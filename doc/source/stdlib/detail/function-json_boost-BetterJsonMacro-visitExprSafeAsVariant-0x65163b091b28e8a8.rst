@@ -1,0 +1,1 @@
+Visit ExprSafeAsVariant node.

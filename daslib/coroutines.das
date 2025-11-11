@@ -11,9 +11,9 @@ require daslib/templates_boost
 require daslib/macro_boost
 require daslib/defer
 
-typedef Coroutine = iterator<bool>
-typedef Coroutines = array<Coroutine>
+typedef Coroutine = iterator<bool> //! A coroutine is a generator that yields bool to indicate if it is still running.
 
+typedef Coroutines = array<Coroutine> //! An array of coroutines.
 
 [call_macro(name="yeild_from")]
 class private YieldFrom : AstCallMacro {

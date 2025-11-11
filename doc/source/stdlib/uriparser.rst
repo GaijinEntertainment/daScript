@@ -5,14 +5,11 @@
 URI manipulation library based on UriParser
 ===========================================
 
-.. include:: detail/uriparser.rst
-
 The URIPARSER module exposes uriParser library https://uriparser.github.io to Daslang.
 
 All functions and symbols are in "uriparser" module, use require to get access to it. ::
 
     require uriparser
-
 
 ++++++++++++++++++
 Handled structures
@@ -22,604 +19,413 @@ Handled structures
 
 .. das:attribute:: UriTextRangeA
 
-|structure_annotation-uriparser-UriTextRangeA|
+ Range of text in the URI.
+
 
 .. _handle-uriparser-UriIp4Struct:
 
 .. das:attribute:: UriIp4Struct
 
-UriIp4Struct fields are
+:Fields: * **data** : uint8[4] -  IPv4 address portion of the URI.
 
-+----+--------+
-+data+uint8[4]+
-+----+--------+
-
-
-|structure_annotation-uriparser-UriIp4Struct|
 
 .. _handle-uriparser-UriIp6Struct:
 
 .. das:attribute:: UriIp6Struct
 
-UriIp6Struct fields are
+:Fields: * **data** : uint8[16] -  IPv6 address porition of the URI.
 
-+----+---------+
-+data+uint8[16]+
-+----+---------+
-
-
-|structure_annotation-uriparser-UriIp6Struct|
 
 .. _handle-uriparser-UriHostDataA:
 
 .. das:attribute:: UriHostDataA
 
-UriHostDataA fields are
+Host data portion of the URI (IPv4 or IPv6, or some future data).
+IPv4 address data.
 
-+--------+------------------------------------------------------------------+
-+ipFuture+ :ref:`uriparser::UriTextRangeA <handle-uriparser-UriTextRangeA>` +
-+--------+------------------------------------------------------------------+
-+ip4     + :ref:`uriparser::UriIp4Struct <handle-uriparser-UriIp4Struct>` ? +
-+--------+------------------------------------------------------------------+
-+ip6     + :ref:`uriparser::UriIp6Struct <handle-uriparser-UriIp6Struct>` ? +
-+--------+------------------------------------------------------------------+
+:Fields: * **ip4** :  :ref:`UriIp4Struct <handle-uriparser-UriIp4Struct>` ? - IPv6 address data.
 
+         * **ip6** :  :ref:`UriIp6Struct <handle-uriparser-UriIp6Struct>` ? - Future host address data.
 
-|structure_annotation-uriparser-UriHostDataA|
+         * **ipFuture** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>` 
+
 
 .. _handle-uriparser-UriPathSegmentStructA:
 
 .. das:attribute:: UriPathSegmentStructA
 
-UriPathSegmentStructA fields are
+Part of the path portion of the URI.
 
-+----+-----------------------------------------------------------------------------------+
-+next+ :ref:`uriparser::UriPathSegmentStructA <handle-uriparser-UriPathSegmentStructA>` ?+
-+----+-----------------------------------------------------------------------------------+
-+text+ :ref:`uriparser::UriTextRangeA <handle-uriparser-UriTextRangeA>`                  +
-+----+-----------------------------------------------------------------------------------+
+:Fields: * **text** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Text of the path segment.
 
+         * **next** :  :ref:`UriPathSegmentStructA <handle-uriparser-UriPathSegmentStructA>` ? - Next path segment, or null if this is the last segment.
 
-|structure_annotation-uriparser-UriPathSegmentStructA|
 
 .. _handle-uriparser-UriUriA:
 
 .. das:attribute:: UriUriA
 
-UriUriA fields are
+URI base class, contains all URI data.
+Scheme of the URI.
 
-+------------+-----------------------------------------------------------------------------------+
-+query       + :ref:`uriparser::UriTextRangeA <handle-uriparser-UriTextRangeA>`                  +
-+------------+-----------------------------------------------------------------------------------+
-+absolutePath+int                                                                                +
-+------------+-----------------------------------------------------------------------------------+
-+fragment    + :ref:`uriparser::UriTextRangeA <handle-uriparser-UriTextRangeA>`                  +
-+------------+-----------------------------------------------------------------------------------+
-+userInfo    + :ref:`uriparser::UriTextRangeA <handle-uriparser-UriTextRangeA>`                  +
-+------------+-----------------------------------------------------------------------------------+
-+hostText    + :ref:`uriparser::UriTextRangeA <handle-uriparser-UriTextRangeA>`                  +
-+------------+-----------------------------------------------------------------------------------+
-+scheme      + :ref:`uriparser::UriTextRangeA <handle-uriparser-UriTextRangeA>`                  +
-+------------+-----------------------------------------------------------------------------------+
-+hostData    + :ref:`uriparser::UriHostDataA <handle-uriparser-UriHostDataA>`                    +
-+------------+-----------------------------------------------------------------------------------+
-+portText    + :ref:`uriparser::UriTextRangeA <handle-uriparser-UriTextRangeA>`                  +
-+------------+-----------------------------------------------------------------------------------+
-+pathTail    + :ref:`uriparser::UriPathSegmentStructA <handle-uriparser-UriPathSegmentStructA>` ?+
-+------------+-----------------------------------------------------------------------------------+
-+owner       +int                                                                                +
-+------------+-----------------------------------------------------------------------------------+
-+pathHead    + :ref:`uriparser::UriPathSegmentStructA <handle-uriparser-UriPathSegmentStructA>` ?+
-+------------+-----------------------------------------------------------------------------------+
+:Fields: * **scheme** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - User information.
 
+         * **userInfo** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Host text.
 
-|structure_annotation-uriparser-UriUriA|
+         * **hostText** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Host data portion of the URI (IPv4 or IPv6, or some future data).
+
+         * **hostData** :  :ref:`UriHostDataA <handle-uriparser-UriHostDataA>`  - Port text.
+
+         * **portText** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Head of the path.
+
+         * **pathHead** :  :ref:`UriPathSegmentStructA <handle-uriparser-UriPathSegmentStructA>` ? - Tail of the path.
+
+         * **pathTail** :  :ref:`UriPathSegmentStructA <handle-uriparser-UriPathSegmentStructA>` ? - Query portion of the URI.
+
+         * **query** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Fragment portion of the URI.
+
+         * **fragment** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Whether the path is absolute.
+
+         * **absolutePath** : int - Whether the URI is owned by the parser.
+
+         * **owner** : int
+
 
 .. _handle-uriparser-Uri:
 
 .. das:attribute:: Uri
 
-Uri fields are
+.. _function-uriparser__dot__rq_empty_Uri_implicit:
 
-+---+------------------------------------------------------+
-+uri+ :ref:`uriparser::UriUriA <handle-uriparser-UriUriA>` +
-+---+------------------------------------------------------+
+.. das:function:: Uri implicit.empty() : bool
 
-
-Uri property operators are
-
-+------+----------+
-+empty +bool const+
-+------+----------+
-+size  +int const +
-+------+----------+
-+status+int const +
-+------+----------+
+Returns true if the given URI is empty.
 
 
-|structure_annotation-uriparser-Uri|
+
+.. _function-uriparser__dot__rq_size_Uri_implicit:
+
+.. das:function:: Uri implicit.size() : int
+
+Returns the size of the given URI.
+
+
+
+.. _function-uriparser__dot__rq_status_Uri_implicit:
+
+.. das:function:: Uri implicit.status() : int
+
+Returns the status of the given URI (URI_SUCCESS, URI_ERROR_SYNTAX, etc.).
+
+
+
+:Properties: * **empty** : bool
+
+             * **size** : int
+
+             * **status** : int
+
+:Fields: * **uri** :  :ref:`UriUriA <handle-uriparser-UriUriA>`  -  URI implementation.
+
 
 +++++++++++++++++++++++++++++++
 Initialization and finalization
 +++++++++++++++++++++++++++++++
 
-  *  :ref:`Uri () : uriparser::Uri <function-_at_uriparser_c__c_Uri>` 
-  *  :ref:`using (arg0:block\<(var arg0:uriparser::Uri# explicit):void\> const implicit) : void <function-_at_uriparser_c__c_using_CI0_ls__hh_XH_ls_uriparser_c__c_Uri_gr__gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`Uri (arg0:string const implicit) : uriparser::Uri <function-_at_uriparser_c__c_Uri_CIs>` 
-  *  :ref:`using (arg0:string const implicit;arg1:block\<(var arg0:uriparser::Uri# explicit):void\> const implicit) : void <function-_at_uriparser_c__c_using_CIs_CI0_ls__hh_XH_ls_uriparser_c__c_Uri_gr__gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`finalize (uri:uriparser::Uri implicit) : void <function-_at_uriparser_c__c_finalize_IH_ls_uriparser_c__c_Uri_gr_>` 
-  *  :ref:`clone (dest:uriparser::Uri implicit;src:uriparser::Uri const implicit) : void <function-_at_uriparser_c__c_clone_IH_ls_uriparser_c__c_Uri_gr__CIH_ls_uriparser_c__c_Uri_gr_>` 
+  *  :ref:`Uri () : Uri <function-uriparser_Uri>` 
+  *  :ref:`using (arg0: block\<(Uri#):void\>) <function-uriparser_using_block_ls_Uri_hh__c_void_gr_>` 
+  *  :ref:`Uri (arg0: string implicit) : Uri <function-uriparser_Uri_string_implicit>` 
+  *  :ref:`using (arg0: string implicit; arg1: block\<(Uri#):void\>) <function-uriparser_using_string_implicit_block_ls_Uri_hh__c_void_gr_>` 
+  *  :ref:`finalize (uri: Uri implicit) <function-uriparser_finalize_Uri_implicit>` 
+  *  :ref:`clone (dest: Uri implicit; src: Uri implicit) <function-uriparser_clone_Uri_implicit_Uri_implicit>` 
 
-.. _function-_at_uriparser_c__c_Uri:
+.. _function-uriparser_Uri:
 
-.. das:function:: Uri()
+.. das:function:: Uri() : Uri
 
-Uri returns  :ref:`uriparser::Uri <handle-uriparser-Uri>` 
+ Creates new URI.
 
-|function-uriparser-Uri|
+.. _function-uriparser_using_block_ls_Uri_hh__c_void_gr_:
 
-.. _function-_at_uriparser_c__c_using_CI0_ls__hh_XH_ls_uriparser_c__c_Uri_gr__gr_1_ls_v_gr__builtin_:
+.. das:function:: using(arg0: block<(Uri#):void>)
 
-.. das:function:: using(arg0: block<(var arg0:Uri#):void> const implicit)
+ Creates scoped URI variable.
 
-+--------+----------------------------------------------------------------------------+
-+argument+argument type                                                               +
-+========+============================================================================+
-+arg0    +block<( :ref:`uriparser::Uri <handle-uriparser-Uri>` #):void> const implicit+
-+--------+----------------------------------------------------------------------------+
+:Arguments: * **arg0** : block<( :ref:`Uri <handle-uriparser-Uri>` #):void> implicit
 
+.. _function-uriparser_Uri_string_implicit:
 
-|function-uriparser-using|
+.. das:function:: Uri(arg0: string implicit) : Uri
 
-.. _function-_at_uriparser_c__c_Uri_CIs:
+ Creates new URI.
 
-.. das:function:: Uri(arg0: string const implicit)
+:Arguments: * **arg0** : string implicit
 
-Uri returns  :ref:`uriparser::Uri <handle-uriparser-Uri>` 
+.. _function-uriparser_using_string_implicit_block_ls_Uri_hh__c_void_gr_:
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+arg0    +string const implicit+
-+--------+---------------------+
+.. das:function:: using(arg0: string implicit; arg1: block<(Uri#):void>)
 
+ Creates scoped URI variable.
 
-|function-uriparser-Uri|
+:Arguments: * **arg0** : string implicit
 
-.. _function-_at_uriparser_c__c_using_CIs_CI0_ls__hh_XH_ls_uriparser_c__c_Uri_gr__gr_1_ls_v_gr__builtin_:
+            * **arg1** : block<( :ref:`Uri <handle-uriparser-Uri>` #):void> implicit
 
-.. das:function:: using(arg0: string const implicit; arg1: block<(var arg0:Uri#):void> const implicit)
-
-+--------+----------------------------------------------------------------------------+
-+argument+argument type                                                               +
-+========+============================================================================+
-+arg0    +string const implicit                                                       +
-+--------+----------------------------------------------------------------------------+
-+arg1    +block<( :ref:`uriparser::Uri <handle-uriparser-Uri>` #):void> const implicit+
-+--------+----------------------------------------------------------------------------+
-
-
-|function-uriparser-using|
-
-.. _function-_at_uriparser_c__c_finalize_IH_ls_uriparser_c__c_Uri_gr_:
+.. _function-uriparser_finalize_Uri_implicit:
 
 .. das:function:: finalize(uri: Uri implicit)
 
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+uri     + :ref:`uriparser::Uri <handle-uriparser-Uri>`  implicit+
-+--------+-------------------------------------------------------+
+ Finalizer for the URI.
 
+:Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
-|function-uriparser-finalize|
+.. _function-uriparser_clone_Uri_implicit_Uri_implicit:
 
-.. _function-_at_uriparser_c__c_clone_IH_ls_uriparser_c__c_Uri_gr__CIH_ls_uriparser_c__c_Uri_gr_:
+.. das:function:: clone(dest: Uri implicit; src: Uri implicit)
 
-.. das:function:: clone(dest: Uri implicit; src: Uri const implicit)
+ Clones the URI.
 
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+dest    + :ref:`uriparser::Uri <handle-uriparser-Uri>`  implicit      +
-+--------+-------------------------------------------------------------+
-+src     + :ref:`uriparser::Uri <handle-uriparser-Uri>`  const implicit+
-+--------+-------------------------------------------------------------+
+:Arguments: * **dest** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
-
-|function-uriparser-clone|
+            * **src** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
 +++++++++++++++++++
 Escape and unescape
 +++++++++++++++++++
 
-  *  :ref:`escape_uri (uriStr:string const implicit;spaceToPlus:bool const;normalizeBreaks:bool const;context:__context const;at:__lineInfo const) : string const <function-_at_uriparser_c__c_escape_uri_CIs_Cb_Cb_C_c_C_l>` 
-  *  :ref:`unescape_uri (uriStr:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_uriparser_c__c_unescape_uri_CIs_C_c_C_l>` 
+  *  :ref:`escape_uri (uriStr: string implicit; spaceToPlus: bool; normalizeBreaks: bool) : string <function-uriparser_escape_uri_string_implicit_bool_bool>` 
+  *  :ref:`unescape_uri (uriStr: string implicit) : string <function-uriparser_unescape_uri_string_implicit>` 
 
-.. _function-_at_uriparser_c__c_escape_uri_CIs_Cb_Cb_C_c_C_l:
+.. _function-uriparser_escape_uri_string_implicit_bool_bool:
 
-.. das:function:: escape_uri(uriStr: string const implicit; spaceToPlus: bool const; normalizeBreaks: bool const)
+.. das:function:: escape_uri(uriStr: string implicit; spaceToPlus: bool; normalizeBreaks: bool) : string
 
-escape_uri returns string const
+ Adds escape characters to the URI.
 
-+---------------+---------------------+
-+argument       +argument type        +
-+===============+=====================+
-+uriStr         +string const implicit+
-+---------------+---------------------+
-+spaceToPlus    +bool const           +
-+---------------+---------------------+
-+normalizeBreaks+bool const           +
-+---------------+---------------------+
+:Arguments: * **uriStr** : string implicit
 
+            * **spaceToPlus** : bool
 
-|function-uriparser-escape_uri|
+            * **normalizeBreaks** : bool
 
-.. _function-_at_uriparser_c__c_unescape_uri_CIs_C_c_C_l:
+.. _function-uriparser_unescape_uri_string_implicit:
 
-.. das:function:: unescape_uri(uriStr: string const implicit)
+.. das:function:: unescape_uri(uriStr: string implicit) : string
 
-unescape_uri returns string const
+ Remove escape characters from the URI.
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+uriStr  +string const implicit+
-+--------+---------------------+
-
-
-|function-uriparser-unescape_uri|
+:Arguments: * **uriStr** : string implicit
 
 +++++++++++++++++
 Uri manipulations
 +++++++++++++++++
 
-  *  :ref:`strip_uri (uri:uriparser::Uri const implicit;query:bool const;fragment:bool const) : uriparser::Uri <function-_at_uriparser_c__c_strip_uri_CIH_ls_uriparser_c__c_Uri_gr__Cb_Cb>` 
-  *  :ref:`add_base_uri (base:uriparser::Uri const implicit;relative:uriparser::Uri const implicit) : uriparser::Uri <function-_at_uriparser_c__c_add_base_uri_CIH_ls_uriparser_c__c_Uri_gr__CIH_ls_uriparser_c__c_Uri_gr_>` 
-  *  :ref:`remove_base_uri (base:uriparser::Uri const implicit;relative:uriparser::Uri const implicit) : uriparser::Uri <function-_at_uriparser_c__c_remove_base_uri_CIH_ls_uriparser_c__c_Uri_gr__CIH_ls_uriparser_c__c_Uri_gr_>` 
-  *  :ref:`normalize (uri:uriparser::Uri implicit) : bool const <function-_at_uriparser_c__c_normalize_IH_ls_uriparser_c__c_Uri_gr_>` 
-  *  :ref:`string (uri:uriparser::Uri const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_uriparser_c__c_string_CIH_ls_uriparser_c__c_Uri_gr__C_c_C_l>` 
-  *  :ref:`string (range:uriparser::UriTextRangeA const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_uriparser_c__c_string_CIH_ls_uriparser_c__c_UriTextRangeA_gr__C_c_C_l>` 
-  *  :ref:`uri_for_each_query_kv (uri:uriparser::Uri const implicit;block:block\<(var arg0:string#;var arg1:string#):void\> const implicit;context:__context const;lineinfo:__lineInfo const) : void <function-_at_uriparser_c__c_uri_for_each_query_kv_CIH_ls_uriparser_c__c_Uri_gr__CI0_ls__hh_s;_hh_s_gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`normalize_uri (uriStr:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_uriparser_c__c_normalize_uri_CIs_C_c_C_l>` 
+  *  :ref:`strip_uri (uri: Uri implicit; query: bool; fragment: bool) : Uri <function-uriparser_strip_uri_Uri_implicit_bool_bool>` 
+  *  :ref:`add_base_uri (base: Uri implicit; relative: Uri implicit) : Uri <function-uriparser_add_base_uri_Uri_implicit_Uri_implicit>` 
+  *  :ref:`remove_base_uri (base: Uri implicit; relative: Uri implicit) : Uri <function-uriparser_remove_base_uri_Uri_implicit_Uri_implicit>` 
+  *  :ref:`normalize (uri: Uri implicit) : bool <function-uriparser_normalize_Uri_implicit>` 
+  *  :ref:`string (uri: Uri implicit) : string <function-uriparser_string_Uri_implicit>` 
+  *  :ref:`string (range: UriTextRangeA implicit) : string <function-uriparser_string_UriTextRangeA_implicit>` 
+  *  :ref:`uri_for_each_query_kv (uri: Uri implicit; block: block\<(string#;string#):void\>) <function-uriparser_uri_for_each_query_kv_Uri_implicit_block_ls_string_hh_;string_hh__c_void_gr_>` 
+  *  :ref:`normalize_uri (uriStr: string implicit) : string <function-uriparser_normalize_uri_string_implicit>` 
 
-.. _function-_at_uriparser_c__c_strip_uri_CIH_ls_uriparser_c__c_Uri_gr__Cb_Cb:
+.. _function-uriparser_strip_uri_Uri_implicit_bool_bool:
 
-.. das:function:: strip_uri(uri: Uri const implicit; query: bool const; fragment: bool const)
+.. das:function:: strip_uri(uri: Uri implicit; query: bool; fragment: bool) : Uri
 
-strip_uri returns  :ref:`uriparser::Uri <handle-uriparser-Uri>` 
+ Removes query and fragment from the URI.
 
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+uri     + :ref:`uriparser::Uri <handle-uriparser-Uri>`  const implicit+
-+--------+-------------------------------------------------------------+
-+query   +bool const                                                   +
-+--------+-------------------------------------------------------------+
-+fragment+bool const                                                   +
-+--------+-------------------------------------------------------------+
+:Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
+            * **query** : bool
 
-|function-uriparser-strip_uri|
+            * **fragment** : bool
 
-.. _function-_at_uriparser_c__c_add_base_uri_CIH_ls_uriparser_c__c_Uri_gr__CIH_ls_uriparser_c__c_Uri_gr_:
+.. _function-uriparser_add_base_uri_Uri_implicit_Uri_implicit:
 
-.. das:function:: add_base_uri(base: Uri const implicit; relative: Uri const implicit)
+.. das:function:: add_base_uri(base: Uri implicit; relative: Uri implicit) : Uri
 
-add_base_uri returns  :ref:`uriparser::Uri <handle-uriparser-Uri>` 
+ Adds `base` URI to the `relative` URI.
 
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+base    + :ref:`uriparser::Uri <handle-uriparser-Uri>`  const implicit+
-+--------+-------------------------------------------------------------+
-+relative+ :ref:`uriparser::Uri <handle-uriparser-Uri>`  const implicit+
-+--------+-------------------------------------------------------------+
+:Arguments: * **base** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
+            * **relative** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
-|function-uriparser-add_base_uri|
+.. _function-uriparser_remove_base_uri_Uri_implicit_Uri_implicit:
 
-.. _function-_at_uriparser_c__c_remove_base_uri_CIH_ls_uriparser_c__c_Uri_gr__CIH_ls_uriparser_c__c_Uri_gr_:
+.. das:function:: remove_base_uri(base: Uri implicit; relative: Uri implicit) : Uri
 
-.. das:function:: remove_base_uri(base: Uri const implicit; relative: Uri const implicit)
+ Removes `base` URI from the `relative` URI.
 
-remove_base_uri returns  :ref:`uriparser::Uri <handle-uriparser-Uri>` 
+:Arguments: * **base** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+base    + :ref:`uriparser::Uri <handle-uriparser-Uri>`  const implicit+
-+--------+-------------------------------------------------------------+
-+relative+ :ref:`uriparser::Uri <handle-uriparser-Uri>`  const implicit+
-+--------+-------------------------------------------------------------+
+            * **relative** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
+.. _function-uriparser_normalize_Uri_implicit:
 
-|function-uriparser-remove_base_uri|
+.. das:function:: normalize(uri: Uri implicit) : bool
 
-.. _function-_at_uriparser_c__c_normalize_IH_ls_uriparser_c__c_Uri_gr_:
+ Normalizes URI, i.e. removes redundant `/` and `.` characters.
 
-.. das:function:: normalize(uri: Uri implicit)
+:Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
-normalize returns bool const
+.. _function-uriparser_string_Uri_implicit:
 
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+uri     + :ref:`uriparser::Uri <handle-uriparser-Uri>`  implicit+
-+--------+-------------------------------------------------------+
+.. das:function:: string(uri: Uri implicit) : string
 
+ Converts URI to string.
 
-|function-uriparser-normalize|
+:Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
-.. _function-_at_uriparser_c__c_string_CIH_ls_uriparser_c__c_Uri_gr__C_c_C_l:
+.. _function-uriparser_string_UriTextRangeA_implicit:
 
-.. das:function:: string(uri: Uri const implicit)
+.. das:function:: string(range: UriTextRangeA implicit) : string
 
-string returns string const
+ Converts URI to string.
 
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+uri     + :ref:`uriparser::Uri <handle-uriparser-Uri>`  const implicit+
-+--------+-------------------------------------------------------------+
+:Arguments: * **range** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  implicit
 
+.. _function-uriparser_uri_for_each_query_kv_Uri_implicit_block_ls_string_hh_;string_hh__c_void_gr_:
 
-|function-uriparser-string|
+.. das:function:: uri_for_each_query_kv(uri: Uri implicit; block: block<(string#;string#):void>)
 
-.. _function-_at_uriparser_c__c_string_CIH_ls_uriparser_c__c_UriTextRangeA_gr__C_c_C_l:
+ Iterates over the URI query parameters.
 
-.. das:function:: string(range: UriTextRangeA const implicit)
+:Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
-string returns string const
+            * **block** : block<(string#;string#):void> implicit
 
-+--------+---------------------------------------------------------------------------------+
-+argument+argument type                                                                    +
-+========+=================================================================================+
-+range   + :ref:`uriparser::UriTextRangeA <handle-uriparser-UriTextRangeA>`  const implicit+
-+--------+---------------------------------------------------------------------------------+
+.. _function-uriparser_normalize_uri_string_implicit:
 
+.. das:function:: normalize_uri(uriStr: string implicit) : string
 
-|function-uriparser-string|
+ Normalizes URI. i.e. removes redundant `/` and `.` characters.
 
-.. _function-_at_uriparser_c__c_uri_for_each_query_kv_CIH_ls_uriparser_c__c_Uri_gr__CI0_ls__hh_s;_hh_s_gr_1_ls_v_gr__builtin__C_c_C_l:
-
-.. das:function:: uri_for_each_query_kv(uri: Uri const implicit; block: block<(var arg0:string#;var arg1:string#):void> const implicit)
-
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+uri     + :ref:`uriparser::Uri <handle-uriparser-Uri>`  const implicit+
-+--------+-------------------------------------------------------------+
-+block   +block<(string#;string#):void> const implicit                 +
-+--------+-------------------------------------------------------------+
-
-
-|function-uriparser-uri_for_each_query_kv|
-
-.. _function-_at_uriparser_c__c_normalize_uri_CIs_C_c_C_l:
-
-.. das:function:: normalize_uri(uriStr: string const implicit)
-
-normalize_uri returns string const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+uriStr  +string const implicit+
-+--------+---------------------+
-
-
-|function-uriparser-normalize_uri|
+:Arguments: * **uriStr** : string implicit
 
 +++++++++++++++++++++
 File name conversions
 +++++++++++++++++++++
 
-  *  :ref:`to_unix_file_name (uri:uriparser::Uri const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_uriparser_c__c_to_unix_file_name_CIH_ls_uriparser_c__c_Uri_gr__C_c_C_l>` 
-  *  :ref:`to_windows_file_name (uri:uriparser::Uri const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_uriparser_c__c_to_windows_file_name_CIH_ls_uriparser_c__c_Uri_gr__C_c_C_l>` 
-  *  :ref:`to_file_name (uri:uriparser::Uri const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_uriparser_c__c_to_file_name_CIH_ls_uriparser_c__c_Uri_gr__C_c_C_l>` 
-  *  :ref:`uri_from_file_name (filename:string const implicit) : uriparser::Uri <function-_at_uriparser_c__c_uri_from_file_name_CIs>` 
-  *  :ref:`uri_from_windows_file_name (filename:string const implicit) : uriparser::Uri <function-_at_uriparser_c__c_uri_from_windows_file_name_CIs>` 
-  *  :ref:`uri_from_unix_file_name (filename:string const implicit) : uriparser::Uri <function-_at_uriparser_c__c_uri_from_unix_file_name_CIs>` 
-  *  :ref:`uri_to_unix_file_name (uriStr:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_uriparser_c__c_uri_to_unix_file_name_CIs_C_c_C_l>` 
-  *  :ref:`uri_to_windows_file_name (uriStr:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_uriparser_c__c_uri_to_windows_file_name_CIs_C_c_C_l>` 
-  *  :ref:`unix_file_name_to_uri (uriStr:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_uriparser_c__c_unix_file_name_to_uri_CIs_C_c_C_l>` 
-  *  :ref:`windows_file_name_to_uri (uriStr:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_uriparser_c__c_windows_file_name_to_uri_CIs_C_c_C_l>` 
-  *  :ref:`uri_to_file_name (uriStr:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_uriparser_c__c_uri_to_file_name_CIs_C_c_C_l>` 
-  *  :ref:`file_name_to_uri (uriStr:string const implicit;context:__context const;at:__lineInfo const) : string const <function-_at_uriparser_c__c_file_name_to_uri_CIs_C_c_C_l>` 
+  *  :ref:`to_unix_file_name (uri: Uri implicit) : string <function-uriparser_to_unix_file_name_Uri_implicit>` 
+  *  :ref:`to_windows_file_name (uri: Uri implicit) : string <function-uriparser_to_windows_file_name_Uri_implicit>` 
+  *  :ref:`to_file_name (uri: Uri implicit) : string <function-uriparser_to_file_name_Uri_implicit>` 
+  *  :ref:`uri_from_file_name (filename: string implicit) : Uri <function-uriparser_uri_from_file_name_string_implicit>` 
+  *  :ref:`uri_from_windows_file_name (filename: string implicit) : Uri <function-uriparser_uri_from_windows_file_name_string_implicit>` 
+  *  :ref:`uri_from_unix_file_name (filename: string implicit) : Uri <function-uriparser_uri_from_unix_file_name_string_implicit>` 
+  *  :ref:`uri_to_unix_file_name (uriStr: string implicit) : string <function-uriparser_uri_to_unix_file_name_string_implicit>` 
+  *  :ref:`uri_to_windows_file_name (uriStr: string implicit) : string <function-uriparser_uri_to_windows_file_name_string_implicit>` 
+  *  :ref:`unix_file_name_to_uri (uriStr: string implicit) : string <function-uriparser_unix_file_name_to_uri_string_implicit>` 
+  *  :ref:`windows_file_name_to_uri (uriStr: string implicit) : string <function-uriparser_windows_file_name_to_uri_string_implicit>` 
+  *  :ref:`uri_to_file_name (uriStr: string implicit) : string <function-uriparser_uri_to_file_name_string_implicit>` 
+  *  :ref:`file_name_to_uri (uriStr: string implicit) : string <function-uriparser_file_name_to_uri_string_implicit>` 
 
-.. _function-_at_uriparser_c__c_to_unix_file_name_CIH_ls_uriparser_c__c_Uri_gr__C_c_C_l:
+.. _function-uriparser_to_unix_file_name_Uri_implicit:
 
-.. das:function:: to_unix_file_name(uri: Uri const implicit)
+.. das:function:: to_unix_file_name(uri: Uri implicit) : string
 
-to_unix_file_name returns string const
+ Converts URI to Unix file name.
 
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+uri     + :ref:`uriparser::Uri <handle-uriparser-Uri>`  const implicit+
-+--------+-------------------------------------------------------------+
+:Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
+.. _function-uriparser_to_windows_file_name_Uri_implicit:
 
-|function-uriparser-to_unix_file_name|
+.. das:function:: to_windows_file_name(uri: Uri implicit) : string
 
-.. _function-_at_uriparser_c__c_to_windows_file_name_CIH_ls_uriparser_c__c_Uri_gr__C_c_C_l:
+ Converts URI to Windows file name.
 
-.. das:function:: to_windows_file_name(uri: Uri const implicit)
+:Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
-to_windows_file_name returns string const
+.. _function-uriparser_to_file_name_Uri_implicit:
 
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+uri     + :ref:`uriparser::Uri <handle-uriparser-Uri>`  const implicit+
-+--------+-------------------------------------------------------------+
+.. das:function:: to_file_name(uri: Uri implicit) : string
 
+ Converts URI to the current platform file name.
 
-|function-uriparser-to_windows_file_name|
+:Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
-.. _function-_at_uriparser_c__c_to_file_name_CIH_ls_uriparser_c__c_Uri_gr__C_c_C_l:
+.. _function-uriparser_uri_from_file_name_string_implicit:
 
-.. das:function:: to_file_name(uri: Uri const implicit)
+.. das:function:: uri_from_file_name(filename: string implicit) : Uri
 
-to_file_name returns string const
+ Converts current platform file name to URI.
 
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+uri     + :ref:`uriparser::Uri <handle-uriparser-Uri>`  const implicit+
-+--------+-------------------------------------------------------------+
+:Arguments: * **filename** : string implicit
 
+.. _function-uriparser_uri_from_windows_file_name_string_implicit:
 
-|function-uriparser-to_file_name|
+.. das:function:: uri_from_windows_file_name(filename: string implicit) : Uri
 
-.. _function-_at_uriparser_c__c_uri_from_file_name_CIs:
+ Converts Windows file name to URI.
 
-.. das:function:: uri_from_file_name(filename: string const implicit)
+:Arguments: * **filename** : string implicit
 
-uri_from_file_name returns  :ref:`uriparser::Uri <handle-uriparser-Uri>` 
+.. _function-uriparser_uri_from_unix_file_name_string_implicit:
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+filename+string const implicit+
-+--------+---------------------+
+.. das:function:: uri_from_unix_file_name(filename: string implicit) : Uri
 
+ Converts Unix file name to URI.
 
-|function-uriparser-uri_from_file_name|
+:Arguments: * **filename** : string implicit
 
-.. _function-_at_uriparser_c__c_uri_from_windows_file_name_CIs:
+.. _function-uriparser_uri_to_unix_file_name_string_implicit:
 
-.. das:function:: uri_from_windows_file_name(filename: string const implicit)
+.. das:function:: uri_to_unix_file_name(uriStr: string implicit) : string
 
-uri_from_windows_file_name returns  :ref:`uriparser::Uri <handle-uriparser-Uri>` 
+ Converts URI to Unix file name.
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+filename+string const implicit+
-+--------+---------------------+
+:Arguments: * **uriStr** : string implicit
 
+.. _function-uriparser_uri_to_windows_file_name_string_implicit:
 
-|function-uriparser-uri_from_windows_file_name|
+.. das:function:: uri_to_windows_file_name(uriStr: string implicit) : string
 
-.. _function-_at_uriparser_c__c_uri_from_unix_file_name_CIs:
+ Converts URI to Windows file name.
 
-.. das:function:: uri_from_unix_file_name(filename: string const implicit)
+:Arguments: * **uriStr** : string implicit
 
-uri_from_unix_file_name returns  :ref:`uriparser::Uri <handle-uriparser-Uri>` 
+.. _function-uriparser_unix_file_name_to_uri_string_implicit:
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+filename+string const implicit+
-+--------+---------------------+
+.. das:function:: unix_file_name_to_uri(uriStr: string implicit) : string
 
+ Converts Unix file name to URI.
 
-|function-uriparser-uri_from_unix_file_name|
+:Arguments: * **uriStr** : string implicit
 
-.. _function-_at_uriparser_c__c_uri_to_unix_file_name_CIs_C_c_C_l:
+.. _function-uriparser_windows_file_name_to_uri_string_implicit:
 
-.. das:function:: uri_to_unix_file_name(uriStr: string const implicit)
+.. das:function:: windows_file_name_to_uri(uriStr: string implicit) : string
 
-uri_to_unix_file_name returns string const
+ Converts Windows file name to URI.
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+uriStr  +string const implicit+
-+--------+---------------------+
+:Arguments: * **uriStr** : string implicit
 
+.. _function-uriparser_uri_to_file_name_string_implicit:
 
-|function-uriparser-uri_to_unix_file_name|
+.. das:function:: uri_to_file_name(uriStr: string implicit) : string
 
-.. _function-_at_uriparser_c__c_uri_to_windows_file_name_CIs_C_c_C_l:
+ Converts URI to the current platform file name.
 
-.. das:function:: uri_to_windows_file_name(uriStr: string const implicit)
+:Arguments: * **uriStr** : string implicit
 
-uri_to_windows_file_name returns string const
+.. _function-uriparser_file_name_to_uri_string_implicit:
 
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+uriStr  +string const implicit+
-+--------+---------------------+
+.. das:function:: file_name_to_uri(uriStr: string implicit) : string
 
+ Converts current file name to URI.
 
-|function-uriparser-uri_to_windows_file_name|
-
-.. _function-_at_uriparser_c__c_unix_file_name_to_uri_CIs_C_c_C_l:
-
-.. das:function:: unix_file_name_to_uri(uriStr: string const implicit)
-
-unix_file_name_to_uri returns string const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+uriStr  +string const implicit+
-+--------+---------------------+
-
-
-|function-uriparser-unix_file_name_to_uri|
-
-.. _function-_at_uriparser_c__c_windows_file_name_to_uri_CIs_C_c_C_l:
-
-.. das:function:: windows_file_name_to_uri(uriStr: string const implicit)
-
-windows_file_name_to_uri returns string const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+uriStr  +string const implicit+
-+--------+---------------------+
-
-
-|function-uriparser-windows_file_name_to_uri|
-
-.. _function-_at_uriparser_c__c_uri_to_file_name_CIs_C_c_C_l:
-
-.. das:function:: uri_to_file_name(uriStr: string const implicit)
-
-uri_to_file_name returns string const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+uriStr  +string const implicit+
-+--------+---------------------+
-
-
-|function-uriparser-uri_to_file_name|
-
-.. _function-_at_uriparser_c__c_file_name_to_uri_CIs_C_c_C_l:
-
-.. das:function:: file_name_to_uri(uriStr: string const implicit)
-
-file_name_to_uri returns string const
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+uriStr  +string const implicit+
-+--------+---------------------+
-
-
-|function-uriparser-file_name_to_uri|
+:Arguments: * **uriStr** : string implicit
 
 ++++
 GUID
 ++++
 
-  *  :ref:`make_new_guid (context:__context const;at:__lineInfo const) : string const <function-_at_uriparser_c__c_make_new_guid_C_c_C_l>` 
+  *  :ref:`make_new_guid () : string <function-uriparser_make_new_guid>` 
 
-.. _function-_at_uriparser_c__c_make_new_guid_C_c_C_l:
+.. _function-uriparser_make_new_guid:
 
-.. das:function:: make_new_guid()
+.. das:function:: make_new_guid() : string
 
-make_new_guid returns string const
-
-|function-uriparser-make_new_guid|
+ Generates new GUID.
 
 

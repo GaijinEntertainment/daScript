@@ -25,63 +25,64 @@ typedef TypeHash = uint64       //! Hash value of the individual type
 struct CTypeInfo {
     //! Type information for the individual component subtype.
     //! Consists of type name and collection of type-specific routines to control type values during its lifetime, serialization, etc.
-    basicType : Type
-    mangledName : string
-    fullName : string
-    hash : TypeHash
-    size : uint
-    eraser     : function<(var arr : array<uint8>) : void>
-    clonner    : function<(var dst : array<uint8>; src : array<uint8>) : void>
-    serializer : function<(var arch : Archive; var arr : array<uint8>; name : string) : void>
-    dumper     : function<(elem : void?) : string>
-    mkTypeInfo : function<() : TypeInfo const?>
-    gc         : function<(var src : array<uint8>) : lambda>
+    basicType : Type        //! basic type of the component
+    mangledName : string    //! mangled name of the type
+    fullName : string       //! full name of the type
+    hash : TypeHash         //! hash of the type
+    size : uint             //! size of the type
+    eraser     : function<(var arr : array<uint8>) : void> //! function to erase component value
+    clonner    : function<(var dst : array<uint8>; src : array<uint8>) : void> //! function to clone component value
+    serializer : function<(var arch : Archive; var arr : array<uint8>; name : string) : void> //! function to serialize component value
+    dumper     : function<(elem : void?) : string> //! function to dump component value as text
+    mkTypeInfo : function<() : TypeInfo const?> //! function to make TypeInfo for the component type
+    gc         : function<(var src : array<uint8>) : lambda> //! function to perform GC marking on the component value
 }
 
 struct public Component {
     //! Single ECS component. Contains component name, data, and data layout.
-    name : string
-    hash : ComponentHash
-    stride : int
-    data : array<uint8>
-    info : CTypeInfo
-    gc_dummy : lambda           // this is here so that GC can find real representation of data
+    name : string           //! name of the component
+    hash : ComponentHash    //! hash of the component
+    stride : int            //! stride of the component data
+    data : array<uint8>     //! raw data of the component
+    info : CTypeInfo        //! type information of the component
+    gc_dummy : lambda       //! this is here so that GC can find real representation of data
 }
 
 struct public EntityId {
     //! Unique identifier of the entity. Consists of id (index in the data array) and generation.
-    id : uint
-    generation : int
+    id : uint               //! index of the entity
+    generation : int        /// generation of the entity
 }
 
 struct public Archetype {
     //! ECS archetype. Archetype is unique combination of components.
-    hash : ComponentHash
-    components : array<Component>
-    size : int
-    eidIndex : int
+    hash : ComponentHash            //! hash of the archetype (combination of component hashes)
+    components : array<Component>   //! list of components in the archetype
+    size : int                      //! number of entities in the archetype
+    eidIndex : int                  //! index of the 'eid' component in the components array
 }
 
 struct public ComponentValue {
     //! Value of the component during creation or transformation.
-    name : string
-    info : CTypeInfo
-    data : float4[4]
+    name : string                   //! name of the component
+    info : CTypeInfo                //! type information of the component
+    data : float4[4]                //! raw data of the component
 }
 
 typedef DeferEval = lambda<(var act : DeferAction) : void>//! Lambda which holds deferred action. Typically creation of destruction of an entity.
 
 struct private DeferAction {
-    eid : EntityId
-    action : DeferEval
+    //! Individual deferred action.
+    eid : EntityId              //! entity id involved in the action
+    action : DeferEval          //! deferred action lambda
 }
 
 typedef ComponentMap = array<ComponentValue> //! Table of component values for individual entity.
 
 struct EcsRequestPos {
     //! Location of the ECS request in the code (source file and line number).
-    file : string
-    line : uint
+    file : string           //! source file
+    line : uint             //! line number
 }
 
 def EcsRequestPos(at : rtti::LineInfo) : EcsRequestPos {
@@ -92,23 +93,23 @@ def EcsRequestPos(at : rtti::LineInfo) : EcsRequestPos {
 struct public EcsRequest {
     //! Individual ESC requests. Contains list of required components, list of components which are required to be absent.
     //! Caches list of archetypes, which match the request.
-    hash : ComponentHash
-    req : array<string>
-    reqn : array<string>
-    archetypes : array<int>     // sorted
-    at : EcsRequestPos
+    hash : ComponentHash        //! hash of the request
+    req : array<string>         //! required components
+    reqn : array<string>        //! required components which are not present
+    archetypes : array<int>     //! sorted list of matching archetypes
+    at : EcsRequestPos          //! location of the request in the code
 }
 
 struct public DecsState {
     //! Entire state of the ECS system.
     //! Conntains archtypes, entities and entity free-list, entity lokup table, all archetypes and archetype lookups, etc.
-    archetypeLookup : table<ComponentHash; int>
-    allArchetypes : array<Archetype>
-    entityFreeList : array<EntityId>
-    entityLookup : array<tuple<generation : int; archetype : ComponentHash; index : int>>
-    componentTypeCheck : table<string; CTypeInfo>
-    ecsQueries : array<EcsRequest>
-    queryLookup : table<ComponentHash; int>
+    archetypeLookup : table<ComponentHash; int>     //! lookup of archetype by its hash
+    allArchetypes : array<Archetype>                //! all archetypes in the system
+    entityFreeList : array<EntityId>                //! list of free entity IDs
+    entityLookup : array<tuple<generation : int; archetype : ComponentHash; index : int>>   //! lookup of entity by its ID
+    componentTypeCheck : table<string; CTypeInfo>   //! lookup of component type info by its name
+    ecsQueries : array<EcsRequest>                  //! all ECS requests
+    queryLookup : table<ComponentHash; int>         //! lookup of ECS request by its hash
 }
 
 typedef PassFunction = function<() : void>  //! One of the callbacks which form individual pass.
@@ -116,8 +117,8 @@ typedef PassFunction = function<() : void>  //! One of the callbacks which form 
 struct public DecsPass {
     //! Individual pass of the update of the ECS system.
     //! Contains pass name and list of all pass calblacks.
-    name : string
-    calls : array<PassFunction>
+    name : string               //! name of the pass
+    calls : array<PassFunction> //! list of all pass callbacks
 }
 
 var public decsState : DecsState    //! Full state of the ESC system.
@@ -163,35 +164,150 @@ def public set(var cv : ComponentValue; val : auto) {
     cv = cval
 }
 
-def public operator :=(var cv : ComponentValue; val : EntityId)    { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : bool)        { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : range)       { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : urange)      { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : range64)     { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : urange64)    { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : string)      { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : int)         { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : int8)        { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : int16)       { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : int64)       { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : int2)        { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : int3)        { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : int4)        { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : uint)        { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : uint8)       { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : uint16)      { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : uint64)      { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : uint2)       { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : uint3)       { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : uint4)       { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : float)       { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : float2)      { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : float3)      { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : float4)      { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : float3x3)    { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : float3x4)    { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : float4x4)    { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : double)      { set(cv, val); }
+def public operator :=(var cv : ComponentValue; val : EntityId) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : bool) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val);
+}
+
+def public operator :=(var cv : ComponentValue; val : range) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : urange) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : range64) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : urange64) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : string) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : int) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : int8) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : int16) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : int64) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : int2) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : int3) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : int4) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : uint) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : uint8) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : uint16) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : uint64) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : uint2) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : uint3) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : uint4) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : float) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : float2) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : float3) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : float4) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : float3x3) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : float3x4) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : float4x4) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : double) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
 
 def public clone(var dst : Component; src : Component) {
     //! Clones component value.
@@ -263,6 +379,7 @@ def public restart {
 }
 
 def private new_entity_id() {
+    //! Creates new entity ID.
     var eid : EntityId
     if (!empty(decsState.entityFreeList)) {
         eid = decsState.entityFreeList[length(decsState.entityFreeList) - 1]
@@ -344,6 +461,7 @@ def public debug_dump {
 }
 
 def private with_archetype(hash : ComponentHash; blk : block<(var arch : Archetype; idx : int; isNew : bool) : void>) {
+    //! Invokes block for the archetype with specified hash.
     var afound & = unsafe(decsState.archetypeLookup[hash])
     if (afound == 0) {
         decsState.allArchetypes |> emplace(Archetype(hash = hash))
@@ -355,6 +473,7 @@ def private with_archetype(hash : ComponentHash; blk : block<(var arch : Archety
 }
 
 def private create_archetype(var arch : Archetype; cmp : ComponentMap; idx : int) {
+    //! Creates archetype from the component map.
     assert(length(arch.components) == 0)
     arch.eidIndex = -1
     for (kv, kvi in cmp, count()) {
@@ -387,6 +506,7 @@ def private create_archetype(var arch : Archetype; cmp : ComponentMap; idx : int
 }
 
 def private get_eid(var arch : Archetype; index : int) : EntityId& {
+    //! Gets entity ID component for the specific entity index in the archetype.
     unsafe {
         var ceid & = arch.components[arch.eidIndex]
         return *(reinterpret<EntityId?> addr(ceid.data[index * ceid.stride]))
@@ -394,6 +514,7 @@ def private get_eid(var arch : Archetype; index : int) : EntityId& {
 }
 
 def private create_entity(var arch : Archetype; eid : EntityId; cmp : ComponentMap) {
+    //! Creates new entity in the archetype with specified component map.
     let eidx = arch.size++
     for (c, comp in arch.components, cmp) {
         c.data |> resize(length(c.data) + c.stride)
@@ -405,6 +526,7 @@ def private create_entity(var arch : Archetype; eid : EntityId; cmp : ComponentM
 }
 
 def private remove_entity(var arch : Archetype; di : int) {
+    //! Removes entity at specified index from the archetype.
     arch.size --
     if (di != arch.size) {// copy last one in the hole
         var eid_last_id = get_eid(arch, arch.size).id
@@ -421,6 +543,7 @@ def private remove_entity(var arch : Archetype; di : int) {
 }
 
 def private cmp_archetype_hash(cmp : ComponentMap) {
+    //! Computes archetype hash from the component map.
     var ahash : ComponentHash
     for (kv in cmp) {
         ahash = (ahash <<< 2ul) ^ hash(kv.name)
@@ -1046,6 +1169,7 @@ def public set(var cmp : ComponentMap; name : string; value : auto(TT)) {
 }
 
 def public has(var cmp : ComponentMap; name : string) {
+    //! Returns true if component map has specified component.
     return binary_search(cmp, ComponentValue(name = name)) <| $(x, y) => x.name < y.name
 }
 

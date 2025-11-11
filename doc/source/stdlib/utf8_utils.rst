@@ -5,281 +5,176 @@
 UTF-8 utilities
 ===============
 
-.. include:: detail/utf8_utils.rst
+The utf8_utils module implements additional infrastructure for the UTF8 utilities.
 
-|module-utf8_utils|
+All functions and symbols are in "utf8_utils" module, use require to get access to it. ::
+
+    require daslib/utf8_utils
 
 +++++++++
 Constants
 +++++++++
 
+.. _global-utf8_utils-s_utf8d:
+
+.. das:attribute:: s_utf8d = [[uint[364] 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x0; 0x1; 0x1; 0x1; 0x1; 0x1; 0x1; 0x1; 0x1; 0x1; 0x1; 0x1; 0x1; 0x1; 0x1; 0x1; 0x1; 0x9; 0x9; 0x9; 0x9; 0x9; 0x9; 0x9; 0x9; 0x9; 0x9; 0x9; 0x9; 0x9; 0x9; 0x9; 0x9; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x7; 0x8; 0x8; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0x2; 0xa; 0x3; 0x3; 0x3; 0x3; 0x3; 0x3; 0x3; 0x3; 0x3; 0x3; 0x3; 0x3; 0x4; 0x3; 0x3; 0xb; 0x6; 0x6; 0x6; 0x5; 0x8; 0x8; 0x8; 0x8; 0x8; 0x8; 0x8; 0x8; 0x8; 0x8; 0x8; 0x0; 0xc; 0x18; 0x24; 0x3c; 0x60; 0x54; 0xc; 0xc; 0xc; 0x30; 0x48; 0xc; 0xc; 0xc; 0xc; 0xc; 0xc; 0xc; 0xc; 0xc; 0xc; 0xc; 0xc; 0xc; 0x0; 0xc; 0xc; 0xc; 0xc; 0xc; 0x0; 0xc; 0x0; 0xc; 0xc; 0xc; 0x18; 0xc; 0xc; 0xc; 0xc; 0xc; 0x18; 0xc; 0x18; 0xc; 0xc; 0xc; 0xc; 0xc; 0xc; 0xc; 0xc; 0xc; 0x18; 0xc; 0xc; 0xc; 0xc; 0xc; 0x18; 0xc; 0xc; 0xc; 0xc; 0xc; 0xc; 0xc; 0x18; 0xc; 0xc; 0xc; 0xc; 0xc; 0xc; 0xc; 0xc; 0xc; 0x24; 0xc; 0x24; 0xc; 0xc; 0xc; 0x24; 0xc; 0xc; 0xc; 0xc; 0xc; 0x24; 0xc; 0x24; 0xc; 0xc; 0xc; 0x24; 0xc; 0xc; 0xc; 0xc; 0xc; 0xc; 0xc; 0xc; 0xc; 0xc]]
+
+|detail/Variable-utf8_utils-s_utf8d|
+
 .. _global-utf8_utils-UTF8_ACCEPT:
 
 .. das:attribute:: UTF8_ACCEPT = 0x0
 
-|variable-utf8_utils-UTF8_ACCEPT|
+|detail/Variable-utf8_utils-UTF8_ACCEPT|
 
 +++++++++++++
 Uncategorized
 +++++++++++++
 
-.. _function-_at_utf8_utils_c__c_utf16_to_utf32_Cu_Cu:
+.. _function-utf8_utils_utf16_to_utf32_uint_uint:
 
-.. das:function:: utf16_to_utf32(high: uint const; low: uint const)
+.. das:function:: utf16_to_utf32(high: uint; low: uint) : uint
 
-utf16_to_utf32 returns uint const
+|detail/function-utf8_utils-utf16_to_utf32-0xce3eab4402448264|
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+high    +uint const   +
-+--------+-------------+
-+low     +uint const   +
-+--------+-------------+
+:Arguments: * **high** : uint
 
+            * **low** : uint
 
-|function-utf8_utils-utf16_to_utf32|
+.. _function-utf8_utils_utf8_encode_array_ls_uint8_gr__uint:
 
-.. _function-_at_utf8_utils_c__c_utf8_encode_1_ls_u8_gr_A_Cu:
+.. das:function:: utf8_encode(dest_array: array<uint8>; ch: uint)
 
-.. das:function:: utf8_encode(dest_array: array<uint8>; ch: uint const)
+Converts a codepoint (UTF-32 symbol) to UTF-8 and appends it to the UTF-8 byte array
 
-+----------+-------------+
-+argument  +argument type+
-+==========+=============+
-+dest_array+array<uint8> +
-+----------+-------------+
-+ch        +uint const   +
-+----------+-------------+
+:Arguments: * **dest_array** : array<uint8>
 
+            * **ch** : uint
 
-Converts UTF-32 string to UTF-8 and returns it as a UTF-8 byte array
+.. _function-utf8_utils_utf8_encode_uint:
 
-.. _function-_at_utf8_utils_c__c_utf8_encode_Cu:
+.. das:function:: utf8_encode(ch: uint) : array<uint8>
 
-.. das:function:: utf8_encode(ch: uint const)
+Converts a codepoint (UTF-32 symbol) to the UTF-8 byte array
 
-utf8_encode returns array<uint8>
+:Arguments: * **ch** : uint
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+ch      +uint const   +
-+--------+-------------+
+.. _function-utf8_utils_utf8_encode_array_ls_uint8_gr__array_ls_uint_gr_:
 
+.. das:function:: utf8_encode(dest_array: array<uint8>; source_utf32_string: array<uint>)
+
+Converts UTF-32 string to UTF-8 and appends it to the UTF-8 byte array
+
+:Arguments: * **dest_array** : array<uint8>
+
+            * **source_utf32_string** : array<uint> implicit
+
+.. _function-utf8_utils_utf8_encode_array_ls_uint_gr_:
+
+.. das:function:: utf8_encode(source_utf32_string: array<uint>) : array<uint8>
 
 Converts UTF-32 string to UTF-8 and returns it as a UTF-8 byte array
 
-.. _function-_at_utf8_utils_c__c_utf8_encode_1_ls_u8_gr_A_CI1_ls_u_gr_A:
+:Arguments: * **source_utf32_string** : array<uint> implicit
 
-.. das:function:: utf8_encode(dest_array: array<uint8>; source_utf32_string: array<uint> const implicit)
+.. _function-utf8_utils_utf8_length_array_ls_uint8_gr_:
 
-+-------------------+--------------------------+
-+argument           +argument type             +
-+===================+==========================+
-+dest_array         +array<uint8>              +
-+-------------------+--------------------------+
-+source_utf32_string+array<uint> const implicit+
-+-------------------+--------------------------+
-
-
-Converts UTF-32 string to UTF-8 and returns it as a UTF-8 byte array
-
-.. _function-_at_utf8_utils_c__c_utf8_encode_CI1_ls_u_gr_A:
-
-.. das:function:: utf8_encode(source_utf32_string: array<uint> const implicit)
-
-utf8_encode returns array<uint8>
-
-+-------------------+--------------------------+
-+argument           +argument type             +
-+===================+==========================+
-+source_utf32_string+array<uint> const implicit+
-+-------------------+--------------------------+
-
-
-Converts UTF-32 string to UTF-8 and returns it as a UTF-8 byte array
-
-.. _function-_at_utf8_utils_c__c_utf8_length_CI1_ls_u8_gr_A:
-
-.. das:function:: utf8_length(utf8_string: array<uint8> const implicit)
-
-utf8_length returns int const
-
-+-----------+---------------------------+
-+argument   +argument type              +
-+===========+===========================+
-+utf8_string+array<uint8> const implicit+
-+-----------+---------------------------+
-
+.. das:function:: utf8_length(utf8_string: array<uint8>) : int
 
 Returns the number of characters in the UTF-8 string
 
-.. _function-_at_utf8_utils_c__c_utf8_length_Cs:
+:Arguments: * **utf8_string** : array<uint8> implicit
 
-.. das:function:: utf8_length(utf8_string: string const)
+.. _function-utf8_utils_utf8_length_string:
 
-utf8_length returns int const
-
-+-----------+-------------+
-+argument   +argument type+
-+===========+=============+
-+utf8_string+string const +
-+-----------+-------------+
-
+.. das:function:: utf8_length(utf8_string: string) : int
 
 Returns the number of characters in the UTF-8 string
 
-.. _function-_at_utf8_utils_c__c_is_first_byte_of_utf8_char_Cu8:
+:Arguments: * **utf8_string** : string
 
-.. das:function:: is_first_byte_of_utf8_char(ch: uint8 const)
+.. _function-utf8_utils_is_first_byte_of_utf8_char_uint8:
 
-is_first_byte_of_utf8_char returns bool const
+.. das:function:: is_first_byte_of_utf8_char(ch: uint8) : bool
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+ch      +uint8 const  +
-+--------+-------------+
+|detail/function-utf8_utils-is_first_byte_of_utf8_char-0xde083daff4aefb23|
 
+:Arguments: * **ch** : uint8
 
-|function-utf8_utils-is_first_byte_of_utf8_char|
+.. _function-utf8_utils_contains_utf8_bom_array_ls_uint8_gr_:
 
-.. _function-_at_utf8_utils_c__c_contains_utf8_bom_CI1_ls_u8_gr_A:
+.. das:function:: contains_utf8_bom(utf8_string: array<uint8>) : bool
 
-.. das:function:: contains_utf8_bom(utf8_string: array<uint8> const implicit)
+|detail/function-utf8_utils-contains_utf8_bom-0x5bd957db87460665|
 
-contains_utf8_bom returns bool const
+:Arguments: * **utf8_string** : array<uint8> implicit
 
-+-----------+---------------------------+
-+argument   +argument type              +
-+===========+===========================+
-+utf8_string+array<uint8> const implicit+
-+-----------+---------------------------+
+.. _function-utf8_utils_contains_utf8_bom_string:
 
+.. das:function:: contains_utf8_bom(utf8_string: string) : bool
 
-Copyright (c) 2008-2009 Bjoern Hoehrmann <bjoern@hoehrmann.de>
-See http://bjoern.hoehrmann.de/utf-8/decoder/dfa/ for details.
+|detail/function-utf8_utils-contains_utf8_bom-0xf749642b9629daa7|
 
-.. _function-_at_utf8_utils_c__c_contains_utf8_bom_Cs:
+:Arguments: * **utf8_string** : string
 
-.. das:function:: contains_utf8_bom(utf8_string: string const)
+.. _function-utf8_utils_is_utf8_string_valid_array_ls_uint8_gr_:
 
-contains_utf8_bom returns bool const
+.. das:function:: is_utf8_string_valid(utf8_string: array<uint8>) : bool
 
-+-----------+-------------+
-+argument   +argument type+
-+===========+=============+
-+utf8_string+string const +
-+-----------+-------------+
+|detail/function-utf8_utils-is_utf8_string_valid-0x2dcc5c1b2e5f2a36|
 
+:Arguments: * **utf8_string** : array<uint8> implicit
 
-Copyright (c) 2008-2009 Bjoern Hoehrmann <bjoern@hoehrmann.de>
-See http://bjoern.hoehrmann.de/utf-8/decoder/dfa/ for details.
+.. _function-utf8_utils_is_utf8_string_valid_string:
 
-.. _function-_at_utf8_utils_c__c_is_utf8_string_valid_CI1_ls_u8_gr_A:
+.. das:function:: is_utf8_string_valid(utf8_string: string) : bool
 
-.. das:function:: is_utf8_string_valid(utf8_string: array<uint8> const implicit)
+|detail/function-utf8_utils-is_utf8_string_valid-0xfa05575fb077659e|
 
-is_utf8_string_valid returns bool const
+:Arguments: * **utf8_string** : string
 
-+-----------+---------------------------+
-+argument   +argument type              +
-+===========+===========================+
-+utf8_string+array<uint8> const implicit+
-+-----------+---------------------------+
+.. _function-utf8_utils_utf8_decode_array_ls_uint_gr__array_ls_uint8_gr_:
 
-
-|function-utf8_utils-is_utf8_string_valid|
-
-.. _function-_at_utf8_utils_c__c_is_utf8_string_valid_Cs:
-
-.. das:function:: is_utf8_string_valid(utf8_string: string const)
-
-is_utf8_string_valid returns bool const
-
-+-----------+-------------+
-+argument   +argument type+
-+===========+=============+
-+utf8_string+string const +
-+-----------+-------------+
-
-
-|function-utf8_utils-is_utf8_string_valid|
-
-.. _function-_at_utf8_utils_c__c_utf8_decode_1_ls_u_gr_A_CI1_ls_u8_gr_A:
-
-.. das:function:: utf8_decode(dest_utf32_string: array<uint>; source_utf8_string: array<uint8> const implicit)
-
-+------------------+---------------------------+
-+argument          +argument type              +
-+==================+===========================+
-+dest_utf32_string +array<uint>                +
-+------------------+---------------------------+
-+source_utf8_string+array<uint8> const implicit+
-+------------------+---------------------------+
-
+.. das:function:: utf8_decode(dest_utf32_string: array<uint>; source_utf8_string: array<uint8>)
 
 Converts UTF-8 string to UTF-32 and appends it to the array of codepoints (UTF-32 string)
 
-.. _function-_at_utf8_utils_c__c_utf8_decode_CI1_ls_u8_gr_A:
+:Arguments: * **dest_utf32_string** : array<uint>
 
-.. das:function:: utf8_decode(source_utf8_string: array<uint8> const implicit)
+            * **source_utf8_string** : array<uint8> implicit
 
-utf8_decode returns array<uint>
+.. _function-utf8_utils_utf8_decode_array_ls_uint8_gr_:
 
-+------------------+---------------------------+
-+argument          +argument type              +
-+==================+===========================+
-+source_utf8_string+array<uint8> const implicit+
-+------------------+---------------------------+
+.. das:function:: utf8_decode(source_utf8_string: array<uint8>) : array<uint>
 
+Converts UTF-8 string to UTF-32 and returns it as an array of codepoints (UTF-32 string)
 
-Converts UTF-8 string to UTF-32 and appends it to the array of codepoints (UTF-32 string)
+:Arguments: * **source_utf8_string** : array<uint8> implicit
 
-.. _function-_at_utf8_utils_c__c_utf8_decode_Cs:
+.. _function-utf8_utils_utf8_decode_string:
 
-.. das:function:: utf8_decode(source_utf8_string: string const)
+.. das:function:: utf8_decode(source_utf8_string: string) : array<uint>
 
-utf8_decode returns array<uint>
+Converts UTF-8 string to UTF-32 and returns it as an array of codepoints (UTF-32 string)
 
-+------------------+-------------+
-+argument          +argument type+
-+==================+=============+
-+source_utf8_string+string const +
-+------------------+-------------+
+:Arguments: * **source_utf8_string** : string
 
+.. _function-utf8_utils_utf8_decode_array_ls_uint_gr__string:
+
+.. das:function:: utf8_decode(dest_utf32_string: array<uint>; source_utf8_string: string)
 
 Converts UTF-8 string to UTF-32 and appends it to the array of codepoints (UTF-32 string)
 
-.. _function-_at_utf8_utils_c__c_utf8_decode_1_ls_u_gr_A_Cs:
+:Arguments: * **dest_utf32_string** : array<uint>
 
-.. das:function:: utf8_decode(dest_utf32_string: array<uint>; source_utf8_string: string const)
+            * **source_utf8_string** : string
 
-+------------------+-------------+
-+argument          +argument type+
-+==================+=============+
-+dest_utf32_string +array<uint>  +
-+------------------+-------------+
-+source_utf8_string+string const +
-+------------------+-------------+
+.. _function-utf8_utils_decode_unicode_escape_string:
 
+.. das:function:: decode_unicode_escape(str: string) : string
 
-Converts UTF-8 string to UTF-32 and appends it to the array of codepoints (UTF-32 string)
+|detail/function-utf8_utils-decode_unicode_escape-0xb8b396646ee69cae|
 
-.. _function-_at_utf8_utils_c__c_decode_unicode_escape_Cs:
-
-.. das:function:: decode_unicode_escape(str: string const)
-
-decode_unicode_escape returns string const
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+str     +string const +
-+--------+-------------+
-
-
-|function-utf8_utils-decode_unicode_escape|
+:Arguments: * **str** : string
 
 

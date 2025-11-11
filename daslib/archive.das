@@ -28,6 +28,7 @@ class public MemSerializer : Serializer {
         pass    // writing
     }
     def MemSerializer(from : array<uint8>) {
+        //! Initialize the serializer for reading from the given data.
         data := from
     }
     def extractData : array<uint8> {
@@ -75,16 +76,16 @@ class public MemSerializer : Serializer {
         //! Sets the last error code.
         lastError = code
     }
-    private data : array<uint8>
-    private readOffset : int
-    private lastError : string
+    private data : array<uint8> //! internal data buffer
+    private readOffset : int    //! current reading offset
+    private lastError : string  //! last error code
 }
 
 struct public Archive {
     //! Archive is a combination of serialization stream, and state (version, and reading status).
-    version : uint
-    reading : bool
-    stream  : Serializer?
+    version : uint //! Version of the archive format.
+    reading : bool //! True if the archive is for reading, false for writing.
+    stream  : Serializer? //! Serialization stream.
 }
 
 def public serialize_raw(var arch : Archive; var value : auto(TT)&) {
@@ -116,6 +117,7 @@ def public serialize(var arch : Archive; var value : auto(TT)&) {
 
 [expect_any_function(value)]
 def public serialize(var arch : Archive; var value : auto(TT)&) {
+    //! Serializes function pointer by its mangled name hash.
     if (arch.reading) {
         var mnh : uint64
         arch |> read_raw(mnh)
@@ -131,19 +133,23 @@ def public serialize(var arch : Archive; var value : auto(TT)&) {
 }
 
 def public serialize(var arch : Archive; var value : float3x3) {
+    //! Serializes float3x3 matrix
     arch |> serialize_raw(value)
 }
 
 def public serialize(var arch : Archive; var value : float3x4) {
+    //! Serializes float3x4 matrix
     arch |> serialize_raw(value)
 }
 
 def public serialize(var arch : Archive; var value : float4x4) {
+    //! Serializes float4x4 matrix
     arch |> serialize_raw(value)
 }
 
 [expect_any_struct(value)]
 def public serialize(var arch : Archive; var value : auto(TT)&) {
+    //! Serializes struct by serializing each field.
     if (arch.reading) {
         delete value
     }
@@ -154,6 +160,7 @@ def public serialize(var arch : Archive; var value : auto(TT)&) {
 
 [expect_any_tuple(value)]
 def public serialize(var arch : Archive; var value : auto(TT)&) {
+    //! Serializes tuple by serializing each field.
     if (arch.reading) {
         delete value
     }
@@ -164,6 +171,7 @@ def public serialize(var arch : Archive; var value : auto(TT)&) {
 
 [expect_any_variant(value)]
 def public serialize(var arch : Archive; var value : auto(TT)&) {
+    //! Serializes variant by serializing the index and the active field.
     if (arch.reading) {
         delete value
         var index : int
@@ -181,12 +189,14 @@ def public serialize(var arch : Archive; var value : auto(TT)&) {
 }
 
 def public serialize(var arch : Archive; var value : auto(TT)[]) {
+    //! Serializes array by serializing its length and each element.
     for (element in value) {
         arch |> _::serialize(element)
     }
 }
 
 def public serialize(var arch : Archive; var value : array<auto(TT)>) {
+    //! Serializes array by serializing its length and each element.
     if (arch.reading) {
         var len : int
         unsafe {
@@ -207,6 +217,7 @@ def public serialize(var arch : Archive; var value : array<auto(TT)>) {
 }
 
 def public serialize(var arch : Archive; var value : table<auto(KT); auto(VT)>) {
+    //! Serializes table by serializing its length and each key-value pair.
     if (arch.reading) {
         var len : int
         arch |> read_raw(len)
@@ -228,6 +239,7 @@ def public serialize(var arch : Archive; var value : table<auto(KT); auto(VT)>) 
 }
 
 def public serialize(var arch : Archive; var value : string&) {
+    //! Serializes string by serializing its length and characters.
     unsafe {
         if (arch.reading) {
             var len : int
@@ -253,6 +265,7 @@ def public serialize(var arch : Archive; var value : string&) {
 }
 
 def public serialize(var arch : Archive; var value : auto(TT)?) {
+    //! Serializes nullable type by serializing a flag and the value if present.
     if (arch.reading) {
         value = null
     }

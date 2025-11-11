@@ -1,0 +1,1 @@
+ writes data fo file.

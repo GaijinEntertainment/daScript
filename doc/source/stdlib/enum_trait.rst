@@ -5,8 +5,6 @@
 Enumeration traits
 ==================
 
-.. include:: detail/enum_trait.rst
-
 The enum_trait module implements typeinfo traits for the enumerations.
 
 All functions and symbols are in "enum_trait" module, use require to get access to it. ::
@@ -43,74 +41,46 @@ Enumeration annotation which implements string constructor for enumeration.
 Uncategorized
 +++++++++++++
 
-.. _function-_at_enum_trait_c__c_string_C._%_ls_IsAnyEnumMacro_c_expect_any_enum(arg_eq_true)_gr_:
+.. _function-enum_trait_string_auto:
 
-.. das:function:: string(arg: auto const)
-
-string returns auto
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+arg     +auto const   +
-+--------+-------------+
-
+.. das:function:: string(arg: auto) : auto
 
 converts enum value to string
  usage: let s = string(EnumValue)
 
-.. _function-_at_enum_trait_c__c_to_enum_CY_ls_EnumT_gr_._Cs:
+:Arguments: * **arg** : auto
 
-.. das:function:: to_enum(ent: auto(EnumT) const; name: string const)
+.. _function-enum_trait_to_enum_autoEnumT_string:
 
-to_enum returns EnumT
+.. das:function:: to_enum(ent: auto(EnumT); name: string) : EnumT
 
-+--------+-----------------+
-+argument+argument type    +
-+========+=================+
-+ent     +auto(EnumT) const+
-+--------+-----------------+
-+name    +string const     +
-+--------+-----------------+
+converts string to enum value, panics if not found
+ usage: let e = to_enum(type<EnumType>,"EnumValueName")
 
+:Arguments: * **ent** : auto(EnumT)
 
-converts string to enum value, returns defaultValue if not found
- usage: let e = to_enum(type<EnumType>,"EnumValueName", EnumType.DefaultValue)
+            * **name** : string
 
-.. _function-_at_enum_trait_c__c_to_enum_CY_ls_EnumT_gr_._Cs_CY_ls_EnumT_gr_L:
+.. _function-enum_trait_to_enum_autoEnumT_string_EnumT:
 
-.. das:function:: to_enum(ent: auto(EnumT) const; name: string const; defaultValue: EnumT const)
-
-to_enum returns EnumT
-
-+------------+-----------------+
-+argument    +argument type    +
-+============+=================+
-+ent         +auto(EnumT) const+
-+------------+-----------------+
-+name        +string const     +
-+------------+-----------------+
-+defaultValue+EnumT const      +
-+------------+-----------------+
-
+.. das:function:: to_enum(ent: auto(EnumT); name: string; defaultValue: EnumT) : EnumT
 
 converts string to enum value, returns defaultValue if not found
  usage: let e = to_enum(type<EnumType>,"EnumValueName", EnumType.DefaultValue)
 
-.. _function-_at_enum_trait_c__c_enum_to_table_CY_ls_EnumT_gr_.:
+:Arguments: * **ent** : auto(EnumT)
 
-.. das:function:: enum_to_table(ent: auto(EnumT) const)
+            * **name** : string
 
-enum_to_table returns table<string;EnumT>
+            * **defaultValue** : EnumT
 
-+--------+-----------------+
-+argument+argument type    +
-+========+=================+
-+ent     +auto(EnumT) const+
-+--------+-----------------+
+.. _function-enum_trait_enum_to_table_autoEnumT:
 
+.. das:function:: enum_to_table(ent: auto(EnumT)) : table<string, EnumT>
 
 converts enum type to array of tuples (name, value)
  usage: let t = enum_to_table(type<EnumType>)
+
+:Arguments: * **ent** : auto(EnumT)
 
 

@@ -1,22 +1,30 @@
-.. |structure-match-MatchError| replace:: to be documented in |structure-match-MatchError|.rst
+.. |detail/enumeration-match-MatchType| replace:: to be documented in |detail/enumeration-match-MatchType|.rst
 
-.. |structure-match-MatchTo| replace:: to be documented in |structure-match-MatchTo|.rst
+.. |detail/structure-match-MatchError| replace:: to be documented in |detail/structure-match-MatchError|.rst
 
-.. |class-match-MatchMacro| replace:: to be documented in |class-match-MatchMacro|.rst
+.. |detail/structure-match-MatchTo| replace:: to be documented in |detail/structure-match-MatchTo|.rst
 
-.. |method-match-MatchMacro.preVisit| replace:: to be documented in |method-match-MatchMacro.preVisit|.rst
+.. |detail/class-match-MatchMacro| replace:: to be documented in |detail/class-match-MatchMacro|.rst
 
-.. |method-match-MatchMacro.visit| replace:: to be documented in |method-match-MatchMacro.visit|.rst
+.. |detail/method-match-MatchMacro.preVisit| replace:: to be documented in |detail/method-match-MatchMacro.preVisit|.rst
 
-.. |method-match-MatchMacro.canVisitArgument| replace:: to be documented in |method-match-MatchMacro.canVisitArgument|.rst
+.. |detail/method-match-MatchMacro.visit| replace:: to be documented in |detail/method-match-MatchMacro.visit|.rst
 
-.. |method-match-MatchMacro.canFoldReturnResult| replace:: to be documented in |method-match-MatchMacro.canFoldReturnResult|.rst
+.. |detail/method-match-MatchMacro.canVisitArgument| replace:: to be documented in |detail/method-match-MatchMacro.canVisitArgument|.rst
 
-.. |class-match-StaticMatchMacro| replace:: to be documented in |class-match-StaticMatchMacro|.rst
+.. |detail/method-match-MatchMacro.canFoldReturnResult| replace:: to be documented in |detail/method-match-MatchMacro.canFoldReturnResult|.rst
 
-.. |class-match-MatchAsIs| replace:: to be documented in |class-match-MatchAsIs|.rst
+.. |detail/class-match-StaticMatchMacro| replace:: to be documented in |detail/class-match-StaticMatchMacro|.rst
 
-.. |function-match-match_type| replace:: to be documented in |function-match-match_type|.rst
+.. |detail/class-match-MultiMatchMacro| replace:: to be documented in |detail/class-match-MultiMatchMacro|.rst
 
-.. |function-match-match_expr| replace:: to be documented in |function-match-match_expr|.rst
+.. |detail/class-match-StaticMultiMatchMacro| replace:: to be documented in |detail/class-match-StaticMultiMatchMacro|.rst
+
+.. |detail/class-match-MatchAsIs| replace:: to be documented in |detail/class-match-MatchAsIs|.rst
+
+.. |detail/class-match-MatchCopy| replace:: to be documented in |detail/class-match-MatchCopy|.rst
+
+.. |detail/function-match-match_type| replace:: to be documented in |detail/function-match-match_type|.rst
+
+.. |detail/function-match-match_expr| replace:: to be documented in |detail/function-match-match_expr|.rst
 

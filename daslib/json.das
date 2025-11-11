@@ -11,35 +11,35 @@ require daslib/strings_boost
 
 variant JsValue {
     //! Single JSON element.
-    _object  : table<string; JsonValue?>
-    _array   : array<JsonValue?>
-    _string  : string
-    _number  : double
-    _longint : int64   // extension, not part of JSON standard
-    _bool    : bool
-    _null    : void?
+    _object  : table<string; JsonValue?>    //! JSON object
+    _array   : array<JsonValue?>           //! JSON array
+    _string  : string                      //! JSON string
+    _number  : double                      //! JSON number
+    _longint : int64                       //! extension, not part of JSON standard (represents long integer numbers)
+    _bool    : bool                        //! JSON boolean
+    _null    : void?                       //! JSON null
 }
 
 struct JsonValue {
     //! JSON value, wraps any JSON element.
-    value : JsValue
+    value : JsValue                         //! value of the JSON element
 }
 
 variant Token {
     //! JSON input stream token.
-    _string  : string
-    _number  : double
-    _longint : int64   // extension, not part of JSON standard
-    _bool    : bool
-    _null    : void?
-    _symbol  : int
-    _error   : string
+    _string  : string                       //! string token
+    _number  : double                       //! number token
+    _longint : int64                        //! extension, not part of JSON standard (represents long integer numbers)
+    _bool    : bool                         //! boolean token
+    _null    : void?                        //! null token
+    _symbol  : int                          //! symbol token (one of []{}:,)
+    _error   : string                       //! error token
 }
 
 struct TokenAt {
     //! JSON parsing token. Contains token and its position.
-    value : Token
-    line, row : int
+    value : Token                           //! token value
+    line, row : int                         //! token position in the input stream
 }
 
 let private {
@@ -53,90 +53,109 @@ def JVNull {
 }
 
 def JV(v : string) {
-    //! Creates `JsonValue` out of value.
+    //! Creates `JsonValue` out of string value.
     return new JsonValue(value <- JsValue(_string = v))
 }
 
 def JV(v : double) {
+    //! Creates `JsonValue` out of double value.
     return new JsonValue(value <- JsValue(_number = v))
 }
 
 def JV(v : bool) {
+    //! Creates `JsonValue` out of boolean value.
     return new JsonValue(value <- JsValue(_bool = v))
 }
 
 def JV(var v : table<string; JsonValue?>) {
+    //! Creates `JsonValue` out of object (table string->JsonValue?) value.
     return new JsonValue(value <- JsValue(_object <- v))
 }
 
 def JV(var v : array<JsonValue?>) {
+    //! Creates `JsonValue` out of array of `JsonValue?` value.
     return new JsonValue(value <- JsValue(_array <- v))
 }
 
 def JV(v : float) {
+    //! Creates `JsonValue` out of float value.
     return new JsonValue(value <- JsValue(_number = double(v)))
 }
 
 def JV(v : int) {
+    //! Creates `JsonValue` out of int value.
     return new JsonValue(value <- JsValue(_longint = int64(v)))
 }
 
 def JV(v : bitfield) {
+    //! Creates `JsonValue` out of bitfield value.
     return new JsonValue(value <- JsValue(_longint = int64(v)))
 }
 
-def JV(v : bitfield8) {
+def JV(v : bitfield : uint8 < >) {
+    //! Creates `JsonValue` out of bitfield8 value.
     return new JsonValue(value <- JsValue(_longint = int64(v)))
 }
 
-def JV(v : bitfield16) {
+def JV(v : bitfield : uint16 < >) {
+    //! Creates `JsonValue` out of bitfield16 value.
     return new JsonValue(value <- JsValue(_longint = int64(v)))
 }
 
-def JV(v : bitfield64) {
+def JV(v : bitfield : uint64 < >) {
+    //! Creates `JsonValue` out of bitfield64 value.
     return new JsonValue(value <- JsValue(_longint = int64(v)))
 }
 
 def JV(val : int8) : JsonValue? {
+    //! Creates `JsonValue` out of int8 value.
     return new JsonValue(value <- JsValue(_longint = int64(val)))
 }
 
 def JV(val : uint8) : JsonValue? {
+    //! Creates `JsonValue` out of uint8 value.
     return new JsonValue(value <- JsValue(_longint = int64(val)))
 }
 
 def JV(val : int16) : JsonValue? {
+    //! Creates `JsonValue` out of int16 value.
     return new JsonValue(value <- JsValue(_longint = int64(val)))
 }
 
 def JV(val : uint16) : JsonValue? {
+    //! Creates `JsonValue` out of uint16 value.
     return new JsonValue(value <- JsValue(_longint = int64(val)))
 }
 
 def JV(val : uint) : JsonValue? {
+    //! Creates `JsonValue` out of uint value.
     return new JsonValue(value <- JsValue(_longint = int64(val)))
 }
 
 def JV(val : int64) : JsonValue? {
+    //! Creates `JsonValue` out of int64 value.
     return new JsonValue(value <- JsValue(_longint = val))
 }
 
 def JV(val : uint64) : JsonValue? {
+    //! Creates `JsonValue` out of uint64 value.
     return new JsonValue(value <- JsValue(_longint = int64(val)))
 }
 
 def private lexer(text : string) {
+    //! creates a lexer generator from the input `text` string.
     let stext = clone_string(text)
     return <- _lexer(stext)
 }
 
 def private lexer(text : array<uint8>) {
+    //! creates a lexer generator from the input `text` array of uint8.
     let stext = string(text)
     return <- _lexer(stext)
 }
 
 def private next(var text : iterator<int>; var character, line, row : int&) : bool {
-
+    //! advances the `text` iterator, updates `character`, `line` and `row`.
     if (next(text, character)) {
         if (is_new_line(character)) {
             line++
@@ -150,6 +169,7 @@ def private next(var text : iterator<int>; var character, line, row : int&) : bo
 }
 
 def private _lexer(var stext : string implicit) {
+    //! creates a lexer generator from the input `stext` string.
     return <- generator<TokenAt>() <| $() {
         var tin : iterator<int>
         unsafe {
@@ -281,6 +301,7 @@ def private _lexer(var stext : string implicit) {
 }
 
 def private expect_token(var itv : iterator<TokenAt>; var ahead : TokenAt; vindex : int; var error : string&) : bool {
+    //! expects the next token to be of variant index `vindex`.
     if (!next(itv, ahead)) {
         error = "unexected eos"
         return false
@@ -293,6 +314,7 @@ def private expect_token(var itv : iterator<TokenAt>; var ahead : TokenAt; vinde
 }
 
 def private expect_symbol(var itv : iterator<TokenAt>; var ahead : TokenAt; sym : int; var error : string&) : bool {
+    //! expects the next token to be symbol `sym`.
     if (!next(itv, ahead)) {
         error = "unexected eos"
         return false
@@ -308,6 +330,7 @@ def private expect_symbol(var itv : iterator<TokenAt>; var ahead : TokenAt; sym 
 }
 
 def private parse_value(var itv : iterator<TokenAt>; var error : string&) : JsonValue? {
+    //! parses a JSON value from the token iterator `itv`.
     var ahead : TokenAt
     if (!next(itv, ahead)) {
         return null
@@ -416,6 +439,8 @@ def read_json(text : string implicit; var error : string&) : JsonValue? {
 }
 
 def read_json(text : array<uint8>; var error : string&) : JsonValue? {
+    //! reads JSON from the `text` array of uint8.
+    //! if `error` is not empty, it contains the parsing error message.
     error = ""
     var lex <- lexer(text)
     var res = parse_value(lex, error)
@@ -452,6 +477,7 @@ def set_allow_duplicate_keys(value : bool) {
 
 // note - we use StringBuilderWriter for performance reasons here
 def private write_value(var writer : StringBuilderWriter; jsv : JsonValue?; depth : int) {
+    //! writes JSON value `jsv` into the `writer` at indentation `depth`.
     if (jsv == null) {
         write(writer, "null")
     } elif (jsv.value is _string) {
@@ -544,7 +570,7 @@ def write_json(val : JsonValue?#) : string {
 
 def try_fixing_broken_json(var bad : string) {
     //! fixes broken json. so far supported
-    //! 1. "string" + "string" string concatination
+    //! 1. "string" + "string" string concatenation
     //! 2. "text "nested text" text" nested quotes
     //! 3. extra , at the end of object or array
     //! 4. /uXXXXXX sequences in the middle of white space

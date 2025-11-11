@@ -1,0 +1,1 @@
+ Removes trailing white space.

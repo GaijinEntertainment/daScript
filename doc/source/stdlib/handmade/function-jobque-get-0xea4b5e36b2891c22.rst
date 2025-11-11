@@ -1,0 +1,1 @@
+ Get atomic integer value.

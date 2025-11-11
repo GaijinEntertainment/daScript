@@ -9,8 +9,8 @@ require uriparser
 require strings
 require jobque
 require daslib/ast_boost
-require daslib/strings_boost
 require daslib/rst_comment
+require daslib/strings_boost
 require daslib/rst
 require daslib/functional
 require daslib/json
@@ -70,13 +70,13 @@ inv_distance|inv_distance_sq)$%%),
 dot|normalize|fast_normalize)$%%),
         group_by_regex("Noise functions", mod, %regex~(uint32_hash|uint_noise_1D|uint_noise_2D|uint_noise_3D)$%%),
         group_by_regex("lerp/mad/clamp", mod, %regex~(lerp|mad|clamp)$%%),
-        group_by_regex("Matrix operations", mod, %regex~(\=\=|\!\=|\*)$%%),
+        group_by_regex("Matrix operations", mod, %regex~(\=\=|\!\=|\*).*$%%),
         group_by_regex("Matrix initializers", mod, %regex~(float3x4|float4x4|float3x3|identity3x4|identity4x4|identity3x3)$%%),
         group_by_regex("Matrix manipulation", mod, %regex~(identity|inverse|rotate|transpose|translation|compose|decompose|look_at|orthonormal_inverse|persp_forward|persp_reverse)$%%),
         group_by_regex("Quaternion operations", mod, %regex~(quat_conjugate|quat_mul|quat_mul_vec|quat_from_unit_arc|quat_from_unit_vec_ang)$%%),
         group_by_regex("Packing and unpacking", mod, %regex~(pack_float_to_byte|unpack_byte_to_float)$%%)
     );
-    document("Math library", mod, "{root}/math.rst", "{root}/detail/math.rst", groups);
+    document("Math library", mod, "math.rst", groups);
 }
 
 def document_module_builtin(root : string) {
@@ -117,7 +117,7 @@ get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_defau
         group_by_regex("Memset", mod, %regex~(memset.*)$%%),
         group_by_regex("Malloc", mod, %regex~(malloc|free|malloc_usable_size)$%%),
         group_by_regex("Compilation and AOT", mod, %regex~(is_aot_enabled|set_aot|reset_aot|compiling_file_name|compiling_module_name)$%%))
-    document("Built-in runtime", mod, "{root}/builtin.rst", "{root}/detail/builtin.rst", groups);
+    document("Built-in runtime", mod, "builtin.rst", groups);
 }
 
 def document_module_fio(root : string) {
@@ -129,7 +129,7 @@ def document_module_fio(root : string) {
         group_by_regex("Directory manipulation", mod, %regex~(dir|mkdir|chdir|getcwd)$%%),
         group_by_regex("OS specific routines", mod, %regex~(sleep|exit|popen|popen_binary|get_env_variable|sanitize_command_line|has_env_variable)$%%)
     )
-    document("File input output library", mod, "{root}/fio.rst", "{root}/detail/fio.rst", groups)
+    document("File input output library", mod, "fio.rst", groups)
 }
 
 def document_module_random(root : string) {
@@ -139,7 +139,7 @@ def document_module_random(root : string) {
         group_by_regex("Random iterators", mod, %regex~(each_random_.*)$%%),
         group_by_regex("Specific distributions", mod, %regex~(random_unit_vector|random_in_unit_disk|random_in_unit_sphere)$%%)
     )
-    document("Random generator library", mod, "{root}/random.rst", "{root}/detail/random.rst", groups)
+    document("Random generator library", mod, "random.rst", groups)
 }
 
 def document_module_network(root : string) {
@@ -147,7 +147,7 @@ def document_module_network(root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Low lever NetworkServer IO", mod, %regex~(make_server|server_init|server_is_open|server_is_connected|server_tick|server_send|server_restore)$%%)
     )
-    document("Network socket library", mod, "{root}/network.rst", "{root}/detail/network.rst", groups)
+    document("Network socket library", mod, "network.rst", groups)
 }
 
 def document_module_uriparser(root : string) {
@@ -159,7 +159,7 @@ def document_module_uriparser(root : string) {
         group_by_regex("File name conversions", mod, %regex~(to_unix_file_name|to_windows_file_name|to_file_name|uri_from_file_name|uri_from_windows_file_name|uri_from_unix_file_name|uri_to_unix_file_name|uri_to_windows_file_name|unix_file_name_to_uri|windows_file_name_to_uri|uri_to_file_name|file_name_to_uri)$%%),
         group_by_regex("GUID", mod, %regex~(make_new_guid)$%%)
     )
-    document("URI manipulation library based on UriParser", mod, "{root}/uriparser.rst", "{root}/detail/uriparser.rst", groups)
+    document("URI manipulation library based on UriParser", mod, "uriparser.rst", groups)
 }
 
 def document_module_rtti(root : string) {
@@ -178,7 +178,7 @@ def document_module_rtti(root : string) {
         group_by_regex("Function and mangled name hash", mod, %regex~(get_function_by_mangled_name_hash|get_function_mangled_name_hash|get_function_address)$%%),
         group_by_regex("Context and mutex locking", mod, %regex~(lock_this_context|lock_context|lock_mutex)$%%),
         group_by_regex("Runtime data access", mod, %regex~(get_table_key_index)$%%))
-    document("Runtime type information library", mod, "{root}/rtti.rst", "{root}/detail/rtti.rst", groups)
+    document("Runtime type information library", mod, "rtti.rst", groups)
 }
 
 def document_module_ast(root : string) {
@@ -209,7 +209,7 @@ def document_module_ast(root : string) {
         group_by_regex("Infer", mod, %regex~(infer_generic_type|update_alias_map)$%%),
         hide_group(group_by_regex("Internal ast infrastructure", mod, %regex~(builtin_ast_.*)%%))
     )
-    document("AST manipulation library", mod, "{root}/ast.rst", "{root}/detail/ast.rst", groups)
+    document("AST manipulation library", mod, "ast.rst", groups)
 }
 
 def document_module_ast_boost(root : string) {
@@ -225,7 +225,7 @@ def document_module_ast_boost(root : string) {
         hide_group(group_by_regex("Clonning", mod, %regex~(clone)%%)),
         group_by_regex("Setup", mod, %regex~setup.*$%%)
     )
-    document("Boost package for the AST", mod, "{root}/ast_boost.rst", "{root}/detail/ast_boost.rst", groups)
+    document("Boost package for the AST", mod, "ast_boost.rst", groups)
 }
 
 def document_module_strings(root : string) {
@@ -241,11 +241,11 @@ def document_module_strings(root : string) {
         group_by_regex("String modifications", mod, %regex~(chop|escape|unescape|repeat|replace|reverse|slice|
 strip|strip_left|strip_right|to_lower|to_lower_in_place|to_upper|to_upper_in_place|rtrim|safe_unescape|ltrim|trim)$%%),
         group_by_regex("Search substrings", mod, %regex~find.*%%),
-        group_by_regex("String conversion routines", mod, %regex~(double|float|int|uint|int64|uint64|to_double|to_float|to_int|to_uint|to_int64|to_uint64|string|to_char)$%%),
+        group_by_regex("String conversion routines", mod, %regex~(double|float|int|uint|int64|uint64|to_double|to_float|to_int|to_uint|to_int64|to_uint64|string|to_char|fmt|int8|to_int8|uint8|to_uint8|int16|to_int16|uint16|to_uint16|to_cpp_float)$%%),
         group_by_regex("String as array", mod, %regex~(modify_data|peek_data)$%%),
         group_by_regex("Low level memory allocation", mod, %regex~(delete_string|reserve_string_buffer)$%%)
     );
-    document("String manipulation library", mod, "{root}/strings.rst", "{root}/detail/strings.rst", groups);
+    document("String manipulation library", mod, "strings.rst", groups);
 }
 
 def document_module_strings_boost(root : string) {
@@ -257,17 +257,17 @@ def document_module_strings_boost(root : string) {
         group_by_regex("Replace", mod, %regex~(replace_multiple)$%%),
         group_by_regex("Levenshtein distance", mod, %regex~(levenshtein_distance|levenshtein_distance_fast)$%%),
         group_by_regex("Character traits", mod, %regex~(is_hex|is_tab_or_space)$%%))
-    document("Boost package for string manipulation library", mod, "{root}/strings_boost.rst", "{root}/detail/strings_boost.rst", groups)
+    document("Boost package for string manipulation library", mod, "strings_boost.rst", groups)
 }
 
 
 def document_module_functional(root : string) {
     var mod = find_module("functional")
     var groups <- array<DocGroup>(
-        group_by_regex("Map, reduce", mod, %regex~(filter|map|reduce|any|sum|all|cycle|islice|count|repeat_ref|repeat|not|echo|flatten)$%%),
+        group_by_regex("Map, reduce", mod, %regex~(filter|map|reduce|any|sum|all|cycle|islice|count|repeat_ref|repeat|not|echo|flatten|sorted)$%%),
         group_by_regex("Queries", mod, %regex~(is_equal|is_not_equal)$%%)
     )
-    document("Functional programming library", mod, "{root}/functional.rst", "{root}/detail/functional.rst", groups)
+    document("Functional programming library", mod, "functional.rst", groups)
 }
 
 def document_module_json(root : string) {
@@ -278,7 +278,7 @@ def document_module_json(root : string) {
         group_by_regex("JSON properties", mod, %regex~(set_no_trailing_zeros|set_no_empty_arrays|set_allow_duplicate_keys)$%%),
         group_by_regex("Broken JSON", mod, %regex~(try_fixing_broken_json)$%%)
     )
-    document("JSON manipulation library", mod, "{root}/json.rst", "{root}/detail/json.rst", groups)
+    document("JSON manipulation library", mod, "json.rst", groups)
 }
 
 def document_module_json_boost(root : string) {
@@ -287,7 +287,7 @@ def document_module_json_boost(root : string) {
         group_by_regex("Value conversion", mod, %regex~(JV|from_JV)$%%),
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     )
-    document("Boost package for JSON", mod, "{root}/json_boost.rst", "{root}/detail/json_boost.rst", groups)
+    document("Boost package for JSON", mod, "json_boost.rst", groups)
 }
 
 def document_module_regex(root : string) {
@@ -295,10 +295,10 @@ def document_module_regex(root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Compilation and validation", mod, %regex~(regex_compile|is_valid|regex_debug|debug_set|visit_top_down)$%%),
         group_by_regex("Access", mod, %regex~(regex_group|regex_foreach)$%%),
-        group_by_regex("Match", mod, %regex~(regex_match)$%%),
+        group_by_regex("Match & replace", mod, %regex~(regex_match|regex_replace)$%%),
         group_by_regex("Generation", mod, %regex~(re_gen.*)$%%)
     )
-    document("Regular expression library", mod, "{root}/regex.rst", "{root}/detail/regex.rst", groups)
+    document("Regular expression library", mod, "regex.rst", groups)
 }
 
 def document_module_regex_boost(root : string) {
@@ -307,7 +307,7 @@ def document_module_regex_boost(root : string) {
         group_by_regex("stub0", mod, %regex~(stub0)$%%),
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     )
-    document("Boost package for REGEX", mod, "{root}/regex_boost.rst", "{root}/detail/regex_boost.rst", groups)
+    document("Boost package for REGEX", mod, "regex_boost.rst", groups)
 }
 
 def document_module_rst(root : string) {
@@ -321,7 +321,7 @@ def document_module_rst(root : string) {
         group_by_regex("Group operations", mod, %regex~.*group%%),
         group_by_regex("Naming helpers", mod, %regex~(topic|module_name|function_name)$%%)
     )
-    document("Documentation generator", mod, "{root}/rst.rst", "{root}/detail/rst.rst", groups)
+    document("Documentation generator", mod, "rst.rst", groups)
 }
 
 def document_module_apply(root : string) {
@@ -330,7 +330,7 @@ def document_module_apply(root : string) {
         group_by_regex("stub0", mod, %regex~(stub0)$%%),
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     )
-    document("Apply reflection pattern", mod, "{root}/apply.rst", "{root}/detail/apply.rst", groups)
+    document("Apply reflection pattern", mod, "apply.rst", groups)
 }
 
 def document_module_jobque(root : string) {
@@ -342,7 +342,7 @@ def document_module_jobque(root : string) {
         group_by_regex("Construction", mod, %regex~(with_channel|with_job_status|with_job_que|with_lock_box)$%%),
         group_by_regex("Atomic", mod, %regex~(atomic32_create|atomic32_remove|with_atomic32|atomic64_create|atomic64_remove|with_atomic64|get|set|inc|dec)$%%)
     )
-    document("Jobs and threads", mod, "{root}/jobque.rst", "{root}/detail/jobque.rst", groups)
+    document("Jobs and threads", mod, "jobque.rst", groups)
 }
 
 def document_module_jobque_boost(root : string) {
@@ -353,7 +353,7 @@ def document_module_jobque_boost(root : string) {
         group_by_regex("Passing data", mod, %regex~(push|push_clone)$%%),
         group_by_regex("Internal capture details", mod, %regex~(capture_jobque_channel|capture_jobque_job_status|release_capture_jobque_channel|release_capture_jobque_job_status)$%%)
     )
-    document("Boost package for jobs and threads", mod, "{root}/jobque_boost.rst", "{root}/detail/jobque_boost.rst", groups)
+    document("Boost package for jobs and threads", mod, "jobque_boost.rst", groups)
 }
 
 def document_module_apply_in_context(root : string) {
@@ -362,16 +362,17 @@ def document_module_apply_in_context(root : string) {
         group_by_regex("stub0", mod, %regex~(stub0)$%%),
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     )
-    document("Cross-context evaluation helpers", mod, "{root}/apply_in_context.rst", "{root}/detail/apply_in_context.rst", groups)
+    document("Cross-context evaluation helpers", mod, "apply_in_context.rst", groups)
 }
 
 def document_module_algorithm(root : string) {
     var mod = find_module("algorithm")
     var groups <- array<DocGroup>(
         group_by_regex("Search", mod, %regex~(lower_bound|binary_search)$%%),
-        group_by_regex("Array manipulation", mod, %regex~(unique|sort_unique|reverse|combine)$%%)
+        group_by_regex("Array manipulation", mod, %regex~(unique|sort_unique|reverse|combine|erase_all|topological_sort)$%%),
+        group_by_regex("Table manipulation", mod, %regex~(intersection|union|difference|identical)$%%)
     )
-    document("Miscelanious algorithms", mod, "{root}/algorithm.rst", "{root}/detail/algorithm.rst", groups)
+    document("Miscelanious algorithms", mod, "algorithm.rst", groups)
 }
 
 def document_module_contracts(root : string) {
@@ -379,7 +380,7 @@ def document_module_contracts(root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Type queries", mod, %regex~(isYetAnotherVectorTemplate)$%%)
     )
-    document("Miscelanious contract annotations", mod, "{root}/contracts.rst", "{root}/detail/contracts.rst", groups)
+    document("Miscelanious contract annotations", mod, "contracts.rst", groups)
 }
 
 def document_module_defer(root : string) {
@@ -388,7 +389,7 @@ def document_module_defer(root : string) {
         group_by_regex("Defer", mod, %regex~(defer)$%%),
         group_by_regex("Stub", mod, %regex~(nada)$%%)
     )
-    document("defer and defer_delete macros", mod, "{root}/defer.rst", "{root}/detail/defer.rst", groups)
+    document("defer and defer_delete macros", mod, "defer.rst", groups)
 }
 
 def document_module_if_not_null(root : string) {
@@ -397,7 +398,7 @@ def document_module_if_not_null(root : string) {
         group_by_regex("stub0", mod, %regex~(stub0)$%%),
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     )
-    document("if_not_null macro", mod, "{root}/if_not_null.rst", "{root}/detail/if_not_null.rst", groups)
+    document("if_not_null macro", mod, "if_not_null.rst", groups)
 }
 
 def document_module_instance_function(root : string) {
@@ -406,7 +407,7 @@ def document_module_instance_function(root : string) {
         group_by_regex("stub0", mod, %regex~(stub0)$%%),
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     )
-    document("instance_function function annotation", mod, "{root}/instance_function.rst", "{root}/detail/instance_function.rst", groups)
+    document("instance_function function annotation", mod, "instance_function.rst", groups)
 }
 
 def document_module_templates(root : string) {
@@ -415,7 +416,7 @@ def document_module_templates(root : string) {
         group_by_regex("stub0", mod, %regex~(stub0)$%%),
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     )
-    document("decltype macro and template function annotation", mod, "{root}/templates.rst", "{root}/detail/templates.rst", groups)
+    document("decltype macro and template function annotation", mod, "templates.rst", groups)
 }
 
 def document_module_templates_boost(root : string) {
@@ -428,7 +429,7 @@ def document_module_templates_boost(root : string) {
         group_by_regex("Global variable helpers", mod, %regex~(add_global_var|add_global_let|add_global_private_var|add_global_private_let)$%%),
         group_by_regex("Hygenic names", mod, %regex~(make_unique_private_name)$%%)
     )
-    document("Template application helpers", mod, "{root}/templates_boost.rst", "{root}/detail/templates_boost.rst", groups)
+    document("Template application helpers", mod, "templates_boost.rst", groups)
 }
 
 def document_module_is_local(root : string) {
@@ -436,7 +437,7 @@ def document_module_is_local(root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Scope checks", mod, %regex~(is_local_expr|is_local_or_global_expr|is_scope_expr)$%%)
     )
-    document("is_local_xxx ast helpers", mod, "{root}/is_local.rst", "{root}/detail/is_local.rst", groups)
+    document("is_local_xxx ast helpers", mod, "is_local.rst", groups)
 }
 
 def document_module_safe_addr(root : string) {
@@ -445,7 +446,7 @@ def document_module_safe_addr(root : string) {
         group_by_regex("Safe temporary address", mod, %regex~(safe_addr|shared_addr)$%%),
         group_by_regex("Temporary pointers", mod, %regex~(temp_ptr)$%%)
     )
-    document("safe_addr macro", mod, "{root}/safe_addr.rst", "{root}/detail/safe_addr.rst", groups)
+    document("safe_addr macro", mod, "safe_addr.rst", groups)
 }
 
 def document_module_static_let(root : string) {
@@ -454,7 +455,7 @@ def document_module_static_let(root : string) {
         group_by_regex("Static variable declarations", mod, %regex~(static_let|static_let_finalize)$%%),
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     )
-    document("static_let macro", mod, "{root}/static_let.rst", "{root}/detail/static_let.rst", groups)
+    document("static_let macro", mod, "static_let.rst", groups)
 }
 
 def document_module_lpipe(root : string) {
@@ -463,7 +464,7 @@ def document_module_lpipe(root : string) {
         group_by_regex("stub0", mod, %regex~(stub0)$%%),
         group_by_regex("stub1", mod, %regex~(stub1)$%%)
     )
-    document("lpipe macro", mod, "{root}/lpipe.rst", "{root}/detail/lpipe.rst", groups)
+    document("lpipe macro", mod, "lpipe.rst", groups)
 }
 
 def document_module_math_bits(root : string) {
@@ -473,7 +474,7 @@ def document_module_math_bits(root : string) {
         group_by_regex("int,uint in float", mod, %regex~(float_bits_to_int|float_bits_to_uint)$%%),
         group_by_regex("int64,uint64 in double", mod, %regex~(int64_bits_to_double|uint64_bits_to_double|double_bits_to_int64|double_bits_to_uint64)$%%),
         group_by_regex("bit-cast vec4f", mod, %regex~(cast_to.*)$%%))
-    document("Math bit helpers", mod, "{root}/math_bits.rst", "{root}/detail/math_bits.rst", groups)
+    document("Math bit helpers", mod, "math_bits.rst", groups)
 }
 
 def document_module_math_boost(root : string) {
@@ -483,18 +484,20 @@ def document_module_math_boost(root : string) {
         group_by_regex("Intersections", mod, %regex~(is_intersecting)$%%),
         group_by_regex("Matrices", mod, %regex~(look_at_lh|look_at_rh|perspective_lh|perspective_rh|perspective_rh_opengl|ortho_rh|planar_shadow)$%%),
         group_by_regex("Plane", mod, %regex~(plane_dot|plane_normalize|plane_from_point_normal)$%%),
+        group_by_regex("Color conversions", mod, %regex~(linear_to_SRGB)$%%),
         group_by_regex("Color packig and unpacking", mod, %regex~(RGBA_TO_UCOLOR|UCOLOR_TO_RGBA|UCOLOR_TO_RGB)$%%)
     )
-    document("Boost package for math", mod, "{root}/math_boost.rst", "{root}/detail/math_boost.rst", groups)
+    document("Boost package for math", mod, "math_boost.rst", groups)
 }
 
 def document_module_array_boost(root : string) {
     var mod = find_module("array_boost")
     var groups <- array<DocGroup>(
         group_by_regex("Temporary arrays", mod, %regex~(temp_array)$%%),
-        group_by_regex("Empty check", mod, %regex~(empty)$%%)
+        group_by_regex("Empty check", mod, %regex~(empty)$%%),
+        group_by_regex("Sub-array view", mod, %regex~(array_view)$%%)
     )
-    document("Boost package for array manipulation", mod, "{root}/array_boost.rst", "{root}/detail/array_boost.rst", groups)
+    document("Boost package for array manipulation", mod, "array_boost.rst", groups)
 }
 
 def document_module_archive(root : string) {
@@ -503,7 +506,7 @@ def document_module_archive(root : string) {
         group_by_regex("Serialization", mod, %regex~(serialize|serialize_raw|read_raw|write_raw)$%%),
         group_by_regex("Memory archive", mod, %regex~(mem_archive_save|mem_archive_load)$%%)
     )
-    document("General prupose serialization", mod, "{root}/archive.rst", "{root}/detail/archive.rst", groups)
+    document("General prupose serialization", mod, "archive.rst", groups)
 }
 
 def document_module_unroll(root : string) {
@@ -511,7 +514,7 @@ def document_module_unroll(root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Unrolling", mod, %regex~(unroll)$%%)
     )
-    document("Loop unrolling", mod, "{root}/unroll.rst", "{root}/detail/unroll.rst", groups)
+    document("Loop unrolling", mod, "unroll.rst", groups)
 }
 
 def document_module_assert_once(root : string) {
@@ -519,7 +522,7 @@ def document_module_assert_once(root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Assertion", mod, %regex~(assert_once)$%%)
     )
-    document("Assert once", mod, "{root}/assert_once.rst", "{root}/detail/assert_once.rst", groups)
+    document("Assert once", mod, "assert_once.rst", groups)
 }
 
 def document_module_ast_block_to_loop(root : string) {
@@ -527,7 +530,7 @@ def document_module_ast_block_to_loop(root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Block to loop conversion", mod, %regex~(convert_block_to_loop)$%%)
     )
-    document("DECS, AST block to loop", mod, "{root}/ast_block_to_loop.rst", "{root}/detail/ast_block_to_loop.rst", groups)
+    document("DECS, AST block to loop", mod, "ast_block_to_loop.rst", groups)
 }
 
 def document_module_ast_used(root : string) {
@@ -535,7 +538,7 @@ def document_module_ast_used(root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Collecting type information", mod, %regex~(collect_used_types)$%%)
     )
-    document("AST type ussage collection", mod, "{root}/ast_used.rst", "{root}/detail/ast_used.rst", groups)
+    document("AST type ussage collection", mod, "ast_used.rst", groups)
 }
 
 def document_module_constexpr(root : string) {
@@ -543,7 +546,7 @@ def document_module_constexpr(root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Macro helpers", mod, %regex~(isConstantExpression)$%%)
     )
-    document("Constant expression checker and substitution", mod, "{root}/constexpr.rst", "{root}/detail/constexpr.rst", groups)
+    document("Constant expression checker and substitution", mod, "constexpr.rst", groups)
 }
 
 def document_module_uriparser_boost(root : string) {
@@ -552,7 +555,7 @@ def document_module_uriparser_boost(root : string) {
         group_by_regex("Split and compose", mod, %regex~(uri_split_full_path|uri_compose_query|uri_compose_query_in_order|uri_compose)$%%),
         group_by_regex("Component accessors", mod, %regex~(scheme|user_info|host|port|path|query|fragment)$%%)
     )
-    document("Boost package for the URI parser", mod, "{root}/uriparser_boost.rst", "{root}/detail/uriparser_boost.rst", groups)
+    document("Boost package for the URI parser", mod, "uriparser_boost.rst", groups)
 }
 
 def document_module_sort_boost(root : string) {
@@ -560,7 +563,7 @@ def document_module_sort_boost(root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("stub", mod, %regex~(stub)$%%)
     )
-    document("Boost package for the builtin sort", mod, "{root}/sort_boost.rst", "{root}/detail/sort_boost.rst", groups)
+    document("Boost package for the builtin sort", mod, "sort_boost.rst", groups)
 }
 
 def document_module_enum_trait(root : string) {
@@ -568,7 +571,7 @@ def document_module_enum_trait(root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("stub", mod, %regex~(stub)$%%)
     )
-    document("Enumeration traits", mod, "{root}/enum_trait.rst", "{root}/detail/enum_trait.rst", groups)
+    document("Enumeration traits", mod, "enum_trait.rst", groups)
 }
 
 def document_module_cpp_bind(root : string) {
@@ -576,7 +579,7 @@ def document_module_cpp_bind(root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Generation of bindings", mod, %regex~(log_cpp_class_adapter)$%%)
     )
-    document("C++ bindings generator", mod, "{root}/cpp_bind.rst", "{root}/detail/cpp_bind.rst", groups)
+    document("C++ bindings generator", mod, "cpp_bind.rst", groups)
 }
 
 def document_module_decs(root : string) {
@@ -591,7 +594,7 @@ def document_module_decs(root : string) {
         group_by_regex("Iteration", mod, %regex~(for_each_archetype|for_eid_archetype|for_each_archetype_find|get_ro|decs_array|get_default_ro|get_optional)$%%),
         group_by_regex("Request", mod, %regex~(verify_request|compile_request|lookup_request|EcsRequestPos)$%%)
     )
-    document("DECS, Daslang entity component system", mod, "{root}/decs.rst", "{root}/detail/decs.rst", groups)
+    document("DECS, Daslang entity component system", mod, "decs.rst", groups)
 }
 
 def document_module_decs_boost(root : string) {
@@ -600,7 +603,7 @@ def document_module_decs_boost(root : string) {
         group_by_regex("Stub1", mod, %regex~(stub1)$%%),
         group_by_regex("Stub2", mod, %regex~(stub2)$%%)
     )
-    document("Boost package for DECS", mod, "{root}/decs_boost.rst", "{root}/detail/decs_boost.rst", groups)
+    document("Boost package for DECS", mod, "decs_boost.rst", groups)
 }
 
 def document_module_utf8_utils(root : string) {
@@ -608,7 +611,7 @@ def document_module_utf8_utils(root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("stub", mod, %regex~(stub)$%%)
     )
-    document("UTF-8 utilities", mod, "{root}/utf8_utils.rst", "{root}/detail/utf8_utils.rst", groups)
+    document("UTF-8 utilities", mod, "utf8_utils.rst", groups)
 }
 
 def document_module_macro_boost(root : string) {
@@ -616,7 +619,7 @@ def document_module_macro_boost(root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Implementation details", mod, %regex~(macro_verify)$%%)
     )
-    document("Boost package for the miscelanious macro manipulations", mod, "{root}/macro_boost.rst", "{root}/detail/macro_boost.rst", groups)
+    document("Boost package for the miscelanious macro manipulations", mod, "macro_boost.rst", groups)
 }
 
 def document_module_coroutines(root : string) {
@@ -624,7 +627,7 @@ def document_module_coroutines(root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Top level coroutine evaluation", mod, %regex~(cr_run|cr_run_all)$%%)
     )
-    document("Coroutines and additional generator support", mod, "{root}/coroutines.rst", "{root}/detail/coroutines.rst", groups)
+    document("Coroutines and additional generator support", mod, "coroutines.rst", groups)
 }
 
 def document_module_interfaces(root : string) {
@@ -632,7 +635,7 @@ def document_module_interfaces(root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Top level coroutine evaluation", mod, %regex~(cr_run|cr_run_all)$%%)
     )
-    document("Interfaces", mod, "{root}/interfaces.rst", "{root}/detail/interfaces.rst", groups)
+    document("Interfaces", mod, "interfaces.rst", groups)
 }
 
 def document_module_export_constructor(root : string) {
@@ -640,7 +643,7 @@ def document_module_export_constructor(root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Top level coroutine evaluation", mod, %regex~(cr_run|cr_run_all)$%%)
     )
-    document("Export constructor", mod, "{root}/export_constructor.rst", "{root}/detail/export_constructor.rst", groups)
+    document("Export constructor", mod, "export_constructor.rst", groups)
 }
 
 def document_module_faker(root : string) {
@@ -651,7 +654,7 @@ def document_module_faker(root : string) {
         group_by_regex("Random strings", mod, %regex~(any_.*|long_string|number|positive_int)$%%),
         group_by_regex("Date and time", mod, %regex~(month|day|date|is_leap_year|week_day)%%)
     )
-    document("Faker", mod, "{root}/faker.rst", "{root}/detail/faker.rst", groups)
+    document("Faker", mod, "faker.rst", groups)
 }
 
 def document_module_fuzzer(root : string) {
@@ -659,7 +662,7 @@ def document_module_fuzzer(root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Fuzzer tests", mod, %regex~fuzz.*$%%)
     )
-    document("Fuzzer", mod, "{root}/fuzzer.rst", "{root}/detail/fuzzer.rst", groups)
+    document("Fuzzer", mod, "fuzzer.rst", groups)
 }
 
 def document_module_match(root : string) {
@@ -667,7 +670,7 @@ def document_module_match(root : string) {
     var groups <- array<DocGroup>(
         hide_group(group_by_regex("Implementation details", mod, %regex~(match_type|match_expr)$%%))
     )
-    document("Pattern matching", mod, "{root}/match.rst", "{root}/detail/match.rst", groups)
+    document("Pattern matching", mod, "match.rst", groups)
 }
 
 def document_module_linq(root : string) {
@@ -687,7 +690,7 @@ def document_module_linq(root : string) {
         group_by_regex("Convertion operations", mod, %regex~(to_table.*|to_sequence.*)$%%),
         group_by_regex("Comparators and keys", mod, %regex~(less.*|unique_key.*|sequence_equal.*)$%%)
     )
-    document("LINQ", mod, "{root}/linq.rst", "{root}/detail/linq.rst", groups)
+    document("LINQ", mod, "linq.rst", groups)
 }
 
 def document_module_linq_boost(root : string) {
@@ -695,13 +698,12 @@ def document_module_linq_boost(root : string) {
     var groups <- array<DocGroup>(
         hide_group(group_by_regex("Implementation details", mod, %regex~(match_type|match_expr)$%%))
     )
-    document("Boost module for LINQ", mod, "{root}/linq_boost.rst", "{root}/detail/linq_boost.rst", groups)
+    document("Boost module for LINQ", mod, "linq_boost.rst", groups)
 }
 
 [export]
 def main {
     let root = get_das_root() + "/doc/source/stdlib"// todo: modify to output /temp so that we can merge changes
-    topic_root = "{root}/detail"
     // document embedded modules
     document_module_builtin(root)
     document_module_math(root)
@@ -712,7 +714,6 @@ def main {
     document_module_ast(root)
     document_module_strings(root)
     document_module_jobque(root)
-
     document_module_algorithm(root)
     document_module_apply_in_context(root)
     document_module_apply(root)

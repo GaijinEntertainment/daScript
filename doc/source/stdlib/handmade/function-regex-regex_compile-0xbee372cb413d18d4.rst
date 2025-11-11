@@ -1,0 +1,1 @@
+Precompile a regular expression.

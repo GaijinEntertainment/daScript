@@ -7,6 +7,7 @@ options strict_smart_pointers = true
 module functional shared public
 
 def private filter_any(var src : iterator<auto(TT)>; var blk) {
+    //! iterates over `src` and yields only those elements for which `blk` returns true
     static_if (!typeinfo is_ref_type(type<TT>)) {
         return <- generator<TT -&> capture(<- src, <- blk) () <| $() {
             for (w in src) {
@@ -35,10 +36,12 @@ def filter(var src : iterator<auto(TT)>; blk : lambda<(what : TT -&) : bool>) {
 
 // filter with function
 def filter(var src : iterator<auto(TT)>; blk : function<(what : TT -&) : bool>) {
+    //! iterates over `src` and yields only those elements for which `blk` returns true
     return <- filter_any(src, blk)
 }
 
 def private map_any(var src : iterator<auto(TT)>; var blk) {
+    //! iterates over `src` and yields the result of `blk` for each element
     static_if (typeinfo can_copy(type<QQ>)) {
         return <- generator<QQ -&> capture(<- src, <- blk) () <| $() {
             for (w in src) {
@@ -77,11 +80,13 @@ def map(var src : iterator<auto(TT)>; blk : lambda<(what : TT -&) : auto(QQ)>) {
 
 // map with function
 def map(var src : iterator<auto(TT)>; blk : function<(what : TT -&) : auto(QQ)>) {
+    //! iterates over `src` and yields the result of `blk` for each element
     return <- map_any(src, blk)
 }
 
 // reduce value, any invokable
 def private reduce_any(var it : iterator<auto(TT)>; functor) {
+    //! iterates over `it` and yields the reduced (combined) result of `functor` for each element
     var left : TT -&
     var first = true
     for (right in it) {
@@ -111,11 +116,15 @@ def reduce(var it : iterator<auto(TT)>; blk : lambda<(left, right : TT -&) : TT 
 
 // reduce with function
 def reduce(var it : iterator<auto(TT)>; blk : function<(left, right : TT -&) : TT const -&>) {
+    //! iterates over `it` and yields the reduced (combined) result of `blk` for each element
+    //! and previous reduction result
     return reduce_any(it, blk)
 }
 
 // reduce with block
 def reduce(var it : iterator<auto(TT)>; blk : block<(left, right : TT -&) : TT const -&>) {
+    //! iterates over `it` and yields the reduced (combined) result of `blk` for each element
+    //! and previous reduction result
     return reduce_any(it, blk)
 }
 
@@ -288,6 +297,7 @@ def echo(var x; extra : string = "\n") {
 }
 
 def private flatten_one(var src : iterator<iterator<auto(TT)>>) {
+    //! iterates over `src`, than iterates over each element of each element of `src` and yields it
     static_if (!typeinfo is_ref_type(type<TT>)) {
         return <- generator<TT -&> capture(<- src) () <| $() {
             for (i in src) {

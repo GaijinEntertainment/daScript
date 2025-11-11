@@ -1,4 +1,4 @@
-.. |class-export_constructor-ExportConstructor| replace:: to be documented in |class-export_constructor-ExportConstructor|.rst
+.. |detail/class-export_constructor-ExportConstructor| replace:: to be documented in |detail/class-export_constructor-ExportConstructor|.rst
 
-.. |method-export_constructor-ExportConstructor.apply| replace:: to be documented in |method-export_constructor-ExportConstructor.apply|.rst
+.. |detail/method-export_constructor-ExportConstructor.apply| replace:: to be documented in |detail/method-export_constructor-ExportConstructor.apply|.rst
 

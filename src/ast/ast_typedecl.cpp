@@ -742,7 +742,7 @@ namespace das
                 case Type::tBitfield64 : stream << ":uint64"; break;
                 default: break;
             }
-            if ( argNames.size() ) {
+            if ( argNames.size() || baseType!=Type::tBitfield ) {
                 stream << "<";
                 int ai = 0;
                 for ( const auto & arg : argNames ) {

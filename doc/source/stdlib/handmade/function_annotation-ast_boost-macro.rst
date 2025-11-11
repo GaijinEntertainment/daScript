@@ -1,0 +1,1 @@
+ MacroMacro function annotation.

@@ -5,14 +5,11 @@
 decltype macro and template function annotation
 ===============================================
 
-.. include:: detail/templates.rst
-
 The templates exposes collection of template-like routines for Daslang.
 
 All functions and symbols are in "templates" module, use require to get access to it. ::
 
     require daslib/templates
-
 
 ++++++++++++++++++++
 Function annotations

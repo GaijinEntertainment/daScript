@@ -5,500 +5,333 @@
 Boost package for math
 ======================
 
-.. include:: detail/math_boost.rst
-
 The math boost module implements collection of helper macros and functions to accompany :ref:`math <stdlib_math>`.
 
 All functions and symbols are in "math_boost" module, use require to get access to it. ::
 
     require daslib/math_boost
 
+++++++++++
+Structures
+++++++++++
 
 .. _struct-math_boost-AABR:
 
 .. das:attribute:: AABR
 
-
-
-AABR fields are
-
-+---+------+
-+min+float2+
-+---+------+
-+max+float2+
-+---+------+
-
-
 axis aligned bounding rectangle
+
+:Fields: * **min** : float2 - min coordinates
+
+         * **max** : float2 - max coordinates
+
 
 .. _struct-math_boost-AABB:
 
 .. das:attribute:: AABB
 
-
-
-AABB fields are
-
-+---+------+
-+min+float3+
-+---+------+
-+max+float3+
-+---+------+
-
-
 axis aligned bounding box
+
+:Fields: * **min** : float3 - min coordinates
+
+         * **max** : float3 - max coordinates
+
 
 .. _struct-math_boost-Ray:
 
 .. das:attribute:: Ray
 
-
-
-Ray fields are
-
-+------+------+
-+dir   +float3+
-+------+------+
-+origin+float3+
-+------+------+
-
-
 ray (direction and origin)
+
+:Fields: * **dir** : float3 - direction
+
+         * **origin** : float3 - origin
+
 
 +++++++++++++++++
 Angle conversions
 +++++++++++++++++
 
-  *  :ref:`degrees (f:float const) : float const <function-_at_math_boost_c__c_degrees_Cf>` 
-  *  :ref:`radians (f:float const) : float const <function-_at_math_boost_c__c_radians_Cf>` 
+  *  :ref:`degrees (f: float) : float <function-math_boost_degrees_float>` 
+  *  :ref:`radians (f: float) : float <function-math_boost_radians_float>` 
 
-.. _function-_at_math_boost_c__c_degrees_Cf:
+.. _function-math_boost_degrees_float:
 
-.. das:function:: degrees(f: float const)
-
-degrees returns float const
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+f       +float const  +
-+--------+-------------+
-
+.. das:function:: degrees(f: float) : float
 
 convert radians to degrees
 
-.. _function-_at_math_boost_c__c_radians_Cf:
+:Arguments: * **f** : float
 
-.. das:function:: radians(f: float const)
+.. _function-math_boost_radians_float:
 
-radians returns float const
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+f       +float const  +
-+--------+-------------+
-
+.. das:function:: radians(f: float) : float
 
 convert degrees to radians
+
+:Arguments: * **f** : float
 
 +++++++++++++
 Intersections
 +++++++++++++
 
-  *  :ref:`is_intersecting (a:math_boost::AABR const;b:math_boost::AABR const) : bool const <function-_at_math_boost_c__c_is_intersecting_CS_ls_math_boost_c__c_AABR_gr__CS_ls_math_boost_c__c_AABR_gr_>` 
-  *  :ref:`is_intersecting (a:math_boost::AABB const;b:math_boost::AABB const) : bool const <function-_at_math_boost_c__c_is_intersecting_CS_ls_math_boost_c__c_AABB_gr__CS_ls_math_boost_c__c_AABB_gr_>` 
-  *  :ref:`is_intersecting (ray:math_boost::Ray const;aabb:math_boost::AABB const;Tmin:float const;Tmax:float const) : bool const <function-_at_math_boost_c__c_is_intersecting_CS_ls_math_boost_c__c_Ray_gr__CS_ls_math_boost_c__c_AABB_gr__Cf_Cf>` 
+  *  :ref:`is_intersecting (a: AABR; b: AABR) : bool <function-math_boost_is_intersecting_AABR_AABR>` 
+  *  :ref:`is_intersecting (a: AABB; b: AABB) : bool <function-math_boost_is_intersecting_AABB_AABB>` 
+  *  :ref:`is_intersecting (ray: Ray; aabb: AABB; Tmin: float = 0f; Tmax: float = FLT_MAX) : bool <function-math_boost_is_intersecting_Ray_AABB_float_float>` 
 
-.. _function-_at_math_boost_c__c_is_intersecting_CS_ls_math_boost_c__c_AABR_gr__CS_ls_math_boost_c__c_AABR_gr_:
+.. _function-math_boost_is_intersecting_AABR_AABR:
 
-.. das:function:: is_intersecting(a: AABR const; b: AABR const)
+.. das:function:: is_intersecting(a: AABR; b: AABR) : bool
 
-is_intersecting returns bool const
+returns true if inputs intersect
 
-+--------+--------------------------------------------------------+
-+argument+argument type                                           +
-+========+========================================================+
-+a       + :ref:`math_boost::AABR <struct-math_boost-AABR>`  const+
-+--------+--------------------------------------------------------+
-+b       + :ref:`math_boost::AABR <struct-math_boost-AABR>`  const+
-+--------+--------------------------------------------------------+
+:Arguments: * **a** :  :ref:`AABR <struct-math_boost-AABR>` 
 
+            * **b** :  :ref:`AABR <struct-math_boost-AABR>` 
 
-A.LO<=B.HI && A.HI>=B.LO
+.. _function-math_boost_is_intersecting_AABB_AABB:
 
-.. _function-_at_math_boost_c__c_is_intersecting_CS_ls_math_boost_c__c_AABB_gr__CS_ls_math_boost_c__c_AABB_gr_:
+.. das:function:: is_intersecting(a: AABB; b: AABB) : bool
 
-.. das:function:: is_intersecting(a: AABB const; b: AABB const)
+returns true if inputs intersect
 
-is_intersecting returns bool const
+:Arguments: * **a** :  :ref:`AABB <struct-math_boost-AABB>` 
 
-+--------+--------------------------------------------------------+
-+argument+argument type                                           +
-+========+========================================================+
-+a       + :ref:`math_boost::AABB <struct-math_boost-AABB>`  const+
-+--------+--------------------------------------------------------+
-+b       + :ref:`math_boost::AABB <struct-math_boost-AABB>`  const+
-+--------+--------------------------------------------------------+
+            * **b** :  :ref:`AABB <struct-math_boost-AABB>` 
 
+.. _function-math_boost_is_intersecting_Ray_AABB_float_float:
 
-A.LO<=B.HI && A.HI>=B.LO
+.. das:function:: is_intersecting(ray: Ray; aabb: AABB; Tmin: float = 0f; Tmax: float = FLT_MAX) : bool
 
-.. _function-_at_math_boost_c__c_is_intersecting_CS_ls_math_boost_c__c_Ray_gr__CS_ls_math_boost_c__c_AABB_gr__Cf_Cf:
+returns true if ray intersects aabb within [Tmin, Tmax]
 
-.. das:function:: is_intersecting(ray: Ray const; aabb: AABB const; Tmin: float const; Tmax: float const)
+:Arguments: * **ray** :  :ref:`Ray <struct-math_boost-Ray>` 
 
-is_intersecting returns bool const
+            * **aabb** :  :ref:`AABB <struct-math_boost-AABB>` 
 
-+--------+--------------------------------------------------------+
-+argument+argument type                                           +
-+========+========================================================+
-+ray     + :ref:`math_boost::Ray <struct-math_boost-Ray>`  const  +
-+--------+--------------------------------------------------------+
-+aabb    + :ref:`math_boost::AABB <struct-math_boost-AABB>`  const+
-+--------+--------------------------------------------------------+
-+Tmin    +float const                                             +
-+--------+--------------------------------------------------------+
-+Tmax    +float const                                             +
-+--------+--------------------------------------------------------+
+            * **Tmin** : float
 
-
-A.LO<=B.HI && A.HI>=B.LO
+            * **Tmax** : float
 
 ++++++++
 Matrices
 ++++++++
 
-  *  :ref:`look_at_lh (Eye:float3 const;At:float3 const;Up:float3 const) : math::float4x4 <function-_at_math_boost_c__c_look_at_lh_Cf3_Cf3_Cf3>` 
-  *  :ref:`look_at_rh (Eye:float3 const;At:float3 const;Up:float3 const) : math::float4x4 <function-_at_math_boost_c__c_look_at_rh_Cf3_Cf3_Cf3>` 
-  *  :ref:`perspective_lh (fovy:float const;aspect:float const;zn:float const;zf:float const) : math::float4x4 <function-_at_math_boost_c__c_perspective_lh_Cf_Cf_Cf_Cf>` 
-  *  :ref:`perspective_rh (fovy:float const;aspect:float const;zn:float const;zf:float const) : math::float4x4 <function-_at_math_boost_c__c_perspective_rh_Cf_Cf_Cf_Cf>` 
-  *  :ref:`perspective_rh_opengl (fovy:float const;aspect:float const;zn:float const;zf:float const) : math::float4x4 <function-_at_math_boost_c__c_perspective_rh_opengl_Cf_Cf_Cf_Cf>` 
-  *  :ref:`ortho_rh (left:float const;right:float const;bottom:float const;top:float const;zNear:float const;zFar:float const) : math::float4x4 <function-_at_math_boost_c__c_ortho_rh_Cf_Cf_Cf_Cf_Cf_Cf>` 
-  *  :ref:`planar_shadow (Light:float4 const;Plane:float4 const) : math::float4x4 <function-_at_math_boost_c__c_planar_shadow_Cf4_Cf4>` 
+  *  :ref:`look_at_lh (Eye: float3; At: float3; Up: float3) : float4x4 <function-math_boost_look_at_lh_float3_float3_float3>` 
+  *  :ref:`look_at_rh (Eye: float3; At: float3; Up: float3) : float4x4 <function-math_boost_look_at_rh_float3_float3_float3>` 
+  *  :ref:`perspective_lh (fovy: float; aspect: float; zn: float; zf: float) : float4x4 <function-math_boost_perspective_lh_float_float_float_float>` 
+  *  :ref:`perspective_rh (fovy: float; aspect: float; zn: float; zf: float) : float4x4 <function-math_boost_perspective_rh_float_float_float_float>` 
+  *  :ref:`perspective_rh_opengl (fovy: float; aspect: float; zn: float; zf: float) : float4x4 <function-math_boost_perspective_rh_opengl_float_float_float_float>` 
+  *  :ref:`ortho_rh (left: float; right: float; bottom: float; top: float; zNear: float; zFar: float) : float4x4 <function-math_boost_ortho_rh_float_float_float_float_float_float>` 
+  *  :ref:`planar_shadow (Light: float4; Plane: float4) : float4x4 <function-math_boost_planar_shadow_float4_float4>` 
 
-.. _function-_at_math_boost_c__c_look_at_lh_Cf3_Cf3_Cf3:
+.. _function-math_boost_look_at_lh_float3_float3_float3:
 
-.. das:function:: look_at_lh(Eye: float3 const; At: float3 const; Up: float3 const)
-
-look_at_lh returns  :ref:`math::float4x4 <handle-math-float4x4>` 
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+Eye     +float3 const +
-+--------+-------------+
-+At      +float3 const +
-+--------+-------------+
-+Up      +float3 const +
-+--------+-------------+
-
+.. das:function:: look_at_lh(Eye: float3; At: float3; Up: float3) : float4x4
 
 left-handed (z forward) look at matrix with origin at `Eye` and target at `At`, and up vector `Up`.
 
-.. _function-_at_math_boost_c__c_look_at_rh_Cf3_Cf3_Cf3:
+:Arguments: * **Eye** : float3
 
-.. das:function:: look_at_rh(Eye: float3 const; At: float3 const; Up: float3 const)
+            * **At** : float3
 
-look_at_rh returns  :ref:`math::float4x4 <handle-math-float4x4>` 
+            * **Up** : float3
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+Eye     +float3 const +
-+--------+-------------+
-+At      +float3 const +
-+--------+-------------+
-+Up      +float3 const +
-+--------+-------------+
+.. _function-math_boost_look_at_rh_float3_float3_float3:
 
+.. das:function:: look_at_rh(Eye: float3; At: float3; Up: float3) : float4x4
 
 right-handed (z towards viewer) look at matrix with origin at `Eye` and target at `At`, and up vector `Up`.
 
-.. _function-_at_math_boost_c__c_perspective_lh_Cf_Cf_Cf_Cf:
+:Arguments: * **Eye** : float3
 
-.. das:function:: perspective_lh(fovy: float const; aspect: float const; zn: float const; zf: float const)
+            * **At** : float3
 
-perspective_lh returns  :ref:`math::float4x4 <handle-math-float4x4>` 
+            * **Up** : float3
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+fovy    +float const  +
-+--------+-------------+
-+aspect  +float const  +
-+--------+-------------+
-+zn      +float const  +
-+--------+-------------+
-+zf      +float const  +
-+--------+-------------+
+.. _function-math_boost_perspective_lh_float_float_float_float:
 
+.. das:function:: perspective_lh(fovy: float; aspect: float; zn: float; zf: float) : float4x4
 
 left-handed (z forward) perspective matrix
 
-.. _function-_at_math_boost_c__c_perspective_rh_Cf_Cf_Cf_Cf:
+:Arguments: * **fovy** : float
 
-.. das:function:: perspective_rh(fovy: float const; aspect: float const; zn: float const; zf: float const)
+            * **aspect** : float
 
-perspective_rh returns  :ref:`math::float4x4 <handle-math-float4x4>` 
+            * **zn** : float
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+fovy    +float const  +
-+--------+-------------+
-+aspect  +float const  +
-+--------+-------------+
-+zn      +float const  +
-+--------+-------------+
-+zf      +float const  +
-+--------+-------------+
+            * **zf** : float
 
+.. _function-math_boost_perspective_rh_float_float_float_float:
+
+.. das:function:: perspective_rh(fovy: float; aspect: float; zn: float; zf: float) : float4x4
 
 right-handed (z toward viewer) perspective matrix
 
-.. _function-_at_math_boost_c__c_perspective_rh_opengl_Cf_Cf_Cf_Cf:
+:Arguments: * **fovy** : float
 
-.. das:function:: perspective_rh_opengl(fovy: float const; aspect: float const; zn: float const; zf: float const)
+            * **aspect** : float
 
-perspective_rh_opengl returns  :ref:`math::float4x4 <handle-math-float4x4>` 
+            * **zn** : float
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+fovy    +float const  +
-+--------+-------------+
-+aspect  +float const  +
-+--------+-------------+
-+zn      +float const  +
-+--------+-------------+
-+zf      +float const  +
-+--------+-------------+
+            * **zf** : float
 
+.. _function-math_boost_perspective_rh_opengl_float_float_float_float:
+
+.. das:function:: perspective_rh_opengl(fovy: float; aspect: float; zn: float; zf: float) : float4x4
 
 right-handed (z toward viewer) opengl (z in [-1..1]) perspective matrix
 
-.. _function-_at_math_boost_c__c_ortho_rh_Cf_Cf_Cf_Cf_Cf_Cf:
+:Arguments: * **fovy** : float
 
-.. das:function:: ortho_rh(left: float const; right: float const; bottom: float const; top: float const; zNear: float const; zFar: float const)
+            * **aspect** : float
 
-ortho_rh returns  :ref:`math::float4x4 <handle-math-float4x4>` 
+            * **zn** : float
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+left    +float const  +
-+--------+-------------+
-+right   +float const  +
-+--------+-------------+
-+bottom  +float const  +
-+--------+-------------+
-+top     +float const  +
-+--------+-------------+
-+zNear   +float const  +
-+--------+-------------+
-+zFar    +float const  +
-+--------+-------------+
+            * **zf** : float
 
+.. _function-math_boost_ortho_rh_float_float_float_float_float_float:
+
+.. das:function:: ortho_rh(left: float; right: float; bottom: float; top: float; zNear: float; zFar: float) : float4x4
 
 right handed (z towards viwer) orthographic (parallel) projection matrix
 
-.. _function-_at_math_boost_c__c_planar_shadow_Cf4_Cf4:
+:Arguments: * **left** : float
 
-.. das:function:: planar_shadow(Light: float4 const; Plane: float4 const)
+            * **right** : float
 
-planar_shadow returns  :ref:`math::float4x4 <handle-math-float4x4>` 
+            * **bottom** : float
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+Light   +float4 const +
-+--------+-------------+
-+Plane   +float4 const +
-+--------+-------------+
+            * **top** : float
 
+            * **zNear** : float
+
+            * **zFar** : float
+
+.. _function-math_boost_planar_shadow_float4_float4:
+
+.. das:function:: planar_shadow(Light: float4; Plane: float4) : float4x4
 
 planar shadow projection matrix, i.e. all light shadows to be projected on a plane
+
+:Arguments: * **Light** : float4
+
+            * **Plane** : float4
 
 +++++
 Plane
 +++++
 
-  *  :ref:`plane_dot (Plane:float4 const;Vec:float4 const) : float const <function-_at_math_boost_c__c_plane_dot_Cf4_Cf4>` 
-  *  :ref:`plane_normalize (Plane:float4 const) : float4 const <function-_at_math_boost_c__c_plane_normalize_Cf4>` 
-  *  :ref:`plane_from_point_normal (p:float3 const;n:float3 const) : float4 const <function-_at_math_boost_c__c_plane_from_point_normal_Cf3_Cf3>` 
+  *  :ref:`plane_dot (Plane: float4; Vec: float4) : float <function-math_boost_plane_dot_float4_float4>` 
+  *  :ref:`plane_normalize (Plane: float4) : float4 <function-math_boost_plane_normalize_float4>` 
+  *  :ref:`plane_from_point_normal (p: float3; n: float3) : float4 <function-math_boost_plane_from_point_normal_float3_float3>` 
 
-.. _function-_at_math_boost_c__c_plane_dot_Cf4_Cf4:
+.. _function-math_boost_plane_dot_float4_float4:
 
-.. das:function:: plane_dot(Plane: float4 const; Vec: float4 const)
-
-plane_dot returns float const
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+Plane   +float4 const +
-+--------+-------------+
-+Vec     +float4 const +
-+--------+-------------+
-
+.. das:function:: plane_dot(Plane: float4; Vec: float4) : float
 
 dot product of `Plane` and 'Vec'
 
-.. _function-_at_math_boost_c__c_plane_normalize_Cf4:
+:Arguments: * **Plane** : float4
 
-.. das:function:: plane_normalize(Plane: float4 const)
+            * **Vec** : float4
 
-plane_normalize returns float4 const
+.. _function-math_boost_plane_normalize_float4:
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+Plane   +float4 const +
-+--------+-------------+
-
+.. das:function:: plane_normalize(Plane: float4) : float4
 
 normalize `Plane', length xyz will be 1.0 (or 0.0 for no plane)
 
-.. _function-_at_math_boost_c__c_plane_from_point_normal_Cf3_Cf3:
+:Arguments: * **Plane** : float4
 
-.. das:function:: plane_from_point_normal(p: float3 const; n: float3 const)
+.. _function-math_boost_plane_from_point_normal_float3_float3:
 
-plane_from_point_normal returns float4 const
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+p       +float3 const +
-+--------+-------------+
-+n       +float3 const +
-+--------+-------------+
-
+.. das:function:: plane_from_point_normal(p: float3; n: float3) : float4
 
 construct plane from point `p` and normal `n`
+
+:Arguments: * **p** : float3
+
+            * **n** : float3
+
++++++++++++++++++
+Color conversions
++++++++++++++++++
+
+  *  :ref:`linear_to_SRGB (x: float) : float <function-math_boost_linear_to_SRGB_float>` 
+  *  :ref:`linear_to_SRGB (c: float3) : float3 <function-math_boost_linear_to_SRGB_float3>` 
+  *  :ref:`linear_to_SRGB (c: float4) : float4 <function-math_boost_linear_to_SRGB_float4>` 
+
+.. _function-math_boost_linear_to_SRGB_float:
+
+.. das:function:: linear_to_SRGB(x: float) : float
+
+convert value from linear space to sRGB curve space
+
+:Arguments: * **x** : float
+
+.. _function-math_boost_linear_to_SRGB_float3:
+
+.. das:function:: linear_to_SRGB(c: float3) : float3
+
+convert value from linear space to sRGB curve space
+
+:Arguments: * **c** : float3
+
+.. _function-math_boost_linear_to_SRGB_float4:
+
+.. das:function:: linear_to_SRGB(c: float4) : float4
+
+convert value from linear space to sRGB curve space
+
+:Arguments: * **c** : float4
 
 ++++++++++++++++++++++++++
 Color packig and unpacking
 ++++++++++++++++++++++++++
 
-  *  :ref:`RGBA_TO_UCOLOR (x:float const;y:float const;z:float const;w:float const) : uint const <function-_at_math_boost_c__c_RGBA_TO_UCOLOR_Cf_Cf_Cf_Cf>` 
-  *  :ref:`RGBA_TO_UCOLOR (xyzw:float4 const) : uint const <function-_at_math_boost_c__c_RGBA_TO_UCOLOR_Cf4>` 
-  *  :ref:`UCOLOR_TO_RGBA (x:uint const) : float4 const <function-_at_math_boost_c__c_UCOLOR_TO_RGBA_Cu>` 
-  *  :ref:`UCOLOR_TO_RGB (x:uint const) : float3 const <function-_at_math_boost_c__c_UCOLOR_TO_RGB_Cu>` 
+  *  :ref:`RGBA_TO_UCOLOR (x: float; y: float; z: float; w: float) : uint <function-math_boost_RGBA_TO_UCOLOR_float_float_float_float>` 
+  *  :ref:`RGBA_TO_UCOLOR (xyzw: float4) : uint <function-math_boost_RGBA_TO_UCOLOR_float4>` 
+  *  :ref:`UCOLOR_TO_RGBA (x: uint) : float4 <function-math_boost_UCOLOR_TO_RGBA_uint>` 
+  *  :ref:`UCOLOR_TO_RGB (x: uint) : float3 <function-math_boost_UCOLOR_TO_RGB_uint>` 
 
-.. _function-_at_math_boost_c__c_RGBA_TO_UCOLOR_Cf_Cf_Cf_Cf:
+.. _function-math_boost_RGBA_TO_UCOLOR_float_float_float_float:
 
-.. das:function:: RGBA_TO_UCOLOR(x: float const; y: float const; z: float const; w: float const)
-
-RGBA_TO_UCOLOR returns uint const
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float const  +
-+--------+-------------+
-+y       +float const  +
-+--------+-------------+
-+z       +float const  +
-+--------+-------------+
-+w       +float const  +
-+--------+-------------+
-
+.. das:function:: RGBA_TO_UCOLOR(x: float; y: float; z: float; w: float) : uint
 
 conversion from RGBA to ucolor. x,y,z,w are in [0,1] range
 
-.. _function-_at_math_boost_c__c_RGBA_TO_UCOLOR_Cf4:
+:Arguments: * **x** : float
 
-.. das:function:: RGBA_TO_UCOLOR(xyzw: float4 const)
+            * **y** : float
 
-RGBA_TO_UCOLOR returns uint const
+            * **z** : float
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+xyzw    +float4 const +
-+--------+-------------+
+            * **w** : float
 
+.. _function-math_boost_RGBA_TO_UCOLOR_float4:
 
-conversion from RGBA to ucolor. x,y,z,w are in [0,1] range
+.. das:function:: RGBA_TO_UCOLOR(xyzw: float4) : uint
 
-.. _function-_at_math_boost_c__c_UCOLOR_TO_RGBA_Cu:
+conversion from RGBA to ucolor. xyzw components are in [0,1] range
 
-.. das:function:: UCOLOR_TO_RGBA(x: uint const)
+:Arguments: * **xyzw** : float4
 
-UCOLOR_TO_RGBA returns float4 const
+.. _function-math_boost_UCOLOR_TO_RGBA_uint:
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +uint const   +
-+--------+-------------+
-
+.. das:function:: UCOLOR_TO_RGBA(x: uint) : float4
 
 conversion from ucolor to RGBA. x components are in [0,255] range
 
-.. _function-_at_math_boost_c__c_UCOLOR_TO_RGB_Cu:
+:Arguments: * **x** : uint
 
-.. das:function:: UCOLOR_TO_RGB(x: uint const)
+.. _function-math_boost_UCOLOR_TO_RGB_uint:
 
-UCOLOR_TO_RGB returns float3 const
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +uint const   +
-+--------+-------------+
-
+.. das:function:: UCOLOR_TO_RGB(x: uint) : float3
 
 conversion from ucolor to RGB. x components are in [0,255] range. result is float3(x,y,z)
 
-+++++++++++++
-Uncategorized
-+++++++++++++
-
-.. _function-_at_math_boost_c__c_linear_to_SRGB_Cf:
-
-.. das:function:: linear_to_SRGB(x: float const)
-
-linear_to_SRGB returns float const
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float const  +
-+--------+-------------+
-
-
-convert value from linear space to sRGB curve space
-
-.. _function-_at_math_boost_c__c_linear_to_SRGB_Cf3:
-
-.. das:function:: linear_to_SRGB(c: float3 const)
-
-linear_to_SRGB returns float3 const
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+c       +float3 const +
-+--------+-------------+
-
-
-convert value from linear space to sRGB curve space
-
-.. _function-_at_math_boost_c__c_linear_to_SRGB_Cf4:
-
-.. das:function:: linear_to_SRGB(c: float4 const)
-
-linear_to_SRGB returns float4 const
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+c       +float4 const +
-+--------+-------------+
-
-
-convert value from linear space to sRGB curve space
+:Arguments: * **x** : uint
 
 

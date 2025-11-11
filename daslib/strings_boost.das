@@ -10,6 +10,7 @@ require math
 require strings public
 
 def wide(text : string implicit; width : int) {
+    //! pads text with spaces to the right to achieve desired width
     let extra = width - length(text)
     if (extra > 0) {
         return text + repeat(" ", extra)
@@ -20,6 +21,7 @@ def wide(text : string implicit; width : int) {
 
 
 def join(it; separator : string implicit) {
+    //! joins iterable `it` elements into a single string with `separator` between elements
     static_if (!typeinfo is_iterable(it)) {
         concept_assert(false, "can't join non-iterable type")
         return ""
@@ -44,6 +46,7 @@ def join(it; separator : string implicit) {
 }
 
 def join(var it : iterator<auto(TT)>; separator : string implicit) {
+    //! joins iterable `it` elements into a single string with `separator` between elements
     let st = build_string() <| $(var writer) {
         var skip_first = true
         for (elem in it) {
@@ -63,6 +66,7 @@ def join(var it : iterator<auto(TT)>; separator : string implicit) {
 }
 
 def private join_implement(iterable; separator : string; blk) : string {
+    //! joins iterable `it` elements into a single string with `separator` between elements
     let st = build_string() <| $(var writer) {
         var skip_first = true
         for (elem in iterable) {
@@ -78,23 +82,28 @@ def private join_implement(iterable; separator : string; blk) : string {
 }
 
 def join(iterable : array<auto(TT)>; separator : string; blk : block<(var writer : StringBuilderWriter; elem : TT) : void>) : string {
+    //! joins iterable `it` elements into a single string with `separator` between elements
     return join_implement(iterable, separator, blk)
 }
 
 def join(var iterable : iterator<auto(TT)>; separator : string; blk : block<(var writer : StringBuilderWriter; elem : TT) : void>) : string {
+    //! joins iterable `it` elements into a single string with `separator` between elements
     return join_implement(iterable, separator, blk)
 }
 
 def join(iterable : auto(TT)[]; separator : string; blk : block<(var writer : StringBuilderWriter; elem : TT) : void>) : string {
+    //! joins iterable `it` elements into a single string with `separator` between elements
     return join_implement(iterable, separator, blk)
 }
 
 def split(text, delim : string implicit; blk : block< (arg : array<string>#) >) {
+    //! splits text by delimiter and calls blk with the resulting array
     builtin_string_split(text, delim, blk)
 }
 
 [skip_lock_check]
 def split(text, delim : string implicit) : array<string> {
+    //! splits text by delimiter and returns the resulting array
     var res : array<string>
     builtin_string_split(text, delim) <| $(arr : array<string>#) : void {
         res := arr
@@ -103,11 +112,13 @@ def split(text, delim : string implicit) : array<string> {
 }
 
 def split_by_chars(text, delim : string implicit; blk : block< (arg : array<string>#) >) {
+    //! splits text by any of the characters in delim and calls blk with the resulting array
     builtin_string_split_by_char(text, delim, blk)
 }
 
 [skip_lock_check]
 def split_by_chars(text, delim : string implicit) : array<string> {
+    //! splits text by any of the characters in delim and returns the resulting array
     var res : array<string>
     builtin_string_split_by_char(text, delim) <| $(arr : array<string>#) : void {
         res := arr
@@ -117,22 +128,26 @@ def split_by_chars(text, delim : string implicit) : array<string> {
 
 [generic]
 def is_character_at(foo : array<uint8> implicit; idx : int; ch : int) {
+    //! returns true if character at position `idx` in `foo` equals `ch`
     return int(foo[idx]) == ch
 }
 
 [generic]
 def eq(a : string implicit; b : das_string) {
+    //! returns true if strings are equal
     return a == b
 }
 
 [generic]
 def eq(b : das_string; a : string implicit) {
+    //! returns true if strings are equal
     return b == a
 }
 
 
 // https://en.wikipedia.org/wiki/Levenshtein_distance
 def levenshtein_distance(s, t : string implicit) : int {
+    //! computes Levenshtein distance between strings s and t
     let sLen = length(s)
     let tLen = length(t)
     var inscope d : array<array<int>>
@@ -159,6 +174,7 @@ def levenshtein_distance(s, t : string implicit) : int {
 // https://en.wikipedia.org/wiki/Levenshtein_distance#Iterative_with_two_matrix_rows
 // https://www.codeproject.com/Articles/13525/Fast-memory-efficient-Levenshtein-algorithm-2
 def levenshtein_distance_fast(s, t : string implicit) : int {
+    //! computes Levenshtein distance between strings s and t using optimized memory
     let sLen = length(s)
     let tLen = length(t)
     var inscope v0 : array<int>
@@ -186,6 +202,7 @@ def levenshtein_distance_fast(s, t : string implicit) : int {
 }
 
 def replace_multiple(source : string; replaces : array<tuple<text : string; replacement : string>>) {
+    //! replaces occurances of multiple strings in a string. does not support overlap
     if (empty(source) || empty(replaces)) {
         return source
     }

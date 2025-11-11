@@ -13,19 +13,19 @@ require daslib/strings_boost
 
 struct Template {
     //! This structure contains collection of subsitution rules for a template.
-    kaboomVar : table<string; tuple<prefix : string; suffix : string> >
-    call2name : table<string; string>
-    field2name : table<string; string>
-    var2name : table<string; string>
-    var2expr : table<string; smart_ptr<Expression>>
-    var2exprList : table<string; array<smart_ptr<Expression>>>
-    type2type : table<string; string>
-    type2etype : table<string; TypeDeclPtr>
-    struct2etype : table<Structure?; TypeDeclPtr>
-    blockArgName : table<string; string>
-    annArg : table<string; lambda<(var ann : AnnotationDeclaration) : void> >
-    blkArg : table<string; array<VariablePtr>>
-    tag2expr : table<string; smart_ptr<Expression>>
+    kaboomVar : table<string; tuple<prefix : string; suffix : string> >         //! variable field access replacement rules
+    call2name : table<string; string>                                           //! call name replacement rules
+    field2name : table<string; string>                                          //! field name replacement rules
+    var2name : table<string; string>                                            //! variable name replacement rules
+    var2expr : table<string; smart_ptr<Expression>>                             //! variable expression replacement rules
+    var2exprList : table<string; array<smart_ptr<Expression>>>                  //! variable expression list replacement rules
+    type2type : table<string; string>                                           //! type name replacement rules
+    type2etype : table<string; TypeDeclPtr>                                     //! type to type declaration replacement rules
+    struct2etype : table<Structure?; TypeDeclPtr>                               //! structure to type declaration replacement rules
+    blockArgName : table<string; string>                                        //! block argument name replacement rules
+    annArg : table<string; lambda<(var ann : AnnotationDeclaration) : void> >   //! annotation argument replacement rules
+    blkArg : table<string; array<VariablePtr>>                                  //! block argument replacement rules
+    tag2expr : table<string; smart_ptr<Expression>>                             //! tag expression replacement rules
 }
 
 def kaboomVarField(var self : Template; name, prefix, suffix : string) {
@@ -121,9 +121,11 @@ def renameCall(var self : Template; name : string; newName : das_string) {
 class private TemplateVisitor : AstVisitor {
     @do_not_delete rules : Template?
     def TemplateVisitor(var r : Template?) {
+        //! Creates template visitor with given rules.
         rules = r
     }
     def override visitExprTag(var expr : smart_ptr<ExprTag>) : ExpressionPtr {
+        //! Visits tag expression and applies tag replacement rules.
         if (expr.name == "v") {
             if (expr.subexpr is ExprVar) {
                 let tn = string((expr.subexpr as ExprVar).name)
@@ -137,12 +139,14 @@ class private TemplateVisitor : AstVisitor {
         return <- expr
     }
     def override preVisitExprMakeStructField(expr : smart_ptr<ExprMakeStruct>; index : int; var decl : MakeFieldDeclPtr; last : bool) : void {
+        //! Visits structure field declaration and applies field renaming rules.
         let fname = string(decl.name)
         if (rules.field2name |> key_exists(fname)) {
             decl.name := rules.field2name |> get_value(fname)
         }
     }
     def override visitExprIsVariant(var expr : smart_ptr<ExprIsVariant>) : ExpressionPtr {
+        //! Visits is-variant expression and applies field renaming rules.
         let fname = string(expr.name)
         if (rules.field2name |> key_exists(fname)) {
             expr.name := rules.field2name |> get_value(fname)
@@ -150,6 +154,7 @@ class private TemplateVisitor : AstVisitor {
         return <- expr
     }
     def override visitExprAsVariant(var expr : smart_ptr<ExprAsVariant>) : ExpressionPtr {
+        //! Visits as-variant expression and applies field renaming rules.
         let fname = string(expr.name)
         if (rules.field2name |> key_exists(fname)) {
             expr.name := rules.field2name |> get_value(fname)
@@ -157,6 +162,7 @@ class private TemplateVisitor : AstVisitor {
         return <- expr
     }
     def override visitExprSafeAsVariant(var expr : smart_ptr<ExprSafeAsVariant>) : ExpressionPtr {
+        //! Visits safe-as-variant expression and applies field renaming rules.
         let fname = string(expr.name)
         if (rules.field2name |> key_exists(fname)) {
             expr.name := rules.field2name |> get_value(fname)
@@ -164,6 +170,7 @@ class private TemplateVisitor : AstVisitor {
         return <- expr
     }
     def override visitExprSafeField(var expr : smart_ptr<ExprSafeField>) : ExpressionPtr {
+        //! Visits safe-field expression and applies field renaming rules.
         let fname = string(expr.name)
         if (rules.field2name |> key_exists(fname)) {
             expr.name := rules.field2name |> get_value(fname)
@@ -171,6 +178,7 @@ class private TemplateVisitor : AstVisitor {
         return <- expr
     }
     def override visitExprField(var expr : smart_ptr<ExprField>) : ExpressionPtr {
+        //! Visits field expression and applies field renaming rules.
         let fname = string(expr.name)
         if (rules.field2name |> key_exists(fname)) {
             expr.name := rules.field2name |> get_value(fname)
@@ -189,6 +197,7 @@ class private TemplateVisitor : AstVisitor {
         return <- expr
     }
     def override visitExprAddr(var expr : smart_ptr<ExprAddr>) : ExpressionPtr {
+        //! Visits address-of expression and applies variable renaming rules.
         let vn = string(expr.target)
         if (key_exists(rules.var2name, vn)) {
             expr.target := rules.var2name |> get_value(vn)
@@ -196,6 +205,7 @@ class private TemplateVisitor : AstVisitor {
         return <- expr
     }
     def override visitExprLet(var expr : smart_ptr<ExprLet>) : ExpressionPtr {
+        //! Visits let expression and applies variable renaming rules.
         for (v in expr.variables) {
             let vn = string(v.name)
             if (key_exists(rules.var2name, vn)) {
@@ -205,6 +215,7 @@ class private TemplateVisitor : AstVisitor {
         return <- expr
     }
     def override visitExprVar(var expr : smart_ptr<ExprVar>) : ExpressionPtr {
+        //! Visits variable expression and applies variable renaming and replacement rules.
         let vn = string(expr.name)
         if (key_exists(rules.var2name, vn)) {
             expr.name := rules.var2name |> get_value(vn)
@@ -217,6 +228,7 @@ class private TemplateVisitor : AstVisitor {
         return <- expr
     }
     def replaceAlias(var typ : TypeDeclPtr&) {
+        //! Replaces type aliases in the given type declaration according to the template rules.
         if (typ.baseType == Type.alias) {
             let ta = string(typ.alias)
             if (key_exists(rules.type2etype, ta)) {
@@ -241,11 +253,13 @@ class private TemplateVisitor : AstVisitor {
         }
     }
     def override visitTypeDecl(var typ : TypeDeclPtr) : TypeDeclPtr {
+        //! Visits type declaration and applies type replacement rules.
         var inscope tyyp <- clone_type(typ)
         replaceAlias(tyyp)
         return <- tyyp
     }
     def override preVisitExprFor(var expr : smart_ptr<ExprFor>) : void {
+        //! Visits for-loop expression and applies variable renaming rules.
         for (it in expr.iterators) {
             let itn = string(it)
             if (key_exists(rules.var2name, itn)) {
@@ -254,6 +268,7 @@ class private TemplateVisitor : AstVisitor {
         }
     }
     def override preVisitExprBlock(var blk : smart_ptr<ExprBlock>) {
+        //! Visits block expression and applies block argument renaming and replacement rules, as well as annotation argument replacement rules.
         if (!blk.blockFlags.isClosure) {
             return
         }
@@ -294,6 +309,7 @@ class private TemplateVisitor : AstVisitor {
         }
     }
     def preVisitAnythingCall(var arguments : dasvector`smart_ptr`Expression) : void {
+        //! Visits call arguments and applies variable expression list replacement rules.
         if (length(rules.var2exprList) == 0) {
             return
         }
@@ -321,6 +337,7 @@ class private TemplateVisitor : AstVisitor {
         }
     }
     def override preVisitExprLooksLikeCall(var expr : smart_ptr<ExprLooksLikeCall>) : void {
+        //! Visits looks-like-call expression and applies call renaming rules.
         let cname = string(expr.name)
         if (rules.call2name |> key_exists(cname)) {
             expr.name := rules.call2name |> get_value(cname)
@@ -328,6 +345,7 @@ class private TemplateVisitor : AstVisitor {
         preVisitAnythingCall(expr.arguments)
     }
     def override preVisitExprCall(var expr : smart_ptr<ExprCall>) : void {
+        //! Visits call expression and applies call renaming rules.
         let cname = string(expr.name)
         if (rules.call2name |> key_exists(cname)) {
             expr.name := rules.call2name |> get_value(cname)
@@ -335,17 +353,20 @@ class private TemplateVisitor : AstVisitor {
         preVisitAnythingCall(expr.arguments)
     }
     def override preVisitExprAddr(var expr : smart_ptr<ExprAddr>) : void {
+        //! Visits address-of expression and applies call renaming rules.
         let cname = string(expr.target)
         if (rules.call2name |> key_exists(cname)) {
             expr.target := rules.call2name |> get_value(cname)
         }
     }
     def override preVisitExprMakeArray(var expr : smart_ptr<ExprMakeArray>) : void {
+        //! Visits make-array expression and applies call renaming rules.
         preVisitAnythingCall(expr.values)
     }
 }
 
 def visit_expression(var expr : ExpressionPtr&; var adapter : smart_ptr<VisitorAdapter>) {
+    //! Visits the expression with the given visitor adapter.
     unsafe {
         // note: visit returns smart_ptr_raw, so we need to be careful with lifetime here
         var newExpr <- expr |> visit(adapter)
@@ -371,6 +392,7 @@ def apply_template(var rules : Template; at : LineInfo; var expr : smart_ptr<Exp
 }
 
 def private visit_type(var typ : TypeDeclPtr&; var adapter : smart_ptr<VisitorAdapter>) {
+    //! Visits the type declaration with the given visitor adapter.
     unsafe {
         // note: visit returns smart_ptr_raw, so we need to be careful with lifetime here
         var newType <- typ |> visit(adapter)
@@ -437,6 +459,7 @@ def make_expression_block(var exprs : dasvector`smart_ptr`Expression) : smart_pt
 }
 
 def private add_global_var_any(mod : Module?; vname : string; vat : LineInfo; vflag : TypeDeclFlags; var value : ExpressionPtr; priv : bool) : bool {
+    //! Adds global variable to the module, given name, type flags and initial value.
     var inscope vvar <- new Variable(at = vat,
         name := vname,
         _type <- new TypeDecl(at = vat,
@@ -460,6 +483,8 @@ def add_global_var(mod : Module?; vname : string; vat : LineInfo; var value : Ex
 }
 
 def add_global_var(mod : Module?; vname : string; var typ : TypeDeclPtr; vat : LineInfo; priv : bool; blk : block<(var v : VariablePtr) : void>) {
+    //! Add global variable to the module, given name and type.
+    //! `priv` specifies if the variable is private to the block.
     var inscope vvar <- new Variable(at = vat,
         name := vname,
         _type <- typ
@@ -473,6 +498,7 @@ def add_global_var(mod : Module?; vname : string; var typ : TypeDeclPtr; vat : L
 }
 
 def add_global_var(mod : Module?; vname : string; var typ : TypeDeclPtr; vat : LineInfo; priv : bool) {
+    //! Add global variable to the module, given name and type.
     return add_global_var(mod, vname, typ, vat, priv) <| $ [unused_argument(v)] (var v) {
         pass
     }
@@ -505,8 +531,8 @@ def make_unique_private_name(prefix : string; vat : LineInfo) {
     return "{prefix}_{vat.line}_{vat.column}"
 }
 
-
 def apply_template(at : LineInfo; var typ : smart_ptr<TypeDecl>&; blk : block<(var rules : Template) : void>) : TypeDeclPtr {
+    //! Applies the template to the given type declaration. If `forceAt` is set, the resulting type declaration will have the same line info as 'at'.
     unsafe {
         // TODO: figure out why this is needed
         var rules : Template
@@ -518,6 +544,7 @@ def apply_template(at : LineInfo; var typ : smart_ptr<TypeDecl>&; blk : block<(v
 }
 
 def apply_template(at : LineInfo; var expr : smart_ptr<Expression>&; blk : block<(var rules : Template) : void>) : ExpressionPtr {
+    //! Applies the template to the given expression. If `forceAt` is set, the resulting expression will have the same line info as 'at'.
     unsafe {
         // TODO: figure out why this is needed
         var rules : Template
@@ -529,6 +556,7 @@ def apply_template(at : LineInfo; var expr : smart_ptr<Expression>&; blk : block
 }
 
 def apply_template(var expr : smart_ptr<Expression>&; blk : block<(var rules : Template) : void>) : ExpressionPtr {
+    //! Applies the template to the given expression.
     unsafe {
         // TODO: figure out why this is needed
         var rules : Template
@@ -540,11 +568,14 @@ def apply_template(var expr : smart_ptr<Expression>&; blk : block<(var rules : T
 }
 
 class private RemoveDerefVisitor : AstVisitor {
-    vname : string
+    //! Visitor that removes dereferences of a specific variable.
+    vname : string //! Name of the variable to remove dereferences for.
     def RemoveDerefVisitor(n : string) {
+        //! Creates visitor that removes dereferences of variable `n`.
         vname = n
     }
     def override visitExprRef2Value(var expr : smart_ptr<ExprRef2Value>) : ExpressionPtr {
+        //! Visits reference-to-value expression and removes dereference if it matches the variable name.
         if (expr.subexpr is ExprVar) {
             let vvar = expr.subexpr as ExprVar
             if ("{vvar.name}" == vname) {
@@ -627,23 +658,28 @@ def public add_type_ptr_ref(anything : auto(TT); flags : TypeDeclFlags) : TypeDe
 }
 
 def private generatedExpr(var expr : ExpressionPtr) : ExpressionPtr {
+    //! Marks the expression as generated.
     expr.genFlags |= ExprGenFlags.generated
     return <- expr
 }
 
 def private generatedVariable(var svar : VariablePtr) : VariablePtr {
+    //! Marks the variable as generated.
     svar.flags |= VariableFlags.generated
     return <- svar
 }
 
 class private QRulesVisitor : AstVisitor {
-    tag_index : int = 0
-    failed : bool = false
-    @do_not_delete rblock : ExprBlock?
+    //! Visitor that processes type tags and variable tags in a block, generating replacement rules.
+    tag_index : int = 0                 //! Index for generating unique tag names.
+    failed : bool = false               //! Flag indicating if processing failed.
+    @do_not_delete rblock : ExprBlock?  //! Reference to the expression block where replacement rules are added.
     def QRulesVisitor(var rb : ExprBlock?) {
+        //! Creates visitor with given expression block for replacement rules.
         rblock = rb
     }
     def visitTD(var typ : TypeDeclPtr&) : void {
+        //! Visits type declaration and processes type tags.
         unsafe {
             var newTyp <- visitTypeDecl(typ)
             if (newTyp != typ) {
@@ -653,6 +689,7 @@ class private QRulesVisitor : AstVisitor {
         }
     }
     def override visitTypeDecl(var typ : TypeDeclPtr) : TypeDeclPtr {
+        //! Visits type declaration and processes type tags.
         if ((typ.baseType == Type.alias) && (typ.flags.isTag)) {
             if (typ.firstType == null || typ.firstType.dimExpr |> length != 1) {
                 compiling_program() |> macro_error(typ.at, "unsupported type tag")
@@ -692,6 +729,7 @@ class private QRulesVisitor : AstVisitor {
         return <- typ
     }
     def override preVisitExprBlockArgument(blk : smart_ptr<ExprBlock>; var arg : VariablePtr; lastArg : bool) : void {
+        //! Visits block argument and processes variable tags.
         if (arg.flags.tag) {
             if (arg.source == null) {
                 compiling_program() |> macro_error(arg.at, "argument '{arg.name}' of block must have tag source")
@@ -727,6 +765,7 @@ class private QRulesVisitor : AstVisitor {
         }
     }
     def override preVisitExprFor(var expr : smart_ptr<ExprFor>) : void {
+        //! Visits for-loop expression and processes iterator tags.
         for (itn, tag in expr.iterators, expr.iteratorsTags) {
             if (tag != null) {
                 let new_tag_name = "temp`var`{tag_index++}`{expr.at.line}`{expr.at.column}"
@@ -744,6 +783,7 @@ class private QRulesVisitor : AstVisitor {
         }
     }
     def override preVisitExprMakeStructField(expr : smart_ptr<ExprMakeStruct>; index : int; var decl : MakeFieldDeclPtr; last : bool) : void {
+        //! Visits structure field declaration and processes field tags.
         if (decl.tag != null) {
             let new_tag_name = "temp`make`field`{tag_index++}`{expr.at.line}`{expr.at.column}"
             decl.name := new_tag_name
@@ -757,6 +797,7 @@ class private QRulesVisitor : AstVisitor {
         }
     }
     def override visitExprTag(var expr : smart_ptr<ExprTag>) : ExpressionPtr {
+        //! Visits tag expression and processes variable/expression/argument/call tags.
         var new_tag_name = ""
         if (expr.name == "c") {
             new_tag_name = "temp`call`{tag_index++}`{expr.at.line}`{expr.at.column}"
@@ -889,6 +930,7 @@ class private QRulesVisitor : AstVisitor {
 
 [macro_function]
 def private apply_qrules(var expr : smart_ptr<Expression>&) : smart_ptr<ExprBlock> {
+    //! Implementation details for the expression reificaiton. This is a generat expression reification.
     var inscope eblk <- new ExprBlock(at = expr.at,
         returnType <- new TypeDecl(at = expr.at, baseType = Type.tVoid),
         arguments := array<VariablePtr>(
@@ -912,6 +954,7 @@ def private apply_qrules(var expr : smart_ptr<Expression>&) : smart_ptr<ExprBloc
 
 [macro_function]
 def private apply_template_qrules(prog : ProgramPtr; var template_structure : Structure?) : smart_ptr<ExprBlock> {
+    //! Implementation details for the expression reificaiton. This is a generat expression reification.
     var inscope eblk <- new ExprBlock(at = template_structure.at,
         returnType <- new TypeDecl(at = template_structure.at, baseType = Type.tVoid),
         arguments := array<VariablePtr>(
@@ -998,12 +1041,14 @@ def public expression_at(var expr : ExpressionPtr; at : LineInfo) : ExpressionPt
 
 class private AstQCallMacro : AstCallMacro {
     //! This macro implements expression reification
-    apply_call = "apply_qmacro"
-    macro_call = "qmacro"
+    apply_call = "apply_qmacro" //! Default apply call, can be overridden in subclasses
+    macro_call = "qmacro"       //! Default macro call, can be overridden in subclasses
     def override canVisitArgument(call : smart_ptr<ExprCallMacro>; argIndex : int) : bool {
+        //! Only first argument is visited
         return false    // nop, this one is just like quote
     }
     def override visit(prog : ProgramPtr; mod : Module?; var call : smart_ptr<ExprCallMacro>) : ExpressionPtr {
+        //! Visit the macro call and generate the reified expression.
         if (call.arguments |> length != 1) {
             macro_error(prog, call.at, "expecting 1 argument, {macro_call}(expression)")
             return <- default<ExpressionPtr>
@@ -1028,28 +1073,34 @@ class private AstQCallMacro : AstCallMacro {
 }
 
 [call_macro(name="qmacro")]
-class private QMacro : AstQCallMacro {}
+class private QMacro : AstQCallMacro {
+    //! This macro implements expression reification 'qmacro'
+}
 
 [call_macro(name="qmacro_block")]
 class private QBlockMacro : AstQCallMacro {
+    //! This macro implements expression block reification 'qmacro_block'
     override apply_call = "apply_qblock"
     override macro_call = "qmacro_block"
 }
 
 [call_macro(name="qmacro_block_to_array")]
 class private QBlockToArrayMacro : AstQCallMacro {
+    //! This macro implements expression block to array reification 'qmacro_block_to_array'
     override apply_call = "apply_qblock_to_array"
     override macro_call = "qmacro_block_to_array"
 }
 
 [call_macro(name="qmacro_expr")]
 class private QBlockExprMacro : AstQCallMacro {
+    //! This macro implements first line of the expression block reification 'qmacro_expr'
     override apply_call = "apply_qblock_expr"
     override macro_call = "qmacro_expr"
 }
 
 [call_macro(name="qmacro_type")]
 class private QTypeMacro : AstQCallMacro {
+    //! This macro implements type declaration reification 'qmacro_type'
     override apply_call = "apply_qtype"
     override macro_call = "qmacro_type"
 }
@@ -1123,15 +1174,19 @@ class private AstQNamedMacro : AstCallMacro {
 }
 
 [call_macro(name="qmacro_function")]
-class private AstQFunctionMacro : AstQNamedMacro {}
+class private AstQFunctionMacro : AstQNamedMacro {
+    //! This macro implements expression reification for functions.
+}
 
 [call_macro(name="qmacro_variable")]
 class private AstQVariableMacro : AstQNamedMacro {
+    //! This macro implements expression reification for variables.
     override apply_call = "apply_qmacro_variable"
     override macro_call = "qmacro_variable"
 }
 
 class private AstQNamedClassMacro : AstCallMacro {
+    //! This macro implements expression reification for the named expressions (function, variable, etc.)
     apply_call = "apply_qmacro_method"
     macro_call = "qmacro_method"
     def override canVisitArgument(call : smart_ptr<ExprCallMacro>; argIndex : int) : bool {
@@ -1175,6 +1230,7 @@ class private AstQMethodMacro : AstQNamedClassMacro {
 
 
 def public apply_qmacro_template_class(instance_name : string; var template_type : smart_ptr<TypeDecl>; blk : block<(var rules : Template) : void>) : TypeDeclPtr {
+    //! Implementation details for the expression reificaiton. This is a template class instantiation reification.
     var mod = compiling_module()
     var template_structure = template_type.structType
     let template_name = string(template_structure.name)
@@ -1241,11 +1297,12 @@ def public apply_qmacro_template_class(instance_name : string; var template_type
 
 [call_macro(name="qmacro_template_class")]
 class private AstQNamedTemplateClassMacro : AstCallMacro {
-    ///! qmacro_template_class(type<MyTemplateClass>)
+    ///! This macro implements expression reification for the templace class 'qmacro_template_class'
     apply_call = "apply_qmacro_template_class"
     macro_call = "qmacro_template_class"
     //! This macro implements expression reification for the named expressions (function, variable, etc.)
     def override visit(prog : ProgramPtr; mod : Module?; var call : smart_ptr<ExprCallMacro>) : ExpressionPtr {
+        //! Visit the macro call and generate the reified expression.
         if (call.arguments |> length != 2) {
             macro_error(prog, call.at, "expecting {macro_call}(NAME,type<TemplateClassOrStructType>)")
             return <- default<ExpressionPtr>
@@ -1265,7 +1322,6 @@ class private AstQNamedTemplateClassMacro : AstCallMacro {
         if (qblk == null) {
             return <- default<ExpressionPtr>
         }
-
         return <- new ExprCall(at = call.at,
             name := apply_call,
             arguments := array<ExpressionPtr>(
@@ -1301,10 +1357,12 @@ def public make_class(name : string; mod : Module?) {
 }
 
 def public make_class(name : string; var baseClass : StructurePtr; mod : Module?) {
+    //! Creates a class structure derived from baseClass. Adds __rtti, __finalize fields.
     return <- make_class(name, get_ptr(baseClass), mod)
 }
 
 def public make_class(name : string; var baseClass : Structure?; mod : Module?) {
+    //! Creates a class structure derived from baseClass. Adds __rtti, __finalize fields.
     if (mod == null) {
         panic("expecting module")
     }

@@ -831,7 +831,13 @@ namespace das {
             if ( !name.empty() ) {
                 ss << c->bitfieldType->alias << "." << name;
             } else {
-                ss << "bitfield(0x" << HEX << c->getValue() << DEC << ")";
+                ss << "bitfield";
+                switch ( c->bitfieldType ? c->bitfieldType->baseType : Type::tBitfield  ) {
+                    case Type::tBitfield8: ss << "8"; break;
+                    case Type::tBitfield16: ss << "16"; break;
+                    case Type::tBitfield64: ss << "64"; break;
+                }
+                ss << "(0x" << HEX << c->getValue() << DEC << ")";
             }
             return Visitor::visit(c);
         }

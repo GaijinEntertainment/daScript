@@ -1,2 +1,0 @@
-verifying arguments
-replacing function

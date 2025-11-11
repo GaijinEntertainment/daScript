@@ -5,14 +5,11 @@
 safe_addr macro
 ===============
 
-.. include:: detail/safe_addr.rst
-
 The safe_addr module implements safe_addr pattern, which returns temporary address of local expression.
 
 All functions and symbols are in "safe_addr" module, use require to get access to it. ::
 
     require daslib/safe_addr
-
 
 ++++++++++++++++++++
 Function annotations
@@ -42,142 +39,86 @@ This macro reports an error if temp_value is attempted outside of function argum
 Safe temporary address
 ++++++++++++++++++++++
 
-  *  :ref:`safe_addr (x:auto(T)& ==const -const) : T -&?# <function-_at_safe_addr_c__c_safe_addr_&_eq_Y_ls_T_gr_.>` 
-  *  :ref:`safe_addr (x:auto(T) const& ==const) : T -&? const# <function-_at_safe_addr_c__c_safe_addr_C&_eq_Y_ls_T_gr_.>` 
-  *  :ref:`shared_addr (tab:table\<auto(KEY);auto(VAL)\> const;k:KEY const) : auto <function-_at_safe_addr_c__c_shared_addr_C1_ls_Y_ls_KEY_gr_._gr_2_ls_Y_ls_VAL_gr_._gr_T_CY_ls_KEY_gr_L>` 
-  *  :ref:`shared_addr (val:auto(VALUE) const&) : auto <function-_at_safe_addr_c__c_shared_addr_C&Y_ls_VALUE_gr_.>` 
+  *  :ref:`safe_addr (var x: auto(T)& ==const) : T?# <function-safe_addr_safe_addr__autoT__eq__eq_const>` 
+  *  :ref:`safe_addr (x: auto(T) const& ==const) : T?# <function-safe_addr_safe_addr_autoT_const__eq__eq_const>` 
+  *  :ref:`shared_addr (tab: table\<auto(KEY), auto(VAL)\>; k: KEY) : auto <function-safe_addr_shared_addr_table_ls_autoKEY,_autoVAL_gr__KEY>` 
+  *  :ref:`shared_addr (val: auto(VALUE)) : auto <function-safe_addr_shared_addr_autoVALUE>` 
 
-.. _function-_at_safe_addr_c__c_safe_addr_&_eq_Y_ls_T_gr_.:
+.. _function-safe_addr_safe_addr__autoT__eq__eq_const:
 
-.. das:function:: safe_addr(x: auto(T)& ==const)
+.. das:function:: safe_addr(x: auto(T)& ==const) : T?#
 
-safe_addr returns T?#
+returns temporary pointer to the given expression
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +auto(T)&!    +
-+--------+-------------+
+:Arguments: * **x** : auto(T)&!
 
+.. _function-safe_addr_safe_addr_autoT_const__eq__eq_const:
 
-returns temporary pointer to the given expressio
-
-.. _function-_at_safe_addr_c__c_safe_addr_C&_eq_Y_ls_T_gr_.:
-
-.. das:function:: safe_addr(x: auto(T) const& ==const)
-
-safe_addr returns T? const#
-
-+--------+---------------+
-+argument+argument type  +
-+========+===============+
-+x       +auto(T) const&!+
-+--------+---------------+
-
+.. das:function:: safe_addr(x: auto(T) const& ==const) : T?#
 
 returns temporary pointer to the given expressio
 
-.. _function-_at_safe_addr_c__c_shared_addr_C1_ls_Y_ls_KEY_gr_._gr_2_ls_Y_ls_VAL_gr_._gr_T_CY_ls_KEY_gr_L:
+:Arguments: * **x** : auto(T)&!
 
-.. das:function:: shared_addr(tab: table<auto(KEY);auto(VAL)> const; k: KEY const)
+.. _function-safe_addr_shared_addr_table_ls_autoKEY,_autoVAL_gr__KEY:
 
-shared_addr returns auto
-
-+--------+--------------------------------+
-+argument+argument type                   +
-+========+================================+
-+tab     +table<auto(KEY);auto(VAL)> const+
-+--------+--------------------------------+
-+k       +KEY const                       +
-+--------+--------------------------------+
-
+.. das:function:: shared_addr(tab: table<auto(KEY), auto(VAL)>; k: KEY) : auto
 
 returns address of the given shared variable. it's safe because shared variables never go out of scope
 
-.. _function-_at_safe_addr_c__c_shared_addr_C&Y_ls_VALUE_gr_.:
+:Arguments: * **tab** : table<auto(KEY);auto(VAL)>
 
-.. das:function:: shared_addr(val: auto(VALUE) const&)
+            * **k** : KEY
 
-shared_addr returns auto
+.. _function-safe_addr_shared_addr_autoVALUE:
 
-+--------+------------------+
-+argument+argument type     +
-+========+==================+
-+val     +auto(VALUE) const&+
-+--------+------------------+
-
+.. das:function:: shared_addr(val: auto(VALUE)) : auto
 
 returns address of the given shared variable. it's safe because shared variables never go out of scope
+
+:Arguments: * **val** : auto(VALUE)&
 
 ++++++++++++++++++
 Temporary pointers
 ++++++++++++++++++
 
-  *  :ref:`temp_ptr (x:auto(T)? const implicit ==const) : T? const# <function-_at_safe_addr_c__c_temp_ptr_CI_eq_1_ls_Y_ls_T_gr_._gr__qm_>` 
-  *  :ref:`temp_ptr (x:auto(T)? implicit ==const -const) : T?# <function-_at_safe_addr_c__c_temp_ptr_I_eq_1_ls_Y_ls_T_gr_._gr__qm_>` 
+  *  :ref:`temp_ptr (x: auto(T)? const implicit ==const) : T?# <function-safe_addr_temp_ptr_autoT_q__const_implicit__eq__eq_const>` 
+  *  :ref:`temp_ptr (var x: auto(T)? implicit ==const) : T?# <function-safe_addr_temp_ptr__autoT_q__implicit__eq__eq_const>` 
 
-.. _function-_at_safe_addr_c__c_temp_ptr_CI_eq_1_ls_Y_ls_T_gr_._gr__qm_:
+.. _function-safe_addr_temp_ptr_autoT_q__const_implicit__eq__eq_const:
 
-.. das:function:: temp_ptr(x: auto(T)? const implicit ==const)
-
-temp_ptr returns T? const#
-
-+--------+------------------------+
-+argument+argument type           +
-+========+========================+
-+x       +auto(T)? const implicit!+
-+--------+------------------------+
-
+.. das:function:: temp_ptr(x: auto(T)? const implicit ==const) : T?#
 
 returns temporary pointer from a given pointer
 
-.. _function-_at_safe_addr_c__c_temp_ptr_I_eq_1_ls_Y_ls_T_gr_._gr__qm_:
+:Arguments: * **x** : auto(T)? implicit!
 
-.. das:function:: temp_ptr(x: auto(T)? implicit ==const)
+.. _function-safe_addr_temp_ptr__autoT_q__implicit__eq__eq_const:
 
-temp_ptr returns T?#
-
-+--------+------------------+
-+argument+argument type     +
-+========+==================+
-+x       +auto(T)? implicit!+
-+--------+------------------+
-
+.. das:function:: temp_ptr(x: auto(T)? implicit ==const) : T?#
 
 returns temporary pointer from a given pointer
+
+:Arguments: * **x** : auto(T)? implicit!
 
 +++++++++++++
 Uncategorized
 +++++++++++++
 
-.. _function-_at_safe_addr_c__c_temp_value_C&_eq_Y_ls_T_gr_.:
+.. _function-safe_addr_temp_value_autoT_const__eq__eq_const:
 
-.. das:function:: temp_value(x: auto(T) const& ==const)
-
-temp_value returns T const&#
-
-+--------+---------------+
-+argument+argument type  +
-+========+===============+
-+x       +auto(T) const&!+
-+--------+---------------+
-
+.. das:function:: temp_value(x: auto(T) const& ==const) : T const&#
 
 returns temporary pointer to the given expression
 
-.. _function-_at_safe_addr_c__c_temp_value_&_eq_Y_ls_T_gr_.:
+:Arguments: * **x** : auto(T)&!
 
-.. das:function:: temp_value(x: auto(T)& ==const)
+.. _function-safe_addr_temp_value__autoT__eq__eq_const:
 
-temp_value returns T&#
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +auto(T)&!    +
-+--------+-------------+
-
+.. das:function:: temp_value(x: auto(T)& ==const) : T&#
 
 returns temporary pointer to the given expression
+
+:Arguments: * **x** : auto(T)&!
 
 

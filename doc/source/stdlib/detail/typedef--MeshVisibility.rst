@@ -1,1 +1,0 @@
-Mesh visibility state

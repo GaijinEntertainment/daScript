@@ -1,0 +1,1 @@
+ Effecitvely C memset.

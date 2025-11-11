@@ -3327,7 +3327,11 @@ bitfield_basic_type_declaration
     ;
 
 bitfield_type_declaration
-    :   DAS_TBITFIELD bitfield_basic_type_declaration[basicType] '<' { yyextra->das_arrow_depth ++; } bitfield_bits[nl] '>' { yyextra->das_arrow_depth --; } {
+    :   DAS_TBITFIELD bitfield_basic_type_declaration[basicType] '<' '>'  {
+            $$ = new TypeDecl($basicType);
+            $$->at = tokAt(scanner,@basicType);
+    }
+    |   DAS_TBITFIELD bitfield_basic_type_declaration[basicType] '<' { yyextra->das_arrow_depth ++; } bitfield_bits[nl] '>' { yyextra->das_arrow_depth --; } {
             $$ = new TypeDecl($basicType);
             $$->argNames = *$nl;
             auto maxBits = $$->maxBitfieldBits();

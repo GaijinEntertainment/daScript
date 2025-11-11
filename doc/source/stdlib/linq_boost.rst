@@ -5,8 +5,6 @@
 Boost module for LINQ
 =====================
 
-.. include:: detail/linq_boost.rst
-
 The LINQ boost module implements collection of helper macros and functions to accompany :ref:`LINQ <stdlib_linq>`.
 
 All functions and symbols are in "linq_boost" module, use require to get access to it. ::

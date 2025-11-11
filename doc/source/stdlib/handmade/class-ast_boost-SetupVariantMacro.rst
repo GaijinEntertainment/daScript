@@ -1,0 +1,1 @@
+ [variant_macro] implementation.

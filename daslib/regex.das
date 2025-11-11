@@ -207,13 +207,17 @@ def private set_meta(var cset : CharSet; che : int) {
         var eset : CharSet
         set_meta(eset, 'd')
         set_or_set(cset, eset)
+    } elif (che == 'n') {
+        set_or_char(cset, '\n')
+    } elif (che == 'r') {
+        set_or_char(cset, '\r')
     } else {
         set_or_char(cset, che)
     }
 }
 
 let private meta = "\\+-*.()[]|^"
-let private meta_set = "wWsSdD"
+let private meta_set = "wWsSdDnr"
 
 def private is_meta_character(ch : int) : bool {
     return find(meta, ch) != -1

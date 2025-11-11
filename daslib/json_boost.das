@@ -146,6 +146,7 @@ def operator ?. value(var a : JsonValue? ==const) : JsValue? {
 
 [macro_function]
 def private is_json_ptr_value(td : TypeDeclPtr) {
+    //! Checks if the type is a pointer to json::JsonValue
     if (td.baseType != Type.tPointer) {
         return false
     }
@@ -171,6 +172,7 @@ class private BetterJsonMacro : AstVariantMacro {
     //! This macro is used to implement `is json_value` and `as json_value` runtime checks.
     //! It essencially substitutes `value as name` with `value.value as name` and `value is name` with `value.value is name`.
     def override visitExprIsVariant(prog : ProgramPtr; mod : Module?; expr : smart_ptr<ExprIsVariant>) : ExpressionPtr {
+        //! Visit ExprIsVariant node.
         if (is_json_ptr_value(expr.value._type)) {
             var inscope vdr <- new ExprField(at = expr.at, name := "value", value <- clone_expression(expr.value))
             var inscope isv <- new ExprIsVariant(at = expr.at, name := expr.name, value <- vdr)
@@ -180,6 +182,7 @@ class private BetterJsonMacro : AstVariantMacro {
         return <- default<ExpressionPtr>
     }
     def override visitExprAsVariant(prog : ProgramPtr; mod : Module?; expr : smart_ptr<ExprAsVariant>) : ExpressionPtr {
+        //! Visit ExprAsVariant node.
         if (is_json_ptr_value(expr.value._type)) {
             var inscope vdr <- new ExprField(at = expr.at, name := "value", value <- clone_expression(expr.value))
             var inscope isv <- new ExprAsVariant(at = expr.at, name := expr.name, value <- vdr)
@@ -189,6 +192,7 @@ class private BetterJsonMacro : AstVariantMacro {
         return <- default<ExpressionPtr>
     }
     def override visitExprSafeAsVariant(prog : ProgramPtr; mod : Module?; expr : smart_ptr<ExprSafeAsVariant>) : ExpressionPtr {
+        //! Visit ExprSafeAsVariant node.
         if (is_json_ptr_value(expr.value._type)) {
             var inscope vdr <- new ExprField(at = expr.at, name := "value", value <- clone_expression(expr.value))
             var inscope isv <- new ExprSafeAsVariant(at = expr.at, name := expr.name, value <- vdr)
@@ -209,6 +213,7 @@ class private JsonReader : AstReaderMacro {
     //!     "size": [1,2,3]
     //!   } %%
     def override accept(prog : ProgramPtr; mod : Module?; var expr : ExprReader?; ch : int; info : LineInfo) : bool {
+        //! Implement the accept method to read until '%%' is found.
         append(expr.sequence, ch)
         if (ends_with(expr.sequence, "%%")) {
             let len = length(expr.sequence)
@@ -219,6 +224,7 @@ class private JsonReader : AstReaderMacro {
         }
     }
     def override visit(prog : ProgramPtr; mod : Module?; expr : smart_ptr<ExprReader>) : ExpressionPtr {
+        //! Visit the ExprReader node and parse the JSON content.
         let seqStr = string(expr.sequence)
         var error = ""
         var json = read_json(seqStr, error)
@@ -260,6 +266,7 @@ def from_JV(v : JsonValue const explicit?; ent : auto(EnumT); defV : EnumT = def
 
 [generic, template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : string; defV : string = "") {
+    //! Parse a JSON value and return the corresponding native value.
     if (v == null || !(v.value is _string)) {
         return defV
     } else {
@@ -269,6 +276,7 @@ def from_JV(v : JsonValue const explicit?; ent : string; defV : string = "") {
 
 [generic, template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : bool; defV : bool = false) {
+    //! Parse a JSON value and return the corresponding native value.
     if (v == null || !(v.value is _bool)) {
         return defV
     } else {
@@ -278,71 +286,85 @@ def from_JV(v : JsonValue const explicit?; ent : bool; defV : bool = false) {
 
 [generic, template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : float; defV : float = 0.) {
+    //! Parse a JSON value and return the corresponding native value.
     return null_coalescing(v, defV)
 }
 
 [generic, template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : double; defV : double = 0.lf) {
+    //! Parse a JSON value and return the corresponding native value.
     return null_coalescing(v, defV)
 }
 
 [generic, template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : int; defV : int = 0) {
+    //! Parse a JSON value and return the corresponding native value.
     return null_coalescing(v, defV)
 }
 
 [generic, template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : uint; defV : uint = 0u) {
+    //! Parse a JSON value and return the corresponding native value.
     return null_coalescing(v, defV)
 }
 
 [generic, template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : int64; defV : int64 = 0l) {
+    //! Parse a JSON value and return the corresponding native value.
     return null_coalescing_with_string(v, defV)
 }
 
 [generic, template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : uint64; defV : uint64 = 0ul) {
+    //! Parse a JSON value and return the corresponding native value.
     return null_coalescing_with_string(v, defV)
 }
 
 [generic, template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : int8; defV : int8 = int8(0)) {
+    //! Parse a JSON value and return the corresponding native value.
     return null_coalescing(v, defV)
 }
 
 [generic, template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : uint8; defV : uint8 = uint8(0)) {
+    //! Parse a JSON value and return the corresponding native value.
     return null_coalescing(v, defV)
 }
 
 [generic, template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : int16; defV : int16 = int16(0)) {
+    //! Parse a JSON value and return the corresponding native value.
     return null_coalescing(v, defV)
 }
 
 [generic, template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : uint16; defV : uint16 = uint16(0)) {
+    //! Parse a JSON value and return the corresponding native value.
     return null_coalescing(v, defV)
 }
 
 [generic, template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : bitfield; defV : bitfield = bitfield()) {
+    //! Parse a JSON value and return the corresponding native value.
     return null_coalescing(v, defV)
 }
 
 [generic, template(ent), unused_argument(ent)]
-def from_JV(v : JsonValue const explicit?; ent : bitfield8; defV : bitfield8 = bitfield8()) {
+def from_JV(v : JsonValue const explicit?; ent : bitfield : uint8 < >; defV : bitfield8 = bitfield8()) {
+    //! Parse a JSON value and return the corresponding native value.
     return null_coalescing(v, defV)
 }
 
 [generic, template(ent), unused_argument(ent)]
-def from_JV(v : JsonValue const explicit?; ent : bitfield16; defV : bitfield16 = bitfield16()) {
+def from_JV(v : JsonValue const explicit?; ent : bitfield : uint16 < >; defV : bitfield16 = bitfield16()) {
+    //! Parse a JSON value and return the corresponding native value.
     return null_coalescing(v, defV)
 }
 
 [generic, template(ent), unused_argument(ent)]
-def from_JV(v : JsonValue const explicit?; ent : bitfield64; defV : bitfield64 = bitfield64()) {
+def from_JV(v : JsonValue const explicit?; ent : bitfield : uint64 < >; defV : bitfield64 = bitfield64()) {
+    //! Parse a JSON value and return the corresponding native value.
     return null_coalescing(v, defV)
 }
 
@@ -360,6 +382,7 @@ def JV(v : auto(VecT)) {
 
 [expect_any_vector_type(ent), template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : auto(VecT); defV : VecT = VecT()) {
+    //! Parse a JSON value and return the corresponding vector value.
     if (v == null) {
         return defV
     }
@@ -376,6 +399,7 @@ def from_JV(v : JsonValue const explicit?; ent : auto(VecT); defV : VecT = VecT(
 
 [template(anything), unused_argument(anything)]
 def from_JV(v : JsonValue const explicit?; anything : table< auto(KT); auto(VT) >) {
+    //! Parse a JSON value and return the corresponding table value.
     var ret : table<KT; VT>
     if (v == null || !(v.value is _object)) {
         return <- ret
@@ -390,14 +414,15 @@ def from_JV(v : JsonValue const explicit?; anything : table< auto(KT); auto(VT) 
 }
 
 struct public JsonFieldState {
-    argName : string
-    enumAsInt : bool
-    unescape : bool
-    embed : bool
-    optional : bool
+    argName : string        //! name of the field in JSON
+    enumAsInt : bool        //! whether to parse enum as integer
+    unescape : bool         //! whether to unescape strings
+    embed : bool            //! whether to embed the field
+    optional : bool         //! whether the field is optional
 }
 
 def public parse_json_annotation(name : string; annotation : array<tuple<name : string; data : RttiValue>>) : JsonFieldState {
+    //! Parse JSON field annotations and return the corresponding JsonFieldState.
     var fieldState : JsonFieldState
     fieldState.argName = name
     for (ann in annotation) {
@@ -418,6 +443,8 @@ def public parse_json_annotation(name : string; annotation : array<tuple<name : 
 
 [unused_argument(anything)]
 def from_JV(v : JsonValue const explicit?; anything : auto(TT)) {
+    //! Parse a JSON value and return the corresponding value of any type.
+    //! This is the main dispatch function that handles various types.
     static_if (typeinfo is_dim(anything)) {
         var ret : TT[typeinfo dim(anything)]
         if (v == null || !(v.value is _array)) {
@@ -504,6 +531,8 @@ def from_JV(v : JsonValue const explicit?; anything : auto(TT)) {
 }
 
 def JV(value : auto(TT)) : JsonValue? {
+    //! Creates `JsonValue` out of value.
+    //! This is the main dispatch function that handles various types.
     static_if (typeinfo is_dim(value)) {
         var arr : array<JsonValue?>
         for (t in value) {
@@ -616,40 +645,47 @@ def JV(value : auto(TT)) : JsonValue? {
     }
 }
 
-
 def JV(val1; val2) : JsonValue? {
+    //! Creates array of two JsonValues.
     return _::JV([ _::JV(val1), _::JV(val2)])
 }
 
 def JV(val1; val2; val3) : JsonValue? {
+    //! Creates array of three JsonValues.
     return _::JV([ _::JV(val1), _::JV(val2), _::JV(val3)])
 }
 
 def JV(val1; val2; val3; val4) : JsonValue? {
+    //! Creates array of four JsonValues.
     return _::JV([ _::JV(val1), _::JV(val2), _::JV(val3), _::JV(val4)])
 }
 
 def JV(val1; val2; val3; val4; val5) : JsonValue? {
+    //! Creates array of five JsonValues.
     return _::JV([ _::JV(val1), _::JV(val2), _::JV(val3), _::JV(val4), _::JV(val5)])
 }
 
 def JV(val1; val2; val3; val4; val5; val6) : JsonValue? {
+    //! Creates array of six JsonValues.
     return _::JV([ _::JV(val1), _::JV(val2), _::JV(val3), _::JV(val4), _::JV(val5), _::JV(val6)])
 }
 
 def JV(val1; val2; val3; val4; val5; val6; val7) : JsonValue? {
+    //! Creates array of seven JsonValues.
     return _::JV([ _::JV(val1), _::JV(val2), _::JV(val3), _::JV(val4), _::JV(val5), _::JV(val6), _::JV(val7)])
 }
 
 def JV(val1; val2; val3; val4; val5; val6; val7; val8) : JsonValue? {
+    //! Creates array of eight JsonValues.
     return _::JV([ _::JV(val1), _::JV(val2), _::JV(val3), _::JV(val4), _::JV(val5), _::JV(val6), _::JV(val7), _::JV(val8)])
 }
 
 def JV(val1; val2; val3; val4; val5; val6; val7; val8; val9) : JsonValue? {
+    //! Creates array of nine JsonValues.
     return _::JV([ _::JV(val1), _::JV(val2), _::JV(val3), _::JV(val4), _::JV(val5), _::JV(val6), _::JV(val7), _::JV(val8), _::JV(val9)])
 }
 
 def JV(val1; val2; val3; val4; val5; val6; val7; val8; val9; val10) : JsonValue? {
+    //! Creates array of ten JsonValues.
     return _::JV([ _::JV(val1), _::JV(val2), _::JV(val3), _::JV(val4), _::JV(val5), _::JV(val6), _::JV(val7), _::JV(val8), _::JV(val9), _::JV(val10)])
 }
-
