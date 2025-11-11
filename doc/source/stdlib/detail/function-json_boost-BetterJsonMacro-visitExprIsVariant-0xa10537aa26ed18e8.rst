@@ -1,1 +1,0 @@
-Visit ExprIsVariant node.
