@@ -299,7 +299,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: EntityId)
 
-|detail/function-decs-clone-0xd7e70b00fdb8ff29|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -309,7 +309,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: bool)
 
-|detail/function-decs-clone-0xecf896599038d14a|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -319,7 +319,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: range)
 
-|detail/function-decs-clone-0xd4b09da6a0ccb5dd|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -329,7 +329,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: urange)
 
-|detail/function-decs-clone-0xa4082e8677636c98|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -339,7 +339,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: range64)
 
-|detail/function-decs-clone-0x349dcd233b80c251|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -349,7 +349,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: urange64)
 
-|detail/function-decs-clone-0xe027ba7ca9f8c644|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -359,7 +359,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: string)
 
-|detail/function-decs-clone-0xfefad2f24e1e67e7|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -369,7 +369,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: int)
 
-|detail/function-decs-clone-0x41a10cca1e992495|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -379,7 +379,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: int8)
 
-|detail/function-decs-clone-0x1dcd6871fe3951f7|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -389,7 +389,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: int16)
 
-|detail/function-decs-clone-0x1dbb5f71fe1aacac|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -399,7 +399,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: int64)
 
-|detail/function-decs-clone-0x1db95e71fe1744f9|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -409,7 +409,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: int2)
 
-|detail/function-decs-clone-0x1dcd6271fe3947c5|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -419,7 +419,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: int3)
 
-|detail/function-decs-clone-0x1dcd6171fe394612|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -429,7 +429,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: int4)
 
-|detail/function-decs-clone-0x1dcd5c71fe393d93|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -439,7 +439,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: uint)
 
-|detail/function-decs-clone-0xda4d9a868ae2e30c|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -449,7 +449,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: uint8)
 
-|detail/function-decs-clone-0xda659a868b0bab0c|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -459,7 +459,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: uint16)
 
-|detail/function-decs-clone-0xe86cc9e309dd48e|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -469,7 +469,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: uint64)
 
-|detail/function-decs-clone-0x11ecca9e3380fa28|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -479,7 +479,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: uint2)
 
-|detail/function-decs-clone-0xda5b9a868afaad0c|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -489,7 +489,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: uint3)
 
-|detail/function-decs-clone-0xda5c9a868afc600c|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -499,7 +499,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: uint4)
 
-|detail/function-decs-clone-0xda619a868b04df0c|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -509,7 +509,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: float)
 
-|detail/function-decs-clone-0x788da344670d198a|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -519,7 +519,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: float2)
 
-|detail/function-decs-clone-0xe5c6253b1b42b3a8|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -529,7 +529,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: float3)
 
-|detail/function-decs-clone-0xe5c6263b1b42b55b|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -539,7 +539,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: float4)
 
-|detail/function-decs-clone-0xe5c62b3b1b42bdda|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -549,7 +549,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: float3x3)
 
-|detail/function-decs-clone-0xa7185e70223dc7b8|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -559,7 +559,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: float3x4)
 
-|detail/function-decs-clone-0xa7186570223dd39d|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -569,7 +569,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: float4x4)
 
-|detail/function-decs-clone-0xa7296370224c436a|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -579,7 +579,7 @@ Access (get/set/clone)
 
 .. das:function:: clone(cv: ComponentValue; val: double)
 
-|detail/function-decs-clone-0x20d364a9e582581f|
+Sets individual component value. Verifies that the value is of the correct type.
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -609,7 +609,7 @@ Returns true if object has specified subobjec.
 
 .. das:function:: has(cmp: ComponentMap; name: string) : bool
 
-|detail/function-decs-has-0xea18a96adc6d2849|
+Returns true if component map has specified component.
 
 :Arguments: * **cmp** :  :ref:`ComponentMap <alias-ComponentMap>` 
 

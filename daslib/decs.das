@@ -164,35 +164,150 @@ def public set(var cv : ComponentValue; val : auto) {
     cv = cval
 }
 
-def public operator :=(var cv : ComponentValue; val : EntityId)    { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : bool)        { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : range)       { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : urange)      { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : range64)     { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : urange64)    { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : string)      { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : int)         { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : int8)        { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : int16)       { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : int64)       { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : int2)        { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : int3)        { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : int4)        { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : uint)        { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : uint8)       { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : uint16)      { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : uint64)      { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : uint2)       { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : uint3)       { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : uint4)       { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : float)       { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : float2)      { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : float3)      { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : float4)      { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : float3x3)    { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : float3x4)    { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : float4x4)    { set(cv, val); }
-def public operator :=(var cv : ComponentValue; val : double)      { set(cv, val); }
+def public operator :=(var cv : ComponentValue; val : EntityId) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : bool) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val);
+}
+
+def public operator :=(var cv : ComponentValue; val : range) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : urange) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : range64) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : urange64) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : string) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : int) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : int8) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : int16) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : int64) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : int2) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : int3) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : int4) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : uint) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : uint8) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : uint16) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : uint64) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : uint2) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : uint3) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : uint4) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : float) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : float2) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : float3) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : float4) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : float3x3) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : float3x4) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : float4x4) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
+
+def public operator :=(var cv : ComponentValue; val : double) {
+    //! Sets individual component value. Verifies that the value is of the correct type.
+    set(cv, val)
+}
 
 def public clone(var dst : Component; src : Component) {
     //! Clones component value.
@@ -264,6 +379,7 @@ def public restart {
 }
 
 def private new_entity_id() {
+    //! Creates new entity ID.
     var eid : EntityId
     if (!empty(decsState.entityFreeList)) {
         eid = decsState.entityFreeList[length(decsState.entityFreeList) - 1]
@@ -345,6 +461,7 @@ def public debug_dump {
 }
 
 def private with_archetype(hash : ComponentHash; blk : block<(var arch : Archetype; idx : int; isNew : bool) : void>) {
+    //! Invokes block for the archetype with specified hash.
     var afound & = unsafe(decsState.archetypeLookup[hash])
     if (afound == 0) {
         decsState.allArchetypes |> emplace(Archetype(hash = hash))
@@ -356,6 +473,7 @@ def private with_archetype(hash : ComponentHash; blk : block<(var arch : Archety
 }
 
 def private create_archetype(var arch : Archetype; cmp : ComponentMap; idx : int) {
+    //! Creates archetype from the component map.
     assert(length(arch.components) == 0)
     arch.eidIndex = -1
     for (kv, kvi in cmp, count()) {
@@ -388,6 +506,7 @@ def private create_archetype(var arch : Archetype; cmp : ComponentMap; idx : int
 }
 
 def private get_eid(var arch : Archetype; index : int) : EntityId& {
+    //! Gets entity ID component for the specific entity index in the archetype.
     unsafe {
         var ceid & = arch.components[arch.eidIndex]
         return *(reinterpret<EntityId?> addr(ceid.data[index * ceid.stride]))
@@ -395,6 +514,7 @@ def private get_eid(var arch : Archetype; index : int) : EntityId& {
 }
 
 def private create_entity(var arch : Archetype; eid : EntityId; cmp : ComponentMap) {
+    //! Creates new entity in the archetype with specified component map.
     let eidx = arch.size++
     for (c, comp in arch.components, cmp) {
         c.data |> resize(length(c.data) + c.stride)
@@ -406,6 +526,7 @@ def private create_entity(var arch : Archetype; eid : EntityId; cmp : ComponentM
 }
 
 def private remove_entity(var arch : Archetype; di : int) {
+    //! Removes entity at specified index from the archetype.
     arch.size --
     if (di != arch.size) {// copy last one in the hole
         var eid_last_id = get_eid(arch, arch.size).id
@@ -422,6 +543,7 @@ def private remove_entity(var arch : Archetype; di : int) {
 }
 
 def private cmp_archetype_hash(cmp : ComponentMap) {
+    //! Computes archetype hash from the component map.
     var ahash : ComponentHash
     for (kv in cmp) {
         ahash = (ahash <<< 2ul) ^ hash(kv.name)
@@ -1047,6 +1169,7 @@ def public set(var cmp : ComponentMap; name : string; value : auto(TT)) {
 }
 
 def public has(var cmp : ComponentMap; name : string) {
+    //! Returns true if component map has specified component.
     return binary_search(cmp, ComponentValue(name = name)) <| $(x, y) => x.name < y.name
 }
 

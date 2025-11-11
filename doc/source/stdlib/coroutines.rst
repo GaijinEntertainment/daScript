@@ -48,13 +48,13 @@ Type aliases
 
 .. das:attribute:: Coroutine = iterator<bool>
 
-|detail/typedef-coroutines-Coroutine|
+A coroutine is a generator that yields bool to indicate if it is still running.
 
 .. _alias-Coroutines:
 
 .. das:attribute:: Coroutines = array<iterator<bool>>
 
-|detail/typedef-coroutines-Coroutines|
+An array of coroutines.
 
 ++++++++++++++++++++
 Function annotations
