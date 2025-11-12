@@ -649,6 +649,39 @@ namespace das {
                 }
             }
         }
+        string getNamelessHint ( const ExpressionPtr & left, const ExpressionPtr & right, const string & op ) const {
+            if ( left->rtti_isMakeTuple() ) {
+                auto mkt = static_pointer_cast<ExprMakeTuple>(left);
+                smart_ptr<ExprVar> firstField;
+                for ( const auto & val : mkt->values ) {
+                    auto value = val;
+                    if ( value->rtti_isR2V() ) {
+                        value = static_pointer_cast<ExprRef2Value>(value)->subexpr;
+                    }
+                    if ( value->rtti_isField() ) {
+                        auto field = static_pointer_cast<ExprField>(value);
+                        if ( field->value->rtti_isVar() ) {
+                            auto var = static_pointer_cast<ExprVar>(field->value);
+                            if ( var->variable->type->isTuple() ) {
+                                if ( !firstField ) {
+                                    firstField = var;
+                                } else if ( firstField->variable != var->variable ) {
+                                    return "";
+                                }
+                            } else {
+                                return "";
+                            }
+                        } else {
+                            return "";
+                        }
+                    } else {
+                        return "";
+                    }
+                }
+                return "did u mean " + firstField->name + " " + op + " " + right->describe();
+            }
+            return "";
+        }
         virtual void preVisit ( ExprCopy * expr ) override {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
@@ -665,6 +698,11 @@ namespace das {
                 program->error("can't assign null pointer to " + expr->left->type->describe(), "", "",
                     expr->right->at, CompilationError::cant_be_null);
             }
+            if ( noWritingToNameless && expr->left->rtti_isMakeLocal() ) {
+                program->error("dead assignment to a temporary value, which is prohibited by CodeOfPolicies",
+                    getNamelessHint(expr->left, expr->right, "="), "",
+                    expr->left->at, CompilationError::no_writing_to_nameless);
+            }
         }
         virtual void preVisit ( ExprMove * expr ) override {
             Visitor::preVisit(expr);
@@ -678,6 +716,11 @@ namespace das {
             if ( needAvoidNullPtr(expr->left->type,false) && expr->right->rtti_isNullPtr() ) {
                 program->error("can't assign null pointer to " + expr->left->type->describe(), "", "",
                     expr->right->at, CompilationError::cant_be_null);
+            }
+            if ( noWritingToNameless && expr->left->rtti_isMakeLocal() ) {
+                program->error("dead move to a temporary value, which is prohibited by CodeOfPolicies",
+                    getNamelessHint(expr->left, expr->right, "<-"), "",
+                        expr->left->at, CompilationError::no_writing_to_nameless);
             }
         }
         virtual void preVisit ( ExprClone * expr ) override {
