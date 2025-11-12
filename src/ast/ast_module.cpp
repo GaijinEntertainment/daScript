@@ -571,7 +571,7 @@ namespace das {
         return it != callThis.end() ? &it->second : nullptr;
     }
 
-    bool Module::compileBuiltinModule ( const string & modName, unsigned char * str, unsigned int str_len ) {
+    bool Module::compileBuiltinModule ( const string & modName, const unsigned char * const str, unsigned int str_len ) {
         TextWriter issues;
         auto access = make_smart<FileAccess>();
         auto fileInfo = make_unique<TextFileInfo>((char *) str, uint32_t(str_len), false);
