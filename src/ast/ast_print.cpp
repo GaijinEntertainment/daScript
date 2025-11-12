@@ -96,7 +96,7 @@ namespace das {
         bool printCStyle = false;
         bool printAliases = false;
         bool printUse = false;
-        bool gen2 = false;
+        bool gen2 = true;
     protected:
         void newLine () {
             auto nlPos = ss.tellp();
