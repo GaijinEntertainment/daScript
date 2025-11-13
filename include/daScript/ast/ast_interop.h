@@ -182,6 +182,8 @@ namespace das
         virtual void * getBuiltinAddress() const override { return (void *) &usingFunc; }
     };
 
+#define VERIFY_JIT_ARGUMENTS 0
+#if VERIFY_JIT_ARGUMENTS
     template <typename Func, Func Fn>
     struct VerifyFn;
 
@@ -195,8 +197,6 @@ namespace das
 
         template <typename ArgT>
         static void verifySingleArgumentType(size_t /*idx*/, FunctionPtr /*fn_info*/) {
-            // todo: enable once everything else is merged
-            /*
             auto & type = fn_info->arguments[idx]->type;
             if (type->isVectorType()) {
                 using CleanType = remove_cv_t<remove_reference_t<ArgT>>;
@@ -222,9 +222,9 @@ namespace das
                 "Reference type mismatch %s in function %s. It makes jit work incorrectly. "
                 "You must be manually changed ref, but not implemented JitConstRefByValue for this type.",
                 debug_type_name<ArgT>(), fn_info->name.c_str());
-            */
         }
     };
+#endif
 
     void addExternFunc(Module& mod, const FunctionPtr & fx, bool isCmres, SideEffects seFlags);
 
@@ -248,7 +248,9 @@ namespace das
         fnX->setSideEffects(sideEffects);
         fnX->propertyFunction = true;
         DAS_ASSERTF(!fnX->result->isSmartPointer(), "property function can't return smart pointer %s::%s", mod.name.c_str(), name);
+#if VERIFY_JIT_ARGUMENTS
         VerifyFn<FuncT, fn>::verify(fnX);
+#endif
         mod.addFunction(fnX,true);  // yes, this one can fail. same C++ bound property can be in multiple classes before or after refactor
         return fnX;
     }
@@ -278,7 +280,9 @@ namespace das
         fnX->setSideEffects(sideEffects);
         fnX->propertyFunction = true;
         DAS_ASSERTF(!fnX->result->isSmartPointer(), "property function can't return smart pointer %s::%s", mod.name.c_str(), name);
+#if VERIFY_JIT_ARGUMENTS
         VerifyFn<FuncT, fn>::verify(fnX);
+#endif
         mod.addFunction(fnX,true);  // yes, this one can fail. same C++ bound property can be in multiple classes before or after refactor
         return fnX;
     }
@@ -299,7 +303,9 @@ namespace das
 #endif
 
         tempFn(fnX.get());
+#if VERIFY_JIT_ARGUMENTS
         VerifyFn<FuncT, fn>::verify(fnX);
+#endif
         addExternFunc(mod, fnX, SimNodeType::IS_CMRES, seFlags);
         return fnX;
     }
@@ -330,7 +336,9 @@ namespace das
                     fnX->name.c_str(), fnX->name.c_str());
             }
         }
+#if VERIFY_JIT_ARGUMENTS
         VerifyFn<FuncT, fn>::verify(fnX);
+#endif
         return fnX;
     }
 
@@ -349,7 +357,9 @@ namespace das
         auto fnX = make_smart<ExternalFn<FuncT, fn, SimNodeType, FuncArgT>>(name, lib, cppName);
 #endif
         tempFn(fnX.get());
+#if VERIFY_JIT_ARGUMENTS
         VerifyFn<FuncT, fn>::verify(fnX);
+#endif
         addExternFunc(mod, fnX, SimNodeType::IS_CMRES, seFlags);
         return fnX;
     }
@@ -371,7 +381,9 @@ namespace das
 #endif
         tempFn(fnX.get());
         fnX->result->temporary = true;
+#if VERIFY_JIT_ARGUMENTS
         VerifyFn<FuncT, fn>::verify(fnX);
+#endif
         addExternFunc(mod, fnX, SimNodeType::IS_CMRES, seFlags);
         return fnX;
     }
@@ -440,5 +452,9 @@ namespace das
         addExtern<void (*)(ET&,ET),method_and_equ::invoke>(mod, lib, "&=", SideEffects::modifyArgument,
             ("das_operator_enum_AND_EQU<" + cppName + ">::invoke").c_str());
     }
+
+#ifdef VERIFY_JIT_ARGUMENTS
+#undef VERIFY_JIT_ARGUMENTS
+#endif
 }
 
