@@ -1,5 +1,7 @@
 #pragma once
 
+#include <daScript/misc/platform.h>
+
 #ifndef DAS_FREE_LIST
 #define DAS_FREE_LIST   0
 #endif
@@ -73,7 +75,7 @@ namespace das {
     void reuse_cache_pop();
 
     struct ReuseCacheGuard {
-        ReuseCacheGuard() { reuse_cache_push(); }
-        ~ReuseCacheGuard() { reuse_cache_pop(); }
+        ReuseCacheGuard();
+        ~ReuseCacheGuard();
     };
 }
