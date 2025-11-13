@@ -836,6 +836,7 @@ namespace das {
                     case Type::tBitfield8: ss << "8"; break;
                     case Type::tBitfield16: ss << "16"; break;
                     case Type::tBitfield64: ss << "64"; break;
+                    default: break;
                 }
                 ss << "(0x" << HEX << c->getValue() << DEC << ")";
             }
