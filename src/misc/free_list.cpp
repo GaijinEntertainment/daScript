@@ -138,3 +138,8 @@ void reuse_cache_pop() {}
 }
 
 #endif
+
+namespace das {
+    ReuseCacheGuard::ReuseCacheGuard() { reuse_cache_push(); }
+    ReuseCacheGuard::~ReuseCacheGuard() { reuse_cache_pop(); }
+}
