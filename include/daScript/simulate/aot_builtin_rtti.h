@@ -100,7 +100,6 @@ namespace das {
     DAS_API int32_t rtti_getDimTypeInfo(const TypeInfo & ti, int32_t index, Context * context, LineInfoArg * at);
     DAS_API int32_t rtti_getDimVarInfo(const VarInfo & ti, int32_t index, Context * context, LineInfoArg * at);
 
-    DAS_API char * builtin_das_root ( Context * context, LineInfoArg * at );
     DAS_API smart_ptr<FileAccess> makeFileAccess( char * pak, Context * context, LineInfoArg * at );
     DAS_API bool introduceFile ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context, LineInfoArg * );
     DAS_API bool rtti_add_file_access_root ( smart_ptr<FileAccess> access, const char * mod, const char * path );

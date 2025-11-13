@@ -775,44 +775,44 @@ namespace das
 
     // core functions
 
-    DAS_API void builtin_throw ( char * text, Context * context, LineInfoArg * at ) {
+    void builtin_throw ( char * text, Context * context, LineInfoArg * at ) {
         context->throw_error_at(at, "%s", text);
     }
 
-    DAS_API void builtin_print ( char * text, Context * context, LineInfoArg * at ) {
+    void builtin_print ( char * text, Context * context, LineInfoArg * at ) {
         context->to_out(at, text);
     }
 
-    DAS_API void builtin_error ( char * text, Context * context, LineInfoArg * at ) {
+    void builtin_error ( char * text, Context * context, LineInfoArg * at ) {
         context->to_err(at, text);
     }
 
-    DAS_API vec4f builtin_breakpoint ( Context & context, SimNode_CallBase * call, vec4f * ) {
+    vec4f builtin_breakpoint ( Context & context, SimNode_CallBase * call, vec4f * ) {
         context.breakPoint(call->debugInfo);
         return v_zero();
     }
 
-    DAS_API void builtin_stackwalk ( bool args, bool vars, Context * context, LineInfoArg * lineInfo ) {
+    void builtin_stackwalk ( bool args, bool vars, Context * context, LineInfoArg * lineInfo ) {
         context->stackWalk(lineInfo, args, vars);
     }
 
-    DAS_API void builtin_terminate ( Context * context, LineInfoArg * at ) {
+    void builtin_terminate ( Context * context, LineInfoArg * at ) {
         context->throw_error_at(at, "terminate");
     }
 
-    DAS_API int builtin_table_size ( const Table & arr ) {
+    int builtin_table_size ( const Table & arr ) {
         return arr.size;
     }
 
-    DAS_API int builtin_table_capacity ( const Table & arr ) {
+    int builtin_table_capacity ( const Table & arr ) {
         return arr.capacity;
     }
 
-    DAS_API void builtin_table_clear ( Table & arr, Context * context, LineInfoArg * at ) {
+    void builtin_table_clear ( Table & arr, Context * context, LineInfoArg * at ) {
         table_clear(*context, arr, at);
     }
 
-    DAS_API vec4f builtin_table_reserve ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+    vec4f builtin_table_reserve ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         // table, size
         if ( !call->types ) {
             context.throw_error_at(call->debugInfo, "missing type info");
@@ -841,53 +841,53 @@ namespace das
         return cast<uint64_t>::from(uhash);
     }
 
-    DAS_API void heap_stats ( Context & ctx, uint64_t * bytes ) {
+    void heap_stats ( Context & ctx, uint64_t * bytes ) {
         bytes[0] = ctx.heap->bytesAllocated();
         bytes[1] = ctx.stringHeap->bytesAllocated();
     }
 
-    DAS_API urange64 heap_allocation_stats ( Context * context ) {
+    urange64 heap_allocation_stats ( Context * context ) {
         return urange64 ( context->heap->getTotalBytesAllocated(), context->heap->getTotalBytesDeleted() );
     }
 
-    DAS_API uint64_t heap_allocation_count ( Context * context ) {
+    uint64_t heap_allocation_count ( Context * context ) {
         return context->heap->getTotalAllocations();
     }
 
-    DAS_API urange64 string_heap_allocation_stats ( Context * context ) {
+    urange64 string_heap_allocation_stats ( Context * context ) {
         return urange64 ( context->stringHeap->getTotalBytesAllocated(), context->stringHeap->getTotalBytesDeleted() );
     }
 
-    DAS_API uint64_t string_heap_allocation_count ( Context * context ) {
+    uint64_t string_heap_allocation_count ( Context * context ) {
         return context->stringHeap->getTotalAllocations();
     }
 
-    DAS_API uint64_t heap_bytes_allocated ( Context * context ) {
+    uint64_t heap_bytes_allocated ( Context * context ) {
         return context->heap->bytesAllocated();
     }
 
-    DAS_API int32_t heap_depth ( Context * context ) {
+    int32_t heap_depth ( Context * context ) {
         return (int32_t) context->heap->depth();
     }
 
-    DAS_API uint64_t string_heap_bytes_allocated ( Context * context ) {
+    uint64_t string_heap_bytes_allocated ( Context * context ) {
         return context->stringHeap->bytesAllocated();
     }
 
-    DAS_API int32_t string_heap_depth ( Context * context ) {
+    int32_t string_heap_depth ( Context * context ) {
         return (int32_t) context->stringHeap->depth();
     }
 
-    DAS_API void string_heap_report ( Context * context, LineInfoArg * info ) {
+    void string_heap_report ( Context * context, LineInfoArg * info ) {
         context->stringHeap->report();
         context->reportAnyHeap(info, true, false, false, false);
     }
 
-    DAS_API bool is_intern_strings ( Context * context ) {
+    bool is_intern_strings ( Context * context ) {
         return context->stringHeap->isIntern();
     }
 
-    DAS_API void heap_collect ( bool sheap, bool validate, Context * context, LineInfoArg * info ) {
+    void heap_collect ( bool sheap, bool validate, Context * context, LineInfoArg * info ) {
         if ( !context->persistent ) {
             context->throw_error_at(info, "heap collection is not allowed in this context, needs 'options persistent'");
         }
@@ -897,12 +897,12 @@ namespace das
         context->collectHeap(info, sheap, validate);
     }
 
-    DAS_API void heap_report ( Context * context, LineInfoArg * info ) {
+    void heap_report ( Context * context, LineInfoArg * info ) {
         context->heap->report();
         context->reportAnyHeap(info, false, true, false, false);
     }
 
-    DAS_API void memory_report ( bool errOnly, Context * context, LineInfoArg * info ) {
+    void memory_report ( bool errOnly, Context * context, LineInfoArg * info ) {
         /*
         context->stringHeap->report();
         context->heap->report();
@@ -910,46 +910,46 @@ namespace das
         context->reportAnyHeap(info,true,true,false,errOnly);
     }
 
-    DAS_API void builtin_table_lock ( const Table & arr, Context * context, LineInfoArg * at ) {
+    void builtin_table_lock ( const Table & arr, Context * context, LineInfoArg * at ) {
         table_lock(*context, const_cast<Table&>(arr), at);
     }
 
-    DAS_API void builtin_table_unlock ( const Table & arr, Context * context, LineInfoArg * at ) {
+    void builtin_table_unlock ( const Table & arr, Context * context, LineInfoArg * at ) {
         table_unlock(*context, const_cast<Table&>(arr), at);
     }
 
-    DAS_API void builtin_table_clear_lock ( const Table & arr, Context * ) {
+    void builtin_table_clear_lock ( const Table & arr, Context * ) {
         const_cast<Table&>(arr).hopeless = 0;
     }
 
-    DAS_API bool builtin_iterator_first ( Sequence & it, void * data, Context * context, LineInfoArg * at ) {
+    bool builtin_iterator_first ( Sequence & it, void * data, Context * context, LineInfoArg * at ) {
         if ( !it.iter ) context->throw_error_at(at, "calling first on empty iterator");
         else if ( it.iter->isOpen ) context->throw_error_at(at, "calling first on already open iterator");
         it.iter->isOpen = true;
         return it.iter->first(*context, (char *)data);
     }
 
-    DAS_API bool builtin_iterator_next ( Sequence & it, void * data, Context * context, LineInfoArg * at ) {
+    bool builtin_iterator_next ( Sequence & it, void * data, Context * context, LineInfoArg * at ) {
         if ( !it.iter ) context->throw_error_at(at, "calling next on empty iterator");
         else if ( !it.iter->isOpen ) context->throw_error_at(at, "calling next on a non-open iterator");
         return it.iter->next(*context, (char *)data);
     }
 
-    DAS_API void builtin_iterator_close ( Sequence & it, void * data, Context * context ) {
+    void builtin_iterator_close ( Sequence & it, void * data, Context * context ) {
         if ( it.iter ) {
             it.iter->close(*context, (char *)&data);
             it.iter = nullptr;
         }
     }
 
-    DAS_API void builtin_iterator_delete ( Sequence & it, Context * context ) {
+    void builtin_iterator_delete ( Sequence & it, Context * context ) {
         if ( it.iter ) {
             it.iter->close(*context, nullptr);
             it.iter = nullptr;
         }
     }
 
-    DAS_API bool builtin_iterator_iterate ( Sequence & it, void * value, Context * context ) {
+    bool builtin_iterator_iterate ( Sequence & it, void * value, Context * context ) {
         if ( !it.iter ) {
             return false;
         } else if ( !it.iter->isOpen) {
@@ -972,28 +972,28 @@ namespace das
         }
     }
 
-    DAS_API void builtin_make_good_array_iterator ( Sequence & result, const Array & arr, int stride, Context * context, LineInfoArg * at ) {
+    void builtin_make_good_array_iterator ( Sequence & result, const Array & arr, int stride, Context * context, LineInfoArg * at ) {
         char * iter = context->allocateIterator(sizeof(GoodArrayIterator), "array<> iterator", at);
         if ( !iter ) context->throw_out_of_memory(false, sizeof(GoodArrayIterator)+16, at);
         new (iter) GoodArrayIterator((Array *)&arr, stride, at);
         result = { (Iterator *) iter };
     }
 
-    DAS_API void builtin_make_fixed_array_iterator ( Sequence & result, void * data, int size, int stride, Context * context, LineInfoArg * at ) {
+    void builtin_make_fixed_array_iterator ( Sequence & result, void * data, int size, int stride, Context * context, LineInfoArg * at ) {
         char * iter = context->allocateIterator(sizeof(FixedArrayIterator), "fixed array iterator", at);
         if ( !iter ) context->throw_out_of_memory(false, sizeof(FixedArrayIterator)+16, at);
         new (iter) FixedArrayIterator((char *)data, size, stride, at);
         result = { (Iterator *) iter };
     }
 
-    DAS_API void builtin_make_range_iterator ( Sequence & result, range rng, Context * context, LineInfoArg * at ) {
+    void builtin_make_range_iterator ( Sequence & result, range rng, Context * context, LineInfoArg * at ) {
         char * iter = context->allocateIterator(sizeof(RangeIterator<range>), "range iterator", at);
         if ( !iter ) context->throw_out_of_memory(false, sizeof(RangeIterator<range>)+16, at);
         new (iter) RangeIterator<range>(rng, at);
         result = { (Iterator *) iter };
     }
 
-    DAS_API vec4f builtin_make_enum_iterator ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+    vec4f builtin_make_enum_iterator ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         if ( !call->types ) context.throw_error_at(call->debugInfo, "missing type info");
         auto itinfo = call->types[0];
         if ( itinfo->type != Type::tIterator ) context.throw_error_at(call->debugInfo, "not an iterator");
@@ -1035,7 +1035,7 @@ namespace das
         return v_zero();
     }
 
-    DAS_API void builtin_make_string_iterator ( Sequence & result, char * str, Context * context, LineInfoArg * at ) {
+    void builtin_make_string_iterator ( Sequence & result, char * str, Context * context, LineInfoArg * at ) {
         char * iter = context->allocateIterator(sizeof(StringIterator), "string iterator", at);
         if ( !iter ) context->throw_out_of_memory(false, sizeof(StringIterator)+16, at);
         new (iter) StringIterator(str, at);
@@ -1051,7 +1051,7 @@ namespace das
         }
     };
 
-    DAS_API void builtin_make_nil_iterator ( Sequence & result, Context * context, LineInfoArg * at ) {
+    void builtin_make_nil_iterator ( Sequence & result, Context * context, LineInfoArg * at ) {
         char * iter = context->allocateIterator(sizeof(NilIterator), "nil iterator", at);
         if ( !iter ) context->throw_out_of_memory(false, sizeof(NilIterator)+16);
         new (iter) NilIterator(at);
@@ -1111,29 +1111,29 @@ namespace das
         int             stride = 0;
     };
 
-    DAS_API void builtin_make_lambda_iterator ( Sequence & result, const Lambda lambda, int stride, Context * context, LineInfoArg * at ) {
+    void builtin_make_lambda_iterator ( Sequence & result, const Lambda lambda, int stride, Context * context, LineInfoArg * at ) {
         char * iter = context->allocateIterator(sizeof(LambdaIterator), "lambda iterator", at);
         if ( !iter ) context->throw_out_of_memory(false, sizeof(LambdaIterator)+16);
         new (iter) LambdaIterator(*context, lambda, stride, at);
         result = { (Iterator *) iter };
     }
 
-    DAS_API void resetProfiler( Context * context ) {
+    void resetProfiler( Context * context ) {
         context->resetProfiler();
     }
 
-    DAS_API void dumpProfileInfo( Context * context ) {
+    void dumpProfileInfo( Context * context ) {
         LOG tp(LogLevel::debug);
         context->collectProfileInfo(tp);
     }
 
-    DAS_API char * collectProfileInfo( Context * context, LineInfoArg * at ) {
+    char * collectProfileInfo( Context * context, LineInfoArg * at ) {
         TextWriter tout;
         context->collectProfileInfo(tout);
         return context->allocateString(tout.str(), at);
     }
 
-    DAS_API void builtin_array_free ( Array & dim, int szt, Context * __context__, LineInfoArg * at ) {
+    void builtin_array_free ( Array & dim, int szt, Context * __context__, LineInfoArg * at ) {
         if ( dim.data ) {
             if ( !dim.lock || dim.hopeless ) {
                 uint32_t oldSize = dim.capacity*szt;
@@ -1150,7 +1150,7 @@ namespace das
         }
     }
 
-    DAS_API void builtin_table_free ( Table & tab, int szk, int szv, Context * __context__, LineInfoArg * at ) {
+    void builtin_table_free ( Table & tab, int szk, int szv, Context * __context__, LineInfoArg * at ) {
         if ( tab.data ) {
             if ( !tab.lock || tab.hopeless ) {
                 uint32_t oldSize = tab.capacity*(szk+szv+sizeof(TableHashKey));
@@ -1373,7 +1373,7 @@ namespace das
         }
     };
 
-    DAS_API TypeDeclPtr makePrintFlags() {
+    TypeDeclPtr makePrintFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "print_flags";
         ft->argNames = { "escapeString", "namesAndDimensions", "typeQualifiers", "refAddresses", "singleLine", "fixedPoint" };
@@ -1387,7 +1387,7 @@ namespace das
         }
     };
 
-    DAS_API vec4f builtin_sprint ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+    vec4f builtin_sprint ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         TextWriter ssw;
         auto typeInfo = call->types[0];
         auto res = args[0];
@@ -1397,7 +1397,7 @@ namespace das
         return cast<char *>::from(sres);
     }
 
-    DAS_API vec4f builtin_json_sprint ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+    vec4f builtin_json_sprint ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         auto typeInfo = call->types[0];
         auto res = args[0];
         auto humanReadable = cast<bool>::to(args[1]);
@@ -1408,7 +1408,7 @@ namespace das
 
     Array  g_CommandLineArguments;
 
-    DAS_API void setCommandLineArguments ( int argc, char * argv[] ) {
+    void setCommandLineArguments ( int argc, char * argv[] ) {
         g_CommandLineArguments.data = (char *) argv;
         g_CommandLineArguments.capacity = argc;
         g_CommandLineArguments.size = argc;
@@ -1416,49 +1416,49 @@ namespace das
         g_CommandLineArguments.flags = 0;
     }
 
-    DAS_API void getCommandLineArguments( Array & arr ) {
+    void getCommandLineArguments( Array & arr ) {
         arr = g_CommandLineArguments;
     }
 
-    DAS_API char * builtin_das_root ( Context * context, LineInfoArg * at ) {
+    char * builtin_das_root ( Context * context, LineInfoArg * at ) {
         return context->allocateString(getDasRoot(), at);
     }
 
-    DAS_API char * to_das_string(const string & str, Context * ctx, LineInfoArg * at) {
+    char * to_das_string(const string & str, Context * ctx, LineInfoArg * at) {
         return ctx->allocateString(str, at);
     }
 
-    DAS_API const char * pass_string(const char * str) {
+    const char * pass_string(const char * str) {
         return str;
     }
 
-    DAS_API char * clone_pass_string(char * str, Context * ctx, LineInfoArg * at ) {
+    char * clone_pass_string(char * str, Context * ctx, LineInfoArg * at ) {
         if ( !str ) return nullptr;
         return ctx->allocateString(str, at);
     }
 
-    DAS_API void set_das_string(string & str, const char * bs) {
+    void set_das_string(string & str, const char * bs) {
         str = bs ? bs : "";
     }
 
-    DAS_API void set_string_das(char * & bs, const string & str, Context * ctx, LineInfoArg * at ) {
+    void set_string_das(char * & bs, const string & str, Context * ctx, LineInfoArg * at ) {
         bs = ctx->allocateString(str, at);
     }
 
-    DAS_API void peek_das_string(const string & str, const TBlock<void,TTemporary<const char *>> & block, Context * context, LineInfoArg * at) {
+    void peek_das_string(const string & str, const TBlock<void,TTemporary<const char *>> & block, Context * context, LineInfoArg * at) {
         vec4f args[1];
         args[0] = cast<const char *>::from(str.c_str());
         context->invoke(block, args, nullptr, at);
     }
 
-    DAS_API char * builtin_string_clone ( const char *str, Context * context, LineInfoArg * at ) {
+    char * builtin_string_clone ( const char *str, Context * context, LineInfoArg * at ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if (!strLen)
             return nullptr;
         return context->allocateString(str, strLen, at);
     }
 
-    DAS_API void builtin_temp_array ( void * data, int size, const Block & block, Context * context, LineInfoArg * at ) {
+    void builtin_temp_array ( void * data, int size, const Block & block, Context * context, LineInfoArg * at ) {
         Array arr;
         arr.data = (char *) data;
         arr.size = arr.capacity = size;
@@ -1469,7 +1469,7 @@ namespace das
         context->invoke(block, args, nullptr, at);
     }
 
-    DAS_API void builtin_make_temp_array ( Array & arr, void * data, int size ) {
+    void builtin_make_temp_array ( Array & arr, void * data, int size ) {
         arr.data = (char *) data;
         arr.size = arr.capacity = size;
         arr.lock = 0;

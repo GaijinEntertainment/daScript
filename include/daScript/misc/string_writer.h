@@ -1,5 +1,6 @@
 #pragma once
 
+#include <daScript/misc/platform.h>
 namespace das {
 
     class Context;
@@ -55,7 +56,7 @@ namespace das {
     #define DAS_SMALL_BUFFER_SIZE   4096
     #endif
 
-    class FixedBufferTextWriter : public StringWriter {
+    class DAS_API FixedBufferTextWriter : public StringWriter {
     public:
         virtual string str() const override;
         virtual uint64_t tellp() const override;
@@ -141,22 +142,13 @@ namespace das {
         trace       = 0,
     };
 
-    DAS_API const char * getLogMarker(int level);
-    DAS_API void logger ( int level, const char *marker, const char * text, Context * context, LineInfo * at );
+    const char * getLogMarker(int level);
+    void logger ( int level, const char *marker, const char * text, Context * context, LineInfo * at );
 
-    class LOG : public TextWriter {
+    class DAS_API LOG : public TextWriter {
     public:
         LOG ( int level = LogLevel::debug ) : logLevel(level) {}
-        virtual void output() override {
-            auto newPos = tellp();
-            if (newPos != pos) {
-                string st(data() + pos, size_t(newPos - pos));
-                logger(logLevel, useMarker ? getLogMarker(logLevel) : "", st.c_str(), /*ctx*/nullptr, /*at*/nullptr);
-                useMarker = false;
-                clear();
-                pos = newPos = 0;
-            }
-        }
+        virtual void output() override;
     protected:
         uint64_t pos = 0;
         int logLevel = LogLevel::debug;

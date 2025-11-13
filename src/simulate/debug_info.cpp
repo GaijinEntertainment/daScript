@@ -277,7 +277,7 @@ namespace das
         return maxSize;
     }
 
-    DAS_API int getVariantFieldOffset ( TypeInfo * info, int index ) {
+    int getVariantFieldOffset ( TypeInfo * info, int index ) {
         DAS_ASSERT(info->type==Type::tVariant);
         DAS_ASSERT(uint32_t(index)<info->argCount);
         int al = getVariantAlign(info) - 1;
@@ -285,7 +285,7 @@ namespace das
         return offset;
     }
 
-    DAS_API int getTypeBaseSize ( TypeInfo * info ) {
+    int getTypeBaseSize ( TypeInfo * info ) {
         if ( info->type==Type::tHandle ) {
             return int(info->getAnnotation()->getSizeOf());
         } else if ( info->type==Type::tStructure ) {
@@ -299,7 +299,7 @@ namespace das
         }
     }
 
-    DAS_API int getTypeBaseAlign ( TypeInfo * info ) {
+    int getTypeBaseAlign ( TypeInfo * info ) {
         if ( info->type==Type::tHandle ) {
             return int(info->getAnnotation()->getAlignOf());
         } else if ( info->type==Type::tStructure ) {
@@ -313,7 +313,7 @@ namespace das
         }
     }
 
-    DAS_API int getDimSize ( TypeInfo * info ) {
+    int getDimSize ( TypeInfo * info ) {
         int size = 1;
         if ( info->dimSize ) {
             for ( uint32_t i=0, is=info->dimSize; i!=is; ++i ) {
@@ -323,23 +323,23 @@ namespace das
         return size;
     }
 
-    DAS_API int getTypeSize ( TypeInfo * info ) {
+    int getTypeSize ( TypeInfo * info ) {
         return getDimSize(info) * getTypeBaseSize(info);
     }
 
-    DAS_API int getTypeAlign ( TypeInfo * info ) {
+    int getTypeAlign ( TypeInfo * info ) {
         return getTypeBaseAlign(info);
     }
 
-    DAS_API bool isVoid ( const TypeInfo * THIS ) {
+    bool isVoid ( const TypeInfo * THIS ) {
         return (THIS->type==Type::tVoid) && (THIS->dimSize==0);
     }
 
-    DAS_API bool isPointer ( const TypeInfo * THIS ) {
+    bool isPointer ( const TypeInfo * THIS ) {
         return (THIS->type==Type::tPointer) && (THIS->dimSize==0);
     }
 
-    DAS_API bool isValidArgumentType ( TypeInfo * argType, TypeInfo * passType ) {
+    bool isValidArgumentType ( TypeInfo * argType, TypeInfo * passType ) {
         // passing non-ref to ref, or passing not the same type
         if ( (argType->isRef() && !passType->isRef()) || !isSameType(argType,passType,RefMatters::no, ConstMatters::no, TemporaryMatters::no,false) ) {
             return false;
@@ -352,7 +352,7 @@ namespace das
         return true;
     }
 
-    DAS_API bool isMatchingArgumentType ( TypeInfo * argType, TypeInfo * passType) {
+    bool isMatchingArgumentType ( TypeInfo * argType, TypeInfo * passType) {
         if (!passType) {
             return false;
         }
@@ -380,7 +380,7 @@ namespace das
         return true;
     }
 
-    DAS_API bool isSameType ( const TypeInfo * THIS,
+    bool isSameType ( const TypeInfo * THIS,
                      const TypeInfo * decl,
                      RefMatters refMatters,
                      ConstMatters constMatters,
@@ -478,7 +478,7 @@ namespace das
         return true;
     }
 
-    DAS_API bool isCompatibleCast ( const StructInfo * THIS, const StructInfo * castS ) {
+    bool isCompatibleCast ( const StructInfo * THIS, const StructInfo * castS ) {
         if ( castS->count < THIS->count ) {
             return false;
         }
@@ -495,7 +495,7 @@ namespace das
         return true;
     }
 
-    DAS_API string debug_type ( const TypeInfo * info ) {
+    string debug_type ( const TypeInfo * info ) {
         if ( !info ) return "";
         TextWriter stream;
         // its never auto or alias
@@ -584,7 +584,7 @@ namespace das
         return stream.str();
     }
 
-    DAS_API string getTypeInfoMangledName ( TypeInfo * info ) {
+    string getTypeInfoMangledName ( TypeInfo * info ) {
         TextWriter ss;
         if ( info->flags & TypeInfo::flag_isConst )     ss << "C";
         if ( info->flags & TypeInfo::flag_ref )         ss << "&";

@@ -5,6 +5,7 @@
 #include "daScript/simulate/runtime_string.h"
 #include "daScript/simulate/debug_print.h"
 #include "daScript/misc/fpe.h"
+#include "daScript/misc/string_writer.h"
 #include "daScript/misc/debug_break.h"
 #include "daScript/ast/ast.h"
 #include "misc/include_fmt.h"
@@ -1713,19 +1714,7 @@ namespace das
         }
     }
 
-    DAS_API const char * getLogMarker(int level)
-    {
-        if ( level >= LogLevel::error )
-            return "[E] ";
-        else if ( level >= LogLevel::warning )
-            return "[W] ";
-        else if ( level >= LogLevel::info )
-            return "[I] ";
-        else
-            return "";
-    }
-
-    DAS_API void logger ( int level, const char *prefix, const char * text, Context * context, LineInfo * at) {
+    void logger ( int level, const char *prefix, const char * text, Context * context, LineInfo * at) {
         bool any = false;
         for_each_debug_agent([&](const DebugAgentPtr & pAgent){
             any |= pAgent->onLog(context, at, level, text);
