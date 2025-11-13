@@ -219,8 +219,7 @@ void data_callback(ma_device*, void* pOutput, const void*, ma_uint32 frameCount)
     buffer.size = buffer.capacity = frameCount * g_channels;
     buffer.lock = 1;
     lock_guard<recursive_mutex> guard(*g_mixer_context->contextMutex);
-    auto saved = *daScriptEnvironment::bound;
-    *daScriptEnvironment::bound = g_mixer_env;
+    auto saved = daScriptEnvironment::exchangeBound(g_mixer_env);
     g_mixer_context->restart();
     g_mixer_context.get()->runWithCatch([&](){
         das_invoke_function<void>::invoke<Array&,int32_t,int32_t>(g_mixer_context.get(),nullptr,g_mixer_function,buffer,g_channels,g_rate,fdt);
@@ -229,7 +228,7 @@ void data_callback(ma_device*, void* pOutput, const void*, ma_uint32 frameCount)
     if ( const char* exp = g_mixer_context->getException() ) {
         g_mixer_context->to_err(&g_mixer_context->exceptionAt, exp);
     }
-    *daScriptEnvironment::bound = saved;
+    daScriptEnvironment::setBound(saved);
 }
 
 Context & dasAudio_mixerContext ( Context * context, LineInfoArg * at ) {
@@ -258,7 +257,7 @@ bool dasAudio_init ( TFunc<void,TTemporary<TArray<float>>,int32_t,int32_t,float>
     }
     g_mixer_context.reset(get_clone_context(&context,uint32_t(ContextCategory::audio_context)));
     g_mixer_function = mixer;
-    g_mixer_env = *daScriptEnvironment::bound;
+    g_mixer_env = daScriptEnvironment::getBound();
     if ( ma_device_start(&g_device) != MA_SUCCESS ) {
         ma_device_uninit(&g_device);
         g_mixer_context.reset();

@@ -289,8 +289,8 @@ namespace das {
         virtual void sweep() override { DAS_ASSERT(0 && "not supported"); }
         virtual bool isOwnPtr ( char * ptr, uint32_t ) override;
         virtual bool isValidPtr ( char *, uint32_t ) override { return true; }
-        virtual void setInitialSize ( uint32_t size );
-        virtual int32_t getInitialSize() const;
+        virtual void setInitialSize ( uint32_t size ) override;
+        virtual int32_t getInitialSize() const override;
         virtual void setGrowFunction ( CustomGrowFunction && fun ) override;
     protected:
         LinearChunkAllocator model;
