@@ -47,8 +47,7 @@ void diagnosticHandler(LLVMDiagnosticInfoRef DI, void *) {
     case LLVMDSNote:    ll = LogLevel::debug; break;
     }
     auto msg = LLVMGetDiagInfoDescription(DI);
-    string text = string(msg) + "\n";
-    toLog(ll, text.c_str(), nullptr, nullptr);
+    LOG(ll) << msg << "\n";
     LLVMDisposeMessage(msg);
 }
 

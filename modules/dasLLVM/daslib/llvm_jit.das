@@ -1875,7 +1875,7 @@ class LlvmJitVisitor : AstVisitor {
     def visitExprOp2_NonMonade(var expr : smart_ptr<ExprOp2>) {
         var left = getE(expr.left)
         var right = getE(expr.right)
-        var opType := expr.right._type
+        assume opType = expr.right._type
         assume shiftType = expr.left._type
         var r2v_left = isReadModifyWriteOp2(expr.op) ? LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.left._type),
                                                             left, expr.left._type.alignOf, "") : null
@@ -5852,16 +5852,21 @@ class ResolveExternVisitor : AstVisitor {
 def get_dll_missing(fns : array<FunctionPtr>; var dll : DLLHandle?; var uids : UidNodes?) {
     verify(!(is_in_completion() || is_compiling_macros() || is_folding()))
 
+    var missing = array<Function?>()
     if (dll.handle == null) {
-        return clone(fns)
-    }
-    var missing = array<FunctionPtr>()
-    for (fn in fns) {
-        let dll_name = uids.get_dll_fn_name(fn)
-        var written_hash = dll.get_function_hash(dll_name)
-        // debug("dll_function_aot_hash: {dll_function_aot_hash}")
-        if (written_hash == null || get_function_aot_hash(fn |> get_ptr) != *written_hash) {
-            missing |> push_clone(fn)
+        for (fn in fns) {
+            var ptr := fn.get_ptr()
+            missing |> push_clone(ptr)
+        }
+    } else {
+        for (fn in fns) {
+            let dll_name = uids.get_dll_fn_name(fn)
+            var written_hash = dll.get_function_hash(dll_name)
+            // debug("dll_function_aot_hash: {dll_function_aot_hash}")
+            if (written_hash == null || get_function_aot_hash(fn |> get_ptr) != *written_hash) {
+                var tmp = fn.get_ptr()
+                missing |> push_clone(tmp)
+            }
         }
     }
     return <- missing
@@ -5888,6 +5893,10 @@ def private generate_llvm(ctx : Context?; var dll : DLLHandle?; var types : Prim
         delete g_errors
         to_log(LOG_ERROR, "LLVM JIT FAILED:\n{errors}\n")
         g_failed = true
+    }
+    astVisitor.adapter := null
+    unsafe {
+        delete astVisitor
     }
     return true
 }
@@ -6031,7 +6040,6 @@ class JIT_LLVM : AstSimulateMacro {
             unsafe {
                 delete fake_visitor
             }
-
             var g_dynamic_lib_handle = new DLLHandle();
             if (LLVM_ENABLE_DLL_LOADING) {
                 g_dynamic_lib_handle.handle = load_dynamic_library("{JIT_DLL_OUTPUT}{prog.thisNamespace}.dll")
