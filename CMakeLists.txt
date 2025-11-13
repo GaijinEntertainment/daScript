@@ -287,12 +287,27 @@ SET(DAS_MODULES_NEED_INC ${NEED_MODULES_PATH}/external_need.inc)
 FILE(WRITE ${DAS_MODULES_RESOLVE_INC}.temp "")
 FILE(WRITE ${DAS_MODULES_NEED_INC}.temp "")
 
+add_compile_definitions(PRIVATE DAS_MOD_API=)
+
+MACRO(ADD_DAS_LIBRARY lib)
+    ADD_LIBRARY(${lib} ${ARGN})
+    # SET_TARGET_PROPERTIES(${lib} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    # TARGET_COMPILE_OPTIONS(${lib} PRIVATE -fvisibility=hidden)
+ENDMACRO()
+
 SET(DAS_MODULES_LIBS)
 SET(DAS_ALL_EXAMPLES)
 FILE(GLOB _modules RELATIVE "${PROJECT_SOURCE_DIR}/modules" "modules/*")
 FOREACH(_module ${_modules})
     MACRO(ADD_MODULE_LIB lib)
         MESSAGE("REGISTER DAS MODULE ${lib}")
+
+        # temporary `if`, unless all modules not use new API
+        if(${ARGC} GREATER 1)
+            ADD_DAS_LIBRARY(${lib} ${ARGN})
+            TARGET_LINK_LIBRARIES(${lib} PUBLIC libDaScript)
+        endif()
+
         LIST(APPEND DAS_MODULES_LIBS ${lib})
     ENDMACRO()
 
