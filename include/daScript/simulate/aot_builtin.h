@@ -10,8 +10,11 @@ namespace das {
     DAS_API const char * compiling_module_name ( );
     DAS_API void setCommandLineArguments ( int argc, char * argv[] );
     DAS_API void getCommandLineArguments( Array & arr );
+
     DAS_API bool is_compiling ( );
     DAS_API bool is_compiling_macros ( );
+
+    DAS_API char * builtin_das_root ( Context * context, LineInfoArg * at );
     DAS_API void builtin_throw ( char * text, Context * context, LineInfoArg * at );
     DAS_API void builtin_print ( char * text, Context * context, LineInfoArg * at );
     DAS_API void builtin_error ( char * text, Context * context, LineInfoArg * at );

@@ -1416,7 +1416,7 @@ namespace das {
         return stream;
     }
 
-    DAS_API StringWriter& operator<< (StringWriter& stream, const Program & program) {
+    StringWriter& operator<< (StringWriter& stream, const Program & program) {
         bool any = false;
         program.library.foreach([&](Module * pm) {
             if ( !pm->name.empty() && pm->name!="$" ) {

@@ -548,11 +548,11 @@ namespace das {
 
     string g_dasRoot;
 
-    DAS_API void setDasRoot ( const string & dr ) {
+    void setDasRoot ( const string & dr ) {
         g_dasRoot = dr;
     }
 
-    DAS_API string getDasRoot ( void ) {
+    string getDasRoot ( void ) {
         if ( g_dasRoot.empty() ) {
             string efp = getExecutableFileName();   // ?/bin/debug/binary.exe
             auto np = efp.find_last_of("\\/");

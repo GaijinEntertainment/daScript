@@ -1490,7 +1490,7 @@ namespace das
         bool ignore_shared_modules = false;
         bool default_module_public = true;              // by default module is 'public', not 'private'
         /*option*/ bool no_deprecated = false;
-        /*option*/ bool no_aliasing = true;                       // if true, aliasing will be reported as error, otherwise will turn off optimization
+        /*option*/ bool no_aliasing = false;                       // if true, aliasing will be reported as error, otherwise will turn off optimization
         /*option*/ bool strict_smart_pointers = true;              // collection of tests for smart pointers, like van inscope for any local, etc
         /*option*/ bool no_init = false;                           // if true, then no [init] is allowed in any shape or form
         /*option*/ bool strict_unsafe_delete = false;              // if true, delete of type which contains 'unsafe' delete is unsafe // TODO: enable when need be

@@ -287,13 +287,11 @@ SET(DAS_MODULES_NEED_INC ${NEED_MODULES_PATH}/external_need.inc)
 FILE(WRITE ${DAS_MODULES_RESOLVE_INC}.temp "")
 FILE(WRITE ${DAS_MODULES_NEED_INC}.temp "")
 
-add_compile_definitions(PRIVATE DAS_MOD_API=)
-
-MACRO(ADD_DAS_LIBRARY lib)
-    ADD_LIBRARY(${lib} ${ARGN})
-    # SET_TARGET_PROPERTIES(${lib} PROPERTIES POSITION_INDEPENDENT_CODE ON)
-    # TARGET_COMPILE_OPTIONS(${lib} PRIVATE -fvisibility=hidden)
-ENDMACRO()
+# MACRO(ADD_DAS_LIBRARY lib)
+#     ADD_LIBRARY(${lib} ${ARGN})
+#     # SET_TARGET_PROPERTIES(${lib} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+#     # TARGET_COMPILE_OPTIONS(${lib} PRIVATE -fvisibility=hidden)
+# ENDMACRO()
 
 SET(DAS_MODULES_LIBS)
 SET(DAS_ALL_EXAMPLES)
@@ -448,6 +446,7 @@ SOURCE_GROUP_FILES("vecmath" VECMATH_SRC)
 
 SET(AST_SRC
 src/ast/ast.cpp
+src/ast/ast_interop.cpp
 src/ast/ast_tls.cpp
 src/ast/ast_visitor.cpp
 src/ast/ast_generate.cpp
