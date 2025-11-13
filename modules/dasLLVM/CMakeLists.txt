@@ -110,7 +110,6 @@ IF ((NOT DAS_LLVM_INCLUDED) AND ${LLVM_FOUND} AND ((NOT ${DAS_LLVM_DISABLED}) OR
 		${DAS_LLVM_DIR}/src/llvm_config/llvmConfigStub.cpp
 	)
 
-	ADD_MODULE_LIB(libDasModuleLlvm)
 	ADD_MODULE_CPP(LlvmConfig)
 	ADD_MODULE_CPP(dasLLVM)
 	ADD_MODULE_DAS(llvm daslib llvm_boost)
@@ -119,7 +118,7 @@ IF ((NOT DAS_LLVM_INCLUDED) AND ${LLVM_FOUND} AND ((NOT ${DAS_LLVM_DISABLED}) OR
 	ADD_MODULE_DAS(llvm daslib llvm_jit_intrin)
 	ADD_MODULE_DAS(llvm daslib llvm_jit_common)
 	ADD_MODULE_DAS(llvm daslib llvm_dll_utils)
-	ADD_LIBRARY(libDasModuleLlvm ${DAS_LLVM_MODULE_SRC} ${DAS_LLVM_MODULE_PLATFORM_SRC})
+	ADD_MODULE_LIB(libDasModuleLlvm ${DAS_LLVM_MODULE_SRC} ${DAS_LLVM_MODULE_PLATFORM_SRC})
 
 	IF(WIN32)
 		TARGET_LINK_LIBRARIES(libDasModuleLlvm PUBLIC LLVM-C LTO Remarks)
