@@ -2272,7 +2272,7 @@ namespace das {
                 if ( fromGeneric ) {
                     ctor->fromGeneric = getOrCreateDummy(var->module);
                 }
-                bool export_for_aot = !var->cppLayout && (*daScriptEnvironment::bound && (*daScriptEnvironment::bound)->g_isInAot);
+                bool export_for_aot = !var->cppLayout && (daScriptEnvironment::getBound() && daScriptEnvironment::getBound()->g_isInAot);
                 ctor->exports = alwaysExportInitializer || export_for_aot;
                 extraFunctions.push_back(ctor);
                 reportAstChanged();

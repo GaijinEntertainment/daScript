@@ -1158,9 +1158,9 @@ namespace das {
                     cast<smart_ptr<Program>>::from(program),
                     cast<string *>::from(&istr)
                 };
-                (*daScriptEnvironment::bound)->g_Program = program;
+                daScriptEnvironment::getBound()->g_Program = program;
                 context->invoke(block, args, nullptr, at);
-                (*daScriptEnvironment::bound)->g_Program.reset();
+                daScriptEnvironment::getBound()->g_Program.reset();
             }
         } else {
             context->throw_error_at(at, "rtti_compile internal error, something went wrong");

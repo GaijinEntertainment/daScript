@@ -453,8 +453,8 @@ namespace das {
             const string        & fileName,
             ModuleGroup         & libGroup,
             TextWriter & logs ) {
-        auto & serializer_read = (*daScriptEnvironment::bound)->serializer_read;
-        auto & serializer_write = (*daScriptEnvironment::bound)->serializer_write;
+        auto & serializer_read = daScriptEnvironment::getBound()->serializer_read;
+        auto & serializer_write = daScriptEnvironment::getBound()->serializer_write;
 
         if ( serializer_read == nullptr || serializer_read->seenNewModule ) {
             return false;
@@ -583,10 +583,10 @@ namespace das {
         }
 
         int err;
-        (*daScriptEnvironment::bound)->g_Program = program;
-        (*daScriptEnvironment::bound)->g_compilerLog = &logs;
-        (*daScriptEnvironment::bound)->g_compilingFileName = fileName.c_str();
-        (*daScriptEnvironment::bound)->g_compilingModuleName = moduleName.c_str();
+        daScriptEnvironment::getBound()->g_Program = program;
+        daScriptEnvironment::getBound()->g_compilerLog = &logs;
+        daScriptEnvironment::getBound()->g_compilingFileName = fileName.c_str();
+        daScriptEnvironment::getBound()->g_compilingModuleName = moduleName.c_str();
         program->promoteToBuiltin = false;
         program->isCompiling = true;
         program->isDependency = isDep;
@@ -602,7 +602,7 @@ namespace das {
         DasParserState parserState;
         parserState.g_Access = access;
         parserState.g_Program = program;
-        parserState.das_def_tab_size = (*daScriptEnvironment::bound)->das_def_tab_size;
+        parserState.das_def_tab_size = daScriptEnvironment::getBound()->das_def_tab_size;
         parserState.das_gen2_make_syntax = policies.gen2_make_syntax;
         yyscan_t scanner = nullptr;
         int64_t file_mtime = access->getFileMtime(fileName.c_str());
@@ -659,19 +659,19 @@ namespace das {
         } else {
             program->error(fileName + " not found", "","",LineInfo());
             program->isCompiling = false;
-            (*daScriptEnvironment::bound)->g_Program.reset();
-            (*daScriptEnvironment::bound)->g_compilerLog = nullptr;
-            (*daScriptEnvironment::bound)->g_compilingFileName = nullptr;
-            (*daScriptEnvironment::bound)->g_compilingModuleName = nullptr;
+            daScriptEnvironment::getBound()->g_Program.reset();
+            daScriptEnvironment::getBound()->g_compilerLog = nullptr;
+            daScriptEnvironment::getBound()->g_compilingFileName = nullptr;
+            daScriptEnvironment::getBound()->g_compilingModuleName = nullptr;
             return program;
         }
         parserState = DasParserState();
         *totParse += get_time_usec(time0);
         if ( err || program->failed() ) {
-            (*daScriptEnvironment::bound)->g_Program.reset();
-            (*daScriptEnvironment::bound)->g_compilerLog = nullptr;
-            (*daScriptEnvironment::bound)->g_compilingFileName = nullptr;
-            (*daScriptEnvironment::bound)->g_compilingModuleName = nullptr;
+            daScriptEnvironment::getBound()->g_Program.reset();
+            daScriptEnvironment::getBound()->g_compilerLog = nullptr;
+            daScriptEnvironment::getBound()->g_compilingFileName = nullptr;
+            daScriptEnvironment::getBound()->g_compilingModuleName = nullptr;
             sort(program->errors.begin(),program->errors.end());
             program->isCompiling = false;
             return program;
@@ -734,9 +734,9 @@ namespace das {
                     logs << *program;
                 }
             }
-            (*daScriptEnvironment::bound)->g_compilerLog = nullptr;
-            (*daScriptEnvironment::bound)->g_compilingFileName = nullptr;
-            (*daScriptEnvironment::bound)->g_compilingModuleName = nullptr;
+            daScriptEnvironment::getBound()->g_compilerLog = nullptr;
+            daScriptEnvironment::getBound()->g_compilingFileName = nullptr;
+            daScriptEnvironment::getBound()->g_compilingModuleName = nullptr;
             sort(program->errors.begin(), program->errors.end());
             program->isCompiling = false;
             if ( !program->failed() ) {
@@ -758,13 +758,13 @@ namespace das {
                     *totM += get_time_usec(timeM);
                 }
             }
-            (*daScriptEnvironment::bound)->g_Program.reset();
+            daScriptEnvironment::getBound()->g_Program.reset();
             if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
             if ( program->options.getBoolOption("log_compile_time",policies.log_compile_time) ) {
                 auto dt = get_time_usec(time0) / 1000000.;
                 logs << "compiler took " << dt << ", " << fileName << "\n";
             }
-            auto & serializer_write = (*daScriptEnvironment::bound)->serializer_write;
+            auto & serializer_write = daScriptEnvironment::getBound()->serializer_write;
             if ( serializer_write != nullptr ) {
                 serializer_write->parsedModules.push_back({fileName, file_mtime, program, program->thisModule.get()});
             }
@@ -852,7 +852,7 @@ namespace das {
     }
 
     void writebackModules ( ModuleGroup & libGroup ) {
-        auto & serializer_write = (*daScriptEnvironment::bound)->serializer_write;
+        auto & serializer_write = daScriptEnvironment::getBound()->serializer_write;
         for ( auto & parsedModule : serializer_write->parsedModules ) {
             auto & [fileName, fileMtime, program, thisModule] = parsedModule; // parsedModule is tuple<string, int64_t, ProgramPtr, Module *>
             *serializer_write << fileMtime;
@@ -999,12 +999,12 @@ namespace das {
     }
 
     void disableSerializationOnDebugger ( vector<ModuleInfo> & req ) {
-        if ( (*daScriptEnvironment::bound)->serializer_read == nullptr )
+        if ( daScriptEnvironment::getBound()->serializer_read == nullptr )
             return;
         for ( auto & mod : req ) {
             if ( mod.fileName.find("daslib/debug") != string::npos ) {
-                auto & serializer_read = (*daScriptEnvironment::bound)->serializer_read;
-                auto & serializer_write = (*daScriptEnvironment::bound)->serializer_read;
+                auto & serializer_read = daScriptEnvironment::getBound()->serializer_read;
+                auto & serializer_write = daScriptEnvironment::getBound()->serializer_read;
                 serializer_read = serializer_write = nullptr;
                 break;
             }
@@ -1049,7 +1049,7 @@ namespace das {
         *totInfer = 0;
         *totOpt = 0;
         *totM = 0;
-        (*daScriptEnvironment::bound)->macroTimeTicks = 0;
+        daScriptEnvironment::getBound()->macroTimeTicks = 0;
         vector<ModuleInfo> req;
         vector<MissingRecord> missing;
         vector<RequireRecord> circular, notAllowed;
@@ -1118,12 +1118,12 @@ namespace das {
                 }
                 addNewModules(libGroup, program);
             }
-            auto & serializer_read = (*daScriptEnvironment::bound)->serializer_read;
+            auto & serializer_read = daScriptEnvironment::getBound()->serializer_read;
             if ( serializer_read && !policies.serialize_main_module ) serializer_read->seenNewModule = true;
             auto res = parseDaScript(fileName, modName, access, logs, libGroup, exportAll, false, policies);
             // wirteback all parsed modules from serializer_write
-            if ( (*daScriptEnvironment::bound)->serializer_write != nullptr
-                && (!(*daScriptEnvironment::bound)->serializer_read || (*daScriptEnvironment::bound)->serializer_read->failed) ) {
+            if ( daScriptEnvironment::getBound()->serializer_write != nullptr
+                && (!daScriptEnvironment::getBound()->serializer_read || daScriptEnvironment::getBound()->serializer_read->failed) ) {
                 writebackModules(libGroup);
             }
             policies.threadlock_context |= res->options.getBoolOption("threadlock_context",false);
@@ -1179,7 +1179,7 @@ namespace das {
                      << "\tparse    " << (*totParse / 1000000.) << "\n"
                      << "\tinfer    " << (*totInfer / 1000000.) << "\n"
                      << "\toptimize " << (*totOpt   / 1000000.) << "\n"
-                     << "\tmacro    " << (ref_time_delta_to_usec((*daScriptEnvironment::bound)->macroTimeTicks)  / 1000000.) << "\n"
+                     << "\tmacro    " << (ref_time_delta_to_usec(daScriptEnvironment::getBound()->macroTimeTicks)  / 1000000.) << "\n"
                      << "\tmacro mods " << (*totM     / 1000000.) << "\n"
                 ;
             }

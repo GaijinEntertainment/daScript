@@ -63,7 +63,7 @@ namespace das
         MacroFunctionAnnotation() : MarkFunctionAnnotation("_macro") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
             func->macroInit = true;
-            auto program = (*daScriptEnvironment::bound)->g_Program;
+            auto program = daScriptEnvironment::getBound()->g_Program;
             program->needMacroModule = true;
             return true;
         };
@@ -109,10 +109,10 @@ namespace das
         };
         virtual bool verifyCall ( ExprCallFunc * call, const AnnotationArgumentList & args,
             const AnnotationArgumentList & /*progArgs */, string & /*err*/ ) override {
-            DAS_ASSERT((*daScriptEnvironment::bound)->g_compilerLog);
-            (*(*daScriptEnvironment::bound)->g_compilerLog) << call->at.describe() << ": *warning* function " << call->func->name << " is deprecated\n";
+            DAS_ASSERT(daScriptEnvironment::getBound()->g_compilerLog);
+            (*daScriptEnvironment::getBound()->g_compilerLog) << call->at.describe() << ": *warning* function " << call->func->name << " is deprecated\n";
             if ( auto arg = args.find("message",Type::tString) ) {
-                (*(*daScriptEnvironment::bound)->g_compilerLog) << "\t" << arg->sValue << "\n";
+                (*daScriptEnvironment::getBound()->g_compilerLog) << "\t" << arg->sValue << "\n";
             }
             return true;
         }
@@ -121,7 +121,7 @@ namespace das
     struct TypeFunctionFunctionAnnotation : MarkFunctionAnnotation {
         TypeFunctionFunctionAnnotation() : MarkFunctionAnnotation("type_function") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string & error) override {
-            if ( !(*daScriptEnvironment::bound)->g_Program->thisModule->addTypeFunction(func->name, true) ) {
+            if ( !daScriptEnvironment::getBound()->g_Program->thisModule->addTypeFunction(func->name, true) ) {
                 error = "can't add type function. type function " + func->name + " already exists?";
                 return false;
             }
@@ -1251,24 +1251,24 @@ namespace das
     };
 
     bool is_compiling (  ) {
-        if ( *daScriptEnvironment::bound && (*daScriptEnvironment::bound)->g_Program ) {
-            return (*daScriptEnvironment::bound)->g_Program->isCompiling || (*daScriptEnvironment::bound)->g_Program->isSimulating;
+        if ( daScriptEnvironment::getBound() && daScriptEnvironment::getBound()->g_Program ) {
+            return daScriptEnvironment::getBound()->g_Program->isCompiling || daScriptEnvironment::getBound()->g_Program->isSimulating;
         }
         return false;
 
     }
 
     bool is_compiling_macros ( ) {
-        if ( *daScriptEnvironment::bound && (*daScriptEnvironment::bound)->g_Program ) {
-            return (*daScriptEnvironment::bound)->g_Program->isCompilingMacros;
+        if ( daScriptEnvironment::getBound() && daScriptEnvironment::getBound()->g_Program ) {
+            return daScriptEnvironment::getBound()->g_Program->isCompilingMacros;
         }
         return false;
     }
 
     bool is_compiling_macros_in_module ( char * name ) {
-        if ( *daScriptEnvironment::bound && (*daScriptEnvironment::bound)->g_Program ) {
-            if ( !(*daScriptEnvironment::bound)->g_Program->isCompilingMacros ) return false;
-            if ( (*daScriptEnvironment::bound)->g_Program->thisModule->name != to_rts(name) ) return false;
+        if ( daScriptEnvironment::getBound() && daScriptEnvironment::getBound()->g_Program ) {
+            if ( !daScriptEnvironment::getBound()->g_Program->isCompilingMacros ) return false;
+            if ( daScriptEnvironment::getBound()->g_Program->thisModule->name != to_rts(name) ) return false;
             if ( isInDebugAgentCreation() ) return false;
             return true;
         }
@@ -1276,8 +1276,8 @@ namespace das
     }
 
     bool is_reporting_compilation_errors ( ) {
-        if ( *daScriptEnvironment::bound && (*daScriptEnvironment::bound)->g_Program ) {
-            return (*daScriptEnvironment::bound)->g_Program->reportingInferErrors;
+        if ( daScriptEnvironment::getBound() && daScriptEnvironment::getBound()->g_Program ) {
+            return daScriptEnvironment::getBound()->g_Program->reportingInferErrors;
         }
         return false;
     }
@@ -1481,9 +1481,9 @@ namespace das
     }
 
     void toCompilerLog ( const char * text, Context * context, LineInfoArg * at ) {
-        if ( (*daScriptEnvironment::bound)->g_compilerLog ) {
+        if ( daScriptEnvironment::getBound()->g_compilerLog ) {
             if ( text ) {
-                (*(*daScriptEnvironment::bound)->g_compilerLog) << text;
+                (*daScriptEnvironment::getBound()->g_compilerLog) << text;
             }
         } else {
             context->throw_error_at(at, "can only write to compiler log during compilation");
@@ -1491,38 +1491,38 @@ namespace das
     }
 
     bool is_in_aot ( ) {
-        return *daScriptEnvironment::bound ? (*daScriptEnvironment::bound)->g_isInAot : false;
+        return daScriptEnvironment::getBound() ? daScriptEnvironment::getBound()->g_isInAot : false;
     }
 
     void set_aot ( ) {
-        assert(*daScriptEnvironment::bound);
-        (*daScriptEnvironment::bound)->g_isInAot = true;
+        assert(daScriptEnvironment::getBound());
+        daScriptEnvironment::getBound()->g_isInAot = true;
     }
     void reset_aot ( ) {
-        assert(*daScriptEnvironment::bound);
-        (*daScriptEnvironment::bound)->g_isInAot = false;
+        assert(daScriptEnvironment::getBound());
+        daScriptEnvironment::getBound()->g_isInAot = false;
     }
 
     bool is_in_completion ( ) {
-        if ( *daScriptEnvironment::bound && (*daScriptEnvironment::bound)->g_Program ) {
-            return (*daScriptEnvironment::bound)->g_Program->policies.completion;
+        if ( daScriptEnvironment::getBound() && daScriptEnvironment::getBound()->g_Program ) {
+            return daScriptEnvironment::getBound()->g_Program->policies.completion;
         }
         return false;
     }
 
     bool is_folding ( ) {
-        if ( *daScriptEnvironment::bound && (*daScriptEnvironment::bound)->g_Program ) {
-            return (*daScriptEnvironment::bound)->g_Program->folding;
+        if ( daScriptEnvironment::getBound() && daScriptEnvironment::getBound()->g_Program ) {
+            return daScriptEnvironment::getBound()->g_Program->folding;
         }
         return false;
     }
 
     const char * compiling_file_name ( ) {
-        return *daScriptEnvironment::bound ? (*daScriptEnvironment::bound)->g_compilingFileName : nullptr;
+        return daScriptEnvironment::getBound() ? daScriptEnvironment::getBound()->g_compilingFileName : nullptr;
     }
 
     const char * compiling_module_name ( ) {
-        return *daScriptEnvironment::bound ? (*daScriptEnvironment::bound)->g_compilingModuleName : nullptr;
+        return daScriptEnvironment::getBound() ? daScriptEnvironment::getBound()->g_compilingModuleName : nullptr;
     }
 
 // remove define to enable emscripten version

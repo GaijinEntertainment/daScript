@@ -85,7 +85,7 @@ namespace das
     }
 
     void TypeInfo::resolveAnnotation() const {
-        if ( (*daScriptEnvironment::bound)->modules ) Module::resolveAnnotation(this);
+        if ( daScriptEnvironment::getBound()->modules ) Module::resolveAnnotation(this);
     }
 
 
