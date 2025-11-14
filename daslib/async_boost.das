@@ -190,7 +190,7 @@ def move_clone_copy(var expr; voidRoutine : bool; var retType : smart_ptr<TypeDe
                             if ($v(voidRoutine)) {
                                 yield true
                             } else {
-                                yield <- struct<$t(retType)>(wait = true)
+                                yield <- variant type<$t(retType)>(wait = true)
                             }
                         }
                     }
@@ -220,12 +220,12 @@ class CollectAndReplaceIteratorFields : AstVisitor {
             return <- expr
         }
         if (!retType.argTypes[0].canCopy) {
-            var inscope res <- qmacro_expr(${ yield <- struct<$t(retType)>(res <- $e(expr.subexpr)); })
+            var inscope res <- qmacro_expr(${ yield <- variant type<$t(retType)>(res <- $e(expr.subexpr)); })
             res |> force_at(expr.at)
             return <- res
         }
 
-        var inscope res <- qmacro_expr(${ yield <- struct<$t(retType)>(res = $e(expr.subexpr)); })
+        var inscope res <- qmacro_expr(${ yield <- variant type<$t(retType)>(res = $e(expr.subexpr)); })
         res |> force_at(expr.at)
         return <- res
     }
@@ -249,7 +249,7 @@ class CollectAndReplaceIteratorFields : AstVisitor {
                 res |> force_at(expr.at)
                 return <- res
             } else {
-                var inscope res <- qmacro_expr(${ yield <- struct<$t(retType)>(wait = true); })
+                var inscope res <- qmacro_expr(${ yield <- variant type<$t(retType)>(wait = true); })
                 res |> force_at(expr.at)
                 return <- res
             }
@@ -307,7 +307,7 @@ class CollectAndReplaceIteratorFields : AstVisitor {
                                 if ($v(voidRoutine)) {
                                     yield true
                                 } else {
-                                    yield <- struct<$t(retType)>(wait = true)
+                                    yield <- variant type<$t(retType)>(wait = true)
                                 }
                             }
                         }
