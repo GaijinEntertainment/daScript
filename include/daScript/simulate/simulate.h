@@ -103,7 +103,7 @@ namespace das
         const LineInfo * getLineInfo() const;
     };
 
-    struct SimNode {
+    struct DAS_API SimNode {
         SimNode ( const LineInfo & at ) : debugInfo(at) {}
         virtual SimNode * copyNode ( Context & context, NodeAllocator * code );
         DAS_EVAL_ABI virtual vec4f eval ( Context & ) = 0;
@@ -242,7 +242,7 @@ namespace das
     void printSimNode ( TextWriter & ss, Context * context, SimNode * node, bool debugHash=false );
     class Function;
     void printSimFunction ( TextWriter & ss, Context * context, Function * fun, SimNode * node, bool debugHash=false );
-    uint64_t getSemanticHash ( SimNode * node, Context * context );
+    DAS_API uint64_t getSemanticHash ( SimNode * node, Context * context );
 
     class DebugAgent : public ptr_ref_count {
     public:
@@ -309,7 +309,7 @@ namespace das
     struct CodeOfPolicies;
     struct AnnotationArgumentList;
 
-    class Context : public ptr_ref_count, public enable_shared_from_this<Context> {
+    class DAS_API Context : public ptr_ref_count, public enable_shared_from_this<Context> {
         template <typename TT> friend struct SimNode_GetGlobalR2V;
         friend struct SimNode_GetGlobal;
         template <typename TT> friend struct SimNode_GetSharedR2V;
@@ -894,23 +894,23 @@ namespace das
         ContextPtr      debugAgentContext;
     };
 
-    void tickDebugAgent ( );
-    void collectDebugAgentState ( Context & ctx, const LineInfo & at );
-    void onBreakpointsReset ( const char * file, int breakpointsNum );
-    void tickSpecificDebugAgent ( const char * name );
-    void installDebugAgent ( DebugAgentPtr newAgent, const char * category, LineInfoArg * at, Context * context );
-    void installThreadLocalDebugAgent ( DebugAgentPtr newAgent, LineInfoArg * at, Context * context );
-    void shutdownDebugAgent();
-    void shutdownThreadLocalDebugAgent();
-    void forkDebugAgentContext ( Func exFn, Context * context, LineInfoArg * lineinfo );
-    bool isInDebugAgentCreation();
-    bool hasDebugAgentContext ( const char * category, LineInfoArg * at, Context * context );
-    void lockDebugAgent ( const TBlock<void> & blk, Context * context, LineInfoArg * line );
-    Context & getDebugAgentContext ( const char * category, LineInfoArg * at, Context * context );
-    void onCreateCppDebugAgent ( const char * category, function<void (Context *)> && );
-    void onDestroyCppDebugAgent ( const char * category, function<void (Context *)> && );
-    void onLogCppDebugAgent ( const char * category, function<bool(Context *, const LineInfo * at, int, const char *)> && lmb );
-    void uninstallCppDebugAgent ( const char * category );
+    DAS_API void tickDebugAgent ( );
+    DAS_API void collectDebugAgentState ( Context & ctx, const LineInfo & at );
+    DAS_API void onBreakpointsReset ( const char * file, int breakpointsNum );
+    DAS_API void tickSpecificDebugAgent ( const char * name );
+    DAS_API void installDebugAgent ( DebugAgentPtr newAgent, const char * category, LineInfoArg * at, Context * context );
+    DAS_API void installThreadLocalDebugAgent ( DebugAgentPtr newAgent, LineInfoArg * at, Context * context );
+    DAS_API void shutdownDebugAgent();
+    DAS_API void shutdownThreadLocalDebugAgent();
+    DAS_API void forkDebugAgentContext ( Func exFn, Context * context, LineInfoArg * lineinfo );
+    DAS_API bool isInDebugAgentCreation();
+    DAS_API bool hasDebugAgentContext ( const char * category, LineInfoArg * at, Context * context );
+    DAS_API void lockDebugAgent ( const TBlock<void> & blk, Context * context, LineInfoArg * line );
+    DAS_API Context & getDebugAgentContext ( const char * category, LineInfoArg * at, Context * context );
+    DAS_API void onCreateCppDebugAgent ( const char * category, function<void (Context *)> && );
+    DAS_API void onDestroyCppDebugAgent ( const char * category, function<void (Context *)> && );
+    DAS_API void onLogCppDebugAgent ( const char * category, function<bool(Context *, const LineInfo * at, int, const char *)> && lmb );
+    DAS_API void uninstallCppDebugAgent ( const char * category );
 
     class SharedStackGuard {
     public:
@@ -1031,7 +1031,7 @@ __forceinline void profileNode ( SimNode * node ) {
 
 #if DAS_ENABLE_KEEPALIVE
 
-    struct SimNode_KeepAlive : SimNode {
+    struct DAS_API SimNode_KeepAlive : SimNode {
         SimNode_KeepAlive ( const LineInfo & at, SimNode * res ) : SimNode(at), value(res) {}
         virtual bool rtti_node_isKeepAlive() const override { return true; }
         virtual SimNode * visit ( SimVisitor & vis ) override;
@@ -1052,7 +1052,7 @@ __forceinline void profileNode ( SimNode * node ) {
 #endif
 
     // ERROR MESSAGE
-    struct SimNode_WithErrorMessage : SimNode {
+    struct DAS_API SimNode_WithErrorMessage : SimNode {
         SimNode_WithErrorMessage ( const LineInfo & at, const char * em )
             : SimNode(at), errorMessage(em) {}
         virtual bool rtti_node_isErrorMessage() const override { return true; }
@@ -1061,7 +1061,7 @@ __forceinline void profileNode ( SimNode * node ) {
     };
 
     // FUNCTION CALL
-    struct SimNode_CallBase : SimNode_WithErrorMessage {
+    struct DAS_API SimNode_CallBase : SimNode_WithErrorMessage {
         SimNode_CallBase ( const LineInfo & at, const char * msg ) : SimNode_WithErrorMessage(at,msg) {}
         virtual bool rtti_node_isCallBase() const override { return true; }
         virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override;
@@ -1089,7 +1089,7 @@ __forceinline void profileNode ( SimNode * node ) {
         // uint32_t stackTop = 0;
     };
 
-    struct SimNode_Final : SimNode {
+    struct DAS_API SimNode_Final : SimNode {
         SimNode_Final ( const LineInfo & a ) : SimNode(a) {}
         virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override;
         void visitFinal ( SimVisitor & vis );
@@ -1126,7 +1126,7 @@ __forceinline void profileNode ( SimNode * node ) {
         uint32_t totalFinal = 0;
     };
 
-    struct SimNode_Block : SimNode_Final {
+    struct DAS_API SimNode_Block : SimNode_Final {
         SimNode_Block ( const LineInfo & at ) : SimNode_Final(at) {}
         virtual bool rtti_node_isBlock() const override { return true; }
         virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override;
@@ -1146,28 +1146,28 @@ __forceinline void profileNode ( SimNode * node ) {
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
     };
 
-    struct SimNode_BlockNF : SimNode_Block {
+    struct DAS_API SimNode_BlockNF : SimNode_Block {
         SimNode_BlockNF ( const LineInfo & at ) : SimNode_Block(at) {}
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
     };
 
-    struct SimNodeDebug_BlockNF : SimNode_BlockNF {
+    struct DAS_API SimNodeDebug_BlockNF : SimNode_BlockNF {
         SimNodeDebug_BlockNF ( const LineInfo & at ) : SimNode_BlockNF(at) {}
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
     };
 
-    struct SimNode_BlockWithLabels : SimNode_Block {
+    struct DAS_API SimNode_BlockWithLabels : SimNode_Block {
         SimNode_BlockWithLabels ( const LineInfo & at ) : SimNode_Block(at) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
     };
 
-    struct SimNodeDebug_BlockWithLabels : SimNode_BlockWithLabels {
+    struct DAS_API SimNodeDebug_BlockWithLabels : SimNode_BlockWithLabels {
         SimNodeDebug_BlockWithLabels ( const LineInfo & at ) : SimNode_BlockWithLabels(at) {}
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
     };
 
-    struct SimNode_ForBase : SimNode_Block {
+    struct DAS_API SimNode_ForBase : SimNode_Block {
         SimNode_ForBase ( const LineInfo & at ) : SimNode_Block(at) {}
         SimNode * visitFor ( SimVisitor & vis, int total, const char * loopName );
         void allocateFor ( NodeAllocator * code, uint32_t t );
@@ -1179,7 +1179,7 @@ __forceinline void profileNode ( SimNode * node ) {
         uint32_t    totalSources;
     };
 
-    struct SimNode_Delete : SimNode_WithErrorMessage {
+    struct DAS_API SimNode_Delete : SimNode_WithErrorMessage {
         SimNode_Delete ( const LineInfo & a, SimNode * s, uint32_t t, const char * em )
             : SimNode_WithErrorMessage(a,em), subexpr(s), total(t) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
@@ -1187,7 +1187,7 @@ __forceinline void profileNode ( SimNode * node ) {
         uint32_t    total;
     };
 
-    struct SimNode_ClosureBlock : SimNode_Block {
+    struct DAS_API SimNode_ClosureBlock : SimNode_Block {
         SimNode_ClosureBlock ( const LineInfo & at, bool nr, bool c0, uint64_t ad )
             : SimNode_Block(at), annotationData(ad), flags(0) {
                 this->needResult = nr;
@@ -1205,7 +1205,7 @@ __forceinline void profileNode ( SimNode * node ) {
         };
     };
 
-    struct SimNodeDebug_ClosureBlock : SimNode_ClosureBlock {
+    struct DAS_API SimNodeDebug_ClosureBlock : SimNode_ClosureBlock {
         SimNodeDebug_ClosureBlock ( const LineInfo & at, bool nr, bool c0, uint64_t ad )
             : SimNode_ClosureBlock(at,nr,c0,ad) { }
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;

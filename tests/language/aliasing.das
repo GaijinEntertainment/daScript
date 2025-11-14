@@ -1,4 +1,6 @@
 options gen2
+options no_aliasing=false // this tests make sense only with disabled aliasing
+
 require dastest/testing_boost public
 
 require daslib/random
