@@ -287,21 +287,27 @@ SET(DAS_MODULES_NEED_INC ${NEED_MODULES_PATH}/external_need.inc)
 FILE(WRITE ${DAS_MODULES_RESOLVE_INC}.temp "")
 FILE(WRITE ${DAS_MODULES_NEED_INC}.temp "")
 
-# MACRO(ADD_DAS_LIBRARY lib)
-#     ADD_LIBRARY(${lib} ${ARGN})
-#     # SET_TARGET_PROPERTIES(${lib} PROPERTIES POSITION_INDEPENDENT_CODE ON)
-#     # TARGET_COMPILE_OPTIONS(${lib} PRIVATE -fvisibility=hidden)
-# ENDMACRO()
-
 SET(DAS_MODULES_LIBS)
 SET(DAS_ALL_EXAMPLES)
 FILE(GLOB _modules RELATIVE "${PROJECT_SOURCE_DIR}/modules" "modules/*")
+
+MACRO(ADD_DAS_PUB_LIBRARY lib)
+    ADD_LIBRARY(${lib} SHARED ${ARGN})
+    TARGET_COMPILE_DEFINITIONS(${lib} PRIVATE DAS_MOD_EXPORTS)
+    SET_TARGET_PROPERTIES(${lib} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    if(WIN32)
+        set_target_properties(${lib} PROPERTIES
+            WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
+    endif()
+ENDMACRO()
 
 MACRO(ADD_DAS_LIBRARY lib)
     ADD_LIBRARY(${lib} SHARED ${ARGN})
     TARGET_COMPILE_DEFINITIONS(${lib} PRIVATE DAS_MOD_EXPORTS)
     SET_TARGET_PROPERTIES(${lib} PROPERTIES POSITION_INDEPENDENT_CODE ON)
-    TARGET_COMPILE_OPTIONS(${lib} PRIVATE -fvisibility=hidden)
+    IF(NOT WIN32)
+        TARGET_COMPILE_OPTIONS(${lib} PRIVATE -fvisibility=hidden)
+    ENDIF()
 ENDMACRO()
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${EXECUTABLE_OUTPUT_PATH})
 FOREACH(_module ${_modules})
@@ -311,6 +317,17 @@ FOREACH(_module ${_modules})
         # temporary `if`, unless all modules not use new API
         if(${ARGC} GREATER 1)
             ADD_DAS_LIBRARY(${lib} ${ARGN})
+            TARGET_LINK_LIBRARIES(${lib} PUBLIC libDaScript)
+        endif()
+
+        LIST(APPEND DAS_MODULES_LIBS ${lib})
+    ENDMACRO()
+    MACRO(ADD_MODULE_PUB_LIB lib)
+        MESSAGE("REGISTER DAS MODULE ${lib}")
+
+        # temporary `if`, unless all modules not use new API
+        if(${ARGC} GREATER 1)
+            ADD_DAS_PUB_LIBRARY(${lib} ${ARGN})
             TARGET_LINK_LIBRARIES(${lib} PUBLIC libDaScript)
         endif()
 
@@ -380,7 +397,7 @@ SET(URIPARSER_SRCS
 3rdparty/uriparser/src/UriMemory.c
 )
 
-ADD_DAS_LIBRARY(libUriParser ${URIPARSER_SRCS})
+ADD_DAS_PUB_LIBRARY(libUriParser ${URIPARSER_SRCS})
 SETUP_CPP11(libUriParser)
 target_compile_options(libUriParser PRIVATE -fvisibility=default)
 target_compile_definitions(libUriParser PUBLIC URIPARSER_BUILD_CHAR)
@@ -760,7 +777,7 @@ MACRO(SETUP_LIBDASCRIPT library)
     ADD_DAS_LIBRARY(${library} ${PARSER_GENERATED_SRC} ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${SIMULATE_SRC} ${BUILTIN_SRC}
             ${MISC_SRC} ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC}
             ${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC} ${DASCRIPT_FMT_SRC} ${TEST_MAIN_LIB_SRC} ${ARGN})
-    target_compile_definitions(libDaScript PRIVATE DAS_EXPORTS DAS_MOD_EXPORTS)
+    target_compile_definitions(${library} PRIVATE DAS_EXPORTS)
     ADD_DEPENDENCIES(${library} need_and_resolve)
     ADD_TARGET_PROJECT_XXD_DEPENDS(${library} libDaScript)
     target_include_directories(${library} PUBLIC
@@ -821,10 +838,7 @@ if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
 
     ADD_DAS_LIBRARY(libDaScriptAot ${AOT_GENERATED_SRC} ${AOT_STUB_SRC})
     ADD_DEPENDENCIES(libDaScriptAot dasAotStub libDaScript)
-    TARGET_LINK_LIBRARIES(libDaScriptAot libDaScript)
-    # SETUP_LIBDASCRIPT(libDaScriptAot ${AOT_GENERATED_SRC} ${AOT_STUB_SRC})
-    # ADD_DEPENDENCIES(libDaScriptAot dasAotStub)
-    target_compile_definitions(libDaScriptAot PRIVATE DAS_EXPORTS DAS_MOD_EXPORTS)
+    TARGET_LINK_LIBRARIES(libDaScriptAot PUBLIC libDaScript)
     SETUP_CPP11(libDaScriptAot)
 endif()
 

@@ -2,8 +2,21 @@
 
 #include <stdint.h>
 
+
 #ifndef DAS_API
-#define DAS_API __attribute__((visibility("default")))
+#ifdef _MSC_VER
+    #ifdef DAS_EXPORTS
+        #define DAS_APIEI __declspec(dllexport)
+    #else
+        #define DAS_APIEI __declspec(dllimport)
+    #endif
+#else
+    #ifdef DAS_EXPORTS
+        #define DAS_APIEI __attribute__((visibility("default")))
+    #else
+        #define DAS_APIEI
+    #endif
+#endif
 #endif
 
 //if target is not defined, try to auto-detect target
@@ -39,17 +52,17 @@
 extern "C" {
 #endif
 
-extern uint32_t SIDEEFFECTS_none;
-extern uint32_t SIDEEFFECTS_unsafe;
-extern uint32_t SIDEEFFECTS_userScenario;
-extern uint32_t SIDEEFFECTS_modifyExternal;
-extern uint32_t SIDEEFFECTS_accessExternal;
-extern uint32_t SIDEEFFECTS_modifyArgument;
-extern uint32_t SIDEEFFECTS_modifyArgumentAndExternal;
-extern uint32_t SIDEEFFECTS_worstDefault;
-extern uint32_t SIDEEFFECTS_accessGlobal;
-extern uint32_t SIDEEFFECTS_invoke;
-extern uint32_t SIDEEFFECTS_inferredSideEffects;
+extern DAS_APIEI uint32_t SIDEEFFECTS_none;
+extern DAS_APIEI uint32_t SIDEEFFECTS_unsafe;
+extern DAS_APIEI uint32_t SIDEEFFECTS_userScenario;
+extern DAS_APIEI uint32_t SIDEEFFECTS_modifyExternal;
+extern DAS_APIEI uint32_t SIDEEFFECTS_accessExternal;
+extern DAS_APIEI uint32_t SIDEEFFECTS_modifyArgument;
+extern DAS_APIEI uint32_t SIDEEFFECTS_modifyArgumentAndExternal;
+extern DAS_APIEI uint32_t SIDEEFFECTS_worstDefault;
+extern DAS_APIEI uint32_t SIDEEFFECTS_accessGlobal;
+extern DAS_APIEI uint32_t SIDEEFFECTS_invoke;
+extern DAS_APIEI uint32_t SIDEEFFECTS_inferredSideEffects;
 
 typedef struct dasTextOutputHandle das_text_writer;
 typedef struct dasModuleGroupHandle das_module_group;
@@ -71,80 +84,80 @@ typedef vec4f (das_interop_function) ( das_context * ctx, das_node * node, vec4f
 
 typedef void (das_interop_function_unaligned) ( das_context * ctx, das_node * node, vec4f_unaligned * arguments, vec4f_unaligned * result );
 
-DAS_API void das_initialize();
-DAS_API void das_shutdown();
+DAS_APIEI void das_initialize();
+DAS_APIEI void das_shutdown();
 
-DAS_API das_text_writer * das_text_make_printer();
-DAS_API das_text_writer * das_text_make_writer();
-DAS_API void das_text_release ( das_text_writer * output );
-DAS_API void das_text_output ( das_text_writer * output, char * text );
+DAS_APIEI das_text_writer * das_text_make_printer();
+DAS_APIEI das_text_writer * das_text_make_writer();
+DAS_APIEI void das_text_release ( das_text_writer * output );
+DAS_APIEI void das_text_output ( das_text_writer * output, char * text );
 
-DAS_API das_module_group * das_modulegroup_make ();
-DAS_API void das_modulegroup_add_module ( das_module_group* lib, das_module* mod );
-DAS_API void das_modulegroup_release ( das_module_group * group );
+DAS_APIEI das_module_group * das_modulegroup_make ();
+DAS_APIEI void das_modulegroup_add_module ( das_module_group* lib, das_module* mod );
+DAS_APIEI void das_modulegroup_release ( das_module_group * group );
 
-DAS_API das_file_access * das_fileaccess_make_default (  );
-DAS_API das_file_access * das_fileaccess_make_project ( const char * project_file  );
-DAS_API void das_fileaccess_release ( das_file_access * access );
-DAS_API void das_fileaccess_introduce_file ( das_file_access * access, const char * file_name, const char * file_content );
+DAS_APIEI das_file_access * das_fileaccess_make_default (  );
+DAS_APIEI das_file_access * das_fileaccess_make_project ( const char * project_file  );
+DAS_APIEI void das_fileaccess_release ( das_file_access * access );
+DAS_APIEI void das_fileaccess_introduce_file ( das_file_access * access, const char * file_name, const char * file_content );
 
-DAS_API void das_get_root ( char * root, int maxbuf );
+DAS_APIEI void das_get_root ( char * root, int maxbuf );
 
-DAS_API das_program * das_program_compile ( char * program_file, das_file_access * access, das_text_writer * tout, das_module_group * libgroup );
-DAS_API void das_program_release ( das_program * program );
-DAS_API int das_program_err_count ( das_program * program );
-DAS_API int das_program_context_stack_size ( das_program * program );
-DAS_API int das_program_simulate ( das_program * program, das_context * ctx, das_text_writer * tout );
-DAS_API das_error * das_program_get_error ( das_program * program, int index );
+DAS_APIEI das_program * das_program_compile ( char * program_file, das_file_access * access, das_text_writer * tout, das_module_group * libgroup );
+DAS_APIEI void das_program_release ( das_program * program );
+DAS_APIEI int das_program_err_count ( das_program * program );
+DAS_APIEI int das_program_context_stack_size ( das_program * program );
+DAS_APIEI int das_program_simulate ( das_program * program, das_context * ctx, das_text_writer * tout );
+DAS_APIEI das_error * das_program_get_error ( das_program * program, int index );
 
-DAS_API void das_error_output ( das_error * error, das_text_writer * tout );
-DAS_API void das_error_report ( das_error * error, char * text, int maxLength );
+DAS_APIEI void das_error_output ( das_error * error, das_text_writer * tout );
+DAS_APIEI void das_error_report ( das_error * error, char * text, int maxLength );
 
-DAS_API das_context * das_context_make ( int stackSize );
-DAS_API void das_context_release ( das_context * context );
-DAS_API das_function * das_context_find_function ( das_context * context, char * name );
-DAS_API vec4f das_context_eval_with_catch ( das_context * context, das_function * fun, vec4f * arguments );
-DAS_API void das_context_eval_with_catch_unaligned ( das_context * context, das_function * fun, vec4f_unaligned * arguments, int narguments, vec4f_unaligned * result );
-DAS_API char * das_context_get_exception ( das_context * context );
+DAS_APIEI das_context * das_context_make ( int stackSize );
+DAS_APIEI void das_context_release ( das_context * context );
+DAS_APIEI das_function * das_context_find_function ( das_context * context, char * name );
+DAS_APIEI vec4f das_context_eval_with_catch ( das_context * context, das_function * fun, vec4f * arguments );
+DAS_APIEI void das_context_eval_with_catch_unaligned ( das_context * context, das_function * fun, vec4f_unaligned * arguments, int narguments, vec4f_unaligned * result );
+DAS_APIEI char * das_context_get_exception ( das_context * context );
 
-DAS_API das_structure * das_structure_make ( das_module_group * lib, const char * name, const char * cppname, int sz, int al );
-DAS_API void das_structure_add_field ( das_structure * st, das_module * mod, das_module_group * lib,  const char * name, const char * cppname, int offset, const char * tname );
+DAS_APIEI das_structure * das_structure_make ( das_module_group * lib, const char * name, const char * cppname, int sz, int al );
+DAS_APIEI void das_structure_add_field ( das_structure * st, das_module * mod, das_module_group * lib,  const char * name, const char * cppname, int offset, const char * tname );
 
-DAS_API das_enumeration * das_enumeration_make ( const char * name, const char * cppname, int ext );
-DAS_API void das_enumeration_add_value ( das_enumeration * enu, const char * name, const char * cppName, int value );
+DAS_APIEI das_enumeration * das_enumeration_make ( const char * name, const char * cppname, int ext );
+DAS_APIEI void das_enumeration_add_value ( das_enumeration * enu, const char * name, const char * cppName, int value );
 
-DAS_API das_module * das_module_create ( char * name );
-DAS_API void das_module_bind_interop_function ( das_module * mod, das_module_group * lib, das_interop_function * fun, char * name, char * cppName, uint32_t sideffects, char* args );
-DAS_API void das_module_bind_interop_function_unaligned ( das_module * mod, das_module_group * lib, das_interop_function_unaligned * fun, char * name, char * cppName, uint32_t sideffects, char* args );
-DAS_API void das_module_bind_alias ( das_module * mod, das_module_group * lib, char * aname, char * tname );
-DAS_API void das_module_bind_structure ( das_module * mod, das_structure * st );
-DAS_API void das_module_bind_enumeration ( das_module * mod, das_enumeration * en );
+DAS_APIEI das_module * das_module_create ( char * name );
+DAS_APIEI void das_module_bind_interop_function ( das_module * mod, das_module_group * lib, das_interop_function * fun, char * name, char * cppName, uint32_t sideffects, char* args );
+DAS_APIEI void das_module_bind_interop_function_unaligned ( das_module * mod, das_module_group * lib, das_interop_function_unaligned * fun, char * name, char * cppName, uint32_t sideffects, char* args );
+DAS_APIEI void das_module_bind_alias ( das_module * mod, das_module_group * lib, char * aname, char * tname );
+DAS_APIEI void das_module_bind_structure ( das_module * mod, das_structure * st );
+DAS_APIEI void das_module_bind_enumeration ( das_module * mod, das_enumeration * en );
 
-DAS_API int    das_argument_int ( vec4f arg );
-DAS_API float  das_argument_float ( vec4f arg );
-DAS_API double das_argument_double ( vec4f arg );
-DAS_API char * das_argument_string ( vec4f arg );
-DAS_API void * das_argument_ptr ( vec4f arg );
+DAS_APIEI int    das_argument_int ( vec4f arg );
+DAS_APIEI float  das_argument_float ( vec4f arg );
+DAS_APIEI double das_argument_double ( vec4f arg );
+DAS_APIEI char * das_argument_string ( vec4f arg );
+DAS_APIEI void * das_argument_ptr ( vec4f arg );
 
-DAS_API int das_argument_int_unaligned ( vec4f_unaligned * arg );
-DAS_API float das_argument_float_unaligned ( vec4f_unaligned * arg );
-DAS_API double das_argument_double_unaligned ( vec4f_unaligned * arg );
-DAS_API char * das_argument_string_unaligned ( vec4f_unaligned * arg );
-DAS_API void * das_argument_ptr_unaligned ( vec4f_unaligned * arg );
+DAS_APIEI int das_argument_int_unaligned ( vec4f_unaligned * arg );
+DAS_APIEI float das_argument_float_unaligned ( vec4f_unaligned * arg );
+DAS_APIEI double das_argument_double_unaligned ( vec4f_unaligned * arg );
+DAS_APIEI char * das_argument_string_unaligned ( vec4f_unaligned * arg );
+DAS_APIEI void * das_argument_ptr_unaligned ( vec4f_unaligned * arg );
 
-DAS_API vec4f das_result_void ();
-DAS_API vec4f das_result_int ( int r );
-DAS_API vec4f das_result_float ( float r );
-DAS_API vec4f das_result_double ( double r );
-DAS_API vec4f das_result_string ( char * r );
-DAS_API vec4f das_result_ptr ( void * r );
+DAS_APIEI vec4f das_result_void ();
+DAS_APIEI vec4f das_result_int ( int r );
+DAS_APIEI vec4f das_result_float ( float r );
+DAS_APIEI vec4f das_result_double ( double r );
+DAS_APIEI vec4f das_result_string ( char * r );
+DAS_APIEI vec4f das_result_ptr ( void * r );
 
-DAS_API void das_result_void_unaligned ( vec4f_unaligned * result );
-DAS_API void das_result_int_unaligned ( vec4f_unaligned * result, int r );
-DAS_API void das_result_float_unaligned ( vec4f_unaligned * result, float r );
-DAS_API void das_result_double_unaligned ( vec4f_unaligned * result, double r );
-DAS_API void das_result_string_unaligned ( vec4f_unaligned * result, char * r );
-DAS_API void das_result_ptr_unaligned ( vec4f_unaligned * result, void * r );
+DAS_APIEI void das_result_void_unaligned ( vec4f_unaligned * result );
+DAS_APIEI void das_result_int_unaligned ( vec4f_unaligned * result, int r );
+DAS_APIEI void das_result_float_unaligned ( vec4f_unaligned * result, float r );
+DAS_APIEI void das_result_double_unaligned ( vec4f_unaligned * result, double r );
+DAS_APIEI void das_result_string_unaligned ( vec4f_unaligned * result, char * r );
+DAS_APIEI void das_result_ptr_unaligned ( vec4f_unaligned * result, void * r );
 
 #ifdef __cplusplus
 }

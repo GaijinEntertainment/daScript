@@ -53,7 +53,6 @@ CMAKE_TEXT_XXD(libDaScriptTest examples/test/unit_test.das)
 ADD_DAS_LIBRARY(libDaScriptTest ${TEST_MAIN_LIB_SRC} ${TEST_GENERATED_SRC})
 TARGET_INCLUDE_DIRECTORIES(libDaScriptTest PUBLIC ${PROJECT_SOURCE_DIR}/examples/test)
 TARGET_LINK_LIBRARIES(libDaScriptTest libDaScript libDaScriptAot)
-set_target_properties(libDaScriptTest PROPERTIES POSITION_INDEPENDENT_CODE ON)
 SETUP_CPP11(libDaScriptTest)
 ADD_PROJECT_XXD_DEPENDS(libDaScriptTest)
 
