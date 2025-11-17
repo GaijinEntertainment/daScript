@@ -1251,14 +1251,14 @@ namespace das
     };
 
     #define REGISTER_MODULE(ClassName) \
-        DAS_MOD_API das::Module * register_##ClassName () { \
+        __declspec(dllexport) das::Module * register_##ClassName () { \
             das::daScriptEnvironment::ensure(); \
             ClassName * module_##ClassName = new ClassName(); \
             return module_##ClassName; \
         }
 
     #define REGISTER_MODULE_IN_NAMESPACE(ClassName,Namespace) \
-        DAS_MOD_API das::Module * register_##ClassName () { \
+        __declspec(dllexport) das::Module * register_##ClassName () { \
             das::daScriptEnvironment::ensure(); \
             Namespace::ClassName * module_##ClassName = new Namespace::ClassName(); \
             return module_##ClassName; \
