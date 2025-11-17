@@ -3626,6 +3626,13 @@ make_struct_decl
         ((ExprMakeStruct *)$msd)->forceVariant = true;
         $$ = $msd;
     }
+    |   DAS_TVARIANT [loc] DAS_TYPE '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] make_variant_dim[msd] ')'  {
+        $msd->at = tokAt(scanner,@loc);
+        ((ExprMakeStruct *)$msd)->makeType = $mkt;
+        ((ExprMakeStruct *)$msd)->useInitializer = $init;
+        ((ExprMakeStruct *)$msd)->forceVariant = true;
+        $$ = $msd;
+    }
     |   DAS_DEFAULT [loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } use_initializer[init] {
         auto msd = new ExprMakeStruct();
         msd->at = tokAt(scanner,@loc);
