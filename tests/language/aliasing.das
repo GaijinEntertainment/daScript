@@ -3,6 +3,8 @@ require dastest/testing_boost public
 
 require daslib/random
 
+options no_aliasing = false // these tests make sense only with disabled aliasing
+
 var seed : int4
 
 let FULL_TEST = false
