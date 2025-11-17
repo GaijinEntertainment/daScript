@@ -1028,7 +1028,7 @@ class LlvmJitVisitor : AstVisitor {
     }
 
     def get_new_handle_function(t : TypeDeclPtr; obj_name : DllName) : tuple<LLVMOpaqueValue?; LLVMOpaqueType?> {
-        var new_handle = LLVMGetNamedGlobal(g_mod, obj_name.publ())
+        var new_handle = LLVMGetNamedGlobal(g_mod, obj_name.glob())
         let fn_type = LLVMFunctionType(types.LLVMVoidPtrType(),
                     fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType()))
         if (new_handle == null) {
@@ -1178,7 +1178,7 @@ class LlvmJitVisitor : AstVisitor {
 
     def register_extern_function(expr : smart_ptr<ExprCallFunc>) : tuple<LLVMOpaqueValue?, LLVMOpaqueType?> {
         let mangled_name = uid.get_dll_fn_name_ptr(expr.func)
-        var ofunc = LLVMGetNamedGlobal(g_mod, mangled_name.publ())
+        var ofunc = LLVMGetNamedGlobal(g_mod, mangled_name.glob())
         if (ofunc == null) {
             var arg_types : array<LLVMOpaqueType?>
             var res_type : LLVMOpaqueType?
@@ -1216,7 +1216,7 @@ class LlvmJitVisitor : AstVisitor {
 
     def register_interop_function(expr : smart_ptr<ExprCallFunc>) : LLVMOpaqueValue? {
         let mangled_name = uid.get_dll_fn_name_ptr(expr.func)
-        var ofunc = LLVMGetNamedGlobal(g_mod, mangled_name.publ())
+        var ofunc = LLVMGetNamedGlobal(g_mod, mangled_name.glob())
         var fn_type = types.LLVMInteropFunctionType()
         let funcPtrType = LLVMPointerType(fn_type, 0u)
         if (ofunc == null) {
@@ -1272,7 +1272,7 @@ class LlvmJitVisitor : AstVisitor {
 
     def get_address_global(name : DllName; typ : LLVMOpaqueType? = null) : LLVMOpaqueValue? {
         let nonnull_type = typ != null ? typ : types.LLVMVoidPtrType()
-        let mb_global = LLVMGetNamedGlobal(g_mod, name.publ())
+        let mb_global = LLVMGetNamedGlobal(g_mod, name.glob())
         if (mb_global == null) {
             return null
         }
@@ -1281,13 +1281,13 @@ class LlvmJitVisitor : AstVisitor {
 
     def save_address_global(name : DllName; address : void?; typ : LLVMOpaqueType? = null) {
         let nonnull_type = typ != null ? typ : types.LLVMVoidPtrType()
-        var global_addr = LLVMGetNamedGlobal(g_mod, name.publ())
+        var global_addr = LLVMGetNamedGlobal(g_mod, name.glob())
         if (global_addr == null) {
-            global_addr = LLVMAddGlobal(g_mod, nonnull_type, name.publ())
+            global_addr = LLVMAddGlobal(g_mod, nonnull_type, name.glob())
             set_public_linkage(global_addr)
             LLVMSetInitializer(global_addr, types.ConstPtr(address |> intptr, nonnull_type))
         } else {
-            failed("Name duplicate {name.publ()}\n")
+            failed("Name duplicate {name.glob()}\n")
         }
         return LLVMBuildLoad2(g_builder, nonnull_type, global_addr, "")
     }
@@ -4074,7 +4074,7 @@ class LlvmJitVisitor : AstVisitor {
 
     def get_delete_handle_function(t : TypeDeclPtr) : LLVMOpaqueValue? {
         let func_name = uid.get_delete_type(t)
-        var delete_handle = LLVMGetNamedGlobal(g_mod, func_name.publ())
+        var delete_handle = LLVMGetNamedGlobal(g_mod, func_name.glob())
         let fn_type = LLVMFunctionType(types.t_void,
                 fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType(), types.LLVMVoidPtrType()))
         if (delete_handle == null) {
@@ -5663,17 +5663,17 @@ class ResolveExternVisitor : AstVisitor {
                 if (NODE_PTR == null) {
                     failed_E(expr, "missing interop function node pointer for {expr.func.name}")
                 }
-                dll.set_function_address(uid.get_call(expr), NODE_PTR)
+                dll.set_glob_address(uid.get_call(expr), NODE_PTR)
             }
             let FUNC_PTR = get_builtin_function_address(expr.func)
             if (FUNC_PTR == null) {
                 failed_E(expr, "missing interop function pointer for {expr.func._module.name}::{expr.func.name} // {get_mangled_name(expr.func)}")
             }
-            dll.set_function_address(uid.get_dll_fn_name_ptr(expr.func), FUNC_PTR)
+            dll.set_glob_address(uid.get_dll_fn_name_ptr(expr.func), FUNC_PTR)
         } else {
             if (!expr.func.moreFlags.requestJit) {
                 var MNH_ADDR = get_function_addr(jit_context, expr.func)
-                dll.set_function_address(uid.get_dll_fn_name_ptr(expr.func), MNH_ADDR)
+                dll.set_glob_address(uid.get_dll_fn_name_ptr(expr.func), MNH_ADDR)
             }
         }
     }
@@ -5684,7 +5684,7 @@ class ResolveExternVisitor : AstVisitor {
                 failed_T(expr.typeexpr, "missing new`handle function pointer for {describe(expr.typeexpr)}")
                 return
             }
-            dll.set_function_address(uid.get_new(expr.typeexpr), new_handle_ptr)
+            dll.set_glob_address(uid.get_new(expr.typeexpr), new_handle_ptr)
         } else {
             if (expr.typeexpr.dim |> length > 0) {
                 if (expr.typeexpr.baseType == Type.tHandle) {
@@ -5695,7 +5695,7 @@ class ResolveExternVisitor : AstVisitor {
                         failed_T(elemT, "missing new`handle function pointer for {describe(elemT)}")
                         return
                     }
-                    dll.set_function_address(uid.get_new(expr.typeexpr), new_handle_ptr)
+                    dll.set_glob_address(uid.get_new(expr.typeexpr), new_handle_ptr)
                 } else {
                     if (expr.initializer) {
                         make_call(expr)
@@ -5736,7 +5736,7 @@ class ResolveExternVisitor : AstVisitor {
                     failed_T(firstT, "missing delete`handle function pointer for {describe(firstT)}")
                     return
                 }
-                dll.set_function_address(uid.get_delete_type(firstT), delete_handle_ptr)
+                dll.set_glob_address(uid.get_delete_type(firstT), delete_handle_ptr)
             }
         }
     }
@@ -5746,19 +5746,19 @@ class ResolveExternVisitor : AstVisitor {
         if (NODE_PTR == null) {
             failed_E(expr, "missing interop function node pointer for string builder at {get_mangled_name(thisFunc)}")
         }
-        dll.set_function_address(uid.get_string_builder(expr), NODE_PTR)
+        dll.set_glob_address(uid.get_string_builder(expr), NODE_PTR)
     }
 
     def override preVisitExprAddr(expr : smart_ptr<ExprAddr>) {
         var MNH_ADDR = get_function_addr(jit_context, expr.func)
-        dll.set_function_address(uid.get_addr(expr), MNH_ADDR)
+        dll.set_glob_address(uid.get_addr(expr), MNH_ADDR)
     }
 
     def override preVisitExprMakeStructIndex(expr : smart_ptr<ExprMakeStruct>; index : int; last : bool) : void {
         // one time is enough?
         if (expr.constructor != null && !expr.constructor.moreFlags.requestJit) {
             var MNH_ADDR = get_function_addr(jit_context, expr.constructor)
-            dll.set_function_address(uid.get_ctor(expr), MNH_ADDR)
+            dll.set_glob_address(uid.get_ctor(expr), MNH_ADDR)
         }
     }
 
@@ -5770,11 +5770,11 @@ class ResolveExternVisitor : AstVisitor {
                 failed_T(firstT, "missing new`handle function pointer for {describe(firstT)}")
                 return
             }
-            dll.set_function_address(uid.get_ascend_new(expr), new_handle_ptr)
+            dll.set_glob_address(uid.get_ascend_new(expr), new_handle_ptr)
         }
 
         if (expr.ascendFlags.needTypeInfo) {
-            dll.set_function_address(
+            dll.set_glob_address(
                 uid.get_ascend_tinfo(expr),
                 make_type_info_structure(*jit_context, expr.subexpr._type)
             )
@@ -5783,7 +5783,7 @@ class ResolveExternVisitor : AstVisitor {
 
     def override preVisitExprTypeInfo(expr : smart_ptr<ExprTypeInfo>) : void {
         if (expr.trait == "rtti_classinfo") {
-            dll.set_function_address(
+            dll.set_glob_address(
                 uid.get_tinfo(expr),
                 make_type_info_structure(*jit_context, expr.typeexpr)
             )
@@ -5814,23 +5814,23 @@ class ResolveExternVisitor : AstVisitor {
         assume subExprT = expr.subexpr._type
         if (subExprT.isGoodTableType) {
             let t = get_table_t(subExprT)
-            dll.set_function_address(DllName(FN_JIT_TABLE_AT(t)), get_jit_table_at(unsafe(reinterpret<int> t)))
+            dll.set_glob_address(DllName(FN_JIT_TABLE_AT(t)), get_jit_table_at(unsafe(reinterpret<int> t)))
         }
     }
 
     def override preVisitExprSetInsert(expr : smart_ptr<ExprSetInsert>) {
         let t = get_table_t(expr.arguments[0]._type)
-        dll.set_function_address(DllName(FN_JIT_TABLE_AT(t)), get_jit_table_at(unsafe(reinterpret<int> t)))
+        dll.set_glob_address(DllName(FN_JIT_TABLE_AT(t)), get_jit_table_at(unsafe(reinterpret<int> t)))
     }
 
     def override preVisitExprKeyExists(expr : smart_ptr<ExprKeyExists>) {
         let t = get_table_t(expr.arguments[0]._type)
-        dll.set_function_address(DllName(FN_JIT_TABLE_FIND(t)), get_jit_table_find(unsafe(reinterpret<int> t)))
+        dll.set_glob_address(DllName(FN_JIT_TABLE_FIND(t)), get_jit_table_find(unsafe(reinterpret<int> t)))
     }
 
     def override preVisitExprFind(expr : smart_ptr<ExprFind>) {
         let t = get_table_t(expr.arguments[0]._type)
-        dll.set_function_address(DllName(FN_JIT_TABLE_FIND(t)), get_jit_table_find(unsafe(reinterpret<int> t)))
+        dll.set_glob_address(DllName(FN_JIT_TABLE_FIND(t)), get_jit_table_find(unsafe(reinterpret<int> t)))
     }
 
     def override preVisitExprSafeAt(expr : smart_ptr<ExprSafeAt>) {
@@ -5838,13 +5838,13 @@ class ResolveExternVisitor : AstVisitor {
         if (subExprT.isGoodTableType || (subExprT.isPointer && subExprT.firstType.isGoodTableType)) {
             var inscope etype := subExprT.isPointer ? subExprT.firstType : subExprT
             let t = get_table_t(etype)
-            dll.set_function_address(DllName(FN_JIT_TABLE_FIND(t)), get_jit_table_find(unsafe(reinterpret<int> t)))
+            dll.set_glob_address(DllName(FN_JIT_TABLE_FIND(t)), get_jit_table_find(unsafe(reinterpret<int> t)))
         }
     }
 
     def override preVisitExprErase(expr : smart_ptr<ExprErase>) {
         let t = get_table_t(expr.arguments[0]._type)
-        dll.set_function_address(DllName(FN_JIT_TABLE_ERASE(t)), get_jit_table_erase(unsafe(reinterpret<int> t)))
+        dll.set_glob_address(DllName(FN_JIT_TABLE_ERASE(t)), get_jit_table_erase(unsafe(reinterpret<int> t)))
     }
 
 }
