@@ -747,7 +747,7 @@ namespace  das {
     struct DAS_API SimPolicy_Range : SimPolicy_iVec<range,3> {};
     struct DAS_API SimPolicy_URange : SimPolicy_uVec<urange,3> {};
 
-    extern const char * rts_null;
+    extern DAS_APIEI const char * rts_null;
 
     __forceinline const char * to_rts ( vec4f a ) {
         const char * s = cast<const char *>::to(a);

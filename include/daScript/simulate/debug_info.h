@@ -277,7 +277,7 @@ namespace das
     };
     template <> struct isCloneable<ModuleFileAccess> : false_type {};
 
-    struct DAS_API LineInfo {
+    struct DAS_APIEI LineInfo {
         LineInfo() = default;
         LineInfo(FileInfo * fi, int c, int l, int lc, int ll)
             : fileInfo(fi)
