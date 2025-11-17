@@ -1333,6 +1333,7 @@ def finalize_dim(var a : auto(TT)[]) {
     }
 }
 
+[no_jit]
 def finalize(var a : array<auto(TT)>) {
     static_if (typeinfo can_delete(type<TT>)) {
         for (aV in a) {
@@ -1344,6 +1345,7 @@ def finalize(var a : array<auto(TT)>) {
     __builtin_array_free(a, typeinfo sizeof(a[0]))
 }
 
+[no_jit]
 def finalize(var a : table<auto(TK); auto(TV)>) {
     static_if (typeinfo can_delete(type<TV>)) {
         for (aV in values(a)) {

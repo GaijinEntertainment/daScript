@@ -92,17 +92,17 @@ void das_initialize_modules() {
 
 extern "C" {
 
-uint32_t SIDEEFFECTS_none = uint32_t(SideEffects::none);
-uint32_t SIDEEFFECTS_unsafe = uint32_t(SideEffects::unsafe);
-uint32_t SIDEEFFECTS_userScenario = uint32_t(SideEffects::userScenario);
-uint32_t SIDEEFFECTS_modifyExternal = uint32_t(SideEffects::modifyExternal);
-uint32_t SIDEEFFECTS_accessExternal = uint32_t(SideEffects::accessExternal);
-uint32_t SIDEEFFECTS_modifyArgument = uint32_t(SideEffects::modifyArgument);
-uint32_t SIDEEFFECTS_modifyArgumentAndExternal = uint32_t(SideEffects::modifyArgumentAndExternal);
-uint32_t SIDEEFFECTS_worstDefault = uint32_t(SideEffects::worstDefault);
-uint32_t SIDEEFFECTS_accessGlobal = uint32_t(SideEffects::accessGlobal);
-uint32_t SIDEEFFECTS_invoke =  uint32_t(SideEffects::invoke);
-uint32_t SIDEEFFECTS_inferredSideEffects =  uint32_t(SideEffects::inferredSideEffects);
+DAS_API uint32_t SIDEEFFECTS_none = uint32_t(SideEffects::none);
+DAS_API uint32_t SIDEEFFECTS_unsafe = uint32_t(SideEffects::unsafe);
+DAS_API uint32_t SIDEEFFECTS_userScenario = uint32_t(SideEffects::userScenario);
+DAS_API uint32_t SIDEEFFECTS_modifyExternal = uint32_t(SideEffects::modifyExternal);
+DAS_API uint32_t SIDEEFFECTS_accessExternal = uint32_t(SideEffects::accessExternal);
+DAS_API uint32_t SIDEEFFECTS_modifyArgument = uint32_t(SideEffects::modifyArgument);
+DAS_API uint32_t SIDEEFFECTS_modifyArgumentAndExternal = uint32_t(SideEffects::modifyArgumentAndExternal);
+DAS_API uint32_t SIDEEFFECTS_worstDefault = uint32_t(SideEffects::worstDefault);
+DAS_API uint32_t SIDEEFFECTS_accessGlobal = uint32_t(SideEffects::accessGlobal);
+DAS_API uint32_t SIDEEFFECTS_invoke =  uint32_t(SideEffects::invoke);
+DAS_API uint32_t SIDEEFFECTS_inferredSideEffects =  uint32_t(SideEffects::inferredSideEffects);
 
 void das_initialize() {
     das_initialize_modules();

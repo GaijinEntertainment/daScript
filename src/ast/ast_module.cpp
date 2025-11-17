@@ -775,6 +775,8 @@ namespace das {
 
     // MODULE LIBRARY
 
+    ModuleLibrary::ModuleLibrary() {}
+
     ModuleLibrary::ModuleLibrary( Module * this_module ) {
         addModule(this_module);
     }

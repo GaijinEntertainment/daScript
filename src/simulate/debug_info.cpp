@@ -257,7 +257,7 @@ namespace das
         return -1;
     }
 
-    int getVariantAlign ( TypeInfo * info ) {
+    static int getVariantAlign ( TypeInfo * info ) {
         int al = getTypeBaseAlign(Type::tInt);
         for ( uint32_t i=0, is=info->argCount; i!=is; ++i ) {
             al = das::max ( al, getTypeAlign(info->argTypes[i]) );
@@ -265,7 +265,7 @@ namespace das
         return al;
     }
 
-    int getVariantSize ( TypeInfo * info ) {
+    static int getVariantSize ( TypeInfo * info ) {
         int maxSize = 0;
         int al = getVariantAlign(info) - 1;
         for ( uint32_t i=0, is=info->argCount; i!=is; ++i ) {
@@ -771,6 +771,45 @@ namespace das
         }
     }
 
+    void FAccessStorImpl::clear() {
+        files.clear();
+    }
+    FileInfoPtr FAccessStorImpl::take( const string & fileName ) {
+        auto it = files.find(fileName);
+        if ( it == files.end() ) return nullptr;
+        return das::move(it->second);
+    }
+    FileInfo *FAccessStorImpl::tryGet( const string & fileName ) {
+        auto it = files.find(fileName);
+        if ( it == files.end() ) return nullptr;
+        return it->second.get();
+    }
+
+    FileInfo *FAccessStorImpl::insert( const string & fileName, FileInfoPtr && info ) {
+        files[fileName] = das::move(info);
+        auto ins = files.find(fileName);
+        ins->second->name = (char *) ins->first.c_str();
+        return ins->second.get();
+
+    }
+
+    bool FAccessStorImpl::erase(const string & fileName) {
+        auto it = files.find(fileName);
+        if ( it != files.end() ) {
+            files.erase(it);
+            return true;
+        } else {
+            return false;
+        }
+    }
+    void FAccessStorImpl::freeSource() {
+        for ( auto & fp : files ) {
+            fp.second->freeSourceData();
+        }            
+    }
+
+    FileAccess::FileAccess() : files(std::make_shared<FAccessStorImpl>()) {}
+
     bool FileAccess::isSameFileName ( const string & a, const string & b ) const {
         if ( a.size() != b.size() ) return false;
         auto it_a = a.begin();
@@ -790,34 +829,23 @@ namespace das
     }
 
     FileInfoPtr FileAccess::letGoOfFileInfo ( const string & fileName ) {
-        auto it = files.find(fileName);
-        if ( it == files.end() ) return nullptr;
-        return das::move(it->second);
+        return das::move(files->take(fileName));
     }
 
     FileInfo * FileAccess::setFileInfo ( const string & fileName, FileInfoPtr && info ) {
         // TODO: test. for now we need to allow replace
         // if ( files.find(fileName)!=files.end() ) return nullptr;
-        files[fileName] = das::move(info);
-        auto ins = files.find(fileName);
-        ins->second->name = (char *) ins->first.c_str();
-        return ins->second.get();
+        return files->insert(fileName, std::move(info));
     }
 
     bool FileAccess::invalidateFileInfo ( const string & fileName ) {
-        auto it = files.find(fileName);
-        if ( it != files.end() ) {
-            files.erase(it);
-            return true;
-        } else {
-            return false;
-        }
+        return files->erase(fileName);
     }
 
     FileInfo * FileAccess::getFileInfo ( const string & fileName ) {
-        auto it = files.find(fileName);
-        if ( it != files.end() ) {
-            return it->second.get();
+        auto res = files->tryGet(fileName);
+        if ( res != nullptr ) {
+            return res;
         }
         auto ni = getNewFileInfo(fileName);
         if ( ni ) {
@@ -846,8 +874,6 @@ namespace das
     }
 
     void FileAccess::freeSourceData() {
-        for ( auto & fp : files ) {
-            fp.second->freeSourceData();
-        }
+        files->freeSource();
     }
 }

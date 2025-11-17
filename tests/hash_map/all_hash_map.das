@@ -1,4 +1,6 @@
 options gen2
+options no_aliasing=false
+
 require dastest/testing_boost public
 
 require daslib/hash_map public

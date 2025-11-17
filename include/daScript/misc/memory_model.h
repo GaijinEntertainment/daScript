@@ -257,7 +257,7 @@ namespace das {
 
     typedef function<int(int)> CustomGrowFunction;
 
-    struct MemoryModel : ptr_ref_count {
+    struct DAS_API MemoryModel : ptr_ref_count {
         enum { default_initial_size = 65536 };
         MemoryModel(const MemoryModel &) = delete;
         MemoryModel & operator = (const MemoryModel &) = delete;
@@ -352,7 +352,7 @@ namespace das {
         HeapChunk * next;
     };
 
-    class LinearChunkAllocator : public ptr_ref_count {
+    class DAS_API LinearChunkAllocator : public ptr_ref_count {
         enum { default_initial_size = 65536 };
     public:
         LinearChunkAllocator() { }
