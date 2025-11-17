@@ -571,7 +571,7 @@ extern "C" {
                     ->args({"library"});
             addExtern<DAS_BIND_FUN(create_shared_library)>(*this, lib,  "create_shared_library",
                 SideEffects::worstDefault, "create_shared_library")
-                    ->args({"objFilePath","libraryName"});
+                    ->args({"objFilePath","libraryName", "jitModuleObj"});
             addExtern<DAS_BIND_FUN(jit_initialize_fileinfo)>(*this, lib,  "jit_initialize_fileinfo",
                 SideEffects::worstDefault, "jit_initialize_fileinfo");
             addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));

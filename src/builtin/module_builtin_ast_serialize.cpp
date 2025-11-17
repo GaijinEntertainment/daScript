@@ -274,9 +274,8 @@ namespace das {
         dtag(HASH_TAG("DasHashmap"));
         if ( writing ) {
             uint64_t size = value.size(); *this << size;
-            for ( auto it = value.begin(); it != value.end(); it++ ) {
-                auto &[k, v] = *it;
-                *this << const_cast<K&>(k) << v;
+            for ( auto & item : value ) {
+                *this << item.first << item.second;
             }
             return;
         }
