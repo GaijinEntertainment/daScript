@@ -27,7 +27,7 @@ namespace das {
     extern AotListBase impl_aot_templates_boost;
     extern AotListBase impl_aot_ast_boost;
 
-    vector<void *> force_aot_stub() {
+    DAS_MOD_API vector<void *> force_aot_stub() {
         vector<void *> stubs = {
             &impl_aot_functional,
             &impl_aot_json,

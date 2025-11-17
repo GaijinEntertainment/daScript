@@ -4,7 +4,7 @@
 #include "daScript/simulate/simulate.h"
 
 namespace das {
-    struct AotFactory {
+    struct DAS_API AotFactory {
         bool is_cmres;
         void * fn;
         vec4f (*wrappedFn)(Context*);
@@ -17,7 +17,7 @@ namespace das {
 
     typedef void ( * RegisterAotFunctions ) ( AotLibrary & );
 
-    struct AotListBase {
+    struct DAS_API AotListBase {
         AotListBase( RegisterAotFunctions prfn );
         static void registerAot ( AotLibrary & lib );
 
@@ -26,8 +26,8 @@ namespace das {
         RegisterAotFunctions regFn;
     };
 
-    AotLibrary & getGlobalAotLibrary();
-    void clearGlobalAotLibrary();
+    DAS_API AotLibrary & getGlobalAotLibrary();
+    DAS_API void clearGlobalAotLibrary();
 
     // Test standalone context
 

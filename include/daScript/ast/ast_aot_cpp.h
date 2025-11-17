@@ -66,7 +66,7 @@ namespace das {
      * @param cppOutputDir output directory where context will be created
      * @param standaloneContextName class name
      */
-    void runStandaloneVisitor(ProgramPtr program, const string& cppOutputDir, const StandaloneContextCfg &cfg);
+    DAS_API void runStandaloneVisitor(ProgramPtr program, const string& cppOutputDir, const StandaloneContextCfg &cfg);
 }
 
 #endif //DAS_AST_AOT_CPP_H

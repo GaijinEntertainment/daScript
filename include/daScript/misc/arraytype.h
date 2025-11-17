@@ -111,7 +111,7 @@ namespace das
         TLambda( const Lambda & that ) { *(Lambda *)this = that; }
     };
 
-    struct GcRootLambda : Lambda  {
+    struct DAS_API GcRootLambda : Lambda  {
         GcRootLambda() = default;
         GcRootLambda( const GcRootLambda & ) = delete;
         GcRootLambda( GcRootLambda && other) : Lambda(other.capture), context(other.context) {
@@ -162,12 +162,12 @@ namespace das
 
     class Context;
 
-    void array_lock ( Context & context, Array & arr, LineInfo * at );
-    void array_unlock ( Context & context, Array & arr, LineInfo * at );
-    void array_reserve ( Context & context, Array & arr, uint32_t newCapacity, uint32_t stride, LineInfo * at );
-    void array_resize ( Context & context, Array & arr, uint32_t newSize, uint32_t stride, bool zero, LineInfo * at );
-    void array_grow ( Context & context, Array & arr, uint32_t newSize, uint32_t stride );  // always grows
-    void array_clear ( Context & context, Array & arr, LineInfo * at );
+    DAS_API void array_lock ( Context & context, Array & arr, LineInfo * at );
+    DAS_API void array_unlock ( Context & context, Array & arr, LineInfo * at );
+    DAS_API void array_reserve ( Context & context, Array & arr, uint32_t newCapacity, uint32_t stride, LineInfo * at );
+    DAS_API void array_resize ( Context & context, Array & arr, uint32_t newSize, uint32_t stride, bool zero, LineInfo * at );
+    DAS_API void array_grow ( Context & context, Array & arr, uint32_t newSize, uint32_t stride );  // always grows
+    DAS_API void array_clear ( Context & context, Array & arr, LineInfo * at );
 
     typedef uint32_t TableHashKey;
 
@@ -177,14 +177,14 @@ namespace das
         uint32_t    tombstones;
     };
 
-    void table_clear ( Context & context, Table & arr, LineInfo * at );
-    void table_lock ( Context & context, Table & arr, LineInfo * at );
-    void table_unlock ( Context & context, Table & arr, LineInfo * at );
-    void table_reserve_impl ( Context & context, Table & arr, int32_t baseType, uint32_t newCapacity, uint32_t valueTypeSize, LineInfo * at );
+    DAS_API void table_clear ( Context & context, Table & arr, LineInfo * at );
+    DAS_API void table_lock ( Context & context, Table & arr, LineInfo * at );
+    DAS_API void table_unlock ( Context & context, Table & arr, LineInfo * at );
+    DAS_API void table_reserve_impl ( Context & context, Table & arr, int32_t baseType, uint32_t newCapacity, uint32_t valueTypeSize, LineInfo * at );
 
     struct Sequence;
-    void builtin_table_keys ( Sequence & result, const Table & tab, int32_t stride, Context * __context__, LineInfoArg * at );
-    void builtin_table_values ( Sequence & result, const Table & tab, int32_t stride, Context * __context__, LineInfoArg * at );
+    DAS_API void builtin_table_keys ( Sequence & result, const Table & tab, int32_t stride, Context * __context__, LineInfoArg * at );
+    DAS_API void builtin_table_values ( Sequence & result, const Table & tab, int32_t stride, Context * __context__, LineInfoArg * at );
 
     template <typename TT>
     struct EnumStubAny  {

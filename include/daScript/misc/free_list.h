@@ -74,7 +74,7 @@ namespace das {
     void reuse_cache_push();
     void reuse_cache_pop();
 
-    struct ReuseCacheGuard {
+    struct DAS_API ReuseCacheGuard {
         ReuseCacheGuard();
         ~ReuseCacheGuard();
     };

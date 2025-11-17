@@ -226,7 +226,7 @@ namespace das
     };
 #endif
 
-    void addExternFunc(Module& mod, const FunctionPtr & fx, bool isCmres, SideEffects seFlags);
+    DAS_API void addExternFunc(Module& mod, const FunctionPtr & fx, bool isCmres, SideEffects seFlags);
 
 #if DAS_SLOW_CALL_INTEROP
     template <typename FuncT, FuncT fn, template <typename FuncTT> class SimNodeT = SimNode_ExtFuncCall, typename QQ = defaultTempFn>

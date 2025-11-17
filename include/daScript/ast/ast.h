@@ -4,6 +4,7 @@
 #include "daScript/misc/string_writer.h"
 #include "daScript/misc/safebox.h"
 #include "daScript/misc/vectypes.h"
+#include "daScript/misc/platform.h"
 #include "daScript/misc/arraytype.h"
 #include "daScript/misc/rangetype.h"
 #include "daScript/simulate/data_walker.h"
@@ -80,7 +81,7 @@ namespace das
 
     //      [annotation (value,value,...,value)]
     //  or  [annotation (key=value,key,value,...,key=value)]
-    struct AnnotationArgument {
+    struct DAS_API AnnotationArgument {
         Type    type;       // only tInt, tFloat, tBool, and tString are allowed
         string  name;
         string  sValue;
@@ -113,7 +114,7 @@ namespace das
 
     typedef vector<AnnotationArgument> AnnotationArguments;
 
-    struct AnnotationArgumentList : AnnotationArguments {
+    struct DAS_API AnnotationArgumentList : AnnotationArguments {
         const AnnotationArgument * find ( const string & name, Type type ) const;
         bool getBoolOption(const string & name, bool def = false) const;
         int32_t getIntOption(const string & name, int32_t def = false) const;
@@ -122,7 +123,7 @@ namespace das
         void serialize ( AstSerializer & ser );
     };
 
-    struct Annotation : BasicAnnotation {
+    struct DAS_API Annotation : BasicAnnotation {
         Annotation ( const string & n, const string & cpn = "" ) : BasicAnnotation(n,cpn) {}
         virtual ~Annotation() {}
         virtual void seal( Module * m ) { module = m; }
@@ -139,7 +140,7 @@ namespace das
         Module *    module = nullptr;
     };
 
-    struct AnnotationDeclaration : ptr_ref_count {
+    struct DAS_API AnnotationDeclaration : ptr_ref_count {
         AnnotationPtr           annotation;
         AnnotationArgumentList  arguments;
         LineInfo                at;
@@ -157,7 +158,7 @@ namespace das
 
     AnnotationList cloneAnnotationList ( const AnnotationList & list );
 
-    class Enumeration : public ptr_ref_count {
+    class DAS_API Enumeration : public ptr_ref_count {
     public:
         struct EnumEntry {
             string          name;
@@ -201,7 +202,7 @@ namespace das
 #endif
     };
 
-    class Structure : public ptr_ref_count {
+    class DAS_API Structure : public ptr_ref_count {
     public:
         struct FieldDeclaration {
             string                  name;
@@ -330,7 +331,7 @@ namespace das
 #endif
     };
 
-    struct Variable : ptr_ref_count {
+    struct DAS_API Variable : ptr_ref_count {
         VariablePtr clone() const;
         string getMangledName() const;
         uint64_t getMangledNameHash() const;
@@ -425,7 +426,7 @@ namespace das
     struct ExprBlock;
     struct ExprCallFunc;
 
-    struct FunctionAnnotation : Annotation {
+    struct DAS_API FunctionAnnotation : Annotation {
         FunctionAnnotation ( const string & n ) : Annotation(n) {}
         virtual bool rtti_isFunctionAnnotation() const override { return true; }
         virtual bool apply ( const FunctionPtr & func, ModuleGroup & libGroup,
@@ -623,7 +624,7 @@ namespace das
         smart_ptr<Structure>   structureType;
     };
 
-    struct Expression : ptr_ref_count {
+    struct DAS_API Expression : ptr_ref_count {
         Expression() = default;
         Expression(const LineInfo & a) : at(a) {}
         string describe() const;
@@ -744,7 +745,7 @@ namespace das
 #pragma warning(push)
 #pragma warning(disable:4324)
 #endif
-    struct ExprConst : Expression {
+    struct DAS_API ExprConst : Expression {
         ExprConst ( ) : baseType(Type::none) { __rtti = "ExprConst"; }
         ExprConst ( Type t ) : baseType(t) { __rtti = "ExprConst"; }
         ExprConst ( const LineInfo & a, Type t ) : Expression(a), baseType(t) { __rtti = "ExprConst"; }
@@ -819,7 +820,7 @@ namespace das
         InferHistory(const LineInfo & a, const FunctionPtr & p) : at(a), func(p.get()) {}
         void serialize ( AstSerializer & ser );
     };
-    class Function : public ptr_ref_count {
+    class DAS_API Function : public ptr_ref_count {
     public:
         enum class DescribeExtra     { no, yes };
         enum class DescribeModule    { no, yes };
@@ -1009,7 +1010,7 @@ namespace das
     uint64_t getFunctionAotHash ( const Function * fun );
     uint64_t getVariableListAotHash ( const vector<const Variable *> & globs, uint64_t initHash );
 
-    class BuiltInFunction : public Function {
+    class DAS_API BuiltInFunction : public Function {
     public:
         BuiltInFunction ( const char *fn, const char * fnCpp );
         virtual string getAotBasicName() const override {
@@ -1108,7 +1109,7 @@ namespace das
 
     bool isValidBuiltinName ( const string & name, bool canPunkt = false );
 
-    class Module {
+    class DAS_API Module {
     public:
         Module ( const string & n = "" );
         void promoteToBuiltin(const FileAccessPtr & access);
@@ -1250,14 +1251,14 @@ namespace das
     };
 
     #define REGISTER_MODULE(ClassName) \
-        das::Module * register_##ClassName () { \
+        DAS_EXPORT_DLL das::Module * register_##ClassName () { \
             das::daScriptEnvironment::ensure(); \
             ClassName * module_##ClassName = new ClassName(); \
             return module_##ClassName; \
         }
 
     #define REGISTER_MODULE_IN_NAMESPACE(ClassName,Namespace) \
-        das::Module * register_##ClassName () { \
+        DAS_EXPORT_DLL das::Module * register_##ClassName () { \
             das::daScriptEnvironment::ensure(); \
             Namespace::ClassName * module_##ClassName = new Namespace::ClassName(); \
             return module_##ClassName; \
@@ -1285,11 +1286,11 @@ namespace das
         virtual ModuleAotType aotRequire ( TextWriter & ) const { return ModuleAotType::cpp; }
     };
 
-    class ModuleLibrary {
+    class DAS_API ModuleLibrary {
         friend class Module;
         friend class Program;
     public:
-        ModuleLibrary() = default;
+        ModuleLibrary() {}
         ModuleLibrary( Module * this_module );
         virtual ~ModuleLibrary() {};
         void addBuiltInModule ();
@@ -1323,14 +1324,14 @@ namespace das
         Module *                        thisModule = nullptr;
     };
 
-    struct ModuleGroupUserData {
+    struct DAS_API ModuleGroupUserData {
         ModuleGroupUserData ( const string & n ) : name(n) {}
         virtual ~ModuleGroupUserData() {}
         string name;
     };
-    typedef unique_ptr<ModuleGroupUserData> ModuleGroupUserDataPtr;
+    typedef shared_ptr<ModuleGroupUserData> ModuleGroupUserDataPtr;
 
-    class ModuleGroup : public ModuleLibrary {
+    class DAS_API ModuleGroup : public ModuleLibrary {
     public:
         virtual ~ModuleGroup();
         ModuleGroupUserData * getUserData ( const string & dataName ) const;
@@ -1408,7 +1409,7 @@ namespace das
         string name;
     };
 
-    class DebugInfoHelper : public ptr_ref_count {
+    class DAS_API DebugInfoHelper : public ptr_ref_count {
     public:
         DebugInfoHelper () { debugInfo = make_shared<DebugInfoAllocator>(); }
         DebugInfoHelper ( const shared_ptr<DebugInfoAllocator> & di ) : debugInfo(di) {}
@@ -1570,11 +1571,11 @@ namespace das
 
     typedef function<void (const TypeDeclPtr & argType, const TypeDeclPtr & passType)> UpdateAliasMapCallback;
 
-    class Program : public ptr_ref_count {
+    class DAS_API Program : public ptr_ref_count {
     public:
         Program();
         int getContextStackSize() const;
-        friend StringWriter& operator<< (StringWriter& stream, const Program & program);
+        friend DAS_API StringWriter& operator<< (StringWriter& stream, const Program & program);
         vector<StructurePtr> findStructure ( const string & name ) const;
         vector<AnnotationPtr> findAnnotation ( const string & name ) const;
         vector<TypeInfoMacroPtr> findTypeInfoMacro ( const string & name ) const;
@@ -1715,23 +1716,23 @@ namespace das
     bool starts_with ( const string & name, const char * template_name );
 
     // access function from class adapter
-    int adapt_field_offset ( const char * fName, const StructInfo * info );
-    int adapt_field_offset_ex ( const char * fName, const StructInfo * info, uint32_t & i );
-    char * adapt_field ( const char * fName, char * pClass, const StructInfo * info );
-    Func adapt ( const char * funcName, char * pClass, const StructInfo * info );
+    DAS_API int adapt_field_offset ( const char * fName, const StructInfo * info );
+    DAS_API int adapt_field_offset_ex ( const char * fName, const StructInfo * info, uint32_t & i );
+    DAS_API char * adapt_field ( const char * fName, char * pClass, const StructInfo * info );
+    DAS_API Func adapt ( const char * funcName, char * pClass, const StructInfo * info );
 
     // this one works for single module only
-    ProgramPtr parseDaScript ( const string & fileName, const string & moduleName, const FileAccessPtr & access,
+    DAS_API ProgramPtr parseDaScript ( const string & fileName, const string & moduleName, const FileAccessPtr & access,
         TextWriter & logs, ModuleGroup & libGroup, bool exportAll = false, bool isDep = false, CodeOfPolicies policies = CodeOfPolicies() );
 
     // this one collectes dependencies and compiles with modules
-    ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access,
+    DAS_API ProgramPtr compileDaScript ( const string & fileName, const FileAccessPtr & access,
         TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies policies = CodeOfPolicies() );
-    ProgramPtr compileDaScriptSerialize ( const string & fileName, const FileAccessPtr & access,
+    DAS_API ProgramPtr compileDaScriptSerialize ( const string & fileName, const FileAccessPtr & access,
         TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies policies = CodeOfPolicies() );
 
     // collect script prerequisits
-    bool getPrerequisits ( const string & fileName,
+    DAS_API bool getPrerequisits ( const string & fileName,
                           const FileAccessPtr & access,
                           string &modName,
                           vector<ModuleInfo> & req,
@@ -1780,7 +1781,7 @@ namespace das
         return true;
     }
 
-    struct daScriptEnvironment {
+    struct DAS_API daScriptEnvironment {
         ProgramPtr      g_Program;
         bool            g_isInAot = false;
         Module *        modules = nullptr;
@@ -1810,7 +1811,7 @@ namespace das
         inline static DAS_THREAD_LOCAL(daScriptEnvironment *) owned;
     };
 
-    struct daScriptEnvironmentGuard {
+    struct DAS_API daScriptEnvironmentGuard {
         das::daScriptEnvironment *initialBound;
         das::daScriptEnvironment *initialOwned;
 

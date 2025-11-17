@@ -864,7 +864,7 @@ namespace das {
     };
 
     // AT (INDEX)
-    struct SimNode_At : SimNode_WithErrorMessage {
+    struct DAS_API SimNode_At : SimNode_WithErrorMessage {
         DAS_PTR_NODE;
         SimNode_At ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng, const char * msg )
             : SimNode_WithErrorMessage(at,msg), value(rv), index(idx), stride(strd), offset(o), range(rng) {}
@@ -881,7 +881,7 @@ namespace das {
     };
 
     // AT (INDEX)
-    struct SimNode_SafeAt : SimNode_At {
+    struct DAS_API SimNode_SafeAt : SimNode_At {
         DAS_PTR_NODE;
         SimNode_SafeAt ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng )
             : SimNode_At(at,rv,idx,strd,o,rng,"") {}
@@ -2533,7 +2533,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     // POINTER TO REFERENCE (CAST)
-    struct SimNode_Ptr2Ref : SimNode_WithErrorMessage {      // ptr -> &value
+    struct DAS_API SimNode_Ptr2Ref : SimNode_WithErrorMessage {      // ptr -> &value
         DAS_PTR_NODE;
         SimNode_Ptr2Ref ( const LineInfo & at, SimNode * s, const char * em )
             : SimNode_WithErrorMessage(at,em), subexpr(s) {}

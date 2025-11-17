@@ -68,27 +68,27 @@ namespace das {
     }
 
 extern "C" {
-    void jit_exception ( const char * text, Context * context, LineInfoArg * at ) {
+    DAS_API void jit_exception ( const char * text, Context * context, LineInfoArg * at ) {
         context->throw_error_at(at, "%s", text ? text : "");
     }
 
-    vec4f jit_call_or_fastcall ( SimFunction * fn, vec4f * args, Context * context ) {
+    DAS_API vec4f jit_call_or_fastcall ( SimFunction * fn, vec4f * args, Context * context ) {
         return context->callOrFastcall(fn, args, nullptr);
     }
 
-    vec4f jit_invoke_block ( const Block & blk, vec4f * args, Context * context ) {
+    DAS_API vec4f jit_invoke_block ( const Block & blk, vec4f * args, Context * context ) {
         return context->invoke(blk, args, nullptr, nullptr);
     }
 
-    vec4f jit_invoke_block_with_cmres ( const Block & blk, vec4f * args, void * cmres, Context * context ) {
+    DAS_API vec4f jit_invoke_block_with_cmres ( const Block & blk, vec4f * args, void * cmres, Context * context ) {
         return context->invoke(blk, args, cmres, nullptr);
     }
 
-    vec4f jit_call_with_cmres ( SimFunction * fn, vec4f * args, void * cmres, Context * context ) {
+    DAS_API vec4f jit_call_with_cmres ( SimFunction * fn, vec4f * args, void * cmres, Context * context ) {
         return context->callWithCopyOnReturn(fn, args, cmres, nullptr);
     }
 
-    char * jit_string_builder ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+    DAS_API char * jit_string_builder ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         StringBuilderWriter writer;
         DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
         for ( int i=0, is=call->nArguments; i!=is; ++i ) {
@@ -102,7 +102,7 @@ extern "C" {
         }
     }
 
-    char * jit_string_builder_temp ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+    DAS_API char * jit_string_builder_temp ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         StringBuilderWriter writer;
         DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
         for ( int i=0, is=call->nArguments; i!=is; ++i ) {
@@ -119,45 +119,45 @@ extern "C" {
     }
 
 
-    void * jit_get_global_mnh ( uint64_t mnh, Context & context ) {
+    DAS_API void * jit_get_global_mnh ( uint64_t mnh, Context & context ) {
         return context.globals + context.globalOffsetByMangledName(mnh);
     }
 
-    void * jit_get_shared_mnh ( uint64_t mnh, Context & context ) {
+    DAS_API void * jit_get_shared_mnh ( uint64_t mnh, Context & context ) {
         return context.shared + context.globalOffsetByMangledName(mnh);
     }
 
-    void * jit_alloc_heap ( uint32_t bytes, Context * context ) {
+    DAS_API void * jit_alloc_heap ( uint32_t bytes, Context * context ) {
         auto ptr = context->allocate(bytes);
         if ( !ptr ) context->throw_out_of_memory(false, bytes);
         return ptr;
     }
 
-    void * jit_alloc_persistent ( uint32_t bytes, Context * ) {
+    DAS_API void * jit_alloc_persistent ( uint32_t bytes, Context * ) {
         return das_aligned_alloc16(bytes);
     }
 
-    void jit_free_heap ( void * bytes, uint32_t size, Context * context ) {
+    DAS_API void jit_free_heap ( void * bytes, uint32_t size, Context * context ) {
         context->free((char *)bytes,size);
     }
 
-    void jit_free_persistent ( void * bytes, Context * ) {
+    DAS_API void jit_free_persistent ( void * bytes, Context * ) {
         das_aligned_free16(bytes);
     }
 
-    void jit_array_lock ( const Array & arr, Context * context, LineInfoArg * at ) {
+    DAS_API void jit_array_lock ( const Array & arr, Context * context, LineInfoArg * at ) {
         builtin_array_lock(arr, context, at);
     }
 
-    void jit_array_unlock ( const Array & arr, Context * context, LineInfoArg * at ) {
+    DAS_API void jit_array_unlock ( const Array & arr, Context * context, LineInfoArg * at ) {
         builtin_array_unlock(arr, context, at);
     }
 
-    int32_t jit_str_cmp ( char * a, char * b ) {
+    DAS_API int32_t jit_str_cmp ( char * a, char * b ) {
         return strcmp(a ? a : "",b ? b : "");
     }
 
-    char * jit_str_cat ( const char * sA, const char * sB, Context * context, LineInfoArg * at ) {
+    DAS_API char * jit_str_cat ( const char * sA, const char * sB, Context * context, LineInfoArg * at ) {
         sA = sA ? sA : "";
         sB = sB ? sB : "";
         auto la = stringLength(*context, sA);
@@ -181,7 +181,7 @@ extern "C" {
         char * SP;
     };
 
-    void jit_prologue ( void * funcLineInfo, int32_t stackSize, JitStackState * stackState, Context * context, LineInfoArg * at ) {
+    DAS_API void jit_prologue ( void * funcLineInfo, int32_t stackSize, JitStackState * stackState, Context * context, LineInfoArg * at ) {
         if (!context->stack.push(stackSize, stackState->EP, stackState->SP)) {
             context->throw_error_at(at, "stack overflow");
         }
@@ -194,11 +194,11 @@ extern "C" {
 #endif
     }
 
-    void jit_epilogue ( JitStackState * stackState, Context * context ) {
+    DAS_API void jit_epilogue ( JitStackState * stackState, Context * context ) {
         context->stack.pop(stackState->EP, stackState->SP);
     }
 
-    void jit_make_block ( Block * blk, int32_t argStackTop, uint64_t ad, void * bodyNode, void * jitImpl, void * funcInfo, void * lineInfo, Context * context ) {
+    DAS_API void jit_make_block ( Block * blk, int32_t argStackTop, uint64_t ad, void * bodyNode, void * jitImpl, void * funcInfo, void * lineInfo, Context * context ) {
         DAS_ASSERTF(lineInfo != nullptr, "Line info should not be null");
 
         JitBlock * block = (JitBlock *) blk;
@@ -212,7 +212,7 @@ extern "C" {
         new (block->node) SimNode_JitBlock(*static_cast<LineInfo*>(lineInfo), (JitBlockFunction) bodyNode, blk, ad);
     }
 
-    void jit_debug ( vec4f res, TypeInfo * typeInfo, char * message, Context * context, LineInfoArg * at ) {
+    DAS_API void jit_debug ( vec4f res, TypeInfo * typeInfo, char * message, Context * context, LineInfoArg * at ) {
         FPE_DISABLE;
         TextWriter ssw;
         if ( message ) ssw << message << " ";
@@ -220,27 +220,27 @@ extern "C" {
         context->to_out(at, ssw.str().c_str());
     }
 
-    bool jit_iterator_iterate ( das::Sequence &it, void *data, das::Context *context ) {
+    DAS_API bool jit_iterator_iterate ( das::Sequence &it, void *data, das::Context *context ) {
         return builtin_iterator_iterate(it, data, context);
     }
 
-    void jit_iterator_delete ( das::Sequence &it, das::Context *context ) {
+    DAS_API void jit_iterator_delete ( das::Sequence &it, das::Context *context ) {
         return builtin_iterator_delete(it, context);
     }
 
-    void jit_iterator_close ( das::Sequence &it, void *data, das::Context *context ) {
+    DAS_API void jit_iterator_close ( das::Sequence &it, void *data, das::Context *context ) {
         return builtin_iterator_close(it, data, context);
     }
 
-    bool jit_iterator_first ( das::Sequence &it, void *data, das::Context *context, das::LineInfoArg *at ) {
+    DAS_API bool jit_iterator_first ( das::Sequence &it, void *data, das::Context *context, das::LineInfoArg *at ) {
         return builtin_iterator_first(it, data, context, at);
     }
 
-    bool jit_iterator_next ( das::Sequence &it, void *data, das::Context *context, das::LineInfoArg *at ) {
+    DAS_API bool jit_iterator_next ( das::Sequence &it, void *data, das::Context *context, das::LineInfoArg *at ) {
         return builtin_iterator_next(it, data, context, at);
     }
 
-    void jit_debug_enter ( char * message, Context * context, LineInfoArg * at ) {
+    DAS_API void jit_debug_enter ( char * message, Context * context, LineInfoArg * at ) {
         TextWriter tw;
         tw << string(context->fnDepth, '\t'); context->fnDepth ++;
         tw << ">>";
@@ -252,7 +252,7 @@ extern "C" {
         context->to_out(at, tw.str().c_str());
     }
 
-    void jit_debug_exit ( char * message, Context * context, LineInfoArg * at ) {
+    DAS_API void jit_debug_exit ( char * message, Context * context, LineInfoArg * at ) {
         TextWriter tw;
         context->fnDepth --; tw << string(context->fnDepth, '\t');
         tw << " -";
@@ -264,7 +264,7 @@ extern "C" {
         context->to_out(at, tw.str().c_str());
     }
 
-    void jit_debug_line ( char * message, Context * context, LineInfoArg * at ) {
+    DAS_API void jit_debug_line ( char * message, Context * context, LineInfoArg * at ) {
         TextWriter tw;
         tw << string(context->fnDepth + 1, '\t');
         tw << ">>";
@@ -276,13 +276,13 @@ extern "C" {
         context->to_out(at, tw.str().c_str());
     }
 
-    void jit_initialize_fileinfo ( void * dummy, const char *filename ) {
+    DAS_API void jit_initialize_fileinfo ( void * dummy, const char *filename ) {
         new (dummy) FileInfo();
         auto fileInfoPtr = reinterpret_cast<FileInfo*>(dummy);
         fileInfoPtr->name = filename;
     }
 
-    void * jit_ast_typedecl ( uint64_t hash, Context * context, LineInfoArg * at ) {
+    DAS_API void * jit_ast_typedecl ( uint64_t hash, Context * context, LineInfoArg * at ) {
         if ( !context->thisProgram ) context->throw_error_at(at, "can't get ast_typeinfo, no program. is 'options rtti' missing?");
         auto ti = context->thisProgram->astTypeInfo.find(hash);
         if ( ti==context->thisProgram->astTypeInfo.end() ) {

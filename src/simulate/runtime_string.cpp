@@ -260,7 +260,7 @@ namespace das
 
     // helper functions
 
-    const char * rts_null = "";
+    DAS_API const char * rts_null = "";
 
     int hexChar ( char ch ) {
         if ( ch>='a' && ch<='f' ) {

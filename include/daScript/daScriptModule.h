@@ -8,7 +8,7 @@ namespace das
 };
 
 #define NEED_MODULE(ClassName) \
-    extern das::Module * register_##ClassName (); \
+    extern DAS_IMPORT_DLL das::Module * register_##ClassName (); \
     *das::ModuleKarma += unsigned(intptr_t(register_##ClassName()));
 
 #define NEED_ALL_DEFAULT_MODULES \
