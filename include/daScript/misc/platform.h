@@ -241,11 +241,15 @@ __forceinline uint64_t rotr64_c(uint64_t a, uint64_t b) {
 
 
 #ifndef DAS_API
-#ifdef _MSC_VER
+#ifdef DAS_NO_SHARED
+    #define DAS_API
+    #define DAS_MOD_API
+    #define DAS_APIEI
+#elif _MSC_VER
     #ifdef DAS_EXPORTS
         #define DAS_API __declspec(dllexport)
     #else
-        #define DAS_API
+        #define DAS_API __declspec(dllimport)
     #endif
     #ifdef DAS_EXPORTS
         #define DAS_APIEI __declspec(dllexport)
@@ -255,7 +259,7 @@ __forceinline uint64_t rotr64_c(uint64_t a, uint64_t b) {
     #ifdef DAS_MOD_EXPORTS
         #define DAS_MOD_API __declspec(dllexport)
     #else
-        #define DAS_MOD_API
+        #define DAS_MOD_API __declspec(dllimport)
     #endif
 #else
     #ifdef DAS_EXPORTS
