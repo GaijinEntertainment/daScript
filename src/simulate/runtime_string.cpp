@@ -1,8 +1,9 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/simulate/runtime_string.h"
+#include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/simulate/simulate.h"
-#include "daScript/simulate/hash.h"
+#include "daScript/simulate/aot.h"
 #include "daScript/simulate/debug_print.h"
 #include "daScript/simulate/runtime_string_delete.h"
 #include "daScript/simulate/simulate_nodes.h"
@@ -262,7 +263,7 @@ namespace das
 
     const char * rts_null = "";
 
-    int hexChar ( char ch ) {
+    static int hexChar ( char ch ) {
         if ( ch>='a' && ch<='f' ) {
             return ch - 'a' + 10;
         } else if ( ch>='A' && ch<='F' ) {
@@ -275,7 +276,7 @@ namespace das
     }
 
 
-    bool encodeUtf8Char(uint32_t ch, char * result) {
+    static bool encodeUtf8Char(uint32_t ch, char * result) {
 
       if (ch <= 0x7F) {
           result[0] = char(ch);
@@ -435,7 +436,7 @@ namespace das
         return result;
     }
 
-    string getFewLines ( const char* st, uint32_t stlen, int ROW, int COL, int /*LROW*/, int LCOL, int TAB ) {
+    static string getFewLines ( const char* st, uint32_t stlen, int ROW, int COL, int /*LROW*/, int LCOL, int TAB ) {
         TextWriter text;
         int col=0, row=1;
         auto it = st;

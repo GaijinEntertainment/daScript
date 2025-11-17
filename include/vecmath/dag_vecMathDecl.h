@@ -50,7 +50,7 @@ typedef const struct bsph3f& bsph3f_cref;
 #ifndef VECTORCALL
   #if _TARGET_PC_MACOSX && __SSE__
     #define VECTORCALL [[clang::vectorcall]]
-  #elif (defined(_MSC_VER) || defined(__clang__)) && __SSE__
+  #elif _TARGET_PC_WIN && (defined(_MSC_VER) || defined(__clang__)) && __SSE__
       //__vectorcall is faster on msvc, even on x64 target
     #define VECTORCALL __vectorcall
   #else

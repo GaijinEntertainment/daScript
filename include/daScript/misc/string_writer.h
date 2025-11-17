@@ -141,16 +141,7 @@ namespace das {
     class LOG : public TextWriter {
     public:
         LOG ( int level = LogLevel::debug ) : logLevel(level) {}
-        virtual void output() override {
-            auto newPos = tellp();
-            if (newPos != pos) {
-                string st(data() + pos, size_t(newPos - pos));
-                logger(logLevel, useMarker ? getLogMarker(logLevel) : "", st.c_str(), /*ctx*/nullptr, /*at*/nullptr);
-                useMarker = false;
-                clear();
-                pos = newPos = 0;
-            }
-        }
+        virtual void output() override;
     protected:
         uint64_t pos = 0;
         int logLevel = LogLevel::debug;

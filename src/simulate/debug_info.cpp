@@ -257,7 +257,7 @@ namespace das
         return -1;
     }
 
-    int getVariantAlign ( TypeInfo * info ) {
+    static int getVariantAlign ( TypeInfo * info ) {
         int al = getTypeBaseAlign(Type::tInt);
         for ( uint32_t i=0, is=info->argCount; i!=is; ++i ) {
             al = das::max ( al, getTypeAlign(info->argTypes[i]) );
@@ -265,7 +265,7 @@ namespace das
         return al;
     }
 
-    int getVariantSize ( TypeInfo * info ) {
+    static int getVariantSize ( TypeInfo * info ) {
         int maxSize = 0;
         int al = getVariantAlign(info) - 1;
         for ( uint32_t i=0, is=info->argCount; i!=is; ++i ) {

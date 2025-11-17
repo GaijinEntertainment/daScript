@@ -10,6 +10,7 @@ int main(int argc, char * argv[]) {
     // force libDaScriptAot linking
     force_aot_stub();
     // request our custom module
+    NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_TestProfile);
     // call daScript for main.das
     string dasRoot = getDasRoot() + "/examples/profile/main.das";

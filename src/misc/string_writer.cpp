@@ -193,4 +193,27 @@ namespace das {
             pos = newPos;
         }
     }
+
+    const char * getLogMarker(int level)
+    {
+        if ( level >= LogLevel::error )
+            return "[E] ";
+        else if ( level >= LogLevel::warning )
+            return "[W] ";
+        else if ( level >= LogLevel::info )
+            return "[I] ";
+        else
+            return "";
+    }
+
+    void LOG::output() {
+        auto newPos = tellp();
+        if (newPos != pos) {
+            string st(data() + pos, size_t(newPos - pos));
+            logger(logLevel, useMarker ? getLogMarker(logLevel) : "", st.c_str(), /*ctx*/nullptr, /*at*/nullptr);
+            useMarker = false;
+            clear();
+            pos = newPos = 0;
+        }
+    }
 }
