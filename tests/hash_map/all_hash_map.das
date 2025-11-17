@@ -3,6 +3,8 @@ require dastest/testing_boost public
 
 require daslib/hash_map public
 
+options no_aliasing = false
+
 struct Foo {
     a : int
 }

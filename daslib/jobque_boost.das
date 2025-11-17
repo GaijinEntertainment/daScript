@@ -298,6 +298,7 @@ def each(var channel : Channel?; tinfo : auto(TT)) {
     }
 }
 
+[unused_argument(tinfo)]
 def each_clone(var channel : Channel?; tinfo : auto(TT)) {
     //! this iterator is used to iterate over the channel in order it was pushed.
     //! iterator stops once channel is depleted (internal entry counter is 0)

@@ -1,6 +1,7 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/simulate/simulate.h"
+#include "daScript/simulate/aot.h"
 #include "daScript/simulate/simulate_nodes.h"
 
 #ifdef _MSC_VER
