@@ -14,10 +14,10 @@ namespace das {
         StringWriterTag(StringWriterTag&&) = delete;
         StringWriterTag& operator=(StringWriterTag&&) = delete;
     };
-    DAS_APIEI extern StringWriterTag HEX;
-    DAS_APIEI extern StringWriterTag DEC;
-    DAS_APIEI extern StringWriterTag FIXEDFP;
-    DAS_APIEI extern StringWriterTag SCIENTIFIC;
+    DAS_API extern StringWriterTag HEX;
+    DAS_API extern StringWriterTag DEC;
+    DAS_API extern StringWriterTag FIXEDFP;
+    DAS_API extern StringWriterTag SCIENTIFIC;
 
     class DAS_API StringWriter {
     public:

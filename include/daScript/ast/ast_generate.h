@@ -41,7 +41,7 @@ namespace das {
         $(self:MKS[])
             ...
     */
-    struct DAS_API ExprMakeStruct;
+    struct ExprMakeStruct;
     ExpressionPtr makeStructWhereBlock ( ExprMakeStruct * mks );
 
     /*
@@ -117,7 +117,7 @@ namespace das {
     /*
         a->b(args) is short for invoke(a.b, a, args)
      */
-    struct DAS_API ExprInvoke;
+    struct ExprInvoke;
     DAS_API ExprInvoke * makeInvokeMethod ( const LineInfo & at, Expression * a, const string & b );
 
     /*
@@ -227,7 +227,7 @@ namespace das {
                      push(temp, subexpr)
              return temp
     */
-    struct DAS_API ExprArrayComprehension;
+    struct ExprArrayComprehension;
     DAS_API ExpressionPtr generateComprehension ( ExprArrayComprehension * expr, bool tableSyntax );
 
     /*
@@ -271,7 +271,7 @@ namespace das {
             return true
             label X
      */
-    struct DAS_API ExprYield;
+    struct ExprYield;
     DAS_API ExpressionPtr generateYield( ExprYield * expr, const FunctionPtr & func );
 
     /*
@@ -283,7 +283,7 @@ namespace das {
             memzero(c)
         if variable is & - swap to pointer
      */
-    struct DAS_API ExprLet;
+    struct ExprLet;
     DAS_API ExpressionPtr replaceGeneratorLet ( ExprLet * expr, const FunctionPtr & func, ExprBlock * scope );
 
     /*
@@ -309,7 +309,7 @@ namespace das {
             end_label:
 
      */
-    struct DAS_API ExprIfThenElse;
+    struct ExprIfThenElse;
     DAS_API ExpressionPtr replaceGeneratorIfThenElse ( ExprIfThenElse * expr, const FunctionPtr & func );
 
     /*
@@ -326,7 +326,7 @@ namespace das {
         label endloop
         finally
     */
-    struct DAS_API ExprWhile;
+    struct ExprWhile;
     DAS_API ExpressionPtr replaceGeneratorWhile ( ExprWhile * expr, const FunctionPtr & func );
 
     /*
@@ -349,7 +349,7 @@ namespace das {
             _builtin_itersator_close(it0,src0) ...
 
      */
-    struct DAS_API ExprFor;
+    struct ExprFor;
     DAS_API ExpressionPtr replaceGeneratorFor ( ExprFor * expr, const FunctionPtr & func );
 }
 

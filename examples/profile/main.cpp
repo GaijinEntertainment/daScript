@@ -5,9 +5,7 @@ using namespace das;
 
 extern int MAIN_FUNC_NAME ( int, char * argv[] );
 
-namespace das {
-    DAS_APIEI vector<void *> force_aot_stub();
-}
+namespace das { DAS_IMPORT_DLL vector<void *> force_aot_stub(); }
 
 int main(int argc, char * argv[]) {
     // force libDaScriptAot linking

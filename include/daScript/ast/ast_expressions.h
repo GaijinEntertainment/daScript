@@ -4,7 +4,7 @@
 
 namespace das
 {
-    struct DAS_API ExprClone;
+    struct ExprClone;
 
     struct DAS_API ExprReader : Expression {
         ExprReader () { __rtti = "ExprReader"; }
@@ -220,7 +220,7 @@ namespace das
                                                             // is a workaround of a compiler bug in 32-bit MVSC 2015
     };
 
-    struct DAS_API ExprOp2;
+    struct ExprOp2;
 
     struct DAS_API ExprVar : Expression {
         ExprVar () { __rtti = "ExprVar"; };
@@ -267,7 +267,7 @@ namespace das
         string          name;
     };
 
-    struct DAS_API ExprClone;
+    struct ExprClone;
 
     struct DAS_API ExprField : Expression {
         ExprField () { __rtti = "ExprField"; };

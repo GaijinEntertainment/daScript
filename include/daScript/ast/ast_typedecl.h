@@ -22,7 +22,7 @@ namespace das {
     struct TypeAnnotation;
     typedef smart_ptr<TypeAnnotation> TypeAnnotationPtr;
 
-    struct DAS_API Expression;
+    struct Expression;
     typedef smart_ptr<Expression> ExpressionPtr;
 
     typedef das_map<string,TypeDeclPtr> AliasMap;

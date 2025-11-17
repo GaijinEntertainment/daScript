@@ -241,42 +241,23 @@ __forceinline uint64_t rotr64_c(uint64_t a, uint64_t b) {
 
 
 #ifndef DAS_API
-#ifdef DAS_NO_SHARED
-    #define DAS_API
-    #define DAS_MOD_API
-    #define DAS_APIEI
-#elif _MSC_VER
-    #ifdef DAS_EXPORTS
-        #define DAS_API __declspec(dllexport)
-    #else
-        #define DAS_API __declspec(dllimport)
-    #endif
-    #ifdef DAS_EXPORTS
-        #define DAS_APIEI __declspec(dllexport)
-    #else
-        #define DAS_APIEI __declspec(dllimport)
-    #endif
-    #ifdef DAS_MOD_EXPORTS
-        #define DAS_MOD_API __declspec(dllexport)
-    #else
-        #define DAS_MOD_API __declspec(dllimport)
-    #endif
+#ifdef _MSC_VER
+    #define DAS_EXPORT_DLL __declspec(dllexport)
+    #define DAS_IMPORT_DLL __declspec(dllimport)
 #else
-    #ifdef DAS_EXPORTS
-        #define DAS_API __attribute__((visibility("default")))
-    #else
-        #define DAS_API
-    #endif
-    #ifdef DAS_EXPORTS
-        #define DAS_APIEI __attribute__((visibility("default")))
-    #else
-        #define DAS_APIEI
-    #endif
-    #ifdef DAS_MOD_EXPORTS
-        #define DAS_MOD_API __attribute__((visibility("default")))
-    #else
-        #define DAS_MOD_API
-    #endif
+    #define DAS_EXPORT_DLL __attribute__((visibility("default")))
+    #define DAS_IMPORT_DLL
+#endif
+
+#ifdef DAS_EXPORTS
+    #define DAS_API DAS_EXPORT_DLL
+#else
+    #define DAS_API DAS_IMPORT_DLL
+#endif
+#ifdef DAS_MOD_EXPORTS
+    #define DAS_MOD_API DAS_EXPORT_DLL
+#else
+    #define DAS_MOD_API DAS_IMPORT_DLL
 #endif
 #endif
 void DAS_API os_debug_break();

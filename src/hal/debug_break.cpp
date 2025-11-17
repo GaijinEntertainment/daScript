@@ -13,7 +13,7 @@
 #endif
 
 #if DAS_SMART_PTR_TRACKER
-    DAS_APIEI das::atomic<uint64_t> das::g_smart_ptr_total {0};
+    DAS_API das::atomic<uint64_t> das::g_smart_ptr_total {0};
 #endif
 
 DAS_API void os_debug_break()

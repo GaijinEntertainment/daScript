@@ -39,7 +39,7 @@ namespace das
     struct FunctionAnnotation;
     typedef smart_ptr<FunctionAnnotation> FunctionAnnotationPtr;
 
-    struct DAS_API Expression;
+    struct Expression;
     typedef smart_ptr<Expression> ExpressionPtr;
 
     struct PassMacro;
@@ -423,8 +423,8 @@ namespace das
 
     typedef das_safe_set<VariablePtr,VarLessPred> safe_var_set;
 
-    struct DAS_API ExprBlock;
-    struct DAS_API ExprCallFunc;
+    struct ExprBlock;
+    struct ExprCallFunc;
 
     struct DAS_API FunctionAnnotation : Annotation {
         FunctionAnnotation ( const string & n ) : Annotation(n) {}
@@ -731,7 +731,7 @@ namespace das
 #endif
     };
 
-    struct DAS_API ExprLooksLikeCall;
+    struct ExprLooksLikeCall;
     typedef function<ExprLooksLikeCall * (const LineInfo & info)> ExprCallFactory;
 
     template <typename ExprType>
@@ -1251,14 +1251,14 @@ namespace das
     };
 
     #define REGISTER_MODULE(ClassName) \
-        __declspec(dllexport) das::Module * register_##ClassName () { \
+        DAS_EXPORT_DLL das::Module * register_##ClassName () { \
             das::daScriptEnvironment::ensure(); \
             ClassName * module_##ClassName = new ClassName(); \
             return module_##ClassName; \
         }
 
     #define REGISTER_MODULE_IN_NAMESPACE(ClassName,Namespace) \
-        __declspec(dllexport) das::Module * register_##ClassName () { \
+        DAS_EXPORT_DLL das::Module * register_##ClassName () { \
             das::daScriptEnvironment::ensure(); \
             Namespace::ClassName * module_##ClassName = new Namespace::ClassName(); \
             return module_##ClassName; \
@@ -1348,7 +1348,7 @@ namespace das
         string name;
     };
 
-    struct DAS_API ExprReader;
+    struct ExprReader;
     struct ReaderMacro : ptr_ref_count {
         ReaderMacro ( const string na = "" ) : name(na) {}
         virtual bool accept ( Program *, Module *, ExprReader *, int, const LineInfo & ) { return false; }
@@ -1359,7 +1359,7 @@ namespace das
         Module * module = nullptr;
     };
 
-    struct DAS_API ExprCallMacro;
+    struct ExprCallMacro;
     struct CallMacro : ptr_ref_count {
         CallMacro ( const string & na = "" ) : name(na) {}
         virtual void preVisit (  Program *, Module *, ExprCallMacro * ) { }
@@ -1371,7 +1371,7 @@ namespace das
         Module * module = nullptr;
     };
 
-    struct DAS_API ExprFor;
+    struct ExprFor;
     struct ForLoopMacro : ptr_ref_count {
         ForLoopMacro ( const string & na = "" ) : name(na) {}
         virtual ExpressionPtr visit ( Program *, Module *, ExprFor * ) { return nullptr; }
@@ -1391,9 +1391,9 @@ namespace das
         string name;
     };
 
-    struct DAS_API ExprIsVariant;
-    struct DAS_API ExprAsVariant;
-    struct DAS_API ExprSafeAsVariant;
+    struct ExprIsVariant;
+    struct ExprAsVariant;
+    struct ExprSafeAsVariant;
     struct VariantMacro : ptr_ref_count {
         VariantMacro ( const string na = "" ) : name(na) {}
         virtual ExpressionPtr visitIs     (  Program *, Module *, ExprIsVariant * ) { return nullptr; }
@@ -1763,7 +1763,7 @@ namespace das
             return false;
         }
         DebugInfoHelper helper;
-        for ( uint32_t index=0, indexs=info->count; index   !=indexs; ++ index ) {
+        for ( uint32_t index=0, indexs=info->count; index!=indexs; ++ index ) {
             auto argType = info->fields[index];
             if ( argType->type==Type::anyArgument ) {
                 continue;

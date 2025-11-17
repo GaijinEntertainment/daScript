@@ -1,7 +1,6 @@
 cmake_minimum_required (VERSION 3.16)
 project (DAS)
 include(GNUInstallDirs)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # for now we gonna run with exceptions enabled
 #add_compile_definitions(DAS_ENABLE_EXCEPTIONS=1)
 
@@ -287,10 +286,6 @@ SET(DAS_MODULES_NEED_INC ${NEED_MODULES_PATH}/external_need.inc)
 FILE(WRITE ${DAS_MODULES_RESOLVE_INC}.temp "")
 FILE(WRITE ${DAS_MODULES_NEED_INC}.temp "")
 
-SET(DAS_MODULES_LIBS)
-SET(DAS_ALL_EXAMPLES)
-FILE(GLOB _modules RELATIVE "${PROJECT_SOURCE_DIR}/modules" "modules/*")
-
 MACRO(ADD_DAS_PUB_LIBRARY lib)
     ADD_LIBRARY(${lib} SHARED ${ARGN})
     TARGET_COMPILE_DEFINITIONS(${lib} PRIVATE DAS_MOD_EXPORTS)
@@ -310,6 +305,11 @@ MACRO(ADD_DAS_LIBRARY lib)
     ENDIF()
 ENDMACRO()
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${EXECUTABLE_OUTPUT_PATH})
+
+SET(DAS_MODULES_LIBS)
+SET(DAS_ALL_EXAMPLES)
+FILE(GLOB _modules RELATIVE "${PROJECT_SOURCE_DIR}/modules" "modules/*")
+
 FOREACH(_module ${_modules})
     MACRO(ADD_MODULE_LIB lib)
         MESSAGE("REGISTER DAS MODULE ${lib}")
