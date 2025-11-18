@@ -2573,11 +2573,17 @@ namespace das {
             }
             if ( func->result->isRefType() && !func->result->ref ) {
                 if ( func->result->canCopy() ) {
-                    func->copyOnReturn = true;
-                    func->moveOnReturn = false;
+                    if ( func->copyOnReturn!=true || func->moveOnReturn!=false ) {
+                        reportAstChanged();
+                        func->copyOnReturn = true;
+                        func->moveOnReturn = false;
+                    }
                 } else if ( func->result->canMove() ) {
-                    func->copyOnReturn = false;
-                    func->moveOnReturn = true;
+                    if ( func->copyOnReturn!=false || func->moveOnReturn!=true ) {
+                        reportAstChanged();
+                        func->copyOnReturn = false;
+                        func->moveOnReturn = true;
+                    }
                 } else {
                     // the error will be reported in the inferReturnType
                     /*
@@ -7156,10 +7162,10 @@ namespace das {
                               + describeType(resType) + ", passing " + describeType(expr->subexpr->type), "", "",
                               expr->at, CompilationError::invalid_return_type);
                     }
-                    if ( resType->isRef() && !resType->isConst() && expr->subexpr->type->isConst() ) {
+                    if ( resType->isRef() && !resType->isConst() && expr->subexpr->type->isConst() && expr->moveSemantics ) {
                         error("incompatible return type, constant matters. expecting "
-                              + describeType(resType) + ", passing " + describeType(expr->subexpr->type), "", "",
-                              expr->at, CompilationError::invalid_return_type);
+                            + describeType(resType) + ", passing " + describeType(expr->subexpr->type), "", "",
+                            expr->at, CompilationError::invalid_return_type);
                     }
                 }
             }
@@ -7188,6 +7194,30 @@ namespace das {
             }
             if ( expr->subexpr ) markNoDiscard(expr->subexpr.get());
         }
+        void getDetailsAndSuggests( ExprReturn * expr, string & details, string & suggestions ) const {
+            if ( verbose ) {
+                bool canMove = expr->subexpr->type->canMove();
+                bool canClone = expr->subexpr->type->canClone();
+                bool isConstant = expr->subexpr->type->isConst();
+                if ( canMove ) {
+                    if ( isConstant ) {
+                        details += "this type can't be moved because it's constant ";
+                    } else {
+                        details += "this type can be moved ";
+                        suggestions += "use return <- instead";
+                    }
+                }
+                if ( canClone ) {
+                    details += (details.size()?"also, ":"");
+                    details += "this type can be cloned ";
+                    suggestions += (suggestions.size()?" or ":"");
+                    suggestions += "use return <- clone(...) instead";
+                }
+                if ( !canMove && !canClone ) {
+                    details += "this type can't be copied or moved, so it can't be returned at all";
+                }
+            }
+        }
         virtual ExpressionPtr visit ( ExprReturn * expr ) override {
             if ( blocks.size() ) {
                 ExprBlock * block = blocks.back();
@@ -7207,7 +7237,9 @@ namespace das {
                     setBlockCopyMoveFlags(block);
                 }
                 if ( block->moveOnReturn && !expr->moveSemantics ) {
-                    error("this type can't be copied; " + describeType(block->type),"","use return <- instead",
+                    string details, suggestions;
+                    getDetailsAndSuggests(expr, details, suggestions);
+                    error(details + ": " + describeType(block->type),"",suggestions,
                           expr->at, CompilationError::invalid_return_semantics );
                     if ( canRelaxAssign(expr->subexpr.get()) ) {
                         reportAstChanged();
@@ -7244,7 +7276,9 @@ namespace das {
                 }
                 inferReturnType(func->result, expr);
                 if ( func->moveOnReturn && !expr->moveSemantics && expr->subexpr ) {
-                    error("this type can't be copied; " + describeType(func->result),"","use return <- instead",
+                    string details, suggestions;
+                    getDetailsAndSuggests(expr, details, suggestions);
+                    error(details + ": " + describeType(func->result),"",suggestions,
                           expr->at, CompilationError::invalid_return_semantics );
                     if ( canRelaxAssign(expr->subexpr.get()) ) {
                         reportAstChanged();
