@@ -1,6 +1,5 @@
 #pragma once
 
-#include "daScript/simulate/simulate.h"
 #include "daScript/simulate/bind_enum.h"
 #include "daScript/simulate/aot.h"
 #include "daScript/simulate/jit_abi.h"

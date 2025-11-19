@@ -3,10 +3,10 @@
 #include "misc/include_fmt.h"
 
 namespace das {
-    StringWriterTag HEX;
-    StringWriterTag DEC;
-    StringWriterTag FIXEDFP;
-    StringWriterTag SCIENTIFIC;
+    DAS_API StringWriterTag HEX;
+    DAS_API StringWriterTag DEC;
+    DAS_API StringWriterTag FIXEDFP;
+    DAS_API StringWriterTag SCIENTIFIC;
 
     mutex TextPrinter::pmut;
 

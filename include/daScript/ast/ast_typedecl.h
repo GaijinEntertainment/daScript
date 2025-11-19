@@ -38,7 +38,7 @@ namespace das {
 
     struct AstSerializer;
 
-    struct TypeDecl : ptr_ref_count {
+    struct DAS_API TypeDecl : ptr_ref_count {
         enum {
             dimAuto = -1,
             dimConst = -2,
@@ -664,7 +664,7 @@ namespace das {
         return tt;
     }
 
-    das::TypeDeclPtr makeHandleType(const das::ModuleLibrary & library, const char * typeName);
+    das::TypeDeclPtr DAS_API makeHandleType(const das::ModuleLibrary & library, const char * typeName);
 
     bool splitTypeName ( const string & name, string & moduleName, string & funcName );
 
@@ -678,7 +678,7 @@ namespace das {
     enum class CpptRedundantConst { no, yes };
     enum class ChooseSmartPtr { no, yes };
 
-    string describeCppType(const smart_ptr_raw<TypeDecl> & type,
+    string DAS_API describeCppType(const smart_ptr_raw<TypeDecl> & type,
                            CpptSubstitureRef substituteRef = CpptSubstitureRef::no,
                            CpptSkipRef skipRef = CpptSkipRef::no,
                            CpptSkipConst skipConst = CpptSkipConst::no,

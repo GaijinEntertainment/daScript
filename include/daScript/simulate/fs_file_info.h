@@ -16,7 +16,7 @@ namespace das {
         virtual FileInfo * tryOpenFile ( const string & fileName ) override;
     };
 
-    class FsReadOnlyCachedFileSystem : public AnyFileSystem {
+    class DAS_API FsReadOnlyCachedFileSystem : public AnyFileSystem {
     public:
         virtual ~FsReadOnlyCachedFileSystem();
         virtual FileInfo * tryOpenFile ( const string & fileName ) override;
@@ -26,7 +26,7 @@ namespace das {
     };
 #endif
 
-    class FsFileAccess : public das::ModuleFileAccess {
+    class DAS_API FsFileAccess : public das::ModuleFileAccess {
     public:
         FsFileAccess();
         FsFileAccess ( const string & pak, const FileAccessPtr & access );

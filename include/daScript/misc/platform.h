@@ -239,7 +239,38 @@ __forceinline uint64_t rotr64_c(uint64_t a, uint64_t b) {
 
 #include "daScript/misc/hal.h"
 
-void os_debug_break();
+
+#ifdef DAS_ENABLE_DLL
+#ifndef DAS_API
+#ifdef _MSC_VER
+    #define DAS_EXPORT_DLL __declspec(dllexport)
+    #define DAS_IMPORT_DLL __declspec(dllimport)
+#else
+    #define DAS_EXPORT_DLL __attribute__((visibility("default")))
+    #define DAS_IMPORT_DLL
+#endif
+
+#ifdef DAS_EXPORTS
+    #define DAS_API DAS_EXPORT_DLL
+#else
+    #define DAS_API DAS_IMPORT_DLL
+#endif
+#ifdef DAS_MOD_EXPORTS
+    #define DAS_MOD_API DAS_EXPORT_DLL
+#else
+    #define DAS_MOD_API DAS_IMPORT_DLL
+#endif
+#endif
+#else
+
+#define DAS_EXPORT_DLL
+#define DAS_IMPORT_DLL
+#define DAS_API
+#define DAS_MOD_API
+
+#endif
+
+void DAS_API os_debug_break();
 
 #ifndef DAS_FATAL_LOG
 #define DAS_FATAL_LOG(...)   do { printf(__VA_ARGS__); fflush(stdout); } while(0)
