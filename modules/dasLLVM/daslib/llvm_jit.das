@@ -5849,10 +5849,11 @@ class ResolveExternVisitor : AstVisitor {
 
 }
 
-def get_dll_missing(fns : array<FunctionPtr>; var dll : DLLHandle?; var uids : UidNodes?) {
+def get_dll_missing(fns : array<FunctionPtr>; disabled : array<FunctionPtr>; var dll : DLLHandle?; var uids : UidNodes?) {
     verify(!(is_in_completion() || is_compiling_macros() || is_folding()))
 
     var missing = array<Function?>()
+    var disabled_exists = array<Function?>()
     if (dll.handle == null) {
         for (fn in fns) {
             var ptr := fn.get_ptr()
@@ -5868,8 +5869,17 @@ def get_dll_missing(fns : array<FunctionPtr>; var dll : DLLHandle?; var uids : U
                 missing |> push_clone(tmp)
             }
         }
+        for (fn in disabled) {
+            let dll_name = uids.get_dll_fn_name(fn)
+            var written_hash = dll.get_function_hash(dll_name)
+            // debug("dll_function_aot_hash: {dll_function_aot_hash}")
+            if (written_hash != null) {
+                var tmp = fn.get_ptr()
+                disabled_exists |> push_clone(tmp)
+            }
+        }
     }
-    return <- missing
+    return <- (missing, disabled_exists)
 }
 
 
@@ -6005,6 +6015,7 @@ class JIT_LLVM : AstSimulateMacro {
             return false
         }
         var funcs : array<FunctionPtr>
+        var disabled : array<FunctionPtr>
         var disableJitVisitor = new DisableJitVisitor()
         var inscope disableJitVisitorAdapter <- make_visitor(*disableJitVisitor)
         prog |> for_each_module <| $(mod) {
@@ -6021,6 +6032,8 @@ class JIT_LLVM : AstSimulateMacro {
                         } else {
                             print("LLVM JIT: disabled {fun.name}\n")
                         }
+                    } else {
+                        disabled |> emplace(fun)
                     }
                 }
             }
@@ -6044,8 +6057,9 @@ class JIT_LLVM : AstSimulateMacro {
             if (LLVM_ENABLE_DLL_LOADING) {
                 g_dynamic_lib_handle.handle = load_dynamic_library("{JIT_DLL_OUTPUT}{prog.thisNamespace}.dll")
             }
-            let missing = get_dll_missing(funcs, g_dynamic_lib_handle, uids)
-            if (missing |> empty()) {
+            let (missing, disabling) = get_dll_missing(funcs, disabled, g_dynamic_lib_handle, uids)
+            let rewrite_dll = missing |> empty() && disabling |> empty();
+            if (rewrite_dll) {
                 var extern_resolver = new ResolveExternVisitor(g_dynamic_lib_handle, g_prim_t, ctx, clone(uids))
                 var inscope adapter_resolve = make_visitor(*extern_resolver)
                 for (fn in funcs) {
@@ -6069,7 +6083,16 @@ class JIT_LLVM : AstSimulateMacro {
                         panic("Internal jit error. Failed to get IR of '{fun.name}' in module {maybe_mod}.\n")
                     }
                 }
-                if (false) {
+                if (!LLVMVerifyModule(g_mod, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
+                    g_failed = true
+                }
+                if (g_failed) {
+                    var fn_names = join([ for (fn in funcs); "{fn.name}" ], ",")
+                    panic("Internal jit error. Failed to get IR for functions {fn_names}.\n")
+                }
+                generate_fileinfo_constructor(*g_prim_t, active_filenames) |> add_constructor_function(g_prim_t)
+                optimize_llvm_module()
+                if (true) {
                     // Let's remove unused attributes before we print IR.
                     var pm = LLVMCreatePassManager()
                     LLVMAddGlobalDCEPass(pm)
@@ -6083,8 +6106,6 @@ class JIT_LLVM : AstSimulateMacro {
                     var fn_names = join([ for (fn in funcs); "{fn.name}" ], ",")
                     panic("Internal jit error. Failed to get IR for functions {fn_names}.\n")
                 }
-                generate_fileinfo_constructor(*g_prim_t, active_filenames) |> add_constructor_function(g_prim_t)
-                optimize_llvm_module()
                 active_filenames = table<string>();
             }
             for (fun in funcs) {
@@ -6099,7 +6120,7 @@ class JIT_LLVM : AstSimulateMacro {
                 }
             }
             // g_dynamic_lib_handle.reset()
-            finalize_jit(prog, !missing |> empty() && LLVM_OUTPUT_OJBECT_FILE)
+            finalize_jit(prog, !rewrite_dll && LLVM_OUTPUT_OJBECT_FILE)
             if (LLVM_JIT_LOG) {
                 let totalDt = double(get_time_usec(totalTime)) / 1000000.0lf
                 to_log(LOG_INFO, "LLVM JIT: {length(funcs)} functions in {totalDt} sec\n")
