@@ -104,7 +104,7 @@ class LlvmGen : CppGenBind {
         return false
     }
     def override skip_enum(ns_en, en : string) {
-        if (ns_en == "std::byte") {
+        if (ns_en == "std::byte" || ns_en |> starts_with("(unnamed enum")) {
             return true
         }
         return false
