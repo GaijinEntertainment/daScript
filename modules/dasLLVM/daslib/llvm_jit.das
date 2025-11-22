@@ -370,6 +370,7 @@ class LlvmJitVisitor : AstVisitor {
     def process_function_hints(annotations : AnnotationList; var arguments : dasvector`smart_ptr`Variable) {
         var alwaysInline = false
         var noInline = false
+        var optNone = false
         var hot = false
         option_no_range_check = false
         option_no_alias = false
@@ -382,6 +383,8 @@ class LlvmJitVisitor : AstVisitor {
                     }
                     if (arg.name == "noinline") {
                         noInline = true
+                    } elif (arg.name == "optnone") {
+                        optNone = true
                     } elif (arg.name == "hot") {
                         hot = true
                     } elif (arg.name == "unsafe_range_check") {
@@ -409,6 +412,13 @@ class LlvmJitVisitor : AstVisitor {
         }
         if (hot) {
             LLVMAddAttributeToFunction(ffunc, attributes.hot)
+        }
+        if (optNone) {
+            if (alwaysInline) {
+                failed("Attribute 'optnone' can't be mixed with 'alwaysinline'!")
+            }
+            LLVMAddAttributeToFunction(ffunc, attributes.optnone)
+            LLVMAddAttributeToFunction(ffunc, attributes.noinline)
         }
     }
 

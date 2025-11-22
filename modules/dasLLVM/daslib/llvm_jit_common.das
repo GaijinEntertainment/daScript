@@ -126,6 +126,7 @@ var g_str2v : table<string; LLVMOpaqueValue?>
 class public Attributes {
     noreturn : LLVMOpaqueAttributeRef?
     readonly : LLVMOpaqueAttributeRef?
+    optnone : LLVMOpaqueAttributeRef?
     nounwind : LLVMOpaqueAttributeRef?
     willreturn : LLVMOpaqueAttributeRef?
     nocapture : LLVMOpaqueAttributeRef?
@@ -139,6 +140,7 @@ class public Attributes {
     def Attributes(ctx : LLVMContextRef) {
         noreturn = ctx |> LLVMGetEnumAttribute("noreturn")
         readonly = ctx |> LLVMGetEnumAttribute("readonly")
+        optnone = ctx |> LLVMGetEnumAttribute("optnone")
         nounwind = ctx |> LLVMGetEnumAttribute("nounwind")
         willreturn = ctx |> LLVMGetEnumAttribute("willreturn")
         nocapture = ctx |> LLVMGetEnumAttribute("nocapture")

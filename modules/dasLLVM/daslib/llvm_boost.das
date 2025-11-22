@@ -209,6 +209,9 @@ def LLVMGetEnumAttributeKindForName(attr_name : string) {
 
 def LLVMGetEnumAttribute(ctx : LLVMContextRef; attr_name : string) : LLVMOpaqueAttributeRef? {
     var attr_id = LLVMGetEnumAttributeKindForName(attr_name)
+    if (attr_id == 0u) {
+        panic("{attr_name} attribute not found")
+    }
     var attr = LLVMCreateEnumAttribute(ctx, attr_id, 0ul)
     if (attr == null) {
         panic("{attr_name} attribute not found")
