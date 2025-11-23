@@ -1447,6 +1447,9 @@ class CppGenBind : AnyGenBind {
         }
     }
     def skip_enum(ns_en, en : string) {
+        if (ns_en |> starts_with("(unnamed enum")) {
+            return true
+        }
         return false
     }
     def override parse_Enum(var cursor : CXCursor; enum_name : string) {

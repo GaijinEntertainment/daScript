@@ -57,17 +57,17 @@ class LlvmGen : CppGenBind {
     )
 
     def LlvmGen {
-        bind_root = "{get_das_root()}/Modules/dasLLVM/src"
+        bind_root = "{get_das_root()}/modules/dasLLVM/src"
         bind_module = "dasLLVM"
         bind_das_module = "llvm"
         let pfn = "cb_dasLLVM.h"
-        let pfp = "{get_das_root()}/Modules/dasLLVM/src/"
+        let pfp = "{get_das_root()}/modules/dasLLVM/src/"
         let clang_i = "{get_das_root()}/../libclang/include/"
         let args <- array<string>(
             "-xc++-header",
             "-std=c++1z",
             "-I{get_full_file_name(pfp)}",
-            "-I{get_full_file_name(clang_i)}",
+            "-I{clang_i}",
             "-DWIN32",
             "-DCINDEX_EXPORTS"
         )
@@ -76,9 +76,6 @@ class LlvmGen : CppGenBind {
         setDefaultFiles()
 //        init_enum_prefix()
         openAllFiles()
-        for (h in llvm_c_headers) {
-            h = to_upper(h)
-        }
     }
 /*
     def init_enum_prefix
@@ -94,21 +91,20 @@ class LlvmGen : CppGenBind {
         return true
     }
     def override skip_file(fname : string) : bool {
-        let ufname = to_upper(fname)
-        if (!any <| [iterator for(h in llvm_c_headers); ufname |> ends_with(h)]) {
+        if (!any <| [iterator for(h in llvm_c_headers); fname |> ends_with(h)]) {
             return true
         }
         return false
     }
     def override skip_alias(var c : CXCursor) {
-        let aliasf = to_upper(clang_getCursorLocationFileName(c))
+        let aliasf = clang_getCursorLocationFileName(c)
         if (!any <| [iterator for(h in llvm_c_headers); aliasf |> ends_with(h)]) {
             return true
         }
         return false
     }
     def override skip_enum(ns_en, en : string) {
-        if (ns_en == "std::byte") {
+        if (ns_en == "std::byte" || ns_en |> starts_with("(unnamed enum")) {
             return true
         }
         return false
@@ -125,7 +121,7 @@ class LlvmGen : CppGenBind {
             || function_name == "LLVMOrcObjectLayerAddObjectFileWithRT" || function_name == "LLVMInitializeCore") {
             return true
         }
-        let funf = to_upper(clang_getCursorLocationFileName(c))
+        let funf = clang_getCursorLocationFileName(c)
         if (!any <| [iterator for(h in llvm_c_headers); funf |> ends_with(h)]) {
             return true
         }

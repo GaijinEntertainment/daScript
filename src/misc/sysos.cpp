@@ -163,8 +163,13 @@
             return dlopen(lib,RTLD_LAZY);
         }
         string normalizeFileName ( const char * fileName ) {
-            // TODO: implement
-            return "";
+            char buffer[PATH_MAX];
+            if ( realpath(fileName, buffer) != nullptr ) {
+                return buffer;
+            } else {
+                // If realpath fails (e.g., file doesn't exist), fallback
+                return fileName ? fileName : "";
+            }
         }
         bool closeLibrary ( void * module ) {
             return dlclose(module) == 0;
