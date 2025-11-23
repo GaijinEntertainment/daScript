@@ -12,7 +12,7 @@ struct public DllName {
     name : string
 
     def DllName(s : string) {
-        name = s |> replace_multiple([("@", "`At`")])
+        name = s |> replace_multiple([("@", "`At`"), ("=", "`Eq`")])
     }
 
     def const impl() {
@@ -21,6 +21,10 @@ struct public DllName {
 
     def const publ() {
         return "{name}"
+    }
+
+    def const glob() {
+        return "{name} glob"
     }
 
     def const id() {
@@ -216,10 +220,9 @@ struct public DLLHandle {
         return unsafe(reinterpret<uint64?>(handle |> get_function_address(fn.id())))
     }
 
-
-    def set_function_address(fn : DllName, ptr : void?) {
+    def set_glob_address(fn : DllName, ptr : void?) {
         assert(handle != null, "dynamic_lib_handle is null")
-        var fn_addr = unsafe(reinterpret<void ??>(handle |> get_function_address(fn.publ())))
+        var fn_addr = unsafe(reinterpret<void ??>(handle |> get_function_address(fn.glob())))
         // assert(fn_addr != null)
         if (fn_addr == null) {
             return false

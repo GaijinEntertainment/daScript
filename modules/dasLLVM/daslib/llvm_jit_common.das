@@ -42,6 +42,7 @@ let public LLVM_OUTPUT_OJBECT_FILE_NAME = "out/"
 
 let public LLVM_ENABLE_DLL_LOADING = false
 let public JIT_DLL_OUTPUT = "out/"
+let public JIT_DLL_DASCRIPTLIB = "build/libDaScript.lib" // We need it only on Windows
 
 let public LLVM_ENABLE_OPT_PASS = LLVM_DEBUG_EVERYTHING ? false : true
 let public LLVM_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 3u
@@ -125,6 +126,7 @@ var g_str2v : table<string; LLVMOpaqueValue?>
 class public Attributes {
     noreturn : LLVMOpaqueAttributeRef?
     readonly : LLVMOpaqueAttributeRef?
+    optnone : LLVMOpaqueAttributeRef?
     nounwind : LLVMOpaqueAttributeRef?
     willreturn : LLVMOpaqueAttributeRef?
     nocapture : LLVMOpaqueAttributeRef?
@@ -138,6 +140,7 @@ class public Attributes {
     def Attributes(ctx : LLVMContextRef) {
         noreturn = ctx |> LLVMGetEnumAttribute("noreturn")
         readonly = ctx |> LLVMGetEnumAttribute("readonly")
+        optnone = ctx |> LLVMGetEnumAttribute("optnone")
         nounwind = ctx |> LLVMGetEnumAttribute("nounwind")
         willreturn = ctx |> LLVMGetEnumAttribute("willreturn")
         nocapture = ctx |> LLVMGetEnumAttribute("nocapture")
@@ -221,19 +224,19 @@ def private add_table_linkage(val : LLVMOpaqueValue?) {
     LLVMSetLinkage(val, LLVMLinkage.LLVMExternalLinkage)
 }
 
-def private get_or_create_table_fn(llvm_module : LLVMOpaqueModule?; var types : PrimitiveTypes?; fn_name : string; at_type : LLVMOpaqueType?; fn_ptr : void?) {
+def private get_or_create_table_fn(llvm_module : LLVMOpaqueModule?; var types : PrimitiveTypes?; fn_name : DllName; at_type : LLVMOpaqueType?; fn_ptr : void?) {
     var tab_fun : LLVMOpaqueValue? = null
-    if (!g_fn_types |> key_exists(fn_name)) {
+    if (!g_fn_types |> key_exists(fn_name.publ())) {
         // create fn
-        g_fn_types[fn_name] = at_type
+        g_fn_types[fn_name.publ()] = at_type
 
         let at_ptr_type = LLVMPointerType(at_type, 0u)
-        tab_fun = LLVMAddGlobal(llvm_module, LLVMPointerType(at_ptr_type, 0u), fn_name)
+        tab_fun = LLVMAddGlobal(llvm_module, LLVMPointerType(at_ptr_type, 0u), fn_name.glob())
         add_table_linkage(tab_fun)
         LLVMSetInitializer(tab_fun, types.ConstPtr(fn_ptr |> intptr(), at_ptr_type))
     } else {
         // we already created it
-        tab_fun = LLVMGetNamedGlobal(llvm_module, fn_name)
+        tab_fun = LLVMGetNamedGlobal(llvm_module, fn_name.glob())
     }
     return tab_fun
 }
@@ -248,7 +251,7 @@ def public get_table_at(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaque
         types.LLVMVoidPtrType(),                          // context
         types.LLVMVoidPtrType(),                          // at
     ))
-    let fn_name = FN_JIT_TABLE_AT(t)
+    let fn_name = DllName(FN_JIT_TABLE_AT(t))
     var tab_fun : LLVMOpaqueValue? = get_or_create_table_fn(llvm_module, types, fn_name, at_type, fn_ptr)
     assert(tab_fun != null)
     tab_fun = LLVMBuildLoad2(g_builder, LLVMPointerType(at_type, 0u), tab_fun, "func_at")
@@ -264,7 +267,7 @@ def public get_table_find(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaq
             types.t_int32,                                    // valueTypeSize
             types.LLVMVoidPtrType()                 // context
             ))
-    let fn_name = FN_JIT_TABLE_FIND(t)
+    let fn_name = DllName(FN_JIT_TABLE_FIND(t))
     var tab_fun : LLVMOpaqueValue? = get_or_create_table_fn(llvm_module, types, fn_name, find_type, fn_ptr)
     assert(tab_fun != null)
     tab_fun = LLVMBuildLoad2(g_builder, LLVMPointerType(find_type, 0u), tab_fun, "func_find")
@@ -272,7 +275,7 @@ def public get_table_find(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaq
 }
 
 def public get_table_erase(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaqueModule?; t : Type; var types : PrimitiveTypes?) {
-    let fn_name = FN_JIT_TABLE_ERASE(t)
+    let fn_name = DllName(FN_JIT_TABLE_ERASE(t))
     assume fn_ptr = get_jit_table_erase(unsafe(reinterpret<int> t))
     // bool jit_table_erase ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context )
     let erase_type = LLVMFunctionType(types.t_int1,                        // bool result
@@ -669,7 +672,7 @@ def public finalize_jit(prog : Program?; write_dll : bool) {
             let file = "{LLVM_OUTPUT_OJBECT_FILE_NAME}{prog.thisNamespace}.o"
             let filetype = LLVMCodeGenFileType.LLVMObjectFile
             LLVMTargetMachineEmitToFile(targetMachine, g_mod, file, filetype, error)
-            create_shared_library(file, "{JIT_DLL_OUTPUT}{prog.thisNamespace}.dll")
+            create_shared_library(file, "{JIT_DLL_OUTPUT}{prog.thisNamespace}.dll", "build/libDaScript.lib")
         }
     }
     g_engine |> LLVMRunStaticConstructors()
