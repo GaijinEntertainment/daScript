@@ -37,10 +37,7 @@ let public LLVM_DEBUG_INFO = false //  || LLVM_DEBUG_EVERYTHING
 let public LLVM_JIT_ALWAYS_SOLID = llvm_config::llvm_jit_always_solid()
 var public LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = false
 
-let public LLVM_OUTPUT_OJBECT_FILE = false
-let public LLVM_OUTPUT_OJBECT_FILE_NAME = "out/"
-
-let public LLVM_ENABLE_DLL_LOADING = false
+let public JIT_USE_DLL_MODE = true
 let public JIT_DLL_OUTPUT = "out/"
 let public JIT_DLL_DASCRIPTLIB = "build/libDaScript.lib" // We need it only on Windows
 
@@ -657,23 +654,26 @@ def public with_default_target_machine(blk : block<(LLVMTargetMachineRef) : void
     LLVMDisposeTargetMachine(targetMachine)
 }
 
+// @mod - module to dump to dll
+// @out_path - folder and name of file, without extension
+// @path_to_dascript_lib - path to library, required on Windows. Has no effect on Linux.
+def public write_dll(mod : LLVMOpaqueModule?; out_path : string; path_to_dascript_lib = "") {
+    with_default_target_machine <| $(targetMachine : LLVMTargetMachineRef) {
+        let error : string?
+        let file = "{out_path}.o"
+        let filetype = LLVMCodeGenFileType.LLVMObjectFile
+        LLVMTargetMachineEmitToFile(targetMachine, mod, file, filetype, error)
+        create_shared_library(file, "{out_path}.dll", "{path_to_dascript_lib}")
+    }
+}
 
 [macro_function]
-def public finalize_jit(prog : Program?; write_dll : bool) {
+def public finalize_jit() {
     return if (is_in_completion() || is_compiling_macros())
     return if (g_mod == null)    // prevent double finalize
     if (LLVM_LOG_RESULT) {
         LLVMDumpModule(g_mod)
         fflush(fstderr())
-    }
-    if (write_dll) {
-        with_default_target_machine <| $(targetMachine : LLVMTargetMachineRef) {
-            let error : string?
-            let file = "{LLVM_OUTPUT_OJBECT_FILE_NAME}{prog.thisNamespace}.o"
-            let filetype = LLVMCodeGenFileType.LLVMObjectFile
-            LLVMTargetMachineEmitToFile(targetMachine, g_mod, file, filetype, error)
-            create_shared_library(file, "{JIT_DLL_OUTPUT}{prog.thisNamespace}.dll", "build/libDaScript.lib")
-        }
     }
     g_engine |> LLVMRunStaticConstructors()
     g_all_engines |> push(JitEngine(
