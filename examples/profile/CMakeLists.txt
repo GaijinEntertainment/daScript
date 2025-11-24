@@ -4,7 +4,8 @@ SET(PROFILE_MAIN_LIB_SRC
 )
 SOURCE_GROUP_FILES("source" PROFILE_MAIN_LIB_SRC)
 
-ADD_LIBRARY(libDaScriptProfile ${PROFILE_MAIN_LIB_SRC})
+ADD_DAS_LIBRARY(libDaScriptProfile ${PROFILE_MAIN_LIB_SRC})
+TARGET_LINK_LIBRARIES(libDaScriptProfile PUBLIC libDaScript)
 SETUP_CPP11(libDaScriptProfile)
 
 file(GLOB PROFILE_SRC
@@ -42,9 +43,9 @@ SOURCE_GROUP_FILES("generated" PROFILE_GENERATED_SRC)
 add_executable(daScriptProfile ${PROFILE_SRC} ${PROFILE_MAIN_SRC} ${PROFILE_GENERATED_SRC} ${DAS_DASCRIPT_MAIN_SRC})
 target_compile_definitions(daScriptProfile PUBLIC MAIN_FUNC_NAME=dascript_app_main) # dascript_dummy_main is here to rename main function from daScript
 TARGET_INCLUDE_DIRECTORIES(daScriptProfile PUBLIC ${PROJECT_SOURCE_DIR}/examples/profile)
-TARGET_LINK_LIBRARIES(daScriptProfile libDaScript libDaScriptTest libDaScriptProfile libDaScriptAot Threads::Threads ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(daScriptProfile libDaScript libDaScriptProfile libDaScriptAot ${DAS_MODULES_LIBS})
+TARGET_LINK_LIBRARIES(daScriptProfile libDaScriptTest libDaScriptProfile libDaScriptAot Threads::Threads ${DAS_MODULES_LIBS})
+ADD_DEPENDENCIES(daScriptProfile libDaScriptProfile libDaScriptAot ${DAS_MODULES_LIBS})
 SETUP_CPP11(daScriptProfile)
-add_dependencies(daScriptProfile daScriptProfileAot dasAotStub)
+add_dependencies(daScriptProfile daScriptProfileAot)
 #target_precompile_headers(daScriptProfile PUBLIC include/daScript/misc/platform.h)
 

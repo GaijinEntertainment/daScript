@@ -187,6 +187,10 @@ namespace das
     public:
         FileAccess() {}
         virtual ~FileAccess() {}
+
+        FileAccess& operator=(const FileAccess&) = delete;
+        FileAccess(const FileAccess&) = delete;
+
         void reset() { files.clear(); }
         FileInfo * setFileInfo ( const string & fileName, FileInfoPtr && info );
         FileInfo * getFileInfo ( const string & fileName );

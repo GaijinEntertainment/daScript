@@ -46,10 +46,10 @@ DAS_BIND_ENUM_CAST_98(SomeEnum_16);
 
 DAS_BIND_ENUM_CAST_98(OpCode);
 
-Goo::GooEnum efn_flip ( Goo::GooEnum goo );
-SomeEnum efn_takeOne_giveTwo ( SomeEnum one );
-SomeEnum98 efn_takeOne_giveTwo_98 ( SomeEnum98 one );
-SomeEnum98_DasProxy efn_takeOne_giveTwo_98_DasProxy ( SomeEnum98_DasProxy two );
+DAS_API Goo::GooEnum efn_flip ( Goo::GooEnum goo );
+DAS_API SomeEnum efn_takeOne_giveTwo ( SomeEnum one );
+DAS_API SomeEnum98 efn_takeOne_giveTwo_98 ( SomeEnum98 one );
+DAS_API SomeEnum98_DasProxy efn_takeOne_giveTwo_98_DasProxy ( SomeEnum98_DasProxy two );
 
 //sample of your-engine-float3-type to be aliased as float3 in daScript.
 class Point3 {
@@ -75,19 +75,19 @@ template <> struct das::das_alias<Point3> : das::das_alias_vec<Point3,float3> {}
 
 typedef das::vector<Point3> Point3Array;
 
-void testPoint3Array(const das::TBlock<void, const Point3Array> & blk, das::Context * context, das::LineInfoArg * lineinfo);
-das::TDim<int32_t,10> testCMRES ( das::Context * __context__ );
+DAS_API void testPoint3Array(const das::TBlock<void, const Point3Array> & blk, das::Context * context, das::LineInfoArg * lineinfo);
+DAS_API das::TDim<int32_t,10> testCMRES ( das::Context * __context__ );
 
 struct SomeDummyType {
     int32_t foo;
     float   bar;
 };
 
-__forceinline Point3 getSamplePoint3() {return Point3{0,1,2};}
-__forceinline Point3 doubleSamplePoint3(const Point3 &a) { return Point3{ a.x + a.x, a.y + a.y, a.z + a.z }; }
-__forceinline void project_to_nearest_navmesh_point(Point3 & a, float t) { a = Point3{ a.x + t, a.y + t, a.z + t }; }
+DAS_API __forceinline Point3 getSamplePoint3() {return Point3{0,1,2};}
+DAS_API __forceinline Point3 doubleSamplePoint3(const Point3 &a) { return Point3{ a.x + a.x, a.y + a.y, a.z + a.z }; }
+DAS_API __forceinline void project_to_nearest_navmesh_point(Point3 & a, float t) { a = Point3{ a.x + t, a.y + t, a.z + t }; }
 
-struct TestObjectFoo {
+struct DAS_API TestObjectFoo {
     Point3 hit;
     const Point3 * lookAt;
     int32_t fooData;
@@ -116,11 +116,11 @@ static_assert ( std::is_trivially_constructible<TestObjectFoo>::value, "this one
 
 typedef das::vector<TestObjectFoo> FooArray;
 
-void testFooArray(const das::TBlock<void, FooArray> & blk, das::Context * context, das::LineInfoArg * lineinfo);
+DAS_API void testFooArray(const das::TBlock<void, FooArray> & blk, das::Context * context, das::LineInfoArg * lineinfo);
 
-__forceinline void set_foo_data (TestObjectFoo * obj, int32_t data ) { obj->fooData = data; }
+DAS_API __forceinline void set_foo_data (TestObjectFoo * obj, int32_t data ) { obj->fooData = data; }
 
-struct TestObjectSmart : public das::ptr_ref_count {
+struct DAS_API TestObjectSmart : public das::ptr_ref_count {
      int fooData = 1234;
      das::smart_ptr<TestObjectSmart> first;
      TestObjectSmart() { total ++; }
@@ -128,13 +128,13 @@ struct TestObjectSmart : public das::ptr_ref_count {
      static int32_t total;
 };
 
-__forceinline das::smart_ptr<TestObjectSmart> makeTestObjectSmart() { return das::make_smart<TestObjectSmart>(); }
-__forceinline uint32_t countTestObjectSmart( const das::smart_ptr<TestObjectSmart> & p ) { return p->use_count(); }
+DAS_API __forceinline das::smart_ptr<TestObjectSmart> makeTestObjectSmart() { return das::make_smart<TestObjectSmart>(); }
+DAS_API __forceinline uint32_t countTestObjectSmart( const das::smart_ptr<TestObjectSmart> & p ) { return p->use_count(); }
 
-__forceinline int32_t getTotalTestObjectSmart() { return TestObjectSmart::total; }
+DAS_API __forceinline int32_t getTotalTestObjectSmart() { return TestObjectSmart::total; }
 
-__forceinline TestObjectFoo makeDummy() { TestObjectFoo x; memset(&x, 0, sizeof(x)); x.fooData = 1;  return x; }
-__forceinline int takeDummy ( const TestObjectFoo & x ) { return x.fooData; }
+DAS_API __forceinline TestObjectFoo makeDummy() { TestObjectFoo x; memset(&x, 0, sizeof(x)); x.fooData = 1;  return x; }
+DAS_API __forceinline int takeDummy ( const TestObjectFoo & x ) { return x.fooData; }
 
 struct TestObjectBar {
     TestObjectFoo * fooPtr;
@@ -152,11 +152,11 @@ struct TestObjectNotNullPtr {
 };
 
 
-int *getPtr();
+DAS_API int *getPtr();
 
-void testFields ( das::Context * ctx );
-void test_das_string(const das::Block & block, das::Context * context, das::LineInfoArg * lineinfo);
-vec4f new_and_init ( das::Context & context, das::SimNode_CallBase * call, vec4f * );
+DAS_API void testFields ( das::Context * ctx );
+DAS_API void test_das_string(const das::Block & block, das::Context * context, das::LineInfoArg * lineinfo);
+DAS_API vec4f new_and_init ( das::Context & context, das::SimNode_CallBase * call, vec4f * );
 
 struct CppS1 {
     virtual ~CppS1() {}
@@ -169,16 +169,16 @@ struct CppS2 : CppS1 {
     int32_t d;
 };
 
-__forceinline float testGetDiv ( float a, float b ) { return a / b; }
-__forceinline float testGetNan() { return nanf("test"); }
+DAS_API __forceinline float testGetDiv ( float a, float b ) { return a / b; }
+DAS_API __forceinline float testGetNan() { return nanf("test"); }
 
-__forceinline int CppS1Size() { return int(sizeof(CppS1)); }
-__forceinline int CppS2Size() { return int(sizeof(CppS2)); }
-__forceinline int CppS2DOffset() { return int(offsetof(CppS2, d)); }
+DAS_API __forceinline int CppS1Size() { return int(sizeof(CppS1)); }
+DAS_API __forceinline int CppS2Size() { return int(sizeof(CppS2)); }
+DAS_API __forceinline int CppS2DOffset() { return int(offsetof(CppS2, d)); }
 
 
-uint64_t CheckEid ( TestObjectFoo & foo, char * const name, das::Context * context, das::LineInfoArg * lineinfo );
-uint64_t CheckEidHint ( TestObjectFoo & foo, char * const name, uint64_t hashHint, das::Context * context, das::LineInfoArg * lineinfo );
+DAS_API uint64_t CheckEid ( TestObjectFoo & foo, char * const name, das::Context * context, das::LineInfoArg * lineinfo );
+DAS_API uint64_t CheckEidHint ( TestObjectFoo & foo, char * const name, uint64_t hashHint, das::Context * context, das::LineInfoArg * lineinfo );
 
 __forceinline void complex_bind (const TestObjectFoo &,
                           const das::TBlock<void, das::TArray<TestObjectFoo>> &,
@@ -191,17 +191,17 @@ __forceinline bool start_effect(const char *, const das::float3x4 &, float) {
     return false;
 }
 
-void builtin_printw(char * utf8string);
+DAS_API void builtin_printw(char * utf8string);
 
-bool tempArrayExample(const das::TArray<char *> & arr,
+DAS_API bool tempArrayExample(const das::TArray<char *> & arr,
     const das::TBlock<void, das::TTemporary<const das::TArray<char *>>> & blk,
     das::Context * context, das::LineInfoArg * lineinfo);
 
-void tempArrayAliasExample(const das::TArray<Point3> & arr,
+DAS_API void tempArrayAliasExample(const das::TArray<Point3> & arr,
     const das::TBlock<void, das::TTemporary<const das::TArray<Point3>>> & blk,
     das::Context * context, das::LineInfoArg * lineinfo);
 
-__forceinline TestObjectFoo & fooPtr2Ref(TestObjectFoo * pMat) {
+DAS_API __forceinline TestObjectFoo & fooPtr2Ref(TestObjectFoo * pMat) {
     return *pMat;
 }
 
@@ -240,7 +240,7 @@ __forceinline SampleVariant makeSampleS() {
 
 __forceinline int32_t testCallLine ( das::LineInfoArg * arg ) { return arg ? arg->line : 0; }
 
-void tableMojo ( das::TTable<char *,int> & in, const das::TBlock<void,das::TTable<char *,int>> & block, das::Context * context, das::LineInfoArg * lineinfo );
+DAS_API void tableMojo ( das::TTable<char *,int> & in, const das::TBlock<void,das::TTable<char *,int>> & block, das::Context * context, das::LineInfoArg * lineinfo );
 
 struct BigEntityId {
     union {
@@ -343,9 +343,9 @@ struct FancyClass {
     FancyClass ( int32_t a, int32_t b ) : value(a+b) {}
 };
 
-inline void deleteFancyClass(FancyClass& fclass) { fclass.~FancyClass(); }
-inline void deleteFancyClassDummy(FancyClass& ) {  } // this one in AOT version, since local class will be deleted by dtor
+DAS_API inline void deleteFancyClass(FancyClass& fclass) { fclass.~FancyClass(); }
+DAS_API inline void deleteFancyClassDummy(FancyClass& ) {  } // this one in AOT version, since local class will be deleted by dtor
 
-void test_abi_lambda_and_function ( das::Lambda lambda, das::Func fn, int32_t lambdaSize, das::Context * context, das::LineInfoArg * lineinfo );
+DAS_API void test_abi_lambda_and_function ( das::Lambda lambda, das::Func fn, int32_t lambdaSize, das::Context * context, das::LineInfoArg * lineinfo );
 
-bool testBindEnumFunction ( das::Context * context, das::LineInfoArg * at );
+DAS_API bool testBindEnumFunction ( das::Context * context, das::LineInfoArg * at );
