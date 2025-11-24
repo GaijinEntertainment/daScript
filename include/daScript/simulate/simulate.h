@@ -218,7 +218,7 @@ namespace das
     };
 #endif
 
-    struct SimVisitor {
+    struct DAS_API SimVisitor {
         virtual void preVisit ( SimNode * ) { }
         virtual void cr () {}
         virtual void op ( const char * /* name */, uint32_t /* sz */ = 0, const string & /* TT */ = string() ) {}
@@ -936,7 +936,7 @@ namespace das
 
     struct DataWalker;
 
-    struct Iterator {
+    struct DAS_API Iterator {
         Iterator(LineInfo * at) : debugInfo(at) {}
         virtual ~Iterator() {}
         virtual bool first ( Context & context, char * value ) = 0;

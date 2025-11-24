@@ -36,6 +36,7 @@ set(DAS_INSTALL_DOCDIR . CACHE STRING "Directory where to install documentation"
 set(DAS_INSTALL_DASLIBDIR daslib CACHE STRING "Directory where to install daslib")
 set(DAS_INSTALL_EXAMPLESDIR examples CACHE STRING "Directory where to install examples")
 set(DAS_INSTALL_MODULESDIR modules CACHE STRING "Directory where to install modules")
+set(DAS_ENABLE_DLL 0 CACHE BOOL "Build as DLL" FORCE)
 
 
 IF(WIN32)
@@ -287,13 +288,40 @@ SET(DAS_MODULES_NEED_INC ${NEED_MODULES_PATH}/external_need.inc)
 FILE(WRITE ${DAS_MODULES_RESOLVE_INC}.temp "")
 FILE(WRITE ${DAS_MODULES_NEED_INC}.temp "")
 
-add_compile_definitions(PRIVATE DAS_MOD_API=)
+ADD_COMPILE_DEFINITIONS(DAS_ENABLE_DLL=$<BOOL:${DAS_ENABLE_DLL}>)
+
+MACRO(ADD_DAS_PUB_LIBRARY lib)
+    IF (${DAS_ENABLE_DLL})
+        ADD_LIBRARY(${lib} SHARED ${ARGN})
+        if(WIN32)
+            # We export a lot of structures, some of them are too complex to be exported.
+            TARGET_COMPILE_OPTIONS(${lib} PRIVATE /wd4251 /wd4661 /wd4275)
+            SET_TARGET_PROPERTIES(${lib} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
+        else()
+            SET_TARGET_PROPERTIES(${lib} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+        endif()
+        TARGET_COMPILE_DEFINITIONS(${lib} PRIVATE DAS_MOD_EXPORTS)
+    ELSE()
+        ADD_LIBRARY(${lib} STATIC ${ARGN})
+    ENDIF()
+ENDMACRO()
 
 MACRO(ADD_DAS_LIBRARY lib)
-    ADD_LIBRARY(${lib} ${ARGN})
-    # SET_TARGET_PROPERTIES(${lib} PROPERTIES POSITION_INDEPENDENT_CODE ON)
-    # TARGET_COMPILE_OPTIONS(${lib} PRIVATE -fvisibility=hidden)
+    IF (${DAS_ENABLE_DLL})
+        ADD_LIBRARY(${lib} SHARED ${ARGN})
+        IF(NOT WIN32)
+            SET_TARGET_PROPERTIES(${lib} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+            TARGET_COMPILE_OPTIONS(${lib} PRIVATE -fvisibility=hidden)
+        ELSE()
+            # We export a lot of structures, some of them are too complex to be exported.
+            TARGET_COMPILE_OPTIONS(${lib} PRIVATE /wd4251 /wd4661 /wd4275)
+        ENDIF()
+        TARGET_COMPILE_DEFINITIONS(${lib} PRIVATE DAS_MOD_EXPORTS)
+    ELSE()
+        ADD_LIBRARY(${lib} STATIC ${ARGN})
+    ENDIF()
 ENDMACRO()
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${EXECUTABLE_OUTPUT_PATH})
 
 SET(DAS_MODULES_LIBS)
 SET(DAS_ALL_EXAMPLES)
@@ -305,6 +333,17 @@ FOREACH(_module ${_modules})
         # temporary `if`, unless all modules not use new API
         if(${ARGC} GREATER 1)
             ADD_DAS_LIBRARY(${lib} ${ARGN})
+            TARGET_LINK_LIBRARIES(${lib} PUBLIC libDaScript)
+        endif()
+
+        LIST(APPEND DAS_MODULES_LIBS ${lib})
+    ENDMACRO()
+    MACRO(ADD_MODULE_PUB_LIB lib)
+        MESSAGE("REGISTER DAS MODULE ${lib}")
+
+        # temporary `if`, unless all modules not use new API
+        if(${ARGC} GREATER 1)
+            ADD_DAS_PUB_LIBRARY(${lib} ${ARGN})
             TARGET_LINK_LIBRARIES(${lib} PUBLIC libDaScript)
         endif()
 
@@ -681,6 +720,19 @@ src/simulate/fs_file_info.cpp
 ${DAS_MODULES_RESOLVE_INC}
 )
 
+SET(TEST_MAIN_LIB_SRC
+examples/test/bytecode.cpp
+examples/test/bytecode.h
+examples/test/test_handles.cpp
+examples/test/test_enum.cpp
+examples/test/module_unitTest.h
+examples/test/unitTest.h
+examples/test/unit_test.das.inc
+examples/test/unit_test.das
+)
+SOURCE_GROUP_FILES("source" TEST_MAIN_LIB_SRC)
+
+
 # das formatter
 SET(DASCRIPT_FMT_SRC
         ${PROJECT_SOURCE_DIR}/utils/dasFormatter/fmt.cpp
@@ -737,9 +789,11 @@ include_directories(include)
 include_directories(3rdparty/fmt/include)
 
 MACRO(SETUP_LIBDASCRIPT library)
-    ADD_LIBRARY(${library} STATIC ${PARSER_GENERATED_SRC} ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC}
-            ${MISC_SRC} ${SIMULATE_SRC} ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC}
-            ${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC} ${DASCRIPT_FMT_SRC})
+    ADD_DAS_LIBRARY(${library} ${PARSER_GENERATED_SRC} ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${SIMULATE_SRC} ${BUILTIN_SRC}
+            ${MISC_SRC} ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC}
+            ${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC} ${DASCRIPT_FMT_SRC} ${TEST_MAIN_LIB_SRC})
+    # Set DAS_EXPORTS to export all MOD symbols from libDaScript
+    TARGET_COMPILE_DEFINITIONS(${library} PRIVATE DAS_EXPORTS)
     ADD_DEPENDENCIES(${library} need_and_resolve)
     ADD_TARGET_PROJECT_XXD_DEPENDS(${library} libDaScript)
     target_include_directories(${library} PUBLIC
@@ -798,9 +852,9 @@ if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
 
     #UNITIZE_BUILD("daslib" AOT_GENERATED_SRC)
 
-    add_library(libDaScriptAot STATIC ${AOT_GENERATED_SRC} ${AOT_STUB_SRC})
+    ADD_DAS_LIBRARY(libDaScriptAot ${AOT_GENERATED_SRC} ${AOT_STUB_SRC})
     ADD_DEPENDENCIES(libDaScriptAot dasAotStub libDaScript)
-    TARGET_LINK_LIBRARIES(libDaScriptAot libDaScript)
+    TARGET_LINK_LIBRARIES(libDaScriptAot PUBLIC libDaScript)
     SETUP_CPP11(libDaScriptAot)
 endif()
 
@@ -815,12 +869,12 @@ if (NOT ${DAS_TOOLS_DISABLED})
 
     SOURCE_GROUP_FILES("main" DAS_DASCRIPT_MAIN_SRC)
 
-    SET(SRC_LIBRARIES libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
+    SET(SRC_LIBRARIES Threads::Threads ${DAS_MODULES_LIBS})
 
     MACRO(SETUP_COMPILER_BINARY target_name library_name)
         add_executable(${target_name} ${DAS_DASCRIPT_MAIN_SRC})
         TARGET_LINK_LIBRARIES(${target_name} ${library_name} ${SRC_LIBRARIES})
-        ADD_DEPENDENCIES(${target_name} ${library_name} libDaScriptTest ${DAS_MODULES_LIBS})
+        ADD_DEPENDENCIES(${target_name} ${library_name} ${DAS_MODULES_LIBS})
         SETUP_CPP11(${target_name})
         SETUP_LTO(${target_name})
     ENDMACRO()
@@ -868,19 +922,6 @@ install(FILES ${PROJECT_SOURCE_DIR}/include/vecmath/LICENSE DESTINATION ${DAS_IN
 
 
 # Test module
-
-SET(TEST_MAIN_LIB_SRC
-examples/test/bytecode.cpp
-examples/test/bytecode.h
-examples/test/test_handles.cpp
-examples/test/test_enum.cpp
-examples/test/module_unitTest.h
-examples/test/unitTest.h
-examples/test/unit_test.das.inc
-examples/test/unit_test.das
-)
-SOURCE_GROUP_FILES("source" TEST_MAIN_LIB_SRC)
-
 
 
 # Tests

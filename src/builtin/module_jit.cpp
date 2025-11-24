@@ -394,24 +394,26 @@ extern "C" {
     }
 
 #if (defined(_MSC_VER) || defined(__linux__) || defined(__APPLE__)) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
-    void create_shared_library ( const char * objFilePath, const char * libraryName, const char * jitModuleObj ) {
+    void create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * jitModuleObj ) {
         char cmd[1024];
 
+        #if defined(_WIN32) || defined(_WIN64)
         if (!check_file_present(jitModuleObj)) {
             LOG(LogLevel::error) << "File '" << jitModuleObj << "' , containing daScript library, does not exist\n";
             return;
         }
+        #endif
         if (!check_file_present(objFilePath)) {
             LOG(LogLevel::error) << "File '" << objFilePath << "' , containing compiled definitions, does not exist\n";
             return;
         }
 
         #if defined(_WIN32) || defined(_WIN64)
-            auto result = fmt::format_to(cmd, FMT_STRING("clang-cl {} {} -link -DLL -OUT:{} 2>&1"), objFilePath, jitModuleObj, libraryName);
+            auto result = fmt::format_to(cmd, FMT_STRING("clang-cl {} {} msvcrt.lib -link -DLL -OUT:{} 2>&1"), objFilePath, jitModuleObj, libraryName);
         #elif defined(__APPLE__)
-            auto result = fmt::format_to(cmd, FMT_STRING("clang -shared -o {} {} {} 2>&1"), libraryName, objFilePath, jitModuleObj);
+            auto result = fmt::format_to(cmd, FMT_STRING("clang -shared -o {} {} 2>&1"), libraryName, objFilePath);
         #else
-            auto result = fmt::format_to(cmd, FMT_STRING("gcc -shared -o {} {} {} 2>&1"), libraryName, objFilePath, jitModuleObj);
+            auto result = fmt::format_to(cmd, FMT_STRING("gcc -shared -o {} {} 2>&1"), libraryName, objFilePath);
         #endif
             *result = '\0';
 

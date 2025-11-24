@@ -240,7 +240,7 @@ __forceinline uint64_t rotr64_c(uint64_t a, uint64_t b) {
 #include "daScript/misc/hal.h"
 
 
-#ifdef DAS_ENABLE_DLL
+#if DAS_ENABLE_DLL
 #ifndef DAS_API
 #ifdef _MSC_VER
     #define DAS_EXPORT_DLL __declspec(dllexport)

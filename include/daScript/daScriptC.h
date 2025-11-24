@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-#ifdef DAS_ENABLE_DLL
+#if DAS_ENABLE_DLL
 #ifndef DAS_API
 #ifdef _MSC_VER
     #define DAS_EXPORT_DLL __declspec(dllexport)
