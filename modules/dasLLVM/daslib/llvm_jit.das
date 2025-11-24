@@ -5932,6 +5932,9 @@ def private generate_llvm_code(var dll : DLLHandle?; fmna : DllName) {
             return code
         }
     }
+    if (JIT_USE_DLL_MODE) {
+        to_log(LOG_ERROR, "Something wrong! Non dll function used in dll mode {fmna.publ()}\n")
+    }
     let fn_code = LLVMGetFunctionAddress(g_engine, fmna.publ())
     code = unsafe(reinterpret<void?> fn_code)
     if (code == null) {
@@ -6064,18 +6067,14 @@ class JIT_LLVM : AstSimulateMacro {
                 delete fake_visitor
             }
             var g_dynamic_lib_handle = new DLLHandle();
-            if (LLVM_ENABLE_DLL_LOADING) {
+            var recompile_prog = true
+            if (JIT_USE_DLL_MODE) {
                 g_dynamic_lib_handle.handle = load_dynamic_library("{JIT_DLL_OUTPUT}{prog.thisNamespace}.dll")
+                let (missing, disabling) = get_dll_missing(funcs, disabled, g_dynamic_lib_handle, uids)
+                let dll_changed = !(missing |> empty() && disabling |> empty())
+                recompile_prog = dll_changed
             }
-            let (missing, disabling) = get_dll_missing(funcs, disabled, g_dynamic_lib_handle, uids)
-            let rewrite_dll = missing |> empty() && disabling |> empty();
-            if (rewrite_dll) {
-                var extern_resolver = new ResolveExternVisitor(g_dynamic_lib_handle, g_prim_t, ctx, clone(uids))
-                var inscope adapter_resolve = make_visitor(*extern_resolver)
-                for (fn in funcs) {
-                    visit(fn, adapter_resolve)
-                }
-            } else {
+            if (recompile_prog) {
                 g_dynamic_lib_handle.reset();
                 for (fun in funcs) {
                     generate_llvm(ctx, g_dynamic_lib_handle, g_prim_t, uids, attrs, fun)
@@ -6102,7 +6101,7 @@ class JIT_LLVM : AstSimulateMacro {
                 }
                 generate_fileinfo_constructor(*g_prim_t, active_filenames) |> add_constructor_function(g_prim_t)
                 optimize_llvm_module()
-                if (true) {
+                if (false) {
                     // Let's remove unused attributes before we print IR.
                     var pm = LLVMCreatePassManager()
                     LLVMAddGlobalDCEPass(pm)
@@ -6117,6 +6116,22 @@ class JIT_LLVM : AstSimulateMacro {
                     panic("Internal jit error. Failed to get IR for functions {fn_names}.\n")
                 }
                 active_filenames = table<string>();
+                if (JIT_USE_DLL_MODE) {
+                    let out_path = "{JIT_DLL_OUTPUT}{prog.thisNamespace}"
+                    write_dll(g_mod, out_path, JIT_DLL_DASCRIPTLIB)
+                    g_dynamic_lib_handle.reset()
+                    g_dynamic_lib_handle.handle = load_dynamic_library("{out_path}.dll")
+                    let (missing, disabling) = get_dll_missing(funcs, disabled, g_dynamic_lib_handle, uids)
+                    assert(missing |> empty() && disabling |> empty())
+                }
+            }
+            if (JIT_USE_DLL_MODE) {
+                assert(g_dynamic_lib_handle.handle != null)
+                var extern_resolver = new ResolveExternVisitor(g_dynamic_lib_handle, g_prim_t, ctx, clone(uids))
+                var inscope adapter_resolve = make_visitor(*extern_resolver)
+                for (fn in funcs) {
+                    visit(fn, adapter_resolve)
+                }
             }
             for (fun in funcs) {
                 var mangled_name = get_mangled_name(fun)
@@ -6129,8 +6144,9 @@ class JIT_LLVM : AstSimulateMacro {
                     unsafe(remove_jit(simfun))
                 }
             }
+            // Never reset lib_handle! It will leak, but there's no other way to keep used function active.
             // g_dynamic_lib_handle.reset()
-            finalize_jit(prog, !rewrite_dll && LLVM_OUTPUT_OJBECT_FILE)
+            finalize_jit()
             if (LLVM_JIT_LOG) {
                 let totalDt = double(get_time_usec(totalTime)) / 1000000.0lf
                 to_log(LOG_INFO, "LLVM JIT: {length(funcs)} functions in {totalDt} sec\n")
