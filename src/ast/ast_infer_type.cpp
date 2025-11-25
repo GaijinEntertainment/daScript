@@ -2445,6 +2445,12 @@ namespace das {
                 error("global variable of type " + describeType(var->type) + " needs to be initialized", "", "",
                     var->at, CompilationError::invalid_variable_type);
             }
+            // we are looking into initialization with empty table or array to replace with nada
+            if ( isEmptyInit(var) ) {
+                var->init.reset();
+                reportAstChanged();
+                return Visitor::visitGlobalLet(var);
+            }
             verifyType(var->type);
             return Visitor::visitGlobalLet(var);
         }
@@ -7936,6 +7942,24 @@ namespace das {
                 error("in scope let can't be const", "", "", var->at, CompilationError::invalid_variable_type);
             }
         }
+        bool isEmptyInit ( const VariablePtr & var ) const {
+            if ( var->type && var->init && var->init_via_move ) {
+                if ( var->init->rtti_isMakeStruct() ) {
+                    auto ma = (ExprMakeStruct *)(var->init.get());
+                    if ( ma->structs.empty() && ma->makeType  ) {
+                        if ( var->type->isGoodArrayType() && ma->makeType->isGoodArrayType()
+                                    && ma->makeType->firstType->baseType==Type::autoinfer ) {
+                            return true;
+                        } else if ( var->type->isGoodTableType() && ma->makeType->isGoodTableType()
+                                    && ma->makeType->firstType->baseType==Type::autoinfer
+                                    && ma->makeType->secondType->baseType==Type::autoinfer ) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
         virtual VariablePtr visitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             if ( var->type && var->type->isExprType() ) {
                 return Visitor::visitLet(expr,var,last);
@@ -8049,6 +8073,12 @@ namespace das {
                         }
                     }
                 }
+            }
+            // we are looking into initialization with empty table or array to replace with nada
+            if ( isEmptyInit(var) ) {
+                var->init.reset();
+                reportAstChanged();
+                return Visitor::visitLet(expr,var,last);
             }
             verifyType(var->type);
             return Visitor::visitLet(expr,var,last);
