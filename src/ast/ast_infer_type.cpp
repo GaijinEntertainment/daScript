@@ -7943,7 +7943,7 @@ namespace das {
             }
         }
         bool isEmptyInit ( const VariablePtr & var ) const {
-            if ( var->type && var->init && var->init_via_move ) {
+            if ( var->type && var->init ) {
                 if ( var->init->rtti_isMakeStruct() ) {
                     auto ma = (ExprMakeStruct *)(var->init.get());
                     if ( ma->structs.empty() && ma->makeType  ) {
