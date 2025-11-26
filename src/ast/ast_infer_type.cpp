@@ -4060,6 +4060,7 @@ namespace das {
 
     // ExprTypeInfo
         bool skipLockCheck() const {
+            if ( program->policies.skip_lock_check ) return true;                   // if code of policy we should skip
             if ( program->thisModule->skipLockCheck ) return true;                  // if this module has options skip_lock_check - we skip
             if ( func ) {
                 if ( func->skipLockCheck ) return true;                             // if this function is [skip_lock_check] - we skip
