@@ -3692,7 +3692,7 @@ namespace das {
         explicit ArgsConverter() {}
 
         string str() {
-            return std::move(ss.str());
+            return ss.str();
         }
 
         // function
