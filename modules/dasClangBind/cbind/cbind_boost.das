@@ -871,13 +871,7 @@ class DasGenBind : AnyGenBind {
         fprint(func_decl_file, ") : ")
         var res_type = clang_getResultType(fun_type)
         let dres_type = clang_knownType(res_type, functionResultRules())
-        fprint(func_decl_file, "{filter_das_words(dres_type)} \{\n")
-        if (res_type.kind == CXTypeKind.Void) {
-            fprint(func_decl_file, "    pass\n")
-        } else {
-            fprint(func_decl_file, "    return unsafe(array<{filter_das_words(dres_type)}>()[0])\n")
-        }
-        fprint(func_decl_file, "\}\n")
+        fprint(func_decl_file, "{filter_das_words(dres_type)} \{\}\n")
     }
     def override generate {
         AnyGenBind`generate(self)
