@@ -81,7 +81,8 @@ def clang_typeToDasTypeUnqEx(var t : CXType; topLevel : bool; rules : TypeRules;
     } elif (t.kind == CXTypeKind.Double) {
         return "double"
     } elif (t.kind == CXTypeKind.NullPtr) {
-        return "void?"
+        let end = topLevel ? "?" : " ?"
+        return "void{end}"
     } elif (t.kind == CXTypeKind.Pointer) {
         var pt = clang_getCanonicalType(clang_getPointeeType(t))
         var rest : string
@@ -90,9 +91,12 @@ def clang_typeToDasTypeUnqEx(var t : CXType; topLevel : bool; rules : TypeRules;
         } elif (rules.uchar_ptr_is_string && (pt.kind == CXTypeKind.Char_U || pt.kind == CXTypeKind.UChar)) {
             rest = "string"
         } elif (rules.structure_ptr_is_void_ptr && pt.kind == CXTypeKind.Record) {
-            rest = "void?"
+            let end = topLevel ? "?" : " ?";
+            rest = "void{end}"
         } else {
-            rest = "{clang_typeToDasTypeEx(pt,false,rules,error)}?"
+            let inner = clang_typeToDasTypeEx(pt, false, rules, error);
+            let end = topLevel ? "?" : " ?";
+            rest = "{inner}{end}"
         }
         if (topLevel && rules.top_level_pointers_are_implicit) {
             return "{rest} implicit"
@@ -105,19 +109,27 @@ def clang_typeToDasTypeUnqEx(var t : CXType; topLevel : bool; rules : TypeRules;
             return rname |> slice(7)
         } elif (rname |> starts_with("class ")) {
             return rname |> slice(7)
+        } elif (!rules.structure_ptr_is_void_ptr) {
+            return rname
         } else {
             error += "unsupported type CXXRecord name {rname}\n"
             return "\u00BF"
         }
+    } elif (t.kind == CXTypeKind.IncompleteArray) {
+        var pt = clang_getCanonicalType(clang_getPointeeType(t))
+        return "void?"
+    } elif (t.kind == CXTypeKind.Enum) {
+        return string(clang_getTypeSpelling(t))
     } elif (t.kind == CXTypeKind.FunctionProto) {
         if (rules.function_proto_is_void_ptr) {
-            return "void?"
+            let end = topLevel ? "?" : " ?";
+            return "void{end}"
         } else {
             error += "unsupported type FunctionProto\n"
             return "\u00BF"
         }
     } else {
-        error += "unsupported type {t.kind}\n"
+        error += "unsupported type {t} {t.kind}\n"
         return "\u00BF"
     }
 }
@@ -212,6 +224,7 @@ class AnyGenBind {
     define_const_file : FILE const?
     define_const_style_das = true
     enum2enum : table<string; string>
+    enum_prefix : table<string; string>
     const_uint8_cpp_type = "uint8_t"
     const_uint16_cpp_type = "uint16_t"
     const_uint8_type = "uint8"
@@ -225,6 +238,23 @@ class AnyGenBind {
         PARSE_FILE_PREFIX = pfp
         ARGV := args
     }
+    def openFile(path : string) {
+        var f = fopen(path, "wb")
+        if (f == null) {
+            to_log(LOG_ERROR, "can't open CppGenBind output at {path}, defaulting to stdout\n")
+            f = fstdout()
+        }
+        f |> fwrite("// this file is generated via Daslang automatic binder\n")
+        f |> fwrite("// all user modifications will be lost after this file is re-generated\n\n")
+        return f
+    }
+    def closeFile(var f : FILE const?&) {
+        if (f != null && f != fstdout()) {
+            fclose(f)
+        }
+        f = null
+    }
+
     def open_file_name : string {
         return "{PARSE_FILE_PREFIX}{PARSE_FILE_NAME}"
     }
@@ -236,7 +266,7 @@ class AnyGenBind {
         var unit = clang_parseTranslationUnit(
             index,
             open_file_name(),
-            unsafe(addr(ARGV[0])), length(ARGV),
+            length(ARGV) == 0 ? null : unsafe(addr(ARGV[0])), length(ARGV),
             null, 0u,
             CXTranslationUnit_SkipFunctionBodies)
         if (unit == null) {
@@ -252,6 +282,17 @@ class AnyGenBind {
         }
         clang_disposeTranslationUnit(unit)
         clang_disposeIndex(index)
+    }
+    def enum_entry_name(en, enn : string) : string {
+        let prefix = enum_prefix?[en] ?? en
+        let uprefix = to_upper(prefix)
+        var name = enn
+        if (enn |> starts_with("{prefix}_") || enn |> starts_with("{uprefix}_")) {
+            name = enn |> slice(length(prefix) + 1)
+        } elif (enn |> starts_with(prefix) || enn |> starts_with(uprefix)) {
+            name = enn |> slice(length(prefix))
+        }
+        return unsafe_names?[name] ?? name
     }
     def namespace_struct_name(dash : string = "::") : string {
         return build_string <| $(wr) {
@@ -643,6 +684,12 @@ class AnyGenBind {
     def skip_const(name : string) : bool {
         return false
     }
+    def skip_enum(ns_en, en : string) {
+        if (ns_en |> starts_with("(unnamed enum")) {
+            return true
+        }
+        return false
+    }
     def getGenConstType(name, default_name : string) {
         return const_type_table?[name] ?? default_name
     }
@@ -712,14 +759,38 @@ class AnyGenBind {
 class DasGenBind : AnyGenBind {
     known_type : table<string; string>
     func_decl_file : FILE const?
-    def DasGenBind(pfn, pfp : string; args : array<string>) {
+    struct_class_file : FILE const?
+    enum_class_file : FILE const?
+    module_name : string
+    MAX_ARGUMENTS = 16
+
+    def filter_das_words(s : string) {
+        let to_replace = {
+            "block" => "_block",
+            "options" => "_options",
+        }
+        for (k, v in keys(to_replace), values(to_replace)) {
+            if (s == k) {
+                return v
+            }
+        }
+        return s
+    }
+
+    def DasGenBind(pfn, pfp : string; args : array<string>; mod_name : string = "") {
         init_args(pfn, pfp, args)
         define_const_file = fstdout()
         func_decl_file = fstdout()
+        module_name = mod_name
     }
-    def setFiles(dcf, fdf : FILE const?) {
+    def setFiles(dcf, fdf : FILE const?; scf : FILE const? = null; ecf : FILE const? = null) {
         define_const_file = dcf
         func_decl_file = fdf
+        struct_class_file = scf
+        enum_class_file = ecf
+    }
+    def typedefRules : TypeRules {
+        return TypeRules.char_ptr_is_string | TypeRules.function_proto_is_void_ptr
     }
     def functionArgumentRules : TypeRules {
         return TypeRules.char_ptr_is_string | TypeRules.function_proto_is_void_ptr | TypeRules.top_level_pointers_are_implicit
@@ -739,12 +810,53 @@ class DasGenBind : AnyGenBind {
     def output_dasbind(function_name : string) {
         fprint(func_decl_file, "[extern(name=\"{function_name}\")]\n")
     }
+    def override parse_Struct(var c : CXCursor; struct_name : string) {
+        if (struct_class_file == null) {
+            return
+        }
+        return if (struct_name |> starts_with <| "(") // do nothing for anonymous unions/structs
+        let struct_namespace_name = namespace_name(struct_name)
+        let dashing_name = namespace_name(struct_name, "_")
+        fprint(struct_class_file, "struct {filter_das_words(struct_name)} \{\}\n")
+    }
+    def override parse_Alias(var c : CXCursor) {
+        let tdn = string(clang_getCursorDisplayName(c))
+        var tdt = clang_getCanonicalType(clang_getCursorType(c))
+        let src_type = clang_knownType(tdt, typedefRules())
+        fprint(struct_class_file, "typedef {tdn} = {src_type}\n")
+    }
+    def override parse_Enum(var cursor : CXCursor; enum_name : string) {
+        if (enum_class_file == null) {
+            return
+        }
+        let ns_en = namespace_name(enum_name)
+        if (skip_enum(ns_en, enum_name)) {
+            return
+        }
+        fprint(enum_class_file, "enum {filter_das_words(enum_name)} \{\n")
+        clang_visitChildren(cursor) <| $(var c, parent) {
+            if (c.kind == CXCursorKind.EnumConstantDecl) {
+                let een = string(clang_getCursorDisplayName(c))
+                let val = clang_getEnumConstantDeclValue(c)
+                let deen = enum_entry_name(enum_name, een)
+                fprint(enum_class_file, "    {filter_das_words(deen)} = {val}\n")
+                return CXChildVisitResult.Continue
+            } else {
+                return CXChildVisitResult.Recurse
+            }
+        }
+        fprint(enum_class_file, "\}\n")
+    }
     def override parse_FunctionDecl(var c : CXCursor) {
         let function_name = string(clang_getCursorSpelling(c))
         var fun_type = clang_getCursorType(c)
-        output_dasbind(function_name)
-        fprint(func_decl_file, "def {function_name} ( ")
         let narg = clang_Cursor_getNumArguments(c)
+        if (narg >= MAX_ARGUMENTS) {
+            fprint(func_decl_file, "// Function `{filter_das_words(function_name)}` has too many arguments. Ignore.\n\n")
+            return
+        }
+        output_dasbind(function_name)
+        fprint(func_decl_file, "def {filter_das_words(function_name)}(")
         for (ai in urange(narg)) {
             if (ai != 0u) {
                 fprint(func_decl_file, "; ")
@@ -754,17 +866,18 @@ class DasGenBind : AnyGenBind {
             var arg_type = clang_getCursorType(carg)
             let darg_type = clang_knownType(arg_type, functionArgumentRules())
             let darg_name = clang_argNameToDasArgName(arg_name, ai)
-            fprint(func_decl_file, "{darg_name}:{darg_type}")
+            fprint(func_decl_file, "{filter_das_words(darg_name)} : {filter_das_words(darg_type)}")
         }
-        fprint(func_decl_file, " ) : ")
+        fprint(func_decl_file, ") : ")
         var res_type = clang_getResultType(fun_type)
         let dres_type = clang_knownType(res_type, functionResultRules())
-        fprint(func_decl_file, "{dres_type}\n")
+        fprint(func_decl_file, "{filter_das_words(dres_type)} \{\n")
         if (res_type.kind == CXTypeKind.Void) {
-            fprint(func_decl_file, "\tpass\n\n")
+            fprint(func_decl_file, "    pass\n")
         } else {
-            fprint(func_decl_file, "\treturn [[{dres_type}]]\n\n")
+            fprint(func_decl_file, "    return unsafe(array<{filter_das_words(dres_type)}>()[0])\n")
         }
+        fprint(func_decl_file, "\}\n")
     }
     def override generate {
         AnyGenBind`generate(self)
@@ -791,7 +904,6 @@ class CppGenBind : AnyGenBind {
     enum_decl_cast_file : FILE const?
     enum_class_file : FILE const?
     enum_add_file : FILE const?
-    enum_prefix : table<string; string>
     struct_decl_file : FILE const?
     struct_impl_file : FILE const?
     struct_class_file : FILE const?
@@ -855,22 +967,6 @@ class CppGenBind : AnyGenBind {
         module_h_file = fstdout()
         module_need_h_file = fstdout()
         define_const_file = fstdout()
-    }
-    def openFile(path : string) {
-        var f = fopen(path, "wb")
-        if (f == null) {
-            to_log(LOG_ERROR, "can't open CppGenBind output at {path}, defaulting to stdout\n")
-            f = fstdout()
-        }
-        f |> fwrite("// this file is generated via Daslang automatic C++ binder\n")
-        f |> fwrite("// all user modifications will be lost after this file is re-generated\n\n")
-        return f
-    }
-    def closeFile(var f : FILE const?&) {
-        if (f != null && f != fstdout()) {
-            fclose(f)
-        }
-        f = null
     }
     def openAllFiles {
         setEnumFiles(
@@ -1416,17 +1512,6 @@ class CppGenBind : AnyGenBind {
         clang_EvalResult_dispose(res)
         return result
     }
-    def enum_entry_name(en, enn : string) : string {
-        let prefix = enum_prefix?[en] ?? en
-        let uprefix = to_upper(prefix)
-        var name = enn
-        if (enn |> starts_with("{prefix}_") || enn |> starts_with("{uprefix}_")) {
-            name = enn |> slice(length(prefix) + 1)
-        } elif (enn |> starts_with(prefix) || enn |> starts_with(uprefix)) {
-            name = enn |> slice(length(prefix))
-        }
-        return unsafe_names?[name] ?? name
-    }
     def dasEnumName(enum_name, cpp_enum_name : string) : string {
         var das_enum_name = enum_name
         if (das_enum_name |> ends_with("_")) {
@@ -1445,12 +1530,6 @@ class CppGenBind : AnyGenBind {
                 fprint(enum_add_file, "addEnumFlagOps<{cppEnumName}>(*this,lib,\"{cppEnumName}\");\n")
             }
         }
-    }
-    def skip_enum(ns_en, en : string) {
-        if (ns_en |> starts_with("(unnamed enum")) {
-            return true
-        }
-        return false
     }
     def override parse_Enum(var cursor : CXCursor; enum_name : string) {
         let ns_en = namespace_name(enum_name)
