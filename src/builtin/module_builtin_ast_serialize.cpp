@@ -2182,6 +2182,7 @@ namespace das {
               << value.max_string_heap_allocated
               << value.rtti
               << value.unsafe_table_lookup
+              << value.skip_lock_check
               << value.relaxed_pointer_const
               << value.version_2_syntax
               << value.gen2_make_syntax
@@ -2316,7 +2317,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 68;
+        static constexpr uint32_t currentVersion = 69;
         return currentVersion;
     }
 
