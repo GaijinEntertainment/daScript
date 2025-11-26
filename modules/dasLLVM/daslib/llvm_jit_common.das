@@ -12,6 +12,7 @@ module llvm_jit_common shared private
 
 require llvm/llvm_boost
 require llvm/llvm_dll_utils
+require llvm/llvm_targets
 require llvm_config
 
 require daslib/ast_boost
@@ -301,9 +302,10 @@ def public init_jit() {
     return if (is_in_completion() || is_compiling_macros())
     return if (g_mod != null)    // prevent double init
     LLVMLinkInMCJIT()
-    LLVMInitializeNativeTarget()
-    LLVMInitializeNativeAsmPrinter()
-    LLVMInitializeNativeAsmParser()
+    LLVMInitializeAllTargetInfos()
+    LLVMInitializeAllTargets()
+    LLVMInitializeAllTargetMCs()
+    LLVMInitializeAllAsmPrinters()
     g_ctx = LLVMContextCreate()
     g_prim_t = new PrimitiveTypes(g_ctx)
     LLVMContextSetOpaquePointers(g_ctx, 1)
