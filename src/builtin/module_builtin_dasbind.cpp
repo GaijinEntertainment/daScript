@@ -205,6 +205,61 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         }
     };
 
+    das_hash_map<string,void *>    g_dasBindLib;
+    mutex                          g_dasBindLibMutex;
+
+    void * bindDynamicLibrary ( const string & library ) {
+        lock_guard<mutex> guard(g_dasBindLibMutex);
+        auto it = g_dasBindLib.find(library);
+        if ( it!=g_dasBindLib.end() ) {
+            return it->second;
+        } else {
+            void * libhandle = nullptr;
+            libhandle = getLibraryHandle(library.c_str());
+            if ( !libhandle ) {
+                libhandle = loadDynamicLibrary(library.c_str());
+            }
+            g_dasBindLib[library] = libhandle;
+            return libhandle;
+        }
+    }
+
+    struct SimNode_ExtCallLate : SimNode_ExtCall {
+        SimNode_ExtCallLate ( const LineInfo & a, uint64_t hc, FastCallWrapper wrp, void * fun ) :
+            SimNode_ExtCall(a,hc,wrp,fun) {
+        }
+        void bind ( Context & context ) {
+            string crash_and_burn;
+            withBind(code,[&](BoundFunction * bf){
+                if ( bf ) {
+                    if ( !bf->fun ) {
+                        void * libhandle = bindDynamicLibrary(bf->library);
+                        if ( !libhandle ) {
+                            crash_and_burn = "can't load library " + bf->library;
+                            return;
+                        }
+                        fnptr = getFunctionAddress(libhandle, bf->name.c_str());
+                        if ( fnptr ) {
+                            bf->fun = fnptr;
+                        } else {
+                            crash_and_burn = "failed to bind " + bf->name;
+                        }
+                    } else {
+                        fnptr = bf->fun;
+                    }
+                } else {
+                    crash_and_burn = "internal error. missing BoundFunction";
+                }
+            });
+            if ( !crash_and_burn.empty() ) context.throw_error_at(debugInfo, "%s",crash_and_burn.c_str());
+        }
+        DAS_EVAL_ABI vec4f eval ( Context & context ) {
+            if ( !fnptr ) bind(context);
+            context.result = wrapper(fnptr, context.abiArg);
+            return context.result;
+        }
+    };
+
     FastCallWrapper getWrapper ( Function * fun, int nReg ) {
         int args = ( fun->result->baseType==Type::tFloat || fun->result->baseType==Type::tDouble ) ? (1<<nReg) : 0;
         for ( int a=0, as=int(fun->arguments.size()); a<as; ++a ) {
@@ -219,6 +274,13 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
     }
 
 #endif
+
+    enum class ApiType {
+        api_unknown,
+        api_cdecl,
+        api_stdcall,
+        api_opengl
+    };
 
     struct ExternFunctionAnnotation : FunctionAnnotation {
         ExternFunctionAnnotation() : FunctionAnnotation("extern") { }
@@ -309,7 +371,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
                             if ( pCall->func->name!="safe_pass_string") {
                                 needToWrap = true;
                             }
-                        } else if ( strcmp(arg->__rtti,"ExprConstString")==0 ) {
+                        } else if ( arg->rtti_isStringConstant() ) {
                             auto str = static_pointer_cast<ExprConstString>(arg);
                             if ( str->getValue().empty()) {
                                 needToWrap = true;
@@ -359,7 +421,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             if ( anyTypeErrors ) return nullptr;
             string fn_name;
             string library, platform_library;
-            string api;
+            ApiType api = ApiType::api_unknown;
             bool late = false;
             for ( auto & arg : args ) {
                 if ( arg.name=="name" && arg.type==Type::tString ) {
@@ -367,11 +429,11 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
                 } else if ( arg.name=="library" && arg.type==Type::tString ) {
                     library = arg.sValue;
                 } else if ( arg.name=="WINAPI" || arg.name=="winapi" || arg.name=="stdcall" || arg.name=="__stdcall" || arg.name=="STDCALL" ) {
-                    api = "stdcall";
+                    api = ApiType::api_stdcall;
                 } else if ( arg.name=="CDECL" || arg.name=="cdecl" || arg.name=="__cdecl" ) {
-                    api = "cdecl";
+                    api = ApiType::api_cdecl;
                 } else if ( arg.name=="opengl" || arg.name=="OPENGL" ) {
-                    api = "opengl";
+                    api = ApiType::api_opengl;
                 } else if ( arg.name=="late" ) {
                     late = true;
                 }
@@ -396,16 +458,13 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
                 err = "missing name";
                 return nullptr;
             }
-            if ( api.empty() ) {
+            if ( api==ApiType::api_unknown ) {
                 err = "need to specify calling convention (like stdcall (aka WINAPI),cdecl,etc)";
                 return nullptr;
             }
             void * libhandle = nullptr;
             if ( !library.empty() ) {
-                libhandle = getLibraryHandle(library.c_str());
-                if ( !libhandle ) {
-                    libhandle = loadDynamicLibrary(library.c_str());
-                }
+                libhandle = bindDynamicLibrary(library);
                 if ( !libhandle && !late ) {
                     err = "can't load library " + library;
                     return nullptr;
@@ -413,7 +472,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             }
             void * funptr = nullptr;
             if ( !late ) {
-                if ( api=="opengl" ) {
+                if ( api==ApiType::api_opengl ) {
                     funptr = openGlGetFunctionAddress(fn_name.c_str());
                 }
                 if ( !funptr ) {
@@ -430,15 +489,24 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
 #else
             auto wrp = nargs==-1 ? getWrapper(fun,6) : getExtraWrapper(nargs,res,perm);
 #endif
-            if ( api=="stdcall") {
-                return context->code->makeNode<SimNode_ExtCall>(fun->at,code,wrp,funptr);
-            } else if ( api=="cdecl" ) {
-                return context->code->makeNode<SimNode_ExtCall>(fun->at,code,wrp,funptr);
-            } else if ( api=="opengl" ) {
-                return context->code->makeNode<SimNode_ExtCallOpenGL>(fun->at,code,wrp,funptr);
-            } else {
-                err = "unsupported api " + api;
-                return nullptr;
+            switch ( api ) {
+                case ApiType::api_stdcall:
+                    if ( late ) {
+                        return context->code->makeNode<SimNode_ExtCallLate>(fun->at,code,wrp,funptr);
+                    } else {
+                        return context->code->makeNode<SimNode_ExtCall>(fun->at,code,wrp,funptr);
+                    }
+                case ApiType::api_cdecl:
+                    if ( late ) {
+                        return context->code->makeNode<SimNode_ExtCallLate>(fun->at,code,wrp,funptr);
+                    } else {
+                        return context->code->makeNode<SimNode_ExtCall>(fun->at,code,wrp,funptr);
+                    }
+                case ApiType::api_opengl:
+                    return context->code->makeNode<SimNode_ExtCallOpenGL>(fun->at,code,wrp,funptr);
+                default:
+                    err = "unsupported api";
+                    return nullptr;
             }
         }
 #endif
