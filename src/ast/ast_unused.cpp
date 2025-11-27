@@ -9,7 +9,7 @@ namespace das {
     class TrackVariableFlags : public Visitor {
     protected:
         virtual bool canVisitFunction ( Function * fun ) override {
-            return !fun->isTemplate;    // we don't do a thing with templates
+            return !fun->stub && !fun->isTemplate;    // we don't do a thing with templates
         }
         // global let
         virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
@@ -291,7 +291,7 @@ namespace das {
             }
         }
         uint32_t getSideEffects ( const FunctionPtr & fnc ) {
-            if ( fnc->isTemplate || fnc->builtIn || fnc->knownSideEffects ) {
+            if ( fnc->stub || fnc->isTemplate || fnc->builtIn || fnc->knownSideEffects ) {
                 return fnc->sideEffectFlags;
             }
             if ( asked.find(fnc.get())!=asked.end() ) {
@@ -369,7 +369,7 @@ namespace das {
         }
     protected:
         virtual bool canVisitFunction ( Function * fun ) override {
-            return !fun->isTemplate;    // we don't do a thing with templates
+            return !fun->stub && !fun->isTemplate;    // we don't do a thing with templates
         }
         virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
         virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
@@ -675,7 +675,7 @@ namespace das {
     class RemoveUnusedLocalVariables : public PassVisitor {
     protected:
         virtual bool canVisitFunction ( Function * fun ) override {
-            return !fun->isTemplate;    // we don't do a thing with templates
+            return !fun->stub && !fun->isTemplate;    // we don't do a thing with templates
         }
         virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
         virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }

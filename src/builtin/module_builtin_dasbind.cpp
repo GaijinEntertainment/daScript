@@ -243,6 +243,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
                 err = "function has too many arguments for the current wrapper config";
                 return false;
             }
+            fun->stub = true;
 #ifndef _MSC_VER
             if ( fun->arguments.size()>6 ) {
                 int perm=0;

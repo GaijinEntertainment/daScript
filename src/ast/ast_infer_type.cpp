@@ -2461,6 +2461,7 @@ namespace das {
             return false;
         }
         virtual bool canVisitFunction ( Function * fun ) override {
+            if ( fun->stub ) return false;
             if ( verbose || debugInferFlag ) {      // it can be fully inferred, and fail concept assert
                 return !fun->isTemplate;            // we don't do a thing with templates
             } else {
