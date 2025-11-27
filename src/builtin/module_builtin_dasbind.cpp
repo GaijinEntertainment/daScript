@@ -351,11 +351,11 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             }
             if ( anyTypeErrors ) return nullptr;
             string fn_name;
-            string library;
+            string library, platform_library;
             string api;
             bool late = false;
             for ( auto & arg : args ) {
-                        if ( arg.name=="name" && arg.type==Type::tString ) {
+                if ( arg.name=="name" && arg.type==Type::tString ) {
                     fn_name = arg.sValue;
                 } else if ( arg.name=="library" && arg.type==Type::tString ) {
                     library = arg.sValue;
@@ -368,6 +368,22 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
                 } else if ( arg.name=="late" ) {
                     late = true;
                 }
+#ifdef _MSC_VER
+                else if ( arg.name=="windows_library" && arg.type==Type::tString ) {
+                    platform_library = arg.sValue;
+                }
+#elif defined(__APPLE__)
+                else if ( arg.name=="macos_library" && arg.type==Type::tString ) {
+                    platform_library = arg.sValue;
+                }
+#elif defined(__linux__) || defined __HAIKU__
+                else if ( arg.name=="linux_library" && arg.type==Type::tString ) {
+                    platform_library = arg.sValue;
+                }
+#endif
+            }
+            if ( !platform_library.empty() ) {
+                library = platform_library;
             }
             if ( fn_name.empty() ) {
                 err = "missing name";
