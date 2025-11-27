@@ -1542,14 +1542,6 @@ struct public DocsHook
     annotationFilter : lambda<(ann : rtti::Annotation const) : bool>
     afterEnums : lambda<(var f : FILE const?; was_enums : bool) : void>
 
-def public mkdir_rec(path : string) : bool
-    return true if path == ""
-    var st : FStat
-    return true if stat(path, st) && st.is_dir
-
-    mkdir_rec(dir_name(path))
-
-    return mkdir(path)
 
 def public documents(name:string; mods:array<Module?>; fname:string; var groups:array<DocGroup>; var hook : DocsHook = DocsHook())
     static_if log_documentation

@@ -127,3 +127,10 @@ def fwrite(f : file; buf : array<auto(BufType)> const implicit) {
     }
 }
 
+def mkdir_rec(path : string) : bool {
+    return true if (path == "")
+    var st : FStat
+    return true if (stat(path, st) && st.is_dir)
+    mkdir_rec(dir_name(path))
+    return mkdir(path)
+}
