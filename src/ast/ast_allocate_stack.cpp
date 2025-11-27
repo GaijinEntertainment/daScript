@@ -167,6 +167,7 @@ namespace das {
             return true;
         }
         virtual bool canVisitFunction ( Function * fun ) override {
+            if ( fun->stub ) return false;
             if ( fun->isTemplate ) return false;
             if ( fun->stackResolved ) return false;
             if ( !fun->used && !isEverything ) return false;
