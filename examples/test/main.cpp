@@ -353,7 +353,6 @@ bool isolated_unit_test ( const string & fn, RuntimeMode mode, bool useSer ) {
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_Raster);
     NEED_MODULE(Module_Strings);
-    NEED_MODULE(Module_UnitTest);
     NEED_MODULE(Module_Rtti);
     NEED_MODULE(Module_Ast);
     NEED_MODULE(Module_Debugger);
@@ -365,6 +364,9 @@ bool isolated_unit_test ( const string & fn, RuntimeMode mode, bool useSer ) {
     if (mode == RuntimeMode::JIT) {
         NEED_MODULE(Module_Jit);
         #include "modules/external_need.inc"
+    } else {
+        // external_need actualy already contains UnitTest. Remove explicit call?
+        NEED_MODULE(Module_UnitTest);
     }
     Module::Initialize();
     bool result = unit_test(fn,mode, useSer);
@@ -499,7 +501,6 @@ int main( int argc, char * argv[] ) {
     NEED_MODULE(Module_Math);
     NEED_MODULE(Module_Raster);
     NEED_MODULE(Module_Strings);
-    NEED_MODULE(Module_UnitTest);
     NEED_MODULE(Module_Rtti);
     NEED_MODULE(Module_Ast);
     NEED_MODULE(Module_Debugger);
@@ -511,6 +512,9 @@ int main( int argc, char * argv[] ) {
     if (enable_jit) {
         NEED_MODULE(Module_Jit);
         #include "modules/external_need.inc"
+    } else {
+        // external_need actualy already contains UnitTest. Remove explicit call?
+        NEED_MODULE(Module_UnitTest);
     }
 
     Module::Initialize();
