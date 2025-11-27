@@ -202,7 +202,6 @@ class LlvmJitVisitor : AstVisitor {
     g_di_builder : LLVMOpaqueDIBuilder?
     di_file_location : table<string; LLVMOpaqueMetadata?>
     di_function : LLVMOpaqueMetadata?
-    di_cu : LLVMOpaqueMetadata?
     types : PrimitiveTypes -const? -const
     option_no_range_check : bool = false
     option_no_alias : bool = false
@@ -211,40 +210,18 @@ class LlvmJitVisitor : AstVisitor {
     ldu_hint : array<bool>
     attributes : Attributes?
 
-    def LlvmJitVisitor(at : LineInfo; ctx : Context?; var types_ : PrimitiveTypes?; uids : UidNodes?; need_di : bool; dib : LLVMOpaqueDIBuilder?; dicu : LLVMOpaqueMetadata?; attrs : Attributes?) {
+    def LlvmJitVisitor(at : LineInfo; ctx : Context?; var types_ : PrimitiveTypes?; uids : UidNodes?; need_di : bool; dib : LLVMOpaqueDIBuilder?; attrs : Attributes?) {
         jit_context = ctx
         types = types_
         g_builder = LLVMCreateBuilderInContext(g_ctx)
         g_di_builder = dib
         attributes = attrs
         uid = uids
-        di_cu = dicu
         if (LLVM_DEBUG_INFO && need_di) {
             own_di = true
             g_di_builder = LLVMCreateDIBuilder(g_mod)
             let producer = "daScript LLVM JIT"
             let runtime_version = 3u
-            di_cu = LLVMDIBuilderCreateCompileUnit(
-                g_di_builder,
-                LLVMDWARFSourceLanguage.C,
-                get_debug_file_location(at),
-                producer,
-                uint64(length(producer)),
-                LLVM_ENABLE_OPT_PASS ? 1 : 0, // isOptimized,
-                "", // const char *Flags,
-                0ul, // size_t FlagsLen,
-                runtime_version, // unsigned RuntimeVer,
-                "", // const char *SplitName,
-                0ul, // size_t SplitNameLen,
-                LLVMDWARFEmissionKind.LLVMDWARFEmissionFull, // LLVMDWARFEmissionKind Kind,
-                0u, // unsigned DWOId,
-                0, // LLVMBool SplitDebugInlining,
-                0, // LLVMBool DebugInfoForProfiling,
-                "", // const char *SysRoot,
-                0ul, // size_t SysRootLen,
-                "", // const char *SDK,
-                0ul // size_t SDKLen
-                )
         }
     }
 
@@ -4825,7 +4802,7 @@ class LlvmJitVisitor : AstVisitor {
     }
 
     def make_block_function(expr : smart_ptr<ExprMakeBlock>; captured : array<CapturedVariable>; first_field_index : int; captureType : LLVMOpaqueType?) : tuple<func : LLVMOpaqueValue?; impl : LLVMOpaqueValue?> {
-        var astVisitor = new LlvmJitVisitor(expr.at, jit_context, types, uid, false, g_di_builder, di_cu, attributes)
+        var astVisitor = new LlvmJitVisitor(expr.at, jit_context, types, uid, false, g_di_builder, attributes)
         unsafe {
             astVisitor.adapter <- make_visitor(*astVisitor)
         }
@@ -5903,7 +5880,7 @@ def private generate_llvm(ctx : Context?; var dll : DLLHandle?; var types : Prim
     let aot_hash : uint64 = get_function_aot_hash(fn |> get_ptr)
     // debug("initializer hash for {dll_name.publ()}: {aot_hash}")
     globalVar |> LLVMSetInitializer(types.ConstI64(aot_hash))
-    var astVisitor = new LlvmJitVisitor(fn.at, ctx, types, uids, true, null, null, attrs)
+    var astVisitor = new LlvmJitVisitor(fn.at, ctx, types, uids, true, null, attrs)
     unsafe {
         astVisitor.adapter <- make_visitor(*astVisitor)
     }
@@ -6059,7 +6036,7 @@ class JIT_LLVM : AstSimulateMacro {
             init_jit()
             let attrs = new Attributes(g_ctx)
             var uids = create_uid_nodes(prog, funcs)
-            var fake_visitor = new LlvmJitVisitor(funcs[0].at, ctx, g_prim_t, uids, false, null, null, attrs)
+            var fake_visitor = new LlvmJitVisitor(funcs[0].at, ctx, g_prim_t, uids, false, null, attrs)
             for (fun in funcs) {
                 fake_visitor->add_llvm_functions(fun)
             }
