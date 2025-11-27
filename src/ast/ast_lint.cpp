@@ -783,7 +783,7 @@ namespace das {
             return !isCppKeyword(str);
         }
         virtual bool canVisitFunction ( Function * fun ) override {
-            return !fun->isTemplate;    // we don't do a thing with templates
+            return !fun->stub && !fun->isTemplate;    // we don't do a thing with templates
         }
         virtual bool canVisitArgumentInit ( Function *, const VariablePtr &, Expression * ) override {
             return false;

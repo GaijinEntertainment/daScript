@@ -965,6 +965,7 @@ namespace das
                 bool    isTemplate : 1;
 
                 bool    unsafeWhenNotCloneArray : 1; // this one is used to mark functions which are unsafe when not cloning arrays
+                bool    stub : 1;                    // skip stack allocation, optimizations, etc
             };
             uint32_t moreFlags = 0;
         };

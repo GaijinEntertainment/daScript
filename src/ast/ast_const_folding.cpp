@@ -29,7 +29,7 @@ namespace das {
 
     class SetSideEffectVisitor : public Visitor {
         virtual bool canVisitFunction ( Function * fun ) override {
-            return !fun->isTemplate;    // we don't do a thing with templates
+            return !fun->stub && !fun->isTemplate;    // we don't do a thing with templates
         }
         // any expression
         virtual void preVisitExpression ( Expression * expr ) override {
@@ -42,7 +42,7 @@ namespace das {
     class NoSideEffectVisitor : public Visitor {
     protected:
         virtual bool canVisitFunction ( Function * fun ) override {
-            return !fun->isTemplate;    // we don't do a thing with templates
+            return !fun->stub && !fun->isTemplate;    // we don't do a thing with templates
         }
         // virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
         // virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
@@ -452,7 +452,7 @@ namespace das {
         vector<Function *> needRun;
     protected:
         virtual bool canVisitFunction ( Function * fun ) override {
-            return !fun->isTemplate;    // we don't do a thing with templates
+            return !fun->stub && !fun->isTemplate;    // we don't do a thing with templates
         }
         // function which is fully a nop
         bool isNop ( const FunctionPtr & func ) {
@@ -779,7 +779,7 @@ namespace das {
         FunctionPtr             func;
     protected:
         virtual bool canVisitFunction ( Function * fun ) override {
-            return !fun->isTemplate;    // we don't do a thing with templates
+            return !fun->stub && !fun->isTemplate;    // we don't do a thing with templates
         }
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
@@ -867,7 +867,7 @@ namespace das {
         bool anySimulated = false;
     protected:
         virtual bool canVisitFunction ( Function * fun ) override {
-            return !fun->isTemplate;    // we don't do a thing with templates
+            return !fun->stub && !fun->isTemplate;    // we don't do a thing with templates
         }
         // ExprCall
         virtual ExpressionPtr visit ( ExprCall * expr ) override {

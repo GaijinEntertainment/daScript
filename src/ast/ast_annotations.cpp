@@ -16,7 +16,9 @@ namespace das
         virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
         virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
         virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
-
+        virtual bool canVisitFunction ( Function * fun ) override {
+            return !fun->stub; //  && !fun->isTemplate;     // not a thing with templates
+        }
         virtual bool canVisitStructure ( Structure * st ) override {
             return !st->isTemplate;     // not a thing with templates
         }
