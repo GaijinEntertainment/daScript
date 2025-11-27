@@ -227,7 +227,7 @@ namespace das
     struct SimFunction;
     class Context;
 
-    class ModuleFileAccess : public FileAccess {
+    class DAS_API ModuleFileAccess : public FileAccess {
     public:
         ModuleFileAccess();
         ModuleFileAccess ( const string & pak, const FileAccessPtr & access );

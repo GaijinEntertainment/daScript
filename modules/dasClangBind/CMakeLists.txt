@@ -58,37 +58,27 @@ IF ((NOT DAS_CLANG_BIND_INCLUDED) AND (${Clang_FOUND}) AND ((NOT ${DAS_CLANG_BIN
 	ADD_MODULE_LIB(libDasModuleClangBind ${DAS_CLANG_BIND_MODULE_SRC} ${DAS_CLANG_BIND_MODULE_PLATFORM_SRC})
 	IF(APPLE)
 		TARGET_LINK_LIBRARIES(libDasModuleClangBind PRIVATE ${CLANG_BIND_LIBRARIES} ${LIBCLANG_LIB}/libclang.dylib)
-	ELSEIF(UNIX)
+    ELSE()
 		TARGET_LINK_LIBRARIES(libDasModuleClangBind PRIVATE ${CLANG_BIND_LIBRARIES} libclang)
-	ELSE()
-		TARGET_LINK_LIBRARIES(libDasModuleClangBind PRIVATE ${CLANG_BIND_LIBRARIES} ${LIBCLANG_LIB}/libclang.lib)
 	ENDIF()
 	# ADD_DEPENDENCIES(libDasModuleClangBind)
 	TARGET_INCLUDE_DIRECTORIES(libDasModuleClangBind PUBLIC ${CLANG_BIND_INCLUDE_DIR} ${CLANG_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
 
 IF(WIN32)
-	add_custom_command(TARGET libDasModuleClangBind POST_BUILD
-    	COMMAND ${CMAKE_COMMAND} -E copy_if_different
-	        "${PROJECT_SOURCE_DIR}/../libclang/bin/LLVM-C.dll"
-    	    "${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/LLVM-C.dll")
-	add_custom_command(TARGET libDasModuleClangBind POST_BUILD
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different
-		"${PROJECT_SOURCE_DIR}/../libclang/bin/LTO.dll"
-		"${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/LTO.dll")
-	add_custom_command(TARGET libDasModuleClangBind POST_BUILD
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different
-		"${PROJECT_SOURCE_DIR}/../libclang/bin/Remarks.dll"
-		"${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/Remarks.dll")
-		add_custom_command(TARGET libDasModuleClangBind POST_BUILD
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different
-		"${PROJECT_SOURCE_DIR}/../libclang/bin/libclang.dll"
-		"${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/libclang.dll")
-	set(DAS_CLANG_DLLS
-		${PROJECT_SOURCE_DIR}/../libclang/bin/LLVM-C.dll
-		${PROJECT_SOURCE_DIR}/../libclang/bin/LTO.dll
-		${PROJECT_SOURCE_DIR}/../libclang/bin/Remarks.dll
-		${PROJECT_SOURCE_DIR}/../libclang/bin/libclang.dll
-	)
+    set(DAS_CLANG_DLLS
+        ${LLVM_INSTALL_PREFIX}/bin/LLVM-C.dll
+        ${LLVM_INSTALL_PREFIX}/bin/LTO.dll
+        ${LLVM_INSTALL_PREFIX}/bin/Remarks.dll
+        ${LLVM_INSTALL_PREFIX}/bin/libclang.dll
+    )
+    foreach(dll ${DAS_CLANG_DLLS})
+        get_filename_component(dll_name "${dll}" NAME)
+        add_custom_command(TARGET libDasModuleClangBind POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${dll}"
+            "${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/${dll_name}"
+        )
+    endforeach()
 	install(FILES ${DAS_CLANG_DLLS}
         DESTINATION ${DAS_INSTALL_BINDIR}
     )

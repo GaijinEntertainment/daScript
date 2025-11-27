@@ -1,5 +1,6 @@
 #include "daScript/misc/platform.h"
 #include "daScript/ast/ast.h"
+#include "daScript/simulate/debug_info.h"
 
 #if !defined(DAS_NO_FILEIO)
 #include <sys/stat.h>

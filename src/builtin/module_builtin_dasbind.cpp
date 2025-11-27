@@ -289,7 +289,10 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
                             break;
                         }
                     } else if ( strcmp(arg->__rtti,"ExprConstString")==0 ) {
-                        // do nothing
+                        auto str = static_pointer_cast<ExprConstString>(arg);
+                        if ( str->getValue().empty()) {
+                            needToTransform = true;
+                        }
                     } else {
                         needToTransform = true;
                         break;
@@ -303,11 +306,14 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
                     if ( arg->type->isString() ) {
                         if ( arg->rtti_isCallFunc() ) {
                             auto pCall = static_pointer_cast<ExprCallFunc>(arg);
-                            if ( pCall->func->name=="safe_pass_string") {
+                            if ( pCall->func->name!="safe_pass_string") {
                                 needToWrap = true;
                             }
                         } else if ( strcmp(arg->__rtti,"ExprConstString")==0 ) {
-                            // do nothing
+                            auto str = static_pointer_cast<ExprConstString>(arg);
+                            if ( str->getValue().empty()) {
+                                needToWrap = true;
+                            }
                         } else {
                             needToWrap = true;
                         }
@@ -450,7 +456,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             lib.addBuiltInModule();
             addAnnotation(make_smart<ExternFunctionAnnotation>());
             addExtern<DAS_BIND_FUN(safe_pass_string)>(*this, lib, "safe_pass_string",
-                SideEffects::none, "safe_pass_string")
+                SideEffects::accessExternal, "safe_pass_string")
                     ->args({"string"});
         }
         virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
