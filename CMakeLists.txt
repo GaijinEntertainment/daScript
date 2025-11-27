@@ -415,6 +415,9 @@ SET(URIPARSER_SRCS
 
 ADD_LIBRARY(libUriParser STATIC ${URIPARSER_SRCS})
 SETUP_CPP11(libUriParser)
+if (${DAS_ENABLE_DLL})
+    SET_TARGET_PROPERTIES(libUriParser PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
 target_compile_definitions(libUriParser PUBLIC URIPARSER_BUILD_CHAR)
 target_compile_definitions(libUriParser PUBLIC URI_STATIC_BUILD)
 target_include_directories(libUriParser PUBLIC
