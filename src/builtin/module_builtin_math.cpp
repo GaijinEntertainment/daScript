@@ -580,7 +580,10 @@ namespace das {
             memset(&res, 0, sizeof(RetT));
             return res;
         }
-        virtual void * getBuiltinAddress() const override { return (void *) &ctorFn; }
+        virtual void * getBuiltinAddress() const override {
+            constexpr bool IS_CMRES = true;
+            return ImplWrapCall<IS_CMRES, NeedVectorWrap<RetT(*)()>::value, RetT(*)(), &ctorFn>::get_builtin_address();
+        }
     };
 
     class Module_Math : public Module {

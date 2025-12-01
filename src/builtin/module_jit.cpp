@@ -411,7 +411,7 @@ extern "C" {
         #if defined(_WIN32) || defined(_WIN64)
             auto result = fmt::format_to(cmd, FMT_STRING("clang-cl {} {} msvcrt.lib -link -DLL -OUT:{} 2>&1"), objFilePath, jitModuleObj, libraryName);
         #elif defined(__APPLE__)
-            auto result = fmt::format_to(cmd, FMT_STRING("clang -shared -o {} {} 2>&1"), libraryName, objFilePath);
+            auto result = fmt::format_to(cmd, FMT_STRING("clang -shared -o {} {} {} 2>&1"), libraryName, jitModuleObj, objFilePath);
         #else
             auto result = fmt::format_to(cmd, FMT_STRING("gcc -shared -o {} {} 2>&1"), libraryName, objFilePath);
         #endif
