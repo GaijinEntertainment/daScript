@@ -408,7 +408,7 @@ inline size_t das_aligned_memsize(void * ptr){
 #define DAS_MACRO_SANITIZER 0
 #endif
 
-#if !_TARGET_64BIT && !defined(__clang__) && (_MSC_VER <= 1900)
+#if defined(_M_IX86) && defined(_MSC_VER) && !defined(__clang__) && _MSC_VER <= 1900
 #define _msc_inline_bug __declspec(noinline)
 #else
 #define _msc_inline_bug __forceinline
