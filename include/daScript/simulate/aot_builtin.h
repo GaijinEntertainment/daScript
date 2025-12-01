@@ -13,6 +13,7 @@ namespace das {
 
     DAS_API bool is_compiling ( );
     DAS_API bool is_compiling_macros ( );
+    DAS_API uint64_t get_context_share_counter ( Context * context );
 
     DAS_API char * builtin_das_root ( Context * context, LineInfoArg * at );
     DAS_API void builtin_throw ( char * text, Context * context, LineInfoArg * at );
