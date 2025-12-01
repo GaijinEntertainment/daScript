@@ -6095,6 +6095,7 @@ class JIT_LLVM : AstSimulateMacro {
                 active_filenames = table<string>();
                 if (JIT_USE_DLL_MODE) {
                     let out_path = "{JIT_DLL_OUTPUT}{prog.thisNamespace}"
+                    mkdir_rec(JIT_DLL_OUTPUT)
                     write_dll(g_mod, out_path, JIT_DLL_DASCRIPTLIB)
                     g_dynamic_lib_handle.reset()
                     g_dynamic_lib_handle.handle = load_dynamic_library("{out_path}.dll")
