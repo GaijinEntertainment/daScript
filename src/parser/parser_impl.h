@@ -117,4 +117,5 @@ namespace das {
     int skip_underscode ( char * tok, char * buf, char * bufend );
     Expression * ast_makeStructToMakeVariant ( MakeStruct * decl, const LineInfo & locAt );
     CaptureEntry * ast_makeCaptureEntry ( yyscan_t scanner, const LineInfo & at, const string & op, const string & name );
+    Expression * ast_makeMoveArgument ( yyscan_t scanner, Expression * expr, const LineInfo & at );
 }

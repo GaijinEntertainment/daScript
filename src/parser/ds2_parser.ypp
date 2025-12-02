@@ -1755,8 +1755,14 @@ expr_list
     :   expr[subexpr] {
         $$ = $subexpr;
     }
-    |   expr_list[left] ',' expr[right]     {
+    |   LARROW expr[subexpr] {
+            $$ = ast_makeMoveArgument(scanner, $subexpr, tokAt(scanner,@subexpr));
+    }
+    |   expr_list[left] ',' expr[right] {
             $$ = new ExprSequence(tokAt(scanner,@left),$left,$right);
+    }
+    |   expr_list[left] ',' LARROW expr[right]     {
+            $$ = new ExprSequence(tokAt(scanner,@left),$left,ast_makeMoveArgument(scanner, $right, tokAt(scanner,@right)));
     }
     ;
 

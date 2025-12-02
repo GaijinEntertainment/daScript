@@ -2090,3 +2090,9 @@ def uint3(a, b, c) : uint3 const {
 def uint4(a, b, c, d) : uint4 const {
     return uint4(uint(a), uint(b), uint(c), uint(d))
 }
+
+def consume_argument(var a : auto(TT)&) : TT& {
+    unsafe {
+        return <- a
+    }
+}
