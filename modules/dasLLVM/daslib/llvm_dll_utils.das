@@ -199,6 +199,10 @@ class public DLLHandle {
     handle : void?
     created_fileinfos : table<FileInfo?; FileInfo?>
 
+    def DLLHandle(handle_ : void?) {
+        handle = handle_
+    }
+
     def reset() {
         if (handle != null) {
             handle |> close_dynamic_library()

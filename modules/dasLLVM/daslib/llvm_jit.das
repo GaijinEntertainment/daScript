@@ -21,6 +21,7 @@ require daslib/safe_addr
 require daslib/strings_boost
 require daslib/defer
 require daslib/lpipe
+require debugapi
 require math
 require jit
 require fio
@@ -6034,6 +6035,98 @@ class DisableJitVisitor : AstVisitor {
     }
 }
 
+
+struct public JitState {
+    dll : void?
+    ee : void?
+    ctx : void?
+}
+
+let shared jit_state : JitState = JitState();
+
+[no_jit, pinvoke]
+def set_jit_state(js : JitState) {
+    unsafe {
+        reinterpret<JitState>(jit_state) = js;
+    }
+}
+
+
+[no_jit]
+def public free_jit_context {
+    // Free everything only if it's the last one context.
+    if (get_context_share_counter() == 1ul) {
+        if (jit_state.dll != null) {
+            var x = new DLLHandle(jit_state.dll);
+            x.reset();
+        } elif (jit_state.ee != null || jit_state.ctx != null) {
+            assert(jit_state.ee != null && jit_state.ctx != null)
+            jit_state.ee |> LLVMRunStaticDestructors()
+            LLVMDisposeExecutionEngine(unsafe(reinterpret<LLVMExecutionEngineRef>(jit_state.ee)))
+            LLVMContextDispose(unsafe(reinterpret<LLVMContextRef>(jit_state.ctx)))
+        }
+        set_jit_state(JitState())
+    }
+}
+
+
+[macro_function]
+def finalize_jit(use_dll : bool; lib_handle : DLLHandle?) : JitState? {
+    verify(!(is_in_completion() || is_compiling_macros()))
+    verify(!(g_mod == null))    // prevent double finalize
+    if (LLVM_LOG_RESULT) {
+        LLVMDumpModule(g_mod)
+        fflush(fstderr())
+    }
+    var result : JitState? = null;
+    if (use_dll) {
+        // Note: ExecutionEngine is owner of the g_mod
+        LLVMDisposeExecutionEngine(g_engine);
+        LLVMContextDispose(g_ctx);
+
+        // JitState is dll only.
+        result = new JitState(dll = lib_handle, ee = null, ctx = null)
+    } else {
+        g_engine |> LLVMRunStaticConstructors()
+
+        // JitState is engine + ctx.
+        result = new JitState(dll = null, ee = g_engine, ctx = g_ctx)
+    }
+    g_engine = null
+    g_ctx = null
+    g_mod = null
+    unsafe {
+        delete g_str2v
+    }
+    return result
+}
+
+// Create shutdown function to avoid removing it from modules.
+// Otherwise jit state shared variable will be removed as unused.
+[infer_macro]
+class ShutdownFn : AstPassMacro {
+    def override apply(prog : ProgramPtr; mod : Module?) : bool {
+        var has_fin = false;
+        compiling_module() |> module_for_each_function <| $(fn) {
+            if (fn.name == "shutdown`llvm_jit") {
+                has_fin = true
+            }
+        }
+        if (has_fin) {
+            return false
+        }
+        var inscope fn <- qmacro_function("shutdown`llvm_jit") <| $() : void {
+            _::free_jit_context()
+        }
+        fn.flags |= FunctionFlags.generated | FunctionFlags.shutdown
+        fn.moreFlags |= MoreFunctionFlags.requestNoJit
+        compiling_module() |> add_function(fn)
+        return true
+    }
+}
+
+
+
 [simulate_macro(name="jit_llvm")]
 class JIT_LLVM : AstSimulateMacro {
     def override simulate(prog : Program?; var ctx : Context?) : bool {
@@ -6174,9 +6267,12 @@ class JIT_LLVM : AstSimulateMacro {
                     unsafe(remove_jit(simfun))
                 }
             }
-            // Never reset lib_handle! It will leak, but there's no other way to keep used function active.
-            // g_dynamic_lib_handle.reset()
-            finalize_jit()
+            var result = finalize_jit(use_dll, g_dynamic_lib_handle)
+
+            unsafe(invoke_in_context(ctx, @() {
+                set_jit_state(*result)
+            }))
+
             if (LLVM_JIT_LOG) {
                 let totalDt = double(get_time_usec(totalTime)) / 1000000.0lf
                 to_log(LOG_INFO, "LLVM JIT: {length(funcs)} functions in {totalDt} sec\n")

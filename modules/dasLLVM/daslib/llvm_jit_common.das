@@ -69,29 +69,6 @@ let public FN_JIT_DEBUG_EXIT        = "jit_debug_exit"
 let public FN_JIT_DEBUG_LINE        = "jit_debug_line"
 let public FN_JIT_AST_TYPEDECL      = "jit_ast_typedecl"
 
-struct JitEngine {
-    mod : LLVMOpaqueModule?
-    engine : LLVMExecutionEngineRef
-    ctx : LLVMContextRef
-}
-
-var private g_all_engines : array<JitEngine>
-
-// do not jit this finalize. It creates garbage in every module even though it's never actually called in runtime
-[no_jit]
-def finalize(var a : JitEngine) {
-    delete a
-}
-[no_jit]
-def finalize(var a : array<JitEngine>) {
-    for (aV in a) {
-        unsafe {
-            delete aV
-        }
-    }
-    __builtin_array_free(a, typeinfo sizeof(a[0]))
-}
-
 var public g_ctx : LLVMContextRef
 var public g_prim_t : PrimitiveTypes?
 var public g_mod : LLVMOpaqueModule?
@@ -107,7 +84,7 @@ var public g_t_stack_state : LLVMOpaqueType?
 var public g_t_iterator : LLVMOpaqueType?
 var public g_t_sequence : LLVMOpaqueType?
 
-var g_str2v : table<string; LLVMOpaqueValue?>
+var public g_str2v : table<string; LLVMOpaqueValue?>
 
 class public Attributes {
     noreturn : LLVMOpaqueAttributeRef?
@@ -656,44 +633,6 @@ def public write_dll(mod : LLVMOpaqueModule?; out_path : string; path_to_dascrip
         let filetype = LLVMCodeGenFileType.LLVMObjectFile
         LLVMTargetMachineEmitToFile(targetMachine, mod, file, filetype, error)
         create_shared_library(file, add_dll_extension(out_path), "{path_to_dascript_lib}", "{path_to_linker}")
-    }
-}
-
-[macro_function]
-def public finalize_jit() {
-    return if (is_in_completion() || is_compiling_macros())
-    return if (g_mod == null)    // prevent double finalize
-    if (LLVM_LOG_RESULT) {
-        LLVMDumpModule(g_mod)
-        fflush(fstderr())
-    }
-    g_engine |> LLVMRunStaticConstructors()
-    g_all_engines |> push(JitEngine(
-        mod <- g_mod,
-        engine <- g_engine,
-        ctx <- g_ctx
-    ))
-    unsafe {
-        delete g_str2v
-    }
-}
-
-[finalize, no_jit] // no_jit is necessary!
-def private finalize_all_jit {
-    for (je in g_all_engines) {
-        LLVMDisposeExecutionEngine(je.engine); je.engine = null
-        g_t_function = null
-        g_t_simFunction = null
-        g_t_block = null
-        g_t_lambda = null
-        g_t_stack_state = null
-        g_t_iterator = null
-        g_t_sequence = null
-    }
-        // TODO: figure out why this crashes
-        // LLVMDisposeModule(je.mod); je.mod = null
-    unsafe {
-        delete g_all_engines
     }
 }
 
