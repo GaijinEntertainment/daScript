@@ -26,6 +26,7 @@ namespace das {
     struct DAS_API DataWalker : ptr_ref_count {
     // we doing what?
         class Context * context = nullptr;
+        bool collecting = false;
         bool reading = false;
         bool _cancel = false;
     // helpers

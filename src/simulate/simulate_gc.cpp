@@ -29,6 +29,10 @@ namespace das
         int32_t            gcFlags = TypeInfo::flag_stringHeapGC | TypeInfo::flag_heapGC;
         int32_t            gcStructFlags = StructInfo::flag_stringHeapGC | StructInfo::flag_heapGC;
 
+        BaseGcDataWalker() {
+            collecting = true;
+            reading = false;
+        }
         virtual bool canVisitStructure ( char * /*ps*/, StructInfo * info ) override {
             if ( !(info->flags & gcStructFlags) ) return false;
             return true;
