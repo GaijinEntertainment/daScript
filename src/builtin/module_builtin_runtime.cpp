@@ -1258,6 +1258,10 @@ namespace das
 
     }
 
+    DAS_API uint64_t get_context_share_counter ( Context * context ) {
+        return (uint64_t) context->code.use_count();
+    }
+
     bool is_compiling_macros ( ) {
         if ( daScriptEnvironment::getBound() && daScriptEnvironment::getBound()->g_Program ) {
             return daScriptEnvironment::getBound()->g_Program->isCompilingMacros;
@@ -1662,6 +1666,9 @@ namespace das
                 ->args({"name"});
         addExtern<DAS_BIND_FUN(is_reporting_compilation_errors)>(*this, lib, "is_reporting_compilation_errors",
             SideEffects::accessExternal, "is_reporting_compilation_errors");
+        addExtern<DAS_BIND_FUN(get_context_share_counter)>(*this, lib, "get_context_share_counter",
+            SideEffects::accessExternal, "get_context_share_counter")
+                ->arg("context");
         // iterator functions
         addExtern<DAS_BIND_FUN(builtin_iterator_first)>(*this, lib, "_builtin_iterator_first",
             SideEffects::modifyArgumentAndExternal, "builtin_iterator_first")
