@@ -111,6 +111,7 @@ namespace das
         vector<string>                 fieldsInOrder;
         mutable DebugInfoHelper    helpA;
         mutable StructInfo *       sti = nullptr;
+        mutable StructInfo *       sti_gc = nullptr;
         ModuleLibrary *            mlib = nullptr;
         vector<TypeAnnotation*> parents;
         bool validationNeverFails = false;
