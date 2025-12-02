@@ -118,42 +118,68 @@ def get_file_info_global(g_builder : LLVMOpaqueBuilder?; types : PrimitiveTypes?
  * @names for all names will be create FileInfo ptr with correct filename
  */
 [macro_function]
-def generate_fileinfo_constructor(var types : PrimitiveTypes; names : table<string>) {
-    var g_builder = LLVMCreateBuilderInContext(g_ctx)
+def generate_fileinfo_ctor_dtor(var types : PrimitiveTypes; names : table<string>) {
+    var ctor_builder = LLVMCreateBuilderInContext(g_ctx)
+    var dtor_builder = LLVMCreateBuilderInContext(g_ctx)
     defer <| ${
-        LLVMDisposeBuilder(g_builder)
+        LLVMDisposeBuilder(ctor_builder)
+        LLVMDisposeBuilder(dtor_builder)
     }
 
     let functionType = LLVMFunctionType(types.t_void, null, 0u, 0)
+
     let constructor = LLVMAddFunctionWithType(g_mod, "fileinfo_constructor", functionType)
+    let destructor = LLVMAddFunctionWithType(g_mod, "fileinfo_destructor", functionType)
+
     set_public_linkage(constructor)
 
-    let entry = LLVMAppendBasicBlockInContext(g_ctx, constructor, "entry")
-    LLVMPositionBuilderAtEnd(g_builder, entry)
+    let entry_ctor = LLVMAppendBasicBlockInContext(g_ctx, constructor, "entry_ctor")
+    LLVMPositionBuilderAtEnd(ctor_builder, entry_ctor)
+
+    let entry_dtor = LLVMAppendBasicBlockInContext(g_ctx, destructor, "entry_dtor")
+    LLVMPositionBuilderAtEnd(dtor_builder, entry_dtor)
 
     let void_ptr = types.LLVMVoidPtrType()
+
     var initializeFuncType = LLVMFunctionType(types.t_void,
         fixed_array<LLVMTypeRef>(
             types.LLVMVoidPtrType(),
             LLVMPointerType(types.t_int8, 0u), // filename
         )
     )
+    var freeFuncType = LLVMFunctionType(types.t_void,
+        fixed_array<LLVMTypeRef>(
+            types.LLVMVoidPtrType(),
+        )
+    )
+
     var initializeFunc = LLVMAddFunctionWithType(g_mod, "jit_initialize_fileinfo", initializeFuncType)
+    var freeFunc = LLVMAddFunctionWithType(g_mod, "jit_free_fileinfo", freeFuncType)
+
     LLVMAddGlobalMapping(g_engine, initializeFunc, get_jit_initialize_fileinfo())
+    LLVMAddGlobalMapping(g_engine, freeFunc, get_jit_free_fileinfo())
+
     g_fn_types["jit_initialize_fileinfo"] = initializeFuncType
+    g_fn_types["jit_free_fileinfo"] = freeFuncType
 
     for (name in keys(names)) {
         var variable = LLVMGetNamedGlobal(g_mod, "fileinfo_{name}")
         assert(variable != null)
-        var callArgs = array<LLVMValueRef>(
-            g_builder |> LLVMBuildPointerCast(variable, void_ptr, ""),
-            get_string_constant_ptr(g_builder, name)
+        var callCtorArgs = array<LLVMValueRef>(
+            ctor_builder |> LLVMBuildPointerCast(variable, void_ptr, ""),
+            get_string_constant_ptr(ctor_builder, name)
         )
-        LLVMBuildCall2(g_builder, initializeFuncType, initializeFunc, callArgs, "")
-    }
-    LLVMBuildRetVoid(g_builder)
+        LLVMBuildCall2(ctor_builder, initializeFuncType, initializeFunc, callCtorArgs, "")
 
-    return constructor
+        var callDtorArgs = array<LLVMValueRef>(
+            dtor_builder |> LLVMBuildPointerCast(variable, void_ptr, ""),
+        )
+        LLVMBuildCall2(dtor_builder, freeFuncType, freeFunc, callDtorArgs, "")
+    }
+    LLVMBuildRetVoid(ctor_builder)
+    LLVMBuildRetVoid(dtor_builder)
+
+    return (constructor, destructor)
 }
 
 [macro_function]
@@ -5593,21 +5619,31 @@ def private get_llvm_function_type(func : FunctionPtr; var types : PrimitiveType
 }
 
 [macro_function]
-def private add_constructor_function(func : LLVMOpaqueValue?; var types : PrimitiveTypes?) {
+def private add_ctor_dtor_function(ctor_dtor : tuple<LLVMOpaqueValue?, LLVMOpaqueValue?>; var types : PrimitiveTypes?) {
     let priority = 0 |> uint64()
-    let funcType = LLVMTypeOf(func)
+    let (ctor, dtor) = ctor_dtor
     let dataPointerType = LLVMPointerType(types.t_int8, 0u)
-    var ctorTypes = fixed_array(types.t_int32, funcType, dataPointerType)
+    var ctorTypes = fixed_array(types.t_int32, LLVMTypeOf(ctor), dataPointerType)
+    var dtorTypes = fixed_array(types.t_int32, LLVMTypeOf(dtor), dataPointerType)
 
-    var ctorFields = fixed_array(types.ConstI32(priority), func, LLVMConstPointerNull(dataPointerType))
+    var ctorFields = fixed_array(types.ConstI32(priority), ctor, LLVMConstPointerNull(dataPointerType))
+    var dtorFields = fixed_array(types.ConstI32(priority), dtor, LLVMConstPointerNull(dataPointerType))
 
 
     let ctorStructType = StructType(types, ctorTypes)
+    let dtorStructType = StructType(types, dtorTypes)
 
     var ctorStruct = LLVMConstNamedStruct(ctorStructType, unsafe(addr(ctorFields[0])), 3u)
+    var dtorStruct = LLVMConstNamedStruct(dtorStructType, unsafe(addr(dtorFields[0])), 3u)
+
     let ctorArray = LLVMAddGlobal(g_mod, LLVMArrayType(ctorStructType, 1u), "llvm.global_ctors")
+    let dtorArray = LLVMAddGlobal(g_mod, LLVMArrayType(dtorStructType, 1u), "llvm.global_dtors")
+
     LLVMSetLinkage(ctorArray, LLVMLinkage.LLVMAppendingLinkage)
+    LLVMSetLinkage(dtorArray, LLVMLinkage.LLVMAppendingLinkage)
+
     LLVMSetInitializer(ctorArray, LLVMConstArray(ctorStructType, unsafe(addr(ctorStruct)), 1u))
+    LLVMSetInitializer(dtorArray, LLVMConstArray(dtorStructType, unsafe(addr(dtorStruct)), 1u))
 }
 
 
@@ -6092,7 +6128,7 @@ class JIT_LLVM : AstSimulateMacro {
                     var fn_names = join([ for (fn in funcs); "{fn.name}" ], ",")
                     panic("Internal jit error. Failed to get IR for functions {fn_names}.\n")
                 }
-                generate_fileinfo_constructor(*g_prim_t, active_filenames) |> add_constructor_function(g_prim_t)
+                generate_fileinfo_ctor_dtor(*g_prim_t, active_filenames) |> add_ctor_dtor_function(g_prim_t)
                 optimize_llvm_module(opt_level |> uint(), size_level |> uint(), LLVM_INLINE_THRESHOLD)
                 if (false) {
                     // Let's remove unused attributes before we print IR.
@@ -6133,7 +6169,7 @@ class JIT_LLVM : AstSimulateMacro {
                 var simfun = get_function_by_mangled_name_hash(MNH, *ctx)
                 var gen = generate_llvm_code(g_dynamic_lib_handle, uids.get_dll_fn_name(fun), use_dll)
                 if (gen != null) {
-                    gen |> unsafe(instrument_jit(simfun, *ctx))
+                    gen |> unsafe(instrument_jit(simfun, fun.at, *ctx))
                 } else {
                     unsafe(remove_jit(simfun))
                 }
