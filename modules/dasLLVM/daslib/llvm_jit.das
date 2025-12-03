@@ -6044,7 +6044,7 @@ class JIT_LLVM : AstSimulateMacro {
         }
         if (!empty(funcs)) {
             let totalTime = ref_time_ticks()
-            init_jit()
+            init_jit(opt_level)
             let attrs = new Attributes(g_ctx)
             var uids = create_uid_nodes(prog, funcs)
             var fake_visitor = new LlvmJitVisitor(ctx, g_prim_t, uids, false, null, attrs)
