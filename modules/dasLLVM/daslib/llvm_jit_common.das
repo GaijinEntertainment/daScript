@@ -13,7 +13,6 @@ module llvm_jit_common shared private
 require llvm/llvm_boost
 require llvm/llvm_dll_utils
 require llvm/llvm_targets
-require llvm_config
 
 require daslib/ast_boost
 require daslib/strings
@@ -23,29 +22,18 @@ require daslib/enum_trait
 require jit
 require fio
 
-let public LLVM_JIT_ENABLED = true || llvm_config::llvm_jit_enabled()
-let public LLVM_JIT_ALL_FUNCTIONS = true || llvm_config::llvm_jit_all_functions()
-
-let public LLVM_DEBUG_RESULT = false || llvm_config::llvm_debug_result()
-let public LLVM_DEBUG_EVERYTHING = false || llvm_config::llvm_debug_everything()
+let public LLVM_DEBUG_RESULT = false
+let public LLVM_DEBUG_EVERYTHING = false
+let LLVM_ENABLE_DIAGNOSTIC = false
 
 let public LLVM_DEBUG_TRACES = false
 let public LLVM_DEBUG_LINE_TRACES = false
 
 let public LLVM_JIT_LOG = false || LLVM_DEBUG_EVERYTHING
-let public LLVM_DEBUG_INFO = false //  || LLVM_DEBUG_EVERYTHING
 
-let public LLVM_JIT_ALWAYS_SOLID = llvm_config::llvm_jit_always_solid()
 var public LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = false
 
-let public JIT_USE_DLL_MODE = true
-let public JIT_DLL_OUTPUT = "out/"
-let public JIT_DLL_DASCRIPTLIB = "build/libDaScript.lib" // We need it only on Windows
-
 let public LLVM_ENABLE_OPT_PASS = LLVM_DEBUG_EVERYTHING ? false : true
-let public LLVM_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 3u
-let public LLVM_SIZE_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 3u
-let public LLVM_JIT_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 3u
 let public LLVM_LOG_RESULT = LLVM_DEBUG_EVERYTHING || LLVM_DEBUG_RESULT
 let public LLVM_INLINE_THRESHOLD = 1024u // 225u
 
@@ -298,7 +286,7 @@ def public LLVMAddFunctionWithType(mod : LLVMModuleRef; name : string; typ : LLV
 
 
 [macro_function]
-def public init_jit() {
+def public init_jit(cg_opt_level) {
     return if (is_in_completion() || is_compiling_macros())
     return if (g_mod != null)    // prevent double init
     LLVMLinkInMCJIT()
@@ -309,13 +297,13 @@ def public init_jit() {
     g_ctx = LLVMContextCreate()
     g_prim_t = new PrimitiveTypes(g_ctx)
     LLVMContextSetOpaquePointers(g_ctx, 1)
-    if (LLVM_DEBUG_INFO) {
+    if (LLVM_ENABLE_DIAGNOSTIC) {
         set_context_diagnostics_to_log(g_ctx)
     }
     g_failed = false
     g_fn_types |> clear()
     g_mod = LLVMModuleCreateWithNameInContext("llvm_jit_module", g_ctx)
-    LLVMCreateJITCompilerForModule(g_engine, g_mod, LLVM_JIT_OPT_LEVEL)
+    LLVMCreateJITCompilerForModule(g_engine, g_mod, cg_opt_level)
     static_if (LLVM_DEBUG_EVERYTHING) {
         let hostcpu = LLVMGetHostCPUName()
         let features = LLVMGetHostCPUFeatures()
@@ -662,10 +650,10 @@ def public with_default_target_machine(blk : block<(LLVMTargetMachineRef) : void
 def public write_dll(mod : LLVMOpaqueModule?; out_path : string; path_to_dascript_lib = "") {
     with_default_target_machine <| $(targetMachine : LLVMTargetMachineRef) {
         let error : string?
-        let file = "{out_path}.o"
+        let file = add_obj_extension(out_path)
         let filetype = LLVMCodeGenFileType.LLVMObjectFile
         LLVMTargetMachineEmitToFile(targetMachine, mod, file, filetype, error)
-        create_shared_library(file, "{out_path}.dll", "{path_to_dascript_lib}")
+        create_shared_library(file, add_dll_extension(out_path), "{path_to_dascript_lib}")
     }
 }
 

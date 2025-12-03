@@ -210,14 +210,14 @@ class LlvmJitVisitor : AstVisitor {
     ldu_hint : array<bool>
     attributes : Attributes?
 
-    def LlvmJitVisitor(at : LineInfo; ctx : Context?; var types_ : PrimitiveTypes?; uids : UidNodes?; need_di : bool; dib : LLVMOpaqueDIBuilder?; attrs : Attributes?) {
+    def LlvmJitVisitor(ctx : Context?; var types_ : PrimitiveTypes?; uids : UidNodes?; need_di : bool; dib : LLVMOpaqueDIBuilder?; attrs : Attributes?) {
         jit_context = ctx
         types = types_
         g_builder = LLVMCreateBuilderInContext(g_ctx)
         g_di_builder = dib
         attributes = attrs
         uid = uids
-        if (LLVM_DEBUG_INFO && need_di) {
+        if (need_di) {
             own_di = true
             g_di_builder = LLVMCreateDIBuilder(g_mod)
             let producer = "daScript LLVM JIT"
@@ -226,18 +226,20 @@ class LlvmJitVisitor : AstVisitor {
     }
 
     def finalize {
-        if (LLVM_DEBUG_INFO) {
-            if (own_di && g_di_builder != null) {
-                LLVMDIBuilderFinalize(g_di_builder)
-                LLVMDisposeDIBuilder(g_di_builder)
-            }
+        if (own_di && g_di_builder != null) {
+            LLVMDIBuilderFinalize(g_di_builder)
+            LLVMDisposeDIBuilder(g_di_builder)
         }
         LLVMDisposeBuilder(g_builder)
     }
 
 // Debug info
+    def const debug_info_enabled() {
+        return g_di_builder != null
+    }
+
     def debug_before_function(fun : FunctionPtr) {
-        if (LLVM_DEBUG_INFO) {
+        if (debug_info_enabled()) {
             clear_builder_location()
             let unit = get_debug_file_location(fun.at)
             let implName = uid.get_dll_fn_name(fun).impl()
@@ -273,7 +275,7 @@ class LlvmJitVisitor : AstVisitor {
     }
 
     def get_debug_file_location(at : LineInfo) : LLVMOpaqueMetadata? {
-        if (LLVM_DEBUG_INFO) {
+        if (debug_info_enabled()) {
             let filename = at.fileInfo != null ? string(at.fileInfo.name) : ""
             return get_debug_file_location_by_name(filename)
         } else {
@@ -291,7 +293,7 @@ class LlvmJitVisitor : AstVisitor {
     }
 
     def get_debug_location(at : LineInfo) : LLVMOpaqueMetadata? {
-        if (LLVM_DEBUG_INFO) {
+        if (debug_info_enabled()) {
             let file_meta = get_debug_file_location(at)
             return LLVMDIBuilderCreateDebugLocation(g_ctx, at.line, at.column, di_function, null)
         } else {
@@ -300,7 +302,7 @@ class LlvmJitVisitor : AstVisitor {
     }
 
     def set_builder_location(at : LineInfo) {
-        if (LLVM_DEBUG_INFO) {
+        if (debug_info_enabled()) {
             if (di_function != null) {
                 LLVMSetCurrentDebugLocation2(g_builder, get_debug_location(at))
             }
@@ -308,7 +310,7 @@ class LlvmJitVisitor : AstVisitor {
     }
 
     def clear_builder_location {
-        if (LLVM_DEBUG_INFO) {
+        if (debug_info_enabled()) {
             LLVMSetCurrentDebugLocation2(g_builder, null)
         }
     }
@@ -4802,7 +4804,7 @@ class LlvmJitVisitor : AstVisitor {
     }
 
     def make_block_function(expr : smart_ptr<ExprMakeBlock>; captured : array<CapturedVariable>; first_field_index : int; captureType : LLVMOpaqueType?) : tuple<func : LLVMOpaqueValue?; impl : LLVMOpaqueValue?> {
-        var astVisitor = new LlvmJitVisitor(expr.at, jit_context, types, uid, false, g_di_builder, attributes)
+        var astVisitor = new LlvmJitVisitor(jit_context, types, uid, false, g_di_builder, attributes)
         unsafe {
             astVisitor.adapter <- make_visitor(*astVisitor)
         }
@@ -5871,7 +5873,7 @@ def get_dll_missing(fns : array<FunctionPtr>; disabled : array<FunctionPtr>; var
 
 
 [macro_function]
-def private generate_llvm(ctx : Context?; var dll : DLLHandle?; var types : PrimitiveTypes?; uids : UidNodes?; attrs : Attributes?; fn : FunctionPtr) {
+def private generate_llvm(ctx : Context?; var types : PrimitiveTypes?; uids : UidNodes?; attrs : Attributes?; fn : FunctionPtr; enable_debug_info : bool) {
     verify(!(is_in_completion() || is_compiling_macros() || is_folding()))
 
     let dll_name = uids.get_dll_fn_name(fn)
@@ -5880,7 +5882,7 @@ def private generate_llvm(ctx : Context?; var dll : DLLHandle?; var types : Prim
     let aot_hash : uint64 = get_function_aot_hash(fn |> get_ptr)
     // debug("initializer hash for {dll_name.publ()}: {aot_hash}")
     globalVar |> LLVMSetInitializer(types.ConstI64(aot_hash))
-    var astVisitor = new LlvmJitVisitor(fn.at, ctx, types, uids, true, null, attrs)
+    var astVisitor = new LlvmJitVisitor(ctx, types, uids, enable_debug_info, null, attrs)
     unsafe {
         astVisitor.adapter <- make_visitor(*astVisitor)
     }
@@ -5899,17 +5901,18 @@ def private generate_llvm(ctx : Context?; var dll : DLLHandle?; var types : Prim
 }
 
 [macro_function]
-def private generate_llvm_code(var dll : DLLHandle?; fmna : DllName) {
+def private generate_llvm_code(var dll : DLLHandle?; fmna : DllName; dll_enabled : bool) {
     verify(!(is_in_completion() || is_compiling_macros() || is_folding()))
     assert(!g_failed)
     var code : void? = null
-    if (dll.handle != null) {
+    if (dll_enabled) {
+        assert(dll.handle != null)
         code = dll.get_function_address(fmna)
         if (code != null) {
             return code
         }
     }
-    if (JIT_USE_DLL_MODE) {
+    if (dll_enabled) {
         to_log(LOG_ERROR, "Something wrong! Non dll function used in dll mode {fmna.publ()}\n")
     }
     let fn_code = LLVMGetFunctionAddress(g_engine, fmna.publ())
@@ -5921,13 +5924,15 @@ def private generate_llvm_code(var dll : DLLHandle?; fmna : DllName) {
 }
 
 [macro_function]
-def private optimize_llvm_module {
+def private optimize_llvm_module(opt_level : uint; size_level : uint; inline_threshold : uint) {
     return if (is_in_completion() || is_compiling_macros() || is_folding())
     return if (g_failed || !LLVM_ENABLE_OPT_PASS)
     var pmb = LLVMPassManagerBuilderCreate()
-    LLVMPassManagerBuilderSetOptLevel(pmb, LLVM_OPT_LEVEL)
-    LLVMPassManagerBuilderSetSizeLevel(pmb, LLVM_SIZE_LEVEL)
-    LLVMPassManagerBuilderUseInlinerWithThreshold(pmb, LLVM_INLINE_THRESHOLD)
+
+    LLVMPassManagerBuilderSetOptLevel(pmb, opt_level)
+    LLVMPassManagerBuilderSetSizeLevel(pmb, size_level)
+    LLVMPassManagerBuilderUseInlinerWithThreshold(pmb, inline_threshold)
+
     var pm = LLVMCreatePassManager()
     LLVMPassManagerBuilderPopulateModulePassManager(pmb, pm)
     // LLVMAddLoopVectorizePass(pm)
@@ -5997,10 +6002,7 @@ class DisableJitVisitor : AstVisitor {
 class JIT_LLVM : AstSimulateMacro {
     def override simulate(prog : Program?; var ctx : Context?) : bool {
         return true if (is_in_completion() || is_compiling_macros() || is_folding())
-        if (!LLVM_JIT_ENABLED) {
-            return true
-        }
-        if (!jit_enabled()) {
+        if (!prog.policies.jit_enabled) {
             error("jit is disabled. use `-jit` option for daScript, or enable jit via CodeOfPolicies")
             return false
         }
@@ -6008,11 +6010,20 @@ class JIT_LLVM : AstSimulateMacro {
         var disabled : array<FunctionPtr>
         var disableJitVisitor = new DisableJitVisitor()
         var inscope disableJitVisitorAdapter <- make_visitor(*disableJitVisitor)
+
+        assume jit_all_functions = prog.policies.jit_jit_all_functions
+        assume debug_info = prog.policies.jit_debug_info
+        assume use_dll = prog.policies.jit_use_dll_mode
+        let opt_level = prog.policies.jit_opt_level
+        let size_level = prog.policies.jit_size_level
+        assume output_folder = string(prog.policies.jit_output_folder)
+        assume path_to_shared_lib = string(prog.policies.jit_path_to_shared_lib)
+
         prog |> for_each_module <| $(mod) {
             mod |> for_each_function("") <| $(fun) {
                 var rqj = fun.moreFlags.requestJit
                 fun.moreFlags &= ~MoreFunctionFlags.requestJit
-                if (fun.flags.used && (LLVM_JIT_ALL_FUNCTIONS || rqj)) {
+                if (fun.flags.used && (jit_all_functions || rqj)) {
                     if (!fun.moreFlags.requestNoJit) {
                         disableJitVisitor.disable = false
                         fun |> visit(disableJitVisitorAdapter)
@@ -6033,28 +6044,31 @@ class JIT_LLVM : AstSimulateMacro {
         }
         if (!empty(funcs)) {
             let totalTime = ref_time_ticks()
-            init_jit()
+            init_jit(opt_level)
             let attrs = new Attributes(g_ctx)
             var uids = create_uid_nodes(prog, funcs)
-            var fake_visitor = new LlvmJitVisitor(funcs[0].at, ctx, g_prim_t, uids, false, null, attrs)
+            var fake_visitor = new LlvmJitVisitor(ctx, g_prim_t, uids, false, null, attrs)
             for (fun in funcs) {
                 fake_visitor->add_llvm_functions(fun)
             }
             unsafe {
                 delete fake_visitor
             }
-            var g_dynamic_lib_handle = new DLLHandle();
+            var g_dynamic_lib_handle : DLLHandle? = null;
             var recompile_prog = true
-            if (JIT_USE_DLL_MODE) {
-                g_dynamic_lib_handle.handle = load_dynamic_library("{JIT_DLL_OUTPUT}{prog.thisNamespace}.dll")
+            if (use_dll) {
+                let dll_object_path = "{output_folder}{prog.thisNamespace}"
+                g_dynamic_lib_handle = get_dll_by_path(dll_object_path)
                 let (missing, disabling) = get_dll_missing(funcs, disabled, g_dynamic_lib_handle, uids)
                 let dll_changed = !(missing |> empty() && disabling |> empty())
                 recompile_prog = dll_changed
+                if (recompile_prog) {
+                    g_dynamic_lib_handle.reset();
+                }
             }
             if (recompile_prog) {
-                g_dynamic_lib_handle.reset();
                 for (fun in funcs) {
-                    generate_llvm(ctx, g_dynamic_lib_handle, g_prim_t, uids, attrs, fun)
+                    generate_llvm(ctx, g_prim_t, uids, attrs, fun, debug_info)
                     let fnmna = uids.get_dll_fn_name(fun)
                     var fn_impl = LLVMGetNamedFunction(g_mod, fnmna.impl())
                     var fn = LLVMGetNamedFunction(g_mod, fnmna.publ())
@@ -6077,7 +6091,7 @@ class JIT_LLVM : AstSimulateMacro {
                     panic("Internal jit error. Failed to get IR for functions {fn_names}.\n")
                 }
                 generate_fileinfo_constructor(*g_prim_t, active_filenames) |> add_constructor_function(g_prim_t)
-                optimize_llvm_module()
+                optimize_llvm_module(opt_level |> uint(), size_level |> uint(), LLVM_INLINE_THRESHOLD)
                 if (false) {
                     // Let's remove unused attributes before we print IR.
                     var pm = LLVMCreatePassManager()
@@ -6093,17 +6107,17 @@ class JIT_LLVM : AstSimulateMacro {
                     panic("Internal jit error. Failed to get IR for functions {fn_names}.\n")
                 }
                 active_filenames = table<string>();
-                if (JIT_USE_DLL_MODE) {
-                    let out_path = "{JIT_DLL_OUTPUT}{prog.thisNamespace}"
-                    mkdir_rec(JIT_DLL_OUTPUT)
-                    write_dll(g_mod, out_path, JIT_DLL_DASCRIPTLIB)
+                if (use_dll) {
+                    mkdir_rec(output_folder)
+                    let dll_object_path = "{output_folder}{prog.thisNamespace}"
+                    write_dll(g_mod, dll_object_path, path_to_shared_lib)
                     g_dynamic_lib_handle.reset()
-                    g_dynamic_lib_handle.handle = load_dynamic_library("{out_path}.dll")
+                    g_dynamic_lib_handle = get_dll_by_path(dll_object_path)
                     let (missing, disabling) = get_dll_missing(funcs, disabled, g_dynamic_lib_handle, uids)
                     assert(missing |> empty() && disabling |> empty())
                 }
             }
-            if (JIT_USE_DLL_MODE) {
+            if (use_dll) {
                 assert(g_dynamic_lib_handle.handle != null)
                 var extern_resolver = new ResolveExternVisitor(g_dynamic_lib_handle, g_prim_t, ctx, clone(uids))
                 var inscope adapter_resolve = make_visitor(*extern_resolver)
@@ -6115,7 +6129,7 @@ class JIT_LLVM : AstSimulateMacro {
                 var mangled_name = get_mangled_name(fun)
                 let MNH = hash(mangled_name)
                 var simfun = get_function_by_mangled_name_hash(MNH, *ctx)
-                var gen = generate_llvm_code(g_dynamic_lib_handle, uids.get_dll_fn_name(fun))
+                var gen = generate_llvm_code(g_dynamic_lib_handle, uids.get_dll_fn_name(fun), use_dll)
                 if (gen != null) {
                     gen |> unsafe(instrument_jit(simfun, *ctx))
                 } else {

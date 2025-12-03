@@ -195,7 +195,7 @@ def public create_uid_nodes(prog : Program?; funcs : array<FunctionPtr>) {
 
 
 // All dll operations pass through this class 
-struct public DLLHandle {
+class public DLLHandle {
     handle : void?
     created_fileinfos : table<FileInfo?; FileInfo?>
 
@@ -248,4 +248,15 @@ struct public DLLHandle {
         }
     }
 
+}
+
+def public add_obj_extension(path : string) {
+    return "{path}.o"
+}
+def public add_dll_extension(path : string) {
+    return "{path}.dll"
+}
+
+def public get_dll_by_path(path : string) : DLLHandle? {
+    return new DLLHandle(handle = load_dynamic_library(add_dll_extension(path)))
 }
