@@ -2221,8 +2221,14 @@ namespace das {
               << value.debug_module
               << value.profiler
               << value.profile_module
-              << value.jit
-              << value.jit_module
+              << value.jit_enabled
+              << value.jit_jit_all_functions
+              << value.jit_debug_info
+              << value.jit_opt_level
+              << value.jit_size_level
+              << value.jit_use_dll_mode
+              << value.jit_output_folder
+              << value.jit_path_to_shared_lib
               << value.threadlock_context;
         return *this;
     }

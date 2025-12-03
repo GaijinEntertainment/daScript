@@ -1526,11 +1526,19 @@ namespace das
         //      1. disables [fastcall]
         bool profiler = false;
         string profile_module;
-    // jit
-        bool jit = false;
-        string jit_module;
     // pinvoke
         /*option*/ bool threadlock_context = false;               // has context mutex
+    // jit
+        bool jit_enabled = false;                                 // enable JIT
+        string jit_module;                                        // path to jit module
+        // todo: add this params to serialization?
+        bool jit_jit_all_functions = true;                        // JIT all functions by default
+        bool jit_debug_info = false;                              // Add debug info to generate binary code
+        bool jit_use_dll_mode = true;                             // Create if missing and reuse DLL or JIT compile
+        string jit_output_folder = "out/";                        // Folder to store compiled dll's
+        int32_t jit_opt_level = 3u;                               // Opt level for LLVM to codegen and IR optimizations
+        int32_t jit_size_level = 3u;                              // Opt level for LLVM for binary size
+        string jit_path_to_shared_lib = "lib/libDaScript.lib";    // Path to libDaScript. Unused on Linux.
     };
 
     struct CommentReader : public ptr_ref_count {

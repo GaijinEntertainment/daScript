@@ -34,7 +34,7 @@ void SetRuntimeMode(CodeOfPolicies &policies, RuntimeMode mode) {
             policies.aot = true;
             break;
         case RuntimeMode::JIT:
-            policies.jit = true;
+            policies.jit_enabled = true;
             policies.jit_module = getDasRoot() + "/daslib/just_in_time.das";
             break;
         case RuntimeMode::Interpreter: break;
