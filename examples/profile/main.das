@@ -26,12 +26,12 @@ def compile_and_run(fileName : string; useAot : bool; useJit : bool) {
             cop.aot_module = true
             cop.threadlock_context = true
             if (useJit) {
-                cop.jit = jit_enabled()
+                cop.jit_enabled = jit_enabled()
                 cop.jit_module := "{get_das_root()}/daslib/just_in_time.das"
             } elif (useAot) {
                 cop.aot = true
             } else {
-                cop.jit = false
+                cop.jit_enabled = false
                 cop.aot = false
             }
             compile_file(fileName, access, unsafe(addr(mg)), cop) <| $(ok, program, issues) {

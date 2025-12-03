@@ -344,7 +344,7 @@ namespace das {
         }
 
         bool jitEnabled() const {
-            return program->policies.jit && (!func || !func->requestNoJit);
+            return program->policies.jit_enabled && (!func || !func->requestNoJit);
         }
 
         void propagateTempType ( const TypeDeclPtr & parentType, TypeDeclPtr & subexprType ) {

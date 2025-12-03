@@ -1572,7 +1572,7 @@ namespace das
 
     bool das_jit_enabled ( Context * context, LineInfoArg * at ) {
         if ( !context->thisProgram ) context->throw_error_at(at, "can only query for jit during compilation");
-        return context->thisProgram->policies.jit;
+        return context->thisProgram->policies.jit_enabled;
     }
 
     bool das_aot_enabled ( Context * context, LineInfoArg * at ) {

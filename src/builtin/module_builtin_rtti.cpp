@@ -785,11 +785,18 @@ namespace das {
         // profiler
             addField<DAS_BIND_MANAGED_FIELD(profiler)>("profiler");
             addField<DAS_BIND_MANAGED_FIELD(profile_module)>("profile_module");
-        // jit
-            addField<DAS_BIND_MANAGED_FIELD(jit)>("jit");
-            addField<DAS_BIND_MANAGED_FIELD(jit_module)>("jit_module");
         // threadlock context
             addField<DAS_BIND_MANAGED_FIELD(threadlock_context)>("threadlock_context");
+        // jit
+            addField<DAS_BIND_MANAGED_FIELD(jit_enabled)>("jit_enabled");
+            addField<DAS_BIND_MANAGED_FIELD(jit_module)>("jit_module");
+            addField<DAS_BIND_MANAGED_FIELD(jit_jit_all_functions)>("jit_jit_all_functions");
+            addField<DAS_BIND_MANAGED_FIELD(jit_debug_info)>("jit_debug_info");
+            addField<DAS_BIND_MANAGED_FIELD(jit_opt_level)>("jit_opt_level");
+            addField<DAS_BIND_MANAGED_FIELD(jit_size_level)>("jit_size_level");
+            addField<DAS_BIND_MANAGED_FIELD(jit_use_dll_mode)>("jit_use_dll_mode");
+            addField<DAS_BIND_MANAGED_FIELD(jit_output_folder)>("jit_output_folder");
+            addField<DAS_BIND_MANAGED_FIELD(jit_path_to_shared_lib)>("jit_path_to_shared_lib");
         }
         virtual bool isLocal() const override { return true; }
     };
