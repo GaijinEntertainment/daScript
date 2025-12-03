@@ -2229,6 +2229,7 @@ namespace das {
               << value.jit_use_dll_mode
               << value.jit_output_folder
               << value.jit_path_to_shared_lib
+              << value.jit_path_to_linker
               << value.threadlock_context;
         return *this;
     }
