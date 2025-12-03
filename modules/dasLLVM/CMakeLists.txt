@@ -105,12 +105,8 @@ IF ((NOT DAS_LLVM_INCLUDED) AND ${LLVM_FOUND} AND ((NOT ${DAS_LLVM_DISABLED}) OR
 		${DAS_LLVM_DIR}/src/dasLLVM.func_63.cpp
 		${DAS_LLVM_DIR}/src/dasLLVM.func_64.cpp
 		${DAS_LLVM_DIR}/src/dasLLVM.func_65.cpp
-	# llvm config module ( for passing setting externally )
-		${DAS_LLVM_DIR}/src/llvm_config/llvmConfigModule.cpp
-		${DAS_LLVM_DIR}/src/llvm_config/llvmConfigStub.cpp
 	)
 
-	ADD_MODULE_CPP(LlvmConfig)
 	ADD_MODULE_CPP(dasLLVM)
 
 	ADD_MODULE_DAS(llvm das_llvm llvm_const)
