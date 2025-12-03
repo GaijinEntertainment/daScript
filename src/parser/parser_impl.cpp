@@ -1264,4 +1264,10 @@ namespace das {
         else yyextra->g_Program->error("unknown capture mode " + op, "", "", at, CompilationError::syntax_error);
         return new CaptureEntry(name,mode);
     }
+
+    Expression * ast_makeMoveArgument ( yyscan_t scanner, Expression * expr, const LineInfo & at ) {
+        auto moveExpr = new ExprCall(at, "$::consume_argument");
+        moveExpr->arguments.push_back(expr);
+        return moveExpr;
+    }
  }
