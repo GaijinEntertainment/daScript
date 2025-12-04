@@ -6016,8 +6016,10 @@ class JIT_LLVM : AstSimulateMacro {
         assume use_dll = prog.policies.jit_use_dll_mode
         let opt_level = prog.policies.jit_opt_level
         let size_level = prog.policies.jit_size_level
-        assume output_folder = string(prog.policies.jit_output_folder)
+        assume config_out_folder = string(prog.policies.jit_output_folder)
+        let output_folder = config_out_folder |> empty() ? "{get_das_root()}/jitted_scripts/" : config_out_folder
         assume path_to_shared_lib = string(prog.policies.jit_path_to_shared_lib)
+        assume path_to_linker = string(prog.policies.jit_path_to_linker)
 
         prog |> for_each_module <| $(mod) {
             mod |> for_each_function("") <| $(fun) {
@@ -6044,7 +6046,7 @@ class JIT_LLVM : AstSimulateMacro {
         }
         if (!empty(funcs)) {
             let totalTime = ref_time_ticks()
-            init_jit(opt_level)
+            init_jit(opt_level |> uint)
             let attrs = new Attributes(g_ctx)
             var uids = create_uid_nodes(prog, funcs)
             var fake_visitor = new LlvmJitVisitor(ctx, g_prim_t, uids, false, null, attrs)
@@ -6110,7 +6112,7 @@ class JIT_LLVM : AstSimulateMacro {
                 if (use_dll) {
                     mkdir_rec(output_folder)
                     let dll_object_path = "{output_folder}{prog.thisNamespace}"
-                    write_dll(g_mod, dll_object_path, path_to_shared_lib)
+                    write_dll(g_mod, dll_object_path, path_to_shared_lib, path_to_linker)
                     g_dynamic_lib_handle.reset()
                     g_dynamic_lib_handle = get_dll_by_path(dll_object_path)
                     let (missing, disabling) = get_dll_missing(funcs, disabled, g_dynamic_lib_handle, uids)
