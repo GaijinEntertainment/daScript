@@ -314,8 +314,13 @@ namespace das
 
     struct FinalizeFunctionAnnotation : MarkFunctionAnnotation {
         FinalizeFunctionAnnotation() : MarkFunctionAnnotation("finalize") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList & args, string &) override {
             func->shutdown = true;
+            for ( auto & arg : args ) {
+                if ( arg.name=="late" && arg.type == Type::tBool ) {
+                    func->lateShutdown = arg.bValue;
+                }
+            }
             return true;
         };
         virtual bool finalize(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string & errors) override {

@@ -110,7 +110,10 @@ namespace das {
             fni->flags |= FuncInfo::flag_init;
             if ( fn.lateInit ) fni->flags |= FuncInfo::flag_late_init;
         }
-        if ( fn.shutdown ) fni->flags |= FuncInfo::flag_shutdown;
+        if ( fn.shutdown ) {
+            fni->flags |= FuncInfo::flag_shutdown;
+            if ( fn.lateShutdown ) fni->flags |= FuncInfo::flag_late_shutdown;
+        }
         if ( fn.builtIn ) fni->flags |= FuncInfo::flag_builtin;
         if ( fn.privateFunction ) fni->flags |= FuncInfo::flag_private;
         fni->result = makeTypeInfo(nullptr, fn.result);

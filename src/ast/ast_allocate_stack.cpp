@@ -972,6 +972,11 @@ namespace das {
                             if (func->lateInit ) logs << "(late)";
                             logs << "]";
                         }
+                        if ( func->shutdown ) {
+                            logs << " [finalize";
+                            if (func->lateShutdown ) logs << "(late)";
+                            logs << "]";
+                        }
                         logs << " // " << HEX << func->getMangledNameHash() << DEC;
                         logs << "\n";
                     }
