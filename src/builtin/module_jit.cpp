@@ -133,7 +133,8 @@ extern "C" {
         return ptr;
     }
 
-    DAS_API void * jit_alloc_persistent ( uint32_t bytes, Context * ) {
+    DAS_API void * jit_alloc_persistent ( uint32_t bytes, Context * context ) {
+        if ( !bytes ) context->throw_out_of_memory(false, bytes);
         return das_aligned_alloc16(bytes);
     }
 
