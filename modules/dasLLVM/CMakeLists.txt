@@ -137,6 +137,7 @@ IF(WIN32)
 		${LLVM_INSTALL_PREFIX}/bin/LLVM-C.dll
 		${LLVM_INSTALL_PREFIX}/bin/LTO.dll
 		${LLVM_INSTALL_PREFIX}/bin/Remarks.dll
+		${LLVM_INSTALL_PREFIX}/bin/clang-cl.exe
 		${LLVM_INSTALL_PREFIX}/bin/libclang.dll
 	)
 	foreach(dll ${DAS_CLANG_DLLS})
