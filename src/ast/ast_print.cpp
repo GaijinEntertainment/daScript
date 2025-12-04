@@ -324,7 +324,7 @@ namespace das {
             if ( fn->init ) { ss << "[init" << (fn->lateInit ? "(late)" : "") << "]\n"; }
             if ( fn->macroInit ) { ss << "[macro_init]\n"; }
             if ( fn->macroFunction ) { ss << "[macro_function]\n"; }
-            if ( fn->shutdown ) { ss << "[finalize]\n"; }
+            if ( fn->shutdown ) { ss << "[finalize" << (fn->lateShutdown ? "(late)" : "") << "]\n"; }
             if ( fn->unsafeDeref ) { ss << "[unsafe_deref]\n"; }
             if ( fn->unsafeOperation ) { ss << "[unsafe_operation]\n"; }
             if ( fn->isClassMethod ) { ss << "[class_method(" << fn->classParent->getMangledName() << ")]\n"; }

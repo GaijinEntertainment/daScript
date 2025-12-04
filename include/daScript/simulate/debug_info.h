@@ -437,6 +437,7 @@ namespace das
         ,   flag_private = (1<<2)
         ,   flag_shutdown = (1<<3)
         ,   flag_late_init = (1<<5)
+        ,   flag_late_shutdown = (1<<6)
         };
         const char *            name;
         const char *            cppName;
