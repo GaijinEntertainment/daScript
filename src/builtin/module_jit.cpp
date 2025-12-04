@@ -395,12 +395,45 @@ extern "C" {
     }
 
 #if (defined(_MSC_VER) || defined(__linux__) || defined(__APPLE__)) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
-    void create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * jitModuleObj ) {
+    void create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasSharedLibrary, const char * customLinker ) {
         char cmd[1024];
+        string linker;
+        string dasLibrary;
+        const bool isLinkerMissing = customLinker == nullptr || strlen(customLinker) == 0;
+        const bool isLibraryMissing = dasSharedLibrary == nullptr || strlen(dasSharedLibrary) == 0;
+        if (isLinkerMissing || isLibraryMissing) {
+            #if defined(_WIN32) || defined(_WIN64)
+                const auto path = get_prefix(getExecutableFileName());
+                const auto winCfg = path.substr(path.find_last_of("\\/"));
+                const auto windowsConfig = (winCfg == "bin" ? "" : (winCfg + "/"));
+                if (isLinkerMissing) {
+                    linker = getDasRoot() + "/bin/" + windowsConfig + "clang-cl.exe";
+                }
+                if (isLibraryMissing) {
+                    dasLibrary = getDasRoot() + "/lib/" + windowsConfig + "libDaScript.lib";
+                }
+            #else
+                if (isLinkerMissing) {
+                    linker = "cc";
+                }
+                #if defined(__APPLE__)
+                if (isLibraryMissing) {
+                    dasLibrary = getDasRoot() + "/lib/liblibDaScript.dylib";
+                }
+                #else
+                if (isLibraryMissing) {
+                    dasLibrary = getDasRoot() + "/lib/liblibDaScript.lib";
+                }
+                #endif
+            #endif
+        } else {
+            linker = customLinker;
+            dasLibrary = dasSharedLibrary;
+        }
 
-        #if defined(_WIN32) || defined(_WIN64)
-        if (!check_file_present(jitModuleObj)) {
-            LOG(LogLevel::error) << "File '" << jitModuleObj << "' , containing daScript library, does not exist\n";
+        #if defined(_WIN32) || defined(_WIN64) || defined(__APPLE__)
+        if (!check_file_present(dasLibrary.c_str())) {
+            LOG(LogLevel::error) << "File '" << dasLibrary << "' , containing daScript library, does not exist\n";
             return;
         }
         #endif
@@ -410,11 +443,11 @@ extern "C" {
         }
 
         #if defined(_WIN32) || defined(_WIN64)
-            auto result = fmt::format_to(cmd, FMT_STRING("clang-cl {} {} msvcrt.lib -link -DLL -OUT:{} 2>&1"), objFilePath, jitModuleObj, libraryName);
+            auto result = fmt::format_to(cmd, FMT_STRING("{} {} {} msvcrt.lib -link -DLL -OUT:{} 2>&1"), linker, objFilePath, dasLibrary, libraryName);
         #elif defined(__APPLE__)
-            auto result = fmt::format_to(cmd, FMT_STRING("clang -shared -o {} {} {} 2>&1"), libraryName, jitModuleObj, objFilePath);
+            auto result = fmt::format_to(cmd, FMT_STRING("{} -shared -o {} {} {} 2>&1"), linker, libraryName, dasLibrary, objFilePath);
         #else
-            auto result = fmt::format_to(cmd, FMT_STRING("gcc -shared -o {} {} 2>&1"), libraryName, objFilePath);
+            auto result = fmt::format_to(cmd, FMT_STRING("{} -shared -o {} {} 2>&1"), linker, libraryName, objFilePath);
         #endif
             *result = '\0';
 
@@ -456,7 +489,7 @@ extern "C" {
         }
     }
 #else
-    void create_shared_library ( const char * , const char * , const char *  ) { }
+    void create_shared_library ( const char * , const char * , const char *, const char * ) { }
 #endif
 
     class Module_Jit : public Module {
@@ -578,7 +611,7 @@ extern "C" {
                     ->args({"library"});
             addExtern<DAS_BIND_FUN(create_shared_library)>(*this, lib,  "create_shared_library",
                 SideEffects::worstDefault, "create_shared_library")
-                    ->args({"objFilePath","libraryName","jitModuleObj"});
+                    ->args({"objFilePath","libraryName","dasSharedLibrary","customLinker"});
             addExtern<DAS_BIND_FUN(jit_initialize_fileinfo)>(*this, lib,  "jit_initialize_fileinfo",
                 SideEffects::worstDefault, "jit_initialize_fileinfo");
             addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));

@@ -797,6 +797,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(jit_use_dll_mode)>("jit_use_dll_mode");
             addField<DAS_BIND_MANAGED_FIELD(jit_output_folder)>("jit_output_folder");
             addField<DAS_BIND_MANAGED_FIELD(jit_path_to_shared_lib)>("jit_path_to_shared_lib");
+            addField<DAS_BIND_MANAGED_FIELD(jit_path_to_linker)>("jit_path_to_linker");
         }
         virtual bool isLocal() const override { return true; }
     };

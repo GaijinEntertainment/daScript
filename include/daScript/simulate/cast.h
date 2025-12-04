@@ -13,16 +13,17 @@ namespace das
     template <typename TT> struct WrapRetType { typedef TT type; };
 
     // gcc fails to deduce auto field type. We should manually add it
+    // NO_ASAN_INLINE should be removed once vecmath adds it to the vec3->vec4 conversions.
     template <typename T, typename Element, Element T::*BaseField = &T::x>
     struct WrapVec2Arg : T {
         WrapVec2Arg(vec4f t) : T(vec_extract<Element>::x(t), vec_extract<Element>::y(t)) {}
-        operator vec4f() const { return das::vec_loadu(&(this->*BaseField)); }
+        NO_ASAN_INLINE operator vec4f() const { return das::vec_loadu(&(this->*BaseField)); }
     };
 
     template <typename T, typename Element, Element T::*BaseField = &T::x>
     struct WrapVec3Arg : T {
         WrapVec3Arg(vec4f t) : T(vec_extract<Element>::x(t), vec_extract<Element>::y(t), vec_extract<Element>::z(t)) {}
-        operator vec4f() const { return das::vec_loadu(&(this->*BaseField)); }
+        NO_ASAN_INLINE operator vec4f() const { return das::vec_loadu(&(this->*BaseField)); }
     };
 
     template <typename T, typename Element, Element T::*BaseField = &T::x>
