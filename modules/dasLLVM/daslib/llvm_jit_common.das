@@ -286,7 +286,7 @@ def public LLVMAddFunctionWithType(mod : LLVMModuleRef; name : string; typ : LLV
 
 
 [macro_function]
-def public init_jit(cg_opt_level) {
+def public init_jit(cg_opt_level : uint) {
     return if (is_in_completion() || is_compiling_macros())
     return if (g_mod != null)    // prevent double init
     LLVMLinkInMCJIT()
@@ -647,13 +647,15 @@ def public with_default_target_machine(blk : block<(LLVMTargetMachineRef) : void
 // @mod - module to dump to dll
 // @out_path - folder and name of file, without extension
 // @path_to_dascript_lib - path to library, required on Windows. Has no effect on Linux.
-def public write_dll(mod : LLVMOpaqueModule?; out_path : string; path_to_dascript_lib = "") {
+// @path_to_linker - path to clang-cl on Windows. By default we'll use clang-cl from LLVM package
+// on Windows, default otherwise.
+def public write_dll(mod : LLVMOpaqueModule?; out_path : string; path_to_dascript_lib, path_to_linker : string) {
     with_default_target_machine <| $(targetMachine : LLVMTargetMachineRef) {
         let error : string?
         let file = add_obj_extension(out_path)
         let filetype = LLVMCodeGenFileType.LLVMObjectFile
         LLVMTargetMachineEmitToFile(targetMachine, mod, file, filetype, error)
-        create_shared_library(file, add_dll_extension(out_path), "{path_to_dascript_lib}")
+        create_shared_library(file, add_dll_extension(out_path), "{path_to_dascript_lib}", "{path_to_linker}")
     }
 }
 
