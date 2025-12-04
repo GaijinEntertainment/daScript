@@ -35,16 +35,24 @@ namespace das {
             if ( next ) next->reset();
         }
         void beforeGC() {
-            gc_bits = (uint32_t*) das_aligned_alloc16(total / 32 * 4);
-            memset ( gc_bits, 0, total / 32 * 4);
+            auto total_bytes = total / 32 * 4;
+            if ( total_bytes ) {
+                gc_bits = (uint32_t*) das_aligned_alloc16(total_bytes);
+                memset ( gc_bits, 0, total_bytes);
+            } else {
+                gc_bits = nullptr;
+            }
             look = 0;
             gc_allocated = 0;
             if ( next ) next->beforeGC();
         }
         void afterGC() {
-            memcpy ( bits, gc_bits, total / 32 * 4 );
-            das_aligned_free16 ( gc_bits );
-            gc_bits = nullptr;
+            auto total_bytes = total / 32 * 4;
+            if ( total_bytes ) {
+                memcpy ( bits, gc_bits, total_bytes );
+                das_aligned_free16 ( gc_bits );
+                gc_bits = nullptr;
+            }
             allocated = gc_allocated;
         }
         __forceinline bool isOwnPtr ( char * ptr ) const {

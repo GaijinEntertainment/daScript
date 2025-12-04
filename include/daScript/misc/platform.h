@@ -353,6 +353,7 @@ void DAS_API os_debug_break();
 #ifndef DAS_ALIGNED_ALLOC
 #define DAS_ALIGNED_ALLOC 1
 inline void *das_aligned_alloc16(size_t size) {
+    DAS_ASSERTF(size != 0, "das_aligned_alloc16 called with size 0");
 #if defined(_MSC_VER)
     return _aligned_malloc(size, 16);
 #else

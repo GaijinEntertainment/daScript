@@ -1153,7 +1153,7 @@ namespace das
     void Context::allocateGlobalsAndShared() {
         freeGlobalsAndShared();
         globals = globalsSize ? (char *) das_aligned_alloc16(globalsSize) : nullptr;
-        shared = sharedOwner ? (char *) das_aligned_alloc16(sharedSize) : nullptr;
+        shared = (sharedOwner && sharedSize) ? (char *) das_aligned_alloc16(sharedSize) : nullptr;
         globalsOwner = true;
         sharedOwner = true;
     }
@@ -1213,7 +1213,7 @@ namespace das
         globalVariables = ctx.globalVariables;
         totalVariables = ctx.totalVariables;
         if ( ctx.globals ) {
-            globals = (char *) das_aligned_alloc16(globalsSize);
+            globals = (char *) (globalsSize ? das_aligned_alloc16(globalsSize) : nullptr);
         }
         // shared
         sharedSize = ctx.sharedSize;
