@@ -423,8 +423,8 @@
 
 
 %type <positions>       alias_list
-%type <ui>               open_block
-%type <ui>               close_block
+%type <ui>              open_block
+%type <ui>              close_block
 %type <b>               opt_sem
 %type <i>               class_or_struct
 %type <b>               copy_or_move
@@ -451,6 +451,7 @@
 %type <b>               use_initializer
 %type <b>               if_or_static_if
 %type <b>               elif_or_static_elif
+%type <b>               optional_template
 
 %type <i>               copy_or_move_or_clone
 
@@ -1291,12 +1292,17 @@ function_name
     |   DAS_TUINT8   { $$ = new string("uint8"); }
     |   DAS_TINT16   { $$ = new string("int16"); }
     |   DAS_TUINT16  { $$ = new string("uint16"); }
+    ;
 
+optional_template
+    :                                   { $$ = false; }
+    |   DAS_TEMPLATE                    { $$ = true; }
     ;
 
 global_function_declaration
-    :   optional_annotation_list[annL] DAS_DEF[from] function_declaration[func] {
+    :   optional_annotation_list[annL] DAS_DEF[from] optional_template[isTemplate] function_declaration[func] {
         $func->atDecl = tokRangeAt(scanner,@from,@func);
+        $func->isTemplate = $isTemplate;
         assignDefaultArguments($func);
         runFunctionAnnotations(scanner, yyextra, $func, $annL, tokAt(scanner,@annL));
         if ( $func->isGeneric() ) {
@@ -3061,8 +3067,8 @@ structure_name
 class_or_struct
     :   DAS_CLASS   { $$ = CorS_Class; }
     |   DAS_STRUCT  { $$ = CorS_Struct; }
-    |   DAS_TEMPLATE DAS_CLASS   { $$ = CorS_ClassTemplate; }
-    |   DAS_TEMPLATE DAS_STRUCT  { $$ = CorS_StructTemplate; }
+    |   DAS_CLASS DAS_TEMPLATE    { $$ = CorS_ClassTemplate; }
+    |   DAS_STRUCT DAS_TEMPLATE   { $$ = CorS_StructTemplate; }
     ;
 
 optional_public_or_private_structure

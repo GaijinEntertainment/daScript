@@ -78,7 +78,7 @@ namespace das
         }
         virtual void preVisit ( ExprCall * call ) override {
             Visitor::preVisit(call);
-            if ( call->func->aotTemplate ) {
+            if ( call->func && call->func->aotTemplate ) {
                 for ( auto & arg : call->arguments ) {
                     skipMakeBlock(arg);
                 }

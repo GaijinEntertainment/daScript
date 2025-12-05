@@ -8,7 +8,7 @@ require daslib/typemacro_boost
 
 struct public TemplateCounterBase {}
 
-template struct TemplateCounter : TemplateCounterBase {
+struct template TemplateCounter : TemplateCounterBase {
     counter : CounterType   // we add this one in a typemacro (or we can use $t(counter_type))
     def next {
         counter ++
@@ -16,6 +16,10 @@ template struct TemplateCounter : TemplateCounterBase {
     def value {
         return counter
     }
+}
+
+def template print_counter(c : $t(resType)) {
+    print("Counter value: {c.value()}\n")
 }
 
 [typemacro_function]
@@ -35,6 +39,9 @@ def counter(macroArgument, passArgument : TypeDeclPtr; counter_type : TypeDeclPt
         var inscope resType <- qmacro_template_class(struct_name, type<TemplateCounter>)
         var inscope CounterType <- clone_type(counter_type)
         add_structure_alias(resType.structType, "CounterType", CounterType)
+        // for demo purposes, we can add a print_counter function here
+        var inscope print_fn <- qmacro_template_function(@@print_counter)
+        add_function(compiling_module(), print_fn)
         return <- resType
     }
 }
