@@ -772,7 +772,7 @@ namespace das {
                 if ( itFnList ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
-                        if ( pFn->isTemplate ) continue;
+                        // if ( pFn->isTemplate ) continue;
                         if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn)) ) {
                             if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                 result.push_back(pFn);
@@ -2940,7 +2940,13 @@ namespace das {
                     expr->type->argTypes.push_back(at);
                     expr->type->argNames.push_back(arg->name);
                 }
-                verifyType(expr->type);
+                if ( expr->func->isTemplate ) {
+                    error("can't take address of a template function " + describeFunction(expr->func),  "", "",
+                        expr->at, CompilationError::function_not_found);
+                    expr->type.reset();
+                } else {
+                    verifyType(expr->type);
+                }
             } else if ( fns.size()==0 ) {
                 if ( !expr->funcType ) {
                     reportFunctionNotFound(expr);

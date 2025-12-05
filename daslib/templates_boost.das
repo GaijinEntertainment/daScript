@@ -930,7 +930,7 @@ class private QRulesVisitor : AstVisitor {
 
 [macro_function]
 def private apply_qrules(var expr : smart_ptr<Expression>&) : smart_ptr<ExprBlock> {
-    //! Implementation details for the expression reificaiton. This is a generat expression reification.
+    //! Implementation details for the expression reificaiton.
     var inscope eblk <- new ExprBlock(at = expr.at,
         returnType <- new TypeDecl(at = expr.at, baseType = Type.tVoid),
         arguments := array<VariablePtr>(
@@ -953,8 +953,32 @@ def private apply_qrules(var expr : smart_ptr<Expression>&) : smart_ptr<ExprBloc
 }
 
 [macro_function]
+def private apply_function_qrules(var func : smart_ptr<Function>&) : smart_ptr<ExprBlock> {
+    //! Implementation details for the expression reificaiton.
+    var inscope eblk <- new ExprBlock(at = func.at,
+        returnType <- new TypeDecl(at = func.at, baseType = Type.tVoid),
+        arguments := array<VariablePtr>(
+            new Variable(at = func.at, name := "rules", _type <- typeinfo ast_typedecl(type<Template>)) |> generatedVariable()
+        ),
+        blockFlags = ExprBlockFlags.isClosure
+    )
+    var astVisitor = new QRulesVisitor(get_ptr(eblk))
+    var inscope astVisitorAdapter <- make_visitor(*astVisitor)
+    visit(func, astVisitorAdapter)
+    if (astVisitor.failed) {
+        eblk := null
+    }
+    unsafe {
+        delete astVisitor
+    }
+    let annot_rules =  ("rules", RttiValue(tBool = true))
+    eblk |> append_annotation("$", "unused_argument", [ annot_rules ])
+    return <- eblk
+}
+
+[macro_function]
 def private apply_template_qrules(prog : ProgramPtr; var template_structure : Structure?) : smart_ptr<ExprBlock> {
-    //! Implementation details for the expression reificaiton. This is a generat expression reification.
+    //! Implementation details for the expression reificaiton.
     var inscope eblk <- new ExprBlock(at = template_structure.at,
         returnType <- new TypeDecl(at = template_structure.at, baseType = Type.tVoid),
         arguments := array<VariablePtr>(
@@ -992,7 +1016,7 @@ def private apply_template_qrules(prog : ProgramPtr; var template_structure : St
 }
 
 def public apply_qmacro(var expr : smart_ptr<Expression>; blk : block<(var rules : Template) : void>) : ExpressionPtr {
-    //! Implementation details for the expression reificaiton. This is a generat expression reification.
+    //! Implementation details for the expression reificaiton.
     return <- apply_template(expr, blk)
 }
 
@@ -1228,7 +1252,6 @@ class private AstQMethodMacro : AstQNamedClassMacro {
     override apply_call = "apply_qmacro_method"
 }
 
-
 def public apply_qmacro_template_class(instance_name : string; var template_type : smart_ptr<TypeDecl>; blk : block<(var rules : Template) : void>) : TypeDeclPtr {
     //! Implementation details for the expression reificaiton. This is a template class instantiation reification.
     var mod = compiling_module()
@@ -1294,6 +1317,60 @@ def public apply_qmacro_template_class(instance_name : string; var template_type
     return <- instance_type
 }
 
+def public apply_qmacro_template_function(func : FunctionPtr; blk : block<(var rules : Template) : void>) : FunctionPtr {
+    var inscope rules : Template
+    invoke(blk, rules)
+    var inscope func_clone <- clone_function(func)
+    func_clone.moreFlags &= ~(MoreFunctionFlags.isTemplate)
+    func_clone.result |> move_new <| apply_template(rules, func.at, clone_type(func.result))
+    for (arg in func_clone.arguments) {
+        arg._type |> move_new <| apply_template(rules, arg.at, clone_type(arg._type))
+    }
+    return <- func_clone
+}
+
+[call_macro(name="qmacro_template_function")]
+class private AstQNamedTemplateFunctionMacro : AstCallMacro {
+    ///! This macro implements expression reification for the templace function 'qmacro_template_function'
+    apply_call = "apply_qmacro_template_function"
+    macro_call = "qmacro_template_function"
+   //! This macro implements expression reification for the named expressions (function, variable, etc.)
+    def override visit(prog : ProgramPtr; mod : Module?; var call : smart_ptr<ExprCallMacro>) : ExpressionPtr {
+        //! Visit the macro call and generate the reified expression.
+        if (call.arguments |> length != 1) {
+            macro_error(prog, call.at, "expecting {macro_call}(@@TEMPLATE_FUNCTION_NAME)")
+            return <- default<ExpressionPtr>
+        }
+        if (!(call.arguments[0] is ExprAddr)) {
+            macro_error(prog, call.at, "expecting @@TEMPLATE_FUNCTION_NAME")
+            return <- default<ExpressionPtr>
+        }
+        var expr_func = call.arguments[0] as ExprAddr
+        if (expr_func.func == null) {
+            macro_error(prog, call.at, "expecting @@TEMPLATE_FUNCTION_NAME to refer to a function")
+            return <- default<ExpressionPtr>
+        }
+        var inscope qfunc := unsafe(reinterpret<smart_ptr<Function>>(expr_func.func))
+        var inscope qblk <- apply_function_qrules(qfunc)
+        var mod_name = string(expr_func.func._module.name)
+        if (mod_name.empty()) {
+            mod_name = "_"
+        }
+        return <- new ExprCall(at = call.at,
+            name := apply_call,
+            arguments := array<ExpressionPtr>(
+                new ExprCall(at = call.at,
+                    name := "find_compiling_function_by_mangled_name_hash",
+                    arguments := array<ExpressionPtr>(
+                        new ExprConstString(at = call.at, value := mod_name)
+                    ,   new ExprConstUInt64(at = call.at, value := expr_func.func.getMangledNameHash)
+                    )
+                ),
+                new ExprMakeBlock(_block <- qblk, at = call.at)
+            )
+        )
+    }
+}
 
 [call_macro(name="qmacro_template_class")]
 class private AstQNamedTemplateClassMacro : AstCallMacro {

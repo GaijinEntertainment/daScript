@@ -1005,6 +1005,15 @@ namespace das {
         return structure->aliases.find(aliasName);
     }
 
+    smart_ptr_raw<Function> findCompilingFunctionByMangledNameHash(char * module_name, uint64_t mnh, Context * context, LineInfoArg * at) {
+        if ( !module_name ) context->throw_error_at(at, "expecting module name");
+        auto program = daScriptEnvironment::getBound()->g_Program;
+        if ( !program ) context->throw_error_at(at, "only available during compilation");
+        Module * mod = string(module_name)=="_" ? program->thisModule.get() : program->library.findModule(module_name);
+        if ( !mod ) context->throw_error_at(at, "module '%s' not found", module_name);
+        return mod->findFunctionByMangledNameHash(mnh);
+    }
+
     #include "ast.das.inc"
 
     Module_Ast::Module_Ast() : Module("ast") {
@@ -1483,6 +1492,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(for_each_structure_alias)>(*this, lib,  "for_each_structure_alias",
                                                     SideEffects::modifyExternal, "for_each_structure_alias")
                 ->args({"structure","block","context","at"});
+        addExtern<DAS_BIND_FUN(findCompilingFunctionByMangledNameHash)>(*this, lib,  "find_compiling_function_by_mangled_name_hash",
+            SideEffects::accessExternal, "findCompilingFunctionByMangledNameHash")
+                ->args({"moduleName","mangledNameHash","context","at"});
     }
 
     ModuleAotType Module_Ast::aotRequire ( TextWriter & tw ) const {
