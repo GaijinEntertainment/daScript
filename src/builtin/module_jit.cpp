@@ -48,14 +48,16 @@ namespace das {
         }
     }
 
-    bool das_instrument_jit ( void * pfun, const Func func, Context & context ) {
+    bool das_instrument_jit ( void * pfun, const Func func, const LineInfo & lineInfo, Context & context ) {
+
         auto simfn = func.PTR;
         if ( !simfn ) return false;
         if ( simfn->code && simfn->code->rtti_node_isJit() ) {
             auto jitNode = static_cast<SimNode_Jit *>(simfn->code);
             jitNode->func = (JitFunction) pfun;
+            jitNode->debugInfo = lineInfo;
         } else {
-            auto node = context.code->makeNode<SimNode_Jit>(LineInfo(), (JitFunction)pfun);
+            auto node = context.code->makeNode<SimNode_Jit>(lineInfo, (JitFunction)pfun);
             node->saved_code = simfn->code;
             node->saved_aot = simfn->aot;
             node->saved_aot_function = simfn->aotFunction;
@@ -283,6 +285,10 @@ extern "C" {
         fileInfoPtr->name = filename;
     }
 
+    DAS_API void jit_free_fileinfo ( void * dummy ) {
+        reinterpret_cast<FileInfo*>(dummy)->~FileInfo();
+    }
+
     DAS_API void * jit_ast_typedecl ( uint64_t hash, Context * context, LineInfoArg * at ) {
         if ( !context->thisProgram ) context->throw_error_at(at, "can't get ast_typeinfo, no program. is 'options rtti' missing?");
         auto ti = context->thisProgram->astTypeInfo.find(hash);
@@ -325,6 +331,7 @@ extern "C" {
     void *das_get_jit_debug_exit() { return (void *)&jit_debug_exit; }
     void *das_get_jit_debug_line() { return (void *)&jit_debug_line; }
     void *das_get_jit_initialize_fileinfo () { return (void*)&jit_initialize_fileinfo; }
+    void *das_get_jit_free_fileinfo () { return (void*)&jit_free_fileinfo; }
     void *das_get_jit_ast_typedecl () { return (void*)&jit_ast_typedecl; }
 
     template <typename KeyType>
@@ -505,7 +512,7 @@ extern "C" {
                     ->args({"code","arguments","cmres","context"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(das_instrument_jit)>(*this, lib, "instrument_jit",
                 SideEffects::worstDefault, "das_instrument_jit")
-                    ->args({"code","function","context"})->unsafeOperation = true;
+                    ->args({"code","function","at", "context"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(das_remove_jit)>(*this, lib, "remove_jit",
                 SideEffects::worstDefault, "das_remove_jit")
                     ->args({"function"})->unsafeOperation = true;
@@ -598,6 +605,8 @@ extern "C" {
                 SideEffects::none, "das_get_jit_debug_line");
             addExtern<DAS_BIND_FUN(das_get_jit_initialize_fileinfo)>(*this, lib,  "get_jit_initialize_fileinfo",
                 SideEffects::none, "das_get_jit_initialize_fileinfo");
+            addExtern<DAS_BIND_FUN(das_get_jit_free_fileinfo)>(*this, lib,  "get_jit_free_fileinfo",
+                SideEffects::none, "das_get_jit_free_fileinfo");
             addExtern<DAS_BIND_FUN(das_recreate_fileinfo_name)>(*this, lib,  "recreate_fileinfo_name",
                 SideEffects::worstDefault, "das_recreate_fileinfo_name");
             addExtern<DAS_BIND_FUN(loadDynamicLibrary)>(*this, lib,  "load_dynamic_library",
@@ -612,8 +621,6 @@ extern "C" {
             addExtern<DAS_BIND_FUN(create_shared_library)>(*this, lib,  "create_shared_library",
                 SideEffects::worstDefault, "create_shared_library")
                     ->args({"objFilePath","libraryName","dasSharedLibrary","customLinker"});
-            addExtern<DAS_BIND_FUN(jit_initialize_fileinfo)>(*this, lib,  "jit_initialize_fileinfo",
-                SideEffects::worstDefault, "jit_initialize_fileinfo");
             addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_EVAL_TOP", uint32_t(uint32_t(offsetof(Context, stack) + offsetof(StackAllocator, evalTop))));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_GLOBALS", uint32_t(uint32_t(offsetof(Context, globals))));
