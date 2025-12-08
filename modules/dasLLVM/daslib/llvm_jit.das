@@ -132,7 +132,8 @@ def generate_fileinfo_ctor_dtor(var types : PrimitiveTypes; names : table<string
     let constructor = LLVMAddFunctionWithType(g_mod, "fileinfo_constructor", functionType)
     let destructor = LLVMAddFunctionWithType(g_mod, "fileinfo_destructor", functionType)
 
-    set_public_linkage(constructor)
+    set_private_linkage(constructor)
+    set_private_linkage(destructor)
 
     let entry_ctor = LLVMAppendBasicBlockInContext(g_ctx, constructor, "entry_ctor")
     LLVMPositionBuilderAtEnd(ctor_builder, entry_ctor)
@@ -477,7 +478,7 @@ class LlvmJitVisitor : AstVisitor {
             failed("Function {fun_name.impl()} somehow already present!")
         }
         ffunc = LLVMAddFunctionWithType(g_mod, fun_name.impl(), fun_type)
-        set_public_linkage(ffunc)
+        set_private_linkage(ffunc)
         // setup parameter alignment
         for (a, ai in arguments, ucount()) {
             var param = LLVMGetParam(ffunc, ai)
@@ -788,7 +789,7 @@ class LlvmJitVisitor : AstVisitor {
                 break
             }
             if (blk |> hasFinalSection()) {
-                var after = append_basic_block("{from_where}_after_call_finally_block_{int(blk.at.line)}_")
+                var after = append_basic_block("{from_where}_after_call_finally_block_{int(blk.at.line)}")
                 var after_ptr = LLVMBlockAddress(LLVMGetBasicBlockParent(after), after)
                 LLVMBuildStore(g_builder, after_ptr, callBlock)
                 var fblk = finallyBlocks[blk]
@@ -1057,7 +1058,7 @@ class LlvmJitVisitor : AstVisitor {
             new_handle = save_address_global(obj_name, new_handle_ptr, LLVMPointerType(fn_type, 0u))
             g_fn_types[obj_name.publ()] = fn_type
         } else {
-            new_handle = LLVMBuildLoad2(g_builder, LLVMPointerType(fn_type, 0u), new_handle, "")
+            new_handle = get_address_global(obj_name, LLVMPointerType(fn_type, 0u))
         }
         return tuple(new_handle, fn_type)
     }
@@ -1225,7 +1226,7 @@ class LlvmJitVisitor : AstVisitor {
             ofunc = save_address_global(mangled_name, FUNC_PTR, fn_ptr_type)
             return tuple(ofunc, fn_type)
         } else {
-            ofunc = LLVMBuildLoad2(g_builder, LLVMPointerType(g_fn_types[mangled_name.publ()], 0u), ofunc, "")
+            ofunc = get_address_global(mangled_name, LLVMPointerType(g_fn_types[mangled_name.publ()], 0u))
             return tuple(ofunc, g_fn_types[mangled_name.publ()])
         }
     }
@@ -1242,7 +1243,7 @@ class LlvmJitVisitor : AstVisitor {
             }
             ofunc = save_address_global(mangled_name, FUNC_PTR, funcPtrType)
         } else {
-            ofunc = LLVMBuildLoad2(g_builder, funcPtrType, ofunc, "")
+            ofunc = get_address_global(mangled_name, funcPtrType)
         }
         return ofunc
     }
@@ -1286,13 +1287,26 @@ class LlvmJitVisitor : AstVisitor {
         return <- params
     }
 
+    // All later loads will be replaced to the first one, assuming `val` is const.
+    // We use it to optimize load of global pointers, since this pointers essentially
+    // immutable in runtime
+    def load_local_const(val : LLVMOpaqueValue?; type_ : LLVMOpaqueType?) {
+        let load_inst = LLVMBuildLoad2(g_builder, type_, val, "")
+        let msg = "invariant.load"
+        LLVMSetMetadata(
+            load_inst,
+            LLVMGetMDKindIDInContext(g_ctx, msg, uint(length(msg))),
+            LLVMMDNodeInContext(g_ctx, null, 0u))
+        return load_inst
+    }
+
     def get_address_global(name : DllName; typ : LLVMOpaqueType? = null) : LLVMOpaqueValue? {
         let nonnull_type = typ != null ? typ : types.LLVMVoidPtrType()
         let mb_global = LLVMGetNamedGlobal(g_mod, name.glob())
         if (mb_global == null) {
             return null
         }
-        return LLVMBuildLoad2(g_builder, nonnull_type, mb_global, "")
+        return load_local_const(mb_global, nonnull_type)
     }
 
     def save_address_global(name : DllName; address : void?; typ : LLVMOpaqueType? = null) {
@@ -1305,7 +1319,7 @@ class LlvmJitVisitor : AstVisitor {
         } else {
             failed("Name duplicate {name.glob()}\n")
         }
-        return LLVMBuildLoad2(g_builder, nonnull_type, global_addr, "")
+        return load_local_const(global_addr, nonnull_type)
     }
 
     def set_meta_cconv(instr : LLVMOpaqueValue?; conv : string) {
@@ -4103,7 +4117,7 @@ class LlvmJitVisitor : AstVisitor {
             delete_handle = save_address_global(func_name, delete_handle_ptr, LLVMPointerType(fn_type, 0u))
             g_fn_types[func_name.publ()] = fn_type
         } else {
-            delete_handle = LLVMBuildLoad2(g_builder, LLVMPointerType(fn_type, 0u), delete_handle, "")
+            delete_handle = get_address_global(func_name, LLVMPointerType(fn_type, 0u))
         }
         return delete_handle
     }
@@ -6052,13 +6066,13 @@ def set_jit_state(js : JitState) {
 }
 
 
+// This function should not be calling anything not marked with `no_jit`
 [no_jit]
 def public free_jit_context {
     // Free everything only if it's the last one context.
     if (get_context_share_counter() == 1ul) {
         if (jit_state.dll != null) {
-            var x = new DLLHandle(jit_state.dll);
-            x.reset();
+            close_dynamic_library(jit_state.dll)
         } elif (jit_state.ee != null || jit_state.ctx != null) {
             assert(jit_state.ee != null && jit_state.ctx != null)
             jit_state.ee |> LLVMRunStaticDestructors()
@@ -6228,7 +6242,11 @@ class JIT_LLVM : AstSimulateMacro {
                     var pm = LLVMCreatePassManager()
                     LLVMAddGlobalDCEPass(pm)
                     LLVMRunPassManager(pm, g_mod)
-                    print("{LLVMPrintModuleToString(g_mod)}\n");
+                    LLVMDisposePassManager(pm)
+                    let module_str = LLVMPrintModuleToString(g_mod)
+                    let msg = clone_string(module_str)
+                    LLVMDisposeMessage(module_str)
+                    print("{msg}\n");
                 }
                 if (!LLVMVerifyModule(g_mod, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
                     g_failed = true
