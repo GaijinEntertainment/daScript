@@ -132,7 +132,8 @@ def generate_fileinfo_ctor_dtor(var types : PrimitiveTypes; names : table<string
     let constructor = LLVMAddFunctionWithType(g_mod, "fileinfo_constructor", functionType)
     let destructor = LLVMAddFunctionWithType(g_mod, "fileinfo_destructor", functionType)
 
-    set_public_linkage(constructor)
+    set_private_linkage(constructor)
+    set_private_linkage(destructor)
 
     let entry_ctor = LLVMAppendBasicBlockInContext(g_ctx, constructor, "entry_ctor")
     LLVMPositionBuilderAtEnd(ctor_builder, entry_ctor)
@@ -477,7 +478,7 @@ class LlvmJitVisitor : AstVisitor {
             failed("Function {fun_name.impl()} somehow already present!")
         }
         ffunc = LLVMAddFunctionWithType(g_mod, fun_name.impl(), fun_type)
-        set_public_linkage(ffunc)
+        set_private_linkage(ffunc)
         // setup parameter alignment
         for (a, ai in arguments, ucount()) {
             var param = LLVMGetParam(ffunc, ai)
