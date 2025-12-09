@@ -51,7 +51,7 @@ namespace das {
         ft->argNames = { "isClosure", "hasReturn", "copyOnReturn", "moveOnReturn",
             "inTheLoop", "finallyBeforeBody", "finallyDisabled","aotSkipMakeBlock",
             "aotDoNotSkipAnnotationData", "isCollapseable", "needCollapse", "hasMakeBlock",
-            "hasEarlyOut", "forLoop", "hasExitByLabel", "isLambdaBlock" };
+            "hasEarlyOut", "forLoop", "hasExitByLabel", "isLambdaBlock", "isGeneratorBlock" };
         return ft;
     }
 
@@ -201,7 +201,7 @@ namespace das {
             "unsafeOutsideOfFor", "skipLockCheck", "safeImplicit", "deprecated", "aliasCMRES", "neverAliasCMRES",
             "addressTaken", "propertyFunction", "pinvoke", "jitOnly", "isStaticClassMethod", "requestNoJit",
             "jitContextAndLineInfo", "nodiscard", "captureString", "callCaptureString", "hasStringBuilder",
-            "recursive", "isTemplate", "unsafeWhenNotCloneArray", "stub", "lateShutdown"
+            "recursive", "isTemplate", "unsafeWhenNotCloneArray", "stub", "lateShutdown", "hasTryRecover"
         };
         return ft;
     }

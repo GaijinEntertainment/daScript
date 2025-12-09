@@ -70,6 +70,7 @@ namespace das {
             relaxedAssign = prog->options.getBoolOption("relaxed_assign", prog->policies.relaxed_assign);
             relaxedPointerConst = prog->options.getBoolOption("relaxed_pointer_const", prog->policies.relaxed_pointer_const);
             unsafeTableLookup = prog->options.getBoolOption("unsafe_table_lookup", prog->policies.unsafe_table_lookup);
+            forceInscopePod = prog->options.getBoolOption("force_inscope_pod", prog->policies.force_inscope_pod);
             thisModule = prog->thisModule.get();
         }
         bool finished() const { return !needRestart; }
@@ -116,6 +117,7 @@ namespace das {
         bool                    relaxedPointerConst = false;
         bool                    unsafeTableLookup = false;
         bool                    debugInferFlag = false;
+        bool                    forceInscopePod = false;
         Module *                thisModule = nullptr;
         size_t                  beforeFunctionErrors = 0;
     public:
@@ -3266,6 +3268,19 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprMakeGenerator
+        virtual void preVisit ( ExprMakeGenerator * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->arguments.size() ) {
+                auto mkBlock = expr->arguments[0];
+                if ( mkBlock->rtti_isMakeBlock() ) {
+                    auto mb = (ExprMakeBlock *)(mkBlock.get());
+                    if ( mb->block->rtti_isBlock() ) {
+                        auto blk = (ExprBlock *)(mb->block.get());
+                        blk->isGeneratorBlock = true;
+                    }
+                }
+            }
+        }
         virtual ExpressionPtr visit ( ExprMakeGenerator * expr ) override {
             if ( expr->iterType && expr->iterType->isExprType() ) {
                 return Visitor::visit(expr);
@@ -7112,6 +7127,10 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprTryCatch
+        void preVisit ( ExprTryCatch * expr ) override {
+            Visitor::preVisit(expr);
+            if ( func ) func->hasTryRecover = true;
+        }
         ExpressionPtr visit ( ExprTryCatch * expr ) override {
             if ( jitEnabled() ) {
                 auto tryBlock = make_smart<ExprMakeBlock>(expr->try_block->at,expr->try_block);
@@ -7869,6 +7888,61 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprLet
+
+        bool isPodDelete( TypeDecl * typ ) {
+            if ( typ->temporary ) return false;
+            das_set<Structure *> dep;
+            bool hasHeap = false;
+            if ( !isPodDelete(typ,dep,hasHeap) ) return false;
+            return hasHeap;
+        }
+
+        bool isPodDelete( TypeDecl * typ, das_set<Structure*> & dep, bool & hasHeap) {
+            if ( typ->baseType==Type::tHandle ) {
+                return typ->annotation->isPod();
+            } else  if ( typ->baseType==Type::tStructure ) {
+                if ( typ->structType ) {
+                    if (dep.find(typ->structType) != dep.end()) return true;
+                    dep.insert(typ->structType);
+                    if ( typ->structType->isClass ) return false;
+                    auto finFn = getFinalizeFunc(typ);
+                    if ( finFn.size()==0 ) {
+                        // ok, no finalize - there will be one generated
+                    } else if ( finFn.size()==1 ) {
+                        auto finFunc = finFn.back();
+                        if ( !finFunc->generated ) return false;
+                    } else {
+                        // seriously? more than one
+                        return false;
+                    }
+                    for ( const auto & fd : typ->structType->fields ) {
+                        if ( fd.type && !fd.doNotDelete && (fd.type->constant || !isPodDelete(fd.type.get(), dep, hasHeap)) ) {
+                            return false;
+                        }
+                    }
+
+                }
+                return true;
+            } else if ( typ->baseType==Type::tTuple || typ->baseType==Type::tVariant || typ->baseType == Type::option ) {
+                for ( const auto & arg : typ->argTypes ) {
+                    if ( arg->constant || !isPodDelete(arg.get(), dep, hasHeap) ) {
+                        return false;
+                    }
+                }
+                return true;
+            } else if ( typ->baseType==Type::tArray || typ->baseType==Type::tTable ) {
+                if ( typ->firstType && (typ->firstType->constant || !isPodDelete(typ->firstType.get(), dep, hasHeap)) ) return false;
+                if ( typ->secondType && (typ->secondType->constant || !isPodDelete(typ->secondType.get(), dep, hasHeap)) ) return false;
+                hasHeap = true;
+            } else if ( typ->baseType==Type::tPointer ) {
+                return !typ->needDelete();  // pointer is good if we don't need to delete
+            } else if ( typ->baseType==Type::tIterator || typ->baseType==Type::tBlock
+                || typ->baseType==Type::tLambda || typ->baseType==Type::tFunction ) {
+                return false;
+            }
+            return true;
+        }
+
         virtual void preVisit ( ExprLet * expr ) override {
             Visitor::preVisit(expr);
             DAS_ASSERT(!scopes.empty());
@@ -7946,9 +8020,6 @@ namespace das {
             if ( !var->init ) {
                 local.push_back(var);
             }
-            if ( expr->inScope && var->type && var->type->isConst() ) {
-                error("in scope let can't be const", "", "", var->at, CompilationError::invalid_variable_type);
-            }
         }
         bool isEmptyInit ( const VariablePtr & var ) const {
             if ( var->type && var->init ) {
@@ -8015,9 +8086,27 @@ namespace das {
                         TypeDecl::clone(castExpr->castType,var->type);
                     }
                 }
+                if ( forceInscopePod && !expr->inScope && !var->type->constant ) {                                          // no constant for now
+                    if ( (expr->variables.size()==1)                                                                        // only one variable
+                         && (func && !func->generated && !func->generator && !func->lambda  && !func->hasTryRecover)        // in functions only, but not in generated ones
+                         && (scopes.size() && !scopes.back()->inTheLoop)                                                    // when not in the loop
+                         && (blocks.empty() || !blocks.back()->isGeneratorBlock)                                            // or not in the generator block
+                    ) {
+                        if ( var->type->canDelete() && isPodDelete(var->type.get()) ) {
+                            expr->inScope = true;
+                            reportAstChanged();
+                        }
+                    }
+                }
                 if ( expr->inScope ) {
                     if ( !var->inScope ) {
                         if ( var->type->canDelete() ) {
+                            if ( var->type->constant ) {
+                                error("variable " + var->name + " of type " + describeType(var->type) + " can't be in-scope const",
+                                    "const variable with complex finalizer can't be deleted automatically", "",
+                                    var->at, CompilationError::invalid_variable_type);
+                                return Visitor::visitLet(expr,var,last);
+                            }
                             var->inScope = true;
                             auto eVar = make_smart<ExprVar>(var->at, var->name);
                             auto exprDel = make_smart<ExprDelete>(var->at, eVar);
@@ -8059,7 +8148,6 @@ namespace das {
                             var->at, CompilationError::invalid_variable_type);
                     }
                 }
-
                 if ( noUnsafeUninitializedStructs && !var->init && var->type->unsafeInit() ) {
                     if ( !safeExpression(expr) ) {
                         error("Uninitialized variable " + var->name + " is unsafe. Use initializer syntax or [safe_when_uninitialized] when intended.", "", "",

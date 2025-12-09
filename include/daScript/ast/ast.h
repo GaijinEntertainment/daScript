@@ -967,6 +967,7 @@ namespace das
                 bool    unsafeWhenNotCloneArray : 1; // this one is used to mark functions which are unsafe when not cloning arrays
                 bool    stub : 1;                    // skip stack allocation, optimizations, etc
                 bool    lateShutdown : 1;
+                bool    hasTryRecover : 1;           // has try { } recover { }
             };
             uint32_t moreFlags = 0;
         };
@@ -1513,6 +1514,7 @@ namespace das
         /*option*/ bool log_total_compile_time = false;            // if true, then detailed compile time will be printed at the end of the compilation
         /*option*/ bool no_fast_call = false;                      // disable fastcall
         /*option*/ bool scoped_stack_allocator = true;             // reuse stack memory after variables out of scope
+        /*option*/ bool force_inscope_pod = false;                 // force in-scope for POD-like types
     // debugger
         //  when enabled
         //      1. disables [fastcall]

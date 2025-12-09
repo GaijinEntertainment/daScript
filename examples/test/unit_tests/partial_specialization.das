@@ -111,11 +111,11 @@ def test_gen_4 {
 // if its an array or a pointer, we compare specialization of subtype
 
 def gen_5(arr : array<auto?>) {
-    return "<*>"
+    return "<*?>"
 }
 
 def gen_5(arr : array<auto>) {
-    return "<*?>"
+    return "<*>"
 }
 
 def test_gen_5 {

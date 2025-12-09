@@ -212,7 +212,8 @@ namespace das
                 bool            hasEarlyOut : 1;            // this block has return, or other blocks with return
                 bool            forLoop : 1;                // this block is a for loop
                 bool            hasExitByLabel : 1;         // whether we have goto outside of block
-                bool            isLambdaBlock : 1;           // this block is a lambda block
+                bool            isLambdaBlock : 1;          // this block is a lambda block
+                bool            isGeneratorBlock : 1;       // this block is a generator block
             };
             uint32_t            blockFlags = 0;
         };
