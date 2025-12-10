@@ -12,9 +12,7 @@ IF ((NOT DAS_LLVM_INCLUDED) AND ${LLVM_FOUND} AND ((NOT ${DAS_LLVM_DISABLED}) OR
 
     LIST(APPEND CMAKE_MODULE_PATH ${DAS_LLVM_DIR})
 
-
 	SET(DAS_LLVM_MODULE_SRC
-	# user include
 		${DAS_LLVM_DIR}/src/dasLLVM.cpp
 	)
 
@@ -34,35 +32,34 @@ IF ((NOT DAS_LLVM_INCLUDED) AND ${LLVM_FOUND} AND ((NOT ${DAS_LLVM_DISABLED}) OR
 	ADD_MODULE_DAS(llvm daslib llvm_dll_utils)
 	ADD_MODULE_LIB(libDasModuleLlvm ${DAS_LLVM_MODULE_SRC})
 
-	IF(WIN32)
-		TARGET_LINK_LIBRARIES(libDasModuleLlvm PUBLIC LLVM-C LTO Remarks)
-	ELSE()
-		TARGET_LINK_LIBRARIES(libDasModuleLlvm PUBLIC LLVM LTO Remarks)
-	ENDIF()
-	# ADD_DEPENDENCIES(libDasModuleLlvm)
 	TARGET_INCLUDE_DIRECTORIES(libDasModuleLlvm PUBLIC ${LLVM_INCLUDE_DIRS})
 
 
 IF(WIN32)
-	set(DAS_CLANG_DLLS
-		${LLVM_INSTALL_PREFIX}/bin/LLVM-C.dll
-		${LLVM_INSTALL_PREFIX}/bin/LTO.dll
-		${LLVM_INSTALL_PREFIX}/bin/Remarks.dll
-		${LLVM_INSTALL_PREFIX}/bin/clang-cl.exe
-		${LLVM_INSTALL_PREFIX}/bin/libclang.dll
+	# Copy clang-cl to use it as a linker
+	add_custom_command(TARGET libDasModuleLlvm POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different
+		"${LLVM_INSTALL_PREFIX}/bin/clang-cl.exe"
+		"${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/clang-cl.exe"
 	)
+	install(FILES ${DAS_CLANG_DLLS} DESTINATION ${DAS_INSTALL_BINDIR})
+	set(DAS_CLANG_DLLS ${LLVM_INSTALL_PREFIX}/bin/LLVM-C.dll)
+ELSEIF(UNIX)
+    set(DAS_CLANG_DLLS ${LLVM_INSTALL_PREFIX}/lib/libLLVM.so )
+ELSEIF(APPLE)
+    set(DAS_CLANG_DLLS ${LLVM_INSTALL_PREFIX}/lib/libLLVM-C.dylib)
+ENDIF()
+	# Always put to single place, it should match with llvm_func.das definitions
+    set(DAS_CLANG_OUTPUT "${PROJECT_SOURCE_DIR}/lib/")
 	foreach(dll ${DAS_CLANG_DLLS})
 		get_filename_component(dll_name "${dll}" NAME)
 		add_custom_command(TARGET libDasModuleLlvm POST_BUILD
 			COMMAND ${CMAKE_COMMAND} -E copy_if_different
 			"${dll}"
-			"${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/${dll_name}"
+            "${DAS_CLANG_OUTPUT}/${dll_name}"
 		)
 	endforeach()
-	install(FILES ${DAS_CLANG_DLLS}
-			DESTINATION ${DAS_INSTALL_BINDIR}
-	)
-ENDIF()
+	install(FILES ${DAS_CLANG_DLLS} DESTINATION ${DAS_INSTALL_LIBDIR})
 
 	install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLVM/LICENSE.TXT DESTINATION ${DAS_INSTALL_DOCDIR} RENAME LLVM.LICENSE)
 
@@ -72,7 +69,8 @@ ENDIF()
 	install(FILES ${DASLLVM_SOURCES}
 			DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLVM/daslib
 	)
-    #ADD_MODULE_DAS(cbind cbind cbind_boost)
+	file(GLOB DASLLVM_BINDINGS ${DAS_LLVM_DIR}/das_llvm/*.das)
+	install(FILES ${DASLLVM_BINDINGS} DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLVM/das_llvm)
 
 	SETUP_CPP11(libDasModuleLlvm)
 ENDIF()
