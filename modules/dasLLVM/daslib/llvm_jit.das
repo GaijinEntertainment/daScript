@@ -132,8 +132,8 @@ def generate_fileinfo_ctor_dtor(var types : PrimitiveTypes; names : table<string
     let constructor = LLVMAddFunctionWithType(g_mod, "fileinfo_constructor", functionType)
     let destructor = LLVMAddFunctionWithType(g_mod, "fileinfo_destructor", functionType)
 
-    set_private_linkage(constructor)
-    set_private_linkage(destructor)
+    set_public_linkage(constructor)
+    set_public_linkage(destructor)
 
     let entry_ctor = LLVMAppendBasicBlockInContext(g_ctx, constructor, "entry_ctor")
     LLVMPositionBuilderAtEnd(ctor_builder, entry_ctor)
@@ -1276,7 +1276,7 @@ class LlvmJitVisitor : AstVisitor {
                 // Wrap string argument for extern functions. Empty string in das is null.
                 var res = LLVMBuildSelect(g_builder,
                     LLVMBuildIsNull(g_builder, src, ""),
-                        get_string_constant_ptr(g_builder, ""),
+                        get_empty_string(g_builder),
                         src,
                     "wrap_str")
                 params |> push(res)
