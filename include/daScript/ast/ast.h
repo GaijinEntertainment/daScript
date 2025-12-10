@@ -363,6 +363,7 @@ namespace das
                 bool    global_shared : 1;
                 bool    do_not_delete : 1;
                 bool    generated : 1;
+
                 bool    capture_as_ref : 1;
                 bool    can_shadow : 1;             // can shadow block or function arguments, as block argument
                 bool    private_variable : 1;
@@ -371,9 +372,12 @@ namespace das
                 bool    inScope : 1;
                 bool    no_capture : 1;
                 bool    early_out : 1;              // this variable is potentially uninitialized in the finally section
+
                 bool    used_in_finally : 1;        // this variable is used in the finally section
                 bool    static_class_member : 1;    // this is a static class member
                 bool    bitfield_constant : 1;      // this is a bitfield constant
+                bool    podDelete : 1;              // this variable can be deleted as POD
+                bool    podDeleteGen : 1;           // pod delete has been generated
             };
             uint32_t flags = 0;
         };
@@ -968,6 +972,7 @@ namespace das
                 bool    stub : 1;                    // skip stack allocation, optimizations, etc
                 bool    lateShutdown : 1;
                 bool    hasTryRecover : 1;           // has try { } recover { }
+                bool    hasUnsafe : 1;               // has unsafe { }
             };
             uint32_t moreFlags = 0;
         };
@@ -1624,6 +1629,7 @@ namespace das
         void buildAccessFlags(TextWriter & logs);
         bool verifyAndFoldContracts();
         void optimize(TextWriter & logs, ModuleGroup & libGroup);
+        bool inScopePodAnalysis(TextWriter & logs);
         void markSymbolUse(bool builtInSym, bool forceAll, bool initThis, Module * macroModule, TextWriter * logs = nullptr);
         void markModuleSymbolUse(TextWriter * logs = nullptr);
         void markMacroSymbolUse(TextWriter * logs = nullptr);

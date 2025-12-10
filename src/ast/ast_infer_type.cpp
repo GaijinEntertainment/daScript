@@ -2717,6 +2717,7 @@ namespace das {
         virtual void preVisit ( ExprUnsafe * expr ) override {
             Visitor::preVisit(expr);
             unsafeDepth ++;
+            if ( func ) func->hasUnsafe = true;
         }
         virtual ExpressionPtr visit ( ExprUnsafe * expr ) override {
             unsafeDepth --;
@@ -8086,14 +8087,18 @@ namespace das {
                         TypeDecl::clone(castExpr->castType,var->type);
                     }
                 }
-                if ( forceInscopePod && !expr->inScope && !var->type->constant ) {                                          // no constant for now
+                if ( forceInscopePod && !expr->inScope && !var->podDelete && !var->type->ref && !var->type->constant ) {    // no constant for now
                     if ( (expr->variables.size()==1)                                                                        // only one variable
-                         && (func && !func->generated && !func->generator && !func->lambda  && !func->hasTryRecover)        // in functions only, but not in generated ones
-                         && (scopes.size() && !scopes.back()->inTheLoop)                                                    // when not in the loop
-                         && (blocks.empty() || !blocks.back()->isGeneratorBlock)                                            // or not in the generator block
+                         // very restrictive on functions
+                         && (func && !func->generated && !func->generator && !func->lambda
+                                && !func->hasTryRecover && !func->hasUnsafe)
+                         // when not in the loop
+                         && (scopes.size() && !scopes.back()->inTheLoop)
+                         // not in the generator block
+                         && (blocks.empty() || !blocks.back()->isGeneratorBlock)
                     ) {
-                        if ( var->type->canDelete() && isPodDelete(var->type.get()) ) {
-                            expr->inScope = true;
+                        if ( isPodDelete(var->type.get()) ) {
+                            var->podDelete = true;
                             reportAstChanged();
                         }
                     }
@@ -10767,6 +10772,16 @@ namespace das {
                 continue;
             }
             libGroup.foreach(modMacro, "*");
+            if ( inScopePodAnalysis(logs) ) {
+                anyMacrosDidWork = true;
+                reportingInferErrors = true;
+                inferTypesDirty(logs, true);
+                reportingInferErrors = false;
+                if ( failed() ) {
+                    error("internal compiler error: pod analysis infer to fail", "", "", LineInfo());
+                }
+                continue;
+            }
         } while ( !failed() && anyMacrosDidWork );
     failed_to_infer:;
         if ( failed() && !anyMacrosFailedToInfer && !macroException ) {

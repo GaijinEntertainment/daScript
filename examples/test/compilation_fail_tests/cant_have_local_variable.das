@@ -1,5 +1,6 @@
 options gen2
 expect 30108:4, 30101:2
+options force_inscope_pod = false
 
 require UnitTest
 
@@ -9,17 +10,12 @@ struct StructureNotLocal {
 
 [export]
 def test : bool {
-    try {
-        var a : TestObjectNotLocal          // 30108
-        var b : StructureNotLocal           // 30108
-        var c : array<StructureNotLocal>    // 30108
-                                            // 30101: array type has to be 'local'
-        var d : table<int; StructureNotLocal>// 30108
-                                            // 30101: table value has to be 'local'
-    } recover {
-        // do nothing
-        // this is here so that we don't auto-generate finalizers for non-local objects
-    }
+    var a : TestObjectNotLocal          // 30108
+    var b : StructureNotLocal           // 30108
+    var c : array<StructureNotLocal>    // 30108
+                                        // 30101: array type has to be 'local'
+    var d : table<int; StructureNotLocal>// 30108
+                                        // 30101: table value has to be 'local'
     return true
 }
 
