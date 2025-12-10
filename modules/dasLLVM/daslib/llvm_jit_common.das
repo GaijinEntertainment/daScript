@@ -664,6 +664,10 @@ def public get_type_pointer(t : TypeDeclPtr) : LLVMOpaqueType? {
     }
 }
 
+def public get_empty_string(builder : LLVMOpaqueBuilder?) {
+    return LLVMBuildPointerCast(builder, build_string_constant(""), g_prim_t.get_type_string(), "empty string_constant")
+}
+
 def public get_string_constant_ptr(builder : LLVMOpaqueBuilder?; message : string) {
     if (message |> length == 0) {
         return LLVMConstPointerNull(g_prim_t.get_type_string())

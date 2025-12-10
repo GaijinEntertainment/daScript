@@ -119,7 +119,7 @@ def get_file_info_global(g_builder : LLVMOpaqueBuilder?; types : PrimitiveTypes?
  * @names for all names will be create FileInfo ptr with correct filename
  */
 [macro_function]
-def generate_fileinfo_ctor_dtor(var types : PrimitiveTypes; names : table<string>) {
+def generate_fileinfo_ctor_dtor(var types : PrimitiveTypes; names : table<string>; dll_mode : bool) {
     var ctor_builder = LLVMCreateBuilderInContext(g_ctx)
     var dtor_builder = LLVMCreateBuilderInContext(g_ctx)
     defer <| ${
@@ -132,8 +132,13 @@ def generate_fileinfo_ctor_dtor(var types : PrimitiveTypes; names : table<string
     let constructor = LLVMAddFunctionWithType(g_mod, "fileinfo_constructor", functionType)
     let destructor = LLVMAddFunctionWithType(g_mod, "fileinfo_destructor", functionType)
 
-    set_public_linkage(constructor)
-    set_public_linkage(destructor)
+    if (dll_mode) {
+        set_private_linkage(constructor)
+        set_private_linkage(destructor)
+    } else {
+        set_public_linkage(constructor)
+        set_public_linkage(destructor)
+    }
 
     let entry_ctor = LLVMAppendBasicBlockInContext(g_ctx, constructor, "entry_ctor")
     LLVMPositionBuilderAtEnd(ctor_builder, entry_ctor)
@@ -6156,7 +6161,10 @@ class JIT_LLVM : AstSimulateMacro {
 
         assume jit_all_functions = prog.policies.jit_jit_all_functions
         assume debug_info = prog.policies.jit_debug_info
-        assume use_dll = prog.policies.jit_use_dll_mode
+        if (prog.policies.jit_use_dll_mode && !das_is_dll_build()) {
+            print("LLVM JIT WARNING: dll mode is enabled, however daslang build is static, disabling dll mode.\n")
+        }
+        let use_dll = prog.policies.jit_use_dll_mode && das_is_dll_build()
         let opt_level = prog.policies.jit_opt_level
         let size_level = prog.policies.jit_size_level
         assume config_out_folder = string(prog.policies.jit_output_folder)
@@ -6235,7 +6243,7 @@ class JIT_LLVM : AstSimulateMacro {
                     var fn_names = join([ for (fn in funcs); "{fn.name}" ], ",")
                     panic("Internal jit error. Failed to get IR for functions {fn_names}.\n")
                 }
-                generate_fileinfo_ctor_dtor(*g_prim_t, active_filenames) |> add_ctor_dtor_function(g_prim_t)
+                generate_fileinfo_ctor_dtor(*g_prim_t, active_filenames, use_dll) |> add_ctor_dtor_function(g_prim_t)
                 optimize_llvm_module(opt_level |> uint(), size_level |> uint(), LLVM_INLINE_THRESHOLD)
                 if (false) {
                     // Let's remove unused attributes before we print IR.
