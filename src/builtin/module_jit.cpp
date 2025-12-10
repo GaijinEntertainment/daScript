@@ -400,38 +400,31 @@ extern "C" {
 #if (defined(_MSC_VER) || defined(__linux__) || defined(__APPLE__)) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
     void create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasSharedLibrary, const char * customLinker ) {
         char cmd[1024];
-        string linker;
-        string dasLibrary;
-        const bool isLinkerMissing = customLinker == nullptr || strlen(customLinker) == 0;
-        const bool isLibraryMissing = dasSharedLibrary == nullptr || strlen(dasSharedLibrary) == 0;
-        if (isLinkerMissing || isLibraryMissing) {
+        string linker = customLinker != nullptr ? customLinker : "";
+        string dasLibrary = dasSharedLibrary != nullptr ? dasSharedLibrary : "";
+        if (linker.empty() || dasLibrary.empty()) {
             #if defined(_WIN32) || defined(_WIN64)
-                const auto path = get_prefix(getExecutableFileName());
-                const auto winCfg = path.substr(path.find_last_of("\\/"));
-                const auto windowsConfig = (winCfg == "bin" ? "" : (winCfg + "/"));
-                if (isLinkerMissing) {
-                    linker = getDasRoot() + "/bin/" + windowsConfig + "clang-cl.exe";
+                if (linker.empty()) {
+                    linker = getDasRoot() + "/bin/clang-cl.exe";
                 }
-                if (isLibraryMissing) {
+                if (dasLibrary.empty()) {
+                    const auto path = get_prefix(getExecutableFileName());
+                    const auto winCfg = path.substr(path.find_last_of("\\/"));
+                    const auto windowsConfig = (winCfg == "bin" ? "" : (winCfg + "/"));
                     dasLibrary = getDasRoot() + "/lib/" + windowsConfig + "libDaScript.lib";
                 }
             #else
-                if (isLinkerMissing) {
+                if (linker.empty()) {
                     linker = "cc";
                 }
+                if (dasLibrary.empty()) {
                 #if defined(__APPLE__)
-                if (isLibraryMissing) {
                     dasLibrary = getDasRoot() + "/lib/liblibDaScript.dylib";
-                }
                 #else
-                if (isLibraryMissing) {
                     dasLibrary = getDasRoot() + "/lib/liblibDaScript.lib";
-                }
                 #endif
+                }
             #endif
-        } else {
-            linker = customLinker;
-            dasLibrary = dasSharedLibrary;
         }
 
         #if defined(_WIN32) || defined(_WIN64) || defined(__APPLE__)

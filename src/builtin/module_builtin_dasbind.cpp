@@ -218,6 +218,9 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             libhandle = getLibraryHandle(library.c_str());
             if ( !libhandle ) {
                 libhandle = loadDynamicLibrary(library.c_str());
+                if (!libhandle) {
+                    libhandle = loadDynamicLibrary((getDasRoot() + "/" + library).c_str());
+                }
             }
             g_dasBindLib[library] = libhandle;
             return libhandle;

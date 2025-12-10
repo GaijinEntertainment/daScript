@@ -162,49 +162,22 @@ jobs:
               echo 'export PATH="/usr/local/opt/bison/bin:$PATH"' >> ~/.bash_profile
               export LDFLAGS="-L/usr/local/opt/bison/lib -L$(brew --prefix openssl)/lib"
               export CPPFLAGS="-I$(brew --prefix openssl)/include"
-
-              brew install llvm@16 # install llvm for module dasLLVM
-              echo "/usr/local/opt/llvm@16/bin" >> $GITHUB_PATH # Add llvm to path
-              echo "LLVM_DIR=/usr/local/opt/llvm@16/lib/cmake/llvm" >> $GITHUB_ENV  # Help cmake
               ;;
             darwin64)
               brew install bison openssl
               echo 'export PATH="/opt/homebrew/opt/bison/bin:$PATH"' >> ~/.bash_profile
               export LDFLAGS="-L/opt/homebrew/opt/bison/lib -L$(brew --prefix openssl)/lib"
               export CPPFLAGS="-I$(brew --prefix openssl)/include"
-
-              brew install llvm@16 # install llvm for module dasLLVM
-              echo "/opt/homebrew/opt/llvm@16/bin" >> $GITHUB_PATH # Add llvm to path
-              echo "LLVM_DIR=/opt/homebrew/opt/llvm@16/lib/cmake/llvm" >> $GITHUB_ENV  # Help cmake
               ;;
           esac
 
       - name: "Install libclang and openssl windows"
         if: runner.os == 'Windows'
         run: |
-          curl -L -o llvm.7z "https://github.com/aleksisch/llvm-windows-prebuilt/releases/download/v1.0.0/win${{ matrix.architecture == 32 && '32' || '64' }}.zip"
-          7z x llvm.7z -o./modules/temp_llvm -y
-          cp -RT ./modules/temp_llvm/win*/ ./modules/libclang/
-          rm -rf ./modules/temp_llvm
-
           git clone https://github.com/microsoft/vcpkg && ./vcpkg/bootstrap-vcpkg.sh
           ./vcpkg/vcpkg install openssl:${{ matrix.architecture == 32 && 'x86' || 'x64' }}-windows --binarycaching
           echo "VCPKG_ROOT=$(pwd)/vcpkg" >> $GITHUB_ENV
           echo "CMAKE_TOOLCHAIN_FILE=$(pwd)/vcpkg/scripts/buildsystems/vcpkg.cmake" >> $GITHUB_ENV
-      - name: "Install libclang linux"
-        if: runner.os == 'Linux'
-        run: |
-          # Add LLVM repository
-          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-          echo "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-16 main" | sudo tee /etc/apt/sources.list.d/llvm.list
-
-          # Install packages
-          sudo apt-get update
-          sudo apt-get install -y libclang-16-dev clang-16
-
-          # Update linker cache
-          sudo ldconfig
-
       - name: "Clone submodules"
         run: |
           git submodule update --init --recursive $(cat ci/release_modules.txt | grep -v "^#" | cut -d':' -f1 | sed 's|^|modules/|' | xargs)
@@ -243,12 +216,11 @@ jobs:
           set -eux
           mkdir build
           export PATH="/c/Strawberry/perl/bin:$PATH" # prepend Strawberry perl to path, so openssl will use it.
-          LIBCLANG_PATH=$(echo "$GITHUB_WORKSPACE" | sed 's/\\/\//g')/modules/libclang # It should be absolute path with no backslashes
           ACTIVE_MODULES=$(cat ci/release_modules.txt | grep -v "^#" | cut -d':' -f2 | sed 's|^|-D|' | xargs)
           case "${{ matrix.build_system }}" in
             cmake)
               cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=${{ matrix.architecture == 32 && 'x86' || 'x64' }} -A ${{ matrix.architecture_string }} \
-                $ACTIVE_MODULES -DPATH_TO_LIBCLANG="$LIBCLANG_PATH" -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+                $ACTIVE_MODULES -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
               cmake --build ./build --config ${{ matrix.cmake_preset }} --target daslang
               ;;
           esac
