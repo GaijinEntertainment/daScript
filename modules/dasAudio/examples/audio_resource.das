@@ -13,7 +13,7 @@ def public audio_fopen(name : string; mode : string; blk : block<(f : file) : vo
     var f = fopen(fname, mode)
     if (f == null) {
         fname = "{get_das_root()}/examples/audio/{name}"
-        f = fopen(name, mode)
+        f = fopen(fname, mode)
     }
     invoke(blk, f)
     if (f != null) {
