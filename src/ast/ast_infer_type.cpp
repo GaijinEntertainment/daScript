@@ -90,6 +90,8 @@ namespace das {
         vector<size_t>          assumeStack;
         vector<size_t>          assumeTypeStack;
         vector<bool>            inFinally;
+        smart_ptr<ExprReturn>   oneReturn;
+        int32_t                 returnCount = 0;
         bool                    canFoldResult = true;
         das_hash_set<int32_t>   labels;
         size_t                  fieldOffset = 0;
@@ -1238,6 +1240,9 @@ namespace das {
                 return nullptr;
             }
             auto field = st->findField(name);
+            if ( !field ) {
+                return nullptr;
+            }
             if ( !field->classMethod ) {
                 return nullptr;
             }
@@ -2473,6 +2478,7 @@ namespace das {
         }
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
+            oneReturn.reset(); returnCount = 0;
             canFoldResult = true;
             unsafeDepth = 0;
             func = f;
@@ -2623,6 +2629,31 @@ namespace das {
                     }
                 }
             }
+            // now, lets mark the single return via move thing
+            if ( forceInscopePod && oneReturn && returnCount==1 ) {
+                if ( oneReturn->moveSemantics ) {
+                    if ( oneReturn->subexpr && oneReturn->subexpr->type ) {
+                        ExprVar * exprVar = nullptr;
+                        if ( oneReturn->subexpr->rtti_isVar() ) {
+                            exprVar = (ExprVar *) oneReturn->subexpr.get();
+                        } else if ( oneReturn->subexpr->rtti_isCallFunc() ) {
+                            auto callExpr = (ExprCallFunc *) oneReturn->subexpr.get();
+                            if (
+                                callExpr->func
+                            &&  callExpr->func->fromGeneric
+                            &&  callExpr->func->fromGeneric->module->name=="$"
+                            &&  callExpr->func->fromGeneric->name=="_return_with_lockcheck" ) {
+                                if ( callExpr->arguments.size()==1 && callExpr->arguments[0]->rtti_isVar() ) {
+                                    exprVar = (ExprVar *) callExpr->arguments[0].get();
+                                }
+                            }
+                        }
+                        if ( exprVar && exprVar->variable ) {
+                            exprVar->variable->single_return_via_move = true;
+                        }
+                    }
+                }
+            }
             // if any of this asserts failed, we have a logic error in how we pop
             DAS_ASSERT(loop.size()==0);
             DAS_ASSERT(scopes.size()==0);
@@ -2630,6 +2661,7 @@ namespace das {
             DAS_ASSERT(local.size()==0);
             DAS_ASSERT(with.size()==0);
             labels.clear();
+            oneReturn.reset(); returnCount = 0;
             func.reset();
             return Visitor::visit(that);
         }
@@ -7347,14 +7379,19 @@ namespace das {
                             reportAstChanged();
                             auto pCall = make_smart<ExprCall>(expr->at,"_return_with_lockcheck");
                             pCall->arguments.push_back(expr->subexpr->clone());
-                            auto pRet = expr->clone();
-                            static_pointer_cast<ExprReturn>(pRet)->subexpr = pCall;
+                            auto pRet = static_pointer_cast<ExprReturn>(expr->clone());
+                            pRet->subexpr = pCall;
+                            if ( forceInscopePod && func ) returnCount ++;  // ast changed, so we don't really care
                             return pRet;
                         }
                     }
                 }
             }
             expr->type = make_smart<TypeDecl>();
+            if ( forceInscopePod && func ) {
+                if ( returnCount==0 ) oneReturn = expr;
+                returnCount ++;
+            }
             return Visitor::visit(expr);
         }
     // ExprYield
@@ -7962,6 +7999,7 @@ namespace das {
         }
         virtual void preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(expr, var, last);
+            var->single_return_via_move = false;
             if ( var->type && var->type->isExprType() ) {
                 return;
             }
@@ -8087,18 +8125,15 @@ namespace das {
                         TypeDecl::clone(castExpr->castType,var->type);
                     }
                 }
-                if ( forceInscopePod && !expr->inScope && !var->podDelete && !var->type->ref  ) {    // no constant for now
+                if ( forceInscopePod && !expr->inScope && !var->pod_delete && !var->type->ref  ) {    // no constant for now
                     if ( (expr->variables.size()==1)                                                 // only one variable
                          // very restrictive on functions
-                         && (func && !func->generated && !func->generator && !func->lambda
-                                && !func->hasTryRecover && !func->hasUnsafe)
-                         // when not in the loop
-                         && (scopes.size() && !scopes.back()->inTheLoop)
+                         && (func && !func->generated && !func->generator && !func->lambda)
                          // not in the generator block
                          && (blocks.empty() || !blocks.back()->isGeneratorBlock)
                     ) {
                         if ( isPodDelete(var->type.get()) ) {
-                            var->podDelete = true;
+                            var->pod_delete = true;
                             reportAstChanged();
                         }
                     }

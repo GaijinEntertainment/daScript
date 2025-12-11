@@ -962,7 +962,6 @@ namespace das {
         "log_gmn_hash",                 Type::tBool,
         "log_ad_hash",                  Type::tBool,
         "log_aliasing",                 Type::tBool,
-        "log_inscope_pod",              Type::tBool,
         "print_ref",                    Type::tBool,
         "print_var_access",             Type::tBool,
         "print_c_style",                Type::tBool,
