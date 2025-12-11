@@ -2,6 +2,7 @@
 
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/heap.h"
+#include "daScript/misc/memory_model.h"
 #include "daScript/misc/debug_break.h"
 
 namespace das {
@@ -204,6 +205,7 @@ namespace das {
     uint64_t LinearHeapAllocator::bytesAllocated() const { return model.bytesAllocated(); }
     uint64_t LinearHeapAllocator::totalAlignedMemoryAllocated() const { return model.totalAlignedMemoryAllocated(); }
     void LinearHeapAllocator::reset() { model.reset(); }
+    void LinearHeapAllocator::shrink() { model.shrink(); }
 
     void LinearHeapAllocator::report() {
         LOG tout(LogLevel::debug);
@@ -229,6 +231,12 @@ namespace das {
     void StringHeapAllocator::reset() {
         das_string_set empty;
         swap ( internMap, empty );
+    }
+
+    void StringHeapAllocator::shrink() {
+        if constexpr (has_shrink_to_fit<decltype(internMap)>::value) {
+            internMap.shrink_to_fit();
+        }
     }
 
     char * StringHeapAllocator::intern(const char * str, uint32_t length) const {
@@ -343,6 +351,7 @@ namespace das {
     uint64_t PersistentStringAllocator::bytesAllocated() const { return model.bytesAllocated(); }
     uint64_t PersistentStringAllocator::totalAlignedMemoryAllocated() const { return model.totalAlignedMemoryAllocated(); }
     void PersistentStringAllocator::reset() { model.reset(); }
+    void PersistentStringAllocator::shrink() { model.shrink(); }
     bool PersistentStringAllocator::isOwnPtr ( char * ptr, uint32_t size ) { return model.isOwnPtr(ptr,size); }
     bool PersistentStringAllocator::isValidPtr ( char * ptr, uint32_t size ) { return model.isAllocatedPtr(ptr,size); }
     void PersistentStringAllocator::setInitialSize ( uint32_t size ) { model.setInitialSize(size); }
@@ -453,6 +462,7 @@ namespace das {
     uint64_t LinearStringAllocator::bytesAllocated() const { return model.bytesAllocated(); }
     uint64_t LinearStringAllocator::totalAlignedMemoryAllocated() const { return model.totalAlignedMemoryAllocated(); }
     void LinearStringAllocator::reset() { model.reset(); }
+    void LinearStringAllocator::shrink() { model.shrink(); }
     bool LinearStringAllocator::isOwnPtr ( char * ptr, uint32_t ) { return model.isOwnPtr(ptr); }
     void LinearStringAllocator::setInitialSize ( uint32_t size ) { model.setInitialSize(size); }
     int32_t LinearStringAllocator::getInitialSize() const { return model.initialSize; }
