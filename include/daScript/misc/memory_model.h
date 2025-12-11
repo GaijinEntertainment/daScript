@@ -10,6 +10,13 @@ namespace das {
 
     #define DAS_PAGE_GC_MASK    0x80000000
 
+    template <typename T, typename = void>
+    struct has_shrink_to_fit : false_type {};
+
+    template <typename T>
+    struct has_shrink_to_fit<T, void_t<decltype(declval<T&>().shrink_to_fit())>> : true_type {};
+
+
     struct LineInfo;
 
     struct Deck {
@@ -272,6 +279,7 @@ namespace das {
         MemoryModel ();
         virtual ~MemoryModel ();
         virtual void reset();
+        virtual void shrink();
         void setInitialSize ( uint32_t size );
         uint32_t grow ( uint32_t si );
         virtual void sweep();
@@ -369,6 +377,7 @@ namespace das {
         void free ( char * ptr, uint32_t s );
         char * reallocate ( char * ptr, uint32_t size, uint32_t nsize );
         virtual void reset ();
+        virtual void shrink ();
         char * allocateName ( const string & name );
         __forceinline bool isOwnPtrQnD ( const char * ptr ) const {
            return chunk!=nullptr && chunk->isOwnPtr(ptr);
@@ -383,6 +392,7 @@ namespace das {
         uint64_t bytesAllocated() const;
         uint64_t totalAlignedMemoryAllocated() const;
         __forceinline void setInitialSize ( uint32_t size ) {
+            unadjustedInitialSize = size;
             initialSize = size;
         }
         virtual uint32_t grow ( uint32_t si );
@@ -390,6 +400,7 @@ namespace das {
         void getStats ( uint32_t & depth, uint64_t & bytes, uint64_t & total ) const;
     public:
         CustomGrowFunction  customGrow;
+        uint32_t    unadjustedInitialSize = 0;
         uint32_t    initialSize = 0;
         uint32_t    alignMask = 15;
         HeapChunk * chunk = nullptr;

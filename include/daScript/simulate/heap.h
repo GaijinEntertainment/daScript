@@ -132,6 +132,7 @@ namespace das {
         virtual uint64_t bytesAllocated() const = 0;
         virtual uint64_t totalAlignedMemoryAllocated() const = 0;
         virtual void reset() = 0;
+        virtual void shrink() = 0; // shrink usually means release unused memory back to OS, works better for linear allocators after reset
         virtual void report() = 0;
         virtual bool mark() = 0;
         virtual bool mark ( char * ptr, uint32_t size ) = 0;
@@ -194,6 +195,7 @@ namespace das {
     public:
         virtual void forEachString ( const callable<void (const char *)> & fn ) = 0;
         virtual void reset() override;
+        virtual void shrink() override;
     public:
         char * impl_allocateString ( Context * context, const char * text, uint32_t length, const LineInfo * at = nullptr );
         void impl_freeString ( char * text, uint32_t length );
@@ -249,6 +251,7 @@ namespace das {
         virtual uint64_t bytesAllocated() const override;
         virtual uint64_t totalAlignedMemoryAllocated() const override;
         virtual void reset() override { model.reset(); }
+        virtual void shrink() override { model.shrink(); }
         virtual void report() override;
         virtual bool mark() override;
         virtual bool mark ( char * ptr, uint32_t size ) override;
@@ -283,6 +286,7 @@ namespace das {
         virtual uint64_t bytesAllocated() const override;
         virtual uint64_t totalAlignedMemoryAllocated() const override;
         virtual void reset() override;
+        virtual void shrink() override;
         virtual void report() override;
         virtual bool mark() override { return false; }
         virtual bool mark ( char *, uint32_t ) override { DAS_ASSERT(0 && "not supported"); return false; }
@@ -325,6 +329,7 @@ namespace das {
         virtual uint64_t bytesAllocated() const override;
         virtual uint64_t totalAlignedMemoryAllocated() const override;
         virtual void reset() override;
+        virtual void shrink() override;
         virtual void forEachString ( const callable<void (const char *)> & fn ) override ;
         virtual void report() override;
         virtual bool mark() override;
@@ -353,6 +358,7 @@ namespace das {
         virtual uint64_t bytesAllocated() const override;
         virtual uint64_t totalAlignedMemoryAllocated() const override;
         virtual void reset() override;
+        virtual void shrink() override;
         virtual void forEachString ( const callable<void (const char *)> & fn ) override;
         virtual void report() override;
         virtual bool mark() override { return false; }
