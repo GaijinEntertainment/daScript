@@ -27,9 +27,20 @@ namespace das {
             if ( func && var->podDelete && !var->podDeleteGen ) {
                 anyWork = true;
                 var->podDeleteGen = true;
-                expr->inScope = true;
-                if ( logs ) {
-                    *logs << "In-scope POD applied to variable '" << var->name << "' in function '" << func->module->name << "::" << func->name << "'\n";
+                if ( func && (func->generated || func->generator || func->lambda || func->hasTryRecover || func->hasUnsafe) ) {
+                    if ( logs ) {
+                        *logs << "In-scope POD aborted '" << var->name << "' in function '" << func->module->name << "::" << func->name << "'\n";
+                        if ( func->generated ) *logs << "\tfunction is generated\n";
+                        if ( func->generator ) *logs << "\tfunction is generator\n";
+                        if ( func->lambda ) *logs << "\tfunction is lambda\n";
+                        if ( func->hasTryRecover ) *logs << "\tfunction has try-recover\n";
+                        if ( func->hasUnsafe ) *logs << "\tfunction has unsafe\n";
+                    }
+                } else {
+                    expr->inScope = true;
+                    if ( logs ) {
+                        *logs << "In-scope POD applied to variable '" << var->name << "' in function '" << func->module->name << "::" << func->name << "'\n";
+                    }
                 }
             }
             return Visitor::visitLet(expr,var,last);
