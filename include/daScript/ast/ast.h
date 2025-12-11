@@ -363,6 +363,7 @@ namespace das
                 bool    global_shared : 1;
                 bool    do_not_delete : 1;
                 bool    generated : 1;
+
                 bool    capture_as_ref : 1;
                 bool    can_shadow : 1;             // can shadow block or function arguments, as block argument
                 bool    private_variable : 1;
@@ -371,9 +372,13 @@ namespace das
                 bool    inScope : 1;
                 bool    no_capture : 1;
                 bool    early_out : 1;              // this variable is potentially uninitialized in the finally section
+
                 bool    used_in_finally : 1;        // this variable is used in the finally section
                 bool    static_class_member : 1;    // this is a static class member
                 bool    bitfield_constant : 1;      // this is a bitfield constant
+                bool    pod_delete : 1;             // this variable can be deleted as POD
+                bool    pod_delete_gen : 1;         // pod delete has been generated
+                bool    single_return_via_move : 1; // this variable is returned via move, where function has only 1 return path
             };
             uint32_t flags = 0;
         };
@@ -967,6 +972,8 @@ namespace das
                 bool    unsafeWhenNotCloneArray : 1; // this one is used to mark functions which are unsafe when not cloning arrays
                 bool    stub : 1;                    // skip stack allocation, optimizations, etc
                 bool    lateShutdown : 1;
+                bool    hasTryRecover : 1;           // has try { } recover { }
+                bool    hasUnsafe : 1;               // has unsafe { }
             };
             uint32_t moreFlags = 0;
         };
@@ -1243,6 +1250,7 @@ namespace das
                 bool    wasParsedNameless : 1;
                 bool    visibleEverywhere : 1;
                 bool    skipLockCheck : 1;
+                bool    allowPodInscope : 1;
             };
             uint32_t        moduleFlags = 0;
         };
@@ -1513,6 +1521,8 @@ namespace das
         /*option*/ bool log_total_compile_time = false;            // if true, then detailed compile time will be printed at the end of the compilation
         /*option*/ bool no_fast_call = false;                      // disable fastcall
         /*option*/ bool scoped_stack_allocator = true;             // reuse stack memory after variables out of scope
+        /*option*/ bool force_inscope_pod = false;                 // force in-scope for POD-like types
+        /*option*/ bool log_inscope_pod = false;                   // log in-scope for POD-like types
     // debugger
         //  when enabled
         //      1. disables [fastcall]
@@ -1622,6 +1632,7 @@ namespace das
         void buildAccessFlags(TextWriter & logs);
         bool verifyAndFoldContracts();
         void optimize(TextWriter & logs, ModuleGroup & libGroup);
+        bool inScopePodAnalysis(TextWriter & logs);
         void markSymbolUse(bool builtInSym, bool forceAll, bool initThis, Module * macroModule, TextWriter * logs = nullptr);
         void markModuleSymbolUse(TextWriter * logs = nullptr);
         void markMacroSymbolUse(TextWriter * logs = nullptr);

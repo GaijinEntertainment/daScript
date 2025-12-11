@@ -329,6 +329,8 @@ namespace das {
             if ( fn->unsafeOperation ) { ss << "[unsafe_operation]\n"; }
             if ( fn->isClassMethod ) { ss << "[class_method(" << fn->classParent->getMangledName() << ")]\n"; }
             if ( fn->generator ) { ss << "[GENERATOR]\n"; }
+            if ( fn->lambda ) { ss << "[LAMBDA]\n"; }
+            if ( fn->hasTryRecover ) { ss << "[has_try_recover]\n"; }
             logAnnotations(fn->annotations);
             if ( printAliases ) {
                 if ( fn->resultAliases.size() ) {

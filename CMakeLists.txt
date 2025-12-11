@@ -499,6 +499,7 @@ src/ast/ast_allocate_stack.cpp
 src/ast/ast_derive_alias.cpp
 src/ast/ast_const_folding.cpp
 src/ast/ast_block_folding.cpp
+src/ast/ast_inscope_pod.cpp
 src/ast/ast_unused.cpp
 src/ast/ast_annotations.cpp
 src/ast/ast_export.cpp

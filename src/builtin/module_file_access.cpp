@@ -47,6 +47,7 @@ namespace das {
                 sameFileName = context->findFunction("is_same_file_name");    // note, this one CAN be null
                 optionAllowed = context->findFunction("option_allowed");    // note, this one CAN be null
                 annotationAllowed = context->findFunction("annotation_allowed");    // note, this one CAN be null
+                podInScopeAllowed = context->findFunction("is_pod_in_scope_allowed"); // note, this one CAN be null
                 // get it ready
                 context->restart();
                 context->runInitScript();   // note: we assume sane init stack size here
@@ -180,6 +181,17 @@ namespace das {
         vec4f res = context->evalWithCatch(annotationAllowed, args, nullptr);
         auto exc = context->getException(); exc;
         DAS_ASSERTF(!exc, "exception failed in `annotation_allowed`: %s", exc);
+        return cast<bool>::to(res);
+    }
+
+    bool ModuleFileAccess::isPodInScopeAllowed ( const string & moduleName, const string & fileName ) const {
+        if (failed() || !podInScopeAllowed) return FileAccess::isPodInScopeAllowed(moduleName,fileName);
+        vec4f args[2];
+        args[0] = cast<const char *>::from(moduleName.c_str());
+        args[1] = cast<const char *>::from(fileName.c_str());
+        vec4f res = context->evalWithCatch(podInScopeAllowed, args, nullptr);
+        auto exc = context->getException(); exc;
+        DAS_ASSERTF(!exc, "exception failed in `pod_in_scope_allowed`: %s", exc);
         return cast<bool>::to(res);
     }
 }

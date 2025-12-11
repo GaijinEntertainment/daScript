@@ -1887,6 +1887,10 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_table_free)>(*this, lib, "__builtin_table_free",
             SideEffects::modifyArgumentAndExternal, "builtin_table_free")
                 ->args({"table","sizeOfKey","sizeOfValue","context","at"});
+        // local collection
+        addInterop<builtin_collect_local,void,vec4f>(*this, lib, "builtin_collect_local",
+            SideEffects::modifyArgumentAndExternal, "builtin_collect_local")
+                ->arg("anything")->unsafeOperation = true;
         // table expressions
         addCall<ExprErase>("__builtin_table_erase");
         addCall<ExprSetInsert>("__builtin_table_set_insert");

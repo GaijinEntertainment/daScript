@@ -70,6 +70,7 @@ namespace das {
             relaxedAssign = prog->options.getBoolOption("relaxed_assign", prog->policies.relaxed_assign);
             relaxedPointerConst = prog->options.getBoolOption("relaxed_pointer_const", prog->policies.relaxed_pointer_const);
             unsafeTableLookup = prog->options.getBoolOption("unsafe_table_lookup", prog->policies.unsafe_table_lookup);
+            forceInscopePod = prog->options.getBoolOption("force_inscope_pod", prog->policies.force_inscope_pod);
             thisModule = prog->thisModule.get();
         }
         bool finished() const { return !needRestart; }
@@ -89,6 +90,8 @@ namespace das {
         vector<size_t>          assumeStack;
         vector<size_t>          assumeTypeStack;
         vector<bool>            inFinally;
+        smart_ptr<ExprReturn>   oneReturn;
+        int32_t                 returnCount = 0;
         bool                    canFoldResult = true;
         das_hash_set<int32_t>   labels;
         size_t                  fieldOffset = 0;
@@ -116,6 +119,7 @@ namespace das {
         bool                    relaxedPointerConst = false;
         bool                    unsafeTableLookup = false;
         bool                    debugInferFlag = false;
+        bool                    forceInscopePod = false;
         Module *                thisModule = nullptr;
         size_t                  beforeFunctionErrors = 0;
     public:
@@ -1236,6 +1240,9 @@ namespace das {
                 return nullptr;
             }
             auto field = st->findField(name);
+            if ( !field ) {
+                return nullptr;
+            }
             if ( !field->classMethod ) {
                 return nullptr;
             }
@@ -2471,6 +2478,7 @@ namespace das {
         }
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
+            oneReturn.reset(); returnCount = 0;
             canFoldResult = true;
             unsafeDepth = 0;
             func = f;
@@ -2621,6 +2629,31 @@ namespace das {
                     }
                 }
             }
+            // now, lets mark the single return via move thing
+            if ( forceInscopePod && oneReturn && returnCount==1 ) {
+                if ( oneReturn->moveSemantics ) {
+                    if ( oneReturn->subexpr && oneReturn->subexpr->type ) {
+                        ExprVar * exprVar = nullptr;
+                        if ( oneReturn->subexpr->rtti_isVar() ) {
+                            exprVar = (ExprVar *) oneReturn->subexpr.get();
+                        } else if ( oneReturn->subexpr->rtti_isCallFunc() ) {
+                            auto callExpr = (ExprCallFunc *) oneReturn->subexpr.get();
+                            if (
+                                callExpr->func
+                            &&  callExpr->func->fromGeneric
+                            &&  callExpr->func->fromGeneric->module->name=="$"
+                            &&  callExpr->func->fromGeneric->name=="_return_with_lockcheck" ) {
+                                if ( callExpr->arguments.size()==1 && callExpr->arguments[0]->rtti_isVar() ) {
+                                    exprVar = (ExprVar *) callExpr->arguments[0].get();
+                                }
+                            }
+                        }
+                        if ( exprVar && exprVar->variable ) {
+                            exprVar->variable->single_return_via_move = true;
+                        }
+                    }
+                }
+            }
             // if any of this asserts failed, we have a logic error in how we pop
             DAS_ASSERT(loop.size()==0);
             DAS_ASSERT(scopes.size()==0);
@@ -2628,6 +2661,7 @@ namespace das {
             DAS_ASSERT(local.size()==0);
             DAS_ASSERT(with.size()==0);
             labels.clear();
+            oneReturn.reset(); returnCount = 0;
             func.reset();
             return Visitor::visit(that);
         }
@@ -2715,6 +2749,7 @@ namespace das {
         virtual void preVisit ( ExprUnsafe * expr ) override {
             Visitor::preVisit(expr);
             unsafeDepth ++;
+            if ( func ) func->hasUnsafe = true;
         }
         virtual ExpressionPtr visit ( ExprUnsafe * expr ) override {
             unsafeDepth --;
@@ -3266,6 +3301,19 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprMakeGenerator
+        virtual void preVisit ( ExprMakeGenerator * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->arguments.size() ) {
+                auto mkBlock = expr->arguments[0];
+                if ( mkBlock->rtti_isMakeBlock() ) {
+                    auto mb = (ExprMakeBlock *)(mkBlock.get());
+                    if ( mb->block->rtti_isBlock() ) {
+                        auto blk = (ExprBlock *)(mb->block.get());
+                        blk->isGeneratorBlock = true;
+                    }
+                }
+            }
+        }
         virtual ExpressionPtr visit ( ExprMakeGenerator * expr ) override {
             if ( expr->iterType && expr->iterType->isExprType() ) {
                 return Visitor::visit(expr);
@@ -7112,6 +7160,10 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprTryCatch
+        void preVisit ( ExprTryCatch * expr ) override {
+            Visitor::preVisit(expr);
+            if ( func ) func->hasTryRecover = true;
+        }
         ExpressionPtr visit ( ExprTryCatch * expr ) override {
             if ( jitEnabled() ) {
                 auto tryBlock = make_smart<ExprMakeBlock>(expr->try_block->at,expr->try_block);
@@ -7327,14 +7379,19 @@ namespace das {
                             reportAstChanged();
                             auto pCall = make_smart<ExprCall>(expr->at,"_return_with_lockcheck");
                             pCall->arguments.push_back(expr->subexpr->clone());
-                            auto pRet = expr->clone();
-                            static_pointer_cast<ExprReturn>(pRet)->subexpr = pCall;
+                            auto pRet = static_pointer_cast<ExprReturn>(expr->clone());
+                            pRet->subexpr = pCall;
+                            if ( forceInscopePod && func ) returnCount ++;  // ast changed, so we don't really care
                             return pRet;
                         }
                     }
                 }
             }
             expr->type = make_smart<TypeDecl>();
+            if ( forceInscopePod && func ) {
+                if ( returnCount==0 ) oneReturn = expr;
+                returnCount ++;
+            }
             return Visitor::visit(expr);
         }
     // ExprYield
@@ -7869,6 +7926,61 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprLet
+
+        bool isPodDelete( TypeDecl * typ ) {
+            if ( typ->temporary ) return false;
+            das_set<Structure *> dep;
+            bool hasHeap = false;
+            if ( !isPodDelete(typ,dep,hasHeap) ) return false;
+            return hasHeap;
+        }
+
+        bool isPodDelete( TypeDecl * typ, das_set<Structure*> & dep, bool & hasHeap) {
+            if ( typ->baseType==Type::tHandle ) {
+                return typ->annotation->isPod();
+            } else  if ( typ->baseType==Type::tStructure ) {
+                if ( typ->structType ) {
+                    if (dep.find(typ->structType) != dep.end()) return true;
+                    dep.insert(typ->structType);
+                    if ( typ->structType->isClass ) return false;
+                    auto finFn = getFinalizeFunc(typ);
+                    if ( finFn.size()==0 ) {
+                        // ok, no finalize - there will be one generated
+                    } else if ( finFn.size()==1 ) {
+                        auto finFunc = finFn.back();
+                        if ( !finFunc->generated ) return false;
+                    } else {
+                        // seriously? more than one
+                        return false;
+                    }
+                    for ( const auto & fd : typ->structType->fields ) {
+                        if ( fd.type && !fd.doNotDelete && (fd.type->constant || !isPodDelete(fd.type.get(), dep, hasHeap)) ) {
+                            return false;
+                        }
+                    }
+
+                }
+                return true;
+            } else if ( typ->baseType==Type::tTuple || typ->baseType==Type::tVariant || typ->baseType == Type::option ) {
+                for ( const auto & arg : typ->argTypes ) {
+                    if ( arg->constant || !isPodDelete(arg.get(), dep, hasHeap) ) {
+                        return false;
+                    }
+                }
+                return true;
+            } else if ( typ->baseType==Type::tArray || typ->baseType==Type::tTable ) {
+                if ( typ->firstType && (typ->firstType->constant || !isPodDelete(typ->firstType.get(), dep, hasHeap)) ) return false;
+                if ( typ->secondType && (typ->secondType->constant || !isPodDelete(typ->secondType.get(), dep, hasHeap)) ) return false;
+                hasHeap = true;
+            } else if ( typ->baseType==Type::tPointer ) {
+                return !typ->needDelete();  // pointer is good if we don't need to delete
+            } else if ( typ->baseType==Type::tIterator || typ->baseType==Type::tBlock
+                || typ->baseType==Type::tLambda || typ->baseType==Type::tFunction ) {
+                return false;
+            }
+            return true;
+        }
+
         virtual void preVisit ( ExprLet * expr ) override {
             Visitor::preVisit(expr);
             DAS_ASSERT(!scopes.empty());
@@ -7887,6 +7999,7 @@ namespace das {
         }
         virtual void preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(expr, var, last);
+            var->single_return_via_move = false;
             if ( var->type && var->type->isExprType() ) {
                 return;
             }
@@ -7945,9 +8058,6 @@ namespace das {
             }
             if ( !var->init ) {
                 local.push_back(var);
-            }
-            if ( expr->inScope && var->type && var->type->isConst() ) {
-                error("in scope let can't be const", "", "", var->at, CompilationError::invalid_variable_type);
             }
         }
         bool isEmptyInit ( const VariablePtr & var ) const {
@@ -8015,9 +8125,28 @@ namespace das {
                         TypeDecl::clone(castExpr->castType,var->type);
                     }
                 }
+                if ( forceInscopePod && !expr->inScope && !var->pod_delete && !var->type->ref  ) {    // no constant for now
+                    if ( (expr->variables.size()==1)                                                 // only one variable
+                         // very restrictive on functions
+                         && (func && !func->generated && !func->generator && !func->lambda)
+                         // not in the generator block
+                         && (blocks.empty() || !blocks.back()->isGeneratorBlock)
+                    ) {
+                        if ( isPodDelete(var->type.get()) ) {
+                            var->pod_delete = true;
+                            reportAstChanged();
+                        }
+                    }
+                }
                 if ( expr->inScope ) {
                     if ( !var->inScope ) {
                         if ( var->type->canDelete() ) {
+                            if ( var->type->constant ) {
+                                error("variable " + var->name + " of type " + describeType(var->type) + " can't be in-scope const",
+                                    "const variable with complex finalizer can't be deleted automatically", "",
+                                    var->at, CompilationError::invalid_variable_type);
+                                return Visitor::visitLet(expr,var,last);
+                            }
                             var->inScope = true;
                             auto eVar = make_smart<ExprVar>(var->at, var->name);
                             auto exprDel = make_smart<ExprDelete>(var->at, eVar);
@@ -8059,7 +8188,6 @@ namespace das {
                             var->at, CompilationError::invalid_variable_type);
                     }
                 }
-
                 if ( noUnsafeUninitializedStructs && !var->init && var->type->unsafeInit() ) {
                     if ( !safeExpression(expr) ) {
                         error("Uninitialized variable " + var->name + " is unsafe. Use initializer syntax or [safe_when_uninitialized] when intended.", "", "",
@@ -10679,6 +10807,16 @@ namespace das {
                 continue;
             }
             libGroup.foreach(modMacro, "*");
+            if ( inScopePodAnalysis(logs) ) {
+                anyMacrosDidWork = true;
+                reportingInferErrors = true;
+                inferTypesDirty(logs, true);
+                reportingInferErrors = false;
+                if ( failed() ) {
+                    error("internal compiler error: pod analysis infer to fail", "", "", LineInfo());
+                }
+                continue;
+            }
         } while ( !failed() && anyMacrosDidWork );
     failed_to_infer:;
         if ( failed() && !anyMacrosFailedToInfer && !macroException ) {

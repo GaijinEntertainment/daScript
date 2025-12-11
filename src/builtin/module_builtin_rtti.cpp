@@ -222,7 +222,7 @@ namespace das {
         ft->alias = "ModuleFlags";
         ft->argNames = {
             "builtIn", "promoted", "isPublic", "isModule", "isSolidContext", "doNotAllowUnsafe",
-            "wasParsedNameless", "visibleEverywhere", "skipLockCheck"
+            "wasParsedNameless", "visibleEverywhere", "skipLockCheck", "allowPodInscope"
         };
         return ft;
     }
@@ -778,6 +778,9 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(log_compile_time)>("log_compile_time");
             addField<DAS_BIND_MANAGED_FIELD(log_total_compile_time)>("log_total_compile_time");
             addField<DAS_BIND_MANAGED_FIELD(no_fast_call)>("no_fast_call");
+            addField<DAS_BIND_MANAGED_FIELD(scoped_stack_allocator)>("scoped_stack_allocator");
+            addField<DAS_BIND_MANAGED_FIELD(force_inscope_pod)>("force_inscope_pod");
+            addField<DAS_BIND_MANAGED_FIELD(log_inscope_pod)>("log_inscope_pod");
         // debugger
             addField<DAS_BIND_MANAGED_FIELD(debugger)>("debugger");
             addField<DAS_BIND_MANAGED_FIELD(debug_infer_flag)>("debug_infer_flag");

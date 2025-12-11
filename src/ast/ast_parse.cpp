@@ -676,6 +676,9 @@ namespace das {
             program->isCompiling = false;
             return program;
         } else {
+            if ( program->options.getBoolOption("force_inscope_pod", policies.force_inscope_pod) ) {
+                program->thisModule->allowPodInscope = access->isPodInScopeAllowed(program->thisModule->name, fileName);
+            }
             program->thisModule->doNotAllowUnsafe = !access->canModuleBeUnsafe(program->thisModule->name, fileName);
             if ( policies.solid_context || program->options.getBoolOption("solid_context",false) ) {
                 program->thisModule->isSolidContext = true;

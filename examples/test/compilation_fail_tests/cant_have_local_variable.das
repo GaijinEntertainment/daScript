@@ -1,5 +1,6 @@
 options gen2
 expect 30108:4, 30101:2
+options force_inscope_pod = false
 
 require UnitTest
 
