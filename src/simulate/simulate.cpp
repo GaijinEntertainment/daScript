@@ -1897,9 +1897,9 @@ namespace das
 
     void Context::throw_out_of_memory ( bool isStringHeap, uint32_t size, const LineInfo * at ) {
         if ( isStringHeap ) {
-            throw_error_at(at, "out of string heap memory, requested %u bytes, limit is %llu bytes", size, (unsigned long long) stringHeap->getLimit());
+            throw_error_at(at, "out of string heap memory, requested %u bytes, used %llu / limit %llu", size, (unsigned long long) stringHeap->bytesAllocated(), (unsigned long long) stringHeap->getLimit());
         } else {
-            throw_error_at(at, "out of heap memory, requested %u bytes, limit is %llu bytes", size, (unsigned long long) heap->getLimit());
+            throw_error_at(at, "out of heap memory, requested %u bytes, used %llu / limit %llu", size, (unsigned long long) heap->bytesAllocated(), (unsigned long long) heap->getLimit());
         }
     }
 
