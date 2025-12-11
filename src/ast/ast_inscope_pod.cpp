@@ -49,7 +49,7 @@ namespace das {
                         if ( func->hasTryRecover ) *logs << "\tfunction has try-recover\n";
                         if ( func->hasUnsafe ) *logs << "\tfunction has unsafe\n";
                         if ( !func->module->allowPodInscope ) *logs << "\tmodule " << func->module->name << " does not allow in-scope POD\n";
-                        if ( blocks.back()->inTheLoop ) *logs << "\tblock is in the loop, which does not have separate 'finally' scope. you can add 'if ( true )' to create scope\n";
+                        if ( blocks.back()->inTheLoop ) *logs << "\tblock is in the loop, which does not have separate 'finally' scope. you can add 'if ( true )' to create scope, or take variable outside of loop\n";
                     }
                 } else {
                     func->notInferred();
