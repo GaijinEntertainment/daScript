@@ -8087,8 +8087,8 @@ namespace das {
                         TypeDecl::clone(castExpr->castType,var->type);
                     }
                 }
-                if ( forceInscopePod && !expr->inScope && !var->podDelete && !var->type->ref && !var->type->constant ) {    // no constant for now
-                    if ( (expr->variables.size()==1)                                                                        // only one variable
+                if ( forceInscopePod && !expr->inScope && !var->podDelete && !var->type->ref  ) {    // no constant for now
+                    if ( (expr->variables.size()==1)                                                 // only one variable
                          // very restrictive on functions
                          && (func && !func->generated && !func->generator && !func->lambda
                                 && !func->hasTryRecover && !func->hasUnsafe)
