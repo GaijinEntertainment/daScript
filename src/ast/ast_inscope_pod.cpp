@@ -23,6 +23,14 @@ namespace das {
             func = nullptr;
             return Visitor::visit(fun);
         }
+        virtual void preVisit ( ExprBlock * block ) override {
+            Visitor::preVisit(block);
+            blocks.push_back(block);
+        }
+        virtual ExpressionPtr visit ( ExprBlock * block ) override {
+            blocks.pop_back();
+            return Visitor::visit(block);
+        }
         virtual VariablePtr visitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             if ( func && var->podDelete && !var->podDeleteGen ) {
                 anyWork = true;
@@ -37,7 +45,10 @@ namespace das {
                         if ( func->hasUnsafe ) *logs << "\tfunction has unsafe\n";
                     }
                 } else {
-                    expr->inScope = true;
+                    auto CallCollectLocal = make_smart<ExprCall>(expr->at,"_::builtin_collect_local");
+                    CallCollectLocal->arguments.push_back( make_smart<ExprVar>(expr->at, var->name) );
+                    CallCollectLocal->alwaysSafe = true;
+                    blocks.back()->finalList.push_back(CallCollectLocal);
                     if ( logs ) {
                         *logs << "In-scope POD applied to variable '" << var->name << "' in function '" << func->module->name << "::" << func->name << "'\n";
                     }
@@ -48,6 +59,7 @@ namespace das {
     protected:
         Function * func = nullptr;
         TextWriter * logs = nullptr;
+        vector<ExprBlock *> blocks;
     };
 
     bool Program::inScopePodAnalysis(TextWriter & logs) {
