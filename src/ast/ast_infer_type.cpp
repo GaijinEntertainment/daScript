@@ -51,7 +51,7 @@ namespace das {
 
     class InferTypes : public FoldingVisitor {
     public:
-        InferTypes( const ProgramPtr & prog ) : FoldingVisitor(prog ) {
+        InferTypes( const ProgramPtr & prog, TextWriter * logs_ ) : FoldingVisitor(prog), logs(logs_) {
             debugInferFlag = prog->options.getBoolOption("debug_infer_flag", prog->policies.debug_infer_flag);
             enableInferTimeFolding = prog->options.getBoolOption("infer_time_folding",true);
             disableAot = prog->options.getBoolOption("no_aot",false);
@@ -71,6 +71,7 @@ namespace das {
             relaxedPointerConst = prog->options.getBoolOption("relaxed_pointer_const", prog->policies.relaxed_pointer_const);
             unsafeTableLookup = prog->options.getBoolOption("unsafe_table_lookup", prog->policies.unsafe_table_lookup);
             forceInscopePod = prog->options.getBoolOption("force_inscope_pod", prog->policies.force_inscope_pod);
+            logInscopePod = prog->options.getBoolOption("log_inscope_pod", prog->policies.log_inscope_pod);
             thisModule = prog->thisModule.get();
         }
         bool finished() const { return !needRestart; }
@@ -120,8 +121,10 @@ namespace das {
         bool                    unsafeTableLookup = false;
         bool                    debugInferFlag = false;
         bool                    forceInscopePod = false;
+        bool                    logInscopePod = false;
         Module *                thisModule = nullptr;
         size_t                  beforeFunctionErrors = 0;
+        TextWriter *            logs = nullptr;
     public:
         vector<FunctionPtr>     extraFunctions;
     protected:
@@ -6901,6 +6904,24 @@ namespace das {
             } else if ( expr->left->type->hasClasses() && !safeExpression(expr) ) {
                 error("moving classes requires unsafe"+moveErrorInfo(expr), "", "",
                     expr->at, CompilationError::unsafe);
+            } else if (
+                   forceInscopePod
+                && func
+                && (func->module->allowPodInscope && (!func->fromGeneric || func->fromGeneric->module->allowPodInscope)) // both modules allow pod inscope
+                && !func->hasUnsafe
+                && isPodDelete(expr->left->type.get())  // its a pod type
+                ) {
+                reportAstChanged();
+                if ( logs && logInscopePod ) {
+                    if ( !expr->at.empty() && expr->at.fileInfo ) {
+                        *logs << expr->at.fileInfo->name << ":" << expr->at.line << ":" << expr->at.column << "\n";
+                    }
+                    *logs << "In-scope POD applied to <- in function '" << func->module->name << "::" << func->name << "'\n";
+                }
+                auto pCall = make_smart<ExprCall>(expr->at,"_move_in_scope_pod");
+                pCall->arguments.push_back(expr->left->clone());
+                pCall->arguments.push_back(expr->right->clone());
+                return pCall;
             } else if ( expr->left->type->lockCheck() || expr->right->type->lockCheck()) {
                 if ( !expr->skipLockCheck && !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") && !skipLockCheck() ) { // we always skip lock check in builtin.das
                     reportAstChanged();
@@ -10844,7 +10865,7 @@ namespace das {
             if ( macroException ) break;
             failToCompile = false;
             errors.clear();
-            InferTypes context(this);
+            InferTypes context(this, &logs);
             context.verbose = verbose || logInferPasses;
             visit(context);
             for ( auto efn : context.extraFunctions ) {
