@@ -6875,7 +6875,7 @@ namespace das {
             } else if ( !expr->right->type->isRef() && !expr->right->type->isMoveableValue() ) {
                 error("can only move to from a reference"+moveErrorInfo(expr), "", "",
                     expr->at, CompilationError::cant_write_to_non_reference);
-            } else if ( expr->left->type->constant ) {
+            } else if ( !expr->allowConstantLValue && expr->left->type->constant ) {
                 error("can't move to a constant value"+moveErrorInfo(expr), "", "",
                     expr->at, CompilationError::cant_move_to_const);
             } else if ( !expr->left->type->canMove() ) {
@@ -6946,7 +6946,7 @@ namespace das {
             } else if ( !expr->left->type->isRef() ) {
                 error("can only copy to a reference"+copyErrorInfo(expr), "", "",
                     expr->at, CompilationError::cant_write_to_non_reference);
-            } else if ( expr->left->type->constant ) {
+            } else if ( !expr->allowConstantLValue && expr->left->type->constant ) {
                 error("can't write to a constant value"+copyErrorInfo(expr), "", "",
                     expr->at, CompilationError::cant_write_to_const);
             } else if ( !expr->allowCopyTemp && expr->right->type->isTemp(true,false) ) {

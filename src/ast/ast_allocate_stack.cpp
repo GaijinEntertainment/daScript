@@ -1079,10 +1079,23 @@ namespace das {
                             ExpressionPtr assign;
                             if ( var->init_via_move ) {
                                 assign = make_smart<ExprMove>(expr->at, left, right);
+                                ((ExprMove *)assign.get())->allowConstantLValue = true;
                             } else {
                                 assign = make_smart<ExprCopy>(expr->at, left, right);
+                                ((ExprCopy *)assign.get())->allowConstantLValue = true;
                             }
                             assign->alwaysSafe = true;
+                            assign->generated = true;
+                            if ( var->type->constant ) {
+                                auto exprOp2 = (ExprOp2 *)(assign.get());
+                                auto pLeft = exprOp2->left->clone();
+                                auto pLeftType = make_smart<TypeDecl>(*var->type);
+                                pLeftType->constant = false;
+                                auto pLeftCast = make_smart<ExprCast>(exprOp2->left->at, pLeft, pLeftType);
+                                pLeftCast->reinterpret = true;
+                                pLeftCast->alwaysSafe = true;
+                                exprOp2->left = pLeftCast;
+                            }
                             afterThisExpression.push_back(assign);
                         }
                     }

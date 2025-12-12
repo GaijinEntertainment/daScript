@@ -238,14 +238,14 @@ namespace das {
     TypeDeclPtr makeExprCopyFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "CopyFlags";
-        ft->argNames = { "allowCopyTemp", "takeOverRightStack", "promoteToClone" };
+        ft->argNames = { "allowCopyTemp", "takeOverRightStack", "allowConstantLValue" };
         return ft;
     }
 
     TypeDeclPtr makeExprMoveFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "MoveFlags";
-        ft->argNames = { "skipLockCheck", "takeOverRightStack" };
+        ft->argNames = { "skipLockCheck", "takeOverRightStack", "allowConstantLValue" };
         return ft;
     }
 
