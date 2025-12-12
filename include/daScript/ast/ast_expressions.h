@@ -488,6 +488,7 @@ namespace das
             struct {
                 bool allowCopyTemp : 1;
                 bool takeOverRightStack : 1;
+                bool allowConstantLValue : 1;
             };
             uint32_t copyFlags = 0;
         };
@@ -506,6 +507,7 @@ namespace das
             struct {
                 bool skipLockCheck : 1;
                 bool takeOverRightStack : 1;
+                bool allowConstantLValue : 1;
             };
             uint32_t moveFlags = 0;
         };
