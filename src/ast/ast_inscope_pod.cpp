@@ -37,7 +37,7 @@ namespace das {
                 var->pod_delete_gen = true;
                 if ( var->single_return_via_move ) {
                     // we silently do nothing. because this pod is returned via move, no need to collect it
-                } else if ( func && (func->generated || func->generator || func->lambda || func->hasTryRecover || func->hasUnsafe || !func->module->allowPodInscope || blocks.back()->inTheLoop) ) {
+                } else if ( func->generated || func->generator || func->lambda || func->hasTryRecover || func->hasUnsafe || !func->module->allowPodInscope || blocks.back()->inTheLoop ) {
                     if ( logs ) {
                         if ( !var->at.empty() && var->at.fileInfo ) {
                             *logs << var->at.fileInfo->name << ":" << var->at.line << ":" << var->at.column << "\n";
