@@ -2217,6 +2217,8 @@ namespace das {
               << value.fail_on_lack_of_aot_export
               << value.no_fast_call
               << value.scoped_stack_allocator
+              << value.force_inscope_pod
+              << value.log_inscope_pod
               << value.debugger
               << value.debug_module
               << value.profiler
@@ -2324,7 +2326,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 71;
+        static constexpr uint32_t currentVersion = 72;
         return currentVersion;
     }
 

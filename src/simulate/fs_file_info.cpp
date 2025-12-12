@@ -22,7 +22,11 @@ namespace das {
             struct stat st;
             int fd = fileno((FILE *)ff);
             fstat(fd, &st);
-            char *source = (char *) (st.st_size ? das_aligned_alloc16(st.st_size) : nullptr);
+            if ( !st.st_size ) {
+                fclose(ff);
+                return new TextFileInfo("", st.st_size, false);
+            }
+            char *source = (char *) das_aligned_alloc16(st.st_size);
             auto info = new TextFileInfo(source, st.st_size, true);
             auto bytesRead = fread(source, 1, st.st_size, ff);
             fclose(ff);
@@ -53,12 +57,17 @@ namespace das {
                 struct stat st;
                 int fd = fileno((FILE *)ff);
                 fstat(fd, &st);
-                char *source = (char *) (st.st_size ? das_aligned_alloc16(st.st_size) : nullptr);
-                hfile.reset(new TextFileInfo(source, st.st_size, true));
-                auto bytesRead = fread(source, 1, st.st_size, ff);
-                fclose(ff);
-                if ( size_t(bytesRead) != size_t(st.st_size) ) {
-                    hfile.release();
+                if ( st.st_size ) {
+                    char *source = (char *) das_aligned_alloc16(st.st_size);
+                    hfile.reset(new TextFileInfo(source, st.st_size, true));
+                    auto bytesRead = fread(source, 1, st.st_size, ff);
+                    fclose(ff);
+                    if ( size_t(bytesRead) != size_t(st.st_size) ) {
+                        hfile.release();
+                    }
+                } else {
+                    fclose(ff);
+                    hfile.reset(new TextFileInfo("", st.st_size, false));
                 }
             } else {
                 it_ok.first->second = nullptr;

@@ -299,8 +299,8 @@ class CollectAndReplaceIteratorFields : AstVisitor {
                                     $i(v.name) := $i(name) as res
                                 } else {
                                     $i(v.name) = $i(name) as res
-}
                                 }
+                            }
                             if ($v(voidRoutine)) {
                                 yield true
                             } else {
