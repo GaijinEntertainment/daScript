@@ -44,11 +44,11 @@ namespace das {
         int append(int size);
         bool isValid() const { return mMagic==uint32_t(STATUS_MAGIC); }
     protected:
-        mutable mutex		mCompleteMutex;
-        uint32_t			mRemaining = 0;
-        condition_variable	mCond;
+        mutable mutex       mCompleteMutex;
+        uint32_t            mRemaining = 0;
+        condition_variable  mCond;
         atomic<int>         mRef{0};
-        uint32_t             mMagic = uint32_t(STATUS_MAGIC);
+        uint32_t            mMagic = uint32_t(STATUS_MAGIC);
     };
 
     class JobQue {
@@ -79,17 +79,17 @@ namespace das {
                 priority = _priority;
                 category = _category;
             }
-            Job				function = nullptr;
-            JobPriority		priority = JobPriority::Inactive;
-            JobCategory		category = 0;
+            Job                function = nullptr;
+            JobPriority        priority = JobPriority::Inactive;
+            JobCategory        category = 0;
         };
         struct ThreadEntry {
             ThreadEntry( unique_ptr<thread> && thread) {
                 threadPointer = das::move(thread);
             };
-            unique_ptr<thread>	threadPointer;
-            JobPriority			currentPriority = JobPriority::Inactive;
-            JobCategory			currentCategory = 0;
+            unique_ptr<thread>  threadPointer;
+            JobPriority         currentPriority = JobPriority::Inactive;
+            JobCategory         currentCategory = 0;
         };
     protected:
         void join();
@@ -98,13 +98,13 @@ namespace das {
     protected:
         condition_variable mCond;
         int mSleepMs;
-        atomic<bool>	mShutdown{false};
-        atomic<int>		mThreadCount{0};
+        atomic<bool>    mShutdown{false};
+        atomic<int>     mThreadCount{0};
         static thread::id mTheMainThread;
         mutex mFifoMutex;
     protected:
-        deque<JobEntry>	mFifo;
-        vector<ThreadEntry>		mThreads;
+        deque<JobEntry> mFifo;
+        vector<ThreadEntry> mThreads;
         atomic<int> mJobsRunning{0};
     protected:
         mutex mEvalMainThreadMutex;

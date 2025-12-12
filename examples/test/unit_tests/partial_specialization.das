@@ -17,7 +17,7 @@ struct Far : Bar {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 // 0. substitute distance is number of casts required for the function
-//		function with less casts is picked
+//    function with less casts is picked
 
 def test(a : Foo; b : Foo) {
     return "foo foo"

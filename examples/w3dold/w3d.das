@@ -208,12 +208,12 @@ def InitWeapon() {
 }
 
 /*
-000 - 063	Walls
-090 - 091	Regular unlocked door (oriented)
-092 - 093	Gold-locked door (oriented)
-094 - 095	Silver-locked door (oriented)
-100 - 101	Elevator door (oriented)
-106 - 143	Walkable tile (room)
+000 - 063    Walls
+090 - 091    Regular unlocked door (oriented)
+092 - 093    Gold-locked door (oriented)
+094 - 095    Silver-locked door (oriented)
+100 - 101    Elevator door (oriented)
+106 - 143    Walkable tile (room)
 */
 
 def InitObjects() {

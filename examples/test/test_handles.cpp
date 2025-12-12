@@ -349,20 +349,20 @@ void testPoint3Array(const TBlock<void,const Point3Array> & blk, Context * conte
 
 TDim<int32_t,10> testCMRES ( Context * __context__ )
 {
-	TDim<int32_t,10> __a_rename_at_7; das_zero(__a_rename_at_7);
-	{
-		bool __need_loop_8 = true;
-		// j : int& -const
-		das_iterator<TDim<int32_t,10>> __j_iterator(__a_rename_at_7);
-		int32_t * __j_rename_at_8;
-		__need_loop_8 = __j_iterator.first(__context__,(__j_rename_at_8)) && __need_loop_8;
-		for ( ; __need_loop_8 ; __need_loop_8 = __j_iterator.next(__context__,(__j_rename_at_8)) )
-		{
-			das_copy((*__j_rename_at_8),13);
-		}
-		__j_iterator.close(__context__,(__j_rename_at_8));
-	};
-	return das_auto_cast_ref<TDim<int32_t,10>>::cast(__a_rename_at_7);
+    TDim<int32_t,10> __a_rename_at_7; das_zero(__a_rename_at_7);
+    {
+        bool __need_loop_8 = true;
+        // j : int& -const
+        das_iterator<TDim<int32_t,10>> __j_iterator(__a_rename_at_7);
+        int32_t * __j_rename_at_8;
+        __need_loop_8 = __j_iterator.first(__context__,(__j_rename_at_8)) && __need_loop_8;
+        for ( ; __need_loop_8 ; __need_loop_8 = __j_iterator.next(__context__,(__j_rename_at_8)) )
+        {
+            das_copy((*__j_rename_at_8),13);
+        }
+        __j_iterator.close(__context__,(__j_rename_at_8));
+    };
+    return das_auto_cast_ref<TDim<int32_t,10>>::cast(__a_rename_at_7);
 }
 
 void testFooArray(const TBlock<void,FooArray> & blk, Context * context, LineInfoArg * at) {

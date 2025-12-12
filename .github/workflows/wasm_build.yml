@@ -58,15 +58,15 @@ jobs:
     steps:
     - name: "SCM Checkout"
       uses: actions/checkout@v4
-      
+
     - uses: lukka/get-cmake@latest
 
     - name: "Install: Required Dev Packages"
       run: |
         set -eux
-        
+
         git clone https://github.com/emscripten-core/emsdk.git
-        
+
         case "${{ matrix.target }}${{ matrix.architecture }}" in
           linux64)
             echo "MARCH=64" >> $GITHUB_ENV
@@ -88,7 +88,7 @@ jobs:
               libxcursor-dev \
               libxinerama-dev \
               libxi-dev
-              
+
             ./emsdk/emsdk install latest
             ./emsdk/emsdk activate latest
             source "/home/runner/work/daScript/daScript/emsdk/emsdk_env.sh"
