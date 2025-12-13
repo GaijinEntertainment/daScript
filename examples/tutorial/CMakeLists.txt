@@ -1,7 +1,7 @@
 MACRO(DAS_TUTORIAL tutorial_name tutorial_src)
     add_executable(${tutorial_name} ${tutorial_src})
     TARGET_COMPILE_DEFINITIONS(${tutorial_name} PRIVATE DAS_MOD_EXPORTS)
-    TARGET_LINK_LIBRARIES(${tutorial_name} libDaScript Threads::Threads libDaScriptTest)
+    TARGET_LINK_LIBRARIES(${tutorial_name} libDaScript Threads::Threads)
     ADD_DEPENDENCIES(${tutorial_name} libDaScript)
     SETUP_CPP11(${tutorial_name})
 ENDMACRO()
@@ -54,8 +54,8 @@ ${DAS_DASCRIPT_MAIN_SRC}
 )
 add_executable(tutorial02_dasAot ${TUTORIAL_02_DASAOT_MAIN_SRC} )
 target_compile_definitions(tutorial02_dasAot PUBLIC MAIN_FUNC_NAME=dascript_dummy_main) # dascript_dummy_main is here to rename main function from daScript
-TARGET_LINK_LIBRARIES(tutorial02_dasAot libDaScript libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(tutorial02_dasAot libDaScript libDaScriptTest ${DAS_MODULES_LIBS})
+TARGET_LINK_LIBRARIES(tutorial02_dasAot libDaScript Threads::Threads ${DAS_MODULES_LIBS})
+ADD_DEPENDENCIES(tutorial02_dasAot libDaScript ${DAS_MODULES_LIBS})
 SETUP_CPP11(tutorial02_dasAot)
 SETUP_LTO(tutorial02_dasAot)
 

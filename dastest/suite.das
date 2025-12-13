@@ -108,10 +108,13 @@ def test_file(file_name : string; ctx : SuiteCtx; file_ctx : FileCtx) : SuiteRes
     access |> add_file_access_root("dastest", ctx.dastestRoot)
     using <| $(var mg : ModuleGroup) {
         using <| $(var cop : CodeOfPolicies) {
-            cop.aot_module = true
-            cop.threadlock_context = true
-            cop.jit_enabled = jit_enabled()
-            cop.jit_module := "{get_das_root()}/daslib/just_in_time.das"
+            if (jit_enabled()) {
+                cop.jit_enabled = jit_enabled()
+                cop.jit_module := "{get_das_root()}/daslib/just_in_time.das"
+            } else {
+                cop.aot_module = true
+                cop.threadlock_context = true
+            }
             compile_file(file_name, access, unsafe(addr(mg)), cop) <| $(ok, program, output) {
                 var expectedErrors : table<CompilationError; int>
                 if (program != null) {

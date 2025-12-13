@@ -242,7 +242,7 @@ def create_ssbo(var value : auto&) {
     var ssbo : uint
     glGenBuffers(1, safe_addr(ssbo))
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo)
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1u, ssbo)
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0u, ssbo)
     glBufferData(GL_SHADER_STORAGE_BUFFER, int64(typeinfo sizeof(value)), unsafe(addr(value)), GL_DYNAMIC_COPY)
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0u)
     return ssbo
