@@ -137,10 +137,10 @@ jobs:
         exclude:
           - target: darwin15
             architecture: 32
-          
+
           - target: darwin26
             architecture: 32
-         
+
           - target: darwin26
             architecture: 64
 

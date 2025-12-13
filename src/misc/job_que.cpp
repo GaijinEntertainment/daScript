@@ -336,7 +336,7 @@ namespace das {
         case JobPriority::Medium:   winPriority = THREAD_PRIORITY_NORMAL; break;
         case JobPriority::High:     winPriority = THREAD_PRIORITY_ABOVE_NORMAL; break;
         case JobPriority::Maximum:  winPriority = THREAD_PRIORITY_HIGHEST; break;
-        default:					DAS_ASSERTF(0, "Windows takes prefixed priority values"); break;
+        default:                    DAS_ASSERTF(0, "Windows takes prefixed priority values"); break;
         }
         SetThreadPriority(GetCurrentThread(), winPriority);
     }

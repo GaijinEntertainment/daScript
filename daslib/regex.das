@@ -253,7 +253,7 @@ def private string_from_hex(ch1, ch2 : int) {
     return to_char(from_hex(ch1, ch2))
 }
 
-// <char>	::=	any non metacharacter | "\" metacharacter
+// <char> ::= any non metacharacter | "\" metacharacter
 def private re_char(expr : string; offset : int) : MaybeReNode {
     trace("re_char", offset)
     if (eos(expr, offset)) {
@@ -299,10 +299,10 @@ def private re_char(expr : string; offset : int) : MaybeReNode {
     return maybe(new ReNode(op = ReOp.Char, text = to_char(ch), textLen = 1, at = range(offset, offset + 1)))
 }
 
-// <set-items>	::=	<set-item> | <set-item> <set-items>
-// <set-item>	::=	<range> | <char>
-// <range>	::=	<char> "-" <char>
-// <char>	::=	any non metacharacter | "\" metacharacter
+// <set-items> ::= <set-item> | <set-item> <set-items>
+// <set-item> ::= <range> | <char>
+// <range> ::= <char> "-" <char>
+// <char> ::= any non metacharacter | "\" metacharacter
 def private re_set_items(expr : string; offset : int) : MaybeReNode {
     trace("re_set_items", offset)
     if (eos(expr, offset)) {
@@ -402,9 +402,9 @@ def private re_set_items(expr : string; offset : int) : MaybeReNode {
     return maybe(new ReNode(op = ReOp.Set, cset = cset, at = range(offset, iofs)));
 }
 
-// <negative-set>	::=	"[^" <set-items> "]"
-// <positive-set>	::=	"[" <set-items> "]"
-// <set>	::=	<positive-set> | <negative-set>
+// <negative-set> ::= "[^" <set-items> "]"
+// <positive-set> ::= "[" <set-items> "]"
+// <set> ::= <positive-set> | <negative-set>
 def private re_set(expr : string; offset : int) : MaybeReNode {
     trace("re_set", offset)
     if (eos(expr, offset)) {
@@ -438,7 +438,7 @@ def private re_set(expr : string; offset : int) : MaybeReNode {
     return oset
 }
 
-// <any>	::=	"."
+// <any> ::= "."
 def private re_any(expr : string; offset : int) : MaybeReNode {
     trace("re_any", offset)
     if (eos(expr, offset)) {
@@ -450,7 +450,7 @@ def private re_any(expr : string; offset : int) : MaybeReNode {
     return nada()
 }
 
-// <eos>	::=	"$"
+// <eos> ::= "$"
 def private re_eos(expr : string; offset : int) : MaybeReNode {
     trace("re_eos", offset)
     if (eos(expr, offset)) {
@@ -462,7 +462,7 @@ def private re_eos(expr : string; offset : int) : MaybeReNode {
     return nada()
 }
 
-// <group>	::=	"(" <RE> ")"
+// <group> ::= "(" <RE> ")"
 def private re_group(expr : string; offset : int) : MaybeReNode {
     trace("re_group", offset)
     if (eos(expr, offset)) {
@@ -482,7 +482,7 @@ def private re_group(expr : string; offset : int) : MaybeReNode {
     return maybe(new ReNode(op = ReOp.Group, subexpr = ore as value, at = range(offset, next(ore) + 1)))
 }
 
-// <elementary-RE>	::=	<group> | <any> | <eos> | <set> | <char>
+// <elementary-RE> ::= <group> | <any> | <eos> | <set> | <char>
 def private re_elementary(expr : string; offset : int) : MaybeReNode {
     trace("re_elementary", offset)
     if (eos(expr, offset)) {
@@ -562,10 +562,10 @@ def private mk_union(var left, right : ReNode?) : ReNode? {
     }
 }
 
-// <RE>	::=	<union> | <simple-RE>
-// <union>	::=	<RE> "|" <simple-RE>
-// <simple-RE>	::=	<concatenation> | <basic-RE>
-// <concatenation>	::=	<simple-RE> <basic-RE>
+// <RE> ::= <union> | <simple-RE>
+// <union> ::= <RE> "|" <simple-RE>
+// <simple-RE> ::= <concatenation> | <basic-RE>
+// <concatenation> ::= <simple-RE> <basic-RE>
 def private  re_re(expr : string; offset : int) : MaybeReNode {
     trace("re_re", offset)
     if (eos(expr, offset)) {
@@ -598,9 +598,9 @@ def private  re_re(expr : string; offset : int) : MaybeReNode {
     return maybe(last)
 }
 
-// <basic-RE>	::=	<star> | <plus> | <elementary-RE>
-// <star>	::=	<elementary-RE> "*"
-// <plus>	::=	<elementary-RE> "+"
+// <basic-RE> ::= <star> | <plus> | <elementary-RE>
+// <star> ::= <elementary-RE> "*"
+// <plus> ::= <elementary-RE> "+"
 def private re_basic(expr : string; offset : int) : MaybeReNode {
     trace("re_basic", offset)
     if (eos(expr, offset)) {
