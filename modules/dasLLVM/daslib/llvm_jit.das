@@ -1174,7 +1174,7 @@ class LlvmJitVisitor : AstVisitor {
                 LLVMAddCallSiteAttribute(ccall, ai + 1u, maybe_ext)
             }
 
-            if (!func.sideEffectFlags.modifyExternal) {
+            if (!(func.sideEffectFlags.modifyExternal || func.sideEffectFlags.modifyArgument || func.sideEffectFlags.invoke)) {
                 if (arg._type.isRef) {
                     LLVMAddCallSiteAttribute(ccall, ai + 1u, attributes.nocapture)
                 }
