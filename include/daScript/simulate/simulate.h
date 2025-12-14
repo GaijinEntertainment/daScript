@@ -352,13 +352,10 @@ namespace das
         void onFree ( void * ptr, const LineInfo & at );
 
         __forceinline char * allocateIterator ( uint32_t size, const char * iterName, const LineInfo * at ) {
-            if ( instrumentAllocations ) {
-                auto aptr = heap->impl_allocateIterator(size, iterName);
-                onAllocate(aptr - 16, size + 16, at ? *at : LineInfo());
-                return aptr;
-            } else {
-                return heap->impl_allocateIterator(size, iterName);
-            }
+            auto aptr = heap->impl_allocateIterator(size, iterName);
+            if ( !aptr ) throw_out_of_memory(true, size + 16, at);
+            if ( instrumentAllocations ) onAllocate(aptr - 16, size + 16, at ? *at : LineInfo());
+            return aptr;
         }
 
         __forceinline void freeIterator ( char * ptr, const LineInfo * at ) {
@@ -367,23 +364,17 @@ namespace das
         }
 
         __forceinline char * allocate ( uint32_t size, const LineInfo * at = nullptr ) {
-            if ( instrumentAllocations ) {
-                auto aptr = heap->impl_allocate(size);
-                onAllocate(aptr, size, at ? *at : LineInfo());
-                return aptr;
-            } else {
-                return heap->impl_allocate(size);
-            }
+            auto aptr = heap->impl_allocate(size);
+            if ( !aptr && size ) throw_out_of_memory(true, size, at);
+            if ( instrumentAllocations ) onAllocate(aptr, size, at ? *at : LineInfo());
+            return aptr;
         }
 
         __forceinline char * reallocate ( char * ptr, uint32_t oldSize, uint32_t size, const LineInfo * at ) {
-            if ( instrumentAllocations ) {
-                auto aptr = heap->impl_reallocate(ptr, oldSize, size);
-                onReallocate(ptr, oldSize, aptr, size, at ? *at : LineInfo());
-                return aptr;
-            } else {
-                return heap->impl_reallocate(ptr, oldSize, size);
-            }
+            auto aptr = heap->impl_reallocate(ptr, oldSize, size);
+            if ( !aptr && size ) throw_out_of_memory(true, size, at);
+            if ( instrumentAllocations ) onReallocate(ptr, oldSize, aptr, size, at ? *at : LineInfo());
+            return aptr;
         }
 
         __forceinline void free ( char * ptr, uint32_t size, const LineInfo * at = nullptr ) {
@@ -392,23 +383,17 @@ namespace das
         }
 
         __forceinline char * allocateString ( const char * text, uint32_t length, const LineInfo * at, bool tempString = false ) {
-            if ( instrumentAllocations ) {
-                auto astr = stringHeap->impl_allocateString(this, text, length, at);
-                onAllocateString(astr, length, tempString, at ? *at : LineInfo());
-                return astr;
-            } else {
-                return stringHeap->impl_allocateString(this, text, length, at);
-            }
+            auto astr = stringHeap->impl_allocateString(this, text, length, at);
+            if ( !astr && length ) throw_out_of_memory(true, length+1, at);
+            if ( instrumentAllocations ) onAllocateString(astr, length, tempString, at ? *at : LineInfo());
+            return astr;
         }
 
         __forceinline char * allocateString ( const string & str, const LineInfo * at, bool tempString = false ) {
-            if ( instrumentAllocations ) {
-                auto astr = stringHeap->impl_allocateString(this, str.c_str(), uint32_t(str.size()), at);
-                onAllocateString(astr, str.size(), tempString, at ? *at : LineInfo());
-                return astr;
-            } else {
-                return stringHeap->impl_allocateString(this, str.c_str(), uint32_t(str.size()), at);
-            }
+            auto astr = stringHeap->impl_allocateString(this, str.c_str(), uint32_t(str.size()), at);
+            if ( !astr && str.size() ) throw_out_of_memory(true, uint32_t(str.size()+1), at);
+            if ( instrumentAllocations ) onAllocateString(astr, str.size(), tempString, at ? *at : LineInfo());
+            return astr;
         }
 
         __forceinline char * allocateTempString ( const char * text, uint32_t length, const LineInfo * at ) {

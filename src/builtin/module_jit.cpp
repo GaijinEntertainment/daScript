@@ -130,9 +130,7 @@ extern "C" {
     }
 
     DAS_API void * jit_alloc_heap ( uint32_t bytes, Context * context ) {
-        auto ptr = context->allocate(bytes);
-        if ( !ptr ) context->throw_out_of_memory(false, bytes);
-        return ptr;
+        return context->allocate(bytes);
     }
 
     DAS_API void * jit_alloc_persistent ( uint32_t bytes, Context * context ) {
@@ -168,14 +166,12 @@ extern "C" {
         uint32_t commonLength = la + lb;
         if ( !commonLength ) {
             return nullptr;
-        } else if ( char * sAB = (char * ) context->allocateString(nullptr, commonLength, at) ) {
+        } else {
+            char * sAB = (char * ) context->allocateString(nullptr, commonLength, at);
             memcpy ( sAB, sA, la );
             memcpy ( sAB+la, sB, lb+1 );
             context->stringHeap->recognize(sAB);
             return sAB;
-        } else {
-            context->throw_out_of_memory(true, commonLength);
-            return nullptr;
         }
     }
 

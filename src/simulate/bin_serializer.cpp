@@ -277,7 +277,6 @@ namespace das {
                 DAS_ASSERTF(info,"type info not found. how did we get type, which is not in the typeinfo hash?");
                 uint32_t size = getTypeSize(info) + 16;
                 char * ptr = context->allocate(size);
-                if ( !ptr ) context->throw_out_of_memory(false, size);
                 context->heap->mark_comment(ptr, "lambda (via bin serializer)");
                 memset ( ptr, 0, size );
                 *((TypeInfo **)ptr) = info;
