@@ -1492,14 +1492,12 @@ namespace das {
     struct das_new {
         static __forceinline TT * make ( Context * __context__ ) {
             char * data = __context__->allocate( sizeof(TT) );
-            if ( !data ) __context__->throw_out_of_memory(false, sizeof(TT));
             memset ( data, 0, sizeof(TT) );
             return (TT *) data;
         }
         template <typename QQ>
         static __forceinline TT * make_and_init ( Context * __context__, QQ && init ) {
             TT * data = (TT *) __context__->allocate( sizeof(TT) );
-            if ( !data ) __context__->throw_out_of_memory(false, sizeof(TT));
             *data = init();
             return data;
         }
@@ -1771,20 +1769,16 @@ namespace das {
     struct das_ascend {
         static __forceinline TT * make(Context * __context__,TypeInfo * typeInfo,const AT & init) {
             auto size = sizeof(AT)+ (typeInfo ? 16 : 0);
-            if ( char * ptr = (char *)__context__->allocate(uint32_t(size)) ) {
-                if ( typeInfo ) {
-                    *((TypeInfo **)ptr) = typeInfo;
-                    ptr += 16;
-                }
-                memcpy(ptr, &init, sizeof(AT));
-                if (moveIt) {
-                    memset((char *)&init, 0, sizeof(AT));
-                }
-                return (TT *) ptr;
-            } else {
-                __context__->throw_out_of_memory(false, uint32_t(size));
-                return nullptr;
+            char * ptr = (char *)__context__->allocate(uint32_t(size));
+            if ( typeInfo ) {
+                *((TypeInfo **)ptr) = typeInfo;
+                ptr += 16;
             }
+            memcpy(ptr, &init, sizeof(AT));
+            if (moveIt) {
+                memset((char *)&init, 0, sizeof(AT));
+            }
+            return (TT *) ptr;
         }
     };
 
@@ -1824,17 +1818,13 @@ namespace das {
     struct das_ascend<Lambda,AT,false> {
         static __forceinline Lambda make(Context * __context__,TypeInfo * typeInfo,const AT & init) {
             auto size = sizeof(AT)+ (typeInfo ? 16 : 0);
-            if ( char * ptr = (char *)__context__->allocate(size) ) {
-                if ( typeInfo ) {
-                    *((TypeInfo **)ptr) = typeInfo;
-                    ptr += 16;
-                }
-                memcpy(ptr, &init, sizeof(AT));
-                return Lambda(ptr);
-            } else {
-                __context__->throw_out_of_memory(false, size);
-                return Lambda(nullptr);
+            char * ptr = (char *)__context__->allocate(size);
+            if ( typeInfo ) {
+                *((TypeInfo **)ptr) = typeInfo;
+                ptr += 16;
             }
+            memcpy(ptr, &init, sizeof(AT));
+            return Lambda(ptr);
         }
     };
 

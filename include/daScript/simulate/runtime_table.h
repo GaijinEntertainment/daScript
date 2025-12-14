@@ -184,10 +184,6 @@ namespace das
             }
             uint32_t memSize = uint32_t(memSize64);
             newTab.data = (char *) context->allocate(memSize, at);
-            if ( !newTab.data ) {
-                context->throw_out_of_memory(false, memSize, at);
-                return false;
-            }
             context->heap->mark_comment(newTab.data, "table");
             newTab.keys = newTab.data + newCapacity * valueTypeSize;
             newTab.hashes = (TableHashKey *)(newTab.keys + newCapacity * sizeof(KeyType));
