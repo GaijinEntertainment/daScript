@@ -237,8 +237,6 @@ __forceinline uint64_t rotr64_c(uint64_t a, uint64_t b) {
 
 #endif
 
-#include "daScript/misc/hal.h"
-
 
 #if DAS_ENABLE_DLL
 #ifndef DAS_API
@@ -269,6 +267,9 @@ __forceinline uint64_t rotr64_c(uint64_t a, uint64_t b) {
 #define DAS_MOD_API
 
 #endif
+
+
+#include "daScript/misc/hal.h"
 
 void DAS_API os_debug_break();
 
