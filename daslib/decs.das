@@ -706,6 +706,7 @@ def public for_each_archetype_find(hash : ComponentHash; var erq : function<() :
 }
 
 // [template(atype)]
+[unsafe_operation]
 def decs_array(atype : auto(TT); src : array<uint8>; capacity : int) {
     //! Low level function returns temporary array of component given specific type of component.
     assert(length(src) > 0)
@@ -724,6 +725,7 @@ def decs_array(atype : auto(TT); src : array<uint8>; capacity : int) {
     }
 }
 
+[unsafe_outside_of_for]
 def public get(arch : Archetype; name : string; value : auto(TT)) {
     //! Creates temporary array of component given specific name and type of component.
     //! If component is not found - panic.
@@ -759,7 +761,7 @@ def public get(arch : Archetype; name : string; value : auto(TT)) {
     }
 }
 
-[expect_dim(value)]
+[expect_dim(value), unsafe_outside_of_for]
 def public get_ro(arch : Archetype; name : string; value : auto(TT)[]) : array<TT[typeinfo sizeof(value)] -const -& -#> const {
     //! Returns const temporary array of component given specific name and type of component for array components.
     unsafe {
@@ -767,7 +769,7 @@ def public get_ro(arch : Archetype; name : string; value : auto(TT)[]) : array<T
     }
 }
 
-[!expect_dim(value)]
+[!expect_dim(value), unsafe_outside_of_for]
 def public get_ro(arch : Archetype; name : string; value : auto(TT)) : array<TT -const -& -#> const {
     //! Returns const temporary array of component given specific name and type of component for regular components.
     unsafe {
