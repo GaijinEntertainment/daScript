@@ -488,6 +488,20 @@ extern "C" {
     void create_shared_library ( const char * , const char * , const char *, const char * ) { }
 #endif
 
+    void jit_set_jit_state(Context & context, void *shared_lib, void *llvm_ee, void *llvm_context) {
+        context.deleteJITOnFinish.shared_lib = shared_lib;
+        context.deleteJITOnFinish.llvm_ee = llvm_ee;
+        context.deleteJITOnFinish.llvm_context = llvm_context;
+    }
+
+    void jit_get_jit_state(const TBlock<void,const void*, const void*, const void*> &block, Context * context, LineInfoArg * at) {
+        vec4f args[3];
+        args[0] = cast<void *>::from(context->deleteJITOnFinish.shared_lib);
+        args[1] = cast<void *>::from(context->deleteJITOnFinish.llvm_ee);
+        args[2] = cast<void *>::from(context->deleteJITOnFinish.llvm_context);
+        context->invoke(block, args, nullptr, at);
+    }
+
     class Module_Jit : public Module {
     public:
         Module_Jit() : Module("jit") {
@@ -610,6 +624,12 @@ extern "C" {
             addExtern<DAS_BIND_FUN(create_shared_library)>(*this, lib,  "create_shared_library",
                 SideEffects::worstDefault, "create_shared_library")
                     ->args({"objFilePath","libraryName","dasSharedLibrary","customLinker"});
+            addExtern<DAS_BIND_FUN(jit_set_jit_state)>(*this, lib,  "set_jit_state",
+                SideEffects::worstDefault, "jit_set_jit_state")
+                    ->args({"context","shared_lib","llvm_ee","llvm_ctx"});
+            addExtern<DAS_BIND_FUN(jit_get_jit_state)>(*this, lib,  "get_jit_state",
+                SideEffects::worstDefault, "jit_get_jit_state")
+                    ->args({"block","context","at"});
             addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_EVAL_TOP", uint32_t(uint32_t(offsetof(Context, stack) + offsetof(StackAllocator, evalTop))));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_GLOBALS", uint32_t(uint32_t(offsetof(Context, globals))));

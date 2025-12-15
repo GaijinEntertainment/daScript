@@ -6061,30 +6061,22 @@ struct public JitState {
     ctx : void?
 }
 
-let shared jit_state : JitState = JitState();
-
-[no_jit, pinvoke]
-def set_jit_state(js : JitState) {
-    unsafe {
-        reinterpret<JitState>(jit_state) = js;
-    }
-}
-
 
 // This function should not be calling anything not marked with `no_jit`
-[no_jit]
+[finalize(late), no_jit]
 def public free_jit_context {
     // Free everything only if it's the last one context.
     if (get_context_share_counter() == 1ul) {
-        if (jit_state.dll != null) {
-            close_dynamic_library(jit_state.dll)
-        } elif (jit_state.ee != null || jit_state.ctx != null) {
-            assert(jit_state.ee != null && jit_state.ctx != null)
-            jit_state.ee |> LLVMRunStaticDestructors()
-            LLVMDisposeExecutionEngine(unsafe(reinterpret<LLVMExecutionEngineRef>(jit_state.ee)))
-            LLVMContextDispose(unsafe(reinterpret<LLVMContextRef>(jit_state.ctx)))
+        get_jit_state() <| $(dll, ee, ctx : void?) {
+            if (dll != null) {
+                close_dynamic_library(dll)
+            } elif (ee != null || ctx != null) {
+                assert(ee != null && ctx != null)
+                ee |> LLVMRunStaticDestructors()
+                LLVMDisposeExecutionEngine(unsafe(reinterpret<LLVMExecutionEngineRef>(ee)))
+                LLVMContextDispose(unsafe(reinterpret<LLVMContextRef>(ctx)))
+            }
         }
-        set_jit_state(JitState())
     }
 }
 
@@ -6104,7 +6096,7 @@ def finalize_jit(use_dll : bool; lib_handle : DLLHandle?) : JitState? {
         LLVMContextDispose(g_ctx);
 
         // JitState is dll only.
-        result = new JitState(dll = lib_handle, ee = null, ctx = null)
+        result = new JitState(dll = lib_handle.handle, ee = null, ctx = null)
     } else {
         g_engine |> LLVMRunStaticConstructors()
 
@@ -6119,31 +6111,6 @@ def finalize_jit(use_dll : bool; lib_handle : DLLHandle?) : JitState? {
     }
     return result
 }
-
-// Create shutdown function to avoid removing it from modules.
-// Otherwise jit state shared variable will be removed as unused.
-[infer_macro]
-class ShutdownFn : AstPassMacro {
-    def override apply(prog : ProgramPtr; mod : Module?) : bool {
-        var has_fin = false;
-        compiling_module() |> module_for_each_function <| $(fn) {
-            if (fn.name == "shutdown`llvm_jit") {
-                has_fin = true
-            }
-        }
-        if (has_fin) {
-            return false
-        }
-        var inscope fn <- qmacro_function("shutdown`llvm_jit") <| $() : void {
-            _::free_jit_context()
-        }
-        fn.flags |= FunctionFlags.generated | FunctionFlags.shutdown
-        fn.moreFlags |= MoreFunctionFlags.requestNoJit
-        compiling_module() |> add_function(fn)
-        return true
-    }
-}
-
 
 
 [simulate_macro(name="jit_llvm")]
@@ -6295,9 +6262,7 @@ class JIT_LLVM : AstSimulateMacro {
             }
             var result = finalize_jit(use_dll, g_dynamic_lib_handle)
 
-            unsafe(invoke_in_context(ctx, @() {
-                set_jit_state(*result)
-            }))
+            set_jit_state(*ctx, result.dll, result.ee, result.ctx)
 
             if (LLVM_JIT_LOG) {
                 let totalDt = double(get_time_usec(totalTime)) / 1000000.0lf

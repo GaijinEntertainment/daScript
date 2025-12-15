@@ -871,6 +871,13 @@ namespace das
 #if DAS_ENABLE_SMART_PTR_TRACKING
         static vector<smart_ptr<ptr_ref_count>> sptrAllocations;
 #endif
+        // It's better to use shared memory + finalize for things like this.
+        struct JitContext {
+            void *shared_lib;
+            void *llvm_ee;
+            void *llvm_context;
+        };
+        JitContext deleteJITOnFinish = {};
         vector<FileInfo*>  deleteUponFinish;
     };
 
