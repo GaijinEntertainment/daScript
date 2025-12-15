@@ -78,6 +78,74 @@ namespace das {
             }
             return Visitor::visitLet(expr,var,last);
         }
+        virtual ExpressionPtr visit ( ExprFor * expr ) override {
+            if ( expr->generated || !func || func->generated || func->generator || func->lambda || func->hasTryRecover || func->hasUnsafe) {
+                return Visitor::visit(expr);
+            }
+            // so, we check arguments, and if there are any POD with pod_delete, we make temp variables for them (which will cause yet another POD delete)
+            // can't be any source - only temp PODS
+            vector<int> podSourceIndices;
+            for ( size_t i=0; i!=expr->sources.size(); ++i ) {
+                auto src = expr->sources[i].get();
+                if ( src->type && src->type->isGoodArrayType() && !src->type->constant ) {
+                    auto good = false;
+                    if ( src->rtti_isMakeLocal() ){                         // its [1,2,3,4]
+                        good = true;
+                    } else if ( src->rtti_isCall() ) {
+                        auto csrc = (ExprCall *) src;
+                        if ( csrc->func && !csrc->func->result->ref && !csrc->func->unsafeOutsideOfFor ) {     // its fn() returning array
+                            good = true;
+                        }
+                    } else if ( src->rtti_isInvoke() ) {
+                        auto csrc = (ExprInvoke *) src;
+                        if ( csrc->type && !csrc->type->ref ) {             // its obj.method() returning array, not ref to array
+                            good = true;
+                        }
+                    }
+                    if ( good  ) {
+                        podSourceIndices.push_back(int(i));
+                    }
+                }
+            }
+            if ( podSourceIndices.size() ) {
+                anyWork = true;
+                func->notInferred();
+                // we make a new block, we make a new variable for each pod source, and we assign it before the for
+                auto newBlock = make_smart<ExprBlock>();
+                newBlock->at = expr->at;
+                newBlock->isCollapseable = true;
+                auto letPod = make_smart<ExprLet>();
+                letPod->at = expr->at;
+                letPod->alwaysSafe = true;  // this is for the array<smart_ptr> and some such
+                newBlock->list.push_back(letPod);
+                for ( auto i : podSourceIndices ) {
+                    auto podVar = make_smart<Variable>();
+                    podVar->at = expr->sources[i]->at;
+                    podVar->name = "`pod`source`" + expr->iterators[i];
+                    podVar->type = make_smart<TypeDecl>(Type::autoinfer);
+                    podVar->init = move(expr->sources[i]);
+                    podVar->init_via_move = true;
+                    podVar->pod_delete = true;
+                    podVar->pod_delete_gen = true;
+                    letPod->variables.push_back(podVar);
+                    expr->sources[i] = make_smart<ExprVar>(podVar->at, podVar->name);
+                    // and collect
+                    auto CallCollectLocal = make_smart<ExprCall>(expr->at,"_::builtin_collect_local");
+                    CallCollectLocal->arguments.push_back( make_smart<ExprVar>(expr->at, podVar->name) );
+                    CallCollectLocal->alwaysSafe = true;
+                    newBlock->finalList.push_back(CallCollectLocal);
+                    if ( logs ) {
+                        if ( !podVar->at.empty() && podVar->at.fileInfo ) {
+                            *logs << podVar->at.fileInfo->name << ":" << podVar->at.line << ":" << podVar->at.column << "\n";
+                        }
+                        *logs << "In-scope POD applied to loop source '" << expr->iterators[i] << "' in function '" << func->module->name << "::" << func->name << "'\n";
+                    }
+                }
+                newBlock->list.push_back(expr);
+                return newBlock;
+            }
+            return Visitor::visit(expr);
+        }
     protected:
         Function * func = nullptr;
         TextWriter * logs = nullptr;
