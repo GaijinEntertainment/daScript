@@ -101,6 +101,26 @@
     #define ___noinline __declspec(noinline)
 #endif
 
+#if defined(__SANITIZE_ADDRESS__)
+    #ifndef _MSC_VER
+        #define DAS_SUPPRESS_ASAN __attribute__((no_sanitize("address")))
+    #else
+        #define DAS_SUPPRESS_ASAN __declspec(no_sanitize_address)
+    #endif
+#elif defined(__has_feature)
+    #if __has_feature(address_sanitizer)
+        #ifndef _MSC_VER
+            #define DAS_SUPPRESS_ASAN __attribute__((no_sanitize("address")))
+        #else
+            #define DAS_SUPPRESS_ASAN __declspec(no_sanitize_address)
+        #endif
+    #else
+        #define DAS_SUPPRESS_ASAN
+    #endif
+#else
+    #define DAS_SUPPRESS_ASAN
+#endif
+
 #if defined(__has_feature)
     #if __has_feature(undefined_behavior_sanitizer)
         #define DAS_SUPPRESS_UB  __attribute__((no_sanitize("undefined")))
