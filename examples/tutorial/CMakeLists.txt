@@ -140,17 +140,29 @@ ${CMAKE_CURRENT_SOURCE_DIR}/examples/tutorial/tutorial07.c
 ${CMAKE_CURRENT_SOURCE_DIR}/examples/tutorial/tutorial07.das
 )
 DAS_TUTORIAL(tutorial07 "${TUTORIAL_07_SRC}")
+set_target_properties(tutorial07 PROPERTIES
+    LINKER_LANGUAGE CXX
+    CXX_STANDARD 17
+)
 
 SET(TUTORIAL_07_UNALIGNED_SRC
 ${CMAKE_CURRENT_SOURCE_DIR}/examples/tutorial/tutorial07unaligned.c
 )
 DAS_TUTORIAL(tutorial07unaligned "${TUTORIAL_07_UNALIGNED_SRC}")
+set_target_properties(tutorial07unaligned PROPERTIES
+    LINKER_LANGUAGE CXX
+    CXX_STANDARD 17
+)
 
 # "C" interface, loading from source file text
 SET(TUTORIAL_07A_SRC
 ${CMAKE_CURRENT_SOURCE_DIR}/examples/tutorial/tutorial07a.c
 )
 DAS_TUTORIAL(tutorial07a "${TUTORIAL_07A_SRC}")
+set_target_properties(tutorial07a PROPERTIES
+    LINKER_LANGUAGE CXX
+    CXX_STANDARD 17
+)
 
 ##########################################
 # tutorial 08- serialization
