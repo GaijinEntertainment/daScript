@@ -226,7 +226,7 @@ jobs:
             case "${{ matrix.target }}${{ matrix.architecture }}" in
               linux64)
                 CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -G \
-                        "${{ matrix.cmake_generator }}" ${{ matrix.cmake_extra_args }} -DDAS_USE_SANITIZER=${{ matrix.sanitizers }}
+                        "${{ matrix.cmake_generator }}" ${{ matrix.cmake_extra_args }} -DDAS_USE_SANITIZER=${{ matrix.sanitizers }} -DDAS_LLVM_DISABLED=OFF
                 cd build
                 ninja daslang
                 ninja
@@ -237,12 +237,12 @@ jobs:
                 cmake --build ./build --config ${{ matrix.cmake_preset }}
                 ;;
               windows64)
-                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=x64 -A ${{ matrix.architecture_string }}
+                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=x64 -A ${{ matrix.architecture_string }} -DDAS_LLVM_DISABLED=OFF
                 cmake --build ./build --config ${{ matrix.cmake_preset }} --target daslang
                 cmake --build ./build --config ${{ matrix.cmake_preset }}
                 ;;
               *)
-                CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture_string }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }}  -G "${{ matrix.cmake_generator }}"
+                CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture_string }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DDAS_LLVM_DISABLED=OFF -G "${{ matrix.cmake_generator }}"
                 cd build
                 ninja daslang
                 ninja
@@ -299,17 +299,29 @@ jobs:
             # when exceptions disabled, we still throw in tests and there'll be memory leaks
             echo -e "leak:format_error\n" > suppressions.txt
             export LSAN_OPTIONS="suppressions='suppressions.txt'"
+            ./daScriptTest -jit
             ./daScriptTest
+            # Use more time to pass UBSAN and disable leaks in JIT mode because we exit using exit(), and do not call destructors.
+            ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- --color --test ../tests || ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- --color --isolated-mode --timeout 1600 --test ../tests
             ./daslang _dasroot_/dastest/dastest.das -- --color --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../tests
             ;;
-           windows*)
+           windows32)
             cd bin/"${{ matrix.cmake_preset }}"
             ./daScriptTest.exe
             ./daslang _dasroot_/dastest/dastest.das -- --color --test ../../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../../tests
             ;;
+           windows*)
+            cd bin/"${{ matrix.cmake_preset }}"
+            ./daScriptTest.exe -jit
+            ./daScriptTest.exe
+            ./daslang _dasroot_/dastest/dastest.das -jit -- --color --test ../../tests || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --isolated-mode --timeout 1200 --test ../../tests
+            ./daslang _dasroot_/dastest/dastest.das -- --color --test ../../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../../tests
+            ;;
            *)
             cd bin
+            ./daScriptTest -jit
             ./daScriptTest
+            ./daslang _dasroot_/dastest/dastest.das -jit -- --color --test ../tests || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --isolated-mode --timeout 1200 --test ../tests
             ./daslang _dasroot_/dastest/dastest.das -- --color --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../tests
             ;;
         esac

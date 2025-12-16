@@ -1,7 +1,7 @@
 MACRO(DAS_TUTORIAL tutorial_name tutorial_src)
     add_executable(${tutorial_name} ${tutorial_src})
     TARGET_COMPILE_DEFINITIONS(${tutorial_name} PRIVATE DAS_MOD_EXPORTS)
-    TARGET_LINK_LIBRARIES(${tutorial_name} libDaScript Threads::Threads libDaScriptTest)
+    TARGET_LINK_LIBRARIES(${tutorial_name} libDaScript Threads::Threads)
     ADD_DEPENDENCIES(${tutorial_name} libDaScript)
     SETUP_CPP11(${tutorial_name})
 ENDMACRO()
@@ -54,8 +54,8 @@ ${DAS_DASCRIPT_MAIN_SRC}
 )
 add_executable(tutorial02_dasAot ${TUTORIAL_02_DASAOT_MAIN_SRC} )
 target_compile_definitions(tutorial02_dasAot PUBLIC MAIN_FUNC_NAME=dascript_dummy_main) # dascript_dummy_main is here to rename main function from daScript
-TARGET_LINK_LIBRARIES(tutorial02_dasAot libDaScript libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(tutorial02_dasAot libDaScript libDaScriptTest ${DAS_MODULES_LIBS})
+TARGET_LINK_LIBRARIES(tutorial02_dasAot libDaScript Threads::Threads ${DAS_MODULES_LIBS})
+ADD_DEPENDENCIES(tutorial02_dasAot libDaScript ${DAS_MODULES_LIBS})
 SETUP_CPP11(tutorial02_dasAot)
 SETUP_LTO(tutorial02_dasAot)
 
@@ -140,17 +140,29 @@ ${CMAKE_CURRENT_SOURCE_DIR}/examples/tutorial/tutorial07.c
 ${CMAKE_CURRENT_SOURCE_DIR}/examples/tutorial/tutorial07.das
 )
 DAS_TUTORIAL(tutorial07 "${TUTORIAL_07_SRC}")
+set_target_properties(tutorial07 PROPERTIES
+    LINKER_LANGUAGE CXX
+    CXX_STANDARD 17
+)
 
 SET(TUTORIAL_07_UNALIGNED_SRC
 ${CMAKE_CURRENT_SOURCE_DIR}/examples/tutorial/tutorial07unaligned.c
 )
 DAS_TUTORIAL(tutorial07unaligned "${TUTORIAL_07_UNALIGNED_SRC}")
+set_target_properties(tutorial07unaligned PROPERTIES
+    LINKER_LANGUAGE CXX
+    CXX_STANDARD 17
+)
 
 # "C" interface, loading from source file text
 SET(TUTORIAL_07A_SRC
 ${CMAKE_CURRENT_SOURCE_DIR}/examples/tutorial/tutorial07a.c
 )
 DAS_TUTORIAL(tutorial07a "${TUTORIAL_07A_SRC}")
+set_target_properties(tutorial07a PROPERTIES
+    LINKER_LANGUAGE CXX
+    CXX_STANDARD 17
+)
 
 ##########################################
 # tutorial 08- serialization

@@ -119,7 +119,7 @@ def get_file_info_global(g_builder : LLVMOpaqueBuilder?; types : PrimitiveTypes?
  * @names for all names will be create FileInfo ptr with correct filename
  */
 [macro_function]
-def generate_fileinfo_ctor_dtor(var types : PrimitiveTypes; names : table<string>) {
+def generate_fileinfo_ctor_dtor(var types : PrimitiveTypes; names : table<string>; dll_mode : bool) {
     var ctor_builder = LLVMCreateBuilderInContext(g_ctx)
     var dtor_builder = LLVMCreateBuilderInContext(g_ctx)
     defer <| ${
@@ -132,8 +132,13 @@ def generate_fileinfo_ctor_dtor(var types : PrimitiveTypes; names : table<string
     let constructor = LLVMAddFunctionWithType(g_mod, "fileinfo_constructor", functionType)
     let destructor = LLVMAddFunctionWithType(g_mod, "fileinfo_destructor", functionType)
 
-    set_private_linkage(constructor)
-    set_private_linkage(destructor)
+    if (dll_mode) {
+        set_private_linkage(constructor)
+        set_private_linkage(destructor)
+    } else {
+        set_public_linkage(constructor)
+        set_public_linkage(destructor)
+    }
 
     let entry_ctor = LLVMAppendBasicBlockInContext(g_ctx, constructor, "entry_ctor")
     LLVMPositionBuilderAtEnd(ctor_builder, entry_ctor)
@@ -1169,7 +1174,7 @@ class LlvmJitVisitor : AstVisitor {
                 LLVMAddCallSiteAttribute(ccall, ai + 1u, maybe_ext)
             }
 
-            if (!func.sideEffectFlags.modifyExternal) {
+            if (!(func.sideEffectFlags.modifyExternal || func.sideEffectFlags.modifyArgument || func.sideEffectFlags.invoke)) {
                 if (arg._type.isRef) {
                     LLVMAddCallSiteAttribute(ccall, ai + 1u, attributes.nocapture)
                 }
@@ -1276,7 +1281,7 @@ class LlvmJitVisitor : AstVisitor {
                 // Wrap string argument for extern functions. Empty string in das is null.
                 var res = LLVMBuildSelect(g_builder,
                     LLVMBuildIsNull(g_builder, src, ""),
-                        get_string_constant_ptr(g_builder, ""),
+                        get_empty_string(g_builder),
                         src,
                     "wrap_str")
                 params |> push(res)
@@ -6056,30 +6061,22 @@ struct public JitState {
     ctx : void?
 }
 
-let shared jit_state : JitState = JitState();
-
-[no_jit, pinvoke]
-def set_jit_state(js : JitState) {
-    unsafe {
-        reinterpret<JitState>(jit_state) = js;
-    }
-}
-
 
 // This function should not be calling anything not marked with `no_jit`
-[no_jit]
+[finalize(late), no_jit]
 def public free_jit_context {
     // Free everything only if it's the last one context.
     if (get_context_share_counter() == 1ul) {
-        if (jit_state.dll != null) {
-            close_dynamic_library(jit_state.dll)
-        } elif (jit_state.ee != null || jit_state.ctx != null) {
-            assert(jit_state.ee != null && jit_state.ctx != null)
-            jit_state.ee |> LLVMRunStaticDestructors()
-            LLVMDisposeExecutionEngine(unsafe(reinterpret<LLVMExecutionEngineRef>(jit_state.ee)))
-            LLVMContextDispose(unsafe(reinterpret<LLVMContextRef>(jit_state.ctx)))
+        get_jit_state() <| $(dll, ee, ctx : void?) {
+            if (dll != null) {
+                close_dynamic_library(dll)
+            } elif (ee != null || ctx != null) {
+                assert(ee != null && ctx != null)
+                ee |> LLVMRunStaticDestructors()
+                LLVMDisposeExecutionEngine(unsafe(reinterpret<LLVMExecutionEngineRef>(ee)))
+                LLVMContextDispose(unsafe(reinterpret<LLVMContextRef>(ctx)))
+            }
         }
-        set_jit_state(JitState())
     }
 }
 
@@ -6099,7 +6096,7 @@ def finalize_jit(use_dll : bool; lib_handle : DLLHandle?) : JitState? {
         LLVMContextDispose(g_ctx);
 
         // JitState is dll only.
-        result = new JitState(dll = lib_handle, ee = null, ctx = null)
+        result = new JitState(dll = lib_handle.handle, ee = null, ctx = null)
     } else {
         g_engine |> LLVMRunStaticConstructors()
 
@@ -6114,31 +6111,6 @@ def finalize_jit(use_dll : bool; lib_handle : DLLHandle?) : JitState? {
     }
     return result
 }
-
-// Create shutdown function to avoid removing it from modules.
-// Otherwise jit state shared variable will be removed as unused.
-[infer_macro]
-class ShutdownFn : AstPassMacro {
-    def override apply(prog : ProgramPtr; mod : Module?) : bool {
-        var has_fin = false;
-        compiling_module() |> module_for_each_function <| $(fn) {
-            if (fn.name == "shutdown`llvm_jit") {
-                has_fin = true
-            }
-        }
-        if (has_fin) {
-            return false
-        }
-        var inscope fn <- qmacro_function("shutdown`llvm_jit") <| $() : void {
-            _::free_jit_context()
-        }
-        fn.flags |= FunctionFlags.generated | FunctionFlags.shutdown
-        fn.moreFlags |= MoreFunctionFlags.requestNoJit
-        compiling_module() |> add_function(fn)
-        return true
-    }
-}
-
 
 
 [simulate_macro(name="jit_llvm")]
@@ -6156,7 +6128,10 @@ class JIT_LLVM : AstSimulateMacro {
 
         assume jit_all_functions = prog.policies.jit_jit_all_functions
         assume debug_info = prog.policies.jit_debug_info
-        assume use_dll = prog.policies.jit_use_dll_mode
+        if (prog.policies.jit_use_dll_mode && !das_is_dll_build()) {
+            print("LLVM JIT WARNING: dll mode is enabled, however daslang build is static, disabling dll mode.\n")
+        }
+        let use_dll = prog.policies.jit_use_dll_mode && das_is_dll_build()
         let opt_level = prog.policies.jit_opt_level
         let size_level = prog.policies.jit_size_level
         assume config_out_folder = string(prog.policies.jit_output_folder)
@@ -6235,7 +6210,7 @@ class JIT_LLVM : AstSimulateMacro {
                     var fn_names = join([ for (fn in funcs); "{fn.name}" ], ",")
                     panic("Internal jit error. Failed to get IR for functions {fn_names}.\n")
                 }
-                generate_fileinfo_ctor_dtor(*g_prim_t, active_filenames) |> add_ctor_dtor_function(g_prim_t)
+                generate_fileinfo_ctor_dtor(*g_prim_t, active_filenames, use_dll) |> add_ctor_dtor_function(g_prim_t)
                 optimize_llvm_module(opt_level |> uint(), size_level |> uint(), LLVM_INLINE_THRESHOLD)
                 if (false) {
                     // Let's remove unused attributes before we print IR.
@@ -6287,9 +6262,7 @@ class JIT_LLVM : AstSimulateMacro {
             }
             var result = finalize_jit(use_dll, g_dynamic_lib_handle)
 
-            unsafe(invoke_in_context(ctx, @() {
-                set_jit_state(*result)
-            }))
+            set_jit_state(*ctx, result.dll, result.ee, result.ctx)
 
             if (LLVM_JIT_LOG) {
                 let totalDt = double(get_time_usec(totalTime)) / 1000000.0lf

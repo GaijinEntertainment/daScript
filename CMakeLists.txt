@@ -32,6 +32,7 @@ option(DAS_PROFILE_DISABLED "Disable dasProfile" OFF)
 option(DAS_TUTORIAL_DISABLED "Disable dasTutorial" OFF)
 option(DAS_TESTS_DISABLED "Disable dasTests" OFF)
 set(DAS_INSTALL_BINDIR bin CACHE STRING "Directory where to install binaries")
+set(DAS_INSTALL_LIBDIR lib CACHE STRING "Directory where to install binaries")
 set(DAS_INSTALL_DOCDIR . CACHE STRING "Directory where to install documentation")
 set(DAS_INSTALL_DASLIBDIR daslib CACHE STRING "Directory where to install daslib")
 set(DAS_INSTALL_EXAMPLESDIR examples CACHE STRING "Directory where to install examples")
@@ -323,6 +324,7 @@ ENDMACRO()
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${EXECUTABLE_OUTPUT_PATH})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
+set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
 
 SET(DAS_MODULES_LIBS)
 SET(DAS_ALL_EXAMPLES)
@@ -865,6 +867,10 @@ SET(DAS_DASCRIPT_MAIN_SRC
 if (NOT ${DAS_TESTS_DISABLED})
     include(examples/test/CMakeLists.txt)
     include(examples/pathTracer/CMakeLists.txt)
+
+    FOREACH(_example ${DAS_ALL_EXAMPLES})
+        TARGET_LINK_LIBRARIES(${_example} libDaScriptTest)
+    ENDFOREACH()
 endif()
 
 # Profile module
@@ -926,7 +932,58 @@ if (NOT ${DAS_TOOLS_DISABLED})
 
 endif()
 
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/dastest DESTINATION .) # It's temporary, daslib should not depend on dastest
+# This list should be significantly reduced, most of the files, except aot related should be private.
+SET(DAS_RELEASE_INCLUDES
+    include/daScript/ast/ast_aot_cpp.h
+    include/daScript/ast/ast_expressions.h
+    include/daScript/ast/ast_generate.h
+    include/daScript/ast/ast.h
+    include/daScript/ast/ast_handle.h
+    include/daScript/ast/ast_interop.h
+    include/daScript/ast/ast_serializer.h
+    include/daScript/ast/ast_typedecl.h
+    include/daScript/daScriptC.h
+    include/daScript/das_project_specific.h
+    include/daScript/misc/arraytype.h
+    include/daScript/misc/debug_break.h
+    include/daScript/misc/free_list.h
+    include/daScript/misc/job_que.h
+    include/daScript/misc/memory_model.h
+    include/daScript/misc/performance_time.h
+    include/daScript/misc/platform.h
+    include/daScript/misc/smart_ptr.h
+    include/daScript/misc/string_writer.h
+    include/daScript/misc/sysos.h
+    include/daScript/simulate/aot_builtin_ast.h
+    include/daScript/simulate/aot_builtin_dasbind.h
+    include/daScript/simulate/aot_builtin_debugger.h
+    include/daScript/simulate/aot_builtin_fio.h
+    include/daScript/simulate/aot_builtin.h
+    include/daScript/simulate/aot_builtin_jobque.h
+    include/daScript/simulate/aot_builtin_matrix.h
+    include/daScript/simulate/aot_builtin_rtti.h
+    include/daScript/simulate/aot_builtin_string.h
+    include/daScript/simulate/aot_builtin_time.h
+    include/daScript/simulate/aot_builtin_uriparser.h
+    include/daScript/simulate/aot.h
+    include/daScript/simulate/aot_library.h
+    include/daScript/simulate/bin_serializer.h
+    include/daScript/simulate/data_walker.h
+    include/daScript/simulate/debug_info.h
+    include/daScript/simulate/debug_print.h
+    include/daScript/simulate/fs_file_info.h
+    include/daScript/simulate/heap.h
+    include/daScript/simulate/runtime_profile.h
+    include/daScript/simulate/runtime_string.h
+    include/daScript/simulate/runtime_table.h
+    include/daScript/simulate/sim_policy.h
+    include/daScript/simulate/simulate.h
+    include/daScript/simulate/simulate_nodes.h
+    include/daScript/simulate/standalone_ctx_utils.h
+    utils/dasFormatter/fmt.h
+)
+
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/lib/ DESTINATION ${DAS_INSTALL_LIBDIR})
 
 install(FILES ${PROJECT_SOURCE_DIR}/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR})
 install(FILES ${PROJECT_SOURCE_DIR}/3rdparty/uriparser/COPYING DESTINATION ${DAS_INSTALL_DOCDIR} RENAME URIPARSER.LICENSE)
