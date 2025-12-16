@@ -245,7 +245,7 @@ namespace das {
     TypeDeclPtr makeExprMoveFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "MoveFlags";
-        ft->argNames = { "skipLockCheck", "takeOverRightStack", "allowConstantLValue" };
+        ft->argNames = { "skipLockCheck", "takeOverRightStack", "allowConstantLValue", "podDelete" };
         return ft;
     }
 

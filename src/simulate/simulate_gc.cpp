@@ -1121,4 +1121,15 @@ namespace das
         }
         return v_zero();
     }
+
+    vec4f builtin_collect_local_and_zero ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        if ( context.persistent ) {  // only doing any work if its a persistent heap
+            GcPod gcpod(&context, &call->debugInfo);
+            gcpod.walk(args[0], call->types[0]);
+            auto ptr = cast<void *>::to(args[0]);
+            auto tsize = cast<uint32_t>::to(args[1]);
+            memset ( ptr, 0, tsize );
+        }
+        return v_zero();
+    }
 }
