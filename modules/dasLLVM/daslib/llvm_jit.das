@@ -1910,23 +1910,25 @@ class LlvmJitVisitor : AstVisitor {
     def visitExprOp2_NonMonade(var expr : smart_ptr<ExprOp2>) {
         var left = getE(expr.left)
         var right = getE(expr.right)
-        assume opType = expr.right._type
         assume shiftType = expr.left._type
+        assume rightType = expr.right._type
         var r2v_left = isReadModifyWriteOp2(expr.op) ? LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.left._type),
                                                             left, expr.left._type.alignOf, "") : null
         // note: we need to handle vector vs scalar operations here
         // the way we do it, is we expand scalar up to vector type
+        var use_left_type = false
         if (expr.op == "*" || expr.op == "*=" || expr.op == "/" || expr.op == "/=") {
-            if (expr.left._type.baseType != expr.right._type.baseType) {// vec * scalar || scalar * vec, and so on
-                if (opType.isVectorType) {
+            if (shiftType.baseType != rightType.baseType) {// vec * scalar || scalar * vec, and so on
+                if (rightType.isVectorType) {
                     assert(expr.op == "*" || expr.op == "/")// scalar * vec || scalar / vec only
-                    left = expand_scalar(g_builder, left, opType)
+                    left = expand_scalar(g_builder, left, rightType)
                 } else {
-                    right = expand_scalar(g_builder, right, expr.left._type)
-                    opType := expr.left._type
+                    right = expand_scalar(g_builder, right, shiftType)
+                    use_left_type = true
                 }
             }
         }
+        assume opType = use_left_type ? expr.left._type : expr.right._type
         // note: we need to handle shift operations
         // the way we do it, is we expand scalar up to vector type
         if (expr.op == "<<" || expr.op == ">>" || expr.op == ">>>" || expr.op == "<<<" || expr.op == "<<=" || expr.op == ">>=" || expr.op == ">>>=" || expr.op == "<<<=") {

@@ -20,7 +20,6 @@ require daslib/strings_boost
 require daslib/defer
 require daslib/enum_trait
 require jit
-require fio
 
 let public LLVM_DEBUG_RESULT = false
 let public LLVM_DEBUG_EVERYTHING = false
