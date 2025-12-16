@@ -1899,6 +1899,9 @@ namespace das
         addInterop<builtin_collect_local,void,vec4f>(*this, lib, "builtin_collect_local",
             SideEffects::modifyArgumentAndExternal, "builtin_collect_local")
                 ->arg("anything")->unsafeOperation = true;
+        addInterop<builtin_collect_local_and_zero,void,vec4f,uint32_t>(*this, lib, "builtin_collect_local_and_zero",
+            SideEffects::modifyArgumentAndExternal, "builtin_collect_local_and_zero")
+                ->args({"anything","sizeOfAnything"})->unsafeOperation = true;
         // table expressions
         addCall<ExprErase>("__builtin_table_erase");
         addCall<ExprSetInsert>("__builtin_table_set_insert");

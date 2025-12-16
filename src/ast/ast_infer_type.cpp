@@ -6906,6 +6906,7 @@ namespace das {
                     expr->at, CompilationError::unsafe);
             } else if (
                    forceInscopePod
+                && !expr->podDelete
                 && func
                 && (func->module->allowPodInscope && (!func->fromGeneric || func->fromGeneric->module->allowPodInscope)) // both modules allow pod inscope
                 && !func->hasUnsafe
@@ -6918,10 +6919,35 @@ namespace das {
                     }
                     *logs << "In-scope POD applied to <- in function '" << func->module->name << "::" << func->name << "'\n";
                 }
-                auto pCall = make_smart<ExprCall>(expr->at,"_move_in_scope_pod");
-                pCall->arguments.push_back(expr->left->clone());
-                pCall->arguments.push_back(expr->right->clone());
-                return pCall;
+                // we convert left <- right into
+                // var left`temp & = left
+                // builtin_collect_local_and_zero(left`temp, size_of(left))
+                // left`temp <- right // unconvertable
+                auto pBlock = make_smart<ExprBlock>();
+                pBlock->at = expr->at;
+                pBlock->isCollapseable = true;
+                scopes.back()->needCollapse = true;
+                auto pLet = make_smart<ExprLet>();
+                pLet->at = expr->at;
+                pLet->alwaysSafe = true;
+                pLet->generated = true;
+                auto pVar = make_smart<Variable>();
+                pVar->at = expr->left->at;
+                pVar->type = make_smart<TypeDecl>(Type::autoinfer);
+                pVar->type->ref = true;
+                pVar->name = "`pod`inscope`temp`" + to_string(pVar->at.line) + "`" + to_string(pVar->at.column);
+                pVar->init = expr->left->clone();
+                pLet->variables.push_back(pVar);
+                auto pCall = make_smart<ExprCall>(expr->at,"_::builtin_collect_local_and_zero");
+                pCall->alwaysSafe = true;
+                pCall->arguments.push_back(make_smart<ExprVar>(expr->at, pVar->name));
+                pCall->arguments.push_back(make_smart<ExprConstUInt>(expr->at, expr->left->type->getSizeOf()));
+                auto pMove = make_smart<ExprMove>(expr->at, make_smart<ExprVar>(expr->at, pVar->name), expr->right->clone());
+                pMove->podDelete = true;
+                pBlock->list.push_back(pLet);
+                pBlock->list.push_back(pCall);
+                pBlock->list.push_back(pMove);
+                return pBlock;
             } else if ( expr->left->type->lockCheck() || expr->right->type->lockCheck()) {
                 if ( !expr->skipLockCheck && !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") && !skipLockCheck() ) { // we always skip lock check in builtin.das
                     reportAstChanged();

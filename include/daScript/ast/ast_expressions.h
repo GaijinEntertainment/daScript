@@ -508,6 +508,7 @@ namespace das
                 bool skipLockCheck : 1;
                 bool takeOverRightStack : 1;
                 bool allowConstantLValue : 1;
+                bool podDelete : 1;
             };
             uint32_t moveFlags = 0;
         };

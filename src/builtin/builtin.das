@@ -2096,14 +2096,3 @@ def consume_argument(var a : auto(TT)&) : TT& {
         return <- a
     }
 }
-
-def _move_in_scope_pod(var a, b : auto(TT)&) {
-    unsafe {
-        static_if (typeinfo need_lock_check(type<TT>)) {
-            _builtin_verify_locks(a)
-            _builtin_verify_locks(b)
-        }
-        builtin_collect_local(a)
-        a <- b
-    }
-}
