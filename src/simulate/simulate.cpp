@@ -124,13 +124,13 @@ namespace das
         return that;
     }
 
-    vec4f SimNode_Jit::eval ( Context & context ) {
+    DAS_SUPPRESS_UB vec4f SimNode_Jit::eval ( Context & context ) {
         auto result = func(&context, context.abiArg, context.abiCMRES);
         context.result = result;
         return result;
     }
 
-    vec4f SimNode_JitBlock::eval ( Context & context ) {
+    DAS_SUPPRESS_UB vec4f SimNode_JitBlock::eval ( Context & context ) {
         auto ba = (BlockArguments *) ( context.stack.bottom() + blockPtr->argumentsOffset );
         return func(&context, ba->arguments, ba->copyOrMoveResult, blockPtr );
     }
