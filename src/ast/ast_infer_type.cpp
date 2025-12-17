@@ -6915,9 +6915,9 @@ namespace das {
                 reportAstChanged();
                 if ( logs && logInscopePod ) {
                     if ( !expr->at.empty() && expr->at.fileInfo ) {
-                        *logs << expr->at.fileInfo->name << ":" << expr->at.line << ":" << expr->at.column << "\n";
+                        *logs << expr->at.fileInfo->name << ":" << expr->at.line << ":" << expr->at.column << " ";
                     }
-                    *logs << "In-scope POD applied to <- in function '" << func->module->name << "::" << func->name << "'\n";
+                    *logs << "In-scope POD applied to '" << *expr << "' in function '" << func->module->name << "::" << func->name << "'\n";
                 }
                 // we convert left <- right into
                 // var left`temp & = left

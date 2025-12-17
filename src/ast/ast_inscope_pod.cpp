@@ -49,9 +49,9 @@ namespace das {
                     ) {
                     if ( logs ) {
                         if ( !var->at.empty() && var->at.fileInfo ) {
-                            *logs << var->at.fileInfo->name << ":" << var->at.line << ":" << var->at.column << "\n";
+                            *logs << var->at.fileInfo->name << ":" << var->at.line << ":" << var->at.column << " ";
                         }
-                        *logs << "warning: POD optimization failed for " << var->name << "' in function '" << func->module->name << "::" << func->name << "'\n";
+                        *logs << "warning: POD optimization failed for '" << var->name << "' in function '" << func->module->name << "::" << func->name << "'\n";
                         if ( func->generated ) *logs << "\tfunction is generated\n";
                         if ( func->generator ) *logs << "\tfunction is generator\n";
                         if ( func->lambda ) *logs << "\tfunction is lambda\n";
@@ -70,7 +70,7 @@ namespace das {
                     blocks.back()->finalList.push_back(CallCollectLocal);
                     if ( logs ) {
                         if ( !var->at.empty() && var->at.fileInfo ) {
-                            *logs << var->at.fileInfo->name << ":" << var->at.line << ":" << var->at.column << "\n";
+                            *logs << var->at.fileInfo->name << ":" << var->at.line << ":" << var->at.column << " ";
                         }
                         *logs << "In-scope POD applied to variable '" << var->name << "' in function '" << func->module->name << "::" << func->name << "'\n";
                     }
@@ -136,7 +136,7 @@ namespace das {
                     newBlock->finalList.push_back(CallCollectLocal);
                     if ( logs ) {
                         if ( !podVar->at.empty() && podVar->at.fileInfo ) {
-                            *logs << podVar->at.fileInfo->name << ":" << podVar->at.line << ":" << podVar->at.column << "\n";
+                            *logs << podVar->at.fileInfo->name << ":" << podVar->at.line << ":" << podVar->at.column << " ";
                         }
                         *logs << "In-scope POD applied to loop source '" << expr->iterators[i] << "' in function '" << func->module->name << "::" << func->name << "'\n";
                     }
