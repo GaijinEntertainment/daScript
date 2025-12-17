@@ -5,8 +5,47 @@
 
 #include <inttypes.h>
 
+#ifndef DAS_TRACK_LOST_POINTER
+#define DAS_TRACK_LOST_POINTER 0
+#endif
+
 namespace das
 {
+#ifdef DAS_TRACK_LOST_POINTER
+    // this one tracks very specific pointer, and calls breakpoint every time its found
+    class TypeDeclVisitor : public Visitor {
+    public:
+        TypeDeclVisitor ( TypeDecl * td ) : tracedType(td) {}
+        virtual void preVisit ( TypeDecl * td ) override {
+            Visitor::preVisit(td);
+            if ( td==tracedType ) {
+                os_debug_break(); // C++ stack contains the location (breakpoint goes here too)
+            }
+        }
+        virtual bool canVisitStructure ( Structure * ) override { return true; }
+        virtual bool canVisitGlobalVariable ( Variable * ) override { return true; }
+        virtual bool canVisitFunction ( Function * ) override { return true; }
+        virtual bool canVisitEnumeration ( Enumeration * ) override { return true; }
+        virtual bool canVisitStructureFieldInit ( Structure * ) override { return true; }
+        virtual bool canVisitIfSubexpr ( ExprIfThenElse * ) override { return true; }
+        virtual bool canVisitExpr ( ExprTypeInfo *, Expression * ) override { return true; }
+        virtual bool canVisitMakeStructureBlock ( ExprMakeStruct *, Expression * ) override { return true; }
+        virtual bool canVisitMakeStructureBody ( ExprMakeStruct * ) override { return true; }
+        virtual bool canVisitArgumentInit ( Function *, const VariablePtr &, Expression * ) override { return true; }
+        virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return true; }
+        virtual bool canVisitWithAliasSubexpression ( ExprAssume * ) override { return true; }
+        virtual bool canVisitMakeBlockBody ( ExprMakeBlock * ) override { return true; }
+        virtual bool canVisitCall ( ExprCall * ) override { return true; }
+    protected:
+        TypeDecl * tracedType = nullptr;
+    };
+
+    void trackLostPointer ( TypeDecl * td ) {
+        TypeDeclVisitor vis(td);
+        daScriptEnvironment::getBound()->g_Program->visitModulesInOrder(vis,true);
+    }
+#endif
+
     TypeDeclPtr makeHandleType(const ModuleLibrary & library, const char * typeName) {
         return library.makeHandleType(typeName);
     }
@@ -850,7 +889,14 @@ namespace das
             dest = make_smart<TypeDecl>(*src);
             return;
         }
-        DAS_ASSERT(dest->use_count()==1);
+        if ( dest->use_count()!=1 ) {
+#if DAS_TRACK_LOST_POINTER
+            trackLostPointer(dest.get());
+#endif
+            DAS_ASSERTF(false, "internal error: cloning into shared TypeDeclPtr");
+            dest = make_smart<TypeDecl>(*src);                                      // this is a fallback
+            return;
+        }
         dest->baseType = src->baseType;
         dest->structType = src->structType;
         dest->enumType = src->enumType;
