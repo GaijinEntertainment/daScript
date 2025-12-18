@@ -37,6 +37,14 @@ namespace das {
                 var->pod_delete_gen = true;
                 if ( var->single_return_via_move ) {
                     // we silently do nothing. because this pod is returned via move, no need to collect it
+                    if ( logs ) {
+                        *logs << "skipping POD optimization for single_return_via_move variable '" << var->name << "' in function '" << func->module->name << "::" << func->name << "'\n";
+                    }
+                } else if ( var->consumed ) {
+                    // we silently do nothing. because this pod is consumed, no need to collect it
+                    if ( logs ) {
+                        *logs << "skipping POD optimization for consumed variable '" << var->name << "' in function '" << func->module->name << "::" << func->name << "'\n";
+                    }
                 } else if (
                            func->generated
                         || func->generator
@@ -64,8 +72,9 @@ namespace das {
                     }
                 } else {
                     func->notInferred();
-                    auto CallCollectLocal = make_smart<ExprCall>(expr->at,"_::builtin_collect_local");
-                    CallCollectLocal->arguments.push_back( make_smart<ExprVar>(expr->at, var->name) );
+                    auto CallCollectLocal = make_smart<ExprCall>(expr->at,"_::builtin_collect_local_and_zero");
+                    CallCollectLocal->arguments.push_back(make_smart<ExprVar>(expr->at, var->name));
+                    CallCollectLocal->arguments.push_back(make_smart<ExprConstUInt>(expr->at, var->type->getSizeOf()));
                     CallCollectLocal->alwaysSafe = true;
                     blocks.back()->finalList.push_back(CallCollectLocal);
                     if ( logs ) {
@@ -130,8 +139,9 @@ namespace das {
                     letPod->variables.push_back(podVar);
                     expr->sources[i] = make_smart<ExprVar>(podVar->at, podVar->name);
                     // and collect
-                    auto CallCollectLocal = make_smart<ExprCall>(expr->at,"_::builtin_collect_local");
-                    CallCollectLocal->arguments.push_back( make_smart<ExprVar>(expr->at, podVar->name) );
+                    auto CallCollectLocal = make_smart<ExprCall>(expr->at,"_::builtin_collect_local_and_zero");
+                    CallCollectLocal->arguments.push_back(make_smart<ExprVar>(expr->at, podVar->name));
+                    CallCollectLocal->arguments.push_back(make_smart<ExprConstUInt>(expr->at, expr->iteratorVariables[i]->type->getSizeOf()));
                     CallCollectLocal->alwaysSafe = true;
                     newBlock->finalList.push_back(CallCollectLocal);
                     if ( logs ) {

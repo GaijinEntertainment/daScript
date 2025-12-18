@@ -125,6 +125,7 @@ namespace das {
         Module *                thisModule = nullptr;
         size_t                  beforeFunctionErrors = 0;
         TextWriter *            logs = nullptr;
+        int32_t                 consumeDepth = 0;
     public:
         vector<FunctionPtr>     extraFunctions;
     protected:
@@ -2484,6 +2485,7 @@ namespace das {
             oneReturn.reset(); returnCount = 0;
             canFoldResult = true;
             unsafeDepth = 0;
+            consumeDepth = 0;
             func = f;
             func->hasReturn = false;
             func->isFullyInferred = true;
@@ -6346,6 +6348,9 @@ namespace das {
                     TypeDecl::clone(expr->type,var->type);
                     expr->type->ref = true;
                     var->used_in_finally = inFinally.empty() ? false : inFinally.back();
+                    if ( consumeDepth ) {
+                        var->consumed = true;
+                    }
                     return Visitor::visit(expr);
                 }
             }
@@ -8054,6 +8059,7 @@ namespace das {
         virtual void preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(expr, var, last);
             var->single_return_via_move = false;
+            var->consumed = false;
             if ( var->type && var->type->isExprType() ) {
                 return;
             }
@@ -8808,16 +8814,38 @@ namespace das {
                 }
             }
         }
+        bool isConsumeArgumentFunc ( Function * fn ) {
+            if (    fn->fromGeneric
+                &&  fn->fromGeneric->module->name=="$"
+                &&  fn->fromGeneric->name=="consume_argument"
+            ) {
+                return true;
+            }
+            return false;
+        }
+        bool isConsumeArgumentCall ( Expression * arg ) {
+            if ( arg->rtti_isCall() ) {
+                auto argCall = (ExprCall *) arg;
+                if ( argCall->func && isConsumeArgumentFunc(argCall->func) ) return true;
+            }
+            return false;
+        }
         virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
             Visitor::preVisitCallArg(call, arg, last);
             arg->isCallArgument = true;
             markNoDiscard(arg);
+            if ( forceInscopePod && isConsumeArgumentCall(arg) ) {
+                consumeDepth ++;
+            }
         }
         virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg , bool last ) override {
             if (!arg->type) {
                 call->argumentsFailedToInfer = true;
             } else if (arg->type && arg->type->isAliasOrExpr()) {
                 call->argumentsFailedToInfer = true;
+            }
+            if ( forceInscopePod && isConsumeArgumentCall(arg) ) {
+                consumeDepth --;
             }
             checkEmptyBlock(arg);
             return Visitor::visitCallArg(call, arg, last);
@@ -9581,8 +9609,17 @@ namespace das {
                 if ( func ) func->notInferred();
                 return Visitor::visit(expr);
             }
-            expr->func = inferFunctionCall(expr, InferCallError::functionOrGeneric, expr->genericFunction ? expr->func : nullptr).get();
-            if ( expr->func && expr->func->fromGeneric ) expr->genericFunction = true;
+            if ( forceInscopePod ) {
+                bool resolvedBefore = expr->genericFunction && expr->func;
+                expr->func = inferFunctionCall(expr, InferCallError::functionOrGeneric, expr->genericFunction ? expr->func : nullptr).get();
+                if ( expr->func && expr->func->fromGeneric ) {
+                    expr->genericFunction = true;
+                    if ( !resolvedBefore && isConsumeArgumentFunc(expr->func) ) func->notInferred();
+                }
+            } else {
+                expr->func = inferFunctionCall(expr, InferCallError::functionOrGeneric, expr->genericFunction ? expr->func : nullptr).get();
+                if ( expr->func && expr->func->fromGeneric ) expr->genericFunction = true;
+            }
             if ( expr->aliasSubstitution  ) {
                 if ( expr->arguments.size()!=1 ) {
                     error("casting to bitfield requires one argument", "", "",

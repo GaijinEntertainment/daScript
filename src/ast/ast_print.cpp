@@ -578,6 +578,8 @@ namespace das {
             if ( printAliases && var->aliasCMRES ) ss << "/*cmres*/";
             if ( var->early_out ) ss << "/*early_out*/";
             if ( var->used_in_finally ) ss << "/*used_in_finally*/";
+            if ( var->consumed ) ss << "/*consumed*/";
+            if ( var->single_return_via_move ) ss << "/*single_return_via_move*/";
             ss << ":" << var->type->describe();
         }
         virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {

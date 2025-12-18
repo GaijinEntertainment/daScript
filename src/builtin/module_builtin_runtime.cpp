@@ -1896,9 +1896,6 @@ namespace das
             SideEffects::modifyArgumentAndExternal, "builtin_table_free")
                 ->args({"table","sizeOfKey","sizeOfValue","context","at"});
         // local collection
-        addInterop<builtin_collect_local,void,vec4f>(*this, lib, "builtin_collect_local",
-            SideEffects::modifyArgumentAndExternal, "builtin_collect_local")
-                ->arg("anything")->unsafeOperation = true;
         addInterop<builtin_collect_local_and_zero,void,vec4f,uint32_t>(*this, lib, "builtin_collect_local_and_zero",
             SideEffects::modifyArgumentAndExternal, "builtin_collect_local_and_zero")
                 ->args({"anything","sizeOfAnything"})->unsafeOperation = true;
