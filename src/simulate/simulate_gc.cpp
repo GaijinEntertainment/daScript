@@ -1114,14 +1114,6 @@ namespace das
         }
     };
 
-    vec4f builtin_collect_local ( Context & context, SimNode_CallBase * call, vec4f * args ) {
-        if ( context.persistent ) {  // only doing any work if its a persistent heap
-            GcPod gcpod(&context, &call->debugInfo);
-            gcpod.walk(args[0], call->types[0]);
-        }
-        return v_zero();
-    }
-
     vec4f builtin_collect_local_and_zero ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         if ( context.persistent ) {  // only doing any work if its a persistent heap
             GcPod gcpod(&context, &call->debugInfo);
