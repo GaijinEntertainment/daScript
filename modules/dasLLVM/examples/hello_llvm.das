@@ -1,17 +1,20 @@
 options gen2
 require daslib/safe_addr
 require llvm/llvm_boost
+require llvm/llvm_targets
 
 [export]
 def main {
-    LLVMContextSetOpaquePointers(LLVMGetGlobalContext(), 0)
-    var mod = LLVMModuleCreateWithName("my_module")
-    var ret_type = LLVMFunctionType(LLVMInt32Type(), fixed_array<LLVMTypeRef>(LLVMInt32Type(), LLVMInt32Type()))
-    var sum = LLVMAddFunction(mod, "sum", ret_type)
+    var ctx = LLVMGetGlobalContext()
+    LLVMContextSetOpaquePointers(ctx, 0)
+    var types = new PrimitiveTypes(ctx)
+    var mod = LLVMModuleCreateWithNameInContext("my_module", ctx)
+    var ret_type = LLVMFunctionType(types.t_int32, fixed_array<LLVMTypeRef>(types.t_int32))
+    var sum = LLVMAddFunction(mod, "add", ret_type)
     var entry = LLVMAppendBasicBlock(sum, "entry")
-    var builder = LLVMCreateBuilder()
+    var builder = LLVMCreateBuilderInContext(ctx)
     LLVMPositionBuilderAtEnd(builder, entry)
-    var tmp = LLVMBuildAdd(builder, LLVMGetParam(sum, 0u), LLVMGetParam(sum, 1u), "tmp")
+    var tmp = LLVMBuildAdd(builder, LLVMGetParam(sum, 0u), LLVMConstInt(types.t_int32, 10 |> uint64(), 0), "tmp")
     LLVMBuildRet(builder, tmp)
     LLVMVerifyModule(mod, LLVMVerifierFailureAction.LLVMAbortProcessAction)
     var engine : LLVMExecutionEngineRef
@@ -20,13 +23,20 @@ def main {
     LLVMInitializeAllTargetMCs()
     LLVMCreateExecutionEngineForModule(engine, mod)
     var x = 10ul
-    var y = 11ul
+    var arg1 = LLVMCreateGenericValueOfInt(types.t_int32, x, 0)
     var args <- fixed_array<LLVMGenericValueRef>(
-        LLVMCreateGenericValueOfInt(LLVMInt32Type(), x, 0),
-        LLVMCreateGenericValueOfInt(LLVMInt32Type(), y, 0)
+        arg1,
     )
-    var res = LLVMRunFunction(engine, sum, 2u, safe_addr(args[0]))
-    print("result = {int(LLVMGenericValueToInt(res, 0))}\n")
+    var llvm_res = LLVMRunFunction(engine, sum, 1u, safe_addr(args[0]))
+    var res = (llvm_res
+            |> LLVMGenericValueToInt(0)
+            |> int())
+    assert(res == 20)
+    print("result = {res}\n")
+
+    // Free everything
+    LLVMDisposeGenericValue(arg1)
+    LLVMDisposeGenericValue(llvm_res)
     LLVMDumpModule(mod)
     LLVMDisposeBuilder(builder)
     LLVMDisposeExecutionEngine(engine)
