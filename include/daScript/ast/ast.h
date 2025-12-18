@@ -378,7 +378,8 @@ namespace das
                 bool    bitfield_constant : 1;      // this is a bitfield constant
                 bool    pod_delete : 1;             // this variable can be deleted as POD
                 bool    pod_delete_gen : 1;         // pod delete has been generated
-                bool    single_return_via_move : 1; // this variable is returned via move, where function has only 1 return path
+                bool    single_return_via_move : 1; // this variable is returned via move, where function has only 1 return path (only set if force_pod_inscope is set)
+                bool    consumed : 1;               // this variable has been passed via consume (only set if force_pod_inscope is set)
             };
             uint32_t flags = 0;
         };

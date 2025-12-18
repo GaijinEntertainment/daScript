@@ -37,6 +37,14 @@ namespace das {
                 var->pod_delete_gen = true;
                 if ( var->single_return_via_move ) {
                     // we silently do nothing. because this pod is returned via move, no need to collect it
+                    if ( logs ) {
+                        *logs << "skipping POD optimization for single_return_via_move variable '" << var->name << "' in function '" << func->module->name << "::" << func->name << "'\n";
+                    }
+                } else if ( var->consumed ) {
+                    // we silently do nothing. because this pod is consumed, no need to collect it
+                    if ( logs ) {
+                        *logs << "skipping POD optimization for consumed variable '" << var->name << "' in function '" << func->module->name << "::" << func->name << "'\n";
+                    }
                 } else if (
                            func->generated
                         || func->generator
