@@ -367,7 +367,7 @@ namespace das {
                 }
             }
             if ( fn->fromGeneric ) {
-                ss << "// from generic " << fn->fromGeneric->describe() << "\n";
+                ss << "// from generic " << fn->fromGeneric->module->name << "::" << fn->fromGeneric->describe() << "\n";
             }
             if ( fn->isTemplate ) {
                 ss << "template ";
