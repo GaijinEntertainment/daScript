@@ -5,9 +5,6 @@ on:
   # push:
   # pull_request:
   # workflow_dispatch:
-  push:
-    tags:
-      - '*'
   release:
     types: prereleased
 defaults:
@@ -38,12 +35,14 @@ jobs:
     needs: pre_job
     if: needs.pre_job.outputs.should_skip != 'true'
     runs-on: ${{ matrix.runner }}
+    env:
+      das_dll_build: ${{ github.event_name == 'release' && 'YES' || 'NO' }}
 
     strategy:
       fail-fast: false
       matrix:
-        target: [linux, linux_arm, darwin, darwin13, windows]
-        architecture: [32, 64]
+        target: [linux, linux_arm, darwin15, darwin26, windows]
+        architecture: [32, 64, arm64]
         cmake_preset: [ Release ]
 
         include:
@@ -59,17 +58,17 @@ jobs:
             runner: ubuntu-24.04-arm
             archive_ext: tar.gz
 
-          - target: darwin
-            release_target: darwin
+          - target: darwin26
+            release_target: darwin26
             release_arch: arm64
-            runner: macos-latest # arm64
+            runner: macos-26 # arm64
             architecture_string: arm64
             archive_ext: tar.gz
 
-          - target: darwin13
-            release_target: darwin
+          - target: darwin15
+            release_target: darwin15
             release_arch: x86_64
-            runner: macos-13 # x64
+            runner: macos-15-intel # x64
             architecture_string: x86_64
             archive_ext: tar.gz
 
@@ -81,11 +80,11 @@ jobs:
             build_system: cmake
             cmake_generator: Visual Studio 17 2022
 
-          - target: darwin
+          - target: darwin15
             build_system: cmake
             cmake_generator: Ninja
 
-          - target: darwin13
+          - target: darwin26
             build_system: cmake
             cmake_generator: Ninja
 
@@ -110,17 +109,32 @@ jobs:
             architecture_string: x64
 
         exclude:
-          - target: darwin
+          - target: darwin15
             architecture: 32
 
-          - target: darwin13
+          - target: darwin15
+            architecture: arm64
+
+          - target: darwin26
             architecture: 32
+
+          - target: darwin26
+            architecture: 64
 
           - target: linux
             architecture: 32
 
+          - target: linux
+            architecture: arm64
+
           - target: linux_arm
             architecture: 32
+
+          - target: linux_arm
+            architecture: arm64 # todo
+
+          - target: windows
+            architecture: arm64
 
     steps:
       - name: "SCM Checkout"
@@ -150,28 +164,27 @@ jobs:
                 libopenal-dev \
                 libvorbis-dev \
                 libflac-dev \
-                libclang-dev \
                 libx11-dev \
                 libxrandr-dev \
                 libxcursor-dev \
                 libxinerama-dev \
                 libxi-dev
               ;;
-            darwin1364)
+            darwin15arm64|darwin26arm64)
               brew install bison openssl
               echo 'export PATH="/usr/local/opt/bison/bin:$PATH"' >> ~/.bash_profile
               export LDFLAGS="-L/usr/local/opt/bison/lib -L$(brew --prefix openssl)/lib"
               export CPPFLAGS="-I$(brew --prefix openssl)/include"
               ;;
-            darwin64)
-              brew install bison openssl
+            darwin1564|darwin2664)
+              arch -x86_64 brew install bison openssl
               echo 'export PATH="/opt/homebrew/opt/bison/bin:$PATH"' >> ~/.bash_profile
               export LDFLAGS="-L/opt/homebrew/opt/bison/lib -L$(brew --prefix openssl)/lib"
               export CPPFLAGS="-I$(brew --prefix openssl)/include"
               ;;
           esac
 
-      - name: "Install libclang and openssl windows"
+      - name: "Install openssl windows"
         if: runner.os == 'Windows'
         run: |
           git clone https://github.com/microsoft/vcpkg && ./vcpkg/bootstrap-vcpkg.sh
@@ -192,7 +205,7 @@ jobs:
               case "${{ matrix.target }}${{ matrix.architecture }}" in
                 linux64)
                   cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} \
-                    -G "${{ matrix.cmake_generator }}" $ACTIVE_MODULES
+                    -G "${{ matrix.cmake_generator }}" -DDAS_ENABLE_DLL=${{ env.das_dll_build }} $ACTIVE_MODULES
                   cd build
                   ninja daslang
                   ;;
@@ -201,7 +214,7 @@ jobs:
 
                   CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture_string }}" \
                     -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
-                    -G "${{ matrix.cmake_generator }}" $ACTIVE_MODULES
+                    -G "${{ matrix.cmake_generator }}" -DDAS_ENABLE_DLL=${{ env.das_dll_build }} $ACTIVE_MODULES
 
                   cd build
                   ninja daslang
@@ -220,7 +233,7 @@ jobs:
           case "${{ matrix.build_system }}" in
             cmake)
               cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=${{ matrix.architecture == 32 && 'x86' || 'x64' }} -A ${{ matrix.architecture_string }} \
-                $ACTIVE_MODULES -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+                -DDAS_ENABLE_DLL=${{ env.das_dll_build }} $ACTIVE_MODULES -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
               cmake --build ./build --config ${{ matrix.cmake_preset }} --target daslang
               ;;
           esac

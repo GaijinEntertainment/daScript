@@ -409,7 +409,7 @@ extern "C" {
                 }
                 if (dasLibrary.empty()) {
                     const auto path = get_prefix(getExecutableFileName());
-                    const auto winCfg = path.substr(path.find_last_of("\\/"));
+                    const auto winCfg = path.substr(path.find_last_of("\\/") + 1);
                     const auto windowsConfig = (winCfg == "bin" ? "" : (winCfg + "/"));
                     dasLibrary = getDasRoot() + "/lib/" + windowsConfig + "libDaScript.lib";
                 }

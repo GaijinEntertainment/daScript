@@ -192,8 +192,8 @@ def main {
             fprint(fdf, "require dasbind public\n")
             fprint(fdf, "options gen2\n")
             fprint(fdf, "module llvm_func shared\n")
-            fprint(fdf, "require llvm_struct\n")
-            fprint(fdf, "require llvm_enum\n")
+            fprint(fdf, "require llvm/llvm_struct\n")
+            fprint(fdf, "require llvm/llvm_enum\n")
             let output_const_name = "{get_das_root()}/modules/dasLLVM/das_llvm/llvm_const.das"
             fopen(output_const_name, "wb") <| $(dcf) {
                 var glbind = new LlvmGenDinamic(pfn, pfp, args)

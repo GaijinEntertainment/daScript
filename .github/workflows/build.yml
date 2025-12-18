@@ -5,7 +5,7 @@ on:
   pull_request:
   workflow_dispatch:
   release:
-    types: published
+    types: prereleased
 defaults:
   run:
     shell: bash
@@ -34,7 +34,8 @@ jobs:
     needs: pre_job
     if: needs.pre_job.outputs.should_skip != 'true'
     runs-on: ${{ matrix.runner }}
-
+    env:
+      das_dll_build: ${{ github.event_name == 'release' && 'YES' || 'NO' }}
     strategy:
       fail-fast: false
       matrix:
@@ -80,7 +81,7 @@ jobs:
           - target: darwin15
             release_target: darwin15
             release_arch: x86_64
-            runner: macos-15 # latest with x86_64 https://github.com/actions/runner-images?tab=readme-ov-file#available-images
+            runner: macos-15-intel # latest with x86_64 https://github.com/actions/runner-images?tab=readme-ov-file#available-images
             architecture_string: x86_64
             archive_ext: tar.gz
 
@@ -226,23 +227,23 @@ jobs:
             case "${{ matrix.target }}${{ matrix.architecture }}" in
               linux64)
                 CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -G \
-                        "${{ matrix.cmake_generator }}" ${{ matrix.cmake_extra_args }} -DDAS_USE_SANITIZER=${{ matrix.sanitizers }} -DDAS_LLVM_DISABLED=OFF
+                        "${{ matrix.cmake_generator }}" -DDAS_ENABLE_DLL=${{ env.das_dll_build }} -DDAS_USE_SANITIZER=${{ matrix.sanitizers }} -DDAS_LLVM_DISABLED=OFF
                 cd build
                 ninja daslang
                 ninja
                 ;;
               windows32)
-                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=x86 -A ${{ matrix.architecture_string }}
+                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DDAS_ENABLE_DLL=${{ env.das_dll_build }} -T host=x86 -A ${{ matrix.architecture_string }}
                 cmake --build ./build --config ${{ matrix.cmake_preset }} --target daslang
                 cmake --build ./build --config ${{ matrix.cmake_preset }}
                 ;;
               windows64)
-                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=x64 -A ${{ matrix.architecture_string }} -DDAS_LLVM_DISABLED=OFF
+                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DDAS_ENABLE_DLL=${{ env.das_dll_build }} -T host=x64 -A ${{ matrix.architecture_string }} -DDAS_LLVM_DISABLED=OFF
                 cmake --build ./build --config ${{ matrix.cmake_preset }} --target daslang
                 cmake --build ./build --config ${{ matrix.cmake_preset }}
                 ;;
               *)
-                CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture_string }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DDAS_LLVM_DISABLED=OFF -G "${{ matrix.cmake_generator }}"
+                CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DDAS_ENABLE_DLL=${{ env.das_dll_build }} -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture_string }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DDAS_LLVM_DISABLED=OFF -G "${{ matrix.cmake_generator }}"
                 cd build
                 ninja daslang
                 ninja
@@ -334,7 +335,7 @@ jobs:
         cmake --install ./build --prefix ./daslang_install --config ${{ matrix.cmake_preset }} --strip
         7z a artifacts/daslang-${{ matrix.release_target }}-${{ matrix.release_arch }}.zip ./daslang_install
     - name: "Create release"
-      if: github.event.action == 'published' && matrix.cmake_preset == 'Release'
+      if: github.event.action == 'prereleased' && matrix.cmake_preset == 'Release'
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

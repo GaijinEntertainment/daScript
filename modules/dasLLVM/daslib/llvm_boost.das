@@ -240,7 +240,7 @@ def LLVMAddAttributeToFunctionArgument(ffunc : LLVMOpaqueValue?; ai : uint; attr
 }
 
 def LLVMBuildShuffleVector(builder : LLVMOpaqueBuilder?; var types : PrimitiveTypes?; v1, v2 : LLVMOpaqueValue?; mask : array<int>; name : string) {
-    var inscope elem : array<LLVMOpaqueValue?>
+    var elem : array<LLVMOpaqueValue?>
     for (m in mask) {
         if (m != -1) {
             elem |> push(types.ConstI32(uint64(m)))
