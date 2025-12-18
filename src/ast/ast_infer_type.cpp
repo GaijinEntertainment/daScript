@@ -3585,6 +3585,11 @@ namespace das {
                 } else {
                     string lname = generateNewLocalFunctionName(block->at);
                     auto pFn = generateLocalFunction(lname, block.get());
+                    if ( func  ) {
+                        if ( auto origin = func->getOriginPtr() ) {
+                            pFn->fromGeneric = getOrCreateDummy(origin->module);
+                        }
+                    }
                     if ( program->addFunction(pFn) ) {
                         reportAstChanged();
                         return make_smart<ExprAddr>(expr->at, "_::" + lname + "`function");
