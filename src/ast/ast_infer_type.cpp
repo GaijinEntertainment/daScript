@@ -6945,7 +6945,7 @@ namespace das {
                 pVar->at = expr->left->at;
                 pVar->type = make_smart<TypeDecl>(Type::autoinfer);
                 pVar->type->ref = true;
-                pVar->name = "`pod`inscope`temp`" + to_string(pVar->at.line) + "`" + to_string(pVar->at.column);
+                pVar->name = "_pod_inscope_temp_" + to_string(pVar->at.line) + "_" + to_string(pVar->at.column);
                 pVar->init = expr->left->clone();
                 pLet->variables.push_back(pVar);
                 auto pCall = make_smart<ExprCall>(expr->at,"_::builtin_collect_local_and_zero");
