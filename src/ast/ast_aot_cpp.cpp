@@ -1334,13 +1334,20 @@ namespace das {
             for ( auto & var : vars ) {
                 ss << tabs();
                 describeVarLocalCppType(ss, var->type);
-                auto vname = collector.getVarName(var);
-                if ( var->type->constant && var->type->isRefType() && !var->type->ref ) {
+                auto varname = collector.getVarName(var);
+                auto vname = varname;
+                auto constRef = var->type->constant && var->type->isRefType() && !var->type->ref;
+                if ( constRef ) {
                     vname += "_ConstRef";
                 }
                 ss  << " " << vname;
                 ss << "; " << "memset((void*)&" << vname << ",0,sizeof(" << vname << "));"
                     << "\n";
+                if ( constRef ) {
+                    ss << tabs();
+                    describeLocalCppType(ss, var->type);
+                    ss << " & " << varname << " = " << vname << ";\n";
+                }
             }
             // pre-declare locals
             auto & temps = collector.localTemps[block];
@@ -1435,11 +1442,13 @@ namespace das {
         }
         virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             if ( !last ) ss << "; ";
-            if ( var->type->constant && var->type->isRefType() && !var->type->ref ) {
-                auto vname = collector.getVarName(var);
-                ss << ";\n    ";
-                describeLocalCppType(ss, var->type);
-                ss << " & " << vname << " = " << vname << "_ConstRef; ";
+            if ( !collector.isMoved(var) ) {
+                if ( var->type->constant && var->type->isRefType() && !var->type->ref ) {
+                    auto vname = collector.getVarName(var);
+                    ss << ";\n" << tabs();
+                    describeLocalCppType(ss, var->type);
+                    ss << " & " << vname << " = " << vname << "_ConstRef;\n";
+                }
             }
             return Visitor::visitLet(let, var, last);
         }
