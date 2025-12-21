@@ -34,8 +34,10 @@ IF(NOT DAS_OPENGL_INCLUDED)
         DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/media
     )
 
-    IF ((NOT ${DAS_BGFX_DISABLED}) OR (NOT DEFINED DAS_BGFX_DISABLED))
-        install(FILES ${PROJECT_SOURCE_DIR}/modules/dasBGFX/bgfx/bgfx/examples/assets/meshes/orb.obj
+    IF (((${DAS_BGFX_DISABLED}) OR (NOT DEFINED DAS_BGFX_DISABLED)) AND (EXISTS "${PROJECT_SOURCE_DIR}/modules/dasBGFX/bgfx"))
+        install(FILES
+            ${PROJECT_SOURCE_DIR}/modules/dasBGFX/bgfx/bgfx/examples/assets/meshes/orb.obj
+            ${PROJECT_SOURCE_DIR}/modules/dasBGFX/bgfx/bgfx/examples/runtime/font/droidsansmono.ttf
             DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/media
         )
     ENDIF ()

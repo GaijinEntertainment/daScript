@@ -32,3 +32,20 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/pathTracer
     FILES_MATCHING
     PATTERN "*.das"
 )
+
+IF(NOT ${DAS_BGFX_DISABLED})
+    install(FILES
+        ${PROJECT_SOURCE_DIR}/examples/pathTracer/toy_path_tracer_bgfx.das
+        ${PROJECT_SOURCE_DIR}/examples/pathTracer/toy_path_tracer_bgfx_hdr.das
+        DESTINATION ${DAS_INSTALL_EXAMPLESDIR}
+    )
+ENDIF()
+
+install(FILES
+    ${PROJECT_SOURCE_DIR}/examples/pathTracer/path_tracer.das
+    ${PROJECT_SOURCE_DIR}/examples/pathTracer/toy_path_tracer.das
+    ${PROJECT_SOURCE_DIR}/examples/pathTracer/toy_pathtracer_opengl_basic.das
+    ${PROJECT_SOURCE_DIR}/examples/pathTracer/toy_path_tracer_opengl.das
+    ${PROJECT_SOURCE_DIR}/examples/pathTracer/toy_path_tracer_opengl_hdr.das
+    ${PROJECT_SOURCE_DIR}/examples/pathTracer/toy_path_tracer_profile.das
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR})

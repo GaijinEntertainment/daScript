@@ -439,11 +439,11 @@ extern "C" {
         }
 
         #if defined(_WIN32) || defined(_WIN64)
-            auto result = fmt::format_to(cmd, FMT_STRING("{} {} {} msvcrt.lib -link -DLL -OUT:{} 2>&1"), linker, objFilePath, dasLibrary, libraryName);
+            auto result = fmt::format_to(cmd, FMT_STRING("\"\"{}\" \"{}\" \"{}\" msvcrt.lib -link -DLL -OUT:\"{}\" 2>&1\""), linker, objFilePath, dasLibrary, libraryName);
         #elif defined(__APPLE__)
-            auto result = fmt::format_to(cmd, FMT_STRING("{} -shared -o {} {} {} 2>&1"), linker, libraryName, dasLibrary, objFilePath);
+            auto result = fmt::format_to(cmd, FMT_STRING("\"{}\" -shared -o \"{}\" \"{}\" \"{}\" 2>&1"), linker, libraryName, dasLibrary, objFilePath);
         #else
-            auto result = fmt::format_to(cmd, FMT_STRING("{} -shared -o {} {} 2>&1"), linker, libraryName, objFilePath);
+            auto result = fmt::format_to(cmd, FMT_STRING("\"{}\" -shared -o \"{}\" \"{}\" 2>&1"), linker, libraryName, objFilePath);
         #endif
             *result = '\0';
 

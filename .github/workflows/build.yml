@@ -28,6 +28,14 @@ jobs:
           concurrent_skipping: 'same_content'
           do_not_skip: '["pull_request", "workflow_dispatch", "release"]'
 
+      - name: Cache LLVM
+        uses: actions/cache@v3
+        id: llvm-cache
+        with:
+          # Cache LLVM.dll, to make CI faster.
+          path: build/_deps/das_llvm_shared_lib-src
+          key: ${{ runner.os }}-luajit-${{ hashFiles('modules/dasLLVM/CMakeLists.txt') }}
+
   ###########################################################
   build:
   ###########################################################
@@ -35,7 +43,8 @@ jobs:
     if: needs.pre_job.outputs.should_skip != 'true'
     runs-on: ${{ matrix.runner }}
     env:
-      das_dll_build: ${{ github.event_name == 'release' && 'YES' || 'NO' }}
+      das_dll_build: 'NO'
+      das_llvm_disabled: ${{ github.event_name == 'release' && 'ON' || 'OFF' }}
     strategy:
       fail-fast: false
       matrix:
@@ -79,6 +88,7 @@ jobs:
             archive_ext: tar.gz
 
           - target: darwin15
+            architecture: 64
             release_target: darwin15
             release_arch: x86_64
             runner: macos-15-intel # latest with x86_64 https://github.com/actions/runner-images?tab=readme-ov-file#available-images
@@ -86,6 +96,7 @@ jobs:
             archive_ext: tar.gz
 
           - target: darwin15
+            architecture: arm64
             release_target: darwin15
             release_arch: arm64
             runner: macos-15
@@ -227,7 +238,7 @@ jobs:
             case "${{ matrix.target }}${{ matrix.architecture }}" in
               linux64)
                 CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -G \
-                        "${{ matrix.cmake_generator }}" -DDAS_ENABLE_DLL=${{ env.das_dll_build }} -DDAS_USE_SANITIZER=${{ matrix.sanitizers }} -DDAS_LLVM_DISABLED=OFF
+                        "${{ matrix.cmake_generator }}" -DDAS_ENABLE_DLL=${{ env.das_dll_build }} -DDAS_USE_SANITIZER=${{ matrix.sanitizers }} -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }}
                 cd build
                 ninja daslang
                 ninja
@@ -238,12 +249,12 @@ jobs:
                 cmake --build ./build --config ${{ matrix.cmake_preset }}
                 ;;
               windows64)
-                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DDAS_ENABLE_DLL=${{ env.das_dll_build }} -T host=x64 -A ${{ matrix.architecture_string }} -DDAS_LLVM_DISABLED=OFF
+                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DDAS_ENABLE_DLL=${{ env.das_dll_build }} -T host=x64 -A ${{ matrix.architecture_string }} -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }}
                 cmake --build ./build --config ${{ matrix.cmake_preset }} --target daslang
                 cmake --build ./build --config ${{ matrix.cmake_preset }}
                 ;;
               *)
-                CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DDAS_ENABLE_DLL=${{ env.das_dll_build }} -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture_string }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DDAS_LLVM_DISABLED=OFF -G "${{ matrix.cmake_generator }}"
+                CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DDAS_ENABLE_DLL=${{ env.das_dll_build }} -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture_string }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }} -G "${{ matrix.cmake_generator }}"
                 cd build
                 ninja daslang
                 ninja
@@ -300,10 +311,10 @@ jobs:
             # when exceptions disabled, we still throw in tests and there'll be memory leaks
             echo -e "leak:format_error\n" > suppressions.txt
             export LSAN_OPTIONS="suppressions='suppressions.txt'"
-            ./daScriptTest -jit
+            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ./daScriptTest -jit
             ./daScriptTest
             # Use more time to pass UBSAN and disable leaks in JIT mode because we exit using exit(), and do not call destructors.
-            ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- --color --test ../tests || ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- --color --isolated-mode --timeout 1600 --test ../tests
+            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- --color --test ../tests || ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- --color --isolated-mode --timeout 1600 --test ../tests
             ./daslang _dasroot_/dastest/dastest.das -- --color --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../tests
             ;;
            windows32)
@@ -313,16 +324,16 @@ jobs:
             ;;
            windows*)
             cd bin/"${{ matrix.cmake_preset }}"
-            ./daScriptTest.exe -jit
+            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ./daScriptTest.exe -jit
             ./daScriptTest.exe
-            ./daslang _dasroot_/dastest/dastest.das -jit -- --color --test ../../tests || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --isolated-mode --timeout 1200 --test ../../tests
+            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --test ../../tests || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --isolated-mode --timeout 1200 --test ../../tests
             ./daslang _dasroot_/dastest/dastest.das -- --color --test ../../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../../tests
             ;;
            *)
             cd bin
-            ./daScriptTest -jit
+            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ./daScriptTest -jit
             ./daScriptTest
-            ./daslang _dasroot_/dastest/dastest.das -jit -- --color --test ../tests || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --isolated-mode --timeout 1200 --test ../tests
+            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --test ../tests || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --isolated-mode --timeout 1200 --test ../tests
             ./daslang _dasroot_/dastest/dastest.das -- --color --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../tests
             ;;
         esac

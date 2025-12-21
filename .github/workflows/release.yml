@@ -238,6 +238,19 @@ jobs:
               ;;
           esac
 
+      - name: "Run tests"
+        run: |
+          if [[ "${{ matrix.target }}" == windows* ]]; then
+            cd "bin/${{ matrix.cmake_preset }}"
+            TEST_PATH="../../tests"
+            EXEC=".exe"
+          else
+            cd bin
+            TEST_PATH="../tests"
+            EXEC=""
+          fi
+          ./daslang${EXEC} _dasroot_/dastest/dastest.das -jit -- --color --test "$TEST_PATH"
+
       - name: "Install binaries"
         if: matrix.cmake_preset == 'Release'
         shell: bash
