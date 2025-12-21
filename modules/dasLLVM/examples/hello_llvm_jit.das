@@ -3,6 +3,7 @@ require daslib/safe_addr
 require daslib/math_bits
 
 require llvm/llvm_boost
+require llvm/llvm_targets
 require jit
 
 [export]
@@ -30,9 +31,10 @@ def main {
     LLVMVerifyModule(mod, LLVMVerifierFailureAction.LLVMAbortProcessAction)
     var engine : LLVMExecutionEngineRef
     LLVMLinkInMCJIT()
-    LLVMInitializeNativeTarget()
-    LLVMInitializeNativeAsmPrinter()
-    LLVMInitializeNativeAsmParser()
+    LLVMInitializeAllTargetInfos()
+    LLVMInitializeAllTargets()
+    LLVMInitializeAllTargetMCs()
+    LLVMInitializeAllAsmPrinters()
     LLVMCreateJITCompilerForModule(engine, mod)
     var pfun = LLVMGetFunctionAddress(engine, "sum")
     var values <- fixed_array<int4>(
