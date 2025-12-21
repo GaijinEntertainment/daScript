@@ -134,11 +134,11 @@ def gen_6(arr : table<auto; auto?>) {
 }
 
 def gen_6(arr : table<int; auto>) {
-    return "<int:*?>"
+    return "<int:*>"
 }
 
 def gen_6(arr : table<int; auto?>) {
-    return "<int:*>"
+    return "<int:*?>"
 }
 
 def test_gen_6 {
