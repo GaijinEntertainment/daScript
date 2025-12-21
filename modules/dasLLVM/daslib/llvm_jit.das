@@ -4343,10 +4343,26 @@ class LlvmJitVisitor : AstVisitor {
 
     def override visitExprField(expr : smart_ptr<ExprField>) : ExpressionPtr {
         var field_ptr : LLVMOpaqueValue?;
-        if (expr.value._type.isBitfield) {
+        assume value_t = expr.value._type
+        if (value_t.isBitfield) {
             let mask = 1u << uint(expr.fieldIndex)
-            let mand = LLVMBuildAnd(g_builder, getE(expr.value), types.ConstI32(uint64(mask)), "")
-            let if_not_zero = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, mand, types.ConstI32(uint64(0)), "")
+            var llvm_mask : LLVMOpaqueValue? = null
+            var llvm_zero : LLVMOpaqueValue? = null
+            if (value_t.baseType == Type.tBitfield) {
+                llvm_mask = types.ConstI32(uint64(mask))
+                llvm_zero = types.ConstI32(uint64(0))
+            } elif (value_t.baseType == Type.tBitfield8) {
+                llvm_mask = types.ConstI8(mask |> int8)
+                llvm_zero = types.ConstI8(0 |> int8)
+            } elif (value_t.baseType == Type.tBitfield16) {
+                llvm_mask = types.ConstI16(mask |> int16)
+                llvm_zero = types.ConstI16(0 |> int16)
+            } elif (value_t.baseType == Type.tBitfield64) {
+                llvm_mask = types.ConstI64(uint64(mask))
+                llvm_zero = types.ConstI64(uint64(0))
+            }
+            let mand = LLVMBuildAnd(g_builder, getE(expr.value), llvm_mask, "")
+            let if_not_zero = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, mand, llvm_zero, "")
             var res_type = type_to_llvm_type(expr._type)
             var res = build_select(if_not_zero, res_type) <| $() {
                 return LLVMConstInt(types.t_int1, uint64(1), 0)
@@ -4954,14 +4970,21 @@ class LlvmJitVisitor : AstVisitor {
         // call jit_make_block
         var blk_ptr = LLVMBuildPointerCast(g_builder, blk, LLVMPointerType(g_t_block, 0u), "")
         let argStackTop = (expr._block as ExprBlock).stackTop
-        let annotationData = (expr._block as ExprBlock).annotationData
+        let annotationData = (expr._block as ExprBlock).annotationData |> uint64()
+        var ann_data_ptr : LLVMOpaqueValue? = null
+        if (annotationData != 0 |> uint64()) {
+            ann_data_ptr = LLVMBuildPtrToInt(g_builder, save_address_global(uid.get_block_ann(expr), unsafe(reinterpret<void?>(annotationData))), types.LLVMIntPtrType(), "")
+        } else {
+            // Just an optimization.
+            ann_data_ptr = LLVMConstInt(types.t_int64, 0 |> uint64(), 0)
+        }
         let null_ptr = LLVMConstPointerNull(types.LLVMVoidPtrType())
         let func_ptr = LLVMBuildPointerCast(g_builder, blk_make.func, types.LLVMVoidPtrType(), "")
         let impl_ptr = LLVMBuildPointerCast(g_builder, blk_make.impl, types.LLVMVoidPtrType(), "")
         var params = fixed_array(
             blk_ptr,                                                    // blk
-            types.ConstI32(uint64(argStackTop)),      // argStackTop
-            LLVMConstInt(types.t_int64, uint64(annotationData), 0),   // annotation data
+            types.ConstI32(uint64(argStackTop)),                        // argStackTop
+            ann_data_ptr,                                               // annotation data
             func_ptr,                                                   // bodyNode
             impl_ptr,                                                   // jitImpl
             null_ptr,                                                   // TODO: funcInfo
@@ -5012,13 +5035,14 @@ class LlvmJitVisitor : AstVisitor {
 
 // ExprConstInt8
     def override visitExprConstInt8(expr : smart_ptr<ExprConstInt8>) : ExpressionPtr {
+        setE(expr, types.ConstI8(expr.value))
         setE(expr, LLVMConstInt(types.t_int8, uint64(expr.value), 0))
         return expr
     }
 
 // ExprConstInt16
     def override visitExprConstInt16(expr : smart_ptr<ExprConstInt16>) : ExpressionPtr {
-        setE(expr, LLVMConstInt(types.t_int16, uint64(expr.value), 0))
+        setE(expr, types.ConstI16(expr.value))
         return expr
     }
 
@@ -5839,6 +5863,11 @@ class ResolveExternVisitor : AstVisitor {
 
     def override preVisitExprMakeBlock(expr : smart_ptr<ExprMakeBlock>) : void {
         thisBlock |> push <| get_ptr(unsafe(reinterpret<smart_ptr<ExprBlock>> expr._block))
+
+        let annotationData = (expr._block as ExprBlock).annotationData
+        if (annotationData != 0 |> uint64()) {
+            dll.set_glob_address(uid.get_block_ann(expr), unsafe(reinterpret<void?>(annotationData)))
+        }
     }
 
     def override visitExprMakeBlock(expr : smart_ptr<ExprMakeBlock>) : ExpressionPtr {

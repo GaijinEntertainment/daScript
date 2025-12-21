@@ -95,6 +95,10 @@ class UidGen : AstVisitor {
         add(get_ptr(expr))
     }
 
+    def override preVisitExprMakeBlock(expr : smart_ptr<ExprMakeBlock>) {
+        add(get_ptr(expr))
+    }
+
 }
 
 class public UidNodes {
@@ -164,6 +168,10 @@ class public UidNodes {
 
     def public get_block_name(blk : smart_ptr<ExprBlock>) : DllName {
         return get_base(get_ptr(blk), "block_{get_mangled_name(blk)}")
+    }
+
+    def public get_block_ann(mk_blk : smart_ptr<ExprMakeBlock>) : DllName {
+        return get_base(get_ptr(mk_blk), "makeblock_ann")
     }
 
     def reset(var func : Function?) {
