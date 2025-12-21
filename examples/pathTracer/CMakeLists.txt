@@ -27,17 +27,11 @@ TARGET_LINK_LIBRARIES(path_tracer libDaScriptAot ${DAS_MODULES_LIBS})
 ADD_DEPENDENCIES(path_tracer libDaScriptAot pathtracer_dasAotStub)
 SETUP_CPP11(path_tracer)
 
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/pathTracer
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}
-    FILES_MATCHING
-    PATTERN "*.das"
-)
-
 IF(NOT ${DAS_BGFX_DISABLED})
     install(FILES
         ${PROJECT_SOURCE_DIR}/examples/pathTracer/toy_path_tracer_bgfx.das
         ${PROJECT_SOURCE_DIR}/examples/pathTracer/toy_path_tracer_bgfx_hdr.das
-        DESTINATION ${DAS_INSTALL_EXAMPLESDIR}
+        DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/pathTracer
     )
 ENDIF()
 
@@ -48,4 +42,4 @@ install(FILES
     ${PROJECT_SOURCE_DIR}/examples/pathTracer/toy_path_tracer_opengl.das
     ${PROJECT_SOURCE_DIR}/examples/pathTracer/toy_path_tracer_opengl_hdr.das
     ${PROJECT_SOURCE_DIR}/examples/pathTracer/toy_path_tracer_profile.das
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR})
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/pathTracer)

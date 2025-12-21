@@ -63,7 +63,7 @@ def main {
     var program = create_shader_program(@@vs_preview, @@fs_preview)
     // var mesh <- gen_sphere(32,16,false) |> create_geometry_fragment
     var mesh <- load_obj_mesh("orb.obj",
-            "{get_das_root()}/modules/dasBGFX/bgfx/bgfx/examples/assets/meshes",
+            "{get_das_root()}/modules/dasOpenGL/examples/",
             "{get_das_root()}/examples/media"
         ) |> create_geometry_fragment
     let checkerboard_texture = gen_image_checkerboard(16, 16, 0xff404040, 0xff808080) |> create_texture

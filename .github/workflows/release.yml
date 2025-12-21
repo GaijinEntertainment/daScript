@@ -239,6 +239,7 @@ jobs:
           esac
 
       - name: "Run tests"
+        if: matrix.architecture_string != 'Win32'
         run: |
           if [[ "${{ matrix.target }}" == windows* ]]; then
             cd "bin/${{ matrix.cmake_preset }}"

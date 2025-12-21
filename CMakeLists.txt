@@ -326,7 +326,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 IF (${DAS_ENABLE_DLL})
     # relative RPATH from install location
-    if(UNIXAPPLE)
+    if(APPLE)
         set(CMAKE_INSTALL_RPATH "@loader_path/../lib")
         set(CMAKE_MACOSX_RPATH ON)
     elseif(UNIX)
