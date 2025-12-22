@@ -31,7 +31,7 @@ def intptr(p : smart_ptr<auto>) : uint64 {
 
 def _move_with_lockcheck(var a : auto(valA)&; var b : auto(valB)&) {
     static_if (typeinfo need_lock_check(type<valA>)) {
-        _builtin_verify_locks(a,"object can't be moved to because it is locked")
+        _builtin_verify_locks(a, "object can't be moved to because it is locked")
     }
     static_if (typeinfo need_lock_check(type<valB>)) {
         _builtin_verify_locks(b, "object can't be moved from because it is locked")
