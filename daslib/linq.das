@@ -201,7 +201,7 @@ def concat(var a, b : iterator<auto(TT)>) : iterator<TT -const -&> {
 def concat_inplace(var a : array<auto(TT)>, b : array<auto(TT)>) {
     //! Concatenates two arrays in place
     static_if (typeinfo need_lock_check(a)) {
-        _builtin_verify_locks(a)
+        _builtin_verify_locks(a, "array can't be concatenated in place because it contains locked elements")
         unsafe(set_verify_array_locks(a, false))
     }
     a.reserve(length(a) + length(b))
@@ -217,7 +217,7 @@ def concat_inplace(var a : array<auto(TT)>, b : array<auto(TT)>) {
 def reverse_inplace(var buffer : array<auto(TT)>) {
     //! Reverses an array in place
     static_if (typeinfo need_lock_check(buffer)) {
-        _builtin_verify_locks(buffer)
+        _builtin_verify_locks(buffer, "array can't be reversed because it contains locked elements")
         unsafe(set_verify_array_locks(buffer, false))
     }
     let l = length(buffer)
@@ -520,7 +520,7 @@ def distinct_inplace(var a : array<auto(TT)>) {
     var to_index = 0
     var inscope seen : table<typedecl(_::unique_key(type<TT>))>
     static_if (typeinfo need_lock_check(a)) {
-        _builtin_verify_locks(a)
+        _builtin_verify_locks(a, "array can't be made distinct in place because it contains locked elements")
         set_verify_array_locks(a, false)
     }
     for (from_index in 0 .. length(a)) {
@@ -611,7 +611,7 @@ def distinct_by_inplace(var a : array<auto(TT)>; key : block<(arg : TT -&) : aut
     var to_index = 0
     var inscope seen : table<typedecl(_::unique_key(key(type<TT>)))>
     static_if (typeinfo need_lock_check(a)) {
-        _builtin_verify_locks(a)
+        _builtin_verify_locks(a, "array can't be made distinct in place because it contains locked elements")
         set_verify_array_locks(a, false)
     }
     for (from_index in 0 .. length(a)) {
@@ -659,7 +659,7 @@ def unique_to_array(a : iterator<auto(TT)>) : array<TT -const -&> {
 def unique_inplace(var a : array<auto(TT)>) {
     //! remove duplicate elements from sorted array in place
     static_if (typeinfo need_lock_check(a)) {
-        _builtin_verify_locks(a)
+        _builtin_verify_locks(a, "array can't be made unique in place because it contains locked elements")
         set_verify_array_locks(a, false)
     }
     var write_index = 1
@@ -702,7 +702,7 @@ def unique_by_to_array(a : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>
 def unique_by_inplace(var a : array<auto(TT)>; key : block<(arg : TT -&) : auto>) {
     //! remove duplicate elements from an array based on a key in place
     static_if (typeinfo need_lock_check(a)) {
-        _builtin_verify_locks(a)
+        _builtin_verify_locks(a, "array can't be made unique in place because it contains locked elements")
         set_verify_array_locks(a, false)
     }
     var write_index = 1
@@ -806,7 +806,7 @@ def skip(arr : array<auto(TT)>; var total : int) : array<TT -& -const> {
 def skip_inplace(var arr : array<auto(TT)>; var total : int) {
     //! Removes the first `total` elements from an array in place
     static_if (typeinfo need_lock_check(arr)) {
-        _builtin_verify_locks(arr)
+        _builtin_verify_locks(arr, "array can't be skipped in place because it contains locked elements")
         unsafe(set_verify_array_locks(arr, false))
     }
     let len = length(arr)
@@ -1040,7 +1040,7 @@ def take_to_array(var src : iterator<auto(TT)>; from : range) : array<TT -& -con
 def take_inplace(var arr : array<auto(TT)>; from : range) {
     //! Keeps only a range of elements in an array in place
     static_if (typeinfo need_lock_check(arr)) {
-        _builtin_verify_locks(arr)
+        _builtin_verify_locks(arr, "array can't be taken in place because it contains locked elements")
         unsafe(set_verify_array_locks(arr, false))
     }
     let len = length(arr)

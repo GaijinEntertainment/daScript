@@ -345,8 +345,9 @@ namespace das
             }
             // Separate variable to avoid std string leak
             const char* errorMsg = context.allocateString(debug_type(typeInfo), &atProblem);
-            context.throw_error_at(&atProblem, "object type<%s>%s contains locked elements (count=%u) and can't be modified (resized, pushed to, erased from, cleared, deleted, moved, or returned via move)",
-                errorMsg, errorPath, totalLockCount);
+            const char* extraMsg = cast<char*>::to(args[1]);
+            context.throw_error_at(&atProblem, "%s\nobject type<%s>%s contains locked elements (count=%u) and can't be modified (resized, pushed to, inserted to, erased from, cleared, deleted, moved, or returned via move)",
+                extraMsg, errorMsg, errorPath, totalLockCount);
         }
         return v_zero();
     }
