@@ -1848,9 +1848,9 @@ namespace das
         addExtern<DAS_BIND_FUN(_builtin_hash_double)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_double")->arg("value");
         addExtern<DAS_BIND_FUN(_builtin_hash_das_string)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_string")->arg("value");
         // locks
-        addInterop<builtin_verify_locks,void,vec4f>(*this, lib, "_builtin_verify_locks",
+        addInterop<builtin_verify_locks,void,vec4f,char *>(*this, lib, "_builtin_verify_locks",
             SideEffects::modifyArgumentAndExternal, "builtin_verify_locks")
-                ->arg("anything");
+                ->args({"anything","errorMessage"});
         addExtern<DAS_BIND_FUN(builtin_set_verify_array_locks)>(*this, lib, "set_verify_array_locks",
             SideEffects::modifyArgument, "builtin_set_verify_array_locks")
                 ->args({"array","check"})->unsafeOperation = true;
