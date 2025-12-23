@@ -30,15 +30,12 @@ IF(NOT DAS_OPENGL_INCLUDED)
     install(FILES ${DAS_OPENGL_EXAMPLES}
         DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/opengl
     )
-    install(FILES ${PROJECT_SOURCE_DIR}/modules/dasOpenGL/examples/image.png
+    install(FILES
+        ${PROJECT_SOURCE_DIR}/modules/dasOpenGL/examples/image.png
+        # This mesh was taken from BGFX `modules/dasBGFX/bgfx/bgfx/examples/assets/meshes`
+        ${PROJECT_SOURCE_DIR}/modules/dasOpenGL/examples/orb.obj
+        # This font was taken from BGFX `modules/dasBGFX/bgfx/bgfx/examples/runtime/font`
+        ${PROJECT_SOURCE_DIR}/modules/dasOpenGL/examples/droidsansmono.ttf
         DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/media
     )
-
-    IF (((${DAS_BGFX_DISABLED}) OR (NOT DEFINED DAS_BGFX_DISABLED)) AND (EXISTS "${PROJECT_SOURCE_DIR}/modules/dasBGFX/bgfx"))
-        install(FILES
-            ${PROJECT_SOURCE_DIR}/modules/dasBGFX/bgfx/bgfx/examples/assets/meshes/orb.obj
-            ${PROJECT_SOURCE_DIR}/modules/dasBGFX/bgfx/bgfx/examples/runtime/font/droidsansmono.ttf
-            DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/media
-        )
-    ENDIF ()
 ENDIF()

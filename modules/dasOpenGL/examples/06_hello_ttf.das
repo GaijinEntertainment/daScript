@@ -29,7 +29,7 @@ def main {
     create_ttf_objects()
     font <- load_ttf([
       fname = "droidsansmono.ttf",
-      path1 = "{get_das_root()}/modules/dasBGFX/bgfx/bgfx/examples/runtime/font",
+      path1 = "{get_das_root()}/modules/dasOpenGL/examples/",
       path2 = "{get_das_root()}/examples/media",
       canfail = true
     ])
