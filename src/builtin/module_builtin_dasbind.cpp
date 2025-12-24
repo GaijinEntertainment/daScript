@@ -219,7 +219,20 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             if ( !libhandle ) {
                 libhandle = loadDynamicLibrary(library.c_str());
                 if (!libhandle) {
-                    libhandle = loadDynamicLibrary((getDasRoot() + "/" + library).c_str());
+                    if ( *daScriptEnvironment::bound && (*daScriptEnvironment::bound)->g_Program ) {
+                        for ( auto & root : (*daScriptEnvironment::bound)->g_Program->policies.dll_search_paths ) {
+                            libhandle = loadDynamicLibrary((root + "/" + library).c_str());
+                            if ( libhandle ) break;
+                        }
+                        /* // we figure this out later
+                        if ( !libhandle ) {
+                            libhandle = loadDynamicLibrary(((*daScriptEnvironment::bound)->g_Program->policies.jit_path_to_shared_lib + "/" + library).c_str());
+                        }
+                        */
+                    }
+                    if ( !libhandle ) {
+                        libhandle = loadDynamicLibrary((getDasRoot() + "/" + library).c_str());
+                    }
                 }
             }
             g_dasBindLib[library] = libhandle;
