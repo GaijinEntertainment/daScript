@@ -6,9 +6,9 @@ options no_global_variables = false
 
 module llvm_boost shared
 
-require llvm/llvm_func public
-require llvm/llvm_struct public
-require llvm/llvm_enum public
+require llvm/bindings/llvm_func public
+require llvm/bindings/llvm_struct public
+require llvm/bindings/llvm_enum public
 
 require daslib/safe_addr
 require daslib/defer

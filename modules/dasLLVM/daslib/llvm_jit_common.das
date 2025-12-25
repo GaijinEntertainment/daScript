@@ -10,9 +10,9 @@ options stack = 4_194_304 // On huge files we need huge stack for jit
 
 module llvm_jit_common shared private
 
-require llvm/llvm_boost
-require llvm/llvm_dll_utils
-require llvm/llvm_targets
+require llvm/daslib/llvm_boost
+require llvm/daslib/llvm_dll_utils
+require llvm/daslib/llvm_targets
 
 require daslib/ast_boost
 require daslib/strings
@@ -283,7 +283,8 @@ def public init_jit(cg_opt_level : uint) {
     static_if (LLVM_DEBUG_EVERYTHING) {
         let hostcpu = LLVMGetHostCPUName()
         let features = LLVMGetHostCPUFeatures()
-        print("LLVM host cpu: {hostcpu}\nLLVM host cpu features: {features}\n")
+        to_log(LOG_DEBUG, "LLVM JIT: host cpu: {hostcpu}\n")
+        to_log(LOG_DEBUG, "LLVM JIT: host cpu features: {features}\n")
         LLVMDisposeMessage(hostcpu)
         LLVMDisposeMessage(features)
     }
@@ -677,7 +678,7 @@ def public get_string_constant_ptr(builder : LLVMOpaqueBuilder?; message : strin
 
 def public failed(msg : string) {
     static_if (LLVM_DEBUG_EVERYTHING) {
-        print("FAILED: {msg}\n")
+        to_log(LOG_ERROR, "LLVM JIT: {msg}\n")
     }
     g_errors |> push("{msg}")
 }

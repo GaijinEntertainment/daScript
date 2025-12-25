@@ -140,7 +140,9 @@ namespace das {
         auto np = req.find_first_of("./");
         if ( np != string::npos ) {
             string top = req.substr(0,np);
-            string mod_name = req.substr(np+1);
+            auto last_np = req.find_last_of("./");
+            string path = last_np == np ? "" : req.substr(np + 1,last_np - np - 1);
+            string mod_name = req.substr(last_np+1);
             ModuleInfo info;
             if ( top==DASLIB_MODULE_NAME ) {
                 info.moduleName = mod_name;
@@ -148,7 +150,7 @@ namespace das {
                 return info;
             }
             #define NATIVE_MODULE(category, subdir_name, dir_name, das_name) \
-                if ( top==#category && mod_name==#das_name ) { \
+                if ( top==#category && mod_name==#das_name && (path.empty() || path == #subdir_name) ) { \
                     info.moduleName = mod_name; \
                     info.fileName = getDasRoot() + "/modules/" + #dir_name + "/" + #subdir_name + "/" + #das_name + ".das"; \
                     return info; \

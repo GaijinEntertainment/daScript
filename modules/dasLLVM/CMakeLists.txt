@@ -12,10 +12,10 @@ IF ((NOT DAS_LLVM_INCLUDED) AND ((NOT ${DAS_LLVM_DISABLED}) OR (NOT DEFINED DAS_
 
 	ADD_MODULE_CPP(dasLLVM)
 
-	ADD_MODULE_DAS(llvm das_llvm llvm_const)
-	ADD_MODULE_DAS(llvm das_llvm llvm_enum)
-	ADD_MODULE_DAS(llvm das_llvm llvm_func)
-	ADD_MODULE_DAS(llvm das_llvm llvm_struct)
+	ADD_MODULE_DAS(llvm bindings llvm_const)
+	ADD_MODULE_DAS(llvm bindings llvm_enum)
+	ADD_MODULE_DAS(llvm bindings llvm_func)
+	ADD_MODULE_DAS(llvm bindings llvm_struct)
 
 	ADD_MODULE_DAS(llvm daslib llvm_boost)
 	ADD_MODULE_DAS(llvm daslib llvm_debug)

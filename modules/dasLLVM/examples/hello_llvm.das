@@ -1,7 +1,7 @@
 options gen2
 require daslib/safe_addr
-require llvm/llvm_boost
-require llvm/llvm_targets
+require llvm/daslib/llvm_boost
+require llvm/daslib/llvm_targets
 
 [export]
 def main {

@@ -2,10 +2,10 @@ options gen2
 require daslib/safe_addr
 require daslib/math_bits
 
-require llvm/llvm_boost
+require llvm/daslib/llvm_boost
 require jit
 require rtti
-require llvm/llvm_targets
+require llvm/daslib/llvm_targets
 
 // If for some reason you want to set jit function manually you should add [no_jit] attribute.
 // Otherwise it will be jitted by default jit-compiler.

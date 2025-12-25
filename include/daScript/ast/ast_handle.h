@@ -529,19 +529,19 @@ namespace das
             auto TTN = describeCppType(makeType<TT>(lib));
             auto OTN = describeCppType(makeType<OT>(lib));
             auto atin = "das_ati<"+TTN+","+OTN+">";
-            initIndex(addExtern<DAS_BIND_FUN((das_ati<TT,OT>)),SimNode_ExtFuncCallRef>(*mod, lib, "[]",
+            initIndex(addExtern<DAS_BIND_FUN((das_ati<TT,OT>)),SimNode_ExtFuncCallRef>(*mod, lib, ".[]",
                 SideEffects::modifyArgument, atin.c_str())
                     ->args({"vec","index","context","at"}));
             auto atun = "das_atu<"+TTN+","+OTN+">";
-            initIndex(addExtern<DAS_BIND_FUN((das_atu<TT,OT>)),SimNode_ExtFuncCallRef>(*mod, lib, "[]",
+            initIndex(addExtern<DAS_BIND_FUN((das_atu<TT,OT>)),SimNode_ExtFuncCallRef>(*mod, lib, ".[]",
                 SideEffects::modifyArgument, atun.c_str())
                     ->args({"vec","index","context","at"}));
             auto atcin = "das_atci<"+TTN+","+OTN+">";
-            initIndex(addExtern<DAS_BIND_FUN((das_atci<TT,OT>)),SimNode_ExtFuncCallRef>(*mod, lib, "[]",
+            initIndex(addExtern<DAS_BIND_FUN((das_atci<TT,OT>)),SimNode_ExtFuncCallRef>(*mod, lib, ".[]",
                 SideEffects::none, atcin.c_str())
                     ->args({"vec","index","context","at"}));
             auto atcun = "das_atcu<"+TTN+","+OTN+">";
-            initIndex(addExtern<DAS_BIND_FUN((das_atcu<TT,OT>)),SimNode_ExtFuncCallRef>(*mod, lib, "[]",
+            initIndex(addExtern<DAS_BIND_FUN((das_atcu<TT,OT>)),SimNode_ExtFuncCallRef>(*mod, lib, ".[]",
                 SideEffects::none, atcun.c_str())
                     ->args({"vec","index","context","at"}));
         }

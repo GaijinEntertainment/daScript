@@ -7,8 +7,8 @@ options unsafe_table_lookup = false
 
 module llvm_jit_intrin shared private
 
-require llvm/llvm_boost
-require llvm/llvm_jit_common
+require llvm/daslib/llvm_boost
+require llvm/daslib/llvm_jit_common
 require daslib/ast_boost
 require strings
 

@@ -187,18 +187,18 @@ def main {
     )
     if (is_dynamic) {
         // generate
-        let output_name = "{get_das_root()}/modules/dasLLVM/das_llvm/llvm_func.das"
+        let output_name = "{get_das_root()}/modules/dasLLVM/bindings/llvm_func.das"
         fopen(output_name, "wb") <| $(fdf) {
             fprint(fdf, "require dasbind public\n")
             fprint(fdf, "options gen2\n")
             fprint(fdf, "module llvm_func shared\n")
-            fprint(fdf, "require llvm/llvm_struct\n")
-            fprint(fdf, "require llvm/llvm_enum\n")
-            let output_const_name = "{get_das_root()}/modules/dasLLVM/das_llvm/llvm_const.das"
+            fprint(fdf, "require llvm/bindings/llvm_struct\n")
+            fprint(fdf, "require llvm/bindings/llvm_enum\n")
+            let output_const_name = "{get_das_root()}/modules/dasLLVM/bindings/llvm_const.das"
             fopen(output_const_name, "wb") <| $(dcf) {
                 var glbind = new LlvmGenDinamic(pfn, pfp, args)
-                var scf = glbind.openFile("{get_das_root()}/modules/dasLLVM/das_llvm/llvm_struct.das")
-                var ecf = glbind.openFile("{get_das_root()}/modules/dasLLVM/das_llvm/llvm_enum.das")
+                var scf = glbind.openFile("{get_das_root()}/modules/dasLLVM/bindings/llvm_struct.das")
+                var ecf = glbind.openFile("{get_das_root()}/modules/dasLLVM/bindings/llvm_enum.das")
                 fprint(scf, "options gen2\nmodule llvm_struct shared\n")
                 fprint(ecf, "options gen2\nmodule llvm_enum shared\n")
                 glbind->setFiles(dcf, fdf, scf, ecf)

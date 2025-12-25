@@ -8,7 +8,7 @@ module llvm_debug shared private
 
 require debugapi
 require llvm
-require llvm/llvm_boost
+require llvm/daslib/llvm_boost
 
 def report_to_debugger(var ctx : Context; category, name : string; value : auto(TT)) {
     let tinfo = typeinfo rtti_typeinfo(value)

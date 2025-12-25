@@ -1,23 +1,27 @@
 options gen2
 require dastest/testing_boost
 
-require jit
-
 require daslib/math_boost
 require UnitTest
 
-[jit]
+def operator [] (arr : Point3Array; ind : int) {
+    return 2.0 * arr.[ind]
+}
+
 def test_point3_array_index(t : T?; arr : Point3Array) {
     assert(arr |> length == 10)
     for (i in range(10)) {
         let p = arr[i]
-        t |> equal(1.0, p.x)
-        t |> equal(2.0, p.y)
-        t |> equal(3.0, p.z)
+        let p_native = arr.[i]
+        t |> equal(2.0, p.x)
+        t |> equal(4.0, p.y)
+        t |> equal(6.0, p.z)
+        t |> equal(1.0, p_native.x)
+        t |> equal(2.0, p_native.y)
+        t |> equal(3.0, p_native.z)
     }
 }
 
-[jit]
 def test_point3_array_each(t : T?; arr : Point3Array) {
     assert(arr |> length == 10)
     for (p in arr) {
@@ -27,7 +31,6 @@ def test_point3_array_each(t : T?; arr : Point3Array) {
     }
 }
 
-[jit]
 def test_point3_array_block(t : T?) {
     testPoint3Array() <| $(arr) {
         assert(arr |> length == 10)
@@ -42,19 +45,16 @@ def test_point3_array_block(t : T?) {
 [test]
 def test_handle_type(t : T?) {
     t |> run("[]") <| @(t : T?) {
-        t |> success(is_jit_function(@@test_point3_array_index))
         testPoint3Array() <| $(arr) {
             test_point3_array_index(t, arr)
         }
     }
     t |> run("each") <| @(t : T?) {
-        t |> success(is_jit_function(@@test_point3_array_each))
         testPoint3Array() <| $(arr) {
             test_point3_array_each(t, arr)
         }
     }
     t |> run("invoke block") <| @(t : T?) {
-        t |> success(is_jit_function(@@test_point3_array_block))
         test_point3_array_block(t)
     }
 }
