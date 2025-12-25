@@ -6046,6 +6046,7 @@ class DisableJitVisitor : AstVisitor {
         for (svar, ssrc in expr.iteratorVariables, expr.sources) {
             if (ssrc._type.isRange || ssrc._type.dim |> length != 0 || ssrc._type.isGoodArrayType || ssrc._type.isIterator) {
             } else {
+                // At least string is not supported yet as the source of loop.
                 disable = true
                 return
             }
@@ -6054,6 +6055,26 @@ class DisableJitVisitor : AstVisitor {
 
     def override preVisitExprClone(expr : smart_ptr<ExprClone>) : void {
         disable = true
+    }
+
+    def override preVisitExprAt(expr : smart_ptr<ExprAt>) : void {
+        if (expr.subexpr._type.isHandle) {
+            let type_str = describe(expr.subexpr._type)
+            to_log(LOG_WARNING,
+                "LLVM JIT: native operator `.[]` should be implemented for " +
+                "type {type_str} to be used in JIT, keeping interpreter mode.\n")
+            disable = true
+        }
+    }
+
+    def override preVisitExprForSource(var expr : smart_ptr<ExprFor>, var source : ExpressionPtr, last : bool) {
+        if (source._type.isHandle) {
+            let type_str = describe(source)
+            to_log(LOG_WARNING,
+                "LLVM JIT: `each` should be implemented for " +
+                "type {type_str} to be used in JIT, keeping interpreter mode.\n")
+            disable = true
+        }
     }
 
     def disable_builtin_call(expr : smart_ptr<ExprCallFunc>) {
