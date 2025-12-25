@@ -479,7 +479,7 @@ class LlvmJitVisitor : AstVisitor {
             fun_type = LLVMFunctionType(type_to_llvm_abi_type(result), fun_args)
         }
         if (LLVMGetNamedFunction(g_mod, fun_name.impl()) != null) {
-            print("Function {fun_name.impl()} somehow already present!")
+            to_log(LOG_ERROR, "LLVM JIT: Function {fun_name.impl()} somehow already present!")
             failed("Function {fun_name.impl()} somehow already present!")
         }
         ffunc = LLVMAddFunctionWithType(g_mod, fun_name.impl(), fun_type)
@@ -624,8 +624,6 @@ class LlvmJitVisitor : AstVisitor {
     def create_line_info_ptr_global(line_info_global : LLVMOpaqueValue?) {
         let uint8_ptr = LLVMPointerType(LLVMPointerType(types.t_int8, 0u), 0u)
         let line_info_ptr_type = uint8_ptr
-        // print("Type of LineInfoPtrType : '{LineInfoPtrType |> describe}'\n")
-        // print("Type of ptrToLineInfoGlobal : '{ptrToLineInfoGlobal |> LLVMTypeOf() |> describe()}'\n")
         let line_info_ptr_global = LLVMAddGlobal(g_mod, line_info_ptr_type, "li_ptr" /* no name */)
         set_private_linkage(line_info_ptr_global)
         LLVMSetInitializer(line_info_ptr_global, line_info_global)
@@ -6061,7 +6059,7 @@ class DisableJitVisitor : AstVisitor {
     def disable_builtin_call(expr : smart_ptr<ExprCallFunc>) {
         if (expr.func.flags.builtIn && !expr.func.flags.interopFn && get_builtin_function_address(expr.func) == null) {
             if (!has_intrinsic(expr)) {
-                print("disable fn {expr.func.name}\n");
+                to_log(LOG_INFO, "LLVM JIT: disable fn {expr.func.name}\n");
                 disable = true
             }
         }
@@ -6160,7 +6158,8 @@ class JIT_LLVM : AstSimulateMacro {
         assume jit_all_functions = prog.policies.jit_jit_all_functions
         assume debug_info = prog.policies.jit_debug_info
         if (prog.policies.jit_use_dll_mode && !das_is_dll_build()) {
-            print("LLVM JIT WARNING: dll mode is enabled, however daslang build is static, disabling dll mode.\n")
+            to_log(LOG_WARNING, "LLVM JIT: dll mode is enabled, however " +
+                "daslang build is static, disabling dll mode.\n")
         }
         let use_dll = prog.policies.jit_use_dll_mode && das_is_dll_build()
         let opt_level = prog.policies.jit_opt_level
@@ -6182,7 +6181,7 @@ class JIT_LLVM : AstSimulateMacro {
                             fun.moreFlags |= MoreFunctionFlags.requestJit
                             funcs |> emplace(fun)
                         } else {
-                            print("LLVM JIT: disabled {fun.name}\n")
+                            to_log(LOG_INFO, "LLVM JIT: disabled {fun.name}\n")
                         }
                     } else {
                         disabled |> emplace(fun)
@@ -6226,11 +6225,11 @@ class JIT_LLVM : AstSimulateMacro {
 
                     assume maybe_mod = prog.thisModuleName |> length() == 0 ? "" : "in module {prog.thisModuleName}"
                     if (!LLVMVerifyFunction(fn_impl, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
-                        // print("{LLVMPrintModuleToString(g_mod)}\n");
+                        // to_log(LOG_ERROR, "LLVM JIT: {LLVMPrintModuleToString(g_mod)}\n");
                         panic("Internal jit error. Failed to get IR of '{fun.name} implementation' {maybe_mod}.\n")
                     }
                     if (!LLVMVerifyFunction(fn, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
-                        // print("{LLVMPrintModuleToString(g_mod)}\n");
+                        // to_log(LOG_ERROR, "LLVM JIT: {LLVMPrintModuleToString(g_mod)}\n");
                         panic("Internal jit error. Failed to get IR of '{fun.name}' in module {maybe_mod}.\n")
                     }
                 }
@@ -6252,7 +6251,7 @@ class JIT_LLVM : AstSimulateMacro {
                     let module_str = LLVMPrintModuleToString(g_mod)
                     let msg = clone_string(module_str)
                     LLVMDisposeMessage(module_str)
-                    print("{msg}\n");
+                    to_log(LOG_DEBUG, "LLVM JIT: {msg}\n");
                 }
                 if (!LLVMVerifyModule(g_mod, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
                     g_failed = true
