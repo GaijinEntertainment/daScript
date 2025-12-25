@@ -1,8 +1,8 @@
 require dasbind public
 options gen2
 module llvm_func shared
-require llvm_struct
-require llvm_enum
+require llvm/bindings/llvm_struct
+require llvm/bindings/llvm_enum
 [extern(cdecl, name="LLVMVerifyModule", library="lib/LLVM.dll")]
 def LLVMVerifyModule(M : LLVMOpaqueModule? implicit; Action : LLVMVerifierFailureAction; OutMessage : string? implicit) : int {}
 [extern(cdecl, name="LLVMVerifyFunction", library="lib/LLVM.dll")]

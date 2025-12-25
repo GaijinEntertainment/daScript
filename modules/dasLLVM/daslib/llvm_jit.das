@@ -10,10 +10,10 @@ options stack = 4_194_304 // On huge files we need huge stack for jit
 
 module llvm_jit shared private
 
-require llvm/llvm_boost
-require llvm/llvm_jit_intrin
-require llvm/llvm_jit_common
-require llvm/llvm_dll_utils
+require llvm/daslib/llvm_boost
+require llvm/daslib/llvm_jit_intrin
+require llvm/daslib/llvm_jit_common
+require llvm/daslib/llvm_dll_utils
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/macro_boost
