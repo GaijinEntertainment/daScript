@@ -295,6 +295,8 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
         policies.jit_enabled = true;
         policies.jit_module = getDasRoot() + "/daslib/just_in_time.das";
         policies.dll_search_paths.emplace_back(getDasRoot() + "/lib");
+
+        daScriptEnvironment::getBound()->g_isInJit = true;
     }
     policies.fail_on_no_aot = false;
     policies.fail_on_lack_of_aot_export = false;

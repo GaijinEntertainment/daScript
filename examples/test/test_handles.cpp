@@ -347,6 +347,31 @@ void testPoint3Array(const TBlock<void,const Point3Array> & blk, Context * conte
     context->invoke(blk, args, nullptr, at);
 }
 
+
+float2 test_abi_mad2 ( float2 a, float2 b, float2 c ) {
+    return v_add(v_mul(a,b),c);
+}
+
+float3 test_abi_mad3 ( float3 a, float3 b, float3 c ) {
+    return v_add(v_mul(a,b),c);
+}
+
+float4 test_abi_mad4 ( float4 a, float4 b, float4 c ) {
+    return v_add(v_mul(a,b),c);
+}
+
+Func test_abi_func ( Func a, Context * ctx ) {
+    bool found = false;
+    for ( int i=0; i!=ctx->getTotalFunctions(); ++i ) {
+        if ( ctx->getFunction(i)==a.PTR ) {
+            found = true;
+            break;
+        }
+    }
+    if ( !found ) ctx->throw_error("function not found");
+    return a;
+}
+
 TDim<int32_t,10> testCMRES ( Context * __context__ )
 {
     TDim<int32_t,10> __a_rename_at_7; das_zero(__a_rename_at_7);
@@ -514,6 +539,16 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
         SideEffects::modifyExternal, "testPoint3Array");
     addExtern<DAS_BIND_FUN(testCMRES),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "testCMRES",
         SideEffects::modifyExternal, "testCMRES");
+
+    // abi tests. We use it in JIT.
+	addExtern<DAS_BIND_FUN(test_abi_mad2) >(*this,lib,"test_abi_mad",SideEffects::worstDefault,"test_abi_mad2")
+		->args({"a","b","c"});
+	addExtern<DAS_BIND_FUN(test_abi_mad3) >(*this,lib,"test_abi_mad",SideEffects::worstDefault,"test_abi_mad3")
+		->args({"a","b","c"});
+	addExtern<DAS_BIND_FUN(test_abi_mad4) >(*this,lib,"test_abi_mad",SideEffects::worstDefault,"test_abi_mad4")
+		->args({"a","b","c"});
+	addExtern<DAS_BIND_FUN(test_abi_func) >(*this,lib,"test_abi_func",SideEffects::worstDefault,"test_abi_func")
+		->args({"fn","context"});
     // foo array
     addExtern<DAS_BIND_FUN(testFooArray)>(*this, lib, "testFooArray",
         SideEffects::modifyExternal, "testFooArray");

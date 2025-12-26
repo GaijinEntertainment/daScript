@@ -1810,6 +1810,7 @@ namespace das
     struct DAS_API daScriptEnvironment {
         ProgramPtr      g_Program;
         bool            g_isInAot = false;
+        bool            g_isInJit = false;
         Module *        modules = nullptr;
         int             das_def_tab_size = 4;
         bool            g_resolve_annotations = true;
