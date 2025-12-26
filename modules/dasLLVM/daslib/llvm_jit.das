@@ -240,7 +240,7 @@ class LlvmJitVisitor : AstVisitor {
     option_no_alias : bool = false
     option_no_capture : bool = false
     own_di : bool = false
-    ldu_hint : array<bool>
+    ldu_hint : bool
     attributes : Attributes?
 
     def LlvmJitVisitor(ctx : Context?; var types_ : PrimitiveTypes?; uids : UidNodes?; need_di : bool; dib : LLVMOpaqueDIBuilder?; attrs : Attributes?) {
@@ -698,7 +698,7 @@ class LlvmJitVisitor : AstVisitor {
         assert(g_builder != null, "missing builder")
         thisFunc = get_ptr(fun)
         uid.reset(get_ptr(fun))
-        ldu_hint |> push(LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS)
+        ldu_hint = LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS
         let fnmna = uid.get_dll_fn_name(fun)
         ffunc = LLVMGetNamedFunction(g_mod, fnmna.impl())
         wfunc = LLVMGetNamedFunction(g_mod, fnmna.publ())
@@ -731,7 +731,7 @@ class LlvmJitVisitor : AstVisitor {
         LLVMPositionBuilderAtEnd(g_builder, function_entry)
         LLVMBuildBr(g_builder, function_body)
         debug_after_function()
-        ldu_hint |> pop()
+        LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = ldu_hint
         ffunc = null
         thisFunc = null
         uid.reset(null)
@@ -6190,6 +6190,9 @@ class JIT_LLVM : AstSimulateMacro {
         assume path_to_shared_lib = string(prog.policies.jit_path_to_shared_lib)
         assume path_to_linker = string(prog.policies.jit_path_to_linker)
 
+        // Set global options
+        LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = prog._options |> find_arg("jit_vec3_ldu") ?as tBool ?? LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS_DEFAULT
+
         prog |> for_each_module <| $(mod) {
             mod |> for_each_function("") <| $(fun) {
                 var rqj = fun.moreFlags.requestJit
@@ -6325,3 +6328,9 @@ class JIT_LLVM : AstSimulateMacro {
 }
 
 
+[_macro, macro_function]
+def init_llvm_jit_module_options() {
+    if (is_compiling_macros_in_module("llvm_jit")) {
+        this_module() |> add_module_option("jit_vec3_ldu", Type.tBool)
+    }
+}
