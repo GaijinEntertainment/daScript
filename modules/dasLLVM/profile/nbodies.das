@@ -5,6 +5,8 @@ require math
 require daslib/unroll
 //ported from https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/nbody-gcc-2.html
 
+options jit_vec3_ldu    // allows unaligned vector3 loads in JIT to not respect boundaries
+
 let {
     SOLAR_MASS = 4. * PI * PI
 }
