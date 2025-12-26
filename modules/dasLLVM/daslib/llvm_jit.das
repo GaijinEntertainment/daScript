@@ -6087,12 +6087,13 @@ class DisableJitVisitor : AstVisitor {
         for (svar, ssrc in expr.iteratorVariables, expr.sources) {
             assume ssrc_t = ssrc._type
             if (ssrc_t.isRange || ssrc_t.dim |> length != 0 ||
-                ssrc_t.isGoodArrayType || ssrc_t.isIterator ||
-                ssrc_t.isString) {
+                ssrc_t.isGoodArrayType || ssrc_t.isIterator) { // ||
+                // ssrc_t.isString) {
             } else {
-                assert(false,
-                    "We shouldn't be here, all loop sources expected to be supported"
-                )
+                disable = true
+                // assert(false,
+                //     "We shouldn't be here, all loop sources expected to be supported"
+                // )
             }
         }
     }
