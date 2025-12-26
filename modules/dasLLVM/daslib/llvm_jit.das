@@ -6190,6 +6190,15 @@ class JIT_LLVM : AstSimulateMacro {
         assume path_to_shared_lib = string(prog.policies.jit_path_to_shared_lib)
         assume path_to_linker = string(prog.policies.jit_path_to_linker)
 
+        // determine if we need volatile vector3 loads
+        let platform = get_platform_name()
+        let arch = get_architecture_name()
+        to_log(LOG_INFO, "LLVM JIT: platform={platform}, architecture={arch}\n")
+        LLVM_JIT_NEED_VOLATILE_VEC3_LOAD = false
+        if (arch == "arm64" || arch == "arm") {
+            LLVM_JIT_NEED_VOLATILE_VEC3_LOAD = true
+        }
+
         // Set global options
         LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = prog._options |> find_arg("jit_vec3_ldu") ?as tBool ?? LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS_DEFAULT
 

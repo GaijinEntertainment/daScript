@@ -1603,6 +1603,38 @@ namespace das
         idpi->noPointerCast = true;
     }
 
+    // windows, darwin, linux, etc
+    const char * das_get_platform_name() {
+        #if defined(_WIN32) || defined(_WIN64)
+            return "windows";
+        #elif defined(__APPLE__) || defined(__MACH__)
+            return "darwin";
+        #elif defined(__linux__)
+            return "linux";
+        #elif defined(__EMSCRIPTEN__)
+            return "emscripten";
+        #else
+            return "unknown";
+        #endif
+    }
+
+    // x86, arm, etc
+    const char * das_get_architecture_name() {
+        #if defined(__x86_64__) || defined(_M_X64)
+            return "x86_64";
+        #elif defined(__i386) || defined(_M_IX86)
+            return "x86";
+        #elif defined(__aarch64__)
+            return "arm64";
+        #elif defined(__arm__) || defined(_M_ARM)
+            return "arm";
+        #elif defined(__EMSCRIPTEN__)
+            return "wasm32";
+        #else
+            return "unknown";
+        #endif
+    }
+
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // printer flags
         addAlias(makePrintFlags());
@@ -2133,5 +2165,10 @@ namespace das
         addExtern<DAS_BIND_FUN(__bit_set64)>(*this, lib, "__bit_set",
             SideEffects::modifyArgument, "__bit_set64")
                 ->args({"value","mask","on"});
+        // platform and architecture
+        addExtern<DAS_BIND_FUN(das_get_platform_name)>(*this, lib, "get_platform_name",
+            SideEffects::none, "das_get_platform_name");
+        addExtern<DAS_BIND_FUN(das_get_architecture_name)>(*this, lib, "get_architecture_name",
+            SideEffects::none, "das_get_architecture_name");
     }
 }

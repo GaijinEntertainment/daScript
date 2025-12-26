@@ -179,4 +179,7 @@ namespace das {
     void builtin_main_loop ( const TBlock<bool> & block, Context * context, LineInfoArg * at );
 
     vec4f _builtin_hash ( Context & context, SimNode_CallBase * call, vec4f * args );
+
+    const char * das_get_platform_name();
+    const char * das_get_architecture_name();
 }
