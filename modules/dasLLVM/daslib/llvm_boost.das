@@ -177,8 +177,8 @@ def LLVMBuildLoadVector3(builder : LLVMOpaqueBuilder?; var types : PrimitiveType
     verify(LLVMGetVectorSize(typ) == 3u)
     let elemT = LLVMGetElementType(typ)
     var ld = LLVMBuildLoad2(builder, LLVMVectorType(elemT, 4u), ptr, name)
-    LLVMSetVolatile(ld, 1)   // BBATKIN: verify why this is volatile?
-    LLVMSetAlignment(ld, 4u)
+    //LLVMSetVolatile(ld, 1)   // BBATKIN: verify why this is volatile?
+    LLVMSetAlignment(ld, 16u)
 /*
     var x = LLVMBuildExtractElement(builder, ld, types.ConstI32(0ul), "")
     var y = LLVMBuildExtractElement(builder, ld, types.ConstI32(1ul), "")
