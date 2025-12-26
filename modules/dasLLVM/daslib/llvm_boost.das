@@ -186,17 +186,6 @@ def LLVMBuildLoadVector3(builder : LLVMOpaqueBuilder?; var types : PrimitiveType
     return xyz
 }
 
-def LLVMBuildLoadVector3Volatile(builder : LLVMOpaqueBuilder?; var types : PrimitiveTypes?; var typ : LLVMOpaqueType?; ptr : LLVMOpaqueValue?; name : string) {
-    verify(LLVMGetVectorSize(typ) == 3u)
-    let elemT = LLVMGetElementType(typ)
-    var ld = LLVMBuildLoad2(builder, LLVMVectorType(elemT, 4u), ptr, name)
-    LLVMSetVolatile(ld, 1)
-    LLVMSetAlignment(ld, 4u)
-    var undef4 = LLVMGetUndef(LLVMVectorType(elemT, 4u))
-    return LLVMBuildShuffleVector(builder, types, ld, undef4, [0, 1, 2], name)
-}
-
-
 def LLVMBuildLoad2Aligned(builder : LLVMOpaqueBuilder?; typ : LLVMOpaqueType?; ptr : LLVMOpaqueValue?; alignment : uint; name : string) {
     let ld = LLVMBuildLoad2(builder, typ, ptr, name)
     LLVMSetAlignment(ld, alignment)
