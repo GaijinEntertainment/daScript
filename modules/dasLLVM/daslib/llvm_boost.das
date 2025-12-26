@@ -176,10 +176,14 @@ def LLVMIsVector3(typ : LLVMOpaqueType?) : bool {
 def LLVMBuildLoadVector3(builder : LLVMOpaqueBuilder?; var types : PrimitiveTypes?; var typ : LLVMOpaqueType?; ptr : LLVMOpaqueValue?; name : string) {
     verify(LLVMGetVectorSize(typ) == 3u)
     let elemT = LLVMGetElementType(typ)
-    var ld = LLVMBuildLoad2(builder, LLVMVectorType(elemT, 4u), ptr, name)
-    LLVMSetAlignment(ld, 4u)
-    var undef4 = LLVMGetUndef(LLVMVectorType(elemT, 4u))
-    return LLVMBuildShuffleVector(builder, types, ld, undef4, [0, 1, 2], name)
+    var x = LLVMBuildLoad2(builder, elemT, ptr, "")
+    var y = LLVMBuildLoad2(builder, elemT, LLVMBuildGEP2(builder, elemT, ptr, types.ConstI32(1ul), "", true), "")
+    var z = LLVMBuildLoad2(builder, elemT, LLVMBuildGEP2(builder, elemT, ptr, types.ConstI32(2ul), "", true), "")
+    var xyz = LLVMGetUndef(LLVMVectorType(elemT, 3u))
+    xyz = LLVMBuildInsertElement(builder, xyz, x, types.ConstI32(0ul), "")
+    xyz = LLVMBuildInsertElement(builder, xyz, y, types.ConstI32(1ul), "")
+    xyz = LLVMBuildInsertElement(builder, xyz, z, types.ConstI32(2ul), "")
+    return xyz
 }
 
 def LLVMBuildLoadVector3Volatile(builder : LLVMOpaqueBuilder?; var types : PrimitiveTypes?; var typ : LLVMOpaqueType?; ptr : LLVMOpaqueValue?; name : string) {
