@@ -28,9 +28,10 @@ namespace das {
     }
 
     bool das_is_jit_function ( const Func func ) {
+        // is_jit_function makes sense only if we're in JIT mode.
         auto simfn = func.PTR;
         if ( !simfn ) return false;
-        return simfn->code && simfn->code->rtti_node_isJit();
+        return simfn->code && (!is_in_jit() || simfn->code->rtti_node_isJit());
     }
 
     bool das_remove_jit ( const Func func ) {

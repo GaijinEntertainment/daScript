@@ -1511,6 +1511,10 @@ namespace das
         return daScriptEnvironment::getBound() ? daScriptEnvironment::getBound()->g_isInAot : false;
     }
 
+    bool is_in_jit ( ) {
+        return daScriptEnvironment::getBound() ? daScriptEnvironment::getBound()->g_isInJit : false;
+    }
+
     void set_aot ( ) {
         assert(daScriptEnvironment::getBound());
         daScriptEnvironment::getBound()->g_isInAot = true;
@@ -2097,6 +2101,8 @@ namespace das
             SideEffects::worstDefault, "das_is_dll_build");
         addExtern<DAS_BIND_FUN(is_in_aot)>(*this, lib, "is_in_aot",
             SideEffects::worstDefault, "is_in_aot");
+        addExtern<DAS_BIND_FUN(is_in_jit)>(*this, lib, "is_in_jit",
+            SideEffects::worstDefault, "is_in_jit");
         addExtern<DAS_BIND_FUN(set_aot)>(*this, lib, "set_aot",
             SideEffects::worstDefault, "set_aot");
         addExtern<DAS_BIND_FUN(reset_aot)>(*this, lib, "reset_aot",
