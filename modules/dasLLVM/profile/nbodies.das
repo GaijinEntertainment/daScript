@@ -5,8 +5,6 @@ require math
 require daslib/unroll
 //ported from https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/nbody-gcc-2.html
 
-options jit_vec3_ldu    // allows unaligned vector3 loads in JIT to not respect boundaries
-
 let {
     SOLAR_MASS = 4. * PI * PI
 }
@@ -48,7 +46,6 @@ let {
     nbodies = 5
 }
 
-[jit]
 def offset_momentum(var bodies : body[5]) {
     var px : float3
     for (b in bodies) {
@@ -57,7 +54,7 @@ def offset_momentum(var bodies : body[5]) {
     bodies[0].v = px / SOLAR_MASS
 }
 
-[jit, hint(alwaysinline, hot, noalias=bodies, unsafe_range_check)]
+[hint(vec3_ldu)]
 def advance(var bodies : body[5]) {
     unroll <| $() {
         for (i in range(nbodies)) {
@@ -76,7 +73,6 @@ def advance(var bodies : body[5]) {
     }
 }
 
-[jit]
 def energy(var bodies : body[5]) {
     var e = 0.0
     var i = 0
@@ -91,7 +87,6 @@ def energy(var bodies : body[5]) {
     return e
 }
 
-[jit]
 def scale_bodies(scale; var bodies : body[5]) {
     for (b in bodies) {
         b.mass *= scale * scale
@@ -99,7 +94,6 @@ def scale_bodies(scale; var bodies : body[5]) {
     }
 }
 
-[jit]
 def nbodies(n : int) {
     scale_bodies(0.01, g_bodies)
     for (i in range(n)) {

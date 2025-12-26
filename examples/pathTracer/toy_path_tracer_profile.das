@@ -13,8 +13,6 @@ require daslib/jobque_boost
 require daslib/random
 require daslib/math_boost
 
-options jit_vec3_ldu    // allows unaligned vector3 loads in JIT to not respect boundaries
-
 [export]
 def main {
     let width = 256
