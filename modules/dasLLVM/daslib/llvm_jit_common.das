@@ -873,7 +873,7 @@ def public build_broadcast_vector(builder : LLVMOpaqueBuilder?; opType : TypeDec
 
 def public LLVMBuildLoadData2Aligned(builder : LLVMOpaqueBuilder?; var typ : LLVMOpaqueType?; ptr : LLVMOpaqueValue?; alignment : int; name : string) {
     if (!LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS && alignment != 16 && LLVMIsVector3(typ)) {
-        if ( LLVM_JIT_NEED_VOLATILE_VEC3_LOAD ) {
+        if (LLVM_JIT_NEED_VOLATILE_VEC3_LOAD) {
             return LLVMBuildLoadVector3Volatile(builder, g_prim_t, typ, ptr, name)
         } else {
             return LLVMBuildLoadVector3(builder, g_prim_t, typ, ptr, name)
