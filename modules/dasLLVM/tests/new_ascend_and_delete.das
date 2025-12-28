@@ -3,23 +3,24 @@ options strict_smart_pointers = false
 
 require dastest/testing_boost
 
-require jit
-
 require UnitTest
 
-[jit]
 def test_new(t : T?) {
     var f = new FancyClass()
     t |> equal(13, f.value)
+    unsafe {
+        delete f
+    }
 }
 
-[jit]
 def test_ascend(t : T?) {
     var f = new FancyClass(value = 123)
     t |> equal(123, f.value)
+    unsafe {
+        delete f
+    }
 }
 
-[jit]
 def test_ascend_cmres(t : T?) {
     var f = new array<int>(1, 2)
     t |> equal(*f |> length(), 2)
@@ -28,7 +29,6 @@ def test_ascend_cmres(t : T?) {
     }
 }
 
-[jit]
 def test_delete(t : T?; var f : FancyClass?) {
     unsafe {
         delete f
@@ -52,7 +52,6 @@ def test_new_and_ascend_delete(t : T?) {
     }
 }
 
-[jit]
 def return_smart_ptr(t : T?) {
     verify(getTotalTestObjectSmart() == 0)
     var ptr <- makeTestObjectSmart()
@@ -65,14 +64,12 @@ def return_smart_ptr(t : T?) {
     t |> equal(0, getTotalTestObjectSmart())
 }
 
-[jit]
 def inside_scope_test {
     var sptr <- new TestObjectSmart
     verify(getTotalTestObjectSmart() == 1)
     return get_ptr(sptr)
 }
 
-[jit]
 def scope_test(t : T?) {
     t |> equal(0, getTotalTestObjectSmart())
     let lostPtr = inside_scope_test()       // we loose one in there, return regular pointer, and cast it to smart_ptr again
@@ -84,7 +81,6 @@ def scope_test(t : T?) {
     t |> equal(0, getTotalTestObjectSmart())
 }
 
-[jit]
 def inside_move_test(t : T?) {
     t |> equal(0, getTotalTestObjectSmart())
     var t1 <- new TestObjectSmart
@@ -95,7 +91,6 @@ def inside_move_test(t : T?) {
     return <- t2
 }
 
-[jit]
 def move_test(t : T?) {
     t |> equal(0, getTotalTestObjectSmart())
     var D <- inside_move_test(t)
@@ -106,7 +101,6 @@ def move_test(t : T?) {
     t |> equal(0, getTotalTestObjectSmart())
 }
 
-[jit]
 def ref_count_test(t : T?) {
     t |> equal(0, getTotalTestObjectSmart())
     var sptr <- new TestObjectSmart         // ref_count = 1
@@ -150,7 +144,6 @@ def ref_count_test(t : T?) {
     t |> equal(0u, smart_ptr_use_count(fptr))
 }
 
-[jit]
 def access_test(t : T?) {
     t |> equal(0, getTotalTestObjectSmart())
     var ptr <- new TestObjectSmart

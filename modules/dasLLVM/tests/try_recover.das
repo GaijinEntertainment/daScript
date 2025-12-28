@@ -1,9 +1,6 @@
 options gen2
 require dastest/testing_boost
 
-require jit
-
-[jit]
 def try_recover(a : array<int>) {
     var res : int
     try {

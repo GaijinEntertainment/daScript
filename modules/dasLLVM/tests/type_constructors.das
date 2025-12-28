@@ -1,8 +1,6 @@
 options gen2
 require dastest/testing_boost
 
-require jit
-
 require rtti
 
 require daslib/fuzzer
@@ -15,13 +13,12 @@ require daslib/constant_expression
 
 // float
 
-[jit]
 def jit_float(x) {
     return float(x)
 }
 
 def test_float(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_float))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_float))
     t |> strictEqual(float(a), jit_float(a), "float(a)")
 }
 
@@ -35,13 +32,12 @@ def test_intrin_float(t : T?) {
 
 // double
 
-[jit]
 def jit_double(x) {
     return double(x)
 }
 
 def test_double(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_double))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_double))
     t |> strictEqual(double(a), jit_double(a), "double(a)")
 }
 
@@ -58,13 +54,12 @@ def test_intrin_double(t : T?) {
 
 // int
 
-[jit]
 def jit_int(x) {
     return int(x)
 }
 
 def test_int(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_int))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_int))
     t |> strictEqual(int(a), jit_int(a), "int(a)")
 }
 
@@ -74,19 +69,18 @@ def test_intrin_int(t : T?) {
     fuzz <| $() {
         fuzz_numeric_and_storage_op1(t, fake, "test_int")
     }
-    t |> success(is_jit_function(@@ < (a : CompilationError) : int > jit_int))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : CompilationError) : int > jit_int))
     t |> equal(int(CompilationError.function_not_found), jit_int(CompilationError.function_not_found))
 }
 
 // uint
 
-[jit]
 def jit_uint(x) {
     return uint(x)
 }
 
 def test_uint(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_uint))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_uint))
     t |> strictEqual(uint(a), jit_uint(a), "uint(a)")
 }
 
@@ -96,20 +90,19 @@ def test_intrin_uint(t : T?) {
     fuzz <| $() {
         fuzz_numeric_and_storage_op1(t, fake, "test_uint")
     }
-    t |> success(is_jit_function(@@ < (a : CompilationError) : int > jit_uint))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : CompilationError) : int > jit_uint))
     t |> equal(uint(CompilationError.function_not_found), jit_uint(CompilationError.function_not_found))
 }
 
 
 // int8
 
-[jit]
 def jit_int8(x) {
     return int8(x)
 }
 
 def test_int8(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_int8))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_int8))
     t |> strictEqual(int8(a), jit_int8(a), "int8(a)")
 }
 
@@ -119,20 +112,19 @@ def test_intrin_int8(t : T?) {
     fuzz <| $() {
         fuzz_numeric_and_storage_op1(t, fake, "test_int8")
     }
-    t |> success(is_jit_function(@@ < (a : CompilationError) : int > jit_int8))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : CompilationError) : int > jit_int8))
     t |> equal(int8(CompilationError.function_not_found), jit_int8(CompilationError.function_not_found))
 }
 
 
 // uint8
 
-[jit]
 def jit_uint8(x) {
     return uint8(x)
 }
 
 def test_uint8(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_uint8))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_uint8))
     t |> strictEqual(uint8(a), jit_uint8(a), "uint8(a)")
 }
 
@@ -142,19 +134,18 @@ def test_intrin_uint8(t : T?) {
     fuzz <| $() {
         fuzz_numeric_and_storage_op1(t, fake, "test_uint8")
     }
-    t |> success(is_jit_function(@@ < (a : CompilationError) : int > jit_uint8))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : CompilationError) : int > jit_uint8))
     t |> equal(uint8(CompilationError.function_not_found), jit_uint8(CompilationError.function_not_found))
 }
 
 // int16
 
-[jit]
 def jit_int16(x) {
     return int16(x)
 }
 
 def test_int16(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_int16))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_int16))
     t |> strictEqual(int16(a), jit_int16(a), "int16(a)")
 }
 
@@ -164,20 +155,19 @@ def test_intrin_int16(t : T?) {
     fuzz <| $() {
         fuzz_numeric_and_storage_op1(t, fake, "test_int16")
     }
-    t |> success(is_jit_function(@@ < (a : CompilationError) : int > jit_int16))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : CompilationError) : int > jit_int16))
     t |> equal(int16(CompilationError.function_not_found), jit_int16(CompilationError.function_not_found))
 }
 
 
 // uint16
 
-[jit]
 def jit_uint16(x) {
     return uint16(x)
 }
 
 def test_uint16(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_uint16))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_uint16))
     t |> strictEqual(uint16(a), jit_uint16(a), "uint16(a)")
 }
 
@@ -187,20 +177,19 @@ def test_intrin_uint16(t : T?) {
     fuzz <| $() {
         fuzz_numeric_and_storage_op1(t, fake, "test_uint16")
     }
-    t |> success(is_jit_function(@@ < (a : CompilationError) : int > jit_uint16))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : CompilationError) : int > jit_uint16))
     t |> equal(uint16(CompilationError.function_not_found), jit_uint16(CompilationError.function_not_found))
 }
 
 
 // int64
 
-[jit]
 def jit_int64(x) {
     return int64(x)
 }
 
 def test_int64(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_int64))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_int64))
     t |> strictEqual(int64(a), jit_int64(a), "int64(a)")
 }
 
@@ -210,20 +199,19 @@ def test_intrin_int64(t : T?) {
     fuzz <| $() {
         fuzz_numeric_and_storage_op1(t, fake, "test_int64")
     }
-    t |> success(is_jit_function(@@ < (a : CompilationError) : int > jit_int64))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : CompilationError) : int > jit_int64))
     t |> equal(int64(CompilationError.function_not_found), jit_int64(CompilationError.function_not_found))
 }
 
 
 // uint64
 
-[jit]
 def jit_uint64(x) {
     return uint64(x)
 }
 
 def test_uint64(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_uint64))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_uint64))
     t |> strictEqual(uint64(a), jit_uint64(a), "uint64(a)")
 }
 
@@ -233,7 +221,7 @@ def test_intrin_uint64(t : T?) {
     fuzz <| $() {
         fuzz_numeric_and_storage_op1(t, fake, "test_uint64")
     }
-    t |> success(is_jit_function(@@ < (a : CompilationError) : int > jit_uint64))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : CompilationError) : int > jit_uint64))
     t |> equal(uint64(CompilationError.function_not_found), jit_uint64(CompilationError.function_not_found))
 }
 
@@ -243,38 +231,34 @@ def test_intrin_uint64(t : T?) {
 
 // float4
 
-[jit]
 def jit_float4(x) {
     return float4(x)
 }
 
 def test_float4(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_float4))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_float4))
     t |> strictEqual(float4(a), jit_float4(a), "float4(a)")
 }
 
-[jit, sideeffects]
+[sideeffects]
 def jit_float4_0 {
     return float4()
 }
 
-[jit]
 def jit_float4_2(a, b) {
     return float4(a, b)
 }
 
-[jit]
 def jit_float4_3(a, b, c) {
     return float4(a, b, c)
 }
 
-[jit]
 def jit_float4_4(x, y, z, w) {
     return float4(x, y, z, w)
 }
 
 def test_float4_4(t : T?; x, y, z, w : auto(TT)) {
-    t |> success(is_jit_function(@@ < (x, y, z, w : TT) : void > jit_float4_4))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (x, y, z, w : TT) : void > jit_float4_4))
     t |> strictEqual(float4(x, y, z, w), jit_float4_4(x, y, z, w), "float4(x,y,z,w)")
 }
 
@@ -338,33 +322,30 @@ def test_intrin_float4(t : T?) {
 
 // float3
 
-[jit]
 def jit_float3(x) {
     return float3(x)
 }
 
 def test_float3(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_float3))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_float3))
     t |> strictEqual(float3(a), jit_float3(a), "float3(a)")
 }
 
-[jit, sideeffects]
+[sideeffects]
 def jit_float3_0 {
     return float3()
 }
 
-[jit]
 def jit_float3_2(a, b) {
     return float3(a, b)
 }
 
-[jit]
 def jit_float3_3(a, b, c) {
     return float3(a, b, c)
 }
 
 def test_float3_3(t : T?; x, y, z : auto(TT)) {
-    t |> success(is_jit_function(@@ < (x, y, z : TT) : void > jit_float3_3))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (x, y, z : TT) : void > jit_float3_3))
     t |> strictEqual(float3(x, y, z), jit_float3_3(x, y, z), "float3(x,y,z)")
 }
 
@@ -408,28 +389,26 @@ def test_intrin_float3(t : T?) {
 
 // float2
 
-[jit]
 def jit_float2(x) {
     return float2(x)
 }
 
 def test_float2(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_float2))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_float2))
     t |> strictEqual(float2(a), jit_float2(a), "float2(a)")
 }
 
-[jit, sideeffects]
+[sideeffects]
 def jit_float2_0 {
     return float2()
 }
 
-[jit]
 def jit_float2_2(a, b) {
     return float2(a, b)
 }
 
 def test_float2_2(t : T?; x, y : auto(TT)) {
-    t |> success(is_jit_function(@@ < (x, y : TT) : void > jit_float2_2))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (x, y : TT) : void > jit_float2_2))
     t |> strictEqual(float2(x, y), jit_float2_2(x, y), "float2(x,y)")
 }
 
@@ -460,38 +439,34 @@ def test_intrin_float2(t : T?) {
 
 // int4
 
-[jit]
 def jit_int4(x) {
     return int4(x)
 }
 
 def test_int4(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_int4))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_int4))
     t |> strictEqual(int4(a), jit_int4(a), "int4(a)")
 }
 
-[jit, sideeffects]
+[sideeffects]
 def jit_int4_0 {
     return int4()
 }
 
-[jit]
 def jit_int4_2(a, b) {
     return int4(a, b)
 }
 
-[jit]
 def jit_int4_3(a, b, c) {
     return int4(a, b, c)
 }
 
-[jit]
 def jit_int4_4(x, y, z, w) {
     return int4(x, y, z, w)
 }
 
 def test_int4_4(t : T?; x, y, z, w : auto(TT)) {
-    t |> success(is_jit_function(@@ < (x, y, z, w : TT) : void > jit_int4_4))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (x, y, z, w : TT) : void > jit_int4_4))
     t |> strictEqual(int4(x, y, z, w), jit_int4_4(x, y, z, w), "int4(x,y,z,w)")
 }
 
@@ -555,33 +530,30 @@ def test_intrin_int4(t : T?) {
 
 // int3
 
-[jit]
 def jit_int3(x) {
     return int3(x)
 }
 
 def test_int3(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_int3))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_int3))
     t |> strictEqual(int3(a), jit_int3(a), "int3(a)")
 }
 
-[jit, sideeffects]
+[sideeffects]
 def jit_int3_0 {
     return int3()
 }
 
-[jit]
 def jit_int3_2(a, b) {
     return int3(a, b)
 }
 
-[jit]
 def jit_int3_3(a, b, c) {
     return int3(a, b, c)
 }
 
 def test_int3_3(t : T?; x, y, z : auto(TT)) {
-    t |> success(is_jit_function(@@ < (x, y, z : TT) : void > jit_int3_3))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (x, y, z : TT) : void > jit_int3_3))
     t |> strictEqual(int3(x, y, z), jit_int3_3(x, y, z), "int3(x,y,z)")
 }
 
@@ -625,28 +597,26 @@ def test_intrin_int3(t : T?) {
 
 // int2
 
-[jit]
 def jit_int2(x) {
     return int2(x)
 }
 
 def test_int2(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_int2))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_int2))
     t |> strictEqual(int2(a), jit_int2(a), "int2(a)")
 }
 
-[jit, sideeffects]
+[sideeffects]
 def jit_int2_0 {
     return int2()
 }
 
-[jit]
 def jit_int2_2(a, b) {
     return int2(a, b)
 }
 
 def test_int2_2(t : T?; x, y : auto(TT)) {
-    t |> success(is_jit_function(@@ < (x, y : TT) : void > jit_int2_2))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (x, y : TT) : void > jit_int2_2))
     t |> strictEqual(int2(x, y), jit_int2_2(x, y), "int2(x,y)")
 }
 
@@ -677,38 +647,34 @@ def test_intrin_int2(t : T?) {
 
 // uint4
 
-[jit]
 def jit_uint4(x) {
     return uint4(x)
 }
 
 def test_uint4(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_uint4))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_uint4))
     t |> strictEqual(uint4(a), jit_uint4(a), "uint4(a)")
 }
 
-[jit, sideeffects]
+[sideeffects]
 def jit_uint4_0 {
     return uint4()
 }
 
-[jit]
 def jit_uint4_2(a, b) {
     return uint4(a, b)
 }
 
-[jit]
 def jit_uint4_3(a, b, c) {
     return uint4(a, b, c)
 }
 
-[jit]
 def jit_uint4_4(x, y, z, w) {
     return uint4(x, y, z, w)
 }
 
 def test_uint4_4(t : T?; x, y, z, w : auto(TT)) {
-    t |> success(is_jit_function(@@ < (x, y, z, w : TT) : void > jit_uint4_4))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (x, y, z, w : TT) : void > jit_uint4_4))
     t |> strictEqual(uint4(x, y, z, w), jit_uint4_4(x, y, z, w), "uint4(x,y,z,w)")
 }
 
@@ -772,33 +738,30 @@ def test_intrin_uint4(t : T?) {
 
 // uint3
 
-[jit]
 def jit_uint3(x) {
     return uint3(x)
 }
 
 def test_uint3(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_uint3))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_uint3))
     t |> strictEqual(uint3(a), jit_uint3(a), "uint3(a)")
 }
 
-[jit, sideeffects]
+[sideeffects]
 def jit_uint3_0 {
     return uint3()
 }
 
-[jit]
 def jit_uint3_2(a, b) {
     return uint3(a, b)
 }
 
-[jit]
 def jit_uint3_3(a, b, c) {
     return uint3(a, b, c)
 }
 
 def test_uint3_3(t : T?; x, y, z : auto(TT)) {
-    t |> success(is_jit_function(@@ < (x, y, z : TT) : void > jit_uint3_3))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (x, y, z : TT) : void > jit_uint3_3))
     t |> strictEqual(uint3(x, y, z), jit_uint3_3(x, y, z), "uint3(x,y,z)")
 }
 
@@ -842,28 +805,26 @@ def test_intrin_uint3(t : T?) {
 
 // uint2
 
-[jit]
 def jit_uint2(x) {
     return uint2(x)
 }
 
 def test_uint2(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_uint2))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_uint2))
     t |> strictEqual(uint2(a), jit_uint2(a), "uint2({a}) // {typeinfo typename(type<TT>)}")
 }
 
-[jit, sideeffects]
+[sideeffects]
 def jit_uint2_0 {
     return uint2()
 }
 
-[jit]
 def jit_uint2_2(a, b) {
     return uint2(a, b)
 }
 
 def test_uint2_2(t : T?; x, y : auto(TT)) {
-    t |> success(is_jit_function(@@ < (x, y : TT) : void > jit_uint2_2))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (x, y : TT) : void > jit_uint2_2))
     t |> strictEqual(uint2(x, y), jit_uint2_2(x, y), "uint2(x,y)")
 }
 
@@ -895,38 +856,35 @@ def test_intrin_uint2(t : T?) {
 
 // range
 
-[jit]
 def jit_range(x) {
     return range(x)
 }
 
 def test_range(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_range))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_range))
     t |> strictEqual(range(a), jit_range(a), "range(a)")
 }
 
-[jit, sideeffects]
+[sideeffects]
 def jit_range_0 {
     return range()
 }
 
-[jit]
 def jit_range_2(a, b) {
     return range(a, b)
 }
 
 def test_range_2(t : T?; x, y : auto(TT)) {
-    t |> success(is_jit_function(@@ < (x, y : TT) : void > jit_range_2))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (x, y : TT) : void > jit_range_2))
     t |> strictEqual(range(x, y), jit_range_2(x, y), "range(x,y)")
 }
 
-[jit]
 def jit_interval_2(a, b) {
     return a..b
 }
 
 def test_interval_2(t : T?; x, y : auto(TT)) {
-    t |> success(is_jit_function(@@ < (x, y : TT) : void > jit_interval_2))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (x, y : TT) : void > jit_interval_2))
     t |> strictEqual(x..y, jit_interval_2(x, y), "x..y")
 }
 
@@ -961,28 +919,26 @@ def test_intrin_range(t : T?) {
 
 // urange
 
-[jit]
 def jit_urange(x) {
     return urange(x)
 }
 
 def test_urange(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_urange))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_urange))
     t |> strictEqual(urange(a), jit_urange(a), "urange(a)")
 }
 
-[jit, sideeffects]
+[sideeffects]
 def jit_urange_0 {
     return urange()
 }
 
-[jit]
 def jit_urange_2(a, b) {
     return urange(a, b)
 }
 
 def test_urange_2(t : T?; x, y : auto(TT)) {
-    t |> success(is_jit_function(@@ < (x, y : TT) : void > jit_urange_2))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (x, y : TT) : void > jit_urange_2))
     t |> strictEqual(urange(x, y), jit_urange_2(x, y), "urange(x,y)")
 }
 
@@ -1017,28 +973,26 @@ def test_intrin_urange(t : T?) {
 
 // range64
 
-[jit]
 def jit_range64(x) {
     return range64(x)
 }
 
 def test_range64(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_range64))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_range64))
     t |> strictEqual(range64(a), jit_range64(a), "range64(a)")
 }
 
-[jit, sideeffects]
+[sideeffects]
 def jit_range64_0 {
     return range64()
 }
 
-[jit]
 def jit_range64_2(a, b) {
     return range64(a, b)
 }
 
 def test_range64_2(t : T?; x, y : auto(TT)) {
-    t |> success(is_jit_function(@@ < (x, y : TT) : void > jit_range64_2))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (x, y : TT) : void > jit_range64_2))
     t |> strictEqual(range64(x, y), jit_range64_2(x, y), "range64(x,y)")
 }
 
@@ -1073,28 +1027,26 @@ def test_intrin_range64(t : T?) {
 
 // urange64
 
-[jit]
 def jit_urange64(x) {
     return urange64(x)
 }
 
 def test_urange64(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_urange64))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_urange64))
     t |> strictEqual(urange64(a), jit_urange64(a), "urange64(a)")
 }
 
-[jit, sideeffects]
+[sideeffects]
 def jit_urange64_0 {
     return urange64()
 }
 
-[jit]
 def jit_urange64_2(a, b) {
     return urange64(a, b)
 }
 
 def test_urange64_2(t : T?; x, y : auto(TT)) {
-    t |> success(is_jit_function(@@ < (x, y : TT) : void > jit_urange64_2))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (x, y : TT) : void > jit_urange64_2))
     t |> strictEqual(urange64(x, y), jit_urange64_2(x, y), "urange64(x,y)")
 }
 

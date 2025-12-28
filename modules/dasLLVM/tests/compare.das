@@ -1,68 +1,60 @@
 options gen2
 require dastest/testing_boost
 
-require jit
-
 require daslib/fuzzer
 require daslib/faker
 
-[jit]
 def eq_jit(a, b) {
     return a == b
 }
 
 def test_eq(t : T?; a, b : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT; b : TT) : void > eq_jit))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : TT) : void > eq_jit))
     t |> equal(a == b, eq_jit(a, b), "a == b")
 }
 
-[jit]
 def neq_jit(a, b) {
     return a != b
 }
 
 def test_neq(t : T?; a, b : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT; b : TT) : void > neq_jit))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : TT) : void > neq_jit))
     t |> equal(a != b, neq_jit(a, b), "a != b")
 }
 
-[jit]
 def less_jit(a, b) {
     return a < b
 }
 
 def test_less(t : T?; a, b : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT; b : TT) : void > less_jit))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : TT) : void > less_jit))
     t |> equal(a < b, less_jit(a, b), "a < b")
 }
 
-[jit]
 def leq_jit(a, b) {
     return a <= b
 }
 
 def test_leq(t : T?; a, b : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT; b : TT) : void > leq_jit))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : TT) : void > leq_jit))
     t |> equal(a <= b, leq_jit(a, b), "a <= b")
 }
 
-[jit]
 def gt_jit(a, b) {
     return a > b
 }
 
 def test_gt(t : T?; a, b : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT; b : TT) : void > gt_jit))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : TT) : void > gt_jit))
     t |> equal(a > b, gt_jit(a, b), "a > b")
 }
 
-[jit]
 def geq_jit(a, b) {
     return a >= b
 }
 
 def test_geq(t : T?; a, b : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT; b : TT) : void > geq_jit))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : TT) : void > geq_jit))
     t |> equal(a >= b, geq_jit(a, b), "a >= b")
 }
 

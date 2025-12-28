@@ -1,15 +1,11 @@
 options gen2
 require dastest/testing_boost
 
-require jit
-
-[jit]
 def make13(var a : int?) {
     *a = 13
     return a
 }
 
-[jit]
 def makeAll13(var a : int?; count : int) {
     for (i in range(count)) {
         unsafe {
@@ -18,7 +14,6 @@ def makeAll13(var a : int?; count : int) {
     }
 }
 
-[jit]
 def addAll(var a : int?; count : int) {
     var c = 0
     for (i in range(count)) {
@@ -29,7 +24,6 @@ def addAll(var a : int?; count : int) {
     return c
 }
 
-[jit]
 def ptrAdd(var a : int?; count : int) {
     var c = 0
     for (i in range(count)) {
@@ -44,7 +38,7 @@ def ptrAdd(var a : int?; count : int) {
 [test]
 def test_ref(t : T?) {
     t |> run("ptr2ref") <| @(t : T?) {
-        t |> success(is_jit_function(@@make13))
+        t |> success(!jit_enabled() || is_jit_function(@@make13))
         var x = -21
         var px = unsafe(addr(x))
         var ppx = make13(px)
@@ -55,8 +49,8 @@ def test_ref(t : T?) {
     t |> run("ptr []") <| @(t : T?) {
         var x : int[10]
         var px = unsafe(addr(x[0]))
-        t |> success(is_jit_function(@@makeAll13))
-        t |> success(is_jit_function(@@addAll))
+        t |> success(!jit_enabled() || is_jit_function(@@makeAll13))
+        t |> success(!jit_enabled() || is_jit_function(@@addAll))
         makeAll13(px, 10)
         for (i in x) {
             t |> equal(i, 13)
@@ -69,7 +63,7 @@ def test_ref(t : T?) {
         for (i, j in x, range(10)) {
             i = j
         }
-        t |> success(is_jit_function(@@addAll))
+        t |> success(!jit_enabled() || is_jit_function(@@addAll))
         t |> equal(addAll(px, 10), 45)
     }
 }

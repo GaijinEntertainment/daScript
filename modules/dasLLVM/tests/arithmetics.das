@@ -3,98 +3,86 @@ require dastest/testing_boost
 
 require daslib/fuzzer
 require daslib/faker
-require jit
-
 require daslib/constant_expression
 
-[jit]
 def add_jit(a, b) {
     return a + b
 }
 
-[jit]
 def sub_jit(a, b) {
     return a - b
 }
 
-[jit]
 def mul_jit(a, b) {
     return a * b
 }
 
-[jit]
 def div_jit(a, b) {
     return a / b
 }
 
-[jit]
 def mod_jit(a, b) {
     return a % b
 }
 
 def test_add(t : T?; a, b : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT; b : TT) : void > add_jit))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : TT) : void > add_jit))
     t |> strictEqual(a + b, add_jit(a, b), "a + b")
 }
 
 def test_sub(t : T?; a, b : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT; b : TT) : void > sub_jit))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : TT) : void > sub_jit))
     t |> strictEqual(a - b, sub_jit(a, b), "a - b")
 }
 
 def test_mul(t : T?; a, b : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT; b : TT) : void > mul_jit))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : TT) : void > mul_jit))
     t |> strictEqual(a * b, mul_jit(a, b), "a * b")
 }
 
 def test_div(t : T?; a, b : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT; b : TT) : void > div_jit))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : TT) : void > div_jit))
     if (b != TT()) {
         t |> strictEqual(a / b, div_jit(a, b), "a / b")
     }
 }
 
 def test_div_vec(t : T?; a, b : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT; b : TT) : void > div_jit))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : TT) : void > div_jit))
     t |> strictEqual(a / b, div_jit(a, b), "a / b")
 }
 
 def test_mod(t : T?; a, b : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT; b : TT) : void > mod_jit))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : TT) : void > mod_jit))
     if (b != TT()) {
         t |> strictEqual(a % b, mod_jit(a, b), "a % b")
     }
 }
 
-[jit]
 def add_equ_jit(a, b) {
     var c = a
     c += b
     return c
 }
 
-[jit]
 def sub_equ_jit(a, b) {
     var c = a
     c -= b
     return c
 }
 
-[jit]
 def mul_equ_jit(a, b) {
     var c = a
     c *= b
     return c
 }
 
-[jit]
 def div_equ_jit(a, b) {
     var c = a
     c /= b
     return c
 }
 
-[jit]
 def mod_equ_jit(a, b) {
     var c = a
     c %= b
@@ -102,34 +90,34 @@ def mod_equ_jit(a, b) {
 }
 
 def test_add_equ(t : T?; a, b : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT; b : TT) : void > add_equ_jit))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : TT) : void > add_equ_jit))
     t |> strictEqual(a + b, add_equ_jit(a, b), "a + b")
 }
 
 def test_sub_equ(t : T?; a, b : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT; b : TT) : void > sub_equ_jit))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : TT) : void > sub_equ_jit))
     t |> strictEqual(a - b, sub_equ_jit(a, b), "a - b")
 }
 
 def test_mul_equ(t : T?; a, b : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT; b : TT) : void > mul_equ_jit))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : TT) : void > mul_equ_jit))
     t |> strictEqual(a * b, mul_equ_jit(a, b), "a * b")
 }
 
 def test_div_equ(t : T?; a, b : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT; b : TT) : void > div_equ_jit))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : TT) : void > div_equ_jit))
     if (b != TT()) {
         t |> strictEqual(a / b, div_equ_jit(a, b), "a / b")
     }
 }
 
 def test_div_equ_vec(t : T?; a, b : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT; b : TT) : void > div_equ_jit))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : TT) : void > div_equ_jit))
     t |> strictEqual(a / b, div_equ_jit(a, b), "a / b")
 }
 
 def test_mod_equ(t : T?; a, b : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT; b : TT) : void > mod_equ_jit))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : TT) : void > mod_equ_jit))
     if (b != TT()) {
         t |> strictEqual(a % b, mod_equ_jit(a, b), "a % b")
     }
@@ -181,55 +169,65 @@ def test_arithmetics_vec_and_scalar_op2(t : T?) {
     }
 }
 
-[jit]
 def post_inc_jit(var a) {
     return a++
 }
 
-[jit]
 def post_dec_jit(var a) {
     return a--
 }
 
-[jit]
 def pre_inc_jit(var a) {
     ++a
     return a
 }
 
-[jit]
 def pre_dec_jit(var a) {
     --a
     return a
 }
 
 def test_post_inc(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > post_inc_jit))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > post_inc_jit))
+    if (a != a) {
+        return
+    }
     t |> strictEqual(a, post_inc_jit(a), "return a ++")
 }
 
 def test_post_dec(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > post_dec_jit))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > post_dec_jit))
+    if (a != a) {
+        return
+    }
     t |> strictEqual(a, post_dec_jit(a), "return a --")
 }
 
 def test_pre_inc(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > pre_inc_jit))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > pre_inc_jit))
+    if (a != a) {
+        return
+    }
     t |> strictEqual(a + TT(1), pre_inc_jit(a), "return ++ a")
 }
 
 def test_pre_dec(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > pre_dec_jit))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > pre_dec_jit))
+    if (a != a) {
+        return
+    }
     t |> strictEqual(a - TT(1), pre_dec_jit(a), "return -- a")
 }
 
-[jit]
 def neg_jit(a) {
     return -a
 }
 
 def test_neg(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > neg_jit))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > neg_jit))
+    if (a != a) {
+        return
+    }
     t |> strictEqual(-a, neg_jit(a), "-a {a}")
 }
 

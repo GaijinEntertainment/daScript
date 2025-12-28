@@ -8,13 +8,12 @@ require daslib/faker
 require daslib/math
 require daslib/constant_expression
 
-[jit]
 def jit_roundi(x) {
     return roundi(x)
 }
 
 def test_roundi(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_roundi))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_roundi))
     jit_roundi(a)
 }
     // precision mismatch???
@@ -28,13 +27,12 @@ def test_intrin_roundi(t : T?) {
     }
 }
 
-[jit]
 def jit_trunci(x) {
     return trunci(x)
 }
 
 def test_trunci(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_trunci))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_trunci))
     t |> strictEqual(trunci(a), jit_trunci(a), "trunci(a)")
 }
 
@@ -46,13 +44,12 @@ def test_intrin_trunci(t : T?) {
     }
 }
 
-[jit]
 def jit_floor(x) {
     return floor(x)
 }
 
 def test_floor(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_floor))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_floor))
     t |> strictEqual(floor(a), jit_floor(a), "floor(a)")
 }
 
@@ -64,13 +61,13 @@ def test_intrin_floor(t : T?) {
     }
 }
 
-[jit, sideeffects]
+[sideeffects]
 def jit_ceil(x) {
     return ceil(x)
 }
 
 def test_ceil(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_ceil))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_ceil))
     t |> numericEqual(ceil(a), jit_ceil(a), "ceil(a)")
 }
 
@@ -82,13 +79,12 @@ def test_intrin_ceil(t : T?) {
     }
 }
 
-[jit]
 def jit_sqrt(x) {
     return sqrt(x)
 }
 
 def test_sqrt(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_sqrt))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_sqrt))
     t |> strictEqual(sqrt(a), jit_sqrt(a), "sqrt(a)")
 }
 
@@ -100,13 +96,13 @@ def test_intrin_sqrt(t : T?) {
     }
 }
 
-[sideeffects, jit]
+[sideeffects]
 def jit_rcp(x) {
     return rcp(x)
 }
 
 def test_rcp(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_rcp))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_rcp))
     jit_rcp(a)
 }
     // note: we can't really compare, because precision is different
@@ -120,13 +116,13 @@ def test_intrin_rcp(t : T?) {
     }
 }
 
-[sideeffects, jit]
+[sideeffects]
 def jit_rcp_est(x) {
     return rcp_est(x)
 }
 
 def test_rcp_est(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_rcp_est))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_rcp_est))
     jit_rcp_est(a)
 }
     // note: we can't really compare, because precision is different
@@ -140,13 +136,13 @@ def test_intrin_rcp_est(t : T?) {
     }
 }
 
-[sideeffects, jit]
+[sideeffects]
 def jit_rsqrt(x) {
     return rsqrt(x)
 }
 
 def test_rsqrt(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_rsqrt))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_rsqrt))
     jit_rsqrt(a)
 }
     // note: we can't really compare, because precision is different
@@ -160,13 +156,13 @@ def test_intrin_rsqrt(t : T?) {
     }
 }
 
-[sideeffects, jit]
+[sideeffects]
 def jit_rsqrt_est(x) {
     return rsqrt_est(x)
 }
 
 def test_rsqrt_est(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_rsqrt_est))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_rsqrt_est))
     jit_rsqrt_est(a)
 }
     // note: we can't really compare, because precision is different
@@ -180,13 +176,13 @@ def test_intrin_rsqrt_est(t : T?) {
     }
 }
 
-[sideeffects, jit]
+[sideeffects]
 def jit_exp(x) {
     return exp(x)
 }
 
 def test_exp(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_exp))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_exp))
     jit_exp(a)
 }
     // note: we can't really compare, because precision is different
@@ -200,13 +196,13 @@ def test_intrin_exp(t : T?) {
     }
 }
 
-[sideeffects, jit]
+[sideeffects]
 def jit_exp2(x) {
     return exp2(x)
 }
 
 def test_exp2(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_exp2))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_exp2))
     jit_exp2(a)
 }
     // note: we can't really compare, because precision is different
@@ -220,13 +216,13 @@ def test_intrin_exp2(t : T?) {
     }
 }
 
-[sideeffects, jit]
+[sideeffects]
 def jit_log(x) {
     return log(x)
 }
 
 def test_log(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_log))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_log))
     jit_log(a)
 }
     // note: we can't really compare, because precision is different
@@ -240,13 +236,13 @@ def test_intrin_log(t : T?) {
     }
 }
 
-[sideeffects, jit]
+[sideeffects]
 def jit_log2(x) {
     return log2(x)
 }
 
 def test_log2(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_log2))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_log2))
     jit_log2(a)
 }
     // note: we can't really compare, because precision is different
@@ -260,13 +256,12 @@ def test_intrin_log2(t : T?) {
     }
 }
 
-[jit]
 def jit_popcount(x) {
     return popcnt(x)
 }
 
 def test_popcount(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_popcount))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_popcount))
     t |> equal(popcnt(a), jit_popcount(a), "popcnt(a)")
 }
 
@@ -278,13 +273,12 @@ def test_popcount(t : T?) {
     }
 }
 
-[jit]
 def jit_ctz(x) {
     return ctz(x)
 }
 
 def test_ctz(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_ctz))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_ctz))
     t |> equal(ctz(a), jit_ctz(a), "ctz(a)")
 }
 
@@ -296,13 +290,12 @@ def test_ctz(t : T?) {
     }
 }
 
-[jit]
 def jit_clz(x) {
     return clz(x)
 }
 
 def test_clz(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : void > jit_clz))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > jit_clz))
     t |> equal(clz(a), jit_clz(a), "clz(a)")
 }
 
@@ -314,13 +307,12 @@ def test_clz(t : T?) {
     }
 }
 
-[jit]
 def jit_min(a, b) {
     return min(a, b)
 }
 
 def test_min(t : T?; a, b : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a, b : TT) : void > jit_min))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a, b : TT) : void > jit_min))
     t |> strictEqual(min(a, b), jit_min(a, b), "min(a,b)")
 }
 
@@ -332,13 +324,12 @@ def test_min(t : T?) {
     }
 }
 
-[jit]
 def jit_max(a, b) {
     return max(a, b)
 }
 
 def test_max(t : T?; a, b : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a, b : TT) : void > jit_max))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a, b : TT) : void > jit_max))
     t |> strictEqual(max(a, b), jit_max(a, b), "max(a,b)")
 }
 
@@ -350,13 +341,12 @@ def test_max(t : T?) {
     }
 }
 
-[jit]
 def jit_abs(a) {
     return abs(a)
 }
 
 def test_abs(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : TT > jit_abs))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : TT > jit_abs))
     t |> strictEqual(abs(a), jit_abs(a), "abs(a)")
 }
 
@@ -368,13 +358,12 @@ def test_abs(t : T?) {
     }
 }
 
-[jit]
 def jit_saturate(a) {
     return saturate(a)
 }
 
 def test_saturate(t : T?; a : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a : TT) : TT > jit_saturate))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : TT > jit_saturate))
     t |> strictEqual(saturate(a), jit_saturate(a), "saturate(a)")
 }
 
@@ -386,13 +375,13 @@ def test_saturate(t : T?) {
     }
 }
 
-[jit, sideeffects]
+[sideeffects]
 def jit_pow(x, y) {
     return pow(x, y)
 }
 
 def test_pow(t : T?; a, b : auto(TT)) {
-    t |> success(is_jit_function(@@ < (a, b : TT) : void > jit_pow))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a, b : TT) : void > jit_pow))
     jit_pow(a, b)
 }
     // note: mismatching precision
@@ -406,13 +395,13 @@ def test_intrin_pow(t : T?) {
     }
 }
 
-[jit, sideeffects]
+[sideeffects]
 def jit_mad(a, b, c) {
     return mad(a, b, c)
 }
 
 def test_mad(t : T?; a : auto(TT); b : auto(QQ); c : TT) {
-    t |> success(is_jit_function(@@ < (a : TT; b : QQ; c : TT) : TT > jit_mad))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : QQ; c : TT) : TT > jit_mad))
     jit_mad(a, b, c)
 }
     // note: mismatching precision
@@ -432,44 +421,44 @@ def test_mad(t : T?) {
     }
 }
 
-[jit, sideeffects]
+[sideeffects]
 def jit_lerp(a, b, c) {
     return lerp(a, b, c)
 }
 
 def test_lerp(t : T?; a : auto(TT); b : auto(QQ); c : TT) {
-    t |> success(is_jit_function(@@ < (a : TT; b : QQ; c : TT) : TT > jit_mad))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : QQ; c : TT) : TT > jit_mad))
     jit_lerp(a, b, c)
 }
     // note: mismatching precision
     // t |> numericEqual ( lerp(a,b,c), jit_lerp(a,b,c), "lerp({a},{b},{c})" )
 
-[jit, sideeffects]
+[sideeffects]
 def jit_normalize_zero() {
     return normalize(float2(0.0, 0.0))
 }
 
-[jit, sideeffects]
+[sideeffects]
 def jit_normalize_nonzero() {
     return normalize(float2(2.0, 2.0))
 }
 
 [test]
 def test_normalize(t : T?) {
-    t |> success(is_jit_function(@@ < () : float2 > jit_normalize_zero))
-    t |> success(is_jit_function(@@ < () : float2 > jit_normalize_nonzero))
+    t |> success(!jit_enabled() || is_jit_function(@@ < () : float2 > jit_normalize_zero))
+    t |> success(!jit_enabled() || is_jit_function(@@ < () : float2 > jit_normalize_nonzero))
     t |> equal(jit_normalize_nonzero(), float2(1.0 / sqrt(2.0), 1.0 / sqrt(2.0)))
     t |> equal(jit_normalize_zero(), float2(0.0, 0.0))
 }
 
-[jit, sideeffects]
+[sideeffects]
 def float3_lerp(from, to : float3; t : float) : float3 {
     return lerp(from, to, t)
 }
 
 [test]
 def test_lerp(t : T?) {
-    t |> success(is_jit_function(@@ < (a : float3; b : float3; c : float) : float3 > float3_lerp))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : float3; b : float3; c : float) : float3 > float3_lerp))
     var fake <- Faker()
     fuzz <| $() {
         fuzz_float_double_or_float_vec_op3(t, fake, "test_lerp")
@@ -477,14 +466,14 @@ def test_lerp(t : T?) {
 }
 
 
-[jit, sideeffects]
+[sideeffects]
 def jit_clamp(a, b, c) {
     return clamp(a, b, c)
 }
 
 def test_clamp(t : T?; a : auto(TT); _b : auto(QQ); c : TT) {
     let b = a + _b
-    t |> success(is_jit_function(@@ < (a : TT; b : QQ; c : TT) : TT > jit_mad))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : QQ; c : TT) : TT > jit_mad))
     jit_clamp(a, b, c)
 }
     // note: mismatching precision
@@ -504,26 +493,26 @@ def test_clamp(t : T?) {
     }
 }
 
-[jit, sideeffects]
+[sideeffects]
 def get_m_3x3 {
     return float3x3()
 }
 
-[jit, sideeffects]
+[sideeffects]
 def get_m_3x4 {
     return float3x4()
 }
 
-[jit, sideeffects]
+[sideeffects]
 def get_m_4x4 {
     return float4x4()
 }
 
 [test]
 def test_mat_ctor(t : T?) {
-    t |> success(is_jit_function(@@get_m_3x3))
-    t |> success(is_jit_function(@@get_m_3x4))
-    t |> success(is_jit_function(@@get_m_4x4))
+    t |> success(!jit_enabled() || is_jit_function(@@get_m_3x3))
+    t |> success(!jit_enabled() || is_jit_function(@@get_m_3x4))
+    t |> success(!jit_enabled() || is_jit_function(@@get_m_4x4))
 
     var m1 = get_m_3x3()
     for (x in 0..2) {
@@ -545,7 +534,7 @@ def test_mat_ctor(t : T?) {
     }
 }
 
-[jit, sideeffects]
+[sideeffects]
 def jit_sign(x) {
     return sign(x)
 }

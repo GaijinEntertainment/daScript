@@ -1,8 +1,6 @@
 options gen2
 require dastest/testing_boost
 
-require jit
-
 var ctor_count = 0
 var to_upper_count = 0
 var utf8_count = 0
@@ -23,7 +21,7 @@ class MyString {
 
 [test]
 def test_chain_invoke_methods(t : T?) {
-    t |> success(is_jit_function(@@MyString))
+    t |> success(!jit_enabled() || is_jit_function(@@MyString))
     let res = new MyString()->to_upper()->utf8()
     t |> equal(1, ctor_count)
     t |> equal(1, to_upper_count)

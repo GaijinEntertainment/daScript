@@ -1,11 +1,9 @@
 options gen2
 require dastest/testing_boost
 
-require jit
-
 require UnitTest
 
-[jit, sideeffects]
+[sideeffects]
 def test_using(t : T?) {
     using() <| $(var f : FancyClass) {
         t |> equal(13, f.value)
@@ -15,7 +13,7 @@ def test_using(t : T?) {
     }
 }
 
-[jit, sideeffects]
+[sideeffects]
 def test_placement_new(t : T?) {
     var fc0 = FancyClass()
     t |> equal(13, fc0.value)
@@ -31,7 +29,7 @@ class Foo {
     }
 }
 
-[jit, sideeffects]
+[sideeffects]
 def test_ascend_ctor(t : T?) {
     var foo = new Foo(b = 42)
     t |> equal(13, foo.a)
@@ -41,15 +39,15 @@ def test_ascend_ctor(t : T?) {
 [test]
 def test_ref(t : T?) {
     t |> run("using") <| @(t : T?) {
-        t |> success(is_jit_function(@@test_using))
+        t |> success(!jit_enabled() || is_jit_function(@@test_using))
         test_using(t)
     }
     t |> run("placement new") <| @(t : T?) {
-        t |> success(is_jit_function(@@test_placement_new))
+        t |> success(!jit_enabled() || is_jit_function(@@test_placement_new))
         test_placement_new(t)
     }
     t |> run("ascend constructor") <| @(t : T?) {
-        t |> success(is_jit_function(@@test_ascend_ctor))
+        t |> success(!jit_enabled() || is_jit_function(@@test_ascend_ctor))
         test_ascend_ctor(t)
     }
 }

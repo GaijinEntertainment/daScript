@@ -3,16 +3,14 @@ require dastest/testing_boost
 
 options unsafe_table_lookup = false
 
-require jit
-
 
 require UnitTest
 
-[test, jit]
+[test]
 def test_table(t : T?) {
     t |> run("table") <| @(in_t : T?) {
 
-        in_t |> success(is_jit_function(@@test_table))
+        in_t |> success(!jit_enabled() || is_jit_function(@@test_table))
 
         var tab : table<EntityId; string>
         tab[EntityId(1)] = "hello"

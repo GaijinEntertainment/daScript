@@ -1,8 +1,6 @@
 options gen2
 require dastest/testing_boost
 
-require jit
-
 require daslib/fuzzer
 require daslib/faker
 require daslib/constant_expression
@@ -24,8 +22,8 @@ def test_min(a, b, c : int) {
 [test]
 def test_phi(t : T?) {
 
-    t |> success(is_jit_function(@@ < (a : int; b : int) : bool > test_min))
-    t |> success(is_jit_function(@@ < (a : int; b : int; c : int) : bool > test_min))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : int; b : int) : bool > test_min))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (a : int; b : int; c : int) : bool > test_min))
 
     t |> equal(1, test_min(1, 2))
     t |> equal(1, test_min(2, 1))

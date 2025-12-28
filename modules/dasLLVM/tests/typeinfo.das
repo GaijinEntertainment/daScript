@@ -9,13 +9,11 @@ require ast
 
 options rtti
 
-[jit]
 def take_it(t : auto(TT)) {
     let tt = typeinfo typename(type<TT>)
     print("name is {tt}\n")
 }
 
-[jit]
 def test_typeinfo {
     take_it(type<int>)
     take_it(type<int?>)
@@ -26,7 +24,6 @@ class Foo {
     a : int
 }
 
-[jit]
 def public class_info_stub(cl) : StructInfo const? {
     // this is a copy of rtti::class_info
     static_if (typeinfo is_pointer(cl)) {
@@ -61,13 +58,12 @@ def public class_info_stub(cl) : StructInfo const? {
 }
 
 
-[jit]
 def test_rtti : StructInfo const ? {
     var f = new Foo()
     return class_info_stub(f)
 }
 
-[jit, sideeffects]
+[sideeffects]
 def test_ast_typedecl {
     return <- typeinfo ast_typedecl(type<int const>)
 }
@@ -76,17 +72,17 @@ def test_ast_typedecl {
 def test_type_info(t : T?) {
     t |> run("typeinfo") <| @(t : T?) {
         test_typeinfo()
-        t |> success(is_jit_function(@@ < (a : int) : void > take_it))
-        t |> success(is_jit_function(@@ < (a : int?) : void > take_it))
-        t |> success(is_jit_function(@@ < (a : array<int>) : void > take_it))
-        t |> success(is_jit_function(@@test_typeinfo))
+        t |> success(!jit_enabled() || is_jit_function(@@ < (a : int) : void > take_it))
+        t |> success(!jit_enabled() || is_jit_function(@@ < (a : int?) : void > take_it))
+        t |> success(!jit_enabled() || is_jit_function(@@ < (a : array<int>) : void > take_it))
+        t |> success(!jit_enabled() || is_jit_function(@@test_typeinfo))
     }
     t |> run("typeinfo nojits") <| @(t : T?) {
-        t |> success(is_jit_function(@@test_rtti))
+        t |> success(!jit_enabled() || is_jit_function(@@test_rtti))
         print("rtti = {test_rtti()}\n")
     }
     t |> run("typeinfo ast_typedecl") <| @(t : T?) {
-        t |> success(is_jit_function(@@test_ast_typedecl))
+        t |> success(!jit_enabled() || is_jit_function(@@test_ast_typedecl))
         var ccc <- test_ast_typedecl()
         t |> equal(ccc.baseType, Type.tInt)
         t |> equal(ccc.flags.constant, true)

@@ -1,8 +1,6 @@
 options gen2
 require dastest/testing_boost
 
-require jit
-
 [jit]
 def string_for(t : T?) {
     for (c, i in "hello", count()) {
@@ -160,7 +158,7 @@ def array_comp(value : int) {
 [test]
 def test_comprehension(t : T?) {
     t |> run("comprehension") <| @(t : T?) {
-        t |> success(is_jit_function(@@array_comp))
+        t |> success(!jit_enabled() || is_jit_function(@@array_comp))
         var a <- array_comp(10)
         for (x, y in a, range(10)) {
             t |> equal(x, y)
@@ -189,16 +187,16 @@ def special_count(max, start, step : int) {
 [test]
 def test_for_loop(t : T?) {
     t |> run("string for") <| @(t : T?) {
-        t |> success(is_jit_function(@@string_for))
+        t |> success(!jit_enabled() || is_jit_function(@@string_for))
         string_for(t)
     }
     t |> run("range for") <| @(t : T?) {
-        t |> success(is_jit_function(@@range_for))
-        t |> success(is_jit_function(@@range_for_range))
-        t |> success(is_jit_function(@@range_for_range_extra))
-        t |> success(is_jit_function(@@range_for_with_break))
-        t |> success(is_jit_function(@@range_for_with_continue))
-        t |> success(is_jit_function(@@range_for_with_finally))
+        t |> success(!jit_enabled() || is_jit_function(@@range_for))
+        t |> success(!jit_enabled() || is_jit_function(@@range_for_range))
+        t |> success(!jit_enabled() || is_jit_function(@@range_for_range_extra))
+        t |> success(!jit_enabled() || is_jit_function(@@range_for_with_break))
+        t |> success(!jit_enabled() || is_jit_function(@@range_for_with_continue))
+        t |> success(!jit_enabled() || is_jit_function(@@range_for_with_finally))
         t |> equal(range_for(10), 10)
         t |> equal(range_for_range(range(100, 110)), 10)
         t |> equal(range_for_range_extra(range(100, 110)), 10)
@@ -207,8 +205,8 @@ def test_for_loop(t : T?) {
         t |> equal(range_for_with_finally(10), 1)
     }
     t |> run("dim for") <| @(t : T?) {
-        t |> success(is_jit_function(@@dim_for))
-        t |> success(is_jit_function(@@dim_and_range_for))
+        t |> success(!jit_enabled() || is_jit_function(@@dim_for))
+        t |> success(!jit_enabled() || is_jit_function(@@dim_and_range_for))
         var a : int[10]
         t |> equal(dim_for(a), 10)
         for (i in a) {
@@ -220,8 +218,8 @@ def test_for_loop(t : T?) {
         }
     }
     t |> run("array for") <| @(t : T?) {
-        t |> success(is_jit_function(@@array_for))
-        t |> success(is_jit_function(@@array_and_range_for))
+        t |> success(!jit_enabled() || is_jit_function(@@array_for))
+        t |> success(!jit_enabled() || is_jit_function(@@array_and_range_for))
         var a : array<int>
         a |> resize(10)
         t |> equal(array_for(a), 10)
@@ -234,23 +232,23 @@ def test_for_loop(t : T?) {
         }
     }
     t |> run("iterator for") <| @(t : T?) {
-        t |> success(is_jit_function(@@iterator_for))
+        t |> success(!jit_enabled() || is_jit_function(@@iterator_for))
         t |> equal(iterator_for(10), 10)
     }
     t |> run("hybrid for") <| @(t : T?) {
-        t |> success(is_jit_function(@@hybrid_for))
+        t |> success(!jit_enabled() || is_jit_function(@@hybrid_for))
         t |> equal(7, hybrid_for(10))
         t |> equal(5, hybrid_for(5))
     }
     t |> run("empty for") <| @(t : T?) {
-        t |> success(is_jit_function(@@add_elements))
+        t |> success(!jit_enabled() || is_jit_function(@@add_elements))
         var a <- array<int>(1, 2, 3)
         t |> equal(6, add_elements(a))
         a |> clear()
         t |> equal(0, add_elements(a))
     }
     t |> run("special count") <| @(t : T?) {
-        t |> success(is_jit_function(@@special_count))
+        t |> success(!jit_enabled() || is_jit_function(@@special_count))
         t |> equal(3,  special_count(3, 0, 1))  // 0, 1, 2
         t |> equal(6,  special_count(3, 0, 2))  // 0, 2, 4
         t |> equal(12, special_count(3, 1, 3))  // 1, 4, 7

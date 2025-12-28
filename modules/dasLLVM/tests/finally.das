@@ -1,44 +1,42 @@
 options gen2
 require dastest/testing_boost
 
-require jit
-
 [test]
 def test_finally(t : T?) {
     t |> run("test if finally") <| @(t : T?) {
-        t |> success(is_jit_function(@@test_if_finally))
+        t |> success(!jit_enabled() || is_jit_function(@@test_if_finally))
         t |> success(test_if_finally())
     }
     t |> run("test nested if") <| @(t : T?) {
-        t |> success(is_jit_function(@@test_nested_if))
+        t |> success(!jit_enabled() || is_jit_function(@@test_nested_if))
         t |> success(test_nested_if())
     }
     t |> run("test nested if else") <| @(t : T?) {
-        t |> success(is_jit_function(@@test_nested_if_else))
+        t |> success(!jit_enabled() || is_jit_function(@@test_nested_if_else))
         t |> success(test_nested_if_else())
     }
     t |> run("test if doulbe break") <| @(t : T?) {
-        t |> success(is_jit_function(@@test_if_double_break))
+        t |> success(!jit_enabled() || is_jit_function(@@test_if_double_break))
         t |> success(test_if_double_break())
     }
     t |> run("test for finally") <| @(t : T?) {
-        t |> success(is_jit_function(@@test_for_finally))
+        t |> success(!jit_enabled() || is_jit_function(@@test_for_finally))
         t |> success(test_for_finally())
     }
     t |> run("test while finally") <| @(t : T?) {
-        t |> success(is_jit_function(@@test_while_finally))
+        t |> success(!jit_enabled() || is_jit_function(@@test_while_finally))
         t |> success(test_while_finally())
     }
     t |> run("test func finally") <| @(t : T?) {
-        t |> success(is_jit_function(@@test_func_finally))
+        t |> success(!jit_enabled() || is_jit_function(@@test_func_finally))
         t |> success(test_func_finally())
     }
     t |> run("test block finally") <| @(t : T?) {
-        t |> success(is_jit_function(@@test_block_finally))
+        t |> success(!jit_enabled() || is_jit_function(@@test_block_finally))
         t |> success(test_block_finally())
     }
     t |> run("for loop with early out") <| @(t : T?) {
-        t |> success(is_jit_function(@@early_out))
+        t |> success(!jit_enabled() || is_jit_function(@@early_out))
         g_steps = 0
         early_out(t, array<int>(1, 2, 3, 4))
         t |> equal(2, g_steps)

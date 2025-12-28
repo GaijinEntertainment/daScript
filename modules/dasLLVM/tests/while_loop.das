@@ -1,9 +1,6 @@
 options gen2
 require dastest/testing_boost
 
-require jit
-
-[jit]
 def count_all(value : int) {
     var i = 0
     while (i < value) {
@@ -12,7 +9,6 @@ def count_all(value : int) {
     return i
 }
 
-[jit]
 def count_with_break(value, max_value : int) {
     var i = 0
     while (i < value) {
@@ -24,7 +20,6 @@ def count_with_break(value, max_value : int) {
     return i
 }
 
-[jit]
 def count_with_continue(value, max_value : int) {
     var i = 0
     var j = 0
@@ -38,7 +33,6 @@ def count_with_continue(value, max_value : int) {
     return j
 }
 
-[jit]
 def count_with_finally(value : int) {
     var i = 0
     var tf = 0
@@ -53,10 +47,10 @@ def count_with_finally(value : int) {
 [test]
 def test_while_loop(t : T?) {
 
-    t |> success(is_jit_function(@@count_all))
-    t |> success(is_jit_function(@@count_with_break))
-    t |> success(is_jit_function(@@count_with_continue))
-    t |> success(is_jit_function(@@count_with_finally))
+    t |> success(!jit_enabled() || is_jit_function(@@count_all))
+    t |> success(!jit_enabled() || is_jit_function(@@count_with_break))
+    t |> success(!jit_enabled() || is_jit_function(@@count_with_continue))
+    t |> success(!jit_enabled() || is_jit_function(@@count_with_finally))
 
     t |> equal(count_all(10), 10)
     t |> equal(count_with_break(10, 5), 5)

@@ -3,37 +3,30 @@ require dastest/testing_boost
 
 require daslib/constant_expression
 
-require jit
-
-[jit]
 def jit_memset8(data : void?; value : uint8; size : int) {
     unsafe {
         memset8(data, value, size)
     }
 }
 
-[jit]
 def jit_memset16(data : void?; value : uint16; size : int) {
     unsafe {
         memset16(data, value, size)
     }
 }
 
-[jit]
 def jit_memset32(data : void?; value : uint; size : int) {
     unsafe {
         memset32(data, value, size)
     }
 }
 
-[jit]
 def jit_memset64(data : void?; value : uint64; size : int) {
     unsafe {
         memset64(data, value, size)
     }
 }
 
-[jit]
 def jit_memset128(data : void?; value : uint4; size : int) {
     unsafe {
         memset128(data, value, size)
@@ -63,7 +56,7 @@ def test_any_memset(t : T?; value : auto(TT); funcname : string) {
 [test]
 def test_memset(t : T?) {
     t |> run("memset8") <| @(t : T?) {
-        t |> success(is_jit_function(@@jit_memset8))
+        t |> success(!jit_enabled() || is_jit_function(@@jit_memset8))
         var a : uint8[10]
         jit_memset8(unsafe(addr(a[2])), 0x55u8, 3)
         for (i in 0..10) {
@@ -72,7 +65,7 @@ def test_memset(t : T?) {
         test_any_memset(t, 12u8, "jit_memset8")
     }
     t |> run("memset16") <| @(t : T?) {
-        t |> success(is_jit_function(@@jit_memset16))
+        t |> success(!jit_enabled() || is_jit_function(@@jit_memset16))
         var a : uint16[10]
         jit_memset16(unsafe(addr(a[2])), uint16(0x55), 3)
         for (i in 0..10) {
@@ -81,7 +74,7 @@ def test_memset(t : T?) {
         test_any_memset(t, uint16(1234), "jit_memset16")
     }
     t |> run("memset32") <| @(t : T?) {
-        t |> success(is_jit_function(@@jit_memset32))
+        t |> success(!jit_enabled() || is_jit_function(@@jit_memset32))
         var a : uint[10]
         jit_memset32(unsafe(addr(a[2])), 0x55, 3)
         for (i in 0..10) {
@@ -90,7 +83,7 @@ def test_memset(t : T?) {
         test_any_memset(t, 0x12345678, "jit_memset32")
     }
     t |> run("memset64") <| @(t : T?) {
-        t |> success(is_jit_function(@@jit_memset64))
+        t |> success(!jit_enabled() || is_jit_function(@@jit_memset64))
         var a : uint64[10]
         jit_memset64(unsafe(addr(a[2])), uint64(0x55), 3)
         for (i in 0..10) {
@@ -99,7 +92,7 @@ def test_memset(t : T?) {
         test_any_memset(t, 0x12345678abcdef01ul, "jit_memset64")
     }
     t |> run("memset128") <| @(t : T?) {
-        t |> success(is_jit_function(@@jit_memset128))
+        t |> success(!jit_enabled() || is_jit_function(@@jit_memset128))
         var a : uint4[10]
         jit_memset128(unsafe(addr(a[2])), uint4(0x12, 0x34, 0x56, 0x78), 3)
         for (i in 0..10) {

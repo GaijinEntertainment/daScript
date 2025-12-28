@@ -1,14 +1,12 @@
 options gen2
 require dastest/testing_boost
 
-require jit
-
-[jit, sideeffects]
+[sideeffects]
 def strcat(a, b : string) {
     return a + b
 }
 
-[jit, sideeffects]
+[sideeffects]
 def strcati(var a : string&; b : string) {
     a += b
 }

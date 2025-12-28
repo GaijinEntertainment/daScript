@@ -1,15 +1,12 @@
 options gen2
 require dastest/testing_boost
 
-require jit
-
-[jit]
 def vec_at_r2v(vec; idx : int) {
     return vec[idx]
 }
 
 def check_vec2_at_r2v(t : T?; v : auto(vecT); a1, a2 : auto(argT)) {
-    t |> success(is_jit_function(@@ < (vec : vecT; idx : int) : argT > vec_at_r2v))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (vec : vecT; idx : int) : argT > vec_at_r2v))
     var f2 = vecT(a1, a2)
     let i1 = vec_at_r2v(f2, 0)
     let i2 = vec_at_r2v(f2, 1)
@@ -18,7 +15,7 @@ def check_vec2_at_r2v(t : T?; v : auto(vecT); a1, a2 : auto(argT)) {
 }
 
 def check_vec3_at_r2v(t : T?; v : auto(vecT); a1, a2, a3 : auto(argT)) {
-    t |> success(is_jit_function(@@ < (vec : vecT; idx : int) : argT > vec_at_r2v))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (vec : vecT; idx : int) : argT > vec_at_r2v))
     var f2 = vecT(a1, a2, a3)
     let i1 = vec_at_r2v(f2, 0)
     let i2 = vec_at_r2v(f2, 1)
@@ -29,7 +26,7 @@ def check_vec3_at_r2v(t : T?; v : auto(vecT); a1, a2, a3 : auto(argT)) {
 }
 
 def check_vec4_at_r2v(t : T?; v : auto(vecT); a1, a2, a3, a4 : auto(argT)) {
-    t |> success(is_jit_function(@@ < (vec : vecT; idx : int) : argT > vec_at_r2v))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (vec : vecT; idx : int) : argT > vec_at_r2v))
     var f2 = vecT(a1, a2, a3, a4)
     let i1 = vec_at_r2v(f2, 0)
     let i2 = vec_at_r2v(f2, 1)
@@ -41,13 +38,12 @@ def check_vec4_at_r2v(t : T?; v : auto(vecT); a1, a2, a3, a4 : auto(argT)) {
     t |> equal(a4, i4)
 }
 
-[jit]
 def set_vec(var vec &; idx : int; val : auto(argT)) {
     vec[idx] = val
 }
 
 def check_set_vec2(t : T?; var v : auto(vecT); a1, a2 : auto(argT)) {
-    t |> success(is_jit_function(@@ < (var vec : vecT&; idx : int; val : argT) > set_vec))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (var vec : vecT&; idx : int; val : argT) > set_vec))
     var f2 : vecT
     set_vec(f2, 0, a1)
     set_vec(f2, 1, a2)
@@ -56,7 +52,7 @@ def check_set_vec2(t : T?; var v : auto(vecT); a1, a2 : auto(argT)) {
 }
 
 def check_set_vec3(t : T?; var v : auto(vecT); a1, a2, a3 : auto(argT)) {
-    t |> success(is_jit_function(@@ < (var vec : vecT&; idx : int; val : argT) > set_vec))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (var vec : vecT&; idx : int; val : argT) > set_vec))
     var f2 : vecT
     set_vec(f2, 0, a1)
     set_vec(f2, 1, a2)
@@ -67,7 +63,7 @@ def check_set_vec3(t : T?; var v : auto(vecT); a1, a2, a3 : auto(argT)) {
 }
 
 def check_set_vec4(t : T?; var v : auto(vecT); a1, a2, a3, a4 : auto(argT)) {
-    t |> success(is_jit_function(@@ < (var vec : vecT&; idx : int; val : argT) > set_vec))
+    t |> success(!jit_enabled() || is_jit_function(@@ < (var vec : vecT&; idx : int; val : argT) > set_vec))
     var f2 : vecT
     set_vec(f2, 0, a1)
     set_vec(f2, 1, a2)

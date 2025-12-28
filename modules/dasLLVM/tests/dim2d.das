@@ -1,8 +1,6 @@
 options gen2
 require dastest/testing_boost
 
-require jit
-
 let ROOM_SIZE_X = 32
 let ROOM_SIZE_Y = 18
 let ROOM_SIZE_Z = 5
@@ -11,7 +9,6 @@ var arr_xyz : int[ROOM_SIZE_X][ROOM_SIZE_Y][ROOM_SIZE_Z]
 var arr_yzx : int[ROOM_SIZE_Y][ROOM_SIZE_Z][ROOM_SIZE_X]
 var arr_xzy : int[ROOM_SIZE_X][ROOM_SIZE_Z][ROOM_SIZE_Y]
 
-[jit]
 def walk {
     var pos = 0
     var arr : int[ROOM_SIZE_X + 2][ROOM_SIZE_Y + 2]
@@ -49,7 +46,6 @@ def init_no_jit {
     }
 }
 
-[jit]
 def check_order_jit : bool {
     var val = 0
     for (i in range(4)) {
@@ -63,7 +59,7 @@ def check_order_jit : bool {
 [test, no_jit]
 def test_dim(t : T?) {
     t |> run("multidim access") <| @(t : T?) {
-        t |> success(is_jit_function(@@ < () : bool > check_order_jit))
+        t |> success(!jit_enabled() || is_jit_function(@@ < () : bool > check_order_jit))
         init_no_jit()
         t |> success(check_order_jit())
         t |> equal(walk(),     576)
