@@ -905,20 +905,22 @@ class LlvmJitVisitor : AstVisitor {
             vptrtype = get_type_pointer(arg._type)
         }
         var v_ptr : LLVMOpaqueValue?
+        var vsize = arg._type.flags.ref ?  typeinfo sizeof(type<void?>) : arg._type.sizeOf
+        var valign = arg._type.flags.ref ?  typeinfo alignof(type<void?>) : arg._type.alignOf
+
         if (arg.flags.aliasCMRES) {
             v_ptr = get_cmres_param()
             v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, vptrtype, "variable_cmres_{arg.name}")
         } else {
             at_function_entry <| $() {
                 v_ptr = LLVMBuildAlloca(g_builder, vtype, "variable_{arg.name}")
+                LLVMBuildMemSet(g_builder, v_ptr, 0ul, uint64(vsize), uint(valign))
                 LLVMSetAlignment(v_ptr, 16u)
                 v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, vptrtype, "variable_{arg.name}")
             }
         }
         setV(arg, v_ptr)
         if (arg.init == null) {
-            var vsize = arg._type.flags.ref ?  typeinfo sizeof(type<void?>) : arg._type.sizeOf
-            var valign = arg._type.flags.ref ?  typeinfo alignof(type<void?>) : arg._type.alignOf
             LLVMBuildMemSet(g_builder, v_ptr, 0ul, uint64(vsize), uint(valign))
         } elif (make_call_to_cmres(arg.init, v_ptr)) {
             pass    // do nothing
