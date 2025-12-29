@@ -648,13 +648,16 @@ namespace das
         for (; body!=tail; ++body) {
             (*body)->eval(context);
             { if ( context.stopFlags ) {
-                if (context.stopFlags&EvalFlags::jumpToLabel && context.gotoLabel<totalLabels) {
+                if (context.stopFlags&EvalFlags::jumpToLabel) {
+                    if (  context.gotoLabel>=totalLabels ) {
+                        context.throw_error_at(debugInfo, "invalid label index %u", context.gotoLabel);
+                    }
                     body=list+labels[context.gotoLabel];
                     if ( body>=list && body<tail ) {
                         context.stopFlags &= ~EvalFlags::jumpToLabel;
                         goto loopbegin;
                     } else {
-                        context.throw_error_at(debugInfo, "jump to label %i failed", context.gotoLabel);
+                        context.throw_error_at(debugInfo, "jump to label %u failed", context.gotoLabel);
                     }
                 }
                 goto loopend;
@@ -676,13 +679,16 @@ namespace das
             DAS_SINGLE_STEP(context,(*body)->debugInfo,false);
             (*body)->eval(context);
             { if ( context.stopFlags ) {
-                if (context.stopFlags&EvalFlags::jumpToLabel && context.gotoLabel<totalLabels) {
+                if (context.stopFlags&EvalFlags::jumpToLabel) {
+                    if (  context.gotoLabel>=totalLabels ) {
+                        context.throw_error_at(debugInfo, "invalid label index %u", context.gotoLabel);
+                    }
                     body=list+labels[context.gotoLabel];
                     if ( body>=list && body<tail ) {
                         context.stopFlags &= ~EvalFlags::jumpToLabel;
                         goto loopbegin;
                     } else {
-                        context.throw_error_at(debugInfo, "jump to label %i failed", context.gotoLabel);
+                        context.throw_error_at(debugInfo, "jump to label %u failed", context.gotoLabel);
                     }
                 }
                 goto loopend;

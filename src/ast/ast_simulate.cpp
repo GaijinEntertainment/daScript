@@ -1865,7 +1865,7 @@ namespace das
             }
         }
         // TODO: what if list size is 0?
-        if ( simlist.size()!=1 || isClosure || finalList.size() ) {
+        if ( simlist.size()!=1 || isClosure || finalList.size() || (maxLabelIndex!=-1) ) {
             SimNode_Block * block;
             if ( isClosure ) {
                 bool needResult = type!=nullptr && type->baseType!=Type::tVoid;
