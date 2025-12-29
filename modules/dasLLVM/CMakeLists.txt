@@ -40,10 +40,9 @@ IF ((NOT DAS_LLVM_INCLUDED) AND ((NOT ${DAS_LLVM_DISABLED}) OR (NOT DEFINED DAS_
                 set(DAS_LLVM_DLL_PATH ${LLVM_INSTALL_PREFIX}/lib/libLLVM.so )
             ENDIF()
             get_filename_component(dll_name "${dll}" NAME)
-            add_custom_target(copy_llvm_dll ALL
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${DAS_LLVM_DLL_PATH}"
+            configure_file("${DAS_LLVM_DLL_PATH}"
                 "${DAS_LLVM_LIB_OUTPUT}/${DAS_LLVM_DLL_NAME}"
+                COPYONLY
             )
         ELSE()
             # File not exists locally and LLVM lib not found.
@@ -108,7 +107,7 @@ IF ((NOT DAS_LLVM_INCLUDED) AND ((NOT ${DAS_LLVM_DISABLED}) OR (NOT DEFINED DAS_
 	install(FILES ${DASLLVM_SOURCES}
 			DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLVM/daslib
 	)
-	file(GLOB DASLLVM_BINDINGS ${DAS_LLVM_DIR}/das_llvm/*.das)
-	install(FILES ${DASLLVM_BINDINGS} DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLVM/das_llvm)
+	file(GLOB DASLLVM_BINDINGS ${DAS_LLVM_DIR}/bindings/*.das)
+	install(FILES ${DASLLVM_BINDINGS} DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLVM/bindings)
 
 ENDIF()
