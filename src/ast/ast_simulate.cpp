@@ -1865,7 +1865,7 @@ namespace das
             }
         }
         // TODO: what if list size is 0?
-        if ( simlist.size()!=1 || isClosure || finalList.size() ) {
+        if ( simlist.size()!=1 || isClosure || finalList.size() || (maxLabelIndex!=-1 || hasExitByLabel) ) {
             SimNode_Block * block;
             if ( isClosure ) {
                 bool needResult = type!=nullptr && type->baseType!=Type::tVoid;
@@ -1879,7 +1879,7 @@ namespace das
                     block = context.code->makeNode<SimNode_ClosureBlock>(at, needResult, C0, annotationData);
                 }
             } else {
-                if ( maxLabelIndex!=-1 ) {
+                if ( maxLabelIndex!=-1 || hasExitByLabel) {
 #if DAS_DEBUGGER
                     if ( context.thisProgram->getDebugger() ) {
                         block = context.code->makeNode<SimNodeDebug_BlockWithLabels>(at);
