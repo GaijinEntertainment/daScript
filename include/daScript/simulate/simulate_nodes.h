@@ -3539,8 +3539,8 @@ SIM_NODE_AT_VECTOR(Float, float)
                 }
             }
         loopend:
-            evalFinal(context);
             closeIterators(sources, pi, context);
+            evalFinal(context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }
@@ -3592,8 +3592,8 @@ SIM_NODE_AT_VECTOR(Float, float)
                 if ( context.stopFlags ) goto loopend;
             }
         loopend:
-            evalFinal(context);
             sources->close(context, pi);
+            evalFinal(context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }
@@ -3648,8 +3648,8 @@ SIM_NODE_AT_VECTOR(Float, float)
                 }
             }
         loopend:
-            this->evalFinal(context);
             this->closeIterators(sources, pi, context);
+            this->evalFinal(context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }
@@ -3688,8 +3688,8 @@ SIM_NODE_AT_VECTOR(Float, float)
                 if ( context.stopFlags ) goto loopend;
             }
         loopend:
-            evalFinal(context);
             sources->close(context, pi);
+            evalFinal(context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }
@@ -3746,8 +3746,8 @@ SIM_NODE_AT_VECTOR(Float, float)
                 }
             }
         loopend:
-            this->evalFinal(context);
             this->closeIterators(sources, pi, context);
+            this->evalFinal(context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }
@@ -3786,8 +3786,8 @@ SIM_NODE_AT_VECTOR(Float, float)
                 if ( context.stopFlags ) goto loopend;
             }
         loopend:
-            evalFinal(context);
             sources->close(context, pi);
+            evalFinal(context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }
