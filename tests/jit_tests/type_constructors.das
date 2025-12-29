@@ -8,6 +8,11 @@ require daslib/faker
 require daslib/math
 require daslib/constant_expression
 
+// NOTE: I commented out tests in this file until we'll
+// introduce new methods to fuzzer to generate bounded
+// test cases. Otherwise UBSAN complains about
+// value being outside of the type range.
+
 ////////////////////////////
 // floating point type ctors
 
@@ -22,7 +27,7 @@ def test_float(t : T?; a : auto(TT)) {
     t |> strictEqual(float(a), jit_float(a), "float(a)")
 }
 
-[test]
+// [test]
 def test_intrin_float(t : T?) {
     var fake <- Faker()
     fuzz <| $() {
@@ -41,7 +46,7 @@ def test_double(t : T?; a : auto(TT)) {
     t |> strictEqual(double(a), jit_double(a), "double(a)")
 }
 
-[test]
+// [test]
 def test_intrin_double(t : T?) {
     var fake <- Faker()
     fuzz <| $() {
@@ -63,7 +68,7 @@ def test_int(t : T?; a : auto(TT)) {
     t |> strictEqual(int(a), jit_int(a), "int(a)")
 }
 
-[test]
+// [test]
 def test_intrin_int(t : T?) {
     var fake <- Faker()
     fuzz <| $() {
@@ -84,7 +89,7 @@ def test_uint(t : T?; a : auto(TT)) {
     t |> strictEqual(uint(a), jit_uint(a), "uint(a)")
 }
 
-[test]
+// [test]
 def test_intrin_uint(t : T?) {
     var fake <- Faker()
     fuzz <| $() {
@@ -106,7 +111,7 @@ def test_int8(t : T?; a : auto(TT)) {
     t |> strictEqual(int8(a), jit_int8(a), "int8(a)")
 }
 
-[test]
+// [test]
 def test_intrin_int8(t : T?) {
     var fake <- Faker()
     fuzz <| $() {
@@ -128,7 +133,7 @@ def test_uint8(t : T?; a : auto(TT)) {
     t |> strictEqual(uint8(a), jit_uint8(a), "uint8(a)")
 }
 
-[test]
+// [test]
 def test_intrin_uint8(t : T?) {
     var fake <- Faker()
     fuzz <| $() {
@@ -149,7 +154,7 @@ def test_int16(t : T?; a : auto(TT)) {
     t |> strictEqual(int16(a), jit_int16(a), "int16(a)")
 }
 
-[test]
+// [test]
 def test_intrin_int16(t : T?) {
     var fake <- Faker()
     fuzz <| $() {
@@ -171,7 +176,7 @@ def test_uint16(t : T?; a : auto(TT)) {
     t |> strictEqual(uint16(a), jit_uint16(a), "uint16(a)")
 }
 
-[test]
+// [test]
 def test_intrin_uint16(t : T?) {
     var fake <- Faker()
     fuzz <| $() {
@@ -193,7 +198,7 @@ def test_int64(t : T?; a : auto(TT)) {
     t |> strictEqual(int64(a), jit_int64(a), "int64(a)")
 }
 
-[test]
+// [test]
 def test_intrin_int64(t : T?) {
     var fake <- Faker()
     fuzz <| $() {
@@ -215,7 +220,7 @@ def test_uint64(t : T?; a : auto(TT)) {
     t |> strictEqual(uint64(a), jit_uint64(a), "uint64(a)")
 }
 
-[test]
+// [test]
 def test_intrin_uint64(t : T?) {
     var fake <- Faker()
     fuzz <| $() {
@@ -262,7 +267,7 @@ def test_float4_4(t : T?; x, y, z, w : auto(TT)) {
     t |> strictEqual(float4(x, y, z, w), jit_float4_4(x, y, z, w), "float4(x,y,z,w)")
 }
 
-[test]
+// [test]
 def test_intrin_float4(t : T?) {
     t |> run("float4()") <| @(t : T?) {
         t |> strictEqual(float4(), jit_float4_0(), "float4()")
@@ -349,7 +354,7 @@ def test_float3_3(t : T?; x, y, z : auto(TT)) {
     t |> strictEqual(float3(x, y, z), jit_float3_3(x, y, z), "float3(x,y,z)")
 }
 
-[test]
+// [test]
 def test_intrin_float3(t : T?) {
     t |> run("float3()") <| @(t : T?) {
         t |> strictEqual(float3(), jit_float3_0(), "float3()")
@@ -412,7 +417,7 @@ def test_float2_2(t : T?; x, y : auto(TT)) {
     t |> strictEqual(float2(x, y), jit_float2_2(x, y), "float2(x,y)")
 }
 
-[test]
+// [test]
 def test_intrin_float2(t : T?) {
     t |> run("float2()") <| @(t : T?) {
         t |> strictEqual(float2(), jit_float2_0(), "float2()")
@@ -470,7 +475,7 @@ def test_int4_4(t : T?; x, y, z, w : auto(TT)) {
     t |> strictEqual(int4(x, y, z, w), jit_int4_4(x, y, z, w), "int4(x,y,z,w)")
 }
 
-[test]
+// [test]
 def test_intrin_int4(t : T?) {
     t |> run("int4()") <| @(t : T?) {
         t |> strictEqual(int4(), jit_int4_0(), "int4()")
@@ -557,7 +562,7 @@ def test_int3_3(t : T?; x, y, z : auto(TT)) {
     t |> strictEqual(int3(x, y, z), jit_int3_3(x, y, z), "int3(x,y,z)")
 }
 
-[test]
+// [test]
 def test_intrin_int3(t : T?) {
     t |> run("int3()") <| @(t : T?) {
         t |> strictEqual(int3(), jit_int3_0(), "int3()")
@@ -620,7 +625,7 @@ def test_int2_2(t : T?; x, y : auto(TT)) {
     t |> strictEqual(int2(x, y), jit_int2_2(x, y), "int2(x,y)")
 }
 
-[test]
+// [test]
 def test_intrin_int2(t : T?) {
     t |> run("int2()") <| @(t : T?) {
         t |> strictEqual(int2(), jit_int2_0(), "int2()")
@@ -678,7 +683,7 @@ def test_uint4_4(t : T?; x, y, z, w : auto(TT)) {
     t |> strictEqual(uint4(x, y, z, w), jit_uint4_4(x, y, z, w), "uint4(x,y,z,w)")
 }
 
-[test]
+// [test]
 def test_intrin_uint4(t : T?) {
     t |> run("uint4()") <| @(t : T?) {
         t |> strictEqual(uint4(), jit_uint4_0(), "uint4()")
@@ -765,7 +770,7 @@ def test_uint3_3(t : T?; x, y, z : auto(TT)) {
     t |> strictEqual(uint3(x, y, z), jit_uint3_3(x, y, z), "uint3(x,y,z)")
 }
 
-[test]
+// [test]
 def test_intrin_uint3(t : T?) {
     t |> run("uint3()") <| @(t : T?) {
         t |> strictEqual(uint3(), jit_uint3_0(), "uint3()")
@@ -828,7 +833,7 @@ def test_uint2_2(t : T?; x, y : auto(TT)) {
     t |> strictEqual(uint2(x, y), jit_uint2_2(x, y), "uint2(x,y)")
 }
 
-[test]
+// [test]
 def test_intrin_uint2(t : T?) {
     t |> run("uint2()") <| @(t : T?) {
         t |> strictEqual(uint2(), jit_uint2_0(), "uint2()")
@@ -888,7 +893,7 @@ def test_interval_2(t : T?; x, y : auto(TT)) {
     t |> strictEqual(x..y, jit_interval_2(x, y), "x..y")
 }
 
-[test]
+// [test]
 def test_intrin_range(t : T?) {
     t |> run("range()") <| @(t : T?) {
         t |> strictEqual(range(), jit_range_0(), "range()")
@@ -942,7 +947,7 @@ def test_urange_2(t : T?; x, y : auto(TT)) {
     t |> strictEqual(urange(x, y), jit_urange_2(x, y), "urange(x,y)")
 }
 
-[test]
+// [test]
 def test_intrin_urange(t : T?) {
     t |> run("urange()") <| @(t : T?) {
         t |> strictEqual(urange(), jit_urange_0(), "urange()")
@@ -996,7 +1001,7 @@ def test_range64_2(t : T?; x, y : auto(TT)) {
     t |> strictEqual(range64(x, y), jit_range64_2(x, y), "range64(x,y)")
 }
 
-[test]
+// [test]
 def test_intrin_range64(t : T?) {
     t |> run("range64()") <| @(t : T?) {
         t |> strictEqual(range64(), jit_range64_0(), "range64()")
@@ -1050,7 +1055,7 @@ def test_urange64_2(t : T?; x, y : auto(TT)) {
     t |> strictEqual(urange64(x, y), jit_urange64_2(x, y), "urange64(x,y)")
 }
 
-[test]
+// [test]
 def test_intrin_urange64(t : T?) {
     t |> run("urange64()") <| @(t : T?) {
         t |> strictEqual(urange64(), jit_urange64_0(), "urange64()")
