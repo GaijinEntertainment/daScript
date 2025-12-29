@@ -103,7 +103,7 @@ namespace das {
     template <typename TT>
     SimNode * SimNode_VariantFieldDerefR2V<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
-        V_OP_TT(FieldDerefR2V);
+        V_OP_TT(VariantFieldDerefR2V);
         V_SUB(value);
         V_ARG(offset);
         V_ARG(variant);
