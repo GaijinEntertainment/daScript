@@ -401,8 +401,8 @@ namespace das
             }
         }
     loopend:
-        evalFinal(context);
         closeIterators(sources.data(), pi.data(), context);
+        evalFinal(context);
         context.stopFlags &= ~EvalFlags::stopForBreak;
         return v_zero();
     }
@@ -444,8 +444,8 @@ namespace das
             }
         }
     loopend:
-        evalFinal(context);
         closeIterators(sources.data(), pi.data(), context);
+        evalFinal(context);
         context.stopFlags &= ~EvalFlags::stopForBreak;
         return v_zero();
     }
@@ -489,8 +489,8 @@ namespace das
             }
         }
     loopend:
-        this->evalFinal(context);
         closeIterators(sources.data(), pi.data(), context);
+        this->evalFinal(context);
         context.stopFlags &= ~EvalFlags::stopForBreak;
         return v_zero();
     }
