@@ -905,20 +905,22 @@ class LlvmJitVisitor : AstVisitor {
             vptrtype = get_type_pointer(arg._type)
         }
         var v_ptr : LLVMOpaqueValue?
+        var vsize = arg._type.flags.ref ?  typeinfo sizeof(type<void?>) : arg._type.sizeOf
+        var valign = arg._type.flags.ref ?  typeinfo alignof(type<void?>) : arg._type.alignOf
+
         if (arg.flags.aliasCMRES) {
             v_ptr = get_cmres_param()
             v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, vptrtype, "variable_cmres_{arg.name}")
         } else {
             at_function_entry <| $() {
                 v_ptr = LLVMBuildAlloca(g_builder, vtype, "variable_{arg.name}")
+                LLVMBuildMemSet(g_builder, v_ptr, 0ul, uint64(vsize), uint(valign))
                 LLVMSetAlignment(v_ptr, 16u)
                 v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, vptrtype, "variable_{arg.name}")
             }
         }
         setV(arg, v_ptr)
         if (arg.init == null) {
-            var vsize = arg._type.flags.ref ?  typeinfo sizeof(type<void?>) : arg._type.sizeOf
-            var valign = arg._type.flags.ref ?  typeinfo alignof(type<void?>) : arg._type.alignOf
             LLVMBuildMemSet(g_builder, v_ptr, 0ul, uint64(vsize), uint(valign))
         } elif (make_call_to_cmres(arg.init, v_ptr)) {
             pass    // do nothing
@@ -2770,6 +2772,33 @@ class LlvmJitVisitor : AstVisitor {
                     LLVMBuildBr(g_builder, okay)
                     LLVMPositionBuilderAtEnd(g_builder, okay)
                 }
+            } elif (ssrc._type.isString) {
+                at_function_entry <| $() {
+                    // Let's reuse range for string iterator.
+                    range2[get_ptr(ssrc)] = LLVMBuildAlloca(g_builder, LLVMPointerType(types.t_int8, 0u), "loop_iter")
+                }
+                var s_ptr = getE(ssrc)
+                // Check if it's das-optimized empty string (just nullptr).
+                var is_empty_str = LLVMBuildIsNull(g_builder, s_ptr, "null_check")
+                var not_empty_str = append_basic_block("not_empty_str")
+                LLVMBuildCondBr(g_builder, is_empty_str, lblk.loop_end, not_empty_str)
+
+                LLVMPositionBuilderAtEnd(g_builder, not_empty_str)
+
+                LLVMBuildStore(g_builder, s_ptr, range2[get_ptr(ssrc)])
+                var cur_chr = LLVMBuildLoad2(g_builder, types.t_int8, s_ptr, "cur_chr")
+                let zero_i8 = types.ConstI8(0 |> int8)
+                let is_null = LLVMBuildICmp(g_builder,
+                    LLVMIntPredicate.LLVMIntNE, cur_chr, zero_i8, "is_null")
+                // Just in case check whether string is equal to '\0', e.g. this
+                // is native string.
+                LLVMBuildStore(g_builder, is_null, lblk.need_loop)
+
+                assume svar_t = svar._type
+                assert(svar_t.baseType == Type.tInt)
+                // Cast to i32, since char is i32 in das.
+                var res = LLVMBuildSExt(g_builder, cur_chr, type_to_llvm_type(svar_t), "sext_cast")
+                LLVMBuildStore(g_builder, res, getV(svar))
             } else {
                 failed_E(ssrc, "unsupported loop source {describe(ssrc._type)}")
             }
@@ -2839,6 +2868,20 @@ class LlvmJitVisitor : AstVisitor {
                     LLVMBuildCondBr(g_builder, rcond, nextOk, lblk.loop_end)
                     LLVMPositionBuilderAtEnd(g_builder, nextOk)
                 }
+            } elif (ssrc._type.isString) {
+                var svar_val = LLVMBuildLoad2(g_builder, LLVMPointerType(types.t_int8, 0u), range2[get_ptr(ssrc)], "")
+                var svar_i = LLVMBuildGEP2(g_builder, types.t_int8, svar_val, types.ConstI32(1ul), "next_element")
+                var val = LLVMBuildLoad2(g_builder, types.t_int8, svar_i, "")
+                let zero_i8 = types.ConstI8(0 |> int8)
+                var is_empty_str = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, val, zero_i8, "is_zero")
+                var nextOk = append_basic_block("for_{svar.name}_next_ok")
+                LLVMBuildCondBr(g_builder, is_empty_str, lblk.loop_end, nextOk)
+                LLVMPositionBuilderAtEnd(g_builder, nextOk)
+
+                LLVMBuildStore(g_builder, svar_i, range2[get_ptr(ssrc)])
+                assert(svar._type.baseType == Type.tInt)
+                var res = LLVMBuildSExt(g_builder, val, type_to_llvm_type(svar._type), "sext_cast")
+                LLVMBuildStore(g_builder, res, getV(svar))
             } else {
                 failed_E(ssrc, "unsupported loop source {describe(ssrc._type)}")
             }
@@ -6044,11 +6087,14 @@ class DisableJitVisitor : AstVisitor {
 
     def override preVisitExprForBody(expr : smart_ptr<ExprFor>) : void {
         for (svar, ssrc in expr.iteratorVariables, expr.sources) {
-            if (ssrc._type.isRange || ssrc._type.dim |> length != 0 || ssrc._type.isGoodArrayType || ssrc._type.isIterator) {
+            assume ssrc_t = ssrc._type
+            if (ssrc_t.isRange || ssrc_t.dim |> length != 0 ||
+                ssrc_t.isGoodArrayType || ssrc_t.isIterator ||
+                ssrc_t.isString) {
             } else {
-                // At least string is not supported yet as the source of loop.
-                disable = true
-                return
+                assert(false,
+                    "We shouldn't be here, all loop sources expected to be supported"
+                )
             }
         }
     }

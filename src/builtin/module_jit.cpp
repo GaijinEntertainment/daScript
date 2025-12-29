@@ -27,12 +27,6 @@ namespace das {
         return res;
     }
 
-    bool das_is_jit_function ( const Func func ) {
-        auto simfn = func.PTR;
-        if ( !simfn ) return false;
-        return simfn->code && simfn->code->rtti_node_isJit();
-    }
-
     bool das_remove_jit ( const Func func ) {
         auto simfn = func.PTR;
         if ( !simfn ) return false;
@@ -522,9 +516,6 @@ extern "C" {
             addExtern<DAS_BIND_FUN(das_instrument_line_info)>(*this, lib, "instrument_line_info",
                 SideEffects::worstDefault, "das_instrument_line_info")
                     ->args({"info","context","at"});
-            addExtern<DAS_BIND_FUN(das_is_jit_function)>(*this, lib, "is_jit_function",
-                SideEffects::worstDefault, "das_is_jit_function")
-                    ->args({"function"});
             addExtern<DAS_BIND_FUN(das_get_jit_exception)>(*this, lib, "get_jit_exception",
                 SideEffects::none, "das_get_jit_exception");
             addExtern<DAS_BIND_FUN(das_get_jit_call_or_fastcall)>(*this, lib, "get_jit_call_or_fastcall",
