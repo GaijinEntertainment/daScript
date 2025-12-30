@@ -40,7 +40,7 @@ class TempStringMacro : AstFunctionAnnotation {
             return true
         }
 
-        errors := "temp_string argument must be a string with subtitutions (string builder)"
+        errors := "temp_string argument must be a string with substitutions (string builder)"
         return false
     }
 }
