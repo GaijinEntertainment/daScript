@@ -848,8 +848,9 @@ namespace das
         void *          hwBpAddress = nullptr;
         const LineInfo * singleStepAt = nullptr;
         int32_t         hwBpIndex = -1;
-        bool            debugger = false;
         volatile bool   singleStepMode = false;
+    public:
+        bool            debugger = false;
     public:
         shared_ptr<das_hash_map<uint64_t,SimFunction *>> tabMnLookup;
         shared_ptr<das_hash_map<uint64_t,uint32_t>> tabGMnLookup;

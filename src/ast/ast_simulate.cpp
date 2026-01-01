@@ -437,7 +437,7 @@ namespace das
             }
         } else {
 #if DAS_DEBUGGER
-            if ( context.thisProgram->getDebugger() ) {
+            if ( context.debugger ) {
                 auto sbody = body->simulate(context);
                 if ( !sbody->rtti_node_isBlock() ) {
                     auto block = context.code->makeNode<SimNodeDebug_BlockNF>(sbody->debugInfo);
@@ -1223,7 +1223,7 @@ namespace das
         auto blk = static_pointer_cast<ExprBlock>(block);
         uint32_t argSp = blk->stackTop;
         auto info = context.thisHelper->makeInvokeableTypeDebugInfo(blk->makeBlockType(),blk->at);
-        if ( context.thisProgram->getDebugger() || context.thisProgram->options.getBoolOption("gc",false) ) {
+        if ( context.gcEnabled || context.debugger  ) {
             context.thisHelper->appendLocalVariables(info, (Expression *)this);
         }
         return context.code->makeNode<SimNode_MakeBlock>(at,block->simulate(context),argSp,stackTop,info);
@@ -1871,7 +1871,7 @@ namespace das
                 bool needResult = type!=nullptr && type->baseType!=Type::tVoid;
                 bool C0 = !needResult && simlist.size()==1 && finalList.size()==0;
 #if DAS_DEBUGGER
-                if ( context.thisProgram->getDebugger() ) {
+                if ( context.debugger ) {
                     block = context.code->makeNode<SimNodeDebug_ClosureBlock>(at, needResult, C0, annotationData);
                 } else
 #endif
@@ -1881,7 +1881,7 @@ namespace das
             } else {
                 if ( maxLabelIndex!=-1 ) {
 #if DAS_DEBUGGER
-                    if ( context.thisProgram->getDebugger() ) {
+                    if ( context.debugger ) {
                         block = context.code->makeNode<SimNodeDebug_BlockWithLabels>(at);
                     } else
 #endif
@@ -1892,7 +1892,7 @@ namespace das
                 } else {
                     if ( finalList.size()==0 ) {
 #if DAS_DEBUGGER
-                        if ( context.thisProgram->getDebugger() ) {
+                        if ( context.debugger ) {
                             block = context.code->makeNode<SimNodeDebug_BlockNF>(at);
                         } else
 #endif
@@ -1902,7 +1902,7 @@ namespace das
                         }
                     } else {
 #if DAS_DEBUGGER
-                        if ( context.thisProgram->getDebugger() ) {
+                        if ( context.debugger ) {
                             block = context.code->makeNode<SimNodeDebug_Block>(at);
                         } else
 #endif
@@ -2390,7 +2390,7 @@ namespace das
 
     SimNode * ExprTryCatch::simulate (Context & context) const {
 #if DAS_DEBUGGER
-        if ( context.thisProgram->getDebugger() ) {
+        if ( context.debugger ) {
             return context.code->makeNode<SimNodeDebug_TryCatch>(at,
                                                     try_block->simulate(context),
                                                     catch_block->simulate(context));
@@ -2509,7 +2509,7 @@ namespace das
         bool condIfZero = false;
         bool match0 = matchEquNequZero(cond, zeroCond, condIfZero);
 #if DAS_DEBUGGER
-        if ( context.thisProgram->getDebugger() ) {
+        if ( context.debugger ) {
             if ( match0 && zeroCond->type->isWorkhorseType() ) {
                 if ( condIfZero ) {
                     if ( if_false ) {
@@ -2599,7 +2599,7 @@ namespace das
     SimNode * ExprWhile::simulate (Context & context) const {
         SimNode_Block * whileNode = nullptr;
 #if DAS_DEBUGGER
-        if ( context.thisProgram->getDebugger() ) {
+        if ( context.debugger ) {
             whileNode = context.code->makeNode<SimNodeDebug_While>(at, cond->simulate(context));
         } else
 #endif
@@ -2651,7 +2651,7 @@ namespace das
         if ( (sourceTypes>1) || hybridRange || nativeIterators || stringChars || /* this is how much we can unroll */ total>MAX_FOR_UNROLL ) {
             SimNode_ForWithIteratorBase * result;
 #if DAS_DEBUGGER
-            if ( context.thisProgram->getDebugger() ) {
+            if ( context.debugger ) {
                 if ( total>MAX_FOR_UNROLL ) {
                     result = (SimNode_ForWithIteratorBase *) context.code->makeNode<SimNodeDebug_ForWithIteratorBase>(at);
                 } else {
@@ -2730,7 +2730,7 @@ namespace das
             auto subB = static_pointer_cast<ExprBlock>(body);
             bool loop1 = (subB->list.size() == 1);
 #if DAS_DEBUGGER
-            if ( context.thisProgram->getDebugger() ) {
+            if ( context.debugger ) {
                 if ( dynamicArrays ) {
                     if (loop1) {
                         result = (SimNode_ForBase *) context.code->makeNodeUnrollNZ_FOR<SimNodeDebug_ForGoodArray1>(total, at);
@@ -3179,6 +3179,7 @@ namespace das
         context.breakOnException |= policies.debugger;
         context.persistent = options.getBoolOption("persistent_heap", policies.persistent_heap);
         context.gcEnabled = options.getBoolOption("gc", false);
+        context.debugger = getDebugger();
         if ( context.persistent ) {
             context.heap = make_smart<PersistentHeapAllocator>();
             context.stringHeap = make_smart<PersistentStringAllocator>();
@@ -3257,7 +3258,7 @@ namespace das
         }
         context.functions = (SimFunction *) context.code->allocate( totalFunctions*sizeof(SimFunction) );
         context.totalFunctions = totalFunctions;
-        auto debuggerOrGC = getDebugger()  || context.thisProgram->options.getBoolOption("gc",false);
+        auto debuggerOrGC = context.debugger || context.gcEnabled;
         vector<FunctionPtr> lookupFunctionTable;
         das_hash_map<uint64_t,Function *> fnByMnh;
         bool anyPInvoke = false;
@@ -3521,7 +3522,6 @@ namespace das
             aotCpp(context,logs);
             registerAotCpp(logs,context);
         }
-        context.debugger = getDebugger();
         isSimulating = false;
         context.thisHelper = &helper;   // note - we may need helper for the 'complete'
         auto bound_env = daScriptEnvironment::getBound();
