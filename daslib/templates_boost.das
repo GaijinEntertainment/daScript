@@ -1273,7 +1273,12 @@ def public apply_qmacro_template_class(instance_name : string; var template_type
             // we rename methods
             let func_name = string(func.name)
             var method_name_parts = split(func_name, "`")
-            method_name_parts[0] = instance_name
+            if ( method_name_parts[0] == template_name ) {
+                method_name_parts[0] = instance_name
+            }
+            if (length(method_name_parts) == 2 &&  method_name_parts[1] == template_name) {
+                method_name_parts[1] = instance_name
+            }
             let func_clone_name = join(method_name_parts, "`")
             method_renames.insert(func_name, func_clone_name)
         }
@@ -1284,6 +1289,8 @@ def public apply_qmacro_template_class(instance_name : string; var template_type
     // Template -> Instance TypeDecl
     rules |> replaceTypeWithTypeDecl(template_name) <| clone_type(instance_type)
     rules |> replaceStructWithTypeDecl(template_structure) <| clone_type(instance_type)
+    // Template`Template class ctor rename
+    rules |> renameCall("{template_name}`{template_name}") <| "{instance_name}`{instance_name}"
     // method renames
     for (t_method, i_method in keys(method_renames), values(method_renames)) {
         rules |> renameVariable(t_method, i_method)
@@ -1301,6 +1308,7 @@ def public apply_qmacro_template_class(instance_name : string; var template_type
             for (arg in func_clone.arguments) {
                 arg._type |> move_new <| apply_template(rules, arg.at, clone_type(arg._type))
             }
+            func_clone.body |> move_new <| apply_template(rules, func.at, clone_expression(func.body))
             mod |> add_function(func_clone)
         }
     })

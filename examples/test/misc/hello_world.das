@@ -1,17 +1,9 @@
-require t_counter
+require daslib/hash_table
 
-typedef Counter = counter<int>
-
-def take_any_counter(var t : counter<auto(TT)>) {
-    print("any counter type is {typeinfo typename(type<TT>)}\n")
-    t.next()
-}
+typedef DictMap = $FlatHashMap < int; int >
 
 [export]
-def main {
-    var c = Counter()
-    c.next()
-    take_any_counter(c)
-    print("count = {c.value()}\n")
+def main() {
+    print("Hello, World!\n")
 }
 

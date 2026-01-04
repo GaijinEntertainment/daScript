@@ -1771,6 +1771,7 @@ namespace das {
     FunctionPtr makeClassConstructor ( Structure * baseClass, Function * method ) {
         // make a function
         auto func = make_smart<Function>();
+        func->isTemplate = baseClass->isTemplate;
         func->generated = true;
         func->at = method->at;
         func->atDecl = method->at;
