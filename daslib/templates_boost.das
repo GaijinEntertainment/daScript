@@ -1308,7 +1308,7 @@ def public apply_qmacro_template_class(instance_name : string; var template_type
             for (arg in func_clone.arguments) {
                 arg._type |> move_new <| apply_template(rules, arg.at, clone_type(arg._type))
             }
-            func_clone.body |> move_new <| apply_template(rules, func.at, clone_expression(func.body))
+            func_clone.body |> move_new <| apply_template(rules, func.at, clone_expression(func.body), false)
             mod |> add_function(func_clone)
         }
     })
@@ -1394,6 +1394,10 @@ class private AstQNamedTemplateClassMacro : AstCallMacro {
         }
         if (!(call.arguments[0]._type.isString)) {
             macro_error(prog, call.at, "expecting function name, {macro_call}(NAME,type<TemplateClassOrStructType>)")
+            return <- default<ExpressionPtr>
+        }
+        if (call.arguments[1]._type == null) {
+            macro_error(prog, call.at, "expecting type")
             return <- default<ExpressionPtr>
         }
         if (!(call.arguments[1]._type.baseType == Type.tStructure

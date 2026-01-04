@@ -3743,6 +3743,15 @@ namespace das {
                                     reportAstChanged();
                                     return newCall;
                                 }
+                                // lets try static class method
+                                if ( valueType->baseType==Type::tStructure ) {
+                                    newCall->name = "_::" + valueType->structType->name + "`" + methodName;
+                                    fcall = inferFunctionCall(newCall.get(), InferCallError::tryOperator);
+                                    if ( fcall != nullptr || newCall->name != callName ) {
+                                        reportAstChanged();
+                                        return newCall;
+                                    }
+                                }
                             }
                             if ( auto mcall = makeCallMacro(expr->at, methodName) ) {
                                 mcall->arguments.push_back(value);
@@ -7936,10 +7945,10 @@ namespace das {
                     (that->type->isHandle() && that->type->annotation->isIterable()) ||
                     (that->type->isString())
              )) {
-                auto func = findMatchingFunctions("*", thisModule, "each", {that->type});
+                auto fnc = findMatchingFunctions("*", thisModule, "each", {that->type});
                 // If there's any `each` for handle type use it, otherwise
                 // stay in interpreter.
-                if ( !func.empty() ) {
+                if ( !fnc.empty() ) {
                     reportAstChanged();
                     auto eachFn = make_smart<ExprCall>(expr->at, "each");
                     eachFn->arguments.push_back(that->clone());

@@ -327,7 +327,11 @@ namespace das {
             if ( fn->shutdown ) { ss << "[finalize" << (fn->lateShutdown ? "(late)" : "") << "]\n"; }
             if ( fn->unsafeDeref ) { ss << "[unsafe_deref]\n"; }
             if ( fn->unsafeOperation ) { ss << "[unsafe_operation]\n"; }
-            if ( fn->isClassMethod ) { ss << "[class_method(" << fn->classParent->getMangledName() << ")]\n"; }
+            if ( fn->isClassMethod ) {
+                ss << "[";
+                ss << (fn->isStaticClassMethod ? "static_class_method" : "class_method");
+                ss << "(" << fn->classParent->getMangledName() << ")]\n";
+            }
             if ( fn->generator ) { ss << "[GENERATOR]\n"; }
             if ( fn->lambda ) { ss << "[LAMBDA]\n"; }
             if ( fn->hasTryRecover ) { ss << "[has_try_recover]\n"; }
