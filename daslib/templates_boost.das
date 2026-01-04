@@ -1273,7 +1273,7 @@ def public apply_qmacro_template_class(instance_name : string; var template_type
             // we rename methods
             let func_name = string(func.name)
             var method_name_parts = split(func_name, "`")
-            if ( method_name_parts[0] == template_name ) {
+            if (method_name_parts[0] == template_name) {
                 method_name_parts[0] = instance_name
             }
             if (length(method_name_parts) == 2 &&  method_name_parts[1] == template_name) {
