@@ -8999,6 +8999,7 @@ namespace das {
     // at this point we are dealing with 2 auto types
         // 3. one with dim is more specialized, than one without
         //      if both have dim, one with actual value is more specialized, than the other one
+        {
             int d1 = t1->dim.size() ? t1->dim[0] : 0;
             int d2 = t2->dim.size() ? t2->dim[0] : 0;
             if ( d1!=d2 ) {
@@ -9008,6 +9009,7 @@ namespace das {
                     return d1 ? 1 : -1;
                 }
             }
+        }
         // 4. the one with base type of auto\alias is less specialized
         //      if both are auto\alias - we assume its the same level of specialization
             bool ba1 = t1->baseType==Type::autoinfer || t1->baseType==Type::alias;
@@ -9017,6 +9019,37 @@ namespace das {
             } else if ( ba1 && ba2 ) {
                 return 0;
             }
+        // 5. if both are typemacros, we need to pick the more specialized one
+        if ( t1->baseType==Type::typeMacro && t2->baseType==Type::typeMacro ) {
+            // the one with more arguments wins
+            size_t d1 = t1->dimExpr.size();
+            size_t d2 = t2->dimExpr.size();
+            if ( d1!=d2 ) {
+                return d1<d2 ? -1 : 1;
+            }
+            // we go through argument, and for the type<...> compare specialization
+            bool less = false;
+            bool more = false;
+            for ( size_t d=0; d!=d1; ++d ) {
+                TypeDeclPtr t1Arg, t2Arg;
+                if ( t1->dimExpr[d]->rtti_isTypeDecl() ) {
+                    t1Arg = static_pointer_cast<ExprTypeDecl>(t1->dimExpr[d])->typeexpr;
+                }
+                if ( t2->dimExpr[d]->rtti_isTypeDecl() ) {
+                    t2Arg = static_pointer_cast<ExprTypeDecl>(t2->dimExpr[d])->typeexpr;
+                }
+                if ( t1Arg && t2Arg ) {
+                    // only if both are types, we can compare
+                    int cmpr = moreSpecialized(t1Arg, t2Arg, passType);
+                    if ( cmpr<0 ) less = true;
+                    else if ( cmpr>0 ) more = true;
+                }
+            }
+            if ( less && more ) return 0;
+            else if ( less ) return -1;
+            else if ( more ) return 1;
+            else return 0;
+        }
     // at this point base type is not auto for both, so lets compare the subtypes
         // if either does not match the base type, we arrive here through wrong option
         if ( t1->baseType!=passType->baseType || t2->baseType!=passType->baseType) {

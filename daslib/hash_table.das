@@ -362,7 +362,9 @@ def FlatHashMap(macroArgument, passArgument : TypeDeclPtr; key_type, value_type 
         return <- TypeDeclPtr() if (inferred_key_type == null)
         var inscope inferred_value_type <- get_structure_alias(passArgument.structType, "ValueType")
         return <- TypeDeclPtr() if (inferred_value_type == null)
-        return <- infer_template_type(passArgument, key_type, inferred_key_type)
+        var inscope kt = clone_type(key_type)
+        var inscope vt = clone_type(value_type)
+        return <- infer_template_types(passArgument, [(kt, inferred_key_type), (vt, inferred_value_type)])
     } else {
         // we are instantiating concrete type here
         var struct_name = "TFlatHashMap<{describe(key_type,false,false,true)},{describe(value_type,false,false,true)}>"
@@ -377,4 +379,3 @@ def FlatHashMap(macroArgument, passArgument : TypeDeclPtr; key_type, value_type 
         return <- resType
     }
 }
-

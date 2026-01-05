@@ -247,3 +247,20 @@ def public infer_template_type(passArgument, templateType, inferredTemplateType 
     resT.flags &= ~TypeDeclFlags.ref
     return <- resT
 }
+
+[macro_function]
+def public infer_template_types(passArgument : TypeDeclPtr; t2it : array<tuple<TypeDeclPtr; TypeDeclPtr>>) : TypeDeclPtr {
+    for ((templateType, inferredTemplateType) in t2it) {
+        if (templateType.isAutoOrAlias) {
+            var inscope resT <- infer_generic_type(templateType, inferredTemplateType, true, true)
+            return <- TypeDeclPtr() if (resT == null)
+            return <- TypeDeclPtr() if (!inferredTemplateType |> is_same_type(resT, RefMatters.no, ConstMatters.no, TemporaryMatters.yes))
+            compiling_program() |> update_alias_map(templateType, resT)
+        } else {
+            return <- TypeDeclPtr() if (!inferredTemplateType |> is_same_type(templateType, RefMatters.no, ConstMatters.no, TemporaryMatters.yes))
+        }
+    }
+    var inscope resT <- clone_type(passArgument)
+    resT.flags &= ~TypeDeclFlags.ref
+    return <- resT
+}
