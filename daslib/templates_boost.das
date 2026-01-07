@@ -239,7 +239,9 @@ class private TemplateVisitor : AstVisitor {
         } elif (typ.baseType == Type.tStructure && typ.structType != null) {
             let st = typ.structType
             if (key_exists(rules.struct2etype, st)) {
+                let oldFlags = typ.flags
                 move_new(typ) <| clone_type(unsafe(rules.struct2etype[st]))
+                typ.flags = oldFlags
             }
         }
         if (typ.firstType != null) {
