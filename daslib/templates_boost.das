@@ -993,15 +993,18 @@ def private apply_template_qrules(prog : ProgramPtr; var template_structure : St
 
     var mod = template_structure._module
     unsafe {
-        var vis_structure <- reinterpret<smart_ptr<Structure>>(template_structure)
+        var ts = template_structure
+        var vis_structure <- reinterpret<smart_ptr<Structure>>(ts)
         prog.visit_structure(vis_structure, astVisitorAdapter)
     }
 
     if (!astVisitor.failed) {
         for_each_function(mod, "", $(func){
             return if (astVisitor.failed)
-            if (func.flags.isClassMethod && func.classParent == template_structure) {
-                visit(func, astVisitorAdapter)
+            if (func.flags.isClassMethod) {
+                if (func.classParent == template_structure) {
+                    visit(func, astVisitorAdapter)
+                }
             }
         })
     }

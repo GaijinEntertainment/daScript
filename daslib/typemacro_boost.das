@@ -44,6 +44,17 @@ def is_typedecl_ptr(t : TypeDeclPtr) {
     return true
 }
 
+[macro_function]
+def public get_string_const(expr : ExpressionPtr) : string {
+    if (expr is ExprConstString) {
+        return string((expr as ExprConstString).value)
+    } elif (expr is ExprAddr) {
+        return string((expr as ExprAddr).target)
+    }
+    macro_error(compiling_program(), expr.at, "expecting string constant or function address")
+    return ""
+}
+
 [function_macro(name="typemacro_function")]
 class TypeMacroMacro : AstFunctionAnnotation {
     //! This macro converts function into a type macro.
@@ -150,6 +161,15 @@ class TypeMacroMacro : AstFunctionAnnotation {
                 }
                 append_expressions(body, expr)
                 (retCall as ExprCall).arguments |> emplace_new <| qmacro((td.dimExpr[$v(macroArgIndex)] as ExprConstBool).value)
+            } elif (argType.baseType == Type.tString) {
+                var inscope expr <- qmacro_block() <| $() {
+                    if (!(td.dimExpr[$v(macroArgIndex)] is ExprConstString) && !(td.dimExpr[$v(macroArgIndex)] is ExprAddr)) {
+                        macro_error(compiling_program(), td.at, "expecting {$v(string(func.arguments[ai].name))} to be string const or function address")
+                        return <- default<TypeDeclPtr>
+                    }
+                }
+                append_expressions(body, expr)
+                (retCall as ExprCall).arguments |> emplace_new <| qmacro(get_string_const((td.dimExpr[$v(macroArgIndex)])))
             } elif (argType.baseType == Type.tBitfield || argType.baseType == Type.tBitfield8 || argType.baseType == Type.tBitfield16 || argType.baseType == Type.tBitfield64) {
                 var inscope expr <- qmacro_block() <| $() {
                     if (!(td.dimExpr[$v(macroArgIndex)] is ExprConstBitfield)) {
@@ -264,3 +284,4 @@ def public infer_template_types(passArgument : TypeDeclPtr; t2it : array<tuple<T
     resT.flags &= ~TypeDeclFlags.ref
     return <- resT
 }
+

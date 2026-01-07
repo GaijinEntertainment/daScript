@@ -1,9 +1,17 @@
-require daslib/hash_table
+require daslib/flat_hash_table
 require math
 
-typedef DictMap = $FlatHashMap < string; int >
+typedef DictMap = $FlatHashTableEx < string; int > (@@hash_string)   // vs @@hash
 
-/*
+def hash_string(s : string) : uint64 {
+    var h : uint64 = 14695981039346656037ul
+    for (c in s) {
+        h = h ^ uint64(c)
+        h = h * 1099511628211ul
+    }
+    return h
+}
+
 def makeRandomSequence(var src : array<string>) {
     let n = 500000
     let mod = uint(n)
@@ -22,25 +30,9 @@ def dict(var tab : auto; src : array<string>) {
     }
     return maxOcc
 }
-*/
-
-def take_any_hash_map(a : $FlatHashMap < auto(TT); auto(QQ) >) {
-    print("Taking ANY TFlatHashMap<{typeinfo typename(type<TT>)};{typeinfo typename(type<QQ>)}>\n")
-}
-
-def take_any_hash_map(a : $FlatHashMap < string; auto(QQ) >) {
-    print("Taking STRING TFlatHashMap<string;{typeinfo typename(type<QQ>)}>\n")
-}
 
 [export]
 def main {
-    var tab <- DictMap()
-    take_any_hash_map(tab)
-
-    typedef IntMap = $FlatHashMap < int; float >
-    var tab1 <- IntMap()
-    take_any_hash_map(tab1)
-    /*
     var src : array<string>
     makeRandomSequence(src)
     if (true) {
@@ -55,7 +47,6 @@ def main {
             dict(tab, src)
         }
     }
-    */
 }
 
 

@@ -128,7 +128,7 @@ struct template TFlatHashTable : TFlatHashTableBase {
     [hint(unsafe_range_check, noalias=self)]
     def static key_index(self : TFlatHashTable explicit; key : KeyType) {
         with (self) {
-            let hash = hash(key)
+            let hash = $c(hashFunctionName)(key)
             var index = int(hash) & mask
             while (true) {
                 let h = hashes[index]
@@ -270,7 +270,7 @@ struct template TFlatHashTable : TFlatHashTableBase {
             } elif (((capacity - data_length) >> 1) < tombstones) {
                 self |> rehash()
             }
-            let hash = hash(key) // TODO: hash function
+            let hash = $c(hashFunctionName)(key)
             var index = int(hash) & mask
             var lastTombstone = -1
             while (true) {
@@ -347,8 +347,8 @@ struct template TFlatHashTable : TFlatHashTableBase {
     }
 }
 
-[typemacro_function]
-def FlatHashTable(macroArgument, passArgument : TypeDeclPtr; key_type, value_type : TypeDeclPtr) : TypeDeclPtr {
+[macro_function]
+def makeFlatHashTable(macroArgument, passArgument : TypeDeclPtr; key_type, value_type : TypeDeclPtr; hashFunctionName : string) : TypeDeclPtr {
     // TODO: consider full template macro, for general purposes
     //  however, once hash_function is specialized, we may need typemacro_function anyway
     if (passArgument != null) {
@@ -364,7 +364,7 @@ def FlatHashTable(macroArgument, passArgument : TypeDeclPtr; key_type, value_typ
         return <- infer_template_types(passArgument, [(kt, inferred_key_type), (vt, inferred_value_type)])
     } else {
         // we are instantiating concrete type here
-        var struct_name = "TFlatHashTable<{describe(key_type,false,false,true)},{describe(value_type,false,false,true)}>"
+        var struct_name = "TFlatHashTable<{describe(key_type,false,false,true)},{describe(value_type,false,false,true)},@@{hashFunctionName}>"
         var existing_struct = compiling_program().find_unique_structure(struct_name)
         return <- new TypeDecl(baseType = Type.tStructure, structType = existing_struct, at = key_type.at) if (existing_struct != null)
         var inscope resType <- qmacro_template_class(struct_name, type<TFlatHashTable>)
@@ -377,3 +377,12 @@ def FlatHashTable(macroArgument, passArgument : TypeDeclPtr; key_type, value_typ
     }
 }
 
+[typemacro_function]
+def FlatHashTable(macroArgument, passArgument : TypeDeclPtr; key_type, value_type : TypeDeclPtr) : TypeDeclPtr {
+    return <- makeFlatHashTable(macroArgument, passArgument, key_type, value_type, "hash")
+}
+
+[typemacro_function]
+def FlatHashTableEx(macroArgument, passArgument : TypeDeclPtr; key_type, value_type : TypeDeclPtr; hashName : string) : TypeDeclPtr {
+    return <- makeFlatHashTable(macroArgument, passArgument, key_type, value_type, hashName)
+}
