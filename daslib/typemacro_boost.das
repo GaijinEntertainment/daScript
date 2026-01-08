@@ -253,24 +253,28 @@ def public determine_template_type_by_field(passArgument : TypeDeclPtr; fieldNam
     return <- clone_type(field._type)
 }
 
-[macro_function]
-def public infer_template_type(passArgument, templateType, inferredTemplateType : TypeDeclPtr) : TypeDeclPtr {
-    if (templateType.isAutoOrAlias) {
-        var inscope resT <- infer_generic_type(templateType, inferredTemplateType, true, true)
-        return <- TypeDeclPtr() if (resT == null)
-        return <- TypeDeclPtr() if (!inferredTemplateType |> is_same_type(resT, RefMatters.no, ConstMatters.no, TemporaryMatters.yes))
-        compiling_program() |> update_alias_map(templateType, resT)
-    } else {
-        return <- TypeDeclPtr() if (!inferredTemplateType |> is_same_type(templateType, RefMatters.no, ConstMatters.no, TemporaryMatters.yes))
-    }
-    var inscope resT <- clone_type(passArgument)
-    resT.flags &= ~TypeDeclFlags.ref
-    return <- resT
+struct public TypeMacroTemplateArgument {
+    name : string
+    argument_type : TypeDeclPtr
+    inferred_type : TypeDeclPtr
 }
 
 [macro_function]
-def public infer_template_types(passArgument : TypeDeclPtr; t2it : array<tuple<TypeDeclPtr; TypeDeclPtr>>) : TypeDeclPtr {
-    for ((templateType, inferredTemplateType) in t2it) {
+def public infer_struct_aliases(structType : Structure?; var args : array<TypeMacroTemplateArgument>) : bool {
+    for (arg in args) {
+        arg.inferred_type |> move_new <| get_structure_alias(structType, arg.name)
+        if (arg.inferred_type == null) {
+            return false
+        }
+    }
+    return true
+}
+
+[macro_function]
+def public infer_template_types(passArgument : TypeDeclPtr; var args  : array<TypeMacroTemplateArgument>) : TypeDeclPtr {
+    for (arg in args) {
+        assume templateType = arg.argument_type
+        assume inferredTemplateType = arg.inferred_type
         if (templateType.isAutoOrAlias) {
             var inscope resT <- infer_generic_type(templateType, inferredTemplateType, true, true)
             return <- TypeDeclPtr() if (resT == null)
@@ -285,3 +289,20 @@ def public infer_template_types(passArgument : TypeDeclPtr; t2it : array<tuple<T
     return <- resT
 }
 
+[macro_function]
+def public add_structure_aliases(structType : Structure?; var args : array<TypeMacroTemplateArgument>) {
+    for (arg in args) {
+        structType |> add_structure_alias(arg.name, arg.argument_type)
+    }
+}
+
+[macro_function]
+def public verify_arguments(var args : array<TypeMacroTemplateArgument>) : bool {
+    for (arg in args) {
+        if (arg.argument_type.isAutoOrAlias) {
+            macro_error(compiling_program(), arg.argument_type.at, "cannot infer template argument '{arg.name}'")
+            return false
+        }
+    }
+    return true
+}

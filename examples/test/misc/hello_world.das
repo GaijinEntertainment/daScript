@@ -1,6 +1,25 @@
 require daslib/flat_hash_table
 require math
 
+typedef FlatHashMap_int_Foo = $FlatHashTable < int; FooType >
+typedef FlatHashMap_string_int = $FlatHashTable < string; int >
+
+struct Foo {
+    a : int
+}
+
+typedef FooType = Foo
+
+[sideeffects]
+def take_any_hash_table(a : $FlatHashTable < auto(TT); auto(QQ) >) {
+    return "any"
+}
+
+[sideeffects]
+def take_any_hash_map(a : $FlatHashTable < string; auto(QQ) >) {
+    return "string;any"
+}
+
 typedef DictMap = $FlatHashTableEx < string; int > (@@hash_string)   // vs @@hash
 
 def hash_string(s : string) : uint64 {
@@ -33,17 +52,20 @@ def dict(var tab : auto; src : array<string>) {
 
 [export]
 def main {
+
+    if (true) {
+        var map1 <- FlatHashMap_int_Foo()
+        var map2 <- FlatHashMap_string_int()
+        verify("any" == take_any_hash_table(map1))
+        verify("string;any" == take_any_hash_map(map2))
+        print("hash table specialization tests passed\n")
+    }
+
     var src : array<string>
     makeRandomSequence(src)
     if (true) {
-        var tab : table<string; int>
-        profile(20, "dictionary") <| $() {
-            dict(tab, src)
-        }
-    }
-    if (true) {
         var tab <- DictMap()
-        profile(20, "flat hash map") <| $() {
+        profile(1, "flat hash map") <| $() {
             dict(tab, src)
         }
     }

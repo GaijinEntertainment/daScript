@@ -8,6 +8,7 @@ module flat_hash_table shared private
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/typemacro_boost
+require daslib/macro_boost
 
 struct TFlatHashTableBase {}
 
@@ -349,30 +350,22 @@ struct template TFlatHashTable : TFlatHashTableBase {
 
 [macro_function]
 def makeFlatHashTable(macroArgument, passArgument : TypeDeclPtr; key_type, value_type : TypeDeclPtr; hashFunctionName : string) : TypeDeclPtr {
-    // TODO: consider full template macro, for general purposes
-    //  however, once hash_function is specialized, we may need typemacro_function anyway
+    var inscope template_arguments <- [
+        TypeMacroTemplateArgument(name="KeyType",  argument_type <- clone_type(key_type)),
+        TypeMacroTemplateArgument(name="ValueType", argument_type <- clone_type(value_type))
+    ]
     if (passArgument != null) {
-        // this is a generic argument match, like $TFlatHashTable(type<auto(TT)>, type<auto(UU)>)
         var inscope template_type <- qmacro_type(type<TFlatHashTable>)
-        return <- TypeDeclPtr() if (!is_qmacro_template_instance(passArgument, template_type))
-        var inscope inferred_key_type <- get_structure_alias(passArgument.structType, "KeyType")
-        return <- TypeDeclPtr() if (inferred_key_type == null)
-        var inscope inferred_value_type <- get_structure_alias(passArgument.structType, "ValueType")
-        return <- TypeDeclPtr() if (inferred_value_type == null)
-        var inscope kt = clone_type(key_type)
-        var inscope vt = clone_type(value_type)
-        return <- infer_template_types(passArgument, [(kt, inferred_key_type), (vt, inferred_value_type)])
+        return <- TypeDeclPtr() if (!is_qmacro_template_instance(passArgument, template_type)) // TODO: extend for hashFunctionName
+        return <- TypeDeclPtr() if (!infer_struct_aliases(passArgument.structType, template_arguments))
+        return <- infer_template_types(passArgument, template_arguments)
     } else {
-        // we are instantiating concrete type here
+        return <- TypeDeclPtr() if (!verify_arguments(template_arguments))
         var struct_name = "TFlatHashTable<{describe(key_type,false,false,true)},{describe(value_type,false,false,true)},@@{hashFunctionName}>"
         var existing_struct = compiling_program().find_unique_structure(struct_name)
         return <- new TypeDecl(baseType = Type.tStructure, structType = existing_struct, at = key_type.at) if (existing_struct != null)
         var inscope resType <- qmacro_template_class(struct_name, type<TFlatHashTable>)
-        var inscope KeyType <- clone_type(key_type)
-        add_structure_alias(resType.structType, "KeyType", KeyType)
-        var inscope ValueType <- clone_type(value_type)
-        add_structure_alias(resType.structType, "ValueType", ValueType)
-        // for demo purposes, we can add a print_counter function here
+        add_structure_aliases(resType.structType, template_arguments)
         return <- resType
     }
 }
