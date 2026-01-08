@@ -92,7 +92,6 @@ class TypeMacroMacro : AstFunctionAnnotation {
     }
 
     def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
-
         for (ann in func.annotations) {
             if (ann.annotation.name == "typemacro_function") {
                 if (!(find_arg(ann.arguments, "patched") is nothing)) {
@@ -100,7 +99,6 @@ class TypeMacroMacro : AstFunctionAnnotation {
                 }
             }
         }
-
         // we expect the following arguments
         // prog:ProgramPtr
         // mod:Module?
@@ -111,17 +109,14 @@ class TypeMacroMacro : AstFunctionAnnotation {
             errors := "expecting at least 2 argumentst (macroArgument: TypeDeclPtr, passArgument: TypeDeclPtr)"
             return false
         }
-
         let cvtFnName = "{func.name}`cvt`arguments"
         var inscope cvtFn <- compiling_module() |> find_unique_function(cvtFnName)
         if (cvtFn == null) {
             errors := "cvt function not found"
             return false
         }
-
         var body = cvtFn.body as ExprBlock
         body.list |> clear
-
         // we need to check, if there are enough arugments
         let expectedArgs = length(func.arguments) - 1
         var inscope checkE <- qmacro_block() <| $() {
@@ -131,10 +126,8 @@ class TypeMacroMacro : AstFunctionAnnotation {
             }
         }
         append_expressions(body, checkE)
-
         var inscope retCall <- qmacro($c(func.name)(td, passT))
-
-        // allowed are basic types (int, float etc) and TypeDeclPtr
+        // allowed are basic types (int, float, string, @@function etc) and TypeDeclPtr
         for (ai in range(2, length(func.arguments))) {
             let argIndex = ai - 2
             let macroArgIndex = ai - 1
@@ -210,25 +203,38 @@ class TypeMacroMacro : AstFunctionAnnotation {
                 return false
             }
         }
-
         var inscope retExpr <- qmacro_block() <| $() {
             return <- $e(retCall)
         }
         append_expressions(body, retExpr)
-
         for (ann in func.annotations) {
             if (ann.annotation.name == "typemacro_function") {
                 astChanged = true
                 ann.arguments |> add_annotation_argument("patched", true)
             }
         }
-
         return true
     }
 }
 
+[structure_macro(name="typemacro_template")]
+class TypeMacroTemplate : AstStructureAnnotation { }
+
 [macro_function]
-def public is_qmacro_template_instance(passArgument, templateType : TypeDeclPtr) {
+def public make_typemacro_template_instance(instance_type, template_type : Structure?; ex : array<tuple<string, string>> = array<tuple<string, string>>()) {
+    var extra : array<tuple<string, RttiValue>>
+    extra.emplace(("parent", RttiValue(tString = "{template_type._module.name}::{template_type.name}")), 0)
+    for (e in ex) {
+        extra.emplace((e._0, RttiValue(tString = e._1)), 0)
+    }
+    unsafe {
+        var append_structure <- reinterpret<smart_ptr<Structure>>(instance_type)
+        append_structure.append_annotation("typemacro_boost", "typemacro_template", extra)
+    }
+}
+
+[macro_function]
+def public is_typemacro_template_instance(passArgument, templateType : TypeDeclPtr; extra : array<tuple<string, string>> = array<tuple<string, string>>()) : bool {
     //! template instance is determined by having parent == template.parent
     if (passArgument == null || passArgument.baseType != Type.tStructure || passArgument.structType == null) {
         return false
@@ -237,20 +243,20 @@ def public is_qmacro_template_instance(passArgument, templateType : TypeDeclPtr)
         panic("macro implementation error. templateType {describe(templateType)} is not a structure")
         return false
     }
-    assume pbase = templateType.structType.parent
-    if (pbase == null) {
-        panic("macro implementation error. template {describe(templateType)} is not derived from another template")
-        return false
+    for (ann in passArgument.structType.annotations) {
+        if (ann.annotation.name == "typemacro_template") {
+            let parentName = find_arg(ann.arguments, "parent")
+            return false if (!(parentName is tString))
+            return false if ((parentName as tString) != "{templateType.structType._module.name}::{templateType.structType.name}")
+            for (ex in extra) {
+                let arg = find_arg(ann.arguments, ex._0)
+                return false if (!(arg is tString))
+                return false if ((arg as tString) != ex._1)
+            }
+            return true
+        }
     }
-    return passArgument.structType.parent == pbase
-}
-
-[macro_function]
-def public determine_template_type_by_field(passArgument : TypeDeclPtr; fieldName : string) : TypeDeclPtr {
-    return <- TypeDeclPtr() if (passArgument.baseType != Type.tStructure || passArgument.structType == null)
-    let field = passArgument.structType |> find_structure_field(fieldName)
-    return <- TypeDeclPtr() if (field == null || field._type == null)
-    return <- clone_type(field._type)
+    return false
 }
 
 struct public TypeMacroTemplateArgument {

@@ -19,15 +19,38 @@ def take_any_hash_map(a : $FlatHashTable < string; auto(QQ) >) {
     return "string;any"
 }
 
+[sideeffects]
+def take_any_hash_map(a) {
+    return "nothing"
+}
+
+def take_dict_map(a : $FlatHashTableEx < auto(TT); auto(TT) > (@@hash_string)) {
+    return "dict_map"
+}
+
 typedef FlatHashMap_int_Foo = $FlatHashTable < int; Foo >
 typedef FlatHashMap_string_int = $FlatHashTable < string; int >
+typedef DictMap = $FlatHashTableEx < string; int > (@@hash_string)   // vs @@hash
+
+def hash_string(s : string) : uint64 {
+    var h : uint64 = 14695981039346656037ul
+    for (c in s) {
+        h = h ^ uint64(c)
+        h = h * 1099511628211ul
+    }
+    return h
+}
 
 [test]
 def specialization(t : T?) {
     var map1 <- FlatHashMap_int_Foo()
     var map2 <- FlatHashMap_string_int()
+    var map3 : table<string; int>
+    var map4 <- DictMap()
     t |> equal("any", take_any_hash_table(map1))
     t |> equal("string;any", take_any_hash_map(map2))
+    t |> equal("nothing", take_any_hash_map(map3))
+    t |> equal("dict_map", take_dict_map(map4))
 }
 
 def table_ops(t : T?; var a : auto(AnyTable_int_to_Foo); var e : Foo; var et : Foo implicit) {

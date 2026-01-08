@@ -354,9 +354,9 @@ def makeFlatHashTable(macroArgument, passArgument : TypeDeclPtr; key_type, value
         TypeMacroTemplateArgument(name="KeyType",  argument_type <- clone_type(key_type)),
         TypeMacroTemplateArgument(name="ValueType", argument_type <- clone_type(value_type))
     ]
+    var inscope template_type <- qmacro_type(type<TFlatHashTable>)
     if (passArgument != null) {
-        var inscope template_type <- qmacro_type(type<TFlatHashTable>)
-        return <- TypeDeclPtr() if (!is_qmacro_template_instance(passArgument, template_type)) // TODO: extend for hashFunctionName
+        return <- TypeDeclPtr() if (!is_typemacro_template_instance(passArgument, template_type, [("hashFunctionName", hashFunctionName)]))
         return <- TypeDeclPtr() if (!infer_struct_aliases(passArgument.structType, template_arguments))
         return <- infer_template_types(passArgument, template_arguments)
     } else {
@@ -365,6 +365,7 @@ def makeFlatHashTable(macroArgument, passArgument : TypeDeclPtr; key_type, value
         var existing_struct = compiling_program().find_unique_structure(struct_name)
         return <- new TypeDecl(baseType = Type.tStructure, structType = existing_struct, at = key_type.at) if (existing_struct != null)
         var inscope resType <- qmacro_template_class(struct_name, type<TFlatHashTable>)
+        make_typemacro_template_instance(resType.structType, template_type.structType, [("hashFunctionName", hashFunctionName)])
         add_structure_aliases(resType.structType, template_arguments)
         return <- resType
     }
