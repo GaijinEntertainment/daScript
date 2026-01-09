@@ -1408,7 +1408,7 @@ class private AstQNamedTemplateClassMacro : AstCallMacro {
         if (!(call.arguments[1]._type.baseType == Type.tStructure
             && call.arguments[1]._type.structType != null
             && call.arguments[1]._type.structType.flags.isTemplate)) {
-            macro_error(prog, call.at, "expecting template structure or class type, {macro_call}(NAME,type<TemplateClassOrStructType>)")
+            macro_error(prog, call.at, "expecting template structure or class type, {macro_call}(NAME,type<TemplateClassOrStructType>), got {describe(call.arguments[1]._type)} which is {call.arguments[1]._type.baseType}")
             return <- default<ExpressionPtr>
         }
         var inscope qclone <- clone_expression(call.arguments[1])

@@ -10,11 +10,9 @@ require daslib/templates_boost
 require daslib/typemacro_boost
 require daslib/macro_boost
 
-struct TFlatHashTableBase {}
-
 //! TFlatHashTable is a hash map that uses open addressing with linear probing.
 [skip_field_lock_check]
-struct template TFlatHashTable : TFlatHashTableBase {
+struct template TFlatHashTable {
     key_data   : array<KeyType>
     hashes : array<uint64>
     value_data : array<ValueType>
@@ -348,39 +346,22 @@ struct template TFlatHashTable : TFlatHashTableBase {
     }
 }
 
-[macro_function]
-def makeFlatHashTable(macroArgument, passArgument : TypeDeclPtr; key_type, value_type : TypeDeclPtr; hashFunctionName : string) : TypeDeclPtr {
-    var inscope template_type <- qmacro_type(type<TFlatHashTable>)
-    var inscope template_arguments <- [
-        TypeMacroTemplateArgument(name="KeyType",  argument_type <- clone_type(key_type)),
-        TypeMacroTemplateArgument(name="ValueType", argument_type <- clone_type(value_type))
-    ]
-    var extra_template_arguments <- [
-        ("hashFunctionName", hashFunctionName)
-    ]
-    // code bellow can be auto-generated
-    if (passArgument != null) {
-        return <- TypeDeclPtr() if (!is_typemacro_template_instance(passArgument, template_type, extra_template_arguments))
-        return <- TypeDeclPtr() if (!infer_struct_aliases(passArgument.structType, template_arguments))
-        return <- infer_template_types(passArgument, template_arguments)
-    } else {
-        return <- TypeDeclPtr() if (!verify_arguments(template_arguments))
-        var struct_name = template_structure_name(template_type.structType, template_arguments, extra_template_arguments)
-        var existing_struct = compiling_program().find_unique_structure(struct_name)
-        return <- new TypeDecl(baseType = Type.tStructure, structType = existing_struct, at = key_type.at) if (existing_struct != null)
-        var inscope resType <- qmacro_template_class(struct_name, type<TFlatHashTable>)
-        make_typemacro_template_instance(resType.structType, template_type.structType, extra_template_arguments)
-        add_structure_aliases(resType.structType, template_arguments)
-        return <- resType
-    }
+[typemacro_template_function(TFlatHashTable)]
+def private makeFlatHashTable(macroArgument, passArgument : TypeDeclPtr; KeyType, ValueType : TypeDeclPtr; hashFunctionName : string) : TypeDeclPtr {
+    //! generated template boilerplate for FlatHashTable
+    return <- default<TypeDeclPtr>
 }
 
 [typemacro_function]
-def FlatHashTable(macroArgument, passArgument : TypeDeclPtr; key_type, value_type : TypeDeclPtr) : TypeDeclPtr {
-    return <- makeFlatHashTable(macroArgument, passArgument, key_type, value_type, "hash")
+def FlatHashTable(macroArgument, passArgument : TypeDeclPtr; KeyType, ValueType : TypeDeclPtr) : TypeDeclPtr {
+    //! FlatHashTable<K;V> is a hash map that uses open addressing with linear probing and default hash function.
+    return <- makeFlatHashTable(macroArgument, passArgument, KeyType, ValueType, "hash")
 }
 
 [typemacro_function]
-def FlatHashTableEx(macroArgument, passArgument : TypeDeclPtr; key_type, value_type : TypeDeclPtr; hashName : string) : TypeDeclPtr {
-    return <- makeFlatHashTable(macroArgument, passArgument, key_type, value_type, hashName)
+def FlatHashTableEx(macroArgument, passArgument : TypeDeclPtr; KeyType, ValueType : TypeDeclPtr; hashName : string) : TypeDeclPtr {
+    //! FlatHashTableEx<K;V;hashName> is a hash map that uses open addressing with linear probing and custom hash function.
+    return <- makeFlatHashTable(macroArgument, passArgument, KeyType, ValueType, hashName)
 }
+
+
