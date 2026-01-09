@@ -9,8 +9,8 @@ module typemacro_boost shared private
 require daslib/ast_boost
 require daslib/macro_boost
 require daslib/templates_boost
-
 require daslib/ast_boost public
+require strings
 
 def public int64_to_enum(_enu : auto(ET); value : int64) : ET {
     static_if (typeinfo sizeof(type<ET>) == 1) {
@@ -311,4 +311,23 @@ def public verify_arguments(var args : array<TypeMacroTemplateArgument>) : bool 
         }
     }
     return true
+}
+
+[macro_function]
+def public template_structure_name(base : Structure?; arguments : array<TypeMacroTemplateArgument>; extra : array<tuple<string, string>> = array<tuple<string, string>>()) : string {
+    return build_string() <| $(builder) {
+        builder.write(base.name)
+        builder.write("<")
+        for (i in range(length(arguments))) {
+            if (i > 0) {
+                builder.write(",")
+            }
+            builder.write(describe(arguments[i].argument_type, false, false, true))
+        }
+        for (e in extra) {
+            builder.write(",")
+            builder.write(e._1)
+        }
+        builder.write(">")
+    }
 }
