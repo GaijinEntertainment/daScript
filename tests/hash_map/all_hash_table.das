@@ -2,6 +2,7 @@ options gen2
 require dastest/testing_boost public
 
 require daslib/flat_hash_table public
+require daslib/cuckoo_hash_table public
 
 options no_aliasing = false
 
@@ -11,7 +12,7 @@ struct Foo {
 
 [sideeffects]
 def take_any_hash_table(a : $FlatHashTable < auto(TT); auto(QQ) >) {
-    return "any"
+    return "any_flat"
 }
 
 [sideeffects]
@@ -23,14 +24,21 @@ def take_any_hash_map(a : $FlatHashTable < string; auto(QQ) >) {
 def take_any_hash_map(a) {
     return "nothing"
 }
-
+[sideeffects]
 def take_dict_map(a : $FlatHashTableEx < auto(TT); auto(TT) > (@@hash_string)) {
     return "dict_map"
+}
+
+[sideeffects]
+def take_any_hash_table(a : $CuckooHashTable < auto(TT); auto(QQ) >) {
+    return "any_cuckoo"
 }
 
 typedef FlatHashMap_int_Foo = $FlatHashTable < int; Foo >
 typedef FlatHashMap_string_int = $FlatHashTable < string; int >
 typedef DictMap = $FlatHashTableEx < string; int > (@@hash_string)   // vs @@hash
+
+typedef CuckooHashMap_int_Foo = $CuckooHashTable < int; Foo >
 
 def hash_string(s : string) : uint64 {
     var h : uint64 = 14695981039346656037ul
@@ -47,10 +55,12 @@ def specialization(t : T?) {
     var map2 <- FlatHashMap_string_int()
     var map3 : table<string; int>
     var map4 <- DictMap()
-    t |> equal("any", take_any_hash_table(map1))
+    var map5 <- CuckooHashMap_int_Foo()
+    t |> equal("any_flat", take_any_hash_table(map1))
     t |> equal("string;any", take_any_hash_map(map2))
     t |> equal("nothing", take_any_hash_map(map3))
     t |> equal("dict_map", take_dict_map(map4))
+    t |> equal("any_cuckoo", take_any_hash_table(map5))
 }
 
 def table_ops(t : T?; var a : auto(AnyTable_int_to_Foo); var e : Foo; var et : Foo implicit) {
@@ -108,6 +118,12 @@ def table_ops(t : T?; var a : auto(AnyTable_int_to_Foo); var e : Foo; var et : F
 def all_ops(t : T?) {
     t |> run("FlatHashMap") <| @(t : T?) {
         var tab <- FlatHashMap_int_Foo()
+        t |> success(tab.empty())
+        t |> equal(0, tab.length())
+        table_ops(t, tab, Foo(a = 1), Foo(a = 2))
+    }
+    t |> run("CuckooHashMap") <| @(t : T?) {
+        var tab <- CuckooHashMap_int_Foo()
         t |> success(tab.empty())
         t |> equal(0, tab.length())
         table_ops(t, tab, Foo(a = 1), Foo(a = 2))
