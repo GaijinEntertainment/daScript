@@ -2,52 +2,27 @@ options gen2
 options persistent_heap
 
 require _framework
-require daslib/hash_map
-require daslib/spoof
+require daslib/flat_hash_table
+require daslib/cuckoo_hash_table
+require slot_map
 
-//! Slot adapter for SlotMap
-let public TSlotMapAdapter = %spoof_template~(SlotMap,HashMapType)
-[skip_field_lock_check]
-struct %SlotMap {
-    id : uint64
-    hashMap : %HashMapType
-}
-
-def %SlotMap {
-    var self : %SlotMap
-    static_if (!typeinfo is_table(type<%HashMapType>)) {
-        self.hashMap <- %HashMapType()
-    }
-    return <- self
-}
-
-def emplace ( var self : %SlotMap explicit; val : int ) {
-    with (self) {
-        let r = id
-        unsafe(hashMap[id]) = val
-        id ++
-        return r
-    }
-}
-%%
-
-%spoof_instance~TCuckooHashMap(CuckooHashMap_uint64_int,uint64,int)%%
-%spoof_instance~TFlatHashMap(FlatHashMap_uint64_int,uint64,int)%%
-%spoof_instance~TFlatHashMap(FlatHashMap0_uint64_int,uint64,int,hash0)%%
+typedef CuckooHashMap_uint64_int = $CuckooHashTable < uint64, int >
+typedef FlatHashMap_uint64_int = $FlatHashTable < uint64, int >
+typedef FlatHashMap0_uint64_int = $FlatHashTableEx < uint64, int > (@@hash0)
 
 typedef SlotTable = table<uint64; int>
 
-%spoof_instance~TSlotMapAdapter(SlotMapAdapter_Table,SlotTable)%%
-%spoof_instance~TSlotMapAdapter(SlotMapAdapter_CuckooHashMap,CuckooHashMap_uint64_int)%%
-%spoof_instance~TSlotMapAdapter(SlotMapAdapter_FlatHashMap,FlatHashMap_uint64_int)%%
-%spoof_instance~TSlotMapAdapter(SlotMapAdapter_FlatHashMap0,FlatHashMap0_uint64_int)%%
+typedef SlotMapAdapter_Table = $SlotMap < SlotTable >
+typedef SlotMapAdapter_CuckooHashMap = $SlotMap < CuckooHashMap_uint64_int >
+typedef SlotMapAdapter_FlatHashMap = $SlotMap < FlatHashMap_uint64_int >
+typedef SlotMapAdapter_FlatHashMap0 = $SlotMap < FlatHashMap0_uint64_int >
 
 [sideeffects]
 def test(hmap : auto(SlotMapType); randomNumbers) {
     for (i in range(25)) {
         var slotMap <- SlotMapType()
         for (num in randomNumbers) {
-            slotMap |> emplace(num)
+            slotMap.emplace(num)
         }
         delete slotMap
     }

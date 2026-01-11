@@ -5,11 +5,12 @@ options persistent_heap
 options unsafe_table_lookup = false
 
 require _framework
-require daslib/hash_map
+require daslib/flat_hash_table
+require daslib/cuckoo_hash_table
 
-%spoof_instance~TCuckooHashMap(CuckooHashMap_test,int,int)%%
-%spoof_instance~TFlatHashMap(FlatHashMap_test,int,int)%%
-%spoof_instance~TFlatHashMap(PathalogicalFlatHashMap_test,int,int,pathalogical)%%
+typedef CuckooHashMap_test = $CuckooHashTable < int; int >
+typedef FlatHashMap_test = $FlatHashTable < int; int >
+typedef PathalogicalFlatHashMap_test = $FlatHashTableEx < int; int > (@@pathalogical)
 
 [sideeffects]
 def test(hmap : auto(HashMapType); randomNumbers) {
@@ -21,7 +22,7 @@ def test(hmap : auto(HashMapType); randomNumbers) {
         for (num in randomNumbers) {
             hashMap[num] = -num
         }
-        hashMap |> clear()
+        hashMap.clear()
         for (num in randomNumbers) {
             hashMap[num] = -num
         }

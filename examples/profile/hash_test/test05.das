@@ -2,10 +2,11 @@ options gen2
 options persistent_heap
 
 require _framework
-require daslib/hash_map
+require daslib/flat_hash_table
+require daslib/cuckoo_hash_table
 
-%spoof_instance~TCuckooHashMap(CuckooHashMap_test,int,int)%%
-%spoof_instance~TFlatHashMap(FlatHashMap_test,int,int)%%
+typedef CuckooHashMap_test = $CuckooHashTable < int; int >
+typedef FlatHashMap_test = $FlatHashTable < int; int >
 
 [sideeffects]
 def test(hmap : auto(HashMapType); dummy) {

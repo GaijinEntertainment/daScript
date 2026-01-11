@@ -13,11 +13,19 @@ require daslib/random public
 require strings public
 
 def public hash0(data) {
-    return hash(data) >>> 32ul
+    //! this hash function converts and workhorse key to a 64 bit hash
+    let k64 = uint64(data)
+    return k64 <= 2ul ? 0x9e3779b97f4a7c15ul : k64
+}
+
+def public hash_extra(data) {
+    var k64 = hash(data)
+    k64 = k64 <= 2ul ? 0x9e3779b97f4a7c15ul : k64
+    return k64 >>> 32ul
 }
 
 /*
-def hash0(s : string) : uint64 {
+def public hash_extra(s : string) : uint64 {
     var h : uint64 = 14695981039346656037ul
     for (c in s) {
         h = (h ^ uint64(c)) * 1099511628211ul
@@ -400,7 +408,7 @@ def private makeCuckooHashTable(macroArgument, passArgument : TypeDeclPtr; KeyTy
 [typemacro_function]
 def CuckooHashTable(macroArgument, passArgument : TypeDeclPtr; KeyType, ValueType : TypeDeclPtr) : TypeDeclPtr {
     //! CuckooHashTable<K;V> is a hash map that uses open addressing with linear probing and default hash function.
-    return <- makeCuckooHashTable(macroArgument, passArgument, KeyType, ValueType, "hash", "hash0")
+    return <- makeCuckooHashTable(macroArgument, passArgument, KeyType, ValueType, "hash", "hash_extra")
 }
 
 [typemacro_function]

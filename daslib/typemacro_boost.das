@@ -417,8 +417,14 @@ class TemplateTypeMacroMacro : AstFunctionAnnotation {
                 mk_extra_array_expr.values |> emplace(mk_tuple)
             }
         }
-        body.list |> emplace_new <| qmacro_expr() {
-            var inscope extra_template_arguments <- to_array_move($e(mk_extra_array_expr))
+        if (length(mk_extra_array_expr.values) == 0) {
+            body.list |> emplace_new <| qmacro_expr() {
+                var inscope extra_template_arguments : array<tuple<string, string>>
+            }
+        } else {
+            body.list |> emplace_new <| qmacro_expr() {
+                var inscope extra_template_arguments <- to_array_move($e(mk_extra_array_expr))
+            }
         }
         // now we add boilerplate
         body.list |> emplace_new <| qmacro_block() {
