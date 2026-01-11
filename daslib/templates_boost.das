@@ -239,7 +239,9 @@ class private TemplateVisitor : AstVisitor {
         } elif (typ.baseType == Type.tStructure && typ.structType != null) {
             let st = typ.structType
             if (key_exists(rules.struct2etype, st)) {
+                let oldFlags = typ.flags
                 move_new(typ) <| clone_type(unsafe(rules.struct2etype[st]))
+                typ.flags = oldFlags
             }
         }
         if (typ.firstType != null) {
@@ -991,15 +993,18 @@ def private apply_template_qrules(prog : ProgramPtr; var template_structure : St
 
     var mod = template_structure._module
     unsafe {
-        var vis_structure <- reinterpret<smart_ptr<Structure>>(template_structure)
+        var ts = template_structure
+        var vis_structure <- reinterpret<smart_ptr<Structure>>(ts)
         prog.visit_structure(vis_structure, astVisitorAdapter)
     }
 
     if (!astVisitor.failed) {
         for_each_function(mod, "", $(func){
             return if (astVisitor.failed)
-            if (func.flags.isClassMethod && func.classParent == template_structure) {
-                visit(func, astVisitorAdapter)
+            if (func.flags.isClassMethod) {
+                if (func.classParent == template_structure) {
+                    visit(func, astVisitorAdapter)
+                }
             }
         })
     }
@@ -1273,7 +1278,12 @@ def public apply_qmacro_template_class(instance_name : string; var template_type
             // we rename methods
             let func_name = string(func.name)
             var method_name_parts = split(func_name, "`")
-            method_name_parts[0] = instance_name
+            if (method_name_parts[0] == template_name) {
+                method_name_parts[0] = instance_name
+            }
+            if (length(method_name_parts) == 2 &&  method_name_parts[1] == template_name) {
+                method_name_parts[1] = instance_name
+            }
             let func_clone_name = join(method_name_parts, "`")
             method_renames.insert(func_name, func_clone_name)
         }
@@ -1284,6 +1294,8 @@ def public apply_qmacro_template_class(instance_name : string; var template_type
     // Template -> Instance TypeDecl
     rules |> replaceTypeWithTypeDecl(template_name) <| clone_type(instance_type)
     rules |> replaceStructWithTypeDecl(template_structure) <| clone_type(instance_type)
+    // Template`Template class ctor rename
+    rules |> renameCall("{template_name}`{template_name}") <| "{instance_name}`{instance_name}"
     // method renames
     for (t_method, i_method in keys(method_renames), values(method_renames)) {
         rules |> renameVariable(t_method, i_method)
@@ -1301,6 +1313,7 @@ def public apply_qmacro_template_class(instance_name : string; var template_type
             for (arg in func_clone.arguments) {
                 arg._type |> move_new <| apply_template(rules, arg.at, clone_type(arg._type))
             }
+            func_clone.body |> move_new <| apply_template(rules, func.at, clone_expression(func.body), false)
             mod |> add_function(func_clone)
         }
     })
@@ -1388,10 +1401,14 @@ class private AstQNamedTemplateClassMacro : AstCallMacro {
             macro_error(prog, call.at, "expecting function name, {macro_call}(NAME,type<TemplateClassOrStructType>)")
             return <- default<ExpressionPtr>
         }
+        if (call.arguments[1]._type == null) {
+            macro_error(prog, call.at, "expecting type")
+            return <- default<ExpressionPtr>
+        }
         if (!(call.arguments[1]._type.baseType == Type.tStructure
             && call.arguments[1]._type.structType != null
             && call.arguments[1]._type.structType.flags.isTemplate)) {
-            macro_error(prog, call.at, "expecting template structure or class type, {macro_call}(NAME,type<TemplateClassOrStructType>)")
+            macro_error(prog, call.at, "expecting template structure or class type, {macro_call}(NAME,type<TemplateClassOrStructType>), got {describe(call.arguments[1]._type)} which is {call.arguments[1]._type.baseType}")
             return <- default<ExpressionPtr>
         }
         var inscope qclone <- clone_expression(call.arguments[1])

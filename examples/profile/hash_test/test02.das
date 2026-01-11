@@ -2,7 +2,8 @@ options gen2
 options persistent_heap
 
 require _framework
-require daslib/hash_map
+require daslib/flat_hash_table
+require daslib/cuckoo_hash_table
 
 [sideeffects]
 def test(hmap : auto(HashMapType); dummy) {
@@ -11,17 +12,22 @@ def test(hmap : auto(HashMapType); dummy) {
         hashMap <- HashMapType()
     }
     for (i in range(25)) {
-        hashMap |> clear()
+        hashMap.clear()
         for (j in range(600000)) {
             unsafe(hashMap[j]) = -j
         }
     }
+    for (i in range(600000)) {
+        let v = hashMap[i]
+        assert(v == -i)
+    }
 }
 
-%spoof_instance~TCuckooHashMap(CuckooHashMap_test,int,int)%%
-%spoof_instance~TFlatHashMap(FlatHashMap_test,int,int)%%
-%spoof_instance~TFlatHashMap(FlatHashMap_test_inline,int,int,hash_inline)%%
-%spoof_instance~TFlatHashMap(FlatHashMap_test0,int,int,hash0)%%
+typedef CuckooHashMap_test = $CuckooHashTable < int; int >
+typedef CuckooHashMap_test_inline = $CuckooHashTableEx < int; int > (@@hash0, @@hash_inline)
+typedef FlatHashMap_test = $FlatHashTable < int; int >
+typedef FlatHashMap_test_inline = $FlatHashTableEx < int; int > (@@hash_inline)
+typedef FlatHashMap_test0 = $FlatHashTableEx < int; int > (@@hash0)
 
 def hash_inline(i : int) : uint64 {
     let DAS_WYHASH_SEED = 0x1234567890abcdeful
@@ -33,11 +39,11 @@ def hash_inline(i : int) : uint64 {
 
 [export]
 def main {
-    print("test02 - insert 600000 elements in a hash map 25 times, with clear inbetween\n")
+    print("test02 - insert 600000 elements in a hash map 25 times, with clear between\n")
     profile_test("table<int;int>", default<table<int; int>>, 0)
-    profile_test("TCuckooHashMap<int,int> hash(x)->x/hash", default<CuckooHashMap_test>, 0)
+    profile_test("TCuckooHashMap<int,int> hash(x)->hash/hash0", default<CuckooHashMap_test>, 0)
+    profile_test("TCuckooHashMap<int,int> hash(x)->x/hash intrinsic", default<CuckooHashMap_test>, 0)
     profile_test("TFlatHashMap<int,int>", default<FlatHashMap_test>, 0)
-    profile_test("TFlatHashMap<int,int> with hash intrinsic", default<FlatHashMap_test_inline>, 0)
+    profile_test("TFlatHashMap<int,int> with hash(x)->hash intrinsic", default<FlatHashMap_test_inline>, 0)
     profile_test("TFlatHashMap<int,int> with hash(x)->x", default<FlatHashMap_test0>, 0)
 }
-

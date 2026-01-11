@@ -164,6 +164,12 @@ namespace das {
     ,   yes
     };
 
+    char hex_char ( int Ch ) {
+        Ch &= 0x0f;
+        if ( Ch<=9 ) return (char)('0'+Ch);
+        else return (char)('a'+(Ch-10));
+    }
+
     string aotSuffixNameEx ( const string & funcName, const char * suffix ) {
         string name;
         bool prefix = false;
@@ -191,10 +197,11 @@ namespace das {
                     case ']':   name += "Sqbr"; break;
                     case '.':   name += "Dot"; break;
                     case '`':   name += "Tick"; break;
+                    case ',':   name += "Comma"; break;
                     default:
                         name += "_0x";
-                        name += '0' + (ch>>4);
-                        name += '0' + (ch & 0x0f);
+                        name += hex_char(ch>>4);
+                        name += hex_char(ch & 0x0f);
                         name += "_";
                         break;
                 }
@@ -1822,6 +1829,10 @@ namespace das {
             Visitor::preVisit(expr);
             ss << "return ";
             if ( expr->moveSemantics ) ss << "/* <- */ ";
+            if ( !expr->returnFunc && !expr->block ) {
+                ss << "/* no function/block for return */ ";
+                return;
+            }
             auto retT = expr->returnFunc ? expr->returnFunc->result : expr->block->returnType;
             if ( !retT->isVoid() ) {
                 if ( expr->moveSemantics ) {
@@ -1837,6 +1848,10 @@ namespace das {
             }
         }
         virtual ExpressionPtr visit(ExprReturn* expr) override {
+            if ( !expr->returnFunc && !expr->block ) {
+                ss << "/* no function/block for return */ ";
+                return Visitor::visit(expr);
+            }
             auto retT = expr->returnFunc ? expr->returnFunc->result : expr->block->returnType;
             if (!retT->isVoid()) ss << ")";
             return Visitor::visit(expr);

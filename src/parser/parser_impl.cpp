@@ -710,15 +710,18 @@ namespace das {
             das_yyerror(scanner,"generic function can't be a member of a class " + func->getMangledName(),
                 func->at, CompilationError::invalid_member_function);
         } else if ( isOpName(func->name) ) {
-            if ( isStatic ) {
-                das_yyerror(scanner,"operator can't be static " + func->getMangledName(),
-                    func->at, CompilationError::invalid_member_function);
-            }
             if ( ovr ) {
                 das_yyerror(scanner,"can't override an operator " + func->getMangledName(),
                     func->at, CompilationError::invalid_member_function);
             }
-            modifyToClassMember(func, yyextra->g_thisStructure, false, cnst);
+            if ( isStatic ) {
+                func->isClassMethod = true;
+                func->isStaticClassMethod = true;
+                func->classParent = yyextra->g_thisStructure;
+                func->privateFunction = isPrivate || yyextra->g_thisStructure->privateStructure;
+            } else {
+                modifyToClassMember(func, yyextra->g_thisStructure, false, cnst);
+            }
             assignDefaultArguments(func);
             runFunctionAnnotations(scanner, nullptr, func, annL, annLAt);
             if ( !yyextra->g_Program->addFunction(func) ) {
@@ -761,10 +764,6 @@ namespace das {
                     modifyToClassMember(func, yyextra->g_thisStructure, false, cnst);
                 }
             } else {
-                if ( isStatic ) {
-                    das_yyerror(scanner,"initializer or a finalizer can't be static " + func->getMangledName(),
-                        func->at, CompilationError::invalid_member_function);
-                }
                 if ( ovr ) {
                     das_yyerror(scanner,"can't override an initializer or a finalizer " + func->getMangledName(),
                         func->at, CompilationError::invalid_member_function);
@@ -773,7 +772,17 @@ namespace das {
                     das_yyerror(scanner,"can't have a constant initializer or a finalizer " + func->getMangledName(),
                         func->at, CompilationError::invalid_member_function);
                 }
-                if ( func->name!="finalize" ) {
+                if ( isStatic ) {
+                    // its just a regular function named as the class
+                    if ( func->name=="finalize" ) {
+                        das_yyerror(scanner,"finalizer can't be static " + func->getMangledName(),
+                            func->at, CompilationError::invalid_member_function);
+                    }
+                    func->isClassMethod = true;
+                    func->isStaticClassMethod = true;
+                    func->classParent = yyextra->g_thisStructure;
+                    func->privateFunction = isPrivate || yyextra->g_thisStructure->privateStructure;
+                } else if ( func->name!="finalize" ) {
                     auto ctr = makeClassConstructor(yyextra->g_thisStructure, func);
                     if ( !yyextra->g_Program->addFunction(ctr) ) {
                         das_yyerror(scanner,"intializer is already defined " + ctr->getMangledName(),
