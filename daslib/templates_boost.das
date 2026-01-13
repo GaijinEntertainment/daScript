@@ -1179,7 +1179,7 @@ class private AstQNamedMacro : AstCallMacro {
             macro_error(prog, call.at, "expecting 2 arguments, {macro_call}(name,expression)")
             return <- default<ExpressionPtr>
         }
-        if (!(call.arguments[0]._type.isString)) {
+        if (call.arguments[0]._type == null || !(call.arguments[0]._type.isString)) {
             macro_error(prog, call.at, "expecting function name, {macro_call}(NAME,expression)")
             return <- default<ExpressionPtr>
         }
