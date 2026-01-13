@@ -277,13 +277,23 @@ class CollectAndReplaceIteratorFields : AstVisitor {
 
                         var subCall = call.arguments[0] as ExprCall
                         var inscope fn <- compiling_module() |> find_unique_function("{subCall.name}")
-                        var error = ""
-                        if (!validateAwaitFn(fn, subCall.name, error)) {
-                            macro_error(compiling_program(), expr.at, error)
+                        if (fn == null) {
+                            macro_error(compiling_program(), expr.at, "expecting await(<async fn>), but function {subCall.name} is not found,\ndefine variable type explicitly: let res : <type> = await <| {subCall.name}()\nor make sure the function is defined before the coroutine")
                             return <- expr
-                        }
+                        } else {
+                            var error = ""
+                            if (!validateAwaitFn(fn, subCall.name, error)) {
+                                macro_error(compiling_program(), expr.at, error)
+                                return <- expr
+                            }
 
-                        v._type |> move_new() <| clone_type(fn.result.firstType.argTypes[0])
+                            v._type |> move_new() <| clone_type(fn.result.firstType.argTypes[0])
+                        }
+                    } else {
+                        var inscope rmConst = clone_type(v._type)
+                        rmConst.flags &= ~TypeDeclFlags.constant
+                        rmConst.flags &= ~TypeDeclFlags.removeConstant
+                        v._type |> move(rmConst)
                     }
 
                     let name = make_unique_private_name("_async_iterator", expr.at)
