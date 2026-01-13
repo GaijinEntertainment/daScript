@@ -742,7 +742,7 @@ def get(Tab : table<auto(keyT)>; at : keyT | #; blk : block<(var p : void?) : vo
 [unused_argument(Tab, at)]
 def get_value(Tab : table<auto(keyT); auto(valT)> ==const; at : keyT | #) : valT {
     concept_assert(false, "can't get value from const table, use Tab?[key] or 'get' instead")
-    return type<valT>
+    return default<valT>
 }
 
 [unused_argument(Tab, at)]
@@ -752,7 +752,7 @@ def get_value(var Tab : table<auto(keyT); smart_ptr<auto(valT)>>; at : keyT | #)
 }
 
 [unused_argument(Tab, at)]
-def get_value(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #) : valT {
+def get_value(var Tab : table<auto(keyT); auto(valT)> ==const; at : keyT | #) : valT {
     static_if (typeinfo is_void(type<valT>)) {
         concept_assert(false, "can't get value, which is void")
         return type<valT>
