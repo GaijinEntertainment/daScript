@@ -101,6 +101,7 @@ struct DapiSequence {
 class DapiDataWalker {
     def abstract canVisitHandle(ps : void?; ti : TypeInfo) : bool
     def abstract canVisitStructure(ps : void?; si : StructInfo) : bool
+    def abstract canVisitDim(ps : void?; ti : TypeInfo) : bool
     def abstract canVisitArray(pa : void?; ti : TypeInfo) : bool
     def abstract canVisitArrayData(ti : TypeInfo; count : uint) : bool
     def abstract canVisitTuple(ps : void?; ti : TypeInfo) : bool

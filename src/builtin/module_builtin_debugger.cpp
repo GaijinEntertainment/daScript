@@ -304,6 +304,13 @@ namespace debugapi {
                 invoke_afterVariant(context,fn_afterVariant,classPtr,ps,*ti);
             }
         }
+        virtual bool canVisitDim ( char * ps, TypeInfo * ti ) override {
+            if ( auto fn_canVisitDim = get_canVisitDim(classPtr) ) {
+                return invoke_canVisitDim(context,fn_canVisitDim,classPtr,ps,*ti);
+            } else {
+                return true;
+            }
+        }
         virtual bool canVisitArray ( Array * pa, TypeInfo * ti ) override {
             if ( auto fn_canVisitArray = get_canVisitArray(classPtr) ) {
                 return invoke_canVisitArray(context,fn_canVisitArray,classPtr,pa,*ti);

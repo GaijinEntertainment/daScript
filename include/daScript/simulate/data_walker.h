@@ -33,6 +33,7 @@ namespace das {
         void error ( const char * message );
         virtual bool cancel () { return _cancel; }
     // data structures
+        virtual bool canVisitDim ( char * ps, TypeInfo * ti ) { return true; }
         virtual bool canVisitArray ( Array * ar, TypeInfo * ti ) { return true; }
         virtual bool canVisitArrayData ( TypeInfo * ti, uint32_t count ) { return true; }
         virtual bool canVisitHandle ( char * ps, TypeInfo * ti ) { return true; }

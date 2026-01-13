@@ -119,8 +119,6 @@ namespace das {
     }
 
     void DataWalker::walk_dim ( char * pa, TypeInfo * ti ) {
-        beforeDim(pa, ti);
-        if ( cancel() ) return;
         TypeInfo copyInfo = *ti;
         DAS_ASSERT(copyInfo.dimSize);
         copyInfo.size = ti->dim[0] ? copyInfo.size / ti->dim[0] : copyInfo.size;
@@ -137,8 +135,6 @@ namespace das {
         uint32_t stride = copyInfo.size;
         uint32_t count = ti->dim[0];
         walk_array(pa, stride, count, &copyInfo);
-        if ( cancel() ) return;
-        afterDim(pa, ti);
     }
 
     void DataWalker::walk_table ( Table * tab, TypeInfo * info ) {
@@ -184,7 +180,13 @@ namespace das {
             if ( cancel() ) return;
             afterRef(pa,info);
         } else if ( info->dimSize ) {
-            walk_dim(pa, info);
+            if ( canVisitDim(pa,info) ) {
+                beforeDim(pa, info);
+                if ( cancel() ) return;
+                walk_dim(pa, info);
+                if ( cancel() ) return;
+                afterDim(pa, info);
+            }
         } else if ( info->type==Type::tArray ) {
             auto arr = (Array *) pa;
             if ( canVisitArray(arr,info) ) {
