@@ -55,6 +55,69 @@ def public get_string_const(expr : ExpressionPtr) : string {
     return ""
 }
 
+[macro_function]
+def public typemacro_argument(dimExpr; index : int; var constType : auto(ExprConstType); var defaultValue : auto(ValueT)) : ValueT {
+    if (index < length(dimExpr)) {
+        if (dimExpr[index].__rtti == typeinfo undecorated_typename(type<ExprConstType>)) {
+            defaultValue = unsafe(reinterpret<ExprConstType?>(dimExpr[index])).value
+        } else {
+            panic("expecting {typeinfo undecorated_typename(type<ExprConstType>)} constant")
+        }
+    }
+    return defaultValue
+}
+
+[macro_function]
+def public typemacro_argument(dimExpr; index : int; var constType : ExprConstString; var defaultValue : auto(ValueT)) : ValueT {
+    if (index < length(dimExpr)) {
+        if (dimExpr[index].__rtti == "ExprConstString") {
+            defaultValue := unsafe(reinterpret<ExprConstString?>(dimExpr[index])).value
+        } elif (dimExpr[index].__rtti == "ExprAddr") {
+            defaultValue := string(unsafe(reinterpret<ExprAddr?>(dimExpr[index])).target)
+        } else {
+            panic("expecting string constant or function address")
+        }
+    }
+    return defaultValue
+}
+
+[macro_function]
+def public typemacro_default_value(argDefaultValue : ExpressionPtr; var constType : auto(ExprConstType); var defaultValue : auto(TT)&; var errors : das_string) : bool {
+    if (argDefaultValue != null) {
+        if (argDefaultValue.__rtti == typeinfo undecorated_typename(type<ExprConstType>)) {
+            defaultValue = unsafe(reinterpret<ExprConstType?>(argDefaultValue)).value
+            return true
+        } else {
+            errors := "expecting {typeinfo undecorated_typename(type<ExprConstType>)} constant as default value"
+            return false
+        }
+        return true
+    } else {
+        defaultValue = default<TT>
+        return true
+    }
+}
+
+[macro_function]
+def public typemacro_default_value(argDefaultValue : ExpressionPtr; var constType : ExprConstString; var defaultValue : auto(TT)&; var errors : das_string) : bool {
+    if (argDefaultValue != null) {
+        if (argDefaultValue.__rtti == "ExprConstString") {
+            defaultValue := unsafe(reinterpret<ExprConstString?>(argDefaultValue)).value
+            return true
+        } elif (argDefaultValue.__rtti == "ExprAddr") {
+            defaultValue := string(unsafe(reinterpret<ExprAddr?>(argDefaultValue)).target)
+            return true
+        } else {
+            errors := "expecting string constant or function address as default value"
+            return false
+        }
+        return true
+    } else {
+        defaultValue = default<TT>
+        return true
+    }
+}
+
 [function_macro(name="typemacro_function")]
 class TypeMacroMacro : AstFunctionAnnotation {
     //! This macro converts function into a type macro.
@@ -90,7 +153,6 @@ class TypeMacroMacro : AstFunctionAnnotation {
         compiling_module() |> add_structure(cls)
         return true
     }
-
     def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
         for (ann in func.annotations) {
             if (ann.annotation.name == "typemacro_function") {
@@ -112,85 +174,43 @@ class TypeMacroMacro : AstFunctionAnnotation {
         }
         var body = cvtFn.body as ExprBlock
         body.list |> clear
-        // we need to check, if there are enough arugments
-        let expectedArgs = length(func.arguments) - 1
-        var inscope checkE <- qmacro_block() <| $() {
-            if (length(td.dimExpr) != $v(expectedArgs)) {
-                macro_error(compiling_program(), td.at, "expecting {$v(expectedArgs)} arguments, got {length(td.dimExpr)}")
-                return <- TypeDeclPtr()
-            }
-        }
-        append_expressions(body, checkE)
         var inscope retCall <- qmacro($c(func.name)(td, passT))
         // allowed are basic types (int, float, string, @@function etc) and TypeDeclPtr
         for (ai in range(2, length(func.arguments))) {
             let argIndex = ai - 2
             let macroArgIndex = ai - 1
             assume argType = func.arguments[ai]._type
+            assume argDefaultValue = func.arguments[ai].init
             if (length(argType.dim) > 0) {
                 errors := "expecting non-array arguments"
                 return false
             }
+            if (argDefaultValue == null) {
+                var inscope checkE <- qmacro_block() <| $() {
+                    if ($v(macroArgIndex) >= length(td.dimExpr)) {
+                        macro_error(compiling_program(), td.at, "expecting {$v(string(func.arguments[ai].name))} argument")
+                        return <- TypeDeclPtr()
+                    }
+                }
+                append_expressions(body, checkE)
+            }
             if (argType.baseType == Type.tInt) {
-                var inscope expr <- qmacro_block() <| $() {
-                    if (!(td.dimExpr[$v(macroArgIndex)] is ExprConstInt)) {
-                        macro_error(compiling_program(), td.at, "expecting {$v(string(func.arguments[ai].name))} to be int const")
-                        return <- default<TypeDeclPtr>
-                    }
-                }
-                append_expressions(body, expr)
-                (retCall as ExprCall).arguments |> emplace_new <| qmacro((td.dimExpr[$v(macroArgIndex)] as ExprConstInt).value)
+                var defaultValue = 0
+                return false if (!typemacro_default_value(argDefaultValue, type<ExprConstInt>, defaultValue, errors))
+                (retCall as ExprCall).arguments |> emplace_new <| qmacro(typemacro_argument(td.dimExpr, $v(macroArgIndex), type<ExprConstInt>, $v(defaultValue)))
             } elif (argType.baseType == Type.tBool) {
-                var inscope expr <- qmacro_block() <| $() {
-                    if (!(td.dimExpr[$v(macroArgIndex)] is ExprConstBool)) {
-                        macro_error(compiling_program(), td.at, "expecting {$v(string(func.arguments[ai].name))} to be bool const")
-                        return <- default<TypeDeclPtr>
-                    }
-                }
-                append_expressions(body, expr)
-                (retCall as ExprCall).arguments |> emplace_new <| qmacro((td.dimExpr[$v(macroArgIndex)] as ExprConstBool).value)
+                var defaultValue = false
+                return false if (!typemacro_default_value(argDefaultValue, type<ExprConstBool>, defaultValue, errors))
+                (retCall as ExprCall).arguments |> emplace_new <| qmacro(typemacro_argument(td.dimExpr, $v(macroArgIndex), type<ExprConstBool>, $v(defaultValue)))
             } elif (argType.baseType == Type.tString) {
-                var inscope expr <- qmacro_block() <| $() {
-                    if (!(td.dimExpr[$v(macroArgIndex)] is ExprConstString) && !(td.dimExpr[$v(macroArgIndex)] is ExprAddr)) {
-                        macro_error(compiling_program(), td.at, "expecting {$v(string(func.arguments[ai].name))} to be string const or function address")
-                        return <- default<TypeDeclPtr>
-                    }
-                }
-                append_expressions(body, expr)
-                (retCall as ExprCall).arguments |> emplace_new <| qmacro(get_string_const((td.dimExpr[$v(macroArgIndex)])))
-            } elif (argType.baseType == Type.tBitfield || argType.baseType == Type.tBitfield8 || argType.baseType == Type.tBitfield16 || argType.baseType == Type.tBitfield64) {
-                var inscope expr <- qmacro_block() <| $() {
-                    if (!(td.dimExpr[$v(macroArgIndex)] is ExprConstBitfield)) {
-                        macro_error(compiling_program(), td.at, "expecting {$v(string(func.arguments[ai].name))} to be bool const")
-                        return <- default<TypeDeclPtr>
-                    }
-                }
-                append_expressions(body, expr)
-                var inscope valueConst : ExpressionPtr
-                if (argType.baseType == Type.tBitfield8) {
-                    valueConst |> move_new <| qmacro(bitfield8(uint8((td.dimExpr[$v(macroArgIndex)] as ExprConstBitfield).value)))
-                } elif (argType.baseType == Type.tBitfield16) {
-                    valueConst |> move_new <| qmacro(bitfield16(uint16((td.dimExpr[$v(macroArgIndex)] as ExprConstBitfield).value)))
-                } elif (argType.baseType == Type.tBitfield64) {
-                    valueConst |> move_new <| qmacro(bitfield64(uint64((td.dimExpr[$v(macroArgIndex)] as ExprConstBitfield).value)))
-                } else {
-                    valueConst |> move_new <| qmacro(bitfield((td.dimExpr[$v(macroArgIndex)] as ExprConstBitfield).value))
-                }
-                (retCall as ExprCall).arguments |> emplace <| valueConst
-            } elif (argType.baseType == Type.tEnumeration || argType.baseType == Type.tEnumeration16 || argType.baseType == Type.tEnumeration64 || argType.baseType == Type.tEnumeration8) {
-                let argTypeName = describe(argType)
-                var inscope expr <- qmacro_block() <| $() {
-                    if (!(td.dimExpr[$v(macroArgIndex)] is ExprConstEnumeration)) {
-                        macro_error(compiling_program(), td.at, "expecting {$v(string(func.arguments[ai].name))} to be {$v(argTypeName)}")
-                        return <- default<TypeDeclPtr>
-                    }
-                }
-                append_expressions(body, expr)
-                (retCall as ExprCall).arguments |> emplace_new <| qmacro(
-                    int64_to_enum(type<$t(argType)>,
-                        find_enum_value(td.dimExpr[$v(macroArgIndex)]._type.enumType,
-                            string((td.dimExpr[$v(macroArgIndex)] as ExprConstEnumeration).value))))
+                var defaultValue = ""
+                return false if (!typemacro_default_value(argDefaultValue, type<ExprConstString>, defaultValue, errors))
+                (retCall as ExprCall).arguments |> emplace_new <| qmacro(typemacro_argument(td.dimExpr, $v(macroArgIndex), type<ExprConstString>, $v(defaultValue)))
             } elif (is_typedecl_ptr(argType)) {
+                if (argDefaultValue != null) {
+                    errors := "TypeDeclPtr argument cannot have default value"
+                    return false
+                }
                 (retCall as ExprCall).arguments |> emplace_new <| qmacro(
                     (td.dimExpr[$v(macroArgIndex)] is ExprTypeDecl) ? (td.dimExpr[$v(macroArgIndex)] as ExprTypeDecl).typeexpr : td.dimExpr[$v(macroArgIndex)]._type)
             } else {
@@ -509,3 +529,4 @@ class TemplateStructure : AstStructureAnnotation {
         return true
     }
 }
+

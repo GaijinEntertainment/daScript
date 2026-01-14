@@ -353,13 +353,7 @@ def private makeFlatHashTable(macroArgument, passArgument : TypeDeclPtr; KeyType
 }
 
 [typemacro_function]
-def FlatHashTable(macroArgument, passArgument : TypeDeclPtr; KeyType, ValueType : TypeDeclPtr) : TypeDeclPtr {
-    //! FlatHashTable<K;V> is a hash map that uses open addressing with linear probing and default hash function.
-    return <- makeFlatHashTable(macroArgument, passArgument, KeyType, ValueType, "hash")
-}
-
-[typemacro_function]
-def FlatHashTableEx(macroArgument, passArgument : TypeDeclPtr; KeyType, ValueType : TypeDeclPtr; hashName : string) : TypeDeclPtr {
+def FlatHashTable(macroArgument, passArgument : TypeDeclPtr; KeyType, ValueType : TypeDeclPtr; hashName : string = "hash") : TypeDeclPtr {
     //! FlatHashTableEx<K;V;hashName> is a hash map that uses open addressing with linear probing and custom hash function.
     return <- makeFlatHashTable(macroArgument, passArgument, KeyType, ValueType, hashName)
 }

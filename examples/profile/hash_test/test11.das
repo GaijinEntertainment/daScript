@@ -8,7 +8,7 @@ require slot_map
 
 typedef CuckooHashMap_uint64_int = $CuckooHashTable < uint64, int >
 typedef FlatHashMap_uint64_int = $FlatHashTable < uint64, int >
-typedef FlatHashMap0_uint64_int = $FlatHashTableEx < uint64, int > (@@hash0)
+typedef FlatHashMap0_uint64_int = $FlatHashTable < uint64, int > (@@hash0)
 
 typedef SlotTable = table<uint64; int>
 
