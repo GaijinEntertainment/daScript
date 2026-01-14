@@ -23,11 +23,11 @@ def test(hmap : auto(HashMapType); dummy) {
     }
 }
 
-typedef CuckooHashMap_test = $CuckooHashTable < int; int >
-typedef CuckooHashMap_test_inline = $CuckooHashTable < int; int > (@@hash0, @@hash_inline)
-typedef FlatHashMap_test = $FlatHashTable < int; int >
-typedef FlatHashMap_test_inline = $FlatHashTable < int; int > (@@hash_inline)
-typedef FlatHashMap_test0 = $FlatHashTable < int; int > (@@hash0)
+typedef CuckooHashMap_test = $TCuckooHashTable < int; int >
+typedef CuckooHashMap_test_inline = $TCuckooHashTable < int; int > (@@hash0, @@hash_inline)
+typedef FlatHashMap_test = $TFlatHashTable < int; int >
+typedef FlatHashMap_test_inline = $TFlatHashTable < int; int > (@@hash_inline)
+typedef FlatHashMap_test0 = $TFlatHashTable < int; int > (@@hash0)
 
 def hash_inline(i : int) : uint64 {
     let DAS_WYHASH_SEED = 0x1234567890abcdeful

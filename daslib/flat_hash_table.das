@@ -11,7 +11,7 @@ require daslib/typemacro_boost
 require daslib/macro_boost
 
 //! TFlatHashTable is a hash map that uses open addressing with linear probing.
-[skip_field_lock_check]
+[skip_field_lock_check, template_structure(KeyType, ValueType, hashFunctionName=@@hash)]
 struct template TFlatHashTable {
     key_data   : array<KeyType>
     hashes : array<uint64>
@@ -345,17 +345,4 @@ struct template TFlatHashTable {
         }
     }
 }
-
-[typemacro_template_function(TFlatHashTable)]
-def private makeFlatHashTable(macroArgument, passArgument : TypeDeclPtr; KeyType, ValueType : TypeDeclPtr; hashFunctionName : string) : TypeDeclPtr {
-    //! generated template boilerplate for FlatHashTable
-    return <- default<TypeDeclPtr>
-}
-
-[typemacro_function]
-def FlatHashTable(macroArgument, passArgument : TypeDeclPtr; KeyType, ValueType : TypeDeclPtr; hashName : string = "hash") : TypeDeclPtr {
-    //! FlatHashTableEx<K;V;hashName> is a hash map that uses open addressing with linear probing and custom hash function.
-    return <- makeFlatHashTable(macroArgument, passArgument, KeyType, ValueType, hashName)
-}
-
 

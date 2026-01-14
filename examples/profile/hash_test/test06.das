@@ -9,8 +9,8 @@ struct Value {
     val : int
 }
 
-typedef CuckooHashMap_test = $CuckooHashTable < int; Value >
-typedef FlatHashMap_test = $FlatHashTable < int; Value >
+typedef CuckooHashMap_test = $TCuckooHashTable < int; Value >
+typedef FlatHashMap_test = $TFlatHashTable < int; Value >
 
 [sideeffects]
 def test(hmap : auto(HashMapType); randomNumbers) {

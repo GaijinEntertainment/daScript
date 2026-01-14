@@ -5,8 +5,8 @@ require _framework
 require daslib/flat_hash_table
 require daslib/cuckoo_hash_table
 
-typedef CuckooHashMap_test = $CuckooHashTable < int; int >
-typedef FlatHashMap_test = $FlatHashTable < int; int >
+typedef CuckooHashMap_test = $TCuckooHashTable < int; int >
+typedef FlatHashMap_test = $TFlatHashTable < int; int >
 
 [sideeffects]
 def test(hmap : auto(HashMapType); randomNumbers) {

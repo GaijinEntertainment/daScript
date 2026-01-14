@@ -34,7 +34,7 @@ def public hash_extra(s : string) : uint64 {
 }
 */
 
-[skip_field_lock_check]
+[skip_field_lock_check, template_structure(KeyType, ValueType, hashFunction0Name=@@hash0, hashFunction1Name=@@hash_extra)]
 struct template TCuckooHashTable {
     typedef KHV_TCuckooHashTable = tuple<key : KeyType; hash : uint64; value : ValueType>
     khv : array<KHV_TCuckooHashTable>
@@ -397,16 +397,4 @@ struct template TCuckooHashTable {
             }
         }
     }
-}
-
-[typemacro_template_function(TCuckooHashTable)]
-def private makeCuckooHashTable(macroArgument, passArgument : TypeDeclPtr; KeyType, ValueType : TypeDeclPtr; hashFunction0Name, hashFunction1Name : string) : TypeDeclPtr {
-    //! generated template boilerplate for CuckooHashTable
-    return <- default<TypeDeclPtr>
-}
-
-[typemacro_function]
-def CuckooHashTable(macroArgument, passArgument : TypeDeclPtr; KeyType, ValueType : TypeDeclPtr; hashName : string = "hash"; hash0name : string = "hash_extra") : TypeDeclPtr {
-    //! CuckooHashTableEx<K;V;hashName> is a hash map that uses open addressing with linear probing and custom hash function.
-    return <- makeCuckooHashTable(macroArgument, passArgument, KeyType, ValueType, hashName, hash0name)
 }

@@ -81,43 +81,6 @@ def public typemacro_argument(dimExpr; index : int; var constType : ExprConstStr
     return defaultValue
 }
 
-[macro_function]
-def public typemacro_default_value(argDefaultValue : ExpressionPtr; var constType : auto(ExprConstType); var defaultValue : auto(TT)&; var errors : das_string) : bool {
-    if (argDefaultValue != null) {
-        if (argDefaultValue.__rtti == typeinfo undecorated_typename(type<ExprConstType>)) {
-            defaultValue = unsafe(reinterpret<ExprConstType?>(argDefaultValue)).value
-            return true
-        } else {
-            errors := "expecting {typeinfo undecorated_typename(type<ExprConstType>)} constant as default value"
-            return false
-        }
-        return true
-    } else {
-        defaultValue = default<TT>
-        return true
-    }
-}
-
-[macro_function]
-def public typemacro_default_value(argDefaultValue : ExpressionPtr; var constType : ExprConstString; var defaultValue : auto(TT)&; var errors : das_string) : bool {
-    if (argDefaultValue != null) {
-        if (argDefaultValue.__rtti == "ExprConstString") {
-            defaultValue := unsafe(reinterpret<ExprConstString?>(argDefaultValue)).value
-            return true
-        } elif (argDefaultValue.__rtti == "ExprAddr") {
-            defaultValue := string(unsafe(reinterpret<ExprAddr?>(argDefaultValue)).target)
-            return true
-        } else {
-            errors := "expecting string constant or function address as default value"
-            return false
-        }
-        return true
-    } else {
-        defaultValue = default<TT>
-        return true
-    }
-}
-
 [function_macro(name="typemacro_function")]
 class TypeMacroMacro : AstFunctionAnnotation {
     //! This macro converts function into a type macro.
@@ -195,17 +158,14 @@ class TypeMacroMacro : AstFunctionAnnotation {
                 append_expressions(body, checkE)
             }
             if (argType.baseType == Type.tInt) {
-                var defaultValue = 0
-                return false if (!typemacro_default_value(argDefaultValue, type<ExprConstInt>, defaultValue, errors))
-                (retCall as ExprCall).arguments |> emplace_new <| qmacro(typemacro_argument(td.dimExpr, $v(macroArgIndex), type<ExprConstInt>, $v(defaultValue)))
+                var inscope defaultValue <- argDefaultValue != null ? clone_expression(argDefaultValue) : quote(0)
+                (retCall as ExprCall).arguments |> emplace_new <| qmacro(typemacro_argument(td.dimExpr, $v(macroArgIndex), type<ExprConstInt>, $e(defaultValue)))
             } elif (argType.baseType == Type.tBool) {
-                var defaultValue = false
-                return false if (!typemacro_default_value(argDefaultValue, type<ExprConstBool>, defaultValue, errors))
-                (retCall as ExprCall).arguments |> emplace_new <| qmacro(typemacro_argument(td.dimExpr, $v(macroArgIndex), type<ExprConstBool>, $v(defaultValue)))
+                var inscope defaultValue <- argDefaultValue != null ? clone_expression(argDefaultValue) : quote(false)
+                (retCall as ExprCall).arguments |> emplace_new <| qmacro(typemacro_argument(td.dimExpr, $v(macroArgIndex), type<ExprConstBool>, $e(defaultValue)))
             } elif (argType.baseType == Type.tString) {
-                var defaultValue = ""
-                return false if (!typemacro_default_value(argDefaultValue, type<ExprConstString>, defaultValue, errors))
-                (retCall as ExprCall).arguments |> emplace_new <| qmacro(typemacro_argument(td.dimExpr, $v(macroArgIndex), type<ExprConstString>, $v(defaultValue)))
+                var inscope defaultValue <- argDefaultValue != null ? clone_expression(argDefaultValue) : quote("")
+                (retCall as ExprCall).arguments |> emplace_new <| qmacro(typemacro_argument(td.dimExpr, $v(macroArgIndex), type<ExprConstString>, $e(defaultValue)))
             } elif (is_typedecl_ptr(argType)) {
                 if (argDefaultValue != null) {
                     errors := "TypeDeclPtr argument cannot have default value"
@@ -493,16 +453,28 @@ class TemplateStructure : AstStructureAnnotation {
             errors := "expecting at least one template argument name"
             return false
         }
-        var inscope template_arguments <- [for (arg in args); string(arg.name)] // todo: support types?
         let makeFuncName = "make`template`{st.name}"
         var inscope ctxFnArguments : array<VariablePtr>
-        for (name in template_arguments) {
-            // let name = argName
-            ctxFnArguments |> emplace_new <| new Variable(
-                name := name,
-                _type <- new TypeDecl(baseType = Type.alias, alias := "TypeDeclPtr"),
-                at = st.at
-            )
+        for (arg in args) {
+            if (true) {
+                var inscope argVar <- new Variable(
+                    name := string(arg.name),
+                    at = st.at
+                )
+                if (arg.basicType == Type.tBool) {
+                    argVar._type |> move_new <| new TypeDecl(baseType = Type.alias, alias := "TypeDeclPtr")
+                } elif (arg.basicType == Type.tInt) {
+                    argVar._type |> move_new <| new TypeDecl(baseType = Type.tInt)
+                    argVar.init |> move_new <| qmacro($v(arg.iValue))
+                } elif (arg.basicType == Type.tString) {
+                    argVar._type |> move_new <| new TypeDecl(baseType = Type.tString)
+                    argVar.init |> move_new <| qmacro($v(string(arg.sValue)))
+                } else {
+                    errors := "unsupported template argument {arg.name} type {arg.basicType}"
+                    return false
+                }
+                ctxFnArguments.emplace(argVar)
+            }
         }
         var inscope makeFunction <- qmacro_function(makeFuncName) <| $(macroArgument, passArgument : TypeDeclPtr; $a(ctxFnArguments)) : TypeDeclPtr {
             return <- default<TypeDeclPtr>
@@ -513,11 +485,10 @@ class TemplateStructure : AstStructureAnnotation {
         if (!(compiling_module() |> add_function(makeFunction))) {
             panic("can't add function {makeFuncName}")
         }
-
         let typeMacroFunctionName = string(st.name)
         var inscope callMacroFunction <- qmacro($c(makeFuncName)(macroArgument, passArgument))
-        for (name in template_arguments) {
-            (callMacroFunction as ExprCall).arguments |> emplace_new <| qmacro($i(name))
+        for (arg in args) {
+            (callMacroFunction as ExprCall).arguments |> emplace_new <| qmacro($i(string(arg.name)))
         }
         var inscope typeMacroFunction <- qmacro_function(typeMacroFunctionName) <| $(macroArgument, passArgument : TypeDeclPtr; $a(ctxFnArguments)) : TypeDeclPtr {
             return <- $e(callMacroFunction)
