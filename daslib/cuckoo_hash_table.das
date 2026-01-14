@@ -406,13 +406,7 @@ def private makeCuckooHashTable(macroArgument, passArgument : TypeDeclPtr; KeyTy
 }
 
 [typemacro_function]
-def CuckooHashTable(macroArgument, passArgument : TypeDeclPtr; KeyType, ValueType : TypeDeclPtr) : TypeDeclPtr {
-    //! CuckooHashTable<K;V> is a hash map that uses open addressing with linear probing and default hash function.
-    return <- makeCuckooHashTable(macroArgument, passArgument, KeyType, ValueType, "hash", "hash_extra")
-}
-
-[typemacro_function]
-def CuckooHashTableEx(macroArgument, passArgument : TypeDeclPtr; KeyType, ValueType : TypeDeclPtr; hashName, hash0name : string) : TypeDeclPtr {
+def CuckooHashTable(macroArgument, passArgument : TypeDeclPtr; KeyType, ValueType : TypeDeclPtr; hashName : string = "hash"; hash0name : string = "hash_extra") : TypeDeclPtr {
     //! CuckooHashTableEx<K;V;hashName> is a hash map that uses open addressing with linear probing and custom hash function.
     return <- makeCuckooHashTable(macroArgument, passArgument, KeyType, ValueType, hashName, hash0name)
 }

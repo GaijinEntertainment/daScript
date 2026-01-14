@@ -25,7 +25,7 @@ def take_any_hash_map(a) {
     return "nothing"
 }
 [sideeffects]
-def take_dict_map(a : $FlatHashTableEx < auto(TT); auto(TT) > (@@hash_string)) {
+def take_dict_map(a : $FlatHashTable < auto(TT); auto(TT) > (@@hash_string)) {
     return "dict_map"
 }
 
@@ -36,7 +36,7 @@ def take_any_hash_table(a : $CuckooHashTable < auto(TT); auto(QQ) >) {
 
 typedef FlatHashMap_int_Foo = $FlatHashTable < int; Foo >
 typedef FlatHashMap_string_int = $FlatHashTable < string; int >
-typedef DictMap = $FlatHashTableEx < string; int > (@@hash_string)   // vs @@hash
+typedef DictMap = $FlatHashTable < string; int > (@@hash_string)   // vs @@hash
 
 typedef CuckooHashMap_int_Foo = $CuckooHashTable < int; Foo >
 

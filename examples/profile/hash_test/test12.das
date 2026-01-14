@@ -10,7 +10,7 @@ require daslib/cuckoo_hash_table
 
 typedef CuckooHashMap_test = $CuckooHashTable < int; int >
 typedef FlatHashMap_test = $FlatHashTable < int; int >
-typedef PathalogicalFlatHashMap_test = $FlatHashTableEx < int; int > (@@pathalogical)
+typedef PathalogicalFlatHashMap_test = $FlatHashTable < int; int > (@@pathalogical)
 
 [sideeffects]
 def test(hmap : auto(HashMapType); randomNumbers) {
