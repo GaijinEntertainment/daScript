@@ -588,9 +588,6 @@ namespace das
         uint64_t length = writer.tellp();
         if ( length ) {
             auto pStr = context.allocateString(writer.c_str(), uint32_t(length), &debugInfo, isTempString);
-            if ( !pStr  ) {
-                context.throw_out_of_memory(true, uint32_t(length), &debugInfo);
-            }
             if ( isTempString ) context.freeTempString(pStr, &debugInfo);
             return cast<char *>::from(pStr);
         } else {
@@ -626,7 +623,6 @@ namespace das
         vec4f ll = source->eval(context);
         char * str = cast<char *>::to(ll);
         char * iter = context.allocateIterator(sizeof(StringIterator),"string iterator", &debugInfo);
-        if ( !iter ) context.throw_out_of_memory(false, sizeof(StringIterator)+16, &debugInfo);
         new (iter) StringIterator(str, &debugInfo);
         return cast<char *>::from(iter);
     }
