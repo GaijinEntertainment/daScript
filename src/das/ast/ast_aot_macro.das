@@ -1,0 +1,34 @@
+options gen2
+module ast_aot_macro
+
+options no_aot
+require ast_aot_cpp
+require daslib/macro_boost
+require daslib/templates_boost
+require daslib/ast_boost
+require strings
+require fio
+
+
+[simulate_macro(name="ast_aot")]
+class AstAot : AstSimulateMacro {
+    def override simulate(prog : Program?; var ctx : Context?) : bool {
+        return true if (is_in_completion() || is_compiling_macros() || is_folding())
+        let res = run_aot(prog, ctx, prog.policies)
+        var is_ok = res |> length() > 0
+        if (is_ok) {
+            let fileName = "{prog.getThisModule.fileName}.cpp"
+            print("Aot to {fileName}.")
+            fopen(fileName, "wb") <| $(fw) {
+                if (fw != null) {
+                    fwrite(fw, res)
+                } else {
+                    is_ok = false
+                    print("Couldn't create output file {fileName}")
+                }
+            }
+        }
+        return is_ok
+    }
+}
+

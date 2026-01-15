@@ -14,22 +14,26 @@ das::FileAccessPtr get_file_access( char * pak );//link time resolved dependenci
 
 TextPrinter tout;
 
-static string projectFile;
+static bool aotEnabled = false;
+static bool isAotLib = false;
+static bool paranoid_validation = false;
 static bool aotMacros = false;
+
+
+static string projectFile;
 static bool profilerRequired = false;
 static bool debuggerRequired = false;
 static bool scopedStackAllocator = true;
 static bool pauseAfterErrors = false;
 static bool quiet = false;
-static bool paranoid_validation = false;
 static bool jitEnabled = false;
-static bool isAotLib = false;
+
 static bool version2syntax = true;
 static bool gen2MakeSyntax = false;
 
 static CodeOfPolicies getPolicies() {
     CodeOfPolicies policies;
-    policies.aot = false;
+    policies.aot = aotEnabled;
     policies.aot_module = true;
     if (aotMacros) {
         policies.aot_macros = true;
@@ -295,6 +299,10 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
         policies.jit_enabled = true;
         policies.jit_module = getDasRoot() + "/daslib/just_in_time.das";
         policies.dll_search_paths.emplace_back(getDasRoot() + "/lib");
+    } else if (aotEnabled) {
+        policies.aot = true;
+        policies.aot_module_path = getDasRoot() + "/src/das/ast/ast_aot_macro.das";
+        // daScriptEnvironment::getBound()->g_isInAot = true;
     }
     policies.fail_on_no_aot = false;
     policies.fail_on_lack_of_aot_export = false;
@@ -466,6 +474,11 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 gen2MakeSyntax = true;
             } else if ( cmd=="jit") {
                 jitEnabled = true;
+            } else if ( cmd=="aot2") {
+                aotEnabled = true;
+            } else if ( cmd=="aot_lib") {
+                aotEnabled = true;
+                isAotLib = true;
             } else if ( cmd=="log" ) {
                 outputProgramCode = true;
             } else if ( cmd=="dry-run" ) {

@@ -230,6 +230,7 @@ namespace das {
     struct ModuleAnnotation : ManagedStructureAnnotation<Module,false> {
         ModuleAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Module", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(fileName)>("fileName");
             addFieldEx ( "moduleFlags", "moduleFlags", offsetof(Module, moduleFlags), makeModuleFlags() );
         }
     };
@@ -714,6 +715,9 @@ namespace das {
         CodeOfPoliciesAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CodeOfPolicies", ml) {
         // aot
             addField<DAS_BIND_MANAGED_FIELD(aot)>("aot");
+            addField<DAS_BIND_MANAGED_FIELD(aot_lib)>("aot_lib");
+            addField<DAS_BIND_MANAGED_FIELD(paranoid_validation)>("paranoid_validation");
+            addField<DAS_BIND_MANAGED_FIELD(cross_platform)>("cross_platform");
             addField<DAS_BIND_MANAGED_FIELD(standalone_context)>("standalone_context");
             addField<DAS_BIND_MANAGED_FIELD(aot_module)>("aot_module");
             addField<DAS_BIND_MANAGED_FIELD(aot_macros)>("aot_macros");

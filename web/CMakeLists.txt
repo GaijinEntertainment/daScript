@@ -55,25 +55,48 @@ SETUP_COMPILER()
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-MACRO(ADD_STANDALONE_FILE genList input)
+MACRO(DAS_AOT_STANDALONE input genList mainTarget dasAotTool dasAotToolArg)
     get_filename_component(input_src ${input} ABSOLUTE)
     get_filename_component(input_dir ${input_src} DIRECTORY)
     get_filename_component(input_name ${input} NAME)
     set(out_dir ${input_dir}/_standalone_ctx_generated)
     set(out_inc ${out_dir}/${input_name}.h)
     set(out_src ${out_dir}/${input_name}.cpp)
-    set_source_files_properties(${out_inc} ${out_src} PROPERTIES GENERATED TRUE)
-    list(APPEND ${genList} ${out_inc} ${out_src})
+    get_filename_component(ctx_name ${input} NAME_WE)
+    file(MAKE_DIRECTORY ${out_dir})
+    ADD_CUSTOM_COMMAND(
+            DEPENDS ${input_src}
+            OUTPUT  ${out_src}
+            COMMENT "AOT precompiling ${input_src} -> ${out_src}"
+            COMMAND ${dasAotTool} ${dasAotToolArg} ${input_src} ${out_dir} -cross-platform -standalone-context ${ctx_name} -standalone-class Standalone
+    )
+    list(APPEND ${genList} ${out_src})
+    set(custom_name ${mainTarget}_${input_name}_standalone)
+    ADD_CUSTOM_TARGET(${custom_name} DEPENDS ${out_src})
+    set_source_files_properties(${out_src} PROPERTIES GENERATED TRUE)
+    SET_TARGET_PROPERTIES(${custom_name} PROPERTIES FOLDER _${mainTarget}_aot)
+    ADD_DEPENDENCIES(${mainTarget} ${custom_name})
 ENDMACRO()
 
-MACRO (ADD_AOT_EXT_FILE genList mainTarget input)
+MACRO(DAS_AOT input genList mainTarget dasAotTool)
     get_filename_component(input_src ${input} ABSOLUTE)
     get_filename_component(input_dir ${input_src} DIRECTORY)
     get_filename_component(input_name ${input} NAME)
     set(out_dir ${input_dir}/_aot_generated)
     set(out_src "${out_dir}/${mainTarget}_${input_name}.cpp")
-    set_source_files_properties(${out_src} PROPERTIES GENERATED TRUE)
+    file(MAKE_DIRECTORY ${out_dir})
+	  ADD_CUSTOM_COMMAND(
+		    DEPENDS ${input_src}
+        DEPENDS ${dasAotTool}
+        OUTPUT  ${out_src}
+        COMMENT "AOT precompiling ${input_src} -> ${out_src}"
+        COMMAND ${dasAotTool} -aot ${input_src} ${out_src}
+    )
     list(APPEND ${genList} ${out_src})
+    set(custom_name ${mainTarget}_${input_name}_aot)
+    ADD_CUSTOM_TARGET(${custom_name} DEPENDS ${out_src})
+    SET_TARGET_PROPERTIES(${custom_name} PROPERTIES FOLDER _${mainTarget}_aot)
+    ADD_DEPENDENCIES(${mainTarget} ${custom_name})
 ENDMACRO()
 
 
@@ -602,26 +625,11 @@ set(AotDaslibList
         ../daslib/strings_boost.das
         ../daslib/random.das
         ../daslib/math_boost.das
-
-        # ../src/das/ast/printer_flags_visitor.das
 )
 SET(AOT_GENERATED_SRC)
 FOREACH(inF IN LISTS AotDaslibList)
-    ADD_AOT_EXT_FILE(AOT_GENERATED_SRC dasAotStub ${inF}) # No need to do aot, since these files already aot'ed
+    DAS_AOT(${inF} AOT_GENERATED_SRC dasAotStub daslang) # No need to do aot, since these files already aot'ed
 ENDFOREACH()
-
-set(StandaloneFilesList
-    # # aot das-mode temporary disabled
-    # src/das/ast/ast_print.das
-    # src/das/ast/ast_aot_cpp.das
-    # src/das/ast/aot_constants.das
-    # src/das/ast/standalone_contexts.das
-)
-
-FOREACH(inF IN LISTS StandaloneFilesList)
-    ADD_STANDALONE_FILE(AOT_GENERATED_SRC ${inF})
-ENDFOREACH()
-
 
 SOURCE_GROUP_FILES("aot stub" AOT_GENERATED_SRC)
 #UNITIZE_BUILD("daslib" AOT_GENERATED_SRC)

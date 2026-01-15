@@ -135,8 +135,6 @@ Result transform_syntax(const string &filename, const string content, format::Fo
     das_set<string> dependencies;
     ModuleGroup libGroup;
     CodeOfPolicies policies;
-    policies.aot = false;
-    policies.aot_module = false;
     policies.fail_on_lack_of_aot_export = false;
     policies.version_2_syntax = false;
 

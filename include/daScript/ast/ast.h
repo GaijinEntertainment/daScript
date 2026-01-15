@@ -1450,10 +1450,14 @@ namespace das
     };
 
     struct CodeOfPolicies {
-        bool        aot = false;                        // enable AOT
+        /*option*/ bool        aot = false;                 // is aot enabled
+        /*option*/ bool        aot_lib = false;
         /*option*/ bool        standalone_context = false;         // generate standalone context class in aot mode
-        bool        aot_module = false;                 // this is how AOT tool knows module is module, and not an entry point
-        bool        aot_macros = false;                 // enables aot of macro code (like 'qmacro_block')
+        bool                   paranoid_validation = false;        // todo
+        bool                   cross_platform = false;             // aot supports platform independent mode
+        bool                   aot_macros = false;                 // enables aot of macro code (like 'qmacro_block')
+        bool                   aot_module = false;                 // this is how AOT tool knows module is module, and not an entry point
+        string aot_module_path = "/src/das/ast/ast_aot_macro.das";
         bool        completion = false;                 // this code is being compiled for 'completion' mode
         bool        export_all = false;                 // when user compiles, export all (public?) functions
         bool        serialize_main_module = true;       // if false, then we recompile main module each time

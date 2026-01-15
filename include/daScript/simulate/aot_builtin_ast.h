@@ -88,7 +88,7 @@ namespace das {
     DAS_API bool macro_aot_infix(TypeInfoMacro *macro, StringBuilderWriter *ss, ExpressionPtr expr);
     DAS_API FileInfo *clone_file_info(const char *name, int tabSize, Context * context, LineInfoArg * at);
     DAS_API void for_each_module_function(Module *module, const TBlock<void,FunctionPtr> &blk, Context * context, LineInfoArg * at);
-    DAS_API uint64_t getInitSemanticHashWithDep(ProgramPtr program, uint64_t semH);
+    DAS_API uint64_t getInitSemanticHashWithDep(Program* program, uint64_t semH);
     DAS_API uint64_t getFunctionHashById(Function *fun, int id, void * pctx, Context * context, LineInfoArg * at);
     DAS_API bool modAotRequire(Module *mod, StringBuilderWriter *ss, Context * context, LineInfoArg * at);
 

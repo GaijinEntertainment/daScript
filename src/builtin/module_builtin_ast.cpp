@@ -966,7 +966,7 @@ namespace das {
         });
     }
 
-    uint64_t getInitSemanticHashWithDep(ProgramPtr program, uint64_t semH) { // todo: implement on das side after .cpp aot removed
+    uint64_t getInitSemanticHashWithDep(Program* program, uint64_t semH) { // todo: implement on das side after .cpp aot removed
         return program->getInitSemanticHashWithDep(semH);
     }
 
