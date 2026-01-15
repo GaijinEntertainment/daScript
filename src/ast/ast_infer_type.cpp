@@ -3745,7 +3745,8 @@ namespace das {
                                 }
                                 // lets try static class method
                                 if ( valueType->baseType==Type::tStructure ) {
-                                    newCall->name = "_::" + valueType->structType->name + "`" + methodName;
+                                    callName = "_::" + valueType->structType->name + "`" + methodName;
+                                    newCall->name = callName;
                                     fcall = inferFunctionCall(newCall.get(), InferCallError::tryOperator);
                                     if ( fcall != nullptr || newCall->name != callName ) {
                                         reportAstChanged();
