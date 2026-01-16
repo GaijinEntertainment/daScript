@@ -426,6 +426,9 @@ namespace das {
     };
 
     template <typename TT>
+    struct das_cast<const TT> : das_cast<TT> {};
+
+    template <typename TT>
     struct das_cast<TT *> {
         template <typename QQ>
         static __forceinline TT * cast ( QQ * expr ) {
