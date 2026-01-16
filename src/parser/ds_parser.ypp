@@ -1205,6 +1205,8 @@ function_name
     |   DAS_OPERATOR ROTLEQU { $$ = new string("<<<="); }
     |   DAS_OPERATOR ROTREQU { $$ = new string(">>>="); }
     |   DAS_OPERATOR '[' ']' { $$ = new string("[]"); }
+    |   DAS_OPERATOR '[' ']' LARROW { $$ = new string("[]<-"); }
+    |   DAS_OPERATOR '[' ']' CLONEEQU { $$ = new string("[]:="); }
     |   DAS_OPERATOR QBRA ']'   { $$ = new string("?[]"); }
     |   DAS_OPERATOR '.'     { $$ = new string("."); }
     |   DAS_OPERATOR QDOT    { $$ = new string("?."); }

@@ -113,3 +113,78 @@ def test_operators(t : T?) {
     }
 }
 
+struct BitArray {
+    bits : uint64
+    def operator [] (index : int) : bool {
+        assert(index >= 0 && index < 64)
+        let mask = (1ul << uint64(index))
+        return (bits & mask) != 0ul
+    }
+    def operator [] =(index : int, value : bool) {
+        assert(index >= 0 && index < 64)
+        let mask = (1ul << uint64(index))
+        if (value) {
+            bits = bits | mask
+        } else {
+            bits = bits & ~mask
+        }
+    }
+    def static clear(var self : BitArray) {
+        self.bits = 0ul
+    }
+}
+
+[test]
+def test_index_operators(t : T?) {
+    t |> run("[], []=") <| @(t : T?) {
+        var a : BitArray
+        t |> equal(a.bits, 0ul)
+        a[1] = true
+        t |> equal(a.bits, 2ul)
+        t |> equal(a[1], true)
+        a.clear()
+        // all bits
+        for (bit in 0..64) {
+            a[bit] = true
+        }
+        for (bit in 0..64) {
+            t |> equal(a[bit], true)
+        }
+        t |> equal(a.bits, 0xfffffffffffffffful)
+        for (bit in 0..64) {
+            a[bit] = false
+        }
+        for (bit in 0..64) {
+            t |> equal(a[bit], false)
+        }
+        t |> equal(a.bits, 0ul)
+        a.clear()
+        // checkerboard
+        for (bit in 0..32) {
+            a[bit * 2] = true
+        }
+        for (bit in 0..64) {
+            t |> equal(a[bit], bit % 2 == 0)
+        }
+        a.clear()
+        for (bit in 0..32) {
+            a[bit * 2 + 1] = true
+        }
+        for (bit in 0..64) {
+            t |> equal(a[bit], bit % 2 == 1)
+        }
+        a.clear()
+    }
+    t |> run("compound operators") <| @(t : T?) {
+        var a : BitArray
+        a.clear()
+        a[0] ||= true
+        t |> equal(a[0], true)
+        a[0] &&= false
+        t |> equal(a[0], false)
+        a[0] ^^= true
+        t |> equal(a[0], true)
+        a[0] ^^= true
+        t |> equal(a[0], false)
+    }
+}

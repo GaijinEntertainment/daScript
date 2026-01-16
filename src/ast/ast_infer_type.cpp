@@ -5220,7 +5220,7 @@ namespace das {
         virtual ExpressionPtr visit ( ExprAt * expr ) override {
             if ( !expr->subexpr->type || expr->subexpr->type->isAliasOrExpr() ) return Visitor::visit(expr);    // failed to infer
             if ( !expr->index->type   || expr->index->type->isAliasOrExpr()   ) return Visitor::visit(expr);    // failed to infer
-            if ( !expr->no_promotion ) {
+            if ( !expr->no_promotion && !expr->underClone ) {
                 if ( auto opE = inferGenericOperator("[]",expr->at,expr->subexpr,expr->index) ) {
                     opE->alwaysSafe = expr->alwaysSafe;
                     return opE;
@@ -6577,6 +6577,7 @@ namespace das {
         bool isAssignmentOperator ( const string & op ) {
             return (op=="+=") || (op=="-=") || (op=="*=") || (op=="/=")
                 || (op=="%=") || (op=="&=") || (op=="|=") || (op=="^=")
+                || (op=="||=") || (op=="&&=") || (op=="^^=")
                 || (op=="<<=") || (op==">>=") || (op=="<<<=") || (op==">>>=");
         }
 
@@ -6631,6 +6632,9 @@ namespace das {
                 } else if ( expr->left->rtti_isVar() ) {
                     auto var = static_pointer_cast<ExprVar>(expr->left);
                     var->underClone = true;
+                } else if ( expr->left->rtti_isAt() ) {
+                    auto at = static_pointer_cast<ExprAt>(expr->left);
+                    at->underClone = true;
                 }
             }
         }
@@ -6677,6 +6681,22 @@ namespace das {
                         } else {
                             expr->left = propGet;
                             return expr;
+                        }
+                    }
+                } else if ( expr->left->rtti_isAt() ) {
+                    ExprAt * eat = (ExprAt *)(expr->left.get());
+                    if ( auto atGet = inferGenericOperator("[]", eat->at, eat->subexpr, eat->index) ) { // we need bot get and set
+                        atGet->alwaysSafe = eat->alwaysSafe | expr->alwaysSafe;
+                        auto opRight = make_smart<ExprOp2>(expr->at, opName, atGet, expr->right);
+                        opRight->type = make_smart<TypeDecl>(*expr->right->type);
+                        if ( auto atSet = inferGenericOperator3("[]=", eat->at, eat->subexpr, eat->index, opRight) ) {
+                            atSet->alwaysSafe = eat->alwaysSafe | expr->alwaysSafe;
+                            removeR2v(atSet);
+                            return atSet;
+                        } else {
+                            reportAstChanged();
+                            expr->left = atGet;
+                            return nullptr;
                         }
                     }
                 }
@@ -7009,6 +7029,9 @@ namespace das {
                 } else if ( expr->left->rtti_isVar() ) {
                     auto var = static_pointer_cast<ExprVar>(expr->left);
                     var->underClone = true;
+                } else if ( expr->left->rtti_isAt() ) {
+                    auto at = static_pointer_cast<ExprAt>(expr->left);
+                    at->underClone = true;
                 }
             }
             markNoDiscard(expr->right.get());
@@ -7055,6 +7078,9 @@ namespace das {
             } else if ( expr->left->rtti_isVar() ) {
                 auto var = static_pointer_cast<ExprVar>(expr->left);
                 var->underClone = true;
+            } else if ( expr->left->rtti_isAt() ) {
+                auto at = static_pointer_cast<ExprAt>(expr->left);
+                at->underClone = true;
             }
             markNoDiscard(expr->right.get());
         }
@@ -7097,6 +7123,21 @@ namespace das {
                                 return call;
                             }
                         }
+                    }
+                } else if ( expr->left->rtti_isAt() ) {
+                    ExprAt * eat = (ExprAt*)(expr->left.get());
+                    // first, lets find []= operator
+                    auto opName = "[]" + expr->name;
+                    if ( auto opAtEq = inferGenericOperator3(opName, expr->at, eat->subexpr, eat->index, expr->right) ) {
+                        opAtEq->alwaysSafe = eat->alwaysSafe | expr->alwaysSafe;
+                        return opAtEq;
+                    }
+                    // now, lets see if at itself can be promoted
+                    if ( auto OpAt = inferGenericOperator("[]", expr->at, eat->subexpr, eat->index) ) {
+                        reportAstChanged();
+                        OpAt->alwaysSafe = eat->alwaysSafe;
+                        expr->left = OpAt;
+                        return nullptr;
                     }
                 }
             }
@@ -9569,6 +9610,27 @@ namespace das {
                 }
             }
             return nullptr;
+        }
+        ExpressionPtr inferGenericOperator3 ( const string & opN, const LineInfo & expr_at, const ExpressionPtr & arg0, const ExpressionPtr & arg1, const ExpressionPtr & arg2, InferCallError err = InferCallError::tryOperator ) {
+            auto opName = "_::" + opN;
+            auto tempCall = make_smart<ExprLooksLikeCall>(expr_at,opName);
+            tempCall->arguments.push_back(arg0);
+            if ( arg1 ) tempCall->arguments.push_back(arg1);
+            if ( arg2 ) tempCall->arguments.push_back(arg2);
+            auto ffunc = inferFunctionCall(tempCall.get(),err).get();
+            if ( opName != tempCall->name ) {   // this happens when the operator gets instanced
+                reportAstChanged();
+                auto opCall = make_smart<ExprCall>(expr_at, tempCall->name);
+                opCall->arguments = das::move(tempCall->arguments);
+                return opCall;
+            } else if ( ffunc ) { // function found
+                reportAstChanged();
+                auto opCall = make_smart<ExprCall>(expr_at, opN);
+                opCall->arguments = das::move(tempCall->arguments);
+                return opCall;
+            } else {
+                return nullptr;
+            }
         }
         ExpressionPtr inferGenericOperator ( const string & opN, const LineInfo & expr_at, const ExpressionPtr & arg0, const ExpressionPtr & arg1, InferCallError err = InferCallError::tryOperator ) {
             auto opName = "_::" + opN;
