@@ -766,14 +766,12 @@ namespace das
 
     TSequence<int32_t> builtin_count ( int32_t start, int32_t step, Context * context, LineInfoArg * at ) {
         char * iter = context->allocateIterator(sizeof(CountIterator), "count iterator", at);
-        if ( !iter ) context->throw_out_of_memory(false, sizeof(CountIterator)+16, at);
         new (iter) CountIterator(start, step, at);
         return TSequence<int>((Iterator *)iter);
     }
 
     TSequence<uint32_t> builtin_ucount ( uint32_t start, uint32_t step, Context * context, LineInfoArg * at ) {
         char * iter = context->allocateIterator(sizeof(CountIterator), "ucount iterator", at);
-        if ( !iter ) context->throw_out_of_memory(false, sizeof(CountIterator)+16, at);
         new (iter) CountIterator(start, step, at);
         return TSequence<int>((Iterator *)iter);
     }
@@ -979,21 +977,18 @@ namespace das
 
     void builtin_make_good_array_iterator ( Sequence & result, const Array & arr, int stride, Context * context, LineInfoArg * at ) {
         char * iter = context->allocateIterator(sizeof(GoodArrayIterator), "array<> iterator", at);
-        if ( !iter ) context->throw_out_of_memory(false, sizeof(GoodArrayIterator)+16, at);
         new (iter) GoodArrayIterator((Array *)&arr, stride, at);
         result = { (Iterator *) iter };
     }
 
     void builtin_make_fixed_array_iterator ( Sequence & result, void * data, int size, int stride, Context * context, LineInfoArg * at ) {
         char * iter = context->allocateIterator(sizeof(FixedArrayIterator), "fixed array iterator", at);
-        if ( !iter ) context->throw_out_of_memory(false, sizeof(FixedArrayIterator)+16, at);
         new (iter) FixedArrayIterator((char *)data, size, stride, at);
         result = { (Iterator *) iter };
     }
 
     void builtin_make_range_iterator ( Sequence & result, range rng, Context * context, LineInfoArg * at ) {
         char * iter = context->allocateIterator(sizeof(RangeIterator<range>), "range iterator", at);
-        if ( !iter ) context->throw_out_of_memory(false, sizeof(RangeIterator<range>)+16, at);
         new (iter) RangeIterator<range>(rng, at);
         result = { (Iterator *) iter };
     }
@@ -1014,22 +1009,18 @@ namespace das
         switch ( tinfo->type ) {
         case Type::tEnumeration:
             iter = context.allocateIterator(sizeof(EnumIterator<int32_t>), "enum iterator", &call->debugInfo);
-            if ( !iter ) context.throw_out_of_memory(false, sizeof(EnumIterator<int32_t>)+16, &call->debugInfo);
             new (iter) EnumIterator<int32_t>(einfo, &call->debugInfo);
             break;
         case Type::tEnumeration8:
             iter = context.allocateIterator(sizeof(EnumIterator<int8_t>), "enum8 iterator", &call->debugInfo);
-            if ( !iter ) context.throw_out_of_memory(false, sizeof(EnumIterator<int8_t>)+16, &call->debugInfo);
             new (iter) EnumIterator<int8_t>(einfo, &call->debugInfo);
             break;
         case Type::tEnumeration16:
             iter = context.allocateIterator(sizeof(EnumIterator<int16_t>), "enum16 iterator", &call->debugInfo);
-            if ( !iter ) context.throw_out_of_memory(false, sizeof(EnumIterator<int16_t>)+16, &call->debugInfo);
             new (iter) EnumIterator<int16_t>(einfo, &call->debugInfo);
             break;
         case Type::tEnumeration64:
             iter = context.allocateIterator(sizeof(EnumIterator<int64_t>), "enum64 iterator", &call->debugInfo);
-            if ( !iter ) context.throw_out_of_memory(false, sizeof(EnumIterator<int64_t>)+16, &call->debugInfo);
             new (iter) EnumIterator<int64_t>(einfo, &call->debugInfo);
             break;
         default:
@@ -1042,7 +1033,6 @@ namespace das
 
     void builtin_make_string_iterator ( Sequence & result, char * str, Context * context, LineInfoArg * at ) {
         char * iter = context->allocateIterator(sizeof(StringIterator), "string iterator", at);
-        if ( !iter ) context->throw_out_of_memory(false, sizeof(StringIterator)+16, at);
         new (iter) StringIterator(str, at);
         result = { (Iterator *) iter };
     }
@@ -1058,7 +1048,6 @@ namespace das
 
     void builtin_make_nil_iterator ( Sequence & result, Context * context, LineInfoArg * at ) {
         char * iter = context->allocateIterator(sizeof(NilIterator), "nil iterator", at);
-        if ( !iter ) context->throw_out_of_memory(false, sizeof(NilIterator)+16);
         new (iter) NilIterator(at);
         result = { (Iterator *) iter };
     }
@@ -1118,7 +1107,6 @@ namespace das
 
     void builtin_make_lambda_iterator ( Sequence & result, const Lambda lambda, int stride, Context * context, LineInfoArg * at ) {
         char * iter = context->allocateIterator(sizeof(LambdaIterator), "lambda iterator", at);
-        if ( !iter ) context->throw_out_of_memory(false, sizeof(LambdaIterator)+16);
         new (iter) LambdaIterator(*context, lambda, stride, at);
         result = { (Iterator *) iter };
     }

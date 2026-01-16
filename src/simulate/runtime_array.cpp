@@ -37,7 +37,6 @@ namespace das
         } else {
             newData = (char *)context.reallocate(arr.data, arr.capacity*stride, newCapacity*stride, at);
         }
-        if ( !newData ) context.throw_out_of_memory(false, newCapacity*stride, at);
         context.heap->mark_comment(newData, "array");
         if ( newData != arr.data ) {
             // memcpy(newData, arr.data, arr.capacity);
@@ -91,7 +90,6 @@ namespace das
         vec4f ll = source->eval(context);
         Array * arr = cast<Array *>::to(ll);
         char * iter = context.allocateIterator(sizeof(GoodArrayIterator),"array<> iterator", &debugInfo);
-        if ( !iter ) context.throw_out_of_memory(false, sizeof(GoodArrayIterator)+16, &debugInfo);
         new (iter) GoodArrayIterator(arr, stride, &debugInfo);
         return cast<char *>::from(iter);
     }
@@ -125,7 +123,6 @@ namespace das
         vec4f ll = source->eval(context);
         char * data = cast<char *>::to(ll);
         char * iter = context.allocateIterator(sizeof(FixedArrayIterator),"fixed array iterator", &debugInfo);
-        if ( !iter ) context.throw_out_of_memory(false, sizeof(FixedArrayIterator)+16, &debugInfo);
         new (iter) FixedArrayIterator(data, size, stride, &debugInfo);
         return cast<char *>::from(iter);
     }
