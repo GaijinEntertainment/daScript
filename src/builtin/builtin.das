@@ -1401,6 +1401,27 @@ def each(rng : range) : iterator<int> {
     return <- it
 }
 
+[generic, nodiscard]
+def each(rng : urange) : iterator<uint> {
+    var it : iterator<uint>
+    _builtin_make_urange_iterator(it, rng)
+    return <- it
+}
+
+[generic, nodiscard]
+def each(rng : range64) : iterator<int64> {
+    var it : iterator<int64>
+    _builtin_make_range64_iterator(it, rng)
+    return <- it
+}
+
+[generic, nodiscard]
+def each(rng : urange64) : iterator<uint64> {
+    var it : iterator<uint64>
+    _builtin_make_urange64_iterator(it, rng)
+    return <- it
+}
+
 def iter_range(foo) {
     concept_assert(typeinfo is_iterable(foo), "requires iterable")
     return range(_::length(foo)) // assuming length(foo) exists

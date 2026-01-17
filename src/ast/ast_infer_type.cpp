@@ -7997,6 +7997,25 @@ namespace das {
                     return eachFn;
                 }
             }
+            // now, for the one where we did not find anything
+            if ( that->type ) {
+                if ( !that->type->dim.size() &&
+                     !that->type->isGoodIteratorType() &&
+                     !that->type->isGoodArrayType() &&
+                     !that->type->isRange() &&
+                     !that->type->isString() &&
+                     !(that->type->isHandle() && that->type->annotation->isIterable())
+                ) {
+                    auto eachCall = make_smart<ExprCall>(that->at, "each");
+                    eachCall->arguments.push_back(that->clone());
+                    if ( auto mkCall = inferFunctionCall(eachCall.get(), InferCallError::tryOperator) ) {
+                        if ( mkCall->result->isGoodIteratorType() ) {
+                            reportAstChanged();
+                            return eachCall;
+                        }
+                    }
+                }
+            }
             if ( that->type && that->type->isRef() ) {
                 return Expression::autoDereference(that);
             }

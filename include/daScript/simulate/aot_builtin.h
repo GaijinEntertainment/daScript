@@ -89,6 +89,9 @@ namespace das {
     DAS_API void builtin_make_good_array_iterator ( Sequence & result, const Array & arr, int stride, Context * context, LineInfoArg * at );
     DAS_API void builtin_make_fixed_array_iterator ( Sequence & result, void * data, int size, int stride, Context * context, LineInfoArg * at );
     DAS_API void builtin_make_range_iterator ( Sequence & result, range rng, Context * context, LineInfoArg * at );
+    DAS_API void builtin_make_urange_iterator ( Sequence & result, urange rng, Context * context, LineInfoArg * at );
+    DAS_API void builtin_make_range64_iterator ( Sequence & result, range64 rng, Context * context, LineInfoArg * at );
+    DAS_API void builtin_make_urange64_iterator ( Sequence & result, urange64 rng, Context * context, LineInfoArg * at );
     DAS_API void builtin_make_lambda_iterator ( Sequence & result, const Lambda lambda, int stride, Context * context, LineInfoArg * at );
     DAS_API void builtin_make_nil_iterator ( Sequence & result, Context * context, LineInfoArg * at );
     DAS_API vec4f builtin_make_enum_iterator ( Context & context, SimNode_CallBase * call, vec4f * );
