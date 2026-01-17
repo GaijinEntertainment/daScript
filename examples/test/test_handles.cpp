@@ -541,14 +541,14 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
         SideEffects::modifyExternal, "testCMRES");
 
     // abi tests. We use it in JIT.
-	addExtern<DAS_BIND_FUN(test_abi_mad2) >(*this,lib,"test_abi_mad",SideEffects::worstDefault,"test_abi_mad2")
-		->args({"a","b","c"});
-	addExtern<DAS_BIND_FUN(test_abi_mad3) >(*this,lib,"test_abi_mad",SideEffects::worstDefault,"test_abi_mad3")
-		->args({"a","b","c"});
-	addExtern<DAS_BIND_FUN(test_abi_mad4) >(*this,lib,"test_abi_mad",SideEffects::worstDefault,"test_abi_mad4")
-		->args({"a","b","c"});
-	addExtern<DAS_BIND_FUN(test_abi_func) >(*this,lib,"test_abi_func",SideEffects::worstDefault,"test_abi_func")
-		->args({"fn","context"});
+    addExtern<DAS_BIND_FUN(test_abi_mad2) >(*this,lib,"test_abi_mad",SideEffects::worstDefault,"test_abi_mad2")
+        ->args({"a","b","c"});
+    addExtern<DAS_BIND_FUN(test_abi_mad3) >(*this,lib,"test_abi_mad",SideEffects::worstDefault,"test_abi_mad3")
+        ->args({"a","b","c"});
+    addExtern<DAS_BIND_FUN(test_abi_mad4) >(*this,lib,"test_abi_mad",SideEffects::worstDefault,"test_abi_mad4")
+        ->args({"a","b","c"});
+    addExtern<DAS_BIND_FUN(test_abi_func) >(*this,lib,"test_abi_func",SideEffects::worstDefault,"test_abi_func")
+        ->args({"fn","context"});
     // foo array
     addExtern<DAS_BIND_FUN(testFooArray)>(*this, lib, "testFooArray",
         SideEffects::modifyExternal, "testFooArray");

@@ -2621,7 +2621,6 @@ SIM_NODE_AT_VECTOR(Float, float)
             char * ptr;
             if ( !persistent ) {
                 ptr = context.allocate(bytes,&debugInfo);
-                if ( !ptr ) context.throw_out_of_memory(false, bytes, &debugInfo);
                 context.heap->mark_comment(ptr, "new");
                 context.heap->mark_location(ptr, &debugInfo);
             } else {
@@ -2646,7 +2645,6 @@ SIM_NODE_AT_VECTOR(Float, float)
             char * ptr;
             if ( !persistent ) {
                 ptr = context.allocate(bytes + (typeInfo ? 16 : 0), &debugInfo);
-                if ( !ptr ) context.throw_out_of_memory(false, bytes + (typeInfo ? 16 : 0), &debugInfo);
                 context.heap->mark_comment(ptr, "new [[ ]]");
                 context.heap->mark_location(ptr, &debugInfo);
             } else {
@@ -2680,7 +2678,6 @@ SIM_NODE_AT_VECTOR(Float, float)
             char * ptr;
             if ( !persistent ) {
                 ptr = context.allocate(bytes + (typeInfo ? 16 : 0), &debugInfo);
-                if ( !ptr ) context.throw_out_of_memory(false, bytes + (typeInfo ? 16 : 0), &debugInfo);
                 context.heap->mark_comment(ptr, "new [[ ]]");
                 context.heap->mark_location(ptr, &debugInfo);
             } else {
@@ -2747,7 +2744,6 @@ SIM_NODE_AT_VECTOR(Float, float)
             char * ptr;
             if ( !persistent ) {
                 ptr = context.allocate(bytes, &debugInfo);
-                if ( !ptr ) context.throw_out_of_memory(false, bytes, &debugInfo);
                 context.heap->mark_comment(ptr, "new with initializer");
                 context.heap->mark_location(ptr, &debugInfo);
             } else {
@@ -2771,7 +2767,6 @@ SIM_NODE_AT_VECTOR(Float, float)
             char* ptr;
             if (!persistent) {
                 ptr = context.allocate(bytes, &debugInfo);
-                if ( !ptr ) context.throw_out_of_memory(false, bytes, &debugInfo);
                 context.heap->mark_comment(ptr, "new with initializer");
                 context.heap->mark_location(ptr, &debugInfo);
             } else {
@@ -3806,7 +3801,6 @@ SIM_NODE_AT_VECTOR(Float, float)
             vec4f ll = source->eval(context);
             TT * array = cast<TT *>::to(ll);
             char * iter = context.allocateIterator(sizeof(IterT),"any iterator", &debugInfo);
-            if ( !iter ) context.throw_out_of_memory(false,sizeof(IterT),&debugInfo);
             new (iter) IterT(array, &debugInfo);
             return cast<char *>::from(iter);
         }

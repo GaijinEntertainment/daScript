@@ -150,7 +150,6 @@ namespace das
 
     void builtin_table_keys ( Sequence & result, const Table & tab, int32_t stride, Context * __context__, LineInfoArg * at ) {
         char * iter = __context__->allocateIterator(sizeof(TableKeysIterator<uint8_t>),"table keys iterator", at);
-        if ( !iter ) __context__->throw_out_of_memory(false, sizeof(TableKeysIterator<uint8_t>)+16, at);
         switch ( stride ) {
         case 1:     new (iter) TableKeysIterator<uint8_t>(&tab, stride, at); break;
         case 2:     new (iter) TableKeysIterator<uint16_t>(&tab, stride, at); break;
@@ -169,7 +168,6 @@ namespace das
 
     void builtin_table_values ( Sequence & result, const Table & tab, int32_t stride, Context * __context__, LineInfoArg * at ) {
         char * iter = __context__->allocateIterator(sizeof(TableValuesIterator),"table values iterator", at);
-        if ( !iter ) __context__->throw_out_of_memory(false, sizeof(TableValuesIterator)+16, at);
         new (iter) TableValuesIterator(&tab, stride, at);
         result = { (Iterator *) iter };
     }

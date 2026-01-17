@@ -426,6 +426,9 @@ namespace das {
     };
 
     template <typename TT>
+    struct das_cast<const TT> : das_cast<TT> {};
+
+    template <typename TT>
     struct das_cast<TT *> {
         template <typename QQ>
         static __forceinline TT * cast ( QQ * expr ) {
@@ -2778,7 +2781,6 @@ namespace das {
     Sequence das_vector_each_sequence ( TT & vec, Context * context, LineInfoArg * at ) {
         using VectorIterator = StdVectorIterator<TT>;
         char * iter = context->allocateIterator(sizeof(VectorIterator), "vector<> iterator", at);
-        if ( !iter ) context->throw_out_of_memory(false, sizeof(VectorIterator)+16, at);
         new (iter) VectorIterator(&vec, at);
         return { (Iterator *) iter };
     }
