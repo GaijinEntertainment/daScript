@@ -66,9 +66,18 @@ struct BoolArray {
     def static push(var self : BoolArray, value : bool) {
         //! Push a new boolean value to the end of the BoolArray.
         with (self) {
-            let old_size = real_size
-            resize(self, int(real_size + 1u))
-            self[ int(old_size) ] = value
+            if ((real_size & 31u) == 0u) {
+                // need a new uint
+                bits.push(0u)
+            }
+            let offs = real_size >> 5u
+            let mask = (1u << (real_size & 31u))
+            if (value) {
+                bits[offs] |= mask
+            } else {
+                bits[offs] &= ~mask
+            }
+            real_size += 1u
         }
     }
     def static push(var self : BoolArray, value : bool, at : int) {
@@ -156,6 +165,17 @@ struct BoolArray {
             wr.write("]")
         }
     }
+    [unsafe_operation]
+    def static data_pointer(var self : BoolArray) : uint ? {
+        //! Get the data pointer of the BoolArray.
+        return unsafe(addr(self.bits[0]))
+    }
+
+    [unsafe_operation]
+    def static data_pointer(self : BoolArray) : uint const ? {
+        //! Get the data pointer of the BoolArray.
+        return unsafe(addr(self.bits[0]))
+    }
 }
 
 [unsafe_outside_of_for]
@@ -163,8 +183,20 @@ def each(self : BoolArray) : iterator<bool> {
     let pself = unsafe(addr(self))
     return <- generator<bool>() <| $ {
         let len = (*pself).length()
-        for (i in 0 .. len) {
-            yield (*pself)[i]
+        let full_uints = uint(len) >> 5u
+        let remaining_bits = uint(len) & 31u
+        let data_ptr = unsafe((*pself).data_pointer())
+        for (i in 0u .. full_uints) {
+            var bits_value = unsafe(data_ptr[i])
+            for (b in 0u .. 32u) {
+                yield (bits_value & 1u) != 0u
+                bits_value >>= 1u
+            }
+        }
+        var tail = unsafe(data_ptr[full_uints])
+        for (b in 0u .. remaining_bits) {
+            yield (tail & 1u) != 0u
+            tail >>= 1u
         }
         return false
     }
