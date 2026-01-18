@@ -13,6 +13,9 @@ struct BoolArray {
     private bits : array<uint>
     private real_size : uint
     [hint(unsafe_range_check, noalias=self)]
+    def finalize {
+        delete bits
+    }
     def const operator [] (index : int) : bool {
         //! Get the boolean value at the given index.
         let uindex = uint(index)

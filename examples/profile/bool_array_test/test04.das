@@ -16,7 +16,7 @@ def test(var a : auto(ArrayType)) {
 def main {
     print("test04 - compound operation, ^^= with flipping bit \n")
     if (true) {
-        var a : BoolArray
+        var inscope a : BoolArray
         a.reserve(TOTAL_ELEMENTS)
         for (i in 0 .. TOTAL_ELEMENTS) {
             a.push(true)
@@ -31,7 +31,7 @@ def main {
         assert(count == TOTAL_ELEMENTS)
     }
     if (true) {
-        var a : array<bool>
+        var inscope a : array<bool>
         a.reserve(TOTAL_ELEMENTS)
         for (i in 0 .. TOTAL_ELEMENTS) {
             a.push(true)

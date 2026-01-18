@@ -7,7 +7,7 @@ let TOTAL_ELEMENTS = 10000
 
 [sideeffects]
 def test(dummy : auto(ArrayType)) {
-    var a : ArrayType
+    var inscope a : ArrayType
     a.resize(TOTAL_ELEMENTS)
     for (i in 0 .. TOTAL_ELEMENTS) {
         a.erase(0)

@@ -18,7 +18,7 @@ def test(var a : auto(ArrayType)) {
 def main {
     print("test02 - access by index; count total number of trues\n")
     if (true) {
-        var a : BoolArray
+        var inscope a : BoolArray
         a.reserve(TOTAL_ELEMENTS)
         for (i in 0 .. TOTAL_ELEMENTS) {
             a.push((i & 1) == 0)
@@ -29,7 +29,7 @@ def main {
         }
     }
     if (true) {
-        var a : array<bool>
+        var inscope a : array<bool>
         a.reserve(TOTAL_ELEMENTS)
         for (i in 0 .. TOTAL_ELEMENTS) {
             a.push((i & 1) == 0)

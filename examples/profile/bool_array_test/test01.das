@@ -7,7 +7,7 @@ let TOTAL_ELEMENTS = 1000000
 
 [sideeffects]
 def test(dummy : auto(ArrayType)) {
-    var a : ArrayType
+    var inscope a : ArrayType
     a.reserve(TOTAL_ELEMENTS)
     for (i in 0 .. TOTAL_ELEMENTS) {
         a.push((i & 1) == 0)
