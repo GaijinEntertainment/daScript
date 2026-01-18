@@ -6685,7 +6685,12 @@ namespace das {
                     }
                 } else if ( expr->left->rtti_isAt() ) {
                     ExprAt * eat = (ExprAt *)(expr->left.get());
-                    if ( auto atGet = inferGenericOperator("[]", eat->at, eat->subexpr, eat->index) ) { // we need bot get and set
+                    auto complexName = "[]" + expr->name;
+                    if ( auto atComplex = inferGenericOperator3(complexName, eat->at, eat->subexpr, eat->index, expr->right) ) {
+                        atComplex->alwaysSafe = eat->alwaysSafe | expr->alwaysSafe;
+                        removeR2v(atComplex);
+                        return atComplex; // we need only set
+                    } else if ( auto atGet = inferGenericOperator("[]", eat->at, eat->subexpr, eat->index) ) { // we need bot get and set
                         atGet->alwaysSafe = eat->alwaysSafe | expr->alwaysSafe;
                         auto opRight = make_smart<ExprOp2>(expr->at, opName, atGet, expr->right);
                         opRight->type = make_smart<TypeDecl>(*expr->right->type);
@@ -7126,7 +7131,7 @@ namespace das {
                     }
                 } else if ( expr->left->rtti_isAt() ) {
                     ExprAt * eat = (ExprAt*)(expr->left.get());
-                    // first, lets find []= operator
+                    // lets find []= operator
                     auto opName = "[]" + expr->name;
                     if ( auto opAtEq = inferGenericOperator3(opName, expr->at, eat->subexpr, eat->index, expr->right) ) {
                         opAtEq->alwaysSafe = eat->alwaysSafe | expr->alwaysSafe;

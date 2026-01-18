@@ -12,13 +12,6 @@ def test(var a : auto(ArrayType)) {
     }
 }
 
-[sideeffects]
-def test_xor_index(var a : BoolArray) {
-    for (i in 0 .. TOTAL_ELEMENTS) {
-        a.xor_index(i, (i & 1) == 0)
-    }
-}
-
 [export]
 def main {
     print("test04 - compound operation, ^^= with flipping bit \n")
@@ -36,23 +29,6 @@ def main {
             if (a[i]) count ++
         }
         assert(count == TOTAL_ELEMENTS)
-    }
-    if (true) {
-        var a : BoolArray
-        a.reserve(TOTAL_ELEMENTS)
-        for (i in 0 .. TOTAL_ELEMENTS) {
-            a.push(true)
-        }
-        profile(20, "BoolArray - flip bits via xor_index") {
-            test_xor_index(a)
-        }
-        var count = 0
-        for (i in 0 .. TOTAL_ELEMENTS) {
-            if (a[i]) count ++
-        }
-        assert(count == TOTAL_ELEMENTS)
-        a.xor_index(0, true)
-        verify(a[0] == false)
     }
     if (true) {
         var a : array<bool>

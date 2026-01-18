@@ -28,7 +28,7 @@ def main {
             assert(t == (TOTAL_ELEMENTS / 2))
         }
     }
-    if ( true ) {
+    if (true) {
         var a : array<bool>
         a.reserve(TOTAL_ELEMENTS)
         for (i in 0 .. TOTAL_ELEMENTS) {
