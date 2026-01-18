@@ -35,40 +35,61 @@ def test_fopen(t : T?) {
     }
     t |> run("erase") <| @@(t : T?) {
         var a : BoolArray
+        var b : array<bool>
         // test all possible erases
-        for (erase_i in 0 .. 100) {
-            a.clear()
-            for (i in 0 .. 100) {
-                a.push(i % 2 == 0)
-            }
-            a.erase(erase_i)
-            // now check
-            for (i in 0 .. 99) {
-                if (i < erase_i) {
-                    t |> equal(a[i], i % 2 == 0)
-                } else {
-                    t |> equal(a[i], (i + 1) % 2 == 0)
+        for (len in 10..100) {
+            for (erase_i in 0 .. len) {
+                a.clear()
+                b.clear()
+                for (i in 0 .. len) {
+                    a.push(i % 2 == 0)
+                    b.push(i % 2 == 0)
+                }
+                a.erase(erase_i)
+                b.erase(erase_i)
+                t |> equal(a.length(), b.length())
+                // now check
+                for (i in 0 .. len - 1) {
+                    t |> equal(a[i], b[i])
+                    if (i < erase_i) {
+                        t |> equal(a[i], i % 2 == 0)
+                        t |> equal(b[i], i % 2 == 0)
+                    } else {
+                        t |> equal(a[i], (i + 1) % 2 == 0)
+                        t |> equal(b[i], (i + 1) % 2 == 0)
+                    }
                 }
             }
         }
     }
     t |> run("insert") <| @@(t : T?) {
         var a : BoolArray
+        var b : array<bool>
         // test all possible inserts
-        for (insert_i in 0 .. 100) {
-            a.clear()
-            for (i in 0 .. 100) {
-                a.push(i % 2 == 0)
-            }
-            a.insert(insert_i, true)
-            // now check
-            for (i in 0 .. 100) {
-                if (i < insert_i) {
-                    t |> equal(a[i], i % 2 == 0)
-                } elif (i == insert_i) {
-                    t |> equal(a[i], true)
-                } else {
-                    t |> equal(a[i], (i - 1) % 2 == 0)
+        for (len in 10..100) {
+            for (insert_i in 0 .. len) {
+                a.clear()
+                b.clear()
+                for (i in 0 .. len) {
+                    a.push(i % 2 == 0)
+                    b.push(i % 2 == 0)
+                }
+                a.push(true, insert_i)
+                b.push(true, insert_i)
+                t |> equal(a.length(), b.length())
+                // now check
+                for (i in 0 .. len) {
+                    t |> equal(a[i], b[i])
+                    if (i < insert_i) {
+                        t |> equal(a[i], i % 2 == 0)
+                        t |> equal(b[i], i % 2 == 0)
+                    } elif (i == insert_i) {
+                        t |> equal(a[i], true)
+                        t |> equal(b[i], true)
+                    } else {
+                        t |> equal(a[i], (i - 1) % 2 == 0)
+                        t |> equal(b[i], (i - 1) % 2 == 0)
+                    }
                 }
             }
         }
