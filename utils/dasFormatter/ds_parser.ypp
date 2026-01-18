@@ -1244,6 +1244,17 @@ function_name
     |   DAS_OPERATOR '[' ']' { $$ = new string("[]"); }
     |   DAS_OPERATOR '[' ']' LARROW { $$ = new string("[]<-"); }
     |   DAS_OPERATOR '[' ']' CLONEEQU { $$ = new string("[]:="); }
+    |   DAS_OPERATOR '[' ']' ADDEQU  { $$ = new string("[]+="); }
+    |   DAS_OPERATOR '[' ']' SUBEQU  { $$ = new string("[]-="); }
+    |   DAS_OPERATOR '[' ']' MULEQU  { $$ = new string("[]*="); }
+    |   DAS_OPERATOR '[' ']' DIVEQU  { $$ = new string("[]/="); }
+    |   DAS_OPERATOR '[' ']' MODEQU  { $$ = new string("[]%="); }
+    |   DAS_OPERATOR '[' ']' ANDEQU  { $$ = new string("[]&="); }
+    |   DAS_OPERATOR '[' ']' OREQU   { $$ = new string("[]|="); }
+    |   DAS_OPERATOR '[' ']' XOREQU  { $$ = new string("[]^="); }
+    |   DAS_OPERATOR '[' ']' ANDANDEQU  { $$ = new string("[]&&="); }
+    |   DAS_OPERATOR '[' ']' OROREQU    { $$ = new string("[]||="); }
+    |   DAS_OPERATOR '[' ']' XORXOREQU  { $$ = new string("[]^^="); }
     |   DAS_OPERATOR QBRA ']'   { $$ = new string("?[]"); }
     |   DAS_OPERATOR '.'     { $$ = new string("."); }
     |   DAS_OPERATOR QDOT    { $$ = new string("?."); }

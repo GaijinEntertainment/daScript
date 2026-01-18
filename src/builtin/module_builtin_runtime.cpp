@@ -993,6 +993,24 @@ namespace das
         result = { (Iterator *) iter };
     }
 
+    void builtin_make_urange_iterator ( Sequence & result, urange rng, Context * context, LineInfoArg * at ) {
+        char * iter = context->allocateIterator(sizeof(RangeIterator<urange>), "range iterator", at);
+        new (iter) RangeIterator<urange>(rng, at);
+        result = { (Iterator *) iter };
+    }
+
+    void builtin_make_range64_iterator ( Sequence & result, range64 rng, Context * context, LineInfoArg * at ) {
+        char * iter = context->allocateIterator(sizeof(RangeIterator<range64>), "range64 iterator", at);
+        new (iter) RangeIterator<range64>(rng, at);
+        result = { (Iterator *) iter };
+    }
+
+    void builtin_make_urange64_iterator ( Sequence & result, urange64 rng, Context * context, LineInfoArg * at ) {
+        char * iter = context->allocateIterator(sizeof(RangeIterator<urange64>), "urange64 iterator", at);
+        new (iter) RangeIterator<urange64>(rng, at);
+        result = { (Iterator *) iter };
+    }
+
     vec4f builtin_make_enum_iterator ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         if ( !call->types ) context.throw_error_at(call->debugInfo, "missing type info");
         auto itinfo = call->types[0];
@@ -1747,6 +1765,15 @@ namespace das
                 ->args({"iterator","data","size","stride","context","at"});
         addExtern<DAS_BIND_FUN(builtin_make_range_iterator)>(*this, lib,  "_builtin_make_range_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_range_iterator")
+                ->args({"iterator","range","context","at"});
+        addExtern<DAS_BIND_FUN(builtin_make_urange_iterator)>(*this, lib,  "_builtin_make_urange_iterator",
+            SideEffects::modifyArgumentAndExternal, "builtin_make_urange_iterator")
+                ->args({"iterator","range","context","at"});
+        addExtern<DAS_BIND_FUN(builtin_make_range64_iterator)>(*this, lib,  "_builtin_make_range64_iterator",
+            SideEffects::modifyArgumentAndExternal, "builtin_make_range64_iterator")
+                ->args({"iterator","range","context","at"});
+        addExtern<DAS_BIND_FUN(builtin_make_urange64_iterator)>(*this, lib,  "_builtin_make_urange64_iterator",
+            SideEffects::modifyArgumentAndExternal, "builtin_make_urange64_iterator")
                 ->args({"iterator","range","context","at"});
         addExtern<DAS_BIND_FUN(builtin_make_string_iterator)>(*this, lib,  "_builtin_make_string_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_string_iterator")

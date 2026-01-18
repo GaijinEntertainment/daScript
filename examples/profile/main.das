@@ -273,6 +273,7 @@ def main {
     var mainTests = true
     var extraTests = false
     var hashTests = false
+    var boolArrayTests = false
     print("{get_command_line_arguments()}\n")
     let nArgs = get_command_line_arguments() |> length()
     var i = 0
@@ -292,6 +293,8 @@ def main {
             extraTests = true
         } elif (arg == "-hash") {
             hashTests = true
+        } elif (arg == "-boolarray") {
+            boolArrayTests = true
         } elif (arg == "-nomain") {
             mainTests = false
         } elif (arg == "-help") {
@@ -318,6 +321,9 @@ def main {
     }
     if (hashTests) {
         run_dir("{get_das_root()}/examples/profile/hash_test")
+    }
+    if (boolArrayTests) {
+        run_dir("{get_das_root()}/tests/bool_array_test")
     }
     if (failed != 0) {
         print("TOTAL FAILURES: {failed}\n")
