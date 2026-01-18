@@ -176,6 +176,16 @@ struct BoolArray {
         //! Get the data pointer of the BoolArray.
         return unsafe(addr(self.bits[0]))
     }
+    def static xor_index ( var self : BoolArray, index : int, value : bool ) {
+        //! Perform XOR operation on the boolean value at the given index.
+        if ( value ) {
+            let uindex = uint(index)
+            if (uindex >= self.real_size) panic("index out of range, {index}")
+            let offs = uindex >> 5u
+            let mask = (1u << (uindex & 31u))
+            self.bits[offs] ^= mask
+        }
+    }
 }
 
 [unsafe_outside_of_for]

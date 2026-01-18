@@ -28,13 +28,15 @@ def main {
             assert(t == (TOTAL_ELEMENTS / 2))
         }
     }
-    profile(20, "Array<bool> - access") {
-         var a : array<bool>
-         a.reserve(TOTAL_ELEMENTS)
-         for (i in 0 .. TOTAL_ELEMENTS) {
-             a.push((i & 1) == 0)
-         }
-         let t = test(a)
-         assert(t == (TOTAL_ELEMENTS / 2))
+    if ( true ) {
+        var a : array<bool>
+        a.reserve(TOTAL_ELEMENTS)
+        for (i in 0 .. TOTAL_ELEMENTS) {
+            a.push((i & 1) == 0)
+        }
+        profile(20, "Array<bool> - access") {
+            let t = test(a)
+            assert(t == (TOTAL_ELEMENTS / 2))
+        }
     }
 }
