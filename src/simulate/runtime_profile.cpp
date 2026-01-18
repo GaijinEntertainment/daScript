@@ -2,6 +2,8 @@
 
 #include "daScript/simulate/runtime_profile.h"
 
+#include "misc/include_fmt.h"
+
 extern "C" int64_t ref_time_ticks ();
 extern "C" int get_time_usec (int64_t reft);
 
@@ -18,7 +20,7 @@ namespace das
         double tSec = minT/1000000.;
         if ( category ) {
             TextWriter ss;
-            ss << "\"" << category << "\", " << tSec << ", " << count << "\n";
+            ss << "\"" << category << "\", " << fmt::format("{:.9f}",tSec) << ", " << count << "\n";
             context->to_out(at, ss.str().c_str());
         }
         return (float) tSec;

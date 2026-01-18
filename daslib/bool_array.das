@@ -12,6 +12,10 @@ struct BoolArray {
     //! A dynamic array of booleans, stored as bits.
     private bits : array<uint>
     private real_size : uint
+    [hint(unsafe_range_check, noalias=self)]
+    def finalize {
+        delete bits
+    }
     def const operator [] (index : int) : bool {
         //! Get the boolean value at the given index.
         let uindex = uint(index)
@@ -20,6 +24,7 @@ struct BoolArray {
         let mask = (1u << (uindex & 31u))
         return (bits[offs] & mask) != 0u
     }
+    [hint(unsafe_range_check, noalias=self)]
     def operator [] =(index : int, value : bool) {
         //! Set the boolean value at the given index.
         let uindex = uint(index)
@@ -32,6 +37,7 @@ struct BoolArray {
             bits[offs] &= ~mask
         }
     }
+    [hint(unsafe_range_check, noalias=self)]
     def operator [] ^^=(index : int, value : bool) {
         //! Perform XOR operation on the boolean value at the given index.
         if (value) {
@@ -42,6 +48,7 @@ struct BoolArray {
             bits[offs] ^= mask
         }
     }
+    [hint(unsafe_range_check, noalias=self)]
     def operator [] &&=(index : int, value : bool) {
         //! Perform AND operation on the boolean value at the given index.
         if (!value) {
@@ -52,6 +59,7 @@ struct BoolArray {
             bits[offs] &= ~mask
         }
     }
+    [hint(unsafe_range_check, noalias=self)]
     def operator [] ||=(index : int, value : bool) {
         //! Perform OR operation on the boolean value at the given index.
         if (value) {
@@ -77,6 +85,7 @@ struct BoolArray {
             bits.reserve(int(needed_uints))
         }
     }
+    [hint(unsafe_range_check, noalias=self)]
     def static resize(var self : BoolArray, newSize : int) {
         //! Resize the BoolArray to the new size.
         with (self) {
@@ -93,6 +102,7 @@ struct BoolArray {
             bits.resize(int(newBitsCount))
         }
     }
+    [hint(unsafe_range_check, noalias=self)]
     def static push(var self : BoolArray, value : bool) {
         //! Push a new boolean value to the end of the BoolArray.
         with (self) {
@@ -110,6 +120,7 @@ struct BoolArray {
             real_size += 1u
         }
     }
+    [hint(unsafe_range_check, noalias=self)]
     def static push(var self : BoolArray, value : bool, at : int) {
         //! Push a new boolean value at the given index in the BoolArray.
         if (at != int(self.real_size)) {
@@ -118,6 +129,7 @@ struct BoolArray {
             self.push(value)
         }
     }
+    [hint(unsafe_range_check, noalias=self)]
     def static pop(var self : BoolArray) : bool {
         //! Pop the last boolean value from the BoolArray and return it.
         with (self) {
@@ -132,56 +144,62 @@ struct BoolArray {
         //! Get the length of the BoolArray.
         return int(self.real_size)
     }
+    [hint(noalias=self)]
     def static erase(var self : BoolArray, index : int) {
         //! Erase the boolean value at the given index from the BoolArray.
         with (self) {
             let uindex = uint(index)
             if (uindex >= real_size) panic("index out of range, {index}")
-            // we will shift all bits after index to the left by one
-            // we are going to do it uint by uint
+            // we start with the dword, where we want to erase
+            let start_offs = uindex >> 5u
+            let start_bit = uindex & 31u
+            let w = bits[start_offs]
+            let low_bits = w & ((1u << start_bit) - 1u)
+            let upper_bits = w >> (start_bit + 1u)
+            var new_w = low_bits | (upper_bits << start_bit)
+            // the top bit of that dword is now free, we need to pull bits from the next dwords
             let total_uints = (real_size + 31u) >> 5u
-            var bit_pos = uindex
-            while (bit_pos < real_size - 1u) {
-                let src_bit = bit_pos + 1u
-                let src_offs = src_bit >> 5u
-                let src_mask = (1u << (src_bit & 31u))
-                let dst_offs = bit_pos >> 5u
-                let dst_mask = (1u << (bit_pos & 31u))
-                let bit_value = (bits[src_offs] & src_mask) != 0u
-                if (bit_value) {
-                    bits[dst_offs] |= dst_mask
-                } else {
-                    bits[dst_offs] &= ~dst_mask
-                }
-                bit_pos += 1u
+            for (offs in (start_offs + 1u) .. total_uints) {
+                let next_w = bits[offs]
+                let next_low_bit = next_w & 1u
+                new_w |= (next_low_bit << 31u)
+                bits[offs - 1u] = new_w
+                new_w = next_w >> 1u
             }
+            bits[total_uints - 1u] = new_w
+            // adjust the size
             resize(self, int(real_size - 1u))
         }
     }
+    [hint(unsafe_range_check, noalias=self)]
     def static insert(var self : BoolArray, index : int, value : bool) {
         //! Insert a boolean value at the given index in the BoolArray.
         with (self) {
             let uindex = uint(index)
-            if (uindex > real_size) panic("index out of range, {index}")
-            // we will shift all bits from index to the right by one
-            let old_size = real_size
+            if (uindex >= real_size) panic("index out of range, {index}")
             resize(self, int(real_size + 1u))
-            var bit_pos = old_size
-            while (bit_pos > uindex) {
-                let src_bit = bit_pos - 1u
-                let src_offs = src_bit >> 5u
-                let src_mask = (1u << (src_bit & 31u))
-                let dst_offs = bit_pos >> 5u
-                let dst_mask = (1u << (bit_pos & 31u))
-                let bit_value = (bits[src_offs] & src_mask) != 0u
-                if (bit_value) {
-                    bits[dst_offs] |= dst_mask
-                } else {
-                    bits[dst_offs] &= ~dst_mask
-                }
-                bit_pos -= 1u
+            // we start with the dword, where we want to insert
+            let start_offs = uindex >> 5u
+            var start_bit = uindex & 31u
+            var w = bits[start_offs]
+            var carry_bit = w >> 31u
+            var lower_bits = w & ((1u << start_bit) - 1u)
+            var upper_bits = w & ~((1u << start_bit) - 1u)
+            upper_bits <<= 1u
+            let set_bit = value ? (1u << start_bit) : 0u
+            w = lower_bits | set_bit | upper_bits
+            bits[start_offs] = w
+            // now we need to propagate the carry bit to the next dwords
+            let total_uints = (real_size + 31u) >> 5u
+            for (offs in (start_offs + 1u) .. total_uints) {
+                let next_w = bits[offs]
+                let next_carry_bit = next_w >> 31u
+                let next_lower_bits = next_w & ((1u << 31u) - 1u)
+                let new_w = (next_lower_bits << 1u) | carry_bit
+                bits[offs] = new_w
+                carry_bit = next_carry_bit
             }
-            self[ int(uindex) ] = value
+            bits[total_uints - 1u] |= carry_bit
         }
     }
     def static to_string(self : BoolArray) {
@@ -208,11 +226,12 @@ struct BoolArray {
     }
 }
 
-[unsafe_outside_of_for]
+[unsafe_outside_of_for, unsafe_deref]
 def each(self : BoolArray) : iterator<bool> {
     let pself = unsafe(addr(self))
     return <- generator<bool>() <| $ {
         let len = (*pself).length()
+        return false if (len == 0)
         let full_uints = uint(len) >> 5u
         let remaining_bits = uint(len) & 31u
         let data_ptr = unsafe((*pself).data_pointer())
