@@ -501,3 +501,23 @@ class TemplateStructure : AstStructureAnnotation {
     }
 }
 
+[macro_function]
+def public is_custom_work_done(structType : Structure?) : bool {
+    for (ann in structType.annotations) {
+        if (ann.annotation.name == "template_structure") {
+            if (!(find_arg(ann.arguments, "custom_work_done") is nothing)) {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+[macro_function]
+def public mark_custom_work_done(var structType : Structure?) {
+    for (ann in structType.annotations) {
+        if (ann.annotation.name == "template_structure") {
+            ann.arguments |> add_annotation_argument("custom_work_done", true)
+        }
+    }
+}
