@@ -1,9 +1,9 @@
 options gen2
 require math
 
-require daslib/hash_map
+require daslib/flat_hash_table
 
-%spoof_instance~TFlatHashMap(FlatHashMap_string_to_int,string,int)%%;
+typedef FlatHashMap_string_to_int = $TFlatHashTable < string, int >
 
 def makeRandomSequence(var src : array<string>) {
     let n = 500000
@@ -16,7 +16,7 @@ def makeRandomSequence(var src : array<string>) {
 }
 
 def dict(var tab : auto; src : array<string>) {
-    clear(tab)
+    tab.clear()
     var maxOcc = 0
     for (s in src) {
         maxOcc = max(++tab[s], maxOcc)

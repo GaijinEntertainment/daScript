@@ -8018,6 +8018,9 @@ namespace das {
                             reportAstChanged();
                             return eachCall;
                         }
+                    } else if ( eachCall->name!="each" ) {
+                        reportAstChanged();
+                        return eachCall;
                     }
                 }
             }
