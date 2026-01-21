@@ -3257,6 +3257,12 @@ bitfield_bits
         $$ = $list;
         delete $name;
     }
+    |   bitfield_bits[list] ',' NAME[name] {
+        das_checkName(scanner,*$name,tokAt(scanner,@name));
+        $list->push_back(*$name);
+        $$ = $list;
+        delete $name;
+    }
     ;
 
 
