@@ -1415,6 +1415,11 @@ class public CppAot : AstVisitor {
                 write(*ss, " & {vname} = {vname}_ConstRef;\n");
             }
         }
+        if (variable.init != null && variable.init is ExprMakeBlock) {
+            var mkb = variable.init as ExprMakeBlock;
+            // Restore ast as it was before, just for consistency.
+            mkb.aotFunctorName := ""
+        }
         return variable;
     }
     def override preVisitExprLetVariableInit(let_ : smart_ptr<ExprLet>; variable : VariablePtr; expr : ExpressionPtr) {
