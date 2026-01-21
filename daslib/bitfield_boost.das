@@ -9,16 +9,16 @@ module bitfield_boost shared public
 require daslib/contracts
 
 [expect_any_bitfield(b)]
-def operator [] ( b : auto, i : int ) : bool {
+def operator [] (b : auto, i : int) : bool {
     //! get bitfield bit at index i
     return (uint64(b) & (1ul << uint64(i))) != 0ul
 }
 
 [expect_any_bitfield(b)]
-def operator [] = ( var b : auto(TT)&, i : int, v : bool ) {
+def operator [] =(var b : auto(TT)&, i : int, v : bool) {
     //! set bitfield bit at index i to v
     let index = uint64(i)
-    if ( index >= uint64(typeinfo sizeof(b) << 3) ) {
+    if (index >= uint64(typeinfo sizeof(b) << 3)) {
         panic("bitfield index {i} out of range")
     }
     if (v) {
@@ -29,10 +29,10 @@ def operator [] = ( var b : auto(TT)&, i : int, v : bool ) {
 }
 
 [expect_any_bitfield(b)]
-def operator [] &&= ( var b : auto(TT)&, i : int, v : bool ) {
+def operator [] &&=(var b : auto(TT)&, i : int, v : bool) {
     //! && assignment for bitfield bit at index i
     let index = uint64(i)
-    if ( index >= uint64(typeinfo sizeof(b) << 3) ) {
+    if (index >= uint64(typeinfo sizeof(b) << 3)) {
         panic("bitfield index {i} out of range")
     }
     if (!v) {
@@ -41,10 +41,10 @@ def operator [] &&= ( var b : auto(TT)&, i : int, v : bool ) {
 }
 
 [expect_any_bitfield(b)]
-def operator [] ||= ( var b : auto(TT)&, i : int, v : bool ) {
+def operator [] ||=(var b : auto(TT)&, i : int, v : bool) {
     //! || assignment for bitfield bit at index i
     let index = uint64(i)
-    if ( index >= uint64(typeinfo sizeof(b) << 3) ) {
+    if (index >= uint64(typeinfo sizeof(b) << 3)) {
         panic("bitfield index {i} out of range")
     }
     if (v) {
@@ -53,10 +53,10 @@ def operator [] ||= ( var b : auto(TT)&, i : int, v : bool ) {
 }
 
 [expect_any_bitfield(b)]
-def operator [] ^^= ( var b : auto(TT)&, i : int, v : bool ) {
+def operator [] ^^=(var b : auto(TT)&, i : int, v : bool) {
     //! toggle bitfield bit at index i if v is true
     let index = uint64(i)
-    if ( index >= uint64(typeinfo sizeof(b) << 3) ) {
+    if (index >= uint64(typeinfo sizeof(b) << 3)) {
         panic("bitfield index {i} out of range")
     }
     if (v) {
@@ -65,12 +65,12 @@ def operator [] ^^= ( var b : auto(TT)&, i : int, v : bool ) {
 }
 
 [expect_any_bitfield(b)]
-def each ( b ) : iterator<bool> {
+def each(b) : iterator<bool> {
     let bits = uint64(b)
-    return <- generator<bool>() <| $ () {
+    return <- generator<bool>() <| $() {
         var mask = 1ul
-        for ( i in range(typeinfo sizeof(b) << 3) ) {
-            yield ( (bits & mask) != 0ul )
+        for (i in range(typeinfo sizeof(b) << 3)) {
+            yield ((bits & mask) != 0ul)
             mask <<= 1ul
         }
         return false
