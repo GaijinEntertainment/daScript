@@ -461,6 +461,12 @@ namespace das {
         virtual void preVisit ( TypeDecl * type ) override {
             Visitor::preVisit(type);
         }
+
+        // function
+        bool canVisitFunction(Function *f) override {
+            return !f->noAot;
+        }
+
         virtual void preVisitExpression ( Expression * expr ) override {
             Visitor::preVisitExpression(expr);
             mark(expr->type.get());
@@ -4159,11 +4165,6 @@ namespace das {
         for ( auto & pm : program->library.getModules() ) {
             pm->structures.foreach([&](auto ps){
                 aotVisitor.ss << "namespace " << aotModuleName(ps->module) << " { struct " << aotStructName(ps.get()) << "; };\n";
-            });
-            pm->functions.foreach([&](auto fn){
-                if (fn->index < 0 || !fn->used || fn->isTemplate)
-                    return;
-                fn->visit(utm);
             });
         }
         for ( auto & pm : program->library.getModules() ) {

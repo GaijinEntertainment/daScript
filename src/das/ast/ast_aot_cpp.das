@@ -449,6 +449,10 @@ class UseTypeMarker : AstVisitor {
     def override preVisitTypeDecl(typeDecl : TypeDeclPtr) {
     }
 
+    def override canVisitFunction(fn : FunctionPtr) {
+        return !fn.flags.noAot;
+    }
+
     def override preVisitExpression(expr : ExpressionPtr) {
         mark(expr._type);
     }
@@ -3523,13 +3527,6 @@ def dumpDependencies(program : ProgramPtr; var aotVisitor : CppAot?) {
     program.get_ptr() |> for_each_module_no_order($(pm) {
         pm |> for_each_structure($(ps) {
             write(*aotVisitor.ss, "namespace {aotModuleName(ps._module)} \{ struct {aotStructName(ps.get_ptr())}; \};\n");
-        });
-        pm |> for_each_module_function($(fn) {
-            // If some functions from another module used we need to declare this type.
-            // Because we have to add debug info about this function signature in our module
-            if (fn.index < 0 || !fn.flags.used)
-                return ;
-            visit(fn, adapter);
         });
     });
     program.get_ptr() |> for_each_module_no_order($(pm) {
