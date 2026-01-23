@@ -185,4 +185,15 @@ namespace das {
 
     const char * das_get_platform_name();
     const char * das_get_architecture_name();
+
+    DAS_API char * fmt_i8 ( const char * fmt, int8_t value, Context * context, LineInfoArg * at );
+    DAS_API char * fmt_u8 ( const char * fmt, uint8_t value, Context * context, LineInfoArg * at );
+    DAS_API char * fmt_i16 ( const char * fmt, int16_t value, Context * context, LineInfoArg * at );
+    DAS_API char * fmt_u16 ( const char * fmt, uint16_t value, Context * context, LineInfoArg * at );
+    DAS_API char * fmt_i32 ( const char * fmt, int32_t value, Context * context, LineInfoArg * at );
+    DAS_API char * fmt_u32 ( const char * fmt, uint32_t value, Context * context, LineInfoArg * at );
+    DAS_API char * fmt_i64 ( const char * fmt, int64_t value, Context * context, LineInfoArg * at );
+    DAS_API char * fmt_u64 ( const char * fmt, uint64_t value, Context * context, LineInfoArg * at );
+    DAS_API char * fmt_f ( const char * fmt, float value, Context * context, LineInfoArg * at );
+    DAS_API char * fmt_d ( const char * fmt, double value, Context * context, LineInfoArg * at );
 }
