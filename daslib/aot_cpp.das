@@ -78,7 +78,7 @@ def das_to_cppString(t : Type) {
         if (Type.tLambda) { return "Lambda"; }
         if (Type.tTuple) { return "Tuple"; }
         if (Type.tVariant) { return "Variant"; }
-        if (_) { panic("Missed type"); return ""; }
+        if (_) { panic("Missed type {t}"); return ""; }
     }
 }
 
@@ -104,6 +104,9 @@ def das_to_cppCTypeString(t : Type) {
         if (Type.tEnumeration16) { return "tEnumeration16"; }
         if (Type.tEnumeration64) { return "tEnumeration64"; }
         if (Type.tBitfield) { return "tBitfield"; }
+        if (Type.tBitfield8) { return "tBitfield8"; }
+        if (Type.tBitfield16) { return "tBitfield16"; }
+        if (Type.tBitfield64) { return "tBitfield64"; }
         if (Type.tIterator) { return "tIterator"; }
         if (Type.tArray) { return "tArray"; }
         if (Type.tTable) { return "tTable"; }
@@ -130,7 +133,7 @@ def das_to_cppCTypeString(t : Type) {
         if (Type.tTuple) { return "tTuple"; }
         if (Type.tVariant) { return "tVariant"; }
         if (Type.tHandle) { return "tHandle"; }
-        if (_) { panic("Missed type"); return ""; }
+        if (_) { panic("Missed type {t}"); return ""; }
     }
 }
 
