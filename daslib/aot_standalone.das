@@ -27,7 +27,6 @@ struct StandaloneContextCfg {
 };
 
 
-
 def getInitSemanticHash(ctx : Context) {
     /*
     const uint64_t fnv_prime = 1099511628211ul;
@@ -223,10 +222,6 @@ class StandaloneContextGen : CppAot {
     }
 
     used_functions : table<string>;
-
-    def override visitGlobalLetVariableInit(arg : VariablePtr; var expr : ExpressionPtr) : ExpressionPtr {
-        return expr; // todo: Is there any way to provide default implementation without binding from c++
-    }
 
     def override visitGlobalLet(prog : ProgramPtr) {
         var globals : array<Variable?>;
