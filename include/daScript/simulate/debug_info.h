@@ -143,6 +143,7 @@ namespace das
         string  moduleName;
         string  fileName;
         string  importName;
+        bool extraDepModule = false;
     };
 
     struct RequireRecord {

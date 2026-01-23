@@ -1601,7 +1601,7 @@ namespace das
     }
 
     bool das_aot_enabled ( Context * context, LineInfoArg * at ) {
-        if ( !context->thisProgram ) context->throw_error_at(at, "can only query for jit during compilation");
+        if ( !context->thisProgram ) context->throw_error_at(at, "can only query for aot during compilation");
         return context->thisProgram->policies.aot;
     }
 

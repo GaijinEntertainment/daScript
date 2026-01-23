@@ -3589,6 +3589,7 @@ namespace das
         return errors.size() == 0;
     }
 
+    // Unused! Consider removing it.
     uint64_t Program::getInitSemanticHashWithDep( uint64_t initHash ) {
         vector<const Variable *> globs;
         globs.reserve(totalVariables);

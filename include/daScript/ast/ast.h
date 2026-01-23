@@ -1247,6 +1247,7 @@ namespace das
                 bool    isPublic : 1;
                 bool    isModule : 1;
                 bool    isSolidContext : 1;
+                bool    fromExtraDependency : 1;
                 bool    doNotAllowUnsafe : 1;
                 bool    wasParsedNameless : 1;
                 bool    visibleEverywhere : 1;
@@ -1450,10 +1451,17 @@ namespace das
     };
 
     struct CodeOfPolicies {
+    // Aot config
         bool        aot = false;                        // enable AOT
+        /*option*/ bool        aot_lib = false;
         /*option*/ bool        standalone_context = false;         // generate standalone context class in aot mode
         bool        aot_module = false;                 // this is how AOT tool knows module is module, and not an entry point
         bool        aot_macros = false;                 // enables aot of macro code (like 'qmacro_block')
+        bool        paranoid_validation = false;        // todo
+        bool        cross_platform = false;             // aot supports platform independent mode
+        string      aot_module_path;
+        string      aot_result;                         // Path where to store cpp-result of aot
+    // End aot config
         bool        completion = false;                 // this code is being compiled for 'completion' mode
         bool        export_all = false;                 // when user compiles, export all (public?) functions
         bool        serialize_main_module = true;       // if false, then we recompile main module each time

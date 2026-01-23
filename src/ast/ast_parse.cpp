@@ -799,6 +799,9 @@ namespace das {
         if ( !hasModule && !modFile.empty() ) {
             vector<FileInfo *> chain;
             TextWriter tw;
+            // vector<ModuleInfo> new_reqs;
+            const auto prev_mod = libGroup.getModules();
+            auto prev_req = req;
             if ( !getPrerequisits(modFile, access, modName, req, missing, circular, notAllowed, chain,
                 dependencies, namelessReq, namelessMismatches, libGroup, &tw, 1, !policies.ignore_shared_modules) ) {
                 if ( log ) {
@@ -807,11 +810,24 @@ namespace das {
                 }
                 return false;
             }
+            for (auto mod : libGroup.getModules()) {
+                if (!count(prev_mod.begin(), prev_mod.end(), mod)) {
+                    mod->fromExtraDependency = true;
+                }
+            }
+            for (auto &req : req) {
+                if (!count_if(prev_req.begin(), prev_req.end(), [&req](const ModuleInfo &mod) {
+                    return mod.moduleName == req.moduleName;
+                })) {
+                    req.extraDepModule = true;
+                }
+            }
             auto finfo = access->getFileInfo(modFile);
             ModuleInfo info;
             info.fileName = finfo->name;
             info.importName = "";
             info.moduleName = modName;
+            info.extraDepModule = true;
             req.push_back(info);
         }
         return true;
@@ -1071,6 +1087,8 @@ namespace das {
                 allGood = addExtraDependency("debug", policies.debug_module, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs) && allGood;
             } else if ( policies.profiler ) {
                 allGood = addExtraDependency("profiler", policies.profile_module, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs) && allGood;
+            } /* else */ if ( !policies.aot_module_path.empty() ) {
+                allGood = addExtraDependency("ast_aot_macro", policies.aot_module_path, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs) && allGood;
             } /* else */ if ( policies.jit_enabled ) {
                 allGood = addExtraDependency("just_in_time", policies.jit_module, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs) && allGood;
             }
@@ -1096,7 +1114,9 @@ namespace das {
                 }
             }
             for ( auto & mod : req ) {
-                if ( libGroup.findModule(mod.moduleName) ) {
+                auto maybeMod = libGroup.findModule(mod.moduleName);
+                if ( maybeMod ) {
+                    maybeMod->fromExtraDependency &= mod.extraDepModule;
                     continue;
                 }
                 auto program = parseDaScript(mod.fileName, mod.moduleName, access, logs, libGroup, true, true, policies);
@@ -1112,6 +1132,7 @@ namespace das {
                     program->thisModule->wasParsedNameless = true;
                 }
                 program->thisModule->fileName = mod.fileName;
+                program->thisModule->fromExtraDependency = mod.extraDepModule;
                 if ( program->promoteToBuiltin ) {
                     if ( canShareModule(program) ) {
                         program->thisModule->promoteToBuiltin(access);
