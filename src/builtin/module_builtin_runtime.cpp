@@ -2194,5 +2194,26 @@ namespace das
             SideEffects::none, "das_get_platform_name");
         addExtern<DAS_BIND_FUN(das_get_architecture_name)>(*this, lib, "get_architecture_name",
             SideEffects::none, "das_get_architecture_name");
+        // fmt
+        addExtern<DAS_BIND_FUN(fmt_i8)>(*this, lib, "fmt",
+            SideEffects::none, "fmt_i8")->args({"format","value","context","at"});
+        addExtern<DAS_BIND_FUN(fmt_u8)>(*this, lib, "fmt",
+            SideEffects::none, "fmt_u8")->args({"format","value","context","at"});
+        addExtern<DAS_BIND_FUN(fmt_i16)>(*this, lib, "fmt",
+            SideEffects::none, "fmt_i16")->args({"format","value","context","at"});
+        addExtern<DAS_BIND_FUN(fmt_u16)>(*this, lib, "fmt",
+            SideEffects::none, "fmt_u16")->args({"format","value","context","at"});
+        addExtern<DAS_BIND_FUN(fmt_i32)>(*this, lib, "fmt",
+            SideEffects::none, "fmt_i32")->args({"format","value","context","at"});
+        addExtern<DAS_BIND_FUN(fmt_u32)>(*this, lib, "fmt",
+            SideEffects::none, "fmt_u32")->args({"format","value","context","at"});
+        addExtern<DAS_BIND_FUN(fmt_i64)>(*this, lib, "fmt",
+            SideEffects::none, "fmt_i64")->args({"format","value","context","at"});
+        addExtern<DAS_BIND_FUN(fmt_u64)>(*this, lib, "fmt",
+            SideEffects::none, "fmt_u64")->args({"format","value","context","at"});
+        addExtern<DAS_BIND_FUN(fmt_f)>(*this, lib, "fmt",
+            SideEffects::none, "fmt_f")->args({"format","value","context","at"});
+        addExtern<DAS_BIND_FUN(fmt_d)>(*this, lib, "fmt",
+            SideEffects::none, "fmt_d")->args({"format","value","context","at"});
     }
 }

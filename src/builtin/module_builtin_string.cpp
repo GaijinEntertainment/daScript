@@ -1031,27 +1031,6 @@ namespace das
                 SideEffects::none, "builtin_string_ltrim")->args({"str","context","at"});
             addExtern<DAS_BIND_FUN(builtin_string_trim)>(*this, lib, "trim",
                 SideEffects::none, "builtin_string_trim")->args({"str","context","at"});
-            // fmt
-            addExtern<DAS_BIND_FUN(fmt_i8)>(*this, lib, "fmt",
-                SideEffects::none, "fmt_i8")->args({"format","value","context","at"});
-            addExtern<DAS_BIND_FUN(fmt_u8)>(*this, lib, "fmt",
-                SideEffects::none, "fmt_u8")->args({"format","value","context","at"});
-            addExtern<DAS_BIND_FUN(fmt_i16)>(*this, lib, "fmt",
-                SideEffects::none, "fmt_i16")->args({"format","value","context","at"});
-            addExtern<DAS_BIND_FUN(fmt_u16)>(*this, lib, "fmt",
-                SideEffects::none, "fmt_u16")->args({"format","value","context","at"});
-            addExtern<DAS_BIND_FUN(fmt_i32)>(*this, lib, "fmt",
-                SideEffects::none, "fmt_i32")->args({"format","value","context","at"});
-            addExtern<DAS_BIND_FUN(fmt_u32)>(*this, lib, "fmt",
-                SideEffects::none, "fmt_u32")->args({"format","value","context","at"});
-            addExtern<DAS_BIND_FUN(fmt_i64)>(*this, lib, "fmt",
-                SideEffects::none, "fmt_i64")->args({"format","value","context","at"});
-            addExtern<DAS_BIND_FUN(fmt_u64)>(*this, lib, "fmt",
-                SideEffects::none, "fmt_u64")->args({"format","value","context","at"});
-            addExtern<DAS_BIND_FUN(fmt_f)>(*this, lib, "fmt",
-                SideEffects::none, "fmt_f")->args({"format","value","context","at"});
-            addExtern<DAS_BIND_FUN(fmt_d)>(*this, lib, "fmt",
-                SideEffects::none, "fmt_d")->args({"format","value","context","at"});
             // format (deprecated)
             addExtern<DAS_BIND_FUN(format<int32_t>)> (*this, lib, "format",
                 SideEffects::none, "format<int32_t>")->args({"format","value","context","at"})->setDeprecated("use fmt() instead");
