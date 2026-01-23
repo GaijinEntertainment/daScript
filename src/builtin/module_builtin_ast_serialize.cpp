@@ -2323,6 +2323,9 @@ namespace das {
 
             program->thisModule.reset(program->library.getModules().back());
         }
+
+        // drop ref_counts
+        smartTypeDeclMap.clear();
     }
 
     uint32_t AstSerializer::getVersion () {
