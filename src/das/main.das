@@ -1,5 +1,5 @@
-require ast/ast_aot_cpp
-require ast/standalone_contexts
+require daslib/aot_cpp
+require daslib/aot_standalone
 
 require fio
 require strings
