@@ -12,6 +12,15 @@ def test(var a : auto(ArrayType)) {
     }
 }
 
+
+[sideeffects]
+def test_simple(var a : auto(ArrayType)) {
+    for (i in 0 .. TOTAL_ELEMENTS) {
+        let A = a[i]
+        a[i] = A ^^ ((i & 1) == 0)
+    }
+}
+
 [export]
 def main {
     print("test04 - compound operation, ^^= with flipping bit \n")
@@ -21,8 +30,23 @@ def main {
         for (i in 0 .. TOTAL_ELEMENTS) {
             a.push(true)
         }
-        profile(20, "BoolArray - flip bits") {
+        profile(20, "BoolArray - flip bits, use []^^=") {
             test(a)
+        }
+        var count = 0
+        for (i in 0 .. TOTAL_ELEMENTS) {
+            if (a[i]) count ++
+        }
+        assert(count == TOTAL_ELEMENTS)
+    }
+    if (true) {
+        var inscope a : BoolArray
+        a.reserve(TOTAL_ELEMENTS)
+        for (i in 0 .. TOTAL_ELEMENTS) {
+            a.push(true)
+        }
+        profile(20, "BoolArray - flip bits, use [] and then []=") {
+            test_simple(a)
         }
         var count = 0
         for (i in 0 .. TOTAL_ELEMENTS) {
