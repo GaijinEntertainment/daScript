@@ -1,6 +1,6 @@
 options gen2
 
-module aot_standalone
+module aot_standalone private
 require fio
 require rtti
 require strings
@@ -26,6 +26,9 @@ struct StandaloneContextCfg {
     cross_platform : bool
 };
 
+def aotFunctionName(str : string) {
+    return replace(str, "`", "__")
+}
 
 def getInitSemanticHash(ctx : Context) {
     /*
@@ -355,7 +358,7 @@ def genStandaloneSrc(var program : ProgramPtr;
     return initFunctions
 }
 
-def runStandaloneVisitor(var program : ProgramPtr, modules : array<string>, var pctx : smart_ptr<Context>; cfg : StandaloneContextCfg) {
+def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string>, var pctx : smart_ptr<Context>; cfg : StandaloneContextCfg) {
     assume context = *pctx;
 
     // mark prologue
@@ -429,7 +432,7 @@ def runStandaloneVisitor(var program : ProgramPtr, modules : array<string>, var 
 }
 
 [export]
-def standalone_aot(input : string; output_dir : string; isAotLib, cross_platform : bool, paranoid_validation : bool; cop : CodeOfPolicies) : string {
+def public standalone_aot(input : string; output_dir : string; isAotLib, cross_platform : bool, paranoid_validation : bool; cop : CodeOfPolicies) : string {
     let cfg = StandaloneContextCfg(context_name = "context",
                                    class_name = "Standalone",
                                    cpp_output_dir = output_dir,
