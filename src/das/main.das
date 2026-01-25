@@ -1,5 +1,5 @@
-require ast/ast_aot_cpp
-require ast/standalone_contexts
+require daslib/aot_cpp
+require daslib/aot_standalone
 
 require fio
 require strings
@@ -37,6 +37,20 @@ def find_argument(args : array<string>; key : string) {
     return ""
 }
 
+def get_list_of_files(args : array<string>, key : string) {
+    let len = length(args)
+    var result = array<tuple<string; string>>()
+    for (i in range(len)) {
+        if (args[i] == key) {
+            if (i + 2 >= len) {
+                panic("Arguments expected in format `-aot <in> <out>`.")
+            }
+            result |> push((args[i + 1], args[i + 2]))
+        }
+    }
+    return <- result
+}
+
 def find_bool(args : array<string>; key : string) {
     let idx = find_index(args, key)
     return idx >= 0 && idx + 1 < length(args)
@@ -46,44 +60,38 @@ def find_bool(args : array<string>; key : string) {
 def main() {
     let args <- get_command_line_arguments()
 
-    let mode = find_argument(args, "--mode");
     let cross_platform = find_bool(args, "-cross_platform");
     let gen1 = find_bool(args, "-gen1");
     let gen2_make = find_bool(args, "-gen2-make");
+    let aot_files = get_list_of_files(args, "-aot")
+    let ctx_files = get_list_of_files(args, "-standalone-context")
     using <| $(var cop : CodeOfPolicies) {
         updateCOP(cop, !gen1, gen2_make)
-        if (mode == "aot") {
-            let input = find_argument(args, "--input");
-            let output = find_argument(args, "--output");
-            print("aot {input} to {output}\n")
-            let res = aot(input, true, false, cross_platform, cop)
+        for ((aot_in, aot_out) in aot_files) {
+            print("Aot to {aot_out}\n")
+            let res = aot(aot_in, true, false, cross_platform, cop)
             if (res |> length() > 0) {
-                fopen(output, "wb") <| $(fw) {
+                fopen(aot_out, "wb") <| $(fw) {
                     if (fw != null) {
                         fwrite(fw, res)
                     } else {
-                        print("Couldn't create output file {output}")
+                        print("Couldn't create output file {aot_out}\n")
                     }
                 }
             }
-        } elif (mode == "standalone_ctx") {
-            let input = find_argument(args, "--input");
-            let output = find_argument(args, "--output");
-            print("standalone ctx {input} to {output} cross_platform={cross_platform}\n")
-            let res = standalone_aot(input, output, false, cross_platform, false, cop)
+        }
+        for ((ctx_in, ctx_out) in ctx_files) {
+            print("Standalone ctx to {ctx_out}\n")
+            let res = standalone_aot(ctx_in, ctx_out, false, cross_platform, false, cop)
             if (res |> length() > 0) {
-                fopen(output, "wb") <| $(fw) {
+                fopen(ctx_out, "wb") <| $(fw) {
                     if (fw != null) {
                         fwrite(fw, res)
                     } else {
-                        print("Couldn't create output file {output}")
+                        print("Couldn't create output file {ctx_out}\n")
                     }
                 }
             }
-        } elif (mode == "ast_print") {
-            panic("unimplemented")
-        } else {
-            panic("Unknown mode {mode}")
         }
     }
 }
