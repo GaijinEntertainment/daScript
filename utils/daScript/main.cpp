@@ -1,4 +1,5 @@
 #include "daScript/ast/aot_templates.h"
+#include "daScript/ast/ast.h"
 #include "daScript/ast/dyn_modules.h"
 #include "daScript/daScript.h"
 #include "daScript/das_common.h"
@@ -28,7 +29,13 @@ static bool debuggerRequired = false;
 static bool scopedStackAllocator = true;
 static bool pauseAfterErrors = false;
 static bool quiet = false;
-static bool jitEnabled = false;
+enum class JitMode {
+    None,
+    Direct,
+    Dll,
+    Executable,
+};
+static JitMode jitEnabled = JitMode::None; // Disabled by default.
 
 static bool version2syntax = true;
 static bool gen2MakeSyntax = false;
@@ -368,8 +375,14 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
     } else if ( profilerRequired ) {
         policies.profiler = true;
         policies.profile_module = getDasRoot() + "/daslib/profiler.das";
-    } /*else*/ if ( jitEnabled ) {
+    } /*else*/ if ( jitEnabled != JitMode::None ) {
         policies.jit_enabled = true;
+        switch (jitEnabled) {
+            case JitMode::Executable: policies.jit_exe_mode = true; break;
+            case JitMode::Dll: policies.jit_dll_mode = true; break;
+            case JitMode::Direct: break;
+            default: break;
+        }
         policies.jit_module = getDasRoot() + "/daslib/just_in_time.das";
         policies.dll_search_paths.emplace_back(getDasRoot() + "/lib");
     } else if (aotEnabled) {
@@ -586,7 +599,10 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 version2syntax = false;
                 gen2MakeSyntax = true;
             } else if ( cmd=="jit") {
-                jitEnabled = true;
+                jitEnabled = JitMode::Direct;
+            } else if ( cmd=="exe") {
+                jitEnabled = JitMode::Executable;
+                dryRun = true;
             } else if ( cmd=="aot2") {
                 dryRun = true;
                 aotEnabled = true;
