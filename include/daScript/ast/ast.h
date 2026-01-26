@@ -1577,9 +1577,10 @@ namespace das
         // todo: add this params to serialization?
         bool jit_jit_all_functions = true;       // JIT all functions by default
         bool jit_debug_info = false;             // Add debug info to generate binary code
-        bool jit_use_dll_mode = true;            // Create if missing and reuse DLL or JIT compile
-        bool jit_emit_prologue = false;           // Emit prologue for all functions and blocks
-        string jit_output_folder;                // Folder to store compiled dll's. By default it'll be _das_root_/jitted_scripts
+        bool jit_dll_mode = true;                // Create if missing and reuse DLL or JIT compile
+        bool jit_exe_mode = false;                // Create executable
+        bool jit_emit_prologue = false;          // Emit prologue for all functions and blocks
+        string jit_output_path;                  // Folder to store compiled dll's. By default it'll be _das_root_/jitted_scripts
         int32_t jit_opt_level = 3u;              // Opt level for LLVM to codegen and IR optimizations
         int32_t jit_size_level = 3u;             // Opt level for LLVM for binary size
         string jit_path_to_shared_lib;           // Path to libDaScript. Optional, we'll try to find it in _das_root_/lib/ if not provided.

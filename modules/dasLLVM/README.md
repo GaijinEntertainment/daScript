@@ -62,5 +62,5 @@ code, and saves it as a dynamic (shared) library.
 - **Subsequent Runs:** Checks if the source code has changed. If unchanged, loads the
 cached DLL for instant execution.
 ### DLL location
-- By default, the `dll` is stored in `get_das_root()/jitted_scripts`.
-- This can be changed using `jit_output_folder` (not exposed to `CLI` yet).
+- By default, the `dll` is stored in `jitted_scripts/`.
+- This can be changed using `jit_output_path`.

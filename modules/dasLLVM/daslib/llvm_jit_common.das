@@ -659,7 +659,17 @@ def public write_dll(mod : LLVMOpaqueModule?; out_path : string; path_to_dascrip
         let file = add_obj_extension(out_path)
         let filetype = LLVMCodeGenFileType.LLVMObjectFile
         LLVMTargetMachineEmitToFile(targetMachine, mod, file, filetype, error)
-        create_shared_library(file, add_dll_extension(out_path), "{path_to_dascript_lib}", "{path_to_linker}")
+        create_shared_library(file, add_dll_extension(out_path), "{path_to_dascript_lib}", "{path_to_linker}", true)
+    }
+}
+
+def public write_exe(mod : LLVMOpaqueModule?; out_path : string; path_to_dascript_lib, path_to_linker : string) {
+    with_default_target_machine <| $(targetMachine : LLVMTargetMachineRef) {
+        let error : string?
+        let file = add_obj_extension(out_path)
+        let filetype = LLVMCodeGenFileType.LLVMObjectFile
+        LLVMTargetMachineEmitToFile(targetMachine, mod, file, filetype, error)
+        create_shared_library(file, add_exe_extension(out_path), "{path_to_dascript_lib}", "{path_to_linker}", false)
     }
 }
 
@@ -669,7 +679,8 @@ def public build_string_constant(message : string) {
     }
     let msg_size = uint(length(message))
     var strType = LLVMArrayType(g_prim_t.t_int8, msg_size + 1u)
-    var str = LLVMAddGlobal(g_mod, strType, "{message}")
+    // Prefix all string variable names to not intersect with function names.
+    var str = LLVMAddGlobal(g_mod, strType, ".str.{message}")
     LLVMSetInitializer(str, LLVMConstStringInContext(g_ctx, message, msg_size, 0))
     LLVMSetGlobalConstant(str, 1)
     LLVMSetLinkage(str, LLVMLinkage.LLVMPrivateLinkage)

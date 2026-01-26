@@ -260,6 +260,10 @@ def public add_dll_extension(path : string) {
     return "{path}.dll"
 }
 
+def public add_exe_extension(path : string) {
+    return "{path}.exe"
+}
+
 def public get_dll_by_path(path : string) : DLLHandle? {
     return new DLLHandle(handle = load_dynamic_library(add_dll_extension(path)))
 }
