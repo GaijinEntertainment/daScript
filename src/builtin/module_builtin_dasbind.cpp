@@ -407,6 +407,12 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             return nullptr;
         }
         virtual SimNode * simulate ( Context * context, Function * fun, const AnnotationArgumentList & args, string & err ) override {
+            if (is_in_completion()) {
+                // Skip simulation in completion mode — the DLL may not be
+                // present on the machine running the IDE. The app itself
+                // still requires the DLL to be available at runtime.
+                return nullptr;
+            }
             bool anyTypeErrors = false;
             for ( const auto & arg : fun->arguments ) {
                 if ( !arg->type->isRef() && arg->type->isVectorType() ) {
