@@ -581,8 +581,16 @@ namespace das {
                         arg->at, CompilationError::cant_be_null);
                 }
             }
-            if ( starts_with(expr->func->name,"builtin`to_table_move`") && expr->func->fromGeneric && expr->func->fromGeneric->module->name=="$" ) {
-                verifyToTableMove(expr);
+            if ( expr->func->fromGeneric && expr->func->fromGeneric->module->name=="$" ) {
+                if ( expr->func->fromGeneric->name=="to_table_move" ) {
+                    verifyToTableMove(expr);
+                } else if ( expr->func->fromGeneric->name=="_move_with_lockcheck" ) {
+                    if ( noWritingToNameless && expr->arguments[0]->rtti_isMakeLocal() ) {
+                        program->error("dead move to a temporary value, which is prohibited by CodeOfPolicies",
+                            getNamelessHint(expr->arguments[0], expr->arguments[1], "<-"), "",
+                                expr->arguments[0]->at, CompilationError::no_writing_to_nameless);
+                    }
+                }
             }
             if ( isClassCtor ) {
                 auto baseClass = func->classParent->parent;
