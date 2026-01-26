@@ -3747,7 +3747,7 @@ def public setAotHashes(program : ProgramPtr; var ctx : Context) {
 
 def public dumpRegisterAot(var tw : StringBuilderWriter?; program : ProgramPtr; var context : Context; allModules : bool; cross_platform : bool) {
     write(*tw, "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) \{\n");
-    registerAotCpp(tw, program, context, cross_platform, true, allModules);
+    registerAotCpp(tw, program, context, cross_platform, false, allModules);
     write(*tw, "    resolveTypeInfoAnnotations();\n");
     write(*tw, "\};\n");
     write(*tw, "\n");
@@ -3900,7 +3900,7 @@ def public run_aot(prog : Program?; var pctx : Context?; cop : CodeOfPolicies) :
 
 
 [export]
-def public aot(input : string; isAotLib, paranoid_validation : bool, cross_platform : bool; cop : CodeOfPolicies) : string {
+def public aot(input : string; paranoid_validation : bool, cross_platform : bool; cop : CodeOfPolicies) : string {
     var result = "";
     using <| $(var mg : ModuleGroup) {
         var inscope access <- make_file_access("")

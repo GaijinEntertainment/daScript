@@ -281,9 +281,9 @@ def writeRegistration(var header : StringBuilderWriter;
                       cfg : StandaloneContextCfg;
                       var context : Context) {
     write(source, "using namespace {program.thisNamespace};\n");
-    dumpRegisterAot(unsafe(addr(source)), program, context, false, cfg.cross_platform);
     write(header, "namespace {cfg.context_name} \{\n");
     write(source, "namespace {cfg.context_name} \{\n");
+    dumpRegisterAot(unsafe(addr(source)), program, context, false, cfg.cross_platform);
     writeStandaloneContext(program, initFunctions, header, source, cfg);
     write(header, "\} // namespace {cfg.context_name}\n");
     write(source, "\} // namespace {cfg.context_name}\n");
@@ -432,8 +432,10 @@ def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string
 }
 
 [export]
-def public standalone_aot(input : string; output_dir : string; isAotLib, cross_platform : bool, paranoid_validation : bool; cop : CodeOfPolicies) : string {
-    let cfg = StandaloneContextCfg(context_name = "context",
+def public standalone_aot(input : string; output_dir : string; cross_platform : bool, paranoid_validation : bool; cop : CodeOfPolicies) : string {
+    let file_name = input |> split_by_chars("/\\") |> back()
+    let ctx_name = (file_name |> split("."))[0]
+    let cfg = StandaloneContextCfg(context_name = ctx_name,
                                    class_name = "Standalone",
                                    cpp_output_dir = output_dir,
                                    cross_platform = cross_platform)
