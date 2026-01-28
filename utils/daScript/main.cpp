@@ -276,7 +276,37 @@ int das_aot_main ( int argc, char * argv[] ) {
         cfg.cross_platform = cross_platform;
         compiled = compileStandalone(argv[2], argv[3], cfg);
     } else {
-        compiled = compile(argv[2], argv[3], dryRun, cross_platform);
+        if (argv[2] == string("aot_das_mode")) {
+            auto f = get_file_access(nullptr);
+            const char *src;
+            uint32_t len;
+            f->getFileInfo(argv[3])->getSourceAndLength(src, len);
+            string_view content(src, len);
+            size_t pos = 0;
+            while (pos < content.length()) {
+                size_t end = content.find('\n', pos);
+                string_view line = content.substr(pos, end - pos);
+                pos = (end == string_view::npos) ? content.length() : end + 1;
+
+                if (line.empty()) continue;
+
+                auto mode_end = line.find(' ');
+                auto in_file_end = line.find(' ', mode_end + 1);
+
+                // No need to support contexts. This is temporary.
+                if (line.substr(0, mode_end) != "aot") {
+                    tout << "Uknown mode on line `" << string(line) << "`, skipping.\n";
+                    continue;
+                }
+
+                string in_file(line.substr(mode_end + 1, in_file_end - mode_end - 1));
+                string out_file(line.substr(in_file_end + 1));
+
+                compiled = compile(in_file, out_file, dryRun, cross_platform);
+            }
+        } else {
+            compiled = compile(argv[2], argv[3], dryRun, cross_platform);
+        }
     }
     Module::Shutdown();
     return compiled ? 0 : -1;

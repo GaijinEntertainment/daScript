@@ -216,7 +216,7 @@ class StandaloneContextGen : CppAot {
     def StandaloneContextGen(var program_ : ProgramPtr; var ss_ : StringBuilderWriter?, var coll : BlockVariableCollector?, cp : bool) {
         ss <- ss_;
         collector <- coll;
-        program <- program_;
+        program := program_;
         cross_platform = cp;
         prologue = program._options |> find_arg("aot_prologue") ?as tBool ?? false;
         solidContext = program.policies.solid_context || (program._options |> find_arg("solid_context") ?as tBool ?? false);
@@ -281,9 +281,9 @@ def writeRegistration(var header : StringBuilderWriter;
                       cfg : StandaloneContextCfg;
                       var context : Context) {
     write(source, "using namespace {program.thisNamespace};\n");
-    dumpRegisterAot(unsafe(addr(source)), program, context, false, cfg.cross_platform);
     write(header, "namespace {cfg.context_name} \{\n");
     write(source, "namespace {cfg.context_name} \{\n");
+    dumpRegisterAot(unsafe(addr(source)), program, context, false, cfg.cross_platform);
     writeStandaloneContext(program, initFunctions, header, source, cfg);
     write(header, "\} // namespace {cfg.context_name}\n");
     write(source, "\} // namespace {cfg.context_name}\n");
@@ -336,6 +336,9 @@ def genStandaloneSrc(var program : ProgramPtr;
             var inscope aot_adapter <- make_visitor(*cpp_aot)
             cpp_aot.adapter := aot_adapter
             dumpDependencies(program, cpp_aot);
+            unsafe {
+                delete cpp_aot
+            }
         }
         write(tw, deps);
         build_string() <| $(tmp_writer) {
@@ -349,6 +352,10 @@ def genStandaloneSrc(var program : ProgramPtr;
                                             collectProgramUsedFunctions(program, false, false),
                                             gen.helper);
             write(tw, gen.str());
+            unsafe {
+                delete gen.collector
+                delete gen
+            }
         }
     }
 
@@ -432,8 +439,10 @@ def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string
 }
 
 [export]
-def public standalone_aot(input : string; output_dir : string; isAotLib, cross_platform : bool, paranoid_validation : bool; cop : CodeOfPolicies) : string {
-    let cfg = StandaloneContextCfg(context_name = "context",
+def public standalone_aot(input : string; output_dir : string; cross_platform : bool, paranoid_validation : bool; cop : CodeOfPolicies) : string {
+    let file_name = input |> split_by_chars("/\\") |> back()
+    let ctx_name = (file_name |> split("."))[0]
+    let cfg = StandaloneContextCfg(context_name = ctx_name,
                                    class_name = "Standalone",
                                    cpp_output_dir = output_dir,
                                    cross_platform = cross_platform)

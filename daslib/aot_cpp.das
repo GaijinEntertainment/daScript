@@ -1058,7 +1058,7 @@ class public CppAot : AstVisitor {
     debugInfoGlobal : int = 0;
     helper : AotDebugInfoHelper ? = new AotDebugInfoHelper();
     program : ProgramPtr;
-    collector : BlockVariableCollector ? = new BlockVariableCollector();
+    @do_not_delete collector : BlockVariableCollector ? = new BlockVariableCollector();
     aotPrefix : table<string>;
     @do_not_delete local_temp_names : table<Expression?; int>;
     @do_not_delete scopes : array<ExprBlock?>;
@@ -2947,7 +2947,8 @@ class public CppAot : AstVisitor {
             write(*ss, ",");
         }
         if (!blk.blockFlags.aotSkipMakeBlock) {
-            let info = helper.helper |> make_invokable_type_debug_info(blk |> make_block_type(), blk.at);
+            var inscope blk_t = blk |> make_block_type()
+            let info = helper.helper |> make_invokable_type_debug_info(blk_t, blk.at);
             write(*ss, "&{funcInfoName(info)},");
         }
         if (expr.aotFunctorName.empty()) {
@@ -3746,10 +3747,7 @@ def public setAotHashes(program : ProgramPtr; var ctx : Context) {
 }
 
 def public dumpRegisterAot(var tw : StringBuilderWriter?; program : ProgramPtr; var context : Context; allModules : bool; cross_platform : bool) {
-    write(*tw, "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) \{\n");
-    registerAotCpp(tw, program, context, cross_platform, true, allModules);
-    write(*tw, "    resolveTypeInfoAnnotations();\n");
-    write(*tw, "\};\n");
+    registerAotCpp(tw, program, context, cross_platform, false, allModules);
     write(*tw, "\n");
     write(*tw, "static AotListBase impl(registerAotFunctions);\n");
 }
@@ -3877,6 +3875,7 @@ def public run_aot(prog : Program?; var pctx : Context?; cop : CodeOfPolicies) :
                 write(writer, "{cpp_aot.str()}");
                 delete cpp_aot.helper.helper
                 unsafe {
+                    delete cpp_aot.collector
                     delete cpp_aot
                 }
             }
@@ -3900,7 +3899,7 @@ def public run_aot(prog : Program?; var pctx : Context?; cop : CodeOfPolicies) :
 
 
 [export]
-def public aot(input : string; isAotLib, paranoid_validation : bool, cross_platform : bool; cop : CodeOfPolicies) : string {
+def public aot(input : string; paranoid_validation : bool, cross_platform : bool; cop : CodeOfPolicies) : string {
     var result = "";
     using <| $(var mg : ModuleGroup) {
         var inscope access <- make_file_access("")

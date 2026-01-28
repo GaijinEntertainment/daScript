@@ -1,0 +1,159 @@
+options gen2
+require daslib/aot_cpp
+require daslib/aot_standalone
+
+require fio
+require daslib/strings_boost
+
+require daslib/rtti
+
+
+def updateCOP(var cop : CodeOfPolicies; gen2 : bool; gen2_make : bool; aot_lib : bool) {
+    cop.threadlock_context = false
+    cop.aot = false;
+    cop.aot_module = true;
+    cop.aot_lib = aot_lib;
+    cop.fail_on_lack_of_aot_export = true;
+    cop.ignore_shared_modules = false;
+    cop.version_2_syntax = gen2;
+    cop.gen2_make_syntax = gen2_make;
+}
+
+
+def find_argument_or(args : array<string>; key : string, def_val : string) {
+    for (i in range(length(args) - 1)) {
+        if (args[i] == key) {
+            return args[i + 1]
+        }
+    }
+    return def_val
+}
+
+def find_argument(args : array<string>; key : string) {
+    for (i in range(length(args) - 1)) {
+        if (args[i] == key) {
+            return args[i + 1]
+        }
+    }
+    panic("expected {key} argument!")
+    return ""
+}
+
+def get_list_of_files(args : array<string>, key : string) {
+    let len = length(args)
+    var result = array<tuple<string; string>>()
+    for (i in range(len)) {
+        if (args[i] == key) {
+            if (i + 2 >= len) {
+                panic("Arguments expected in format `-aot <in> <out>`.")
+            }
+            result |> push((args[i + 1], args[i + 2]))
+        }
+    }
+    return <- result
+}
+
+def parse_input_file(filename : string) {
+    var aot_files = array<tuple<string; string>>()
+    var aot_lib_files = array<tuple<string; string>>()
+    var ctx_files = array<tuple<string; string>>()
+    fopen(filename, "rb") <| $(fr) {
+        if (fr == null) {
+            print("Couldn't open input file {filename}\n")
+        }
+        fread(fr) <| $(data) {
+            for (line in data |> split("\n")) {
+                if (line.empty()) {
+                    continue
+                }
+                // aot/ctx in.das out.cpp
+                let parts = line |> split(" ")
+                let mode = parts[0]
+                if (mode == "aot") {
+                    aot_files |> push((parts[1], parts[2]))
+                } elif (mode == "aotlib") {
+                    aot_lib_files |> push((parts[1], parts[2]))
+                } elif (mode == "ctx") {
+                    ctx_files |> push((parts[1], parts[2]))
+                } else {
+                    panic("Unexpected mode {mode}. Choose `aot` or `ctx`.\n")
+                }
+            }
+        }
+    }
+    return <- (aot_files, aot_lib_files, ctx_files)
+}
+
+def find_bool(args : array<string>; key : string) {
+    let idx = find_index(args, key)
+    return idx >= 0 && idx + 1 < length(args)
+}
+
+[export]
+def main() {
+    let args <- get_command_line_arguments()
+
+    let cross_platform = find_bool(args, "-cross_platform");
+    let gen1 = find_bool(args, "-gen1");
+    let gen2_make = find_bool(args, "-gen2-make");
+
+    var aot_files = array<tuple<string; string>>()
+    var aotlib_files = array<tuple<string; string>>()
+    var ctx_files = array<tuple<string; string>>()
+
+    let input_file = find_argument_or(args, "-in_file", "")
+    if (!input_file.empty()) {
+        var (a1, a2, a3) <- parse_input_file(input_file)
+        aot_files <- a1
+        aotlib_files <- a2
+        ctx_files <- a3
+    } else {
+        aot_files = get_list_of_files(args, "-aot")
+        aotlib_files = get_list_of_files(args, "-aotlib")
+        ctx_files = get_list_of_files(args, "-ctx")
+    }
+    using <| $(var cop : CodeOfPolicies) {
+        updateCOP(cop, !gen1, gen2_make, false)
+        for ((aot_in, aot_out) in aot_files) {
+            print("Aot to {aot_out}\n")
+            let res = aot(aot_in, false, cross_platform, cop)
+            if (res |> length() > 0) {
+                fopen(aot_out, "wb") <| $(fw) {
+                    if (fw != null) {
+                        fwrite(fw, res)
+                    } else {
+                        print("Couldn't create output file {aot_out}\n")
+                    }
+                }
+            }
+        }
+        updateCOP(cop, !gen1, gen2_make, true)
+        for ((aot_in, aot_out) in aotlib_files) {
+            print("Aot library to {aot_out}\n")
+            let res = aot(aot_in, false, cross_platform, cop)
+            if (res |> length() > 0) {
+                fopen(aot_out, "wb") <| $(fw) {
+                    if (fw != null) {
+                        fwrite(fw, res)
+                    } else {
+                        print("Couldn't create output file {aot_out}\n")
+                    }
+                }
+            }
+        }
+        updateCOP(cop, !gen1, gen2_make, false)
+        for ((ctx_in, ctx_out) in ctx_files) {
+            print("Standalone ctx to {ctx_out}\n")
+            let res = standalone_aot(ctx_in, ctx_out, cross_platform, false, cop)
+            if (res |> length() > 0) {
+                fopen(ctx_out, "wb") <| $(fw) {
+                    if (fw != null) {
+                        fwrite(fw, res)
+                    } else {
+                        print("Couldn't create output file {ctx_out}\n")
+                    }
+                }
+            }
+        }
+    }
+}

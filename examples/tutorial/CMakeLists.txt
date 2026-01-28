@@ -79,12 +79,13 @@ SETUP_CPP11(tutorial02aot)
 
 ## Example of standalone context
 SET(TUTORIAL_02_STANDALONE_CTX_GENERATED_SRC)
-DAS_AOT_STANDALONE("examples/tutorial/tutorial02.das" TUTORIAL_02_STANDALONE_CTX_GENERATED_SRC tutorial02_dasAotStub tutorial02_dasAot "aot")
+add_custom_target(tutorial02_dasAotStubStandalone)
+DAS_AOT_CTX("examples/tutorial/tutorial02.das" TUTORIAL_02_STANDALONE_CTX_GENERATED_SRC tutorial02_dasAotStubStandalone tutorial02_dasAot)
 add_executable(tutorial_02_standalone
         ${CMAKE_CURRENT_SOURCE_DIR}/examples/tutorial/tutorial02_standalone_ctx.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/examples/tutorial/tutorial02.das
         ${TUTORIAL_02_STANDALONE_CTX_GENERATED_SRC})
-ADD_DEPENDENCIES(tutorial_02_standalone libDaScript tutorial02_dasAotStub)
+ADD_DEPENDENCIES(tutorial_02_standalone libDaScript tutorial02_dasAotStubStandalone)
 target_include_directories(tutorial_02_standalone PUBLIC ${PROJECT_SOURCE_DIR}/examples/tutorial)
 TARGET_LINK_LIBRARIES(tutorial_02_standalone libDaScript)
 SETUP_CPP11(tutorial_02_standalone)

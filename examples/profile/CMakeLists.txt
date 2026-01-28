@@ -37,7 +37,7 @@ SETUP_LTO(profiler_dasAot)
 
 add_custom_target(daScriptProfileAot)
 SET(PROFILE_GENERATED_SRC)
-DAS_AOT_DIR("${PROFILE_SRC}" PROFILE_GENERATED_SRC daScriptProfileAot profiler_dasAot)
+DAS_AOT("${PROFILE_SRC}" PROFILE_GENERATED_SRC daScriptProfileAot profiler_dasAot)
 SOURCE_GROUP_FILES("generated" PROFILE_GENERATED_SRC)
 
 add_executable(daScriptProfile ${PROFILE_SRC} ${PROFILE_MAIN_SRC} ${PROFILE_GENERATED_SRC} ${DAS_DASCRIPT_MAIN_SRC})
