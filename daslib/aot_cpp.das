@@ -3746,10 +3746,7 @@ def public setAotHashes(program : ProgramPtr; var ctx : Context) {
 }
 
 def public dumpRegisterAot(var tw : StringBuilderWriter?; program : ProgramPtr; var context : Context; allModules : bool; cross_platform : bool) {
-    write(*tw, "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) \{\n");
     registerAotCpp(tw, program, context, cross_platform, false, allModules);
-    write(*tw, "    resolveTypeInfoAnnotations();\n");
-    write(*tw, "\};\n");
     write(*tw, "\n");
     write(*tw, "static AotListBase impl(registerAotFunctions);\n");
 }
