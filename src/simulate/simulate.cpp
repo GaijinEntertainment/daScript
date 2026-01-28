@@ -22,7 +22,7 @@ namespace das
     }
 
     GcRootLambda::~GcRootLambda() {
-        if ( capture && context ) {
+        if ( capture && context && (context->category.value & uint32_t(das::ContextCategory::dead)) == 0u ) {
             context->removeGcRoot( (void *)capture );
         }
     }

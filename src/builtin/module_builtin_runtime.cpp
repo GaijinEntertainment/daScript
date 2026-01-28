@@ -1364,6 +1364,10 @@ namespace das
     __forceinline void i_das_ptr_set_add_uint64 ( void * & ptr, uint64_t value, int32_t stride ) { ptr = (char*) ptr + value * stride; }
     __forceinline void i_das_ptr_set_sub_uint64 ( void * & ptr, uint64_t value, int32_t stride ) { ptr = (char*) ptr - value * stride; }
 
+    void* builtin_das_aligned_alloc16(uint64_t size) {
+        return das_aligned_alloc16((size_t)size);
+    }
+
     Module_BuiltIn::~Module_BuiltIn() {
         gc0_reset();
     }
@@ -2024,8 +2028,8 @@ namespace das
         addExternEx<void(*)(void *,uint4,int32_t),DAS_BIND_FUN(das_memset128u)>(*this, lib, "memset128",
             SideEffects::modifyArgumentAndExternal, "das_memset128u")
                 ->args({"left","value","count"})->unsafeOperation = true;
-        addExtern<DAS_BIND_FUN(das_aligned_alloc16)> (*this, lib, "malloc",
-            SideEffects::modifyExternal, "das_aligned_alloc16")
+        addExtern<DAS_BIND_FUN(builtin_das_aligned_alloc16)> (*this, lib, "malloc",
+            SideEffects::modifyExternal, "builtin_das_aligned_alloc16")
                 ->args({"size"})->unsafeOperation = true;
         addExtern<DAS_BIND_FUN(das_aligned_free16)> (*this, lib, "free",
             SideEffects::modifyExternal, "das_aligned_free16")

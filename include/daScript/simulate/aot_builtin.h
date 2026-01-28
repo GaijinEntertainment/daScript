@@ -133,6 +133,8 @@ namespace das {
     smart_ptr_raw<void> gc0_restore_smart_ptr ( char * name, Context * context );
     void gc0_reset();
 
+    void *builtin_das_aligned_alloc16(uint64_t size);
+
     __forceinline void array_grow ( Context & context, Array & arr, uint32_t stride, LineInfo * at ) {
         if ( arr.isLocked() ) context.throw_error_at(at, "can't resize locked array");
         uint32_t newSize = arr.size + 1;
