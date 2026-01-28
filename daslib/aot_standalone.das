@@ -216,7 +216,7 @@ class StandaloneContextGen : CppAot {
     def StandaloneContextGen(var program_ : ProgramPtr; var ss_ : StringBuilderWriter?, var coll : BlockVariableCollector?, cp : bool) {
         ss <- ss_;
         collector <- coll;
-        program <- program_;
+        program := program_;
         cross_platform = cp;
         prologue = program._options |> find_arg("aot_prologue") ?as tBool ?? false;
         solidContext = program.policies.solid_context || (program._options |> find_arg("solid_context") ?as tBool ?? false);
@@ -336,6 +336,9 @@ def genStandaloneSrc(var program : ProgramPtr;
             var inscope aot_adapter <- make_visitor(*cpp_aot)
             cpp_aot.adapter := aot_adapter
             dumpDependencies(program, cpp_aot);
+            unsafe {
+                delete cpp_aot
+            }
         }
         write(tw, deps);
         build_string() <| $(tmp_writer) {
@@ -349,6 +352,10 @@ def genStandaloneSrc(var program : ProgramPtr;
                                             collectProgramUsedFunctions(program, false, false),
                                             gen.helper);
             write(tw, gen.str());
+            unsafe {
+                delete gen.collector
+                delete gen
+            }
         }
     }
 

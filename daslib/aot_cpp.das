@@ -1058,7 +1058,7 @@ class public CppAot : AstVisitor {
     debugInfoGlobal : int = 0;
     helper : AotDebugInfoHelper ? = new AotDebugInfoHelper();
     program : ProgramPtr;
-    collector : BlockVariableCollector ? = new BlockVariableCollector();
+    @do_not_delete collector : BlockVariableCollector ? = new BlockVariableCollector();
     aotPrefix : table<string>;
     @do_not_delete local_temp_names : table<Expression?; int>;
     @do_not_delete scopes : array<ExprBlock?>;
@@ -2947,7 +2947,8 @@ class public CppAot : AstVisitor {
             write(*ss, ",");
         }
         if (!blk.blockFlags.aotSkipMakeBlock) {
-            let info = helper.helper |> make_invokable_type_debug_info(blk |> make_block_type(), blk.at);
+            var inscope blk_t = blk |> make_block_type()
+            let info = helper.helper |> make_invokable_type_debug_info(blk_t, blk.at);
             write(*ss, "&{funcInfoName(info)},");
         }
         if (expr.aotFunctorName.empty()) {
@@ -3874,6 +3875,7 @@ def public run_aot(prog : Program?; var pctx : Context?; cop : CodeOfPolicies) :
                 write(writer, "{cpp_aot.str()}");
                 delete cpp_aot.helper.helper
                 unsafe {
+                    delete cpp_aot.collector
                     delete cpp_aot
                 }
             }
