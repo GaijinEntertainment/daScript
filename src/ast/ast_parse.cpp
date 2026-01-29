@@ -3,11 +3,14 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/ast/ast_expressions.h"
+#include "daScript/daScriptModule.h"
 #include "daScript/das_common.h"
 #include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/simulate/aot_builtin_uriparser.h"
 
 #include "../parser/parser_state.h"
+
+#include "daScript/misc/sysos.h"
 
 typedef void * yyscan_t;
 union YYSTYPE;
@@ -258,6 +261,31 @@ namespace das {
 
     string getDasRoot ( void );
 
+    static Module *requireExOrDll(string mod, bool allowPromoted, TextWriter * log = nullptr) {
+        const auto path = getDasRoot() + "/modules_libs/" + mod + "_mod.dll";
+        auto lib = loadDynamicLibrary(path.c_str());
+        if (!lib) {
+            if (log) {
+                *log << "Failed to open library at " << path << ".\n";
+            }
+            return nullptr;
+        }
+        const auto regName = getModuleRegistratorName(mod);
+        auto rawFn = getFunctionAddress(lib, regName.c_str());
+        auto fn = reinterpret_cast<Module*(*)(void)>(rawFn);
+        if (fn) {
+            *das::ModuleKarma += unsigned(intptr_t(fn()));
+            if (log) {
+                *log << "Dynamic module loaded: " << regName << ".\n";
+            }
+        } else {
+            if (log) {
+                *log << "Register function not found, expected: " << path << ".\n";
+            }
+        }
+        return Module::requireEx(mod, allowPromoted);
+    }
+
     bool getPrerequisits ( const string & fileName,
                           const FileAccessPtr & access,
                           string &modName,
@@ -281,7 +309,7 @@ namespace das {
                 *log << string(tab,'\t') << "in " << fileName << "\n";
             }
             vector<RequireRecord> ownReq = getAllRequire(fi, modName, chain, access);
-            for ( auto & modRec : ownReq ) {
+            for ( const auto & modRec : ownReq ) {
                 string mod = modRec.name;
                 if ( log ) {
                     *log << string(tab,'\t') << "require " << mod << "\n";
@@ -425,6 +453,9 @@ namespace das {
                     }
                 }
             }
+            return true;
+        } else if (auto module = requireExOrDll(reqNameHint, allowPromoted)) {
+            libGroup.addModule(module);
             return true;
         } else {
             if ( log ) {

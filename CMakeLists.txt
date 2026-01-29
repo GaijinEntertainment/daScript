@@ -317,6 +317,7 @@ IF (${DAS_ENABLE_DLL})
     endif()
 ENDIF()
 
+SET(DAS_DYN_MODULES_LIBS)
 SET(DAS_MODULES_LIBS)
 SET(DAS_ALL_EXAMPLES)
 FILE(GLOB _modules RELATIVE "${PROJECT_SOURCE_DIR}/modules" "modules/*")
@@ -342,6 +343,20 @@ MACRO(ADD_MODULE_PUB_LIB lib)
     endif()
 
     LIST(APPEND DAS_MODULES_LIBS ${lib})
+ENDMACRO()
+MACRO(ADD_MODULE_DYN_LIB lib)
+    MESSAGE("REGISTER DAS MODULE ${lib}")
+
+    ADD_LIBRARY(${lib} SHARED ${ARGN})
+    set_target_properties(${lib} PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/modules_libs"
+        ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/modules_libs"
+        SUFFIX ".dll"
+        PREFIX ""
+    )
+
+    TARGET_LINK_LIBRARIES(${lib} PUBLIC libDaScript)
+    LIST(APPEND DAS_DYN_MODULES_LIBS ${lib})
 ENDMACRO()
 
 MACRO(ADD_EXAMPLE tgt)
@@ -883,7 +898,7 @@ if (NOT ${DAS_TOOLS_DISABLED})
     MACRO(SETUP_COMPILER_BINARY target_name library_name)
         add_executable(${target_name} ${DAS_DASCRIPT_MAIN_SRC})
         TARGET_LINK_LIBRARIES(${target_name} ${library_name} ${SRC_LIBRARIES})
-        ADD_DEPENDENCIES(${target_name} ${library_name} ${DAS_MODULES_LIBS})
+        ADD_DEPENDENCIES(${target_name} ${library_name} ${DAS_DYN_MODULES_LIBS})
         SETUP_CPP11(${target_name})
         SETUP_LTO(${target_name})
     ENDMACRO()

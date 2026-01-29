@@ -1163,5 +1163,6 @@ public:
 };
 
 REGISTER_MODULE(Module_TestProfile);
+REGISTER_DYN_MODULE(Module_TestProfile, testProfile);
 
 
