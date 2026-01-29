@@ -28,9 +28,14 @@ namespace das {
         if ( !block ) return FNV_offset_basis;
         auto h = FNV_offset_basis;
 #if DAS_SAFE_HASH
-        while ( *block ) {
-            h ^= *block++;
+        while ( true ) {
+            uint64_t v = block[0];
+            if ( v==0 ) break;
+            v |= uint64_t(block[1])<<8;
+            h ^= v;
             h *= FNV_prime;
+            if ( v < 0x100 ) break;
+            block += 2;
         }
 #else
         while ( true ) {
