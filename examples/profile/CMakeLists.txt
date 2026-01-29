@@ -4,7 +4,7 @@ SET(PROFILE_MAIN_LIB_SRC
 )
 SOURCE_GROUP_FILES("source" PROFILE_MAIN_LIB_SRC)
 
-ADD_DAS_LIBRARY(libDaScriptProfile ${PROFILE_MAIN_LIB_SRC})
+ADD_MODULE_LIB(libDaScriptProfile testProfile ${PROFILE_MAIN_LIB_SRC})
 TARGET_LINK_LIBRARIES(libDaScriptProfile PUBLIC libDaScript)
 SETUP_CPP11(libDaScriptProfile)
 
@@ -24,20 +24,10 @@ list(SORT PROFILE_MAIN_SRC)
 SOURCE_GROUP_FILES("source" PROFILE_MAIN_SRC)
 
 ### 1. setup custom AOT utility
-SET(PROFILER_DASAOT_MAIN_SRC
-${CMAKE_CURRENT_SOURCE_DIR}/examples/profile/main_aot.cpp
-${DAS_DASCRIPT_MAIN_SRC}
-)
-add_executable(profiler_dasAot ${PROFILER_DASAOT_MAIN_SRC} )
-target_compile_definitions(profiler_dasAot PUBLIC MAIN_FUNC_NAME=dascript_dummy_main) # dascript_dummy_main is here to rename main function from daScript
-TARGET_LINK_LIBRARIES(profiler_dasAot libDaScript libDaScriptProfile Threads::Threads ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(profiler_dasAot libDaScript libDaScriptProfile ${DAS_MODULES_LIBS})
-SETUP_CPP11(profiler_dasAot)
-SETUP_LTO(profiler_dasAot)
-
 add_custom_target(daScriptProfileAot)
 SET(PROFILE_GENERATED_SRC)
-DAS_AOT("${PROFILE_SRC}" PROFILE_GENERATED_SRC daScriptProfileAot profiler_dasAot)
+# Use dynamic daslang, since we need to load `testProfile` module.
+DAS_AOT("${PROFILE_SRC}" PROFILE_GENERATED_SRC daScriptProfileAot daslang_dyn)
 SOURCE_GROUP_FILES("generated" PROFILE_GENERATED_SRC)
 
 add_executable(daScriptProfile ${PROFILE_SRC} ${PROFILE_MAIN_SRC} ${PROFILE_GENERATED_SRC} ${DAS_DASCRIPT_MAIN_SRC})

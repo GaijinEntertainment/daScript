@@ -625,6 +625,8 @@ public:
     }
 };
 
+REGISTER_DYN_MODULE(Module_Audio,Module_Audio);
+
 } // namespace das
 
 REGISTER_MODULE_IN_NAMESPACE(Module_Audio, das);
