@@ -238,22 +238,22 @@ jobs:
             case "${{ matrix.target }}${{ matrix.architecture }}" in
               linux64)
                 CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -G \
-                        "${{ matrix.cmake_generator }}" -DDAS_ENABLE_DLL=${{ env.das_dll_build }} -DDAS_USE_SANITIZER=${{ matrix.sanitizers }} -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }}
+                        "${{ matrix.cmake_generator }}" -DDAS_USE_SANITIZER=${{ matrix.sanitizers }} -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }}
                 cd build
                 ninja
                 ;;
               windows32)
-                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DDAS_ENABLE_DLL=${{ env.das_dll_build }} -T host=x86 -A ${{ matrix.architecture_string }}
+                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=x86 -A ${{ matrix.architecture_string }}
                 cmake --build ./build --config ${{ matrix.cmake_preset }} --target daslang
                 cmake --build ./build --config ${{ matrix.cmake_preset }}
                 ;;
               windows64)
-                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -DDAS_ENABLE_DLL=${{ env.das_dll_build }} -T host=x64 -A ${{ matrix.architecture_string }} -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }}
+                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=x64 -A ${{ matrix.architecture_string }} -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }}
                 cmake --build ./build --config ${{ matrix.cmake_preset }} --target daslang
                 cmake --build ./build --config ${{ matrix.cmake_preset }}
                 ;;
               *)
-                CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DDAS_ENABLE_DLL=${{ env.das_dll_build }} -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture_string }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }} -G "${{ matrix.cmake_generator }}"
+                CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture_string }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }} -G "${{ matrix.cmake_generator }}"
                 cd build
                 ninja
                 ;;

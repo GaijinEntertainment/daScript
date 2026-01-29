@@ -6,19 +6,6 @@ IF ((NOT DAS_LLVM_INCLUDED) AND ((NOT ${DAS_LLVM_DISABLED}) OR (NOT DEFINED DAS_
 
     LIST(APPEND CMAKE_MODULE_PATH ${DAS_LLVM_DIR})
 
-	ADD_MODULE_DAS(llvm bindings llvm_const)
-	ADD_MODULE_DAS(llvm bindings llvm_enum)
-	ADD_MODULE_DAS(llvm bindings llvm_func)
-	ADD_MODULE_DAS(llvm bindings llvm_struct)
-
-	ADD_MODULE_DAS(llvm daslib llvm_boost)
-	ADD_MODULE_DAS(llvm daslib llvm_debug)
-	ADD_MODULE_DAS(llvm daslib llvm_jit)
-	ADD_MODULE_DAS(llvm daslib llvm_targets)
-	ADD_MODULE_DAS(llvm daslib llvm_jit_intrin)
-	ADD_MODULE_DAS(llvm daslib llvm_jit_common)
-	ADD_MODULE_DAS(llvm daslib llvm_dll_utils)
-
     set(DAS_LLVM_LIB_OUTPUT "${PROJECT_SOURCE_DIR}/lib")
     set(DAS_CLANG_OUTPUT "${PROJECT_SOURCE_DIR}/bin")
     set(DAS_LLVM_DLL_NAME LLVM.dll)
@@ -109,5 +96,6 @@ IF ((NOT DAS_LLVM_INCLUDED) AND ((NOT ${DAS_LLVM_DISABLED}) OR (NOT DEFINED DAS_
 	)
 	file(GLOB DASLLVM_BINDINGS ${DAS_LLVM_DIR}/bindings/*.das)
 	install(FILES ${DASLLVM_BINDINGS} DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLVM/bindings)
+	install(FILES ${DAS_LLVM_DIR}/.das_module DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLVM/)
 
 ENDIF()

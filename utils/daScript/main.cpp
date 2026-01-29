@@ -279,7 +279,10 @@ int das_aot_main ( int argc, char * argv[] ) {
     if (!Module::require("dasbind")) {
         NEED_MODULE(Module_DASBIND);
     }
+    #if !defined(DAS_ENABLE_DLL) || !defined(DAS_ENABLE_DYN_INCLUDES)
+    // Otherwises search for static modules.
     #include "modules/external_need.inc"
+    #endif
     #ifdef DAS_ENABLE_DYN_INCLUDES
     daScriptEnvironment::ensure();
     require_dynamic_modules(getDasRoot(), project_root, tout);
@@ -727,7 +730,10 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     NEED_MODULE(Module_FIO);
     NEED_MODULE(Module_DASBIND);
 
+    #if !defined(DAS_ENABLE_DLL) || !defined(DAS_ENABLE_DYN_INCLUDES)
+    // Otherwises search for static modules.
     #include "modules/external_need.inc"
+    #endif
     #ifdef DAS_ENABLE_DYN_INCLUDES
     // Search for external modules and init them. Only if flag is enabled.
     daScriptEnvironment::ensure();

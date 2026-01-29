@@ -1,0 +1,20 @@
+options gen2
+
+require fio
+
+[export]
+def initialize(project_path : string) {
+    let daslib_paths = [
+        "llvm_boost", "llvm_debug", "llvm_jit", "llvm_targets",
+        "llvm_jit_intrin", "llvm_jit_common", "llvm_dll_utils"
+    ]
+    let bindings_paths = [
+        "llvm_const", "llvm_enum", "llvm_func", "llvm_struct",
+    ]
+    for (path in daslib_paths) {
+        register_native_path("llvm", "daslib/{path}", "{project_path}/daslib/{path}.das")
+    }
+    for (path in bindings_paths) {
+        register_native_path("llvm", "bindings/{path}", "{project_path}/bindings/{path}.das")
+    }
+}

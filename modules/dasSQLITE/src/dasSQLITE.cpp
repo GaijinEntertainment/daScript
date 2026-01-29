@@ -31,6 +31,8 @@ bool Module_dasSQLITE::initDependencies() {
 	initMain();
 	return true;
 }
+
+REGISTER_DYN_MODULE(Module_dasSQLITE,Module_dasSQLITE);
 }
 REGISTER_MODULE_IN_NAMESPACE(Module_dasSQLITE,das);
 
