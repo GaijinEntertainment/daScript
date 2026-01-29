@@ -2,16 +2,11 @@
 SET(PATHTRACER_DASAOT_MAIN_SRC
     ${DAS_DASCRIPT_MAIN_SRC}
 )
-add_executable(pathtracer_dasAot ${PATHTRACER_DASAOT_MAIN_SRC} )
-TARGET_LINK_LIBRARIES(pathtracer_dasAot libDaScriptTest libDaScriptAot Threads::Threads ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(pathtracer_dasAot libDaScriptTest libDaScriptAot ${DAS_MODULES_LIBS})
-SETUP_CPP11(pathtracer_dasAot)
-SETUP_LTO(pathtracer_dasAot)
 
 ### 2. setup aot target for the path tracer
 add_custom_target(pathtracer_dasAotStub)
 SET(PATHTRACER_AOT_GENERATED_SRC)
-DAS_AOT("examples/pathTracer/path_tracer.das" PATHTRACER_AOT_GENERATED_SRC pathtracer_dasAotStub pathtracer_dasAot)
+DAS_AOT("examples/pathTracer/path_tracer.das" PATHTRACER_AOT_GENERATED_SRC pathtracer_dasAotStub daslang)
 
 ### setup main path tracer executable
 SET(PATHTRACER_AOT_SRC

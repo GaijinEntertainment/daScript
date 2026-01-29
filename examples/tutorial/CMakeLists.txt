@@ -50,12 +50,14 @@ SET(TUTORIAL_02_DASAOT_MAIN_SRC
 ${CMAKE_CURRENT_SOURCE_DIR}/examples/tutorial/tutorial02module.cpp
 ${DAS_DASCRIPT_MAIN_SRC}
 )
-ADD_MODULE_DYN_LIB(tutorial_02_mod ${TUTORIAL_02_DASAOT_MAIN_SRC})
+ADD_DAS_SHARED_MODULE_LIB(tutorial_02_mod ${TUTORIAL_02_DASAOT_MAIN_SRC})
+TARGET_COMPILE_DEFINITIONS(tutorial_02_mod PRIVATE DAS_MOD_EXPORTS DAS_ENABLE_DLL=1)
+TARGET_LINK_LIBRARIES(tutorial_02_mod PUBLIC libDaScriptDyn)
 
 ### 2. setup aot target for the tutorial
 add_custom_target(tutorial02_dasAotStub)
 SET(TUTORIAL_02_AOT_GENERATED_SRC)
-DAS_AOT("examples/tutorial/tutorial02.das" TUTORIAL_02_AOT_GENERATED_SRC tutorial02_dasAotStub daslang)
+DAS_AOT("examples/tutorial/tutorial02.das" TUTORIAL_02_AOT_GENERATED_SRC tutorial02_dasAotStub daslang_dyn)
 
 ### setup main tutorial executable
 SET(TUTORIAL_02_AOT_SRC
@@ -73,7 +75,7 @@ SETUP_CPP11(tutorial02aot)
 ## Example of standalone context
 SET(TUTORIAL_02_STANDALONE_CTX_GENERATED_SRC)
 add_custom_target(tutorial02_dasAotStubStandalone)
-DAS_AOT_CTX("examples/tutorial/tutorial02.das" TUTORIAL_02_STANDALONE_CTX_GENERATED_SRC tutorial02_dasAotStubStandalone daslang)
+DAS_AOT_CTX("examples/tutorial/tutorial02.das" TUTORIAL_02_STANDALONE_CTX_GENERATED_SRC tutorial02_dasAotStubStandalone daslang_dyn)
 add_executable(tutorial_02_standalone
         ${CMAKE_CURRENT_SOURCE_DIR}/examples/tutorial/tutorial02_standalone_ctx.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/examples/tutorial/tutorial02.das

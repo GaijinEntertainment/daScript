@@ -4,8 +4,7 @@ SET(PROFILE_MAIN_LIB_SRC
 )
 SOURCE_GROUP_FILES("source" PROFILE_MAIN_LIB_SRC)
 
-ADD_MODULE_DYN_LIB(testProfile_mod ${PROFILE_MAIN_LIB_SRC})
-ADD_DAS_LIBRARY(libDaScriptProfile ${PROFILE_MAIN_LIB_SRC})
+ADD_MODULE_LIB(libDaScriptProfile testProfile_mod ${PROFILE_MAIN_LIB_SRC})
 TARGET_LINK_LIBRARIES(libDaScriptProfile PUBLIC libDaScript)
 SETUP_CPP11(libDaScriptProfile)
 
@@ -27,7 +26,7 @@ SOURCE_GROUP_FILES("source" PROFILE_MAIN_SRC)
 ### 1. setup custom AOT utility
 add_custom_target(daScriptProfileAot)
 SET(PROFILE_GENERATED_SRC)
-DAS_AOT("${PROFILE_SRC}" PROFILE_GENERATED_SRC daScriptProfileAot daslang)
+DAS_AOT("${PROFILE_SRC}" PROFILE_GENERATED_SRC daScriptProfileAot daslang_dyn)
 SOURCE_GROUP_FILES("generated" PROFILE_GENERATED_SRC)
 
 add_executable(daScriptProfile ${PROFILE_SRC} ${PROFILE_MAIN_SRC} ${PROFILE_GENERATED_SRC} ${DAS_DASCRIPT_MAIN_SRC})
