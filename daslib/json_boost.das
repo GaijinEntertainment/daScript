@@ -17,6 +17,7 @@ require daslib/strings_boost
 require daslib/apply
 require daslib/macro_boost
 require daslib/static_let
+require daslib/enum_trait
 
 def operator ?[] (a : json::JsonValue const? ==const; key : string) : JsonValue? const {
     //! Returns the value of the key in the JSON object, if it exists.
@@ -254,7 +255,7 @@ def from_JV(v : JsonValue const explicit?; ent : auto(EnumT); defV : EnumT = def
         panic("not a valid enumeration {name} in {typeinfo typename(type<EnumT>)}")
     } else {
         let intValue = (v.value is _number) ? int(v.value as _number) : int(v.value as _longint)
-        for (it in each_enum(defV)) {
+        for (it in defV) {
             if (intValue == int(it)) {
                 return it
             }

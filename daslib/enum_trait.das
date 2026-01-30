@@ -12,6 +12,16 @@ require daslib/templates_boost
 require daslib/templates
 require daslib/contracts
 
+[expect_any_enum(tt), unused_argument(tt), nodiscard]
+def public each(tt : auto(TT)) : iterator<TT -const -&> {
+    concept_assert(typeinfo is_enum(tt), "expecting 'each(any_enum_value)'")
+    var iter : iterator<TT -const -&>
+    _builtin_make_enum_iterator(iter)
+    unsafe {
+        return <- iter
+    }
+}
+
 [expect_any_enum(arg)]
 def public string(arg) {
     //! converts enum value to string
@@ -23,7 +33,7 @@ def public string(arg) {
 def public to_enum(ent : auto(EnumT), name : string) : EnumT {
     //! converts string to enum value, panics if not found
     //!  usage: let e = to_enum(type<EnumType>,"EnumValueName")
-    for (e in each_enum(type<EnumT>)) {
+    for (e in type<EnumT>) {
         if ("{e}" == name) {
             return e
         }
@@ -36,7 +46,7 @@ def public to_enum(ent : auto(EnumT), name : string) : EnumT {
 def public to_enum(ent : auto(EnumT), name : string; defaultValue : EnumT) : EnumT {
     //! converts string to enum value, returns defaultValue if not found
     //!  usage: let e = to_enum(type<EnumType>,"EnumValueName", EnumType.DefaultValue)
-    for (e in each_enum(type<EnumT>)) {
+    for (e in type<EnumT>) {
         if ("{e}" == name) {
             return e
         }
@@ -49,7 +59,7 @@ def public enum_to_table(ent : auto(EnumT)) : table<string, EnumT -const -&> {
     //! converts enum type to array of tuples (name, value)
     //!  usage: let t = enum_to_table(type<EnumType>)
     var tab : table<string, EnumT -const -&>
-    for (e in each_enum(type<EnumT>)) {
+    for (e in type<EnumT>) {
         unsafe(tab["{e}"]) = e
     }
     return <- tab
