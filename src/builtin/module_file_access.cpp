@@ -96,11 +96,12 @@ namespace das {
         return cast<bool>::to(res);
     }
 
-    bool ModuleFileAccess::canBeRequired ( const string & mod, const string & fileName ) const {
-        if(failed() || !canModuleBeRequired) return FileAccess::canBeRequired(mod,fileName);
-        vec4f args[2];
+    bool ModuleFileAccess::canBeRequired ( const string & mod, const string & fileName, bool isPublic ) const {
+        if(failed() || !canModuleBeRequired) return FileAccess::canBeRequired(mod,fileName,isPublic);
+        vec4f args[3];
         args[0] = cast<const char *>::from(mod.c_str());
         args[1] = cast<const char *>::from(fileName.c_str());
+        args[2] = cast<bool>::from(isPublic);
         auto res = context->evalWithCatch(canModuleBeRequired, args, nullptr);
         auto exc = context->getException(); exc;
         DAS_ASSERTF(!exc, "exception failed in `can_module_be_required`: %s", exc);
