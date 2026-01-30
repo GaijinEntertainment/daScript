@@ -1479,7 +1479,7 @@ def each_ref(lam : lambda<(var arg : auto(argT)?) : bool>) : iterator<argT&> {
     }
 }
 
-[unused_argument(tt), nodiscard]
+[unused_argument(tt), nodiscard, deprecated(message="use regular iteration or `each` from `daslib/enum_trait` instead")]
 def each_enum(tt : auto(TT)) : iterator<TT -const -&> {
     concept_assert(typeinfo is_enum(tt), "expecting 'each_enum(any_enum_value)'")
     var iter : iterator<TT -const -&>

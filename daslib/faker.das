@@ -15,6 +15,7 @@ require daslib/strings
 require daslib/defer
 require math
 require daslib/math_bits
+require daslib/enum_trait
 
 struct MonthNameAndDay {
     name : string
@@ -309,7 +310,7 @@ def public any_uint(var faker : Faker) : string {
 def public any_enum(var faker : Faker, enum_value : auto(TT)) : TT {
     //! Generates random enumeration value.
     var inscope values : array<TT -const>
-    for (v in each_enum(enum_value)) {
+    for (v in enum_value) {
         values |> push(v)
     }
     var idx = 0u

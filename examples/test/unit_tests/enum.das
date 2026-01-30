@@ -3,6 +3,8 @@ options rtti
 
 require UnitTest
 
+require daslib/enum_trait
+
 enum Numbers : int16 {
     zero
     one
@@ -97,13 +99,13 @@ def test {
     assert(foo16.e16 == SomeEnum_16.SomeEnum_16_one)
     assert(int(foo16.e16) == 1)
     assert(typeinfo sizeof(foo16.e16) == 2)
-    for (e, tt in each_enum(BooHoo.boo), fixed_array<int>(0, 1, 5)) {
+    for (e, tt in type<BooHoo>, fixed_array<int>(0, 1, 5)) {
         assert(int(e) == tt)
     }
-    for (e, tt in each_enum(BooHoo8.boo), fixed_array<int>(1, 2, 3)) {
+    for (e, tt in type<BooHoo8>, fixed_array<int>(1, 2, 3)) {
         assert(int(e) == tt)
     }
-    for (e, tt in each_enum(BooHoo16.boo), fixed_array<int>(4, 5, 6)) {
+    for (e, tt in type<BooHoo16>, fixed_array<int>(4, 5, 6)) {
         assert(int(e) == tt)
     }
     // binds
