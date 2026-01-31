@@ -1165,6 +1165,7 @@ namespace das
         bool compileBuiltinModule ( const string & name, const unsigned char * const str, unsigned int str_len );//will replace last symbol to 0
         static Module * require ( const string & name );
         static Module * requireEx ( const string & name, bool allowPromoted );
+        static Module * requireExOrDll ( const string & name, bool allowPromoted );
         static void Initialize();
         static void CollectFileInfo(das::vector<FileInfoPtr> &accesses);
         static void Shutdown();
@@ -1268,6 +1269,19 @@ namespace das
             ClassName * module_##ClassName = new ClassName(); \
             return module_##ClassName; \
         }
+
+    #define REGISTER_DYN_MODULE(ClassName, ExtName) \
+        extern "C" { \
+            DAS_EXPORT_DLL das::Module * register_dyn_##ExtName () { \
+                das::daScriptEnvironment::ensure(); \
+                ClassName * module_##ClassName = new ClassName(); \
+                return module_##ClassName; \
+            } \
+        }
+
+    static inline string getModuleRegistratorName(const string &mod) {
+        return string("register_dyn_") + mod;
+    }
 
     #define REGISTER_MODULE_IN_NAMESPACE(ClassName,Namespace) \
         DAS_EXPORT_DLL das::Module * register_##ClassName () { \
