@@ -138,7 +138,14 @@ namespace das {
                                     mod += *src ++;
                                 }
                                 if ( isReq ) {
-                                    req.push_back({mod, line, chain});
+                                    bool isPublic = false;
+                                    while ( src < src_end && src[0] == ' ' ) {
+                                        src ++;
+                                    }
+                                    if ( src + 6 < src_end && memcmp(src, "public", 6) == 0 ) {
+                                        isPublic = true;
+                                    }
+                                    req.push_back({mod, line, chain, isPublic});
                                 } else if ( isInc ) {
                                     string incFileName = access->getIncludeFileName(fi->name,mod);
                                     auto info = access->getFileInfo(incFileName);
@@ -286,9 +293,9 @@ namespace das {
                 if ( log ) {
                     *log << string(tab,'\t') << "require " << mod << "\n";
                 }
-                if ( !access->canBeRequired(mod, fileName) )
+                if ( !access->canBeRequired(mod, fileName, modRec.isPublic) )
                 {
-                    notAllowed.push_back({mod, modRec.line, chain});
+                    notAllowed.push_back({mod, modRec.line, chain, modRec.isPublic});
                     if ( log ) {
                         *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - CAN'T BE REQUIRED\n";
                     }
@@ -314,7 +321,7 @@ namespace das {
                                 if ( log ) {
                                     *log << string(tab,'\t') << "from " << fileName << " require " << modRec.name << " - CIRCULAR DEPENDENCY\n";
                                 }
-                                circular.push_back({modRec.name, modRec.line, chain});
+                                circular.push_back({modRec.name, modRec.line, chain, modRec.isPublic});
                                 return false;
                             }
                             dependencies.insert(mod);
