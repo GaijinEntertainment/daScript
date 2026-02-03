@@ -975,6 +975,7 @@ namespace das
                 bool    lateShutdown : 1;
                 bool    hasTryRecover : 1;           // has try { } recover { }
                 bool    hasUnsafe : 1;               // has unsafe { }
+                bool    isConstClassMethod : 1;      // method is const
             };
             uint32_t moreFlags = 0;
         };

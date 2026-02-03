@@ -699,6 +699,7 @@ namespace das {
             const LineInfo & fromBlock, const LineInfo & annLAt ) {
         func->atDecl = fromBlock;
         func->body = block;
+        func->isConstClassMethod = cnst;
         auto isGeneric = func->isGeneric();
         if ( !yyextra->g_thisStructure ) {
             das_yyerror(scanner,"internal error or invalid macro. member function is declared outside of a class",
