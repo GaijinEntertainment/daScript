@@ -330,6 +330,9 @@ namespace das {
             if ( fn->isClassMethod ) {
                 ss << "[";
                 ss << (fn->isStaticClassMethod ? "static_class_method" : "class_method");
+                if ( fn->isConstClassMethod ) {
+                    ss << " const";
+                }
                 ss << "(" << fn->classParent->getMangledName() << ")]\n";
             }
             if ( fn->generator ) { ss << "[GENERATOR]\n"; }

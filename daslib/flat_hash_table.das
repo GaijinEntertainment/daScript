@@ -9,6 +9,7 @@ require daslib/ast_boost
 require daslib/templates_boost
 require daslib/typemacro_boost
 require daslib/macro_boost
+require daslib/class_boost
 
 //! TFlatHashTable is a hash map that uses open addressing with linear probing.
 [skip_field_lock_check, template_structure(KeyType, ValueType, hashFunctionName=@@hash)]
@@ -62,99 +63,92 @@ struct template TFlatHashTable {
         mask = initialSize - 1
     }
 
-    def static empty(var self : TFlatHashTable explicit) : bool {
-        return self.data_length == 0
+    [class_method]
+    def static const empty() : bool {
+        return data_length == 0
     }
 
-    def static length(var self : TFlatHashTable explicit) : int {
-        return self.data_length
+    [class_method]
+    def static const length() : int {
+        return data_length
     }
 
-    def static clear(var self : TFlatHashTable explicit) {
-        with (self) {
-            for (h in hashes) {
-                h = 0ul
-            }
-            data_length = 0
-            tombstones = 0
+    [class_method]
+    def static clear() {
+        for (h in hashes) {
+            h = 0ul
         }
+        data_length = 0
+        tombstones = 0
     }
 
-    def static grow(var self : TFlatHashTable explicit) {
-        with (self) {
-            let newSize = capacity * 2
-            self |> reserve(newSize)
-        }
+    [class_method]
+    def static grow() {
+        let newSize = capacity * 2
+        self |> reserve(newSize)
     }
 
-    def static rehash(var self : TFlatHashTable explicit) {
-        with (self) {
-            self |> reserve(capacity)
-        }
+    [class_method]
+    def static rehash() {
+        self |> reserve(capacity)
     }
 
-    [hint(unsafe_range_check, noalias=self)]
-    def static reserve(var self : TFlatHashTable explicit; newSize : int) {
+    [class_method, hint(unsafe_range_check, noalias=self)]
+    def static reserve(newSize : int) {
         assert((newSize & (newSize - 1)) == 0, "size must be a power of 2")
-        with (self) {
-            var newkey_data : array<KeyType>
-            var newHashes : array<uint64>
-            var newvalue_data : array<ValueType>
-            newkey_data |> resize(newSize)
-            newHashes |> resize(newSize)
-            newvalue_data |> resize(newSize)
-            mask = newSize - 1
-            swap(newkey_data, key_data)
-            swap(newHashes, hashes)
-            swap(newvalue_data, value_data)
-            data_length = 0
-            tombstones = 0
-            capacity = newSize
-            for (k, v, h in newkey_data, newvalue_data, newHashes) {
-                if (h > 1ul) {
-                    self[k] <- v
-                }
+        var newkey_data : array<KeyType>
+        var newHashes : array<uint64>
+        var newvalue_data : array<ValueType>
+        newkey_data |> resize(newSize)
+        newHashes |> resize(newSize)
+        newvalue_data |> resize(newSize)
+        mask = newSize - 1
+        swap(newkey_data, key_data)
+        swap(newHashes, hashes)
+        swap(newvalue_data, value_data)
+        data_length = 0
+        tombstones = 0
+        capacity = newSize
+        for (k, v, h in newkey_data, newvalue_data, newHashes) {
+            if (h > 1ul) {
+                self[k] <- v
             }
-            newkey_data |> resize(0)
-            newHashes |> resize(0)
-            newvalue_data |> resize(0)
-            delete newkey_data
-            delete newHashes
-            delete newvalue_data
         }
+        newkey_data |> resize(0)
+        newHashes |> resize(0)
+        newvalue_data |> resize(0)
+        delete newkey_data
+        delete newHashes
+        delete newvalue_data
     }
 
-    [hint(unsafe_range_check, noalias=self)]
-    def static key_index(self : TFlatHashTable explicit; key : KeyType) {
-        with (self) {
-            let hash = $c(hashFunctionName)(key)
-            var index = int(hash) & mask
-            while (true) {
-                let h = hashes[index]
-                if (h == hash) {
-                    if (key_data[index] == key) {   // otherwise skip matching hash collision
-                        return index
-                    }
-                } elif (h == 0ul) {               // empty, key not found
-                    break
+    [class_method, hint(unsafe_range_check, noalias=self)]
+    def static const key_index(key : KeyType) {
+        let hash = $c(hashFunctionName)(key)
+        var index = int(hash) & mask
+        while (true) {
+            let h = hashes[index]
+            if (h == hash) {
+                if (key_data[index] == key) {   // otherwise skip matching hash collision
+                    return index
                 }
-                // skip hash collision or tombstone(1)
-                index = (index + 1) & mask
+            } elif (h == 0ul) {               // empty, key not found
+                break
             }
-            return -1
+            // skip hash collision or tombstone(1)
+            index = (index + 1) & mask
         }
+        return -1
     }
 
-    [hint(unsafe_range_check, noalias=self)]
-    def static key_exists(self : TFlatHashTable explicit; key : KeyType) {
-        with (self) {
-            let index = self |> key_index(key)
-            return index != -1
-        }
+    [class_method, hint(unsafe_range_check, noalias=self)]
+    def static const key_exists(key : KeyType) {
+        let index = self |> key_index(key)
+        return index != -1
     }
 
-    [hint(unsafe_range_check, noalias=self)]
-    def static get(var self : TFlatHashTable == const explicit; key : KeyType; blk : block<(var v : ValueType) : void>) : bool {
+    [explicit_const_class_method, hint(unsafe_range_check, noalias=self)]
+    def static get(key : KeyType; blk : block<(var v : ValueType) : void>) : bool {
         with (self) {
             let index = self |> key_index(key)
             if (index != -1) {
@@ -166,8 +160,8 @@ struct template TFlatHashTable {
         }
     }
 
-    [hint(unsafe_range_check, noalias=self)]
-    def static get(self : TFlatHashTable == const explicit; key : KeyType; blk : block<(v : ValueType) : void>) : bool {
+    [explicit_const_class_method, hint(unsafe_range_check, noalias=self)]
+    def static const get(key : KeyType; blk : block<(v : ValueType) : void>) : bool {
         with (self) {
             let index = self |> key_index(key)
             if (index != -1) {
@@ -179,23 +173,21 @@ struct template TFlatHashTable {
         }
     }
 
-    [hint(unsafe_range_check, noalias=self)]
-    def static erase(var self : TFlatHashTable explicit; key : KeyType) : bool {
-        with (self) {
-            let index = self |> key_index(key)
-            if (index != -1) {
-                hashes[index] = 1ul   // tombstone
-                tombstones ++
-                data_length --
-                return true
-            } else {
-                return false
-            }
+    [class_method, hint(unsafe_range_check, noalias=self)]
+    def static erase(key : KeyType) : bool {
+        let index = self |> key_index(key)
+        if (index != -1) {
+            hashes[index] = 1ul   // tombstone
+            tombstones ++
+            data_length --
+            return true
+        } else {
+            return false
         }
     }
 
-    [hint(unsafe_range_check, noalias=self)]
-    def static foreach(self : TFlatHashTable == const explicit; blk : block<(k : KeyType; v : ValueType) : void>) {
+    [explicit_const_class_method, hint(unsafe_range_check, noalias=self)]
+    def static const foreach(blk : block<(k : KeyType; v : ValueType) : void>) {
         with (self) {
             for (k, v, h in key_data, value_data, hashes) {
                 if (h > 1ul) {
@@ -205,8 +197,8 @@ struct template TFlatHashTable {
         }
     }
 
-    [hint(unsafe_range_check, noalias=self)]
-    def static foreach(var self : TFlatHashTable == const explicit; blk : block<(k : KeyType; var v : ValueType) : void>) {
+    [explicit_const_class_method, hint(unsafe_range_check, noalias=self)]
+    def static foreach(blk : block<(k : KeyType; var v : ValueType) : void>) {
         with (self) {
             for (k, v, h in key_data, value_data, hashes) {
                 if (h > 1ul) {
@@ -216,8 +208,8 @@ struct template TFlatHashTable {
         }
     }
 
-    [unsafe_outside_of_for]
-    def static keys(var self : TFlatHashTable explicit) {
+    [class_method, unsafe_outside_of_for]
+    def static keys() {
         var pself = unsafe(addr(self))
         return <- generator<KeyType&>() <| $() {
             for (h, k in pself.hashes, pself.key_data) {
@@ -231,8 +223,8 @@ struct template TFlatHashTable {
         }
     }
 
-    [unsafe_outside_of_for]
-    def static values(var self : TFlatHashTable == const explicit) {
+    [explicit_const_class_method, unsafe_outside_of_for]
+    def static values() {
         var pself = unsafe(addr(self))
         return <- generator<ValueType&>() <| $() {
             for (h, v in pself.hashes, pself.value_data) {
@@ -246,8 +238,8 @@ struct template TFlatHashTable {
         }
     }
 
-    [unsafe_outside_of_for]
-    def static values(self : TFlatHashTable == const explicit) {
+    [explicit_const_class_method, unsafe_outside_of_for]
+    def static const values() {
         var pself = unsafe(addr(self))
         return <- generator<ValueType const&>() <| $() {
             for (h, v in pself.hashes, pself.value_data) {
@@ -261,87 +253,79 @@ struct template TFlatHashTable {
         }
     }
 
-    [hint(unsafe_range_check, noalias=self)]
-    def static operator [] (var self : TFlatHashTable == const explicit; key : KeyType) : ValueType & {
-        with (self) {
-            if (data_length > (capacity >> 1)) {// ((mask+1)*2/3)
-                self |> grow()
-            } elif (((capacity - data_length) >> 1) < tombstones) {
-                self |> rehash()
-            }
-            let hash = $c(hashFunctionName)(key)
-            var index = int(hash) & mask
-            var lastTombstone = -1
-            while (true) {
-                let h = hashes[index]
-                if (h == hash) {
-                    if (key_data[index] == key) {   // otherwise skip matching hash collision
-                        unsafe {
-                            return value_data[index]
-                        }
-                    }
-                } elif (h == 1ul) {
-                    if (lastTombstone == -1) {
-                        lastTombstone = index
-                    }
-                } elif (h == 0ul) {
-                    if (lastTombstone != -1) {
-                        index = lastTombstone
-                        tombstones --
-                    }
-                    key_data[index] := key
-                    hashes[index] = hash
-                    data_length ++
+    [explicit_const_class_method, hint(unsafe_range_check, noalias=self)]
+    def static operator [] (key : KeyType) : ValueType & {
+        if (data_length > (capacity >> 1)) {// ((mask+1)*2/3)
+            self |> grow()
+        } elif (((capacity - data_length) >> 1) < tombstones) {
+            self |> rehash()
+        }
+        let hash = $c(hashFunctionName)(key)
+        var index = int(hash) & mask
+        var lastTombstone = -1
+        while (true) {
+            let h = hashes[index]
+            if (h == hash) {
+                if (key_data[index] == key) {   // otherwise skip matching hash collision
                     unsafe {
                         return value_data[index]
                     }
                 }
-                index = (index + 1) & mask
-            }
-            panic("unreachable")
-            unsafe {
-                return value_data[0] // we never get here due to panic
-            }
-        }
-    }
-
-    [hint(unsafe_range_check, noalias=self)]
-    def static operator [] (self : TFlatHashTable == const explicit; key : KeyType) : ValueType const & {
-        with (self) {
-            let index = self |> key_index(key)
-            if (index != -1) {
+            } elif (h == 1ul) {
+                if (lastTombstone == -1) {
+                    lastTombstone = index
+                }
+            } elif (h == 0ul) {
+                if (lastTombstone != -1) {
+                    index = lastTombstone
+                    tombstones --
+                }
+                key_data[index] := key
+                hashes[index] = hash
+                data_length ++
                 unsafe {
                     return value_data[index]
                 }
             }
-            panic("key not found")
+            index = (index + 1) & mask
+        }
+        panic("unreachable")
+        unsafe {
+            return value_data[0] // we never get here due to panic
+        }
+    }
+
+    [explicit_const_class_method, hint(unsafe_range_check, noalias=self)]
+    def static const operator [] (key : KeyType) : ValueType const & {
+        let index = self |> key_index(key)
+        if (index != -1) {
             unsafe {
-                return value_data[0] // we never get here due to panic
+                return value_data[index]
             }
+        }
+        panic("key not found")
+        unsafe {
+            return value_data[0] // we never get here due to panic
         }
     }
 
-    [hint(unsafe_range_check, noalias=self)]
-    def static operator ?[] (var self : TFlatHashTable == const explicit; key : KeyType) : ValueType ? {
-        with (self) {
-            let index = self |> key_index(key)
-            if (index != -1) {
-                return unsafe(addr(value_data[index]))
-            } else {
-                return null
-            }
+    [explicit_const_class_method, hint(unsafe_range_check, noalias=self)]
+    def static operator ?[] (key : KeyType) : ValueType ? {
+        let index = self |> key_index(key)
+        if (index != -1) {
+            return unsafe(addr(value_data[index]))
+        } else {
+            return null
         }
     }
 
-    [hint(unsafe_range_check, noalias=self)]
-    def static operator ?[] (self : TFlatHashTable == const explicit; key : KeyType) : ValueType const ? {
-        with (self) {
-            let index = self |> key_index(key)
-            if (index != -1) {
-                return unsafe(addr(value_data[index]))
-            } else {
-                return null
-            }
+    [explicit_const_class_method, hint(unsafe_range_check, noalias=self)]
+    def static const operator ?[] (key : KeyType) : ValueType const ? {
+        let index = self |> key_index(key)
+        if (index != -1) {
+            return unsafe(addr(value_data[index]))
+        } else {
+            return null
         }
     }
 }
