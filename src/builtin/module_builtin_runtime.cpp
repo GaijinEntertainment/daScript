@@ -447,6 +447,7 @@ namespace das
         virtual bool touch(const StructurePtr & ps, ModuleGroup &,
                            const AnnotationArgumentList &, string & ) override {
             ps->genCtor = true;
+            ps->noGenCtor = true;
             return true;
         }
         virtual bool look ( const StructurePtr &, ModuleGroup &,

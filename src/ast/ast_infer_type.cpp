@@ -10330,7 +10330,8 @@ namespace das {
             }
             auto isClassCtor = !expr->nativeClassInitializer &&
                 (expr->useInitializer || expr->usedInitializer) &&
-                expr->makeType && (expr->makeType->isClass() || (expr->alwaysUseInitializer && expr->makeType->isStructure()));
+                expr->makeType && (expr->makeType->isClass() ||
+                (expr->alwaysUseInitializer && expr->makeType->isStructure() && !expr->makeType->structType->noGenCtor));
             if (  isClassCtor ) {
                 auto st = expr->makeType->structType;
                 // auto ctorName = st->module->name  + "::" + st->name;
