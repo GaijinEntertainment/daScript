@@ -276,18 +276,22 @@ int das_aot_main ( int argc, char * argv[] ) {
         cfg.cross_platform = cross_platform;
         compiled = compileStandalone(argv[2], argv[3], cfg);
     } else {
-        if (argv[2] == string("aot_das_mode")) {
+        if (argv[2] == string("aot_file_mode")) {
             auto f = get_file_access(nullptr);
             const char *src;
             uint32_t len;
             f->getFileInfo(argv[3])->getSourceAndLength(src, len);
             string_view content(src, len);
             size_t pos = 0;
+            // Old MAC uses `\r`. Windows uses `\r\n`. Linux uses `\n`.
+            // Solution below is not optimal, but simplest.
+            // We will remove it, once switched to the das aot completely.
             while (pos < content.length()) {
-                size_t end = content.find('\n', pos);
+                size_t end1 = content.find('\n', pos);
+                size_t end2 = content.find('\r', pos);
+                size_t end = das::min(end1, end2);
                 string_view line = content.substr(pos, end - pos);
                 pos = (end == string_view::npos) ? content.length() : end + 1;
-
                 if (line.empty()) continue;
 
                 auto mode_end = line.find(' ');
@@ -295,14 +299,21 @@ int das_aot_main ( int argc, char * argv[] ) {
 
                 // No need to support contexts. This is temporary.
                 if (line.substr(0, mode_end) != "aot") {
-                    tout << "Uknown mode on line `" << string(line) << "`, skipping.\n";
+                    if (!quiet) {
+                        tout << "Uknown mode on line `" << string(line) << "`, skipping.\n";
+                    }
                     continue;
                 }
 
                 string in_file(line.substr(mode_end + 1, in_file_end - mode_end - 1));
                 string out_file(line.substr(in_file_end + 1));
 
-                compiled = compile(in_file, out_file, dryRun, cross_platform);
+                // Use `or` here, to return `true` if at least one file compiled successfully.
+                auto is_ok = compile(in_file, out_file, dryRun, cross_platform);
+                if (!is_ok && !quiet) {
+                    tout << "Failed to compile `" << string(in_file) << "` in aot.\n";
+                }
+                compiled |= is_ok;
             }
         } else {
             compiled = compile(argv[2], argv[3], dryRun, cross_platform);

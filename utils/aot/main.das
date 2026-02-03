@@ -53,6 +53,16 @@ def get_list_of_files(args : array<string>, key : string) {
     return <- result
 }
 
+
+def private normalize_line_endings(text : string) : string {
+    // Convert all line endings to LF for consistent comparison
+    var result = text
+    result = replace(result, "\r\n", "\n")  // Windows CRLF -> LF
+    result = replace(result, "\r", "\n")    // Old Mac CR -> LF
+    return result
+}
+
+
 def parse_input_file(filename : string) {
     var aot_files = array<tuple<string; string>>()
     var aot_lib_files = array<tuple<string; string>>()
@@ -62,7 +72,7 @@ def parse_input_file(filename : string) {
             print("Couldn't open input file {filename}\n")
         }
         fread(fr) <| $(data) {
-            for (line in data |> split("\n")) {
+            for (line in normalize_line_endings(string(data)) |> split("\n")) {
                 if (line.empty()) {
                     continue
                 }
@@ -76,7 +86,7 @@ def parse_input_file(filename : string) {
                 } elif (mode == "ctx") {
                     ctx_files |> push((parts[1], parts[2]))
                 } else {
-                    panic("Unexpected mode {mode}. Choose `aot` or `ctx`.\n")
+                    to_log(LOG_DEBUG, "Unexpected mode {mode}. Choose `aot` or `ctx`.\n")
                 }
             }
         }
