@@ -3748,7 +3748,7 @@ namespace das {
                                     callName = "_::" + valueType->structType->name + "`" + methodName;
                                     newCall->name = callName;
                                     fcall = inferFunctionCall(newCall.get(), InferCallError::tryOperator);
-                                    if ( fcall != nullptr || newCall->name != callName ) {
+                                    if ( (fcall != nullptr && fcall->isStaticClassMethod) || newCall->name != callName ) {
                                         reportAstChanged();
                                         return newCall;
                                     }
@@ -3760,7 +3760,7 @@ namespace das {
                                     derefValue->type->constant |= valueType->constant;
                                     newCall->arguments[0] = derefValue;
                                     fcall = inferFunctionCall(newCall.get(), InferCallError::tryOperator);
-                                    if ( fcall != nullptr || newCall->name != callName ) {
+                                    if ( (fcall != nullptr && fcall->isStaticClassMethod) || newCall->name != callName ) {
                                         reportAstChanged();
                                         return newCall;
                                     }
