@@ -1,10 +1,21 @@
 #pragma once
 
-#include "daScript/ast/ast.h"
-#include "daScript/ast/ast_expressions.h"
-#include "daScript/ast/ast_visitor.h"
+#include "daScript/misc/vectypes.h"
+#include "daScript/misc/arraytype.h"
+#include "daScript/misc/smart_ptr.h"
 
 namespace das {
+
+    class Context;
+    class LineInfo;
+    class LineInfoArg;
+    class Function;
+    class ExprCallFunc;
+    class ExprStringBuilder;
+
+    struct TypeDecl;
+    typedef smart_ptr<TypeDecl> TypeDeclPtr;
+
     float4 das_invoke_code ( void * pfun, vec4f anything, void * cmres, Context * context );
     bool das_is_jit_function ( const Func func );
     bool das_remove_jit ( const Func func );
