@@ -1,16 +1,25 @@
+#include "daScript/daScriptModule.h"
 #include "daScript/misc/platform.h"
 
 #include "daScript/misc/performance_time.h"
 #include "daScript/misc/sysos.h"
-#include "daScript/simulate/aot.h"
+
+#include "daScript/ast/ast.h"                     // astTypeInfo
+#include "daScript/ast/ast_handle.h"              // addConstant
+#include "daScript/ast/ast_interop.h"             // addExtern
+
 #include "daScript/simulate/aot_builtin_jit.h"
-#include "daScript/simulate/aot_builtin_ast.h"
-#include "daScript/ast/ast.h"
-#include "daScript/ast/ast_handle.h"
-#include "daScript/ast/ast_visitor.h"
+#include "daScript/simulate/aot_builtin.h"
+#include "daScript/simulate/debug_info.h"
+#include "daScript/simulate/debug_print.h"
+#include "daScript/simulate/hash.h"               // stringLength
+#include "daScript/simulate/simulate.h"
+#include "daScript/simulate/simulate_visit_op.h"
+
 #include "daScript/misc/fpe.h"
 #include "daScript/misc/sysos.h"
 #include "misc/include_fmt.h"
+
 #include "module_builtin_rtti.h"
 #include "module_builtin_ast.h"
 
@@ -19,6 +28,64 @@
 #include <inttypes.h>
 
 namespace das {
+    typedef vec4f ( * JitFunction ) ( Context * , vec4f *, void * );
+
+    struct SimNode_Jit : SimNode {
+        SimNode_Jit ( const LineInfo & at, JitFunction eval )
+            : SimNode(at), func(eval) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
+        virtual bool rtti_node_isJit() const override { return true; }
+        JitFunction func = nullptr;
+        // saved original node
+        SimNode * saved_code = nullptr;
+        bool saved_aot = false;
+        void * saved_aot_function = nullptr;
+    };
+
+    struct SimNode_JitBlock;
+
+    struct JitBlock : Block {
+        vec4f   node[10];
+    };
+
+    struct SimNode_JitBlock : SimNode_ClosureBlock {
+        SimNode_JitBlock ( const LineInfo & at, JitBlockFunction eval, Block * bptr, uint64_t ad )
+            : SimNode_ClosureBlock(at,false,false,ad), func(eval), blockPtr(bptr) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
+        JitBlockFunction func = nullptr;
+        Block * blockPtr = nullptr;
+    };
+    static_assert(sizeof(SimNode_JitBlock)<=sizeof(JitBlock().node),"jit block node must fit under node size");
+
+
+    DAS_SUPPRESS_UB vec4f SimNode_Jit::eval ( Context & context ) {
+        auto result = func(&context, context.abiArg, context.abiCMRES);
+        context.result = result;
+        return result;
+    }
+
+    SimNode * SimNode_JitBlock::visit ( SimVisitor & vis ) {
+        uint64_t fptr = (uint64_t) func;
+        V_BEGIN();
+        V_OP(JitBlock);
+        V_ARG(fptr);
+        V_END();
+    }
+
+    DAS_SUPPRESS_UB vec4f SimNode_JitBlock::eval ( Context & context ) {
+        auto ba = (BlockArguments *) ( context.stack.bottom() + blockPtr->argumentsOffset );
+        return func(&context, ba->arguments, ba->copyOrMoveResult, blockPtr );
+    }
+
+    SimNode * SimNode_Jit::visit ( SimVisitor & vis ) {
+        uint64_t fptr = (uint64_t) func;
+        V_BEGIN();
+        V_OP(Jit);
+        V_ARG(fptr);
+        V_END();
+    }
 
     float4 das_invoke_code ( void * pfun, vec4f anything, void * cmres, Context * context ) {
         vec4f * arguments = cast<vec4f *>::to(anything);
