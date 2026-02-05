@@ -34,7 +34,7 @@ jobs:
         with:
           # Cache LLVM.dll, to make CI faster.
           path: build/_deps/das_llvm_shared_lib-src
-          key: ${{ runner.os }}-luajit-${{ hashFiles('modules/dasLLVM/CMakeLists.txt') }}
+          key: ${{ runner.os }}-${{ hashFiles('modules/dasLLVM/CMakeLists.txt') }}
 
   ###########################################################
   build:
@@ -240,7 +240,6 @@ jobs:
                 CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -G \
                         "${{ matrix.cmake_generator }}" -DDAS_ENABLE_DLL=${{ env.das_dll_build }} -DDAS_USE_SANITIZER=${{ matrix.sanitizers }} -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }}
                 cd build
-                ninja daslang
                 ninja
                 ;;
               windows32)
@@ -256,7 +255,6 @@ jobs:
               *)
                 CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DDAS_ENABLE_DLL=${{ env.das_dll_build }} -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture_string }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }} -G "${{ matrix.cmake_generator }}"
                 cd build
-                ninja daslang
                 ninja
                 ;;
             esac
