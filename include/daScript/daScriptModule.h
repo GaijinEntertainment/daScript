@@ -1,5 +1,5 @@
 #pragma once
-#include <stdint.h>
+#include "daScript/misc/platform.h" // DAS_THREAD_LOCAL
 
 namespace das
 {

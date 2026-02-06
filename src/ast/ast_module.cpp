@@ -170,6 +170,9 @@ namespace das {
             m = m->next;
             delete pM;
         }
+        // Free allocated structures for dynamic modules.
+        delete daScriptEnvironment::getBound()->g_dyn_modules_resolve;
+
         clearGlobalAotLibrary();
         resetFusionEngine();
         daScriptEnvironment::setBound(nullptr);
