@@ -9,8 +9,8 @@ using namespace das;
 
 void use_utf8();
 
-void require_project_specific_modules();//link time resolved dependencies
 das::FileAccessPtr get_file_access( char * pak );//link time resolved dependencies
+bool require_dynamic_modules(string, TextWriter&);//link time resolved dependencies
 
 TextPrinter tout;
 
@@ -176,6 +176,8 @@ int das_aot_main ( int argc, char * argv[] ) {
     bool das_mode = false;
     char * standaloneContextName = nullptr;
     char * standaloneClassName = nullptr;
+
+    string project_root;
     if ( argc>3  ) {
         for (int ai = 4; ai != argc; ++ai) {
             if ( strcmp(argv[ai],"-q")==0 ) {
@@ -211,6 +213,9 @@ int das_aot_main ( int argc, char * argv[] ) {
                 }
                 setDasRoot(argv[ai+1]);
                 ai += 1;
+            } else if ( strcmp(argv[ai],"-project-root") ) {
+                project_root = argv[ai + 1];
+                ai++;
             } else if ( strcmp(argv[ai],"-v2syntax")==0 ) {
                 version2syntax = true;
             } else if ( strcmp(argv[ai],"-v1syntax")==0 ) {
@@ -266,8 +271,16 @@ int das_aot_main ( int argc, char * argv[] ) {
     if (!Module::require("dasbind")) {
         NEED_MODULE(Module_DASBIND);
     }
-    require_project_specific_modules();
+    #ifndef DAS_ENABLE_DLL
     #include "modules/external_need.inc"
+    #endif
+    #ifdef DAS_ENABLE_DYN_MODULES
+    daScriptEnvironment::ensure();
+    if (!project_root.empty() && getDasRoot() != project_root) {
+        require_dynamic_modules(project_root, tout);
+    }
+    require_dynamic_modules(getDasRoot(), tout);
+    #endif
     Module::Initialize();
     daScriptEnvironment::getBound()->g_isInAot = true;
     bool compiled = false;
@@ -476,6 +489,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     bool outputProgramCode = false;
     bool pauseAfterDone = false;
     bool dryRun = false;
+    string project_root;
     optional<format::FormatOptions> formatter;
     for ( int i=1; i < argc; ++i ) {
         if ( argv[i][0]=='-' ) {
@@ -527,6 +541,9 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 outputProgramCode = true;
             } else if ( cmd=="dry-run" ) {
                 dryRun = true;
+            } else if ( cmd=="project-root" ) {
+                project_root = argv[i + 1];
+                i++;
             } else if ( cmd=="run-fmt" ) {
                 formatter.emplace();
                 if ( i+2 > argc ) {
@@ -654,8 +671,18 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     NEED_MODULE(Module_JobQue);
     NEED_MODULE(Module_FIO);
     NEED_MODULE(Module_DASBIND);
-    require_project_specific_modules();
+
+    #ifndef DAS_ENABLE_DLL
     #include "modules/external_need.inc"
+    #endif
+    // Search for external modules and init them. Only if flag is enabled.
+    #ifdef DAS_ENABLE_DYN_INCLUDES
+    daScriptEnvironment::ensure();
+    if (!project_root.empty() && getDasRoot() != project_root) {
+        require_dynamic_modules(project_root, tout);
+    }
+    require_dynamic_modules(getDasRoot(), tout);
+    #endif
     Module::Initialize();
 
     if (formatter) {

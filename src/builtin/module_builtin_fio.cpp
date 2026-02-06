@@ -1,9 +1,11 @@
+#include "daScript/ast/ast.h"
 #include "daScript/misc/platform.h"
 
 #include "module_builtin.h"
 
-#include "daScript/simulate/aot_builtin_fio.h"
+#include "daScript/daScriptModule.h"
 
+#include "daScript/simulate/aot_builtin_fio.h"
 #include "daScript/simulate/simulate_nodes.h"
 #include "daScript/ast/ast_interop.h"
 #include "daScript/ast/ast_policy_types.h"
@@ -576,6 +578,44 @@ namespace das {
         return context->allocateString(res, at);
     }
 
+    // Returns DLL handle.
+    void *register_dynamic_module(const char *path, const char *mod_name, Context * context, LineInfoArg * at ) {
+        auto lib = loadDynamicLibrary(path);
+        if (!lib) {
+            return nullptr;
+        }
+        const auto regName = getDynModuleRegistratorName(mod_name);
+        auto rawFn = getFunctionAddress(lib, regName.c_str());
+        if (rawFn) {
+            auto fn = reinterpret_cast<Module*(*)(void)>(rawFn);
+            *ModuleKarma += unsigned(intptr_t(fn()));
+        } else {
+            printf("Failed to find fn %s in %s\n",regName.c_str(), path);
+            closeLibrary(lib);
+            lib = nullptr;
+        }
+        return lib;
+    }
+
+    void register_native_path(const char *mod_name, const char *src_path, const char *dst_path, Context * context, LineInfoArg * at ) {
+        // daScriptEnvironment::ensure() will help, but let's keep assertion.
+        DAS_ASSERTF(daScriptEnvironment::getBound(), "When register_native_path called we expect that environment is already set.");
+        auto &mod_resolve = daScriptEnvironment::getBound()->g_dyn_modules_resolve;
+        if (mod_resolve == nullptr) {
+            mod_resolve = new vector<DynamicModuleInfo>();
+        }
+        size_t mod_id = 0;
+        auto cur_mod = find_if(mod_resolve->begin(), mod_resolve->end(), [&mod_name](DynamicModuleInfo &mod) {
+            return mod.name == mod_name;
+        });
+        if (cur_mod == mod_resolve->end()) {
+            // Add new module
+            mod_resolve->emplace_back(DynamicModuleInfo{mod_name,{}});
+            cur_mod = (--mod_resolve->end());
+        }
+        cur_mod->paths.emplace_back(src_path, dst_path);
+    }
+
     char * sanitize_command_line ( const char * cmd, Context * context, LineInfoArg * at ) {
         if ( !cmd ) return nullptr;
         stringstream ss;
@@ -715,6 +755,12 @@ namespace das {
             addExtern<DAS_BIND_FUN(has_env_variable)>(*this, lib, "has_env_variable",
                 SideEffects::accessExternal, "has_env_variable")
                     ->args({"var","context","at"});
+            addExtern<DAS_BIND_FUN(register_dynamic_module)>(*this, lib, "register_dynamic_module",
+                SideEffects::worstDefault, "register_dynamic_module")
+                    ->args({"path", "name", "context","at"});
+            addExtern<DAS_BIND_FUN(register_native_path)>(*this, lib, "register_native_path",
+                SideEffects::worstDefault, "register_native_path")
+                    ->args({"mod_name", "src", "dst", "context","at"});
             addExtern<DAS_BIND_FUN(sanitize_command_line)>(*this, lib, "sanitize_command_line",
                 SideEffects::none, "sanitize_command_line")
                     ->args({"var","context","at"});
