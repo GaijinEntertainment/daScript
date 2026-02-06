@@ -156,6 +156,21 @@ namespace das {
                     return info; \
                 }
             #include "modules/external_resolve.inc"
+            // Try dynamic modules. From modules/<name>/.das_module.
+            auto resolve_mod = daScriptEnvironment::getBound()->g_dyn_modules_resolve;
+            if (resolve_mod) {
+                for (const auto &mod: *resolve_mod) {
+                    if (mod.name == top) {
+                        for (const auto &[from_path, to_path] : mod.paths) {
+                            if (from_path == req.substr(np + 1)) {
+                                info.moduleName = mod_name;
+                                info.fileName = to_path;
+                                return info;
+                            }
+                        }
+                    }
+                }
+            }
             #undef NATIVE_MODULE
             auto ert = extraRoots.find(top);
             if ( ert!=extraRoots.end() ) {

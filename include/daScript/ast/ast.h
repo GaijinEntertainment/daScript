@@ -1271,6 +1271,23 @@ namespace das
             return module_##ClassName; \
         }
 
+    #if DAS_ENABLE_DLL
+        #define REGISTER_DYN_MODULE(ClassName, ExtName) \
+        extern "C" { \
+            DAS_EXPORT_DLL das::Module * register_dyn_##ExtName () { \
+                das::daScriptEnvironment::ensure(); \
+                ClassName * module_##ClassName = new ClassName(); \
+                return module_##ClassName; \
+            } \
+        }
+    #else
+        #define REGISTER_DYN_MODULE(ClassName, ExtName)
+    #endif
+
+    static inline string getDynModuleRegistratorName(const string &mod) {
+        return "register_dyn_" + mod;
+    }
+
     #define REGISTER_MODULE_IN_NAMESPACE(ClassName,Namespace) \
         DAS_EXPORT_DLL das::Module * register_##ClassName () { \
             das::daScriptEnvironment::ensure(); \
@@ -1817,6 +1834,13 @@ namespace das
         return true;
     }
 
+    struct DynamicModuleInfo {
+        ~DynamicModuleInfo();
+        string name;
+        vector<void*> dll_handlers;         // all c++ binded dlls.
+        vector<pair<string, string>> paths; // from -> to
+    };
+
     struct DAS_API daScriptEnvironment {
         ProgramPtr      g_Program;
         bool            g_isInAot = false;
@@ -1829,6 +1853,8 @@ namespace das
         int64_t         macroTimeTicks = 0;
         AstSerializer * serializer_read = nullptr;
         AstSerializer * serializer_write = nullptr;
+
+        vector<DynamicModuleInfo> *g_dyn_modules_resolve = nullptr;
         inline static DAS_THREAD_LOCAL(DebugAgentInstance *) g_threadLocalDebugAgent;
         uint64_t        dataWalkerStringLimit = 0;
 

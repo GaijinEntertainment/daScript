@@ -1,9 +1,15 @@
 #include "daScript/misc/platform.h"
+#include "daScript/misc/sysos.h"
 
 #include "daScript/ast/ast.h"
 
 namespace das {
 
+DynamicModuleInfo::~DynamicModuleInfo() {
+    for (auto handler : dll_handlers) {
+        closeLibrary(handler);
+    }
+}
 
 daScriptEnvironment *daScriptEnvironment::getBound() { return *(daScriptEnvironment::bound); }
 daScriptEnvironment *daScriptEnvironment::getOwned() { return *(daScriptEnvironment::owned); }

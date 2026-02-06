@@ -100,7 +100,7 @@ bool run_tests( const string & path, bool (*test_fn)(const string &, bool useAot
 }
 
 
-void require_project_specific_modules();
+bool require_dynamic_modules(const string&, const string&, TextWriter&);//link time resolved dependencies
 
 void test_thread(bool useAot) {
     ReuseCacheGuard guard;
@@ -123,7 +123,7 @@ void test_thread(bool useAot) {
     NEED_MODULE(Module_JobQue);
     NEED_MODULE(Module_FIO);
     NEED_MODULE(Module_DASBIND);
-    require_project_specific_modules();
+    require_dynamic_modules(getDasRoot(), getDasRoot(), tout);
     #include "modules/external_need.inc"
     if ( VerboseTests )
         tout << "Module::Initialize (" << this_thread_id() << ")\n";
