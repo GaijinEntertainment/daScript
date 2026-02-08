@@ -82,6 +82,44 @@ typedef enum {
     OneTwo_two = 2
 } OneTwo;
 
+// model
+typedef struct {
+    float *     vertices;
+    uint32_t    vertexCount;
+    int         smoothShading;
+} model;
+
+// def make_model ( vtx : array<float> ) : model?
+vec4f make_model ( das_context * ctx, das_node * node, vec4f * args ) {
+    (void)ctx; (void)node;
+    // get array from argument
+    das_array * arr = (das_array *) das_argument_ptr(args[0]);
+    uint32_t size = arr->size;
+    float * data = (float *) arr->data;
+    printf("make_model called with array of size %u\n", size);
+    for ( uint32_t i=0; i!=size; ++i ) {
+        printf("  vtx[%u] = %f\n", i, data[i]);
+    }
+    model * mdl = (model *) malloc ( sizeof(model) );
+    mdl->vertexCount = size;
+    mdl->vertices = (float *) malloc ( sizeof(float) * size );
+    memcpy ( mdl->vertices, data, sizeof(float) * size );
+    mdl->smoothShading = 0;
+    return das_result_ptr(mdl);   // return null model
+}
+
+// def set_smooth_shading ( mdl : model, smooth : bool ) : void
+vec4f set_smooth_shading ( das_context * ctx, das_node * node, vec4f * args ) {
+    (void)ctx; (void)node;
+    model * mdl = (model *) das_argument_ptr(args[0]);
+    int smooth = das_argument_bool(args[1]);
+    printf("set_smooth_shading called with model %p and smooth=%s\n", mdl, smooth ? "true" : "false");
+    if ( mdl ) {
+        mdl->smoothShading = smooth ? 1 : 0;
+    }
+    return das_result_void();
+}
+
 das_module * register_module_tutorial_07() {
     // create module and library
     das_module * mod = das_module_create ("tutorial_07");
@@ -101,6 +139,19 @@ das_module * register_module_tutorial_07() {
     das_module_bind_structure(mod, st);
     // bind das_c_func
     das_module_bind_interop_function(mod, lib, &das_c_func, "das_c_func", "das_c_func", SIDEEFFECTS_modifyExternal, "v i");
+
+    ////////////////
+    // model example
+    ////////////////
+
+    // handled structure 'model'
+    das_structure * mst = das_structure_make(lib, "model", "model", sizeof(model), _Alignof(model));
+    das_structure_add_field(mst, mod, lib, "vertices", "vertices", offsetof(model,vertices), "1<f>?");
+    das_structure_add_field(mst, mod, lib, "vertexCount", "vertexCount", offsetof(model,vertexCount), "u");
+    das_structure_add_field(mst, mod, lib, "smoothShading", "smoothShading", offsetof(model,smoothShading), "i");
+    // bind model functions
+    das_module_bind_interop_function(mod, lib, &make_model, "make_model", "make_model", SIDEEFFECTS_modifyExternal, "1<H<model>>? C1<f>A");
+    das_module_bind_interop_function(mod, lib, &set_smooth_shading, "set_smooth_shading", "set_smooth_shading", SIDEEFFECTS_modifyExternal, "v 1<H<model>>? b");
     // cleanup
     das_modulegroup_release(lib);
     return mod;

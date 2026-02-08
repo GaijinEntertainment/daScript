@@ -29,6 +29,19 @@ def test {
 
     let t = OneTwo.one
     print("t = {t} {OneTwo.two}\n")
+
+    ////////////////
+    // model example
+    ////////////////
+
+    let pos <- [ 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 ]
+    var mdl = make_model(pos)
+    if (mdl == null) {
+        print("model is null\n")
+    } else {
+        mdl.set_smooth_shading(true)
+        debug(mdl, "model after set_smooth_shading")
+    }
 }
 
 
