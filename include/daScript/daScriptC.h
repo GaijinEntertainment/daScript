@@ -81,6 +81,25 @@ typedef struct {
     float x, y, z, w;
 } vec4f_unaligned;
 
+typedef struct {
+    char *      data;
+    uint32_t    size;
+    uint32_t    capacity;
+    uint32_t    lock;
+    uint32_t    flags;
+} das_array;
+
+typedef struct {
+    char *      data;
+    uint32_t    size;
+    uint32_t    capacity;
+    uint32_t    lock;
+    uint32_t    flags;
+    char *      keys;
+    uint32_t *  hashes;
+    uint32_t    tombstones;
+} das_table;
+
 typedef vec4f (das_interop_function) ( das_context * ctx, das_node * node, vec4f * arguments );
 
 typedef void (das_interop_function_unaligned) ( das_context * ctx, das_node * node, vec4f_unaligned * arguments, vec4f_unaligned * result );
@@ -135,11 +154,13 @@ DAS_API void das_module_bind_structure ( das_module * mod, das_structure * st );
 DAS_API void das_module_bind_enumeration ( das_module * mod, das_enumeration * en );
 
 DAS_API int    das_argument_int ( vec4f arg );
+DAS_API int    das_argument_bool ( vec4f arg );
 DAS_API float  das_argument_float ( vec4f arg );
 DAS_API double das_argument_double ( vec4f arg );
 DAS_API char * das_argument_string ( vec4f arg );
 DAS_API void * das_argument_ptr ( vec4f arg );
 
+DAS_API int das_argument_bool_unaligned ( vec4f_unaligned * arg );
 DAS_API int das_argument_int_unaligned ( vec4f_unaligned * arg );
 DAS_API float das_argument_float_unaligned ( vec4f_unaligned * arg );
 DAS_API double das_argument_double_unaligned ( vec4f_unaligned * arg );
@@ -148,6 +169,7 @@ DAS_API void * das_argument_ptr_unaligned ( vec4f_unaligned * arg );
 
 DAS_API vec4f das_result_void ();
 DAS_API vec4f das_result_int ( int r );
+DAS_API vec4f das_result_bool ( int r );
 DAS_API vec4f das_result_float ( float r );
 DAS_API vec4f das_result_double ( double r );
 DAS_API vec4f das_result_string ( char * r );

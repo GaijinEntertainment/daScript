@@ -325,6 +325,7 @@ void das_enumeration_add_value ( das_enumeration * enu, const char * name, const
 }
 
 int    das_argument_int ( vec4f arg ) { return cast<int>::to(arg); }
+int    das_argument_bool ( vec4f arg ) { return cast<bool>::to(arg) ? 1 : 0; }
 float  das_argument_float ( vec4f arg ) { return cast<float>::to(arg); }
 double  das_argument_double ( vec4f arg ) { return cast<double>::to(arg); }
 char * das_argument_string ( vec4f arg ) { char * a = cast<char *>::to(arg); return a ? a : ((char *)""); }
@@ -332,12 +333,14 @@ void * das_argument_ptr ( vec4f arg ) { return cast<void *>::to(arg); }
 
 vec4f das_result_void () { return v_zero(); }
 vec4f das_result_int ( int r ) { return cast<int>::from(r); }
+vec4f das_result_bool ( int r ) { return cast<bool>::from(r != 0); }
 vec4f das_result_float ( float r ) { return cast<float>::from(r); }
 vec4f das_result_double ( double r ) { return cast<double>::from(r); }
 vec4f das_result_string ( char * r ) { return cast<char *>::from(r); }
 vec4f das_result_ptr ( void * r ) { return cast<void *>::from(r); }
 
 int das_argument_int_unaligned ( vec4f_unaligned * arg ) { return cast<int>::to(v_ldu((const float *)arg)); }
+int das_argument_bool_unaligned ( vec4f_unaligned * arg ) { return cast<bool>::to(v_ldu((const float *)arg)) ? 1 : 0; }
 float das_argument_float_unaligned ( vec4f_unaligned * arg ) { return cast<float>::to(v_ldu((const float *)arg)); }
 double das_argument_double_unaligned ( vec4f_unaligned * arg ) { return cast<double>::to(v_ldu((const float *)arg)); }
 char * das_argument_string_unaligned ( vec4f_unaligned * arg ) { char * a = cast<char *>::to(v_ldu((const float *)arg)); return a ? a : ((char *)""); }
