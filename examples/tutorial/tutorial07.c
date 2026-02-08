@@ -73,6 +73,13 @@ vec4f das_c_func ( das_context * ctx, das_node * node, vec4f * args ) {
     return das_result_void();                                       // return result
 }
 
+// this is test function (string)
+vec4f das_c_str_func ( das_context * ctx, das_node * node, vec4f * args ) {
+    (void)ctx; (void)node;
+    printf("from das_c_str_func(%s)\n", das_argument_string(args[0]));  // access argument
+    return das_result_void();                                       // return result
+}
+
 typedef struct {
     int     foo;
     float   bar;
@@ -140,6 +147,8 @@ das_module * register_module_tutorial_07() {
     das_module_bind_structure(mod, st);
     // bind das_c_func
     das_module_bind_interop_function(mod, lib, &das_c_func, "das_c_func", "das_c_func", SIDEEFFECTS_modifyExternal, "v i");
+    // bind das_c_str_func
+    das_module_bind_interop_function(mod, lib, &das_c_str_func, "das_c_str_func", "das_c_str_func", SIDEEFFECTS_modifyExternal, "v s");
 
     ////////////////
     // model example

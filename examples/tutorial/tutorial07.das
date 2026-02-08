@@ -12,6 +12,7 @@ def take_2(a : int; b : float) {
 def test {
     print("this tutorial implements C interfaces\n")
     das_c_func(13)
+    das_c_str_func("hello from das")
 
     var a : intarray
     for (x in range(3)) {
