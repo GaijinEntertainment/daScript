@@ -86,7 +86,7 @@ static Result init_dyn_modules(string path, TextWriter &tout, bool debug = false
     }
 }
 
-static bool init_modules_for_folder(const das::string path, das::TextWriter &tout) {
+static bool init_modules_for_folder(const das::string &path, das::TextWriter &tout) {
     using namespace das;
     string modules_path = path + "/modules/";
     bool all_good = true;
@@ -117,17 +117,23 @@ static bool init_modules_for_folder(const das::string path, das::TextWriter &tou
     }
  #endif
     return all_good;
-
 }
 }
 
+// Initializes dynamic modules from:
+// - das_root/modules
+// - project_root/modules
+// If project_root is empty it will be ignored.
 DAS_API bool require_dynamic_modules(const das::string &das_root,
                                      const das::string &project_root,
                                      das::TextWriter &tout) {
     // Always init for dasroot.
-    init_modules_for_folder(das_root, tout);
-    if (!project_root.empty() && project_root != das_root) {
+    bool all_good = das::init_modules_for_folder(das_root, tout);
+    if (!project_root.empty() &&
+        das::normalizeFileName(das_root.c_str()) !=
+        das::normalizeFileName(project_root.c_str())) {
         // Init for project_root.
-        init_modules_for_folder(das_root, tout);
+        all_good &= das::init_modules_for_folder(project_root, tout);
     }
+    return all_good;
 }

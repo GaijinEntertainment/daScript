@@ -205,6 +205,7 @@ namespace das
         virtual int64_t getFileMtime ( const string & fileName ) const;
         FileInfoPtr letGoOfFileInfo ( const string & fileName );
         virtual ModuleInfo getModuleInfo ( const string & req, const string & from ) const;
+        virtual string getDynModulesFolder () const { return ""; }
         virtual bool isPodInScopeAllowed ( const string & /*moduleName*/, const string & /*fileName*/ ) const { return true; };
         virtual bool isModuleAllowed ( const string &, const string & ) const { return true; };
         virtual bool canModuleBeUnsafe ( const string &, const string & ) const { return true; };
@@ -240,6 +241,7 @@ namespace das
         virtual ~ModuleFileAccess();
         bool failed() const { return !context || !modGet; }
         virtual ModuleInfo getModuleInfo ( const string & req, const string & from ) const override;
+        virtual string getDynModulesFolder () const override;
         virtual string getIncludeFileName ( const string & fileName, const string & incFileName ) const override;
         virtual bool isModuleAllowed ( const string &, const string & ) const override;
         virtual bool canModuleBeUnsafe ( const string &, const string & ) const override;
@@ -260,6 +262,7 @@ namespace das
         SimFunction *       optionAllowed = nullptr;
         SimFunction *       annotationAllowed = nullptr;
         SimFunction *       podInScopeAllowed = nullptr;
+        SimFunction *       dynModulesFolderGet = nullptr;
     };
     template <> struct isCloneable<ModuleFileAccess> : false_type {};
 

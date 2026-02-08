@@ -1,6 +1,7 @@
 #include "daScript/ast/aot_templates.h"
 #include "daScript/daScript.h"
 #include "daScript/das_common.h"
+#include "daScript/misc/sysos.h" // normalizeFileName
 #include "daScript/simulate/fs_file_info.h"
 #include "../dasFormatter/fmt.h"
 #include "daScript/ast/ast_aot_cpp.h"
@@ -10,7 +11,7 @@ using namespace das;
 void use_utf8();
 
 das::FileAccessPtr get_file_access( char * pak );//link time resolved dependencies
-bool require_dynamic_modules(const string &, const string &, TextWriter&);//link time resolved dependencies
+bool require_dynamic_modules(const das::string &, const das::string &, TextWriter&);//link time resolved dependencies
 
 TextPrinter tout;
 
@@ -432,6 +433,37 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
     return success;
 }
 
+// Deduces project_root for dyn modules.
+// First attempt: from command line arguments
+// Second try: project file
+// Third try: path from compiled file
+// Default: empty
+static string deduce_project_root(string maybe_project_root, string compile_file) {
+    if (!maybe_project_root.empty()) {
+        return maybe_project_root;
+    }
+    if (!projectFile.empty()) {
+        auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
+        auto maybe_result = access->getDynModulesFolder();
+        if (!maybe_result.empty()) {
+            return maybe_result;
+        }
+    }
+    if (!compile_file.empty()) {
+        auto filename_start = compile_file.find_last_of("\\/");
+        string project_root;
+        if (filename_start != string::npos) {
+            // Try from directory where first script located
+            project_root = compile_file.substr(0, filename_start);
+        } else {
+            // Try from current directory.
+            project_root = "./";
+        }
+        return project_root;
+    }
+    return "";
+}
+
 void replace( string& str, const string& from, const string& to ) {
     size_t it = str.find(from);
     if( it != string::npos ) {
@@ -448,6 +480,7 @@ void print_help() {
         << "    -v2makeSyntax enable version 1 syntax with version 2 constructors syntax (for arrays/structures)\n"
         << "    -jit        enable Just-In-Time compilation\n"
         << "    -project <path.das_project> path to project file\n"
+        << "    -project_root optional path to root directory of the project (used for dyn modules)\n"
         << "    -run-fmt    <inplace/dry> <v2/v1> <semicolon> run formatter, requires 2 or more arguments\n"
         << "    -log        output program code\n"
         << "    -pause      pause after errors and pause again before exiting program\n"
@@ -698,6 +731,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     #ifdef DAS_ENABLE_DYN_INCLUDES
     // Search for external modules and init them. Only if flag is enabled.
     daScriptEnvironment::ensure();
+    project_root = deduce_project_root(project_root, files.front());
     require_dynamic_modules(getDasRoot(), project_root, tout);
     #endif
     Module::Initialize();
