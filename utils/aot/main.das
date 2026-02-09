@@ -62,6 +62,20 @@ def private normalize_line_endings(text : string) : string {
     return result
 }
 
+def private is_content_same(content : string; filename : string) : bool {
+    var is_same = false
+    fopen(filename, "rb") <| $(fr) {
+        if (fr == null) {
+            is_same = false
+            return
+        }
+        fread(fr) <| $(data) {
+            is_same = content == data
+        }
+    }
+    return is_same
+}
+
 
 def parse_input_file(filename : string) {
     var aot_files = array<tuple<string; string>>()
@@ -125,44 +139,50 @@ def main() {
     using <| $(var cop : CodeOfPolicies) {
         updateCOP(cop, !gen1, gen2_make, false)
         for ((aot_in, aot_out) in aot_files) {
-            print("Aot to {aot_out}\n")
             let res = aot(aot_in, false, cross_platform, cop)
-            if (res |> length() > 0) {
+            if (res |> length() > 0 && !is_content_same(res, aot_out)) {
                 fopen(aot_out, "wb") <| $(fw) {
                     if (fw != null) {
+                        to_log(LOG_INFO, "Aot to {aot_out}\n")
                         fwrite(fw, res)
                     } else {
-                        print("Couldn't create output file {aot_out}\n")
+                        to_log(LOG_ERROR, "Couldn't create output file {aot_out}\n")
                     }
                 }
+            } else {
+                to_log(LOG_INFO, "Content is same for {aot_out}\n")
             }
         }
         updateCOP(cop, !gen1, gen2_make, true)
         for ((aot_in, aot_out) in aotlib_files) {
-            print("Aot library to {aot_out}\n")
             let res = aot(aot_in, false, cross_platform, cop)
-            if (res |> length() > 0) {
+            if (res |> length() > 0 && !is_content_same(res, aot_out)) {
                 fopen(aot_out, "wb") <| $(fw) {
                     if (fw != null) {
+                        to_log(LOG_INFO, "Aot library to {aot_out}\n")
                         fwrite(fw, res)
                     } else {
-                        print("Couldn't create output file {aot_out}\n")
+                        to_log(LOG_ERROR, "Couldn't create output file {aot_out}\n")
                     }
                 }
+            } else {
+                to_log(LOG_INFO, "Content is same for {aot_out}\n")
             }
         }
         updateCOP(cop, !gen1, gen2_make, false)
         for ((ctx_in, ctx_out) in ctx_files) {
-            print("Standalone ctx to {ctx_out}\n")
             let res = standalone_aot(ctx_in, ctx_out, cross_platform, false, cop)
-            if (res |> length() > 0) {
+            if (res |> length() > 0 && !is_content_same(res, ctx_out)) {
                 fopen(ctx_out, "wb") <| $(fw) {
                     if (fw != null) {
+                        to_log(LOG_INFO, "Standalone ctx to {ctx_out}\n")
                         fwrite(fw, res)
                     } else {
-                        print("Couldn't create output file {ctx_out}\n")
+                        to_log(LOG_ERROR, "Couldn't create output file {ctx_out}\n")
                     }
                 }
+            } else {
+                to_log(LOG_INFO, "Content is same for {ctx_out}\n")
             }
         }
     }
