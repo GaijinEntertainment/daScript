@@ -1,31 +1,16 @@
-cmake_temp/
-
 *.DS_Store
 .DS_Store
-tmtags
 
 *.output
 *.temp
 
-build/
-bin/
+build/                      # build artifacts
+bin/                        # All build binaries stored here
+jitted_scripts/             # JIT stores dll's here
+lib/                        # All build libraries stored here
 .vscode/
 .cache/
-temp/
 
-
-test.bin
-include/modules/external_need.inc
-include/modules/external_resolve.inc
-examples/test/imgui.ini
-examples/test/Simple.json
-temp/fragment.bin
-temp/fragment.sh
-temp/varying.def.sc
-temp/vertex.bin
-temp/vertex.sh
-temp/compute.bin
-temp/compute.sh
 modules/dasSFML/libsfml/
 site/
 doc/sphinx-build/
@@ -42,10 +27,4 @@ web/output/daScript.js.mem
 web/output/daScript.wasm
 web/output/.idea/
 
-examples/rast2d/LEVELS/
-examples/rast2d/SOUNDS/audio_0.wav
-examples/rast2d/SOUNDS/
-examples/rast2d/SPRITES/
-examples/rast2d/WALLS/
-examples/rast2d/PICTURES/
 yzg.code-workspace
