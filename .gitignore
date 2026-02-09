@@ -8,6 +8,8 @@ build/                      # build artifacts
 bin/                        # All build binaries stored here
 jitted_scripts/             # JIT stores dll's here
 lib/                        # All build libraries stored here
+modules/**/*.mod
+examples/**/*.mod
 .vscode/
 .cache/
 

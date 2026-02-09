@@ -47,6 +47,8 @@ public:
     }
 };
 
+REGISTER_DYN_MODULE(Module_StdDlg,Module_StdDlg);
+
 }
 
 REGISTER_MODULE_IN_NAMESPACE(Module_StdDlg,das);

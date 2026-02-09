@@ -37,7 +37,6 @@ set(DAS_INSTALL_DOCDIR . CACHE STRING "Directory where to install documentation"
 set(DAS_INSTALL_DASLIBDIR daslib CACHE STRING "Directory where to install daslib")
 set(DAS_INSTALL_EXAMPLESDIR examples CACHE STRING "Directory where to install examples")
 set(DAS_INSTALL_MODULESDIR modules CACHE STRING "Directory where to install modules")
-set(DAS_ENABLE_DLL 0 CACHE BOOL "Build as DLL")
 
 IF(WIN32)
     IF(DAS_LLVM_DISABLED)
@@ -132,7 +131,7 @@ MACRO(DAS_AOT_EXT input_files genList mainTarget dasAotTool dasAotToolArg)
     ADD_CUSTOM_COMMAND(
         OUTPUT  ${all_outputs}
         DEPENDS ${all_depends}
-        COMMENT "AOT precompiling ${num_files} files"
+        COMMENT "AOT compiling files..."
         COMMAND ${dasAotTool} ${PROJECT_SOURCE_DIR}/utils/aot/main.das -- ${command_args} ${CROSS_PLATFORM}
     )
     set(custom_name ${mainTarget}_genaot)
@@ -262,86 +261,100 @@ ELSE()
 
 ENDIF()
 
-SET(NEED_MODULES_PATH "${CMAKE_CURRENT_BINARY_DIR}/include/modules")
-include_directories(${CMAKE_CURRENT_BINARY_DIR}/include/)
+# All shared libraries should pass through this macro.
+# It sets required properties for shared libraries.
+MACRO(SETUP_DAS_SHARED_LIBRARY lib)
+    ADD_LIBRARY(${lib} SHARED ${ARGN})
+    if(WIN32)
+        # We export a lot of structures, some of them has not exported internals.
+        # Instead of marking everything as exported let's disable
+        # warning and refactor our public API in future.
+        TARGET_COMPILE_OPTIONS(${lib} PUBLIC /wd4251 /wd4661 /wd4275)
+    else()
+        SET_TARGET_PROPERTIES(${lib} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    endif()
+ENDMACRO()
 
-SET(DAS_MODULES_RESOLVE_INC ${NEED_MODULES_PATH}/external_resolve.inc)
-SET(DAS_MODULES_NEED_INC ${NEED_MODULES_PATH}/external_need.inc)
+MACRO(ADD_DAS_STATIC_LIBRARY lib)
+    ADD_LIBRARY(${lib} STATIC ${ARGN})
+ENDMACRO()
+
+
+SET(NEED_MODULES_PATH "${CMAKE_CURRENT_BINARY_DIR}/include")
+
+SET(DAS_MODULES_RESOLVE_INC ${NEED_MODULES_PATH}/modules/external_resolve.inc)
+SET(DAS_MODULES_NEED_INC ${NEED_MODULES_PATH}/modules/external_need.inc)
 FILE(WRITE ${DAS_MODULES_RESOLVE_INC}.temp "")
 FILE(WRITE ${DAS_MODULES_NEED_INC}.temp "")
 
-ADD_COMPILE_DEFINITIONS(DAS_ENABLE_DLL=$<BOOL:${DAS_ENABLE_DLL}>)
-
-MACRO(ADD_DAS_PUB_LIBRARY lib)
-    IF (${DAS_ENABLE_DLL})
-        ADD_LIBRARY(${lib} SHARED ${ARGN})
-        if(WIN32)
-            # We export a lot of structures, some of them are too complex to be exported.
-            TARGET_COMPILE_OPTIONS(${lib} PRIVATE /wd4251 /wd4661 /wd4275)
-            SET_TARGET_PROPERTIES(${lib} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
-        else()
-            SET_TARGET_PROPERTIES(${lib} PROPERTIES POSITION_INDEPENDENT_CODE ON)
-        endif()
-        TARGET_COMPILE_DEFINITIONS(${lib} PRIVATE DAS_MOD_EXPORTS)
-    ELSE()
-        ADD_LIBRARY(${lib} STATIC ${ARGN})
-    ENDIF()
-ENDMACRO()
-
-MACRO(ADD_DAS_LIBRARY lib)
-    IF (${DAS_ENABLE_DLL})
-        ADD_LIBRARY(${lib} SHARED ${ARGN})
-        IF(NOT WIN32)
-            SET_TARGET_PROPERTIES(${lib} PROPERTIES POSITION_INDEPENDENT_CODE ON)
-            TARGET_COMPILE_OPTIONS(${lib} PRIVATE -fvisibility=hidden)
-        ELSE()
-            # We export a lot of structures, some of them are too complex to be exported.
-            TARGET_COMPILE_OPTIONS(${lib} PRIVATE /wd4251 /wd4661 /wd4275)
-        ENDIF()
-        TARGET_COMPILE_DEFINITIONS(${lib} PRIVATE DAS_MOD_EXPORTS)
-    ELSE()
-        ADD_LIBRARY(${lib} STATIC ${ARGN})
-    ENDIF()
-ENDMACRO()
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${EXECUTABLE_OUTPUT_PATH})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
-IF (${DAS_ENABLE_DLL})
-    # relative RPATH from install location
-    if(APPLE)
-        set(CMAKE_INSTALL_RPATH "@loader_path/../lib")
-        set(CMAKE_MACOSX_RPATH ON)
-    elseif(UNIX)
-        set(CMAKE_INSTALL_RPATH "\$ORIGIN/../lib")
-        set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-    endif()
-ENDIF()
 
+# All dynamic modules libraries will be added here (files like dasModuleAudio.mod).
+SET(DAS_DYN_MODULES_LIBS)
+# All static modules libraries will be added here (files like libDasModuleAudio.a).
 SET(DAS_MODULES_LIBS)
+
 SET(DAS_ALL_EXAMPLES)
 FILE(GLOB _modules RELATIVE "${PROJECT_SOURCE_DIR}/modules" "modules/*")
 
-MACRO(ADD_MODULE_LIB lib)
-    MESSAGE("REGISTER DAS MODULE ${lib}")
+# Every dynamic module should pass through this macro.
+MACRO(ADD_DAS_SHARED_MODULE_LIB module_name)
+    MESSAGE("REGISTER DAS SHARED MODULE ${module_name}")
+    SETUP_DAS_SHARED_LIBRARY(${module_name} ${ARGN})
 
-    # temporary `if`, unless all modules not use new API
-    if(${ARGC} GREATER 1)
-        ADD_DAS_LIBRARY(${lib} ${ARGN})
-        TARGET_LINK_LIBRARIES(${lib} PUBLIC libDaScript)
-    endif()
+    # extract from modules/dasLLVM -> dasLLVM
+    SET(SHARED_OUTPUT_PATH "${CMAKE_CURRENT_LIST_DIR}/")
+    get_filename_component(FOLDER_NAME "${CMAKE_CURRENT_LIST_DIR}" NAME)
+    SET_TARGET_PROPERTIES(${module_name} PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY "${SHARED_OUTPUT_PATH}"
+        RUNTIME_OUTPUT_DIRECTORY "${SHARED_OUTPUT_PATH}"
+        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${SHARED_OUTPUT_PATH}"
+        RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${SHARED_OUTPUT_PATH}"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${SHARED_OUTPUT_PATH}"
+        RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${SHARED_OUTPUT_PATH}"
+        SUFFIX ".mod"
+        PREFIX ""
+    )
+    # Install all shared libraries to the same place.
+    # So in runtime all of them will be loaded.
+    install(TARGETS ${module_name}
+        DESTINATION ${DAS_INSTALL_MODULESDIR}/${FOLDER_NAME}
+    )
+    # Compiled dynamic module is useless without config.
+    # Build only static lib or create .das_module file if no config exists.
+    if(NOT ${FOLDER_NAME} STREQUAL "tutorial" AND NOT ${FOLDER_NAME} STREQUAL "profile" AND NOT ${FOLDER_NAME} STREQUAL "test")
+        install(FILES "${CMAKE_CURRENT_LIST_DIR}/.das_module"
+            DESTINATION ${DAS_INSTALL_MODULESDIR}/${FOLDER_NAME}
+        )
+    ENDIF()
+    IF(EXISTS "${CMAKE_CURRENT_LIST_DIR}/.das_module")
+    ENDIF()
+    TARGET_COMPILE_DEFINITIONS(${module_name} PRIVATE DAS_MOD_EXPORTS DAS_ENABLE_DLL=1)
+    TARGET_LINK_LIBRARIES(${module_name} PUBLIC libDaScriptDyn)
+    ADD_DEPENDENCIES(${module_name} libDaScriptDyn)
+    LIST(APPEND DAS_DYN_MODULES_LIBS ${module_name})
+ENDMACRO()
 
+# Every static module should pass through this macro.
+MACRO(ADD_DAS_STATIC_MODULE_LIB lib)
+    MESSAGE("REGISTER DAS STATIC MODULE ${lib}")
+    ADD_DAS_STATIC_LIBRARY(${lib} ${ARGN})
+    TARGET_LINK_LIBRARIES(${lib} PUBLIC libDaScript)
     LIST(APPEND DAS_MODULES_LIBS ${lib})
 ENDMACRO()
-MACRO(ADD_MODULE_PUB_LIB lib)
-    MESSAGE("REGISTER DAS MODULE ${lib}")
 
-    # temporary `if`, unless all modules not use new API
-    if(${ARGC} GREATER 1)
-        ADD_DAS_PUB_LIBRARY(${lib} ${ARGN})
-        TARGET_LINK_LIBRARIES(${lib} PUBLIC libDaScript)
-    endif()
-
-    LIST(APPEND DAS_MODULES_LIBS ${lib})
+# If you need both static and dynamic call this.
+# module_name target should end on `_mod` and first part should
+# be exactly `module_name`. Like `llvm_mod` for llvm module.
+MACRO(ADD_MODULE_LIB lib module_name)
+    ADD_DAS_STATIC_MODULE_LIB(${lib} ${ARGN})
+    ADD_DAS_SHARED_MODULE_LIB(${module_name} ${ARGN})
+ENDMACRO()
+MACRO(ADD_MODULE_PUB_LIB lib module_name)
+    ADD_MODULE_LIB(${lib} ${module_name} ${ARGN})
+    SET_TARGET_PROPERTIES(${module_name} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
 ENDMACRO()
 
 MACRO(ADD_EXAMPLE tgt)
@@ -409,13 +422,17 @@ SET(URIPARSER_SRCS
 )
 
 ADD_LIBRARY(libUriParser STATIC ${URIPARSER_SRCS})
+ADD_LIBRARY(libUriParserDyn STATIC ${URIPARSER_SRCS})
 SETUP_CPP11(libUriParser)
-if (${DAS_ENABLE_DLL})
-    SET_TARGET_PROPERTIES(libUriParser PROPERTIES POSITION_INDEPENDENT_CODE ON)
-endif()
+SET_TARGET_PROPERTIES(libUriParserDyn PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_definitions(libUriParser PUBLIC URIPARSER_BUILD_CHAR)
 target_compile_definitions(libUriParser PUBLIC URI_STATIC_BUILD)
 target_include_directories(libUriParser PUBLIC
+  ${PROJECT_SOURCE_DIR}/3rdparty/uriparser/include
+)
+target_compile_definitions(libUriParserDyn PUBLIC URIPARSER_BUILD_CHAR)
+target_compile_definitions(libUriParserDyn PUBLIC URI_STATIC_BUILD)
+target_include_directories(libUriParserDyn PUBLIC
   ${PROJECT_SOURCE_DIR}/3rdparty/uriparser/include
 )
 
@@ -716,7 +733,6 @@ include/daScript/simulate/aot_builtin_uriparser.h
 include/daScript/simulate/aot_builtin_jit.h
 include/daScript/simulate/fs_file_info.h
 src/simulate/fs_file_info.cpp
-${DAS_MODULES_RESOLVE_INC}
 )
 
 
@@ -775,12 +791,20 @@ list(SORT DAS_LIB_SRC)
 include_directories(include)
 include_directories(3rdparty/fmt/include)
 
-MACRO(SETUP_LIBDASCRIPT library)
-    ADD_DAS_LIBRARY(${library} ${PARSER_GENERATED_SRC} ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${SIMULATE_SRC} ${BUILTIN_SRC}
-            ${MISC_SRC} ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC}
-            ${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC} ${DASCRIPT_FMT_SRC})
-    # Set DAS_EXPORTS to export all MOD symbols from libDaScript
-    TARGET_COMPILE_DEFINITIONS(${library} PRIVATE DAS_EXPORTS)
+MACRO(SETUP_LIBDASCRIPT library shared_lib)
+    IF(${shared_lib})
+        SETUP_DAS_SHARED_LIBRARY(${library} ${PARSER_GENERATED_SRC}
+                ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${SIMULATE_SRC} ${BUILTIN_SRC}
+                ${MISC_SRC} ${SIMULATE_FUSION_SRC} ${MAIN_SRC}
+                ${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC} ${DASCRIPT_FMT_SRC})
+        TARGET_COMPILE_DEFINITIONS(${library} PRIVATE DAS_EXPORTS=1 DAS_MOD_EXPORTS=1 DAS_ENABLE_DLL=1)
+        # Set DAS_EXPORTS to export all MOD symbols from libDaScript
+    ELSE()
+        ADD_LIBRARY(${library} STATIC ${PARSER_GENERATED_SRC}
+                ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${SIMULATE_SRC} ${BUILTIN_SRC}
+                ${MISC_SRC} ${SIMULATE_FUSION_SRC} ${MAIN_SRC}
+                ${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC} ${DASCRIPT_FMT_SRC})
+    ENDIF()
     ADD_DEPENDENCIES(${library} need_and_resolve)
     ADD_TARGET_PROJECT_XXD_DEPENDS(${library} libDaScript)
     target_include_directories(${library} PUBLIC
@@ -788,7 +812,11 @@ MACRO(SETUP_LIBDASCRIPT library)
             ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/uriparser/include
             ${CMAKE_CURRENT_SOURCE_DIR}/include
     )
-    target_link_libraries(${library} libUriParser)
+    IF(${shared_lib})
+        target_link_libraries(${library} libUriParserDyn)
+    ELSE()
+        target_link_libraries(${library} libUriParser)
+    ENDIF()
     #target_link_libraries(${library} fmt::fmt)
     IF(LINUX_UUID)
         target_link_libraries(${library} uuid)
@@ -803,7 +831,10 @@ MACRO(SETUP_LIBDASCRIPT library)
     #target_precompile_headers(${library} PUBLIC include/daScript/misc/platform.h)
 ENDMACRO()
 
-SETUP_LIBDASCRIPT(libDaScript)
+SETUP_LIBDASCRIPT(libDaScript OFF)
+target_include_directories(libDaScript PUBLIC ${NEED_MODULES_PATH})
+SETUP_LIBDASCRIPT(libDaScriptDyn ON)
+target_include_directories(libDaScriptDyn PUBLIC ${NEED_MODULES_PATH})
 
 if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
 
@@ -837,7 +868,7 @@ if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
 
     #UNITIZE_BUILD("daslib" AOT_GENERATED_SRC)
 
-    ADD_DAS_LIBRARY(libDaScriptAot ${AOT_GENERATED_SRC} ${AOT_STUB_SRC})
+    ADD_DAS_STATIC_LIBRARY(libDaScriptAot ${AOT_GENERATED_SRC} ${AOT_STUB_SRC})
     ADD_DEPENDENCIES(libDaScriptAot dasAotStub libDaScript)
     TARGET_LINK_LIBRARIES(libDaScriptAot PUBLIC libDaScript)
     SETUP_CPP11(libDaScriptAot)
@@ -878,20 +909,37 @@ if (NOT ${DAS_TOOLS_DISABLED})
 
     SOURCE_GROUP_FILES("main" DAS_DASCRIPT_MAIN_SRC)
 
-    SET(SRC_LIBRARIES Threads::Threads ${DAS_MODULES_LIBS})
+    SET(SRC_LIBRARIES Threads::Threads)
 
-    MACRO(SETUP_COMPILER_BINARY target_name library_name)
+    MACRO(SETUP_COMPILER_BINARY target_name library_name modules dyn_modules)
         add_executable(${target_name} ${DAS_DASCRIPT_MAIN_SRC})
-        TARGET_LINK_LIBRARIES(${target_name} ${library_name} ${SRC_LIBRARIES})
-        ADD_DEPENDENCIES(${target_name} ${library_name} ${DAS_MODULES_LIBS})
+        TARGET_LINK_LIBRARIES(${target_name} ${library_name} ${SRC_LIBRARIES} ${${modules}})
+        ADD_DEPENDENCIES(${target_name} ${library_name} ${${dyn_modules}})
         SETUP_CPP11(${target_name})
         SETUP_LTO(${target_name})
     ENDMACRO()
 
-    SETUP_COMPILER_BINARY(daslang libDaScript)
-    INSTALL(TARGETS daslang
-            RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
-    )
+    SETUP_COMPILER_BINARY(daslang libDaScript DAS_MODULES_LIBS "")
+    INSTALL(TARGETS daslang RUNTIME DESTINATION ${DAS_INSTALL_BINDIR})
+
+    # Enable dynamic modules lookup.
+    TARGET_COMPILE_DEFINITIONS(daslang PRIVATE DAS_ENABLE_DYN_INCLUDES=1)
+
+    # Add daslang-dyn target.
+    SETUP_COMPILER_BINARY(daslang_dyn libDaScriptDyn "" DAS_DYN_MODULES_LIBS)
+    TARGET_COMPILE_DEFINITIONS(daslang_dyn PRIVATE DAS_ENABLE_DLL=1 DAS_ENABLE_DYN_INCLUDES=1)
+    # relative RPATH from install location
+    if(APPLE)
+        SET_TARGET_PROPERTIES(daslang_dyn PROPERTIES
+            INSTALL_RPATH "@loader_path/../lib"
+            CMAKE_MACOSX_RPATH ON
+        )
+    elseif(UNIX)
+        SET_TARGET_PROPERTIES(daslang_dyn PROPERTIES
+            INSTALL_RPATH "\$ORIGIN/../lib"
+        )
+    endif()
+    INSTALL(TARGETS daslang_dyn RUNTIME DESTINATION ${DAS_INSTALL_BINDIR})
 
     file(GLOB DASLIB_SOURCES
         ${PROJECT_SOURCE_DIR}/daslib/*.das
@@ -901,10 +949,13 @@ if (NOT ${DAS_TOOLS_DISABLED})
     )
 
     add_executable(das-fmt ${PROJECT_SOURCE_DIR}/utils/dasFormatter/main.cpp)
-    TARGET_LINK_LIBRARIES(das-fmt libDaScript ${SRC_LIBRARIES})
+    TARGET_LINK_LIBRARIES(das-fmt libDaScript ${SRC_LIBRARIES} ${DAS_MODULES_LIBS})
 
     SETUP_CPP11(das-fmt)
     SETUP_LTO(das-fmt)
+get_target_property(DAS_FMT_INCLUDES libDaScriptDyn INCLUDE_DIRECTORIES)
+get_target_property(DAS_FMT_DEFS das-fmt COMPILE_DEFINITIONS)
+get_target_property(DAS_FMT_LIBS das-fmt LINK_LIBRARIES)
 
     #IF(APPLE)
     #  add_executable(daslangOsx MACOSX_BUNDLE ${DAS_DASCRIPT_MAIN_SRC})
@@ -973,15 +1024,14 @@ SET(DAS_RELEASE_INCLUDES
 )
 
 # Install all modules and main library.
-IF(${DAS_ENABLE_DLL})
 install(TARGETS
     libDaScript
+    libDaScriptDyn
     ${DAS_MODULES_LIBS}
     RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
     LIBRARY DESTINATION ${DAS_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${DAS_INSTALL_LIBDIR}
 )
-ENDIF()
 
 install(FILES ${PROJECT_SOURCE_DIR}/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR})
 install(FILES ${PROJECT_SOURCE_DIR}/3rdparty/uriparser/COPYING DESTINATION ${DAS_INSTALL_DOCDIR} RENAME URIPARSER.LICENSE)

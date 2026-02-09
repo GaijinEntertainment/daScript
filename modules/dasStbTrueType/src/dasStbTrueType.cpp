@@ -59,6 +59,8 @@ public:
     }
 };
 
+REGISTER_DYN_MODULE(Module_StbTrueType,Module_StbTrueType);
+
 }
 
 REGISTER_MODULE_IN_NAMESPACE(Module_StbTrueType,das);

@@ -48,6 +48,7 @@ namespace das {
                 optionAllowed = context->findFunction("option_allowed");    // note, this one CAN be null
                 annotationAllowed = context->findFunction("annotation_allowed");    // note, this one CAN be null
                 podInScopeAllowed = context->findFunction("is_pod_in_scope_allowed"); // note, this one CAN be null
+                dynModulesFolderGet = context->findFunction("dyn_modules_folder");          // note, this one CAN be null
                 // get it ready
                 context->restart();
                 context->runInitScript();   // note: we assume sane init stack size here
@@ -138,6 +139,14 @@ namespace das {
         info.fileName = res.modFileName ? res.modFileName : "";
         info.importName = res.modImportName ? res.modImportName : "";
         return info;
+    }
+
+    string ModuleFileAccess::getDynModulesFolder() const {
+        if(failed() || !dynModulesFolderGet) return FileAccess::getDynModulesFolder();
+        auto res = context->evalWithCatch(dynModulesFolderGet, nullptr, nullptr);
+        auto exc = context->getException(); exc;
+        DAS_ASSERTF(!exc, "exception failed in `dyn_modules_folder`: %s", exc);
+        return cast<const char *>::to(res);
     }
 
     string ModuleFileAccess::getIncludeFileName ( const string & fileName, const string & incFileName ) const {

@@ -250,6 +250,8 @@ public:
     }
 };
 
+REGISTER_DYN_MODULE(Module_PUGIXML,Module_PUGIXML);
+
 }
 
 REGISTER_MODULE_IN_NAMESPACE(Module_PUGIXML,das);

@@ -22,6 +22,9 @@ bool g_reportCompilationFailErrors = false;
 bool g_collectSharedModules = true;
 bool g_failOnSmartPtrLeaks = true;
 
+//link time resolved dependencies
+bool require_dynamic_modules(const string &, const string &, TextWriter&);
+
 enum class RuntimeMode {
     Interpreter,
     AOT,
@@ -364,11 +367,10 @@ bool isolated_unit_test ( const string & fn, RuntimeMode mode, bool useSer ) {
     NEED_MODULE(Module_DASBIND);
     if (mode == RuntimeMode::JIT) {
         NEED_MODULE(Module_Jit);
-        #include "modules/external_need.inc"
-    } else {
-        // external_need actualy already contains UnitTest. Remove explicit call?
-        NEED_MODULE(Module_UnitTest);
     }
+    NEED_MODULE(Module_UnitTest);
+    daScriptEnvironment::ensure();
+    require_dynamic_modules(getDasRoot(), getDasRoot(), tout);
     Module::Initialize();
     bool result = unit_test(fn,mode, useSer);
     // shutdown
@@ -512,12 +514,10 @@ int main( int argc, char * argv[] ) {
     NEED_MODULE(Module_DASBIND);
     if (enable_jit) {
         NEED_MODULE(Module_Jit);
-        #include "modules/external_need.inc"
-    } else {
-        // external_need actualy already contains UnitTest. Remove explicit call?
-        NEED_MODULE(Module_UnitTest);
     }
-
+    NEED_MODULE(Module_UnitTest);
+    daScriptEnvironment::ensure();
+    require_dynamic_modules(getDasRoot(), getDasRoot(), tout);
     Module::Initialize();
     // aot library
 #if 0 // Debug this one test
