@@ -8,6 +8,11 @@
 
 #define TUTORIAL_NAME   "/examples/tutorial/tutorial07.das"
 
+typedef struct {
+    int     foo;
+    float   bar;
+} FooBar;
+
 void tutorial () {
     das_text_writer * tout = das_text_make_printer();               // output stream for all compiler messages (stdout. for stringstream use TextWriter)
     das_module_group * dummyLibGroup = das_modulegroup_make();      // module group for compiled program
@@ -59,6 +64,25 @@ void tutorial () {
         das_text_output(tout, "\n");
         goto shutdown;
     }
+    // evalute 'test_cmres' function in the context, which returns complex result (FooBar structure)
+    das_function * fnTestCmres = das_context_find_function(ctx,"test_cmres");
+    if ( !fnTestCmres ) {
+        das_text_output(tout, "function 'test_cmres' not found\n");
+        goto shutdown;
+    }
+    FooBar cmres;
+    vec4f args[2];
+    args[0] = das_result_int(42);
+    args[1] = das_result_float(3.14f);
+    das_context_eval_with_catch_cmres(ctx, fnTestCmres, args, &cmres);
+    ex = das_context_get_exception(ctx);
+    if ( ex!=NULL ) {
+        das_text_output(tout, "exception: ");
+        das_text_output(tout, ex);
+        das_text_output(tout, "\n");
+        goto shutdown;
+    }
+    printf("test_cmres returned: foo=%i, bar=%f\n", cmres.foo, cmres.bar);
 shutdown:;
     das_program_release(program);
     das_fileaccess_release(fAccess);
@@ -80,10 +104,111 @@ vec4f das_c_str_func ( das_context * ctx, das_node * node, vec4f * args ) {
     return das_result_void();                                       // return result
 }
 
-typedef struct {
-    int     foo;
-    float   bar;
-} FooBar;
+// this function receives function pointer and calls it with int and float args
+// def callback_func ( callback : function<(int,float):string), int, float ) : string
+vec4f das_callback_func ( das_context * ctx, das_node * node, vec4f * args ) {
+    (void)ctx; (void)node;
+    das_function * callback = das_argument_function(args[0]);
+    if ( callback ) {
+        int iArg = das_argument_int(args[1]);
+        float fArg = das_argument_float(args[2]);
+        printf("calling callback function(%i,%f)...\n", iArg, fArg);
+        vec4f callback_args[2];
+        callback_args[0] = das_result_int(iArg);
+        callback_args[1] = das_result_float(fArg);
+        vec4f result = das_context_eval_with_catch(ctx, callback, callback_args);
+        char * ex = das_context_get_exception(ctx);
+        if ( ex!=NULL ) {
+            das_text_writer * tout = das_text_make_printer();
+            das_text_output(tout, "exception in callback: ");
+            das_text_output(tout, ex);
+            das_text_output(tout, "\n");
+            das_text_release(tout);
+        }
+        char * str_result = das_argument_string(result);
+        char * prefix = "callback function returned: ";
+        char output[256];
+        snprintf(output, sizeof(output), "%s%s\n", prefix, str_result);
+        output[255] = '\0';
+        char * out_str = das_allocate_string(ctx, output);
+        printf("%s", out_str);
+        return das_result_string(out_str);
+    } else {
+        printf("callback function is null\n");
+        return das_result_string(NULL);
+    }
+}
+
+// this function receives lambda and calls it with int and float args
+// def lambda_func ( lambda : lambda<(int,float):string), int, float ) : string
+vec4f das_lambda_func ( das_context * ctx, das_node * node, vec4f * args ) {
+    (void)ctx; (void)node;
+    das_lambda * lambda = das_argument_lambda(args[0]);
+    if ( lambda ) {
+        int iArg = das_argument_int(args[1]);
+        float fArg = das_argument_float(args[2]);
+        printf("calling lambda (%i,%f)...\n", iArg, fArg);
+        vec4f lambda_args[3];
+        lambda_args[0] = das_result_lambda(lambda);
+        lambda_args[1] = das_result_int(iArg);
+        lambda_args[2] = das_result_float(fArg);
+        vec4f result = das_context_eval_lambda(ctx, lambda, lambda_args);
+        char * ex = das_context_get_exception(ctx);
+        if ( ex!=NULL ) {
+            das_text_writer * tout = das_text_make_printer();
+            das_text_output(tout, "exception in lambda: ");
+            das_text_output(tout, ex);
+            das_text_output(tout, "\n");
+            das_text_release(tout);
+        }
+        char * str_result = das_argument_string(result);
+        char * prefix = "lambda function returned: ";
+        char output[256];
+        snprintf(output, sizeof(output), "%s%s\n", prefix, str_result);
+        output[255] = '\0';
+        char * out_str = das_allocate_string(ctx, output);
+        printf("%s", out_str);
+        return das_result_string(out_str);
+    } else {
+        printf("lambda function is null\n");
+        return das_result_string(NULL);
+    }
+}
+
+// this function receives lambda and calls it with int and float args
+// def lambda_func ( block : block<(int,float):string), int, float ) : string
+vec4f das_block_func ( das_context * ctx, das_node * node, vec4f * args ) {
+    (void)ctx; (void)node;
+    das_block * block = das_argument_block(args[0]);
+    if ( block ) {
+        int iArg = das_argument_int(args[1]);
+        float fArg = das_argument_float(args[2]);
+        printf("calling block (%i,%f)...\n", iArg, fArg);
+        vec4f block_args[2];
+        block_args[0] = das_result_int(iArg);
+        block_args[1] = das_result_float(fArg);
+        vec4f result = das_context_eval_block(ctx, block, block_args);
+        char * ex = das_context_get_exception(ctx);
+        if ( ex!=NULL ) {
+            das_text_writer * tout = das_text_make_printer();
+            das_text_output(tout, "exception in block: ");
+            das_text_output(tout, ex);
+            das_text_output(tout, "\n");
+            das_text_release(tout);
+        }
+        char * str_result = das_argument_string(result);
+        char * prefix = "block returned: ";
+        char output[256];
+        snprintf(output, sizeof(output), "%s%s\n", prefix, str_result);
+        output[255] = '\0';
+        char * out_str = das_allocate_string(ctx, output);
+        printf("%s", out_str);
+        return das_result_string(out_str);
+    } else {
+        printf("block is null\n");
+        return das_result_string(NULL);
+    }
+}
 
 typedef enum {
     OneTwo_one = 1,
@@ -149,6 +274,12 @@ das_module * register_module_tutorial_07() {
     das_module_bind_interop_function(mod, lib, &das_c_func, "das_c_func", "das_c_func", SIDEEFFECTS_modifyExternal, "v i");
     // bind das_c_str_func
     das_module_bind_interop_function(mod, lib, &das_c_str_func, "das_c_str_func", "das_c_str_func", SIDEEFFECTS_modifyExternal, "v s");
+    // bind das_callback_func
+    das_module_bind_interop_function(mod, lib, &das_callback_func, "das_callback_func", "das_callback_func", SIDEEFFECTS_modifyExternal, "s 0<i;f>@@ i f");
+    // bind das_lambda_func
+    das_module_bind_interop_function(mod, lib, &das_lambda_func, "das_lambda_func", "das_lambda_func", SIDEEFFECTS_modifyExternal, "s 0<i;f>@ i f");
+    // bind das_block_func
+    das_module_bind_interop_function(mod, lib, &das_block_func, "das_block_func", "das_block_func", SIDEEFFECTS_modifyExternal, "s 0<i;f>$ i f");
 
     ////////////////
     // model example

@@ -3855,7 +3855,7 @@ namespace das {
         }
     }
 
-    void Program::registerAotCpp ( TextWriter & logs, Context & context, bool headers, bool allModules ) {
+    void Program::registerAotCpp ( TextWriter & logs, Context & /*context*/, bool headers, bool allModules ) {
         const auto fnn = collectUsedFunctions(library.modules, totalFunctions, getThisModule(), allModules);
         auto visitor = ArgsConverter();
         visit(visitor);
