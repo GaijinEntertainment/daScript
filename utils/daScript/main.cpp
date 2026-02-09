@@ -176,10 +176,18 @@ int das_aot_main ( int argc, char * argv[] ) {
     bool das_mode = false;
     char * standaloneContextName = nullptr;
     char * standaloneClassName = nullptr;
+    vector<pair<string, string>> aot_files;
     if ( argc>3  ) {
-        for (int ai = 4; ai != argc; ++ai) {
+        for (int ai = 1; ai != argc; ++ai) {
             if ( strcmp(argv[ai],"-q")==0 ) {
                 quiet = true;
+            } else if ( strcmp(argv[ai],"-aot")==0 ) {
+                if (ai + 2 >= argc) {
+                    tout << "-aot requires 2 arguments <in> <out>.";
+                    return -1;
+                }
+                aot_files.emplace_back(argv[ai + 1], argv[ai + 2]);
+                ai += 2;
             } else if ( strcmp(argv[ai],"-p")==0 ) {
                 paranoid_validation = true;
             } else if ( strcmp(argv[ai],"-dry-run")==0 ) {
@@ -316,7 +324,16 @@ int das_aot_main ( int argc, char * argv[] ) {
                 compiled |= is_ok;
             }
         } else {
-            compiled = compile(argv[2], argv[3], dryRun, cross_platform);
+            size_t id = 2;
+            for (const auto &[in, out] : aot_files) {
+                // Use `or` here, to return `true` if at least one file compiled successfully.
+                auto is_ok = compile(in, out, dryRun, cross_platform);
+                if (!is_ok && !quiet) {
+                    tout << "Failed to compile `" << out << "` in aot.\n";
+                }
+                compiled |= is_ok;
+                id += 2;
+            }
         }
     }
     Module::Shutdown();
