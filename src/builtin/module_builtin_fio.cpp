@@ -645,7 +645,7 @@ namespace das {
         if (cur_mod == mod_resolve->end()) {
             // Add new module
             mod_resolve->emplace_back(DynamicModuleInfo{mod_name,{}});
-            cur_mod = (--mod_resolve->end());
+            cur_mod = prev(mod_resolve->end());
         }
         cur_mod->paths.emplace_back(src_path, dst_path);
     }

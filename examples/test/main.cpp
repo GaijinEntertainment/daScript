@@ -23,7 +23,9 @@ bool g_collectSharedModules = true;
 bool g_failOnSmartPtrLeaks = true;
 
 //link time resolved dependencies
+#ifdef DAS_ENABLE_DYN_INCLUDES
 bool require_dynamic_modules(const string &, const string &, TextWriter&);
+#endif
 
 enum class RuntimeMode {
     Interpreter,
@@ -368,9 +370,11 @@ bool isolated_unit_test ( const string & fn, RuntimeMode mode, bool useSer ) {
     if (mode == RuntimeMode::JIT) {
         NEED_MODULE(Module_Jit);
     }
-    NEED_MODULE(Module_UnitTest);
+    #ifdef DAS_ENABLE_DYN_INCLUDES
+    // This adds JIT.
     daScriptEnvironment::ensure();
     require_dynamic_modules(getDasRoot(), getDasRoot(), tout);
+    #endif
     Module::Initialize();
     bool result = unit_test(fn,mode, useSer);
     // shutdown
@@ -516,8 +520,11 @@ int main( int argc, char * argv[] ) {
         NEED_MODULE(Module_Jit);
     }
     NEED_MODULE(Module_UnitTest);
+    #ifdef DAS_ENABLE_DYN_INCLUDES
+    // This adds JIT.
     daScriptEnvironment::ensure();
     require_dynamic_modules(getDasRoot(), getDasRoot(), tout);
+    #endif
     Module::Initialize();
     // aot library
 #if 0 // Debug this one test

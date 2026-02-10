@@ -120,6 +120,9 @@ static bool init_modules_for_folder(const das::string &path, das::TextWriter &to
 }
 }
 
+// Nothing by default.
+DAS_API void require_project_specific_modules() {}
+
 // Initializes dynamic modules from:
 // - das_root/modules
 // - project_root/modules
