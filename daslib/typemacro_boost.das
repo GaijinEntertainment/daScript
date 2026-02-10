@@ -81,6 +81,35 @@ def public typemacro_argument(dimExpr; index : int; var constType : ExprConstStr
     return defaultValue
 }
 
+[structure_macro(name="typemacro_documentation")]
+class TypeMacroInfo : AstStructureAnnotation { }
+
+[macro_function]
+def private append_arguments_annotation(var cls : StructurePtr; var func : FunctionPtr) {
+    var ann_args : array<tuple<string; RttiValue>>
+    ann_args |> reserve(length(func.arguments) - 1)
+    var name = (string(func.name), RttiValue(tBool = true))
+    ann_args |> emplace(name)
+    for (i in range(2, length(func.arguments))) {
+        var value = RttiValue(tString = "```empty```type```")
+        assume argInit = func.arguments[i].init
+        if (argInit != null) {
+            if (argInit is ExprConstInt) {
+                value = RttiValue(tInt = (argInit as ExprConstInt).value)
+            } elif (argInit is ExprConstBool) {
+                value = RttiValue(tBool = (argInit as ExprConstBool).value)
+            } elif (argInit is ExprConstString) {
+                value = RttiValue(tString = string((argInit as ExprConstString).value))
+            } else {
+                value = RttiValue(tString = describe(argInit))
+            }
+        }
+        var blah = (string(func.arguments[i].name), value)
+        ann_args |> emplace(blah)
+    }
+    cls |> append_annotation("typemacro_boost", "typemacro_documentation", ann_args)
+}
+
 [function_macro(name="typemacro_function")]
 class TypeMacroMacro : AstFunctionAnnotation {
     //! This macro converts function into a type macro.
@@ -93,6 +122,7 @@ class TypeMacroMacro : AstFunctionAnnotation {
         }
         var inscope cls <- make_class(className, parentType.structType, compiling_module())
         cls.flags &= ~StructureFlags.genCtor
+        cls.flags.privateStructure = true
         let cvtFnName = "{func.name}`cvt`arguments"
         var inscope cvtFn <- qmacro_function(cvtFnName) <| $(prog : ProgramPtr; mod : Module?; td, passT : TypeDeclPtr) : TypeDeclPtr {
             return <- default<TypeDeclPtr>
@@ -113,6 +143,7 @@ class TypeMacroMacro : AstFunctionAnnotation {
         cls |> append_annotation("ast_boost", "type_macro", [
             name
         ])
+        append_arguments_annotation(cls, func)
         compiling_module() |> add_structure(cls)
         return true
     }

@@ -883,7 +883,7 @@ def append_annotation(mod_name, ann_name : string; args : array< tuple<argname :
         } elif (arg is tString) {
             decl.arguments |> add_annotation_argument(argName, arg as tString)
         } else {
-            panic("Invalid rtti value")
+            panic("Invalid rtti value {arg} for annotation argument {argName}")
         }
     }
     return <- decl

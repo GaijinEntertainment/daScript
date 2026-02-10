@@ -434,6 +434,12 @@ namespace das {
         }
     }
 
+    void for_each_typemacro ( Module * mod, const TBlock<void,TypeMacroPtr> & block, Context * context, LineInfoArg * at ) {
+        for ( auto & td : mod->typeMacros ) {
+            das_invoke<void>::invoke<TypeMacroPtr>(context,at,block,td.second);
+        }
+    }
+
     bool isSameAstType ( TypeDeclPtr THIS,
                      TypeDeclPtr decl,
                      RefMatters refMatters,
@@ -1270,6 +1276,9 @@ namespace das {
                 ->args({"module","block","context","line"});
         addExtern<DAS_BIND_FUN(for_each_typeinfo_macro)>(*this, lib,  "for_each_typeinfo_macro",
             SideEffects::modifyExternal, "for_each_typeinfo_macro")
+                ->args({"module","block","context","line"});
+        addExtern<DAS_BIND_FUN(for_each_typemacro)>(*this, lib,  "for_each_typemacro",
+            SideEffects::modifyExternal, "for_each_typemacro")
                 ->args({"module","block","context","line"});
         addExtern<DAS_BIND_FUN(builtin_structure_for_each_field)>(*this, lib,  "for_each_field",
             SideEffects::modifyExternal, "builtin_structure_for_each_field")

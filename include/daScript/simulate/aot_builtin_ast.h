@@ -539,6 +539,7 @@ namespace das {
     DAS_API void for_each_reader_macro ( Module * mod, const TBlock<void,TTemporary<char *>> & block, Context * context, LineInfoArg * at );
     DAS_API void for_each_variant_macro ( Module * mod, const TBlock<void,VariantMacroPtr> & block, Context * context, LineInfoArg * at );
     DAS_API void for_each_typeinfo_macro ( Module * mod, const TBlock<void,TypeInfoMacroPtr> & block, Context * context, LineInfoArg * at );
+    DAS_API void for_each_typemacro ( Module * mod, const TBlock<void,TypeMacroPtr> & block, Context * context, LineInfoArg * at );
     DAS_API void for_each_for_loop_macro ( Module * mod, const TBlock<void,ForLoopMacroPtr> & block, Context * context, LineInfoArg * at );
     DAS_API Annotation * get_expression_annotation ( Expression * expr, Context * context, LineInfoArg * at );
     DAS_API Structure * find_unique_structure ( smart_ptr_raw<Program> prog, const char * name, Context * context, LineInfoArg * at );
