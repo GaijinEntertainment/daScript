@@ -1275,6 +1275,10 @@ optional_function_type
         $$ = $typeDecl;
         $$->at = tokAt(scanner,@typeDecl);
     }
+    |   RARROW type_declaration[typeDecl]  {
+        $$ = $typeDecl;
+        $$->at = tokAt(scanner,@typeDecl);
+    }
     ;
 
 function_name
