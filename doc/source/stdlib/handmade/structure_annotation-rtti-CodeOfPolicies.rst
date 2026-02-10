@@ -1,8 +1,12 @@
 Object which holds compilation and simulation settings and restrictions.
 whether ahead-of-time compilation is enabled
+library??
+whether paranoid validation is enabled (extra checks, no optimizations)
+whether cross-platform AOT is enabled (if not, we generate code for the current platform)
 whether standalone context AOT compilation is enabled
 specifies to AOT if we are compiling a module, or a final program
 enables AOT of macro code (like 'qmacro_block' etc)
+file name for AOT output (if not set, we generate a temporary file)
 if we are in code completion mode
 export all functions and global variables
 if not, we recompile main module each time
@@ -66,3 +70,13 @@ sets profile module (module which will be loaded when profiler connects)
 enables JIT support
 sets JIT module (module which will be loaded when JIT is enabled)
 enables threadlock context
+JIT enabled - if enabled, JIT will be used to compile code at runtime. if not enabled, code will be interpreted.
+JIT module - module, loaded when -jit is specified.
+JIT all functions - if enabled, JIT will compile all functions in the module, otherwise it will compile only functions which are called at runtime.
+JIT debug info - if enabled, JIT will generate debug info for JIT compiled code, which can be used by debuggers and profilers.
+JIT opt level - optimization level for JIT compiled code (0-3)
+JIT size level - size optimization level for JIT compiled code (0-3)
+JIT dll mode - if enabled, JIT will generate DLL's into JIT output folder, and load them from there. if not enabled, JIT will generate code in memory and execute it directly.
+JIT output folder (where JIT compiled code will be stored)
+path to shared library, which is used in JIT
+path to linker, which is used in JIT

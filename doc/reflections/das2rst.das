@@ -56,6 +56,7 @@ require daslib/fuzzer
 require daslib/match
 require daslib/linq
 require daslib/linq_boost
+require daslib/flat_hash_table
 
 def document_module_math(root : string) {
     var mod = get_module("math")
@@ -657,6 +658,19 @@ def document_module_faker(root : string) {
     document("Faker", mod, "faker.rst", groups)
 }
 
+def document_module_flat_hash_table(root : string) {
+    var mod = find_module("flat_hash_table")
+    var groups <- array<DocGroup>(
+        group_by_regex("Template structure", mod, %regex~(TFlatHashTable)$%%),
+        group_by_regex("Basic operations", mod, %regex~(empty|length|clear|key_exists|erase|get)$%%),
+        group_by_regex("Memory management", mod, %regex~(grow|rehash|reserve)$%%),
+        group_by_regex("Iteration", mod, %regex~(foreach|keys|values)$%%),
+        group_by_regex("Internal operations", mod, %regex~(key_index)$%%),
+        group_by_regex("Operators", mod, %regex~(\[\]|\?\[\])$%%)
+    )
+    document("Flat hash table", mod, "flat_hash_table.rst", groups)
+}
+
 def document_module_fuzzer(root : string) {
     var mod = find_module("fuzzer")
     var groups <- array<DocGroup>(
@@ -738,6 +752,7 @@ def main {
     document_module_enum_trait(root)
     document_module_export_constructor(root)
     document_module_faker(root)
+    document_module_flat_hash_table(root)
     document_module_functional(root)
     document_module_fuzzer(root)
     document_module_if_not_null(root)

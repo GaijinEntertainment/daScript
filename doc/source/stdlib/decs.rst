@@ -55,7 +55,7 @@ Constants
 
 .. _global-decs-INVALID_ENTITY_ID:
 
-.. das:attribute:: INVALID_ENTITY_ID = [[decs::EntityId ]]
+.. das:attribute:: INVALID_ENTITY_ID = struct<decs::EntityId>(uninitialized )
 
 Entity ID which represents invalid entity.
 
@@ -879,6 +879,9 @@ If block returns true, iteration is stopped.
 .. _function-decs_decs_array_autoTT_array_ls_uint8_gr__int:
 
 .. das:function:: decs_array(atype: auto(TT); src: array<uint8>; capacity: int) : auto
+
+.. warning:: 
+  This is unsafe operation.
 
 Low level function returns temporary array of component given specific type of component.
 

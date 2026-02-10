@@ -41,6 +41,14 @@ Enumeration annotation which implements string constructor for enumeration.
 Uncategorized
 +++++++++++++
 
+.. _function-enum_trait_each_autoTT:
+
+.. das:function:: each(tt: auto(TT)) : iterator<TT>
+
+|detail/function-enum_trait-each-0xfe83f9b247ca1480|
+
+:Arguments: * **tt** : auto(TT)
+
 .. _function-enum_trait_string_auto:
 
 .. das:function:: string(arg: auto) : auto

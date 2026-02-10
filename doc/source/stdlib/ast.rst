@@ -89,45 +89,45 @@ properties of the `FieldDeclaration` object.
 
 .. das:attribute:: bitfield StructureFlags
 
-properties of the `Structure` object.
+:Fields: * **isClass** (0x1) - properties of the `Structure` object.
 
-:Fields: * **isClass** (0x1) - The structure is a class.
+         * **genCtor** (0x2) - The structure is a class.
 
-         * **genCtor** (0x2) - Generate constructor.
+         * **cppLayout** (0x4) - Generate constructor.
 
-         * **cppLayout** (0x4) - C++ data layout.
+         * **cppLayoutNotPod** (0x8) - C++ data layout.
 
-         * **cppLayoutNotPod** (0x8) - C++ layout not POD type, i.e. has alignment to accommodate for inheritance.
+         * **generated** (0x10) - C++ layout not POD type, i.e. has alignment to accommodate for inheritance.
 
-         * **generated** (0x10) - This structure is compiler-generated.
+         * **persistent** (0x20) - This structure is compiler-generated.
 
-         * **persistent** (0x20) - This structure is using persistent heap (C++ heap).
+         * **isLambda** (0x40) - This structure is using persistent heap (C++ heap).
 
-         * **isLambda** (0x40) - This structure is a lambda.
+         * **privateStructure** (0x80) - This structure is a lambda.
 
-         * **privateStructure** (0x80) - This structure is private.
+         * **macroInterface** (0x100) - This structure is private.
 
-         * **macroInterface** (0x100) - This structure is a macro interface.
+         * **_sealed** (0x200) - This structure is a macro interface.
 
-         * **_sealed** (0x200) - This structure is sealed. It cannot be inherited.
+         * **skipLockCheck** (0x400) - This structure is sealed. It cannot be inherited.
 
-         * **skipLockCheck** (0x400) - Skip lock check.
+         * **circular** (0x800) - Skip lock check.
 
-         * **circular** (0x800) - This structure has circulare references (and is invalid).
+         * **_generator** (0x1000) - This structure has circulare references (and is invalid).
 
-         * **_generator** (0x1000) - This structure is a generator.
+         * **hasStaticMembers** (0x2000) - This structure is a generator.
 
-         * **hasStaticMembers** (0x2000) - This structure has static members.
+         * **hasStaticFunctions** (0x4000) - This structure has static members.
 
-         * **hasStaticFunctions** (0x4000) - This structure has static functions.
+         * **hasInitFields** (0x8000) - This structure has static functions.
 
-         * **hasInitFields** (0x8000) - This structure has initialized fields.
+         * **safeWhenUninitialized** (0x10000) - This structure has initialized fields.
 
-         * **safeWhenUninitialized** (0x10000) - This structure is safe when uninitialized.
+         * **isTemplate** (0x20000) - This structure is safe when uninitialized.
 
-         * **isTemplate** (0x20000) - This structure is a template.
+         * **hasDefaultInitializer** (0x40000) - This structure is a template.
 
-         * **hasDefaultInitializer** (0x40000) - This structure has a default initializer.
+         * **noGenCtor** (0x80000) - This structure has a default initializer.
 
 
 .. _alias-ExprGenFlags:
@@ -262,54 +262,67 @@ properties of the `Function` object.
 .. das:attribute:: bitfield MoreFunctionFlags
 
 additional properties of the `Function` object.
+Function is a macro function.
 
-:Fields: * **macroFunction** (0x1) - Function is a macro function.
+:Fields: * **macroFunction** (0x1) - Converts das string arguments to C++ char *. Empty string, which is null in das, is converted to "".
 
-         * **needStringCast** (0x2) - Converts das string arguments to C++ char *. Empty string, which is null in das, is converted to "".
+         * **needStringCast** (0x2) - Function hash depends on arguments.
 
-         * **aotHashDeppendsOnArguments** (0x4) - Function hash depends on arguments.
+         * **aotHashDeppendsOnArguments** (0x4) - Function is late initialized.
 
-         * **lateInit** (0x8) - Function is late initialized.
+         * **lateInit** (0x8) - Function is requested to be JIT compiled.
 
-         * **requestJit** (0x10) - Function is requested to be JIT compiled.
+         * **requestJit** (0x10) - Function is unsafe outside of for loop sources.
 
-         * **unsafeOutsideOfFor** (0x20) - Function is unsafe outside of for loop sources.
+         * **unsafeOutsideOfFor** (0x20) - Skip lock check for this function.
 
-         * **skipLockCheck** (0x40) - Skip lock check for this function.
+         * **skipLockCheck** (0x40) - Function is safe for implicit calls. Otherwise temp values are to be specialized for in the generic.
 
-         * **safeImplicit** (0x80) - Function is safe for implicit calls. Otherwise temp values are to be specialized for in the generic.
+         * **safeImplicit** (0x80) - Function is deprecated.
 
-         * **deprecated** (0x100) - Function is deprecated.
+         * **deprecated** (0x100) - Function aliases CMRES (Copy or Move return result).
 
-         * **aliasCMRES** (0x200) - Function aliases CMRES (Copy or Move return result).
+         * **aliasCMRES** (0x200) - Function never aliases CMRES.
 
-         * **neverAliasCMRES** (0x400) - Function never aliases CMRES.
+         * **neverAliasCMRES** (0x400) - Function address is taken.
 
-         * **addressTaken** (0x800) - Function address is taken.
+         * **addressTaken** (0x800) - Function is a property function.
 
-         * **propertyFunction** (0x1000) - Function is a property function.
+         * **propertyFunction** (0x1000) - Function is a P/Invoke function, i.e. cross-context call.
 
-         * **pinvoke** (0x2000) - Function is a P/Invoke function, i.e. cross-context call.
+         * **pinvoke** (0x2000) - Function is JIT only.
 
-         * **jitOnly** (0x4000) - Function is JIT only.
+         * **jitOnly** (0x4000) - Function is a static class method.
 
-         * **isStaticClassMethod** (0x8000) - Function is a static class method.
+         * **isStaticClassMethod** (0x8000) - Function is requested to not be JIT compiled.
 
-         * **requestNoJit** (0x10000) - Function is requested to not be JIT compiled.
+         * **requestNoJit** (0x10000) - Function requires JIT context and line info.
 
-         * **jitContextAndLineInfo** (0x20000) - Function requires JIT context and line info.
+         * **jitContextAndLineInfo** (0x20000) - Discarding the return value of the function is unsafe.
 
-         * **nodiscard** (0x40000) - Discarding the return value of the function is unsafe.
+         * **nodiscard** (0x40000) - Function captures string arguments.
 
-         * **captureString** (0x80000) - Function captures string arguments.
+         * **captureString** (0x80000) - Function calls capture string arguments.
 
-         * **callCaptureString** (0x100000) - Function calls capture string arguments.
+         * **callCaptureString** (0x100000) - Function has a string builder.
 
-         * **hasStringBuilder** (0x200000) - Function has a string builder.
+         * **hasStringBuilder** (0x200000) - Function is recursive.
 
-         * **recursive** (0x400000) - Function is recursive.
+         * **recursive** (0x400000) - Function is a template function.
 
-         * **isTemplate** (0x800000) - Function is a template function.
+         * **isTemplate** (0x800000) - Function is unsafe, when its not used to clone arrays.
+
+         * **unsafeWhenNotCloneArray** (0x1000000) - This flag is a stub.
+
+         * **stub** (0x2000000) - Function will shutdown after all other shutdonws are done.
+
+         * **lateShutdown** (0x4000000) - Function has try\recover blocks.
+
+         * **hasTryRecover** (0x8000000) - Function has unsafe operations made by user.
+
+         * **hasUnsafe** (0x10000000) - Function is a const class method.
+
+         * **isConstClassMethod** (0x20000000)
 
 
 .. _alias-FunctionSideEffectFlags:
@@ -336,44 +349,52 @@ side-effect properties of the `Function` object.
 .. das:attribute:: bitfield VariableFlags
 
 properties of the `Variable` object.
+Variable is initialized via move <-
+Variable is initialized via clone :=
 
-:Fields: * **init_via_move** (0x1) - Variable is initialized via move <-
+:Fields: * **init_via_move** (0x1) - Variable is used
 
-         * **init_via_clone** (0x2) - Variable is initialized via clone :=
+         * **init_via_clone** (0x2) - Variable is an alias for CMRES return value
 
-         * **used** (0x4) - Variable is used
+         * **used** (0x4) - Variable is marked as used (to suppress unused warnings)
 
-         * **aliasCMRES** (0x8) - Variable is an alias for CMRES return value
+         * **aliasCMRES** (0x8) - Variable is a global shared variable
 
-         * **marked_used** (0x10) - Variable is marked as used (to suppress unused warnings)
+         * **marked_used** (0x10) - @do_not_delete annotation on the variable
 
-         * **global_shared** (0x20) - Variable is a global shared variable
+         * **global_shared** (0x20) - Variable is generated by the compiler
 
-         * **do_not_delete** (0x40) - @do_not_delete annotation on the variable
+         * **do_not_delete** (0x40) - Variable is captured by reference in a closure
 
-         * **generated** (0x80) - Variable is generated by the compiler
+         * **generated** (0x80) - Variable can shadow another variable in an inner scope
 
-         * **capture_as_ref** (0x100) - Variable is captured by reference in a closure
+         * **capture_as_ref** (0x100) - Variable is private to the class/struct
 
-         * **can_shadow** (0x200) - Variable can shadow another variable in an inner scope
+         * **can_shadow** (0x200) - Variable is a reification tag
 
-         * **private_variable** (0x400) - Variable is private to the class/struct
+         * **private_variable** (0x400) - Variable is a global variable
 
-         * **tag** (0x800) - Variable is a reification tag
+         * **tag** (0x800) - Variable is 'let inscope', i.e. there is a coresponding 'delete' in the 'finally' section of the block
 
-         * **global** (0x1000) - Variable is a global variable
+         * **global** (0x1000) - This variable will not be captured in lambda (think 'self').
 
-         * **inScope** (0x2000) - Variable is 'let inscope', i.e. there is a coresponding 'delete' in the 'finally' section of the block
+         * **inScope** (0x2000) - There is an early out from the scope where this variable is defined (via return and otherwise)
 
-         * **no_capture** (0x4000) - This variable will not be captured in lambda (think 'self').
+         * **no_capture** (0x4000) - Variable is used in the finally block
 
-         * **early_out** (0x8000) - There is an early out from the scope where this variable is defined (via return and otherwise)
+         * **early_out** (0x8000) - Variable is a static class member
 
-         * **used_in_finally** (0x10000) - Variable is used in the finally block
+         * **used_in_finally** (0x10000) - Variable is a bitfield constant
 
-         * **static_class_member** (0x20000) - Variable is a static class member
+         * **static_class_member** (0x20000) - This variable can be deleted as POD
 
-         * **bitfield_constant** (0x40000) - Variable is a bitfield constant
+         * **bitfield_constant** (0x40000) - POD delete has been generated for this variable
+
+         * **pod_delete** (0x80000) - This variable is returned via move in a function with only one return path
+
+         * **pod_delete_gen** (0x100000) - This variable has been passed via consume
+
+         * **single_return_via_move** (0x200000)
 
 
 .. _alias-VariableAccessFlags:
@@ -399,54 +420,54 @@ access properties of the `Variable` object.
 
 .. das:attribute:: bitfield ExprBlockFlags
 
-properties of the `ExprBlock` object.
+:Fields: * **isClosure** (0x1) - properties of the `ExprBlock` object.
 
-:Fields: * **isClosure** (0x1) - Block is a closure, and not a regular expression list.
+         * **hasReturn** (0x2) - Block is a closure, and not a regular expression list.
 
-         * **hasReturn** (0x2) - Block has a return statement.
+         * **copyOnReturn** (0x4) - Block has a return statement.
 
-         * **copyOnReturn** (0x4) - When invoked, the block result is copied on return.
+         * **moveOnReturn** (0x8) - When invoked, the block result is copied on return.
 
-         * **moveOnReturn** (0x8) - When invoked, the block result is moved on return.
+         * **inTheLoop** (0x10) - When invoked, the block result is moved on return.
 
-         * **inTheLoop** (0x10) - Block is inside a loop.
+         * **finallyBeforeBody** (0x20) - Block is inside a loop.
 
-         * **finallyBeforeBody** (0x20) - Finally is to be visited before the body.
+         * **finallyDisabled** (0x40) - Finally is to be visited before the body.
 
-         * **finallyDisabled** (0x40) - Finally is disabled.
+         * **aotSkipMakeBlock** (0x80) - Finally is disabled.
 
-         * **aotSkipMakeBlock** (0x80) - AOT is allowed to skip make block generation, and pass [&]() directly.
+         * **aotDoNotSkipAnnotationData** (0x100) - AOT is allowed to skip make block generation, and pass [&]() directly.
 
-         * **aotDoNotSkipAnnotationData** (0x100) - AOT should not skip annotation data even if make block is skipped.
+         * **isCollapseable** (0x200) - AOT should not skip annotation data even if make block is skipped.
 
-         * **isCollapseable** (0x200) - Block is eligible for collapse optimization.
+         * **needCollapse** (0x400) - Block is eligible for collapse optimization.
 
-         * **needCollapse** (0x400) - Block needs to be collapsed.
+         * **hasMakeBlock** (0x800) - Block needs to be collapsed.
 
-         * **hasMakeBlock** (0x800) - Block has make block operation.
+         * **hasEarlyOut** (0x1000) - Block has make block operation.
 
-         * **hasEarlyOut** (0x1000) - Block has early out (break/continue/return).
+         * **forLoop** (0x2000) - Block has early out (break/continue/return).
 
-         * **forLoop** (0x2000) - Block is a for loop body.
+         * **hasExitByLabel** (0x4000) - Block is a for loop body.
 
-         * **hasExitByLabel** (0x4000) - Block has exit by label (goto outside).
+         * **isLambdaBlock** (0x8000) - Block has exit by label (goto outside).
 
-         * **isLambdaBlock** (0x8000) - Block is a lambda block.
+         * **isGeneratorBlock** (0x10000) - Block is a lambda block.
 
 
 .. _alias-ExprAtFlags:
 
 .. das:attribute:: bitfield ExprAtFlags
 
-properties of the `ExprAt` object.
+:Fields: * **r2v** (0x1) - properties of the `ExprAt` object.
 
-:Fields: * **r2v** (0x1) - Reference to value conversion is applied.
+         * **r2cr** (0x2) - Reference to value conversion is applied.
 
-         * **r2cr** (0x2) - Read to const reference is propagated.
+         * **write** (0x4) - Read to const reference is propagated.
 
-         * **write** (0x4) - The result is written to.
+         * **no_promotion** (0x8) - The result is written to.
 
-         * **no_promotion** (0x8) - Promotion to operator is disabled, even if operator [] is overloaded.
+         * **under_clone** (0x10) - Promotion to operator is disabled, even if operator [] is overloaded.
 
 
 .. _alias-ExprMakeLocalFlags:
@@ -655,7 +676,7 @@ properties of the `ExprCopy` object.
 
          * **takeOverRightStack** (0x2) - Its 'foo = [MakeLocal]' and temp stack value is allocated by copy expression.
 
-         * **promoteToClone** (0x4) - Promote to clone, i.e. this is 'foo := bar' and not 'foo = bar'
+         * **allowConstantLValue** (0x4) - Promote to clone, i.e. this is 'foo := bar' and not 'foo = bar'
 
 
 .. _alias-MoveFlags:
@@ -667,6 +688,10 @@ Properties of the `ExprMove` object.
 :Fields: * **skipLockCheck** (0x1) - Skip lock checks.
 
          * **takeOverRightStack** (0x2) - Its 'foo <- [MakeLocal]' and temp stack value is allocated by move expression.
+
+         * **allowConstantLValue** (0x4) - Move is allowed for constant lvalue, for example x <- 5
+
+         * **podDelete** (0x8) - Move is a POD delete.
 
 
 .. _alias-IfFlags:
@@ -6634,6 +6659,7 @@ Searching
   *  :ref:`find_structure_field (structPtr: Structure? implicit; field: string implicit) : FieldDeclaration? <function-ast_find_structure_field_Structure_q__implicit_string_implicit>` 
   *  :ref:`find_unique_structure (program: smart_ptr\<Program\> implicit; name: string implicit) : Structure? <function-ast_find_unique_structure_smart_ptr_ls_Program_gr__implicit_string_implicit>` 
   *  :ref:`find_struct_field_parent (structure: smart_ptr\<Structure\> implicit; name: string implicit) : Structure const? <function-ast_find_struct_field_parent_smart_ptr_ls_Structure_gr__implicit_string_implicit>` 
+  *  :ref:`find_compiling_function_by_mangled_name_hash (moduleName: string implicit; mangledNameHash: uint64) : smart_ptr\<Function\> <function-ast_find_compiling_function_by_mangled_name_hash_string_implicit_uint64>` 
   *  :ref:`find_module (prog: smart_ptr\<Program\>; name: string) : Module? <function-ast_find_module_smart_ptr_ls_Program_gr__string>` 
   *  :ref:`find_module (name: string) : Module? <function-ast_find_module_string>` 
   *  :ref:`find_compiling_module (name: string) : Module? <function-ast_find_compiling_module_string>` 
@@ -6763,6 +6789,19 @@ Searching
 :Arguments: * **structure** : smart_ptr< :ref:`Structure <handle-ast-Structure>` > implicit
 
             * **name** : string implicit
+
+.. _function-ast_find_compiling_function_by_mangled_name_hash_string_implicit_uint64:
+
+.. das:function:: find_compiling_function_by_mangled_name_hash(moduleName: string implicit; mangledNameHash: uint64) : smart_ptr<Function>
+
+// stub
+def def public find_compiling_function_by_mangled_name_hash(moduleName:string const implicit; mangledNameHash:uint64 const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
+
+
+
+:Arguments: * **moduleName** : string implicit
+
+            * **mangledNameHash** : uint64
 
 .. _function-ast_find_module_smart_ptr_ls_Program_gr__string:
 

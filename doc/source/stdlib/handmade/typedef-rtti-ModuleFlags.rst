@@ -8,3 +8,4 @@ This module does not allow unsafe code.
 This module was parsed nameless.
 This module is visible everywhere.
 This module skips lock checking.
+This module allows pod inscope.

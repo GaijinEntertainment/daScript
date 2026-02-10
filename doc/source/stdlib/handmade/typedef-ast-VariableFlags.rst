@@ -18,3 +18,8 @@ There is an early out from the scope where this variable is defined (via return 
 Variable is used in the finally block
 Variable is a static class member
 Variable is a bitfield constant
+This variable can be deleted as POD
+POD delete has been generated for this variable
+This variable is returned via move in a function with only one return path
+This variable has been passed via consume
+

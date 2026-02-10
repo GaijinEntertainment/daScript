@@ -606,4 +606,32 @@ OS specific routines
 
 :Arguments: * **var** : string implicit
 
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-fio_mkdir_rec_string:
+
+.. das:function:: mkdir_rec(path: string) : bool
+
+// stub
+def // [modify_external]
+def public mkdir_rec(path:string const) : bool const
+	if ( path == "" )
+		return true
+
+	else
+		var st/*early_out*/:fio::FStat -const
+		if ( stat(path,st) && .`is_dir(st) )
+			return true
+
+		else
+			mkdir_rec(dir_name(path,__context__,__lineinfo__))
+			return mkdir(path)
+
+
+
+
+:Arguments: * **path** : string
+
 
