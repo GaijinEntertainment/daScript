@@ -1708,16 +1708,7 @@ Containers
 
 .. das:function:: each(rng: urange) : iterator<uint>
 
-// stub
-def // [nodiscard]
-[$::generic,$::nodiscard]
-def public each(rng:urange const) : iterator<uint>
-	var it:iterator<uint> -const
-	_builtin_make_urange_iterator(it,rng)
-	return <- it
-
-
-
+Returns an iterator over the given range.
 
 :Arguments: * **rng** : urange
 
@@ -1725,16 +1716,7 @@ def public each(rng:urange const) : iterator<uint>
 
 .. das:function:: each(rng: range64) : iterator<int64>
 
-// stub
-def // [nodiscard]
-[$::generic,$::nodiscard]
-def public each(rng:range64 const) : iterator<int64>
-	var it:iterator<int64> -const
-	_builtin_make_range64_iterator(it,rng)
-	return <- it
-
-
-
+Returns an iterator over the given range.
 
 :Arguments: * **rng** : range64
 
@@ -1742,16 +1724,7 @@ def public each(rng:range64 const) : iterator<int64>
 
 .. das:function:: each(rng: urange64) : iterator<uint64>
 
-// stub
-def // [nodiscard]
-[$::generic,$::nodiscard]
-def public each(rng:urange64 const) : iterator<uint64>
-	var it:iterator<uint64> -const
-	_builtin_make_urange64_iterator(it,rng)
-	return <- it
-
-
-
+Returns iterator over the given range.
 
 :Arguments: * **rng** : urange64
 
@@ -3504,46 +3477,32 @@ Uncategorized
 
 .. das:function:: get_context_share_counter() : uint64
 
-// stub
-def def public get_context_share_counter(context:__context const = __context__
-
-
+Returns use count for the shared context, which is incremented by each thread that accesses it.
 
 .. _function-builtin_das_is_dll_build:
 
 .. das:function:: das_is_dll_build() : bool
 
-// stub
-def def public das_is_dll_build
-
-
+Returns true if the current build is a DLL build, false otherwise.
+This determines if daslib symbols are available for the JIT.
 
 .. _function-builtin_get_platform_name:
 
 .. das:function:: get_platform_name() : string
 
-// stub
-def def public get_platform_name
-
-
+Returns name of the platform (operating system) that the program is running on, such as "windows", "linux", "darwin" (for macOS), "emscripten" (for WebAssembly), or "unknown" if it cannot be determined.
 
 .. _function-builtin_get_architecture_name:
 
 .. das:function:: get_architecture_name() : string
 
-// stub
-def def public get_architecture_name
-
-
+Returns the name of the architecture the program is running on, such as "x86_64", "x86", "arm64", "arm", "wasm32", or "unknown".
 
 .. _function-builtin_fmt_string_implicit_int8:
 
 .. das:function:: fmt(format: string implicit; value: int8) : string
 
-// stub
-def def public fmt(format:string const implicit; value:int8 const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
-
-
+Converts value to string given specified format (that of libfmt or C++20 std::format).
 
 :Arguments: * **format** : string implicit
 
@@ -3553,10 +3512,7 @@ def def public fmt(format:string const implicit; value:int8 const; context:__con
 
 .. das:function:: fmt(format: string implicit; value: uint8) : string
 
-// stub
-def def public fmt(format:string const implicit; value:uint8 const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
-
-
+Converts value to string given specified format (that of libfmt or C++20 std::format).
 
 :Arguments: * **format** : string implicit
 
@@ -3566,10 +3522,7 @@ def def public fmt(format:string const implicit; value:uint8 const; context:__co
 
 .. das:function:: fmt(format: string implicit; value: int16) : string
 
-// stub
-def def public fmt(format:string const implicit; value:int16 const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
-
-
+Converts value to string given specified format (that of libfmt or C++20 std::format).
 
 :Arguments: * **format** : string implicit
 
@@ -3579,10 +3532,7 @@ def def public fmt(format:string const implicit; value:int16 const; context:__co
 
 .. das:function:: fmt(format: string implicit; value: uint16) : string
 
-// stub
-def def public fmt(format:string const implicit; value:uint16 const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
-
-
+Converts value to string given specified format (that of libfmt or C++20 std::format).
 
 :Arguments: * **format** : string implicit
 
@@ -3592,10 +3542,7 @@ def def public fmt(format:string const implicit; value:uint16 const; context:__c
 
 .. das:function:: fmt(format: string implicit; value: int) : string
 
-// stub
-def def public fmt(format:string const implicit; value:int const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
-
-
+Converts value to string given specified format (that of libfmt or C++20 std::format).
 
 :Arguments: * **format** : string implicit
 
@@ -3605,10 +3552,7 @@ def def public fmt(format:string const implicit; value:int const; context:__cont
 
 .. das:function:: fmt(format: string implicit; value: uint) : string
 
-// stub
-def def public fmt(format:string const implicit; value:uint const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
-
-
+Converts value to string given specified format (that of libfmt or C++20 std::format).
 
 :Arguments: * **format** : string implicit
 
@@ -3618,10 +3562,7 @@ def def public fmt(format:string const implicit; value:uint const; context:__con
 
 .. das:function:: fmt(format: string implicit; value: int64) : string
 
-// stub
-def def public fmt(format:string const implicit; value:int64 const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
-
-
+Converts value to string given specified format (that of libfmt or C++20 std::format).
 
 :Arguments: * **format** : string implicit
 
@@ -3631,10 +3572,7 @@ def def public fmt(format:string const implicit; value:int64 const; context:__co
 
 .. das:function:: fmt(format: string implicit; value: uint64) : string
 
-// stub
-def def public fmt(format:string const implicit; value:uint64 const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
-
-
+Converts value to string given specified format (that of libfmt or C++20 std::format).
 
 :Arguments: * **format** : string implicit
 
@@ -3644,10 +3582,7 @@ def def public fmt(format:string const implicit; value:uint64 const; context:__c
 
 .. das:function:: fmt(format: string implicit; value: float) : string
 
-// stub
-def def public fmt(format:string const implicit; value:float const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
-
-
+Converts value to string given specified format (that of libfmt or C++20 std::format).
 
 :Arguments: * **format** : string implicit
 
@@ -3657,10 +3592,7 @@ def def public fmt(format:string const implicit; value:float const; context:__co
 
 .. das:function:: fmt(format: string implicit; value: double) : string
 
-// stub
-def def public fmt(format:string const implicit; value:double const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
-
-
+Converts value to string given specified format (that of libfmt or C++20 std::format).
 
 :Arguments: * **format** : string implicit
 
@@ -3670,13 +3602,9 @@ def def public fmt(format:string const implicit; value:double const; context:__c
 
 .. das:function:: consume_argument(a: auto(TT)&) : TT&
 
-// stub
-def def public consume_argument(var a:auto(TT)& -const) : TT&
-	unsafe
-		return <- a
-
-
-
+Notifies compiler that the argument is consumed, i.e. it will not be used after this call.
+This allows to avoid unnecessary clones and moves in some cases, for example when the argument is returned from the function.
+Alternative syntax is foo ( <-arg ) instead of foo ( consume_argument(arg) ).
 
 :Arguments: * **a** : auto(TT)&
 

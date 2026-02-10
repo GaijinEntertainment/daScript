@@ -859,7 +859,7 @@ String conversion routines
 
 .. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: int8) : StringBuilderWriter&
 
- Converts value to string given specified format (that of libfmt or C++20 std::format).
+Converts value to string given specified format (that of libfmt or C++20 std::format).
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 

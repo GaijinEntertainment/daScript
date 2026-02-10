@@ -6794,10 +6794,7 @@ Searching
 
 .. das:function:: find_compiling_function_by_mangled_name_hash(moduleName: string implicit; mangledNameHash: uint64) : smart_ptr<Function>
 
-// stub
-def def public find_compiling_function_by_mangled_name_hash(moduleName:string const implicit; mangledNameHash:uint64 const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
-
-
+Returns 'Function' in the currently compiling 'Program' given its mangled name hash.
 
 :Arguments: * **moduleName** : string implicit
 
