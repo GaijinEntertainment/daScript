@@ -10,8 +10,12 @@ using namespace das;
 
 void use_utf8();
 
+void require_project_specific_modules();//link time resolved dependencies
 das::FileAccessPtr get_file_access( char * pak );//link time resolved dependencies
+
+#ifdef DAS_ENABLE_DYN_INCLUDES
 bool require_dynamic_modules(const das::string &, const das::string &, TextWriter&);//link time resolved dependencies
+#endif
 
 TextPrinter tout;
 
@@ -221,7 +225,7 @@ int das_aot_main ( int argc, char * argv[] ) {
                 }
                 setDasRoot(argv[ai+1]);
                 ai += 1;
-            } else if ( strcmp(argv[ai],"-project-root") ) {
+            } else if ( strcmp(argv[ai],"-project-root")==0 ) {
                 project_root = argv[ai + 1];
                 ai++;
             } else if ( strcmp(argv[ai],"-v2syntax")==0 ) {
@@ -279,6 +283,7 @@ int das_aot_main ( int argc, char * argv[] ) {
     if (!Module::require("dasbind")) {
         NEED_MODULE(Module_DASBIND);
     }
+    require_project_specific_modules();
     #if !defined(DAS_ENABLE_DLL) || !defined(DAS_ENABLE_DYN_INCLUDES)
     // Otherwises search for static modules.
     #include "modules/external_need.inc"
@@ -730,6 +735,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     NEED_MODULE(Module_FIO);
     NEED_MODULE(Module_DASBIND);
 
+    require_project_specific_modules();
     #if !defined(DAS_ENABLE_DLL) || !defined(DAS_ENABLE_DYN_INCLUDES)
     // Otherwises search for static modules.
     #include "modules/external_need.inc"

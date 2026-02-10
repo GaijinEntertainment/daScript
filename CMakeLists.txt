@@ -805,6 +805,7 @@ MACRO(SETUP_LIBDASCRIPT library shared_lib)
                 ${MISC_SRC} ${SIMULATE_FUSION_SRC} ${MAIN_SRC}
                 ${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC} ${DASCRIPT_FMT_SRC})
     ENDIF()
+    TARGET_COMPILE_DEFINITIONS(${library} PUBLIC DAS_ENABLE_DYN_INCLUDES=1)
     ADD_DEPENDENCIES(${library} need_and_resolve)
     ADD_TARGET_PROJECT_XXD_DEPENDS(${library} libDaScript)
     target_include_directories(${library} PUBLIC
@@ -922,12 +923,9 @@ if (NOT ${DAS_TOOLS_DISABLED})
     SETUP_COMPILER_BINARY(daslang libDaScript DAS_MODULES_LIBS "")
     INSTALL(TARGETS daslang RUNTIME DESTINATION ${DAS_INSTALL_BINDIR})
 
-    # Enable dynamic modules lookup.
-    TARGET_COMPILE_DEFINITIONS(daslang PRIVATE DAS_ENABLE_DYN_INCLUDES=1)
-
     # Add daslang-dyn target.
     SETUP_COMPILER_BINARY(daslang_dyn libDaScriptDyn "" DAS_DYN_MODULES_LIBS)
-    TARGET_COMPILE_DEFINITIONS(daslang_dyn PRIVATE DAS_ENABLE_DLL=1 DAS_ENABLE_DYN_INCLUDES=1)
+    TARGET_COMPILE_DEFINITIONS(daslang_dyn PRIVATE DAS_ENABLE_DLL=1)
     # relative RPATH from install location
     if(APPLE)
         SET_TARGET_PROPERTIES(daslang_dyn PROPERTIES
