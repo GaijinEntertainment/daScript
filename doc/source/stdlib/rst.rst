@@ -199,14 +199,6 @@ Creates a safe function name by replacing special characters.
 
 :Arguments: * **name** : string
 
-.. _function-rst_mkdir_rec_string:
-
-.. das:function:: mkdir_rec(path: string) : bool
-
-Recursively creates directories for the specified path.
-
-:Arguments: * **path** : string
-
 .. _function-rst_function_label_file_smart_ptr_ls_Function_gr_Function_q__int:
 
 .. das:function:: function_label_file(value: smart_ptr<Function>|Function?; drop_args: int = 0) : auto

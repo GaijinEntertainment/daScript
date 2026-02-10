@@ -88,6 +88,12 @@ This macro implements expression reification for the named expressions (function
 
 This macro implements expression reification for class methods.
 
+.. _call-macro-templates_boost-qmacro_template_function:
+
+.. das:attribute:: qmacro_template_function
+
+This macro implements expression reification for the named expressions (function, variable, etc.)
+
 .. _call-macro-templates_boost-qmacro:
 
 .. das:attribute:: qmacro
@@ -648,7 +654,7 @@ Implementation details for the reification. This adds any array to the rules.
 
 .. das:function:: apply_qmacro(expr: smart_ptr<Expression>; blk: block<(var rules:Template):void>) : ExpressionPtr
 
-Implementation details for the expression reificaiton. This is a generat expression reification.
+Implementation details for the expression reificaiton.
 
 :Arguments: * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` >
 
@@ -751,6 +757,16 @@ Implementation details for the expression reificaiton. This is a template class 
 :Arguments: * **instance_name** : string
 
             * **template_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` >
+
+            * **blk** : block<(rules: :ref:`Template <struct-templates_boost-Template>` ):void>
+
+.. _function-templates_boost_apply_qmacro_template_function_FunctionPtr_block_ls_var_rules_c_Template_c_void_gr_:
+
+.. das:function:: apply_qmacro_template_function(func: FunctionPtr; blk: block<(var rules:Template):void>) : FunctionPtr
+
+|detail/function-templates_boost-apply_qmacro_template_function-0x3e0c0b5d66b8efb6|
+
+:Arguments: * **func** :  :ref:`FunctionPtr <alias-FunctionPtr>` 
 
             * **blk** : block<(rules: :ref:`Template <struct-templates_boost-Template>` ):void>
 

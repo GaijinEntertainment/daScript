@@ -80,6 +80,7 @@ THE SOFTWARE.
    match.rst
    linq.rst
    linq_boost.rst
+   flat_hash_table.rst
 
 
 

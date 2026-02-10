@@ -23,3 +23,10 @@ Function calls capture string arguments.
 Function has a string builder.
 Function is recursive.
 Function is a template function.
+Function is unsafe, when its not used to clone arrays.
+This flag is a stub.
+Function will shutdown after all other shutdonws are done.
+Function has try\recover blocks.
+Function has unsafe operations made by user.
+Function is a const class method.
+

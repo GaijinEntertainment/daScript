@@ -854,16 +854,6 @@ String conversion routines
   *  :ref:`uint64 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint64 <function-strings_uint64_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
   *  :ref:`float (str: string implicit; result: ConversionResult& implicit; offset: int& implicit) : float <function-strings_float_string_implicit_ConversionResult_implicit_int_implicit>` 
   *  :ref:`double (str: string implicit; result: ConversionResult& implicit; offset: int& implicit) : double <function-strings_double_string_implicit_ConversionResult_implicit_int_implicit>` 
-  *  :ref:`fmt (format: string implicit; value: int8) : string <function-strings_fmt_string_implicit_int8>` 
-  *  :ref:`fmt (format: string implicit; value: uint8) : string <function-strings_fmt_string_implicit_uint8>` 
-  *  :ref:`fmt (format: string implicit; value: int16) : string <function-strings_fmt_string_implicit_int16>` 
-  *  :ref:`fmt (format: string implicit; value: uint16) : string <function-strings_fmt_string_implicit_uint16>` 
-  *  :ref:`fmt (format: string implicit; value: int) : string <function-strings_fmt_string_implicit_int>` 
-  *  :ref:`fmt (format: string implicit; value: uint) : string <function-strings_fmt_string_implicit_uint>` 
-  *  :ref:`fmt (format: string implicit; value: int64) : string <function-strings_fmt_string_implicit_int64>` 
-  *  :ref:`fmt (format: string implicit; value: uint64) : string <function-strings_fmt_string_implicit_uint64>` 
-  *  :ref:`fmt (format: string implicit; value: float) : string <function-strings_fmt_string_implicit_float>` 
-  *  :ref:`fmt (format: string implicit; value: double) : string <function-strings_fmt_string_implicit_double>` 
 
 .. _function-strings_fmt_StringBuilderWriter_implicit_string_implicit_int8:
 
@@ -1310,106 +1300,6 @@ String conversion routines
             * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>` & implicit
 
             * **offset** : int& implicit
-
-.. _function-strings_fmt_string_implicit_int8:
-
-.. das:function:: fmt(format: string implicit; value: int8) : string
-
- Converts value to string given specified format (that of libfmt or C++20 std::format).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : int8
-
-.. _function-strings_fmt_string_implicit_uint8:
-
-.. das:function:: fmt(format: string implicit; value: uint8) : string
-
- Converts value to string given specified format (that of libfmt or C++20 std::format).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : uint8
-
-.. _function-strings_fmt_string_implicit_int16:
-
-.. das:function:: fmt(format: string implicit; value: int16) : string
-
- Converts value to string given specified format (that of libfmt or C++20 std::format).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : int16
-
-.. _function-strings_fmt_string_implicit_uint16:
-
-.. das:function:: fmt(format: string implicit; value: uint16) : string
-
- Converts value to string given specified format (that of libfmt or C++20 std::format).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : uint16
-
-.. _function-strings_fmt_string_implicit_int:
-
-.. das:function:: fmt(format: string implicit; value: int) : string
-
- Converts value to string given specified format (that of libfmt or C++20 std::format).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : int
-
-.. _function-strings_fmt_string_implicit_uint:
-
-.. das:function:: fmt(format: string implicit; value: uint) : string
-
- Converts value to string given specified format (that of libfmt or C++20 std::format).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : uint
-
-.. _function-strings_fmt_string_implicit_int64:
-
-.. das:function:: fmt(format: string implicit; value: int64) : string
-
- Converts value to string given specified format (that of libfmt or C++20 std::format).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : int64
-
-.. _function-strings_fmt_string_implicit_uint64:
-
-.. das:function:: fmt(format: string implicit; value: uint64) : string
-
- Converts value to string given specified format (that of libfmt or C++20 std::format).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : uint64
-
-.. _function-strings_fmt_string_implicit_float:
-
-.. das:function:: fmt(format: string implicit; value: float) : string
-
- Converts value to string given specified format (that of libfmt or C++20 std::format).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : float
-
-.. _function-strings_fmt_string_implicit_double:
-
-.. das:function:: fmt(format: string implicit; value: double) : string
-
- Converts value to string given specified format (that of libfmt or C++20 std::format).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : double
 
 +++++++++++++++
 String as array

@@ -580,7 +580,7 @@ Containers
   *  :ref:`get (Tab: table\<auto(keyT), void\>; at: keyT|keyT#; blk: block\<(var p:void?):void\>) : auto <function-builtin_get_table_ls_autokeyT,_void_gr__keyTkeyT_hh__block_ls_var_p_c_void_q__c_void_gr_>` 
   *  :ref:`get_value (Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#) : valT <function-builtin_get_value_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
   *  :ref:`get_value (var Tab: table\<auto(keyT), smart_ptr\<auto(valT)\>\>; at: keyT|keyT#) : smart_ptr\<valT\> <function-builtin_get_value_table_ls_autokeyT,_smart_ptr_ls_autovalT_gr__gr__keyTkeyT_hh_>` 
-  *  :ref:`get_value (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#) : valT <function-builtin_get_value_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
+  *  :ref:`get_value (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#) : valT <function-builtin_get_value__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
   *  :ref:`get_value (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#) : valT[-2] <function-builtin_get_value_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
   *  :ref:`erase (var Tab: table\<auto(keyT), auto(valT)\>; at: string#) : bool <function-builtin_erase_table_ls_autokeyT,_autovalT_gr__string_hh_>` 
   *  :ref:`erase (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#) : bool <function-builtin_erase_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
@@ -622,6 +622,9 @@ Containers
   *  :ref:`lock_forever (var Tab: table\<auto(keyT);auto(valT)\>|table\<auto(keyT);auto(valT)\>#) : table\<keyT, valT\># <function-builtin_lock_forever_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh_>` 
   *  :ref:`next (var it: iterator\<auto(TT)\>; var value: TT&) : bool <function-builtin_next_iterator_ls_autoTT_gr__TT>` 
   *  :ref:`each (rng: range) : iterator\<int\> <function-builtin_each_range>` 
+  *  :ref:`each (rng: urange) : iterator\<uint\> <function-builtin_each_urange>` 
+  *  :ref:`each (rng: range64) : iterator\<int64\> <function-builtin_each_range64>` 
+  *  :ref:`each (rng: urange64) : iterator\<uint64\> <function-builtin_each_urange64>` 
   *  :ref:`each (str: string) : iterator\<int\> <function-builtin_each_string>` 
   *  :ref:`each (a: auto(TT)[]) : iterator\<TT&\> <function-builtin_each_autoTT>` 
   *  :ref:`each (a: array\<auto(TT)\>) : iterator\<TT&\> <function-builtin_each_array_ls_autoTT_gr_>` 
@@ -1271,13 +1274,13 @@ Containers
 
             * **at** : option<keyT|keyT#>
 
-.. _function-builtin_get_value_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_:
+.. _function-builtin_get_value__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_:
 
 .. das:function:: get_value(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#) : valT
 
  gets the value from the table.
 
-:Arguments: * **Tab** : table<auto(keyT);auto(valT)>
+:Arguments: * **Tab** : table<auto(keyT);auto(valT)>!
 
             * **at** : option<keyT|keyT#>
 
@@ -1701,6 +1704,57 @@ Containers
 
 :Arguments: * **rng** : range
 
+.. _function-builtin_each_urange:
+
+.. das:function:: each(rng: urange) : iterator<uint>
+
+// stub
+def // [nodiscard]
+[$::generic,$::nodiscard]
+def public each(rng:urange const) : iterator<uint>
+	var it:iterator<uint> -const
+	_builtin_make_urange_iterator(it,rng)
+	return <- it
+
+
+
+
+:Arguments: * **rng** : urange
+
+.. _function-builtin_each_range64:
+
+.. das:function:: each(rng: range64) : iterator<int64>
+
+// stub
+def // [nodiscard]
+[$::generic,$::nodiscard]
+def public each(rng:range64 const) : iterator<int64>
+	var it:iterator<int64> -const
+	_builtin_make_range64_iterator(it,rng)
+	return <- it
+
+
+
+
+:Arguments: * **rng** : range64
+
+.. _function-builtin_each_urange64:
+
+.. das:function:: each(rng: urange64) : iterator<uint64>
+
+// stub
+def // [nodiscard]
+[$::generic,$::nodiscard]
+def public each(rng:urange64 const) : iterator<uint64>
+	var it:iterator<uint64> -const
+	_builtin_make_urange64_iterator(it,rng)
+	return <- it
+
+
+
+
+:Arguments: * **rng** : urange64
+
 .. _function-builtin_each_string:
 
 .. das:function:: each(str: string) : iterator<int>
@@ -1752,6 +1806,9 @@ Containers
 .. _function-builtin_each_enum_autoTT:
 
 .. das:function:: each_enum(tt: auto(TT)) : iterator<TT>
+
+.. warning:: 
+  This function is deprecated.
 
  iterates over each element in the enumeration
 
@@ -3438,5 +3495,189 @@ Compilation and AOT
 .. das:function:: compiling_module_name() : string
 
  returns name of the module currently being compiled.
+
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-builtin_get_context_share_counter:
+
+.. das:function:: get_context_share_counter() : uint64
+
+// stub
+def def public get_context_share_counter(context:__context const = __context__
+
+
+
+.. _function-builtin_das_is_dll_build:
+
+.. das:function:: das_is_dll_build() : bool
+
+// stub
+def def public das_is_dll_build
+
+
+
+.. _function-builtin_get_platform_name:
+
+.. das:function:: get_platform_name() : string
+
+// stub
+def def public get_platform_name
+
+
+
+.. _function-builtin_get_architecture_name:
+
+.. das:function:: get_architecture_name() : string
+
+// stub
+def def public get_architecture_name
+
+
+
+.. _function-builtin_fmt_string_implicit_int8:
+
+.. das:function:: fmt(format: string implicit; value: int8) : string
+
+// stub
+def def public fmt(format:string const implicit; value:int8 const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
+
+
+
+:Arguments: * **format** : string implicit
+
+            * **value** : int8
+
+.. _function-builtin_fmt_string_implicit_uint8:
+
+.. das:function:: fmt(format: string implicit; value: uint8) : string
+
+// stub
+def def public fmt(format:string const implicit; value:uint8 const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
+
+
+
+:Arguments: * **format** : string implicit
+
+            * **value** : uint8
+
+.. _function-builtin_fmt_string_implicit_int16:
+
+.. das:function:: fmt(format: string implicit; value: int16) : string
+
+// stub
+def def public fmt(format:string const implicit; value:int16 const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
+
+
+
+:Arguments: * **format** : string implicit
+
+            * **value** : int16
+
+.. _function-builtin_fmt_string_implicit_uint16:
+
+.. das:function:: fmt(format: string implicit; value: uint16) : string
+
+// stub
+def def public fmt(format:string const implicit; value:uint16 const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
+
+
+
+:Arguments: * **format** : string implicit
+
+            * **value** : uint16
+
+.. _function-builtin_fmt_string_implicit_int:
+
+.. das:function:: fmt(format: string implicit; value: int) : string
+
+// stub
+def def public fmt(format:string const implicit; value:int const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
+
+
+
+:Arguments: * **format** : string implicit
+
+            * **value** : int
+
+.. _function-builtin_fmt_string_implicit_uint:
+
+.. das:function:: fmt(format: string implicit; value: uint) : string
+
+// stub
+def def public fmt(format:string const implicit; value:uint const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
+
+
+
+:Arguments: * **format** : string implicit
+
+            * **value** : uint
+
+.. _function-builtin_fmt_string_implicit_int64:
+
+.. das:function:: fmt(format: string implicit; value: int64) : string
+
+// stub
+def def public fmt(format:string const implicit; value:int64 const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
+
+
+
+:Arguments: * **format** : string implicit
+
+            * **value** : int64
+
+.. _function-builtin_fmt_string_implicit_uint64:
+
+.. das:function:: fmt(format: string implicit; value: uint64) : string
+
+// stub
+def def public fmt(format:string const implicit; value:uint64 const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
+
+
+
+:Arguments: * **format** : string implicit
+
+            * **value** : uint64
+
+.. _function-builtin_fmt_string_implicit_float:
+
+.. das:function:: fmt(format: string implicit; value: float) : string
+
+// stub
+def def public fmt(format:string const implicit; value:float const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
+
+
+
+:Arguments: * **format** : string implicit
+
+            * **value** : float
+
+.. _function-builtin_fmt_string_implicit_double:
+
+.. das:function:: fmt(format: string implicit; value: double) : string
+
+// stub
+def def public fmt(format:string const implicit; value:double const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
+
+
+
+:Arguments: * **format** : string implicit
+
+            * **value** : double
+
+.. _function-builtin_consume_argument_autoTT:
+
+.. das:function:: consume_argument(a: auto(TT)&) : TT&
+
+// stub
+def def public consume_argument(var a:auto(TT)& -const) : TT&
+	unsafe
+		return <- a
+
+
+
+
+:Arguments: * **a** : auto(TT)&
 
 

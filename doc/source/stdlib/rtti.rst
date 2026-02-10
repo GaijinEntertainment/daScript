@@ -130,25 +130,27 @@ Flags which represent properties of the `StructInfo` object (rtti object which r
 
 .. das:attribute:: bitfield ModuleFlags
 
-Flags which represent the module's state.
+:Fields: * **builtIn** (0x1) - Flags which represent the module's state.
 
-:Fields: * **builtIn** (0x1) - This module is built-in.
+         * **promoted** (0x2) - This module is built-in.
 
-         * **promoted** (0x2) - This module is promoted to a builtin module.
+         * **isPublic** (0x4) - This module is promoted to a builtin module.
 
-         * **isPublic** (0x4) - This module is public.
+         * **isModule** (0x8) - This module is public.
 
-         * **isModule** (0x8) - This module is a module.
+         * **isSolidContext** (0x10) - This module is a module.
 
-         * **isSolidContext** (0x10) - This module is a solid context (can't be called from other contexts via pinvoke, global variables are cemented at locations)
+         * **fromExtraDependency** (0x20) - This module is a solid context (can't be called from other contexts via pinvoke, global variables are cemented at locations)
 
-         * **doNotAllowUnsafe** (0x20) - This module does not allow unsafe code.
+         * **doNotAllowUnsafe** (0x40) - This module does not allow unsafe code.
 
-         * **wasParsedNameless** (0x40) - This module was parsed nameless.
+         * **wasParsedNameless** (0x80) - This module was parsed nameless.
 
-         * **visibleEverywhere** (0x80) - This module is visible everywhere.
+         * **visibleEverywhere** (0x100) - This module is visible everywhere.
 
-         * **skipLockCheck** (0x100) - This module skips lock checking.
+         * **skipLockCheck** (0x200) - This module skips lock checking.
+
+         * **allowPodInscope** (0x400) - This module allows pod inscope.
 
 
 .. _alias-AnnotationDeclarationFlags:
@@ -604,141 +606,169 @@ Handled structures
 
 .. das:attribute:: CodeOfPolicies
 
-Object which holds compilation and simulation settings and restrictions.
+:Fields: * **aot** : bool - Object which holds compilation and simulation settings and restrictions.
 
-:Fields: * **aot** : bool - whether ahead-of-time compilation is enabled
+         * **aot_lib** : bool - whether ahead-of-time compilation is enabled
 
-         * **standalone_context** : bool - whether standalone context AOT compilation is enabled
+         * **standalone_context** : bool - library??
 
-         * **aot_module** : bool - specifies to AOT if we are compiling a module, or a final program
+         * **aot_module** : bool - whether paranoid validation is enabled (extra checks, no optimizations)
 
-         * **aot_macros** : bool - enables AOT of macro code (like 'qmacro_block' etc)
+         * **aot_macros** : bool - whether cross-platform AOT is enabled (if not, we generate code for the current platform)
 
-         * **completion** : bool - if we are in code completion mode
+         * **paranoid_validation** : bool - whether standalone context AOT compilation is enabled
 
-         * **export_all** : bool - export all functions and global variables
+         * **cross_platform** : bool - specifies to AOT if we are compiling a module, or a final program
 
-         * **serialize_main_module** : bool - if not, we recompile main module each time
+         * **aot_result** :  :ref:`das_string <handle-builtin-das_string>`  - enables AOT of macro code (like 'qmacro_block' etc)
 
-         * **keep_alive** : bool - keep context alive after main function
+         * **completion** : bool - file name for AOT output (if not set, we generate a temporary file)
 
-         * **very_safe_context** : bool - whether to use very safe context (delete of data is delayed, to avoid table[foo]=table[bar] lifetime bugs)
+         * **export_all** : bool - if we are in code completion mode
 
-         * **always_report_candidates_threshold** : int - threshold for reporting candidates for function calls. if less than this number, we always report them
+         * **serialize_main_module** : bool - export all functions and global variables
 
-         * **max_infer_passes** : int - maximum number of inference passes
+         * **keep_alive** : bool - if not, we recompile main module each time
 
-         * **stack** : uint - stack size
+         * **very_safe_context** : bool - keep context alive after main function
 
-         * **intern_strings** : bool - whether to intern strings
+         * **always_report_candidates_threshold** : int - whether to use very safe context (delete of data is delayed, to avoid table[foo]=table[bar] lifetime bugs)
 
-         * **persistent_heap** : bool - whether to use persistent heap (or linear heap)
+         * **max_infer_passes** : int - threshold for reporting candidates for function calls. if less than this number, we always report them
 
-         * **multiple_contexts** : bool - whether multiple contexts are allowed (pinvokes between contexts)
+         * **stack** : uint - maximum number of inference passes
 
-         * **heap_size_hint** : uint - heap size hint
+         * **intern_strings** : bool - stack size
 
-         * **string_heap_size_hint** : uint - string heap size hint
+         * **persistent_heap** : bool - whether to intern strings
 
-         * **solid_context** : bool - whether to use solid context (global variables are cemented at locations, can't be called from other contexts via pinvoke)
+         * **multiple_contexts** : bool - whether to use persistent heap (or linear heap)
 
-         * **macro_context_persistent_heap** : bool - whether macro context uses persistent heap
+         * **heap_size_hint** : uint - whether multiple contexts are allowed (pinvokes between contexts)
 
-         * **macro_context_collect** : bool - whether macro context does garbage collection
+         * **string_heap_size_hint** : uint - heap size hint
 
-         * **max_static_variables_size** : uint64 - maximum size of static variables
+         * **solid_context** : bool - string heap size hint
 
-         * **max_heap_allocated** : uint64 - maximum heap allocated
+         * **macro_context_persistent_heap** : bool - whether to use solid context (global variables are cemented at locations, can't be called from other contexts via pinvoke)
 
-         * **max_string_heap_allocated** : uint64 - maximum string heap allocated
+         * **macro_context_collect** : bool - whether macro context uses persistent heap
 
-         * **rtti** : bool - whether to enable RTTI
+         * **max_static_variables_size** : uint64 - whether macro context does garbage collection
 
-         * **unsafe_table_lookup** : bool - whether to allow unsafe table lookups (via [] operator)
+         * **max_heap_allocated** : uint64 - maximum size of static variables
 
-         * **relaxed_pointer_const** : bool - whether to relax pointer constness rules
+         * **max_string_heap_allocated** : uint64 - maximum heap allocated
 
-         * **version_2_syntax** : bool - allows use of version 2 syntax
+         * **rtti** : bool - maximum string heap allocated
 
-         * **gen2_make_syntax** : bool - whether to use gen2 make syntax
+         * **unsafe_table_lookup** : bool - whether to enable RTTI
 
-         * **relaxed_assign** : bool - allows relaxing of the assignment rules
+         * **relaxed_pointer_const** : bool - whether to allow unsafe table lookups (via [] operator)
 
-         * **no_unsafe** : bool - disables all unsafe operations
+         * **version_2_syntax** : bool - whether to relax pointer constness rules
 
-         * **local_ref_is_unsafe** : bool - local references are considered unsafe
+         * **gen2_make_syntax** : bool - allows use of version 2 syntax
 
-         * **no_global_variables** : bool - disallows global variables in this context (except for generated)
+         * **relaxed_assign** : bool - whether to use gen2 make syntax
 
-         * **no_global_variables_at_all** : bool - disallows global variables at all in this context
+         * **no_unsafe** : bool - allows relaxing of the assignment rules
 
-         * **no_global_heap** : bool - disallows global heap in this context
+         * **local_ref_is_unsafe** : bool - disables all unsafe operations
 
-         * **only_fast_aot** : bool - only fast AOT, no C++ name generation
+         * **no_global_variables** : bool - local references are considered unsafe
 
-         * **aot_order_side_effects** : bool - whether to consider side effects during AOT ordering
+         * **no_global_variables_at_all** : bool - disallows global variables in this context (except for generated)
 
-         * **no_unused_function_arguments** : bool - errors on unused function arguments
+         * **no_global_heap** : bool - disallows global variables at all in this context
 
-         * **no_unused_block_arguments** : bool - errors on unused block arguments
+         * **only_fast_aot** : bool - disallows global heap in this context
 
-         * **allow_block_variable_shadowing** : bool - allows block variable shadowing
+         * **aot_order_side_effects** : bool - only fast AOT, no C++ name generation
 
-         * **allow_local_variable_shadowing** : bool - allows local variable shadowing
+         * **no_unused_function_arguments** : bool - whether to consider side effects during AOT ordering
 
-         * **allow_shared_lambda** : bool - allows shared lambdas
+         * **no_unused_block_arguments** : bool - errors on unused function arguments
 
-         * **ignore_shared_modules** : bool - ignore shared modules during compilation
+         * **allow_block_variable_shadowing** : bool - errors on unused block arguments
 
-         * **default_module_public** : bool - default module mode is public
+         * **allow_local_variable_shadowing** : bool - allows block variable shadowing
 
-         * **no_deprecated** : bool - disallows use of deprecated features
+         * **allow_shared_lambda** : bool - allows local variable shadowing
 
-         * **no_aliasing** : bool - disallows aliasing (if aliasing is allowed, temporary lifetimes are extended)
+         * **ignore_shared_modules** : bool - allows shared lambdas
 
-         * **strict_smart_pointers** : bool - enables strict smart pointer checks
+         * **default_module_public** : bool - ignore shared modules during compilation
 
-         * **no_init** : bool - disallows use of 'init' in structures
+         * **no_deprecated** : bool - default module mode is public
 
-         * **strict_unsafe_delete** : bool - enables strict unsafe delete checks
+         * **no_aliasing** : bool - disallows use of deprecated features
 
-         * **no_members_functions_in_struct** : bool - disallows members functions in structures
+         * **strict_smart_pointers** : bool - disallows aliasing (if aliasing is allowed, temporary lifetimes are extended)
 
-         * **no_local_class_members** : bool - disallows local class members
+         * **no_init** : bool - enables strict smart pointer checks
 
-         * **report_invisible_functions** : bool - report invisible functions
+         * **strict_unsafe_delete** : bool - disallows use of 'init' in structures
 
-         * **report_private_functions** : bool - report private functions
+         * **no_members_functions_in_struct** : bool - enables strict unsafe delete checks
 
-         * **strict_properties** : bool - enables strict property checks
+         * **no_local_class_members** : bool - disallows members functions in structures
 
-         * **no_optimizations** : bool - disables all optimizations
+         * **report_invisible_functions** : bool - disallows local class members
 
-         * **fail_on_no_aot** : bool - fails compilation if AOT is not available
+         * **report_private_functions** : bool - report invisible functions
 
-         * **fail_on_lack_of_aot_export** : bool - fails compilation if AOT export is not available
+         * **strict_properties** : bool - report private functions
 
-         * **log_compile_time** : bool - log compile time
+         * **no_optimizations** : bool - enables strict property checks
 
-         * **log_total_compile_time** : bool - log total compile time
+         * **fail_on_no_aot** : bool - disables all optimizations
 
-         * **no_fast_call** : bool - disables fast call optimization
+         * **fail_on_lack_of_aot_export** : bool - fails compilation if AOT is not available
 
-         * **debugger** : bool - enables debugger support
+         * **log_compile_time** : bool - fails compilation if AOT export is not available
 
-         * **debug_infer_flag** : bool - enables debug inference flag
+         * **log_total_compile_time** : bool - log compile time
 
-         * **debug_module** :  :ref:`das_string <handle-builtin-das_string>`  - sets debug module (module which will be loaded when IDE connects)
+         * **no_fast_call** : bool - log total compile time
 
-         * **profiler** : bool - enables profiler support
+         * **scoped_stack_allocator** : bool - disables fast call optimization
 
-         * **profile_module** :  :ref:`das_string <handle-builtin-das_string>`  - sets profile module (module which will be loaded when profiler connects)
+         * **force_inscope_pod** : bool - enables debugger support
 
-         * **jit** : bool - enables JIT support
+         * **log_inscope_pod** : bool - enables debug inference flag
 
-         * **jit_module** :  :ref:`das_string <handle-builtin-das_string>`  - sets JIT module (module which will be loaded when JIT is enabled)
+         * **debugger** : bool - sets debug module (module which will be loaded when IDE connects)
+
+         * **debug_infer_flag** : bool - enables profiler support
+
+         * **debug_module** :  :ref:`das_string <handle-builtin-das_string>`  - sets profile module (module which will be loaded when profiler connects)
+
+         * **profiler** : bool - enables JIT support
+
+         * **profile_module** :  :ref:`das_string <handle-builtin-das_string>`  - sets JIT module (module which will be loaded when JIT is enabled)
 
          * **threadlock_context** : bool - enables threadlock context
+
+         * **jit_enabled** : bool - JIT enabled - if enabled, JIT will be used to compile code at runtime. if not enabled, code will be interpreted.
+
+         * **jit_module** :  :ref:`das_string <handle-builtin-das_string>`  - JIT module - module, loaded when -jit is specified.
+
+         * **jit_jit_all_functions** : bool - JIT all functions - if enabled, JIT will compile all functions in the module, otherwise it will compile only functions which are called at runtime.
+
+         * **jit_debug_info** : bool - JIT debug info - if enabled, JIT will generate debug info for JIT compiled code, which can be used by debuggers and profilers.
+
+         * **jit_use_dll_mode** : bool - JIT opt level - optimization level for JIT compiled code (0-3)
+
+         * **jit_output_folder** :  :ref:`das_string <handle-builtin-das_string>`  - JIT size level - size optimization level for JIT compiled code (0-3)
+
+         * **jit_opt_level** : int - JIT dll mode - if enabled, JIT will generate DLL's into JIT output folder, and load them from there. if not enabled, JIT will generate code in memory and execute it directly.
+
+         * **jit_size_level** : int - JIT output folder (where JIT compiled code will be stored)
+
+         * **jit_path_to_shared_lib** :  :ref:`das_string <handle-builtin-das_string>`  - path to shared library, which is used in JIT
+
+         * **jit_path_to_linker** :  :ref:`das_string <handle-builtin-das_string>`  - path to linker, which is used in JIT
 
 
 .. _handle-rtti-FileInfo:
@@ -859,9 +889,9 @@ Object which holds information about compilation error or exception.
 
 .. das:attribute:: Module
 
- Collection of types, aliases, functions, classes, macros etc under a single namespace.
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  -  Collection of types, aliases, functions, classes, macros etc under a single namespace.
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Module name.
+         * **fileName** :  :ref:`das_string <handle-builtin-das_string>`  - Module name.
 
          * **moduleFlags** :  :ref:`ModuleFlags <alias-ModuleFlags>`  - Module flags.
 
