@@ -3625,11 +3625,7 @@ Uncategorized
 
 .. das:function:: float4x4 implicit ==const.[](m: float4x4 implicit ==const; i: int) : float4&
 
-// stub
-def // 
-def public .[](var m:math::float4x4 implicit ==const; i:int const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
-
-
+Returns the element of the 4x4 matrix at the specified index.
 
 :Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>`  implicit!
 
@@ -3639,11 +3635,7 @@ def public .[](var m:math::float4x4 implicit ==const; i:int const; context:__con
 
 .. das:function:: float4x4 const implicit ==const.[](m: float4x4 const implicit ==const; i: int) : float4
 
-// stub
-def // 
-def public .[](m:math::float4x4 const implicit ==const; i:int const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
-
-
+Returns the element of the 4x4 matrix at the specified index.
 
 :Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>`  implicit!
 
@@ -3653,11 +3645,7 @@ def public .[](m:math::float4x4 const implicit ==const; i:int const; context:__c
 
 .. das:function:: float4x4 implicit ==const.[](m: float4x4 implicit ==const; i: uint) : float4&
 
-// stub
-def // 
-def public .[](var m:math::float4x4 implicit ==const; i:uint const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
-
-
+Returns the element of the 4x4 matrix at the specified index.
 
 :Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>`  implicit!
 
@@ -3667,11 +3655,7 @@ def public .[](var m:math::float4x4 implicit ==const; i:uint const; context:__co
 
 .. das:function:: float4x4 const implicit ==const.[](m: float4x4 const implicit ==const; i: uint) : float4
 
-// stub
-def // 
-def public .[](m:math::float4x4 const implicit ==const; i:uint const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
-
-
+Returns the element of the 4x4 matrix at the specified index.
 
 :Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>`  implicit!
 
@@ -3697,11 +3681,7 @@ def public .[](m:math::float4x4 const implicit ==const; i:uint const; context:__
 
 .. das:function:: float3x4 implicit ==const.[](m: float3x4 implicit ==const; i: int) : float3&
 
-// stub
-def // 
-def public .[](var m:math::float3x4 implicit ==const; i:int const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
-
-
+Returns the element of the 3x4 matrix at the specified index.
 
 :Arguments: * **m** :  :ref:`float3x4 <handle-math-float3x4>`  implicit!
 
@@ -3711,11 +3691,7 @@ def public .[](var m:math::float3x4 implicit ==const; i:int const; context:__con
 
 .. das:function:: float3x4 const implicit ==const.[](m: float3x4 const implicit ==const; i: int) : float3
 
-// stub
-def // 
-def public .[](m:math::float3x4 const implicit ==const; i:int const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
-
-
+Returns the element of the 3x4 matrix at the specified index.
 
 :Arguments: * **m** :  :ref:`float3x4 <handle-math-float3x4>`  implicit!
 
@@ -3725,10 +3701,7 @@ def public .[](m:math::float3x4 const implicit ==const; i:int const; context:__c
 
 .. das:function:: float3x4 implicit ==const.[](m: float3x4 implicit ==const; i: uint) : float3&
 
-// stub
-def // 
-def public .[](var m:math::float3x4 implicit ==const; i:uint const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
-
+Returns the element of the 3x4 matrix at the specified index.
 
 
 :Arguments: * **m** :  :ref:`float3x4 <handle-math-float3x4>`  implicit!
@@ -3739,11 +3712,7 @@ def public .[](var m:math::float3x4 implicit ==const; i:uint const; context:__co
 
 .. das:function:: float3x4 const implicit ==const.[](m: float3x4 const implicit ==const; i: uint) : float3
 
-// stub
-def // 
-def public .[](m:math::float3x4 const implicit ==const; i:uint const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
-
-
+Returns element of 3x4 matrix at specified index.
 
 :Arguments: * **m** :  :ref:`float3x4 <handle-math-float3x4>`  implicit!
 
@@ -3825,11 +3794,7 @@ def public .[](m:math::float3x4 const implicit ==const; i:uint const; context:__
 
 .. das:function:: float3x3 implicit ==const.[](m: float3x3 implicit ==const; i: int) : float3&
 
-// stub
-def // 
-def public .[](var m:math::float3x3 implicit ==const; i:int const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
-
-
+Returns the element of the 3x3 matrix at the specified index.
 
 :Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>`  implicit!
 
@@ -3839,11 +3804,7 @@ def public .[](var m:math::float3x3 implicit ==const; i:int const; context:__con
 
 .. das:function:: float3x3 const implicit ==const.[](m: float3x3 const implicit ==const; i: int) : float3
 
-// stub
-def // 
-def public .[](m:math::float3x3 const implicit ==const; i:int const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
-
-
+Returns the element of the 3x3 matrix at the specified index.
 
 :Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>`  implicit!
 
@@ -3853,11 +3814,7 @@ def public .[](m:math::float3x3 const implicit ==const; i:int const; context:__c
 
 .. das:function:: float3x3 implicit ==const.[](m: float3x3 implicit ==const; i: uint) : float3&
 
-// stub
-def // 
-def public .[](var m:math::float3x3 implicit ==const; i:uint const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
-
-
+Returns the element of the 3x3 matrix at the specified index.
 
 :Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>`  implicit!
 
@@ -3867,11 +3824,7 @@ def public .[](var m:math::float3x3 implicit ==const; i:uint const; context:__co
 
 .. das:function:: float3x3 const implicit ==const.[](m: float3x3 const implicit ==const; i: uint) : float3
 
-// stub
-def // 
-def public .[](m:math::float3x3 const implicit ==const; i:uint const; context:__context const = __context__; at:__lineInfo const = __lineinfo__
-
-
+Returns the element of the 3x3 matrix at the specified index.
 
 :Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>`  implicit!
 
