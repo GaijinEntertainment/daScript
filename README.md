@@ -1,5 +1,5 @@
 # Daslang
-Daslang - high-performance statically strong typed scripting language
+Daslang - high-performance statically strongly typed scripting language
 
 MacOS/linux/win32/win64 build status [![build](https://github.com/GaijinEntertainment/daScript/actions/workflows/build.yml/badge.svg)](https://github.com/GaijinEntertainment/daScript/actions/workflows/build.yml)\
 MacOS/linux/win64 wasm build status [![wasm_build](https://github.com/GaijinEntertainment/daScript/actions/workflows/wasm_build.yml/badge.svg)](https://github.com/GaijinEntertainment/daScript/actions/workflows/wasm_build.yml)
@@ -23,7 +23,66 @@ git submodule update --init --recursive
 ## Building
 
 ```sh
-mkdir -p build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo
-cmake --build . --target daslang --config RelWithDebInfo
+cmake -Bbuild -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build --target daslang --config RelWithDebInfo
 ```
+
+## Aot usage
+For detailed usage see [tutorial02aot.cpp](examples/tutorial/tutorial02aot.cpp).
+Here's a short version:
+First compile `daslang`:
+```sh
+cmake -Bbuild
+cmake --build build --target daslang
+```
+Now let's create a `main.das` file with the following content:
+```sh
+[export]
+def main() { print("Hello world\n"); }
+```
+Create a `C++` application, called `test_aot.cpp`. For simplicity we don't
+use error checking here (this example was taken from [tutorial02aot.cpp](examples/tutorial/tutorial02aot.cpp)):
+```cpp
+#include "daScript/daScript.h"
+int main(int argc, char **argv) {
+    using namespace das;
+    NEED_ALL_DEFAULT_MODULES;
+    Module::Initialize();
+    TextPrinter tout;
+    ModuleGroup dummyLibGroup;
+    CodeOfPolicies policies = {.aot = true, .version_2_syntax=true};
+    auto fAccess = make_smart<FsFileAccess>();
+    auto program = compileDaScript("main.das", fAccess, tout, dummyLibGroup, policies);
+    assert(!program->failed());
+    Context ctx(program->getContextStackSize());
+    program->simulate(ctx, tout);
+    auto fnTest = ctx.findFunction("main");
+    assert(fnTest != nullptr);
+    ctx.evalWithCatch(fnTest, nullptr);
+    Module::Shutdown();
+}
+```
+Perform AOT compilation, then compile and run the binary:
+```sh
+./bin/daslang -aot main.das aot_main.cpp
+clang++ test_aot.cpp aot_main.cpp -Iinclude lib/liblibDaScript.a lib/liblibUriParser.a -o aot_example
+./aot_example
+```
+In a similar manner, you can link against a shared library instead of a static one:
+```sh
+cmake --build build --target daslang_dyn
+./bin/daslang_dyn -aot main.das aot_main.cpp
+clang++ test_aot.cpp aot_main.cpp -Iinclude lib/liblibDaScriptDyn.so -o aot_example
+LD_LIBRARY_PATH=./lib ./aot_example
+```
+
+## JIT usage
+To use JIT, you need the `LLVM 16.0.6` shared library at the path
+`lib/LLVM.dll`, this name is fixed because of [dynamic bindings](modules/dasLLVM/bindings/llvm_func.das).
+
+Once you have `LLVM.dll`, all you need is:
+```sh
+./bin/daslang_dyn -jit main.das
+```
+For more details on how JIT works and what can be configured, see the
+[JIT Readme](modules/dasLLVM/README.md).
