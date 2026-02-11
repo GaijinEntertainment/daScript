@@ -2180,17 +2180,36 @@ def repeat(element : auto(TT); count : int) : iterator<TT -const -&> {
 
 [skip_lock_check, unused_argument(tt)]
 def private sequence_equal_impl(var first, second; tt : auto(TT)) : bool {
-    var inscope arr_first <- to_array(first)
-    var inscope arr_second <- to_array(second)
-    if (length(arr_first) != length(arr_second)) {
-        return false
-    }
-    for (f, s in arr_first, arr_second) {
-        if (f != s) {
+    static_if (typeinfo can_copy(type<TT -const -&>)) {
+        var f : TT -const -&
+        var s : TT -const -&
+        while (true) {
+            let has_f = next(first, f)
+            let has_s = next(second, s)
+            if (has_f != has_s) {
+                return false
+            }
+            if (!has_f) {
+                return true
+            }
+            if (f != s) {
+                return false
+            }
+        }
+        return true
+    } else {
+        var inscope arr_first <- to_array(first)
+        var inscope arr_second <- to_array(second)
+        if (length(arr_first) != length(arr_second)) {
             return false
         }
+        for (f, s in arr_first, arr_second) {
+            if (f != s) {
+                return false
+            }
+        }
+        return true
     }
-    return true
 }
 
 [skip_lock_check, unused_argument(tt)]
@@ -2220,17 +2239,36 @@ def sequence_equal(first, second : array<auto(TT)>) : bool {
 
 [skip_lock_check, unused_argument(tt)]
 def private sequence_equal_by_impl(var first, second; tt : auto(TT); key : block<(arg : TT -&) : auto>) : bool {
-    var inscope arr_first <- to_array(first)
-    var inscope arr_second <- to_array(second)
-    if (length(arr_first) != length(arr_second)) {
-        return false
-    }
-    for (f, s in arr_first, arr_second) {
-        if (key(f) != key(s)) {
+    static_if (typeinfo can_copy(type<TT -const -&>)) {
+        var f : TT -const -&
+        var s : TT -const -&
+        while (true) {
+            let has_f = next(first, f)
+            let has_s = next(second, s)
+            if (has_f != has_s) {
+                return false
+            }
+            if (!has_f) {
+                return true
+            }
+            if (key(f) != key(s)) {
+                return false
+            }
+        }
+        return true
+    } else {
+        var inscope arr_first <- to_array(first)
+        var inscope arr_second <- to_array(second)
+        if (length(arr_first) != length(arr_second)) {
             return false
         }
+        for (f, s in arr_first, arr_second) {
+            if (key(f) != key(s)) {
+                return false
+            }
+        }
+        return true
     }
-    return true
 }
 
 [skip_lock_check, unused_argument(tt)]
