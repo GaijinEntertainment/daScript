@@ -1,5 +1,5 @@
 cmake_minimum_required (VERSION 3.16)
-project (DAS)
+project (DAS VERSION 0.5.9)
 include(GNUInstallDirs)
 
 # for now we gonna run with exceptions enabled
@@ -428,14 +428,15 @@ SET_TARGET_PROPERTIES(libUriParserDyn PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_definitions(libUriParser PUBLIC URIPARSER_BUILD_CHAR)
 target_compile_definitions(libUriParser PUBLIC URI_STATIC_BUILD)
 target_include_directories(libUriParser PUBLIC
-  ${PROJECT_SOURCE_DIR}/3rdparty/uriparser/include
+  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/3rdparty/uriparser/include>
+  $<INSTALL_INTERFACE:include>
 )
 target_compile_definitions(libUriParserDyn PUBLIC URIPARSER_BUILD_CHAR)
 target_compile_definitions(libUriParserDyn PUBLIC URI_STATIC_BUILD)
 target_include_directories(libUriParserDyn PUBLIC
-  ${PROJECT_SOURCE_DIR}/3rdparty/uriparser/include
+  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/3rdparty/uriparser/include>
+  $<INSTALL_INTERFACE:include>
 )
-
 # libDaScript
 
 FLEX(src/parser/ds_lexer.lpp)
@@ -521,6 +522,7 @@ src/ast/ast_export.cpp
 src/ast/ast_parse.cpp
 src/ast/ast_debug_info_helper.cpp
 src/ast/ast_handle.cpp
+src/ast/dyn_modules.cpp
 include/daScript/ast/compilation_errors.h
 include/daScript/ast/ast_typedecl.h
 include/daScript/ast/ast_typefactory.h
@@ -802,7 +804,8 @@ MACRO(SETUP_LIBDASCRIPT library shared_lib)
                 ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${SIMULATE_SRC} ${BUILTIN_SRC}
                 ${MISC_SRC} ${SIMULATE_FUSION_SRC} ${MAIN_SRC}
                 ${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC} ${DASCRIPT_FMT_SRC})
-        TARGET_COMPILE_DEFINITIONS(${library} PRIVATE DAS_EXPORTS=1 DAS_MOD_EXPORTS=1 DAS_ENABLE_DLL=1)
+        TARGET_COMPILE_DEFINITIONS(${library} PRIVATE DAS_EXPORTS=1 DAS_MOD_EXPORTS=1)
+        TARGET_COMPILE_DEFINITIONS(${library} PUBLIC DAS_ENABLE_DLL=1)
         # Set DAS_EXPORTS to export all MOD symbols from libDaScript
     ELSE()
         ADD_LIBRARY(${library} STATIC ${PARSER_GENERATED_SRC}
@@ -813,7 +816,7 @@ MACRO(SETUP_LIBDASCRIPT library shared_lib)
     TARGET_COMPILE_DEFINITIONS(${library} PUBLIC DAS_ENABLE_DYN_INCLUDES=1)
     ADD_DEPENDENCIES(${library} need_and_resolve)
     ADD_TARGET_PROJECT_XXD_DEPENDS(${library} libDaScript)
-    target_include_directories(${library} PUBLIC
+    target_include_directories(${library} PRIVATE
             ${DAS_SMMALLOC_DIR}
             ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/uriparser/include
             ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -835,12 +838,16 @@ MACRO(SETUP_LIBDASCRIPT library shared_lib)
     ENDIF()
     SETUP_CPP11(${library})
     #target_precompile_headers(${library} PUBLIC include/daScript/misc/platform.h)
+
+    # Static modules generated include.
+    target_include_directories(${library} PUBLIC
+        $<BUILD_INTERFACE:${NEED_MODULES_PATH}>
+        $<INSTALL_INTERFACE:include>
+    )
 ENDMACRO()
 
 SETUP_LIBDASCRIPT(libDaScript OFF)
-target_include_directories(libDaScript PUBLIC ${NEED_MODULES_PATH})
 SETUP_LIBDASCRIPT(libDaScriptDyn ON)
-target_include_directories(libDaScriptDyn PUBLIC ${NEED_MODULES_PATH})
 
 if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
 
@@ -921,6 +928,8 @@ if (NOT ${DAS_TOOLS_DISABLED})
         add_executable(${target_name} ${DAS_DASCRIPT_MAIN_SRC})
         TARGET_LINK_LIBRARIES(${target_name} ${library_name} ${SRC_LIBRARIES} ${${modules}})
         ADD_DEPENDENCIES(${target_name} ${library_name} ${${dyn_modules}})
+        # Static modules generated include.
+        target_include_directories(${target_name} PRIVATE ${NEED_MODULES_PATH})
         SETUP_CPP11(${target_name})
         SETUP_LTO(${target_name})
     ENDMACRO()
@@ -930,7 +939,6 @@ if (NOT ${DAS_TOOLS_DISABLED})
 
     # Add daslang-dyn target.
     SETUP_COMPILER_BINARY(daslang_dyn libDaScriptDyn "" DAS_DYN_MODULES_LIBS)
-    TARGET_COMPILE_DEFINITIONS(daslang_dyn PRIVATE DAS_ENABLE_DLL=1)
     # relative RPATH from install location
     if(APPLE)
         SET_TARGET_PROPERTIES(daslang_dyn PROPERTIES
@@ -953,6 +961,7 @@ if (NOT ${DAS_TOOLS_DISABLED})
 
     add_executable(das-fmt ${PROJECT_SOURCE_DIR}/utils/dasFormatter/main.cpp)
     TARGET_LINK_LIBRARIES(das-fmt libDaScript ${SRC_LIBRARIES} ${DAS_MODULES_LIBS})
+    target_include_directories(das-fmt PRIVATE ${NEED_MODULES_PATH})
 
     SETUP_CPP11(das-fmt)
     SETUP_LTO(das-fmt)
@@ -976,7 +985,7 @@ get_target_property(DAS_FMT_LIBS das-fmt LINK_LIBRARIES)
 endif()
 
 # This list should be significantly reduced, most of the files, except aot related should be private.
-SET(DAS_RELEASE_INCLUDES
+SET(DAS_RELEASE_AST_INCLUDE
     include/daScript/ast/ast_aot_cpp.h
     include/daScript/ast/ast_expressions.h
     include/daScript/ast/ast_generate.h
@@ -985,8 +994,19 @@ SET(DAS_RELEASE_INCLUDES
     include/daScript/ast/ast_interop.h
     include/daScript/ast/ast_serializer.h
     include/daScript/ast/ast_typedecl.h
+)
+
+SET(DAS_RELEASE_C_API
     include/daScript/daScriptC.h
+)
+
+SET(DAS_RELEASE_INCLUDE
+    include/daScript/daScript.h
+    include/daScript/das_config.h
     include/daScript/das_project_specific.h
+)
+
+SET(DAS_RELEASE_MISC_INCLUDE
     include/daScript/misc/arraytype.h
     include/daScript/misc/debug_break.h
     include/daScript/misc/free_list.h
@@ -997,6 +1017,9 @@ SET(DAS_RELEASE_INCLUDES
     include/daScript/misc/smart_ptr.h
     include/daScript/misc/string_writer.h
     include/daScript/misc/sysos.h
+)
+
+SET(DAS_SIMULATE_INCLUDES
     include/daScript/simulate/aot_builtin_ast.h
     include/daScript/simulate/aot_builtin_dasbind.h
     include/daScript/simulate/aot_builtin_debugger.h
@@ -1023,17 +1046,51 @@ SET(DAS_RELEASE_INCLUDES
     include/daScript/simulate/simulate.h
     include/daScript/simulate/simulate_nodes.h
     include/daScript/simulate/standalone_ctx_utils.h
-    utils/dasFormatter/fmt.h
+)
+
+install(FILES
+    ${DAS_RELEASE_C_API}
+    DESTINATION include/daScript
 )
 
 # Install all modules and main library.
 install(TARGETS
-    libDaScript
-    libDaScriptDyn
-    ${DAS_MODULES_LIBS}
+    libDaScript libDaScriptDyn libUriParser libUriParserDyn ${DAS_MODULES_LIBS}
+    EXPORT DASTargets
     RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
     LIBRARY DESTINATION ${DAS_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${DAS_INSTALL_LIBDIR}
+    INCLUDES DESTINATION include
+)
+
+set(DAS_CONFIG_INSTALL_DIR "${DAS_INSTALL_LIBDIR}/cmake/DAS")
+
+install(EXPORT DASTargets
+    FILE DASTargets.cmake
+    NAMESPACE DAS::
+    DESTINATION ${DAS_CONFIG_INSTALL_DIR}
+)
+
+include(CMakePackageConfigHelpers)
+
+# Perform package configuration.
+configure_package_config_file(
+  ${CMAKE_CURRENT_SOURCE_DIR}/cmake/DASConfig.cmake.in
+  ${CMAKE_CURRENT_BINARY_DIR}/cmake/DASConfig.cmake
+  INSTALL_DESTINATION "${DAS_CONFIG_INSTALL_DIR}"
+)
+
+write_basic_package_version_file(
+  ${CMAKE_CURRENT_BINARY_DIR}/cmake/DASConfigVersion.cmake
+  VERSION ${PROJECT_VERSION}
+  COMPATIBILITY AnyNewerVersion
+)
+
+
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/cmake/DASConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/cmake/DASConfigVersion.cmake
+    DESTINATION ${DAS_CONFIG_INSTALL_DIR}
 )
 
 install(FILES ${PROJECT_SOURCE_DIR}/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR})

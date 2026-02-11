@@ -579,7 +579,7 @@ namespace das {
     }
 
     enum class RegisterOnError {
-        Nothing,
+        Nothing = 0,
         ErrorMsg,
         Fail,
     };
@@ -609,7 +609,7 @@ namespace das {
             auto fn = reinterpret_cast<Module*(*)(void)>(rawFn);
             *ModuleKarma += unsigned(intptr_t(fn()));
         } else {
-            auto err_msg = "Failed to find fn `" + string(path) + "` in " + path + ".\n";
+            auto err_msg = "Failed to find fn `" + regName + "` in `" + path + "`.\n";
             switch (static_cast<RegisterOnError>(on_error)) {
                 case RegisterOnError::Nothing: break;
                 case RegisterOnError::Fail: {

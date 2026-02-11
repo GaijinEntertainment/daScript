@@ -2,6 +2,8 @@
 
 #include "daScript/daScript.h"
 #include "daScript/daScriptC.h"
+#include "daScript/ast/dyn_modules.h"
+#include "daScript/misc/sysos.h"
 
 using namespace das;
 
@@ -135,6 +137,16 @@ das_module_group * das_modulegroup_make () {
 
 void das_modulegroup_release ( das_module_group * group ) {
     if ( group ) delete (ModuleGroup *) group;
+}
+
+int das_register_dynamic_modules ( das_file_access *file_access,
+                                    const char *project_root,
+                                    das_text_writer *tout ) {
+    TextPrinter printer;
+    TextWriter *writer = tout != nullptr ? (TextWriter *)tout : &printer;
+    bool res = require_dynamic_modules((FileAccess *)file_access, project_root,
+                    project_root, *writer);
+    return !res;
 }
 
 void das_modulegroup_add_module ( das_module_group* lib, das_module* mod ) {

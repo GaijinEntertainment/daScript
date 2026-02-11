@@ -138,12 +138,40 @@ namespace das {
     void Module::Initialize() {
         daScriptEnvironment::ensure();
         g_envTotal ++;
+
+        // InitDependencies do not add new modules.
+        vector<bool> mod_state;
+        bool any = true;
         bool all = false;
-        while ( !all ) {
+        while ( !all && any ) {
             all = true;
-            for ( auto m = daScriptEnvironment::getBound()->modules; m ; m = m->next ) {
-                all &= m->initDependencies();
+            any = false;
+            size_t i = 0;
+            for ( auto m = daScriptEnvironment::getBound()->modules; m ; m = m->next, i++ ) {
+                auto result = m->initDependencies();
+                all &= result;
+                if (i >= mod_state.size()) {
+                    // init
+                    mod_state.emplace_back(false);
+                    DAS_ASSERT(mod_state.size() == i + 1);
+                }
+                if (result && !mod_state.at(i)) {
+                    mod_state.at(i) = true;
+                    any = true;
+                }
             }
+        }
+        if (!any) {
+            // Some modules was not initialized!
+            size_t i = 0;
+            string error = "";
+            for ( auto m = daScriptEnvironment::getBound()->modules; m ; m = m->next, i++ ) {
+                DAS_ASSERT(mod_state.size() == i);
+                if (!mod_state.at(i)) {
+                    error += " " + m->name;
+                }
+            }
+            DAS_FATAL_ERROR("Unable to initialize some modules:%s\n", error.c_str());
         }
     }
 
