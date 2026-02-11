@@ -239,15 +239,18 @@ class LlvmJitVisitor : AstVisitor {
     option_no_range_check : bool = false
     option_no_alias : bool = false
     option_no_capture : bool = false
+    // If debug_build enabled we'll emit prologue for every function.
+    emit_prologue : bool = false
     own_di : bool = false
     ldu_hint : bool
     attributes : Attributes?
 
-    def LlvmJitVisitor(ctx : Context?; var types_ : PrimitiveTypes?; uids : UidNodes?; need_di : bool; dib : LLVMOpaqueDIBuilder?; attrs : Attributes?) {
+    def LlvmJitVisitor(ctx : Context?; var types_ : PrimitiveTypes?; uids : UidNodes?; need_di : bool; emit_prologue_ : bool; dib : LLVMOpaqueDIBuilder?; attrs : Attributes?) {
         jit_context = ctx
         types = types_
         g_builder = LLVMCreateBuilderInContext(g_ctx)
         g_di_builder = dib
+        emit_prologue = emit_prologue_
         attributes = attrs
         uid = uids
         if (need_di) {
@@ -647,17 +650,21 @@ class LlvmJitVisitor : AstVisitor {
         return loaded_ptr
     }
 
-    def build_function_entry(funAt : LineInfo; bodyId : uint64; hasMakeBlock : bool; var totalStackSize : uint; var arguments : dasvector`smart_ptr`Variable) {
+    def build_function_entry(funAt : LineInfo;
+                             bodyId : uint64; need_prologue : bool;
+                             var totalStackSize : uint;
+                             var arguments : dasvector`smart_ptr`Variable) {
         // now write to regular function
         function_entry = append_basic_block("entry")
         LLVMPositionBuilderAtEnd(g_builder, function_entry)
         // enter
         build_enter(funAt)
         // allocate prologue if need be
-        if (hasMakeBlock) {
+        if (need_prologue) {
             prologue = LLVMBuildAlloca(g_builder, g_t_stack_state, "prologue")
             prologue = LLVMBuildPointerCast(g_builder, prologue, LLVMPointerType(g_t_stack_state, 0u), "")
             var params = fixed_array(
+                get_string_constant_ptr(g_builder, "{thisFunc.name}"),
                 get_line_info_ptr(funAt),
                 types.ConstI32(uint64(totalStackSize)),
                 prologue,
@@ -704,7 +711,9 @@ class LlvmJitVisitor : AstVisitor {
         wfunc = LLVMGetNamedFunction(g_mod, fnmna.publ())
         // build wrapper function
         build_wrapper_function(fnmna, fun.arguments, fun.result, isCMRES(fun), null, fun.at)
-        build_function_entry(fun.at, hash(get_mangled_name(fun)), fun.flags.hasMakeBlock, fun.totalStackSize, fun.arguments)
+        build_function_entry(fun.at, hash(get_mangled_name(fun)),
+                             fun.flags.hasMakeBlock || emit_prologue,
+                             fun.totalStackSize, fun.arguments)
         process_function_hints(fun.annotations, fun.arguments)
         process_labels(fun.body)
         process_finally(fun.body)
@@ -4893,7 +4902,9 @@ class LlvmJitVisitor : AstVisitor {
         wfunc = LLVMGetNamedFunction(g_mod, fnmna.publ())
         // build wrapper function
         build_wrapper_function(fnmna, thisBlock.arguments, thisBlock.returnType, isCmres, captureType, thisBlock.at)
-        build_function_entry(expr.at, hash(fnmna), thisBlock.blockFlags.hasMakeBlock, thisFunc.totalStackSize, thisBlock.arguments)
+        build_function_entry(expr.at, hash(fnmna),
+            thisBlock.blockFlags.hasMakeBlock || emit_prologue,
+            thisFunc.totalStackSize, thisBlock.arguments)
         process_function_hints(thisBlock.annotations, thisBlock.arguments)
         process_labels(expr)
         process_finally(expr)
@@ -4909,7 +4920,7 @@ class LlvmJitVisitor : AstVisitor {
     }
 
     def make_block_function(expr : smart_ptr<ExprMakeBlock>; captured : array<CapturedVariable>; first_field_index : int; captureType : LLVMOpaqueType?) : tuple<func : LLVMOpaqueValue?; impl : LLVMOpaqueValue?> {
-        var astVisitor = new LlvmJitVisitor(jit_context, types, uid, false, g_di_builder, attributes)
+        var astVisitor = new LlvmJitVisitor(jit_context, types, uid, false, emit_prologue, g_di_builder, attributes)
         unsafe {
             astVisitor.adapter <- make_visitor(*astVisitor)
         }
@@ -6001,7 +6012,9 @@ def get_dll_missing(fns : array<FunctionPtr>; disabled : array<FunctionPtr>; var
 
 
 [macro_function]
-def private generate_llvm(ctx : Context?; var types : PrimitiveTypes?; uids : UidNodes?; attrs : Attributes?; fn : FunctionPtr; enable_debug_info : bool) {
+def private generate_llvm(ctx : Context?; var types : PrimitiveTypes?; uids : UidNodes?;
+                          attrs : Attributes?; fn : FunctionPtr;
+                          enable_debug_info : bool; emit_prologue : bool) {
     verify(!(is_in_completion() || is_compiling_macros() || is_folding()))
 
     let dll_name = uids.get_dll_fn_name(fn)
@@ -6010,7 +6023,7 @@ def private generate_llvm(ctx : Context?; var types : PrimitiveTypes?; uids : Ui
     let aot_hash : uint64 = get_function_aot_hash(fn |> get_ptr)
     // debug("initializer hash for {dll_name.publ()}: {aot_hash}")
     globalVar |> LLVMSetInitializer(types.ConstI64(aot_hash))
-    var astVisitor = new LlvmJitVisitor(ctx, types, uids, enable_debug_info, null, attrs)
+    var astVisitor = new LlvmJitVisitor(ctx, types, uids, enable_debug_info, emit_prologue, null, attrs)
     unsafe {
         astVisitor.adapter <- make_visitor(*astVisitor)
     }
@@ -6231,6 +6244,7 @@ class JIT_LLVM : AstSimulateMacro {
         let use_dll = prog.policies.jit_use_dll_mode && das_is_dll_build()
         let opt_level = prog.policies.jit_opt_level
         let size_level = prog.policies.jit_size_level
+        let emit_prologue = true // prog.policies.emit_prologue
         assume config_out_folder = string(prog.policies.jit_output_folder)
         let output_folder = config_out_folder |> empty() ? "{get_das_root()}/jitted_scripts/" : config_out_folder
         assume path_to_shared_lib = string(prog.policies.jit_path_to_shared_lib)
@@ -6267,7 +6281,7 @@ class JIT_LLVM : AstSimulateMacro {
             init_jit(opt_level |> uint)
             let attrs = new Attributes(g_ctx)
             var uids = create_uid_nodes(prog, funcs)
-            var fake_visitor = new LlvmJitVisitor(ctx, g_prim_t, uids, false, null, attrs)
+            var fake_visitor = new LlvmJitVisitor(ctx, g_prim_t, uids, false, emit_prologue, null, attrs)
             for (fun in funcs) {
                 fake_visitor->add_llvm_functions(fun)
             }
@@ -6288,7 +6302,7 @@ class JIT_LLVM : AstSimulateMacro {
             }
             if (recompile_prog) {
                 for (fun in funcs) {
-                    generate_llvm(ctx, g_prim_t, uids, attrs, fun, debug_info)
+                    generate_llvm(ctx, g_prim_t, uids, attrs, fun, debug_info, emit_prologue)
                     let fnmna = uids.get_dll_fn_name(fun)
                     var fn_impl = LLVMGetNamedFunction(g_mod, fnmna.impl())
                     var fn = LLVMGetNamedFunction(g_mod, fnmna.publ())

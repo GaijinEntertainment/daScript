@@ -897,7 +897,11 @@ namespace debugapi {
             }
             walker->onBeforeCall(pp,SP);
             if ( !info ) {
-                walker->onCallAOT(pp,pp->fileName);
+                if (pp->is_jit) {
+                    walker->onCallJIT(pp,pp->fileName);
+                } else {
+                    walker->onCallAOT(pp,pp->fileName);
+                }
             } else if ( pp->line ) {
                 walker->onCallAt(pp,info,pp->line);
             } else {

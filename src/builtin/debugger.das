@@ -204,6 +204,7 @@ class DapiStackWalker {
     def abstract canWalkOutOfScopeVariables : bool
     def abstract onBeforeCall(pp : Prologue; sp : void?) : void
     def abstract onCallAOT(pp : Prologue; fileName : string#) : void
+    def abstract onCallJIT(pp : Prologue; fileName : string#) : void
     def abstract onCallAt(pp : Prologue; info : FuncInfo; at : LineInfo) : void
     def abstract onCall(pp : Prologue; info : FuncInfo) : void
     def abstract onAfterPrologue(pp : Prologue; sp : void?) : void

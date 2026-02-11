@@ -432,10 +432,18 @@ def public init_jit(cg_opt_level : uint) {
     // void jit_prologue ( void * line_info, int32_t stackSize, JitStackState * stackState, Context * context )
     var jit_prologue = LLVMAddFunctionWithType(g_mod, FN_JIT_PROLOGUE,
         LLVMFunctionType(g_prim_t.t_void,
-            fixed_array<LLVMTypeRef>(g_prim_t.LLVMVoidPtrType(), g_prim_t.t_int32, LLVMPointerType(g_t_stack_state, 0u), g_prim_t.LLVMVoidPtrType())))
+            fixed_array<LLVMTypeRef>(
+                g_prim_t.get_type_string(),
+                g_prim_t.LLVMVoidPtrType(),
+                g_prim_t.t_int32,
+                LLVMPointerType(g_t_stack_state, 0u),
+                g_prim_t.LLVMVoidPtrType()
+            )
+        )
+    )
     LLVMAddGlobalMapping(g_engine, jit_prologue, get_jit_prologue())
     LLVMAddAttributesToFunction(jit_prologue, fixed_array(nounwind, willreturn))
-    LLVMAddAttributeToFunctionArgumentRange(jit_prologue, urange(2, 4), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_prologue, urange(3, 5), nocapture)
     // void jit_epilogue ( JitStackState * stackState, Context * context )
     var jit_epilogue = LLVMAddFunctionWithType(g_mod, FN_JIT_EPILOGUE,
         LLVMFunctionType(g_prim_t.t_void,

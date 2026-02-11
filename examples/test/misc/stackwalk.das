@@ -33,6 +33,9 @@ class SampleStackWalker : DapiStackWalker {
     def override onCallAOT(pp : Prologue; fileName : string#) : void {
         print("AOT {fileName}\n")
     }
+    def override onCallJIT(pp : Prologue; fileName : string#) : void {
+        print("JIT {fileName}\n")
+    }
     def override onCallAt(pp : Prologue; info : FuncInfo; at : LineInfo) : void {
         print("{info.name} at {at}\n")
     }

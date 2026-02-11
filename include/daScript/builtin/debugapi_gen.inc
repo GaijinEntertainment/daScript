@@ -1227,17 +1227,18 @@ protected:
     __fn_canWalkOutOfScopeVariables = 2,
     __fn_onBeforeCall = 3,
     __fn_onCallAOT = 4,
-    __fn_onCallAt = 5,
-    __fn_onCall = 6,
-    __fn_onAfterPrologue = 7,
-    __fn_onArgument = 8,
-    __fn_onBeforeVariables = 9,
-    __fn_onVariable = 10,
-    __fn_onAfterCall = 11,
-    __fn_onCorruptStack = 12,
+    __fn_onCallJIT = 5,
+    __fn_onCallAt = 6,
+    __fn_onCall = 7,
+    __fn_onAfterPrologue = 8,
+    __fn_onArgument = 9,
+    __fn_onBeforeVariables = 10,
+    __fn_onVariable = 11,
+    __fn_onAfterCall = 12,
+    __fn_onCorruptStack = 13,
   };
 protected:
-  int _das_class_method_offset[13];
+  int _das_class_method_offset[14];
 public:
   DapiStackWalker_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_canWalkArguments] = info->fields[2]->offset;
@@ -1245,14 +1246,15 @@ public:
       _das_class_method_offset[__fn_canWalkOutOfScopeVariables] = info->fields[4]->offset;
       _das_class_method_offset[__fn_onBeforeCall] = info->fields[5]->offset;
       _das_class_method_offset[__fn_onCallAOT] = info->fields[6]->offset;
-      _das_class_method_offset[__fn_onCallAt] = info->fields[7]->offset;
-      _das_class_method_offset[__fn_onCall] = info->fields[8]->offset;
-      _das_class_method_offset[__fn_onAfterPrologue] = info->fields[9]->offset;
-      _das_class_method_offset[__fn_onArgument] = info->fields[10]->offset;
-      _das_class_method_offset[__fn_onBeforeVariables] = info->fields[11]->offset;
-      _das_class_method_offset[__fn_onVariable] = info->fields[12]->offset;
-      _das_class_method_offset[__fn_onAfterCall] = info->fields[13]->offset;
-      _das_class_method_offset[__fn_onCorruptStack] = info->fields[14]->offset;
+      _das_class_method_offset[__fn_onCallJIT] = info->fields[7]->offset;
+      _das_class_method_offset[__fn_onCallAt] = info->fields[8]->offset;
+      _das_class_method_offset[__fn_onCall] = info->fields[9]->offset;
+      _das_class_method_offset[__fn_onAfterPrologue] = info->fields[10]->offset;
+      _das_class_method_offset[__fn_onArgument] = info->fields[11]->offset;
+      _das_class_method_offset[__fn_onBeforeVariables] = info->fields[12]->offset;
+      _das_class_method_offset[__fn_onVariable] = info->fields[13]->offset;
+      _das_class_method_offset[__fn_onAfterCall] = info->fields[14]->offset;
+      _das_class_method_offset[__fn_onCorruptStack] = info->fields[15]->offset;
   }
   __forceinline Func get_canWalkArguments ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_canWalkArguments]);
@@ -1294,6 +1296,15 @@ public:
     return getDasClassMethod(self,_das_class_method_offset[__fn_onCallAOT]);
   }
   __forceinline void invoke_onCallAOT ( Context * __context__, Func __funcCall__, void * self, Prologue const  & pp, char * const  fileName ) const {
+    das_invoke_function<void>::invoke
+      <void *,Prologue const  &,char * const >
+        (__context__,nullptr,__funcCall__,
+          self,pp,fileName);
+  }
+  __forceinline Func get_onCallJIT ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onCallJIT]);
+  }
+  __forceinline void invoke_onCallJIT ( Context * __context__, Func __funcCall__, void * self, Prologue const  & pp, char * const  fileName ) const {
     das_invoke_function<void>::invoke
       <void *,Prologue const  &,char * const >
         (__context__,nullptr,__funcCall__,
