@@ -1,0 +1,12 @@
+# DASConfig.cmake.in
+@PACKAGE_INIT@
+
+# Version information
+set(DAS_VERSION @PROJECT_VERSION@)
+
+# Import targets
+if(NOT TARGET DAS::DAS)
+    include("${CMAKE_CURRENT_LIST_DIR}/DASTargets.cmake")
+endif()
+
+set(DAS_FOUND TRUE)

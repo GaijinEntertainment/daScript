@@ -86,3 +86,9 @@ Once you have `LLVM.dll`, all you need is:
 ```
 For more details on how JIT works and what can be configured, see the
 [JIT Readme](modules/dasLLVM/README.md).
+
+## Embedding into cmake
+To embed daslang into your CMake application, simply call `find_package(DAS)`.
+This will provide the targets `libDaScript`
+and `libDaScriptDyn`. For an example of using daslang as an external project
+(including usage for dynamic modules) see [this demo](https://github.com/aleksisch/dascript-demo).
