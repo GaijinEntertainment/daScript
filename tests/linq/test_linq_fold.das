@@ -632,7 +632,7 @@ def test_intersect(t : T?) {
             ._order_by(_) // sort
             ._fold()
         )
-        var expected = [3, 4, 5, 6, 7]
+        var expected = [3, 4, 5, 6]
         t |> equal(length(t1), length(expected))
         for (i, v in 0..length(expected), t1) {
             t |> equal(expected[i], v)
