@@ -356,7 +356,7 @@ int das_aot_main ( int argc, char * argv[] ) {
     return compiled ? 0 : -1;
 }
 
-bool compile_and_run ( const string & fn, const string & mainFnName, bool outputProgramCode, bool dryRun, const char * introFile = nullptr ) {
+bool compile_and_run ( const string & fn, const string & mainFnName, bool outputProgramCode, bool dryRun, bool compileOnly, const char * introFile = nullptr ) {
     auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
     if ( introFile ) {
         auto fileInfo = make_unique<TextFileInfo>(introFile, uint32_t(strlen(introFile)), false);
@@ -398,6 +398,9 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
         } else {
             if ( outputProgramCode )
                 tout << *program << "\n";
+            if ( compileOnly )
+                return true;
+
             auto pctx = SimulateWithErrReport(program, tout);
             if ( !pctx ) {
                 success = false;
@@ -493,6 +496,7 @@ void print_help() {
         << "    -log        output program code\n"
         << "    -pause      pause after errors and pause again before exiting program\n"
         << "    -dry-run    compile and simulate script without execution\n"
+        << "    -compile-only compile script without simulation and execution\n"
         << "    -dasroot    set path to dascript root folder (with daslib)\n"
 #if DAS_SMART_PTR_ID
         << "    -track-smart-ptr <id> track smart pointer with id\n"
@@ -552,6 +556,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     bool outputProgramCode = false;
     bool pauseAfterDone = false;
     bool dryRun = false;
+    bool compileOnly = false;
     string project_root;
     optional<format::FormatOptions> formatter;
     for ( int i=1; i < argc; ++i ) {
@@ -604,6 +609,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 outputProgramCode = true;
             } else if ( cmd=="dry-run" ) {
                 dryRun = true;
+            } else if ( cmd=="compile-only" ) {
+                compileOnly = true;
             } else if ( cmd=="project-root" ) {
                 project_root = argv[i + 1];
                 i++;
@@ -760,7 +767,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
 
     for ( auto & fn : files ) {
         replace(fn, "_dasroot_", getDasRoot());
-        if (!compile_and_run(fn, mainName, outputProgramCode, dryRun)) {
+        if (!compile_and_run(fn, mainName, outputProgramCode, dryRun, compileOnly)) {
             failedFiles++;
         }
     }
