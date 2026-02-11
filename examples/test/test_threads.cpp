@@ -1,4 +1,5 @@
 #include "daScript/daScript.h"
+#include "daScript/ast/dyn_modules.h"
 #include "daScript/simulate/fs_file_info.h"
 #include "daScript/misc/performance_time.h"
 #include "daScript/misc/fpe.h"
@@ -99,11 +100,6 @@ bool run_tests( const string & path, bool (*test_fn)(const string &, bool useAot
 #endif
 }
 
-
-#ifdef DAS_ENABLE_DYN_INCLUDES
-bool require_dynamic_modules(const string &, const string &, TextWriter&);
-#endif
-
 void test_thread(bool useAot) {
     ReuseCacheGuard guard;
     TextPrinter tout;
@@ -132,7 +128,7 @@ void test_thread(bool useAot) {
     #ifdef DAS_ENABLE_DYN_INCLUDES
     // Search for external modules and init them. Only if flag is enabled.
     daScriptEnvironment::ensure();
-    require_dynamic_modules(getDasRoot(), getDasRoot(), tout);
+    require_dynamic_modules(make_smart<FsFileAccess>(), getDasRoot(), getDasRoot(), tout);
     #endif
     if ( VerboseTests )
         tout << "Module::Initialize (" << this_thread_id() << ")\n";

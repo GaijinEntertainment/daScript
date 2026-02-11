@@ -1,5 +1,6 @@
 #include "daScript/daScript.h"
 #include "daScript/ast/ast_serializer.h"
+#include "daScript/ast/dyn_modules.h"
 #include "daScript/simulate/fs_file_info.h"
 #include "daScript/misc/performance_time.h"
 #include "daScript/misc/fpe.h"
@@ -21,11 +22,6 @@ bool g_useSerialization = false;
 bool g_reportCompilationFailErrors = false;
 bool g_collectSharedModules = true;
 bool g_failOnSmartPtrLeaks = true;
-
-//link time resolved dependencies
-#ifdef DAS_ENABLE_DYN_INCLUDES
-bool require_dynamic_modules(const string &, const string &, TextWriter&);
-#endif
 
 enum class RuntimeMode {
     Interpreter,
@@ -373,7 +369,7 @@ bool isolated_unit_test ( const string & fn, RuntimeMode mode, bool useSer ) {
     #ifdef DAS_ENABLE_DYN_INCLUDES
     // This adds JIT.
     daScriptEnvironment::ensure();
-    require_dynamic_modules(getDasRoot(), getDasRoot(), tout);
+    require_dynamic_modules(make_smart<FsFileAccess>(), getDasRoot(), getDasRoot(), tout);
     #endif
     Module::Initialize();
     bool result = unit_test(fn,mode, useSer);
@@ -523,7 +519,7 @@ int main( int argc, char * argv[] ) {
     #ifdef DAS_ENABLE_DYN_INCLUDES
     // This adds JIT.
     daScriptEnvironment::ensure();
-    require_dynamic_modules(getDasRoot(), getDasRoot(), tout);
+    require_dynamic_modules(make_smart<FsFileAccess>(), getDasRoot(), getDasRoot(), tout);
     #endif
     Module::Initialize();
     // aot library

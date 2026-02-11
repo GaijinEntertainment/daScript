@@ -1,7 +1,7 @@
 #include "daScript/ast/aot_templates.h"
+#include "daScript/ast/dyn_modules.h"
 #include "daScript/daScript.h"
 #include "daScript/das_common.h"
-#include "daScript/misc/sysos.h" // normalizeFileName
 #include "daScript/simulate/fs_file_info.h"
 #include "../dasFormatter/fmt.h"
 #include "daScript/ast/ast_aot_cpp.h"
@@ -12,10 +12,6 @@ void use_utf8();
 
 void require_project_specific_modules();//link time resolved dependencies
 das::FileAccessPtr get_file_access( char * pak );//link time resolved dependencies
-
-#ifdef DAS_ENABLE_DYN_INCLUDES
-bool require_dynamic_modules(const das::string &, const das::string &, TextWriter&);//link time resolved dependencies
-#endif
 
 TextPrinter tout;
 
@@ -290,7 +286,8 @@ int das_aot_main ( int argc, char * argv[] ) {
     #endif
     #ifdef DAS_ENABLE_DYN_INCLUDES
     daScriptEnvironment::ensure();
-    require_dynamic_modules(getDasRoot(), project_root, tout);
+    auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
+    require_dynamic_modules(access, getDasRoot(), project_root, tout);
     #endif
     Module::Initialize();
     daScriptEnvironment::getBound()->g_isInAot = true;
@@ -741,10 +738,13 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     #include "modules/external_need.inc"
     #endif
     #ifdef DAS_ENABLE_DYN_INCLUDES
-    // Search for external modules and init them. Only if flag is enabled.
-    daScriptEnvironment::ensure();
-    project_root = deduce_project_root(project_root, files.front());
-    require_dynamic_modules(getDasRoot(), project_root, tout);
+    {
+        // Search for external modules and init them. Only if flag is enabled.
+        daScriptEnvironment::ensure();
+        project_root = deduce_project_root(project_root, files.front());
+        auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
+        require_dynamic_modules(access, getDasRoot(), project_root, tout);
+    }
     #endif
     Module::Initialize();
 

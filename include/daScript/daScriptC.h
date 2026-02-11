@@ -127,6 +127,16 @@ DAS_API void das_modulegroup_add_module ( das_module_group* lib, das_module* mod
 // release module group
 DAS_API void das_modulegroup_release ( das_module_group * group );
 
+// Looks for <path>/modules/<module_name>/.das_module files and call
+// `initialize` on them.
+//
+// If tout == nullptr prints logs to stdout.
+//
+// Returns 0 on success.
+DAS_API int das_register_dynamic_modules(das_file_access *file_access,
+                                         const char *project_root,
+                                         das_text_writer *tout);
+
 // make default file access
 DAS_API das_file_access * das_fileaccess_make_default (  );
 // make file access from a project file. project file is a .das_project script which specifies access, module lookup paths, permissions, etc.

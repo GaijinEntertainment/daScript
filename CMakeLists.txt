@@ -521,6 +521,7 @@ src/ast/ast_export.cpp
 src/ast/ast_parse.cpp
 src/ast/ast_debug_info_helper.cpp
 src/ast/ast_handle.cpp
+src/ast/dyn_modules.cpp
 include/daScript/ast/compilation_errors.h
 include/daScript/ast/ast_typedecl.h
 include/daScript/ast/ast_typefactory.h
