@@ -313,6 +313,11 @@ SET(AST_SRC
 ../src/ast/ast_print.cpp
 ../src/ast/ast_aot_cpp.cpp
 ../src/ast/ast_infer_type.cpp
+../src/ast/ast_infer_type_report.cpp
+../src/ast/ast_infer_type_function.cpp
+../src/ast/ast_infer_type_helper.cpp
+../src/ast/ast_infer_type_op.cpp
+../src/ast/ast_infer_type_make.cpp
 ../src/ast/ast_lint.cpp
 ../src/ast/ast_allocate_stack.cpp
 ../src/ast/ast_derive_alias.cpp
