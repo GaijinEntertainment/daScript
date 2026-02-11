@@ -114,14 +114,14 @@ MACRO(DAS_AOT_EXT input_files genList mainTarget dasAotTool dasAotToolArg)
             set(out_arg "${out_dir}/${mainTarget}_${input_name}.cpp")
             set(out_src "${out_dir}/${mainTarget}_${input_name}.cpp")
         endif()
-        
+
         # Add to dependencies
         list(APPEND all_depends ${input_src})
-        
+
         # Add to outputs
         list(APPEND all_outputs ${out_src})
         list(APPEND ${genList} ${out_src})
-        
+
         # Build command arguments: tool_arg input1 output1 tool_arg input2 output2 ...
         list(APPEND command_args ${dasAotToolArg} ${input_src} ${out_arg})
 
@@ -504,6 +504,11 @@ src/ast/ast_module.cpp
 src/ast/ast_print.cpp
 src/ast/ast_aot_cpp.cpp
 src/ast/ast_infer_type.cpp
+src/ast/ast_infer_type_report.cpp
+src/ast/ast_infer_type_function.cpp
+src/ast/ast_infer_type_helper.cpp
+src/ast/ast_infer_type_op.cpp
+src/ast/ast_infer_type_make.cpp
 src/ast/ast_lint.cpp
 src/ast/ast_allocate_stack.cpp
 src/ast/ast_derive_alias.cpp
