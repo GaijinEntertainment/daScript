@@ -5,9 +5,9 @@ Terminals unused in grammar
     LLPIPE
 
 
-State 1553 conflicts: 1 reduce/reduce
-State 1626 conflicts: 1 reduce/reduce
-State 1648 conflicts: 1 reduce/reduce
+State 1553 conflicts: 1 shift/reduce
+State 1627 conflicts: 1 shift/reduce
+State 1649 conflicts: 1 shift/reduce
 
 
 Grammar
@@ -143,7 +143,7 @@ Grammar
 
    89 $@4: %empty
 
-   90 expression_if_block: $@3 '{' expressions $@4 '}' expression_block_finally
+   90 expression_if_block: '{' $@3 expressions $@4 '}' expression_block_finally
 
    91 $@5: %empty
 
@@ -153,7 +153,7 @@ Grammar
 
    94 $@7: %empty
 
-   95 expression_else_block: $@6 '{' expressions $@7 '}' expression_block_finally
+   95 expression_else_block: '{' $@6 expressions $@7 '}' expression_block_finally
 
    96 $@8: %empty
 
@@ -48081,12 +48081,12 @@ State 1553
 
    99 expression_if_then_else: $@9 if_or_static_if '(' expr ')' optional_emit_semis . expression_if_block expression_else
 
-    '{'       reduce using rule 88 ($@3)
+    '{'  shift, and go to state 1590
+
     '{'       [reduce using rule 91 ($@5)]
     $default  reduce using rule 91 ($@5)
 
-    expression_if_block  go to state 1590
-    $@3                  go to state 1591
+    expression_if_block  go to state 1591
     $@5                  go to state 1592
 
 
@@ -48800,23 +48800,25 @@ State 1589
 
 State 1590
 
-   99 expression_if_then_else: $@9 if_or_static_if '(' expr ')' optional_emit_semis expression_if_block . expression_else
+   90 expression_if_block: '{' . $@3 expressions $@4 '}' expression_block_finally
 
-    "else"         shift, and go to state 1610
-    "elif"         shift, and go to state 1611
-    "static_elif"  shift, and go to state 1612
+    $default  reduce using rule 88 ($@3)
 
-    $default  reduce using rule 72 (expression_else)
-
-    elif_or_static_elif  go to state 1613
-    expression_else      go to state 1614
+    $@3  go to state 1610
 
 
 State 1591
 
-   90 expression_if_block: $@3 . '{' expressions $@4 '}' expression_block_finally
+   99 expression_if_then_else: $@9 if_or_static_if '(' expr ')' optional_emit_semis expression_if_block . expression_else
 
-    '{'  shift, and go to state 1615
+    "else"         shift, and go to state 1611
+    "elif"         shift, and go to state 1612
+    "static_elif"  shift, and go to state 1613
+
+    $default  reduce using rule 72 (expression_else)
+
+    elif_or_static_elif  go to state 1614
+    expression_else      go to state 1615
 
 
 State 1592
@@ -49336,6 +49338,15 @@ State 1609
 
 State 1610
 
+   90 expression_if_block: '{' $@3 . expressions $@4 '}' expression_block_finally
+
+    $default  reduce using rule 312 (expressions)
+
+    expressions  go to state 1626
+
+
+State 1611
+
    73 expression_else: "else" . optional_emit_semis expression_else_block
 
     "new line, semicolon"  shift, and go to state 147
@@ -49343,44 +49354,35 @@ State 1610
     $default  reduce using rule 70 (optional_emit_semis)
 
     emit_semis           go to state 148
-    optional_emit_semis  go to state 1626
+    optional_emit_semis  go to state 1627
 
 
-State 1611
+State 1612
 
    66 elif_or_static_elif: "elif" .
 
     $default  reduce using rule 66 (elif_or_static_elif)
 
 
-State 1612
+State 1613
 
    67 elif_or_static_elif: "static_elif" .
 
     $default  reduce using rule 67 (elif_or_static_elif)
 
 
-State 1613
+State 1614
 
    74 expression_else: elif_or_static_elif . '(' expr ')' optional_emit_semis expression_else_block expression_else
 
-    '('  shift, and go to state 1627
-
-
-State 1614
-
-   99 expression_if_then_else: $@9 if_or_static_if '(' expr ')' optional_emit_semis expression_if_block expression_else .
-
-    $default  reduce using rule 99 (expression_if_then_else)
+    '('  shift, and go to state 1628
 
 
 State 1615
 
-   90 expression_if_block: $@3 '{' . expressions $@4 '}' expression_block_finally
+   99 expression_if_then_else: $@9 if_or_static_if '(' expr ')' optional_emit_semis expression_if_block expression_else .
 
-    $default  reduce using rule 312 (expressions)
-
-    expressions  go to state 1628
+    $default  reduce using rule 99 (expression_if_then_else)
 
 
 State 1616
@@ -49771,131 +49773,7 @@ State 1625
 
 State 1626
 
-   73 expression_else: "else" optional_emit_semis . expression_else_block
-
-    '{'       reduce using rule 93 ($@6)
-    '{'       [reduce using rule 96 ($@8)]
-    $default  reduce using rule 96 ($@8)
-
-    expression_else_block  go to state 1635
-    $@6                    go to state 1636
-    $@8                    go to state 1637
-
-
-State 1627
-
-   74 expression_else: elif_or_static_elif '(' . expr ')' optional_emit_semis expression_else_block expression_else
-
-    "struct"                          shift, and go to state 417
-    "class"                           shift, and go to state 418
-    "true"                            shift, and go to state 419
-    "false"                           shift, and go to state 420
-    "new"                             shift, and go to state 421
-    "typeinfo"                        shift, and go to state 422
-    "type"                            shift, and go to state 423
-    "array"                           shift, and go to state 424
-    "null"                            shift, and go to state 425
-    "table"                           shift, and go to state 426
-    "deref"                           shift, and go to state 427
-    "cast"                            shift, and go to state 428
-    "upcast"                          shift, and go to state 429
-    "addr"                            shift, and go to state 430
-    "reinterpret"                     shift, and go to state 431
-    "unsafe"                          shift, and go to state 432
-    "fixed_array"                     shift, and go to state 433
-    "default"                         shift, and go to state 434
-    "bool"                            shift, and go to state 208
-    "void"                            shift, and go to state 209
-    "string"                          shift, and go to state 210
-    "int"                             shift, and go to state 212
-    "int2"                            shift, and go to state 213
-    "int3"                            shift, and go to state 214
-    "int4"                            shift, and go to state 215
-    "uint"                            shift, and go to state 216
-    "bitfield"                        shift, and go to state 435
-    "uint2"                           shift, and go to state 218
-    "uint3"                           shift, and go to state 219
-    "uint4"                           shift, and go to state 220
-    "float"                           shift, and go to state 221
-    "float2"                          shift, and go to state 222
-    "float3"                          shift, and go to state 223
-    "float4"                          shift, and go to state 224
-    "range"                           shift, and go to state 225
-    "urange"                          shift, and go to state 226
-    "range64"                         shift, and go to state 227
-    "urange64"                        shift, and go to state 228
-    "int64"                           shift, and go to state 230
-    "uint64"                          shift, and go to state 231
-    "double"                          shift, and go to state 232
-    "int8"                            shift, and go to state 235
-    "uint8"                           shift, and go to state 236
-    "int16"                           shift, and go to state 237
-    "uint16"                          shift, and go to state 238
-    "tuple"                           shift, and go to state 436
-    "variant"                         shift, and go to state 437
-    "generator"                       shift, and go to state 438
-    "++"                              shift, and go to state 439
-    "--"                              shift, and go to state 440
-    "::"                              shift, and go to state 57
-    "$$"                              shift, and go to state 441
-    "$i"                              shift, and go to state 442
-    "$v"                              shift, and go to state 443
-    "$b"                              shift, and go to state 444
-    "$a"                              shift, and go to state 445
-    "$c"                              shift, and go to state 446
-    "..."                             shift, and go to state 447
-    "integer constant"                shift, and go to state 448
-    "long integer constant"           shift, and go to state 449
-    "unsigned integer constant"       shift, and go to state 450
-    "unsigned long integer constant"  shift, and go to state 451
-    "unsigned int8 constant"          shift, and go to state 452
-    "floating point constant"         shift, and go to state 453
-    "double constant"                 shift, and go to state 454
-    "name"                            shift, and go to state 58
-    "start of the string"             shift, and go to state 455
-    '-'                               shift, and go to state 456
-    '+'                               shift, and go to state 457
-    '*'                               shift, and go to state 458
-    '%'                               shift, and go to state 14
-    '~'                               shift, and go to state 459
-    '!'                               shift, and go to state 460
-    '['                               shift, and go to state 461
-    '('                               shift, and go to state 462
-    '$'                               shift, and go to state 463
-    '@'                               shift, and go to state 464
-    '{'                               shift, and go to state 465
-
-    string_builder          go to state 466
-    expr_reader             go to state 467
-    expr_call_pipe          go to state 468
-    name_in_namespace       go to state 469
-    expr_new                go to state 470
-    expr_cast               go to state 471
-    expr_type_decl          go to state 472
-    expr_type_info          go to state 473
-    block_or_lambda         go to state 474
-    expr_full_block         go to state 475
-    expr_numeric_const      go to state 476
-    expr_named_call         go to state 477
-    expr_method_call        go to state 478
-    func_addr_expr          go to state 479
-    expr_field              go to state 480
-    expr_call               go to state 481
-    expr                    go to state 1638
-    expr_generator          go to state 483
-    expr_mtag               go to state 484
-    basic_type_declaration  go to state 485
-    make_decl               go to state 486
-    make_struct_decl        go to state 487
-    make_tuple_call         go to state 488
-    make_dim_decl           go to state 489
-    make_table_decl         go to state 490
-    array_comprehension     go to state 491
-
-
-State 1628
-
-   90 expression_if_block: $@3 '{' expressions . $@4 '}' expression_block_finally
+   90 expression_if_block: '{' $@3 expressions . $@4 '}' expression_block_finally
   313 expressions: expressions . expression_any
   314            | expressions . error
 
@@ -50007,7 +49885,7 @@ State 1628
     expression_label                  go to state 1017
     expression_goto                   go to state 1018
     expression_if_one_liner           go to state 1019
-    $@4                               go to state 1639
+    $@4                               go to state 1635
     expression_if_then_else           go to state 1020
     $@9                               go to state 1021
     expression_if_then_else_oneliner  go to state 1022
@@ -50053,6 +49931,130 @@ State 1628
     make_dim_decl                     go to state 489
     make_table_decl                   go to state 490
     array_comprehension               go to state 491
+
+
+State 1627
+
+   73 expression_else: "else" optional_emit_semis . expression_else_block
+
+    '{'  shift, and go to state 1636
+
+    '{'       [reduce using rule 96 ($@8)]
+    $default  reduce using rule 96 ($@8)
+
+    expression_else_block  go to state 1637
+    $@8                    go to state 1638
+
+
+State 1628
+
+   74 expression_else: elif_or_static_elif '(' . expr ')' optional_emit_semis expression_else_block expression_else
+
+    "struct"                          shift, and go to state 417
+    "class"                           shift, and go to state 418
+    "true"                            shift, and go to state 419
+    "false"                           shift, and go to state 420
+    "new"                             shift, and go to state 421
+    "typeinfo"                        shift, and go to state 422
+    "type"                            shift, and go to state 423
+    "array"                           shift, and go to state 424
+    "null"                            shift, and go to state 425
+    "table"                           shift, and go to state 426
+    "deref"                           shift, and go to state 427
+    "cast"                            shift, and go to state 428
+    "upcast"                          shift, and go to state 429
+    "addr"                            shift, and go to state 430
+    "reinterpret"                     shift, and go to state 431
+    "unsafe"                          shift, and go to state 432
+    "fixed_array"                     shift, and go to state 433
+    "default"                         shift, and go to state 434
+    "bool"                            shift, and go to state 208
+    "void"                            shift, and go to state 209
+    "string"                          shift, and go to state 210
+    "int"                             shift, and go to state 212
+    "int2"                            shift, and go to state 213
+    "int3"                            shift, and go to state 214
+    "int4"                            shift, and go to state 215
+    "uint"                            shift, and go to state 216
+    "bitfield"                        shift, and go to state 435
+    "uint2"                           shift, and go to state 218
+    "uint3"                           shift, and go to state 219
+    "uint4"                           shift, and go to state 220
+    "float"                           shift, and go to state 221
+    "float2"                          shift, and go to state 222
+    "float3"                          shift, and go to state 223
+    "float4"                          shift, and go to state 224
+    "range"                           shift, and go to state 225
+    "urange"                          shift, and go to state 226
+    "range64"                         shift, and go to state 227
+    "urange64"                        shift, and go to state 228
+    "int64"                           shift, and go to state 230
+    "uint64"                          shift, and go to state 231
+    "double"                          shift, and go to state 232
+    "int8"                            shift, and go to state 235
+    "uint8"                           shift, and go to state 236
+    "int16"                           shift, and go to state 237
+    "uint16"                          shift, and go to state 238
+    "tuple"                           shift, and go to state 436
+    "variant"                         shift, and go to state 437
+    "generator"                       shift, and go to state 438
+    "++"                              shift, and go to state 439
+    "--"                              shift, and go to state 440
+    "::"                              shift, and go to state 57
+    "$$"                              shift, and go to state 441
+    "$i"                              shift, and go to state 442
+    "$v"                              shift, and go to state 443
+    "$b"                              shift, and go to state 444
+    "$a"                              shift, and go to state 445
+    "$c"                              shift, and go to state 446
+    "..."                             shift, and go to state 447
+    "integer constant"                shift, and go to state 448
+    "long integer constant"           shift, and go to state 449
+    "unsigned integer constant"       shift, and go to state 450
+    "unsigned long integer constant"  shift, and go to state 451
+    "unsigned int8 constant"          shift, and go to state 452
+    "floating point constant"         shift, and go to state 453
+    "double constant"                 shift, and go to state 454
+    "name"                            shift, and go to state 58
+    "start of the string"             shift, and go to state 455
+    '-'                               shift, and go to state 456
+    '+'                               shift, and go to state 457
+    '*'                               shift, and go to state 458
+    '%'                               shift, and go to state 14
+    '~'                               shift, and go to state 459
+    '!'                               shift, and go to state 460
+    '['                               shift, and go to state 461
+    '('                               shift, and go to state 462
+    '$'                               shift, and go to state 463
+    '@'                               shift, and go to state 464
+    '{'                               shift, and go to state 465
+
+    string_builder          go to state 466
+    expr_reader             go to state 467
+    expr_call_pipe          go to state 468
+    name_in_namespace       go to state 469
+    expr_new                go to state 470
+    expr_cast               go to state 471
+    expr_type_decl          go to state 472
+    expr_type_info          go to state 473
+    block_or_lambda         go to state 474
+    expr_full_block         go to state 475
+    expr_numeric_const      go to state 476
+    expr_named_call         go to state 477
+    expr_method_call        go to state 478
+    func_addr_expr          go to state 479
+    expr_field              go to state 480
+    expr_call               go to state 481
+    expr                    go to state 1639
+    expr_generator          go to state 483
+    expr_mtag               go to state 484
+    basic_type_declaration  go to state 485
+    make_decl               go to state 486
+    make_struct_decl        go to state 487
+    make_tuple_call         go to state 488
+    make_dim_decl           go to state 489
+    make_table_decl         go to state 490
+    array_comprehension     go to state 491
 
 
 State 1629
@@ -50201,19 +50203,28 @@ State 1634
 
 State 1635
 
+   90 expression_if_block: '{' $@3 expressions $@4 . '}' expression_block_finally
+
+    '}'  shift, and go to state 1642
+
+
+State 1636
+
+   95 expression_else_block: '{' . $@6 expressions $@7 '}' expression_block_finally
+
+    $default  reduce using rule 93 ($@6)
+
+    $@6  go to state 1643
+
+
+State 1637
+
    73 expression_else: "else" optional_emit_semis expression_else_block .
 
     $default  reduce using rule 73 (expression_else)
 
 
-State 1636
-
-   95 expression_else_block: $@6 . '{' expressions $@7 '}' expression_block_finally
-
-    '{'  shift, and go to state 1642
-
-
-State 1637
+State 1638
 
    97 expression_else_block: $@8 . expression_if_one_liner SEMICOLON
 
@@ -50302,7 +50313,7 @@ State 1637
 
     string_builder           go to state 466
     expr_reader              go to state 467
-    expression_if_one_liner  go to state 1643
+    expression_if_one_liner  go to state 1644
     expr_call_pipe           go to state 468
     name_in_namespace        go to state 469
     expr_new                 go to state 470
@@ -50333,7 +50344,7 @@ State 1637
     array_comprehension      go to state 491
 
 
-State 1638
+State 1639
 
    74 expression_else: elif_or_static_elif '(' expr . ')' optional_emit_semis expression_else_block expression_else
   423 expr_method_call: expr . "->" "name" '(' ')'
@@ -50433,14 +50444,7 @@ State 1638
     '%'    shift, and go to state 658
     '.'    shift, and go to state 659
     '['    shift, and go to state 660
-    ')'    shift, and go to state 1644
-
-
-State 1639
-
-   90 expression_if_block: $@3 '{' expressions $@4 . '}' expression_block_finally
-
-    '}'  shift, and go to state 1645
+    ')'    shift, and go to state 1645
 
 
 State 1640
@@ -50459,24 +50463,35 @@ State 1641
 
 State 1642
 
-   95 expression_else_block: $@6 '{' . expressions $@7 '}' expression_block_finally
+   90 expression_if_block: '{' $@3 expressions $@4 '}' . expression_block_finally
 
-    $default  reduce using rule 312 (expressions)
+    "finally"  shift, and go to state 1398
 
-    expressions  go to state 1646
+    $default  reduce using rule 285 (expression_block_finally)
+
+    expression_block_finally  go to state 1646
 
 
 State 1643
+
+   95 expression_else_block: '{' $@6 . expressions $@7 '}' expression_block_finally
+
+    $default  reduce using rule 312 (expressions)
+
+    expressions  go to state 1647
+
+
+State 1644
 
    97 expression_else_block: $@8 expression_if_one_liner . SEMICOLON
 
     "new line, semicolon"  shift, and go to state 13
     ';'                    shift, and go to state 16
 
-    SEMICOLON  go to state 1647
+    SEMICOLON  go to state 1648
 
 
-State 1644
+State 1645
 
    74 expression_else: elif_or_static_elif '(' expr ')' . optional_emit_semis expression_else_block expression_else
 
@@ -50485,23 +50500,19 @@ State 1644
     $default  reduce using rule 70 (optional_emit_semis)
 
     emit_semis           go to state 148
-    optional_emit_semis  go to state 1648
-
-
-State 1645
-
-   90 expression_if_block: $@3 '{' expressions $@4 '}' . expression_block_finally
-
-    "finally"  shift, and go to state 1398
-
-    $default  reduce using rule 285 (expression_block_finally)
-
-    expression_block_finally  go to state 1649
+    optional_emit_semis  go to state 1649
 
 
 State 1646
 
-   95 expression_else_block: $@6 '{' expressions . $@7 '}' expression_block_finally
+   90 expression_if_block: '{' $@3 expressions $@4 '}' expression_block_finally .
+
+    $default  reduce using rule 90 (expression_if_block)
+
+
+State 1647
+
+   95 expression_else_block: '{' $@6 expressions . $@7 '}' expression_block_finally
   313 expressions: expressions . expression_any
   314            | expressions . error
 
@@ -50661,36 +50672,29 @@ State 1646
     array_comprehension               go to state 491
 
 
-State 1647
+State 1648
 
    97 expression_else_block: $@8 expression_if_one_liner SEMICOLON .
 
     $default  reduce using rule 97 (expression_else_block)
 
 
-State 1648
+State 1649
 
    74 expression_else: elif_or_static_elif '(' expr ')' optional_emit_semis . expression_else_block expression_else
 
-    '{'       reduce using rule 93 ($@6)
+    '{'  shift, and go to state 1636
+
     '{'       [reduce using rule 96 ($@8)]
     $default  reduce using rule 96 ($@8)
 
     expression_else_block  go to state 1651
-    $@6                    go to state 1636
-    $@8                    go to state 1637
-
-
-State 1649
-
-   90 expression_if_block: $@3 '{' expressions $@4 '}' expression_block_finally .
-
-    $default  reduce using rule 90 (expression_if_block)
+    $@8                    go to state 1638
 
 
 State 1650
 
-   95 expression_else_block: $@6 '{' expressions $@7 . '}' expression_block_finally
+   95 expression_else_block: '{' $@6 expressions $@7 . '}' expression_block_finally
 
     '}'  shift, and go to state 1652
 
@@ -50699,19 +50703,19 @@ State 1651
 
    74 expression_else: elif_or_static_elif '(' expr ')' optional_emit_semis expression_else_block . expression_else
 
-    "else"         shift, and go to state 1610
-    "elif"         shift, and go to state 1611
-    "static_elif"  shift, and go to state 1612
+    "else"         shift, and go to state 1611
+    "elif"         shift, and go to state 1612
+    "static_elif"  shift, and go to state 1613
 
     $default  reduce using rule 72 (expression_else)
 
-    elif_or_static_elif  go to state 1613
+    elif_or_static_elif  go to state 1614
     expression_else      go to state 1653
 
 
 State 1652
 
-   95 expression_else_block: $@6 '{' expressions $@7 '}' . expression_block_finally
+   95 expression_else_block: '{' $@6 expressions $@7 '}' . expression_block_finally
 
     "finally"  shift, and go to state 1398
 
@@ -50729,6 +50733,6 @@ State 1653
 
 State 1654
 
-   95 expression_else_block: $@6 '{' expressions $@7 '}' expression_block_finally .
+   95 expression_else_block: '{' $@6 expressions $@7 '}' expression_block_finally .
 
     $default  reduce using rule 95 (expression_else_block)

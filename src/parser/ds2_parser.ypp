@@ -13,9 +13,12 @@
 /*
     grammar errors
 
-    r/r error on '{'.
+    s/r conflict on '{' (3 instances: if-block, else-block, elif-block).
         if ( cond ) { foo() } // can't tell block from table<auto>(foo())
+    resolved by preferring shift (block body) over reduce (one-liner expression).
 */
+
+%expect 3
 
 %code requires {
     #include "daScript/misc/platform.h"
@@ -897,9 +900,9 @@ optional_semis
     ;
 
 expression_if_block
-    :   {
+    :   '{' [bbegin] {
         yyextra->push_nesteds(DAS_EMIT_SEMICOLON);
-    } '{' [bbegin] expressions[block] {
+    } expressions[block] {
         yyextra->pop_nesteds();
     } '}' expression_block_finally[fin] {
         $$ = $block;
@@ -919,9 +922,9 @@ expression_if_block
     ;
 
 expression_else_block
-    :   {
+    :   '{' [bbegin] {
         yyextra->push_nesteds(DAS_EMIT_SEMICOLON);
-    } '{' [bbegin] expressions[block] {
+    } expressions[block] {
         yyextra->pop_nesteds();
     } '}' expression_block_finally[fin] {
         $$ = $block;
