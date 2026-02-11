@@ -155,7 +155,7 @@ struct BoolArray {
             let start_bit = uindex & 31u
             let w = bits[start_offs]
             let low_bits = w & ((1u << start_bit) - 1u)
-            let upper_bits = w >> (start_bit + 1u)
+            let upper_bits = start_bit < 31u ? (w >> (start_bit + 1u)) : 0u
             var new_w = low_bits | (upper_bits << start_bit)
             // the top bit of that dword is now free, we need to pull bits from the next dwords
             let total_uints = (real_size + 31u) >> 5u
@@ -176,7 +176,11 @@ struct BoolArray {
         //! Insert a boolean value at the given index in the BoolArray.
         with (self) {
             let uindex = uint(index)
-            if (uindex >= real_size) panic("index out of range, {index}")
+            if (uindex > real_size) panic("index out of range, {index}")
+            if (uindex == real_size) {
+                push(self, value)
+                return
+            }
             resize(self, int(real_size + 1u))
             // we start with the dword, where we want to insert
             let start_offs = uindex >> 5u
