@@ -5,6 +5,10 @@ Clone
 =====
 
 Clone is designed to create a deep copy of the data.
+
+For an overview of when to use copy (``=``), move (``<-``), and clone (``:=``),
+see :ref:`Move, Copy, and Clone <move_copy_clone>`.
+
 Cloning is invoked via the clone operator ``:=``::
 
     a := b
@@ -23,7 +27,7 @@ This in turn expands into ``clone_to_move``::
 Cloning rules and implementation details
 ----------------------------------------
 
-Cloning obeys several rules.
+Cloning obeys the following rules.
 
 Certain types like blocks, lambdas, and iterators can't be cloned at all.
 
@@ -165,3 +169,9 @@ clone_to_move implementation
     }
 
 Note that for non-cloneable types, Daslang will not promote ``:=`` initialize into ``clone_to_move``.
+
+.. seealso::
+
+    :ref:`Move, copy, and clone <clone_to_move>` for move, copy, and assignment rules,
+    :ref:`Finalizers <finalizers>` for delete and finalization semantics,
+    :ref:`Structs <structs>` and :ref:`Variants <variants>` for custom clone expansion.

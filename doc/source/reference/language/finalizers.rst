@@ -4,7 +4,7 @@
 Finalizer
 =========
 
-Finalizers are special functions which are called in exactly two cases:
+Finalizers are special functions called in exactly two cases:
 
 ``delete`` is called explicitly on a data type::
 
@@ -27,7 +27,7 @@ Lambda based iterator or generator is sequenced out::
 
 By default finalizers are called recursively on subtypes.
 
-If memory models allows deallocation, standard finalizers also free the memory::
+If the memory model allows deallocation, standard finalizers also free the memory::
 
     options persistent_heap = true
 
@@ -164,3 +164,11 @@ Lambdas and generators have their capture structure finalized.
 Lambdas can have custom finalizers defined as well (see :ref:`Lambdas <lambdas_finalizer>`).
 
 Classes can define custom finalizers inside the class body (see :ref:`Classes <classes_finalizer>`).
+
+.. seealso::
+
+    :ref:`Structs <structs>` for struct finalizer expansion,
+    :ref:`Tuples <tuples>` and :ref:`Variants <variants>` for composite type finalization,
+    :ref:`Arrays <arrays>` and :ref:`Tables <tables>` for container finalization,
+    :ref:`Move, copy, and clone <clone_to_move>` for delete-after-move semantics,
+    :ref:`Options <options>` for ``persistent_heap`` and memory deallocation policies.

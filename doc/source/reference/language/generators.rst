@@ -5,13 +5,14 @@ Generator
 =========
 
 Generators allow you to declare a lambda that behaves like an iterator.
-For all intents and purposes, a generator is a lambda passed to an ``each`` or ``each_ref`` function.
+Internally, a generator is compiled into a lambda that is passed to an ``each`` or ``each_ref`` function.
 
-Generator syntax is similar to lambda syntax::
+Generator syntax is similar to lambda syntax.  A generator expression starts with the
+``generator`` keyword, followed by the element type in angle brackets, then a ``$`` and a block::
 
-    generator ::= `generator` < type > $ ( ) block
+    // generator<ElementType>() <| $ { ... }
 
-Generator lambdas must have no arguments. It always returns boolean::
+Generator lambdas must have no arguments. The generator body always returns a boolean::
 
     let gen <- generator<int>() <| $ {  // gen is iterator<int>
         for ( t in range(0,10) ) {
@@ -155,3 +156,10 @@ A label is created to specify where to go to next time, after the ``yield``::
 Iterator initialization is replaced with the creation of the lambda::
 
     var gen:iterator<int> <- each(new<lambda<(_yield_8:int&):bool const>> default<_lambda_thismodule_8_8_1>)
+
+.. seealso::
+
+    :ref:`Lambdas <lambdas>` for lambda capture semantics used by generators,
+    :ref:`Statements <statements>` for ``yield`` and ``return`` statements,
+    :ref:`Comprehensions <comprehensions>` for iterator comprehensions backed by generators,
+    :ref:`Blocks <blocks>` for block-like syntax.

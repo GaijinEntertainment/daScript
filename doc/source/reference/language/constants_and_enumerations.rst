@@ -21,7 +21,7 @@ Constant
 .. index::
     single: Constants
 
-Constants bind a specific value to an identifier. Constants are exactly global variables. Their value cannot be changed.
+Constants bind a specific value to an identifier. Constants are global variables whose values cannot be changed.
 
 Constants are declared with the following syntax::
 
@@ -31,16 +31,16 @@ Constants are declared with the following syntax::
     let blah = "I'm string constant which is declared on the same line as variable"
 
 Constants are always globally scoped from the moment they are declared.
-Any subsequential code can reference them.
+Any subsequent code can reference them.
 
-You can not change such global variables.
+You cannot change the value of a constant.
 
 Constants can be ``shared``::
 
     let shared blah <- ["blah","blahh","blahh"]
 
-Shared constants point to the same memory in different instances of `Context`.
-They are initialized once during the first context initialization.
+Shared constants point to the same memory across all ``Context`` instances
+and are initialized once, during the first context initialization.
 
 ---------------
 Global variable
@@ -51,9 +51,9 @@ Mutable global variables are defined as::
     var foobar = 100
     var barfoo = 100
 
-Their usage can be switched on and off on a per-project basis via `CodeOfPolicies`.
+Their usage can be switched on and off on a per-project basis via ``CodeOfPolicies``.
 
-Local static variables can be declared via the `static_let` macro::
+Local static variables can be declared via the ``static_let`` macro::
 
     require daslib/static_let
 
@@ -65,14 +65,14 @@ Local static variables can be declared via the `static_let` macro::
     }
 
 Variable ``bar`` in the example above is effectively a global variable.
-However, it's only visible inside the scope of the corresponding `static_let` macro.
+However, it's only visible inside the scope of the corresponding ``static_let`` macro.
 
-Global variables can be `private` or `public` ::
+Global variables can be ``private`` or ``public`` ::
 
     let public foobar = 100
     let private barfoo = 100
 
-If not specified, structures inherit module publicity (i.e. in public modules global variables are public,
+If not specified, global variables inherit module publicity (i.e. in public modules global variables are public,
 and in private modules global variables are private).
 
 
@@ -99,7 +99,7 @@ It is not required to assign specific value to enum::
         ten = 9+1 // will be 10, since its explicitly specified
     }
 
-Enumerations can be `private` or `public`::
+Enumerations can be ``private`` or ``public``::
 
     enum private Foo {
         fooA
@@ -111,7 +111,7 @@ Enumerations can be `private` or `public`::
         barB
     }
 
-If not specified, enumeration inherit module publicity (i.e. in public modules enumerations are public,
+If not specified, enumerations inherit module publicity (i.e. in public modules enumerations are public,
 and in private modules enumerations are private).
 
 An enum name itself is a strong type, and all enum values are of this type.
@@ -133,11 +133,18 @@ Enumerations can specify one of the following storage types: ``int``, ``int8``, 
 
 Enumeration values will be truncated down to the storage type.
 
-The `each_enum` iterator iterates over specific enumeration type values.
+The ``each_enum`` iterator iterates over specific enumeration type values.
 Any enum element needs to be provided to specify the enumeration type::
 
-    for ( x in each_enum(Characters ch_a) ) {
+    for ( x in each_enum(Characters.ch_a) ) {
         print("x = {x}\n")
     }
 
+.. seealso::
+
+    :ref:`Datatypes <datatypes_and_values>` for a list of built-in types including enum storage types,
+    :ref:`Iterators <iterators>` for ``each_enum`` and other iteration patterns,
+    :ref:`Pattern matching <pattern-matching>` for matching on enumeration values,
+    :ref:`Contexts <contexts>` for shared constant initialization across contexts,
+    :ref:`Program structure <program_structure>` for the overall layout of global declarations.
 

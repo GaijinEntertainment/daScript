@@ -4,17 +4,20 @@
 Block
 =====
 
-Blocks are nameless functions which captures the local context by reference.
+Blocks are nameless functions that capture the local context by reference.
 Blocks offer significant performance advantages over lambdas (see :ref:`Lambda <lambdas>`).
 
-The block type can be declared with a function-like syntax::
+The block type can be declared with a function-like syntax.
+The type is written as ``block`` followed by an optional type signature in angle brackets::
 
-    block_type ::= block { optional_block_type }
-    optional_block_type ::= < { optional_block_arguments } { : return_type } >
-    optional_block_arguments := ( block_argument_list )
-    block_argument_list := argument_name : type | block_argument_list , argument_name : type
+    block < (arg1:int; arg2:float&) : bool >
 
-    block < (arg1:int;arg2:float&):bool >
+The ``->`` operator can be used instead of ``:`` for the return type::
+
+    block < (arg1:int; arg2:float&) -> bool >   // equivalent
+
+If no type signature is specified, ``block`` alone represents a block that takes no
+arguments and returns nothing.
 
 Blocks capture the current stack, so blocks can be passed, but never returned.
 Block variables can only be passed as arguments.
@@ -108,4 +111,12 @@ Local block variables are allowed::
     verify ( 3 == invoke(blk,1,2) )
     verify ( 7 == invoke(blk,3,4) )
 
-They can't be copied, or moved.
+Local block variables cannot be copied or moved.
+
+.. seealso::
+
+    :ref:`Functions <functions>` for regular function declarations,
+    :ref:`Lambdas <lambdas>` for heap-allocated callable objects with captures,
+    :ref:`Generators <generators>` for iterator-producing lambdas,
+    :ref:`Annotations <annotations>` for block annotations.
+

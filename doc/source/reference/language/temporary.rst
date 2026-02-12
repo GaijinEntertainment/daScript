@@ -21,9 +21,9 @@ From Daslang's perspective, the declaration of the function looks like this::
 
 Where string# is a temporary version of a Daslang string type.
 
-The main idea behind temporary types is that they can't `escape` outside of the scope of the block they are passed to.
+The key property of temporary types is that they cannot escape the scope of the block they are passed to.
 
-Temporary values accomplish this by following certain rules.
+Temporary values enforce this through the following rules.
 
 Temporary values can't be copied or moved::
 
@@ -36,10 +36,11 @@ Temporary values can't be copied or moved::
 
 Temporary values can't be returned or passed to functions, which require regular values::
 
-    def accept_string(s:string)
+    def accept_string(s:string) {
         print("s={s}\n")
+    }
 
-    def sample ( var t : das_string )
+    def sample ( var t : das_string ) {
         peek(t) $ ( boo : string# ) {
             accept_string(boo) // error
         }
@@ -86,4 +87,11 @@ A pointer to the temporary value can be received for the corresponding scope via
         var b = safe_addr(a)    // b is int?#, and this operation does not require unsafe
         ...
     }
+
+.. seealso::
+
+    :ref:`Unsafe <unsafe>` for ``implicit`` keyword usage and returning temporary values,
+    :ref:`Clone <clone>` for cloning temporary values into regular ones,
+    :ref:`Blocks <blocks>` for temporary scope and block lifetime,
+    :ref:`Functions <functions>` for ``implicit`` in function signatures.
 

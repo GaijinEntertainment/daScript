@@ -34,7 +34,7 @@ Dynamic sub-arrays can be created out of any array type via range indexing::
   var a  = fixed_array(1,2,3,4)
   let b <- a[1..3]               //  b is [2,3]
 
-In reality `a[b]`, where b is a range, is equivalent to `subarray(a, b)`.
+In reality ``a[b]``, where b is a range, is equivalent to ``subarray(a, b)``.
 
 Resizing, insertion, and deletion of dynamic arrays and array elements is done through a set of
 standard functions (see :ref:`built-in functions <stdlib__builtin>`).
@@ -46,11 +46,11 @@ Arrays (as well as tables, structures, and handled types) are passed to function
 Arrays cannot be copied; only cloned or moved. ::
 
   def clone_array(var a, b: array<string>)
-    a := b      // a is not a deep copy of b
+    a := b      // a is now a deep copy of b
     clone(a, b) // same as above
 
   def move_array(var a, b: array<string>)
-    a <- b  // a is no points to same data as b, and b is empty.
+    a <- b  // a now points to the same data as b, and b is empty
 
 Arrays can be constructed inline::
 
@@ -130,5 +130,13 @@ Search functions are available for both static and dynamic arrays::
   def find_index ( arr : auto(TT)[] implicit; key : TT )
   def find_index_if ( arr : array<auto(TT)> implicit; blk : block<(key:TT):bool> )
   def find_index_if ( arr : auto(TT)[] implicit; blk : block<(key:TT):bool> )
+
+.. seealso::
+
+    :ref:`Comprehensions <comprehensions>` for array and iterator comprehension syntax,
+    :ref:`Iterators <iterators>` for iteration patterns over arrays,
+    :ref:`Move, copy, and clone <clone_to_move>` for array copy, move, and clone rules,
+    :ref:`Locks <locks>` for array locking during iteration,
+    :ref:`Datatypes <datatypes_and_values>` for a list of element types.
 
 

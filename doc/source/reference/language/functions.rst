@@ -7,7 +7,7 @@ Function
 .. index::
     single: Functions
 
-Functions pointers are first class values, like integers or strings, and can be stored in table slots,
+Function pointers are first-class values, like integers or strings, and can be stored in table slots,
 local variables, arrays, and passed as function parameters.
 Functions themselves are declarations (much like in C++).
 
@@ -46,12 +46,22 @@ Returning different types is a compilation error::
         }
     }
 
+The return type can be specified explicitly with ``:`` or ``->`` — both are equivalent::
+
+    def add(a, b : int) : int {
+        return a + b
+    }
+
+    def add(a, b : int) -> int {   // same as above
+        return a + b
+    }
+
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Publicity
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Functions can be `private` or `public` ::
+Functions can be ``private`` or ``public`` ::
 
     def private foo(a:bool)
 
@@ -78,7 +88,7 @@ You can call a function by using its name and passing in all its arguments (with
 Named Arguments Function call
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-You can also call a function by using its name and passing all aits rguments with explicit names (with the possible omission of the default arguments)::
+You can also call a function by using its name and passing all its arguments with explicit names (with the possible omission of the default arguments)::
 
     def foo(a, b: int) {
         return a + b
@@ -110,14 +120,17 @@ They also allow default values for arguments other than the last ones::
 Function pointer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Pointers to a function use a similar declaration to that of a block or lambda::
+Pointers to a function use a similar declaration to that of a block or lambda.
+The type is written as ``function`` followed by an optional type signature in angle brackets::
 
-    function_type ::= function { optional_function_type }
-    optional_function_type ::= < { optional_function_arguments } { : return_type } >
-    optional_function_arguments := ( function_argument_list )
-    function_argument_list := argument_name : type | function_argument_list ; argument_name : type
+    function < (arg1:int; arg2:float&) : bool >
 
-    function < (arg1:int;arg2:float&):bool >
+The ``->`` operator can be used instead of ``:`` for the return type::
+
+    function < (arg1:int; arg2:float&) -> bool >   // equivalent
+
+If no type signature is specified, ``function`` alone represents a function pointer with
+an unspecified signature.
 
 Function pointers can be obtained by using the ``@@`` operator::
 
@@ -187,7 +200,7 @@ Daslang will instantiate them during the infer pass of compilation::
 Generic functions allow code similar to dynamically-typed languages like Python or Lua,
 while still enjoying the performance and robustness of strong, static typing.
 
-Generic function addresses cannot be obtained.
+You cannot take the address of a generic function.
 
 Unspecified types can also be written via ``auto`` notation::
 
@@ -234,7 +247,7 @@ Functions can be specialized if their argument types are different::
     let i = twice(1)    // prints "int"
     let f = twice(1.0)  // prints "float"
 
-Declaring functions with the same exact argument list is compilation time error.
+Declaring functions with the same exact argument list is a compilation-time error.
 
 Functions can be partially specialized::
 
@@ -276,15 +289,15 @@ Function specialization can be limited by contracts (contract macros)::
 
 In the example above, only arrays will be matched.
 
-Its possible to do boolean logic operations on the contracts::
+It is possible to use boolean logic operations on contracts::
 
     [expect_any_tuple(blah) || expect_any_variant(blah)]
     def print_blah ...
 
 In the example above print_blah will accept any tuple or variant.
-Available logic operations are `!`, `&&`, `||` and `^^`.
+Available logic operations are ``!``, ``&&``, ``||`` and ``^^``.
 
-LSP can be explicitly prohibited for a particular function argument via the `explicit` keyword::
+LSP can be explicitly prohibited for a particular function argument via the ``explicit`` keyword::
 
     def foo ( a : Foo explicit ) // will accept Foo, but not any subtype of Foo
 
@@ -303,7 +316,7 @@ A function with default parameters is declared as follows: ::
         return a + b + c + d
     }
 
-When the function *test* is invoked and the parameters `c` or `d` are not specified,
+When the function *test* is invoked and the parameters ``c`` or ``d`` are not specified,
 the compiler will generate a call with default value to the unspecified parameter. A default parameter can be
 any valid compile-time const Daslang expression. The expression is evaluated at compile-time.
 
@@ -361,8 +374,8 @@ Tail recursion is a method for partially transforming recursion in a program int
 iteration: it applies when the recursive calls in a function are the last executed
 statements in that function (just before the return).
 
-Currently, Daslang doesn't support tail recursion.
-It is implied that a Daslang function always returns.
+Currently, Daslang does not support tail recursion.
+A Daslang function is assumed to always return.
 
 ---------------------------------------------
 Operator Overloading
@@ -462,33 +475,49 @@ Overloading accessors
 Daslang allows you to overload accessors, which means that you can define custom behavior for accessing fields of your own data types.
 Here is an example of how to overload the accessor for a custom struct called Foo::
 
+    require math
+
     struct Foo {
         dir : float3
     }
-    def operator . length ( foo : Foo ) {
+    def operator . magnitude ( foo : Foo ) : float {
         return length(foo.dir)
     }
-    def operator . length := ( var foo:Foo; value:float ) {
+    def operator . magnitude := ( var foo:Foo; value:float ) {
         foo.dir = normalize(foo.dir) * value
     }
     [export]
     def main {
-        var f = Foo(dir=float3(1,2,3)))
-        print("length = {f.length} // {f}\n")
-        f.length := 10.
-        print("length = {f.length} // {f}\n")
+        var f = Foo(dir=float3(1,2,3))
+        print("magnitude = {f.magnitude} // {f}\n")
+        f.magnitude := 10.
+        print("magnitude = {f.magnitude} // {f}\n")
     }
 
-It now has accessor `length` which can be used to get and set the length of the `dir` field.
+Expected output::
+
+    magnitude = 3.7416575 // [[ 1,2,3]]
+    magnitude = 10 // [[ 2.6726124,5.345225,8.017837]]
+
+It now has accessor ``magnitude`` which can be used to get and set the magnitude of the ``dir`` field.
 
 Classes allow to overload accessors for properties as well::
 
     class Foo {
         dir : float3
-        def const operator . length {
+        def const operator . magnitude : float {
             return length(dir)
         }
-        def operator . length := ( value:float ) {
+        def operator . magnitude := ( value:float ) {
             dir = normalize(dir) * value
         }
     }
+
+.. seealso::
+
+    :ref:`Generic programming <generic_programming>` for generic functions and type inference,
+    :ref:`Lambdas <lambdas>` for anonymous callable objects with captures,
+    :ref:`Blocks <blocks>` for stack-bound callable objects,
+    :ref:`Annotations <annotations>` for function annotations like ``[export]`` and ``[private]``,
+    :ref:`Move, copy, and clone <clone_to_move>` for ``return <-`` move semantics,
+    :ref:`Classes <classes>` for member functions and method-like calls.

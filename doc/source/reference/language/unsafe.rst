@@ -18,9 +18,9 @@ Expressions (and subexpressions) can also be unsafe::
 
     let px = unsafe(addr(x))
 
-Unsafe is followed by a block which can include those operations. Nested unsafe sections are allowed. Unsafe is not inherited in lambda, generator, or local functions; it is, however, inherited in local blocks.
+The ``unsafe`` keyword is followed by a block that can include such operations. Nested unsafe sections are allowed. ``unsafe`` is not inherited in lambdas, generators, or local functions, but it is inherited in local blocks.
 
-Individual expressions can cause a `CompilationError::unsafe` error, unless they are part of the unsafe section. Additionally, macros can explicitly set the `ExprGenFlags::alwaysSafe` flag.
+Individual expressions can cause a ``CompilationError::unsafe`` error, unless they are part of the unsafe section. Additionally, macros can explicitly set the ``ExprGenFlags::alwaysSafe`` flag.
 
 The address of expression is unsafe::
 
@@ -120,27 +120,34 @@ Local class variables are unsafe::
         var g = Goo()                           // potential lifetime issues
     }
 
-========
 implicit
-========
+--------
 
-`implicit` keyword is used to specify that type can be either temporary or regular type, and will be treated as defined.
+``implicit`` keyword is used to specify that type can be either temporary or regular type, and will be treated as defined.
 For example::
 
     def foo ( a : Foo implicit )    // a will be treated as Foo, but will also accept Foo# as argument
     def foo ( a : Foo# implicit )   // a will be treated as Foo#, but will also accept Foo as argument
 
-Unfortunately implicit conversions like this are unsafe, so `implicit` is unsafe by definition.
+Unfortunately implicit conversions like this are unsafe, so ``implicit`` is unsafe by definition.
 
-===========
 other cases
-===========
+-----------
 
-There are several other cases where `unsafe` is required, but not explicitly mentioned in the documentation.
+There are several other cases where ``unsafe`` is required, but not explicitly mentioned in the documentation.
 They are typically controlled via CodeOfPolicies or appropriate option::
 
     options unsafe_table_lookup = false // makes table indexing safe. refers to CodeOfPolicies::unsafe_table_lookup
 
     var tab <- { 1=>"one", 2=>"two" }
     tab[3] = "three"        // this is unsafe, since it can create a pointer to a temporary object
+
+.. seealso::
+
+    :ref:`Lambdas <lambdas>` for capture-by-reference and move requiring unsafe,
+    :ref:`Classes <classes>` for local class variables being unsafe,
+    :ref:`Expressions <expressions>` for ``addr``, ``reinterpret``, and ``upcast`` operators,
+    :ref:`Temporary types <temporary>` for ``implicit`` and temporary type qualifiers,
+    :ref:`Tables <tables>` for unsafe table lookup,
+    :ref:`Options <options>` for ``unsafe_table_lookup`` and related policies.
 

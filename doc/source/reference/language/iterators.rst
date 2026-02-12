@@ -4,14 +4,12 @@
 Iterator
 ========
 
-Iterators are objects which can traverse over a sequence without knowing the details of the sequence's implementation.
+Iterators are objects that traverse a sequence without exposing the details of the sequence's implementation.
 
-The Iterator type is defined as follows::
+The iterator type is written as ``iterator`` followed by the element type in angle brackets::
 
-    iterator_type ::= iterator < type >
-
-    iterator<int>           // iterates over integer
-    iterator<const Foo&>    // iterates over Foo by reference
+    iterator<int>           // iterates over integers
+    iterator<const Foo&>    // iterates over Foo by const reference
 
 Iterators can be moved, but not copied or cloned.
 
@@ -37,18 +35,42 @@ For the reference iterator, the ``for`` loop will provide a reference variable::
 
 Iterators can be created from lambdas (see :ref:`Lambda <lambdas_iterator>`) or generators (see :ref:`Generator <generators>`).
 
+---------------------------
+Making types iterable
+---------------------------
+
+Any type can be made directly iterable in a ``for`` loop by defining an ``each`` function for it.
+When an ``each`` function exists that takes a value of type ``T`` and returns an ``iterator``,
+you can iterate over ``T`` directly — the compiler calls ``each`` automatically::
+
+    struct Foo {
+        data : array<int>
+    }
+
+    def each ( f : Foo ) : iterator<int&> {
+        return each(f.data)
+    }
+
+    var f = Foo(data <- [1, 2, 3])
+    for ( x in f ) {           // equivalent to: for ( x in each(f) )
+        print("{x}\n")
+    }
+
+This is how built-in types like ranges, arrays, and strings become iterable — each has a corresponding
+``each`` function defined in the standard library.
+
 Calling ``delete`` on an iterator will make it sequence out and free its memory::
 
-    var it <- each_enum(Numbers one)
+    var it <- each_enum(Numbers.one)
     delete it                           // safe to delete
 
-    var it <- each_enum(Numbers one)
+    var it <- each_enum(Numbers.one)
     for ( x in it ) {
         print("x = {x}\n")
     }
     delete it                           // its always safe to delete sequenced out iterator
 
-Loops and iteration functions do it automatically.
+Loops and iteration functions call the finalizer automatically.
 
 -----------------
 builtin iterators
@@ -127,8 +149,8 @@ A semantic equivalent of the for loop can be explicitly written using these oper
 
 ``_builtin_iterator_iterate`` is one function to rule them all. It acts like all 3 functions above.
 On a non-empty iterator it starts with 'first',
-then proceeds to call `next` until the sequence is exhausted.
-Once the iterator is sequenced out, it calls `close`::
+then proceeds to call ``next`` until the sequence is exhausted.
+Once the iterator is sequenced out, it calls ``close``::
 
     var it <- each(range(0,10))
     var i : int
@@ -165,5 +187,14 @@ The function ``next`` is implemented as follows::
                 return _builtin_iterator_iterate(it, addr(value))
             }
         }
+    }
 
 It is important to notice that builtin iteration functions accept pointers instead of references.
+
+.. seealso::
+
+    :ref:`Arrays <arrays>` and :ref:`Tables <tables>` for built-in iterable containers,
+    :ref:`Statements <statements>` for the ``for`` loop syntax,
+    :ref:`Comprehensions <comprehensions>` for comprehension-based iterators,
+    :ref:`Generators <generators>` for creating iterators from generator functions,
+    :ref:`Finalizers <finalizers>` for iterator finalization.

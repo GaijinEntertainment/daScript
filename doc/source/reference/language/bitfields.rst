@@ -4,7 +4,7 @@
 Bitfield
 ========
 
-Bitfields are a nameless types which represent a collection of flags in a single integer::
+Bitfields are nameless types that represent a collection of flags in a single integer::
 
     var t : bitfield < one,two,three >
 
@@ -65,7 +65,7 @@ Individual flags can be read as if they were regular bool fields::
     var t : bitfield < one; two; three >
     assert(!t.one)
 
-If alias is available, bitfield can be constructed via alias notation::
+If an alias is available, a bitfield can be constructed using alias notation::
 
     assert(t==bits123.three)
 
@@ -85,4 +85,10 @@ Bitfields support built-in constants::
         All = OneTwoThree.one | OneTwoThree.two | OneTwoThree.three
         None = bitfield(0)
     }
+
+.. seealso::
+
+    :ref:`Datatypes <datatypes_and_values>` for a complete list of built-in types,
+    :ref:`Aliases <aliases>` for the ``typedef`` shorthand syntax,
+    :ref:`Expressions <expressions>` for binary operators used with bitfields.
 
