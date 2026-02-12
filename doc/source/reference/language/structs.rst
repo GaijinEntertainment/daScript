@@ -9,8 +9,8 @@ Struct
     single: Structs
 
 Daslang uses a structure mechanism similar to languages like C/C++, Java, C#, etc.
-However, there are some important difference.
-Structures are first class objects like integers or strings and can be stored in
+However, there are some important differences.
+Structures are first-class objects like integers or strings and can be stored in
 table slots, other structures, local variables, arrays, tuples, variants, etc., and passed as function parameters.
 
 ------------------
@@ -28,7 +28,7 @@ A structure object is created through the keyword ``struct``::
         xf: float
     }
 
-Sturctures can be ``private`` or ``public``::
+Structures can be ``private`` or ``public``::
 
     struct private Foo {
         x, y: int
@@ -46,10 +46,10 @@ Structure instances are created through a 'new expression' or a variable declara
     let foo: Foo
     let foo: Foo? = new Foo()
 
-There are intentionally no member functions. There are only data members, since it is a data type itself.
-Structures can handle members with a function type as data (meaning it's a function pointer that can be changed during execution).
-There are initializers that simplify writing complex structure initialization.
-Basically, a function with same name as the structure itself works as an initializer.
+Structures intentionally have no member functions — only data members — since they represent a pure data type.
+Structures can contain members of function type as data (that is, function pointers that can be reassigned at runtime).
+Initializers simplify complex structure initialization.
+A function with the same name as the structure acts as its initializer.
 The compiler will generate a 'default' initializer if there are any members with an initializer::
 
     struct Foo {
@@ -62,14 +62,14 @@ Structure fields are initialized to zero by default, regardless of 'initializers
     let fZero : Foo     // no initializer is called, x, y = 0
     let fInited = Foo() // initializer is called, x = 1, y = 2
 
-Structure field types are inferred, where possible::
+Structure field types are inferred where possible::
 
     struct Foo {
         x = 1    // inferred as int
         y = 2.0    // inferred as float
     }
 
-Explicit structure initialization during creation leaves all uninitialized members zeroed::
+Explicit structure initialization during creation leaves all unspecified members zeroed::
 
     let fExplicit = Foo(uninitialized x=13)  // x = 13, y = 0
 
@@ -88,7 +88,7 @@ The previous code example is syntactic sugar for::
     fPostConstruction.x = 13
     fPostConstruction.y = 2
 
-The "Clone initializer" is useful pattern for creating a clone of an existing structure when both structures are on the heap::
+The "Clone initializer" is a useful pattern for creating a clone of an existing structure when both structures are on the heap::
 
     def Foo ( p : Foo? ) {               // "clone initializer" takes pointer to existing structure
         var self := *p
@@ -122,7 +122,7 @@ For ease of Objected Oriented Programming, non-virtual member functions can be e
     setXY(foo, 10, 11)     // exactly same thing as the line above
 
 
-Since function pointers are a thing, one can emulate 'virtual' functions by storing function pointers as members::
+Since function pointers are first-class values, you can emulate virtual functions by storing function pointers as members::
 
     struct Foo {
         x, y: int = 0
@@ -141,7 +141,7 @@ Since function pointers are a thing, one can emulate 'virtual' functions by stor
                     // It is also just syntactic sugar for function pointer call
     invoke(foo.set, foo, 1, 2)  // exactly same thing as above
 
-This makes the difference between virtual and non-virtual calls in the OOP paradigm explicit.
+This makes the distinction between virtual and non-virtual calls in the OOP paradigm explicit and intentional.
 In fact, Daslang classes implement virtual functions in exactly this manner.
 
 Virtual functions can be declared in the body of the structure. This is equivalent to the example above::
@@ -204,7 +204,8 @@ Structure size and alignment are similar to that of C++:
 * individual members are aligned individually
 * overall structure alignment is that of the largest member's alignment
 
-Inherited structure alignment can be controlled via the [cpp_layout] annotation::
+Inherited structure alignment can be controlled via the ``[cpp_layout]`` annotation
+(see :ref:`Annotations <annotations>`)::
 
     [cpp_layout (pod=false)]
     struct CppS1 {
@@ -222,7 +223,7 @@ Inherited structure alignment can be controlled via the [cpp_layout] annotation:
 OOP implementation details
 --------------------------
 
-There is sufficient amount of infrastructure to support basic OOP on top of the structures.
+There is sufficient infrastructure to support basic OOP on top of structures.
 However, it is already available in form of classes with some fixed memory overhead (see :ref:`Classes <classes>`).
 
 It's possible to override the method of the base class with override syntax.
@@ -254,7 +255,7 @@ It is safe to use the ``cast`` keyword to cast a derived structure instance into
     var f3d: Foo3D = Foo3D()
     (cast<Foo> f3d).y = 5
 
-It is unsafe to cast a base struct to it's derived child type::
+It is unsafe to cast a base struct to its derived child type::
 
     var f3d: Foo3D = Foo3D()
     def foo(var foo: Foo) {
@@ -271,7 +272,7 @@ If needed, the upcast can be used with the ``unsafe`` keyword::
         y: int
     }
 
-    def setY(var foo: Foo; y: int) {  // Warning! Can make awful things to your app if its not really Foo2
+    def setY(var foo: Foo; y: int) {  // Warning! Can cause problems if foo is not actually Foo2
         unsafe {
             (upcast<Foo2> foo).y = y
         }
@@ -299,4 +300,12 @@ As the example above is very dangerous, and in order to make it safer, you can m
             }
         }
     }
+
+.. seealso::
+
+    :ref:`Classes <classes>` for the class type with member functions and RTTI,
+    :ref:`Move, copy, and clone <clone_to_move>` for struct copy, move, and clone rules,
+    :ref:`Finalizers <finalizers>` for struct finalization,
+    :ref:`Functions <functions>` for OOP-style ``|>`` pipe calls on structs,
+    :ref:`Generic programming <generic_programming>` for ``typeinfo`` on structs.
 

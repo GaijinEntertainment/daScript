@@ -53,7 +53,7 @@ The current index can be determined via the ``variant_index`` function::
     var t : U_F
     assert(variant_index(t)==0)
 
-The index value for a specific case can be determine via the ``variant_index`` and ``safe_variant_index`` type traits.
+The index value for a specific case can be determined via the ``variant_index`` and ``safe_variant_index`` type traits.
 ``safe_variant_index`` will return -1 for invalid indices and types, whereas ``variant_index`` will report a compilation error::
 
     assert(typeinfo(variant_index<i_value> t)==0)
@@ -66,8 +66,9 @@ The index value for a specific case can be determine via the ``variant_index`` a
 
 Current case selection can be modified with the unsafe operation ``safe_variant_index``::
 
-    unsafe
+    unsafe {
         set_variant_index(t, typeinfo variant_index<f_value>(t))
+    }
 
 -------------------------
 Alignment and data layout
@@ -87,4 +88,13 @@ Variants contain the 'index' of the current case, followed by a union of individ
 Individual cases start from the same offset.
 
 The variant type is aligned by the alignment of its largest case, but no less than that of an int32.
+
+.. seealso::
+
+    :ref:`Pattern matching <pattern-matching>` for matching and extracting variant cases,
+    :ref:`Aliases <aliases>` for the ``typedef`` shorthand variant syntax,
+    :ref:`Datatypes <datatypes_and_values>` for a list of built-in types,
+    :ref:`Move, copy, and clone <clone_to_move>` for variant clone and move semantics,
+    :ref:`Unsafe <unsafe>` for unsafe variant field access and ``?as`` without null coalescing,
+    :ref:`Finalizers <finalizers>` for variant finalization.
 

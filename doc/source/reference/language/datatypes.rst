@@ -90,6 +90,90 @@ As such, they will be passed to functions by value (but this value is just a ref
 ``das_string`` is a mutable string, whose content can be changed. It is simply a builtin handled type, i.e., a std::string bound to Daslang.
 As such, it passed as reference.
 
+.. _type_conversions:
+
+------------------------------
+Type Conversion and Casting
+------------------------------
+
+.. index::
+    single: Type Conversion
+    single: Casting
+
+Daslang is a strongly typed language with **no implicit type conversions**.
+All numeric operations require operands of the same type — for example, ``int + float``
+is a compilation error.  You must convert explicitly::
+
+    let i = 42
+    let f = float(i) + 1.0     // explicit int -> float
+    let i2 = i + int(1.0)      // explicit float -> int
+
+Explicit numeric casts
+^^^^^^^^^^^^^^^^^^^^^^
+
+Any numeric type can be explicitly converted to any other numeric type using
+the target type name as a function::
+
+    float(42)           // int -> float              (42.0)
+    int(3.7)            // float -> int, truncates   (3)
+    double(3.14)        // float -> double
+    float(3.14lf)       // double -> float
+    uint(42)            // int -> uint
+    int64(42)           // int -> int64
+    uint64(42)          // int -> uint64
+    int8(42)            // int -> int8 (storage type)
+    uint8(42)           // int -> uint8 (storage type)
+    int16(42)           // int -> int16 (storage type)
+    uint16(42)          // int -> uint16 (storage type)
+
+Float-to-integer conversion truncates toward zero (like C).
+
+Enumeration casts
+^^^^^^^^^^^^^^^^^
+
+Enumerations can be converted to their underlying integer type::
+
+    enum Color {
+        red
+        green
+        blue
+    }
+
+    let c = Color.green
+    let i = int(c)              // 1
+
+Converting an integer back to an enumeration requires ``unsafe`` and ``reinterpret``::
+
+    unsafe {
+        let c2 = reinterpret<Color>(1)  // Color.green
+    }
+
+String conversion
+^^^^^^^^^^^^^^^^^
+
+Any type can be converted to a string via the ``string`` function::
+
+    let s = string(42)          // "42"
+    let s2 = string(3.14)      // "3.14"
+
+String interpolation (``{expr}`` inside string literals) also converts expressions to text automatically.
+
+To parse strings into numbers, use the functions from ``require strings``::
+
+    require strings
+    let i = to_int("123")       // 123
+    let f = to_float("3.14")   // 3.14
+
+There is no ``int(string)`` — use ``to_int`` instead.
+
+What is NOT allowed
+^^^^^^^^^^^^^^^^^^^
+
+* **No implicit numeric promotion:** ``int + float`` is a compile error
+* **No bool(int):** use a comparison like ``x != 0`` instead
+* **No implicit int-to-float assignment:** ``var f : float = 42`` is a compile error; use ``float(42)``
+* **No int(string):** use ``to_int`` from the ``strings`` module
+
 --------
 Table
 --------
@@ -230,6 +314,74 @@ Pointers can be created using the new operator, or with the C++ environment.
        return foo?.x ?? -1
     }
 
+--------------
+Smart Pointers
+--------------
+
+Smart pointers (``smart_ptr<T>``) are reference-counted pointers to C++-managed (handled) types.
+They are **not** available for regular Daslang structs or classes — only for types registered
+as handled types from the C++ side (such as AST node types in ``daslib/ast``).
+
+Smart pointers are primarily used in the macro and AST manipulation context::
+
+    require ast
+
+    var inscope expr : smart_ptr<ExprConstInt> <- new ExprConstInt(value=42)
+
+The key properties of smart pointers:
+
+* They maintain a reference count and automatically release the object when the count reaches zero
+* They can be moved but not copied via ``<-``
+* Dereferencing works the same as regular pointers (``*ptr`` and ``ptr.field``)
+* Moving from a smart pointer value requires ``unsafe`` unless the value is a ``new`` expression
+
+Because ``strict_smart_pointers`` is enabled by default, smart pointer variables must be
+declared with ``inscope`` to ensure automatic cleanup::
+
+    var inscope a <- new ExprConstInt(value=1)   // create — safe, no unsafe needed
+    var inscope b <- a                           // move — safe, a becomes null
+    unsafe {
+        var inscope c <- some_function()         // move from function result — unsafe
+    }
+
+Ownership transfer functions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Daslang provides built-in functions for safe smart pointer ownership transfer.
+These avoid the need for ``unsafe`` blocks when reassigning smart pointers that
+already hold a value:
+
+``move(dest, src)``
+    Transfers ownership from ``src`` into ``dest``. If ``dest`` already holds a value,
+    its reference count is decremented. After the call, ``src`` becomes null.
+    Both arguments must be existing smart pointer variables::
+
+        var inscope a <- new ExprConstInt(value=1)
+        var inscope b <- new ExprConstInt(value=2)
+        b |> move <| a       // b now holds what a held; old b is released; a is null
+
+``move_new(dest, src)``
+    Transfers ownership from a newly created smart pointer into ``dest``. If ``dest``
+    already holds a value, its reference count is decremented. This is the idiomatic
+    way to replace the contents of a smart pointer field or variable::
+
+        var inscope fn <- find_function("foo")
+        fn |> move_new <| new Function(name := "bar")   // fn now holds the new Function
+
+    It can also be called in function-call style::
+
+        move_new(fn) <| new Function(name := "bar")
+
+``smart_ptr_clone(dest, src)``
+    Clones (increments the reference count of) ``src`` into ``dest``. Both ``dest`` and
+    ``src`` remain valid after the call. If ``dest`` already held a value, it is released.
+
+``smart_ptr_use_count(ptr)``
+    Returns the current reference count of the smart pointer as a ``uint``.
+
+Smart pointer types frequently appear in ``daslib/ast`` and ``daslib/ast_boost`` when
+building or transforming AST nodes in macros.
+
 -----------
 Iterators
 -----------
@@ -238,3 +390,11 @@ Iterators are a sequence which can be traversed, and associated data retrieved.
 They share some similarities with C++ iterators.
 
 (see :ref:`Iterators <iterators>`).
+
+.. seealso::
+
+    :ref:`Structs <structs>`, :ref:`Tuples <tuples>`, and :ref:`Variants <variants>` for composite types,
+    :ref:`Arrays <arrays>` and :ref:`Tables <tables>` for container types,
+    :ref:`Aliases <aliases>` for type alias declarations,
+    :ref:`Bitfields <bitfields>` for the bitfield type.
+

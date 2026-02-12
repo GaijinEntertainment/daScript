@@ -4,12 +4,12 @@
 Tuple
 =====
 
-Tuples are a concise syntax to create nameless data structures::
+Tuples are a concise syntax to create anonymous data structures.
+A tuple type is declared with the ``tuple`` keyword followed by a list of element types
+(optionally named) in angle brackets::
 
-    tuple ::= tuple < element_list >
-    element_list ::= nameless_element_list | named_element_list
-    nameless_element_list ::= type | nameless_element_list ',' type
-    named_element_list := name : type | named_element_list ',' name : type
+    tuple<int; float>               // unnamed elements
+    tuple<i:int; f:float>           // named elements
 
 Two tuple declarations are the same if they have the same number of types, and their respective types are the same::
 
@@ -50,7 +50,7 @@ Tuple elements can be assigned names via tuple constructor::
 
     var a = tuple<a:int,b:float,c:string>(a=1, b=2.0, c="3")
 
-both auto a full type specification can be used to construct a tuple.
+Both ``auto`` and a full type specification can be used to construct a tuple.
 Array of tuples can be constructed using similar syntax, with a comma as a separator::
 
     let H : array<Tup> <- array tuple<Tup>((a = 1, b = 2., c = "3"), (a = 4, b = 5., c = "6"))
@@ -75,8 +75,11 @@ Iterators and containers can be expanded in the for-loop in a similar way::
         assert(c == "3")
     }
 
+.. seealso::
 
-
-
-
+    :ref:`Datatypes <datatypes_and_values>` for a list of built-in types,
+    :ref:`Pattern matching <pattern-matching>` for matching and destructuring tuples,
+    :ref:`Finalizers <finalizers>` for tuple finalization,
+    :ref:`Move, copy, and clone <clone_to_move>` for tuple copy and move rules,
+    :ref:`Aliases <aliases>` for the ``typedef`` shorthand tuple syntax.
 

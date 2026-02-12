@@ -7,14 +7,17 @@ Lambda
 Lambdas are nameless functions which capture the local context by clone, copy, or reference.
 Lambdas are slower than blocks, but allow for more flexibility in lifetime and capture modes  (see :ref:`Blocks <blocks>`).
 
-The lambda type can be declared with a function-like syntax::
+The lambda type can be declared with a function-like syntax.
+The type is written as ``lambda`` followed by an optional type signature in angle brackets::
 
-    lambda_type ::= lambda { optional_lambda_type }
-    optional_lambda_type ::= < { optional_lambda_arguments } { : return_type } >
-    optional_lambda_arguments := ( lambda_argument_list )
-    lambda_argument_list := argument_name : type | lambda_argument_list ; argument_name : type
+    lambda < (arg1:int; arg2:float&) : bool >
 
-    lambda < (arg1:int;arg2:float&):bool >
+The ``->`` operator can be used instead of ``:`` for the return type::
+
+    lambda < (arg1:int; arg2:float&) -> bool >   // equivalent
+
+If no type signature is specified, ``lambda`` alone represents a lambda that takes no
+arguments and returns nothing.
 
 Lambdas can be local or global variables, and can be passed as an argument by reference.
 Lambdas can be moved, but can't be copied or cloned::
@@ -43,7 +46,7 @@ Lambdas are typically declared via move syntax::
     }
     let t = invoke(counter,13)
 
-There are a lot of similarities between lambda and block declarations.
+There are many similarities between lambda and block declarations.
 The main difference is that blocks are specified with ``$`` symbol, while lambdas are specified with ``@`` symbol.
 Lambdas can also be declared via inline syntax.
 There is a similar simplified syntax for the lambdas containing return expression only.
@@ -63,7 +66,7 @@ Unlike blocks, lambdas can specify their capture types explicitly. There are sev
 
 Capturing by reference requires unsafe.
 
-By default, capture by copy will be generated. If copy is not available, unsafe is required for the default capture by move::
+By default, capture by copy is used. If copy is not available, the ``unsafe`` keyword is required for the default capture by move::
 
 	var a1 <- [1,2]
 	var a2 <- [1,2]
@@ -79,7 +82,7 @@ By default, capture by copy will be generated. If copy is not available, unsafe 
 
 .. _lambdas_finalizer:
 
-Lambdas can be deleted, which cause finalizers to be called on all captured data  (see :ref:`Finalizers <finalizers>`)::
+Lambdas can be deleted, which causes finalizers to be called on all captured data  (see :ref:`Finalizers <finalizers>`)::
 
     delete lam
 
@@ -174,9 +177,17 @@ The C++ Lambda class contains single void pointer for the capture data::
         ...
     };
 
-The rational behind passing lambda by reference is that when delete is called
+The rationale behind passing lambdas by reference is that when ``delete`` is called:
 
     1. the finalizer is invoked for the capture data
-    2. the capture is replaced via null
+    2. the capture is replaced with null
 
-The lack of a copy or move ensures there are not multiple pointers to a single instance of the captured data floating around.
+The lack of copy or move semantics ensures that multiple pointers to a single instance of captured data cannot exist.
+
+.. seealso::
+
+    :ref:`Blocks <blocks>` for stack-bound callable objects without captures,
+    :ref:`Generators <generators>` for iterator-producing lambdas,
+    :ref:`Functions <functions>` for regular named functions,
+    :ref:`Unsafe <unsafe>` for implicit capture by reference or move,
+    :ref:`Finalizers <finalizers>` for lambda finalizers.

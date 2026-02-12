@@ -9,13 +9,16 @@ as well as mechanism to expose C++ functionality to Daslang.
 A module is a collection of types, constants, and functions.
 Modules can be native to Daslang, as well as built-in.
 
+For an overview of how ``module``, ``require``, and ``options`` fit into the overall file layout,
+see :ref:`Program Structure <program_structure>`.
+
 To request a module, use the ``require`` keyword::
 
     require math
     require ast public
     require daslib/ast_boost
 
-The ``public`` modifier indicates that included model is visible to everything including current module.
+The ``public`` modifier indicates that the included module is visible to everything that includes the current module.
 
 Module names may contain ``/`` and ``.`` symbols.
 The project is responsible for resolving module names into file names (see :ref:`Project <modules_project>`).
@@ -33,17 +36,17 @@ A native module is a separate Daslang file, with an optional ``module`` name::
 
 If not specified, the module name defaults to that of the file name.
 
-Modules can be `private` or `public`::
+Modules can be ``private`` or ``public``::
 
     module Foo private
 
     module Foo public
 
-Default publicity of the functions, structures, or enumerations are that of the module
+The default publicity of functions, structures, and enumerations is that of the module
 (i.e. if the module is public and a function's publicity is not specified, that function is public).
 
 
-Module can be made visible to all modules in the project via the `inscope` modifier::
+Module can be made visible to all modules in the project via the ``inscope`` modifier::
 
     module Foo inscope
 
@@ -51,7 +54,7 @@ Module can be made visible to all modules in the project via the `inscope` modif
 Builtin modules
 ---------------
 
-Builtin modules are the way to expose C++ functionality to Daslang (see :ref:`Builtin modules <embedding_modules>`).
+Built-in modules are the way to expose C++ functionality to Daslang (see :ref:`Builtin modules <embedding_modules>`).
 
 --------------
 Shared modules
@@ -76,10 +79,10 @@ When calling a function, the name of the module can be specified explicitly or i
 
 If the function does not exist in that module, a compilation error will occur.
 If the function is private or not directly visible, a compilation error will occur.
-If multiple functions match implicit function, compilation error will occur.
+If multiple functions match an implicit function call, a compilation error will occur.
 
 Module names ``_`` and ``__`` are reserved to specify the `current module` and the `current module only`, respectively.
-Its particularly important for generic functions, which are always instanced as private functions in the current module::
+It is particularly important for generic functions, which are always instanced as private functions in the current module::
 
     module b
 
@@ -97,4 +100,10 @@ Specifying an empty prefix is the same as specifying no prefix.
 
 Without the ``_`` or ``__`` module prefixes, overwritten functions would not be visible from generics.
 That is why the ``:=`` and ``delete`` operators are always replaced with ``_::clone`` or ``_::finalize`` calls.
+
+.. seealso::
+
+    :ref:`Program structure <program_structure>` for module declaration and ``require`` statements,
+    :ref:`Constants and enumerations <constants_and_enumerations>` for module-scoped constants,
+    :ref:`Options <options>` for per-module options.
 

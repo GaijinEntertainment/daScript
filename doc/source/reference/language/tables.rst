@@ -18,14 +18,14 @@ Tables are associative containers implemented as a set of key/value pairs::
         tab["some"] = 20  // replaces the value for 'some' key
     }
 
-Accessing a table element via index operator is unsafe, due to the fact that in daslang containers store unboxed values.
+Accessing a table element via the index operator is unsafe, because Daslang containers store unboxed values.
 Consider the following example::
 
     tab["1"] = tab["2"]               // this potentially breaks the table
 
 What happens is table may get resized either after tab["1"] or tab["2"] if either key is missing (similar to C++ STL hash_map).
 
-Its possible to shut down unsafe error via CodeOfPolicies, or to use the following option::
+It is possible to suppress this unsafe error via ``CodeOfPolicies``, or by using the following option::
 
     options unsafe_table_lookup = false
 
@@ -41,7 +41,7 @@ It can also be written to::
     var dummy = 0
     tab?["one"] ?? dummy = 10   // if "one" is not in the table, dummy will be set to 10
 
-There is a collection of safe functions to work with tables, which are safe to use even if the table is empty or resized.
+A collection of safe functions is available for working with tables, even if the table is empty or gets resized.
 
 There are several relevant builtin functions: ``clear``, ``key_exists``, ``get``, and ``erase``.
 ``get`` works with block as last argument, and returns if value has been found. It can be used with the rbpipe operator::
@@ -52,7 +52,7 @@ There are several relevant builtin functions: ``clear``, ``key_exists``, ``get``
     }
     assert(found)
 
-There is non constant version available as well::
+A non-constant version is available as well::
 
     var tab <- { "one"=>1, "two"=>2 }
     let found = get(tab,"one") <| $(var val) {
@@ -61,7 +61,7 @@ There is non constant version available as well::
     let t = tab |> get_value("one")
     assert(t==123)
 
-'insert','insert_clone', and 'emplace' are safe way to add elements to the table::
+``insert``, ``insert_clone``, and ``emplace`` are safe ways to add elements to a table::
 
     var tab <- { "one"=>1, "two"=>2 }
     tab |> insert("three",3)         // insert new key/value pair
@@ -74,13 +74,13 @@ Tables (as well as arrays, structs, and handled types) are passed to functions b
 Tables cannot be assigned, only cloned or moved. ::
 
     def clone_table(var a, b: table<string, int>) {
-        a := b      // a is not deep copy of b
+        a := b      // a is now a deep copy of b
         clone(a, b) // same as above
         a = b       // error
     }
 
     def move_table(var a, b: table<string, int>) {
-        a <- b  //a is no points to same data as b, and b is empty.
+        a <- b  // a now points to the same data as b, and b is empty
     }
 
 Table keys can be not only strings, but any other 'workhorse' type as well.
@@ -98,17 +98,26 @@ Alternative syntax is::
     let tab <- table("one"=>1, "two"=>2)
     let tab <- table<string,int>("one"=>1, "two"=>2)
 
-Table which holds no associative data can also be declared::
+A table that holds no associative data can also be declared::
 
     var tab : table<int>
     tab |> insert(1)        // this is how we insert a key into such table
 
-Table can be iterated over with the ``for`` loop::
+A table can be iterated over with the ``for`` loop::
 
     var tab <- { "one"=>1, "two"=>2 }
     for ( key, value in keys(tab), values(tab) ) {
         print("key: {key}, value: {value}\n")
     }
 
-Table which holds no associative data only has keys.
+A table that holds no associative data only has keys.
+
+.. seealso::
+
+    :ref:`Datatypes <datatypes_and_values>` for a list of key and value types,
+    :ref:`Iterators <iterators>` for ``keys`` and ``values`` iterator patterns,
+    :ref:`Move, copy, and clone <clone_to_move>` for table move and clone semantics,
+    :ref:`Locks <locks>` for table locking during iteration and find,
+    :ref:`Unsafe <unsafe>` for ``unsafe_table_lookup`` and pointer-related operations,
+    :ref:`Tuples <tuples>` for the inline table construction syntax.
 
