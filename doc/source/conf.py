@@ -212,7 +212,10 @@ htmlhelp_basename = 'daslang_doc'
 # -- Options for LaTeX output ---------------------------------------------
 
 latex_elements = {
-'extrapackages': r'\usepackage{textgreek}'
+'extrapackages': r'''
+\usepackage{textgreek}
+\usepackage{newunicodechar}
+''',
 # The paper size ('letterpaper' or 'a4paper').
 #'papersize': 'letterpaper',
 
@@ -220,7 +223,11 @@ latex_elements = {
 #'pointsize': '10pt',
 
 # Additional stuff for the LaTeX preamble.
-#'preamble': '',
+# This unicode characters is not known to LaTeX.
+'preamble': r'''
+\newunicodechar{✓}{\checkmark}
+\newunicodechar{✗}{\texttimes}
+''',
 
 # Latex figure (float) alignment
 #'figure_align': 'htbp',

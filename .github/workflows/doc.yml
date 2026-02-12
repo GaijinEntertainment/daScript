@@ -1,0 +1,60 @@
+name: Build doc
+
+# Run only on tags and release publish
+on:
+  release:
+    types: prereleased
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: "SCM Checkout"
+      uses: actions/checkout@v4
+    - name: "Install Python dependencies"
+      run: |
+        # Our bindings do not work on latest.
+        pip install -r doc/requirements.txt
+
+    - name: "Build latex files"
+      run: |
+        sphinx-build -b latex -d doc/sphinx-build doc/source build/latex
+    - name: "Build site"
+      run: |
+        # We do not upload site in release.
+        sphinx-build -b html -d doc/sphinx-build doc/source build/site
+
+    - name: Compile LaTeX document
+      uses: xu-cheng/latex-action@v4
+      with:
+        root_file: daslangstdlib.tex
+        working_directory: build/latex
+        continue_on_error: true
+    - name: Compile LaTeX document
+      uses: xu-cheng/latex-action@v4
+      with:
+        root_file: daslang.tex
+        working_directory: build/latex
+        continue_on_error: true
+    - name: Check pdf file
+      run: |
+        find . -name "*.pdf"
+    - name: "Create release"
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: build/latex/daslang.pdf
+        asset_name: daslang.pdf
+        asset_content_type: application/pdf
+
+    - name: "Create release"
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: build/latex/daslangstdlib.pdf
+        asset_name: daslangstdlib.pdf
+        asset_content_type: application/pdf
