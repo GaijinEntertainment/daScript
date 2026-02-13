@@ -151,6 +151,7 @@ class LintVisitor : AstVisitor {
 }
 
 def public paranoid(prog : ProgramPtr; compile_time_errors : bool) {
+    //! Runs the paranoid lint visitor on the program to check for common coding issues.
     var astVisitor = new LintVisitor(compile_time_errors = compile_time_errors)
     unsafe {
         astVisitor.astVisitorAdapter <- make_visitor(*astVisitor)

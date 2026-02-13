@@ -47,7 +47,7 @@ Encoding and decoding
 
 .. das:function:: utf16_to_utf32(high: uint; low: uint) : uint
 
-|detail/function-utf8_utils-utf16_to_utf32-0xce3eab4402448264|
+Converts a UTF-16 surrogate pair to a single UTF-32 codepoint.
 
 :Arguments: * **high** : uint
 
@@ -149,7 +149,7 @@ Returns the number of characters in the UTF-8 string
 
 .. das:function:: is_first_byte_of_utf8_char(ch: uint8) : bool
 
-|detail/function-utf8_utils-is_first_byte_of_utf8_char-0xde083daff4aefb23|
+Returns true if the given byte is the first byte of a UTF-8 character.
 
 :Arguments: * **ch** : uint8
 
@@ -157,7 +157,7 @@ Returns the number of characters in the UTF-8 string
 
 .. das:function:: contains_utf8_bom(utf8_string: array<uint8>) : bool
 
-|detail/function-utf8_utils-contains_utf8_bom-0x5bd957db87460665|
+Returns true if the byte array starts with a UTF-8 BOM (byte order mark).
 
 :Arguments: * **utf8_string** : array<uint8> implicit
 
@@ -165,7 +165,7 @@ Returns the number of characters in the UTF-8 string
 
 .. das:function:: contains_utf8_bom(utf8_string: string) : bool
 
-|detail/function-utf8_utils-contains_utf8_bom-0xf749642b9629daa7|
+Returns true if the string starts with a UTF-8 BOM (byte order mark).
 
 :Arguments: * **utf8_string** : string
 
@@ -173,7 +173,7 @@ Returns the number of characters in the UTF-8 string
 
 .. das:function:: is_utf8_string_valid(utf8_string: array<uint8>) : bool
 
-|detail/function-utf8_utils-is_utf8_string_valid-0x2dcc5c1b2e5f2a36|
+Returns true if the byte array contains a valid UTF-8 encoded string.
 
 :Arguments: * **utf8_string** : array<uint8> implicit
 
@@ -181,7 +181,7 @@ Returns the number of characters in the UTF-8 string
 
 .. das:function:: is_utf8_string_valid(utf8_string: string) : bool
 
-|detail/function-utf8_utils-is_utf8_string_valid-0xfa05575fb077659e|
+Returns true if the string contains valid UTF-8 encoded data.
 
 :Arguments: * **utf8_string** : string
 
@@ -189,7 +189,7 @@ Returns the number of characters in the UTF-8 string
 
 .. das:function:: decode_unicode_escape(str: string) : string
 
-|detail/function-utf8_utils-decode_unicode_escape-0xb8b396646ee69cae|
+Decodes Unicode escape sequences (backslash followed by hex digits) in a string to UTF-8.
 
 :Arguments: * **str** : string
 

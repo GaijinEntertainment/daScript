@@ -23,11 +23,13 @@ let LOG_REFACTOR = 100500
 
 [tag_function(extract_method_tag), sideeffects]
 def public extract_method(method_name : string; blk : block) {
+    //! Marks a block of code for method extraction refactoring.
     invoke(blk)
 }
 
 [tag_function(extract_method_tag), sideeffects]
 def public extract_expression(method_name : string; expr) {
+    //! Marks an expression for expression extraction refactoring.
     return expr
 }
 
@@ -131,11 +133,13 @@ struct ExtractVariableDesc {
 
 [tag_function(extract_variable_tag), sideeffects]
 def public extract_variable_nonref(method_name : string; expr) {
+    //! Marks an expression for variable extraction by value.
     return expr
 }
 
 [tag_function(extract_variable_tag), sideeffects]
 def public extract_variable_ref(method_name : string; var expr : auto(TT)& ==const) : TT& {
+    //! Marks an expression for variable extraction by reference.
     unsafe {
         return expr
     }

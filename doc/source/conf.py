@@ -38,6 +38,8 @@ extensions = [
 templates_path = ['_templates']
 exclude_patterns = ['index/detail/*', 'index/handmade/*']
 
+suppress_warnings = ['toctree.not_included']
+
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:
 # source_suffix = ['.rst', '.md']

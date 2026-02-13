@@ -1169,7 +1169,6 @@ Returns the number of elements if the given type is a fixed array, otherwise ret
 .. das:function:: TypeDecl implicit.alignOf() : int
 
 Returns the memory alignment requirement of the type in bytes.
-def TypeDecl implicit.alignOf (this: TypeDecl implicit) : int
 
 .. _function-ast__dot__rq_baseSizeOf_TypeDecl_implicit:
 
@@ -6341,7 +6340,7 @@ Adds a variable to a module, returning false if a duplicate already exists.
 .. das:function:: add_keyword(module: Module? implicit; keyword: string implicit; needOxfordComma: bool) : bool
 
 Registers a new keyword in the specified module, making it available to the parser.
-def add_keyword (module: Module? implicit; keyword: string implicit; needOxfordComma: bool) : bool
+
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 

@@ -22,7 +22,7 @@ Uncategorized
 
 .. das:function:: format_source_string(file_data: string const& implicit) : string
 
-|detail/function-das_source_formatter-format_source_string-0x21a01e17e70ca4c2|
+Formats a daScript source code string and returns the formatted result.
 
 :Arguments: * **file_data** : string& implicit
 
@@ -30,7 +30,7 @@ Uncategorized
 
 .. das:function:: format_source(file_data: array<uint8>) : string
 
-|detail/function-das_source_formatter-format_source-0xfb066e19d23081ff|
+Formats daScript source code given as a byte array and returns the formatted result.
 
 :Arguments: * **file_data** : array<uint8> implicit
 

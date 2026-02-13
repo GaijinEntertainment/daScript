@@ -21,6 +21,7 @@ struct public SurfaceData {
 }
 
 def public bitmap8_size(size : int2) {
+    //! Returns the buffer size in bytes needed for an 8-bit bitmap of the given dimensions, including a 1024-byte header.
     return uint64(size.x * size.y) + 1024ul
 }
 

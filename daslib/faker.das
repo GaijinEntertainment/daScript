@@ -62,6 +62,7 @@ struct public Faker {
 }
 
 def public Faker(var rng : iterator<uint>) {
+    //! Constructs a Faker instance with the given random number generator.
     return <-  Faker(rnd <- rng)
 }
 

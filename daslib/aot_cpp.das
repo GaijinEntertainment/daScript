@@ -395,6 +395,7 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
 
 def public describeCppType(typeDecl : TypeDeclPtr;
                            cfg : DescribeConfig) {
+    //! Returns the C++ type string for a daScript TypeDecl using the given configuration.
     return describeCppTypeEx(typeDecl, cfg, CpptUseAlias.no);
 }
 
@@ -507,6 +508,7 @@ def enumInfoName(info : EnumInfo?) {
     return "__enum_info__{info.hash:x}";
 }
 def public funcInfoName(info : FuncInfo?) {
+    //! Returns the C++ identifier name for a function's runtime info based on its hash.
     return "__func_info__{info.hash:x}";
 }
 def varInfoName(info : VarInfo?) {
@@ -817,10 +819,12 @@ class public AotDebugInfoHelper {
 };
 
 def public isLocalVec(vtype : TypeDeclPtr) {
+    //! Returns true if the type is a non-reference vector type without dimensions.
     return empty(vtype.dim) && vtype.isVectorType && !vtype.flags.ref;
 }
 
 def public describeLocalCppType(var writer : StringBuilderWriter?; vtype : TypeDeclPtr; cross_platform : bool; substituteRef : CpptSubstitureRef = CpptSubstitureRef.yes; skipConst : CpptSkipConst = CpptSkipConst.no) {
+    //! Writes the C++ type representation of a local variable type to a string builder.
     let cfg = DescribeConfig(substitute_ref = substituteRef == CpptSubstitureRef.yes,
                              skip_const = skipConst == CpptSkipConst.yes,
                              cross_platform = cross_platform)
@@ -841,6 +845,7 @@ def describeVarLocalCppType(var writer : StringBuilderWriter?; vtype : TypeDeclP
 }
 
 def public aotFuncName(func : Function?) {
+    //! Returns the AOT C++ function name for a daScript function, including its hash suffix.
     if (func.hash != uint64(0)) {
         return "{aotSuffixNameEx(func.name,"_Func")}_{func.hash:x}";
     } else {
@@ -976,6 +981,7 @@ def collect_block_variables() {
 }
 
 def public describeCppFunc(fn : FunctionPtr; var collector : BlockVariableCollector?; cross_platform : bool; needName : bool = true; needInline : bool = true) {
+    //! Returns the C++ function signature string for an AOT-compiled function.
     return build_string() <| $(writer) {
         if (needInline) {
             write(writer, "inline ");
@@ -3549,6 +3555,7 @@ class public CppAot : AstVisitor {
 
 
 def public dumpDependencies(program : ProgramPtr; var aotVisitor : CppAot?) {
+    //! Writes forward declarations and dependent type/function definitions for AOT output.
     let utm = new UseTypeMarker();
     var inscope adapter <- make_visitor(*utm)
     visit(program, adapter);
@@ -3672,6 +3679,7 @@ def collectUsedFunctions(modules : array<Module?>; totalFunctions : int; this_mo
 }
 
 def public collectProgramUsedFunctions(program : ProgramPtr; all_modules : bool; is_all : bool) : array<Function?> {
+    //! Collects all used functions from a program's modules for AOT code generation.
     var modules : array<Module?>;
     program.get_ptr() |> for_each_module_no_order($(mod) {
         modules.push(mod);
@@ -3725,6 +3733,7 @@ def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var co
 }
 
 def public setAotHashes(program : ProgramPtr; var ctx : Context) {
+    //! Computes semantic and AOT hashes for all used functions in the program.
     // compute semantic hash for each used function
     var fni = 0;
     program.get_ptr() |> for_each_module_no_order($(mod) {
@@ -3747,12 +3756,14 @@ def public setAotHashes(program : ProgramPtr; var ctx : Context) {
 }
 
 def public dumpRegisterAot(var tw : StringBuilderWriter?; program : ProgramPtr; var context : Context; allModules : bool; cross_platform : bool) {
+    //! Writes the AOT registration code and function list to the string builder.
     registerAotCpp(tw, program, context, cross_platform, false, allModules);
     write(*tw, "\n");
     write(*tw, "static AotListBase impl(registerAotFunctions);\n");
 }
 
 def public getRequiredModulesFor(program : ProgramPtr) {
+    //! Collects required module declarations and checks for no-AOT modules in the program.
     var modules_str : array<string>
     // lets comment on required modules
     /* todo: we don't need it?
@@ -3796,6 +3807,7 @@ def public getRequiredModulesFor(program : ProgramPtr) {
 }
 
 def public compile_and_simulate(input : string, var access; var mg : ModuleGroup?, cop, blk) {
+    //! Compiles a daScript file, simulates it, and invokes a callback with the program and context.
     set_aot();
     compile_file(input, access, mg, cop) <| $(ok; var program : smart_ptr<Program>; issues) {
         if (!ok) {
@@ -3814,6 +3826,7 @@ def public compile_and_simulate(input : string, var access; var mg : ModuleGroup
 
 [export]
 def public run_aot(prog : Program?; var pctx : Context?; cop : CodeOfPolicies) : string {
+    //! Generates the complete AOT C++ source code string for a compiled and simulated program.
     let program <- unsafe(reinterpret<ProgramPtr>(prog));
     return build_string() <| $(writer) {
         // lets comment on required modules
@@ -3900,6 +3913,7 @@ def public run_aot(prog : Program?; var pctx : Context?; cop : CodeOfPolicies) :
 
 [export]
 def public aot(input : string; paranoid_validation : bool, cross_platform : bool; cop : CodeOfPolicies) : string {
+    //! Compiles, simulates, and generates AOT C++ code for a daScript input file.
     var result = "";
     using <| $(var mg : ModuleGroup) {
         var inscope access <- make_file_access("")

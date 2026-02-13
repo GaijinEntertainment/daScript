@@ -31,6 +31,7 @@ struct CaptureEntryInitData {
 }
 
 def public clone(var a : dasvector`CaptureEntry; b : array<CaptureEntryInitData>) {
+    //! Clones an array of CaptureEntryInitData into a dasvector of CaptureEntry.
     a |> resize(length(b))
     for (e, i in b, count()) {
         a[i].name := e.name
@@ -48,6 +49,7 @@ struct LineInfoInitData {
 
 
 def public clone_line_info(var b : LineInfoInitData) : LineInfo {
+    //! Creates a LineInfo from a LineInfoInitData struct.
     return LineInfo(fileInfo = b.fileInfo,
                     column = b.column,
                     line = b.line,
@@ -56,6 +58,7 @@ def public clone_line_info(var b : LineInfoInitData) : LineInfo {
 }
 
 def public clone(var a : dasvector`LineInfo; b : array<LineInfoInitData>) {
+    //! Clones an array of LineInfoInitData into a dasvector of LineInfo.
     a |> resize(length(b))
     for (e, i in b, count()) {
         a[i].column := e.column
@@ -66,6 +69,7 @@ def public clone(var a : dasvector`LineInfo; b : array<LineInfoInitData>) {
 }
 
 def public clone(var args : rtti::AnnotationList; var nargs : array<smart_ptr<rtti::AnnotationDeclaration>>) {
+    //! Clones an array of AnnotationDeclaration smart pointers into an AnnotationList.
     _::clear(args)
     for (narg in nargs) {
         _::emplace(args, narg)
@@ -82,6 +86,7 @@ struct EnumEntryInitData {
 }
 
 def public clone(var a : dasvector`EnumEntry; var b : array<EnumEntryInitData>) {
+    //! Clones an array of EnumEntryInitData into a dasvector of EnumEntry.
     a |> resize(length(b))
     for (e, i in b, count()) {
         a[i].name := e.name
@@ -101,6 +106,7 @@ struct AnnotationArgumentInitData {
 }
 
 def public clone(var a : AnnotationArgumentList; b : array<AnnotationArgumentInitData>) {
+    //! Clones an array of AnnotationArgumentInitData into an AnnotationArgumentList.
     a |> resize(length(b))
     for (e, i in b, count()) {
         a[i].name := e.name
@@ -119,6 +125,7 @@ def public clone(var a : AnnotationArgumentList; b : array<AnnotationArgumentIni
 }
 
 def public cvt_to_mks(var args) : smart_ptr<MakeStruct> {
+    //! Converts an array of arguments into a MakeStruct smart pointer.
     var inscope res <- new MakeStruct(uninitialized);
     *res |> resize(length(args))
     for (arg, i in args, count()) {
@@ -135,6 +142,7 @@ struct FileInfoInitData {
 }
 
 def public clone_file_info(b : FileInfoInitData) : FileInfo? {
+    //! Creates a FileInfo from a FileInfoInitData struct.
     return clone_file_info(b.name, b.tabSize)
 }
 

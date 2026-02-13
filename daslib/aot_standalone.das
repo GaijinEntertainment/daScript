@@ -366,6 +366,7 @@ def genStandaloneSrc(var program : ProgramPtr;
 }
 
 def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string>, var pctx : smart_ptr<Context>; cfg : StandaloneContextCfg) {
+    //! Runs the standalone AOT visitor on the program to generate C++ source and header files.
     assume context = *pctx;
 
     // mark prologue
@@ -440,6 +441,7 @@ def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string
 
 [export]
 def public standalone_aot(input : string; output_dir : string; cross_platform : bool, paranoid_validation : bool; cop : CodeOfPolicies) : string {
+    //! Compiles a daScript file and generates standalone AOT C++ code in the given output directory.
     let file_name = input |> split_by_chars("/\\") |> back()
     let ctx_name = (file_name |> split("."))[0]
     let cfg = StandaloneContextCfg(context_name = ctx_name,

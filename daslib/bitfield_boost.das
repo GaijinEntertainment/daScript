@@ -71,6 +71,7 @@ def operator [] ^^=(var b : auto(TT)&, i : int, v : bool) {
 
 [expect_any_bitfield(b)]
 def each(b) : iterator<bool> {
+    //! Iterates over each bit of a bitfield value, yielding true or false for each bit.
     let bits = uint64(b)
     return <- generator<bool>() <| $() {
         var mask = 1ul

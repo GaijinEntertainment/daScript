@@ -33,7 +33,7 @@ Dynamic casts
 
 .. das:function:: is_instance_of(instance: auto(TCLS)?; otherclass: auto(TT)) : auto
 
-|detail/function-dynamic_cast_rtti-is_instance_of-0xc5fcab99b781e6a6|
+Returns true if the class instance is an instance of the specified class using RTTI.
 
 :Arguments: * **instance** : auto(TCLS)?
 
@@ -47,7 +47,7 @@ Uncategorized
 
 .. das:function:: dynamic_type_cast(instance: auto; otherclass: auto(TT)) : TT?
 
-|detail/function-dynamic_cast_rtti-dynamic_type_cast-0x481c060aca6ae89a|
+Casts a class instance to the target type using RTTI, returns null if the cast fails.
 
 :Arguments: * **instance** : auto
 
@@ -57,7 +57,7 @@ Uncategorized
 
 .. das:function:: force_dynamic_type_cast(instance: auto; otherclass: auto(TT)) : TT?
 
-|detail/function-dynamic_cast_rtti-force_dynamic_type_cast-0xa519cc5bb1f277b5|
+Casts a class instance to the target type using RTTI, panics if the cast fails.
 
 :Arguments: * **instance** : auto
 

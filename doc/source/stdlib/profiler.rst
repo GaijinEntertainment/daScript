@@ -23,7 +23,7 @@ Profiler control
 
 .. das:function:: set_enable_profiler(ctxId: uint64; enabled: bool)
 
-|detail/function-profiler-set_enable_profiler-0x7f7349c9cefba56|
+Enables or disables the profiler for the given context ID.
 
 :Arguments: * **ctxId** : uint64
 

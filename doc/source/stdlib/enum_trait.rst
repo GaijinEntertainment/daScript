@@ -73,7 +73,7 @@ Enumeration iteration
 
 .. das:function:: each(tt: auto(TT)) : iterator<TT>
 
-|detail/function-enum_trait-each-0xfe83f9b247ca1480|
+Returns an iterator over all values of the given enumeration type.
 
 :Arguments: * **tt** : auto(TT)
 

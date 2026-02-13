@@ -22,7 +22,7 @@ Uncategorized
 
 .. das:function:: clone(a: dasvector`CaptureEntry; b: array<CaptureEntryInitData>)
 
-|detail/function-quote-clone-0x98a6e7e6ce04868f|
+Clones an array of CaptureEntryInitData into a dasvector of CaptureEntry.
 
 :Arguments: * **a** : vector<CaptureEntry>
 
@@ -32,7 +32,7 @@ Uncategorized
 
 .. das:function:: clone_line_info(b: LineInfoInitData) : LineInfo
 
-|detail/function-quote-clone_line_info-0xe873c51cd19a8f92|
+Creates a LineInfo from a LineInfoInitData struct.
 
 :Arguments: * **b** :  :ref:`LineInfoInitData <struct-quote-LineInfoInitData>` 
 
@@ -40,7 +40,7 @@ Uncategorized
 
 .. das:function:: clone(a: dasvector`LineInfo; b: array<LineInfoInitData>)
 
-|detail/function-quote-clone-0x4f61cf6f2a0932e7|
+Clones an array of LineInfoInitData into a dasvector of LineInfo.
 
 :Arguments: * **a** : vector<LineInfo>
 
@@ -50,7 +50,7 @@ Uncategorized
 
 .. das:function:: clone(args: AnnotationList; nargs: array<smart_ptr<AnnotationDeclaration>>)
 
-|detail/function-quote-clone-0x2e978299757f5070|
+Clones an array of AnnotationDeclaration smart pointers into an AnnotationList.
 
 :Arguments: * **args** :  :ref:`AnnotationList <handle-rtti-AnnotationList>` 
 
@@ -60,7 +60,7 @@ Uncategorized
 
 .. das:function:: clone(a: dasvector`EnumEntry; b: array<EnumEntryInitData>)
 
-|detail/function-quote-clone-0xbf3e68887f05b633|
+Clones an array of EnumEntryInitData into a dasvector of EnumEntry.
 
 :Arguments: * **a** : vector<EnumEntry>
 
@@ -70,7 +70,7 @@ Uncategorized
 
 .. das:function:: clone(a: AnnotationArgumentList; b: array<AnnotationArgumentInitData>)
 
-|detail/function-quote-clone-0x71dd92c9e0edd381|
+Clones an array of AnnotationArgumentInitData into an AnnotationArgumentList.
 
 :Arguments: * **a** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
 
@@ -80,7 +80,7 @@ Uncategorized
 
 .. das:function:: clone_file_info(b: FileInfoInitData) : FileInfo?
 
-|detail/function-quote-clone_file_info-0x650e31c6b8e5ea4f|
+Creates a FileInfo from a FileInfoInitData struct.
 
 :Arguments: * **b** :  :ref:`FileInfoInitData <struct-quote-FileInfoInitData>` 
 
@@ -88,7 +88,7 @@ Uncategorized
 
 .. das:function:: cvt_to_mks(args: auto) : smart_ptr<MakeStruct>
 
-|detail/function-quote-cvt_to_mks-0x16b6d9940665549|
+Converts an array of arguments into a MakeStruct smart pointer.
 
 :Arguments: * **args** : auto
 

@@ -21,7 +21,7 @@ Uncategorized
 
 .. das:function:: enable_profiler(ctx: Context)
 
-|detail/function-profiler_boost-enable_profiler-0xadfe8e9817500262|
+Enables the profiler for the given context.
 
 :Arguments: * **ctx** :  :ref:`Context <handle-rtti-Context>` 
 
@@ -29,7 +29,7 @@ Uncategorized
 
 .. das:function:: disable_profiler(ctx: Context)
 
-|detail/function-profiler_boost-disable_profiler-0xc772cd93d23604ea|
+Disables the profiler for the given context.
 
 :Arguments: * **ctx** :  :ref:`Context <handle-rtti-Context>` 
 

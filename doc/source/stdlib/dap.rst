@@ -223,7 +223,7 @@ Uncategorized
 
 .. das:function:: InitializeRequestArguments(data: JsonValue?) : InitializeRequestArguments
 
-|detail/function-dap-InitializeRequestArguments-0xcfda5e72467f24c8|
+Constructs an InitializeRequestArguments from a JSON value.
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -231,7 +231,7 @@ Uncategorized
 
 .. das:function:: DisconnectArguments(data: JsonValue?) : DisconnectArguments
 
-|detail/function-dap-DisconnectArguments-0x9be176d413d449e|
+Constructs a DisconnectArguments from a JSON value.
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -239,7 +239,7 @@ Uncategorized
 
 .. das:function:: DataBreakpoint(data: JsonValue?) : DataBreakpoint
 
-|detail/function-dap-DataBreakpoint-0x603e46207abd3b58|
+Constructs a DataBreakpoint from a JSON value.
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -247,7 +247,7 @@ Uncategorized
 
 .. das:function:: SetDataBreakpointsArguments(data: JsonValue?) : SetDataBreakpointsArguments
 
-|detail/function-dap-SetDataBreakpointsArguments-0xf5cb33aef6c0896a|
+Constructs a SetDataBreakpointsArguments from a JSON value, parsing the breakpoints array.
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -255,7 +255,7 @@ Uncategorized
 
 .. das:function:: DataBreakpointInfoArguments(data: JsonValue?) : DataBreakpointInfoArguments
 
-|detail/function-dap-DataBreakpointInfoArguments-0xe64cbed1c6652ce3|
+Constructs a DataBreakpointInfoArguments from a JSON value.
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -263,7 +263,7 @@ Uncategorized
 
 .. das:function:: SourceBreakpoint(data: JsonValue?) : SourceBreakpoint
 
-|detail/function-dap-SourceBreakpoint-0x4524798dd369cb53|
+Constructs a SourceBreakpoint from a JSON value.
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -271,7 +271,7 @@ Uncategorized
 
 .. das:function:: Source(data: JsonValue?) : Source
 
-|detail/function-dap-Source-0x5ab400eaa5ff1f5e|
+Constructs a Source from a JSON value.
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -279,7 +279,7 @@ Uncategorized
 
 .. das:function:: SetBreakpointsArguments(data: JsonValue?) : SetBreakpointsArguments
 
-|detail/function-dap-SetBreakpointsArguments-0xf8d315f1db853494|
+Constructs a SetBreakpointsArguments from a JSON value, parsing source and breakpoints.
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -287,7 +287,7 @@ Uncategorized
 
 .. das:function:: StackTraceArguments(data: JsonValue?) : StackTraceArguments
 
-|detail/function-dap-StackTraceArguments-0x73166280aac7ce65|
+Constructs a StackTraceArguments from a JSON value.
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -295,7 +295,7 @@ Uncategorized
 
 .. das:function:: ScopesArguments(data: JsonValue?) : ScopesArguments
 
-|detail/function-dap-ScopesArguments-0x6bdcd049ac80a256|
+Constructs a ScopesArguments from a JSON value.
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -303,7 +303,7 @@ Uncategorized
 
 .. das:function:: VariablesArguments(data: JsonValue?) : VariablesArguments
 
-|detail/function-dap-VariablesArguments-0x5cf903e7126b3367|
+Constructs a VariablesArguments from a JSON value.
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -311,7 +311,7 @@ Uncategorized
 
 .. das:function:: JV(data: Variable) : JsonValue?
 
-|detail/function-dap-JV-0x486b32165ac0d5cc|
+Converts a Variable struct to its DAP JSON representation.
 
 :Arguments: * **data** :  :ref:`Variable <struct-dap-Variable>` 
 
@@ -319,7 +319,7 @@ Uncategorized
 
 .. das:function:: ContinueArguments(data: JsonValue?) : ContinueArguments
 
-|detail/function-dap-ContinueArguments-0x6679b7846ef3beb6|
+Constructs a ContinueArguments from a JSON value.
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -327,7 +327,7 @@ Uncategorized
 
 .. das:function:: PauseArguments(data: JsonValue?) : PauseArguments
 
-|detail/function-dap-PauseArguments-0x579d107b61f9dcf3|
+Constructs a PauseArguments from a JSON value.
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -335,7 +335,7 @@ Uncategorized
 
 .. das:function:: StepInArguments(data: JsonValue?) : StepInArguments
 
-|detail/function-dap-StepInArguments-0x390039c5c5ee3b1c|
+Constructs a StepInArguments from a JSON value.
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -343,7 +343,7 @@ Uncategorized
 
 .. das:function:: NextArguments(data: JsonValue?) : NextArguments
 
-|detail/function-dap-NextArguments-0xa2308a0436bd5ac3|
+Constructs a NextArguments from a JSON value.
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -351,7 +351,7 @@ Uncategorized
 
 .. das:function:: StepOutArguments(data: JsonValue?) : StepOutArguments
 
-|detail/function-dap-StepOutArguments-0x9e9761e1594e0dee|
+Constructs a StepOutArguments from a JSON value.
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -359,7 +359,7 @@ Uncategorized
 
 .. das:function:: EvaluateArguments(data: JsonValue?) : EvaluateArguments
 
-|detail/function-dap-EvaluateArguments-0xc1bfcdd2690cf312|
+Constructs an EvaluateArguments from a JSON value.
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -367,7 +367,7 @@ Uncategorized
 
 .. das:function:: JV(data: EvaluateResponse) : JsonValue?
 
-|detail/function-dap-JV-0x8e9c49df66f20bbb|
+Converts an EvaluateResponse struct to its DAP JSON representation.
 
 :Arguments: * **data** :  :ref:`EvaluateResponse <struct-dap-EvaluateResponse>` 
 
@@ -375,7 +375,7 @@ Uncategorized
 
 .. das:function:: joj(val: JsonValue?; id: string) : JsonValue?
 
-|detail/function-dap-joj-0x994db487d35b8589|
+Returns a nested JSON object field by name, or null if not found.
 
 :Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 

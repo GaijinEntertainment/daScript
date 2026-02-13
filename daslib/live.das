@@ -45,12 +45,14 @@ def public get_live_context : smart_ptr<Context> {
 
 [export]
 def saveLiveContext {
+    //! Serializes the current decs state to `decsLiveData` for preservation across reloads.
     to_log(LOG_TRACE, "LIVE: saveLiveContext\n")
     decsLiveData <- mem_archive_save(decsState)
 }
 
 [export]
 def restoreLiveContext {
+    //! Restores decs state from `decsLiveData` saved by a previous `saveLiveContext` call.
     to_log(LOG_TRACE, "LIVE: restoreLiveContext\n")
     if (length(decsLiveData) > 0) {
         try {
@@ -68,14 +70,17 @@ def private go_offline {
 }
 
 def public is_live {
+    //! Returns true if the application is currently running in live-reload mode.
     return appLive
 }
 
 def public is_app_live {
+    //! Returns true if the live application context pointer is valid.
     return appPtr != null
 }
 
 def public go_main {
+    //! Switches from live-reload mode back to the main context.
     to_log(LOG_TRACE, "LIVE: go_main\n")
     delete decsLiveData
     appLive = false
@@ -85,6 +90,7 @@ def public go_main {
 }
 
 def public go_live(appf, appd : string) {
+    //! Enters live-reload mode for the given application file and directory.
     to_log(LOG_TRACE, "LIVE: go_life appFile={appf} appDir={appd}\n")
     appLive = true
     this_context().name := "Live context"
@@ -105,6 +111,7 @@ def private live_lookup(fn) {
 }
 
 def public invoke_live(fn : string) {
+    //! Invokes a named function with no arguments in the live application context.
     if (live_lookup(fn)) {
         try {
             unsafe {
@@ -118,6 +125,7 @@ def public invoke_live(fn : string) {
 }
 
 def public invoke_live(fn : string; a1) {
+    //! Invokes a named function with one argument in the live application context.
     if (live_lookup(fn)) {
         try {
             unsafe {
@@ -131,6 +139,7 @@ def public invoke_live(fn : string; a1) {
 }
 
 def public invoke_live(fn : string; a1; a2) {
+    //! Invokes a named function with two arguments in the live application context.
     if (live_lookup(fn)) {
         try {
             unsafe {
@@ -144,6 +153,7 @@ def public invoke_live(fn : string; a1; a2) {
 }
 
 def public invoke_live(fn : string; a1; a2; a3) {
+    //! Invokes a named function with three arguments in the live application context.
     if (live_lookup(fn)) {
         try {
             unsafe {
@@ -157,6 +167,7 @@ def public invoke_live(fn : string; a1; a2; a3) {
 }
 
 def public invoke_live(fn : string; a1; a2; a3; a4) {
+    //! Invokes a named function with four arguments in the live application context.
     if (live_lookup(fn)) {
         try {
             unsafe {
@@ -170,6 +181,7 @@ def public invoke_live(fn : string; a1; a2; a3; a4) {
 }
 
 def public watch_files {
+    //! Checks if any `.das` or `.das_project` files in the app directory have been modified since last check.
     var clk = get_clock()
     if ((clk - watchTime) <= 0.0lf) {
         return false
@@ -198,6 +210,7 @@ def public watch_files {
 
 [export]
 def set_new_context(var ptr : smart_ptr<Context>; full_restart : bool = false) {
+    //! Replaces the live application context, migrating decs state between the old and new contexts.
     to_log(LOG_TRACE, "LIVE: set new context {intptr(get_ptr(ptr))}\n")
     invoke_live("shutdown")
     if (appPtr != null) {
@@ -251,6 +264,7 @@ def set_new_context(var ptr : smart_ptr<Context>; full_restart : bool = false) {
 }
 
 def public recompile(full_restart : bool = false) {
+    //! Recompiles the live application file and hot-swaps the running context.
     to_log(LOG_TRACE, "LIVE: recompile full_restart={full_restart}\n")
     var inscope access <- make_file_access("")
     using <| $(var mg : ModuleGroup) {
@@ -278,6 +292,7 @@ def public recompile(full_restart : bool = false) {
 }
 
 def public live_keypressed(keycode, scancode, action, mods : int) {
+    //! Forwards a key press event to the live context; Ctrl+R triggers a full recompile.
     invoke_live("keypressed", keycode, scancode, action, mods)
     if (is_live()) {
         if (scancode == 19 && action == 1 && mods == 2) {
@@ -287,26 +302,32 @@ def public live_keypressed(keycode, scancode, action, mods : int) {
 }
 
 def public live_charpressed(charcode : uint) {
+    //! Forwards a character input event to the live context.
     invoke_live("charpressed", charcode)
 }
 
 def public live_mousemoved(x, y : double) {
+    //! Forwards a mouse move event to the live context.
     invoke_live("mousemoved", x, y)
 }
 
 def public live_mouseenter(yes : bool) {
+    //! Forwards a mouse enter/leave event to the live context.
     invoke_live("mouseenter", yes)
 }
 
 def public live_mousebutton(button, action, mods : int) {
+    //! Forwards a mouse button event to the live context.
     invoke_live("mousebutton", button, action, mods)
 }
 
 def public live_mousescroll(x, y : double) {
+    //! Forwards a mouse scroll event to the live context.
     invoke_live("mousescroll", x, y)
 }
 
 def public live_update(appTime : double) {
+    //! Computes delta time and invokes the live context's `act` function each frame.
     static_let <| $() {
         var t = 0.0lf
     }

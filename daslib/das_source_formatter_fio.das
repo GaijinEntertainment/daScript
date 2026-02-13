@@ -18,6 +18,7 @@ require daslib/das_source_formatter
 
 
 def public format_file(file_name : string const) {
+    //! Reads a daScript source file, formats it, and writes the result back if changed.
     var unformatted : string = ""
     var formatted : string = ""
     fopen(file_name, "rb") <| $(fr) {
@@ -45,6 +46,7 @@ def public format_file(file_name : string const) {
 
 
 def public format_files(file_names : array<string>&) {
+    //! Formats multiple daScript source files in place.
     for (fname in file_names) {
         format_file(fname)
     }

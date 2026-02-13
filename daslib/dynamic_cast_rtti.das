@@ -20,6 +20,7 @@ require daslib/type_traits
 
 [expect_class(instance), template(otherclass), unused_argument(otherclass)]
 def public is_instance_of(instance : auto(TCLS)?; otherclass : auto(TT)) {
+    //! Returns true if the class instance is an instance of the specified class using RTTI.
     if (instance == null) {
         return false
     }
@@ -42,6 +43,7 @@ def public is_instance_of(instance : auto(TCLS)?; otherclass : auto(TT)) {
 
 [expect_class(instance), template(otherclass), unused_argument(otherclass)]
 def public dynamic_type_cast(instance; otherclass : auto(TT)) : TT -const? {
+    //! Casts a class instance to the target type using RTTI, returns null if the cast fails.
     if (instance == null) {
         return null
     }
@@ -64,6 +66,7 @@ def public dynamic_type_cast(instance; otherclass : auto(TT)) : TT -const? {
 
 [expect_class(instance), template(otherclass), unused_argument(otherclass)]
 def public force_dynamic_type_cast(instance; otherclass : auto(TT)) : TT -const? {
+    //! Casts a class instance to the target type using RTTI, panics if the cast fails.
     if (instance == null) {
         panic("null pointer cast")
     }

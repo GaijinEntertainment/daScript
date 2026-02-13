@@ -27,6 +27,7 @@ def public hash0(data) {
 }
 
 def public hash_extra(data) {
+    //! Returns a secondary hash derived from the upper 32 bits of the primary hash, used for cuckoo hashing.
     var k64 = hash(data)
     k64 = k64 <= 2ul ? 0x9e3779b97f4a7c15ul : k64
     return k64 >>> 32ul

@@ -26,6 +26,7 @@ struct public SOA_INDEX {
 
 [tag_function(soa_call)]
 def public operator .(src : SOA_INDEX explicit; field : string) {
+    //! Field access operator for SOA_INDEX; rewritten by SoaCallMacro to convert soa[index].field into soa.field[index].
     // its important that this operator returns `void`, because it would prevent the compiler from cascading infer of wrong type
     assert(false, "this code should never been instanced. soa_call macro replaces the soa[index].field with soa.field[index]")
 }

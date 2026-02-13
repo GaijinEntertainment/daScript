@@ -23,6 +23,7 @@ require daslib/strings_boost
 struct InitializeRequestArguments {}
 
 def InitializeRequestArguments(data : JsonValue?) {
+    //! Constructs an InitializeRequestArguments from a JSON value.
     return InitializeRequestArguments()
 }
 
@@ -35,6 +36,7 @@ struct DisconnectArguments {
 }
 
 def DisconnectArguments(data : JsonValue?) {
+    //! Constructs a DisconnectArguments from a JSON value.
     return DisconnectArguments(restart = job(data, "restart"),
                                  terminateDebuggee = job(data, "terminateDebuggee"),
                                  suspendDebuggee = job(data, "suspendDebuggee")
@@ -67,6 +69,7 @@ struct DataBreakpoint {
 }
 
 def DataBreakpoint(data : JsonValue?) {
+    //! Constructs a DataBreakpoint from a JSON value.
     return DataBreakpoint(dataId = jos(data, "dataId"),
                             accessType = jos(data, "accessType"),
                             condition = jos(data, "condition"),
@@ -82,6 +85,7 @@ struct SetDataBreakpointsArguments {
 }
 
 def SetDataBreakpointsArguments(data : JsonValue?) {
+    //! Constructs a SetDataBreakpointsArguments from a JSON value, parsing the breakpoints array.
     var res <- SetDataBreakpointsArguments()
     var breakpoints = joj(data, "breakpoints")
     if (breakpoints != null) {
@@ -99,6 +103,7 @@ struct DataBreakpointInfoArguments {
 }
 
 def DataBreakpointInfoArguments(data : JsonValue?) {
+    //! Constructs a DataBreakpointInfoArguments from a JSON value.
     return DataBreakpointInfoArguments(
                 variablesReference = jon(data, "variablesReference"),
                 name = jos(data, "name")
@@ -118,6 +123,7 @@ struct SourceBreakpoint {
 }
 
 def SourceBreakpoint(data : JsonValue?) {
+    //! Constructs a SourceBreakpoint from a JSON value.
     return SourceBreakpoint(line = jon(data, "line"))
 }
 
@@ -128,6 +134,7 @@ struct Source {
 }
 
 def Source(data : JsonValue?) {
+    //! Constructs a Source from a JSON value.
     return Source(name = jos(data, "name"), path = jos(data, "path"))
 }
 
@@ -140,6 +147,7 @@ struct SetBreakpointsArguments {
 }
 
 def SetBreakpointsArguments(data : JsonValue?) {
+    //! Constructs a SetBreakpointsArguments from a JSON value, parsing source and breakpoints.
     var res <- SetBreakpointsArguments(source = Source(joj(data, "source")),
                                          sourceModified = job(data, "sourceModified"))
     var breakpoints = joj(data, "breakpoints")
@@ -189,6 +197,7 @@ struct StackTraceArguments {
 }
 
 def StackTraceArguments(data : JsonValue?) {
+    //! Constructs a StackTraceArguments from a JSON value.
     return <- StackTraceArguments(threadId = jon(data, "threadId"), startFrame = jon(data, "startFrame"), levels = jon(data, "levels"))
 }
 
@@ -212,6 +221,7 @@ struct ScopesArguments {
 }
 
 def ScopesArguments(data : JsonValue?) {
+    //! Constructs a ScopesArguments from a JSON value.
     return <- ScopesArguments(frameId = jon(data, "frameId"))
 }
 
@@ -236,6 +246,7 @@ struct VariablesArguments {
 }
 
 def VariablesArguments(data : JsonValue?) {
+    //! Constructs a VariablesArguments from a JSON value.
     return <- VariablesArguments(
         variablesReference = jon(data, "variablesReference"),
         start = jon(data, "start", -1lf),
@@ -259,6 +270,7 @@ struct VariablesResponseBody {
 
 
 def JV(data : Variable) {
+    //! Converts a Variable struct to its DAP JSON representation.
     let valStr = unescape(data.value)
     return JV({
         "name" => JV(data.name),
@@ -282,6 +294,7 @@ struct ContinueArguments {
 }
 
 def ContinueArguments(data : JsonValue?) {
+    //! Constructs a ContinueArguments from a JSON value.
     return <- ContinueArguments(threadId = jon(data, "threadId"))
 }
 
@@ -292,6 +305,7 @@ struct PauseArguments {
 }
 
 def PauseArguments(data : JsonValue?) {
+    //! Constructs a PauseArguments from a JSON value.
     return <- PauseArguments(threadId = jon(data, "threadId"))
 }
 
@@ -302,6 +316,7 @@ struct StepInArguments {
 }
 
 def StepInArguments(data : JsonValue?) {
+    //! Constructs a StepInArguments from a JSON value.
     return <- StepInArguments(threadId = jon(data, "threadId"))
 }
 
@@ -312,6 +327,7 @@ struct NextArguments {
 }
 
 def NextArguments(data : JsonValue?) {
+    //! Constructs a NextArguments from a JSON value.
     return <- NextArguments(threadId = jon(data, "threadId"))
 }
 
@@ -322,6 +338,7 @@ struct StepOutArguments {
 }
 
 def StepOutArguments(data : JsonValue?) {
+    //! Constructs a StepOutArguments from a JSON value.
     return <- StepOutArguments(threadId = jon(data, "threadId"))
 }
 
@@ -334,6 +351,7 @@ struct EvaluateArguments {
 }
 
 def EvaluateArguments(data : JsonValue?) {
+    //! Constructs an EvaluateArguments from a JSON value.
     return <- EvaluateArguments(frameId = jon(data, "frameId"), expression = jos(data, "expression"), context = jos(data, "context"))
 }
 
@@ -346,6 +364,7 @@ struct EvaluateResponse {
 }
 
 def JV(data : EvaluateResponse) {
+    //! Converts an EvaluateResponse struct to its DAP JSON representation.
     return JV({
         "result" => JV(data.result),
         "variablesReference" => JV(data.variablesReference),
@@ -369,6 +388,7 @@ struct ThreadEvent {
 
 
 def joj(val : JsonValue?; id : string) : JsonValue? {
+    //! Returns a nested JSON object field by name, or null if not found.
     var res : JsonValue? = null
     if (val == null || !(val is _object)) {
         return res
@@ -380,6 +400,7 @@ def joj(val : JsonValue?; id : string) : JsonValue? {
 }
 
 def jon(val : JsonValue?; id : string; defVal = 0lf) : double {
+    //! Returns a numeric JSON field by name, or `defVal` if not found.
     var res = defVal
     if (val == null || !(val is _object)) {
         return res
@@ -395,10 +416,12 @@ def jon(val : JsonValue?; id : string; defVal = 0lf) : double {
 }
 
 def j_s(val : JsonValue?; defVal = "") : string {
+    //! Returns the string value of a JSON value, or `defVal` if not a string.
     return val?.value ?as _string ?? defVal
 }
 
 def jos(val : JsonValue?; id : string; defVal = "") : string {
+    //! Returns a string JSON field by name, or `defVal` if not found.
     var res = defVal
     if (val == null || !(val is _object)) {
         return res
@@ -412,6 +435,7 @@ def jos(val : JsonValue?; id : string; defVal = "") : string {
 }
 
 def job(val : JsonValue?; id : string; defVal = false) : bool {
+    //! Returns a boolean JSON field by name, or `defVal` if not found.
     var res = defVal
     if (val == null || !(val is _object)) {
         return res

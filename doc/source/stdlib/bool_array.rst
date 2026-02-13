@@ -32,7 +32,7 @@ Uncategorized
 
 .. das:function:: each(self: BoolArray) : iterator<bool>
 
-|detail/function-bool_array-each-0xa996d8309221b000|
+Returns an iterator over all boolean values in the BoolArray.
 
 :Arguments: * **self** :  :ref:`BoolArray <struct-bool_array-BoolArray>` 
 

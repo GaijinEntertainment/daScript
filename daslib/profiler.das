@@ -49,6 +49,7 @@ struct PerfContext {
 var @do_not_delete g_d_agent : ProfilerDebugAgent?
 
 def public set_enable_profiler(var ctxId : uint64; enabled : bool) {
+    //! Enables or disables the profiler for the given context ID.
     if (g_d_agent != null) {
         g_d_agent->enable_profiler(ctxId, enabled)
     }

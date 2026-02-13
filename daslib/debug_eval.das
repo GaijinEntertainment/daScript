@@ -617,6 +617,7 @@ def expr(var st : TokenStream) : Result {
 }
 
 def public debug_eval(context : table<string; Result>; expr : string) : Result {
+    //! Evaluates a debug expression string with the given variable context and returns the result.
     var st <- TokenStream(expr)
     st.names := context
     var result = expr(st)

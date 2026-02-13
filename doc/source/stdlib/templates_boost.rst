@@ -766,7 +766,7 @@ Implementation details for the expression reificaiton. This is a template class 
 
 .. das:function:: apply_qmacro_template_function(func: FunctionPtr; blk: block<(var rules:Template):void>) : FunctionPtr
 
-|detail/function-templates_boost-apply_qmacro_template_function-0x3e0c0b5d66b8efb6|
+Applies template rules to a function, cloning it with substituted types.
 
 :Arguments: * **func** :  :ref:`FunctionPtr <alias-FunctionPtr>` 
 

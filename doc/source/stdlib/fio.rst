@@ -96,42 +96,42 @@ Handled structures
 .. das:function:: FStat implicit.size() : uint64
 
 Returns the size of the file in bytes.
-def FStat implicit.size (this: FStat implicit) : uint64
+
 
 .. _function-fio__dot__rq_atime_FStat_implicit:
 
 .. das:function:: FStat implicit.atime() : clock
 
 Returns the last access time of the file as a clock value.
-def FStat implicit.atime (this: FStat implicit) : clock
+
 
 .. _function-fio__dot__rq_ctime_FStat_implicit:
 
 .. das:function:: FStat implicit.ctime() : clock
 
 Returns the creation time of the file as a clock value.
-def FStat implicit.ctime (this: FStat implicit) : clock
+
 
 .. _function-fio__dot__rq_mtime_FStat_implicit:
 
 .. das:function:: FStat implicit.mtime() : clock
 
 Returns the last modification time of the file as a clock value.
-def FStat implicit.mtime (this: FStat implicit) : clock
+
 
 .. _function-fio__dot__rq_is_reg_FStat_implicit:
 
 .. das:function:: FStat implicit.is_reg() : bool
 
 Returns true if the file status indicates a regular file.
-def FStat implicit.is_reg (this: FStat implicit) : bool
+
 
 .. _function-fio__dot__rq_is_dir_FStat_implicit:
 
 .. das:function:: FStat implicit.is_dir() : bool
 
 Returns true if the file status indicates a directory.
-def FStat implicit.is_dir (this: FStat implicit) : bool
+
 
 :Properties: * **size** : uint64
 

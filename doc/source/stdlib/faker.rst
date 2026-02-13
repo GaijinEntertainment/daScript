@@ -42,7 +42,7 @@ Constructor
 
 .. das:function:: Faker(rng: iterator<uint>) : Faker
 
-|detail/function-faker-Faker-0x31196536a28fad9c|
+Constructs a Faker instance with the given random number generator.
 
 :Arguments: * **rng** : iterator<uint>
 

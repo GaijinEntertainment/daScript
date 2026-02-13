@@ -20,6 +20,7 @@ require daslib/ast_boost public
 require strings
 
 def public int64_to_enum(_enu : auto(ET); value : int64) : ET {
+    //! Converts an int64 value to the specified enum type via reinterpret cast.
     static_if (typeinfo sizeof(type<ET>) == 1) {
         return unsafe(reinterpret<ET>(int8(value)))
     } static_elif (typeinfo sizeof(type<ET>) == 2) {
@@ -53,6 +54,7 @@ def is_typedecl_ptr(t : TypeDeclPtr) {
 
 [macro_function]
 def public get_string_const(expr : ExpressionPtr) : string {
+    //! Extracts a string constant value or function address name from an expression.
     if (expr is ExprConstString) {
         return string((expr as ExprConstString).value)
     } elif (expr is ExprAddr) {
@@ -64,6 +66,7 @@ def public get_string_const(expr : ExpressionPtr) : string {
 
 [macro_function]
 def public typemacro_argument(dimExpr; index : int; var constType : auto(ExprConstType); var defaultValue : auto(ValueT)) : ValueT {
+    //! Extracts a typed constant argument at the given index from a type macro's dimension expressions.
     if (index < length(dimExpr)) {
         if (dimExpr[index].__rtti == typeinfo undecorated_typename(type<ExprConstType>)) {
             defaultValue = unsafe(reinterpret<ExprConstType?>(dimExpr[index])).value
@@ -76,6 +79,7 @@ def public typemacro_argument(dimExpr; index : int; var constType : auto(ExprCon
 
 [macro_function]
 def public typemacro_argument(dimExpr; index : int; var constType : ExprConstString; var defaultValue : auto(ValueT)) : ValueT {
+    //! Extracts a string constant or function address argument at the given index from a type macro's dimension expressions.
     if (index < length(dimExpr)) {
         if (dimExpr[index].__rtti == "ExprConstString") {
             defaultValue := unsafe(reinterpret<ExprConstString?>(dimExpr[index])).value
@@ -235,6 +239,7 @@ class TypeMacroTemplate : AstStructureAnnotation { }
 
 [macro_function]
 def public make_typemacro_template_instance(instance_type, template_type : Structure?; ex : array<tuple<string, string>> = array<tuple<string, string>>()) {
+    //! Annotates a structure as a typemacro template instance of the given template type.
     var extra : array<tuple<string, RttiValue>>
     extra.emplace(("parent", RttiValue(tString = "{template_type._module.name}::{template_type.name}")), 0)
     for (e in ex) {
@@ -280,6 +285,7 @@ struct public TypeMacroTemplateArgument {
 
 [macro_function]
 def public infer_struct_aliases(structType : Structure?; var args : array<TypeMacroTemplateArgument>) : bool {
+    //! Infers structure alias types for all template arguments from a structure definition.
     for (arg in args) {
         arg.inferred_type |> move_new <| get_structure_alias(structType, arg.name)
         if (arg.inferred_type == null) {
@@ -291,6 +297,7 @@ def public infer_struct_aliases(structType : Structure?; var args : array<TypeMa
 
 [macro_function]
 def public infer_template_types(passArgument : TypeDeclPtr; var args  : array<TypeMacroTemplateArgument>) : TypeDeclPtr {
+    //! Infers and validates template argument types against a pass argument, returning the resolved type.
     for (arg in args) {
         assume templateType = arg.argument_type
         assume inferredTemplateType = arg.inferred_type
@@ -310,6 +317,7 @@ def public infer_template_types(passArgument : TypeDeclPtr; var args  : array<Ty
 
 [macro_function]
 def public add_structure_aliases(structType : Structure?; var args : array<TypeMacroTemplateArgument>) {
+    //! Adds all template argument type aliases to a structure.
     for (arg in args) {
         structType |> add_structure_alias(arg.name, arg.argument_type)
     }
@@ -317,6 +325,7 @@ def public add_structure_aliases(structType : Structure?; var args : array<TypeM
 
 [macro_function]
 def public verify_arguments(var args : array<TypeMacroTemplateArgument>) : bool {
+    //! Verifies that all template arguments have been fully inferred (no remaining auto or alias types).
     for (arg in args) {
         if (arg.argument_type.isAutoOrAlias) {
             macro_error(compiling_program(), arg.argument_type.at, "cannot infer template argument '{arg.name}'")
@@ -328,6 +337,7 @@ def public verify_arguments(var args : array<TypeMacroTemplateArgument>) : bool 
 
 [macro_function]
 def public template_structure_name(base : Structure?; arguments : array<TypeMacroTemplateArgument>; extra : array<tuple<string, string>> = array<tuple<string, string>>()) : string {
+    //! Builds a mangled template structure name from its base name and argument types.
     return build_string() <| $(builder) {
         builder.write(base.name)
         builder.write("<")
@@ -541,6 +551,7 @@ class TemplateStructure : AstStructureAnnotation {
 
 [macro_function]
 def public is_custom_work_done(structType : Structure?) : bool {
+    //! Returns true if custom work has already been performed on the template structure.
     for (ann in structType.annotations) {
         if (ann.annotation.name == "template_structure") {
             if (!(find_arg(ann.arguments, "custom_work_done") is nothing)) {
@@ -553,6 +564,7 @@ def public is_custom_work_done(structType : Structure?) : bool {
 
 [macro_function]
 def public mark_custom_work_done(var structType : Structure?) {
+    //! Marks the template structure's custom work as complete in its annotation.
     for (ann in structType.annotations) {
         if (ann.annotation.name == "template_structure") {
             ann.arguments |> add_annotation_argument("custom_work_done", true)

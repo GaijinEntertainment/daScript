@@ -79,6 +79,7 @@ def call_macro_label_name(mod, value) {
 }
 
 def public safe_function_name(name : string) : string {
+    //! Replaces special characters in a function name to produce a safe RST label identifier.
     return name |> replace_multiple([
         (" ", "_"),
         ("$", "_builtin_"),
@@ -102,6 +103,7 @@ def public safe_function_name(name : string) : string {
 }
 
 def public function_label_file(value : FunctionPtr | Function?; drop_args : int = 0) {
+    //! Generates a unique RST label for a function based on its name and argument types.
     var mn = "{value.name}"
     var drop = drop_args
     for (arg in value.arguments) {
@@ -121,6 +123,7 @@ def public function_label_file(value : FunctionPtr | Function?; drop_args : int 
 }
 
 def public function_label_file(name; value : smart_ptr<TypeDecl>&; drop_args : int = 0) {
+    //! Generates a unique RST label for a function type based on its name and argument types.
     var mn = "{name}"
     var drop = drop_args
     for (arg in value.argTypes) {
@@ -293,6 +296,7 @@ def describe_type_short(td : TypeDeclPtr) {
 }
 
 def public describe_short(expr : Expression? | smart_ptr<Expression>&) {
+    //! Returns a short description of an expression, using empty parentheses for empty make-structs.
     if (expr is ExprMakeStruct) {
         let str = expr as ExprMakeStruct
         var count = 0
@@ -547,6 +551,7 @@ def make_ref(name, text : string) {
 }
 
 def public make_group(name : string; plus : string = "+") {
+    //! Creates an RST group header with the given name surrounded by separator lines.
     let len = length(name)
     return "{strings::repeat(plus,len)}\n{name}\n{strings::repeat(plus,len)}\n\n"
 }
@@ -1003,6 +1008,7 @@ def document_global_constants(doc_file : file; mods : array<Module?>) {
 }
 
 def public document_enumeration(doc_file : file; mod : Module?; value) {
+    //! Writes RST documentation for a single enumeration to the doc file.
     fwrite(doc_file, make_label(enum_label_name(value)))
     fwrite(doc_file, make_domain("das:attribute"))
     fwrite(doc_file, "{value.name}\n\n")
@@ -1019,6 +1025,7 @@ def public document_enumeration(doc_file : file; mod : Module?; value) {
 
 
 def public document_enumerations(doc_file : file; mods : array<Module?>) : bool {
+    //! Writes RST documentation for all public enumerations across the given modules.
     var any = false
     for (mod in mods) {
         if (any) {
@@ -1958,6 +1965,7 @@ def debug_group(var group : DocGroup) {
 }
 
 def public append_to_group_by_regex(var group : DocGroup; var mod : Module?; var reg : Regex) : DocGroup& {
+    //! Appends functions whose names match the given regex to an existing DocGroup.
     for_each_function(mod, "") <| $(func) {
         if (function_needs_documenting(func)) {
             if (regex_match(reg, string(func.name)) != -1) {
@@ -2085,6 +2093,7 @@ struct public DocsHook {
 
 
 def public documents(name : string; mods : array<Module?>; fname : string; var groups : array<DocGroup>; var hook : DocsHook = DocsHook()) {
+    //! Generates complete RST documentation for a set of modules into the specified file.
     static_if (log_documentation) {
         print("Documenting {name} into {fname}\n")
     }

@@ -60,7 +60,7 @@ Uncategorized
 
 .. das:function:: SOA_INDEX.(src: SOA_INDEX; field: string)
 
-|detail/function-soa-_dot_-0xa1eaafb9544386c7|
+Field access operator for SOA_INDEX; rewritten by SoaCallMacro to convert soa[index].field into soa.field[index].
 
 :Arguments: * **src** :  :ref:`SOA_INDEX <struct-soa-SOA_INDEX>` 
 

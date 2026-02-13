@@ -13,6 +13,7 @@ require daslib/strings_boost
 require math
 
 def public utf16_to_utf32(high, low : uint) {
+    //! Converts a UTF-16 surrogate pair to a single UTF-32 codepoint.
     if (high >= 0xD800 && high <= 0xDBFF) {
         return ((high - 0xD800) << 10u) + (low - 0xDC00) + 0x10000
     } else {
@@ -107,18 +108,21 @@ def public utf8_length(utf8_string : string const) : int {
 
 
 def public is_first_byte_of_utf8_char(ch : uint8) : bool {
+    //! Returns true if the given byte is the first byte of a UTF-8 character.
     let x = uint(ch)
     return (x > 0u) && (x < 128u || (x & 0xC0) == 0xC0)
 }
 
 
 def public contains_utf8_bom(utf8_string : array<uint8> const implicit) : bool {
+    //! Returns true if the byte array starts with a UTF-8 BOM (byte order mark).
     return (length(utf8_string) >= 3 &&
           uint(utf8_string[0]) == 0xEF && uint(utf8_string[1]) == 0xBB && uint(utf8_string[2]) == 0xBF)
 }
 
 
 def public contains_utf8_bom(utf8_string : string const) : bool {
+    //! Returns true if the string starts with a UTF-8 BOM (byte order mark).
     unsafe {
         return (!empty(utf8_string) &&
               uint(utf8_string |> character_uat(0)) == 0xEF &&
@@ -157,6 +161,7 @@ let shared s_utf8d <-  fixed_array(
 let UTF8_ACCEPT = 0u
 
 def public is_utf8_string_valid(utf8_string : array<uint8> const implicit) : bool {
+    //! Returns true if the byte array contains a valid UTF-8 encoded string.
     var codepoint = 0u
     var state = 0u
     for (ch in utf8_string) {
@@ -170,6 +175,7 @@ def public is_utf8_string_valid(utf8_string : array<uint8> const implicit) : boo
 
 
 def public is_utf8_string_valid(utf8_string : string const) : bool {
+    //! Returns true if the string contains valid UTF-8 encoded data.
     var codepoint = 0u
     var state = 0u
     for (ch in utf8_string) {
@@ -227,6 +233,7 @@ def public utf8_decode(var dest_utf32_string : array<uint>; source_utf8_string :
 }
 
 def decode_unicode_escape(str : string) {
+    //! Decodes Unicode escape sequences (backslash followed by hex digits) in a string to UTF-8.
     return build_string <| $(writer) {
         peek_data(str) <| $(p) {
             var i = 0

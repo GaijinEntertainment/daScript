@@ -31,7 +31,7 @@ Uncategorized
 
 .. das:function:: debug_eval(context: table<string, Result>; expr: string) : Result
 
-|detail/function-debug_eval-debug_eval-0x647185423590d05f|
+Evaluates a debug expression string with the given variable context and returns the result.
 
 :Arguments: * **context** : table<string; :ref:`Result <struct-debug_eval-Result>` >
 

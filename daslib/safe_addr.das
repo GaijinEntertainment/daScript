@@ -127,6 +127,7 @@ def public temp_addr(var x : auto(T)& ==const) : T-& ? #
 
 [tag_function(temp_addr_tag)]
 def public temp_addr(x : auto(T)& ==const) : T-& ? const #
+    //! Returns a temporary const pointer to the given expression.
     unsafe
         return reinterpret<T-&? const #>(addr(x))
 

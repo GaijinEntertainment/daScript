@@ -2602,7 +2602,7 @@ lerp/mad/clamp
 .. das:function:: mad(a: float; b: float; c: float) : float
 
 Computes the fused multiply-add operation `a * b + c`.
-def mad (a: float; b: float; c: float) : float
+
 
 :Arguments: * **a** : float
 
@@ -2627,7 +2627,7 @@ Performs linear interpolation between a and b using the factor t, returning a + 
 .. das:function:: mad(a: float2; b: float2; c: float2) : float2
 
 Computes the fused multiply-add operation `a * b + c`.
-def mad (a: float2; b: float2; c: float2) : float2
+
 
 :Arguments: * **a** : float2
 
@@ -2652,7 +2652,7 @@ Performs linear interpolation between a and b using the factor t, returning a + 
 .. das:function:: mad(a: float3; b: float3; c: float3) : float3
 
 Computes the fused multiply-add operation `a * b + c`.
-def mad (a: float3; b: float3; c: float3) : float3
+
 
 :Arguments: * **a** : float3
 
@@ -2677,7 +2677,7 @@ Performs linear interpolation between a and b using the factor t, returning a + 
 .. das:function:: mad(a: float4; b: float4; c: float4) : float4
 
 Computes the fused multiply-add operation `a * b + c`.
-def mad (a: float4; b: float4; c: float4) : float4
+
 
 :Arguments: * **a** : float4
 
@@ -2702,7 +2702,7 @@ Performs linear interpolation between a and b using the factor t, returning a + 
 .. das:function:: mad(a: float2; b: float; c: float2) : float2
 
 Computes the fused multiply-add operation `a * b + c`.
-def mad (a: float2; b: float; c: float2) : float2
+
 
 :Arguments: * **a** : float2
 
@@ -2715,7 +2715,7 @@ def mad (a: float2; b: float; c: float2) : float2
 .. das:function:: mad(a: float3; b: float; c: float3) : float3
 
 Computes the fused multiply-add operation `a * b + c`.
-def mad (a: float3; b: float; c: float3) : float3
+
 
 :Arguments: * **a** : float3
 
@@ -2728,7 +2728,7 @@ def mad (a: float3; b: float; c: float3) : float3
 .. das:function:: mad(a: float4; b: float; c: float4) : float4
 
 Computes the fused multiply-add operation `a * b + c`.
-def mad (a: float4; b: float; c: float4) : float4
+
 
 :Arguments: * **a** : float4
 
@@ -2741,7 +2741,7 @@ def mad (a: float4; b: float; c: float4) : float4
 .. das:function:: mad(a: int; b: int; c: int) : int
 
 Computes the fused multiply-add operation `a * b + c`.
-def mad (a: int; b: int; c: int) : int
+
 
 :Arguments: * **a** : int
 
@@ -2754,7 +2754,7 @@ def mad (a: int; b: int; c: int) : int
 .. das:function:: mad(a: int2; b: int2; c: int2) : int2
 
 Computes the fused multiply-add operation `a * b + c`.
-def mad (a: int2; b: int2; c: int2) : int2
+
 
 :Arguments: * **a** : int2
 
@@ -2767,7 +2767,7 @@ def mad (a: int2; b: int2; c: int2) : int2
 .. das:function:: mad(a: int3; b: int3; c: int3) : int3
 
 Computes the fused multiply-add operation `a * b + c`.
-def mad (a: int3; b: int3; c: int3) : int3
+
 
 :Arguments: * **a** : int3
 
@@ -2780,7 +2780,7 @@ def mad (a: int3; b: int3; c: int3) : int3
 .. das:function:: mad(a: int4; b: int4; c: int4) : int4
 
 Computes the fused multiply-add operation `a * b + c`.
-def mad (a: int4; b: int4; c: int4) : int4
+
 
 :Arguments: * **a** : int4
 
@@ -2793,7 +2793,7 @@ def mad (a: int4; b: int4; c: int4) : int4
 .. das:function:: mad(a: int2; b: int; c: int2) : int2
 
 Computes the fused multiply-add operation `a * b + c`.
-def mad (a: int2; b: int; c: int2) : int2
+
 
 :Arguments: * **a** : int2
 
@@ -2806,7 +2806,7 @@ def mad (a: int2; b: int; c: int2) : int2
 .. das:function:: mad(a: int3; b: int; c: int3) : int3
 
 Computes the fused multiply-add operation `a * b + c`.
-def mad (a: int3; b: int; c: int3) : int3
+
 
 :Arguments: * **a** : int3
 
@@ -2819,7 +2819,7 @@ def mad (a: int3; b: int; c: int3) : int3
 .. das:function:: mad(a: int4; b: int; c: int4) : int4
 
 Computes the fused multiply-add operation `a * b + c`.
-def mad (a: int4; b: int; c: int4) : int4
+
 
 :Arguments: * **a** : int4
 
@@ -2832,7 +2832,7 @@ def mad (a: int4; b: int; c: int4) : int4
 .. das:function:: mad(a: uint; b: uint; c: uint) : uint
 
 Computes the fused multiply-add operation `a * b + c`.
-def mad (a: uint; b: uint; c: uint) : uint
+
 
 :Arguments: * **a** : uint
 
@@ -2845,7 +2845,7 @@ def mad (a: uint; b: uint; c: uint) : uint
 .. das:function:: mad(a: uint2; b: uint2; c: uint2) : uint2
 
 Computes the fused multiply-add operation `a * b + c`.
-def mad (a: uint2; b: uint2; c: uint2) : uint2
+
 
 :Arguments: * **a** : uint2
 
@@ -2858,7 +2858,7 @@ def mad (a: uint2; b: uint2; c: uint2) : uint2
 .. das:function:: mad(a: uint3; b: uint3; c: uint3) : uint3
 
 Computes the fused multiply-add operation `a * b + c`.
-def mad (a: uint3; b: uint3; c: uint3) : uint3
+
 
 :Arguments: * **a** : uint3
 
@@ -2871,7 +2871,7 @@ def mad (a: uint3; b: uint3; c: uint3) : uint3
 .. das:function:: mad(a: uint4; b: uint4; c: uint4) : uint4
 
 Computes the fused multiply-add operation `a * b + c`.
-def mad (a: uint4; b: uint4; c: uint4) : uint4
+
 
 :Arguments: * **a** : uint4
 
@@ -2884,7 +2884,7 @@ def mad (a: uint4; b: uint4; c: uint4) : uint4
 .. das:function:: mad(a: uint2; b: uint; c: uint2) : uint2
 
 Computes the fused multiply-add operation `a * b + c`.
-def mad (a: uint2; b: uint; c: uint2) : uint2
+
 
 :Arguments: * **a** : uint2
 
@@ -2897,7 +2897,7 @@ def mad (a: uint2; b: uint; c: uint2) : uint2
 .. das:function:: mad(a: uint3; b: uint; c: uint3) : uint3
 
 Computes the fused multiply-add operation `a * b + c`.
-def mad (a: uint3; b: uint; c: uint3) : uint3
+
 
 :Arguments: * **a** : uint3
 
@@ -2910,7 +2910,7 @@ def mad (a: uint3; b: uint; c: uint3) : uint3
 .. das:function:: mad(a: uint4; b: uint; c: uint4) : uint4
 
 Computes the fused multiply-add operation `a * b + c`.
-def mad (a: uint4; b: uint; c: uint4) : uint4
+
 
 :Arguments: * **a** : uint4
 
@@ -2923,7 +2923,7 @@ def mad (a: uint4; b: uint; c: uint4) : uint4
 .. das:function:: mad(a: double; b: double; c: double) : double
 
 Computes the fused multiply-add operation `a * b + c`.
-def mad (a: double; b: double; c: double) : double
+
 
 :Arguments: * **a** : double
 
@@ -3181,7 +3181,7 @@ Matrix operations
 .. das:function:: float4x4 implicit*(x: float4x4 implicit; y: float4x4 implicit) : float4x4
 
 Multiplies two 4x4 matrices and returns the resulting 4x4 matrix.
-def float4x4 implicit* (x: float4x4 implicit; y: float4x4 implicit) : float4x4
+
 
 :Arguments: * **x** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
 
@@ -3212,7 +3212,7 @@ Returns true if two float3x3 matrices are not equal, comparing all elements comp
 .. das:function:: float3x4 implicit*(x: float3x4 implicit; y: float3x4 implicit) : float3x4
 
 Multiplies two 3x4 matrices and returns the resulting 3x4 matrix.
-def float3x4 implicit* (x: float3x4 implicit; y: float3x4 implicit) : float3x4
+
 
 :Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
 
@@ -3223,7 +3223,7 @@ def float3x4 implicit* (x: float3x4 implicit; y: float3x4 implicit) : float3x4
 .. das:function:: float3x4 implicit*(x: float3x4 implicit; y: float3) : float3
 
 Transforms a float3 vector by a 3x4 matrix.
-def float3x4 implicit* (x: float3x4 implicit; y: float3) : float3
+
 
 :Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
 
@@ -3234,7 +3234,7 @@ def float3x4 implicit* (x: float3x4 implicit; y: float3) : float3
 .. das:function:: float4x4 implicit*(x: float4x4 implicit; y: float4) : float4
 
 Transforms a float4 vector by a 4x4 matrix.
-def float4x4 implicit* (x: float4x4 implicit; y: float4) : float4
+
 
 :Arguments: * **x** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
 
@@ -3265,7 +3265,7 @@ Returns true if two float3x3 matrices are not equal, comparing all elements comp
 .. das:function:: float3x3 implicit*(x: float3x3 implicit; y: float3x3 implicit) : float3x3
 
 Multiplies two 3x3 matrices and returns the resulting 3x3 matrix.
-def float3x3 implicit* (x: float3x3 implicit; y: float3x3 implicit) : float3x3
+
 
 :Arguments: * **x** :  :ref:`float3x3 <handle-math-float3x3>`  implicit
 
@@ -3276,7 +3276,7 @@ def float3x3 implicit* (x: float3x3 implicit; y: float3x3 implicit) : float3x3
 .. das:function:: float3x3 implicit*(x: float3x3 implicit; y: float3) : float3
 
 Transforms a float3 vector by a 3x3 matrix.
-def float3x3 implicit* (x: float3x3 implicit; y: float3) : float3
+
 
 :Arguments: * **x** :  :ref:`float3x3 <handle-math-float3x3>`  implicit
 

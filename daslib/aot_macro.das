@@ -13,6 +13,7 @@ require fio
 [simulate_macro(name="ast_aot")]
 class AstAot : AstSimulateMacro {
     def override simulate(prog : Program?; var ctx : Context?) : bool {
+        //! Runs AOT compilation of the program and writes the result to the output file specified in policies.
         return true if (is_in_completion() || is_compiling_macros() || is_folding())
         let res = run_aot(prog, ctx, prog.policies)
         var is_ok = res |> length() > 0

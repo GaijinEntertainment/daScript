@@ -1283,6 +1283,7 @@ def do_format(var ctx : FormatterCtx) {
 
 
 def public format_source_string(file_data : string const& implicit) : string {
+    //! Formats a daScript source code string and returns the formatted result.
     var inscope ctx : FormatterCtx
     ctx.data <- [ for (c in file_data); uint8(c) ]
     ctx.data |> push(uint8(0))
@@ -1300,6 +1301,7 @@ def format_source(var ctx : FormatterCtx; file_data : array<uint8> const& implic
 
 
 def public format_source(file_data : array<uint8> const& implicit) : string {
+    //! Formats daScript source code given as a byte array and returns the formatted result.
     var inscope ctx : FormatterCtx
     return ctx |> format_source(file_data)
 }

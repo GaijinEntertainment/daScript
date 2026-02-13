@@ -176,20 +176,24 @@ var ast : ClangAst
 var rev_enums : table<string; string>
 
 def is_str(jso, str) {
+    //! Checks if a JSON value is a string equal to the given value.
     return (jso is _string) && ((jso as _string) == str)
 }
 
 def with_object(var jso; field; blk : block<(var val : table<string; JsonValue?>) : void>) {
+    //! Invokes a block with the specified JSON object field.
     assert(jso[field] is _object)
     invoke(blk, jso[field] as _object)
 }
 
 def with_array(var jso; field; blk : block<(var val : array<JsonValue?>) : void>) {
+    //! Invokes a block with the specified JSON array field.
     assert(jso[field] is _array)
     invoke(blk, jso[field] as _array)
 }
 
 def is_valid_loc(var loc) {
+    //! Checks if a source location is valid (non-empty).
     if (loc |> length == 0) {
         return false
     }
@@ -197,6 +201,7 @@ def is_valid_loc(var loc) {
 }
 
 def onInner(var root) {
+    //! Recursively processes all inner declarations of a Clang AST node.
     root |> with_array("inner") <| $(inner) {
         for (idecl in inner) {
             assert(idecl is _object)
@@ -244,6 +249,7 @@ def onInner(var root) {
 
 [sideeffects] // TODO: fixme. find why we need to specify [sideeffects] here
 def onLinkageSpec(var root) {
+    //! Processes an extern linkage specification node.
     if (!allow_extern_c) {
         return
     }
@@ -259,6 +265,7 @@ def onLinkageSpec(var root) {
 }
 
 def onNamespace(var root) {
+    //! Processes a C++ namespace declaration and its inner declarations.
     if (!root |> key_exists("inner")) {
         return
     }
@@ -273,6 +280,7 @@ def onNamespace(var root) {
 }
 
 def onEnum(var root) {
+    //! Processes a C++ enum declaration and its constants.
     if (!root |> key_exists("name")) {
         print("enum 'name' missing in {root}\n")
         return
@@ -314,6 +322,7 @@ def onEnum(var root) {
 }
 
 def onVar(var root) {
+    //! Processes a global variable declaration.
     let name = root["name"] as _string
     let fullName = getCppName(name)
     let mangledName = root["mangledName"] as _string // todo: undecorate mangled name
@@ -330,11 +339,13 @@ def onVar(var root) {
 }
 
 def getQualType(var root; field : string = "type") {
+    //! Extracts the qualified type string from a Clang AST node.
     var qto & = unsafe(root[field] as _object)
     return qto["qualType"] as _string
 }
 
 def onNumericLiteral(var inner_obj) {
+    //! Extracts the value and type from a numeric literal AST node.
     var value = ""
     var valueType = ""
     let valueCategory = inner_obj["valueCategory"] as _string
@@ -346,6 +357,7 @@ def onNumericLiteral(var inner_obj) {
 }
 
 def onInitArg(var root) {
+    //! Parses the default argument initializer from a function parameter node.
     var value = ""
     var valueType = ""
     if (root |> key_exists("inner")) {
@@ -402,6 +414,7 @@ def onInitArg(var root) {
 }
 
 def onFunctionBody(var root; isMethod : bool; ofClass : string = "") : ClangFunc {
+    //! Parses a function or method declaration into a ClangFunc descriptor.
     let name = root["name"] as _string
     let fullName = getCppName(name)
     let mangledName = root["mangledName"] as _string // todo: undecorate mangled name
@@ -456,6 +469,7 @@ def onFunctionBody(var root; isMethod : bool; ofClass : string = "") : ClangFunc
 }
 
 def onMethod(var root) {
+    //! Processes a C++ method declaration within a struct or class.
     if (length(struct_stack) > 0) {
         var in_class = struct_stack[length(struct_stack) - 1]
         ast.structs[in_class].methods |> emplace <| onFunctionBody(root, true, join(struct_stack, "::"))
@@ -465,11 +479,13 @@ def onMethod(var root) {
 }
 
 def onFunction(var root) {
+    //! Processes a standalone C++ function declaration.
     var fdecl <- onFunctionBody(root, false)
     ast.funcs[fdecl.mangledName] <- fdecl
 }
 
 def onStruct(var root) {
+    //! Processes a C++ struct or class declaration and its members.
     let name = key_exists(root, "name") ? (root["name"] as _string) : ""
     let tagUsed = root["tagUsed"] as _string
     let fullName = getCppName(name)
@@ -499,6 +515,7 @@ def onStruct(var root) {
 }
 
 def onAccess(var root) {
+    //! Updates the current access specifier (public, private, or protected).
     let access = root["access"] as _string
     var kind = AccessKind.Public
     if (access == "public") {
@@ -514,6 +531,7 @@ def onAccess(var root) {
 }
 
 def isBitfield(var root) {
+    //! Checks if a field declaration is a bitfield.
     if (root |> key_exists("isBitfield")) {
         if (root["isBitfield"] as _bool) {
             return true
@@ -523,6 +541,7 @@ def isBitfield(var root) {
 }
 
 def onField(var root) {
+    //! Processes a struct or class field declaration.
     let name = key_exists(root, "name") ? (root["name"] as _string) : ""
     var qualType = getQualType(root)
     var access = access_stack[length(access_stack) - 1]
@@ -540,6 +559,7 @@ def onField(var root) {
 }
 
 def getCppName(baseName) {
+    //! Builds a fully qualified C++ name using the current namespace stack.
     var name = join([iterator for(n in name_stack); n.name], "::")
     if (length(name) != 0) {
         name = "{name}::{baseName}"
@@ -550,6 +570,7 @@ def getCppName(baseName) {
 }
 
 def onTypeDecl(var root) {
+    //! Processes a C++ typedef declaration.
     let name = root["name"] as _string
     let fullName = getCppName(name)
     var qualType = getQualType(root)
@@ -564,6 +585,7 @@ def onTypeDecl(var root) {
 }
 
 def isBlockedType(qtype : string) {
+    //! Checks if a type name matches any blocked type pattern.
     for (btn in blocked_type_names) {
         if (qtype |> find(btn) != -1) {
             return true
@@ -573,6 +595,7 @@ def isBlockedType(qtype : string) {
 }
 
 def isLocalType(qtype : string) {
+    //! Checks if a type name matches any local type pattern.
     for (btn in local_type_names) {
         if (qtype |> find(btn) != -1) {
             return true
@@ -583,6 +606,7 @@ def isLocalType(qtype : string) {
 
 
 def genEnums(hf, mf, df : FILE const?) {
+    //! Generates C++ binding code for all parsed enumerations.
     fprint(hf, "// ------------\n// enumerations\n// ------------\n\n")
     fprint(mf, "// ------------\n// enumerations\n// ------------\n\n")
     fprint(df, "// ------------\n// enumerations\n// ------------\n\n")
@@ -650,6 +674,7 @@ public:
 }
 
 def needToGenStruct(st) {
+    //! Determines if a struct should be included in binding generation.
     if (empty(st.name)) {
         return false
     }
@@ -662,6 +687,7 @@ def needToGenStruct(st) {
 }
 
 def needToGenField(fld) {
+    //! Determines if a struct field should be included in binding generation.
     if (empty(fld.name)) {
         return false
     }
@@ -675,6 +701,7 @@ def needToGenField(fld) {
 }
 
 def getBindFldName(name : string) {
+    //! Returns a safe binding field name, prefixing reserved words with underscore.
     if (name == "type") {
         return "_{name}"
     }
@@ -682,6 +709,7 @@ def getBindFldName(name : string) {
 }
 
 def genStructs(hf, mf, df : FILE const?) {
+    //! Generates C++ binding code for all parsed structures and their fields.
     fprint(hf, "// ------------\n// structures\n// ------------\n\n")
     fprint(mf, "// ------------\n// structures\n// ------------\n\n")
     fprint(df, "// ------------\n// structures\n// ------------\n\n")
@@ -769,6 +797,7 @@ def genStructs(hf, mf, df : FILE const?) {
 var op_regex <- %regex~operator[^a-zA-Z_]%%
 
 def isBlockedFun(fn) {
+    //! Checks if a function should be excluded from binding generation.
     if (fn.isMethod && fn.isStatic) {
         print("warning: skipping static method {fn.name} in {fn.cppName}\n")
         return true
@@ -798,18 +827,21 @@ def isBlockedFun(fn) {
 }
 
 def qType2FnType(st) {
+    //! Converts a qualified type string to a C function pointer type.
     let ob = find(st, "(")
     assert(ob != -1)
     return slice(st, 0, ob) + "(*)" + slice(st, ob)
 }
 
 def qType2FnTypeClass(st, className) {
+    //! Converts a qualified type string to a class member function pointer type.
     let ob = find(st, "(")
     assert(ob != -1)
     return slice(st, 0, ob) + "({className}::*)" + slice(st, ob)
 }
 
 def getFunRetType(fn) {
+    //! Extracts the return type from a function's qualified type string.
     let ob = find(fn.ftype, "(")
     assert(ob != -1)
     var cppResType = slice(fn.ftype, 0, ob)
@@ -820,6 +852,7 @@ def getFunRetType(fn) {
 }
 
 def isRefFun(fn) {
+    //! Checks if a function returns a reference type.
     let ob = find(fn.ftype, "(")
     assert(ob != -1)
     var cppResType = slice(fn.ftype, 0, ob)
@@ -836,6 +869,7 @@ def isRefFun(fn) {
 }
 
 def isCmresFun(fn) {
+    //! Checks if a function returns by value a type requiring copy-or-move semantics.
     // note: hacking cpp type to autodetect CMRES
     let ob = find(fn.ftype, "(")
     assert(ob != -1)
@@ -873,6 +907,7 @@ def isCmresFun(fn) {
 var g_method_name = 0
 
 def methodName(name : string) {
+    //! Generates a unique internal name for a method binding.
     g_method_name ++
     return "_{name}_method_{g_method_name}"
 }
@@ -882,6 +917,7 @@ var g_split_factor = 20
 var g_split_file : FILE const? = null
 
 def openSplitFile {
+    //! Opens a new split output file when the split threshold is reached.
     if ((g_split_count % g_split_factor) == 0) {
         closeSplitFile()
         let split_index = g_split_count / g_split_factor
@@ -895,6 +931,7 @@ def openSplitFile {
 }
 
 def closeSplitFile {
+    //! Closes the current split output file if one is open.
     if (g_split_file != null) {
         fprint(g_split_file, split_cpp_suffix)
         fclose(g_split_file)
@@ -903,6 +940,7 @@ def closeSplitFile {
 }
 
 def getFunctions(df, df_method : FILE const?) {
+    //! Generates C++ binding code for all parsed functions and methods.
     fprint(df, "// ------------\n// functions\n// ------------\n\n")
     var all_fn : table<string; int>
     for (fn in values(ast.funcs)) {
@@ -945,6 +983,7 @@ var {
 }
 
 def parseQualArgs(qname : string; var rtype : string&) {
+    //! Parses argument types and return type from a qualified function type string.
     if (regex_match(reg_args, qname) != -1) {
         let qargs = regex_group(reg_args, 2, qname)
         rtype = regex_group(reg_args, 1, qname)
@@ -954,6 +993,7 @@ def parseQualArgs(qname : string; var rtype : string&) {
 }
 
 def getDefinePrefix(xname : string) {
+    //! Returns the preprocessor define prefix for a given C++ qualified name.
     for (nn, pn in keys(namespace_to_prefix), values(namespace_to_prefix)) {
         if (xname |> starts_with(nn)) {
             return pn
@@ -965,6 +1005,7 @@ def getDefinePrefix(xname : string) {
 var gen_fn_callback : lambda<(fn : ClangFunc) : void>
 
 def genFunction(fn : ClangFunc; castbind : bool; df : FILE const?) {
+    //! Generates C++ binding code for a single function or method.
     var bind_enchantation = ""
     var cpp_enchantation = ""
     var using_mname = ""
@@ -1084,6 +1125,7 @@ def genFunction(fn : ClangFunc; castbind : bool; df : FILE const?) {
 }
 
 def genBindings(hf, df, mf_enum, df_enum, mf_ann, df_ann, df_method : FILE const?) {
+    //! Generates all C++ bindings (enums, structs, functions) to the output files.
     genEnums(hf, mf_enum, df_enum)
     genStructs(hf, mf_ann, df_ann)
     getFunctions(df, df_method)
@@ -1091,6 +1133,7 @@ def genBindings(hf, df, mf_enum, df_enum, mf_ann, df_ann, df_method : FILE const
 }
 
 def bindHeaders(fname, outprefix : string) {
+    //! Parses a Clang AST JSON file and generates all binding output files.
     delete blocked_functions_table
     for (fn in blocked_functions) {
         blocked_functions_table[fn] = true
@@ -1144,16 +1187,19 @@ def bindHeaders(fname, outprefix : string) {
 
 
 def genDefineConstants(fname, prefix : string) {
+    //! Generates constant bindings from a single header file.
     var fnames <-  [ fname ]
     defer <| $() { delete fnames; }
     fnames |> genDefineConstants <| prefix
 }
 
 def getGenConstType(name, default_name : string) {
+    //! Returns the C++ type for a constant, falling back to the default type.
     return const_type_table?[name] ?? default_name
 }
 
 def searchAndGenConst(var regex_def : Regex; defTName, suffix : string; var ofs : table<int; bool>; data : string; var dup : table<string; bool>; hf : FILE const?) {
+    //! Searches for #define constants matching a regex and generates binding code.
     regex_foreach(regex_def, data) <| $(r) {
         if (!ofs |> key_exists(r.x)) {
             let DEF = regex_group(regex_def, 1, data)
@@ -1175,6 +1221,7 @@ def searchAndGenConst(var regex_def : Regex; defTName, suffix : string; var ofs 
 }
 
 def genDefineConstants(fnames : array<string>; prefix : string) {
+    //! Generates constant bindings from multiple header files.
     delete blocked_defines_table
     for (bd in blocked_defines) {
         blocked_defines_table[bd] = true

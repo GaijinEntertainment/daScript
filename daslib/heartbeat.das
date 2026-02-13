@@ -22,11 +22,13 @@ var g_hbCallback : lambda<() : void>
 var g_inHB : bool = false
 
 def public set_heartbeat(var cb : lambda<() : void>) {
+    //! Sets the heartbeat callback lambda, replacing any previously set callback.
     delete g_hbCallback
     g_hbCallback <- cb
 }
 
 def public heartbeat() {
+    //! Invokes the heartbeat callback if one is set, with re-entrancy protection.
     if (g_inHB) {
         return
     }

@@ -23,7 +23,7 @@ File formatting
 
 .. das:function:: format_file(file_name: string)
 
-|detail/function-das_source_formatter_fio-format_file-0xee2279329a68061|
+Reads a daScript source file, formats it, and writes the result back if changed.
 
 :Arguments: * **file_name** : string
 
@@ -35,7 +35,7 @@ Uncategorized
 
 .. das:function:: format_files(file_names: array<string>)
 
-|detail/function-das_source_formatter_fio-format_files-0x244ceb22c2b5f106|
+Formats multiple daScript source files in place.
 
 :Arguments: * **file_names** : array<string>
 

@@ -1179,9 +1179,11 @@ class private AstQNamedMacro : AstCallMacro {
     apply_call = "apply_qmacro_function"
     macro_call = "qmacro_function"
     def override canVisitArgument(call : smart_ptr<ExprCallMacro>; argIndex : int) : bool {
+        //! Only visits the first argument (the name).
         return argIndex == 0
     }
     def override visit(prog : ProgramPtr; mod : Module?; var call : smart_ptr<ExprCallMacro>) : ExpressionPtr {
+        //! Visits the macro call and generates the reified named expression.
         if (call.arguments |> length != 2) {
             macro_error(prog, call.at, "expecting 2 arguments, {macro_call}(name,expression)")
             return <- default<ExpressionPtr>
@@ -1226,10 +1228,12 @@ class private AstQNamedClassMacro : AstCallMacro {
     apply_call = "apply_qmacro_method"
     macro_call = "qmacro_method"
     def override canVisitArgument(call : smart_ptr<ExprCallMacro>; argIndex : int) : bool {
+        //! Only visits the first two arguments (name and class).
         return argIndex == 0 || argIndex == 1
     }
     //! This macro implements expression reification for the named expressions (function, variable, etc.)
     def override visit(prog : ProgramPtr; mod : Module?; var call : smart_ptr<ExprCallMacro>) : ExpressionPtr {
+        //! Visits the macro call and generates the reified named class expression.
         if (call.arguments |> length != 3) {
             macro_error(prog, call.at, "expecting 3 arguments, {macro_call}(name,class,expression)")
             return <- default<ExpressionPtr>
@@ -1338,6 +1342,7 @@ def public apply_qmacro_template_class(instance_name : string; var template_type
 }
 
 def public apply_qmacro_template_function(func : FunctionPtr; blk : block<(var rules : Template) : void>) : FunctionPtr {
+    //! Applies template rules to a function, cloning it with substituted types.
     var inscope rules : Template
     invoke(blk, rules)
     var inscope func_clone <- clone_function(func)

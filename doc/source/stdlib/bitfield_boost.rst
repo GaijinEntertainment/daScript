@@ -79,7 +79,7 @@ toggle bitfield bit at index i if v is true
 
 .. das:function:: each(b: auto) : iterator<bool>
 
-|detail/function-bitfield_boost-each-0x6664fece0f7bcdf4|
+Iterates over each bit of a bitfield value, yielding true or false for each bit.
 
 :Arguments: * **b** : auto
 

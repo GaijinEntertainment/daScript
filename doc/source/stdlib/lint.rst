@@ -21,7 +21,7 @@ Uncategorized
 
 .. das:function:: paranoid(prog: ProgramPtr; compile_time_errors: bool)
 
-|detail/function-lint-paranoid-0x8c9b77a3ca504759|
+Runs the paranoid lint visitor on the program to check for common coding issues.
 
 :Arguments: * **prog** :  :ref:`ProgramPtr <alias-ProgramPtr>` 
 

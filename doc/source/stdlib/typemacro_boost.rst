@@ -83,7 +83,7 @@ Enum helpers
 
 .. das:function:: int64_to_enum(_enu: auto(ET); value: int64) : ET
 
-|detail/function-typemacro_boost-int64_to_enum-0xb329576f15617c62|
+Converts an int64 value to the specified enum type via reinterpret cast.
 
 :Arguments: * **_enu** : auto(ET)
 
@@ -97,7 +97,7 @@ Uncategorized
 
 .. das:function:: get_string_const(expr: ExpressionPtr) : string
 
-|detail/function-typemacro_boost-get_string_const-0xf655065b8b02861a|
+Extracts a string constant value or function address name from an expression.
 
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
@@ -105,7 +105,7 @@ Uncategorized
 
 .. das:function:: make_typemacro_template_instance(instance_type: Structure?; template_type: Structure?; ex: array<tuple<string;string>> = array<tuple<string;string>>())
 
-|detail/function-typemacro_boost-make_typemacro_template_instance-0x7d3d6e21a6335442|
+Annotates a structure as a typemacro template instance of the given template type.
 
 :Arguments: * **instance_type** :  :ref:`Structure <handle-ast-Structure>` ?
 
@@ -129,7 +129,7 @@ template instance is determined by having parent == template.parent
 
 .. das:function:: infer_struct_aliases(structType: Structure?; args: array<TypeMacroTemplateArgument>) : bool
 
-|detail/function-typemacro_boost-infer_struct_aliases-0x62f823d768318fa5|
+Infers structure alias types for all template arguments from a structure definition.
 
 :Arguments: * **structType** :  :ref:`Structure <handle-ast-Structure>` ?
 
@@ -139,7 +139,7 @@ template instance is determined by having parent == template.parent
 
 .. das:function:: infer_template_types(passArgument: TypeDeclPtr; args: array<TypeMacroTemplateArgument>) : TypeDeclPtr
 
-|detail/function-typemacro_boost-infer_template_types-0x6b9504bdcdfb49e0|
+Infers and validates template argument types against a pass argument, returning the resolved type.
 
 :Arguments: * **passArgument** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
 
@@ -149,7 +149,7 @@ template instance is determined by having parent == template.parent
 
 .. das:function:: add_structure_aliases(structType: Structure?; args: array<TypeMacroTemplateArgument>)
 
-|detail/function-typemacro_boost-add_structure_aliases-0x85c39211ad0ddd27|
+Adds all template argument type aliases to a structure.
 
 :Arguments: * **structType** :  :ref:`Structure <handle-ast-Structure>` ?
 
@@ -159,7 +159,7 @@ template instance is determined by having parent == template.parent
 
 .. das:function:: verify_arguments(args: array<TypeMacroTemplateArgument>) : bool
 
-|detail/function-typemacro_boost-verify_arguments-0x5efed42c9ffac12e|
+Verifies that all template arguments have been fully inferred (no remaining auto or alias types).
 
 :Arguments: * **args** : array< :ref:`TypeMacroTemplateArgument <struct-typemacro_boost-TypeMacroTemplateArgument>` >
 
@@ -167,7 +167,7 @@ template instance is determined by having parent == template.parent
 
 .. das:function:: template_structure_name(base: Structure?; arguments: array<TypeMacroTemplateArgument>; extra: array<tuple<string;string>> = array<tuple<string;string>>()) : string
 
-|detail/function-typemacro_boost-template_structure_name-0xf61df8860f12ad24|
+Builds a mangled template structure name from its base name and argument types.
 
 :Arguments: * **base** :  :ref:`Structure <handle-ast-Structure>` ?
 
@@ -179,7 +179,7 @@ template instance is determined by having parent == template.parent
 
 .. das:function:: is_custom_work_done(structType: Structure?) : bool
 
-|detail/function-typemacro_boost-is_custom_work_done-0xdd682cd4b0218df|
+Returns true if custom work has already been performed on the template structure.
 
 :Arguments: * **structType** :  :ref:`Structure <handle-ast-Structure>` ?
 
@@ -187,7 +187,7 @@ template instance is determined by having parent == template.parent
 
 .. das:function:: mark_custom_work_done(structType: Structure?)
 
-|detail/function-typemacro_boost-mark_custom_work_done-0x886dbd95ecf9e7fa|
+Marks the template structure's custom work as complete in its annotation.
 
 :Arguments: * **structType** :  :ref:`Structure <handle-ast-Structure>` ?
 
@@ -195,7 +195,7 @@ template instance is determined by having parent == template.parent
 
 .. das:function:: typemacro_argument(dimExpr: auto; index: int; constType: auto(ExprConstType); defaultValue: auto(ValueT)) : ValueT
 
-|detail/function-typemacro_boost-typemacro_argument-0xcacf3c534f7cab81|
+Extracts a typed constant argument at the given index from a type macro's dimension expressions.
 
 :Arguments: * **dimExpr** : auto
 
@@ -209,7 +209,7 @@ template instance is determined by having parent == template.parent
 
 .. das:function:: typemacro_argument(dimExpr: auto; index: int; constType: ExprConstString; defaultValue: auto(ValueT)) : ValueT
 
-|detail/function-typemacro_boost-typemacro_argument-0x278212e4a29dbe02|
+Extracts a string constant or function address argument at the given index from a type macro's dimension expressions.
 
 :Arguments: * **dimExpr** : auto
 

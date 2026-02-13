@@ -24,6 +24,7 @@ class private LongStringReader : AstReaderMacro {
     //!  and special charactes like { this } and "that"
     //!  %%
     def override accept(prog : ProgramPtr; mod : Module?; var expr : ExprReader?; ch : int; info : LineInfo) : bool {
+        //! Accepts characters into the reader sequence until the closing %% delimiter is found.
         if (ch != '\r') {
             append(expr.sequence, ch)
         }
@@ -36,6 +37,7 @@ class private LongStringReader : AstReaderMacro {
         }
     }
     def override visit(prog : ProgramPtr; mod : Module?; expr : smart_ptr<ExprReader>) : ExpressionPtr {
+        //! Converts the accumulated reader sequence into a constant string expression.
         return <- new ExprConstString(at = expr.at, value := expr.sequence)
     }
 }

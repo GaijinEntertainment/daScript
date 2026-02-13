@@ -25,9 +25,11 @@ def internal_enable_profiler(var ctxId : uint64; enabled : bool) {
 }
 
 def public enable_profiler(var ctx : Context) {
+    //! Enables the profiler for the given context.
     internal_enable_profiler(intptr(unsafe(addr(ctx))), true)
 }
 
 def public disable_profiler(var ctx : Context) {
+    //! Disables the profiler for the given context.
     internal_enable_profiler(intptr(unsafe(addr(ctx))), false)
 }

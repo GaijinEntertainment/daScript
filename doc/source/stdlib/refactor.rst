@@ -49,7 +49,7 @@ Refactoring operations
 
 .. das:function:: extract_method(method_name: string; blk: block<():void>)
 
-|detail/function-refactor-extract_method-0x19a04db32e32647f|
+Marks a block of code for method extraction refactoring.
 
 :Arguments: * **method_name** : string
 
@@ -63,7 +63,7 @@ Uncategorized
 
 .. das:function:: extract_expression(method_name: string; expr: auto) : auto
 
-|detail/function-refactor-extract_expression-0x5b119e3f7dc9a25f|
+Marks an expression for expression extraction refactoring.
 
 :Arguments: * **method_name** : string
 
@@ -73,7 +73,7 @@ Uncategorized
 
 .. das:function:: extract_variable_nonref(method_name: string; expr: auto) : auto
 
-|detail/function-refactor-extract_variable_nonref-0x7a2d840d254f4fba|
+Marks an expression for variable extraction by value.
 
 :Arguments: * **method_name** : string
 
@@ -83,7 +83,7 @@ Uncategorized
 
 .. das:function:: extract_variable_ref(method_name: string; expr: auto(TT)& ==const) : TT&
 
-|detail/function-refactor-extract_variable_ref-0x945f97301b2d6178|
+Marks an expression for variable extraction by reference.
 
 :Arguments: * **method_name** : string
 
