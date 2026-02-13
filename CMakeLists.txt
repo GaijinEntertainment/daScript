@@ -291,7 +291,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${EXECUTABLE_OUTPUT_PATH})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 
-# All dynamic modules libraries will be added here (files like dasModuleAudio.mod).
+# All dynamic modules libraries will be added here (files like dasModuleAudio.das_module).
 SET(DAS_DYN_MODULES_LIBS)
 # All static modules libraries will be added here (files like libDasModuleAudio.a).
 SET(DAS_MODULES_LIBS)
@@ -314,22 +314,21 @@ MACRO(ADD_DAS_SHARED_MODULE_LIB module_name)
         RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${SHARED_OUTPUT_PATH}"
         RUNTIME_OUTPUT_DIRECTORY_RELEASE "${SHARED_OUTPUT_PATH}"
         RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${SHARED_OUTPUT_PATH}"
-        SUFFIX ".mod"
+        SUFFIX ".das_module"
         PREFIX ""
     )
-    # Install all shared libraries to the same place.
-    # So in runtime all of them will be loaded.
-    install(TARGETS ${module_name}
-        DESTINATION ${DAS_INSTALL_MODULESDIR}/${FOLDER_NAME}
-    )
-    # Compiled dynamic module is useless without config.
-    # Build only static lib or create .das_module file if no config exists.
-    if(NOT ${FOLDER_NAME} STREQUAL "tutorial" AND NOT ${FOLDER_NAME} STREQUAL "profile" AND NOT ${FOLDER_NAME} STREQUAL "test")
+    # Ignore tutorial, profile, test.
+    if(NOT "${FOLDER_NAME}" STREQUAL "tutorial" AND
+       NOT "${FOLDER_NAME}" STREQUAL "profile" AND
+       NOT "${FOLDER_NAME}" STREQUAL "test")
+        install(TARGETS ${module_name}
+            DESTINATION ${DAS_INSTALL_MODULESDIR}/${FOLDER_NAME}
+        )
+        # Compiled dynamic module is useless without config.
+        # Build only static lib or create .das_module file if no config exists.
         install(FILES "${CMAKE_CURRENT_LIST_DIR}/.das_module"
             DESTINATION ${DAS_INSTALL_MODULESDIR}/${FOLDER_NAME}
         )
-    ENDIF()
-    IF(EXISTS "${CMAKE_CURRENT_LIST_DIR}/.das_module")
     ENDIF()
     TARGET_COMPILE_DEFINITIONS(${module_name} PRIVATE DAS_MOD_EXPORTS DAS_ENABLE_DLL=1)
     TARGET_LINK_LIBRARIES(${module_name} PUBLIC libDaScriptDyn)
@@ -342,6 +341,22 @@ MACRO(ADD_DAS_STATIC_MODULE_LIB lib)
     MESSAGE("REGISTER DAS STATIC MODULE ${lib}")
     ADD_DAS_STATIC_LIBRARY(${lib} ${ARGN})
     TARGET_LINK_LIBRARIES(${lib} PUBLIC libDaScript)
+    # Compiled dynamic module is useless without config.
+    # Build only static lib or create .das_module file if no config exists.
+    get_filename_component(FOLDER_NAME "${CMAKE_CURRENT_LIST_DIR}" NAME)
+    if(NOT "${FOLDER_NAME}" STREQUAL "tutorial" AND
+       NOT "${FOLDER_NAME}" STREQUAL "profile" AND
+       NOT "${FOLDER_NAME}" STREQUAL "test")
+        install(TARGETS
+            ${lib}
+            EXPORT DASTargets
+            RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
+            LIBRARY DESTINATION ${DAS_INSTALL_LIBDIR}
+            ARCHIVE DESTINATION ${DAS_INSTALL_LIBDIR}
+            INCLUDES DESTINATION include
+        )
+    ENDIF()
+
     LIST(APPEND DAS_MODULES_LIBS ${lib})
 ENDMACRO()
 
@@ -422,7 +437,7 @@ SET(URIPARSER_SRCS
 )
 
 ADD_LIBRARY(libUriParser STATIC ${URIPARSER_SRCS})
-ADD_LIBRARY(libUriParserDyn STATIC ${URIPARSER_SRCS})
+ADD_LIBRARY(libUriParserDyn OBJECT ${URIPARSER_SRCS})
 SETUP_CPP11(libUriParser)
 SET_TARGET_PROPERTIES(libUriParserDyn PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_definitions(libUriParser PUBLIC URIPARSER_BUILD_CHAR)
@@ -1055,7 +1070,7 @@ install(FILES
 
 # Install all modules and main library.
 install(TARGETS
-    libDaScript libDaScriptDyn libUriParser libUriParserDyn ${DAS_MODULES_LIBS}
+    libDaScript libDaScriptDyn libUriParser libUriParserDyn
     EXPORT DASTargets
     RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
     LIBRARY DESTINATION ${DAS_INSTALL_LIBDIR}

@@ -5,6 +5,6 @@ require fio
 [export]
 def initialize(project_path : string) {
     if (das_is_dll_build()) {
-        register_dynamic_module("{get_das_root()}/examples/tutorial/tutorial_02.mod", "tutorial_02")
+        register_dynamic_module("{get_das_root()}/examples/tutorial/tutorial_02.das_module", "tutorial_02")
     }
 }
