@@ -10,6 +10,7 @@ module linq_boost shared public
 //! Provides ``|>`` pipe-syntax rewrites for LINQ operations so that
 //! ``arr |> where(...) |> select(...)`` chains compile into efficient
 //! iterator pipelines.
+//! Requires the ``linq`` module.
 
 require daslib/linq public
 

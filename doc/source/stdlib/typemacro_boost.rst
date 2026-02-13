@@ -100,21 +100,9 @@ Converts an int64 value to the specified enum type via reinterpret cast.
 Template structure instantiation
 ++++++++++++++++++++++++++++++++
 
-  *  :ref:`make_typemacro_template_instance (instance_type: Structure?; template_type: Structure?; ex: array\<tuple\<string;string\>\> = array\<tuple\<string;string\>\>()) <function-typemacro_boost_make_typemacro_template_instance_Structure_q__Structure_q__array_ls_tuple_ls_string;string_gr__gr_>` 
   *  :ref:`is_typemacro_template_instance (passArgument: TypeDeclPtr; templateType: TypeDeclPtr; extra: array\<tuple\<string;string\>\> = array\<tuple\<string;string\>\>()) : bool <function-typemacro_boost_is_typemacro_template_instance_TypeDeclPtr_TypeDeclPtr_array_ls_tuple_ls_string;string_gr__gr_>` 
+  *  :ref:`make_typemacro_template_instance (instance_type: Structure?; template_type: Structure?; ex: array\<tuple\<string;string\>\> = array\<tuple\<string;string\>\>()) <function-typemacro_boost_make_typemacro_template_instance_Structure_q__Structure_q__array_ls_tuple_ls_string;string_gr__gr_>` 
   *  :ref:`template_structure_name (base: Structure?; arguments: array\<TypeMacroTemplateArgument\>; extra: array\<tuple\<string;string\>\> = array\<tuple\<string;string\>\>()) : string <function-typemacro_boost_template_structure_name_Structure_q__array_ls_TypeMacroTemplateArgument_gr__array_ls_tuple_ls_string;string_gr__gr_>` 
-
-.. _function-typemacro_boost_make_typemacro_template_instance_Structure_q__Structure_q__array_ls_tuple_ls_string;string_gr__gr_:
-
-.. das:function:: make_typemacro_template_instance(instance_type: Structure?; template_type: Structure?; ex: array<tuple<string;string>> = array<tuple<string;string>>())
-
-Annotates a structure as a typemacro template instance of the given template type.
-
-:Arguments: * **instance_type** :  :ref:`Structure <handle-ast-Structure>` ?
-
-            * **template_type** :  :ref:`Structure <handle-ast-Structure>` ?
-
-            * **ex** : array<tuple<string;string>>
 
 .. _function-typemacro_boost_is_typemacro_template_instance_TypeDeclPtr_TypeDeclPtr_array_ls_tuple_ls_string;string_gr__gr_:
 
@@ -127,6 +115,18 @@ template instance is determined by having parent == template.parent
             * **templateType** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
 
             * **extra** : array<tuple<string;string>>
+
+.. _function-typemacro_boost_make_typemacro_template_instance_Structure_q__Structure_q__array_ls_tuple_ls_string;string_gr__gr_:
+
+.. das:function:: make_typemacro_template_instance(instance_type: Structure?; template_type: Structure?; ex: array<tuple<string;string>> = array<tuple<string;string>>())
+
+Annotates a structure as a typemacro template instance of the given template type.
+
+:Arguments: * **instance_type** :  :ref:`Structure <handle-ast-Structure>` ?
+
+            * **template_type** :  :ref:`Structure <handle-ast-Structure>` ?
+
+            * **ex** : array<tuple<string;string>>
 
 .. _function-typemacro_boost_template_structure_name_Structure_q__array_ls_TypeMacroTemplateArgument_gr__array_ls_tuple_ls_string;string_gr__gr_:
 
@@ -144,10 +144,20 @@ Builds a mangled template structure name from its base name and argument types.
 Type inference helpers
 ++++++++++++++++++++++
 
+  *  :ref:`add_structure_aliases (structType: Structure?; var args: array\<TypeMacroTemplateArgument\>) <function-typemacro_boost_add_structure_aliases_Structure_q__array_ls_TypeMacroTemplateArgument_gr_>` 
   *  :ref:`infer_struct_aliases (structType: Structure?; var args: array\<TypeMacroTemplateArgument\>) : bool <function-typemacro_boost_infer_struct_aliases_Structure_q__array_ls_TypeMacroTemplateArgument_gr_>` 
   *  :ref:`infer_template_types (passArgument: TypeDeclPtr; var args: array\<TypeMacroTemplateArgument\>) : TypeDeclPtr <function-typemacro_boost_infer_template_types_TypeDeclPtr_array_ls_TypeMacroTemplateArgument_gr_>` 
-  *  :ref:`add_structure_aliases (structType: Structure?; var args: array\<TypeMacroTemplateArgument\>) <function-typemacro_boost_add_structure_aliases_Structure_q__array_ls_TypeMacroTemplateArgument_gr_>` 
   *  :ref:`verify_arguments (var args: array\<TypeMacroTemplateArgument\>) : bool <function-typemacro_boost_verify_arguments_array_ls_TypeMacroTemplateArgument_gr_>` 
+
+.. _function-typemacro_boost_add_structure_aliases_Structure_q__array_ls_TypeMacroTemplateArgument_gr_:
+
+.. das:function:: add_structure_aliases(structType: Structure?; args: array<TypeMacroTemplateArgument>)
+
+Adds all template argument type aliases to a structure.
+
+:Arguments: * **structType** :  :ref:`Structure <handle-ast-Structure>` ?
+
+            * **args** : array< :ref:`TypeMacroTemplateArgument <struct-typemacro_boost-TypeMacroTemplateArgument>` >
 
 .. _function-typemacro_boost_infer_struct_aliases_Structure_q__array_ls_TypeMacroTemplateArgument_gr_:
 
@@ -166,16 +176,6 @@ Infers structure alias types for all template arguments from a structure definit
 Infers and validates template argument types against a pass argument, returning the resolved type.
 
 :Arguments: * **passArgument** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
-
-            * **args** : array< :ref:`TypeMacroTemplateArgument <struct-typemacro_boost-TypeMacroTemplateArgument>` >
-
-.. _function-typemacro_boost_add_structure_aliases_Structure_q__array_ls_TypeMacroTemplateArgument_gr_:
-
-.. das:function:: add_structure_aliases(structType: Structure?; args: array<TypeMacroTemplateArgument>)
-
-Adds all template argument type aliases to a structure.
-
-:Arguments: * **structType** :  :ref:`Structure <handle-ast-Structure>` ?
 
             * **args** : array< :ref:`TypeMacroTemplateArgument <struct-typemacro_boost-TypeMacroTemplateArgument>` >
 
@@ -228,22 +228,12 @@ Marks the template structure's custom work as complete in its annotation.
 Type macro arguments
 ++++++++++++++++++++
 
-  *  :ref:`typemacro_argument (dimExpr: auto; index: int; var constType: auto(ExprConstType); var defaultValue: auto(ValueT)) : ValueT <function-typemacro_boost_typemacro_argument_auto_int_autoExprConstType_autoValueT_0x44>` 
   *  :ref:`typemacro_argument (dimExpr: auto; index: int; var constType: ExprConstString; var defaultValue: auto(ValueT)) : ValueT <function-typemacro_boost_typemacro_argument_auto_int_ExprConstString_autoValueT_0x51>` 
+  *  :ref:`typemacro_argument (dimExpr: auto; index: int; var constType: auto(ExprConstType); var defaultValue: auto(ValueT)) : ValueT <function-typemacro_boost_typemacro_argument_auto_int_autoExprConstType_autoValueT_0x44>` 
 
-.. _function-typemacro_boost_typemacro_argument_auto_int_autoExprConstType_autoValueT_0x44:
 
-.. das:function:: typemacro_argument(dimExpr: auto; index: int; constType: auto(ExprConstType); defaultValue: auto(ValueT)) : ValueT
-
-Extracts a typed constant argument at the given index from a type macro's dimension expressions.
-
-:Arguments: * **dimExpr** : auto
-
-            * **index** : int
-
-            * **constType** : auto(ExprConstType)
-
-            * **defaultValue** : auto(ValueT)
+typemacro_argument
+^^^^^^^^^^^^^^^^^^
 
 .. _function-typemacro_boost_typemacro_argument_auto_int_ExprConstString_autoValueT_0x51:
 
@@ -258,5 +248,11 @@ Extracts a string constant or function address argument at the given index from 
             * **constType** :  :ref:`ExprConstString <handle-ast-ExprConstString>` 
 
             * **defaultValue** : auto(ValueT)
+
+.. _function-typemacro_boost_typemacro_argument_auto_int_autoExprConstType_autoValueT_0x44:
+
+.. das:function:: typemacro_argument(dimExpr: auto; index: int; constType: auto(ExprConstType); defaultValue: auto(ValueT)) : ValueT
+
+----
 
 

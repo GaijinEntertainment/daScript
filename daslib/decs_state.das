@@ -11,6 +11,7 @@ module decs_state shared private
 //!
 //! Sends entity and archetype data to the debug-agent context
 //! for live inspection in the DAP debugger's variable view.
+//! Requires the ``decs`` module.
 
 require daslib/decs
 require daslib/strings_boost

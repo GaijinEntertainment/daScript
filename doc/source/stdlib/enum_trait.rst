@@ -81,10 +81,19 @@ Returns an iterator over all values of the given enumeration type.
 Enumeration conversion
 ++++++++++++++++++++++
 
+  *  :ref:`enum_to_table (ent: auto(EnumT)) : table\<string, EnumT\> <function-enum_trait_enum_to_table_autoEnumT_0x41>` 
   *  :ref:`string (arg: auto) : auto <function-enum_trait_string_auto_0x21>` 
   *  :ref:`to_enum (ent: auto(EnumT); name: string) : EnumT <function-enum_trait_to_enum_autoEnumT_string_0x28>` 
   *  :ref:`to_enum (ent: auto(EnumT); name: string; defaultValue: EnumT) : EnumT <function-enum_trait_to_enum_autoEnumT_string_EnumT_0x35>` 
-  *  :ref:`enum_to_table (ent: auto(EnumT)) : table\<string, EnumT\> <function-enum_trait_enum_to_table_autoEnumT_0x41>` 
+
+.. _function-enum_trait_enum_to_table_autoEnumT_0x41:
+
+.. das:function:: enum_to_table(ent: auto(EnumT)) : table<string, EnumT>
+
+converts enum type to array of tuples (name, value)
+ usage: let t = enum_to_table(type<EnumType>)
+
+:Arguments: * **ent** : auto(EnumT)
 
 .. _function-enum_trait_string_auto_0x21:
 
@@ -94,6 +103,10 @@ converts enum value to string
  usage: let s = string(EnumValue)
 
 :Arguments: * **arg** : auto
+
+
+to_enum
+^^^^^^^
 
 .. _function-enum_trait_to_enum_autoEnumT_string_0x28:
 
@@ -110,22 +123,6 @@ converts string to enum value, panics if not found
 
 .. das:function:: to_enum(ent: auto(EnumT); name: string; defaultValue: EnumT) : EnumT
 
-converts string to enum value, returns defaultValue if not found
- usage: let e = to_enum(type<EnumType>,"EnumValueName", EnumType.DefaultValue)
-
-:Arguments: * **ent** : auto(EnumT)
-
-            * **name** : string
-
-            * **defaultValue** : EnumT
-
-.. _function-enum_trait_enum_to_table_autoEnumT_0x41:
-
-.. das:function:: enum_to_table(ent: auto(EnumT)) : table<string, EnumT>
-
-converts enum type to array of tuples (name, value)
- usage: let t = enum_to_table(type<EnumType>)
-
-:Arguments: * **ent** : auto(EnumT)
+----
 
 

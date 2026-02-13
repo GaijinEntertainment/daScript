@@ -15,7 +15,7 @@ require daslib/array_boost
 require daslib/contracts
 
 def unique(var a : array<auto(TT)>) {
-    //! Returns array of the elements of a with duplicates removed.
+    //! Returns an array of elements from a with duplicates removed.
     var pidx = -1
     var b : array<TT -const -&>
     for (e, eidx in a, range(length(a))) {
@@ -28,9 +28,9 @@ def unique(var a : array<auto(TT)>) {
 }
 
 def sort_unique(var a : array<auto(TT)>) {
-    //! Returns array of the elements of a, sorted and with duplicates removed.
-    //! The elements of a are sorted in ascending order.
-    //! The resulted array has only unqiue elements.
+    //! Returns an array of elements from a, sorted and with duplicates removed.
+    //! The elements are sorted in ascending order.
+    //! The resulting array has only unique elements.
     if (empty(a)) {
         return
     }
@@ -41,7 +41,7 @@ def sort_unique(var a : array<auto(TT)>) {
 }
 
 def reverse(var a : array<auto>) {
-    //! Returns array of the elements of a in reverse order.
+    //! Reverses the elements of a in place.
     let l = length(a)
     let half = l / 2
     let lm1 = l - 1
@@ -51,7 +51,7 @@ def reverse(var a : array<auto>) {
 }
 
 def combine(a, b : array<auto(TT)>) {
-    //! Returns array of the elements of a and then b.
+    //! Returns a new array containing elements from a followed by b.
     var c : array<TT>
     reserve(c, length(a) + length(b))
     for (t in a) {
@@ -64,7 +64,7 @@ def combine(a, b : array<auto(TT)>) {
 }
 
 def lower_bound(a : array<auto(TT)>; f, l : int; val : TT const -&) {
-    //! Returns an iterator pointing to the first element in the range [first, last) that is not less than (i.e. greater or equal to) value, or last if no such element is found.
+    //! Returns the index of the first element in the range [f, l) that is not less than val, or l if no such element is found.
     assert(f >= 0 && f <= l, "lower bound first out of range")
     assert(l >= f && l <= length(a), "lower bound last out of range")
     var count = l - f
@@ -83,12 +83,12 @@ def lower_bound(a : array<auto(TT)>; f, l : int; val : TT const -&) {
 }
 
 def lower_bound(a : array<auto(TT)>; val : TT const -&) {
-    //! Returns an iterator pointing to the first element in the array that is not less than (i.e. greater or equal to) value, or length(a) if no such element is found.
+    //! Returns the index of the first element in the array that is not less than val, or length(a) if no such element is found.
     return lower_bound(a, 0, length(a), val)
 }
 
 def lower_bound(a : array<auto(TT)>; f, l : int; value : auto(QQ); less : block<(a : TT const -&, b : QQ) : bool>) {
-    //! Returns an iterator pointing to the first element in the range [first, last) that is not less than (i.e. greater or equal to) value, or last if no such element is found.
+    //! Returns the index of the first element in the range [f, l) for which less returns false, or l if no such element is found.
     assert(f >= 0 && f <= l, "lower bound first out of range")
     assert(l >= f && l <= length(a), "lower bound last out of range")
     var count = l - f
@@ -107,35 +107,35 @@ def lower_bound(a : array<auto(TT)>; f, l : int; value : auto(QQ); less : block<
 }
 
 def lower_bound(a : array<auto(TT)>; value : auto(QQ); less : block<(a : TT const -&, b : QQ) : bool>) {
-    //! Returns an iterator pointing to the first element in the array that is not less than (i.e. greater or equal to) value, or length(a) if no such element is found.
+    //! Returns the index of the first element in the array for which less returns false, or length(a) if no such element is found.
     return lower_bound(a, 0, length(a), value, less)
 }
 
 def binary_search(a : array<auto(TT)>; val : TT const -&) {
-    //! Returns true if an val appears within the array a.
-    //! Array a must be sorted.
+    //! Returns true if val appears within the array a.
+    //! The array must be sorted.
     let first = lower_bound(a, val)
     return (first != length(a)) && (!(val < a[first]))
 }
 
 def binary_search(a : array<auto(TT)>; f, last : int; val : TT const -&) {
-    //! Returns true if an val appears within the range [f, last).
-    //! Array a must be sorted.
+    //! Returns true if val appears within the range [f, last).
+    //! The array must be sorted.
     let first = lower_bound(a, f, last, val)
     return (first != last) && (!(val < a[first]))
 }
 
 def binary_search(a : array<auto(TT)>; val : TT const -&; less : block<(a, b : TT const -&) : bool>) {
-    //! Returns true if an val appears within the array a.
-    //! Array a must be sorted according to the provided less function.
+    //! Returns true if val appears within the array a.
+    //! The array must be sorted according to the provided less function.
     let first = lower_bound(a, val, less)
     let last = length(a)
     return (first != last) && (!invoke(less, val, a[first]))
 }
 
 def binary_search(a : array<auto(TT)>; f, last : int; val : TT const -&; less : block<(a, b : TT const -&) : bool>) {
-    //! Returns true if an val appears within the range [f, last).
-    //! Array a must be sorted according to the provided less function.
+    //! Returns true if val appears within the range [f, last).
+    //! The array must be sorted according to the provided less function.
     let first = lower_bound(a, f, last, val, less)
     return (first != last) && (!invoke(less, val, a[first]))
 }
@@ -152,7 +152,7 @@ def reverse(var a) {
 
 [expect_any_array(a)]
 def combine(a, b) {
-    //! Returns array of the elements of a and then b.
+    //! Returns a new array containing elements from a followed by b.
     unsafe {
         return combine(temp_array(a), temp_array(b))
     }
@@ -160,7 +160,7 @@ def combine(a, b) {
 
 [expect_any_array(a)]
 def lower_bound(a; f, l : int; val) {
-    //! Returns an iterator pointing to the first element in the range [first, last) that is not less than (i.e. greater or equal to) value, or last if no such element is found.
+    //! Returns the index of the first element in the range [f, l) that is not less than val, or l if no such element is found.
     static_if (typeinfo stripped_typename(a[0]) != typeinfo stripped_typename(val)) {
         concept_assert(false, "value type {typeinfo stripped_typename(val)} should be the same as array {typeinfo stripped_typename(a)} element type {typeinfo stripped_typename(a[0])}")
         return -1
@@ -173,7 +173,7 @@ def lower_bound(a; f, l : int; val) {
 
 [expect_any_array(a)]
 def lower_bound(a; val) {
-    //! Returns an iterator pointing to the first element in the array that is not less than (i.e. greater or equal to) value, or length(a) if no such element is found.
+    //! Returns the index of the first element in the array that is not less than val, or length(a) if no such element is found.
     static_if (typeinfo stripped_typename(a[0]) != typeinfo stripped_typename(val)) {
         concept_assert(false, "value type {typeinfo stripped_typename(val)} should be the same as array {typeinfo stripped_typename(a)} element type {typeinfo stripped_typename(a[0])}")
         return -1
@@ -186,7 +186,7 @@ def lower_bound(a; val) {
 
 [expect_any_array(a)]
 def lower_bound(a; f, l : int; val : auto(TT); less : block<(a, b : TT const -&) : bool>) {
-    //! Returns an iterator pointing to the first element in the range [first, last) that is not less than (i.e. greater or equal to) value, or last if no such element is found.
+    //! Returns the index of the first element in the range [f, l) for which less returns false, or l if no such element is found.
     static_if (typeinfo stripped_typename(a[0]) != typeinfo stripped_typename(val)) {
         concept_assert(false, "value type {typeinfo stripped_typename(val)} should be the same as array {typeinfo stripped_typename(a)} element type {typeinfo stripped_typename(a[0])}")
         return -1
@@ -199,7 +199,7 @@ def lower_bound(a; f, l : int; val : auto(TT); less : block<(a, b : TT const -&)
 
 [expect_any_array(a)]
 def lower_bound(a; val : auto(TT); less : block<(a, b : TT const -&) : bool>) {
-    //! Returns an iterator pointing to the first element in the array that is not less than (i.e. greater or equal to) value, or length(a) if no such element is found.
+    //! Returns the index of the first element in the array for which less returns false, or length(a) if no such element is found.
     static_if (typeinfo stripped_typename(a[0]) != typeinfo stripped_typename(val)) {
         concept_assert(false, "value type {typeinfo stripped_typename(val)} should be the same as array {typeinfo stripped_typename(a)} element type {typeinfo stripped_typename(a[0])}")
         return -1
@@ -212,7 +212,7 @@ def lower_bound(a; val : auto(TT); less : block<(a, b : TT const -&) : bool>) {
 
 [expect_any_array(a)]
 def binary_search(a; val) {
-    //! Returns true if an val appears within the array a.
+    //! Returns true if val appears within the array a.
     static_if (typeinfo stripped_typename(a[0]) != typeinfo stripped_typename(val)) {
         concept_assert(false, "value type {typeinfo stripped_typename(val)} should be the same as array {typeinfo stripped_typename(a)} element type {typeinfo stripped_typename(a[0])}")
         return -1
@@ -225,7 +225,7 @@ def binary_search(a; val) {
 
 [expect_any_array(a)]
 def binary_search(a; f, last : int; val) {
-    //! Returns true if an val appears within the range [f, last).
+    //! Returns true if val appears within the range [f, last).
     static_if (typeinfo stripped_typename(a[0]) != typeinfo stripped_typename(val)) {
         concept_assert(false, "value type {typeinfo stripped_typename(val)} should be the same as array {typeinfo stripped_typename(a)} element type {typeinfo stripped_typename(a[0])}")
         return -1
@@ -238,7 +238,7 @@ def binary_search(a; f, last : int; val) {
 
 [expect_any_array(a)]
 def binary_search(a; val : auto(TT); less : block<(a, b : TT const -&) : bool>) {
-    //! Returns true if an val appears within the array a.
+    //! Returns true if val appears within the array a.
     static_if (typeinfo stripped_typename(a[0]) != typeinfo stripped_typename(val)) {
         concept_assert(false, "value type {typeinfo stripped_typename(val)} should be the same as array {typeinfo stripped_typename(a)} element type {typeinfo stripped_typename(a[0])}")
         return -1
@@ -251,7 +251,7 @@ def binary_search(a; val : auto(TT); less : block<(a, b : TT const -&) : bool>) 
 
 [expect_any_array(a)]
 def binary_search(a; f, last : int; val : auto(TT); less : block<(a, b : TT const -&) : bool>) {
-    //! Returns true if an val appears within the range [f, last).
+    //! Returns true if val appears within the range [f, last).
     static_if (typeinfo stripped_typename(a[0]) != typeinfo stripped_typename(val)) {
         concept_assert(false, "value type {typeinfo stripped_typename(val)} should be the same as array {typeinfo stripped_typename(a)} element type {typeinfo stripped_typename(a[0])}")
         return -1
@@ -264,7 +264,7 @@ def binary_search(a; f, last : int; val : auto(TT); less : block<(a, b : TT cons
 
 [expect_any_array(arr)]
 def erase_all(var arr; value) {
-    //! Erase all elements equal to value from arr
+    //! Erases all elements equal to value from arr.
     static_if (typeinfo stripped_typename(arr[0]) != typeinfo stripped_typename(value)) {
         concept_assert(false, "value type {typeinfo stripped_typename(value)} should be the same as array {typeinfo stripped_typename(arr)} element type {typeinfo stripped_typename(arr[0])}")
         return -1
@@ -314,7 +314,7 @@ def topological_sort(nodes : array<auto(Node)>) {
 }
 
 def intersection(a, b : table<auto(TT)>) : table<TT> {
-    //! Returns the intersection of two sets
+    //! Returns the intersection of two sets.
     var result : table<TT>
     if (length(a) < length(b)) {
         for (k in keys(a)) {
@@ -333,7 +333,7 @@ def intersection(a, b : table<auto(TT)>) : table<TT> {
 }
 
 def union(a, b : table<auto(TT)>) : table<TT> {
-    //! Returns the union of two sets
+    //! Returns the union of two sets.
     var result : table<TT>
     for (k in keys(a)) {
         result |> insert(k)
@@ -345,7 +345,7 @@ def union(a, b : table<auto(TT)>) : table<TT> {
 }
 
 def difference(a, b : table<auto(TT)>) : table<TT> {
-    //! Returns the difference of two sets
+    //! Returns the difference of two sets.
     var result : table<TT>
     for (k in keys(a)) {
         if (!b |> key_exists(k)) {
@@ -356,7 +356,7 @@ def difference(a, b : table<auto(TT)>) : table<TT> {
 }
 
 def identical(a, b : table<auto(TT)>) : bool {
-    //! Returns true if the two sets are identical
+    //! Returns true if the two sets are identical.
     if (length(a) != length(b)) {
         return false
     }

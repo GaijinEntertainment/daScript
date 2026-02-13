@@ -9,6 +9,8 @@ The JOBQUE_BOOST module provides high-level job queue abstractions built on
 the low-level ``jobque`` primitives. It includes ``with_job``, ``with_job_status``,
 and channel-based patterns for simplified concurrent programming.
 
+See also :doc:`jobque` for the low-level job queue primitives.
+
 All functions and symbols are in "jobque_boost" module, use require to get access to it. ::
 
     require daslib/jobque_boost
@@ -79,10 +81,37 @@ Create a new thread
 Iteration
 +++++++++
 
+  *  :ref:`each (var channel: Channel?; tinfo: auto(TT)) : auto <function-jobque_boost_each_Channel_q__autoTT_0x11d>` 
+  *  :ref:`each_clone (var channel: Channel?; tinfo: auto(TT)) : auto <function-jobque_boost_each_clone_Channel_q__autoTT_0x137>` 
   *  :ref:`for_each (channel: Channel?; blk: block\<(res:auto(TT)#):void\>) : auto <function-jobque_boost_for_each_Channel_q__block_ls_res_c_autoTT_hh__c_void_gr_>` 
   *  :ref:`for_each_clone (channel: Channel?; blk: block\<(res:auto(TT)#):void\>) : auto <function-jobque_boost_for_each_clone_Channel_q__block_ls_res_c_autoTT_hh__c_void_gr_>` 
-  *  :ref:`each (var channel: Channel?; tinfo: auto(TT)) : auto <function-jobque_boost_each_Channel_q__autoTT_0x11c>` 
-  *  :ref:`each_clone (var channel: Channel?; tinfo: auto(TT)) : auto <function-jobque_boost_each_clone_Channel_q__autoTT_0x136>` 
+
+.. _function-jobque_boost_each_Channel_q__autoTT_0x11d:
+
+.. das:function:: each(channel: Channel?; tinfo: auto(TT)) : auto
+
+.. warning:: 
+  This function is deprecated.
+
+this iterator is used to iterate over the channel in order it was pushed.
+iterator stops once channel is depleted (internal entry counter is 0)
+iteration can happen on multiple threads or jobs at the same time.
+
+:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
+
+            * **tinfo** : auto(TT)
+
+.. _function-jobque_boost_each_clone_Channel_q__autoTT_0x137:
+
+.. das:function:: each_clone(channel: Channel?; tinfo: auto(TT)) : auto
+
+this iterator is used to iterate over the channel in order it was pushed.
+iterator stops once channel is depleted (internal entry counter is 0)
+iteration can happen on multiple threads or jobs at the same time.
+
+:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
+
+            * **tinfo** : auto(TT)
 
 .. _function-jobque_boost_for_each_Channel_q__block_ls_res_c_autoTT_hh__c_void_gr_:
 
@@ -111,51 +140,14 @@ this can happen on multiple threads or jobs at the same time.
 
             * **blk** : block<(res:auto(TT)#):void>
 
-.. _function-jobque_boost_each_Channel_q__autoTT_0x11c:
-
-.. das:function:: each(channel: Channel?; tinfo: auto(TT)) : auto
-
-.. warning:: 
-  This function is deprecated.
-
-this iterator is used to iterate over the channel in order it was pushed.
-iterator stops once channel is depleted (internal entry counter is 0)
-iteration can happen on multiple threads or jobs at the same time.
-
-:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
-
-            * **tinfo** : auto(TT)
-
-.. _function-jobque_boost_each_clone_Channel_q__autoTT_0x136:
-
-.. das:function:: each_clone(channel: Channel?; tinfo: auto(TT)) : auto
-
-this iterator is used to iterate over the channel in order it was pushed.
-iterator stops once channel is depleted (internal entry counter is 0)
-iteration can happen on multiple threads or jobs at the same time.
-
-:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
-
-            * **tinfo** : auto(TT)
-
 ++++++++++++
 Passing data
 ++++++++++++
 
-  *  :ref:`push_clone (channel: Channel?; data: auto(TT)) : auto <function-jobque_boost_push_clone_Channel_q__autoTT_0xc4>` 
   *  :ref:`push (channel: Channel?; data: auto?) : auto <function-jobque_boost_push_Channel_q__auto_q_>` 
-  *  :ref:`push_batch_clone (channel: Channel?; data: array\<auto(TT)\>) : auto <function-jobque_boost_push_batch_clone_Channel_q__array_ls_autoTT_gr_>` 
   *  :ref:`push_batch (channel: Channel?; data: array\<auto?\>) : auto <function-jobque_boost_push_batch_Channel_q__array_ls_auto_q__gr_>` 
-
-.. _function-jobque_boost_push_clone_Channel_q__autoTT_0xc4:
-
-.. das:function:: push_clone(channel: Channel?; data: auto(TT)) : auto
-
-clones data and pushed value to the channel (at the end)
-
-:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
-
-            * **data** : auto(TT)
+  *  :ref:`push_batch_clone (channel: Channel?; data: array\<auto(TT)\>) : auto <function-jobque_boost_push_batch_clone_Channel_q__array_ls_autoTT_gr_>` 
+  *  :ref:`push_clone (channel: Channel?; data: auto(TT)) : auto <function-jobque_boost_push_clone_Channel_q__autoTT_0xc5>` 
 
 .. _function-jobque_boost_push_Channel_q__auto_q_:
 
@@ -167,16 +159,6 @@ pushes value to the channel (at the end)
 
             * **data** : auto?
 
-.. _function-jobque_boost_push_batch_clone_Channel_q__array_ls_autoTT_gr_:
-
-.. das:function:: push_batch_clone(channel: Channel?; data: array<auto(TT)>) : auto
-
-clones data and pushed values to the channel (at the end)
-
-:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
-
-            * **data** : array<auto(TT)>
-
 .. _function-jobque_boost_push_batch_Channel_q__array_ls_auto_q__gr_:
 
 .. das:function:: push_batch(channel: Channel?; data: array<auto?>) : auto
@@ -187,16 +169,36 @@ pushes values to the channel (at the end)
 
             * **data** : array<auto?>
 
+.. _function-jobque_boost_push_batch_clone_Channel_q__array_ls_autoTT_gr_:
+
+.. das:function:: push_batch_clone(channel: Channel?; data: array<auto(TT)>) : auto
+
+clones data and pushed values to the channel (at the end)
+
+:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
+
+            * **data** : array<auto(TT)>
+
+.. _function-jobque_boost_push_clone_Channel_q__autoTT_0xc5:
+
+.. das:function:: push_clone(channel: Channel?; data: auto(TT)) : auto
+
+clones data and pushed value to the channel (at the end)
+
+:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
+
+            * **data** : auto(TT)
+
 ++++++++++++++
 Receiving data
 ++++++++++++++
 
   *  :ref:`gather (ch: Channel?; blk: block\<(arg:auto(TT)#):void\>) : auto <function-jobque_boost_gather_Channel_q__block_ls_arg_c_autoTT_hh__c_void_gr_>` 
-  *  :ref:`gather_ex (ch: Channel?; blk: block\<(arg:auto(TT)#;info:TypeInfo const?;var ctx:Context):void\>) : auto <function-jobque_boost_gather_ex_Channel_q__block_ls_arg_c_autoTT_hh_;info_c_TypeInfo_const_q_;var_ctx_c_Context_c_void_gr_>` 
   *  :ref:`gather_and_forward (ch: Channel?; toCh: Channel?; blk: block\<(arg:auto(TT)#):void\>) : auto <function-jobque_boost_gather_and_forward_Channel_q__Channel_q__block_ls_arg_c_autoTT_hh__c_void_gr_>` 
+  *  :ref:`gather_ex (ch: Channel?; blk: block\<(arg:auto(TT)#;info:TypeInfo const?;var ctx:Context):void\>) : auto <function-jobque_boost_gather_ex_Channel_q__block_ls_arg_c_autoTT_hh_;info_c_TypeInfo_const_q_;var_ctx_c_Context_c_void_gr_>` 
   *  :ref:`peek (ch: Channel?; blk: block\<(arg:auto(TT)#):void\>) : auto <function-jobque_boost_peek_Channel_q__block_ls_arg_c_autoTT_hh__c_void_gr_>` 
-  *  :ref:`pop_one (channel: Channel?; blk: block\<(res:auto(TT)#):void\>) : auto <function-jobque_boost_pop_one_Channel_q__block_ls_res_c_autoTT_hh__c_void_gr_>` 
   *  :ref:`pop_and_clone_one (channel: Channel?; blk: block\<(res:auto(TT)#):void\>) : auto <function-jobque_boost_pop_and_clone_one_Channel_q__block_ls_res_c_autoTT_hh__c_void_gr_>` 
+  *  :ref:`pop_one (channel: Channel?; blk: block\<(res:auto(TT)#):void\>) : auto <function-jobque_boost_pop_one_Channel_q__block_ls_res_c_autoTT_hh__c_void_gr_>` 
 
 .. _function-jobque_boost_gather_Channel_q__block_ls_arg_c_autoTT_hh__c_void_gr_:
 
@@ -208,17 +210,6 @@ afterwards input is consumed
 :Arguments: * **ch** :  :ref:`Channel <handle-jobque-Channel>` ?
 
             * **blk** : block<(arg:auto(TT)#):void>
-
-.. _function-jobque_boost_gather_ex_Channel_q__block_ls_arg_c_autoTT_hh_;info_c_TypeInfo_const_q_;var_ctx_c_Context_c_void_gr_:
-
-.. das:function:: gather_ex(ch: Channel?; blk: block<(arg:auto(TT)#;info:TypeInfo const?;var ctx:Context):void>) : auto
-
-reads input from the channel (in order it was pushed) and invokes the block on each input.
-afterwards input is consumed
-
-:Arguments: * **ch** :  :ref:`Channel <handle-jobque-Channel>` ?
-
-            * **blk** : block<(arg:auto(TT)#;info: :ref:`TypeInfo <handle-rtti-TypeInfo>` ?;ctx: :ref:`Context <handle-rtti-Context>` ):void>
 
 .. _function-jobque_boost_gather_and_forward_Channel_q__Channel_q__block_ls_arg_c_autoTT_hh__c_void_gr_:
 
@@ -233,6 +224,17 @@ afterwards input is consumed
 
             * **blk** : block<(arg:auto(TT)#):void>
 
+.. _function-jobque_boost_gather_ex_Channel_q__block_ls_arg_c_autoTT_hh_;info_c_TypeInfo_const_q_;var_ctx_c_Context_c_void_gr_:
+
+.. das:function:: gather_ex(ch: Channel?; blk: block<(arg:auto(TT)#;info:TypeInfo const?;var ctx:Context):void>) : auto
+
+reads input from the channel (in order it was pushed) and invokes the block on each input.
+afterwards input is consumed
+
+:Arguments: * **ch** :  :ref:`Channel <handle-jobque-Channel>` ?
+
+            * **blk** : block<(arg:auto(TT)#;info: :ref:`TypeInfo <handle-rtti-TypeInfo>` ?;ctx: :ref:`Context <handle-rtti-Context>` ):void>
+
 .. _function-jobque_boost_peek_Channel_q__block_ls_arg_c_autoTT_hh__c_void_gr_:
 
 .. das:function:: peek(ch: Channel?; blk: block<(arg:auto(TT)#):void>) : auto
@@ -243,6 +245,16 @@ afterwards input is not consumed
 :Arguments: * **ch** :  :ref:`Channel <handle-jobque-Channel>` ?
 
             * **blk** : block<(arg:auto(TT)#):void>
+
+.. _function-jobque_boost_pop_and_clone_one_Channel_q__block_ls_res_c_autoTT_hh__c_void_gr_:
+
+.. das:function:: pop_and_clone_one(channel: Channel?; blk: block<(res:auto(TT)#):void>) : auto
+
+reads one command from channel
+
+:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
+
+            * **blk** : block<(res:auto(TT)#):void>
 
 .. _function-jobque_boost_pop_one_Channel_q__block_ls_res_c_autoTT_hh__c_void_gr_:
 
@@ -257,45 +269,25 @@ reads one command from channel
 
             * **blk** : block<(res:auto(TT)#):void>
 
-.. _function-jobque_boost_pop_and_clone_one_Channel_q__block_ls_res_c_autoTT_hh__c_void_gr_:
-
-.. das:function:: pop_and_clone_one(channel: Channel?; blk: block<(res:auto(TT)#):void>) : auto
-
-reads one command from channel
-
-:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
-
-            * **blk** : block<(res:auto(TT)#):void>
-
 ++++++++++++++++++
 LockBox operations
 ++++++++++++++++++
 
-  *  :ref:`set (box: LockBox?; data: auto(TT)) : auto <function-jobque_boost_set_LockBox_q__autoTT_0xe4>` 
-  *  :ref:`set (box: LockBox?; data: auto?) : auto <function-jobque_boost_set_LockBox_q__auto_q_>` 
+  *  :ref:`clear (box: LockBox?; type_: auto(TT)) : auto <function-jobque_boost_clear_LockBox_q__autoTT_0x10e>` 
   *  :ref:`get (box: LockBox?; blk: block\<(res:auto(TT)#):void\>) : auto <function-jobque_boost_get_LockBox_q__block_ls_res_c_autoTT_hh__c_void_gr_>` 
+  *  :ref:`set (box: LockBox?; data: auto?) : auto <function-jobque_boost_set_LockBox_q__auto_q_>` 
+  *  :ref:`set (box: LockBox?; data: auto(TT)) : auto <function-jobque_boost_set_LockBox_q__autoTT_0xe5>` 
   *  :ref:`update (box: LockBox?; blk: block\<(var res:auto(TT)#):void\>) : auto <function-jobque_boost_update_LockBox_q__block_ls_var_res_c_autoTT_hh__c_void_gr_>` 
-  *  :ref:`clear (box: LockBox?; type_: auto(TT)) : auto <function-jobque_boost_clear_LockBox_q__autoTT_0x10d>` 
 
-.. _function-jobque_boost_set_LockBox_q__autoTT_0xe4:
+.. _function-jobque_boost_clear_LockBox_q__autoTT_0x10e:
 
-.. das:function:: set(box: LockBox?; data: auto(TT)) : auto
+.. das:function:: clear(box: LockBox?; type_: auto(TT)) : auto
 
-clones data and sets value to the lock box
-
-:Arguments: * **box** :  :ref:`LockBox <handle-jobque-LockBox>` ?
-
-            * **data** : auto(TT)
-
-.. _function-jobque_boost_set_LockBox_q__auto_q_:
-
-.. das:function:: set(box: LockBox?; data: auto?) : auto
-
-sets value to the lock box
+clear value from the lock box
 
 :Arguments: * **box** :  :ref:`LockBox <handle-jobque-LockBox>` ?
 
-            * **data** : auto?
+            * **type_** : auto(TT)
 
 .. _function-jobque_boost_get_LockBox_q__block_ls_res_c_autoTT_hh__c_void_gr_:
 
@@ -307,6 +299,26 @@ reads value from the lock box and invokes the block on it
 
             * **blk** : block<(res:auto(TT)#):void>
 
+
+set
+^^^
+
+.. _function-jobque_boost_set_LockBox_q__auto_q_:
+
+.. das:function:: set(box: LockBox?; data: auto?) : auto
+
+sets value to the lock box
+
+:Arguments: * **box** :  :ref:`LockBox <handle-jobque-LockBox>` ?
+
+            * **data** : auto?
+
+.. _function-jobque_boost_set_LockBox_q__autoTT_0xe5:
+
+.. das:function:: set(box: LockBox?; data: auto(TT)) : auto
+
+----
+
 .. _function-jobque_boost_update_LockBox_q__block_ls_var_res_c_autoTT_hh__c_void_gr_:
 
 .. das:function:: update(box: LockBox?; blk: block<(var res:auto(TT)#):void>) : auto
@@ -316,16 +328,6 @@ update value in the lock box and invokes the block on it
 :Arguments: * **box** :  :ref:`LockBox <handle-jobque-LockBox>` ?
 
             * **blk** : block<(res:auto(TT)#):void>
-
-.. _function-jobque_boost_clear_LockBox_q__autoTT_0x10d:
-
-.. das:function:: clear(box: LockBox?; type_: auto(TT)) : auto
-
-clear value from the lock box
-
-:Arguments: * **box** :  :ref:`LockBox <handle-jobque-LockBox>` ?
-
-            * **type_** : auto(TT)
 
 ++++++++++++++++++++++++
 Internal capture details

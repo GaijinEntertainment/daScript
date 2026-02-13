@@ -102,6 +102,18 @@ When editing RST files in `doc/source/reference/language/`:
 - `func.moreFlags.propertyFunction` — property accessor (name starts with `.\``)
 - `func.classParent` — pointer to the struct/class that owns the method
 
+### Table operations
+
+- `table[key]` **inserts** a new default entry if `key` is missing — use only when you want insert-on-access
+- `table[key]` requires `unsafe` by default; add `options unsafe_table_lookup = false` to allow safe `[]` access
+- `table?[key] ?? default_value` — safe lookup with fallback, does NOT insert missing keys
+- `key_exists(table, key)` — check if a key is present without inserting
+- `table |> insert(key, value)` — insert into `table<K;V>`; `table |> insert(key)` — insert into set `table<K>`
+- `table |> erase(key)` — remove a key
+- **Never use two `[]` lookups on the same table in one expression** (e.g. `tab[k1] = tab[k2]`) — tables are unboxed containers and re-hashing on insert can invalidate the first reference
+- `find(table, key) <| $(pval) { ... }` — block-based lookup; block receives pointer to value if found
+- `get(table, key, blk)` — similar block-based access (see `daslib/builtin.das`)
+
 ## Keywords Reference
 
 `aka` — variable name alias (`var a aka alpha = 42`, `for (x aka element in arr)`)

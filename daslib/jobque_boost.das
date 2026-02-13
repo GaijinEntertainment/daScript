@@ -13,6 +13,7 @@ module jobque_boost shared public
 //! ``with_job_status``, ``channel_next``, ``channel_push``, and
 //! other convenience wrappers that capture lambda closures and
 //! correctly manage context cloning for multi-threaded execution.
+//! Extends the built-in ``jobque`` module.
 
 require jobque public
 

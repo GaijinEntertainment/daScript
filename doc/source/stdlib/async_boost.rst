@@ -48,15 +48,13 @@ use 'return false' to immediately return from the generator.
 Awaiting
 ++++++++
 
-  *  :ref:`await_next_frame () <function-async_boost_await_next_frame>` 
   *  :ref:`await (var a: iterator\<bool\>) : bool <function-async_boost_await_iterator_ls_bool_gr_>` 
   *  :ref:`await (var a: iterator\<variant\<res:auto(T);wait:bool\>\>) : T <function-async_boost_await_iterator_ls_variant_ls_res_c_autoT;wait_c_bool_gr__gr_>` 
+  *  :ref:`await_next_frame () <function-async_boost_await_next_frame>` 
 
-.. _function-async_boost_await_next_frame:
 
-.. das:function:: await_next_frame()
-
-This function is used to suspend coroutine until next frame.
+await
+^^^^^
 
 .. _function-async_boost_await_iterator_ls_bool_gr_:
 
@@ -70,9 +68,13 @@ This function is used to wait for the result of the async function.
 
 .. das:function:: await(a: iterator<variant<res:auto(T);wait:bool>>) : T
 
-This function is used to wait for the result of the async function.
+----
 
-:Arguments: * **a** : iterator<variant<res:auto(T);wait:bool>>
+.. _function-async_boost_await_next_frame:
+
+.. das:function:: await_next_frame()
+
+This function is used to suspend coroutine until next frame.
 
 +++++++++++++++++++
 Running async tasks

@@ -2,6 +2,8 @@ The DECS_BOOST module provides convenience macros and syntactic sugar for
 the DECS entity component system, including simplified component registration,
 entity creation, and system definition patterns.
 
+See also :doc:`decs` for the core ECS runtime and :doc:`decs_state` for entity state machines.
+
 All functions and symbols are in "decs_boost" module, use require to get access to it. ::
 
     require daslib/decs_boost

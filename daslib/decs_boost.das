@@ -13,6 +13,7 @@ module decs_boost shared private
 //! Implements the ``decs_query`` block macro that generates
 //! type-safe, zero-overhead iteration over ECS archetypes.
 //! Also provides ``[decs_event]`` and ``[decs_template]``.
+//! Requires the ``decs`` module.
 
 require daslib/decs public
 require daslib/ast_boost

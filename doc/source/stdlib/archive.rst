@@ -154,32 +154,36 @@ Initialize the serializer for reading from the given data.
 Serialization
 +++++++++++++
 
-  *  :ref:`serialize (var arch: Archive; var value: float3x3) <function-archive_serialize_Archive_float3x3>` 
-  *  :ref:`serialize (var arch: Archive; var value: float3x4) <function-archive_serialize_Archive_float3x4>` 
-  *  :ref:`serialize (var arch: Archive; var value: float4x4) <function-archive_serialize_Archive_float4x4>` 
-  *  :ref:`serialize (var arch: Archive; var value: string&) <function-archive_serialize_Archive_string>` 
-  *  :ref:`serialize_raw (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_raw_Archive_autoTT_0x62>` 
   *  :ref:`read_raw (var arch: Archive; var value: auto(TT)&) : auto <function-archive_read_raw_Archive_autoTT_0x6b>` 
-  *  :ref:`write_raw (var arch: Archive; var value: auto(TT)&) : auto <function-archive_write_raw_Archive_autoTT_0x71>` 
+  *  :ref:`serialize (var arch: Archive; var value: float3x4) <function-archive_serialize_Archive_float3x4>` 
+  *  :ref:`serialize (var arch: Archive; var value: string&) <function-archive_serialize_Archive_string>` 
+  *  :ref:`serialize (var arch: Archive; var value: float3x3) <function-archive_serialize_Archive_float3x3>` 
   *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT_0x78>` 
+  *  :ref:`serialize (var arch: Archive; var value: float4x4) <function-archive_serialize_Archive_float4x4>` 
   *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT_0x7e>` 
-  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT_0x9e>` 
+  *  :ref:`serialize (var arch: Archive; var value: table\<auto(KT), auto(VT)\>) : auto <function-archive_serialize_Archive_table_ls_autoKT,_autoVT_gr_>` 
   *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT_0xa9>` 
+  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT_0x9e>` 
   *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT_0xb4>` 
   *  :ref:`serialize (var arch: Archive; var value: auto(TT)[]) : auto <function-archive_serialize_Archive_autoTT_0xc6>` 
   *  :ref:`serialize (var arch: Archive; var value: array\<auto(TT)\>) : auto <function-archive_serialize_Archive_array_ls_autoTT_gr_>` 
-  *  :ref:`serialize (var arch: Archive; var value: table\<auto(KT), auto(VT)\>) : auto <function-archive_serialize_Archive_table_ls_autoKT,_autoVT_gr_>` 
   *  :ref:`serialize (var arch: Archive; var value: auto(TT)?) : auto <function-archive_serialize_Archive_autoTT_q_>` 
+  *  :ref:`serialize_raw (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_raw_Archive_autoTT_0x62>` 
+  *  :ref:`write_raw (var arch: Archive; var value: auto(TT)&) : auto <function-archive_write_raw_Archive_autoTT_0x71>` 
 
-.. _function-archive_serialize_Archive_float3x3:
+.. _function-archive_read_raw_Archive_autoTT_0x6b:
 
-.. das:function:: serialize(arch: Archive; value: float3x3)
+.. das:function:: read_raw(arch: Archive; value: auto(TT)&) : auto
 
-Serializes float3x3 matrix
+Read raw data (straight up bytes for raw pod)
 
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
-            * **value** :  :ref:`float3x3 <handle-math-float3x3>` 
+            * **value** : auto(TT)&
+
+
+serialize
+^^^^^^^^^
 
 .. _function-archive_serialize_Archive_float3x4:
 
@@ -191,41 +195,61 @@ Serializes float3x4 matrix
 
             * **value** :  :ref:`float3x4 <handle-math-float3x4>` 
 
-.. _function-archive_serialize_Archive_float4x4:
-
-.. das:function:: serialize(arch: Archive; value: float4x4)
-
-Serializes float4x4 matrix
-
-:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
-
-            * **value** :  :ref:`float4x4 <handle-math-float4x4>` 
-
 .. _function-archive_serialize_Archive_string:
 
 .. das:function:: serialize(arch: Archive; value: string&)
 
-Serializes string by serializing its length and characters.
+.. _function-archive_serialize_Archive_float3x3:
 
-:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
+.. das:function:: serialize(arch: Archive; value: float3x3)
 
-            * **value** : string&
+.. _function-archive_serialize_Archive_autoTT_0x78:
+
+.. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
+
+.. _function-archive_serialize_Archive_float4x4:
+
+.. das:function:: serialize(arch: Archive; value: float4x4)
+
+.. _function-archive_serialize_Archive_autoTT_0x7e:
+
+.. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
+
+.. _function-archive_serialize_Archive_table_ls_autoKT,_autoVT_gr_:
+
+.. das:function:: serialize(arch: Archive; value: table<auto(KT), auto(VT)>) : auto
+
+.. _function-archive_serialize_Archive_autoTT_0xa9:
+
+.. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
+
+.. _function-archive_serialize_Archive_autoTT_0x9e:
+
+.. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
+
+.. _function-archive_serialize_Archive_autoTT_0xb4:
+
+.. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
+
+.. _function-archive_serialize_Archive_autoTT_0xc6:
+
+.. das:function:: serialize(arch: Archive; value: auto(TT)[]) : auto
+
+.. _function-archive_serialize_Archive_array_ls_autoTT_gr_:
+
+.. das:function:: serialize(arch: Archive; value: array<auto(TT)>) : auto
+
+.. _function-archive_serialize_Archive_autoTT_q_:
+
+.. das:function:: serialize(arch: Archive; value: auto(TT)?) : auto
+
+----
 
 .. _function-archive_serialize_raw_Archive_autoTT_0x62:
 
 .. das:function:: serialize_raw(arch: Archive; value: auto(TT)&) : auto
 
 Serialize raw data (straight up bytes for raw pod)
-
-:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
-
-            * **value** : auto(TT)&
-
-.. _function-archive_read_raw_Archive_autoTT_0x6b:
-
-.. das:function:: read_raw(arch: Archive; value: auto(TT)&) : auto
-
-Read raw data (straight up bytes for raw pod)
 
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
@@ -241,110 +265,12 @@ Write raw data (straight up bytes for raw pod)
 
             * **value** : auto(TT)&
 
-.. _function-archive_serialize_Archive_autoTT_0x78:
-
-.. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
-
-Serializes variant by serializing the index and the active field.
-
-:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
-
-            * **value** : auto(TT)&
-
-.. _function-archive_serialize_Archive_autoTT_0x7e:
-
-.. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
-
-Serializes variant by serializing the index and the active field.
-
-:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
-
-            * **value** : auto(TT)&
-
-.. _function-archive_serialize_Archive_autoTT_0x9e:
-
-.. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
-
-Serializes variant by serializing the index and the active field.
-
-:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
-
-            * **value** : auto(TT)&
-
-.. _function-archive_serialize_Archive_autoTT_0xa9:
-
-.. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
-
-Serializes variant by serializing the index and the active field.
-
-:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
-
-            * **value** : auto(TT)&
-
-.. _function-archive_serialize_Archive_autoTT_0xb4:
-
-.. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
-
-Serializes variant by serializing the index and the active field.
-
-:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
-
-            * **value** : auto(TT)&
-
-.. _function-archive_serialize_Archive_autoTT_0xc6:
-
-.. das:function:: serialize(arch: Archive; value: auto(TT)[]) : auto
-
-Serializes array by serializing its length and each element.
-
-:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
-
-            * **value** : auto(TT)[-1]
-
-.. _function-archive_serialize_Archive_array_ls_autoTT_gr_:
-
-.. das:function:: serialize(arch: Archive; value: array<auto(TT)>) : auto
-
-Serializes array by serializing its length and each element.
-
-:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
-
-            * **value** : array<auto(TT)>
-
-.. _function-archive_serialize_Archive_table_ls_autoKT,_autoVT_gr_:
-
-.. das:function:: serialize(arch: Archive; value: table<auto(KT), auto(VT)>) : auto
-
-Serializes table by serializing its length and each key-value pair.
-
-:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
-
-            * **value** : table<auto(KT);auto(VT)>
-
-.. _function-archive_serialize_Archive_autoTT_q_:
-
-.. das:function:: serialize(arch: Archive; value: auto(TT)?) : auto
-
-Serializes nullable type by serializing a flag and the value if present.
-
-:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
-
-            * **value** : auto(TT)?
-
 ++++++++++++++
 Memory archive
 ++++++++++++++
 
-  *  :ref:`mem_archive_save (var t: auto&) : auto <function-archive_mem_archive_save_auto_0x119>` 
   *  :ref:`mem_archive_load (var data: array\<uint8\>; var t: auto&; canfail: bool = false) : bool <function-archive_mem_archive_load_array_ls_uint8_gr__auto_bool_0x121>` 
-
-.. _function-archive_mem_archive_save_auto_0x119:
-
-.. das:function:: mem_archive_save(t: auto&) : auto
-
-Saves the object to a memory archive. Result is array<uint8> with the serialized data.
-
-:Arguments: * **t** : auto&
+  *  :ref:`mem_archive_save (var t: auto&) : auto <function-archive_mem_archive_save_auto_0x119>` 
 
 .. _function-archive_mem_archive_load_array_ls_uint8_gr__auto_bool_0x121:
 
@@ -357,5 +283,13 @@ Loads the object from a memory archive. `data` is the array<uint8> with the seri
             * **t** : auto&
 
             * **canfail** : bool
+
+.. _function-archive_mem_archive_save_auto_0x119:
+
+.. das:function:: mem_archive_save(t: auto&) : auto
+
+Saves the object to a memory archive. Result is array<uint8> with the serialized data.
+
+:Arguments: * **t** : auto&
 
 

@@ -34,35 +34,19 @@ Example: ::
 Split and join
 ++++++++++++++
 
-  *  :ref:`split (text: string implicit; delim: string implicit) : array\<string\> <function-strings_boost_split_string_implicit_string_implicit>` 
-  *  :ref:`split_by_chars (text: string implicit; delim: string implicit) : array\<string\> <function-strings_boost_split_by_chars_string_implicit_string_implicit>` 
   *  :ref:`join (it: auto; separator: string implicit) : auto <function-strings_boost_join_auto_string_implicit_0x1d>` 
-  *  :ref:`join (var it: iterator\<auto(TT)\>; separator: string implicit) : auto <function-strings_boost_join_iterator_ls_autoTT_gr__string_implicit>` 
   *  :ref:`join (iterable: array\<auto(TT)\>; separator: string; blk: block\<(var writer:StringBuilderWriter;elem:TT):void\>) : string <function-strings_boost_join_array_ls_autoTT_gr__string_block_ls_var_writer_c_StringBuilderWriter;elem_c_TT_c_void_gr_>` 
+  *  :ref:`join (var it: iterator\<auto(TT)\>; separator: string implicit) : auto <function-strings_boost_join_iterator_ls_autoTT_gr__string_implicit>` 
   *  :ref:`join (var iterable: iterator\<auto(TT)\>; separator: string; blk: block\<(var writer:StringBuilderWriter;elem:TT):void\>) : string <function-strings_boost_join_iterator_ls_autoTT_gr__string_block_ls_var_writer_c_StringBuilderWriter;elem_c_TT_c_void_gr_>` 
   *  :ref:`join (iterable: auto(TT)[]; separator: string; blk: block\<(var writer:StringBuilderWriter;elem:TT):void\>) : string <function-strings_boost_join_autoTT_string_block_ls_var_writer_c_StringBuilderWriter;elem_c_TT_c_void_gr__0x64>` 
+  *  :ref:`split (text: string implicit; delim: string implicit) : array\<string\> <function-strings_boost_split_string_implicit_string_implicit>` 
   *  :ref:`split (text: string implicit; delim: string implicit; blk: block\<(arg:array\<string\>#):auto\>) : auto <function-strings_boost_split_string_implicit_string_implicit_block_ls_arg_c_array_ls_string_gr__hh__c_auto_gr_>` 
+  *  :ref:`split_by_chars (text: string implicit; delim: string implicit) : array\<string\> <function-strings_boost_split_by_chars_string_implicit_string_implicit>` 
   *  :ref:`split_by_chars (text: string implicit; delim: string implicit; blk: block\<(arg:array\<string\>#):auto\>) : auto <function-strings_boost_split_by_chars_string_implicit_string_implicit_block_ls_arg_c_array_ls_string_gr__hh__c_auto_gr_>` 
 
-.. _function-strings_boost_split_string_implicit_string_implicit:
 
-.. das:function:: split(text: string implicit; delim: string implicit) : array<string>
-
-Splits a string by the specified delimiter characters, invoking a block for each resulting substring.
-
-:Arguments: * **text** : string implicit
-
-            * **delim** : string implicit
-
-.. _function-strings_boost_split_by_chars_string_implicit_string_implicit:
-
-.. das:function:: split_by_chars(text: string implicit; delim: string implicit) : array<string>
-
-Splits a string by the specified delimiter characters and returns an array of substrings.
-
-:Arguments: * **text** : string implicit
-
-            * **delim** : string implicit
+join
+^^^^
 
 .. _function-strings_boost_join_auto_string_implicit_0x1d:
 
@@ -74,55 +58,31 @@ Joins the elements of an iterable into a single string using the specified separ
 
             * **separator** : string implicit
 
-.. _function-strings_boost_join_iterator_ls_autoTT_gr__string_implicit:
-
-.. das:function:: join(it: iterator<auto(TT)>; separator: string implicit) : auto
-
-Joins the elements of an iterable into a single string using the specified separator.
-
-:Arguments: * **it** : iterator<auto(TT)>
-
-            * **separator** : string implicit
-
 .. _function-strings_boost_join_array_ls_autoTT_gr__string_block_ls_var_writer_c_StringBuilderWriter;elem_c_TT_c_void_gr_:
 
 .. das:function:: join(iterable: array<auto(TT)>; separator: string; blk: block<(var writer:StringBuilderWriter;elem:TT):void>) : string
 
-Joins the elements of an iterable into a single string using the specified separator.
+.. _function-strings_boost_join_iterator_ls_autoTT_gr__string_implicit:
 
-:Arguments: * **iterable** : array<auto(TT)>
-
-            * **separator** : string
-
-            * **blk** : block<(writer: :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ;elem:TT):void>
+.. das:function:: join(it: iterator<auto(TT)>; separator: string implicit) : auto
 
 .. _function-strings_boost_join_iterator_ls_autoTT_gr__string_block_ls_var_writer_c_StringBuilderWriter;elem_c_TT_c_void_gr_:
 
 .. das:function:: join(iterable: iterator<auto(TT)>; separator: string; blk: block<(var writer:StringBuilderWriter;elem:TT):void>) : string
 
-Joins the elements of an iterable into a single string using the specified separator.
-
-:Arguments: * **iterable** : iterator<auto(TT)>
-
-            * **separator** : string
-
-            * **blk** : block<(writer: :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ;elem:TT):void>
-
 .. _function-strings_boost_join_autoTT_string_block_ls_var_writer_c_StringBuilderWriter;elem_c_TT_c_void_gr__0x64:
 
 .. das:function:: join(iterable: auto(TT)[]; separator: string; blk: block<(var writer:StringBuilderWriter;elem:TT):void>) : string
 
-Joins the elements of an iterable into a single string using the specified separator.
+----
 
-:Arguments: * **iterable** : auto(TT)[-1]
 
-            * **separator** : string
+split
+^^^^^
 
-            * **blk** : block<(writer: :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ;elem:TT):void>
+.. _function-strings_boost_split_string_implicit_string_implicit:
 
-.. _function-strings_boost_split_string_implicit_string_implicit_block_ls_arg_c_array_ls_string_gr__hh__c_auto_gr_:
-
-.. das:function:: split(text: string implicit; delim: string implicit; blk: block<(arg:array<string>#):auto>) : auto
+.. das:function:: split(text: string implicit; delim: string implicit) : array<string>
 
 Splits a string by the specified delimiter characters, invoking a block for each resulting substring.
 
@@ -130,11 +90,19 @@ Splits a string by the specified delimiter characters, invoking a block for each
 
             * **delim** : string implicit
 
-            * **blk** : block<(arg:array<string>#):auto>
+.. _function-strings_boost_split_string_implicit_string_implicit_block_ls_arg_c_array_ls_string_gr__hh__c_auto_gr_:
 
-.. _function-strings_boost_split_by_chars_string_implicit_string_implicit_block_ls_arg_c_array_ls_string_gr__hh__c_auto_gr_:
+.. das:function:: split(text: string implicit; delim: string implicit; blk: block<(arg:array<string>#):auto>) : auto
 
-.. das:function:: split_by_chars(text: string implicit; delim: string implicit; blk: block<(arg:array<string>#):auto>) : auto
+----
+
+
+split_by_chars
+^^^^^^^^^^^^^^
+
+.. _function-strings_boost_split_by_chars_string_implicit_string_implicit:
+
+.. das:function:: split_by_chars(text: string implicit; delim: string implicit) : array<string>
 
 Splits a string by the specified delimiter characters and returns an array of substrings.
 
@@ -142,7 +110,11 @@ Splits a string by the specified delimiter characters and returns an array of su
 
             * **delim** : string implicit
 
-            * **blk** : block<(arg:array<string>#):auto>
+.. _function-strings_boost_split_by_chars_string_implicit_string_implicit_block_ls_arg_c_array_ls_string_gr__hh__c_auto_gr_:
+
+.. das:function:: split_by_chars(text: string implicit; delim: string implicit; blk: block<(arg:array<string>#):auto>) : auto
+
+----
 
 ++++++++++
 Formatting
@@ -165,21 +137,13 @@ Pads the string with trailing spaces to reach the specified minimum width.
 Queries and comparisons
 +++++++++++++++++++++++
 
-  *  :ref:`is_character_at (foo: array\<uint8\>; idx: int; ch: int) : auto <function-strings_boost_is_character_at_array_ls_uint8_gr__int_int>` 
   *  :ref:`eq (a: string implicit; b: das_string) : auto <function-strings_boost_eq_string_implicit_das_string>` 
   *  :ref:`eq (b: das_string; a: string implicit) : auto <function-strings_boost_eq_das_string_string_implicit>` 
+  *  :ref:`is_character_at (foo: array\<uint8\>; idx: int; ch: int) : auto <function-strings_boost_is_character_at_array_ls_uint8_gr__int_int>` 
 
-.. _function-strings_boost_is_character_at_array_ls_uint8_gr__int_int:
 
-.. das:function:: is_character_at(foo: array<uint8>; idx: int; ch: int) : auto
-
-Returns ``true`` if the byte at the specified index in the array equals the given character code.
-
-:Arguments: * **foo** : array<uint8> implicit
-
-            * **idx** : int
-
-            * **ch** : int
+eq
+^^
 
 .. _function-strings_boost_eq_string_implicit_das_string:
 
@@ -195,11 +159,19 @@ Compares a ``string`` with a ``das_string`` for equality, returning ``true`` if 
 
 .. das:function:: eq(b: das_string; a: string implicit) : auto
 
-Compares a ``string`` with a ``das_string`` for equality, returning ``true`` if they match.
+----
 
-:Arguments: * **b** :  :ref:`das_string <handle-builtin-das_string>` 
+.. _function-strings_boost_is_character_at_array_ls_uint8_gr__int_int:
 
-            * **a** : string implicit
+.. das:function:: is_character_at(foo: array<uint8>; idx: int; ch: int) : auto
+
+Returns ``true`` if the byte at the specified index in the array equals the given character code.
+
+:Arguments: * **foo** : array<uint8> implicit
+
+            * **idx** : int
+
+            * **ch** : int
 
 +++++++
 Replace

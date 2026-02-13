@@ -94,19 +94,13 @@ convert degrees to radians
 Intersections
 +++++++++++++
 
-  *  :ref:`is_intersecting (a: AABR; b: AABR) : bool <function-math_boost_is_intersecting_AABR_AABR>` 
   *  :ref:`is_intersecting (a: AABB; b: AABB) : bool <function-math_boost_is_intersecting_AABB_AABB>` 
+  *  :ref:`is_intersecting (a: AABR; b: AABR) : bool <function-math_boost_is_intersecting_AABR_AABR>` 
   *  :ref:`is_intersecting (ray: Ray; aabb: AABB; Tmin: float = 0f; Tmax: float = FLT_MAX) : bool <function-math_boost_is_intersecting_Ray_AABB_float_float>` 
 
-.. _function-math_boost_is_intersecting_AABR_AABR:
 
-.. das:function:: is_intersecting(a: AABR; b: AABR) : bool
-
-returns true if inputs intersect
-
-:Arguments: * **a** :  :ref:`AABR <struct-math_boost-AABR>` 
-
-            * **b** :  :ref:`AABR <struct-math_boost-AABR>` 
+is_intersecting
+^^^^^^^^^^^^^^^
 
 .. _function-math_boost_is_intersecting_AABB_AABB:
 
@@ -118,19 +112,15 @@ returns true if inputs intersect
 
             * **b** :  :ref:`AABB <struct-math_boost-AABB>` 
 
+.. _function-math_boost_is_intersecting_AABR_AABR:
+
+.. das:function:: is_intersecting(a: AABR; b: AABR) : bool
+
 .. _function-math_boost_is_intersecting_Ray_AABB_float_float:
 
 .. das:function:: is_intersecting(ray: Ray; aabb: AABB; Tmin: float = 0f; Tmax: float = FLT_MAX) : bool
 
-returns true if ray intersects aabb within [Tmin, Tmax]
-
-:Arguments: * **ray** :  :ref:`Ray <struct-math_boost-Ray>` 
-
-            * **aabb** :  :ref:`AABB <struct-math_boost-AABB>` 
-
-            * **Tmin** : float
-
-            * **Tmax** : float
+----
 
 ++++++++
 Matrices
@@ -138,10 +128,10 @@ Matrices
 
   *  :ref:`look_at_lh (Eye: float3; At: float3; Up: float3) : float4x4 <function-math_boost_look_at_lh_float3_float3_float3>` 
   *  :ref:`look_at_rh (Eye: float3; At: float3; Up: float3) : float4x4 <function-math_boost_look_at_rh_float3_float3_float3>` 
+  *  :ref:`ortho_rh (left: float; right: float; bottom: float; top: float; zNear: float; zFar: float) : float4x4 <function-math_boost_ortho_rh_float_float_float_float_float_float>` 
   *  :ref:`perspective_lh (fovy: float; aspect: float; zn: float; zf: float) : float4x4 <function-math_boost_perspective_lh_float_float_float_float>` 
   *  :ref:`perspective_rh (fovy: float; aspect: float; zn: float; zf: float) : float4x4 <function-math_boost_perspective_rh_float_float_float_float>` 
   *  :ref:`perspective_rh_opengl (fovy: float; aspect: float; zn: float; zf: float) : float4x4 <function-math_boost_perspective_rh_opengl_float_float_float_float>` 
-  *  :ref:`ortho_rh (left: float; right: float; bottom: float; top: float; zNear: float; zFar: float) : float4x4 <function-math_boost_ortho_rh_float_float_float_float_float_float>` 
   *  :ref:`planar_shadow (Light: float4; Plane: float4) : float4x4 <function-math_boost_planar_shadow_float4_float4>` 
 
 .. _function-math_boost_look_at_lh_float3_float3_float3:
@@ -167,6 +157,24 @@ right-handed (z towards viewer) look at matrix with origin at `Eye` and target a
             * **At** : float3
 
             * **Up** : float3
+
+.. _function-math_boost_ortho_rh_float_float_float_float_float_float:
+
+.. das:function:: ortho_rh(left: float; right: float; bottom: float; top: float; zNear: float; zFar: float) : float4x4
+
+right handed (z towards viwer) orthographic (parallel) projection matrix
+
+:Arguments: * **left** : float
+
+            * **right** : float
+
+            * **bottom** : float
+
+            * **top** : float
+
+            * **zNear** : float
+
+            * **zFar** : float
 
 .. _function-math_boost_perspective_lh_float_float_float_float:
 
@@ -210,24 +218,6 @@ right-handed (z toward viewer) opengl (z in [-1..1]) perspective matrix
 
             * **zf** : float
 
-.. _function-math_boost_ortho_rh_float_float_float_float_float_float:
-
-.. das:function:: ortho_rh(left: float; right: float; bottom: float; top: float; zNear: float; zFar: float) : float4x4
-
-right handed (z towards viwer) orthographic (parallel) projection matrix
-
-:Arguments: * **left** : float
-
-            * **right** : float
-
-            * **bottom** : float
-
-            * **top** : float
-
-            * **zNear** : float
-
-            * **zFar** : float
-
 .. _function-math_boost_planar_shadow_float4_float4:
 
 .. das:function:: planar_shadow(Light: float4; Plane: float4) : float4x4
@@ -243,8 +233,8 @@ Plane
 +++++
 
   *  :ref:`plane_dot (Plane: float4; Vec: float4) : float <function-math_boost_plane_dot_float4_float4>` 
-  *  :ref:`plane_normalize (Plane: float4) : float4 <function-math_boost_plane_normalize_float4>` 
   *  :ref:`plane_from_point_normal (p: float3; n: float3) : float4 <function-math_boost_plane_from_point_normal_float3_float3>` 
+  *  :ref:`plane_normalize (Plane: float4) : float4 <function-math_boost_plane_normalize_float4>` 
 
 .. _function-math_boost_plane_dot_float4_float4:
 
@@ -256,14 +246,6 @@ dot product of `Plane` and 'Vec'
 
             * **Vec** : float4
 
-.. _function-math_boost_plane_normalize_float4:
-
-.. das:function:: plane_normalize(Plane: float4) : float4
-
-normalize `Plane', length xyz will be 1.0 (or 0.0 for no plane)
-
-:Arguments: * **Plane** : float4
-
 .. _function-math_boost_plane_from_point_normal_float3_float3:
 
 .. das:function:: plane_from_point_normal(p: float3; n: float3) : float4
@@ -274,21 +256,25 @@ construct plane from point `p` and normal `n`
 
             * **n** : float3
 
+.. _function-math_boost_plane_normalize_float4:
+
+.. das:function:: plane_normalize(Plane: float4) : float4
+
+normalize `Plane', length xyz will be 1.0 (or 0.0 for no plane)
+
+:Arguments: * **Plane** : float4
+
 +++++++++++++++++
 Color conversions
 +++++++++++++++++
 
-  *  :ref:`linear_to_SRGB (x: float) : float <function-math_boost_linear_to_SRGB_float>` 
   *  :ref:`linear_to_SRGB (c: float3) : float3 <function-math_boost_linear_to_SRGB_float3>` 
+  *  :ref:`linear_to_SRGB (x: float) : float <function-math_boost_linear_to_SRGB_float>` 
   *  :ref:`linear_to_SRGB (c: float4) : float4 <function-math_boost_linear_to_SRGB_float4>` 
 
-.. _function-math_boost_linear_to_SRGB_float:
 
-.. das:function:: linear_to_SRGB(x: float) : float
-
-convert value from linear space to sRGB curve space
-
-:Arguments: * **x** : float
+linear_to_SRGB
+^^^^^^^^^^^^^^
 
 .. _function-math_boost_linear_to_SRGB_float3:
 
@@ -298,36 +284,28 @@ convert value from linear space to sRGB curve space
 
 :Arguments: * **c** : float3
 
+.. _function-math_boost_linear_to_SRGB_float:
+
+.. das:function:: linear_to_SRGB(x: float) : float
+
 .. _function-math_boost_linear_to_SRGB_float4:
 
 .. das:function:: linear_to_SRGB(c: float4) : float4
 
-convert value from linear space to sRGB curve space
-
-:Arguments: * **c** : float4
+----
 
 ++++++++++++++++++++++++++
 Color packig and unpacking
 ++++++++++++++++++++++++++
 
-  *  :ref:`RGBA_TO_UCOLOR (x: float; y: float; z: float; w: float) : uint <function-math_boost_RGBA_TO_UCOLOR_float_float_float_float>` 
   *  :ref:`RGBA_TO_UCOLOR (xyzw: float4) : uint <function-math_boost_RGBA_TO_UCOLOR_float4>` 
-  *  :ref:`UCOLOR_TO_RGBA (x: uint) : float4 <function-math_boost_UCOLOR_TO_RGBA_uint>` 
+  *  :ref:`RGBA_TO_UCOLOR (x: float; y: float; z: float; w: float) : uint <function-math_boost_RGBA_TO_UCOLOR_float_float_float_float>` 
   *  :ref:`UCOLOR_TO_RGB (x: uint) : float3 <function-math_boost_UCOLOR_TO_RGB_uint>` 
+  *  :ref:`UCOLOR_TO_RGBA (x: uint) : float4 <function-math_boost_UCOLOR_TO_RGBA_uint>` 
 
-.. _function-math_boost_RGBA_TO_UCOLOR_float_float_float_float:
 
-.. das:function:: RGBA_TO_UCOLOR(x: float; y: float; z: float; w: float) : uint
-
-conversion from RGBA to ucolor. x,y,z,w are in [0,1] range
-
-:Arguments: * **x** : float
-
-            * **y** : float
-
-            * **z** : float
-
-            * **w** : float
+RGBA_TO_UCOLOR
+^^^^^^^^^^^^^^
 
 .. _function-math_boost_RGBA_TO_UCOLOR_float4:
 
@@ -337,19 +315,25 @@ conversion from RGBA to ucolor. xyzw components are in [0,1] range
 
 :Arguments: * **xyzw** : float4
 
-.. _function-math_boost_UCOLOR_TO_RGBA_uint:
+.. _function-math_boost_RGBA_TO_UCOLOR_float_float_float_float:
 
-.. das:function:: UCOLOR_TO_RGBA(x: uint) : float4
+.. das:function:: RGBA_TO_UCOLOR(x: float; y: float; z: float; w: float) : uint
 
-conversion from ucolor to RGBA. x components are in [0,255] range
-
-:Arguments: * **x** : uint
+----
 
 .. _function-math_boost_UCOLOR_TO_RGB_uint:
 
 .. das:function:: UCOLOR_TO_RGB(x: uint) : float3
 
 conversion from ucolor to RGB. x components are in [0,255] range. result is float3(x,y,z)
+
+:Arguments: * **x** : uint
+
+.. _function-math_boost_UCOLOR_TO_RGBA_uint:
+
+.. das:function:: UCOLOR_TO_RGBA(x: uint) : float4
+
+conversion from ucolor to RGBA. x components are in [0,255] range
 
 :Arguments: * **x** : uint
 

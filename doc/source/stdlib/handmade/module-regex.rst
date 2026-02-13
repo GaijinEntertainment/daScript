@@ -2,6 +2,8 @@ The REGEX module implements regular expression matching and searching.
 It provides ``regex_compile`` for building patterns, ``regex_match`` for
 full-string matching, and ``regex_foreach`` for finding all matches within text.
 
+See also :doc:`regex_boost` for compile-time regex construction via the ``%regex~`` reader macro.
+
 All functions and symbols are in "regex" module, use require to get access to it. ::
 
     require daslib/regex

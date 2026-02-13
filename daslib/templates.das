@@ -12,6 +12,7 @@ module templates shared private
 //! compile-time ``TypeDecl`` values, and the ``[template]`` function
 //! annotation for removing template-only arguments from instantiated
 //! generic functions.
+//! See also ``templates_boost`` for template substitution and code generation.
 
 require ast
 require rtti

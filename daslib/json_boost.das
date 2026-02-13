@@ -11,6 +11,7 @@ module json_boost shared public
 //! Generates ``from_JsValue`` and ``to_JsValue`` conversions for user
 //! structs using compile-time reflection. Also provides the ``%json~``
 //! reader macro for embedding JSON literals in source code.
+//! Requires the ``json`` module.
 
 require rtti public
 require ast

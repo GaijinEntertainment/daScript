@@ -408,37 +408,29 @@ Event body indicating a thread started or exited.
 JSON deserialization
 ++++++++++++++++++++
 
-  *  :ref:`InitializeRequestArguments (data: JsonValue?) : InitializeRequestArguments <function-dap_InitializeRequestArguments_JsonValue_q_>` 
-  *  :ref:`DisconnectArguments (data: JsonValue?) : DisconnectArguments <function-dap_DisconnectArguments_JsonValue_q_>` 
-  *  :ref:`DataBreakpoint (data: JsonValue?) : DataBreakpoint <function-dap_DataBreakpoint_JsonValue_q_>` 
-  *  :ref:`SetDataBreakpointsArguments (data: JsonValue?) : SetDataBreakpointsArguments <function-dap_SetDataBreakpointsArguments_JsonValue_q_>` 
-  *  :ref:`DataBreakpointInfoArguments (data: JsonValue?) : DataBreakpointInfoArguments <function-dap_DataBreakpointInfoArguments_JsonValue_q_>` 
-  *  :ref:`SourceBreakpoint (data: JsonValue?) : SourceBreakpoint <function-dap_SourceBreakpoint_JsonValue_q_>` 
-  *  :ref:`Source (data: JsonValue?) : Source <function-dap_Source_JsonValue_q_>` 
-  *  :ref:`SetBreakpointsArguments (data: JsonValue?) : SetBreakpointsArguments <function-dap_SetBreakpointsArguments_JsonValue_q_>` 
-  *  :ref:`StackTraceArguments (data: JsonValue?) : StackTraceArguments <function-dap_StackTraceArguments_JsonValue_q_>` 
-  *  :ref:`ScopesArguments (data: JsonValue?) : ScopesArguments <function-dap_ScopesArguments_JsonValue_q_>` 
-  *  :ref:`VariablesArguments (data: JsonValue?) : VariablesArguments <function-dap_VariablesArguments_JsonValue_q_>` 
   *  :ref:`ContinueArguments (data: JsonValue?) : ContinueArguments <function-dap_ContinueArguments_JsonValue_q_>` 
-  *  :ref:`PauseArguments (data: JsonValue?) : PauseArguments <function-dap_PauseArguments_JsonValue_q_>` 
-  *  :ref:`StepInArguments (data: JsonValue?) : StepInArguments <function-dap_StepInArguments_JsonValue_q_>` 
-  *  :ref:`NextArguments (data: JsonValue?) : NextArguments <function-dap_NextArguments_JsonValue_q_>` 
-  *  :ref:`StepOutArguments (data: JsonValue?) : StepOutArguments <function-dap_StepOutArguments_JsonValue_q_>` 
+  *  :ref:`DataBreakpoint (data: JsonValue?) : DataBreakpoint <function-dap_DataBreakpoint_JsonValue_q_>` 
+  *  :ref:`DataBreakpointInfoArguments (data: JsonValue?) : DataBreakpointInfoArguments <function-dap_DataBreakpointInfoArguments_JsonValue_q_>` 
+  *  :ref:`DisconnectArguments (data: JsonValue?) : DisconnectArguments <function-dap_DisconnectArguments_JsonValue_q_>` 
   *  :ref:`EvaluateArguments (data: JsonValue?) : EvaluateArguments <function-dap_EvaluateArguments_JsonValue_q_>` 
+  *  :ref:`InitializeRequestArguments (data: JsonValue?) : InitializeRequestArguments <function-dap_InitializeRequestArguments_JsonValue_q_>` 
+  *  :ref:`NextArguments (data: JsonValue?) : NextArguments <function-dap_NextArguments_JsonValue_q_>` 
+  *  :ref:`PauseArguments (data: JsonValue?) : PauseArguments <function-dap_PauseArguments_JsonValue_q_>` 
+  *  :ref:`ScopesArguments (data: JsonValue?) : ScopesArguments <function-dap_ScopesArguments_JsonValue_q_>` 
+  *  :ref:`SetBreakpointsArguments (data: JsonValue?) : SetBreakpointsArguments <function-dap_SetBreakpointsArguments_JsonValue_q_>` 
+  *  :ref:`SetDataBreakpointsArguments (data: JsonValue?) : SetDataBreakpointsArguments <function-dap_SetDataBreakpointsArguments_JsonValue_q_>` 
+  *  :ref:`Source (data: JsonValue?) : Source <function-dap_Source_JsonValue_q_>` 
+  *  :ref:`SourceBreakpoint (data: JsonValue?) : SourceBreakpoint <function-dap_SourceBreakpoint_JsonValue_q_>` 
+  *  :ref:`StackTraceArguments (data: JsonValue?) : StackTraceArguments <function-dap_StackTraceArguments_JsonValue_q_>` 
+  *  :ref:`StepInArguments (data: JsonValue?) : StepInArguments <function-dap_StepInArguments_JsonValue_q_>` 
+  *  :ref:`StepOutArguments (data: JsonValue?) : StepOutArguments <function-dap_StepOutArguments_JsonValue_q_>` 
+  *  :ref:`VariablesArguments (data: JsonValue?) : VariablesArguments <function-dap_VariablesArguments_JsonValue_q_>` 
 
-.. _function-dap_InitializeRequestArguments_JsonValue_q_:
+.. _function-dap_ContinueArguments_JsonValue_q_:
 
-.. das:function:: InitializeRequestArguments(data: JsonValue?) : InitializeRequestArguments
+.. das:function:: ContinueArguments(data: JsonValue?) : ContinueArguments
 
-Constructs an InitializeRequestArguments from a JSON value.
-
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
-
-.. _function-dap_DisconnectArguments_JsonValue_q_:
-
-.. das:function:: DisconnectArguments(data: JsonValue?) : DisconnectArguments
-
-Constructs a DisconnectArguments from a JSON value.
+Constructs a ContinueArguments from a JSON value.
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -450,14 +442,6 @@ Constructs a DataBreakpoint from a JSON value.
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
-.. _function-dap_SetDataBreakpointsArguments_JsonValue_q_:
-
-.. das:function:: SetDataBreakpointsArguments(data: JsonValue?) : SetDataBreakpointsArguments
-
-Constructs a SetDataBreakpointsArguments from a JSON value, parsing the breakpoints array.
-
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
-
 .. _function-dap_DataBreakpointInfoArguments_JsonValue_q_:
 
 .. das:function:: DataBreakpointInfoArguments(data: JsonValue?) : DataBreakpointInfoArguments
@@ -466,91 +450,11 @@ Constructs a DataBreakpointInfoArguments from a JSON value.
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
-.. _function-dap_SourceBreakpoint_JsonValue_q_:
+.. _function-dap_DisconnectArguments_JsonValue_q_:
 
-.. das:function:: SourceBreakpoint(data: JsonValue?) : SourceBreakpoint
+.. das:function:: DisconnectArguments(data: JsonValue?) : DisconnectArguments
 
-Constructs a SourceBreakpoint from a JSON value.
-
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
-
-.. _function-dap_Source_JsonValue_q_:
-
-.. das:function:: Source(data: JsonValue?) : Source
-
-Constructs a Source from a JSON value.
-
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
-
-.. _function-dap_SetBreakpointsArguments_JsonValue_q_:
-
-.. das:function:: SetBreakpointsArguments(data: JsonValue?) : SetBreakpointsArguments
-
-Constructs a SetBreakpointsArguments from a JSON value, parsing source and breakpoints.
-
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
-
-.. _function-dap_StackTraceArguments_JsonValue_q_:
-
-.. das:function:: StackTraceArguments(data: JsonValue?) : StackTraceArguments
-
-Constructs a StackTraceArguments from a JSON value.
-
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
-
-.. _function-dap_ScopesArguments_JsonValue_q_:
-
-.. das:function:: ScopesArguments(data: JsonValue?) : ScopesArguments
-
-Constructs a ScopesArguments from a JSON value.
-
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
-
-.. _function-dap_VariablesArguments_JsonValue_q_:
-
-.. das:function:: VariablesArguments(data: JsonValue?) : VariablesArguments
-
-Constructs a VariablesArguments from a JSON value.
-
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
-
-.. _function-dap_ContinueArguments_JsonValue_q_:
-
-.. das:function:: ContinueArguments(data: JsonValue?) : ContinueArguments
-
-Constructs a ContinueArguments from a JSON value.
-
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
-
-.. _function-dap_PauseArguments_JsonValue_q_:
-
-.. das:function:: PauseArguments(data: JsonValue?) : PauseArguments
-
-Constructs a PauseArguments from a JSON value.
-
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
-
-.. _function-dap_StepInArguments_JsonValue_q_:
-
-.. das:function:: StepInArguments(data: JsonValue?) : StepInArguments
-
-Constructs a StepInArguments from a JSON value.
-
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
-
-.. _function-dap_NextArguments_JsonValue_q_:
-
-.. das:function:: NextArguments(data: JsonValue?) : NextArguments
-
-Constructs a NextArguments from a JSON value.
-
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
-
-.. _function-dap_StepOutArguments_JsonValue_q_:
-
-.. das:function:: StepOutArguments(data: JsonValue?) : StepOutArguments
-
-Constructs a StepOutArguments from a JSON value.
+Constructs a DisconnectArguments from a JSON value.
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -562,20 +466,112 @@ Constructs an EvaluateArguments from a JSON value.
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
+.. _function-dap_InitializeRequestArguments_JsonValue_q_:
+
+.. das:function:: InitializeRequestArguments(data: JsonValue?) : InitializeRequestArguments
+
+Constructs an InitializeRequestArguments from a JSON value.
+
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+
+.. _function-dap_NextArguments_JsonValue_q_:
+
+.. das:function:: NextArguments(data: JsonValue?) : NextArguments
+
+Constructs a NextArguments from a JSON value.
+
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+
+.. _function-dap_PauseArguments_JsonValue_q_:
+
+.. das:function:: PauseArguments(data: JsonValue?) : PauseArguments
+
+Constructs a PauseArguments from a JSON value.
+
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+
+.. _function-dap_ScopesArguments_JsonValue_q_:
+
+.. das:function:: ScopesArguments(data: JsonValue?) : ScopesArguments
+
+Constructs a ScopesArguments from a JSON value.
+
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+
+.. _function-dap_SetBreakpointsArguments_JsonValue_q_:
+
+.. das:function:: SetBreakpointsArguments(data: JsonValue?) : SetBreakpointsArguments
+
+Constructs a SetBreakpointsArguments from a JSON value, parsing source and breakpoints.
+
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+
+.. _function-dap_SetDataBreakpointsArguments_JsonValue_q_:
+
+.. das:function:: SetDataBreakpointsArguments(data: JsonValue?) : SetDataBreakpointsArguments
+
+Constructs a SetDataBreakpointsArguments from a JSON value, parsing the breakpoints array.
+
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+
+.. _function-dap_Source_JsonValue_q_:
+
+.. das:function:: Source(data: JsonValue?) : Source
+
+Constructs a Source from a JSON value.
+
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+
+.. _function-dap_SourceBreakpoint_JsonValue_q_:
+
+.. das:function:: SourceBreakpoint(data: JsonValue?) : SourceBreakpoint
+
+Constructs a SourceBreakpoint from a JSON value.
+
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+
+.. _function-dap_StackTraceArguments_JsonValue_q_:
+
+.. das:function:: StackTraceArguments(data: JsonValue?) : StackTraceArguments
+
+Constructs a StackTraceArguments from a JSON value.
+
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+
+.. _function-dap_StepInArguments_JsonValue_q_:
+
+.. das:function:: StepInArguments(data: JsonValue?) : StepInArguments
+
+Constructs a StepInArguments from a JSON value.
+
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+
+.. _function-dap_StepOutArguments_JsonValue_q_:
+
+.. das:function:: StepOutArguments(data: JsonValue?) : StepOutArguments
+
+Constructs a StepOutArguments from a JSON value.
+
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+
+.. _function-dap_VariablesArguments_JsonValue_q_:
+
+.. das:function:: VariablesArguments(data: JsonValue?) : VariablesArguments
+
+Constructs a VariablesArguments from a JSON value.
+
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+
 ++++++++++++++++++
 JSON serialization
 ++++++++++++++++++
 
-  *  :ref:`JV (data: Variable) : JsonValue? <function-dap_JV_Variable>` 
   *  :ref:`JV (data: EvaluateResponse) : JsonValue? <function-dap_JV_EvaluateResponse>` 
+  *  :ref:`JV (data: Variable) : JsonValue? <function-dap_JV_Variable>` 
 
-.. _function-dap_JV_Variable:
 
-.. das:function:: JV(data: Variable) : JsonValue?
-
-Converts a Variable struct to its DAP JSON representation.
-
-:Arguments: * **data** :  :ref:`Variable <struct-dap-Variable>` 
+JV
+^^
 
 .. _function-dap_JV_EvaluateResponse:
 
@@ -585,15 +581,43 @@ Converts an EvaluateResponse struct to its DAP JSON representation.
 
 :Arguments: * **data** :  :ref:`EvaluateResponse <struct-dap-EvaluateResponse>` 
 
+.. _function-dap_JV_Variable:
+
+.. das:function:: JV(data: Variable) : JsonValue?
+
+----
+
 ++++++++++++++++++++
 JSON field accessors
 ++++++++++++++++++++
 
+  *  :ref:`j_s (val: JsonValue?; defVal: string = "") : string <function-dap_j_s_JsonValue_q__string>` 
+  *  :ref:`job (val: JsonValue?; id: string; defVal: bool = false) : bool <function-dap_job_JsonValue_q__string_bool>` 
   *  :ref:`joj (val: JsonValue?; id: string) : JsonValue? <function-dap_joj_JsonValue_q__string>` 
   *  :ref:`jon (val: JsonValue?; id: string; defVal: double = 0lf) : double <function-dap_jon_JsonValue_q__string_double>` 
-  *  :ref:`j_s (val: JsonValue?; defVal: string = "") : string <function-dap_j_s_JsonValue_q__string>` 
   *  :ref:`jos (val: JsonValue?; id: string; defVal: string = "") : string <function-dap_jos_JsonValue_q__string_string>` 
-  *  :ref:`job (val: JsonValue?; id: string; defVal: bool = false) : bool <function-dap_job_JsonValue_q__string_bool>` 
+
+.. _function-dap_j_s_JsonValue_q__string:
+
+.. das:function:: j_s(val: JsonValue?; defVal: string = "") : string
+
+Returns the string value of a JSON value, or `defVal` if not a string.
+
+:Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+
+            * **defVal** : string
+
+.. _function-dap_job_JsonValue_q__string_bool:
+
+.. das:function:: job(val: JsonValue?; id: string; defVal: bool = false) : bool
+
+Returns a boolean JSON field by name, or `defVal` if not found.
+
+:Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+
+            * **id** : string
+
+            * **defVal** : bool
 
 .. _function-dap_joj_JsonValue_q__string:
 
@@ -617,16 +641,6 @@ Returns a numeric JSON field by name, or `defVal` if not found.
 
             * **defVal** : double
 
-.. _function-dap_j_s_JsonValue_q__string:
-
-.. das:function:: j_s(val: JsonValue?; defVal: string = "") : string
-
-Returns the string value of a JSON value, or `defVal` if not a string.
-
-:Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>` ?
-
-            * **defVal** : string
-
 .. _function-dap_jos_JsonValue_q__string_string:
 
 .. das:function:: jos(val: JsonValue?; id: string; defVal: string = "") : string
@@ -638,17 +652,5 @@ Returns a string JSON field by name, or `defVal` if not found.
             * **id** : string
 
             * **defVal** : string
-
-.. _function-dap_job_JsonValue_q__string_bool:
-
-.. das:function:: job(val: JsonValue?; id: string; defVal: bool = false) : bool
-
-Returns a boolean JSON field by name, or `defVal` if not found.
-
-:Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>` ?
-
-            * **id** : string
-
-            * **defVal** : bool
 
 

@@ -1974,7 +1974,7 @@ def function_name(func : FunctionPtr | Function?) {
     return name
 }
 
-def document_function(doc_file : file; mod : Module?; var func : FunctionPtr | Function?; drop_args : int = 0; prefix : string = ""; objType : string = "das:function") {
+def document_function(doc_file : file; mod : Module?; var func : FunctionPtr | Function?; drop_args : int = 0; prefix : string = ""; objType : string = "das:function"; skip_body : bool = false) {
     let argNames <- [for (arg in func.arguments); string(arg.name)]
     let argTypes <- [for (arg in func.arguments); get_ptr(arg._type)]
     let argInits <- [for (arg in func.arguments); get_ptr(arg.init)]
@@ -1982,6 +1982,9 @@ def document_function(doc_file : file; mod : Module?; var func : FunctionPtr | F
     let funcSafeName = function_name(func)
     (document_function_declaration(doc_file, objType, funcSafeName,
         argNames, argTypes, argInits, func.result, drop_args))
+    if (skip_body) {
+        return
+    }
     // if func.result != null && !func.result.isVoid
     //     fwrite(doc_file,"``{funcSafeName}`` returns {describe_type(func.result)}\n\n")
     if (func.flags.unsafeOperation) {
@@ -2009,6 +2012,7 @@ def document_functions(doc_file : file; mods : array<Module?>; var groups : arra
                 if (grp.hidden) {
                     document_warning(doc_file, "This group of functions is hidden. It will not be in the final documentation.")
                 }
+                grp.func |> sort($(a, b) => function_name(a.fn) < function_name(b.fn))
                 for (func in grp.func) {
                     if (!key_exists(tab, func.fn)) {
                         let descr = rst_describe_function_short(func.fn)
@@ -2017,12 +2021,49 @@ def document_functions(doc_file : file; mods : array<Module?>; var groups : arra
                     }
                 }
                 fwrite(doc_file, "\n")
+                // build set of names that have multiple overloads
+                var multi_overload : table<string>
+                var prev_count_name = ""
+                var count_run = 0
+                for (func in grp.func) {
+                    if (!tab.key_exists(func.fn)) {
+                        let cur_name = function_name(func.fn)
+                        if (cur_name == prev_count_name) {
+                            count_run += 1
+                            if (count_run == 2) {
+                                multi_overload |> insert(cur_name)
+                            }
+                        } else {
+                            prev_count_name = cur_name
+                            count_run = 1
+                        }
+                    }
+                }
+                var prev_func_name = ""
+                var prev_was_overload_group = false
                 for (func in grp.func) {
                     if (tab.key_exists(func.fn)) {
                         continue
                     }
                     tab.insert(func.fn)
-                    document_function(doc_file, func.mod, func.fn)
+                    let cur_name = function_name(func.fn)
+                    let is_overload = cur_name == prev_func_name
+                    if (!is_overload) {
+                        if (prev_was_overload_group) {
+                            fwrite(doc_file, "----\n\n")
+                        }
+                        if (multi_overload |> key_exists(cur_name)) {
+                            fwrite(doc_file, "\n{cur_name}\n{strings::repeat("^", length(cur_name))}\n\n")
+                            prev_was_overload_group = true
+                        } else {
+                            prev_was_overload_group = false
+                        }
+                    }
+                    document_function(doc_file, func.mod, func.fn, 0, "", "das:function", is_overload)
+                    prev_func_name = cur_name
+                }
+                if (prev_was_overload_group) {
+                    fwrite(doc_file, "----\n\n")
                 }
             }
         }

@@ -12,6 +12,7 @@ module templates_boost shared public
 //! stores substitution rules (rename variables, replace types, swap expressions)
 //! and `apply_template` walks an AST subtree applying them. Used internally by
 //! many other daslib macros.
+//! Requires the ``templates`` module.
 
 require ast
 require daslib/ast_boost

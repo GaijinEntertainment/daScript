@@ -552,194 +552,192 @@ Allocates the structure on the C++ heap (via `new`) instead of the daScript cont
 Containers
 ++++++++++
 
-  *  :ref:`clear (array: array\<anything\>) <function-builtin_clear_array_ls_anything_gr_>` 
-  *  :ref:`length (array: array\<anything\>) : int <function-builtin_length_array_ls_anything_gr_>` 
-  *  :ref:`capacity (array: array\<anything\>) : int <function-builtin_capacity_array_ls_anything_gr_>` 
-  *  :ref:`empty (iterator: iterator implicit) : bool <function-builtin_empty_iterator_implicit>` 
-  *  :ref:`length (table: table\<anything, anything\>) : int <function-builtin_length_table_ls_anything,_anything_gr_>` 
-  *  :ref:`capacity (table: table\<anything, anything\>) : int <function-builtin_capacity_table_ls_anything,_anything_gr_>` 
-  *  :ref:`empty (str: string implicit) : bool <function-builtin_empty_string_implicit>` 
-  *  :ref:`empty (str: das_string implicit) : bool <function-builtin_empty_das_string_implicit>` 
-  *  :ref:`resize (var Arr: array\<auto(numT)\>; newSize: int) : auto <function-builtin_resize_array_ls_autonumT_gr__int>` 
-  *  :ref:`resize_and_init (var Arr: array\<auto(numT)\>; newSize: int) : auto <function-builtin_resize_and_init_array_ls_autonumT_gr__int>` 
-  *  :ref:`resize_and_init (var Arr: array\<auto(numT)\>; newSize: int; initValue: numT) : auto <function-builtin_resize_and_init_array_ls_autonumT_gr__int_numT>` 
-  *  :ref:`resize_no_init (var Arr: array\<auto(numT)\>; newSize: int) : auto <function-builtin_resize_no_init_array_ls_autonumT_gr__int>` 
-  *  :ref:`reserve (var Arr: array\<auto(numT)\>; newSize: int) : auto <function-builtin_reserve_array_ls_autonumT_gr__int>` 
-  *  :ref:`pop (var Arr: array\<auto(numT)\>) : auto <function-builtin_pop_array_ls_autonumT_gr_>` 
-  *  :ref:`push (var Arr: array\<auto(numT)\>; value: numT ==const; at: int) : auto <function-builtin_push_array_ls_autonumT_gr__numT__eq__eq_const_int>` 
-  *  :ref:`push (var Arr: array\<auto(numT)\>; var value: numT ==const; at: int) : auto <function-builtin_push_array_ls_autonumT_gr___numT__eq__eq_const_int>` 
-  *  :ref:`push (var Arr: array\<auto(numT)\>; value: numT ==const) : auto <function-builtin_push_array_ls_autonumT_gr__numT__eq__eq_const>` 
-  *  :ref:`push (var Arr: array\<auto(numT)\>; var value: numT ==const) : auto <function-builtin_push_array_ls_autonumT_gr___numT__eq__eq_const>` 
-  *  :ref:`push (var Arr: array\<auto(numT)\>; varr: array\<numT\>) : auto <function-builtin_push_array_ls_autonumT_gr__array_ls_numT_gr_>` 
-  *  :ref:`push (var Arr: array\<auto(numT)\>; var varr: array\<numT\>) : auto <function-builtin_push_array_ls_autonumT_gr___array_ls_numT_gr_>` 
-  *  :ref:`push (var Arr: array\<auto(numT)\>; varr: numT[]) : auto <function-builtin_push_array_ls_autonumT_gr__numT>` 
-  *  :ref:`push (var Arr: array\<auto(numT)[]\>; varr: numT const[] ==const) : auto <function-builtin_push_array_ls_autonumT_gr__numT_const__eq__eq_const>` 
-  *  :ref:`push (var Arr: array\<auto(numT)[]\>; var varr: numT[] ==const) : auto <function-builtin_push_array_ls_autonumT_gr___numT__eq__eq_const>` 
-  *  :ref:`emplace (var Arr: array\<auto(numT)\>; var value: numT&; at: int) : auto <function-builtin_emplace_array_ls_autonumT_gr__numT_int>` 
-  *  :ref:`emplace (var Arr: array\<auto(numT)\>; var value: numT&) : auto <function-builtin_emplace_array_ls_autonumT_gr__numT>` 
-  *  :ref:`emplace (var Arr: array\<auto(numT)\>; var value: numT[]) : auto <function-builtin_emplace_array_ls_autonumT_gr__numT>` 
-  *  :ref:`emplace (var Arr: array\<auto(numT)[]\>; var value: numT[]) : auto <function-builtin_emplace_array_ls_autonumT_gr__numT>` 
-  *  :ref:`push_clone (var Arr: array\<auto(numT)\>; value: numT ==const|numT const# ==const; at: int) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT__eq__eq_constnumT_const_hh___eq__eq_const_int>` 
-  *  :ref:`push_clone (var Arr: array\<auto(numT)\>; var value: numT ==const|numT# ==const; at: int) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT__eq__eq_constnumT_hh___eq__eq_const_int>` 
-  *  :ref:`push_clone (var Arr: array\<auto(numT)\>; value: numT ==const|numT const# ==const) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT__eq__eq_constnumT_const_hh___eq__eq_const>` 
-  *  :ref:`push_clone (var Arr: array\<auto(numT)\>; var value: numT ==const|numT# ==const) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT__eq__eq_constnumT_hh___eq__eq_const>` 
-  *  :ref:`push_clone (var Arr: array\<auto(numT)\>; varr: numT const[] ==const) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT_const__eq__eq_const>` 
-  *  :ref:`push_clone (var Arr: array\<auto(numT)\>; var varr: numT[] ==const) : auto <function-builtin_push_clone_array_ls_autonumT_gr___numT__eq__eq_const>` 
-  *  :ref:`push_clone (var Arr: array\<auto(numT)[]\>; varr: numT const[] ==const) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT_const__eq__eq_const>` 
-  *  :ref:`push_clone (var Arr: array\<auto(numT)[]\>; var varr: numT[]) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT>` 
-  *  :ref:`push_clone (var A: auto(CT); b: auto(TT)|auto(TT)#) : auto <function-builtin_push_clone_autoCT_autoTTautoTT_hh__0x1db>` 
-  *  :ref:`back (var a: array\<auto(TT)\>) : TT& <function-builtin_back__array_ls_autoTT_gr_>` 
-  *  :ref:`back (var a: array\<auto(TT)\>#) : TT&# <function-builtin_back__array_ls_autoTT_gr__hh_>` 
-  *  :ref:`back (a: array\<auto(TT)\>) : TT <function-builtin_back_array_ls_autoTT_gr_>` 
   *  :ref:`back (a: array\<auto(TT)\>#) : TT const&# <function-builtin_back_array_ls_autoTT_gr__hh_>` 
+  *  :ref:`back (a: array\<auto(TT)\>) : TT <function-builtin_back_array_ls_autoTT_gr_>` 
+  *  :ref:`back (var a: array\<auto(TT)\>#) : TT&# <function-builtin_back__array_ls_autoTT_gr__hh_>` 
   *  :ref:`back (var arr: auto(TT) ==const) : auto& <function-builtin_back__autoTT__eq__eq_const_0x213>` 
   *  :ref:`back (arr: auto(TT) ==const) : auto <function-builtin_back_autoTT__eq__eq_const_0x21e>` 
+  *  :ref:`back (var a: array\<auto(TT)\>) : TT& <function-builtin_back__array_ls_autoTT_gr_>` 
+  *  :ref:`capacity (table: table\<anything, anything\>) : int <function-builtin_capacity_table_ls_anything,_anything_gr_>` 
+  *  :ref:`capacity (array: array\<anything\>) : int <function-builtin_capacity_array_ls_anything_gr_>` 
+  *  :ref:`clear (array: array\<anything\>) <function-builtin_clear_array_ls_anything_gr_>` 
+  *  :ref:`clear (var t: table\<auto(KT), auto(VT)\>) : auto <function-builtin_clear_table_ls_autoKT,_autoVT_gr_>` 
+  *  :ref:`copy_to_local (a: auto(TT)) : TT <function-builtin_copy_to_local_autoTT_0x41f>` 
+  *  :ref:`each (a: array\<auto(TT)\>#) : iterator\<TT&#\> <function-builtin_each_array_ls_autoTT_gr__hh_>` 
+  *  :ref:`each (str: string) : iterator\<int\> <function-builtin_each_string>` 
+  *  :ref:`each (a: array\<auto(TT)\>) : iterator\<TT&\> <function-builtin_each_array_ls_autoTT_gr_>` 
+  *  :ref:`each (a: auto(TT)[]) : iterator\<TT&\> <function-builtin_each_autoTT_0x59e>` 
+  *  :ref:`each (lam: lambda\<(var arg:auto(argT)):bool\>) : iterator\<argT\> <function-builtin_each_lambda_ls_var_arg_c_autoargT_c_bool_gr_>` 
+  *  :ref:`each (rng: range) : iterator\<int\> <function-builtin_each_range>` 
+  *  :ref:`each (rng: urange64) : iterator\<uint64\> <function-builtin_each_urange64>` 
+  *  :ref:`each (rng: range64) : iterator\<int64\> <function-builtin_each_range64>` 
+  *  :ref:`each (rng: urange) : iterator\<uint\> <function-builtin_each_urange>` 
+  *  :ref:`each_enum (tt: auto(TT)) : iterator\<TT\> <function-builtin_each_enum_autoTT_0x5cb>` 
+  *  :ref:`each_ref (lam: lambda\<(var arg:auto(argT)?):bool\>) : iterator\<argT&\> <function-builtin_each_ref_lambda_ls_var_arg_c_autoargT_q__c_bool_gr_>` 
+  *  :ref:`emplace (var Arr: array\<auto(numT)\>; var value: numT&; at: int) : auto <function-builtin_emplace_array_ls_autonumT_gr__numT_int>` 
+  *  :ref:`emplace (var Arr: array\<auto(numT)\>; var value: numT&) : auto <function-builtin_emplace_array_ls_autonumT_gr__numT>` 
+  *  :ref:`emplace (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; var val: valT[]&) : auto <function-builtin_emplace_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT>` 
+  *  :ref:`emplace (var Tab: table\<auto, auto\>; key: auto; value: auto) : auto <function-builtin_emplace_table_ls_auto,_auto_gr__auto_auto_0x3a9>` 
+  *  :ref:`emplace (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; var val: valT&) : auto <function-builtin_emplace_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT>` 
+  *  :ref:`emplace (var Tab: table\<auto(keyT), smart_ptr\<auto(valT)\>\>; at: keyT|keyT#; var val: smart_ptr\<valT\>&) : auto <function-builtin_emplace_table_ls_autokeyT,_smart_ptr_ls_autovalT_gr__gr__keyTkeyT_hh__smart_ptr_ls_valT_gr_>` 
+  *  :ref:`emplace (var a: array\<auto\>; value: auto) : auto <function-builtin_emplace_array_ls_auto_gr__auto_0x3b6>` 
+  *  :ref:`emplace (var Arr: array\<auto(numT)\>; var value: numT[]) : auto <function-builtin_emplace_array_ls_autonumT_gr__numT>` 
+  *  :ref:`emplace (var Arr: array\<auto(numT)[]\>; var value: numT[]) : auto <function-builtin_emplace_array_ls_autonumT_gr__numT>` 
+  *  :ref:`emplace_default (var tab: table\<auto(keyT), auto(valT)\>; key: keyT|keyT#) <function-builtin_emplace_default_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
+  *  :ref:`emplace_new (var Arr: array\<smart_ptr\<auto(numT)\>\>; var value: smart_ptr\<numT\>) : auto <function-builtin_emplace_new_array_ls_smart_ptr_ls_autonumT_gr__gr__smart_ptr_ls_numT_gr_>` 
+  *  :ref:`emplace_new (var tab: table\<auto(kT), smart_ptr\<auto(vT)\>\>; key: kT; var value: smart_ptr\<vT\>) : auto <function-builtin_emplace_new_table_ls_autokT,_smart_ptr_ls_autovT_gr__gr__kT_smart_ptr_ls_vT_gr_>` 
+  *  :ref:`empty (str: string implicit) : bool <function-builtin_empty_string_implicit>` 
+  *  :ref:`empty (str: das_string implicit) : bool <function-builtin_empty_das_string_implicit>` 
+  *  :ref:`empty (a: table\<auto;auto\>|table\<auto;auto\>#) : bool <function-builtin_empty_table_ls_auto;auto_gr_table_ls_auto;auto_gr__hh_>` 
+  *  :ref:`empty (a: array\<auto\>|array\<auto\>#) : bool <function-builtin_empty_array_ls_auto_gr_array_ls_auto_gr__hh_>` 
+  *  :ref:`empty (iterator: iterator implicit) : bool <function-builtin_empty_iterator_implicit>` 
+  *  :ref:`erase (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#) : bool <function-builtin_erase_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
   *  :ref:`erase (var Arr: array\<auto(numT)\>; at: int) : auto <function-builtin_erase_array_ls_autonumT_gr__int>` 
   *  :ref:`erase (var Arr: array\<auto(numT)\>; at: int; count: int) : auto <function-builtin_erase_array_ls_autonumT_gr__int_int>` 
+  *  :ref:`erase (var Tab: table\<auto(keyT), auto(valT)\>; at: string#) : bool <function-builtin_erase_table_ls_autokeyT,_autovalT_gr__string_hh_>` 
   *  :ref:`erase_if (var arr: array\<auto(TT)\>; blk: block\<(key:TT const):bool\>|block\<(var key:TT&):bool\>) : auto <function-builtin_erase_if_array_ls_autoTT_gr__block_ls_key_c_TT_const_c_bool_gr_block_ls_var_key_c_TT_c_bool_gr_>` 
-  *  :ref:`remove_value (var arr: array\<auto(TT)\>|array\<auto(TT)\>#; key: TT) : bool <function-builtin_remove_value_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__TT>` 
-  *  :ref:`length (a: auto|auto#) : int <function-builtin_length_autoauto_hh_>` 
-  *  :ref:`empty (a: array\<auto\>|array\<auto\>#) : bool <function-builtin_empty_array_ls_auto_gr_array_ls_auto_gr__hh_>` 
-  *  :ref:`empty (a: table\<auto;auto\>|table\<auto;auto\>#) : bool <function-builtin_empty_table_ls_auto;auto_gr_table_ls_auto;auto_gr__hh_>` 
-  *  :ref:`reserve (var Tab: table\<auto(keyT), auto\>; newSize: int) : auto <function-builtin_reserve_table_ls_autokeyT,_auto_gr__int>` 
-  *  :ref:`get (Tab: table\<auto(keyT), auto(valT)\>#; at: keyT|keyT#; blk: block\<(p:valT const&#):void\>) : auto <function-builtin_get_table_ls_autokeyT,_autovalT_gr__hh__keyTkeyT_hh__block_ls_p_c_valT_const_hh__c_void_gr_>` 
+  *  :ref:`find_index (arr: array\<auto(TT)\>|array\<auto(TT)\>#; key: TT) : auto <function-builtin_find_index_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__TT>` 
+  *  :ref:`find_index (var arr: iterator\<auto(TT)\>; key: TT) : auto <function-builtin_find_index_iterator_ls_autoTT_gr__TT>` 
+  *  :ref:`find_index (arr: auto(TT)[]|auto(TT)[]#; key: TT) : auto <function-builtin_find_index_autoTTautoTT_hh__TT>` 
+  *  :ref:`find_index_if (var arr: iterator\<auto(TT)\>; blk: block\<(key:TT):bool\>) : auto <function-builtin_find_index_if_iterator_ls_autoTT_gr__block_ls_key_c_TT_c_bool_gr_>` 
+  *  :ref:`find_index_if (arr: array\<auto(TT)\>|array\<auto(TT)\>#; blk: block\<(key:TT):bool\>) : auto <function-builtin_find_index_if_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__block_ls_key_c_TT_c_bool_gr_>` 
+  *  :ref:`find_index_if (arr: auto(TT)[]|auto(TT)[]#; blk: block\<(key:TT):bool\>) : auto <function-builtin_find_index_if_autoTTautoTT_hh__block_ls_key_c_TT_c_bool_gr_>` 
   *  :ref:`get (Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; blk: block\<(p:valT):void\>) : auto <function-builtin_get_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_p_c_valT_c_void_gr_>` 
-  *  :ref:`get (var Tab: table\<auto(keyT), auto(valT)\>#; at: keyT|keyT#; blk: block\<(var p:valT&#):void\>) : auto <function-builtin_get__table_ls_autokeyT,_autovalT_gr__hh__keyTkeyT_hh__block_ls_var_p_c_valT_hh__c_void_gr_>` 
+  *  :ref:`get (Tab: table\<auto(keyT), auto(valT)\>#; at: keyT|keyT#; blk: block\<(p:valT const&#):void\>) : auto <function-builtin_get_table_ls_autokeyT,_autovalT_gr__hh__keyTkeyT_hh__block_ls_p_c_valT_const_hh__c_void_gr_>` 
   *  :ref:`get (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; blk: block\<(var p:valT&):void\>) : auto <function-builtin_get__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_var_p_c_valT_c_void_gr_>` 
+  *  :ref:`get (var Tab: table\<auto(keyT), auto(valT)\>#; at: keyT|keyT#; blk: block\<(var p:valT&#):void\>) : auto <function-builtin_get__table_ls_autokeyT,_autovalT_gr__hh__keyTkeyT_hh__block_ls_var_p_c_valT_hh__c_void_gr_>` 
   *  :ref:`get (Tab: table\<auto(keyT), auto(valT)[]\>#; at: keyT|keyT#; blk: block\<(p:valT const[-2]&#):void\>) : auto <function-builtin_get_table_ls_autokeyT,_autovalT_gr__hh__keyTkeyT_hh__block_ls_p_c_valT_const-2_hh__c_void_gr_>` 
-  *  :ref:`get (Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; blk: block\<(p:valT const[-2]&):void\>) : auto <function-builtin_get_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_p_c_valT_const-2_c_void_gr_>` 
-  *  :ref:`get (var Tab: table\<auto(keyT), auto(valT)[]\>#; at: keyT|keyT#; blk: block\<(var p:valT[-2]&#):void\>) : auto <function-builtin_get__table_ls_autokeyT,_autovalT_gr__hh__keyTkeyT_hh__block_ls_var_p_c_valT-2_hh__c_void_gr_>` 
   *  :ref:`get (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; blk: block\<(var p:valT[-2]&):void\>) : auto <function-builtin_get__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_var_p_c_valT-2_c_void_gr_>` 
+  *  :ref:`get (Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; blk: block\<(p:valT const[-2]&):void\>) : auto <function-builtin_get_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_p_c_valT_const-2_c_void_gr_>` 
   *  :ref:`get (Tab: table\<auto(keyT), void\>; at: keyT|keyT#; blk: block\<(var p:void?):void\>) : auto <function-builtin_get_table_ls_autokeyT,_void_gr__keyTkeyT_hh__block_ls_var_p_c_void_q__c_void_gr_>` 
+  *  :ref:`get (var Tab: table\<auto(keyT), auto(valT)[]\>#; at: keyT|keyT#; blk: block\<(var p:valT[-2]&#):void\>) : auto <function-builtin_get__table_ls_autokeyT,_autovalT_gr__hh__keyTkeyT_hh__block_ls_var_p_c_valT-2_hh__c_void_gr_>` 
+  *  :ref:`get_value (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#) : valT[-2] <function-builtin_get_value_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
+  *  :ref:`get_value (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#) : valT <function-builtin_get_value__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
   *  :ref:`get_value (Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#) : valT <function-builtin_get_value_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
   *  :ref:`get_value (var Tab: table\<auto(keyT), smart_ptr\<auto(valT)\>\>; at: keyT|keyT#) : smart_ptr\<valT\> <function-builtin_get_value_table_ls_autokeyT,_smart_ptr_ls_autovalT_gr__gr__keyTkeyT_hh_>` 
-  *  :ref:`get_value (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#) : valT <function-builtin_get_value__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
-  *  :ref:`get_value (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#) : valT[-2] <function-builtin_get_value_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
-  *  :ref:`erase (var Tab: table\<auto(keyT), auto(valT)\>; at: string#) : bool <function-builtin_erase_table_ls_autokeyT,_autovalT_gr__string_hh_>` 
-  *  :ref:`erase (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#) : bool <function-builtin_erase_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
+  *  :ref:`get_with_default (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; blk: block\<(var p:valT&):void\>) <function-builtin_get_with_default__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_var_p_c_valT_c_void_gr_>` 
+  *  :ref:`has_value (var a: iterator\<auto\>; key: auto) : auto <function-builtin_has_value_iterator_ls_auto_gr__auto_0x76a>` 
+  *  :ref:`has_value (a: auto; key: auto) : auto <function-builtin_has_value_auto_auto_0x75c>` 
   *  :ref:`insert (var Tab: table\<auto(keyT), void\>; at: keyT|keyT#) : auto <function-builtin_insert_table_ls_autokeyT,_void_gr__keyTkeyT_hh_>` 
+  *  :ref:`insert (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; val: valT ==const|valT const# ==const) : auto <function-builtin_insert_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_const_hh___eq__eq_const>` 
+  *  :ref:`insert (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; var val: valT[] ==const|valT[]# ==const) : auto <function-builtin_insert_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_hh___eq__eq_const>` 
+  *  :ref:`insert (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; var val: valT ==const|valT# ==const) : auto <function-builtin_insert_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_hh___eq__eq_const>` 
+  *  :ref:`insert (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; val: valT const[] ==const|valT const[]# ==const) : auto <function-builtin_insert_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT_const__eq__eq_constvalT_const_hh___eq__eq_const>` 
   *  :ref:`insert_clone (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; var val: valT ==const|valT# ==const) : auto <function-builtin_insert_clone_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_hh___eq__eq_const>` 
   *  :ref:`insert_clone (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; val: valT ==const|valT const# ==const) : auto <function-builtin_insert_clone_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_const_hh___eq__eq_const>` 
   *  :ref:`insert_clone (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; var val: valT[] ==const|valT[]# ==const) : auto <function-builtin_insert_clone_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_hh___eq__eq_const>` 
   *  :ref:`insert_clone (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; val: valT const[] ==const|valT const[]# ==const) : auto <function-builtin_insert_clone_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT_const__eq__eq_constvalT_const_hh___eq__eq_const>` 
-  *  :ref:`insert (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; var val: valT ==const|valT# ==const) : auto <function-builtin_insert_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_hh___eq__eq_const>` 
-  *  :ref:`insert (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; val: valT ==const|valT const# ==const) : auto <function-builtin_insert_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_const_hh___eq__eq_const>` 
-  *  :ref:`insert (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; var val: valT[] ==const|valT[]# ==const) : auto <function-builtin_insert_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_hh___eq__eq_const>` 
-  *  :ref:`insert (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; val: valT const[] ==const|valT const[]# ==const) : auto <function-builtin_insert_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT_const__eq__eq_constvalT_const_hh___eq__eq_const>` 
-  *  :ref:`emplace (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; var val: valT&) : auto <function-builtin_emplace_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT>` 
-  *  :ref:`emplace (var Tab: table\<auto(keyT), smart_ptr\<auto(valT)\>\>; at: keyT|keyT#; var val: smart_ptr\<valT\>&) : auto <function-builtin_emplace_table_ls_autokeyT,_smart_ptr_ls_autovalT_gr__gr__keyTkeyT_hh__smart_ptr_ls_valT_gr_>` 
-  *  :ref:`emplace (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; var val: valT[]&) : auto <function-builtin_emplace_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT>` 
-  *  :ref:`emplace_new (var tab: table\<auto(kT), smart_ptr\<auto(vT)\>\>; key: kT; var value: smart_ptr\<vT\>) : auto <function-builtin_emplace_new_table_ls_autokT,_smart_ptr_ls_autovT_gr__gr__kT_smart_ptr_ls_vT_gr_>` 
-  *  :ref:`emplace (var Tab: table\<auto, auto\>; key: auto; value: auto) : auto <function-builtin_emplace_table_ls_auto,_auto_gr__auto_auto_0x3a9>` 
-  *  :ref:`emplace (var a: array\<auto\>; value: auto) : auto <function-builtin_emplace_array_ls_auto_gr__auto_0x3b6>` 
-  *  :ref:`emplace_new (var Arr: array\<smart_ptr\<auto(numT)\>\>; var value: smart_ptr\<numT\>) : auto <function-builtin_emplace_new_array_ls_smart_ptr_ls_autonumT_gr__gr__smart_ptr_ls_numT_gr_>` 
-  *  :ref:`insert_default (var tab: table\<auto(TT), auto(QQ)\>; key: TT|TT#; var value: QQ ==const|QQ# ==const) <function-builtin_insert_default_table_ls_autoTT,_autoQQ_gr__TTTT_hh__QQ__eq__eq_constQQ_hh___eq__eq_const>` 
   *  :ref:`insert_default (var tab: table\<auto(keyT), auto(valT)\>; key: keyT|keyT#; value: valT ==const|valT const# ==const) <function-builtin_insert_default_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_const_hh___eq__eq_const>` 
   *  :ref:`insert_default (var tab: table\<auto(keyT), auto(valT)\>; key: keyT|keyT#) <function-builtin_insert_default_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
-  *  :ref:`emplace_default (var tab: table\<auto(keyT), auto(valT)\>; key: keyT|keyT#) <function-builtin_emplace_default_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
-  *  :ref:`get_with_default (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; blk: block\<(var p:valT&):void\>) <function-builtin_get_with_default__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_var_p_c_valT_c_void_gr_>` 
-  *  :ref:`modify (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; blk: block\<(p:valT):valT\>) <function-builtin_modify__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_p_c_valT_c_valT_gr_>` 
-  *  :ref:`key_exists (Tab: table\<auto(keyT);auto(valT)\>|table\<auto(keyT);auto(valT)\>#; at: string#) : bool <function-builtin_key_exists_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh__string_hh_>` 
+  *  :ref:`insert_default (var tab: table\<auto(TT), auto(QQ)\>; key: TT|TT#; var value: QQ ==const|QQ# ==const) <function-builtin_insert_default_table_ls_autoTT,_autoQQ_gr__TTTT_hh__QQ__eq__eq_constQQ_hh___eq__eq_const>` 
   *  :ref:`key_exists (Tab: table\<auto(keyT);auto(valT)\>|table\<auto(keyT);auto(valT)\>#; at: keyT|keyT#) : bool <function-builtin_key_exists_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh__keyTkeyT_hh_>` 
-  *  :ref:`copy_to_local (a: auto(TT)) : TT <function-builtin_copy_to_local_autoTT_0x41f>` 
-  *  :ref:`move_to_local (var a: auto(TT)&) : TT <function-builtin_move_to_local_autoTT_0x428>` 
-  *  :ref:`keys (a: table\<auto(keyT);auto(valT)\> ==const|table\<auto(keyT);auto(valT)\> const# ==const) : iterator\<keyT\> <function-builtin_keys_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__const_hh___eq__eq_const>` 
+  *  :ref:`key_exists (Tab: table\<auto(keyT);auto(valT)\>|table\<auto(keyT);auto(valT)\>#; at: string#) : bool <function-builtin_key_exists_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh__string_hh_>` 
   *  :ref:`keys (var a: table\<auto(keyT);auto(valT)\> ==const|table\<auto(keyT);auto(valT)\># ==const) : iterator\<keyT\> <function-builtin_keys_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__hh___eq__eq_const>` 
-  *  :ref:`values (a: table\<auto(keyT);void\> ==const|table\<auto(keyT);void\> const# ==const) : auto <function-builtin_values_table_ls_autokeyT;void_gr___eq__eq_consttable_ls_autokeyT;void_gr__const_hh___eq__eq_const>` 
-  *  :ref:`values (var a: table\<auto(keyT);void\> ==const|table\<auto(keyT);void\># ==const) : auto <function-builtin_values_table_ls_autokeyT;void_gr___eq__eq_consttable_ls_autokeyT;void_gr__hh___eq__eq_const>` 
-  *  :ref:`values (a: table\<auto(keyT);auto(valT)\> ==const|table\<auto(keyT);auto(valT)\> const# ==const) : iterator\<valT const&\> <function-builtin_values_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__const_hh___eq__eq_const>` 
-  *  :ref:`values (var a: table\<auto(keyT);auto(valT)\> ==const|table\<auto(keyT);auto(valT)\># ==const) : iterator\<valT&\> <function-builtin_values_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__hh___eq__eq_const>` 
-  *  :ref:`values (a: table\<auto(keyT);auto(valT)[]\> ==const|table\<auto(keyT);auto(valT)[]\> const# ==const) : iterator\<valT const[-2]&\> <function-builtin_values_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__const_hh___eq__eq_const>` 
-  *  :ref:`values (var a: table\<auto(keyT);auto(valT)[]\> ==const|table\<auto(keyT);auto(valT)[]\># ==const) : iterator\<valT[-2]&\> <function-builtin_values_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__hh___eq__eq_const>` 
+  *  :ref:`keys (a: table\<auto(keyT);auto(valT)\> ==const|table\<auto(keyT);auto(valT)\> const# ==const) : iterator\<keyT\> <function-builtin_keys_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__const_hh___eq__eq_const>` 
+  *  :ref:`length (a: auto|auto#) : int <function-builtin_length_autoauto_hh_>` 
+  *  :ref:`length (array: array\<anything\>) : int <function-builtin_length_array_ls_anything_gr_>` 
+  *  :ref:`length (table: table\<anything, anything\>) : int <function-builtin_length_table_ls_anything,_anything_gr_>` 
+  *  :ref:`lock (a: array\<auto(TT)\> ==const|array\<auto(TT)\> const# ==const; blk: block\<(x:array\<TT\>#):auto\>) : auto <function-builtin_lock_array_ls_autoTT_gr___eq__eq_constarray_ls_autoTT_gr__const_hh___eq__eq_const_block_ls_x_c_array_ls_TT_gr__hh__c_auto_gr_>` 
+  *  :ref:`lock (var a: array\<auto(TT)\> ==const|array\<auto(TT)\># ==const; blk: block\<(var x:array\<TT\>#):auto\>) : auto <function-builtin_lock_array_ls_autoTT_gr___eq__eq_constarray_ls_autoTT_gr__hh___eq__eq_const_block_ls_var_x_c_array_ls_TT_gr__hh__c_auto_gr_>` 
   *  :ref:`lock (Tab: table\<auto(keyT);auto(valT)\>|table\<auto(keyT);auto(valT)\>#; blk: block\<(t:table\<keyT, valT\>#):void\>) : auto <function-builtin_lock_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh__block_ls_t_c_table_ls_keyT,_valT_gr__hh__c_void_gr_>` 
   *  :ref:`lock_forever (var Tab: table\<auto(keyT);auto(valT)\>|table\<auto(keyT);auto(valT)\>#) : table\<keyT, valT\># <function-builtin_lock_forever_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh_>` 
+  *  :ref:`modify (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; blk: block\<(p:valT):valT\>) <function-builtin_modify__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_p_c_valT_c_valT_gr_>` 
+  *  :ref:`move_to_local (var a: auto(TT)&) : TT <function-builtin_move_to_local_autoTT_0x428>` 
+  *  :ref:`move_to_ref (var a: auto&; var b: auto) : auto <function-builtin_move_to_ref_auto_auto_0x80c>` 
   *  :ref:`next (var it: iterator\<auto(TT)\>; var value: TT&) : bool <function-builtin_next_iterator_ls_autoTT_gr__TT>` 
-  *  :ref:`each (rng: range) : iterator\<int\> <function-builtin_each_range>` 
-  *  :ref:`each (rng: urange) : iterator\<uint\> <function-builtin_each_urange>` 
-  *  :ref:`each (rng: range64) : iterator\<int64\> <function-builtin_each_range64>` 
-  *  :ref:`each (rng: urange64) : iterator\<uint64\> <function-builtin_each_urange64>` 
-  *  :ref:`each (str: string) : iterator\<int\> <function-builtin_each_string>` 
-  *  :ref:`each (a: auto(TT)[]) : iterator\<TT&\> <function-builtin_each_autoTT_0x59e>` 
-  *  :ref:`each (a: array\<auto(TT)\>) : iterator\<TT&\> <function-builtin_each_array_ls_autoTT_gr_>` 
-  *  :ref:`each (a: array\<auto(TT)\>#) : iterator\<TT&#\> <function-builtin_each_array_ls_autoTT_gr__hh_>` 
-  *  :ref:`each (lam: lambda\<(var arg:auto(argT)):bool\>) : iterator\<argT\> <function-builtin_each_lambda_ls_var_arg_c_autoargT_c_bool_gr_>` 
-  *  :ref:`each_ref (lam: lambda\<(var arg:auto(argT)?):bool\>) : iterator\<argT&\> <function-builtin_each_ref_lambda_ls_var_arg_c_autoargT_q__c_bool_gr_>` 
-  *  :ref:`each_enum (tt: auto(TT)) : iterator\<TT\> <function-builtin_each_enum_autoTT_0x5cb>` 
   *  :ref:`nothing (var it: iterator\<auto(TT)\>) : iterator\<TT\> <function-builtin_nothing_iterator_ls_autoTT_gr_>` 
-  *  :ref:`to_array (var it: iterator\<auto(TT)\>) : array\<TT\> <function-builtin_to_array_iterator_ls_autoTT_gr_>` 
+  *  :ref:`pop (var Arr: array\<auto(numT)\>) : auto <function-builtin_pop_array_ls_autonumT_gr_>` 
+  *  :ref:`push (var Arr: array\<auto(numT)[]\>; varr: numT const[] ==const) : auto <function-builtin_push_array_ls_autonumT_gr__numT_const__eq__eq_const>` 
+  *  :ref:`push (var Arr: array\<auto(numT)\>; varr: numT[]) : auto <function-builtin_push_array_ls_autonumT_gr__numT>` 
+  *  :ref:`push (var Arr: array\<auto(numT)[]\>; var varr: numT[] ==const) : auto <function-builtin_push_array_ls_autonumT_gr___numT__eq__eq_const>` 
+  *  :ref:`push (var Arr: array\<auto(numT)\>; varr: array\<numT\>) : auto <function-builtin_push_array_ls_autonumT_gr__array_ls_numT_gr_>` 
+  *  :ref:`push (var Arr: array\<auto(numT)\>; value: numT ==const) : auto <function-builtin_push_array_ls_autonumT_gr__numT__eq__eq_const>` 
+  *  :ref:`push (var Arr: array\<auto(numT)\>; var value: numT ==const; at: int) : auto <function-builtin_push_array_ls_autonumT_gr___numT__eq__eq_const_int>` 
+  *  :ref:`push (var Arr: array\<auto(numT)\>; var value: numT ==const) : auto <function-builtin_push_array_ls_autonumT_gr___numT__eq__eq_const>` 
+  *  :ref:`push (var Arr: array\<auto(numT)\>; var varr: array\<numT\>) : auto <function-builtin_push_array_ls_autonumT_gr___array_ls_numT_gr_>` 
+  *  :ref:`push (var Arr: array\<auto(numT)\>; value: numT ==const; at: int) : auto <function-builtin_push_array_ls_autonumT_gr__numT__eq__eq_const_int>` 
+  *  :ref:`push_clone (var A: auto(CT); b: auto(TT)|auto(TT)#) : auto <function-builtin_push_clone_autoCT_autoTTautoTT_hh__0x1db>` 
+  *  :ref:`push_clone (var Arr: array\<auto(numT)[]\>; var varr: numT[]) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT>` 
+  *  :ref:`push_clone (var Arr: array\<auto(numT)\>; varr: numT const[] ==const) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT_const__eq__eq_const>` 
+  *  :ref:`push_clone (var Arr: array\<auto(numT)\>; var value: numT ==const|numT# ==const) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT__eq__eq_constnumT_hh___eq__eq_const>` 
+  *  :ref:`push_clone (var Arr: array\<auto(numT)\>; var varr: numT[] ==const) : auto <function-builtin_push_clone_array_ls_autonumT_gr___numT__eq__eq_const>` 
+  *  :ref:`push_clone (var Arr: array\<auto(numT)\>; var value: numT ==const|numT# ==const; at: int) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT__eq__eq_constnumT_hh___eq__eq_const_int>` 
+  *  :ref:`push_clone (var Arr: array\<auto(numT)\>; value: numT ==const|numT const# ==const; at: int) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT__eq__eq_constnumT_const_hh___eq__eq_const_int>` 
+  *  :ref:`push_clone (var Arr: array\<auto(numT)\>; value: numT ==const|numT const# ==const) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT__eq__eq_constnumT_const_hh___eq__eq_const>` 
+  *  :ref:`push_clone (var Arr: array\<auto(numT)[]\>; varr: numT const[] ==const) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT_const__eq__eq_const>` 
+  *  :ref:`remove_value (var arr: array\<auto(TT)\>|array\<auto(TT)\>#; key: TT) : bool <function-builtin_remove_value_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__TT>` 
+  *  :ref:`reserve (var Tab: table\<auto(keyT), auto\>; newSize: int) : auto <function-builtin_reserve_table_ls_autokeyT,_auto_gr__int>` 
+  *  :ref:`reserve (var Arr: array\<auto(numT)\>; newSize: int) : auto <function-builtin_reserve_array_ls_autonumT_gr__int>` 
+  *  :ref:`resize (var Arr: array\<auto(numT)\>; newSize: int) : auto <function-builtin_resize_array_ls_autonumT_gr__int>` 
+  *  :ref:`resize_and_init (var Arr: array\<auto(numT)\>; newSize: int; initValue: numT) : auto <function-builtin_resize_and_init_array_ls_autonumT_gr__int_numT>` 
+  *  :ref:`resize_and_init (var Arr: array\<auto(numT)\>; newSize: int) : auto <function-builtin_resize_and_init_array_ls_autonumT_gr__int>` 
+  *  :ref:`resize_no_init (var Arr: array\<auto(numT)\>; newSize: int) : auto <function-builtin_resize_no_init_array_ls_autonumT_gr__int>` 
+  *  :ref:`sort (var a: array\<auto(TT)\>|array\<auto(TT)\>#) : auto <function-builtin_sort_array_ls_autoTT_gr_array_ls_autoTT_gr__hh_>` 
+  *  :ref:`sort (var a: array\<auto(TT)\>|array\<auto(TT)\>#; cmp: block\<(x:TT;y:TT):bool\>) : auto <function-builtin_sort_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__block_ls_x_c_TT;y_c_TT_c_bool_gr_>` 
+  *  :ref:`sort (var a: auto(TT)[]|auto(TT)[]#) : auto <function-builtin_sort_autoTTautoTT_hh_>` 
+  *  :ref:`sort (var a: auto(TT)[]|auto(TT)[]#; cmp: block\<(x:TT;y:TT):bool\>) : auto <function-builtin_sort_autoTTautoTT_hh__block_ls_x_c_TT;y_c_TT_c_bool_gr_>` 
+  *  :ref:`subarray (a: auto(TT)[]; r: urange) : auto <function-builtin_subarray_autoTT_urange_0x7c2>` 
+  *  :ref:`subarray (a: array\<auto(TT)\>; r: urange) : auto <function-builtin_subarray_array_ls_autoTT_gr__urange>` 
+  *  :ref:`subarray (a: array\<auto(TT)\>; r: range) : auto <function-builtin_subarray_array_ls_autoTT_gr__range>` 
+  *  :ref:`subarray (var a: array\<auto(TT)\>; r: range) : auto <function-builtin_subarray__array_ls_autoTT_gr__range>` 
+  *  :ref:`subarray (a: auto(TT)[]; r: range) : auto <function-builtin_subarray_autoTT_range_0x7b1>` 
   *  :ref:`to_array (a: auto(TT)[]) : array\<TT\> <function-builtin_to_array_autoTT_0x5e9>` 
+  *  :ref:`to_array (var it: iterator\<auto(TT)\>) : array\<TT\> <function-builtin_to_array_iterator_ls_autoTT_gr_>` 
+  *  :ref:`to_array_move (var a: auto(TT) ==const) : array\<TT\> <function-builtin_to_array_move__autoTT__eq__eq_const_0x61a>` 
   *  :ref:`to_array_move (var a: auto(TT)[]) : array\<TT\> <function-builtin_to_array_move_autoTT_0x5f3>` 
   *  :ref:`to_array_move (a: auto(TT) ==const) : array\<TT\> <function-builtin_to_array_move_autoTT__eq__eq_const_0x608>` 
-  *  :ref:`to_array_move (var a: auto(TT) ==const) : array\<TT\> <function-builtin_to_array_move__autoTT__eq__eq_const_0x61a>` 
   *  :ref:`to_table (a: tuple\<auto(keyT);auto(valT)\>[]) : table\<keyT, valT\> <function-builtin_to_table_tuple_ls_autokeyT;autovalT_gr_>` 
   *  :ref:`to_table (a: auto(keyT)[]) : table\<keyT, void\> <function-builtin_to_table_autokeyT_0x635>` 
+  *  :ref:`to_table_move (var a: tuple\<auto(keyT);auto(valT)\>[]) : table\<keyT, valT\> <function-builtin_to_table_move_tuple_ls_autokeyT;autovalT_gr_>` 
+  *  :ref:`to_table_move (var a: tuple\<auto(keyT);auto(valT)\>) : table\<keyT, valT\> <function-builtin_to_table_move_tuple_ls_autokeyT;autovalT_gr_>` 
+  *  :ref:`to_table_move (var a: array\<tuple\<auto(keyT);auto(valT)\>\>) : table\<keyT, valT\> <function-builtin_to_table_move_array_ls_tuple_ls_autokeyT;autovalT_gr__gr_>` 
   *  :ref:`to_table_move (a: auto(keyT)[]) : table\<keyT, void\> <function-builtin_to_table_move_autokeyT_0x63e>` 
   *  :ref:`to_table_move (a: array\<auto(keyT)\>) : table\<keyT, void\> <function-builtin_to_table_move_array_ls_autokeyT_gr_>` 
   *  :ref:`to_table_move (a: auto(keyT)) : table\<keyT, void\> <function-builtin_to_table_move_autokeyT_0x650>` 
-  *  :ref:`to_table_move (var a: tuple\<auto(keyT);auto(valT)\>) : table\<keyT, valT\> <function-builtin_to_table_move_tuple_ls_autokeyT;autovalT_gr_>` 
-  *  :ref:`to_table_move (var a: tuple\<auto(keyT);auto(valT)\>[]) : table\<keyT, valT\> <function-builtin_to_table_move_tuple_ls_autokeyT;autovalT_gr_>` 
-  *  :ref:`to_table_move (var a: array\<tuple\<auto(keyT);auto(valT)\>\>) : table\<keyT, valT\> <function-builtin_to_table_move_array_ls_tuple_ls_autokeyT;autovalT_gr__gr_>` 
-  *  :ref:`sort (var a: auto(TT)[]|auto(TT)[]#) : auto <function-builtin_sort_autoTTautoTT_hh_>` 
-  *  :ref:`sort (var a: array\<auto(TT)\>|array\<auto(TT)\>#) : auto <function-builtin_sort_array_ls_autoTT_gr_array_ls_autoTT_gr__hh_>` 
-  *  :ref:`sort (var a: auto(TT)[]|auto(TT)[]#; cmp: block\<(x:TT;y:TT):bool\>) : auto <function-builtin_sort_autoTTautoTT_hh__block_ls_x_c_TT;y_c_TT_c_bool_gr_>` 
-  *  :ref:`sort (var a: array\<auto(TT)\>|array\<auto(TT)\>#; cmp: block\<(x:TT;y:TT):bool\>) : auto <function-builtin_sort_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__block_ls_x_c_TT;y_c_TT_c_bool_gr_>` 
-  *  :ref:`lock (var a: array\<auto(TT)\> ==const|array\<auto(TT)\># ==const; blk: block\<(var x:array\<TT\>#):auto\>) : auto <function-builtin_lock_array_ls_autoTT_gr___eq__eq_constarray_ls_autoTT_gr__hh___eq__eq_const_block_ls_var_x_c_array_ls_TT_gr__hh__c_auto_gr_>` 
-  *  :ref:`lock (a: array\<auto(TT)\> ==const|array\<auto(TT)\> const# ==const; blk: block\<(x:array\<TT\>#):auto\>) : auto <function-builtin_lock_array_ls_autoTT_gr___eq__eq_constarray_ls_autoTT_gr__const_hh___eq__eq_const_block_ls_x_c_array_ls_TT_gr__hh__c_auto_gr_>` 
-  *  :ref:`find_index (arr: array\<auto(TT)\>|array\<auto(TT)\>#; key: TT) : auto <function-builtin_find_index_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__TT>` 
-  *  :ref:`find_index (arr: auto(TT)[]|auto(TT)[]#; key: TT) : auto <function-builtin_find_index_autoTTautoTT_hh__TT>` 
-  *  :ref:`find_index (var arr: iterator\<auto(TT)\>; key: TT) : auto <function-builtin_find_index_iterator_ls_autoTT_gr__TT>` 
-  *  :ref:`find_index_if (arr: array\<auto(TT)\>|array\<auto(TT)\>#; blk: block\<(key:TT):bool\>) : auto <function-builtin_find_index_if_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__block_ls_key_c_TT_c_bool_gr_>` 
-  *  :ref:`find_index_if (arr: auto(TT)[]|auto(TT)[]#; blk: block\<(key:TT):bool\>) : auto <function-builtin_find_index_if_autoTTautoTT_hh__block_ls_key_c_TT_c_bool_gr_>` 
-  *  :ref:`find_index_if (var arr: iterator\<auto(TT)\>; blk: block\<(key:TT):bool\>) : auto <function-builtin_find_index_if_iterator_ls_autoTT_gr__block_ls_key_c_TT_c_bool_gr_>` 
-  *  :ref:`has_value (a: auto; key: auto) : auto <function-builtin_has_value_auto_auto_0x75c>` 
-  *  :ref:`has_value (var a: iterator\<auto\>; key: auto) : auto <function-builtin_has_value_iterator_ls_auto_gr__auto_0x76a>` 
-  *  :ref:`subarray (a: auto(TT)[]; r: range) : auto <function-builtin_subarray_autoTT_range_0x7b1>` 
-  *  :ref:`subarray (a: auto(TT)[]; r: urange) : auto <function-builtin_subarray_autoTT_urange_0x7c2>` 
-  *  :ref:`subarray (a: array\<auto(TT)\>; r: range) : auto <function-builtin_subarray_array_ls_autoTT_gr__range>` 
-  *  :ref:`subarray (var a: array\<auto(TT)\>; r: range) : auto <function-builtin_subarray__array_ls_autoTT_gr__range>` 
-  *  :ref:`subarray (a: array\<auto(TT)\>; r: urange) : auto <function-builtin_subarray_array_ls_autoTT_gr__urange>` 
-  *  :ref:`move_to_ref (var a: auto&; var b: auto) : auto <function-builtin_move_to_ref_auto_auto_0x80c>` 
-  *  :ref:`clear (var t: table\<auto(KT), auto(VT)\>) : auto <function-builtin_clear_table_ls_autoKT,_autoVT_gr_>` 
+  *  :ref:`values (var a: table\<auto(keyT);auto(valT)[]\> ==const|table\<auto(keyT);auto(valT)[]\># ==const) : iterator\<valT[-2]&\> <function-builtin_values_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__hh___eq__eq_const>` 
+  *  :ref:`values (a: table\<auto(keyT);auto(valT)[]\> ==const|table\<auto(keyT);auto(valT)[]\> const# ==const) : iterator\<valT const[-2]&\> <function-builtin_values_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__const_hh___eq__eq_const>` 
+  *  :ref:`values (a: table\<auto(keyT);auto(valT)\> ==const|table\<auto(keyT);auto(valT)\> const# ==const) : iterator\<valT const&\> <function-builtin_values_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__const_hh___eq__eq_const>` 
+  *  :ref:`values (a: table\<auto(keyT);void\> ==const|table\<auto(keyT);void\> const# ==const) : auto <function-builtin_values_table_ls_autokeyT;void_gr___eq__eq_consttable_ls_autokeyT;void_gr__const_hh___eq__eq_const>` 
+  *  :ref:`values (var a: table\<auto(keyT);void\> ==const|table\<auto(keyT);void\># ==const) : auto <function-builtin_values_table_ls_autokeyT;void_gr___eq__eq_consttable_ls_autokeyT;void_gr__hh___eq__eq_const>` 
+  *  :ref:`values (var a: table\<auto(keyT);auto(valT)\> ==const|table\<auto(keyT);auto(valT)\># ==const) : iterator\<valT&\> <function-builtin_values_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__hh___eq__eq_const>` 
 
-.. _function-builtin_clear_array_ls_anything_gr_:
 
-.. das:function:: clear(array: array<anything>)
+back
+^^^^
 
-Removes all elements from the dynamic `array`, leaving it empty with a size of 0.
+.. _function-builtin_back_array_ls_autoTT_gr__hh_:
 
-:Arguments: * **array** : array implicit
+.. das:function:: back(a: array<auto(TT)>#) : TT const&#
 
-.. _function-builtin_length_array_ls_anything_gr_:
+Accesses and returns a const temporary reference to the last element of the temporary dynamic array `a`.
 
-.. das:function:: length(array: array<anything>) : int
+:Arguments: * **a** : array<auto(TT)>#!
 
-Returns the number of elements currently stored in the given dynamic `array`.
+.. _function-builtin_back_array_ls_autoTT_gr_:
 
-:Arguments: * **array** : array implicit
+.. das:function:: back(a: array<auto(TT)>) : TT
 
-.. _function-builtin_capacity_array_ls_anything_gr_:
+.. _function-builtin_back__array_ls_autoTT_gr__hh_:
 
-.. das:function:: capacity(array: array<anything>) : int
+.. das:function:: back(a: array<auto(TT)>#) : TT&#
 
-Returns the current capacity of the `array` — the number of elements it can hold before triggering a reallocation.
+.. _function-builtin_back__autoTT__eq__eq_const_0x213:
 
-:Arguments: * **array** : array implicit
+.. das:function:: back(arr: auto(TT) ==const) : auto&
 
-.. _function-builtin_empty_iterator_implicit:
+.. _function-builtin_back_autoTT__eq__eq_const_0x21e:
 
-.. das:function:: empty(iterator: iterator implicit) : bool
+.. das:function:: back(arr: auto(TT) ==const) : auto
 
-Returns `true` if the iterator is empty, meaning it would not produce any more values or has not been initialized.
+.. _function-builtin_back__array_ls_autoTT_gr_:
 
-:Arguments: * **iterator** : iterator implicit
+.. das:function:: back(a: array<auto(TT)>) : TT&
 
-.. _function-builtin_length_table_ls_anything,_anything_gr_:
+----
 
-.. das:function:: length(table: table<anything, anything>) : int
 
-Returns the number of key-value pairs currently stored in the given `table`.
-
-:Arguments: * **table** : table implicit
+capacity
+^^^^^^^^
 
 .. _function-builtin_capacity_table_ls_anything,_anything_gr_:
 
@@ -749,175 +747,106 @@ Returns the current capacity of the `table` — the number of key-value pairs it
 
 :Arguments: * **table** : table implicit
 
-.. _function-builtin_empty_string_implicit:
+.. _function-builtin_capacity_array_ls_anything_gr_:
 
-.. das:function:: empty(str: string implicit) : bool
+.. das:function:: capacity(array: array<anything>) : int
 
-Checks whether the string `str` is empty (null or zero-length) and returns `true` if so.
+----
 
-:Arguments: * **str** : string implicit
 
-.. _function-builtin_empty_das_string_implicit:
+clear
+^^^^^
 
-.. das:function:: empty(str: das_string implicit) : bool
+.. _function-builtin_clear_array_ls_anything_gr_:
 
-Checks whether the `das_string` is empty (has zero length) and returns `true` if so.
+.. das:function:: clear(array: array<anything>)
 
-:Arguments: * **str** :  :ref:`das_string <handle-builtin-das_string>`  implicit
+Removes all elements from the dynamic `array`, leaving it empty with a size of 0.
 
-.. _function-builtin_resize_array_ls_autonumT_gr__int:
+:Arguments: * **array** : array implicit
 
-.. das:function:: resize(Arr: array<auto(numT)>; newSize: int) : auto
+.. _function-builtin_clear_table_ls_autoKT,_autoVT_gr_:
 
-Resizes dynamic array `Arr` to `newSize` elements; new elements beyond the previous length are zero-initialized, and excess elements are removed.
+.. das:function:: clear(t: table<auto(KT), auto(VT)>) : auto
 
-:Arguments: * **Arr** : array<auto(numT)>
+----
 
-            * **newSize** : int
+.. _function-builtin_copy_to_local_autoTT_0x41f:
 
-.. _function-builtin_resize_and_init_array_ls_autonumT_gr__int:
+.. das:function:: copy_to_local(a: auto(TT)) : TT
 
-.. das:function:: resize_and_init(Arr: array<auto(numT)>; newSize: int) : auto
+Copies the value `a` and returns it as a new local value on the stack, which can be used to work around aliasing issues where a reference might be invalidated.
 
-Resizes dynamic array `Arr` to `newSize` elements, initializing any newly added elements with their default constructor.
+:Arguments: * **a** : auto(TT)
 
-:Arguments: * **Arr** : array<auto(numT)>
 
-            * **newSize** : int
+each
+^^^^
 
-.. _function-builtin_resize_and_init_array_ls_autonumT_gr__int_numT:
+.. _function-builtin_each_array_ls_autoTT_gr__hh_:
 
-.. das:function:: resize_and_init(Arr: array<auto(numT)>; newSize: int; initValue: numT) : auto
+.. das:function:: each(a: array<auto(TT)>#) : iterator<TT&#>
 
-Resizes dynamic array `Arr` to `newSize` elements, initializing any newly added elements with the provided `initValue`.
+Creates an iterator that yields temporary references to each element of the temporary dynamic array `a`.
 
-:Arguments: * **Arr** : array<auto(numT)>
+:Arguments: * **a** : array<auto(TT)>#
 
-            * **newSize** : int
+.. _function-builtin_each_string:
 
-            * **initValue** : numT
+.. das:function:: each(str: string) : iterator<int>
 
-.. _function-builtin_resize_no_init_array_ls_autonumT_gr__int:
+.. _function-builtin_each_array_ls_autoTT_gr_:
 
-.. das:function:: resize_no_init(Arr: array<auto(numT)>; newSize: int) : auto
+.. das:function:: each(a: array<auto(TT)>) : iterator<TT&>
 
-Resizes dynamic array `Arr` to `newSize` elements without initializing newly added entries, leaving their memory contents undefined.
+.. _function-builtin_each_autoTT_0x59e:
 
-:Arguments: * **Arr** : array<auto(numT)>
+.. das:function:: each(a: auto(TT)[]) : iterator<TT&>
 
-            * **newSize** : int
+.. _function-builtin_each_lambda_ls_var_arg_c_autoargT_c_bool_gr_:
 
-.. _function-builtin_reserve_array_ls_autonumT_gr__int:
+.. das:function:: each(lam: lambda<(var arg:auto(argT)):bool>) : iterator<argT>
 
-.. das:function:: reserve(Arr: array<auto(numT)>; newSize: int) : auto
+.. _function-builtin_each_range:
 
-Pre-allocates memory in `Arr` to hold at least `newSize` elements without reallocation, improving performance of subsequent push operations.
+.. das:function:: each(rng: range) : iterator<int>
 
-:Arguments: * **Arr** : array<auto(numT)>
+.. _function-builtin_each_urange64:
 
-            * **newSize** : int
+.. das:function:: each(rng: urange64) : iterator<uint64>
 
-.. _function-builtin_pop_array_ls_autonumT_gr_:
+.. _function-builtin_each_range64:
 
-.. das:function:: pop(Arr: array<auto(numT)>) : auto
+.. das:function:: each(rng: range64) : iterator<int64>
 
-Removes and discards the last element of `Arr`, reducing its length by one.
+.. _function-builtin_each_urange:
 
-:Arguments: * **Arr** : array<auto(numT)>
+.. das:function:: each(rng: urange) : iterator<uint>
 
-.. _function-builtin_push_array_ls_autonumT_gr__numT__eq__eq_const_int:
+----
 
-.. das:function:: push(Arr: array<auto(numT)>; value: numT ==const; at: int) : auto
+.. _function-builtin_each_enum_autoTT_0x5cb:
 
-Inserts `value` into dynamic array `Arr` at the specified index `at`, shifting subsequent elements.
+.. das:function:: each_enum(tt: auto(TT)) : iterator<TT>
 
-:Arguments: * **Arr** : array<auto(numT)>
+.. warning:: 
+  This function is deprecated.
 
-            * **value** : numT!
+Creates an iterator that yields every value of the enumeration type inferred from `tt`, allowing iteration over all members of an enum.
 
-            * **at** : int
+:Arguments: * **tt** : auto(TT)
 
-.. _function-builtin_push_array_ls_autonumT_gr___numT__eq__eq_const_int:
+.. _function-builtin_each_ref_lambda_ls_var_arg_c_autoargT_q__c_bool_gr_:
 
-.. das:function:: push(Arr: array<auto(numT)>; value: numT ==const; at: int) : auto
+.. das:function:: each_ref(lam: lambda<(var arg:auto(argT)?):bool>) : iterator<argT&>
 
-Inserts a mutable `value` into dynamic array `Arr` at the specified index `at`, shifting subsequent elements.
+Wraps a lambda `lam` — which receives a mutable pointer argument and returns a bool indicating whether to continue — into an iterator that yields references to each value rather than copies.
 
-:Arguments: * **Arr** : array<auto(numT)>
+:Arguments: * **lam** : lambda<(arg:auto(argT)?):bool>
 
-            * **value** : numT!
 
-            * **at** : int
-
-.. _function-builtin_push_array_ls_autonumT_gr__numT__eq__eq_const:
-
-.. das:function:: push(Arr: array<auto(numT)>; value: numT ==const) : auto
-
-Appends a single `value` to the end of dynamic array `Arr`.
-
-:Arguments: * **Arr** : array<auto(numT)>
-
-            * **value** : numT!
-
-.. _function-builtin_push_array_ls_autonumT_gr___numT__eq__eq_const:
-
-.. das:function:: push(Arr: array<auto(numT)>; value: numT ==const) : auto
-
-Appends a mutable `value` to the end of dynamic array `Arr`, moving it if possible.
-
-:Arguments: * **Arr** : array<auto(numT)>
-
-            * **value** : numT!
-
-.. _function-builtin_push_array_ls_autonumT_gr__array_ls_numT_gr_:
-
-.. das:function:: push(Arr: array<auto(numT)>; varr: array<numT>) : auto
-
-Appends all elements of dynamic array `varr` to the end of dynamic array `Arr`.
-
-:Arguments: * **Arr** : array<auto(numT)>
-
-            * **varr** : array<numT>!
-
-.. _function-builtin_push_array_ls_autonumT_gr___array_ls_numT_gr_:
-
-.. das:function:: push(Arr: array<auto(numT)>; varr: array<numT>) : auto
-
-Appends all elements of mutable dynamic array `varr` to the end of dynamic array `Arr`, moving elements when possible.
-
-:Arguments: * **Arr** : array<auto(numT)>
-
-            * **varr** : array<numT>!
-
-.. _function-builtin_push_array_ls_autonumT_gr__numT:
-
-.. das:function:: push(Arr: array<auto(numT)>; varr: numT[]) : auto
-
-Appends all elements of the static array `varr` to the end of dynamic array `Arr`.
-
-:Arguments: * **Arr** : array<auto(numT)>
-
-            * **varr** : numT[-1]
-
-.. _function-builtin_push_array_ls_autonumT_gr__numT_const__eq__eq_const:
-
-.. das:function:: push(Arr: array<auto(numT)[]>; varr: numT const[] ==const) : auto
-
-Appends a constant fixed-size array element `varr` to the end of `Arr`, an array of fixed-size arrays.
-
-:Arguments: * **Arr** : array<auto(numT)[-1]>
-
-            * **varr** : numT[-1]!
-
-.. _function-builtin_push_array_ls_autonumT_gr___numT__eq__eq_const:
-
-.. das:function:: push(Arr: array<auto(numT)[]>; varr: numT[] ==const) : auto
-
-Appends a mutable fixed-size array element `varr` to the end of `Arr`, an array of fixed-size arrays.
-
-:Arguments: * **Arr** : array<auto(numT)[-1]>
-
-            * **varr** : numT[-1]!
+emplace
+^^^^^^^
 
 .. _function-builtin_emplace_array_ls_autonumT_gr__numT_int:
 
@@ -935,195 +864,123 @@ Moves `value` into the dynamic array `Arr` at index `at` using move semantics, s
 
 .. das:function:: emplace(Arr: array<auto(numT)>; value: numT&) : auto
 
-Moves `value` into the end of the dynamic array `Arr` using move semantics, avoiding unnecessary copies.
+.. _function-builtin_emplace_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT:
 
-:Arguments: * **Arr** : array<auto(numT)>
+.. das:function:: emplace(Tab: table<auto(keyT), auto(valT)[]>; at: keyT|keyT#; val: valT[]&) : auto
 
-            * **value** : numT&
+.. _function-builtin_emplace_table_ls_auto,_auto_gr__auto_auto_0x3a9:
+
+.. das:function:: emplace(Tab: table<auto, auto>; key: auto; value: auto) : auto
+
+.. _function-builtin_emplace_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT:
+
+.. das:function:: emplace(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#; val: valT&) : auto
+
+.. _function-builtin_emplace_table_ls_autokeyT,_smart_ptr_ls_autovalT_gr__gr__keyTkeyT_hh__smart_ptr_ls_valT_gr_:
+
+.. das:function:: emplace(Tab: table<auto(keyT), smart_ptr<auto(valT)>>; at: keyT|keyT#; val: smart_ptr<valT>&) : auto
+
+.. _function-builtin_emplace_array_ls_auto_gr__auto_0x3b6:
+
+.. das:function:: emplace(a: array<auto>; value: auto) : auto
 
 .. _function-builtin_emplace_array_ls_autonumT_gr__numT:
 
 .. das:function:: emplace(Arr: array<auto(numT)>; value: numT[]) : auto
 
-Moves a fixed-size array `value` into the end of the dynamic array `Arr` of fixed-size arrays using move semantics.
-
-:Arguments: * **Arr** : array<auto(numT)>
-
-            * **value** : numT[-1]
-
 .. _function-builtin_emplace_array_ls_autonumT_gr__numT:
 
 .. das:function:: emplace(Arr: array<auto(numT)[]>; value: numT[]) : auto
 
-Moves a fixed-size array `value` into the end of the dynamic array `Arr` using move semantics, avoiding unnecessary copies.
+----
 
-:Arguments: * **Arr** : array<auto(numT)[-1]>
+.. _function-builtin_emplace_default_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_:
 
-            * **value** : numT[-1]
+.. das:function:: emplace_default(tab: table<auto(keyT), auto(valT)>; key: keyT|keyT#)
 
-.. _function-builtin_push_clone_array_ls_autonumT_gr__numT__eq__eq_constnumT_const_hh___eq__eq_const_int:
+Constructs a new default-initialized element in the table `tab` at the given `key`, only if that key does not already exist.
 
-.. das:function:: push_clone(Arr: array<auto(numT)>; value: numT ==const|numT const# ==const; at: int) : auto
+:Arguments: * **tab** : table<auto(keyT);auto(valT)>
 
-Clones a constant `value` and inserts the copy into dynamic array `Arr` at the specified index `at`, shifting subsequent elements.
+            * **key** : option<keyT|keyT#>
 
-:Arguments: * **Arr** : array<auto(numT)>
 
-            * **value** : option<numT!|numT#!>
+emplace_new
+^^^^^^^^^^^
 
-            * **at** : int
+.. _function-builtin_emplace_new_array_ls_smart_ptr_ls_autonumT_gr__gr__smart_ptr_ls_numT_gr_:
 
-.. _function-builtin_push_clone_array_ls_autonumT_gr__numT__eq__eq_constnumT_hh___eq__eq_const_int:
+.. das:function:: emplace_new(Arr: array<smart_ptr<auto(numT)>>; value: smart_ptr<numT>) : auto
 
-.. das:function:: push_clone(Arr: array<auto(numT)>; value: numT ==const|numT# ==const; at: int) : auto
+Moves a smart pointer `value` into the end of the array `Arr`, constructing the entry in-place and returning a reference to it.
 
-Clones `value` and inserts the copy into dynamic array `Arr` at the specified index `at`, shifting subsequent elements.
+:Arguments: * **Arr** : array<smart_ptr<auto(numT)>>
 
-:Arguments: * **Arr** : array<auto(numT)>
+            * **value** : smart_ptr<numT>
 
-            * **value** : option<numT!|numT#!>
+.. _function-builtin_emplace_new_table_ls_autokT,_smart_ptr_ls_autovT_gr__gr__kT_smart_ptr_ls_vT_gr_:
 
-            * **at** : int
+.. das:function:: emplace_new(tab: table<auto(kT), smart_ptr<auto(vT)>>; key: kT; value: smart_ptr<vT>) : auto
 
-.. _function-builtin_push_clone_array_ls_autonumT_gr__numT__eq__eq_constnumT_const_hh___eq__eq_const:
+----
 
-.. das:function:: push_clone(Arr: array<auto(numT)>; value: numT ==const|numT const# ==const) : auto
 
-Clones a constant `value` and appends the deep copy to the end of dynamic array `Arr`.
+empty
+^^^^^
 
-:Arguments: * **Arr** : array<auto(numT)>
+.. _function-builtin_empty_string_implicit:
 
-            * **value** : option<numT!|numT#!>
+.. das:function:: empty(str: string implicit) : bool
 
-.. _function-builtin_push_clone_array_ls_autonumT_gr__numT__eq__eq_constnumT_hh___eq__eq_const:
+Checks whether the string `str` is empty (null or zero-length) and returns `true` if so.
 
-.. das:function:: push_clone(Arr: array<auto(numT)>; value: numT ==const|numT# ==const) : auto
+:Arguments: * **str** : string implicit
 
-Clones a mutable `value` and appends the deep copy to the end of dynamic array `Arr`.
+.. _function-builtin_empty_das_string_implicit:
 
-:Arguments: * **Arr** : array<auto(numT)>
+.. das:function:: empty(str: das_string implicit) : bool
 
-            * **value** : option<numT!|numT#!>
+.. _function-builtin_empty_table_ls_auto;auto_gr_table_ls_auto;auto_gr__hh_:
 
-.. _function-builtin_push_clone_array_ls_autonumT_gr__numT_const__eq__eq_const:
+.. das:function:: empty(a: table<auto;auto>|table<auto;auto>#) : bool
 
-.. das:function:: push_clone(Arr: array<auto(numT)>; varr: numT const[] ==const) : auto
+.. _function-builtin_empty_array_ls_auto_gr_array_ls_auto_gr__hh_:
 
-Clones all elements of a constant static array `varr` and appends them to dynamic array `Arr`.
+.. das:function:: empty(a: array<auto>|array<auto>#) : bool
 
-:Arguments: * **Arr** : array<auto(numT)>
+.. _function-builtin_empty_iterator_implicit:
 
-            * **varr** : numT[-1]!
+.. das:function:: empty(iterator: iterator implicit) : bool
 
-.. _function-builtin_push_clone_array_ls_autonumT_gr___numT__eq__eq_const:
+----
 
-.. das:function:: push_clone(Arr: array<auto(numT)>; varr: numT[] ==const) : auto
 
-Clones all elements of a mutable static array `varr` and appends them to dynamic array `Arr`.
+erase
+^^^^^
 
-:Arguments: * **Arr** : array<auto(numT)>
+.. _function-builtin_erase_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_:
 
-            * **varr** : numT[-1]!
+.. das:function:: erase(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#) : bool
 
-.. _function-builtin_push_clone_array_ls_autonumT_gr__numT_const__eq__eq_const:
+Removes the entry with key `at` from the table `Tab`, returning `true` if the key was found and erased.
 
-.. das:function:: push_clone(Arr: array<auto(numT)[]>; varr: numT const[] ==const) : auto
+:Arguments: * **Tab** : table<auto(keyT);auto(valT)>
 
-Clones a constant fixed-size array `varr` and appends the copy to `Arr`, an array of fixed-size arrays.
-
-:Arguments: * **Arr** : array<auto(numT)[-1]>
-
-            * **varr** : numT[-1]!
-
-.. _function-builtin_push_clone_array_ls_autonumT_gr__numT:
-
-.. das:function:: push_clone(Arr: array<auto(numT)[]>; varr: numT[]) : auto
-
-Clones a mutable fixed-size array `varr` and appends the copy to `Arr`, an array of fixed-size arrays.
-
-:Arguments: * **Arr** : array<auto(numT)[-1]>
-
-            * **varr** : numT[-1]
-
-.. _function-builtin_push_clone_autoCT_autoTTautoTT_hh__0x1db:
-
-.. das:function:: push_clone(A: auto(CT); b: auto(TT)|auto(TT)#) : auto
-
-Clones and appends element `b` to the container `A`, using deep copy semantics rather than move or shallow copy.
-
-:Arguments: * **A** : auto(CT)
-
-            * **b** : option<auto(TT)|auto(TT)#>
-
-.. _function-builtin_back__array_ls_autoTT_gr_:
-
-.. das:function:: back(a: array<auto(TT)>) : TT&
-
-Accesses and returns a mutable reference to the last element of the dynamic array `a`.
-
-:Arguments: * **a** : array<auto(TT)>!
-
-.. _function-builtin_back__array_ls_autoTT_gr__hh_:
-
-.. das:function:: back(a: array<auto(TT)>#) : TT&#
-
-Accesses and returns a temporary mutable reference to the last element of the temporary dynamic array `a`.
-
-:Arguments: * **a** : array<auto(TT)>#!
-
-.. _function-builtin_back_array_ls_autoTT_gr_:
-
-.. das:function:: back(a: array<auto(TT)>) : TT
-
-Accesses and returns by value the last element of the dynamic array `a`.
-
-:Arguments: * **a** : array<auto(TT)>!
-
-.. _function-builtin_back_array_ls_autoTT_gr__hh_:
-
-.. das:function:: back(a: array<auto(TT)>#) : TT const&#
-
-Accesses and returns a const temporary reference to the last element of the temporary dynamic array `a`.
-
-:Arguments: * **a** : array<auto(TT)>#!
-
-.. _function-builtin_back__autoTT__eq__eq_const_0x213:
-
-.. das:function:: back(arr: auto(TT) ==const) : auto&
-
-Accesses and returns a mutable reference to the last element of the fixed-size array or static array `arr`.
-
-:Arguments: * **arr** : auto(TT)!
-
-.. _function-builtin_back_autoTT__eq__eq_const_0x21e:
-
-.. das:function:: back(arr: auto(TT) ==const) : auto
-
-Accesses and returns the last element of the fixed-size array or static array `arr` by value.
-
-:Arguments: * **arr** : auto(TT)!
+            * **at** : option<keyT|keyT#>
 
 .. _function-builtin_erase_array_ls_autonumT_gr__int:
 
 .. das:function:: erase(Arr: array<auto(numT)>; at: int) : auto
 
-Erases the element at index `at` from the array `Arr`, shifting subsequent elements to fill the gap.
-
-:Arguments: * **Arr** : array<auto(numT)>
-
-            * **at** : int
-
 .. _function-builtin_erase_array_ls_autonumT_gr__int_int:
 
 .. das:function:: erase(Arr: array<auto(numT)>; at: int; count: int) : auto
 
-Erases `count` elements from the array `Arr` starting at index `at`, shifting subsequent elements to fill the gap.
+.. _function-builtin_erase_table_ls_autokeyT,_autovalT_gr__string_hh_:
 
-:Arguments: * **Arr** : array<auto(numT)>
+.. das:function:: erase(Tab: table<auto(keyT), auto(valT)>; at: string#) : bool
 
-            * **at** : int
-
-            * **count** : int
+----
 
 .. _function-builtin_erase_if_array_ls_autoTT_gr__block_ls_key_c_TT_const_c_bool_gr_block_ls_var_key_c_TT_c_bool_gr_:
 
@@ -1135,61 +992,57 @@ Iterates over the array `arr` and removes all elements for which the block `blk`
 
             * **blk** : option<block<(key:TT):bool>|block<(key:TT&):bool>>
 
-.. _function-builtin_remove_value_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__TT:
 
-.. das:function:: remove_value(arr: array<auto(TT)>|array<auto(TT)>#; key: TT) : bool
+find_index
+^^^^^^^^^^
 
-Searches `arr` for the first element equal to `key` and removes it, returning true if an element was found and removed or false otherwise.
+.. _function-builtin_find_index_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__TT:
+
+.. das:function:: find_index(arr: array<auto(TT)>|array<auto(TT)>#; key: TT) : auto
+
+Searches the dynamic array `arr` for the first occurrence of `key` and returns its index, or -1 if not found.
 
 :Arguments: * **arr** : option<array<auto(TT)>|array<auto(TT)>#>
 
             * **key** : TT
 
-.. _function-builtin_length_autoauto_hh_:
+.. _function-builtin_find_index_iterator_ls_autoTT_gr__TT:
 
-.. das:function:: length(a: auto|auto#) : int
+.. das:function:: find_index(arr: iterator<auto(TT)>; key: TT) : auto
 
-Returns the number of elements currently stored in a table or dynamic array `a`.
+.. _function-builtin_find_index_autoTTautoTT_hh__TT:
 
-:Arguments: * **a** : option<auto|auto#>
+.. das:function:: find_index(arr: auto(TT)[]|auto(TT)[]#; key: TT) : auto
 
-.. _function-builtin_empty_array_ls_auto_gr_array_ls_auto_gr__hh_:
+----
 
-.. das:function:: empty(a: array<auto>|array<auto>#) : bool
 
-Checks whether the array `a` contains no elements and returns `true` if it is empty.
+find_index_if
+^^^^^^^^^^^^^
 
-:Arguments: * **a** : option<array<auto>|array<auto>#>
+.. _function-builtin_find_index_if_iterator_ls_autoTT_gr__block_ls_key_c_TT_c_bool_gr_:
 
-.. _function-builtin_empty_table_ls_auto;auto_gr_table_ls_auto;auto_gr__hh_:
+.. das:function:: find_index_if(arr: iterator<auto(TT)>; blk: block<(key:TT):bool>) : auto
 
-.. das:function:: empty(a: table<auto;auto>|table<auto;auto>#) : bool
+Consumes elements from the iterator `arr` and returns the index of the first element for which the block `blk` returns `true`, or -1 if no match is found.
 
-Checks whether the table `a` contains no entries and returns `true` if it is empty.
+:Arguments: * **arr** : iterator<auto(TT)>
 
-:Arguments: * **a** : option<table<auto;auto>|table<auto;auto>#>
+            * **blk** : block<(key:TT):bool>
 
-.. _function-builtin_reserve_table_ls_autokeyT,_auto_gr__int:
+.. _function-builtin_find_index_if_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__block_ls_key_c_TT_c_bool_gr_:
 
-.. das:function:: reserve(Tab: table<auto(keyT), auto>; newSize: int) : auto
+.. das:function:: find_index_if(arr: array<auto(TT)>|array<auto(TT)>#; blk: block<(key:TT):bool>) : auto
 
-Pre-allocates memory in `Tab` to hold at least `newSize` entries without rehashing, improving performance of subsequent insertions.
+.. _function-builtin_find_index_if_autoTTautoTT_hh__block_ls_key_c_TT_c_bool_gr_:
 
-:Arguments: * **Tab** : table<auto(keyT);auto>
+.. das:function:: find_index_if(arr: auto(TT)[]|auto(TT)[]#; blk: block<(key:TT):bool>) : auto
 
-            * **newSize** : int
+----
 
-.. _function-builtin_get_table_ls_autokeyT,_autovalT_gr__hh__keyTkeyT_hh__block_ls_p_c_valT_const_hh__c_void_gr_:
 
-.. das:function:: get(Tab: table<auto(keyT), auto(valT)>#; at: keyT|keyT#; blk: block<(p:valT const&#):void>) : auto
-
-Looks up `at` in the temporary table `Tab` and, if found, invokes `blk` with a const handle reference to the value; returns `true` if the key existed.
-
-:Arguments: * **Tab** : table<auto(keyT);auto(valT)>#!
-
-            * **at** : option<keyT|keyT#>
-
-            * **blk** : block<(p:valT&#):void>
+get
+^^^
 
 .. _function-builtin_get_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_p_c_valT_c_void_gr_:
 
@@ -1203,119 +1056,43 @@ Looks up `at` in the table `Tab` and, if found, invokes `blk` with a reference t
 
             * **blk** : block<(p:valT&):void>
 
-.. _function-builtin_get__table_ls_autokeyT,_autovalT_gr__hh__keyTkeyT_hh__block_ls_var_p_c_valT_hh__c_void_gr_:
+.. _function-builtin_get_table_ls_autokeyT,_autovalT_gr__hh__keyTkeyT_hh__block_ls_p_c_valT_const_hh__c_void_gr_:
 
-.. das:function:: get(Tab: table<auto(keyT), auto(valT)>#; at: keyT|keyT#; blk: block<(var p:valT&#):void>) : auto
-
-Looks up `at` in the temporary table `Tab` and, if found, invokes `blk` with a mutable handle reference to the value; returns `true` if the key existed.
-
-:Arguments: * **Tab** : table<auto(keyT);auto(valT)>#!
-
-            * **at** : option<keyT|keyT#>
-
-            * **blk** : block<(p:valT&#):void>
+.. das:function:: get(Tab: table<auto(keyT), auto(valT)>#; at: keyT|keyT#; blk: block<(p:valT const&#):void>) : auto
 
 .. _function-builtin_get__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_var_p_c_valT_c_void_gr_:
 
 .. das:function:: get(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#; blk: block<(var p:valT&):void>) : auto
 
-Looks up `at` in the table `Tab` and, if found, invokes `blk` with a mutable reference to the value; returns `true` if the key existed, `false` otherwise.
+.. _function-builtin_get__table_ls_autokeyT,_autovalT_gr__hh__keyTkeyT_hh__block_ls_var_p_c_valT_hh__c_void_gr_:
 
-:Arguments: * **Tab** : table<auto(keyT);auto(valT)>!
-
-            * **at** : option<keyT|keyT#>
-
-            * **blk** : block<(p:valT&):void>
+.. das:function:: get(Tab: table<auto(keyT), auto(valT)>#; at: keyT|keyT#; blk: block<(var p:valT&#):void>) : auto
 
 .. _function-builtin_get_table_ls_autokeyT,_autovalT_gr__hh__keyTkeyT_hh__block_ls_p_c_valT_const-2_hh__c_void_gr_:
 
 .. das:function:: get(Tab: table<auto(keyT), auto(valT)[]>#; at: keyT|keyT#; blk: block<(p:valT const[-2]&#):void>) : auto
 
-Looks up `at` in the temporary table `Tab` (whose values are fixed-size arrays) and, if found, invokes `blk` with a const handle reference to the array value; returns `true` if the key existed.
+.. _function-builtin_get__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_var_p_c_valT-2_c_void_gr_:
 
-:Arguments: * **Tab** : table<auto(keyT);auto(valT)[-1]>#!
-
-            * **at** : option<keyT|keyT#>
-
-            * **blk** : block<(p:valT[-2]&#):void>
+.. das:function:: get(Tab: table<auto(keyT), auto(valT)[]>; at: keyT|keyT#; blk: block<(var p:valT[-2]&):void>) : auto
 
 .. _function-builtin_get_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_p_c_valT_const-2_c_void_gr_:
 
 .. das:function:: get(Tab: table<auto(keyT), auto(valT)[]>; at: keyT|keyT#; blk: block<(p:valT const[-2]&):void>) : auto
 
-Looks up `at` in the table `Tab` (whose values are fixed-size arrays) and, if found, invokes `blk` with a const reference to the array value; returns `true` if the key existed.
+.. _function-builtin_get_table_ls_autokeyT,_void_gr__keyTkeyT_hh__block_ls_var_p_c_void_q__c_void_gr_:
 
-:Arguments: * **Tab** : table<auto(keyT);auto(valT)[-1]>!
-
-            * **at** : option<keyT|keyT#>
-
-            * **blk** : block<(p:valT[-2]&):void>
+.. das:function:: get(Tab: table<auto(keyT), void>; at: keyT|keyT#; blk: block<(var p:void?):void>) : auto
 
 .. _function-builtin_get__table_ls_autokeyT,_autovalT_gr__hh__keyTkeyT_hh__block_ls_var_p_c_valT-2_hh__c_void_gr_:
 
 .. das:function:: get(Tab: table<auto(keyT), auto(valT)[]>#; at: keyT|keyT#; blk: block<(var p:valT[-2]&#):void>) : auto
 
-Looks up `at` in the temporary table `Tab` (whose values are fixed-size arrays) and, if found, invokes `blk` with a mutable reference to the array value; returns `true` if the key existed.
+----
 
-:Arguments: * **Tab** : table<auto(keyT);auto(valT)[-1]>#!
 
-            * **at** : option<keyT|keyT#>
-
-            * **blk** : block<(p:valT[-2]&#):void>
-
-.. _function-builtin_get__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_var_p_c_valT-2_c_void_gr_:
-
-.. das:function:: get(Tab: table<auto(keyT), auto(valT)[]>; at: keyT|keyT#; blk: block<(var p:valT[-2]&):void>) : auto
-
-Looks up `at` in the table `Tab` (whose values are fixed-size arrays) and, if found, invokes `blk` with a mutable reference to the array value; returns `true` if the key existed.
-
-:Arguments: * **Tab** : table<auto(keyT);auto(valT)[-1]>!
-
-            * **at** : option<keyT|keyT#>
-
-            * **blk** : block<(p:valT[-2]&):void>
-
-.. _function-builtin_get_table_ls_autokeyT,_void_gr__keyTkeyT_hh__block_ls_var_p_c_void_q__c_void_gr_:
-
-.. das:function:: get(Tab: table<auto(keyT), void>; at: keyT|keyT#; blk: block<(var p:void?):void>) : auto
-
-Looks up `at` in the set-style table `Tab` (with `void` values) and, if found, invokes `blk` with a void pointer; returns `true` if the key existed.
-
-:Arguments: * **Tab** : table<auto(keyT);void>
-
-            * **at** : option<keyT|keyT#>
-
-            * **blk** : block<(p:void?):void>
-
-.. _function-builtin_get_value_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_:
-
-.. das:function:: get_value(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#) : valT
-
-Retrieves the value associated with key `at` from the const table `Tab`, returning a copy of the value.
-
-:Arguments: * **Tab** : table<auto(keyT);auto(valT)>!
-
-            * **at** : option<keyT|keyT#>
-
-.. _function-builtin_get_value_table_ls_autokeyT,_smart_ptr_ls_autovalT_gr__gr__keyTkeyT_hh_:
-
-.. das:function:: get_value(Tab: table<auto(keyT), smart_ptr<auto(valT)>>; at: keyT|keyT#) : smart_ptr<valT>
-
-Retrieves and moves the `smart_ptr` value associated with key `at` from the mutable table `Tab`, removing it from the table.
-
-:Arguments: * **Tab** : table<auto(keyT);smart_ptr<auto(valT)>>
-
-            * **at** : option<keyT|keyT#>
-
-.. _function-builtin_get_value__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_:
-
-.. das:function:: get_value(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#) : valT
-
-Retrieves the value associated with key `at` from the mutable table `Tab`, returning a copy of the value.
-
-:Arguments: * **Tab** : table<auto(keyT);auto(valT)>!
-
-            * **at** : option<keyT|keyT#>
+get_value
+^^^^^^^^^
 
 .. _function-builtin_get_value_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_:
 
@@ -1327,25 +1104,55 @@ Retrieves the fixed-size array value associated with key `at` from the mutable t
 
             * **at** : option<keyT|keyT#>
 
-.. _function-builtin_erase_table_ls_autokeyT,_autovalT_gr__string_hh_:
+.. _function-builtin_get_value__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_:
 
-.. das:function:: erase(Tab: table<auto(keyT), auto(valT)>; at: string#) : bool
+.. das:function:: get_value(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#) : valT
 
-Removes the entry with the string key `at` from the table `Tab`, returning `true` if the key was found and erased.
+.. _function-builtin_get_value_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_:
 
-:Arguments: * **Tab** : table<auto(keyT);auto(valT)>
+.. das:function:: get_value(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#) : valT
 
-            * **at** : string#
+.. _function-builtin_get_value_table_ls_autokeyT,_smart_ptr_ls_autovalT_gr__gr__keyTkeyT_hh_:
 
-.. _function-builtin_erase_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_:
+.. das:function:: get_value(Tab: table<auto(keyT), smart_ptr<auto(valT)>>; at: keyT|keyT#) : smart_ptr<valT>
 
-.. das:function:: erase(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#) : bool
+----
 
-Removes the entry with key `at` from the table `Tab`, returning `true` if the key was found and erased.
+.. _function-builtin_get_with_default__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_var_p_c_valT_c_void_gr_:
 
-:Arguments: * **Tab** : table<auto(keyT);auto(valT)>
+.. das:function:: get_with_default(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#; blk: block<(var p:valT&):void>)
+
+Looks up key `at` in the table `Tab`, inserting a default-initialized entry if the key is absent, then invokes `blk` with a mutable reference to the value.
+
+:Arguments: * **Tab** : table<auto(keyT);auto(valT)>!
 
             * **at** : option<keyT|keyT#>
+
+            * **blk** : block<(p:valT&):void>
+
+
+has_value
+^^^^^^^^^
+
+.. _function-builtin_has_value_iterator_ls_auto_gr__auto_0x76a:
+
+.. das:function:: has_value(a: iterator<auto>; key: auto) : auto
+
+Consumes elements from the iterator `a` and returns `true` if any element equals `key`.
+
+:Arguments: * **a** : iterator<auto>
+
+            * **key** : auto
+
+.. _function-builtin_has_value_auto_auto_0x75c:
+
+.. das:function:: has_value(a: auto; key: auto) : auto
+
+----
+
+
+insert
+^^^^^^
 
 .. _function-builtin_insert_table_ls_autokeyT,_void_gr__keyTkeyT_hh_:
 
@@ -1356,6 +1163,28 @@ Inserts the key `at` into the set-style table `Tab` (a table with `void` values)
 :Arguments: * **Tab** : table<auto(keyT);void>
 
             * **at** : option<keyT|keyT#>
+
+.. _function-builtin_insert_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_const_hh___eq__eq_const:
+
+.. das:function:: insert(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#; val: valT ==const|valT const# ==const) : auto
+
+.. _function-builtin_insert_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_hh___eq__eq_const:
+
+.. das:function:: insert(Tab: table<auto(keyT), auto(valT)[]>; at: keyT|keyT#; val: valT[] ==const|valT[]# ==const) : auto
+
+.. _function-builtin_insert_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_hh___eq__eq_const:
+
+.. das:function:: insert(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#; val: valT ==const|valT# ==const) : auto
+
+.. _function-builtin_insert_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT_const__eq__eq_constvalT_const_hh___eq__eq_const:
+
+.. das:function:: insert(Tab: table<auto(keyT), auto(valT)[]>; at: keyT|keyT#; val: valT const[] ==const|valT const[]# ==const) : auto
+
+----
+
+
+insert_clone
+^^^^^^^^^^^^
 
 .. _function-builtin_insert_clone_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_hh___eq__eq_const:
 
@@ -1373,177 +1202,19 @@ Inserts or updates an entry in the table `Tab` at key `at` by cloning the mutabl
 
 .. das:function:: insert_clone(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#; val: valT ==const|valT const# ==const) : auto
 
-Inserts or updates an entry in the table `Tab` at key `at` by cloning the const value `val` into the table.
-
-:Arguments: * **Tab** : table<auto(keyT);auto(valT)>
-
-            * **at** : option<keyT|keyT#>
-
-            * **val** : option<valT!|valT#!>
-
 .. _function-builtin_insert_clone_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_hh___eq__eq_const:
 
 .. das:function:: insert_clone(Tab: table<auto(keyT), auto(valT)[]>; at: keyT|keyT#; val: valT[] ==const|valT[]# ==const) : auto
-
-Inserts or updates an entry in the table `Tab` at key `at` by cloning the mutable fixed-size array `val` into the table.
-
-:Arguments: * **Tab** : table<auto(keyT);auto(valT)[-1]>
-
-            * **at** : option<keyT|keyT#>
-
-            * **val** : option<valT[-1]!|valT[-1]#!>
 
 .. _function-builtin_insert_clone_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT_const__eq__eq_constvalT_const_hh___eq__eq_const:
 
 .. das:function:: insert_clone(Tab: table<auto(keyT), auto(valT)[]>; at: keyT|keyT#; val: valT const[] ==const|valT const[]# ==const) : auto
 
-Inserts or updates an entry in the table `Tab` at key `at` by cloning the const fixed-size array `val` into the table.
+----
 
-:Arguments: * **Tab** : table<auto(keyT);auto(valT)[-1]>
 
-            * **at** : option<keyT|keyT#>
-
-            * **val** : option<valT[-1]!|valT[-1]#!>
-
-.. _function-builtin_insert_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_hh___eq__eq_const:
-
-.. das:function:: insert(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#; val: valT ==const|valT# ==const) : auto
-
-Inserts or updates an entry in the table `Tab` by moving the mutable value `val` at the specified key `at`.
-
-:Arguments: * **Tab** : table<auto(keyT);auto(valT)>
-
-            * **at** : option<keyT|keyT#>
-
-            * **val** : option<valT!|valT#!>
-
-.. _function-builtin_insert_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_const_hh___eq__eq_const:
-
-.. das:function:: insert(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#; val: valT ==const|valT const# ==const) : auto
-
-Inserts or updates an entry in the table `Tab` by copying the const value `val` at the specified key `at`.
-
-:Arguments: * **Tab** : table<auto(keyT);auto(valT)>
-
-            * **at** : option<keyT|keyT#>
-
-            * **val** : option<valT!|valT#!>
-
-.. _function-builtin_insert_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_hh___eq__eq_const:
-
-.. das:function:: insert(Tab: table<auto(keyT), auto(valT)[]>; at: keyT|keyT#; val: valT[] ==const|valT[]# ==const) : auto
-
-Inserts or updates an entry in the table `Tab` by moving a mutable fixed-size array `val` at the specified key `at`.
-
-:Arguments: * **Tab** : table<auto(keyT);auto(valT)[-1]>
-
-            * **at** : option<keyT|keyT#>
-
-            * **val** : option<valT[-1]!|valT[-1]#!>
-
-.. _function-builtin_insert_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT_const__eq__eq_constvalT_const_hh___eq__eq_const:
-
-.. das:function:: insert(Tab: table<auto(keyT), auto(valT)[]>; at: keyT|keyT#; val: valT const[] ==const|valT const[]# ==const) : auto
-
-Inserts or updates an entry in the table `Tab` by copying a const fixed-size array `val` at the specified key `at`.
-
-:Arguments: * **Tab** : table<auto(keyT);auto(valT)[-1]>
-
-            * **at** : option<keyT|keyT#>
-
-            * **val** : option<valT[-1]!|valT[-1]#!>
-
-.. _function-builtin_emplace_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT:
-
-.. das:function:: emplace(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#; val: valT&) : auto
-
-Moves `val` into the table `Tab` at key `at` using move semantics, avoiding unnecessary copies.
-
-:Arguments: * **Tab** : table<auto(keyT);auto(valT)>
-
-            * **at** : option<keyT|keyT#>
-
-            * **val** : valT&
-
-.. _function-builtin_emplace_table_ls_autokeyT,_smart_ptr_ls_autovalT_gr__gr__keyTkeyT_hh__smart_ptr_ls_valT_gr_:
-
-.. das:function:: emplace(Tab: table<auto(keyT), smart_ptr<auto(valT)>>; at: keyT|keyT#; val: smart_ptr<valT>&) : auto
-
-Moves the smart pointer `val` into the table `Tab` at key `at`, transferring ownership of the pointed-to object into the table entry.
-
-:Arguments: * **Tab** : table<auto(keyT);smart_ptr<auto(valT)>>
-
-            * **at** : option<keyT|keyT#>
-
-            * **val** : smart_ptr<valT>&
-
-.. _function-builtin_emplace_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT:
-
-.. das:function:: emplace(Tab: table<auto(keyT), auto(valT)[]>; at: keyT|keyT#; val: valT[]&) : auto
-
-Moves the fixed-size array `val` into the table `Tab` at key `at` using move semantics.
-
-:Arguments: * **Tab** : table<auto(keyT);auto(valT)[-1]>
-
-            * **at** : option<keyT|keyT#>
-
-            * **val** : valT[-1]&
-
-.. _function-builtin_emplace_new_table_ls_autokT,_smart_ptr_ls_autovT_gr__gr__kT_smart_ptr_ls_vT_gr_:
-
-.. das:function:: emplace_new(tab: table<auto(kT), smart_ptr<auto(vT)>>; key: kT; value: smart_ptr<vT>) : auto
-
-Moves a smart pointer `value` into the table `tab` at the given `key`, constructing the entry in-place and returning a reference to it.
-
-:Arguments: * **tab** : table<auto(kT);smart_ptr<auto(vT)>>
-
-            * **key** : kT
-
-            * **value** : smart_ptr<vT>
-
-.. _function-builtin_emplace_table_ls_auto,_auto_gr__auto_auto_0x3a9:
-
-.. das:function:: emplace(Tab: table<auto, auto>; key: auto; value: auto) : auto
-
-Moves `value` into the table `Tab` at the specified `key` using move semantics, avoiding unnecessary copies.
-
-:Arguments: * **Tab** : table<auto;auto>
-
-            * **key** : auto
-
-            * **value** : auto
-
-.. _function-builtin_emplace_array_ls_auto_gr__auto_0x3b6:
-
-.. das:function:: emplace(a: array<auto>; value: auto) : auto
-
-Appends `value` to the end of the dynamic array `a` using move semantics when possible.
-
-:Arguments: * **a** : array<auto>
-
-            * **value** : auto
-
-.. _function-builtin_emplace_new_array_ls_smart_ptr_ls_autonumT_gr__gr__smart_ptr_ls_numT_gr_:
-
-.. das:function:: emplace_new(Arr: array<smart_ptr<auto(numT)>>; value: smart_ptr<numT>) : auto
-
-Moves a smart pointer `value` into the end of the array `Arr`, constructing the entry in-place and returning a reference to it.
-
-:Arguments: * **Arr** : array<smart_ptr<auto(numT)>>
-
-            * **value** : smart_ptr<numT>
-
-.. _function-builtin_insert_default_table_ls_autoTT,_autoQQ_gr__TTTT_hh__QQ__eq__eq_constQQ_hh___eq__eq_const:
-
-.. das:function:: insert_default(tab: table<auto(TT), auto(QQ)>; key: TT|TT#; value: QQ ==const|QQ# ==const)
-
-Inserts key `key` with the given mutable `value` into table `tab` only if the key does not already exist; existing entries are left unchanged.
-
-:Arguments: * **tab** : table<auto(TT);auto(QQ)>
-
-            * **key** : option<TT|TT#>
-
-            * **value** : option<QQ!|QQ#!>
+insert_default
+^^^^^^^^^^^^^^
 
 .. _function-builtin_insert_default_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_const_hh___eq__eq_const:
 
@@ -1561,33 +1232,103 @@ Inserts key `key` with the given const `value` into table `tab` only if the key 
 
 .. das:function:: insert_default(tab: table<auto(keyT), auto(valT)>; key: keyT|keyT#)
 
-Inserts key `key` with a default-initialized value into table `tab` only if the key does not already exist; existing entries are left unchanged.
+.. _function-builtin_insert_default_table_ls_autoTT,_autoQQ_gr__TTTT_hh__QQ__eq__eq_constQQ_hh___eq__eq_const:
 
-:Arguments: * **tab** : table<auto(keyT);auto(valT)>
+.. das:function:: insert_default(tab: table<auto(TT), auto(QQ)>; key: TT|TT#; value: QQ ==const|QQ# ==const)
 
-            * **key** : option<keyT|keyT#>
+----
 
-.. _function-builtin_emplace_default_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_:
 
-.. das:function:: emplace_default(tab: table<auto(keyT), auto(valT)>; key: keyT|keyT#)
+key_exists
+^^^^^^^^^^
 
-Constructs a new default-initialized element in the table `tab` at the given `key`, only if that key does not already exist.
+.. _function-builtin_key_exists_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh__keyTkeyT_hh_:
 
-:Arguments: * **tab** : table<auto(keyT);auto(valT)>
+.. das:function:: key_exists(Tab: table<auto(keyT);auto(valT)>|table<auto(keyT);auto(valT)>#; at: keyT|keyT#) : bool
 
-            * **key** : option<keyT|keyT#>
+Checks whether the key `at` exists in the table `Tab` and returns `true` if found.
 
-.. _function-builtin_get_with_default__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_var_p_c_valT_c_void_gr_:
-
-.. das:function:: get_with_default(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#; blk: block<(var p:valT&):void>)
-
-Looks up key `at` in the table `Tab`, inserting a default-initialized entry if the key is absent, then invokes `blk` with a mutable reference to the value.
-
-:Arguments: * **Tab** : table<auto(keyT);auto(valT)>!
+:Arguments: * **Tab** : option<table<auto(keyT);auto(valT)>|table<auto(keyT);auto(valT)>#>
 
             * **at** : option<keyT|keyT#>
 
-            * **blk** : block<(p:valT&):void>
+.. _function-builtin_key_exists_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh__string_hh_:
+
+.. das:function:: key_exists(Tab: table<auto(keyT);auto(valT)>|table<auto(keyT);auto(valT)>#; at: string#) : bool
+
+----
+
+
+keys
+^^^^
+
+.. _function-builtin_keys_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__hh___eq__eq_const:
+
+.. das:function:: keys(a: table<auto(keyT);auto(valT)> ==const|table<auto(keyT);auto(valT)># ==const) : iterator<keyT>
+
+Creates an iterator over all keys of the mutable table `a`, allowing enumeration of the table's key set.
+
+:Arguments: * **a** : option<table<auto(keyT);auto(valT)>!|table<auto(keyT);auto(valT)>#!>
+
+.. _function-builtin_keys_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__const_hh___eq__eq_const:
+
+.. das:function:: keys(a: table<auto(keyT);auto(valT)> ==const|table<auto(keyT);auto(valT)> const# ==const) : iterator<keyT>
+
+----
+
+
+length
+^^^^^^
+
+.. _function-builtin_length_autoauto_hh_:
+
+.. das:function:: length(a: auto|auto#) : int
+
+Returns the number of elements currently stored in a table or dynamic array `a`.
+
+:Arguments: * **a** : option<auto|auto#>
+
+.. _function-builtin_length_array_ls_anything_gr_:
+
+.. das:function:: length(array: array<anything>) : int
+
+.. _function-builtin_length_table_ls_anything,_anything_gr_:
+
+.. das:function:: length(table: table<anything, anything>) : int
+
+----
+
+
+lock
+^^^^
+
+.. _function-builtin_lock_array_ls_autoTT_gr___eq__eq_constarray_ls_autoTT_gr__const_hh___eq__eq_const_block_ls_x_c_array_ls_TT_gr__hh__c_auto_gr_:
+
+.. das:function:: lock(a: array<auto(TT)> ==const|array<auto(TT)> const# ==const; blk: block<(x:array<TT>#):auto>) : auto
+
+Locks a constant array for the duration of `blk`, preventing structural modifications while providing read-only access through a temporary reference.
+
+:Arguments: * **a** : option<array<auto(TT)>!|array<auto(TT)>#!>
+
+            * **blk** : block<(x:array<TT>#):auto>
+
+.. _function-builtin_lock_array_ls_autoTT_gr___eq__eq_constarray_ls_autoTT_gr__hh___eq__eq_const_block_ls_var_x_c_array_ls_TT_gr__hh__c_auto_gr_:
+
+.. das:function:: lock(a: array<auto(TT)> ==const|array<auto(TT)># ==const; blk: block<(var x:array<TT>#):auto>) : auto
+
+.. _function-builtin_lock_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh__block_ls_t_c_table_ls_keyT,_valT_gr__hh__c_void_gr_:
+
+.. das:function:: lock(Tab: table<auto(keyT);auto(valT)>|table<auto(keyT);auto(valT)>#; blk: block<(t:table<keyT, valT>#):void>) : auto
+
+----
+
+.. _function-builtin_lock_forever_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh_:
+
+.. das:function:: lock_forever(Tab: table<auto(keyT);auto(valT)>|table<auto(keyT);auto(valT)>#) : table<keyT, valT>#
+
+Permanently locks a table, preventing any future insertions, deletions, or structural modifications, and returns a temporary reference to it.
+
+:Arguments: * **Tab** : option<table<auto(keyT);auto(valT)>|table<auto(keyT);auto(valT)>#>
 
 .. _function-builtin_modify__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_p_c_valT_c_valT_gr_:
 
@@ -1601,34 +1342,6 @@ Looks up `at` in `Tab` and, if found, invokes `blk` with the current value, repl
 
             * **blk** : block<(p:valT&):valT>
 
-.. _function-builtin_key_exists_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh__string_hh_:
-
-.. das:function:: key_exists(Tab: table<auto(keyT);auto(valT)>|table<auto(keyT);auto(valT)>#; at: string#) : bool
-
-Checks whether the string key `at` exists in the table `Tab` and returns `true` if found.
-
-:Arguments: * **Tab** : option<table<auto(keyT);auto(valT)>|table<auto(keyT);auto(valT)>#>
-
-            * **at** : string#
-
-.. _function-builtin_key_exists_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh__keyTkeyT_hh_:
-
-.. das:function:: key_exists(Tab: table<auto(keyT);auto(valT)>|table<auto(keyT);auto(valT)>#; at: keyT|keyT#) : bool
-
-Checks whether the key `at` exists in the table `Tab` and returns `true` if found.
-
-:Arguments: * **Tab** : option<table<auto(keyT);auto(valT)>|table<auto(keyT);auto(valT)>#>
-
-            * **at** : option<keyT|keyT#>
-
-.. _function-builtin_copy_to_local_autoTT_0x41f:
-
-.. das:function:: copy_to_local(a: auto(TT)) : TT
-
-Copies the value `a` and returns it as a new local value on the stack, which can be used to work around aliasing issues where a reference might be invalidated.
-
-:Arguments: * **a** : auto(TT)
-
 .. _function-builtin_move_to_local_autoTT_0x428:
 
 .. das:function:: move_to_local(a: auto(TT)&) : TT
@@ -1637,87 +1350,15 @@ Moves the value referenced by `a` onto the stack as a local copy and returns it,
 
 :Arguments: * **a** : auto(TT)&
 
-.. _function-builtin_keys_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__const_hh___eq__eq_const:
+.. _function-builtin_move_to_ref_auto_auto_0x80c:
 
-.. das:function:: keys(a: table<auto(keyT);auto(valT)> ==const|table<auto(keyT);auto(valT)> const# ==const) : iterator<keyT>
+.. das:function:: move_to_ref(a: auto&; b: auto) : auto
 
-Creates an iterator over all keys of the const table `a`, allowing enumeration of the table's key set.
+Moves `b` into the reference `a`; if `b` is a value type rather than a reference, it is copied instead of moved.
 
-:Arguments: * **a** : option<table<auto(keyT);auto(valT)>!|table<auto(keyT);auto(valT)>#!>
+:Arguments: * **a** : auto&
 
-.. _function-builtin_keys_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__hh___eq__eq_const:
-
-.. das:function:: keys(a: table<auto(keyT);auto(valT)> ==const|table<auto(keyT);auto(valT)># ==const) : iterator<keyT>
-
-Creates an iterator over all keys of the mutable table `a`, allowing enumeration of the table's key set.
-
-:Arguments: * **a** : option<table<auto(keyT);auto(valT)>!|table<auto(keyT);auto(valT)>#!>
-
-.. _function-builtin_values_table_ls_autokeyT;void_gr___eq__eq_consttable_ls_autokeyT;void_gr__const_hh___eq__eq_const:
-
-.. das:function:: values(a: table<auto(keyT);void> ==const|table<auto(keyT);void> const# ==const) : auto
-
-Returns an iterator over all entries in a constant `table<keyT, void>` used as a set.
-
-:Arguments: * **a** : option<table<auto(keyT);void>!|table<auto(keyT);void>#!>
-
-.. _function-builtin_values_table_ls_autokeyT;void_gr___eq__eq_consttable_ls_autokeyT;void_gr__hh___eq__eq_const:
-
-.. das:function:: values(a: table<auto(keyT);void> ==const|table<auto(keyT);void># ==const) : auto
-
-Returns an iterator over all entries in a mutable `table<keyT, void>` used as a set.
-
-:Arguments: * **a** : option<table<auto(keyT);void>!|table<auto(keyT);void>#!>
-
-.. _function-builtin_values_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__const_hh___eq__eq_const:
-
-.. das:function:: values(a: table<auto(keyT);auto(valT)> ==const|table<auto(keyT);auto(valT)> const# ==const) : iterator<valT const&>
-
-Returns a read-only iterator over all values in the given constant `table<keyT, valT>`, yielding each value by const reference.
-
-:Arguments: * **a** : option<table<auto(keyT);auto(valT)>!|table<auto(keyT);auto(valT)>#!>
-
-.. _function-builtin_values_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__hh___eq__eq_const:
-
-.. das:function:: values(a: table<auto(keyT);auto(valT)> ==const|table<auto(keyT);auto(valT)># ==const) : iterator<valT&>
-
-Returns a mutable iterator over all values in the given mutable `table<keyT, valT>`, yielding each value by reference.
-
-:Arguments: * **a** : option<table<auto(keyT);auto(valT)>!|table<auto(keyT);auto(valT)>#!>
-
-.. _function-builtin_values_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__const_hh___eq__eq_const:
-
-.. das:function:: values(a: table<auto(keyT);auto(valT)[]> ==const|table<auto(keyT);auto(valT)[]> const# ==const) : iterator<valT const[-2]&>
-
-Returns a read-only iterator over all fixed-size array values in a constant `table<keyT, valT[]>`, yielding each array by const reference.
-
-:Arguments: * **a** : option<table<auto(keyT);auto(valT)[-1]>!|table<auto(keyT);auto(valT)[-1]>#!>
-
-.. _function-builtin_values_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__hh___eq__eq_const:
-
-.. das:function:: values(a: table<auto(keyT);auto(valT)[]> ==const|table<auto(keyT);auto(valT)[]># ==const) : iterator<valT[-2]&>
-
-Returns a mutable iterator over all fixed-size array values in a mutable `table<keyT, valT[]>`, yielding each array by reference.
-
-:Arguments: * **a** : option<table<auto(keyT);auto(valT)[-1]>!|table<auto(keyT);auto(valT)[-1]>#!>
-
-.. _function-builtin_lock_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh__block_ls_t_c_table_ls_keyT,_valT_gr__hh__c_void_gr_:
-
-.. das:function:: lock(Tab: table<auto(keyT);auto(valT)>|table<auto(keyT);auto(valT)>#; blk: block<(t:table<keyT, valT>#):void>) : auto
-
-Locks a table for the duration of `blk`, preventing insertions or deletions while providing read-only access through a temporary reference.
-
-:Arguments: * **Tab** : option<table<auto(keyT);auto(valT)>|table<auto(keyT);auto(valT)>#>
-
-            * **blk** : block<(t:table<keyT;valT>#):void>
-
-.. _function-builtin_lock_forever_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh_:
-
-.. das:function:: lock_forever(Tab: table<auto(keyT);auto(valT)>|table<auto(keyT);auto(valT)>#) : table<keyT, valT>#
-
-Permanently locks a table, preventing any future insertions, deletions, or structural modifications, and returns a temporary reference to it.
-
-:Arguments: * **Tab** : option<table<auto(keyT);auto(valT)>|table<auto(keyT);auto(valT)>#>
+            * **b** : auto
 
 .. _function-builtin_next_iterator_ls_autoTT_gr__TT:
 
@@ -1729,97 +1370,6 @@ Advances the iterator `it` and stores the next element in `value`, returning tru
 
             * **value** : TT&
 
-.. _function-builtin_each_range:
-
-.. das:function:: each(rng: range) : iterator<int>
-
-Creates an iterator that yields each `int` value in the range `rng`.
-
-:Arguments: * **rng** : range
-
-.. _function-builtin_each_urange:
-
-.. das:function:: each(rng: urange) : iterator<uint>
-
-Creates an iterator that yields each `uint` value in the unsigned range `rng`.
-
-:Arguments: * **rng** : urange
-
-.. _function-builtin_each_range64:
-
-.. das:function:: each(rng: range64) : iterator<int64>
-
-Creates an iterator that yields each `int64` value in the 64-bit range `rng`.
-
-:Arguments: * **rng** : range64
-
-.. _function-builtin_each_urange64:
-
-.. das:function:: each(rng: urange64) : iterator<uint64>
-
-Creates an iterator that yields each `uint64` value in the 64-bit unsigned range `rng`.
-
-:Arguments: * **rng** : urange64
-
-.. _function-builtin_each_string:
-
-.. das:function:: each(str: string) : iterator<int>
-
-Creates an iterator that yields the Unicode codepoint (as `int`) of each character in the string `str`.
-
-:Arguments: * **str** : string
-
-.. _function-builtin_each_autoTT_0x59e:
-
-.. das:function:: each(a: auto(TT)[]) : iterator<TT&>
-
-Creates an iterator that yields mutable references to each element of the fixed-size (static) array `a`.
-
-:Arguments: * **a** : auto(TT)[-1]
-
-.. _function-builtin_each_array_ls_autoTT_gr_:
-
-.. das:function:: each(a: array<auto(TT)>) : iterator<TT&>
-
-Creates an iterator that yields mutable references to each element of the dynamic array `a`.
-
-:Arguments: * **a** : array<auto(TT)>
-
-.. _function-builtin_each_array_ls_autoTT_gr__hh_:
-
-.. das:function:: each(a: array<auto(TT)>#) : iterator<TT&#>
-
-Creates an iterator that yields temporary references to each element of the temporary dynamic array `a`.
-
-:Arguments: * **a** : array<auto(TT)>#
-
-.. _function-builtin_each_lambda_ls_var_arg_c_autoargT_c_bool_gr_:
-
-.. das:function:: each(lam: lambda<(var arg:auto(argT)):bool>) : iterator<argT>
-
-Wraps a lambda `lam` — which receives a mutable argument and returns a bool indicating whether to continue — into an iterator that yields values until the lambda returns false.
-
-:Arguments: * **lam** : lambda<(arg:auto(argT)):bool>
-
-.. _function-builtin_each_ref_lambda_ls_var_arg_c_autoargT_q__c_bool_gr_:
-
-.. das:function:: each_ref(lam: lambda<(var arg:auto(argT)?):bool>) : iterator<argT&>
-
-Wraps a lambda `lam` — which receives a mutable pointer argument and returns a bool indicating whether to continue — into an iterator that yields references to each value rather than copies.
-
-:Arguments: * **lam** : lambda<(arg:auto(argT)?):bool>
-
-.. _function-builtin_each_enum_autoTT_0x5cb:
-
-.. das:function:: each_enum(tt: auto(TT)) : iterator<TT>
-
-.. warning:: 
-  This function is deprecated.
-
-Creates an iterator that yields every value of the enumeration type inferred from `tt`, allowing iteration over all members of an enum.
-
-:Arguments: * **tt** : auto(TT)
-
 .. _function-builtin_nothing_iterator_ls_autoTT_gr_:
 
 .. das:function:: nothing(it: iterator<auto(TT)>) : iterator<TT>
@@ -1828,13 +1378,243 @@ Produces an empty iterator of the same element type as `it` that yields no eleme
 
 :Arguments: * **it** : iterator<auto(TT)>
 
-.. _function-builtin_to_array_iterator_ls_autoTT_gr_:
+.. _function-builtin_pop_array_ls_autonumT_gr_:
 
-.. das:function:: to_array(it: iterator<auto(TT)>) : array<TT>
+.. das:function:: pop(Arr: array<auto(numT)>) : auto
 
-Consumes iterator `it` and collects all yielded elements into a new dynamic array by cloning each one.
+Removes and discards the last element of `Arr`, reducing its length by one.
 
-:Arguments: * **it** : iterator<auto(TT)>
+:Arguments: * **Arr** : array<auto(numT)>
+
+
+push
+^^^^
+
+.. _function-builtin_push_array_ls_autonumT_gr__numT_const__eq__eq_const:
+
+.. das:function:: push(Arr: array<auto(numT)[]>; varr: numT const[] ==const) : auto
+
+Appends a constant fixed-size array element `varr` to the end of `Arr`, an array of fixed-size arrays.
+
+:Arguments: * **Arr** : array<auto(numT)[-1]>
+
+            * **varr** : numT[-1]!
+
+.. _function-builtin_push_array_ls_autonumT_gr__numT:
+
+.. das:function:: push(Arr: array<auto(numT)>; varr: numT[]) : auto
+
+.. _function-builtin_push_array_ls_autonumT_gr___numT__eq__eq_const:
+
+.. das:function:: push(Arr: array<auto(numT)[]>; varr: numT[] ==const) : auto
+
+.. _function-builtin_push_array_ls_autonumT_gr__array_ls_numT_gr_:
+
+.. das:function:: push(Arr: array<auto(numT)>; varr: array<numT>) : auto
+
+.. _function-builtin_push_array_ls_autonumT_gr__numT__eq__eq_const:
+
+.. das:function:: push(Arr: array<auto(numT)>; value: numT ==const) : auto
+
+.. _function-builtin_push_array_ls_autonumT_gr___numT__eq__eq_const_int:
+
+.. das:function:: push(Arr: array<auto(numT)>; value: numT ==const; at: int) : auto
+
+.. _function-builtin_push_array_ls_autonumT_gr___numT__eq__eq_const:
+
+.. das:function:: push(Arr: array<auto(numT)>; value: numT ==const) : auto
+
+.. _function-builtin_push_array_ls_autonumT_gr___array_ls_numT_gr_:
+
+.. das:function:: push(Arr: array<auto(numT)>; varr: array<numT>) : auto
+
+.. _function-builtin_push_array_ls_autonumT_gr__numT__eq__eq_const_int:
+
+.. das:function:: push(Arr: array<auto(numT)>; value: numT ==const; at: int) : auto
+
+----
+
+
+push_clone
+^^^^^^^^^^
+
+.. _function-builtin_push_clone_autoCT_autoTTautoTT_hh__0x1db:
+
+.. das:function:: push_clone(A: auto(CT); b: auto(TT)|auto(TT)#) : auto
+
+Clones and appends element `b` to the container `A`, using deep copy semantics rather than move or shallow copy.
+
+:Arguments: * **A** : auto(CT)
+
+            * **b** : option<auto(TT)|auto(TT)#>
+
+.. _function-builtin_push_clone_array_ls_autonumT_gr__numT:
+
+.. das:function:: push_clone(Arr: array<auto(numT)[]>; varr: numT[]) : auto
+
+.. _function-builtin_push_clone_array_ls_autonumT_gr__numT_const__eq__eq_const:
+
+.. das:function:: push_clone(Arr: array<auto(numT)>; varr: numT const[] ==const) : auto
+
+.. _function-builtin_push_clone_array_ls_autonumT_gr__numT__eq__eq_constnumT_hh___eq__eq_const:
+
+.. das:function:: push_clone(Arr: array<auto(numT)>; value: numT ==const|numT# ==const) : auto
+
+.. _function-builtin_push_clone_array_ls_autonumT_gr___numT__eq__eq_const:
+
+.. das:function:: push_clone(Arr: array<auto(numT)>; varr: numT[] ==const) : auto
+
+.. _function-builtin_push_clone_array_ls_autonumT_gr__numT__eq__eq_constnumT_hh___eq__eq_const_int:
+
+.. das:function:: push_clone(Arr: array<auto(numT)>; value: numT ==const|numT# ==const; at: int) : auto
+
+.. _function-builtin_push_clone_array_ls_autonumT_gr__numT__eq__eq_constnumT_const_hh___eq__eq_const_int:
+
+.. das:function:: push_clone(Arr: array<auto(numT)>; value: numT ==const|numT const# ==const; at: int) : auto
+
+.. _function-builtin_push_clone_array_ls_autonumT_gr__numT__eq__eq_constnumT_const_hh___eq__eq_const:
+
+.. das:function:: push_clone(Arr: array<auto(numT)>; value: numT ==const|numT const# ==const) : auto
+
+.. _function-builtin_push_clone_array_ls_autonumT_gr__numT_const__eq__eq_const:
+
+.. das:function:: push_clone(Arr: array<auto(numT)[]>; varr: numT const[] ==const) : auto
+
+----
+
+.. _function-builtin_remove_value_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__TT:
+
+.. das:function:: remove_value(arr: array<auto(TT)>|array<auto(TT)>#; key: TT) : bool
+
+Searches `arr` for the first element equal to `key` and removes it, returning true if an element was found and removed or false otherwise.
+
+:Arguments: * **arr** : option<array<auto(TT)>|array<auto(TT)>#>
+
+            * **key** : TT
+
+
+reserve
+^^^^^^^
+
+.. _function-builtin_reserve_table_ls_autokeyT,_auto_gr__int:
+
+.. das:function:: reserve(Tab: table<auto(keyT), auto>; newSize: int) : auto
+
+Pre-allocates memory in `Tab` to hold at least `newSize` entries without rehashing, improving performance of subsequent insertions.
+
+:Arguments: * **Tab** : table<auto(keyT);auto>
+
+            * **newSize** : int
+
+.. _function-builtin_reserve_array_ls_autonumT_gr__int:
+
+.. das:function:: reserve(Arr: array<auto(numT)>; newSize: int) : auto
+
+----
+
+.. _function-builtin_resize_array_ls_autonumT_gr__int:
+
+.. das:function:: resize(Arr: array<auto(numT)>; newSize: int) : auto
+
+Resizes dynamic array `Arr` to `newSize` elements; new elements beyond the previous length are zero-initialized, and excess elements are removed.
+
+:Arguments: * **Arr** : array<auto(numT)>
+
+            * **newSize** : int
+
+
+resize_and_init
+^^^^^^^^^^^^^^^
+
+.. _function-builtin_resize_and_init_array_ls_autonumT_gr__int_numT:
+
+.. das:function:: resize_and_init(Arr: array<auto(numT)>; newSize: int; initValue: numT) : auto
+
+Resizes dynamic array `Arr` to `newSize` elements, initializing any newly added elements with the provided `initValue`.
+
+:Arguments: * **Arr** : array<auto(numT)>
+
+            * **newSize** : int
+
+            * **initValue** : numT
+
+.. _function-builtin_resize_and_init_array_ls_autonumT_gr__int:
+
+.. das:function:: resize_and_init(Arr: array<auto(numT)>; newSize: int) : auto
+
+----
+
+.. _function-builtin_resize_no_init_array_ls_autonumT_gr__int:
+
+.. das:function:: resize_no_init(Arr: array<auto(numT)>; newSize: int) : auto
+
+Resizes dynamic array `Arr` to `newSize` elements without initializing newly added entries, leaving their memory contents undefined.
+
+:Arguments: * **Arr** : array<auto(numT)>
+
+            * **newSize** : int
+
+
+sort
+^^^^
+
+.. _function-builtin_sort_array_ls_autoTT_gr_array_ls_autoTT_gr__hh_:
+
+.. das:function:: sort(a: array<auto(TT)>|array<auto(TT)>#) : auto
+
+Sorts a dynamic array in place in ascending order using the default comparison for its element type.
+
+:Arguments: * **a** : option<array<auto(TT)>|array<auto(TT)>#>
+
+.. _function-builtin_sort_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__block_ls_x_c_TT;y_c_TT_c_bool_gr_:
+
+.. das:function:: sort(a: array<auto(TT)>|array<auto(TT)>#; cmp: block<(x:TT;y:TT):bool>) : auto
+
+.. _function-builtin_sort_autoTTautoTT_hh_:
+
+.. das:function:: sort(a: auto(TT)[]|auto(TT)[]#) : auto
+
+.. _function-builtin_sort_autoTTautoTT_hh__block_ls_x_c_TT;y_c_TT_c_bool_gr_:
+
+.. das:function:: sort(a: auto(TT)[]|auto(TT)[]#; cmp: block<(x:TT;y:TT):bool>) : auto
+
+----
+
+
+subarray
+^^^^^^^^
+
+.. _function-builtin_subarray_autoTT_urange_0x7c2:
+
+.. das:function:: subarray(a: auto(TT)[]; r: urange) : auto
+
+Creates and returns a new dynamic array containing a copy of elements from fixed-size array `a` within the unsigned range `r`.
+
+:Arguments: * **a** : auto(TT)[-1]
+
+            * **r** : urange
+
+.. _function-builtin_subarray_array_ls_autoTT_gr__urange:
+
+.. das:function:: subarray(a: array<auto(TT)>; r: urange) : auto
+
+.. _function-builtin_subarray_array_ls_autoTT_gr__range:
+
+.. das:function:: subarray(a: array<auto(TT)>; r: range) : auto
+
+.. _function-builtin_subarray__array_ls_autoTT_gr__range:
+
+.. das:function:: subarray(a: array<auto(TT)>; r: range) : auto
+
+.. _function-builtin_subarray_autoTT_range_0x7b1:
+
+.. das:function:: subarray(a: auto(TT)[]; r: range) : auto
+
+----
+
+
+to_array
+^^^^^^^^
 
 .. _function-builtin_to_array_autoTT_0x5e9:
 
@@ -1844,21 +1624,15 @@ Converts a fixed-size array `a` into a new dynamic array by cloning each element
 
 :Arguments: * **a** : auto(TT)[-1]
 
-.. _function-builtin_to_array_move_autoTT_0x5f3:
+.. _function-builtin_to_array_iterator_ls_autoTT_gr_:
 
-.. das:function:: to_array_move(a: auto(TT)[]) : array<TT>
+.. das:function:: to_array(it: iterator<auto(TT)>) : array<TT>
 
-Converts a mutable fixed-size array `a` into a new dynamic array, moving each element instead of cloning.
+----
 
-:Arguments: * **a** : auto(TT)[-1]
 
-.. _function-builtin_to_array_move_autoTT__eq__eq_const_0x608:
-
-.. das:function:: to_array_move(a: auto(TT) ==const) : array<TT>
-
-Converts container `a` into a new dynamic array, copying elements into the result.
-
-:Arguments: * **a** : auto(TT)!
+to_array_move
+^^^^^^^^^^^^^
 
 .. _function-builtin_to_array_move__autoTT__eq__eq_const_0x61a:
 
@@ -1867,6 +1641,20 @@ Converts container `a` into a new dynamic array, copying elements into the resul
 Converts a mutable container `a` into a new dynamic array, moving elements when possible instead of cloning.
 
 :Arguments: * **a** : auto(TT)!
+
+.. _function-builtin_to_array_move_autoTT_0x5f3:
+
+.. das:function:: to_array_move(a: auto(TT)[]) : array<TT>
+
+.. _function-builtin_to_array_move_autoTT__eq__eq_const_0x608:
+
+.. das:function:: to_array_move(a: auto(TT) ==const) : array<TT>
+
+----
+
+
+to_table
+^^^^^^^^
 
 .. _function-builtin_to_table_tuple_ls_autokeyT;autovalT_gr_:
 
@@ -1880,41 +1668,11 @@ Converts a fixed-size array of key-value tuples `a` into a `table<keyT, valT>` b
 
 .. das:function:: to_table(a: auto(keyT)[]) : table<keyT, void>
 
-Converts a fixed-size array of keys `a` into a `table<keyT, void>` set by cloning each key element.
+----
 
-:Arguments: * **a** : auto(keyT)[-1]
 
-.. _function-builtin_to_table_move_autokeyT_0x63e:
-
-.. das:function:: to_table_move(a: auto(keyT)[]) : table<keyT, void>
-
-Converts a fixed-size array of keys `a` into a `table<keyT, void>` set, copying or moving each key.
-
-:Arguments: * **a** : auto(keyT)[-1]
-
-.. _function-builtin_to_table_move_array_ls_autokeyT_gr_:
-
-.. das:function:: to_table_move(a: array<auto(keyT)>) : table<keyT, void>
-
-Converts a dynamic array of keys `a` into a `table<keyT, void>` set, copying or moving each key.
-
-:Arguments: * **a** : array<auto(keyT)>
-
-.. _function-builtin_to_table_move_autokeyT_0x650:
-
-.. das:function:: to_table_move(a: auto(keyT)) : table<keyT, void>
-
-Converts a generic key container `a` into a `table<keyT, void>` set, copying or moving each key.
-
-:Arguments: * **a** : auto(keyT)
-
-.. _function-builtin_to_table_move_tuple_ls_autokeyT;autovalT_gr_:
-
-.. das:function:: to_table_move(a: tuple<auto(keyT);auto(valT)>) : table<keyT, valT>
-
-Converts a single mutable key-value tuple `a` into a `table<keyT, valT>` containing one entry, moving the key and value.
-
-:Arguments: * **a** : tuple<auto(keyT);auto(valT)>
+to_table_move
+^^^^^^^^^^^^^
 
 .. _function-builtin_to_table_move_tuple_ls_autokeyT;autovalT_gr_:
 
@@ -1924,217 +1682,61 @@ Converts a mutable fixed-size array of key-value tuples `a` into a `table<keyT, 
 
 :Arguments: * **a** : tuple<auto(keyT);auto(valT)>[-1]
 
+.. _function-builtin_to_table_move_tuple_ls_autokeyT;autovalT_gr_:
+
+.. das:function:: to_table_move(a: tuple<auto(keyT);auto(valT)>) : table<keyT, valT>
+
 .. _function-builtin_to_table_move_array_ls_tuple_ls_autokeyT;autovalT_gr__gr_:
 
 .. das:function:: to_table_move(a: array<tuple<auto(keyT);auto(valT)>>) : table<keyT, valT>
 
-Converts a mutable dynamic array of key-value tuples `a` into a `table<keyT, valT>`, moving elements when possible.
+.. _function-builtin_to_table_move_autokeyT_0x63e:
 
-:Arguments: * **a** : array<tuple<auto(keyT);auto(valT)>>
+.. das:function:: to_table_move(a: auto(keyT)[]) : table<keyT, void>
 
-.. _function-builtin_sort_autoTTautoTT_hh_:
+.. _function-builtin_to_table_move_array_ls_autokeyT_gr_:
 
-.. das:function:: sort(a: auto(TT)[]|auto(TT)[]#) : auto
+.. das:function:: to_table_move(a: array<auto(keyT)>) : table<keyT, void>
 
-Sorts a fixed-size array in place in ascending order using the default comparison for its element type.
+.. _function-builtin_to_table_move_autokeyT_0x650:
 
-:Arguments: * **a** : option<auto(TT)[-1]|auto(TT)[-1]#>
+.. das:function:: to_table_move(a: auto(keyT)) : table<keyT, void>
 
-.. _function-builtin_sort_array_ls_autoTT_gr_array_ls_autoTT_gr__hh_:
+----
 
-.. das:function:: sort(a: array<auto(TT)>|array<auto(TT)>#) : auto
 
-Sorts a dynamic array in place in ascending order using the default comparison for its element type.
+values
+^^^^^^
 
-:Arguments: * **a** : option<array<auto(TT)>|array<auto(TT)>#>
+.. _function-builtin_values_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__hh___eq__eq_const:
 
-.. _function-builtin_sort_autoTTautoTT_hh__block_ls_x_c_TT;y_c_TT_c_bool_gr_:
+.. das:function:: values(a: table<auto(keyT);auto(valT)[]> ==const|table<auto(keyT);auto(valT)[]># ==const) : iterator<valT[-2]&>
 
-.. das:function:: sort(a: auto(TT)[]|auto(TT)[]#; cmp: block<(x:TT;y:TT):bool>) : auto
+Returns a mutable iterator over all fixed-size array values in a mutable `table<keyT, valT[]>`, yielding each array by reference.
 
-Sorts a fixed-size array in place using the custom comparison block `cmp`, where `cmp` returns true when `x` should precede `y`.
+:Arguments: * **a** : option<table<auto(keyT);auto(valT)[-1]>!|table<auto(keyT);auto(valT)[-1]>#!>
 
-:Arguments: * **a** : option<auto(TT)[-1]|auto(TT)[-1]#>
+.. _function-builtin_values_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__const_hh___eq__eq_const:
 
-            * **cmp** : block<(x:TT;y:TT):bool>
+.. das:function:: values(a: table<auto(keyT);auto(valT)[]> ==const|table<auto(keyT);auto(valT)[]> const# ==const) : iterator<valT const[-2]&>
 
-.. _function-builtin_sort_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__block_ls_x_c_TT;y_c_TT_c_bool_gr_:
+.. _function-builtin_values_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__const_hh___eq__eq_const:
 
-.. das:function:: sort(a: array<auto(TT)>|array<auto(TT)>#; cmp: block<(x:TT;y:TT):bool>) : auto
+.. das:function:: values(a: table<auto(keyT);auto(valT)> ==const|table<auto(keyT);auto(valT)> const# ==const) : iterator<valT const&>
 
-Sorts a dynamic array in place using the custom comparison block `cmp`, where `cmp` returns true when `x` should precede `y`.
+.. _function-builtin_values_table_ls_autokeyT;void_gr___eq__eq_consttable_ls_autokeyT;void_gr__const_hh___eq__eq_const:
 
-:Arguments: * **a** : option<array<auto(TT)>|array<auto(TT)>#>
+.. das:function:: values(a: table<auto(keyT);void> ==const|table<auto(keyT);void> const# ==const) : auto
 
-            * **cmp** : block<(x:TT;y:TT):bool>
+.. _function-builtin_values_table_ls_autokeyT;void_gr___eq__eq_consttable_ls_autokeyT;void_gr__hh___eq__eq_const:
 
-.. _function-builtin_lock_array_ls_autoTT_gr___eq__eq_constarray_ls_autoTT_gr__hh___eq__eq_const_block_ls_var_x_c_array_ls_TT_gr__hh__c_auto_gr_:
+.. das:function:: values(a: table<auto(keyT);void> ==const|table<auto(keyT);void># ==const) : auto
 
-.. das:function:: lock(a: array<auto(TT)> ==const|array<auto(TT)># ==const; blk: block<(var x:array<TT>#):auto>) : auto
+.. _function-builtin_values_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__hh___eq__eq_const:
 
-Locks a mutable array for the duration of `blk`, preventing resizing, push, or pop operations while allowing element access through a temporary reference.
+.. das:function:: values(a: table<auto(keyT);auto(valT)> ==const|table<auto(keyT);auto(valT)># ==const) : iterator<valT&>
 
-:Arguments: * **a** : option<array<auto(TT)>!|array<auto(TT)>#!>
-
-            * **blk** : block<(x:array<TT>#):auto>
-
-.. _function-builtin_lock_array_ls_autoTT_gr___eq__eq_constarray_ls_autoTT_gr__const_hh___eq__eq_const_block_ls_x_c_array_ls_TT_gr__hh__c_auto_gr_:
-
-.. das:function:: lock(a: array<auto(TT)> ==const|array<auto(TT)> const# ==const; blk: block<(x:array<TT>#):auto>) : auto
-
-Locks a constant array for the duration of `blk`, preventing structural modifications while providing read-only access through a temporary reference.
-
-:Arguments: * **a** : option<array<auto(TT)>!|array<auto(TT)>#!>
-
-            * **blk** : block<(x:array<TT>#):auto>
-
-.. _function-builtin_find_index_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__TT:
-
-.. das:function:: find_index(arr: array<auto(TT)>|array<auto(TT)>#; key: TT) : auto
-
-Searches the dynamic array `arr` for the first occurrence of `key` and returns its index, or -1 if not found.
-
-:Arguments: * **arr** : option<array<auto(TT)>|array<auto(TT)>#>
-
-            * **key** : TT
-
-.. _function-builtin_find_index_autoTTautoTT_hh__TT:
-
-.. das:function:: find_index(arr: auto(TT)[]|auto(TT)[]#; key: TT) : auto
-
-Searches the fixed-size array `arr` for the first occurrence of `key` and returns its index, or -1 if not found.
-
-:Arguments: * **arr** : option<auto(TT)[-1]|auto(TT)[-1]#>
-
-            * **key** : TT
-
-.. _function-builtin_find_index_iterator_ls_autoTT_gr__TT:
-
-.. das:function:: find_index(arr: iterator<auto(TT)>; key: TT) : auto
-
-Consumes elements from the iterator `arr` and returns the index of the first element equal to `key`, or -1 if not found.
-
-:Arguments: * **arr** : iterator<auto(TT)>
-
-            * **key** : TT
-
-.. _function-builtin_find_index_if_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__block_ls_key_c_TT_c_bool_gr_:
-
-.. das:function:: find_index_if(arr: array<auto(TT)>|array<auto(TT)>#; blk: block<(key:TT):bool>) : auto
-
-Searches the dynamic array `arr` and returns the index of the first element for which the block `blk` returns `true`, or -1 if no match is found.
-
-:Arguments: * **arr** : option<array<auto(TT)>|array<auto(TT)>#>
-
-            * **blk** : block<(key:TT):bool>
-
-.. _function-builtin_find_index_if_autoTTautoTT_hh__block_ls_key_c_TT_c_bool_gr_:
-
-.. das:function:: find_index_if(arr: auto(TT)[]|auto(TT)[]#; blk: block<(key:TT):bool>) : auto
-
-Searches the fixed-size array `arr` and returns the index of the first element for which the block `blk` returns `true`, or -1 if no match is found.
-
-:Arguments: * **arr** : option<auto(TT)[-1]|auto(TT)[-1]#>
-
-            * **blk** : block<(key:TT):bool>
-
-.. _function-builtin_find_index_if_iterator_ls_autoTT_gr__block_ls_key_c_TT_c_bool_gr_:
-
-.. das:function:: find_index_if(arr: iterator<auto(TT)>; blk: block<(key:TT):bool>) : auto
-
-Consumes elements from the iterator `arr` and returns the index of the first element for which the block `blk` returns `true`, or -1 if no match is found.
-
-:Arguments: * **arr** : iterator<auto(TT)>
-
-            * **blk** : block<(key:TT):bool>
-
-.. _function-builtin_has_value_auto_auto_0x75c:
-
-.. das:function:: has_value(a: auto; key: auto) : auto
-
-Checks whether the iterable container `a` (array, fixed-size array, etc.) contains the element `key`, returning `true` if found.
-
-:Arguments: * **a** : auto
-
-            * **key** : auto
-
-.. _function-builtin_has_value_iterator_ls_auto_gr__auto_0x76a:
-
-.. das:function:: has_value(a: iterator<auto>; key: auto) : auto
-
-Consumes elements from the iterator `a` and returns `true` if any element equals `key`.
-
-:Arguments: * **a** : iterator<auto>
-
-            * **key** : auto
-
-.. _function-builtin_subarray_autoTT_range_0x7b1:
-
-.. das:function:: subarray(a: auto(TT)[]; r: range) : auto
-
-Creates and returns a new dynamic array containing a copy of elements from fixed-size array `a` within the signed range `r`.
-
-:Arguments: * **a** : auto(TT)[-1]
-
-            * **r** : range
-
-.. _function-builtin_subarray_autoTT_urange_0x7c2:
-
-.. das:function:: subarray(a: auto(TT)[]; r: urange) : auto
-
-Creates and returns a new dynamic array containing a copy of elements from fixed-size array `a` within the unsigned range `r`.
-
-:Arguments: * **a** : auto(TT)[-1]
-
-            * **r** : urange
-
-.. _function-builtin_subarray_array_ls_autoTT_gr__range:
-
-.. das:function:: subarray(a: array<auto(TT)>; r: range) : auto
-
-Creates and returns a new dynamic array containing a copy of elements from `a` within the signed range `r`.
-
-:Arguments: * **a** : array<auto(TT)>!
-
-            * **r** : range
-
-.. _function-builtin_subarray__array_ls_autoTT_gr__range:
-
-.. das:function:: subarray(a: array<auto(TT)>; r: range) : auto
-
-Creates and returns a new dynamic array containing a copy of elements from mutable array `a` within the signed range `r`.
-
-:Arguments: * **a** : array<auto(TT)>!
-
-            * **r** : range
-
-.. _function-builtin_subarray_array_ls_autoTT_gr__urange:
-
-.. das:function:: subarray(a: array<auto(TT)>; r: urange) : auto
-
-Creates and returns a new dynamic array containing a copy of elements from `a` within the unsigned range `r`.
-
-:Arguments: * **a** : array<auto(TT)>
-
-            * **r** : urange
-
-.. _function-builtin_move_to_ref_auto_auto_0x80c:
-
-.. das:function:: move_to_ref(a: auto&; b: auto) : auto
-
-Moves `b` into the reference `a`; if `b` is a value type rather than a reference, it is copied instead of moved.
-
-:Arguments: * **a** : auto&
-
-            * **b** : auto
-
-.. _function-builtin_clear_table_ls_autoKT,_autoVT_gr_:
-
-.. das:function:: clear(t: table<auto(KT), auto(VT)>) : auto
-
-Removes all key-value pairs from the table `t`, leaving it empty with a size of 0.
-
-:Arguments: * **t** : table<auto(KT);auto(VT)>
+----
 
 ++++++++++++++++++++++++
 das::string manipulation
@@ -2156,24 +1758,18 @@ Provides zero-copy read access to the contents of a `das_string` by invoking `bl
 Heap reporting
 ++++++++++++++
 
-  *  :ref:`heap_allocation_stats () : urange64 <function-builtin_heap_allocation_stats>` 
   *  :ref:`heap_allocation_count () : uint64 <function-builtin_heap_allocation_count>` 
-  *  :ref:`string_heap_allocation_stats () : urange64 <function-builtin_string_heap_allocation_stats>` 
-  *  :ref:`string_heap_allocation_count () : uint64 <function-builtin_string_heap_allocation_count>` 
+  *  :ref:`heap_allocation_stats () : urange64 <function-builtin_heap_allocation_stats>` 
   *  :ref:`heap_bytes_allocated () : uint64 <function-builtin_heap_bytes_allocated>` 
-  *  :ref:`heap_depth () : int <function-builtin_heap_depth>` 
-  *  :ref:`string_heap_bytes_allocated () : uint64 <function-builtin_string_heap_bytes_allocated>` 
-  *  :ref:`string_heap_depth () : int <function-builtin_string_heap_depth>` 
   *  :ref:`heap_collect (string_heap: bool = true; validate: bool = false) <function-builtin_heap_collect_bool_bool>` 
-  *  :ref:`string_heap_report () <function-builtin_string_heap_report>` 
+  *  :ref:`heap_depth () : int <function-builtin_heap_depth>` 
   *  :ref:`heap_report () <function-builtin_heap_report>` 
   *  :ref:`memory_report (errorsOnly: bool) <function-builtin_memory_report_bool>` 
-
-.. _function-builtin_heap_allocation_stats:
-
-.. das:function:: heap_allocation_stats() : urange64
-
-Returns heap allocation statistics as a `urange64`, where the `x` component is total bytes allocated and the `y` component is total bytes freed.
+  *  :ref:`string_heap_allocation_count () : uint64 <function-builtin_string_heap_allocation_count>` 
+  *  :ref:`string_heap_allocation_stats () : urange64 <function-builtin_string_heap_allocation_stats>` 
+  *  :ref:`string_heap_bytes_allocated () : uint64 <function-builtin_string_heap_bytes_allocated>` 
+  *  :ref:`string_heap_depth () : int <function-builtin_string_heap_depth>` 
+  *  :ref:`string_heap_report () <function-builtin_string_heap_report>` 
 
 .. _function-builtin_heap_allocation_count:
 
@@ -2181,41 +1777,17 @@ Returns heap allocation statistics as a `urange64`, where the `x` component is t
 
 Returns the total number of heap allocations performed by the current context since it was created.
 
-.. _function-builtin_string_heap_allocation_stats:
+.. _function-builtin_heap_allocation_stats:
 
-.. das:function:: string_heap_allocation_stats() : urange64
+.. das:function:: heap_allocation_stats() : urange64
 
-Returns string heap allocation statistics as a `urange64` where `x` is total bytes allocated and `y` is total bytes deleted.
-
-.. _function-builtin_string_heap_allocation_count:
-
-.. das:function:: string_heap_allocation_count() : uint64
-
-Returns the total number of individual string allocations performed on the current context's string heap.
+Returns heap allocation statistics as a `urange64`, where the `x` component is total bytes allocated and the `y` component is total bytes freed.
 
 .. _function-builtin_heap_bytes_allocated:
 
 .. das:function:: heap_bytes_allocated() : uint64
 
 Returns the number of bytes currently in use on the heap (allocated minus freed), not counting reserved but unused memory.
-
-.. _function-builtin_heap_depth:
-
-.. das:function:: heap_depth() : int
-
-Returns the number of generations (depth of the allocation chain) in the context's regular heap.
-
-.. _function-builtin_string_heap_bytes_allocated:
-
-.. das:function:: string_heap_bytes_allocated() : uint64
-
-Returns the total number of bytes currently allocated in the current context's string heap.
-
-.. _function-builtin_string_heap_depth:
-
-.. das:function:: string_heap_depth() : int
-
-Returns the number of generational layers (depth) in the current context's string heap.
 
 .. _function-builtin_heap_collect_bool_bool:
 
@@ -2230,11 +1802,11 @@ Triggers garbage collection on the context heap; when `string_heap` is `true` th
 
             * **validate** : bool
 
-.. _function-builtin_string_heap_report:
+.. _function-builtin_heap_depth:
 
-.. das:function:: string_heap_report()
+.. das:function:: heap_depth() : int
 
-Prints a detailed report of string heap usage, including allocation counts and byte statistics, to the log output.
+Returns the number of generations (depth of the allocation chain) in the context's regular heap.
 
 .. _function-builtin_heap_report:
 
@@ -2250,15 +1822,67 @@ Prints a report of memory allocations for the current context; when `errorsOnly`
 
 :Arguments: * **errorsOnly** : bool
 
+.. _function-builtin_string_heap_allocation_count:
+
+.. das:function:: string_heap_allocation_count() : uint64
+
+Returns the total number of individual string allocations performed on the current context's string heap.
+
+.. _function-builtin_string_heap_allocation_stats:
+
+.. das:function:: string_heap_allocation_stats() : urange64
+
+Returns string heap allocation statistics as a `urange64` where `x` is total bytes allocated and `y` is total bytes deleted.
+
+.. _function-builtin_string_heap_bytes_allocated:
+
+.. das:function:: string_heap_bytes_allocated() : uint64
+
+Returns the total number of bytes currently allocated in the current context's string heap.
+
+.. _function-builtin_string_heap_depth:
+
+.. das:function:: string_heap_depth() : int
+
+Returns the number of generational layers (depth) in the current context's string heap.
+
+.. _function-builtin_string_heap_report:
+
+.. das:function:: string_heap_report()
+
+Prints a detailed report of string heap usage, including allocation counts and byte statistics, to the log output.
+
 ++++++++++++++++++
 GC0 infrastructure
 ++++++++++++++++++
 
-  *  :ref:`gc0_save_ptr (name: string implicit; data: void? implicit) <function-builtin_gc0_save_ptr_string_implicit_void_q__implicit>` 
-  *  :ref:`gc0_save_smart_ptr (name: string implicit; data: smart_ptr\<void\> implicit) <function-builtin_gc0_save_smart_ptr_string_implicit_smart_ptr_ls_void_gr__implicit>` 
+  *  :ref:`gc0_reset () <function-builtin_gc0_reset>` 
   *  :ref:`gc0_restore_ptr (name: string implicit) : void? <function-builtin_gc0_restore_ptr_string_implicit>` 
   *  :ref:`gc0_restore_smart_ptr (name: string implicit) : smart_ptr\<void\> <function-builtin_gc0_restore_smart_ptr_string_implicit>` 
-  *  :ref:`gc0_reset () <function-builtin_gc0_reset>` 
+  *  :ref:`gc0_save_ptr (name: string implicit; data: void? implicit) <function-builtin_gc0_save_ptr_string_implicit_void_q__implicit>` 
+  *  :ref:`gc0_save_smart_ptr (name: string implicit; data: smart_ptr\<void\> implicit) <function-builtin_gc0_save_smart_ptr_string_implicit_smart_ptr_ls_void_gr__implicit>` 
+
+.. _function-builtin_gc0_reset:
+
+.. das:function:: gc0_reset()
+
+Clears the entire gc0 storage, invalidating all previously saved pointers and smart pointers stored within it.
+
+.. _function-builtin_gc0_restore_ptr_string_implicit:
+
+.. das:function:: gc0_restore_ptr(name: string implicit) : void?
+
+Retrieves a raw pointer previously saved in gc0 storage under the specified `name`, returning `null` if not found.
+
+:Arguments: * **name** : string implicit
+
+.. _function-builtin_gc0_restore_smart_ptr_string_implicit:
+
+.. das:function:: gc0_restore_smart_ptr(name: string implicit) : smart_ptr<void>
+
+Retrieves a `smart_ptr<void>` previously saved in gc0 storage under the specified `name`.
+
+:Arguments: * **name** : string implicit
 
 .. _function-builtin_gc0_save_ptr_string_implicit_void_q__implicit:
 
@@ -2280,53 +1904,59 @@ Stores a `smart_ptr<void>` `data` into gc0 storage under the specified `name`, a
 
             * **data** : smart_ptr<void> implicit
 
-.. _function-builtin_gc0_restore_ptr_string_implicit:
-
-.. das:function:: gc0_restore_ptr(name: string implicit) : void?
-
-Retrieves a raw pointer previously saved in gc0 storage under the specified `name`, returning `null` if not found.
-
-:Arguments: * **name** : string implicit
-
-.. _function-builtin_gc0_restore_smart_ptr_string_implicit:
-
-.. das:function:: gc0_restore_smart_ptr(name: string implicit) : smart_ptr<void>
-
-Retrieves a `smart_ptr<void>` previously saved in gc0 storage under the specified `name`.
-
-:Arguments: * **name** : string implicit
-
-.. _function-builtin_gc0_reset:
-
-.. das:function:: gc0_reset()
-
-Clears the entire gc0 storage, invalidating all previously saved pointers and smart pointers stored within it.
-
 ++++++++++++++++++++++++
 Smart ptr infrastructure
 ++++++++++++++++++++++++
 
-  *  :ref:`move_new (dest: smart_ptr\<void\>& implicit; src: smart_ptr\<void\> implicit) <function-builtin_move_new_smart_ptr_ls_void_gr__implicit_smart_ptr_ls_void_gr__implicit>` 
+  *  :ref:`add_ptr_ref (src: smart_ptr\<auto(TT)\>) : smart_ptr\<TT\> <function-builtin_add_ptr_ref_smart_ptr_ls_autoTT_gr_>` 
+  *  :ref:`get_const_ptr (src: smart_ptr\<auto(TT)\>) : TT? <function-builtin_get_const_ptr_smart_ptr_ls_autoTT_gr_>` 
+  *  :ref:`get_ptr (var src: smart_ptr\<auto(TT)\> ==const) : TT? <function-builtin_get_ptr__smart_ptr_ls_autoTT_gr___eq__eq_const>` 
+  *  :ref:`get_ptr (src: smart_ptr\<auto(TT)\> ==const) : TT? <function-builtin_get_ptr_smart_ptr_ls_autoTT_gr___eq__eq_const>` 
   *  :ref:`move (dest: smart_ptr\<void\>& implicit; src: void? implicit) <function-builtin_move_smart_ptr_ls_void_gr__implicit_void_q__implicit>` 
   *  :ref:`move (dest: smart_ptr\<void\>& implicit; src: smart_ptr\<void\>& implicit) <function-builtin_move_smart_ptr_ls_void_gr__implicit_smart_ptr_ls_void_gr__implicit>` 
+  *  :ref:`move_new (dest: smart_ptr\<void\>& implicit; src: smart_ptr\<void\> implicit) <function-builtin_move_new_smart_ptr_ls_void_gr__implicit_smart_ptr_ls_void_gr__implicit>` 
   *  :ref:`smart_ptr_clone (dest: smart_ptr\<void\>& implicit; src: void? implicit) <function-builtin_smart_ptr_clone_smart_ptr_ls_void_gr__implicit_void_q__implicit>` 
   *  :ref:`smart_ptr_clone (dest: smart_ptr\<void\>& implicit; src: smart_ptr\<void\> implicit) <function-builtin_smart_ptr_clone_smart_ptr_ls_void_gr__implicit_smart_ptr_ls_void_gr__implicit>` 
-  *  :ref:`smart_ptr_use_count (ptr: smart_ptr\<void\> implicit) : uint <function-builtin_smart_ptr_use_count_smart_ptr_ls_void_gr__implicit>` 
   *  :ref:`smart_ptr_is_valid (dest: smart_ptr\<void\> implicit) : bool <function-builtin_smart_ptr_is_valid_smart_ptr_ls_void_gr__implicit>` 
-  *  :ref:`get_ptr (src: smart_ptr\<auto(TT)\> ==const) : TT? <function-builtin_get_ptr_smart_ptr_ls_autoTT_gr___eq__eq_const>` 
-  *  :ref:`get_ptr (var src: smart_ptr\<auto(TT)\> ==const) : TT? <function-builtin_get_ptr__smart_ptr_ls_autoTT_gr___eq__eq_const>` 
-  *  :ref:`get_const_ptr (src: smart_ptr\<auto(TT)\>) : TT? <function-builtin_get_const_ptr_smart_ptr_ls_autoTT_gr_>` 
-  *  :ref:`add_ptr_ref (src: smart_ptr\<auto(TT)\>) : smart_ptr\<TT\> <function-builtin_add_ptr_ref_smart_ptr_ls_autoTT_gr_>` 
+  *  :ref:`smart_ptr_use_count (ptr: smart_ptr\<void\> implicit) : uint <function-builtin_smart_ptr_use_count_smart_ptr_ls_void_gr__implicit>` 
 
-.. _function-builtin_move_new_smart_ptr_ls_void_gr__implicit_smart_ptr_ls_void_gr__implicit:
+.. _function-builtin_add_ptr_ref_smart_ptr_ls_autoTT_gr_:
 
-.. das:function:: move_new(dest: smart_ptr<void>& implicit; src: smart_ptr<void> implicit)
+.. das:function:: add_ptr_ref(src: smart_ptr<auto(TT)>) : smart_ptr<TT>
 
-Moves a newly constructed smart pointer value `src` into `dest`, used to initialize a `smart_ptr` from a `new` expression.
+Increments the reference count of the smart pointer `src` and returns a new smart_ptr that shares ownership of the same object.
 
-:Arguments: * **dest** : smart_ptr<void>& implicit
+:Arguments: * **src** : smart_ptr<auto(TT)>
 
-            * **src** : smart_ptr<void> implicit
+.. _function-builtin_get_const_ptr_smart_ptr_ls_autoTT_gr_:
+
+.. das:function:: get_const_ptr(src: smart_ptr<auto(TT)>) : TT?
+
+Extracts a constant raw pointer of type `TT?` from the given `smart_ptr<TT>`, without affecting reference counting.
+
+:Arguments: * **src** : smart_ptr<auto(TT)>
+
+
+get_ptr
+^^^^^^^
+
+.. _function-builtin_get_ptr__smart_ptr_ls_autoTT_gr___eq__eq_const:
+
+.. das:function:: get_ptr(src: smart_ptr<auto(TT)> ==const) : TT?
+
+Extracts a mutable raw pointer of type `TT?` from the given mutable `smart_ptr<TT>`, without affecting reference counting.
+
+:Arguments: * **src** : smart_ptr<auto(TT)>!
+
+.. _function-builtin_get_ptr_smart_ptr_ls_autoTT_gr___eq__eq_const:
+
+.. das:function:: get_ptr(src: smart_ptr<auto(TT)> ==const) : TT?
+
+----
+
+
+move
+^^^^
 
 .. _function-builtin_move_smart_ptr_ls_void_gr__implicit_void_q__implicit:
 
@@ -2342,11 +1972,21 @@ Moves a raw pointer `src` into the smart pointer `dest`, nullifying the previous
 
 .. das:function:: move(dest: smart_ptr<void>& implicit; src: smart_ptr<void>& implicit)
 
-Moves smart pointer `src` into smart pointer `dest`, nullifying `src` and transferring ownership so that `dest` holds the managed object.
+----
+
+.. _function-builtin_move_new_smart_ptr_ls_void_gr__implicit_smart_ptr_ls_void_gr__implicit:
+
+.. das:function:: move_new(dest: smart_ptr<void>& implicit; src: smart_ptr<void> implicit)
+
+Moves a newly constructed smart pointer value `src` into `dest`, used to initialize a `smart_ptr` from a `new` expression.
 
 :Arguments: * **dest** : smart_ptr<void>& implicit
 
-            * **src** : smart_ptr<void>& implicit
+            * **src** : smart_ptr<void> implicit
+
+
+smart_ptr_clone
+^^^^^^^^^^^^^^^
 
 .. _function-builtin_smart_ptr_clone_smart_ptr_ls_void_gr__implicit_void_q__implicit:
 
@@ -2362,19 +2002,7 @@ Clones a raw pointer `src` into smart pointer `dest`, incrementing the internal 
 
 .. das:function:: smart_ptr_clone(dest: smart_ptr<void>& implicit; src: smart_ptr<void> implicit)
 
-Clones smart pointer `src` into smart pointer `dest`, incrementing the internal reference count so both share ownership of the managed object.
-
-:Arguments: * **dest** : smart_ptr<void>& implicit
-
-            * **src** : smart_ptr<void> implicit
-
-.. _function-builtin_smart_ptr_use_count_smart_ptr_ls_void_gr__implicit:
-
-.. das:function:: smart_ptr_use_count(ptr: smart_ptr<void> implicit) : uint
-
-Returns the current reference count of the object managed by `ptr`, indicating how many smart pointers share ownership.
-
-:Arguments: * **ptr** : smart_ptr<void> implicit
+----
 
 .. _function-builtin_smart_ptr_is_valid_smart_ptr_ls_void_gr__implicit:
 
@@ -2384,37 +2012,13 @@ Checks whether the smart pointer `dest` holds a non-null reference to valid data
 
 :Arguments: * **dest** : smart_ptr<void> implicit
 
-.. _function-builtin_get_ptr_smart_ptr_ls_autoTT_gr___eq__eq_const:
+.. _function-builtin_smart_ptr_use_count_smart_ptr_ls_void_gr__implicit:
 
-.. das:function:: get_ptr(src: smart_ptr<auto(TT)> ==const) : TT?
+.. das:function:: smart_ptr_use_count(ptr: smart_ptr<void> implicit) : uint
 
-Extracts a raw pointer of type `TT?` from the given `smart_ptr<TT>`, without affecting reference counting.
+Returns the current reference count of the object managed by `ptr`, indicating how many smart pointers share ownership.
 
-:Arguments: * **src** : smart_ptr<auto(TT)>!
-
-.. _function-builtin_get_ptr__smart_ptr_ls_autoTT_gr___eq__eq_const:
-
-.. das:function:: get_ptr(src: smart_ptr<auto(TT)> ==const) : TT?
-
-Extracts a mutable raw pointer of type `TT?` from the given mutable `smart_ptr<TT>`, without affecting reference counting.
-
-:Arguments: * **src** : smart_ptr<auto(TT)>!
-
-.. _function-builtin_get_const_ptr_smart_ptr_ls_autoTT_gr_:
-
-.. das:function:: get_const_ptr(src: smart_ptr<auto(TT)>) : TT?
-
-Extracts a constant raw pointer of type `TT?` from the given `smart_ptr<TT>`, without affecting reference counting.
-
-:Arguments: * **src** : smart_ptr<auto(TT)>
-
-.. _function-builtin_add_ptr_ref_smart_ptr_ls_autoTT_gr_:
-
-.. das:function:: add_ptr_ref(src: smart_ptr<auto(TT)>) : smart_ptr<TT>
-
-Increments the reference count of the smart pointer `src` and returns a new smart_ptr that shares ownership of the same object.
-
-:Arguments: * **src** : smart_ptr<auto(TT)>
+:Arguments: * **ptr** : smart_ptr<void> implicit
 
 ++++++++++++++++++++
 Macro infrastructure
@@ -2423,9 +2027,9 @@ Macro infrastructure
   *  :ref:`is_compiling () : bool <function-builtin_is_compiling>` 
   *  :ref:`is_compiling_macros () : bool <function-builtin_is_compiling_macros>` 
   *  :ref:`is_compiling_macros_in_module (name: string implicit) : bool <function-builtin_is_compiling_macros_in_module_string_implicit>` 
-  *  :ref:`is_reporting_compilation_errors () : bool <function-builtin_is_reporting_compilation_errors>` 
-  *  :ref:`is_in_completion () : bool <function-builtin_is_in_completion>` 
   *  :ref:`is_folding () : bool <function-builtin_is_folding>` 
+  *  :ref:`is_in_completion () : bool <function-builtin_is_in_completion>` 
+  *  :ref:`is_reporting_compilation_errors () : bool <function-builtin_is_reporting_compilation_errors>` 
 
 .. _function-builtin_is_compiling:
 
@@ -2447,11 +2051,11 @@ Returns `true` if the current context is being compiled during the macro pass an
 
 :Arguments: * **name** : string implicit
 
-.. _function-builtin_is_reporting_compilation_errors:
+.. _function-builtin_is_folding:
 
-.. das:function:: is_reporting_compilation_errors() : bool
+.. das:function:: is_folding() : bool
 
-Returns `true` if the context failed to compile and the inference pass is currently reporting compilation errors.
+Returns `true` if the compiler is currently performing its constant folding optimization pass.
 
 .. _function-builtin_is_in_completion:
 
@@ -2459,38 +2063,32 @@ Returns `true` if the context failed to compile and the inference pass is curren
 
 Returns `true` if the compiler is running in completion mode, generating lexical information for a text editor's code-completion system.
 
-.. _function-builtin_is_folding:
+.. _function-builtin_is_reporting_compilation_errors:
 
-.. das:function:: is_folding() : bool
+.. das:function:: is_reporting_compilation_errors() : bool
 
-Returns `true` if the compiler is currently performing its constant folding optimization pass.
+Returns `true` if the context failed to compile and the inference pass is currently reporting compilation errors.
 
 ++++++++
 Profiler
 ++++++++
 
-  *  :ref:`reset_profiler () <function-builtin_reset_profiler>` 
-  *  :ref:`dump_profile_info () <function-builtin_dump_profile_info>` 
   *  :ref:`collect_profile_info () : string <function-builtin_collect_profile_info>` 
+  *  :ref:`dump_profile_info () <function-builtin_dump_profile_info>` 
   *  :ref:`profile (count: int; category: string implicit; block: block\<():void\>) : float <function-builtin_profile_int_string_implicit_block_ls__c_void_gr_>` 
-
-.. _function-builtin_reset_profiler:
-
-.. das:function:: reset_profiler()
-
-Resets all counters and accumulated data in the built-in profiler to zero.
-
-.. _function-builtin_dump_profile_info:
-
-.. das:function:: dump_profile_info()
-
-Prints the execution counts and timing data for all lines collected by the built-in line profiler to the standard output.
+  *  :ref:`reset_profiler () <function-builtin_reset_profiler>` 
 
 .. _function-builtin_collect_profile_info:
 
 .. das:function:: collect_profile_info() : string
 
 Collects profiling information gathered by the built-in line profiler and returns it as a formatted string containing execution counts and timing data.
+
+.. _function-builtin_dump_profile_info:
+
+.. das:function:: dump_profile_info()
+
+Prints the execution counts and timing data for all lines collected by the built-in line profiler to the standard output.
 
 .. _function-builtin_profile_int_string_implicit_block_ls__c_void_gr_:
 
@@ -2504,31 +2102,77 @@ Executes `block` a total of `count` times under the given `category` label, prin
 
             * **block** : block<void> implicit
 
+.. _function-builtin_reset_profiler:
+
+.. das:function:: reset_profiler()
+
+Resets all counters and accumulated data in the built-in profiler to zero.
+
 +++++++++++++++++++++
 System infrastructure
 +++++++++++++++++++++
 
+  *  :ref:`aot_enabled () : bool <function-builtin_aot_enabled>` 
+  *  :ref:`breakpoint () <function-builtin_breakpoint>` 
+  *  :ref:`error (text: string implicit) <function-builtin_error_string_implicit>` 
+  *  :ref:`eval_main_loop (block: block\<():void\>) <function-builtin_eval_main_loop_block_ls__c_void_gr_>` 
   *  :ref:`get_das_root () : string <function-builtin_get_das_root>` 
+  *  :ref:`is_in_aot () : bool <function-builtin_is_in_aot>` 
+  *  :ref:`is_intern_strings () : bool <function-builtin_is_intern_strings>` 
   *  :ref:`panic (text: string implicit) <function-builtin_panic_string_implicit>` 
   *  :ref:`print (text: string implicit) <function-builtin_print_string_implicit>` 
-  *  :ref:`error (text: string implicit) <function-builtin_error_string_implicit>` 
   *  :ref:`sprint (value: any; flags: print_flags) : string <function-builtin_sprint_any_print_flags>` 
   *  :ref:`sprint_json (value: any; humanReadable: bool) : string <function-builtin_sprint_json_any_bool>` 
-  *  :ref:`terminate () <function-builtin_terminate>` 
-  *  :ref:`breakpoint () <function-builtin_breakpoint>` 
   *  :ref:`stackwalk (args: bool = true; vars: bool = true) <function-builtin_stackwalk_bool_bool>` 
-  *  :ref:`is_intern_strings () : bool <function-builtin_is_intern_strings>` 
-  *  :ref:`is_in_aot () : bool <function-builtin_is_in_aot>` 
-  *  :ref:`to_log (level: int; text: string implicit) <function-builtin_to_log_int_string_implicit>` 
+  *  :ref:`terminate () <function-builtin_terminate>` 
   *  :ref:`to_compiler_log (text: string implicit) <function-builtin_to_compiler_log_string_implicit>` 
-  *  :ref:`eval_main_loop (block: block\<():void\>) <function-builtin_eval_main_loop_block_ls__c_void_gr_>` 
-  *  :ref:`aot_enabled () : bool <function-builtin_aot_enabled>` 
+  *  :ref:`to_log (level: int; text: string implicit) <function-builtin_to_log_int_string_implicit>` 
+
+.. _function-builtin_aot_enabled:
+
+.. das:function:: aot_enabled() : bool
+
+Checks whether ahead-of-time (AOT) compilation is enabled for the current program and returns true if it is.
+
+.. _function-builtin_breakpoint:
+
+.. das:function:: breakpoint()
+
+Triggers a debugger breakpoint by calling `os_debugbreakpoint`, which is a link-time dependency expected to be provided by the host application or debugger tool.
+
+.. _function-builtin_error_string_implicit:
+
+.. das:function:: error(text: string implicit)
+
+Outputs the string `text` to the context's error stream, similar to `print` but directed to the error output channel.
+
+:Arguments: * **text** : string implicit
+
+.. _function-builtin_eval_main_loop_block_ls__c_void_gr_:
+
+.. das:function:: eval_main_loop(block: block<():void>)
+
+Executes the application main loop by repeatedly invoking `block` until it returns `false`; on Emscripten targets, uses the platform-specific main loop mechanism instead.
+
+:Arguments: * **block** : block<void> implicit
 
 .. _function-builtin_get_das_root:
 
 .. das:function:: get_das_root() : string
 
 Returns the file-system path to the daScript root directory, where `daslib` and other standard libraries are located.
+
+.. _function-builtin_is_in_aot:
+
+.. das:function:: is_in_aot() : bool
+
+Returns `true` if the compiler is currently generating ahead-of-time (AOT) compiled code.
+
+.. _function-builtin_is_intern_strings:
+
+.. das:function:: is_intern_strings() : bool
+
+Returns `true` if string interning is enabled in the current context, meaning identical strings share the same memory.
 
 .. _function-builtin_panic_string_implicit:
 
@@ -2543,14 +2187,6 @@ will cause panic. The program will be determinated if there is no recover. Panic
 .. das:function:: print(text: string implicit)
 
 Outputs `text` to the current context's log, typically printing to standard output.
-
-:Arguments: * **text** : string implicit
-
-.. _function-builtin_error_string_implicit:
-
-.. das:function:: error(text: string implicit)
-
-Outputs the string `text` to the context's error stream, similar to `print` but directed to the error output channel.
 
 :Arguments: * **text** : string implicit
 
@@ -2574,18 +2210,6 @@ Serializes `value` directly to a JSON string, bypassing intermediate representat
 
             * **humanReadable** : bool
 
-.. _function-builtin_terminate:
-
-.. das:function:: terminate()
-
-Immediately terminates execution of the current daScript context.
-
-.. _function-builtin_breakpoint:
-
-.. das:function:: breakpoint()
-
-Triggers a debugger breakpoint by calling `os_debugbreakpoint`, which is a link-time dependency expected to be provided by the host application or debugger tool.
-
 .. _function-builtin_stackwalk_bool_bool:
 
 .. das:function:: stackwalk(args: bool = true; vars: bool = true)
@@ -2596,17 +2220,19 @@ Prints the current call stack to the log; set `args` to include function argumen
 
             * **vars** : bool
 
-.. _function-builtin_is_intern_strings:
+.. _function-builtin_terminate:
 
-.. das:function:: is_intern_strings() : bool
+.. das:function:: terminate()
 
-Returns `true` if string interning is enabled in the current context, meaning identical strings share the same memory.
+Immediately terminates execution of the current daScript context.
 
-.. _function-builtin_is_in_aot:
+.. _function-builtin_to_compiler_log_string_implicit:
 
-.. das:function:: is_in_aot() : bool
+.. das:function:: to_compiler_log(text: string implicit)
 
-Returns `true` if the compiler is currently generating ahead-of-time (AOT) compiled code.
+Outputs `text` to the compiler's log stream, typically used from within macro code during compilation.
+
+:Arguments: * **text** : string implicit
 
 .. _function-builtin_to_log_int_string_implicit:
 
@@ -2618,93 +2244,38 @@ Outputs `text` to the logging infrastructure at the specified `level` (e.g. LOG_
 
             * **text** : string implicit
 
-.. _function-builtin_to_compiler_log_string_implicit:
-
-.. das:function:: to_compiler_log(text: string implicit)
-
-Outputs `text` to the compiler's log stream, typically used from within macro code during compilation.
-
-:Arguments: * **text** : string implicit
-
-.. _function-builtin_eval_main_loop_block_ls__c_void_gr_:
-
-.. das:function:: eval_main_loop(block: block<():void>)
-
-Executes the application main loop by repeatedly invoking `block` until it returns `false`; on Emscripten targets, uses the platform-specific main loop mechanism instead.
-
-:Arguments: * **block** : block<void> implicit
-
-.. _function-builtin_aot_enabled:
-
-.. das:function:: aot_enabled() : bool
-
-Checks whether ahead-of-time (AOT) compilation is enabled for the current program and returns true if it is.
-
 +++++++++++++++++++
 Memory manipulation
 +++++++++++++++++++
 
-  *  :ref:`variant_index (arg0: variant\<\> implicit) : int <function-builtin_variant_index_variant_ls__gr__implicit>` 
-  *  :ref:`set_variant_index (variant: variant\<\> implicit; index: int) <function-builtin_set_variant_index_variant_ls__gr__implicit_int>` 
+  *  :ref:`hash (value: int8) : uint64 <function-builtin_hash_int8>` 
   *  :ref:`hash (data: any) : uint64 <function-builtin_hash_any>` 
   *  :ref:`hash (data: string implicit) : uint64 <function-builtin_hash_string_implicit>` 
-  *  :ref:`hash (value: int8) : uint64 <function-builtin_hash_int8>` 
-  *  :ref:`hash (value: uint8) : uint64 <function-builtin_hash_uint8>` 
-  *  :ref:`hash (value: int16) : uint64 <function-builtin_hash_int16>` 
-  *  :ref:`hash (value: uint16) : uint64 <function-builtin_hash_uint16>` 
   *  :ref:`hash (value: int) : uint64 <function-builtin_hash_int>` 
-  *  :ref:`hash (value: uint) : uint64 <function-builtin_hash_uint>` 
+  *  :ref:`hash (value: int16) : uint64 <function-builtin_hash_int16>` 
+  *  :ref:`hash (value: uint8) : uint64 <function-builtin_hash_uint8>` 
+  *  :ref:`hash (value: uint16) : uint64 <function-builtin_hash_uint16>` 
+  *  :ref:`hash (value: double) : uint64 <function-builtin_hash_double>` 
   *  :ref:`hash (value: int64) : uint64 <function-builtin_hash_int64>` 
+  *  :ref:`hash (value: uint) : uint64 <function-builtin_hash_uint>` 
   *  :ref:`hash (value: uint64) : uint64 <function-builtin_hash_uint64>` 
   *  :ref:`hash (value: void? implicit) : uint64 <function-builtin_hash_void_q__implicit>` 
   *  :ref:`hash (value: float) : uint64 <function-builtin_hash_float>` 
-  *  :ref:`hash (value: double) : uint64 <function-builtin_hash_double>` 
   *  :ref:`hash (value: das_string implicit) : uint64 <function-builtin_hash_das_string_implicit>` 
-  *  :ref:`memcpy (left: void? implicit; right: void? implicit; size: int) <function-builtin_memcpy_void_q__implicit_void_q__implicit_int>` 
-  *  :ref:`memcmp (left: void? implicit; right: void? implicit; size: int) : int <function-builtin_memcmp_void_q__implicit_void_q__implicit_int>` 
-  *  :ref:`intptr (p: void?) : uint64 <function-builtin_intptr_void_q_>` 
   *  :ref:`intptr (p: smart_ptr\<auto\>) : uint64 <function-builtin_intptr_smart_ptr_ls_auto_gr_>` 
-  *  :ref:`lock_data (var a: array\<auto(TT)\> ==const|array\<auto(TT)\># ==const; blk: block\<(var p:TT?#;s:int):auto\>) : auto <function-builtin_lock_data_array_ls_autoTT_gr___eq__eq_constarray_ls_autoTT_gr__hh___eq__eq_const_block_ls_var_p_c_TT_q__hh_;s_c_int_c_auto_gr_>` 
+  *  :ref:`intptr (p: void?) : uint64 <function-builtin_intptr_void_q_>` 
   *  :ref:`lock_data (a: array\<auto(TT)\> ==const|array\<auto(TT)\> const# ==const; blk: block\<(p:TT const?#;s:int):auto\>) : auto <function-builtin_lock_data_array_ls_autoTT_gr___eq__eq_constarray_ls_autoTT_gr__const_hh___eq__eq_const_block_ls_p_c_TT_const_q__hh_;s_c_int_c_auto_gr_>` 
+  *  :ref:`lock_data (var a: array\<auto(TT)\> ==const|array\<auto(TT)\># ==const; blk: block\<(var p:TT?#;s:int):auto\>) : auto <function-builtin_lock_data_array_ls_autoTT_gr___eq__eq_constarray_ls_autoTT_gr__hh___eq__eq_const_block_ls_var_p_c_TT_q__hh_;s_c_int_c_auto_gr_>` 
   *  :ref:`map_to_array (data: void?; len: int; blk: block\<(var arg:array\<auto(TT)\>#):auto\>) : auto <function-builtin_map_to_array_void_q__int_block_ls_var_arg_c_array_ls_autoTT_gr__hh__c_auto_gr_>` 
   *  :ref:`map_to_ro_array (data: void?; len: int; blk: block\<(arg:array\<auto(TT)\>#):auto\>) : auto <function-builtin_map_to_ro_array_void_q__int_block_ls_arg_c_array_ls_autoTT_gr__hh__c_auto_gr_>` 
+  *  :ref:`memcmp (left: void? implicit; right: void? implicit; size: int) : int <function-builtin_memcmp_void_q__implicit_void_q__implicit_int>` 
+  *  :ref:`memcpy (left: void? implicit; right: void? implicit; size: int) <function-builtin_memcpy_void_q__implicit_void_q__implicit_int>` 
+  *  :ref:`set_variant_index (variant: variant\<\> implicit; index: int) <function-builtin_set_variant_index_variant_ls__gr__implicit_int>` 
+  *  :ref:`variant_index (arg0: variant\<\> implicit) : int <function-builtin_variant_index_variant_ls__gr__implicit>` 
 
-.. _function-builtin_variant_index_variant_ls__gr__implicit:
 
-.. das:function:: variant_index(arg0: variant<> implicit) : int
-
-Returns the zero-based index indicating which alternative the variant currently holds.
-
-:Arguments: * **arg0** : variant<> implicit
-
-.. _function-builtin_set_variant_index_variant_ls__gr__implicit_int:
-
-.. das:function:: set_variant_index(variant: variant<> implicit; index: int)
-
-.. warning:: 
-  This is unsafe operation.
-
-Overwrites the internal type discriminator of `variant` to `index`, changing which alternative the variant is considered to hold.
-
-:Arguments: * **variant** : variant<> implicit
-
-            * **index** : int
-
-.. _function-builtin_hash_any:
-
-.. das:function:: hash(data: any) : uint64
-
-Computes a 64-bit FNV-1a hash of the given value of any type and returns it as `uint64`.
-
-:Arguments: * **data** : any
-
-.. _function-builtin_hash_string_implicit:
-
-.. das:function:: hash(data: string implicit) : uint64
-
-Computes a 64-bit FNV-1a hash of the given string and returns it as `uint64`.
-
-:Arguments: * **data** : string implicit
+hash
+^^^^
 
 .. _function-builtin_hash_int8:
 
@@ -2714,131 +2285,63 @@ Computes a 64-bit FNV-1a hash of the given `int8` value and returns it as `uint6
 
 :Arguments: * **value** : int8
 
-.. _function-builtin_hash_uint8:
+.. _function-builtin_hash_any:
 
-.. das:function:: hash(value: uint8) : uint64
+.. das:function:: hash(data: any) : uint64
 
-Computes a 64-bit FNV-1a hash of the given `uint8` value and returns it as `uint64`.
+.. _function-builtin_hash_string_implicit:
 
-:Arguments: * **value** : uint8
-
-.. _function-builtin_hash_int16:
-
-.. das:function:: hash(value: int16) : uint64
-
-Computes a 64-bit FNV-1a hash of the given `int16` value and returns it as `uint64`.
-
-:Arguments: * **value** : int16
-
-.. _function-builtin_hash_uint16:
-
-.. das:function:: hash(value: uint16) : uint64
-
-Computes a 64-bit FNV-1a hash of the given `uint16` value and returns it as `uint64`.
-
-:Arguments: * **value** : uint16
+.. das:function:: hash(data: string implicit) : uint64
 
 .. _function-builtin_hash_int:
 
 .. das:function:: hash(value: int) : uint64
 
-Computes a 64-bit FNV-1a hash of the given `int` value and returns it as `uint64`.
+.. _function-builtin_hash_int16:
 
-:Arguments: * **value** : int
+.. das:function:: hash(value: int16) : uint64
 
-.. _function-builtin_hash_uint:
+.. _function-builtin_hash_uint8:
 
-.. das:function:: hash(value: uint) : uint64
+.. das:function:: hash(value: uint8) : uint64
 
-Computes a 64-bit FNV-1a hash of the given `uint` value and returns it as `uint64`.
+.. _function-builtin_hash_uint16:
 
-:Arguments: * **value** : uint
-
-.. _function-builtin_hash_int64:
-
-.. das:function:: hash(value: int64) : uint64
-
-Computes a 64-bit FNV-1a hash of the given `int64` value and returns it as `uint64`.
-
-:Arguments: * **value** : int64
-
-.. _function-builtin_hash_uint64:
-
-.. das:function:: hash(value: uint64) : uint64
-
-Computes a 64-bit FNV-1a hash of the given `uint64` value and returns it as `uint64`.
-
-:Arguments: * **value** : uint64
-
-.. _function-builtin_hash_void_q__implicit:
-
-.. das:function:: hash(value: void? implicit) : uint64
-
-Computes a 64-bit FNV-1a hash of the given raw pointer `value` and returns it as `uint64`.
-
-:Arguments: * **value** : void? implicit
-
-.. _function-builtin_hash_float:
-
-.. das:function:: hash(value: float) : uint64
-
-Computes a 64-bit FNV-1a hash of the given `float` value and returns it as `uint64`.
-
-:Arguments: * **value** : float
+.. das:function:: hash(value: uint16) : uint64
 
 .. _function-builtin_hash_double:
 
 .. das:function:: hash(value: double) : uint64
 
-Computes a 64-bit FNV-1a hash of the given `double` value and returns it as `uint64`.
+.. _function-builtin_hash_int64:
 
-:Arguments: * **value** : double
+.. das:function:: hash(value: int64) : uint64
+
+.. _function-builtin_hash_uint:
+
+.. das:function:: hash(value: uint) : uint64
+
+.. _function-builtin_hash_uint64:
+
+.. das:function:: hash(value: uint64) : uint64
+
+.. _function-builtin_hash_void_q__implicit:
+
+.. das:function:: hash(value: void? implicit) : uint64
+
+.. _function-builtin_hash_float:
+
+.. das:function:: hash(value: float) : uint64
 
 .. _function-builtin_hash_das_string_implicit:
 
 .. das:function:: hash(value: das_string implicit) : uint64
 
-Computes a 64-bit FNV-1a hash of the given `das_string` value and returns it as `uint64`.
+----
 
-:Arguments: * **value** :  :ref:`das_string <handle-builtin-das_string>`  implicit
 
-.. _function-builtin_memcpy_void_q__implicit_void_q__implicit_int:
-
-.. das:function:: memcpy(left: void? implicit; right: void? implicit; size: int)
-
-.. warning:: 
-  This is unsafe operation.
-
-Copies `size` bytes of memory from the address pointed to by `right` into the address pointed to by `left`.
-
-:Arguments: * **left** : void? implicit
-
-            * **right** : void? implicit
-
-            * **size** : int
-
-.. _function-builtin_memcmp_void_q__implicit_void_q__implicit_int:
-
-.. das:function:: memcmp(left: void? implicit; right: void? implicit; size: int) : int
-
-.. warning:: 
-  This is unsafe operation.
-
-Compares `size` bytes of memory at `left` and `right`, returning -1 if `left` is less, 1 if `left` is greater, or 0 if both regions are identical.
-
-:Arguments: * **left** : void? implicit
-
-            * **right** : void? implicit
-
-            * **size** : int
-
-.. _function-builtin_intptr_void_q_:
-
-.. das:function:: intptr(p: void?) : uint64
-
-Converts a raw pointer `p` to its `uint64` integer representation, useful for pointer arithmetic or serialization.
-
-:Arguments: * **p** : void?
+intptr
+^^^^^^
 
 .. _function-builtin_intptr_smart_ptr_ls_auto_gr_:
 
@@ -2848,15 +2351,15 @@ Converts a `smart_ptr` `p` to its `uint64` integer representation, useful for po
 
 :Arguments: * **p** : smart_ptr<auto>
 
-.. _function-builtin_lock_data_array_ls_autoTT_gr___eq__eq_constarray_ls_autoTT_gr__hh___eq__eq_const_block_ls_var_p_c_TT_q__hh_;s_c_int_c_auto_gr_:
+.. _function-builtin_intptr_void_q_:
 
-.. das:function:: lock_data(a: array<auto(TT)> ==const|array<auto(TT)># ==const; blk: block<(var p:TT?#;s:int):auto>) : auto
+.. das:function:: intptr(p: void?) : uint64
 
-Locks a mutable array and invokes `blk` with a raw pointer `p` to the array's contiguous data and its size `s`, allowing direct memory-level access to elements.
+----
 
-:Arguments: * **a** : option<array<auto(TT)>!|array<auto(TT)>#!>
 
-            * **blk** : block<(p:TT?#;s:int):auto>
+lock_data
+^^^^^^^^^
 
 .. _function-builtin_lock_data_array_ls_autoTT_gr___eq__eq_constarray_ls_autoTT_gr__const_hh___eq__eq_const_block_ls_p_c_TT_const_q__hh_;s_c_int_c_auto_gr_:
 
@@ -2867,6 +2370,12 @@ Locks a constant array and invokes `blk` with a read-only pointer `p` to the arr
 :Arguments: * **a** : option<array<auto(TT)>!|array<auto(TT)>#!>
 
             * **blk** : block<(p:TT?#;s:int):auto>
+
+.. _function-builtin_lock_data_array_ls_autoTT_gr___eq__eq_constarray_ls_autoTT_gr__hh___eq__eq_const_block_ls_var_p_c_TT_q__hh_;s_c_int_c_auto_gr_:
+
+.. das:function:: lock_data(a: array<auto(TT)> ==const|array<auto(TT)># ==const; blk: block<(var p:TT?#;s:int):auto>) : auto
+
+----
 
 .. _function-builtin_map_to_array_void_q__int_block_ls_var_arg_c_array_ls_autoTT_gr__hh__c_auto_gr_:
 
@@ -2898,22 +2407,63 @@ Constructs a temporary read-only array of type `TT` over raw memory at `data` wi
 
             * **blk** : block<(arg:array<auto(TT)>#):auto>
 
+.. _function-builtin_memcmp_void_q__implicit_void_q__implicit_int:
+
+.. das:function:: memcmp(left: void? implicit; right: void? implicit; size: int) : int
+
+.. warning:: 
+  This is unsafe operation.
+
+Compares `size` bytes of memory at `left` and `right`, returning -1 if `left` is less, 1 if `left` is greater, or 0 if both regions are identical.
+
+:Arguments: * **left** : void? implicit
+
+            * **right** : void? implicit
+
+            * **size** : int
+
+.. _function-builtin_memcpy_void_q__implicit_void_q__implicit_int:
+
+.. das:function:: memcpy(left: void? implicit; right: void? implicit; size: int)
+
+.. warning:: 
+  This is unsafe operation.
+
+Copies `size` bytes of memory from the address pointed to by `right` into the address pointed to by `left`.
+
+:Arguments: * **left** : void? implicit
+
+            * **right** : void? implicit
+
+            * **size** : int
+
+.. _function-builtin_set_variant_index_variant_ls__gr__implicit_int:
+
+.. das:function:: set_variant_index(variant: variant<> implicit; index: int)
+
+.. warning:: 
+  This is unsafe operation.
+
+Overwrites the internal type discriminator of `variant` to `index`, changing which alternative the variant is considered to hold.
+
+:Arguments: * **variant** : variant<> implicit
+
+            * **index** : int
+
+.. _function-builtin_variant_index_variant_ls__gr__implicit:
+
+.. das:function:: variant_index(arg0: variant<> implicit) : int
+
+Returns the zero-based index indicating which alternative the variant currently holds.
+
+:Arguments: * **arg0** : variant<> implicit
+
 +++++++++++++++++
 Binary serializer
 +++++++++++++++++
 
-  *  :ref:`binary_save (obj: auto; subexpr: block\<(data:array\<uint8\>#):void\>) : auto <function-builtin_binary_save_auto_block_ls_data_c_array_ls_uint8_gr__hh__c_void_gr__0x414>` 
   *  :ref:`binary_load (var obj: auto; data: array\<uint8\>) : auto <function-builtin_binary_load_auto_array_ls_uint8_gr__0x419>` 
-
-.. _function-builtin_binary_save_auto_block_ls_data_c_array_ls_uint8_gr__hh__c_void_gr__0x414:
-
-.. das:function:: binary_save(obj: auto; subexpr: block<(data:array<uint8>#):void>) : auto
-
-Serializes `obj` into a binary representation and passes the resulting uint8 byte array to the block `subexpr`. Obsolete — use `daslib/archive` instead.
-
-:Arguments: * **obj** : auto
-
-            * **subexpr** : block<(data:array<uint8>#):void>
+  *  :ref:`binary_save (obj: auto; subexpr: block\<(data:array\<uint8\>#):void\>) : auto <function-builtin_binary_save_auto_block_ls_data_c_array_ls_uint8_gr__hh__c_void_gr__0x414>` 
 
 .. _function-builtin_binary_load_auto_array_ls_uint8_gr__0x419:
 
@@ -2924,6 +2474,16 @@ Deserializes `obj` from the binary representation stored in `data` (an array of 
 :Arguments: * **obj** : auto
 
             * **data** : array<uint8> implicit
+
+.. _function-builtin_binary_save_auto_block_ls_data_c_array_ls_uint8_gr__hh__c_void_gr__0x414:
+
+.. das:function:: binary_save(obj: auto; subexpr: block<(data:array<uint8>#):void>) : auto
+
+Serializes `obj` into a binary representation and passes the resulting uint8 byte array to the block `subexpr`. Obsolete — use `daslib/archive` instead.
+
+:Arguments: * **obj** : auto
+
+            * **subexpr** : block<(data:array<uint8>#):void>
 
 +++++++++++++++++++++
 Path and command line
@@ -2942,16 +2502,32 @@ Time and date
 +++++++++++++
 
   *  :ref:`get_clock () : clock <function-builtin_get_clock>` 
+  *  :ref:`get_time_nsec (ref: int64) : int64 <function-builtin_get_time_nsec_int64>` 
+  *  :ref:`get_time_usec (ref: int64) : int <function-builtin_get_time_usec_int64>` 
   *  :ref:`mktime (year: int; month: int; mday: int; hour: int; min: int; sec: int) : clock <function-builtin_mktime_int_int_int_int_int_int>` 
   *  :ref:`ref_time_ticks () : int64 <function-builtin_ref_time_ticks>` 
-  *  :ref:`get_time_usec (ref: int64) : int <function-builtin_get_time_usec_int64>` 
-  *  :ref:`get_time_nsec (ref: int64) : int64 <function-builtin_get_time_nsec_int64>` 
 
 .. _function-builtin_get_clock:
 
 .. das:function:: get_clock() : clock
 
 Returns the current calendar time as a `clock` value representing the number of seconds since 00:00 UTC, January 1, 1970 (the Unix epoch).
+
+.. _function-builtin_get_time_nsec_int64:
+
+.. das:function:: get_time_nsec(ref: int64) : int64
+
+Computes the elapsed time in nanoseconds since the reference point `ref`, which is typically obtained from `ref_time_ticks`.
+
+:Arguments: * **ref** : int64
+
+.. _function-builtin_get_time_usec_int64:
+
+.. das:function:: get_time_usec(ref: int64) : int
+
+Computes the elapsed time in microseconds since the reference point `ref`, which is typically obtained from `ref_time_ticks`.
+
+:Arguments: * **ref** : int64
 
 .. _function-builtin_mktime_int_int_int_int_int_int:
 
@@ -2977,36 +2553,14 @@ Converts the calendar date and time specified by `year`, `month`, `mday`, `hour`
 
 Captures the current high-resolution time in ticks, suitable for measuring elapsed intervals with `get_time_usec`.
 
-.. _function-builtin_get_time_usec_int64:
-
-.. das:function:: get_time_usec(ref: int64) : int
-
-Computes the elapsed time in microseconds since the reference point `ref`, which is typically obtained from `ref_time_ticks`.
-
-:Arguments: * **ref** : int64
-
-.. _function-builtin_get_time_nsec_int64:
-
-.. das:function:: get_time_nsec(ref: int64) : int64
-
-Computes the elapsed time in nanoseconds since the reference point `ref`, which is typically obtained from `ref_time_ticks`.
-
-:Arguments: * **ref** : int64
-
 ++++++++++++++++
 Platform queries
 ++++++++++++++++
 
-  *  :ref:`get_context_share_counter () : uint64 <function-builtin_get_context_share_counter>` 
   *  :ref:`das_is_dll_build () : bool <function-builtin_das_is_dll_build>` 
-  *  :ref:`get_platform_name () : string <function-builtin_get_platform_name>` 
   *  :ref:`get_architecture_name () : string <function-builtin_get_architecture_name>` 
-
-.. _function-builtin_get_context_share_counter:
-
-.. das:function:: get_context_share_counter() : uint64
-
-Returns the use-count of the shared context, which is incremented each time a thread accesses it; useful for tracking concurrent context usage.
+  *  :ref:`get_context_share_counter () : uint64 <function-builtin_get_context_share_counter>` 
+  *  :ref:`get_platform_name () : string <function-builtin_get_platform_name>` 
 
 .. _function-builtin_das_is_dll_build:
 
@@ -3014,42 +2568,42 @@ Returns the use-count of the shared context, which is incremented each time a th
 
 Checks whether the current build is configured as a DLL (dynamic library) build, which determines if daslib symbols are available for the JIT compiler.
 
-.. _function-builtin_get_platform_name:
-
-.. das:function:: get_platform_name() : string
-
-Returns the name of the operating system the program is running on, such as `"windows"`, `"linux"`, `"darwin"`, `"emscripten"`, or `"unknown"`.
-
 .. _function-builtin_get_architecture_name:
 
 .. das:function:: get_architecture_name() : string
 
 Returns the name of the CPU architecture the program is running on, such as `"x86_64"`, `"x86"`, `"arm64"`, `"arm"`, `"wasm32"`, or `"unknown"`.
 
+.. _function-builtin_get_context_share_counter:
+
+.. das:function:: get_context_share_counter() : uint64
+
+Returns the use-count of the shared context, which is incremented each time a thread accesses it; useful for tracking concurrent context usage.
+
+.. _function-builtin_get_platform_name:
+
+.. das:function:: get_platform_name() : string
+
+Returns the name of the operating system the program is running on, such as `"windows"`, `"linux"`, `"darwin"`, `"emscripten"`, or `"unknown"`.
+
 +++++++++++++++++
 String formatting
 +++++++++++++++++
 
-  *  :ref:`fmt (format: string implicit; value: int8) : string <function-builtin_fmt_string_implicit_int8>` 
   *  :ref:`fmt (format: string implicit; value: uint8) : string <function-builtin_fmt_string_implicit_uint8>` 
-  *  :ref:`fmt (format: string implicit; value: int16) : string <function-builtin_fmt_string_implicit_int16>` 
+  *  :ref:`fmt (format: string implicit; value: int8) : string <function-builtin_fmt_string_implicit_int8>` 
   *  :ref:`fmt (format: string implicit; value: uint16) : string <function-builtin_fmt_string_implicit_uint16>` 
-  *  :ref:`fmt (format: string implicit; value: int) : string <function-builtin_fmt_string_implicit_int>` 
-  *  :ref:`fmt (format: string implicit; value: uint) : string <function-builtin_fmt_string_implicit_uint>` 
+  *  :ref:`fmt (format: string implicit; value: int16) : string <function-builtin_fmt_string_implicit_int16>` 
   *  :ref:`fmt (format: string implicit; value: int64) : string <function-builtin_fmt_string_implicit_int64>` 
+  *  :ref:`fmt (format: string implicit; value: uint) : string <function-builtin_fmt_string_implicit_uint>` 
   *  :ref:`fmt (format: string implicit; value: uint64) : string <function-builtin_fmt_string_implicit_uint64>` 
-  *  :ref:`fmt (format: string implicit; value: float) : string <function-builtin_fmt_string_implicit_float>` 
+  *  :ref:`fmt (format: string implicit; value: int) : string <function-builtin_fmt_string_implicit_int>` 
   *  :ref:`fmt (format: string implicit; value: double) : string <function-builtin_fmt_string_implicit_double>` 
+  *  :ref:`fmt (format: string implicit; value: float) : string <function-builtin_fmt_string_implicit_float>` 
 
-.. _function-builtin_fmt_string_implicit_int8:
 
-.. das:function:: fmt(format: string implicit; value: int8) : string
-
-Formats an `int8` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : int8
+fmt
+^^^
 
 .. _function-builtin_fmt_string_implicit_uint8:
 
@@ -3061,85 +2615,43 @@ Formats a `uint8` value as a string using the given `format` specifier (followin
 
             * **value** : uint8
 
-.. _function-builtin_fmt_string_implicit_int16:
+.. _function-builtin_fmt_string_implicit_int8:
 
-.. das:function:: fmt(format: string implicit; value: int16) : string
-
-Formats an `int16` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : int16
+.. das:function:: fmt(format: string implicit; value: int8) : string
 
 .. _function-builtin_fmt_string_implicit_uint16:
 
 .. das:function:: fmt(format: string implicit; value: uint16) : string
 
-Formats a `uint16` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
+.. _function-builtin_fmt_string_implicit_int16:
 
-:Arguments: * **format** : string implicit
-
-            * **value** : uint16
-
-.. _function-builtin_fmt_string_implicit_int:
-
-.. das:function:: fmt(format: string implicit; value: int) : string
-
-Formats an `int` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : int
-
-.. _function-builtin_fmt_string_implicit_uint:
-
-.. das:function:: fmt(format: string implicit; value: uint) : string
-
-Formats a `uint` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : uint
+.. das:function:: fmt(format: string implicit; value: int16) : string
 
 .. _function-builtin_fmt_string_implicit_int64:
 
 .. das:function:: fmt(format: string implicit; value: int64) : string
 
-Formats an `int64` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
+.. _function-builtin_fmt_string_implicit_uint:
 
-:Arguments: * **format** : string implicit
-
-            * **value** : int64
+.. das:function:: fmt(format: string implicit; value: uint) : string
 
 .. _function-builtin_fmt_string_implicit_uint64:
 
 .. das:function:: fmt(format: string implicit; value: uint64) : string
 
-Formats a `uint64` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
+.. _function-builtin_fmt_string_implicit_int:
 
-:Arguments: * **format** : string implicit
-
-            * **value** : uint64
-
-.. _function-builtin_fmt_string_implicit_float:
-
-.. das:function:: fmt(format: string implicit; value: float) : string
-
-Formats a `float` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : float
+.. das:function:: fmt(format: string implicit; value: int) : string
 
 .. _function-builtin_fmt_string_implicit_double:
 
 .. das:function:: fmt(format: string implicit; value: double) : string
 
-Formats a `double` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
+.. _function-builtin_fmt_string_implicit_float:
 
-:Arguments: * **format** : string implicit
+.. das:function:: fmt(format: string implicit; value: float) : string
 
-            * **value** : double
+----
 
 ++++++++++++++++++++
 Argument consumption
@@ -3201,10 +2713,20 @@ Enables or disables runtime lock verification for the given `table`; when `check
 Lock checking internals
 +++++++++++++++++++++++
 
+  *  :ref:`_at_with_lockcheck (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#) : valT& <function-builtin__at_with_lockcheck_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
   *  :ref:`_move_with_lockcheck (var a: auto(valA)&; var b: auto(valB)&) : auto <function-builtin__move_with_lockcheck_autovalA_autovalB_0x20>` 
   *  :ref:`_return_with_lockcheck (var a: auto(valT)& ==const) : auto& <function-builtin__return_with_lockcheck__autovalT__eq__eq_const_0x32>` 
   *  :ref:`_return_with_lockcheck (a: auto(valT) const& ==const) : auto& <function-builtin__return_with_lockcheck_autovalT_const__eq__eq_const_0x3b>` 
-  *  :ref:`_at_with_lockcheck (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#) : valT& <function-builtin__at_with_lockcheck_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
+
+.. _function-builtin__at_with_lockcheck_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_:
+
+.. das:function:: _at_with_lockcheck(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#) : valT&
+
+Looks up and returns a reference to the element at key `at` in the table `Tab`, while verifying that `Tab` and its lockable sub-elements are not locked.
+
+:Arguments: * **Tab** : table<auto(keyT);auto(valT)>
+
+            * **at** : option<keyT|keyT#>
 
 .. _function-builtin__move_with_lockcheck_autovalA_autovalB_0x20:
 
@@ -3215,6 +2737,10 @@ Moves the contents of `b` into `a`, verifying that neither `a` nor `b` (nor any 
 :Arguments: * **a** : auto(valA)&
 
             * **b** : auto(valB)&
+
+
+_return_with_lockcheck
+^^^^^^^^^^^^^^^^^^^^^^
 
 .. _function-builtin__return_with_lockcheck__autovalT__eq__eq_const_0x32:
 
@@ -3228,93 +2754,27 @@ Passes through and returns a mutable reference to `a`, verifying that `a` and al
 
 .. das:function:: _return_with_lockcheck(a: auto(valT) const& ==const) : auto&
 
-Passes through and returns a const reference to `a`, verifying that `a` and all of its lockable sub-elements are not currently locked.
-
-:Arguments: * **a** : auto(valT)&!
-
-.. _function-builtin__at_with_lockcheck_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_:
-
-.. das:function:: _at_with_lockcheck(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#) : valT&
-
-Looks up and returns a reference to the element at key `at` in the table `Tab`, while verifying that `Tab` and its lockable sub-elements are not locked.
-
-:Arguments: * **Tab** : table<auto(keyT);auto(valT)>
-
-            * **at** : option<keyT|keyT#>
+----
 
 ++++++++++++++
 Bit operations
 ++++++++++++++
 
-  *  :ref:`clz (bits: uint) : uint <function-builtin_clz_uint>` 
-  *  :ref:`clz (bits: uint64) : uint64 <function-builtin_clz_uint64>` 
-  *  :ref:`ctz (bits: uint) : uint <function-builtin_ctz_uint>` 
-  *  :ref:`ctz (bits: uint64) : uint64 <function-builtin_ctz_uint64>` 
-  *  :ref:`popcnt (bits: uint) : uint <function-builtin_popcnt_uint>` 
-  *  :ref:`popcnt (bits: uint64) : uint64 <function-builtin_popcnt_uint64>` 
-  *  :ref:`mul128 (a: uint64; b: uint64) : urange64 <function-builtin_mul128_uint64_uint64>` 
   *  :ref:`__bit_set (value: bitfield& implicit; mask: bitfield; on: bool) <function-builtin___bit_set_bitfield_implicit_bitfield_bool>` 
   *  :ref:`__bit_set (value: bitfield8:uint8\<\>& implicit; mask: bitfield8:uint8\<\>; on: bool) <function-builtin___bit_set_bitfield8_c_uint8_ls__gr__implicit_bitfield8_c_uint8_ls__gr__bool>` 
-  *  :ref:`__bit_set (value: bitfield16:uint16\<\>& implicit; mask: bitfield16:uint16\<\>; on: bool) <function-builtin___bit_set_bitfield16_c_uint16_ls__gr__implicit_bitfield16_c_uint16_ls__gr__bool>` 
   *  :ref:`__bit_set (value: bitfield64:uint64\<\>& implicit; mask: bitfield64:uint64\<\>; on: bool) <function-builtin___bit_set_bitfield64_c_uint64_ls__gr__implicit_bitfield64_c_uint64_ls__gr__bool>` 
+  *  :ref:`__bit_set (value: bitfield16:uint16\<\>& implicit; mask: bitfield16:uint16\<\>; on: bool) <function-builtin___bit_set_bitfield16_c_uint16_ls__gr__implicit_bitfield16_c_uint16_ls__gr__bool>` 
+  *  :ref:`clz (bits: uint64) : uint64 <function-builtin_clz_uint64>` 
+  *  :ref:`clz (bits: uint) : uint <function-builtin_clz_uint>` 
+  *  :ref:`ctz (bits: uint64) : uint64 <function-builtin_ctz_uint64>` 
+  *  :ref:`ctz (bits: uint) : uint <function-builtin_ctz_uint>` 
+  *  :ref:`mul128 (a: uint64; b: uint64) : urange64 <function-builtin_mul128_uint64_uint64>` 
+  *  :ref:`popcnt (bits: uint64) : uint64 <function-builtin_popcnt_uint64>` 
+  *  :ref:`popcnt (bits: uint) : uint <function-builtin_popcnt_uint>` 
 
-.. _function-builtin_clz_uint:
 
-.. das:function:: clz(bits: uint) : uint
-
-Counts the number of leading zero bits in the 32-bit unsigned integer `bits`, returning 32 if the value is zero.
-
-:Arguments: * **bits** : uint
-
-.. _function-builtin_clz_uint64:
-
-.. das:function:: clz(bits: uint64) : uint64
-
-Counts the number of leading zero bits in the 64-bit unsigned integer `bits`, returning 64 if the value is zero.
-
-:Arguments: * **bits** : uint64
-
-.. _function-builtin_ctz_uint:
-
-.. das:function:: ctz(bits: uint) : uint
-
-Counts the number of trailing zero bits in the 32-bit unsigned integer `bits`, returning 32 if the value is zero.
-
-:Arguments: * **bits** : uint
-
-.. _function-builtin_ctz_uint64:
-
-.. das:function:: ctz(bits: uint64) : uint64
-
-Counts the number of trailing zero bits in the 64-bit unsigned integer `bits`, returning 64 if the value is zero.
-
-:Arguments: * **bits** : uint64
-
-.. _function-builtin_popcnt_uint:
-
-.. das:function:: popcnt(bits: uint) : uint
-
-Counts and returns the number of set (1) bits in the 32-bit unsigned integer `bits`.
-
-:Arguments: * **bits** : uint
-
-.. _function-builtin_popcnt_uint64:
-
-.. das:function:: popcnt(bits: uint64) : uint64
-
-Counts and returns the number of set (1) bits in the 64-bit unsigned integer `bits`.
-
-:Arguments: * **bits** : uint64
-
-.. _function-builtin_mul128_uint64_uint64:
-
-.. das:function:: mul128(a: uint64; b: uint64) : urange64
-
-Multiplies two 64-bit unsigned integers `a` and `b`, returning the full 128-bit result as a `urange64` containing the low and high 64-bit halves.
-
-:Arguments: * **a** : uint64
-
-            * **b** : uint64
+__bit_set
+^^^^^^^^^
 
 .. _function-builtin___bit_set_bitfield_implicit_bitfield_bool:
 
@@ -3332,56 +2792,92 @@ Sets or clears the bits specified by `mask` in the bitfield `value`, turning the
 
 .. das:function:: __bit_set(value: bitfield8:uint8<>& implicit; mask: bitfield8:uint8<>; on: bool)
 
-Sets or clears the bits specified by `mask` in the 8-bit bitfield `value`, turning them on if `on` is true or off if `on` is false.
+.. _function-builtin___bit_set_bitfield64_c_uint64_ls__gr__implicit_bitfield64_c_uint64_ls__gr__bool:
 
-:Arguments: * **value** : bitfield : uint8<>& implicit
-
-            * **mask** : bitfield : uint8<>
-
-            * **on** : bool
+.. das:function:: __bit_set(value: bitfield64:uint64<>& implicit; mask: bitfield64:uint64<>; on: bool)
 
 .. _function-builtin___bit_set_bitfield16_c_uint16_ls__gr__implicit_bitfield16_c_uint16_ls__gr__bool:
 
 .. das:function:: __bit_set(value: bitfield16:uint16<>& implicit; mask: bitfield16:uint16<>; on: bool)
 
-Sets or clears the bits specified by `mask` in the 16-bit bitfield `value`, turning them on if `on` is true or off if `on` is false.
+----
 
-:Arguments: * **value** : bitfield : uint16<>& implicit
 
-            * **mask** : bitfield : uint16<>
+clz
+^^^
 
-            * **on** : bool
+.. _function-builtin_clz_uint64:
 
-.. _function-builtin___bit_set_bitfield64_c_uint64_ls__gr__implicit_bitfield64_c_uint64_ls__gr__bool:
+.. das:function:: clz(bits: uint64) : uint64
 
-.. das:function:: __bit_set(value: bitfield64:uint64<>& implicit; mask: bitfield64:uint64<>; on: bool)
+Counts the number of leading zero bits in the 64-bit unsigned integer `bits`, returning 64 if the value is zero.
 
-Sets or clears the bits specified by `mask` in the 64-bit bitfield `value`, turning them on if `on` is true or off if `on` is false.
+:Arguments: * **bits** : uint64
 
-:Arguments: * **value** : bitfield : uint64<>& implicit
+.. _function-builtin_clz_uint:
 
-            * **mask** : bitfield : uint64<>
+.. das:function:: clz(bits: uint) : uint
 
-            * **on** : bool
+----
+
+
+ctz
+^^^
+
+.. _function-builtin_ctz_uint64:
+
+.. das:function:: ctz(bits: uint64) : uint64
+
+Counts the number of trailing zero bits in the 64-bit unsigned integer `bits`, returning 64 if the value is zero.
+
+:Arguments: * **bits** : uint64
+
+.. _function-builtin_ctz_uint:
+
+.. das:function:: ctz(bits: uint) : uint
+
+----
+
+.. _function-builtin_mul128_uint64_uint64:
+
+.. das:function:: mul128(a: uint64; b: uint64) : urange64
+
+Multiplies two 64-bit unsigned integers `a` and `b`, returning the full 128-bit result as a `urange64` containing the low and high 64-bit halves.
+
+:Arguments: * **a** : uint64
+
+            * **b** : uint64
+
+
+popcnt
+^^^^^^
+
+.. _function-builtin_popcnt_uint64:
+
+.. das:function:: popcnt(bits: uint64) : uint64
+
+Counts and returns the number of set (1) bits in the 64-bit unsigned integer `bits`.
+
+:Arguments: * **bits** : uint64
+
+.. _function-builtin_popcnt_uint:
+
+.. das:function:: popcnt(bits: uint) : uint
+
+----
 
 +++++++++
 Intervals
 +++++++++
 
-  *  :ref:`interval (arg0: int; arg1: int) : range <function-builtin_interval_int_int>` 
   *  :ref:`interval (arg0: uint; arg1: uint) : urange <function-builtin_interval_uint_uint>` 
-  *  :ref:`interval (arg0: int64; arg1: int64) : range64 <function-builtin_interval_int64_int64>` 
+  *  :ref:`interval (arg0: int; arg1: int) : range <function-builtin_interval_int_int>` 
   *  :ref:`interval (arg0: uint64; arg1: uint64) : urange64 <function-builtin_interval_uint64_uint64>` 
+  *  :ref:`interval (arg0: int64; arg1: int64) : range64 <function-builtin_interval_int64_int64>` 
 
-.. _function-builtin_interval_int_int:
 
-.. das:function:: interval(arg0: int; arg1: int) : range
-
-Constructs a `range` value from the two `int` endpoints `arg0` (inclusive) and `arg1` (exclusive).
-
-:Arguments: * **arg0** : int
-
-            * **arg1** : int
+interval
+^^^^^^^^
 
 .. _function-builtin_interval_uint_uint:
 
@@ -3393,25 +2889,19 @@ Constructs a `urange` value from the two `uint` endpoints `arg0` (inclusive) and
 
             * **arg1** : uint
 
-.. _function-builtin_interval_int64_int64:
+.. _function-builtin_interval_int_int:
 
-.. das:function:: interval(arg0: int64; arg1: int64) : range64
-
-Constructs a `range64` value from the two `int64` endpoints `arg0` (inclusive) and `arg1` (exclusive).
-
-:Arguments: * **arg0** : int64
-
-            * **arg1** : int64
+.. das:function:: interval(arg0: int; arg1: int) : range
 
 .. _function-builtin_interval_uint64_uint64:
 
 .. das:function:: interval(arg0: uint64; arg1: uint64) : urange64
 
-Constructs a `urange64` value from the two `uint64` endpoints `arg0` (inclusive) and `arg1` (exclusive).
+.. _function-builtin_interval_int64_int64:
 
-:Arguments: * **arg0** : uint64
+.. das:function:: interval(arg0: int64; arg1: int64) : range64
 
-            * **arg1** : uint64
+----
 
 ++++
 RTTI
@@ -3463,9 +2953,9 @@ Algorithms
 ++++++++++
 
   *  :ref:`count (start: int = 0; step: int = 1) : iterator\<int\> <function-builtin_count_int_int>` 
-  *  :ref:`ucount (start: uint = 0x0; step: uint = 0x1) : iterator\<uint\> <function-builtin_ucount_uint_uint>` 
   *  :ref:`iter_range (foo: auto) : auto <function-builtin_iter_range_auto_0x591>` 
   *  :ref:`swap (var a: auto(TT)&; var b: auto(TT)&) : auto <function-builtin_swap_autoTT_autoTT_0x7a9>` 
+  *  :ref:`ucount (start: uint = 0x0; step: uint = 0x1) : iterator\<uint\> <function-builtin_ucount_uint_uint>` 
 
 .. _function-builtin_count_int_int:
 
@@ -3476,16 +2966,6 @@ Creates an infinite iterator that yields integer values starting from `start` an
 :Arguments: * **start** : int
 
             * **step** : int
-
-.. _function-builtin_ucount_uint_uint:
-
-.. das:function:: ucount(start: uint = 0x0; step: uint = 0x1) : iterator<uint>
-
-Creates an infinite iterator over unsigned integers beginning at `start` and incrementing by `step` on each iteration.
-
-:Arguments: * **start** : uint
-
-            * **step** : uint
 
 .. _function-builtin_iter_range_auto_0x591:
 
@@ -3505,28 +2985,38 @@ Exchanges the values of `a` and `b` in place, leaving each variable holding the 
 
             * **b** : auto(TT)&
 
+.. _function-builtin_ucount_uint_uint:
+
+.. das:function:: ucount(start: uint = 0x0; step: uint = 0x1) : iterator<uint>
+
+Creates an infinite iterator over unsigned integers beginning at `start` and incrementing by `step` on each iteration.
+
+:Arguments: * **start** : uint
+
+            * **step** : uint
+
 ++++++
 Memset
 ++++++
 
-  *  :ref:`memset8 (left: void? implicit; value: uint8; count: int) <function-builtin_memset8_void_q__implicit_uint8_int>` 
+  *  :ref:`memset128 (left: void? implicit; value: uint4; count: int) <function-builtin_memset128_void_q__implicit_uint4_int>` 
   *  :ref:`memset16 (left: void? implicit; value: uint16; count: int) <function-builtin_memset16_void_q__implicit_uint16_int>` 
   *  :ref:`memset32 (left: void? implicit; value: uint; count: int) <function-builtin_memset32_void_q__implicit_uint_int>` 
   *  :ref:`memset64 (left: void? implicit; value: uint64; count: int) <function-builtin_memset64_void_q__implicit_uint64_int>` 
-  *  :ref:`memset128 (left: void? implicit; value: uint4; count: int) <function-builtin_memset128_void_q__implicit_uint4_int>` 
+  *  :ref:`memset8 (left: void? implicit; value: uint8; count: int) <function-builtin_memset8_void_q__implicit_uint8_int>` 
 
-.. _function-builtin_memset8_void_q__implicit_uint8_int:
+.. _function-builtin_memset128_void_q__implicit_uint4_int:
 
-.. das:function:: memset8(left: void? implicit; value: uint8; count: int)
+.. das:function:: memset128(left: void? implicit; value: uint4; count: int)
 
 .. warning:: 
   This is unsafe operation.
 
-Fills memory at `left` with `count` copies of the 8-bit `value`, equivalent to the C `memset` function.
+Fills memory at `left` with `count` copies of the 128-bit `uint4` vector `value`.
 
 :Arguments: * **left** : void? implicit
 
-            * **value** : uint8
+            * **value** : uint4
 
             * **count** : int
 
@@ -3575,18 +3065,18 @@ Fills memory at `left` with `count` copies of the 64-bit `value`.
 
             * **count** : int
 
-.. _function-builtin_memset128_void_q__implicit_uint4_int:
+.. _function-builtin_memset8_void_q__implicit_uint8_int:
 
-.. das:function:: memset128(left: void? implicit; value: uint4; count: int)
+.. das:function:: memset8(left: void? implicit; value: uint8; count: int)
 
 .. warning:: 
   This is unsafe operation.
 
-Fills memory at `left` with `count` copies of the 128-bit `uint4` vector `value`.
+Fills memory at `left` with `count` copies of the 8-bit `value`, equivalent to the C `memset` function.
 
 :Arguments: * **left** : void? implicit
 
-            * **value** : uint4
+            * **value** : uint8
 
             * **count** : int
 
@@ -3594,20 +3084,9 @@ Fills memory at `left` with `count` copies of the 128-bit `uint4` vector `value`
 Malloc
 ++++++
 
-  *  :ref:`malloc (size: uint64) : void? <function-builtin_malloc_uint64>` 
   *  :ref:`free (ptr: void? implicit) <function-builtin_free_void_q__implicit>` 
+  *  :ref:`malloc (size: uint64) : void? <function-builtin_malloc_uint64>` 
   *  :ref:`malloc_usable_size (ptr: void? implicit) : uint64 <function-builtin_malloc_usable_size_void_q__implicit>` 
-
-.. _function-builtin_malloc_uint64:
-
-.. das:function:: malloc(size: uint64) : void?
-
-.. warning:: 
-  This is unsafe operation.
-
-Allocates a block of uninitialized memory of the specified `size` in bytes, C-style, and returns a raw pointer to it; must be freed with `free`.
-
-:Arguments: * **size** : uint64
 
 .. _function-builtin_free_void_q__implicit:
 
@@ -3619,6 +3098,17 @@ Allocates a block of uninitialized memory of the specified `size` in bytes, C-st
 Frees memory previously allocated with `malloc`, following C-style manual memory management semantics.
 
 :Arguments: * **ptr** : void? implicit
+
+.. _function-builtin_malloc_uint64:
+
+.. das:function:: malloc(size: uint64) : void?
+
+.. warning:: 
+  This is unsafe operation.
+
+Allocates a block of uninitialized memory of the specified `size` in bytes, C-style, and returns a raw pointer to it; must be freed with `free`.
+
+:Arguments: * **size** : uint64
 
 .. _function-builtin_malloc_usable_size_void_q__implicit:
 
@@ -3635,22 +3125,10 @@ Returns the usable size in bytes of the memory block pointed to by `ptr`, as rep
 Compilation and AOT
 +++++++++++++++++++
 
-  *  :ref:`set_aot () <function-builtin_set_aot>` 
-  *  :ref:`reset_aot () <function-builtin_reset_aot>` 
   *  :ref:`compiling_file_name () : string <function-builtin_compiling_file_name>` 
   *  :ref:`compiling_module_name () : string <function-builtin_compiling_module_name>` 
-
-.. _function-builtin_set_aot:
-
-.. das:function:: set_aot()
-
-Notifies the compiler that ahead-of-time code generation is now in progress.
-
-.. _function-builtin_reset_aot:
-
-.. das:function:: reset_aot()
-
-Notifies the compiler that ahead-of-time code generation has finished, restoring normal compilation mode.
+  *  :ref:`reset_aot () <function-builtin_reset_aot>` 
+  *  :ref:`set_aot () <function-builtin_set_aot>` 
 
 .. _function-builtin_compiling_file_name:
 
@@ -3663,5 +3141,17 @@ Returns the file name of the source file currently being compiled, useful for co
 .. das:function:: compiling_module_name() : string
 
 Returns the name of the module currently being compiled, useful for compile-time metaprogramming and diagnostics.
+
+.. _function-builtin_reset_aot:
+
+.. das:function:: reset_aot()
+
+Notifies the compiler that ahead-of-time code generation has finished, restoring normal compilation mode.
+
+.. _function-builtin_set_aot:
+
+.. das:function:: set_aot()
+
+Notifies the compiler that ahead-of-time code generation is now in progress.
 
 
