@@ -1,1 +1,1 @@
-Ticks the server to process incoming connections and data.
+Processes pending connections and incoming data; must be called periodically.

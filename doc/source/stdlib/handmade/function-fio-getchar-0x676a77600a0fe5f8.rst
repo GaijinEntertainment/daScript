@@ -1,1 +1,1 @@
-equivalent to C `getchar`. Reads and returns next character from standard input.
+Reads and returns the next character from standard input as an integer, equivalent to C getchar.

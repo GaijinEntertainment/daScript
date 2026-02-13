@@ -1,1 +1,1 @@
-inserts key into the set (table with no values) `Tab`
+Inserts the key `at` into the set-style table `Tab` (a table with `void` values), effectively adding to a set.

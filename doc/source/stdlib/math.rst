@@ -49,26 +49,22 @@ Constants
 
 .. das:attribute:: PI = 3.1415927f
 
-The ratio of a circle's circumference to its diameter. π
-
+The single-precision float constant pi (3.14159265...), representing the ratio of a circle's circumference to its diameter.
 .. _global-math-DBL_PI:
 
 .. das:attribute:: DBL_PI = 3.141592653589793lf
 
-The ratio of a circle's circumference to its diameter. π
-
+The double-precision constant pi (3.141592653589793...), representing the ratio of a circle's circumference to its diameter.
 .. _global-math-FLT_EPSILON:
 
 .. das:attribute:: FLT_EPSILON = 1.1920929e-07f
 
-the difference between 1 and the smallest floating point number of type float that is greater than 1.
-
+The smallest single-precision float value epsilon such that 1.0f + epsilon != 1.0f, approximately 1.1920929e-7.
 .. _global-math-DBL_EPSILON:
 
 .. das:attribute:: DBL_EPSILON = 2.220446049250313e-16lf
 
-the difference between 1 and the smallest double precision floating point number of type double that is greater than 1.
-
+The smallest double-precision value epsilon such that 1.0 + epsilon != 1.0, approximately 2.2204460492503131e-16.
 ++++++++++++++++++
 Handled structures
 ++++++++++++++++++
@@ -155,7 +151,7 @@ all numerics (uint*, int*, float*, double)
 
 .. das:function:: min(x: int; y: int) : int
 
-returns the minimum of x and y
+Returns the component-wise minimum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : int
 
@@ -165,7 +161,7 @@ returns the minimum of x and y
 
 .. das:function:: max(x: int; y: int) : int
 
-returns the maximum of x and y
+Returns the component-wise maximum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : int
 
@@ -175,7 +171,7 @@ returns the maximum of x and y
 
 .. das:function:: min(x: int2; y: int2) : int2
 
-returns the minimum of x and y
+Returns the component-wise minimum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : int2
 
@@ -185,7 +181,7 @@ returns the minimum of x and y
 
 .. das:function:: max(x: int2; y: int2) : int2
 
-returns the maximum of x and y
+Returns the component-wise maximum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : int2
 
@@ -195,7 +191,7 @@ returns the maximum of x and y
 
 .. das:function:: min(x: int3; y: int3) : int3
 
-returns the minimum of x and y
+Returns the component-wise minimum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : int3
 
@@ -205,7 +201,7 @@ returns the minimum of x and y
 
 .. das:function:: max(x: int3; y: int3) : int3
 
-returns the maximum of x and y
+Returns the component-wise maximum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : int3
 
@@ -215,7 +211,7 @@ returns the maximum of x and y
 
 .. das:function:: min(x: int4; y: int4) : int4
 
-returns the minimum of x and y
+Returns the component-wise minimum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : int4
 
@@ -225,7 +221,7 @@ returns the minimum of x and y
 
 .. das:function:: max(x: int4; y: int4) : int4
 
-returns the maximum of x and y
+Returns the component-wise maximum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : int4
 
@@ -235,7 +231,7 @@ returns the maximum of x and y
 
 .. das:function:: min(x: uint; y: uint) : uint
 
-returns the minimum of x and y
+Returns the component-wise minimum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : uint
 
@@ -245,7 +241,7 @@ returns the minimum of x and y
 
 .. das:function:: max(x: uint; y: uint) : uint
 
-returns the maximum of x and y
+Returns the component-wise maximum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : uint
 
@@ -255,7 +251,7 @@ returns the maximum of x and y
 
 .. das:function:: min(x: uint2; y: uint2) : uint2
 
-returns the minimum of x and y
+Returns the component-wise minimum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : uint2
 
@@ -265,7 +261,7 @@ returns the minimum of x and y
 
 .. das:function:: max(x: uint2; y: uint2) : uint2
 
-returns the maximum of x and y
+Returns the component-wise maximum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : uint2
 
@@ -275,7 +271,7 @@ returns the maximum of x and y
 
 .. das:function:: min(x: uint3; y: uint3) : uint3
 
-returns the minimum of x and y
+Returns the component-wise minimum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : uint3
 
@@ -285,7 +281,7 @@ returns the minimum of x and y
 
 .. das:function:: max(x: uint3; y: uint3) : uint3
 
-returns the maximum of x and y
+Returns the component-wise maximum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : uint3
 
@@ -295,7 +291,7 @@ returns the maximum of x and y
 
 .. das:function:: min(x: uint4; y: uint4) : uint4
 
-returns the minimum of x and y
+Returns the component-wise minimum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : uint4
 
@@ -305,7 +301,7 @@ returns the minimum of x and y
 
 .. das:function:: max(x: uint4; y: uint4) : uint4
 
-returns the maximum of x and y
+Returns the component-wise maximum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : uint4
 
@@ -315,7 +311,7 @@ returns the maximum of x and y
 
 .. das:function:: min(x: float; y: float) : float
 
-returns the minimum of x and y
+Returns the component-wise minimum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : float
 
@@ -325,7 +321,7 @@ returns the minimum of x and y
 
 .. das:function:: max(x: float; y: float) : float
 
-returns the maximum of x and y
+Returns the component-wise maximum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : float
 
@@ -335,7 +331,7 @@ returns the maximum of x and y
 
 .. das:function:: min(x: float2; y: float2) : float2
 
-returns the minimum of x and y
+Returns the component-wise minimum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : float2
 
@@ -345,7 +341,7 @@ returns the minimum of x and y
 
 .. das:function:: max(x: float2; y: float2) : float2
 
-returns the maximum of x and y
+Returns the component-wise maximum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : float2
 
@@ -355,7 +351,7 @@ returns the maximum of x and y
 
 .. das:function:: min(x: float3; y: float3) : float3
 
-returns the minimum of x and y
+Returns the component-wise minimum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : float3
 
@@ -365,7 +361,7 @@ returns the minimum of x and y
 
 .. das:function:: max(x: float3; y: float3) : float3
 
-returns the maximum of x and y
+Returns the component-wise maximum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : float3
 
@@ -375,7 +371,7 @@ returns the maximum of x and y
 
 .. das:function:: min(x: float4; y: float4) : float4
 
-returns the minimum of x and y
+Returns the component-wise minimum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : float4
 
@@ -385,7 +381,7 @@ returns the minimum of x and y
 
 .. das:function:: max(x: float4; y: float4) : float4
 
-returns the maximum of x and y
+Returns the component-wise maximum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : float4
 
@@ -395,7 +391,7 @@ returns the maximum of x and y
 
 .. das:function:: min(x: double; y: double) : double
 
-returns the minimum of x and y
+Returns the component-wise minimum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : double
 
@@ -405,7 +401,7 @@ returns the minimum of x and y
 
 .. das:function:: max(x: double; y: double) : double
 
-returns the maximum of x and y
+Returns the component-wise maximum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : double
 
@@ -415,7 +411,7 @@ returns the maximum of x and y
 
 .. das:function:: min(x: int64; y: int64) : int64
 
-returns the minimum of x and y
+Returns the component-wise minimum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : int64
 
@@ -425,7 +421,7 @@ returns the minimum of x and y
 
 .. das:function:: max(x: int64; y: int64) : int64
 
-returns the maximum of x and y
+Returns the component-wise maximum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : int64
 
@@ -435,7 +431,7 @@ returns the maximum of x and y
 
 .. das:function:: min(x: uint64; y: uint64) : uint64
 
-returns the minimum of x and y
+Returns the component-wise minimum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : uint64
 
@@ -445,7 +441,7 @@ returns the minimum of x and y
 
 .. das:function:: max(x: uint64; y: uint64) : uint64
 
-returns the maximum of x and y
+Returns the component-wise maximum of two values, supporting scalar double, float, int, int64, uint, uint64 and vector float2, float3, float4 types.
 
 :Arguments: * **x** : uint64
 
@@ -588,7 +584,7 @@ float* and double
 
 .. das:function:: sin(x: float) : float
 
-returns the sine of x
+Returns the sine of the angle x given in radians for double or float, with output in the range [-1, 1].
 
 :Arguments: * **x** : float
 
@@ -596,7 +592,7 @@ returns the sine of x
 
 .. das:function:: cos(x: float) : float
 
-returns the cosine of x
+Returns the cosine of x, where x is specified in radians; works with float and double.
 
 :Arguments: * **x** : float
 
@@ -604,7 +600,7 @@ returns the cosine of x
 
 .. das:function:: tan(x: float) : float
 
-returns the tangent of x
+Returns the tangent of the angle x given in radians for double or float; undefined at odd multiples of pi/2.
 
 :Arguments: * **x** : float
 
@@ -612,7 +608,7 @@ returns the tangent of x
 
 .. das:function:: sin(x: float2) : float2
 
-returns the sine of x
+Returns the sine of the angle x given in radians for double or float, with output in the range [-1, 1].
 
 :Arguments: * **x** : float2
 
@@ -620,7 +616,7 @@ returns the sine of x
 
 .. das:function:: cos(x: float2) : float2
 
-returns the cosine of x
+Returns the cosine of x, where x is specified in radians; works with float and double.
 
 :Arguments: * **x** : float2
 
@@ -628,7 +624,7 @@ returns the cosine of x
 
 .. das:function:: tan(x: float2) : float2
 
-returns the tangent of x
+Returns the tangent of the angle x given in radians for double or float; undefined at odd multiples of pi/2.
 
 :Arguments: * **x** : float2
 
@@ -636,7 +632,7 @@ returns the tangent of x
 
 .. das:function:: sin(x: float3) : float3
 
-returns the sine of x
+Returns the sine of the angle x given in radians for double or float, with output in the range [-1, 1].
 
 :Arguments: * **x** : float3
 
@@ -644,7 +640,7 @@ returns the sine of x
 
 .. das:function:: cos(x: float3) : float3
 
-returns the cosine of x
+Returns the cosine of x, where x is specified in radians; works with float and double.
 
 :Arguments: * **x** : float3
 
@@ -652,7 +648,7 @@ returns the cosine of x
 
 .. das:function:: tan(x: float3) : float3
 
-returns the tangent of x
+Returns the tangent of the angle x given in radians for double or float; undefined at odd multiples of pi/2.
 
 :Arguments: * **x** : float3
 
@@ -660,7 +656,7 @@ returns the tangent of x
 
 .. das:function:: sin(x: float4) : float4
 
-returns the sine of x
+Returns the sine of the angle x given in radians for double or float, with output in the range [-1, 1].
 
 :Arguments: * **x** : float4
 
@@ -668,7 +664,7 @@ returns the sine of x
 
 .. das:function:: cos(x: float4) : float4
 
-returns the cosine of x
+Returns the cosine of x, where x is specified in radians; works with float and double.
 
 :Arguments: * **x** : float4
 
@@ -676,7 +672,7 @@ returns the cosine of x
 
 .. das:function:: tan(x: float4) : float4
 
-returns the tangent of x
+Returns the tangent of the angle x given in radians for double or float; undefined at odd multiples of pi/2.
 
 :Arguments: * **x** : float4
 
@@ -684,7 +680,7 @@ returns the tangent of x
 
 .. das:function:: exp(x: float) : float
 
-returns the e^x value of x
+Returns e raised to the power of x (the base-e exponential), computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float
 
@@ -692,7 +688,7 @@ returns the e^x value of x
 
 .. das:function:: log(x: float) : float
 
-returns the natural logarithm of x
+Returns the natural (base-e) logarithm of x; the input must be positive; computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float
 
@@ -700,7 +696,7 @@ returns the natural logarithm of x
 
 .. das:function:: exp2(x: float) : float
 
-returns the 2^x value of x
+Returns 2 raised to the power of x, computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float
 
@@ -708,7 +704,7 @@ returns the 2^x value of x
 
 .. das:function:: log2(x: float) : float
 
-returns the logarithm base-2 of x
+Returns the base-2 logarithm of x; the input must be positive; computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float
 
@@ -716,14 +712,15 @@ returns the logarithm base-2 of x
 
 .. das:function:: rcp(x: float) : float
 
-Returns the reciprocal (1/x) of the argument. For vector types, computes per-component reciprocal.
+Returns the reciprocal (1/x) of a scalar float or each component of a float2, float3, or float4 vector.
+
 :Arguments: * **x** : float
 
 .. _function-math_pow_float_float:
 
 .. das:function:: pow(x: float; y: float) : float
 
-returns x raised to the power of y
+Returns x raised to the power of y for scalar double, float, or vector float2, float3, float4 types; domain requires x >= 0 for non-integer y values.
 
 :Arguments: * **x** : float
 
@@ -733,7 +730,7 @@ returns x raised to the power of y
 
 .. das:function:: exp(x: float2) : float2
 
-returns the e^x value of x
+Returns e raised to the power of x (the base-e exponential), computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float2
 
@@ -741,7 +738,7 @@ returns the e^x value of x
 
 .. das:function:: log(x: float2) : float2
 
-returns the natural logarithm of x
+Returns the natural (base-e) logarithm of x; the input must be positive; computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float2
 
@@ -749,7 +746,7 @@ returns the natural logarithm of x
 
 .. das:function:: exp2(x: float2) : float2
 
-returns the 2^x value of x
+Returns 2 raised to the power of x, computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float2
 
@@ -757,7 +754,7 @@ returns the 2^x value of x
 
 .. das:function:: log2(x: float2) : float2
 
-returns the logarithm base-2 of x
+Returns the base-2 logarithm of x; the input must be positive; computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float2
 
@@ -765,14 +762,15 @@ returns the logarithm base-2 of x
 
 .. das:function:: rcp(x: float2) : float2
 
-Returns the reciprocal (1/x) of the argument. For vector types, computes per-component reciprocal.
+Returns the reciprocal (1/x) of a scalar float or each component of a float2, float3, or float4 vector.
+
 :Arguments: * **x** : float2
 
 .. _function-math_pow_float2_float2:
 
 .. das:function:: pow(x: float2; y: float2) : float2
 
-returns x raised to the power of y
+Returns x raised to the power of y for scalar double, float, or vector float2, float3, float4 types; domain requires x >= 0 for non-integer y values.
 
 :Arguments: * **x** : float2
 
@@ -782,7 +780,7 @@ returns x raised to the power of y
 
 .. das:function:: exp(x: float3) : float3
 
-returns the e^x value of x
+Returns e raised to the power of x (the base-e exponential), computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float3
 
@@ -790,7 +788,7 @@ returns the e^x value of x
 
 .. das:function:: log(x: float3) : float3
 
-returns the natural logarithm of x
+Returns the natural (base-e) logarithm of x; the input must be positive; computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float3
 
@@ -798,7 +796,7 @@ returns the natural logarithm of x
 
 .. das:function:: exp2(x: float3) : float3
 
-returns the 2^x value of x
+Returns 2 raised to the power of x, computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float3
 
@@ -806,7 +804,7 @@ returns the 2^x value of x
 
 .. das:function:: log2(x: float3) : float3
 
-returns the logarithm base-2 of x
+Returns the base-2 logarithm of x; the input must be positive; computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float3
 
@@ -814,14 +812,15 @@ returns the logarithm base-2 of x
 
 .. das:function:: rcp(x: float3) : float3
 
-Returns the reciprocal (1/x) of the argument. For vector types, computes per-component reciprocal.
+Returns the reciprocal (1/x) of a scalar float or each component of a float2, float3, or float4 vector.
+
 :Arguments: * **x** : float3
 
 .. _function-math_pow_float3_float3:
 
 .. das:function:: pow(x: float3; y: float3) : float3
 
-returns x raised to the power of y
+Returns x raised to the power of y for scalar double, float, or vector float2, float3, float4 types; domain requires x >= 0 for non-integer y values.
 
 :Arguments: * **x** : float3
 
@@ -831,7 +830,7 @@ returns x raised to the power of y
 
 .. das:function:: exp(x: float4) : float4
 
-returns the e^x value of x
+Returns e raised to the power of x (the base-e exponential), computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float4
 
@@ -839,7 +838,7 @@ returns the e^x value of x
 
 .. das:function:: log(x: float4) : float4
 
-returns the natural logarithm of x
+Returns the natural (base-e) logarithm of x; the input must be positive; computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float4
 
@@ -847,7 +846,7 @@ returns the natural logarithm of x
 
 .. das:function:: exp2(x: float4) : float4
 
-returns the 2^x value of x
+Returns 2 raised to the power of x, computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float4
 
@@ -855,7 +854,7 @@ returns the 2^x value of x
 
 .. das:function:: log2(x: float4) : float4
 
-returns the logarithm base-2 of x
+Returns the base-2 logarithm of x; the input must be positive; computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float4
 
@@ -863,14 +862,15 @@ returns the logarithm base-2 of x
 
 .. das:function:: rcp(x: float4) : float4
 
-Returns the reciprocal (1/x) of the argument. For vector types, computes per-component reciprocal.
+Returns the reciprocal (1/x) of a scalar float or each component of a float2, float3, or float4 vector.
+
 :Arguments: * **x** : float4
 
 .. _function-math_pow_float4_float4:
 
 .. das:function:: pow(x: float4; y: float4) : float4
 
-returns x raised to the power of y
+Returns x raised to the power of y for scalar double, float, or vector float2, float3, float4 types; domain requires x >= 0 for non-integer y values.
 
 :Arguments: * **x** : float4
 
@@ -880,7 +880,7 @@ returns x raised to the power of y
 
 .. das:function:: floor(x: float) : float
 
-returns a float value representing the largest integer that is less than or equal to x
+Returns the largest integral value not greater than x (rounds toward negative infinity), computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float
 
@@ -888,7 +888,7 @@ returns a float value representing the largest integer that is less than or equa
 
 .. das:function:: ceil(x: float) : float
 
-returns a float value representing the smallest integer (type is still float) that is greater than or equal to arg0
+Returns the smallest integral value not less than x (rounds toward positive infinity), computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float
 
@@ -896,7 +896,7 @@ returns a float value representing the smallest integer (type is still float) th
 
 .. das:function:: sqrt(x: float) : float
 
-returns the square root of x
+Returns the square root of a scalar double, float, or each component of a float2, float3, or float4 vector; input must be non-negative.
 
 :Arguments: * **x** : float
 
@@ -904,7 +904,7 @@ returns the square root of x
 
 .. das:function:: saturate(x: float) : float
 
-returns a clamped to [0..1] inclusive range x
+Clamps the scalar double, float, or each component of a float2, float3, float4 vector to the [0, 1] range, returning 0 for values below 0 and 1 for values above 1.
 
 :Arguments: * **x** : float
 
@@ -912,7 +912,7 @@ returns a clamped to [0..1] inclusive range x
 
 .. das:function:: floor(x: float2) : float2
 
-returns a float value representing the largest integer that is less than or equal to x
+Returns the largest integral value not greater than x (rounds toward negative infinity), computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float2
 
@@ -920,7 +920,7 @@ returns a float value representing the largest integer that is less than or equa
 
 .. das:function:: ceil(x: float2) : float2
 
-returns a float value representing the smallest integer (type is still float) that is greater than or equal to arg0
+Returns the smallest integral value not less than x (rounds toward positive infinity), computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float2
 
@@ -928,7 +928,7 @@ returns a float value representing the smallest integer (type is still float) th
 
 .. das:function:: sqrt(x: float2) : float2
 
-returns the square root of x
+Returns the square root of a scalar double, float, or each component of a float2, float3, or float4 vector; input must be non-negative.
 
 :Arguments: * **x** : float2
 
@@ -936,7 +936,7 @@ returns the square root of x
 
 .. das:function:: saturate(x: float2) : float2
 
-returns a clamped to [0..1] inclusive range x
+Clamps the scalar double, float, or each component of a float2, float3, float4 vector to the [0, 1] range, returning 0 for values below 0 and 1 for values above 1.
 
 :Arguments: * **x** : float2
 
@@ -944,7 +944,7 @@ returns a clamped to [0..1] inclusive range x
 
 .. das:function:: floor(x: float3) : float3
 
-returns a float value representing the largest integer that is less than or equal to x
+Returns the largest integral value not greater than x (rounds toward negative infinity), computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float3
 
@@ -952,7 +952,7 @@ returns a float value representing the largest integer that is less than or equa
 
 .. das:function:: ceil(x: float3) : float3
 
-returns a float value representing the smallest integer (type is still float) that is greater than or equal to arg0
+Returns the smallest integral value not less than x (rounds toward positive infinity), computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float3
 
@@ -960,7 +960,7 @@ returns a float value representing the smallest integer (type is still float) th
 
 .. das:function:: sqrt(x: float3) : float3
 
-returns the square root of x
+Returns the square root of a scalar double, float, or each component of a float2, float3, or float4 vector; input must be non-negative.
 
 :Arguments: * **x** : float3
 
@@ -968,7 +968,7 @@ returns the square root of x
 
 .. das:function:: saturate(x: float3) : float3
 
-returns a clamped to [0..1] inclusive range x
+Clamps the scalar double, float, or each component of a float2, float3, float4 vector to the [0, 1] range, returning 0 for values below 0 and 1 for values above 1.
 
 :Arguments: * **x** : float3
 
@@ -976,7 +976,7 @@ returns a clamped to [0..1] inclusive range x
 
 .. das:function:: floor(x: float4) : float4
 
-returns a float value representing the largest integer that is less than or equal to x
+Returns the largest integral value not greater than x (rounds toward negative infinity), computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float4
 
@@ -984,7 +984,7 @@ returns a float value representing the largest integer that is less than or equa
 
 .. das:function:: ceil(x: float4) : float4
 
-returns a float value representing the smallest integer (type is still float) that is greater than or equal to arg0
+Returns the smallest integral value not less than x (rounds toward positive infinity), computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float4
 
@@ -992,7 +992,7 @@ returns a float value representing the smallest integer (type is still float) th
 
 .. das:function:: sqrt(x: float4) : float4
 
-returns the square root of x
+Returns the square root of a scalar double, float, or each component of a float2, float3, or float4 vector; input must be non-negative.
 
 :Arguments: * **x** : float4
 
@@ -1000,7 +1000,7 @@ returns the square root of x
 
 .. das:function:: saturate(x: float4) : float4
 
-returns a clamped to [0..1] inclusive range x
+Clamps the scalar double, float, or each component of a float2, float3, float4 vector to the [0, 1] range, returning 0 for values below 0 and 1 for values above 1.
 
 :Arguments: * **x** : float4
 
@@ -1008,7 +1008,7 @@ returns a clamped to [0..1] inclusive range x
 
 .. das:function:: abs(x: int) : int
 
-returns the absolute value of x
+Returns the absolute value of the argument, computed component-wise for float2, float3, float4, int2, int3, and int4 vector types, and per-element for scalar float, double, int, and int64 types.
 
 :Arguments: * **x** : int
 
@@ -1016,7 +1016,7 @@ returns the absolute value of x
 
 .. das:function:: sign(x: int) : int
 
-returns sign of x, or 0 if x == 0
+Returns the sign of the scalar value x as -1, 0, or 1 for double, float, int, or int64 types, indicating whether the value is negative, zero, or positive.
 
 :Arguments: * **x** : int
 
@@ -1024,7 +1024,7 @@ returns sign of x, or 0 if x == 0
 
 .. das:function:: abs(x: int2) : int2
 
-returns the absolute value of x
+Returns the absolute value of the argument, computed component-wise for float2, float3, float4, int2, int3, and int4 vector types, and per-element for scalar float, double, int, and int64 types.
 
 :Arguments: * **x** : int2
 
@@ -1032,7 +1032,7 @@ returns the absolute value of x
 
 .. das:function:: sign(x: int2) : int2
 
-returns sign of x, or 0 if x == 0
+Returns the sign of the scalar value x as -1, 0, or 1 for double, float, int, or int64 types, indicating whether the value is negative, zero, or positive.
 
 :Arguments: * **x** : int2
 
@@ -1040,7 +1040,7 @@ returns sign of x, or 0 if x == 0
 
 .. das:function:: abs(x: int3) : int3
 
-returns the absolute value of x
+Returns the absolute value of the argument, computed component-wise for float2, float3, float4, int2, int3, and int4 vector types, and per-element for scalar float, double, int, and int64 types.
 
 :Arguments: * **x** : int3
 
@@ -1048,7 +1048,7 @@ returns the absolute value of x
 
 .. das:function:: sign(x: int3) : int3
 
-returns sign of x, or 0 if x == 0
+Returns the sign of the scalar value x as -1, 0, or 1 for double, float, int, or int64 types, indicating whether the value is negative, zero, or positive.
 
 :Arguments: * **x** : int3
 
@@ -1056,7 +1056,7 @@ returns sign of x, or 0 if x == 0
 
 .. das:function:: abs(x: int4) : int4
 
-returns the absolute value of x
+Returns the absolute value of the argument, computed component-wise for float2, float3, float4, int2, int3, and int4 vector types, and per-element for scalar float, double, int, and int64 types.
 
 :Arguments: * **x** : int4
 
@@ -1064,7 +1064,7 @@ returns the absolute value of x
 
 .. das:function:: sign(x: int4) : int4
 
-returns sign of x, or 0 if x == 0
+Returns the sign of the scalar value x as -1, 0, or 1 for double, float, int, or int64 types, indicating whether the value is negative, zero, or positive.
 
 :Arguments: * **x** : int4
 
@@ -1072,7 +1072,7 @@ returns sign of x, or 0 if x == 0
 
 .. das:function:: abs(x: uint) : uint
 
-returns the absolute value of x
+Returns the absolute value of the argument, computed component-wise for float2, float3, float4, int2, int3, and int4 vector types, and per-element for scalar float, double, int, and int64 types.
 
 :Arguments: * **x** : uint
 
@@ -1080,7 +1080,7 @@ returns the absolute value of x
 
 .. das:function:: sign(x: uint) : uint
 
-returns sign of x, or 0 if x == 0
+Returns the sign of the scalar value x as -1, 0, or 1 for double, float, int, or int64 types, indicating whether the value is negative, zero, or positive.
 
 :Arguments: * **x** : uint
 
@@ -1088,7 +1088,7 @@ returns sign of x, or 0 if x == 0
 
 .. das:function:: abs(x: uint2) : uint2
 
-returns the absolute value of x
+Returns the absolute value of the argument, computed component-wise for float2, float3, float4, int2, int3, and int4 vector types, and per-element for scalar float, double, int, and int64 types.
 
 :Arguments: * **x** : uint2
 
@@ -1096,7 +1096,7 @@ returns the absolute value of x
 
 .. das:function:: sign(x: uint2) : uint2
 
-returns sign of x, or 0 if x == 0
+Returns the sign of the scalar value x as -1, 0, or 1 for double, float, int, or int64 types, indicating whether the value is negative, zero, or positive.
 
 :Arguments: * **x** : uint2
 
@@ -1104,7 +1104,7 @@ returns sign of x, or 0 if x == 0
 
 .. das:function:: abs(x: uint3) : uint3
 
-returns the absolute value of x
+Returns the absolute value of the argument, computed component-wise for float2, float3, float4, int2, int3, and int4 vector types, and per-element for scalar float, double, int, and int64 types.
 
 :Arguments: * **x** : uint3
 
@@ -1112,7 +1112,7 @@ returns the absolute value of x
 
 .. das:function:: sign(x: uint3) : uint3
 
-returns sign of x, or 0 if x == 0
+Returns the sign of the scalar value x as -1, 0, or 1 for double, float, int, or int64 types, indicating whether the value is negative, zero, or positive.
 
 :Arguments: * **x** : uint3
 
@@ -1120,7 +1120,7 @@ returns sign of x, or 0 if x == 0
 
 .. das:function:: abs(x: uint4) : uint4
 
-returns the absolute value of x
+Returns the absolute value of the argument, computed component-wise for float2, float3, float4, int2, int3, and int4 vector types, and per-element for scalar float, double, int, and int64 types.
 
 :Arguments: * **x** : uint4
 
@@ -1128,7 +1128,7 @@ returns the absolute value of x
 
 .. das:function:: sign(x: uint4) : uint4
 
-returns sign of x, or 0 if x == 0
+Returns the sign of the scalar value x as -1, 0, or 1 for double, float, int, or int64 types, indicating whether the value is negative, zero, or positive.
 
 :Arguments: * **x** : uint4
 
@@ -1136,7 +1136,7 @@ returns sign of x, or 0 if x == 0
 
 .. das:function:: abs(x: float) : float
 
-returns the absolute value of x
+Returns the absolute value of the argument, computed component-wise for float2, float3, float4, int2, int3, and int4 vector types, and per-element for scalar float, double, int, and int64 types.
 
 :Arguments: * **x** : float
 
@@ -1144,7 +1144,7 @@ returns the absolute value of x
 
 .. das:function:: sign(x: float) : float
 
-returns sign of x, or 0 if x == 0
+Returns the sign of the scalar value x as -1, 0, or 1 for double, float, int, or int64 types, indicating whether the value is negative, zero, or positive.
 
 :Arguments: * **x** : float
 
@@ -1152,7 +1152,7 @@ returns sign of x, or 0 if x == 0
 
 .. das:function:: abs(x: float2) : float2
 
-returns the absolute value of x
+Returns the absolute value of the argument, computed component-wise for float2, float3, float4, int2, int3, and int4 vector types, and per-element for scalar float, double, int, and int64 types.
 
 :Arguments: * **x** : float2
 
@@ -1160,7 +1160,7 @@ returns the absolute value of x
 
 .. das:function:: sign(x: float2) : float2
 
-returns sign of x, or 0 if x == 0
+Returns the sign of the scalar value x as -1, 0, or 1 for double, float, int, or int64 types, indicating whether the value is negative, zero, or positive.
 
 :Arguments: * **x** : float2
 
@@ -1168,7 +1168,7 @@ returns sign of x, or 0 if x == 0
 
 .. das:function:: abs(x: float3) : float3
 
-returns the absolute value of x
+Returns the absolute value of the argument, computed component-wise for float2, float3, float4, int2, int3, and int4 vector types, and per-element for scalar float, double, int, and int64 types.
 
 :Arguments: * **x** : float3
 
@@ -1176,7 +1176,7 @@ returns the absolute value of x
 
 .. das:function:: sign(x: float3) : float3
 
-returns sign of x, or 0 if x == 0
+Returns the sign of the scalar value x as -1, 0, or 1 for double, float, int, or int64 types, indicating whether the value is negative, zero, or positive.
 
 :Arguments: * **x** : float3
 
@@ -1184,7 +1184,7 @@ returns sign of x, or 0 if x == 0
 
 .. das:function:: abs(x: float4) : float4
 
-returns the absolute value of x
+Returns the absolute value of the argument, computed component-wise for float2, float3, float4, int2, int3, and int4 vector types, and per-element for scalar float, double, int, and int64 types.
 
 :Arguments: * **x** : float4
 
@@ -1192,7 +1192,7 @@ returns the absolute value of x
 
 .. das:function:: sign(x: float4) : float4
 
-returns sign of x, or 0 if x == 0
+Returns the sign of the scalar value x as -1, 0, or 1 for double, float, int, or int64 types, indicating whether the value is negative, zero, or positive.
 
 :Arguments: * **x** : float4
 
@@ -1200,7 +1200,7 @@ returns sign of x, or 0 if x == 0
 
 .. das:function:: abs(x: double) : double
 
-returns the absolute value of x
+Returns the absolute value of the argument, computed component-wise for float2, float3, float4, int2, int3, and int4 vector types, and per-element for scalar float, double, int, and int64 types.
 
 :Arguments: * **x** : double
 
@@ -1208,7 +1208,7 @@ returns the absolute value of x
 
 .. das:function:: sign(x: double) : double
 
-returns sign of x, or 0 if x == 0
+Returns the sign of the scalar value x as -1, 0, or 1 for double, float, int, or int64 types, indicating whether the value is negative, zero, or positive.
 
 :Arguments: * **x** : double
 
@@ -1216,7 +1216,7 @@ returns sign of x, or 0 if x == 0
 
 .. das:function:: abs(x: int64) : int64
 
-returns the absolute value of x
+Returns the absolute value of the argument, computed component-wise for float2, float3, float4, int2, int3, and int4 vector types, and per-element for scalar float, double, int, and int64 types.
 
 :Arguments: * **x** : int64
 
@@ -1224,7 +1224,7 @@ returns the absolute value of x
 
 .. das:function:: sign(x: int64) : int64
 
-returns sign of x, or 0 if x == 0
+Returns the sign of the scalar value x as -1, 0, or 1 for double, float, int, or int64 types, indicating whether the value is negative, zero, or positive.
 
 :Arguments: * **x** : int64
 
@@ -1232,7 +1232,7 @@ returns sign of x, or 0 if x == 0
 
 .. das:function:: abs(x: uint64) : uint64
 
-returns the absolute value of x
+Returns the absolute value of the argument, computed component-wise for float2, float3, float4, int2, int3, and int4 vector types, and per-element for scalar float, double, int, and int64 types.
 
 :Arguments: * **x** : uint64
 
@@ -1240,7 +1240,7 @@ returns the absolute value of x
 
 .. das:function:: sign(x: uint64) : uint64
 
-returns sign of x, or 0 if x == 0
+Returns the sign of the scalar value x as -1, 0, or 1 for double, float, int, or int64 types, indicating whether the value is negative, zero, or positive.
 
 :Arguments: * **x** : uint64
 
@@ -1248,7 +1248,7 @@ returns sign of x, or 0 if x == 0
 
 .. das:function:: is_nan(x: float) : bool
 
-Returns true if `x` is NaN (not a number)
+Returns true if x is NaN (Not a Number), checked component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float
 
@@ -1256,7 +1256,7 @@ Returns true if `x` is NaN (not a number)
 
 .. das:function:: is_finite(x: float) : bool
 
-Returns true if `x` is not a negative or positive infinity
+Returns true if x is a finite value (not infinity and not NaN), checked component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float
 
@@ -1264,7 +1264,7 @@ Returns true if `x` is not a negative or positive infinity
 
 .. das:function:: is_nan(x: double) : bool
 
-Returns true if `x` is NaN (not a number)
+Returns true if x is NaN (Not a Number), checked component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : double
 
@@ -1272,7 +1272,7 @@ Returns true if `x` is NaN (not a number)
 
 .. das:function:: is_finite(x: double) : bool
 
-Returns true if `x` is not a negative or positive infinity
+Returns true if x is a finite value (not infinity and not NaN), checked component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : double
 
@@ -1280,7 +1280,7 @@ Returns true if `x` is not a negative or positive infinity
 
 .. das:function:: sqrt(x: double) : double
 
-returns the square root of x
+Returns the square root of a scalar double, float, or each component of a float2, float3, or float4 vector; input must be non-negative.
 
 :Arguments: * **x** : double
 
@@ -1288,7 +1288,7 @@ returns the square root of x
 
 .. das:function:: exp(x: double) : double
 
-returns the e^x value of x
+Returns e raised to the power of x (the base-e exponential), computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : double
 
@@ -1296,14 +1296,15 @@ returns the e^x value of x
 
 .. das:function:: rcp(x: double) : double
 
-Returns the reciprocal (1/x) of the argument. For vector types, computes per-component reciprocal.
+Returns the reciprocal (1/x) of a scalar float or each component of a float2, float3, or float4 vector.
+
 :Arguments: * **x** : double
 
 .. _function-math_log_double:
 
 .. das:function:: log(x: double) : double
 
-returns the natural logarithm of x
+Returns the natural (base-e) logarithm of x; the input must be positive; computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : double
 
@@ -1311,7 +1312,7 @@ returns the natural logarithm of x
 
 .. das:function:: pow(x: double; y: double) : double
 
-returns x raised to the power of y
+Returns x raised to the power of y for scalar double, float, or vector float2, float3, float4 types; domain requires x >= 0 for non-integer y values.
 
 :Arguments: * **x** : double
 
@@ -1321,7 +1322,7 @@ returns x raised to the power of y
 
 .. das:function:: exp2(x: double) : double
 
-returns the 2^x value of x
+Returns 2 raised to the power of x, computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : double
 
@@ -1329,7 +1330,7 @@ returns the 2^x value of x
 
 .. das:function:: log2(x: double) : double
 
-returns the logarithm base-2 of x
+Returns the base-2 logarithm of x; the input must be positive; computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : double
 
@@ -1337,7 +1338,7 @@ returns the logarithm base-2 of x
 
 .. das:function:: sin(x: double) : double
 
-returns the sine of x
+Returns the sine of the angle x given in radians for double or float, with output in the range [-1, 1].
 
 :Arguments: * **x** : double
 
@@ -1345,7 +1346,7 @@ returns the sine of x
 
 .. das:function:: cos(x: double) : double
 
-returns the cosine of x
+Returns the cosine of x, where x is specified in radians; works with float and double.
 
 :Arguments: * **x** : double
 
@@ -1353,7 +1354,7 @@ returns the cosine of x
 
 .. das:function:: asin(x: double) : double
 
-returns the arcsine of x
+Returns the arcsine of x in radians; the input must be in the range [-1, 1] and the result is in the range [-pi/2, pi/2]; works with float and double.
 
 :Arguments: * **x** : double
 
@@ -1361,7 +1362,7 @@ returns the arcsine of x
 
 .. das:function:: acos(x: double) : double
 
-returns the arccosine of x
+Returns the arccosine of x in radians; the input must be in the range [-1, 1] and the result is in the range [0, pi]; works with float and double.
 
 :Arguments: * **x** : double
 
@@ -1369,7 +1370,7 @@ returns the arccosine of x
 
 .. das:function:: safe_asin(x: double) : double
 
-Returns the arcsine of `x`, clamping `x` to the [-1..1] range to avoid NaN results.
+Returns the arcsine of x in radians, clamping the input to the valid domain [-1, 1] to prevent NaN results from out-of-range values.
 
 :Arguments: * **x** : double
 
@@ -1377,7 +1378,7 @@ Returns the arcsine of `x`, clamping `x` to the [-1..1] range to avoid NaN resul
 
 .. das:function:: safe_acos(x: double) : double
 
-Returns the arc cosine of x, clamped to the range [-1, 1].
+Returns the arccosine of x in radians, clamping the input to the valid domain [-1, 1] to prevent NaN results from out-of-range values.
 
 :Arguments: * **x** : double
 
@@ -1385,7 +1386,7 @@ Returns the arc cosine of x, clamped to the range [-1, 1].
 
 .. das:function:: tan(x: double) : double
 
-returns the tangent of x
+Returns the tangent of the angle x given in radians for double or float; undefined at odd multiples of pi/2.
 
 :Arguments: * **x** : double
 
@@ -1393,7 +1394,7 @@ returns the tangent of x
 
 .. das:function:: atan(x: double) : double
 
-returns the arctangent of x
+Returns the arctangent of x in radians, with the result in the range [-pi/2, pi/2]; works with float and double.
 
 :Arguments: * **x** : double
 
@@ -1401,7 +1402,7 @@ returns the arctangent of x
 
 .. das:function:: atan2(y: double; x: double) : double
 
-returns the arctangent of y/x
+Returns the arctangent of y/x in radians, using the signs of both arguments to determine the correct quadrant; the result is in the range [-pi, pi]; works with float and double.
 
 :Arguments: * **y** : double
 
@@ -1411,7 +1412,7 @@ returns the arctangent of y/x
 
 .. das:function:: sincos(x: float; s: float& implicit; c: float& implicit)
 
-returns oth sine and cosine of x
+Computes both the sine and cosine of the angle x in radians simultaneously, writing the results to output parameters s and c, for float or double types.
 
 :Arguments: * **x** : float
 
@@ -1423,7 +1424,7 @@ returns oth sine and cosine of x
 
 .. das:function:: sincos(x: double; s: double& implicit; c: double& implicit)
 
-returns oth sine and cosine of x
+Computes both the sine and cosine of the angle x in radians simultaneously, writing the results to output parameters s and c, for float or double types.
 
 :Arguments: * **x** : double
 
@@ -1435,7 +1436,7 @@ returns oth sine and cosine of x
 
 .. das:function:: asin(x: float) : float
 
-returns the arcsine of x
+Returns the arcsine of x in radians; the input must be in the range [-1, 1] and the result is in the range [-pi/2, pi/2]; works with float and double.
 
 :Arguments: * **x** : float
 
@@ -1443,7 +1444,7 @@ returns the arcsine of x
 
 .. das:function:: acos(x: float) : float
 
-returns the arccosine of x
+Returns the arccosine of x in radians; the input must be in the range [-1, 1] and the result is in the range [0, pi]; works with float and double.
 
 :Arguments: * **x** : float
 
@@ -1451,7 +1452,7 @@ returns the arccosine of x
 
 .. das:function:: safe_asin(x: float) : float
 
-Returns the arcsine of `x`, clamping `x` to the [-1..1] range to avoid NaN results.
+Returns the arcsine of x in radians, clamping the input to the valid domain [-1, 1] to prevent NaN results from out-of-range values.
 
 :Arguments: * **x** : float
 
@@ -1459,7 +1460,7 @@ Returns the arcsine of `x`, clamping `x` to the [-1..1] range to avoid NaN resul
 
 .. das:function:: safe_acos(x: float) : float
 
-Returns the arc cosine of x, clamped to the range [-1, 1].
+Returns the arccosine of x in radians, clamping the input to the valid domain [-1, 1] to prevent NaN results from out-of-range values.
 
 :Arguments: * **x** : float
 
@@ -1467,7 +1468,7 @@ Returns the arc cosine of x, clamped to the range [-1, 1].
 
 .. das:function:: atan(x: float) : float
 
-returns the arctangent of x
+Returns the arctangent of x in radians, with the result in the range [-pi/2, pi/2]; works with float and double.
 
 :Arguments: * **x** : float
 
@@ -1475,7 +1476,7 @@ returns the arctangent of x
 
 .. das:function:: atan2(y: float; x: float) : float
 
-returns the arctangent of y/x
+Returns the arctangent of y/x in radians, using the signs of both arguments to determine the correct quadrant; the result is in the range [-pi, pi]; works with float and double.
 
 :Arguments: * **y** : float
 
@@ -1485,7 +1486,7 @@ returns the arctangent of y/x
 
 .. das:function:: asin(x: float2) : float2
 
-returns the arcsine of x
+Returns the arcsine of x in radians; the input must be in the range [-1, 1] and the result is in the range [-pi/2, pi/2]; works with float and double.
 
 :Arguments: * **x** : float2
 
@@ -1493,7 +1494,7 @@ returns the arcsine of x
 
 .. das:function:: asin(x: float3) : float3
 
-returns the arcsine of x
+Returns the arcsine of x in radians; the input must be in the range [-1, 1] and the result is in the range [-pi/2, pi/2]; works with float and double.
 
 :Arguments: * **x** : float3
 
@@ -1501,7 +1502,7 @@ returns the arcsine of x
 
 .. das:function:: asin(x: float4) : float4
 
-returns the arcsine of x
+Returns the arcsine of x in radians; the input must be in the range [-1, 1] and the result is in the range [-pi/2, pi/2]; works with float and double.
 
 :Arguments: * **x** : float4
 
@@ -1509,7 +1510,7 @@ returns the arcsine of x
 
 .. das:function:: acos(x: float2) : float2
 
-returns the arccosine of x
+Returns the arccosine of x in radians; the input must be in the range [-1, 1] and the result is in the range [0, pi]; works with float and double.
 
 :Arguments: * **x** : float2
 
@@ -1517,7 +1518,7 @@ returns the arccosine of x
 
 .. das:function:: acos(x: float3) : float3
 
-returns the arccosine of x
+Returns the arccosine of x in radians; the input must be in the range [-1, 1] and the result is in the range [0, pi]; works with float and double.
 
 :Arguments: * **x** : float3
 
@@ -1525,7 +1526,7 @@ returns the arccosine of x
 
 .. das:function:: acos(x: float4) : float4
 
-returns the arccosine of x
+Returns the arccosine of x in radians; the input must be in the range [-1, 1] and the result is in the range [0, pi]; works with float and double.
 
 :Arguments: * **x** : float4
 
@@ -1533,7 +1534,7 @@ returns the arccosine of x
 
 .. das:function:: safe_asin(x: float2) : float2
 
-Returns the arcsine of `x`, clamping `x` to the [-1..1] range to avoid NaN results.
+Returns the arcsine of x in radians, clamping the input to the valid domain [-1, 1] to prevent NaN results from out-of-range values.
 
 :Arguments: * **x** : float2
 
@@ -1541,7 +1542,7 @@ Returns the arcsine of `x`, clamping `x` to the [-1..1] range to avoid NaN resul
 
 .. das:function:: safe_asin(x: float3) : float3
 
-Returns the arcsine of `x`, clamping `x` to the [-1..1] range to avoid NaN results.
+Returns the arcsine of x in radians, clamping the input to the valid domain [-1, 1] to prevent NaN results from out-of-range values.
 
 :Arguments: * **x** : float3
 
@@ -1549,7 +1550,7 @@ Returns the arcsine of `x`, clamping `x` to the [-1..1] range to avoid NaN resul
 
 .. das:function:: safe_asin(x: float4) : float4
 
-Returns the arcsine of `x`, clamping `x` to the [-1..1] range to avoid NaN results.
+Returns the arcsine of x in radians, clamping the input to the valid domain [-1, 1] to prevent NaN results from out-of-range values.
 
 :Arguments: * **x** : float4
 
@@ -1557,7 +1558,7 @@ Returns the arcsine of `x`, clamping `x` to the [-1..1] range to avoid NaN resul
 
 .. das:function:: safe_acos(x: float2) : float2
 
-returns the arc cosine of x, clamped to the range [-1, 1].
+Returns the arccosine of x in radians, clamping the input to the valid domain [-1, 1] to prevent NaN results from out-of-range values.
 
 :Arguments: * **x** : float2
 
@@ -1565,7 +1566,7 @@ returns the arc cosine of x, clamped to the range [-1, 1].
 
 .. das:function:: safe_acos(x: float3) : float3
 
-Returns the arc cosine of x, clamped to the range [-1, 1].
+Returns the arccosine of x in radians, clamping the input to the valid domain [-1, 1] to prevent NaN results from out-of-range values.
 
 :Arguments: * **x** : float3
 
@@ -1573,7 +1574,7 @@ Returns the arc cosine of x, clamped to the range [-1, 1].
 
 .. das:function:: safe_acos(x: float4) : float4
 
-Returns the arc cosine of x, clamped to the range [-1, 1].
+Returns the arccosine of x in radians, clamping the input to the valid domain [-1, 1] to prevent NaN results from out-of-range values.
 
 :Arguments: * **x** : float4
 
@@ -1581,7 +1582,7 @@ Returns the arc cosine of x, clamped to the range [-1, 1].
 
 .. das:function:: atan(x: float2) : float2
 
-returns the arctangent of x
+Returns the arctangent of x in radians, with the result in the range [-pi/2, pi/2]; works with float and double.
 
 :Arguments: * **x** : float2
 
@@ -1589,7 +1590,7 @@ returns the arctangent of x
 
 .. das:function:: atan(x: float3) : float3
 
-returns the arctangent of x
+Returns the arctangent of x in radians, with the result in the range [-pi/2, pi/2]; works with float and double.
 
 :Arguments: * **x** : float3
 
@@ -1597,7 +1598,7 @@ returns the arctangent of x
 
 .. das:function:: atan(x: float4) : float4
 
-returns the arctangent of x
+Returns the arctangent of x in radians, with the result in the range [-pi/2, pi/2]; works with float and double.
 
 :Arguments: * **x** : float4
 
@@ -1605,7 +1606,7 @@ returns the arctangent of x
 
 .. das:function:: atan2(y: float2; x: float2) : float2
 
-returns the arctangent of y/x
+Returns the arctangent of y/x in radians, using the signs of both arguments to determine the correct quadrant; the result is in the range [-pi, pi]; works with float and double.
 
 :Arguments: * **y** : float2
 
@@ -1615,7 +1616,7 @@ returns the arctangent of y/x
 
 .. das:function:: atan2(y: float3; x: float3) : float3
 
-returns the arctangent of y/x
+Returns the arctangent of y/x in radians, using the signs of both arguments to determine the correct quadrant; the result is in the range [-pi, pi]; works with float and double.
 
 :Arguments: * **y** : float3
 
@@ -1625,7 +1626,7 @@ returns the arctangent of y/x
 
 .. das:function:: atan2(y: float4; x: float4) : float4
 
-returns the arctangent of y/x
+Returns the arctangent of y/x in radians, using the signs of both arguments to determine the correct quadrant; the result is in the range [-pi, pi]; works with float and double.
 
 :Arguments: * **y** : float4
 
@@ -1691,7 +1692,7 @@ float* only
 
 .. das:function:: rcp_est(x: float) : float
 
-returns the fast approximation 1/x
+Returns a fast hardware estimate of the reciprocal (1/x) of a scalar float or each component of a float2, float3, or float4 vector, trading precision for speed.
 
 :Arguments: * **x** : float
 
@@ -1699,7 +1700,7 @@ returns the fast approximation 1/x
 
 .. das:function:: rcp_est(x: float2) : float2
 
-returns the fast approximation 1/x
+Returns a fast hardware estimate of the reciprocal (1/x) of a scalar float or each component of a float2, float3, or float4 vector, trading precision for speed.
 
 :Arguments: * **x** : float2
 
@@ -1707,7 +1708,7 @@ returns the fast approximation 1/x
 
 .. das:function:: rcp_est(x: float3) : float3
 
-returns the fast approximation 1/x
+Returns a fast hardware estimate of the reciprocal (1/x) of a scalar float or each component of a float2, float3, or float4 vector, trading precision for speed.
 
 :Arguments: * **x** : float3
 
@@ -1715,7 +1716,7 @@ returns the fast approximation 1/x
 
 .. das:function:: rcp_est(x: float4) : float4
 
-returns the fast approximation 1/x
+Returns a fast hardware estimate of the reciprocal (1/x) of a scalar float or each component of a float2, float3, or float4 vector, trading precision for speed.
 
 :Arguments: * **x** : float4
 
@@ -1723,7 +1724,7 @@ returns the fast approximation 1/x
 
 .. das:function:: fract(x: float) : float
 
-returns a fraction part of x
+Returns the fractional part of x (equivalent to x - floor(x)), computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float
 
@@ -1731,7 +1732,7 @@ returns a fraction part of x
 
 .. das:function:: round(x: float) : float
 
-Returns the nearest integer to `x`.
+Rounds each component of the scalar double, float, or vector float2, float3, float4 value x to the nearest integer, with halfway cases rounded to the nearest even value.
 
 :Arguments: * **x** : float
 
@@ -1739,14 +1740,15 @@ Returns the nearest integer to `x`.
 
 .. das:function:: rsqrt(x: float) : float
 
-Returns the reciprocal square root (1/sqrt(x)) of the argument. For vector types, computes per-component reciprocal square root.
+Returns the reciprocal square root (1/sqrt(x)) of a scalar float or each component of a float2, float3, or float4 vector.
+
 :Arguments: * **x** : float
 
 .. _function-math_rsqrt_est_float:
 
 .. das:function:: rsqrt_est(x: float) : float
 
-returns the fast approximation 1/sqrt(x)
+Returns a fast hardware estimate of the reciprocal square root (1/sqrt(x)) of a scalar float or each component of a float2, float3, or float4 vector, trading precision for speed.
 
 :Arguments: * **x** : float
 
@@ -1754,7 +1756,7 @@ returns the fast approximation 1/sqrt(x)
 
 .. das:function:: fract(x: float2) : float2
 
-returns a fraction part of x
+Returns the fractional part of x (equivalent to x - floor(x)), computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float2
 
@@ -1762,7 +1764,7 @@ returns a fraction part of x
 
 .. das:function:: round(x: float2) : float2
 
-Returns the nearest integer to `x`.
+Rounds each component of the scalar double, float, or vector float2, float3, float4 value x to the nearest integer, with halfway cases rounded to the nearest even value.
 
 :Arguments: * **x** : float2
 
@@ -1770,14 +1772,15 @@ Returns the nearest integer to `x`.
 
 .. das:function:: rsqrt(x: float2) : float2
 
-Returns the reciprocal square root (1/sqrt(x)) of the argument. For vector types, computes per-component reciprocal square root.
+Returns the reciprocal square root (1/sqrt(x)) of a scalar float or each component of a float2, float3, or float4 vector.
+
 :Arguments: * **x** : float2
 
 .. _function-math_rsqrt_est_float2:
 
 .. das:function:: rsqrt_est(x: float2) : float2
 
-returns the fast approximation 1/sqrt(x)
+Returns a fast hardware estimate of the reciprocal square root (1/sqrt(x)) of a scalar float or each component of a float2, float3, or float4 vector, trading precision for speed.
 
 :Arguments: * **x** : float2
 
@@ -1785,7 +1788,7 @@ returns the fast approximation 1/sqrt(x)
 
 .. das:function:: fract(x: float3) : float3
 
-returns a fraction part of x
+Returns the fractional part of x (equivalent to x - floor(x)), computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float3
 
@@ -1793,7 +1796,7 @@ returns a fraction part of x
 
 .. das:function:: round(x: float3) : float3
 
-Returns the nearest integer to `x`.
+Rounds each component of the scalar double, float, or vector float2, float3, float4 value x to the nearest integer, with halfway cases rounded to the nearest even value.
 
 :Arguments: * **x** : float3
 
@@ -1801,14 +1804,15 @@ Returns the nearest integer to `x`.
 
 .. das:function:: rsqrt(x: float3) : float3
 
-Returns the reciprocal square root (1/sqrt(x)) of the argument. For vector types, computes per-component reciprocal square root.
+Returns the reciprocal square root (1/sqrt(x)) of a scalar float or each component of a float2, float3, or float4 vector.
+
 :Arguments: * **x** : float3
 
 .. _function-math_rsqrt_est_float3:
 
 .. das:function:: rsqrt_est(x: float3) : float3
 
-returns the fast approximation 1/sqrt(x)
+Returns a fast hardware estimate of the reciprocal square root (1/sqrt(x)) of a scalar float or each component of a float2, float3, or float4 vector, trading precision for speed.
 
 :Arguments: * **x** : float3
 
@@ -1816,7 +1820,7 @@ returns the fast approximation 1/sqrt(x)
 
 .. das:function:: fract(x: float4) : float4
 
-returns a fraction part of x
+Returns the fractional part of x (equivalent to x - floor(x)), computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.
 
 :Arguments: * **x** : float4
 
@@ -1824,7 +1828,7 @@ returns a fraction part of x
 
 .. das:function:: round(x: float4) : float4
 
-Returns the nearest integer to `x`.
+Rounds each component of the scalar double, float, or vector float2, float3, float4 value x to the nearest integer, with halfway cases rounded to the nearest even value.
 
 :Arguments: * **x** : float4
 
@@ -1832,14 +1836,15 @@ Returns the nearest integer to `x`.
 
 .. das:function:: rsqrt(x: float4) : float4
 
-Returns the reciprocal square root (1/sqrt(x)) of the argument. For vector types, computes per-component reciprocal square root.
+Returns the reciprocal square root (1/sqrt(x)) of a scalar float or each component of a float2, float3, or float4 vector.
+
 :Arguments: * **x** : float4
 
 .. _function-math_rsqrt_est_float4:
 
 .. das:function:: rsqrt_est(x: float4) : float4
 
-returns the fast approximation 1/sqrt(x)
+Returns a fast hardware estimate of the reciprocal square root (1/sqrt(x)) of a scalar float or each component of a float2, float3, or float4 vector, trading precision for speed.
 
 :Arguments: * **x** : float4
 
@@ -1847,7 +1852,7 @@ returns the fast approximation 1/sqrt(x)
 
 .. das:function:: atan_est(x: float) : float
 
-Fast estimation for the `atan`.
+Returns a fast estimated arctangent of x in radians, trading some precision for speed; the result approximates the range [-pi/2, pi/2].
 
 :Arguments: * **x** : float
 
@@ -1855,7 +1860,7 @@ Fast estimation for the `atan`.
 
 .. das:function:: atan2_est(y: float; x: float) : float
 
-returns the fast approximation of arctangent of y/x
+Returns a fast estimated arctangent of y/x in radians, using the signs of both arguments to determine the correct quadrant; trades some precision for speed.
 
 :Arguments: * **y** : float
 
@@ -1865,7 +1870,7 @@ returns the fast approximation of arctangent of y/x
 
 .. das:function:: atan_est(x: float2) : float2
 
-Fast estimation for the `atan`.
+Returns a fast estimated arctangent of x in radians, trading some precision for speed; the result approximates the range [-pi/2, pi/2].
 
 :Arguments: * **x** : float2
 
@@ -1873,7 +1878,7 @@ Fast estimation for the `atan`.
 
 .. das:function:: atan_est(x: float3) : float3
 
-Fast estimation for the `atan`.
+Returns a fast estimated arctangent of x in radians, trading some precision for speed; the result approximates the range [-pi/2, pi/2].
 
 :Arguments: * **x** : float3
 
@@ -1881,7 +1886,7 @@ Fast estimation for the `atan`.
 
 .. das:function:: atan_est(x: float4) : float4
 
-Fast estimation for the `atan`.
+Returns a fast estimated arctangent of x in radians, trading some precision for speed; the result approximates the range [-pi/2, pi/2].
 
 :Arguments: * **x** : float4
 
@@ -1889,7 +1894,7 @@ Fast estimation for the `atan`.
 
 .. das:function:: atan2_est(y: float2; x: float2) : float2
 
-returns the fast approximation of arctangent of y/x
+Returns a fast estimated arctangent of y/x in radians, using the signs of both arguments to determine the correct quadrant; trades some precision for speed.
 
 :Arguments: * **y** : float2
 
@@ -1899,7 +1904,7 @@ returns the fast approximation of arctangent of y/x
 
 .. das:function:: atan2_est(y: float3; x: float3) : float3
 
-returns the fast approximation of arctangent of y/x
+Returns a fast estimated arctangent of y/x in radians, using the signs of both arguments to determine the correct quadrant; trades some precision for speed.
 
 :Arguments: * **y** : float3
 
@@ -1909,7 +1914,7 @@ returns the fast approximation of arctangent of y/x
 
 .. das:function:: atan2_est(y: float4; x: float4) : float4
 
-returns the fast approximation of arctangent of y/x
+Returns a fast estimated arctangent of y/x in radians, using the signs of both arguments to determine the correct quadrant; trades some precision for speed.
 
 :Arguments: * **y** : float4
 
@@ -1919,7 +1924,7 @@ returns the fast approximation of arctangent of y/x
 
 .. das:function:: floori(x: float) : int
 
-returns a integer value representing the largest integer that is less than or equal to x
+Returns the largest integer not greater than x (rounds toward negative infinity), converting the float argument to an int result.
 
 :Arguments: * **x** : float
 
@@ -1927,7 +1932,7 @@ returns a integer value representing the largest integer that is less than or eq
 
 .. das:function:: ceili(x: float) : int
 
-returns a value representing the smallest integer (integer type!) that is greater than or equal to arg0
+Returns the smallest integer not less than x (rounds toward positive infinity), converting the float argument to an int result.
 
 :Arguments: * **x** : float
 
@@ -1935,7 +1940,7 @@ returns a value representing the smallest integer (integer type!) that is greate
 
 .. das:function:: roundi(x: float) : int
 
-returns a integer value representing the integer that is closest to x
+Rounds the float x to the nearest integer value and returns the result as an int.
 
 :Arguments: * **x** : float
 
@@ -1943,7 +1948,7 @@ returns a integer value representing the integer that is closest to x
 
 .. das:function:: trunci(x: float) : int
 
-returns a integer value representing the float without fraction part of x
+Truncates the float x toward zero to the nearest integer and returns the result as an int.
 
 :Arguments: * **x** : float
 
@@ -1951,7 +1956,7 @@ returns a integer value representing the float without fraction part of x
 
 .. das:function:: floori(x: double) : int
 
-returns a integer value representing the largest integer that is less than or equal to x
+Returns the largest integer not greater than x (rounds toward negative infinity), converting the float argument to an int result.
 
 :Arguments: * **x** : double
 
@@ -1959,7 +1964,7 @@ returns a integer value representing the largest integer that is less than or eq
 
 .. das:function:: ceili(x: double) : int
 
-returns a value representing the smallest integer (integer type!) that is greater than or equal to arg0
+Returns the smallest integer not less than x (rounds toward positive infinity), converting the float argument to an int result.
 
 :Arguments: * **x** : double
 
@@ -1967,7 +1972,7 @@ returns a value representing the smallest integer (integer type!) that is greate
 
 .. das:function:: roundi(x: double) : int
 
-returns a integer value representing the integer that is closest to x
+Rounds the float x to the nearest integer value and returns the result as an int.
 
 :Arguments: * **x** : double
 
@@ -1975,7 +1980,7 @@ returns a integer value representing the integer that is closest to x
 
 .. das:function:: trunci(x: double) : int
 
-returns a integer value representing the float without fraction part of x
+Truncates the float x toward zero to the nearest integer and returns the result as an int.
 
 :Arguments: * **x** : double
 
@@ -1983,7 +1988,7 @@ returns a integer value representing the float without fraction part of x
 
 .. das:function:: floori(x: float2) : int2
 
-returns a integer value representing the largest integer that is less than or equal to x
+Returns the largest integer not greater than x (rounds toward negative infinity), converting the float argument to an int result.
 
 :Arguments: * **x** : float2
 
@@ -1991,7 +1996,7 @@ returns a integer value representing the largest integer that is less than or eq
 
 .. das:function:: ceili(x: float2) : int2
 
-returns a value representing the smallest integer (integer type!) that is greater than or equal to arg0
+Returns the smallest integer not less than x (rounds toward positive infinity), converting the float argument to an int result.
 
 :Arguments: * **x** : float2
 
@@ -1999,7 +2004,7 @@ returns a value representing the smallest integer (integer type!) that is greate
 
 .. das:function:: roundi(x: float2) : int2
 
-returns a integer value representing the integer that is closest to x
+Rounds the float x to the nearest integer value and returns the result as an int.
 
 :Arguments: * **x** : float2
 
@@ -2007,7 +2012,7 @@ returns a integer value representing the integer that is closest to x
 
 .. das:function:: trunci(x: float2) : int2
 
-returns a integer value representing the float without fraction part of x
+Truncates the float x toward zero to the nearest integer and returns the result as an int.
 
 :Arguments: * **x** : float2
 
@@ -2015,7 +2020,7 @@ returns a integer value representing the float without fraction part of x
 
 .. das:function:: floori(x: float3) : int3
 
-returns a integer value representing the largest integer that is less than or equal to x
+Returns the largest integer not greater than x (rounds toward negative infinity), converting the float argument to an int result.
 
 :Arguments: * **x** : float3
 
@@ -2023,7 +2028,7 @@ returns a integer value representing the largest integer that is less than or eq
 
 .. das:function:: ceili(x: float3) : int3
 
-returns a value representing the smallest integer (integer type!) that is greater than or equal to arg0
+Returns the smallest integer not less than x (rounds toward positive infinity), converting the float argument to an int result.
 
 :Arguments: * **x** : float3
 
@@ -2031,7 +2036,7 @@ returns a value representing the smallest integer (integer type!) that is greate
 
 .. das:function:: roundi(x: float3) : int3
 
-returns a integer value representing the integer that is closest to x
+Rounds the float x to the nearest integer value and returns the result as an int.
 
 :Arguments: * **x** : float3
 
@@ -2039,7 +2044,7 @@ returns a integer value representing the integer that is closest to x
 
 .. das:function:: trunci(x: float3) : int3
 
-returns a integer value representing the float without fraction part of x
+Truncates the float x toward zero to the nearest integer and returns the result as an int.
 
 :Arguments: * **x** : float3
 
@@ -2047,7 +2052,7 @@ returns a integer value representing the float without fraction part of x
 
 .. das:function:: floori(x: float4) : int4
 
-returns a integer value representing the largest integer that is less than or equal to x
+Returns the largest integer not greater than x (rounds toward negative infinity), converting the float argument to an int result.
 
 :Arguments: * **x** : float4
 
@@ -2055,7 +2060,7 @@ returns a integer value representing the largest integer that is less than or eq
 
 .. das:function:: ceili(x: float4) : int4
 
-returns a value representing the smallest integer (integer type!) that is greater than or equal to arg0
+Returns the smallest integer not less than x (rounds toward positive infinity), converting the float argument to an int result.
 
 :Arguments: * **x** : float4
 
@@ -2063,7 +2068,7 @@ returns a value representing the smallest integer (integer type!) that is greate
 
 .. das:function:: roundi(x: float4) : int4
 
-returns a integer value representing the integer that is closest to x
+Rounds the float x to the nearest integer value and returns the result as an int.
 
 :Arguments: * **x** : float4
 
@@ -2071,7 +2076,7 @@ returns a integer value representing the integer that is closest to x
 
 .. das:function:: trunci(x: float4) : int4
 
-returns a integer value representing the float without fraction part of x
+Truncates the float x toward zero to the nearest integer and returns the result as an int.
 
 :Arguments: * **x** : float4
 
@@ -2079,21 +2084,24 @@ returns a integer value representing the float without fraction part of x
 
 .. das:function:: float4x4 implicit-(x: float4x4 implicit) : float4x4
 
-Returns the arithmetic negation of the argument (unary minus). Works with scalar and vector types.
+Returns the component-wise arithmetic negation of a matrix, flipping the sign of every element; works with float3x3, float3x4, and float4x4 matrix types.
+
 :Arguments: * **x** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
 
 .. _function-math_-_float3x4_implicit:
 
 .. das:function:: float3x4 implicit-(x: float3x4 implicit) : float3x4
 
-Returns the arithmetic negation of the argument (unary minus). Works with scalar and vector types.
+Returns the component-wise arithmetic negation of a matrix, flipping the sign of every element; works with float3x3, float3x4, and float4x4 matrix types.
+
 :Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
 
 .. _function-math_-_float3x3_implicit:
 
 .. das:function:: float3x3 implicit-(x: float3x3 implicit) : float3x3
 
-Returns the arithmetic negation of the argument (unary minus). Works with scalar and vector types.
+Returns the component-wise arithmetic negation of a matrix, flipping the sign of every element; works with float3x3, float3x4, and float4x4 matrix types.
+
 :Arguments: * **x** :  :ref:`float3x3 <handle-math-float3x3>`  implicit
 
 +++++++++++
@@ -2122,7 +2130,7 @@ float3 only
 
 .. das:function:: cross(x: float3; y: float3) : float3
 
-returns vector representing cross product between x and y
+Returns the cross product of two float3 vectors, producing a float3 vector perpendicular to both inputs with magnitude equal to the area of the parallelogram they span.
 
 :Arguments: * **x** : float3
 
@@ -2132,7 +2140,7 @@ returns vector representing cross product between x and y
 
 .. das:function:: distance(x: float2; y: float2) : float
 
-returns a non-negative value representing distance between x and y
+Returns the Euclidean distance between two vectors as a float scalar; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float2
 
@@ -2142,7 +2150,7 @@ returns a non-negative value representing distance between x and y
 
 .. das:function:: distance_sq(x: float2; y: float2) : float
 
-returns a non-negative value representing squared distance between x and y
+Returns the squared Euclidean distance between two vectors as a float scalar, avoiding the square root for faster distance comparisons; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float2
 
@@ -2152,7 +2160,7 @@ returns a non-negative value representing squared distance between x and y
 
 .. das:function:: inv_distance(x: float2; y: float2) : float
 
-returns a non-negative value representing 1/distance between x and y
+Returns the reciprocal of the Euclidean distance between two vectors (1 / distance(x, y)) as a float; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float2
 
@@ -2162,7 +2170,7 @@ returns a non-negative value representing 1/distance between x and y
 
 .. das:function:: inv_distance_sq(x: float2; y: float2) : float
 
-returns a non-negative value representing 1/squared distance between x and y
+Returns the reciprocal of the squared Euclidean distance between two vectors (1 / distance_sq(x, y)) as a float; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float2
 
@@ -2172,7 +2180,7 @@ returns a non-negative value representing 1/squared distance between x and y
 
 .. das:function:: distance(x: float3; y: float3) : float
 
-returns a non-negative value representing distance between x and y
+Returns the Euclidean distance between two vectors as a float scalar; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float3
 
@@ -2182,7 +2190,7 @@ returns a non-negative value representing distance between x and y
 
 .. das:function:: distance_sq(x: float3; y: float3) : float
 
-returns a non-negative value representing squared distance between x and y
+Returns the squared Euclidean distance between two vectors as a float scalar, avoiding the square root for faster distance comparisons; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float3
 
@@ -2192,7 +2200,7 @@ returns a non-negative value representing squared distance between x and y
 
 .. das:function:: inv_distance(x: float3; y: float3) : float
 
-returns a non-negative value representing 1/distance between x and y
+Returns the reciprocal of the Euclidean distance between two vectors (1 / distance(x, y)) as a float; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float3
 
@@ -2202,7 +2210,7 @@ returns a non-negative value representing 1/distance between x and y
 
 .. das:function:: inv_distance_sq(x: float3; y: float3) : float
 
-returns a non-negative value representing 1/squared distance between x and y
+Returns the reciprocal of the squared Euclidean distance between two vectors (1 / distance_sq(x, y)) as a float; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float3
 
@@ -2212,7 +2220,7 @@ returns a non-negative value representing 1/squared distance between x and y
 
 .. das:function:: distance(x: float4; y: float4) : float
 
-returns a non-negative value representing distance between x and y
+Returns the Euclidean distance between two vectors as a float scalar; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float4
 
@@ -2222,7 +2230,7 @@ returns a non-negative value representing distance between x and y
 
 .. das:function:: distance_sq(x: float4; y: float4) : float
 
-returns a non-negative value representing squared distance between x and y
+Returns the squared Euclidean distance between two vectors as a float scalar, avoiding the square root for faster distance comparisons; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float4
 
@@ -2232,7 +2240,7 @@ returns a non-negative value representing squared distance between x and y
 
 .. das:function:: inv_distance(x: float4; y: float4) : float
 
-returns a non-negative value representing 1/distance between x and y
+Returns the reciprocal of the Euclidean distance between two vectors (1 / distance(x, y)) as a float; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float4
 
@@ -2242,7 +2250,7 @@ returns a non-negative value representing 1/distance between x and y
 
 .. das:function:: inv_distance_sq(x: float4; y: float4) : float
 
-returns a non-negative value representing 1/squared distance between x and y
+Returns the reciprocal of the squared Euclidean distance between two vectors (1 / distance_sq(x, y)) as a float; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float4
 
@@ -2252,7 +2260,7 @@ returns a non-negative value representing 1/squared distance between x and y
 
 .. das:function:: reflect(v: float3; n: float3) : float3
 
-see function-math-reflect.rst for details
+Computes the reflection of float2 or float3 vector v off a surface with unit normal n, returning the reflected vector as v - 2*dot(v,n)*n.
 
 :Arguments: * **v** : float3
 
@@ -2262,7 +2270,7 @@ see function-math-reflect.rst for details
 
 .. das:function:: reflect(v: float2; n: float2) : float2
 
-see function-math-reflect.rst for details
+Computes the reflection of float2 or float3 vector v off a surface with unit normal n, returning the reflected vector as v - 2*dot(v,n)*n.
 
 :Arguments: * **v** : float2
 
@@ -2272,7 +2280,7 @@ see function-math-reflect.rst for details
 
 .. das:function:: refract(v: float3; n: float3; nint: float) : float3
 
-see function-math-refract.rst for details
+Computes the refraction of float2 or float3 vector v through a surface with unit normal n using Snell's law with index ratio nint, writing the result to outRefracted and returning false if total internal reflection occurs.
 
 :Arguments: * **v** : float3
 
@@ -2284,7 +2292,7 @@ see function-math-refract.rst for details
 
 .. das:function:: refract(v: float2; n: float2; nint: float) : float2
 
-see function-math-refract.rst for details
+Computes the refraction of float2 or float3 vector v through a surface with unit normal n using Snell's law with index ratio nint, writing the result to outRefracted and returning false if total internal reflection occurs.
 
 :Arguments: * **v** : float2
 
@@ -2322,7 +2330,7 @@ float2, float3, float4
 
 .. das:function:: dot(x: float2; y: float2) : float
 
-returns scalar representing dot product between x and y
+Returns the dot product (scalar product) of two vectors as a float; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float2
 
@@ -2332,7 +2340,7 @@ returns scalar representing dot product between x and y
 
 .. das:function:: dot(x: float3; y: float3) : float
 
-returns scalar representing dot product between x and y
+Returns the dot product (scalar product) of two vectors as a float; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float3
 
@@ -2342,7 +2350,7 @@ returns scalar representing dot product between x and y
 
 .. das:function:: dot(x: float4; y: float4) : float
 
-returns scalar representing dot product between x and y
+Returns the dot product (scalar product) of two vectors as a float; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float4
 
@@ -2352,7 +2360,7 @@ returns scalar representing dot product between x and y
 
 .. das:function:: fast_normalize(x: float2) : float2
 
-returns the fast approximation of normalized x, or nan if length(x) is 0
+Returns a unit-length vector in the same direction as x using a fast approximation; does not check for zero-length input; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float2
 
@@ -2360,7 +2368,7 @@ returns the fast approximation of normalized x, or nan if length(x) is 0
 
 .. das:function:: fast_normalize(x: float3) : float3
 
-returns the fast approximation of normalized x, or nan if length(x) is 0
+Returns a unit-length vector in the same direction as x using a fast approximation; does not check for zero-length input; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float3
 
@@ -2368,7 +2376,7 @@ returns the fast approximation of normalized x, or nan if length(x) is 0
 
 .. das:function:: fast_normalize(x: float4) : float4
 
-returns the fast approximation of normalized x, or nan if length(x) is 0
+Returns a unit-length vector in the same direction as x using a fast approximation; does not check for zero-length input; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float4
 
@@ -2376,7 +2384,7 @@ returns the fast approximation of normalized x, or nan if length(x) is 0
 
 .. das:function:: normalize(x: float2) : float2
 
-returns normalized x, or nan if length(x) is 0
+Returns a unit-length vector with the same direction as the input float2, float3, or float4 vector; behavior is undefined if the input vector has zero length.
 
 :Arguments: * **x** : float2
 
@@ -2384,7 +2392,7 @@ returns normalized x, or nan if length(x) is 0
 
 .. das:function:: normalize(x: float3) : float3
 
-returns normalized x, or nan if length(x) is 0
+Returns a unit-length vector with the same direction as the input float2, float3, or float4 vector; behavior is undefined if the input vector has zero length.
 
 :Arguments: * **x** : float3
 
@@ -2392,7 +2400,7 @@ returns normalized x, or nan if length(x) is 0
 
 .. das:function:: normalize(x: float4) : float4
 
-returns normalized x, or nan if length(x) is 0
+Returns a unit-length vector with the same direction as the input float2, float3, or float4 vector; behavior is undefined if the input vector has zero length.
 
 :Arguments: * **x** : float4
 
@@ -2400,7 +2408,7 @@ returns normalized x, or nan if length(x) is 0
 
 .. das:function:: length(x: float2) : float
 
-returns a non-negative value representing magnitude of x
+Returns the Euclidean length (magnitude) of the vector as a float; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float2
 
@@ -2408,7 +2416,7 @@ returns a non-negative value representing magnitude of x
 
 .. das:function:: length(x: float3) : float
 
-returns a non-negative value representing magnitude of x
+Returns the Euclidean length (magnitude) of the vector as a float; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float3
 
@@ -2416,7 +2424,7 @@ returns a non-negative value representing magnitude of x
 
 .. das:function:: length(x: float4) : float
 
-returns a non-negative value representing magnitude of x
+Returns the Euclidean length (magnitude) of the vector as a float; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float4
 
@@ -2424,7 +2432,7 @@ returns a non-negative value representing magnitude of x
 
 .. das:function:: inv_length(x: float2) : float
 
-returns a non-negative value representing 1/magnitude of x
+Returns the reciprocal of the length of the vector (1 / length(x)) as a float; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float2
 
@@ -2432,7 +2440,7 @@ returns a non-negative value representing 1/magnitude of x
 
 .. das:function:: inv_length(x: float3) : float
 
-returns a non-negative value representing 1/magnitude of x
+Returns the reciprocal of the length of the vector (1 / length(x)) as a float; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float3
 
@@ -2440,7 +2448,7 @@ returns a non-negative value representing 1/magnitude of x
 
 .. das:function:: inv_length(x: float4) : float
 
-returns a non-negative value representing 1/magnitude of x
+Returns the reciprocal of the length of the vector (1 / length(x)) as a float; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float4
 
@@ -2448,7 +2456,7 @@ returns a non-negative value representing 1/magnitude of x
 
 .. das:function:: inv_length_sq(x: float2) : float
 
-returns a non-negative value representing 1/squared magnitude of x
+Returns the reciprocal of the squared length of the vector (1 / length_sq(x)) as a float; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float2
 
@@ -2456,7 +2464,7 @@ returns a non-negative value representing 1/squared magnitude of x
 
 .. das:function:: inv_length_sq(x: float3) : float
 
-returns a non-negative value representing 1/squared magnitude of x
+Returns the reciprocal of the squared length of the vector (1 / length_sq(x)) as a float; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float3
 
@@ -2464,7 +2472,7 @@ returns a non-negative value representing 1/squared magnitude of x
 
 .. das:function:: inv_length_sq(x: float4) : float
 
-returns a non-negative value representing 1/squared magnitude of x
+Returns the reciprocal of the squared length of the vector (1 / length_sq(x)) as a float; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float4
 
@@ -2472,7 +2480,7 @@ returns a non-negative value representing 1/squared magnitude of x
 
 .. das:function:: length_sq(x: float2) : float
 
-returns a non-negative value representing squared magnitude of x
+Returns the squared Euclidean length of the vector as a float, equivalent to dot(x, x) and avoiding the square root for faster magnitude comparisons; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float2
 
@@ -2480,7 +2488,7 @@ returns a non-negative value representing squared magnitude of x
 
 .. das:function:: length_sq(x: float3) : float
 
-returns a non-negative value representing squared magnitude of x
+Returns the squared Euclidean length of the vector as a float, equivalent to dot(x, x) and avoiding the square root for faster magnitude comparisons; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float3
 
@@ -2488,7 +2496,7 @@ returns a non-negative value representing squared magnitude of x
 
 .. das:function:: length_sq(x: float4) : float
 
-returns a non-negative value representing squared magnitude of x
+Returns the squared Euclidean length of the vector as a float, equivalent to dot(x, x) and avoiding the square root for faster magnitude comparisons; works with float2, float3, and float4 vector types.
 
 :Arguments: * **x** : float4
 
@@ -2505,7 +2513,7 @@ Noise functions
 
 .. das:function:: uint32_hash(seed: uint) : uint
 
-returns hashed value of seed
+Returns a well-distributed uint hash of the input uint seed using an improved integer hash function suitable for hash tables and procedural generation.
 
 :Arguments: * **seed** : uint
 
@@ -2513,7 +2521,7 @@ returns hashed value of seed
 
 .. das:function:: uint_noise_1D(position: int; seed: uint) : uint
 
-returns noise value of position in the seeded sequence
+Generates a deterministic uint hash value from a 1D integer position and a uint seed, suitable for repeatable procedural noise.
 
 :Arguments: * **position** : int
 
@@ -2523,7 +2531,7 @@ returns noise value of position in the seeded sequence
 
 .. das:function:: uint_noise_2D(position: int2; seed: uint) : uint
 
-returns noise value of position in the seeded sequence
+Generates a deterministic uint hash value from 2D integer coordinates (x, y) and a uint seed, suitable for repeatable procedural noise.
 
 :Arguments: * **position** : int2
 
@@ -2533,7 +2541,7 @@ returns noise value of position in the seeded sequence
 
 .. das:function:: uint_noise_3D(position: int3; seed: uint) : uint
 
-returns noise value of position in the seeded sequence
+Generates a deterministic uint hash value from 3D integer coordinates (x, y, z) and a uint seed, suitable for repeatable procedural noise.
 
 :Arguments: * **position** : int3
 
@@ -2593,7 +2601,8 @@ lerp/mad/clamp
 
 .. das:function:: mad(a: float; b: float; c: float) : float
 
-returns vector or scalar representing a * b + c
+Computes the fused multiply-add operation `a * b + c`.
+def mad (a: float; b: float; c: float) : float
 
 :Arguments: * **a** : float
 
@@ -2605,7 +2614,7 @@ returns vector or scalar representing a * b + c
 
 .. das:function:: lerp(a: float; b: float; t: float) : float
 
-returns vector or scalar representing a + (b - a) * t
+Performs linear interpolation between a and b using the factor t, returning a + (b - a) * t; when t is 0 the result is a, when t is 1 the result is b; works component-wise with float, double, float2, float3, and float4 types.
 
 :Arguments: * **a** : float
 
@@ -2617,7 +2626,8 @@ returns vector or scalar representing a + (b - a) * t
 
 .. das:function:: mad(a: float2; b: float2; c: float2) : float2
 
-returns vector or scalar representing a * b + c
+Computes the fused multiply-add operation `a * b + c`.
+def mad (a: float2; b: float2; c: float2) : float2
 
 :Arguments: * **a** : float2
 
@@ -2629,7 +2639,7 @@ returns vector or scalar representing a * b + c
 
 .. das:function:: lerp(a: float2; b: float2; t: float2) : float2
 
-returns vector or scalar representing a + (b - a) * t
+Performs linear interpolation between a and b using the factor t, returning a + (b - a) * t; when t is 0 the result is a, when t is 1 the result is b; works component-wise with float, double, float2, float3, and float4 types.
 
 :Arguments: * **a** : float2
 
@@ -2641,7 +2651,8 @@ returns vector or scalar representing a + (b - a) * t
 
 .. das:function:: mad(a: float3; b: float3; c: float3) : float3
 
-returns vector or scalar representing a * b + c
+Computes the fused multiply-add operation `a * b + c`.
+def mad (a: float3; b: float3; c: float3) : float3
 
 :Arguments: * **a** : float3
 
@@ -2653,7 +2664,7 @@ returns vector or scalar representing a * b + c
 
 .. das:function:: lerp(a: float3; b: float3; t: float3) : float3
 
-returns vector or scalar representing a + (b - a) * t
+Performs linear interpolation between a and b using the factor t, returning a + (b - a) * t; when t is 0 the result is a, when t is 1 the result is b; works component-wise with float, double, float2, float3, and float4 types.
 
 :Arguments: * **a** : float3
 
@@ -2665,7 +2676,8 @@ returns vector or scalar representing a + (b - a) * t
 
 .. das:function:: mad(a: float4; b: float4; c: float4) : float4
 
-returns vector or scalar representing a * b + c
+Computes the fused multiply-add operation `a * b + c`.
+def mad (a: float4; b: float4; c: float4) : float4
 
 :Arguments: * **a** : float4
 
@@ -2677,7 +2689,7 @@ returns vector or scalar representing a * b + c
 
 .. das:function:: lerp(a: float4; b: float4; t: float4) : float4
 
-returns vector or scalar representing a + (b - a) * t
+Performs linear interpolation between a and b using the factor t, returning a + (b - a) * t; when t is 0 the result is a, when t is 1 the result is b; works component-wise with float, double, float2, float3, and float4 types.
 
 :Arguments: * **a** : float4
 
@@ -2689,7 +2701,8 @@ returns vector or scalar representing a + (b - a) * t
 
 .. das:function:: mad(a: float2; b: float; c: float2) : float2
 
-returns vector or scalar representing a * b + c
+Computes the fused multiply-add operation `a * b + c`.
+def mad (a: float2; b: float; c: float2) : float2
 
 :Arguments: * **a** : float2
 
@@ -2701,7 +2714,8 @@ returns vector or scalar representing a * b + c
 
 .. das:function:: mad(a: float3; b: float; c: float3) : float3
 
-returns vector or scalar representing a * b + c
+Computes the fused multiply-add operation `a * b + c`.
+def mad (a: float3; b: float; c: float3) : float3
 
 :Arguments: * **a** : float3
 
@@ -2713,7 +2727,8 @@ returns vector or scalar representing a * b + c
 
 .. das:function:: mad(a: float4; b: float; c: float4) : float4
 
-returns vector or scalar representing a * b + c
+Computes the fused multiply-add operation `a * b + c`.
+def mad (a: float4; b: float; c: float4) : float4
 
 :Arguments: * **a** : float4
 
@@ -2725,7 +2740,8 @@ returns vector or scalar representing a * b + c
 
 .. das:function:: mad(a: int; b: int; c: int) : int
 
-returns vector or scalar representing a * b + c
+Computes the fused multiply-add operation `a * b + c`.
+def mad (a: int; b: int; c: int) : int
 
 :Arguments: * **a** : int
 
@@ -2737,7 +2753,8 @@ returns vector or scalar representing a * b + c
 
 .. das:function:: mad(a: int2; b: int2; c: int2) : int2
 
-returns vector or scalar representing a * b + c
+Computes the fused multiply-add operation `a * b + c`.
+def mad (a: int2; b: int2; c: int2) : int2
 
 :Arguments: * **a** : int2
 
@@ -2749,7 +2766,8 @@ returns vector or scalar representing a * b + c
 
 .. das:function:: mad(a: int3; b: int3; c: int3) : int3
 
-returns vector or scalar representing a * b + c
+Computes the fused multiply-add operation `a * b + c`.
+def mad (a: int3; b: int3; c: int3) : int3
 
 :Arguments: * **a** : int3
 
@@ -2761,7 +2779,8 @@ returns vector or scalar representing a * b + c
 
 .. das:function:: mad(a: int4; b: int4; c: int4) : int4
 
-returns vector or scalar representing a * b + c
+Computes the fused multiply-add operation `a * b + c`.
+def mad (a: int4; b: int4; c: int4) : int4
 
 :Arguments: * **a** : int4
 
@@ -2773,7 +2792,8 @@ returns vector or scalar representing a * b + c
 
 .. das:function:: mad(a: int2; b: int; c: int2) : int2
 
-returns vector or scalar representing a * b + c
+Computes the fused multiply-add operation `a * b + c`.
+def mad (a: int2; b: int; c: int2) : int2
 
 :Arguments: * **a** : int2
 
@@ -2785,7 +2805,8 @@ returns vector or scalar representing a * b + c
 
 .. das:function:: mad(a: int3; b: int; c: int3) : int3
 
-returns vector or scalar representing a * b + c
+Computes the fused multiply-add operation `a * b + c`.
+def mad (a: int3; b: int; c: int3) : int3
 
 :Arguments: * **a** : int3
 
@@ -2797,7 +2818,8 @@ returns vector or scalar representing a * b + c
 
 .. das:function:: mad(a: int4; b: int; c: int4) : int4
 
-returns vector or scalar representing a * b + c
+Computes the fused multiply-add operation `a * b + c`.
+def mad (a: int4; b: int; c: int4) : int4
 
 :Arguments: * **a** : int4
 
@@ -2809,7 +2831,8 @@ returns vector or scalar representing a * b + c
 
 .. das:function:: mad(a: uint; b: uint; c: uint) : uint
 
-returns vector or scalar representing a * b + c
+Computes the fused multiply-add operation `a * b + c`.
+def mad (a: uint; b: uint; c: uint) : uint
 
 :Arguments: * **a** : uint
 
@@ -2821,7 +2844,8 @@ returns vector or scalar representing a * b + c
 
 .. das:function:: mad(a: uint2; b: uint2; c: uint2) : uint2
 
-returns vector or scalar representing a * b + c
+Computes the fused multiply-add operation `a * b + c`.
+def mad (a: uint2; b: uint2; c: uint2) : uint2
 
 :Arguments: * **a** : uint2
 
@@ -2833,7 +2857,8 @@ returns vector or scalar representing a * b + c
 
 .. das:function:: mad(a: uint3; b: uint3; c: uint3) : uint3
 
-returns vector or scalar representing a * b + c
+Computes the fused multiply-add operation `a * b + c`.
+def mad (a: uint3; b: uint3; c: uint3) : uint3
 
 :Arguments: * **a** : uint3
 
@@ -2845,7 +2870,8 @@ returns vector or scalar representing a * b + c
 
 .. das:function:: mad(a: uint4; b: uint4; c: uint4) : uint4
 
-returns vector or scalar representing a * b + c
+Computes the fused multiply-add operation `a * b + c`.
+def mad (a: uint4; b: uint4; c: uint4) : uint4
 
 :Arguments: * **a** : uint4
 
@@ -2857,7 +2883,8 @@ returns vector or scalar representing a * b + c
 
 .. das:function:: mad(a: uint2; b: uint; c: uint2) : uint2
 
-returns vector or scalar representing a * b + c
+Computes the fused multiply-add operation `a * b + c`.
+def mad (a: uint2; b: uint; c: uint2) : uint2
 
 :Arguments: * **a** : uint2
 
@@ -2869,7 +2896,8 @@ returns vector or scalar representing a * b + c
 
 .. das:function:: mad(a: uint3; b: uint; c: uint3) : uint3
 
-returns vector or scalar representing a * b + c
+Computes the fused multiply-add operation `a * b + c`.
+def mad (a: uint3; b: uint; c: uint3) : uint3
 
 :Arguments: * **a** : uint3
 
@@ -2881,7 +2909,8 @@ returns vector or scalar representing a * b + c
 
 .. das:function:: mad(a: uint4; b: uint; c: uint4) : uint4
 
-returns vector or scalar representing a * b + c
+Computes the fused multiply-add operation `a * b + c`.
+def mad (a: uint4; b: uint; c: uint4) : uint4
 
 :Arguments: * **a** : uint4
 
@@ -2893,7 +2922,8 @@ returns vector or scalar representing a * b + c
 
 .. das:function:: mad(a: double; b: double; c: double) : double
 
-returns vector or scalar representing a * b + c
+Computes the fused multiply-add operation `a * b + c`.
+def mad (a: double; b: double; c: double) : double
 
 :Arguments: * **a** : double
 
@@ -2905,7 +2935,7 @@ returns vector or scalar representing a * b + c
 
 .. das:function:: lerp(a: double; b: double; t: double) : double
 
-returns vector or scalar representing a + (b - a) * t
+Performs linear interpolation between a and b using the factor t, returning a + (b - a) * t; when t is 0 the result is a, when t is 1 the result is b; works component-wise with float, double, float2, float3, and float4 types.
 
 :Arguments: * **a** : double
 
@@ -2917,7 +2947,7 @@ returns vector or scalar representing a + (b - a) * t
 
 .. das:function:: clamp(t: int; a: int; b: int) : int
 
-returns vector or scalar representing min(max(t, a), b)
+Returns the value t clamped to the inclusive range [a, b], equivalent to min(max(t, a), b); works with float, double, float2, float3, float4, int, int64, uint, and uint64 types.
 
 :Arguments: * **t** : int
 
@@ -2929,7 +2959,7 @@ returns vector or scalar representing min(max(t, a), b)
 
 .. das:function:: clamp(t: int2; a: int2; b: int2) : int2
 
-returns vector or scalar representing min(max(t, a), b)
+Returns the value t clamped to the inclusive range [a, b], equivalent to min(max(t, a), b); works with float, double, float2, float3, float4, int, int64, uint, and uint64 types.
 
 :Arguments: * **t** : int2
 
@@ -2941,7 +2971,7 @@ returns vector or scalar representing min(max(t, a), b)
 
 .. das:function:: clamp(t: int3; a: int3; b: int3) : int3
 
-returns vector or scalar representing min(max(t, a), b)
+Returns the value t clamped to the inclusive range [a, b], equivalent to min(max(t, a), b); works with float, double, float2, float3, float4, int, int64, uint, and uint64 types.
 
 :Arguments: * **t** : int3
 
@@ -2953,7 +2983,7 @@ returns vector or scalar representing min(max(t, a), b)
 
 .. das:function:: clamp(t: int4; a: int4; b: int4) : int4
 
-returns vector or scalar representing min(max(t, a), b)
+Returns the value t clamped to the inclusive range [a, b], equivalent to min(max(t, a), b); works with float, double, float2, float3, float4, int, int64, uint, and uint64 types.
 
 :Arguments: * **t** : int4
 
@@ -2965,7 +2995,7 @@ returns vector or scalar representing min(max(t, a), b)
 
 .. das:function:: clamp(t: uint; a: uint; b: uint) : uint
 
-returns vector or scalar representing min(max(t, a), b)
+Returns the value t clamped to the inclusive range [a, b], equivalent to min(max(t, a), b); works with float, double, float2, float3, float4, int, int64, uint, and uint64 types.
 
 :Arguments: * **t** : uint
 
@@ -2977,7 +3007,7 @@ returns vector or scalar representing min(max(t, a), b)
 
 .. das:function:: clamp(t: uint2; a: uint2; b: uint2) : uint2
 
-returns vector or scalar representing min(max(t, a), b)
+Returns the value t clamped to the inclusive range [a, b], equivalent to min(max(t, a), b); works with float, double, float2, float3, float4, int, int64, uint, and uint64 types.
 
 :Arguments: * **t** : uint2
 
@@ -2989,7 +3019,7 @@ returns vector or scalar representing min(max(t, a), b)
 
 .. das:function:: clamp(t: uint3; a: uint3; b: uint3) : uint3
 
-returns vector or scalar representing min(max(t, a), b)
+Returns the value t clamped to the inclusive range [a, b], equivalent to min(max(t, a), b); works with float, double, float2, float3, float4, int, int64, uint, and uint64 types.
 
 :Arguments: * **t** : uint3
 
@@ -3001,7 +3031,7 @@ returns vector or scalar representing min(max(t, a), b)
 
 .. das:function:: clamp(t: uint4; a: uint4; b: uint4) : uint4
 
-returns vector or scalar representing min(max(t, a), b)
+Returns the value t clamped to the inclusive range [a, b], equivalent to min(max(t, a), b); works with float, double, float2, float3, float4, int, int64, uint, and uint64 types.
 
 :Arguments: * **t** : uint4
 
@@ -3013,7 +3043,7 @@ returns vector or scalar representing min(max(t, a), b)
 
 .. das:function:: clamp(t: float; a: float; b: float) : float
 
-returns vector or scalar representing min(max(t, a), b)
+Returns the value t clamped to the inclusive range [a, b], equivalent to min(max(t, a), b); works with float, double, float2, float3, float4, int, int64, uint, and uint64 types.
 
 :Arguments: * **t** : float
 
@@ -3025,7 +3055,7 @@ returns vector or scalar representing min(max(t, a), b)
 
 .. das:function:: clamp(t: float2; a: float2; b: float2) : float2
 
-returns vector or scalar representing min(max(t, a), b)
+Returns the value t clamped to the inclusive range [a, b], equivalent to min(max(t, a), b); works with float, double, float2, float3, float4, int, int64, uint, and uint64 types.
 
 :Arguments: * **t** : float2
 
@@ -3037,7 +3067,7 @@ returns vector or scalar representing min(max(t, a), b)
 
 .. das:function:: clamp(t: float3; a: float3; b: float3) : float3
 
-returns vector or scalar representing min(max(t, a), b)
+Returns the value t clamped to the inclusive range [a, b], equivalent to min(max(t, a), b); works with float, double, float2, float3, float4, int, int64, uint, and uint64 types.
 
 :Arguments: * **t** : float3
 
@@ -3049,7 +3079,7 @@ returns vector or scalar representing min(max(t, a), b)
 
 .. das:function:: clamp(t: float4; a: float4; b: float4) : float4
 
-returns vector or scalar representing min(max(t, a), b)
+Returns the value t clamped to the inclusive range [a, b], equivalent to min(max(t, a), b); works with float, double, float2, float3, float4, int, int64, uint, and uint64 types.
 
 :Arguments: * **t** : float4
 
@@ -3061,7 +3091,7 @@ returns vector or scalar representing min(max(t, a), b)
 
 .. das:function:: clamp(t: double; a: double; b: double) : double
 
-returns vector or scalar representing min(max(t, a), b)
+Returns the value t clamped to the inclusive range [a, b], equivalent to min(max(t, a), b); works with float, double, float2, float3, float4, int, int64, uint, and uint64 types.
 
 :Arguments: * **t** : double
 
@@ -3073,7 +3103,7 @@ returns vector or scalar representing min(max(t, a), b)
 
 .. das:function:: clamp(t: int64; a: int64; b: int64) : int64
 
-returns vector or scalar representing min(max(t, a), b)
+Returns the value t clamped to the inclusive range [a, b], equivalent to min(max(t, a), b); works with float, double, float2, float3, float4, int, int64, uint, and uint64 types.
 
 :Arguments: * **t** : int64
 
@@ -3085,7 +3115,7 @@ returns vector or scalar representing min(max(t, a), b)
 
 .. das:function:: clamp(t: uint64; a: uint64; b: uint64) : uint64
 
-returns vector or scalar representing min(max(t, a), b)
+Returns the value t clamped to the inclusive range [a, b], equivalent to min(max(t, a), b); works with float, double, float2, float3, float4, int, int64, uint, and uint64 types.
 
 :Arguments: * **t** : uint64
 
@@ -3097,7 +3127,7 @@ returns vector or scalar representing min(max(t, a), b)
 
 .. das:function:: lerp(a: float2; b: float2; t: float) : float2
 
-returns vector or scalar representing a + (b - a) * t
+Performs linear interpolation between a and b using the factor t, returning a + (b - a) * t; when t is 0 the result is a, when t is 1 the result is b; works component-wise with float, double, float2, float3, and float4 types.
 
 :Arguments: * **a** : float2
 
@@ -3109,7 +3139,7 @@ returns vector or scalar representing a + (b - a) * t
 
 .. das:function:: lerp(a: float3; b: float3; t: float) : float3
 
-returns vector or scalar representing a + (b - a) * t
+Performs linear interpolation between a and b using the factor t, returning a + (b - a) * t; when t is 0 the result is a, when t is 1 the result is b; works component-wise with float, double, float2, float3, and float4 types.
 
 :Arguments: * **a** : float3
 
@@ -3121,7 +3151,7 @@ returns vector or scalar representing a + (b - a) * t
 
 .. das:function:: lerp(a: float4; b: float4; t: float) : float4
 
-returns vector or scalar representing a + (b - a) * t
+Performs linear interpolation between a and b using the factor t, returning a + (b - a) * t; when t is 0 the result is a, when t is 1 the result is b; works component-wise with float, double, float2, float3, and float4 types.
 
 :Arguments: * **a** : float4
 
@@ -3150,7 +3180,8 @@ Matrix operations
 
 .. das:function:: float4x4 implicit*(x: float4x4 implicit; y: float4x4 implicit) : float4x4
 
-Multiplies a float4x4 matrix by a float4x4 matrix.
+Multiplies two 4x4 matrices and returns the resulting 4x4 matrix.
+def float4x4 implicit* (x: float4x4 implicit; y: float4x4 implicit) : float4x4
 
 :Arguments: * **x** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
 
@@ -3160,7 +3191,7 @@ Multiplies a float4x4 matrix by a float4x4 matrix.
 
 .. das:function:: float4x4 implicit==(x: float4x4 implicit; y: float4x4 implicit) : bool
 
-Compares two float4x4 matrices for equality.
+Returns true if two float3x3 matrices are exactly equal, comparing all elements component-wise.
 
 :Arguments: * **x** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
 
@@ -3170,7 +3201,7 @@ Compares two float4x4 matrices for equality.
 
 .. das:function:: float4x4 implicit!=(x: float4x4 implicit; y: float4x4 implicit) : bool
 
-Compares two float4x4 matrices for inequality.
+Returns true if two float3x3 matrices are not equal, comparing all elements component-wise.
 
 :Arguments: * **x** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
 
@@ -3180,7 +3211,8 @@ Compares two float4x4 matrices for inequality.
 
 .. das:function:: float3x4 implicit*(x: float3x4 implicit; y: float3x4 implicit) : float3x4
 
-Multiplies a float3x4 matrix by a float3x4 matrix.
+Multiplies two 3x4 matrices and returns the resulting 3x4 matrix.
+def float3x4 implicit* (x: float3x4 implicit; y: float3x4 implicit) : float3x4
 
 :Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
 
@@ -3190,7 +3222,8 @@ Multiplies a float3x4 matrix by a float3x4 matrix.
 
 .. das:function:: float3x4 implicit*(x: float3x4 implicit; y: float3) : float3
 
-Multiplies a float3x3 matrix by a float3 vector.
+Transforms a float3 vector by a 3x4 matrix.
+def float3x4 implicit* (x: float3x4 implicit; y: float3) : float3
 
 :Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
 
@@ -3200,7 +3233,8 @@ Multiplies a float3x3 matrix by a float3 vector.
 
 .. das:function:: float4x4 implicit*(x: float4x4 implicit; y: float4) : float4
 
-Multiplies a float4x4 matrix by a float4 vector.
+Transforms a float4 vector by a 4x4 matrix.
+def float4x4 implicit* (x: float4x4 implicit; y: float4) : float4
 
 :Arguments: * **x** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
 
@@ -3210,7 +3244,7 @@ Multiplies a float4x4 matrix by a float4 vector.
 
 .. das:function:: float3x4 implicit==(x: float3x4 implicit; y: float3x4 implicit) : bool
 
-Compares two float3x4 matrices for equality.
+Returns true if two float3x3 matrices are exactly equal, comparing all elements component-wise.
 
 :Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
 
@@ -3220,7 +3254,7 @@ Compares two float3x4 matrices for equality.
 
 .. das:function:: float3x4 implicit!=(x: float3x4 implicit; y: float3x4 implicit) : bool
 
-Compares two float3x4 matrices for inequality.
+Returns true if two float3x3 matrices are not equal, comparing all elements component-wise.
 
 :Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
 
@@ -3230,7 +3264,8 @@ Compares two float3x4 matrices for inequality.
 
 .. das:function:: float3x3 implicit*(x: float3x3 implicit; y: float3x3 implicit) : float3x3
 
-Multiplies a float3x3 matrix by a float3x3 matrix.
+Multiplies two 3x3 matrices and returns the resulting 3x3 matrix.
+def float3x3 implicit* (x: float3x3 implicit; y: float3x3 implicit) : float3x3
 
 :Arguments: * **x** :  :ref:`float3x3 <handle-math-float3x3>`  implicit
 
@@ -3240,7 +3275,8 @@ Multiplies a float3x3 matrix by a float3x3 matrix.
 
 .. das:function:: float3x3 implicit*(x: float3x3 implicit; y: float3) : float3
 
-Multiplies a float3x3 matrix by a float3 vector.
+Transforms a float3 vector by a 3x3 matrix.
+def float3x3 implicit* (x: float3x3 implicit; y: float3) : float3
 
 :Arguments: * **x** :  :ref:`float3x3 <handle-math-float3x3>`  implicit
 
@@ -3250,7 +3286,7 @@ Multiplies a float3x3 matrix by a float3 vector.
 
 .. das:function:: float3x3 implicit==(x: float3x3 implicit; y: float3x3 implicit) : bool
 
-Compares two float3x3 matrices for equality.
+Returns true if two float3x3 matrices are exactly equal, comparing all elements component-wise.
 
 :Arguments: * **x** :  :ref:`float3x3 <handle-math-float3x3>`  implicit
 
@@ -3260,7 +3296,7 @@ Compares two float3x3 matrices for equality.
 
 .. das:function:: float3x3 implicit!=(x: float3x3 implicit; y: float3x3 implicit) : bool
 
-Compares two float3x3 matrices for inequality.
+Returns true if two float3x3 matrices are not equal, comparing all elements component-wise.
 
 :Arguments: * **x** :  :ref:`float3x3 <handle-math-float3x3>`  implicit
 
@@ -3285,25 +3321,25 @@ Matrix initializers
 
 .. das:function:: float3x3() : float3x3
 
-Returns empty matrix, where each component is 0.
+Extracts the upper-left 3x3 rotation part from a float3x4 transformation matrix, returning it as a float3x3.
 
 .. _function-math_float3x4:
 
 .. das:function:: float3x4() : float3x4
 
-Returns empty matrix, where each component is 0.
+Constructs a float3x4 transformation matrix from a float3x3 rotation matrix, with the translation component set to zero.
 
 .. _function-math_float4x4:
 
 .. das:function:: float4x4() : float4x4
 
-Returns empty matrix, where each component is 0.
+Converts a float3x4 transformation matrix to a float4x4 matrix, filling the fourth row with [0, 0, 0, 1].
 
 .. _function-math_float4x4_float3x4_implicit:
 
 .. das:function:: float4x4(arg0: float3x4 implicit) : float4x4
 
-Returns empty matrix, where each component is 0.
+Converts a float3x4 transformation matrix to a float4x4 matrix, filling the fourth row with [0, 0, 0, 1].
 
 :Arguments: * **arg0** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
 
@@ -3311,13 +3347,13 @@ Returns empty matrix, where each component is 0.
 
 .. das:function:: identity4x4() : float4x4
 
-Returns identity matrix, where diagonal is 1 and every other component is 0.
+Returns a float4x4 identity matrix with ones on the diagonal and zeros elsewhere.
 
 .. _function-math_float3x4_float4x4_implicit:
 
 .. das:function:: float3x4(arg0: float4x4 implicit) : float3x4
 
-Returns empty matrix, where each component is 0.
+Constructs a float3x4 transformation matrix from a float3x3 rotation matrix, with the translation component set to zero.
 
 :Arguments: * **arg0** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
 
@@ -3325,13 +3361,13 @@ Returns empty matrix, where each component is 0.
 
 .. das:function:: identity3x4() : float3x4
 
-Returns identity matrix, where diagonal is 1 and every other component is 0.
+Returns a float3x4 identity transformation matrix with the rotation part set to identity and the translation set to zero.
 
 .. _function-math_float3x3_float4x4_implicit:
 
 .. das:function:: float3x3(arg0: float4x4 implicit) : float3x3
 
-Returns empty matrix, where each component is 0.
+Extracts the upper-left 3x3 rotation part from a float3x4 transformation matrix, returning it as a float3x3.
 
 :Arguments: * **arg0** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
 
@@ -3339,7 +3375,7 @@ Returns empty matrix, where each component is 0.
 
 .. das:function:: float3x3(arg0: float3x4 implicit) : float3x3
 
-Returns empty matrix, where each component is 0.
+Extracts the upper-left 3x3 rotation part from a float3x4 transformation matrix, returning it as a float3x3.
 
 :Arguments: * **arg0** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
 
@@ -3347,7 +3383,7 @@ Returns empty matrix, where each component is 0.
 
 .. das:function:: identity3x3() : float3x3
 
-Returns identity matrix, where diagonal is 1 and every other component is 0.
+Returns a float3x3 identity matrix with ones on the diagonal and zeros elsewhere.
 
 +++++++++++++++++++
 Matrix manipulation
@@ -3373,7 +3409,7 @@ Matrix manipulation
 
 .. das:function:: identity(x: float4x4 implicit)
 
-Returns identity matrix, where diagonal is 1 and every other component is 0.
+Sets the given float3x4 matrix to the identity transformation (rotation part is the identity matrix, translation is zero) and returns it.
 
 :Arguments: * **x** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
 
@@ -3381,7 +3417,7 @@ Returns identity matrix, where diagonal is 1 and every other component is 0.
 
 .. das:function:: translation(xyz: float3) : float4x4
 
-Returns the arc cosine of x, clamped to the range [-1, 1].
+Constructs a float3x4 matrix representing a pure translation by the float3 offset xyz, with the rotation part set to identity.
 
 :Arguments: * **xyz** : float3
 
@@ -3389,7 +3425,7 @@ Returns the arc cosine of x, clamped to the range [-1, 1].
 
 .. das:function:: transpose(x: float4x4 implicit) : float4x4
 
-Transposes the specified input matrix x.
+Returns the transpose of a float3x3 or float4x4 matrix, swapping rows and columns.
 
 :Arguments: * **x** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
 
@@ -3397,7 +3433,7 @@ Transposes the specified input matrix x.
 
 .. das:function:: persp_forward(wk: float; hk: float; zn: float; zf: float) : float4x4
 
-Perspective matrix, zn - 0, zf - 1
+Returns a forward (standard) perspective projection float4x4 matrix constructed from horizontal scale wk, vertical scale hk, near plane zn, and far plane zf.
 
 :Arguments: * **wk** : float
 
@@ -3411,7 +3447,7 @@ Perspective matrix, zn - 0, zf - 1
 
 .. das:function:: persp_reverse(wk: float; hk: float; zn: float; zf: float) : float4x4
 
-Perspective matrix, zn - 1, zf - 0
+Returns a reverse-depth perspective projection float4x4 matrix constructed from horizontal scale wk, vertical scale hk, near plane zn, and far plane zf, mapping the far plane to 0 and the near plane to 1.
 
 :Arguments: * **wk** : float
 
@@ -3425,7 +3461,7 @@ Perspective matrix, zn - 1, zf - 0
 
 .. das:function:: look_at(eye: float3; at: float3; up: float3) : float4x4
 
-Look-at matrix with the origin at `eye`, looking at `at`, with `up` as up direction.
+Constructs a float3x4 look-at view transformation matrix from an eye position, a target point to look at, and an up direction vector.
 
 :Arguments: * **eye** : float3
 
@@ -3437,7 +3473,7 @@ Look-at matrix with the origin at `eye`, looking at `at`, with `up` as up direct
 
 .. das:function:: compose(pos: float3; rot: float4; scale: float3) : float4x4
 
-Compose transformation out of translation, rotation and scale.
+Constructs a float3x4 transformation matrix from a float3x3 rotation matrix and a float3 translation position.
 
 :Arguments: * **pos** : float3
 
@@ -3449,7 +3485,7 @@ Compose transformation out of translation, rotation and scale.
 
 .. das:function:: decompose(mat: float4x4 implicit; pos: float3& implicit; rot: float4& implicit; scale: float3& implicit)
 
-Decompose transformation into translation, rotation and scale.
+Decomposes a float3x4 transformation matrix into its float3x3 rotation component and float3 translation position, writing the results into the output arguments rot and pos.
 
 :Arguments: * **mat** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
 
@@ -3463,7 +3499,7 @@ Decompose transformation into translation, rotation and scale.
 
 .. das:function:: identity(x: float3x4 implicit)
 
-Returns identity matrix, where diagonal is 1 and every other component is 0.
+Sets the given float3x4 matrix to the identity transformation (rotation part is the identity matrix, translation is zero) and returns it.
 
 :Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
 
@@ -3471,7 +3507,7 @@ Returns identity matrix, where diagonal is 1 and every other component is 0.
 
 .. das:function:: inverse(x: float3x4 implicit) : float3x4
 
-Returns the inverse of the matrix x.
+Returns the inverse of a matrix, such that multiplying the original by its inverse yields the identity; works with float3x4 and float4x4 matrix types.
 
 :Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
 
@@ -3479,7 +3515,7 @@ Returns the inverse of the matrix x.
 
 .. das:function:: inverse(m: float4x4 implicit) : float4x4
 
-Returns the inverse of the matrix x.
+Returns the inverse of a matrix, such that multiplying the original by its inverse yields the identity; works with float3x4 and float4x4 matrix types.
 
 :Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
 
@@ -3487,7 +3523,7 @@ Returns the inverse of the matrix x.
 
 .. das:function:: orthonormal_inverse(m: float3x3 implicit) : float3x3
 
-Fast `inverse` for the orthonormal matrix.
+Returns the inverse of a float3x4 matrix whose rotational 3x3 part is orthonormal (each axis is unit length and mutually perpendicular), computed more efficiently than a general matrix inverse.
 
 :Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>`  implicit
 
@@ -3495,7 +3531,7 @@ Fast `inverse` for the orthonormal matrix.
 
 .. das:function:: orthonormal_inverse(m: float3x4 implicit) : float3x4
 
-Fast `inverse` for the orthonormal matrix.
+Returns the inverse of a float3x4 matrix whose rotational 3x3 part is orthonormal (each axis is unit length and mutually perpendicular), computed more efficiently than a general matrix inverse.
 
 :Arguments: * **m** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
 
@@ -3503,7 +3539,7 @@ Fast `inverse` for the orthonormal matrix.
 
 .. das:function:: rotate(x: float3x4 implicit; y: float3) : float3
 
-Rotates vector y by 3x4 matrix x. Only 3x3 portion of x is multiplied by y.
+Rotates a float3 vector v by the 3x3 rotation part of the float3x4 matrix m, ignoring the translation component.
 
 :Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
 
@@ -3513,7 +3549,7 @@ Rotates vector y by 3x4 matrix x. Only 3x3 portion of x is multiplied by y.
 
 .. das:function:: identity(x: float3x3 implicit)
 
-Returns identity matrix, where diagonal is 1 and every other component is 0.
+Sets the given float3x4 matrix to the identity transformation (rotation part is the identity matrix, translation is zero) and returns it.
 
 :Arguments: * **x** :  :ref:`float3x3 <handle-math-float3x3>`  implicit
 
@@ -3531,7 +3567,7 @@ Quaternion operations
 
 .. das:function:: quat_from_unit_arc(v0: float3; v1: float3) : float4
 
-Quaternion which represents rotation from `v0` to `v1`, both arguments need to be normalized
+Creates a float4 quaternion representing the shortest rotation arc from unit-length float3 vector v0 to unit-length float3 vector v1; both input vectors must be normalized.
 
 :Arguments: * **v0** : float3
 
@@ -3541,7 +3577,7 @@ Quaternion which represents rotation from `v0` to `v1`, both arguments need to b
 
 .. das:function:: quat_from_unit_vec_ang(v: float3; ang: float) : float4
 
-Quaternion which represents rotation for `ang` radians around vector `v`. `v` needs to be normalized
+Creates a float4 quaternion representing a rotation of ang radians around the unit-length float3 axis vector v.
 
 :Arguments: * **v** : float3
 
@@ -3551,7 +3587,7 @@ Quaternion which represents rotation for `ang` radians around vector `v`. `v` ne
 
 .. das:function:: quat_mul(q1: float4; q2: float4) : float4
 
-Quaternion which is multiplication of `q1` and `q2`
+Returns the float4 quaternion product of q1 and q2, representing the combined rotation of q2 followed by q1.
 
 :Arguments: * **q1** : float4
 
@@ -3561,7 +3597,7 @@ Quaternion which is multiplication of `q1` and `q2`
 
 .. das:function:: quat_mul_vec(q: float4; v: float3) : float3
 
-Transform vector `v` by quaternion `q`
+Rotates a float3 vector v by the float4 quaternion q and returns the resulting float3 vector.
 
 :Arguments: * **q** : float4
 
@@ -3571,7 +3607,7 @@ Transform vector `v` by quaternion `q`
 
 .. das:function:: quat_conjugate(q: float4) : float4
 
-Quaternion which is conjugate of `q`
+Returns the conjugate of the float4 quaternion q by negating its xyz components, which for unit quaternions equals the inverse rotation.
 
 :Arguments: * **q** : float4
 
@@ -3586,7 +3622,7 @@ Packing and unpacking
 
 .. das:function:: pack_float_to_byte(x: float4) : uint
 
-Packs float4 vector `v` to byte4 vector and returns it as uint. Each component is clamped to [0..255] range.
+Packs a float4 vector into a single uint by converting each component to an 8-bit byte value, mapping the XYZW components to the four bytes of the result.
 
 :Arguments: * **x** : float4
 
@@ -3594,7 +3630,7 @@ Packs float4 vector `v` to byte4 vector and returns it as uint. Each component i
 
 .. das:function:: unpack_byte_to_float(x: uint) : float4
 
-Unpacks byte4 vector to float4 vector.
+Unpacks the four bytes of a uint into a float4 vector, converting each 8-bit byte value to its corresponding floating-point component.
 
 :Arguments: * **x** : uint
 
@@ -3606,7 +3642,7 @@ Uncategorized
 
 .. das:function:: float4x4 implicit ==const.[](m: float4x4 implicit ==const; i: int) : float4&
 
-Returns the element of the 4x4 matrix at the specified index.
+Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
 
 :Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>`  implicit!
 
@@ -3616,7 +3652,7 @@ Returns the element of the 4x4 matrix at the specified index.
 
 .. das:function:: float4x4 const implicit ==const.[](m: float4x4 const implicit ==const; i: int) : float4
 
-Returns the element of the 4x4 matrix at the specified index.
+Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
 
 :Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>`  implicit!
 
@@ -3626,7 +3662,7 @@ Returns the element of the 4x4 matrix at the specified index.
 
 .. das:function:: float4x4 implicit ==const.[](m: float4x4 implicit ==const; i: uint) : float4&
 
-Returns the element of the 4x4 matrix at the specified index.
+Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
 
 :Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>`  implicit!
 
@@ -3636,7 +3672,7 @@ Returns the element of the 4x4 matrix at the specified index.
 
 .. das:function:: float4x4 const implicit ==const.[](m: float4x4 const implicit ==const; i: uint) : float4
 
-Returns the element of the 4x4 matrix at the specified index.
+Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
 
 :Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>`  implicit!
 
@@ -3646,7 +3682,7 @@ Returns the element of the 4x4 matrix at the specified index.
 
 .. das:function:: determinant(x: float4x4 implicit) : float
 
-Returns the determinant of the matrix `m`.
+Returns the determinant of a float3x3 matrix as a float scalar; a zero determinant indicates the matrix is singular and non-invertible.
 
 :Arguments: * **x** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
 
@@ -3654,7 +3690,7 @@ Returns the determinant of the matrix `m`.
 
 .. das:function:: determinant(x: float3x4 implicit) : float
 
-Returns the determinant of the matrix `m`.
+Returns the determinant of a float3x3 matrix as a float scalar; a zero determinant indicates the matrix is singular and non-invertible.
 
 :Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
 
@@ -3662,7 +3698,7 @@ Returns the determinant of the matrix `m`.
 
 .. das:function:: float3x4 implicit ==const.[](m: float3x4 implicit ==const; i: int) : float3&
 
-Returns the element of the 3x4 matrix at the specified index.
+Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
 
 :Arguments: * **m** :  :ref:`float3x4 <handle-math-float3x4>`  implicit!
 
@@ -3672,7 +3708,7 @@ Returns the element of the 3x4 matrix at the specified index.
 
 .. das:function:: float3x4 const implicit ==const.[](m: float3x4 const implicit ==const; i: int) : float3
 
-Returns the element of the 3x4 matrix at the specified index.
+Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
 
 :Arguments: * **m** :  :ref:`float3x4 <handle-math-float3x4>`  implicit!
 
@@ -3682,7 +3718,7 @@ Returns the element of the 3x4 matrix at the specified index.
 
 .. das:function:: float3x4 implicit ==const.[](m: float3x4 implicit ==const; i: uint) : float3&
 
-Returns the element of the 3x4 matrix at the specified index.
+Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
 
 :Arguments: * **m** :  :ref:`float3x4 <handle-math-float3x4>`  implicit!
 
@@ -3692,7 +3728,7 @@ Returns the element of the 3x4 matrix at the specified index.
 
 .. das:function:: float3x4 const implicit ==const.[](m: float3x4 const implicit ==const; i: uint) : float3
 
-Returns element of 3x4 matrix at specified index.
+Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
 
 :Arguments: * **m** :  :ref:`float3x4 <handle-math-float3x4>`  implicit!
 
@@ -3702,7 +3738,7 @@ Returns element of 3x4 matrix at specified index.
 
 .. das:function:: quat_from_euler(angles: float3) : float4
 
-Construct quaternion from euler angles.
+Creates a float4 quaternion from a float3 of Euler angles (pitch, yaw, roll) given in radians.
 
 :Arguments: * **angles** : float3
 
@@ -3710,7 +3746,7 @@ Construct quaternion from euler angles.
 
 .. das:function:: quat_from_euler(x: float; y: float; z: float) : float4
 
-Construct quaternion from euler angles.
+Creates a float4 quaternion from a float3 of Euler angles (pitch, yaw, roll) given in radians.
 
 :Arguments: * **x** : float
 
@@ -3722,7 +3758,7 @@ Construct quaternion from euler angles.
 
 .. das:function:: euler_from_quat(angles: float4) : float3
 
-Construct euler angles from quaternion.
+Converts a float4 quaternion to Euler angles, returning a float3 representing rotation around the x, y, and z axes in radians.
 
 :Arguments: * **angles** : float4
 
@@ -3730,7 +3766,7 @@ Construct euler angles from quaternion.
 
 .. das:function:: quat(m: float3x3 implicit) : float4
 
-Construct quaternion from matrix.
+Extracts the rotation part of a float3x4 matrix and returns it as a float4 quaternion in (x, y, z, w) format.
 
 :Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>`  implicit
 
@@ -3738,7 +3774,7 @@ Construct quaternion from matrix.
 
 .. das:function:: quat(m: float3x4 implicit) : float4
 
-Construct quaternion from matrix.
+Extracts the rotation part of a float3x4 matrix and returns it as a float4 quaternion in (x, y, z, w) format.
 
 :Arguments: * **m** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
 
@@ -3746,7 +3782,7 @@ Construct quaternion from matrix.
 
 .. das:function:: quat(m: float4x4 implicit) : float4
 
-Construct quaternion from matrix.
+Extracts the rotation part of a float3x4 matrix and returns it as a float4 quaternion in (x, y, z, w) format.
 
 :Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
 
@@ -3754,7 +3790,7 @@ Construct quaternion from matrix.
 
 .. das:function:: quat_slerp(t: float; a: float4; b: float4) : float4
 
-Spherical linear interpolation between `a` and `b` by `t`.
+Performs spherical linear interpolation between float4 quaternions a and b by factor t in the range [0,1], returning a smoothly interpolated float4 quaternion.
 
 :Arguments: * **t** : float
 
@@ -3766,7 +3802,7 @@ Spherical linear interpolation between `a` and `b` by `t`.
 
 .. das:function:: determinant(x: float3x3 implicit) : float
 
-Returns the determinant of the matrix `m`.
+Returns the determinant of a float3x3 matrix as a float scalar; a zero determinant indicates the matrix is singular and non-invertible.
 
 :Arguments: * **x** :  :ref:`float3x3 <handle-math-float3x3>`  implicit
 
@@ -3774,7 +3810,7 @@ Returns the determinant of the matrix `m`.
 
 .. das:function:: float3x3 implicit ==const.[](m: float3x3 implicit ==const; i: int) : float3&
 
-Returns the element of the 3x3 matrix at the specified index.
+Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
 
 :Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>`  implicit!
 
@@ -3784,7 +3820,7 @@ Returns the element of the 3x3 matrix at the specified index.
 
 .. das:function:: float3x3 const implicit ==const.[](m: float3x3 const implicit ==const; i: int) : float3
 
-Returns the element of the 3x3 matrix at the specified index.
+Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
 
 :Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>`  implicit!
 
@@ -3794,7 +3830,7 @@ Returns the element of the 3x3 matrix at the specified index.
 
 .. das:function:: float3x3 implicit ==const.[](m: float3x3 implicit ==const; i: uint) : float3&
 
-Returns the element of the 3x3 matrix at the specified index.
+Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
 
 :Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>`  implicit!
 
@@ -3804,7 +3840,7 @@ Returns the element of the 3x3 matrix at the specified index.
 
 .. das:function:: float3x3 const implicit ==const.[](m: float3x3 const implicit ==const; i: uint) : float3
 
-Returns the element of the 3x3 matrix at the specified index.
+Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
 
 :Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>`  implicit!
 

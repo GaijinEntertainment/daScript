@@ -1,1 +1,1 @@
-Returns true if the given type annotation represents a shareable type.
+Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` can be shared across multiple ``Context`` objects.

@@ -1,1 +1,1 @@
-minimum possible value of 'int64'
+Minimum representable value of a signed 64-bit integer (`int64`).

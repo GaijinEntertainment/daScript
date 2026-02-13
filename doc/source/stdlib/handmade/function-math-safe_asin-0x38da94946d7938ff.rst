@@ -1,1 +1,1 @@
-Returns the arcsine of `x`, clamping `x` to the [-1..1] range to avoid NaN results.
+Returns the arcsine of x in radians, clamping the input to the valid domain [-1, 1] to prevent NaN results from out-of-range values.

@@ -1,1 +1,1 @@
-indicates that the function should be treated as if it has side-effects. for example it will not be optimized out
+Declares that the function has side effects, preventing the compiler from optimizing away or reordering its calls.

@@ -1,1 +1,1 @@
-Returns true if the given annotation is an EnumerationAnnotation.
+Property-like accessor that returns ``true`` if the given ``Annotation`` is an ``EnumerationAnnotation``.

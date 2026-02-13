@@ -1,1 +1,2 @@
-Adds new `keyword`. It can appear in the `keyword <type> expr` or `keyword expr block` syntax. See daslib/match as implementation example.
+Registers a new keyword in the specified module, making it available to the parser.
+

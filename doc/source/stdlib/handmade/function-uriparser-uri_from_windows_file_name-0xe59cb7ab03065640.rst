@@ -1,1 +1,1 @@
-Converts Windows file name to URI.
+Converts a Windows-style file path to a ``file://`` URI string.

@@ -1,1 +1,2 @@
-Creates a safe function name by replacing special characters.
+Escapes special characters in a function name to produce a safe identifier for RST output.
+# === MODULE: strings_boost ===

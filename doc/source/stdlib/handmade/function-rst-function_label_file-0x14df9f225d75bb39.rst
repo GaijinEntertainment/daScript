@@ -1,1 +1,1 @@
-Creates a unique label for a function suitable for use in file names.
+Creates a unique, file-name-safe label string for a function.

@@ -1,1 +1,1 @@
-Adds annotation argument to the `AnnotationArgumentList` object.
+Appends an annotation argument (name-value pair) to the given ``AnnotationArgumentList``, used when constructing annotations programmatically.

@@ -46,19 +46,19 @@ Handled structures
 
 .. das:function:: JobStatus implicit.isReady() : bool
 
-Weather or not the job is completed.
+Whether the job has completed execution.
 
 .. _function-jobque__dot__rq_isValid_JobStatus_implicit:
 
 .. das:function:: JobStatus implicit.isValid() : bool
 
-If the job status object is valid.
+Whether the job status object refers to a valid, active job.
 
 .. _function-jobque__dot__rq_size_JobStatus_implicit:
 
 .. das:function:: JobStatus implicit.size() : int
 
-Number of remaining elements, which were previously appended.
+Returns the string length of the URI.
 
 :Properties: * **isReady** : bool
 
@@ -66,7 +66,7 @@ Number of remaining elements, which were previously appended.
 
              * **size** : int
 
-Job status indicator (ready or not, as well as entry count).
+ Job status indicator (ready or not, as well as entry count).
 
 
 .. _handle-jobque-Channel:
@@ -77,40 +77,40 @@ Job status indicator (ready or not, as well as entry count).
 
 .. das:function:: Channel implicit.isEmpty() : bool
 
-Weather there are no remaining elements in the pipe.
+Whether the channel or pipe contains no remaining elements.
 
 .. _function-jobque__dot__rq_total_Channel_implicit:
 
 .. das:function:: Channel implicit.total() : int
 
-Total number of elements in the pipe.
+Total number of elements that have been added to the pipe.
 
 :Properties: * **isEmpty** : bool
 
              * **total** : int
 
-Channel provides a way to communicate between multiple contexts, including threads and jobs. Channel has internal entry count.
+ Channel provides a way to communicate between multiple contexts, including threads and jobs. Channel has internal entry count.
 
 
 .. _handle-jobque-LockBox:
 
 .. das:attribute:: LockBox
 
-Lockbox. Similar to channel, only for single object.
+ Lockbox. Similar to channel, only for single object.
 
 
 .. _handle-jobque-Atomic32:
 
 .. das:attribute:: Atomic32
 
-Atomic 32 bit integer.
+ Atomic 32 bit integer.
 
 
 .. _handle-jobque-Atomic64:
 
 .. das:attribute:: Atomic64
 
-Atomic 64 bit integer.
+ Atomic 64 bit integer.
 
 
 +++++++++++++++++++++++++++
@@ -134,7 +134,8 @@ Channel, JobStatus, Lockbox
 
 .. das:function:: lock_box_create() : LockBox?
 
-Creates a new lock box for thread-safe shared data access. A lock box allows one thread to update a value while others read it safely.
+Creates a new ``LockBox`` for thread-safe shared access to a single value.
+
 .. _function-jobque_lock_box_remove_LockBox_q__implicit:
 
 .. das:function:: lock_box_remove(box: LockBox?& implicit)
@@ -142,14 +143,15 @@ Creates a new lock box for thread-safe shared data access. A lock box allows one
 .. warning:: 
   This is unsafe operation.
 
-Destroys a lock box and releases its resources. The lock box must not be in use by any active jobs.
+Destroys a ``LockBox`` and releases its resources.
+
 :Arguments: * **box** :  :ref:`LockBox <handle-jobque-LockBox>` ?& implicit
 
 .. _function-jobque_append_JobStatus_q__implicit_int:
 
 .. das:function:: append(channel: JobStatus? implicit; size: int) : int
 
-Increase entry count to the channel.
+Increases the entry count of the channel, signaling that new work has been added.
 
 :Arguments: * **channel** :  :ref:`JobStatus <handle-jobque-JobStatus>` ? implicit
 
@@ -162,7 +164,8 @@ Increase entry count to the channel.
 .. warning:: 
   This is unsafe operation.
 
-Creates a new channel for inter-thread communication. Returns a channel handle used for sending and receiving messages between jobs.
+Creates a new ``Channel`` for inter-thread communication and synchronization.
+
 .. _function-jobque_channel_remove_Channel_q__implicit:
 
 .. das:function:: channel_remove(channel: Channel?& implicit)
@@ -170,14 +173,15 @@ Creates a new channel for inter-thread communication. Returns a channel handle u
 .. warning:: 
   This is unsafe operation.
 
-Destroys a channel and releases its resources. The channel must not be in use by any active jobs.
+Destroys a ``Channel`` and releases its resources.
+
 :Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?& implicit
 
 .. _function-jobque_add_ref_JobStatus_q__implicit:
 
 .. das:function:: add_ref(status: JobStatus? implicit)
 
-Increase reference count of the job status or channel.
+Increases the reference count of a ``JobStatus`` or ``Channel``, preventing premature deletion.
 
 :Arguments: * **status** :  :ref:`JobStatus <handle-jobque-JobStatus>` ? implicit
 
@@ -185,7 +189,7 @@ Increase reference count of the job status or channel.
 
 .. das:function:: release(status: JobStatus?& implicit)
 
-Decrease reference count of the job status or channel. Object is delete when reference count reaches 0.
+Decreases the reference count of a ``JobStatus`` or ``Channel``; the object is deleted when the count reaches zero.
 
 :Arguments: * **status** :  :ref:`JobStatus <handle-jobque-JobStatus>` ?& implicit
 
@@ -193,7 +197,7 @@ Decrease reference count of the job status or channel. Object is delete when ref
 
 .. das:function:: join(job: JobStatus? implicit)
 
-Wait until channel entry count reaches 0.
+Joins the elements of an iterable into a single string using the specified separator.
 
 :Arguments: * **job** :  :ref:`JobStatus <handle-jobque-JobStatus>` ? implicit
 
@@ -201,7 +205,7 @@ Wait until channel entry count reaches 0.
 
 .. das:function:: notify(job: JobStatus? implicit)
 
-Notify channel that entry is completed (decrease entry count).
+Decreases the channel's entry count, signaling that one unit of work has completed.
 
 :Arguments: * **job** :  :ref:`JobStatus <handle-jobque-JobStatus>` ? implicit
 
@@ -209,7 +213,7 @@ Notify channel that entry is completed (decrease entry count).
 
 .. das:function:: notify_and_release(job: JobStatus?& implicit)
 
-Notify channel or job status that entry is completed (decrease entry count) and decrease reference count of the job status or channel.
+Decreases the entry count and the reference count of a ``Channel`` or ``JobStatus`` in a single operation.
 
 :Arguments: * **job** :  :ref:`JobStatus <handle-jobque-JobStatus>` ?& implicit
 
@@ -217,7 +221,8 @@ Notify channel or job status that entry is completed (decrease entry count) and 
 
 .. das:function:: job_status_create() : JobStatus?
 
-Creates a new job status object for tracking the completion state of asynchronous jobs.
+Creates a new ``JobStatus`` object for tracking the completion state of asynchronous jobs.
+
 .. _function-jobque_job_status_remove_JobStatus_q__implicit:
 
 .. das:function:: job_status_remove(jobStatus: JobStatus?& implicit)
@@ -225,7 +230,7 @@ Creates a new job status object for tracking the completion state of asynchronou
 .. warning:: 
   This is unsafe operation.
 
-Destroys job status.
+Destroys a ``JobStatus`` object and releases its resources.
 
 :Arguments: * **jobStatus** :  :ref:`JobStatus <handle-jobque-JobStatus>` ?& implicit
 
@@ -241,19 +246,19 @@ Queries
 
 .. das:function:: get_total_hw_jobs() : int
 
-Total number of hardware threads supporting job system.
+Returns the total number of hardware threads allocated to the job system.
 
 .. _function-jobque_get_total_hw_threads:
 
 .. das:function:: get_total_hw_threads() : int
 
-Total number of hardware threads available.
+Returns the total number of hardware threads available on the system.
 
 .. _function-jobque_is_job_que_shutting_down:
 
 .. das:function:: is_job_que_shutting_down() : bool
 
-Returns true if job que infrastructure is shut-down or not initialized.
+Returns ``true`` if the job queue infrastructure is shutting down or has not been initialized.
 
 ++++++++++++++++++++
 Internal invocations
@@ -267,7 +272,7 @@ Internal invocations
 
 .. das:function:: new_job_invoke(lambda: lambda<():void>; function: function<():void>; lambdaSize: int)
 
-Creates clone of the current context, moves attached lambda to it.
+Clones the current context, moves the attached lambda into it, and submits it to the job queue.
 
 :Arguments: * **lambda** : lambda<void>
 
@@ -279,7 +284,7 @@ Creates clone of the current context, moves attached lambda to it.
 
 .. das:function:: new_thread_invoke(lambda: lambda<():void>; function: function<():void>; lambdaSize: int)
 
-Creates clone of the current context, moves attached lambda to it.
+Clones the current context, moves the attached lambda into it, and runs it on a new dedicated thread.
 
 :Arguments: * **lambda** : lambda<void>
 
@@ -291,7 +296,7 @@ Creates clone of the current context, moves attached lambda to it.
 
 .. das:function:: new_debugger_thread(block: block<():void>)
 
-Creates a new thread for debugging purposes (tick thread).
+Creates a new debugger tick thread for servicing debug connections.
 
 :Arguments: * **block** : block<void> implicit
 
@@ -309,7 +314,7 @@ Construction
 
 .. das:function:: with_lock_box(block: block<(LockBox?):void>)
 
-Creates `LockBox`, makes it available inside the scope of the block.
+Creates a ``LockBox`` scoped to the given block and automatically destroys it afterward.
 
 :Arguments: * **block** : block<( :ref:`LockBox <handle-jobque-LockBox>` ?):void> implicit
 
@@ -317,7 +322,7 @@ Creates `LockBox`, makes it available inside the scope of the block.
 
 .. das:function:: with_channel(block: block<(Channel?):void>)
 
-Creates `Channel`, makes it available inside the scope of the block.
+Creates a ``Channel`` scoped to the given block and automatically destroys it afterward.
 
 :Arguments: * **block** : block<( :ref:`Channel <handle-jobque-Channel>` ?):void> implicit
 
@@ -325,7 +330,7 @@ Creates `Channel`, makes it available inside the scope of the block.
 
 .. das:function:: with_channel(count: int; block: block<(Channel?):void>)
 
-Creates `Channel`, makes it available inside the scope of the block.
+Creates a ``Channel`` scoped to the given block and automatically destroys it afterward.
 
 :Arguments: * **count** : int
 
@@ -335,7 +340,7 @@ Creates `Channel`, makes it available inside the scope of the block.
 
 .. das:function:: with_job_status(total: int; block: block<(JobStatus?):void>)
 
-Creates `JobStatus`, makes it available inside the scope of the block.
+Creates a ``JobStatus`` scoped to the given block and automatically destroys it afterward.
 
 :Arguments: * **total** : int
 
@@ -345,7 +350,7 @@ Creates `JobStatus`, makes it available inside the scope of the block.
 
 .. das:function:: with_job_que(block: block<():void>)
 
-Makes sure jobque infrastructure is available inside the scope of the block.
+Ensures job queue infrastructure is initialized for the duration of the block.
 
 :Arguments: * **block** : block<void> implicit
 
@@ -372,7 +377,7 @@ Atomic
 
 .. das:function:: atomic32_create() : Atomic32?
 
-Creates atomic 32 bit integer.
+Creates an ``Atomic32`` — a thread-safe 32-bit integer for lock-free concurrent access.
 
 .. _function-jobque_atomic32_remove_Atomic32_q__implicit:
 
@@ -381,7 +386,7 @@ Creates atomic 32 bit integer.
 .. warning:: 
   This is unsafe operation.
 
-Destroys atomic 32 bit integer.
+Destroys an ``Atomic32`` and releases its resources.
 
 :Arguments: * **atomic** :  :ref:`Atomic32 <handle-jobque-Atomic32>` ?& implicit
 
@@ -389,7 +394,7 @@ Destroys atomic 32 bit integer.
 
 .. das:function:: with_atomic32(block: block<(Atomic32?):void>)
 
-Creates `Atomic32`, makes it available inside the scope of the block.
+Creates an ``Atomic32`` scoped to the given block and automatically destroys it afterward.
 
 :Arguments: * **block** : block<( :ref:`Atomic32 <handle-jobque-Atomic32>` ?):void> implicit
 
@@ -397,7 +402,7 @@ Creates `Atomic32`, makes it available inside the scope of the block.
 
 .. das:function:: set(atomic: Atomic32? implicit; value: int)
 
-Set atomic integer value.
+Sets the atomic integer to the specified value.
 
 :Arguments: * **atomic** :  :ref:`Atomic32 <handle-jobque-Atomic32>` ? implicit
 
@@ -407,7 +412,7 @@ Set atomic integer value.
 
 .. das:function:: get(atomic: Atomic32? implicit) : int
 
-Get atomic integer value.
+Returns the current value of the atomic integer.
 
 :Arguments: * **atomic** :  :ref:`Atomic32 <handle-jobque-Atomic32>` ? implicit
 
@@ -415,7 +420,7 @@ Get atomic integer value.
 
 .. das:function:: inc(atomic: Atomic32? implicit) : int
 
-Increase atomic integer value and returns result.
+Atomically increments the integer value and returns the result.
 
 :Arguments: * **atomic** :  :ref:`Atomic32 <handle-jobque-Atomic32>` ? implicit
 
@@ -423,7 +428,7 @@ Increase atomic integer value and returns result.
 
 .. das:function:: dec(atomic: Atomic32? implicit) : int
 
-Decrease atomic integer value and returns result.
+Atomically decrements the integer value and returns the result.
 
 :Arguments: * **atomic** :  :ref:`Atomic32 <handle-jobque-Atomic32>` ? implicit
 
@@ -431,7 +436,7 @@ Decrease atomic integer value and returns result.
 
 .. das:function:: atomic64_create() : Atomic64?
 
-Creates atomic 64 bit integer.
+Creates an ``Atomic64`` — a thread-safe 64-bit integer for lock-free concurrent access.
 
 .. _function-jobque_atomic64_remove_Atomic64_q__implicit:
 
@@ -440,7 +445,7 @@ Creates atomic 64 bit integer.
 .. warning:: 
   This is unsafe operation.
 
-Destroys atomic 64 bit integer.
+Destroys an ``Atomic64`` and releases its resources.
 
 :Arguments: * **atomic** :  :ref:`Atomic64 <handle-jobque-Atomic64>` ?& implicit
 
@@ -448,7 +453,7 @@ Destroys atomic 64 bit integer.
 
 .. das:function:: with_atomic64(block: block<(Atomic64?):void>)
 
-Creates `Atomic64`, makes it available inside the scope of the block.
+Creates an ``Atomic64`` scoped to the given block and automatically destroys it afterward.
 
 :Arguments: * **block** : block<( :ref:`Atomic64 <handle-jobque-Atomic64>` ?):void> implicit
 
@@ -456,7 +461,7 @@ Creates `Atomic64`, makes it available inside the scope of the block.
 
 .. das:function:: set(atomic: Atomic64? implicit; value: int64)
 
-Set atomic integer value.
+Sets the atomic integer to the specified value.
 
 :Arguments: * **atomic** :  :ref:`Atomic64 <handle-jobque-Atomic64>` ? implicit
 
@@ -466,7 +471,7 @@ Set atomic integer value.
 
 .. das:function:: get(atomic: Atomic64? implicit) : int64
 
-Get atomic integer value.
+Returns the current value of the atomic integer.
 
 :Arguments: * **atomic** :  :ref:`Atomic64 <handle-jobque-Atomic64>` ? implicit
 
@@ -474,7 +479,7 @@ Get atomic integer value.
 
 .. das:function:: inc(atomic: Atomic64? implicit) : int64
 
-Increase atomic integer value and returns result.
+Atomically increments the integer value and returns the result.
 
 :Arguments: * **atomic** :  :ref:`Atomic64 <handle-jobque-Atomic64>` ? implicit
 
@@ -482,7 +487,7 @@ Increase atomic integer value and returns result.
 
 .. das:function:: dec(atomic: Atomic64? implicit) : int64
 
-Decrease atomic integer value and returns result.
+Atomically decrements the integer value and returns the result.
 
 :Arguments: * **atomic** :  :ref:`Atomic64 <handle-jobque-Atomic64>` ? implicit
 

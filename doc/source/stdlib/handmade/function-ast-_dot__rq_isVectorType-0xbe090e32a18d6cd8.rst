@@ -1,1 +1,1 @@
-Returns if the given type is a vector type, like int2 float3, or range64.
+Returns whether the given type is a vector type such as int2, float3, or range64.

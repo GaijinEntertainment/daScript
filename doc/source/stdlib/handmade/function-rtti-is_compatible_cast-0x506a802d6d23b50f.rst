@@ -1,1 +1,1 @@
-Returns true if `from` type can be casted to `to` type.
+Returns ``true`` if an object of type ``from`` (``StructInfo``) can be safely cast to type ``to`` (``StructInfo``), following the class hierarchy.

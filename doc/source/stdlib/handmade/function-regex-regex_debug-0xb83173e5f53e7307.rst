@@ -1,1 +1,1 @@
-Debugs regular expression by printing its structure.
+Prints the internal structure of a compiled regex for debugging purposes.

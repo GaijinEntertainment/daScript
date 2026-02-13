@@ -1,1 +1,1 @@
-equivalent to C `feof`. Returns true if end of file has been reached.
+Returns true if the end-of-file indicator has been set on the given FILE pointer, equivalent to C feof.

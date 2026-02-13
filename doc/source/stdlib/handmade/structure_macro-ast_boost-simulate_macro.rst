@@ -1,1 +1,1 @@
-Turns AstSimulateMacro into a macro with the specified `name`.
+The ``[simulate_macro]`` structure annotation — registers an ``AstSimulateMacro`` subclass as a named macro invoked during the simulation (code generation) phase.

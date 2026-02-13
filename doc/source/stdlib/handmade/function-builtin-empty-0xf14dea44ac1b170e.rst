@@ -1,1 +1,1 @@
-returns true if iterator is empty, i.e. would not produce any more values or uninitialized
+Checks whether the string `str` is empty (null or zero-length) and returns `true` if so.

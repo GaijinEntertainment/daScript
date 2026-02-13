@@ -1,1 +1,1 @@
-the difference between 1 and the smallest floating point number of type float that is greater than 1.
+The smallest single-precision float value epsilon such that 1.0f + epsilon != 1.0f, approximately 1.1920929e-7.

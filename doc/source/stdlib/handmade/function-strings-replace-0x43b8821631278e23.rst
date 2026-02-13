@@ -1,1 +1,1 @@
-Replace all occurances of the stubstring in the string with another substring.
+Returns a new string with all occurrences of substring `toSearch` in `str` replaced by the substring `replace`.

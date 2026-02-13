@@ -1,1 +1,1 @@
-indicates that function is to be exported to the final compiled context
+Forces a function to be exported and retained in the final compiled context, even if it is not directly called.

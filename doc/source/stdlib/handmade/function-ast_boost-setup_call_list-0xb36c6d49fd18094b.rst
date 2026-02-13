@@ -1,1 +1,1 @@
-Create new function which will contain collection of calls. Returns body block to where the call is to be appended.
+Creates or locates a compilation-phase setup function (``__setup_macros``) and returns its body ``ExprBlock`` so callers can append registration calls to it.

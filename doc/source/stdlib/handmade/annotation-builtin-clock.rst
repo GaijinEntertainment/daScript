@@ -1,1 +1,1 @@
-das::Time which is a wrapper around `time_t`
+Handled type wrapping `das::Time`, which encapsulates the C `time_t` value for calendar time representation.

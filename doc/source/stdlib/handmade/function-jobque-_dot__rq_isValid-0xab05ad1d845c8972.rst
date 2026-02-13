@@ -1,1 +1,1 @@
-If the job status object is valid.
+Whether the job status object refers to a valid, active job.

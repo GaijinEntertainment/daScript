@@ -1,1 +1,1 @@
-Limit of repetitions for regex quantifiers.
+Returns the maximum repetition limit used by regex quantifiers during string generation.

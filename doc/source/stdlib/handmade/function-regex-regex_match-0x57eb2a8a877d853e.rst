@@ -1,1 +1,1 @@
-Matches a regular expression against a string and returns the position of the match.
+Matches a compiled regex against a string and returns the end position of the match, or ``-1`` on failure.

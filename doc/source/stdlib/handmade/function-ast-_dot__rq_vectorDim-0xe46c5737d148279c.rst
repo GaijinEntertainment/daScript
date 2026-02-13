@@ -1,1 +1,1 @@
-Returns the dimension of a vector type, e.g. for vector4 it returns 4.
+Returns the number of components in a vector type, for example 4 for float4.

@@ -1,1 +1,1 @@
-Creates adapter for the `AstVisitor` interface.
+Creates an adapter for the AstVisitor interface.

@@ -1,1 +1,1 @@
-This annotation is used for tagging specific funcstion.
+Implements the ``[tag_function]`` function annotation, which attaches named boolean tags to functions so they can be discovered and processed by ``[tag_function_macro]``.

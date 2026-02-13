@@ -1,1 +1,1 @@
-Returns the Levenshtein distance between two strings.
+Computes the Levenshtein edit distance between two strings.

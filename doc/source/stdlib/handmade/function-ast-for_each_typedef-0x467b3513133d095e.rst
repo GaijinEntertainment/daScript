@@ -1,1 +1,1 @@
-Iterates through every typedef in the `Module`.
+Iterates through every typedef in the specified module.

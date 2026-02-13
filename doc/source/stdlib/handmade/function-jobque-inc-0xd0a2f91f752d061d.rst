@@ -1,1 +1,1 @@
-Increase atomic integer value and returns result.
+Atomically increments the integer value and returns the result.

@@ -1,1 +1,1 @@
-Find structure in the program with the specified name. If its unique - return it, otherwise null.
+Finds a uniquely named structure in the program, returning it if unique or null if ambiguous.

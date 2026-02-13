@@ -1,1 +1,1 @@
-Returns if somehwere in the type definition there are non-trivial copy operations.
+Returns whether the type definition contains any non-trivial copy operations.

@@ -1,1 +1,1 @@
-Makes adapter to the `AstEnumerationAnnotation` and adds it to the current module.
+Creates an AstEnumerationAnnotation adapter and adds it to the current module.

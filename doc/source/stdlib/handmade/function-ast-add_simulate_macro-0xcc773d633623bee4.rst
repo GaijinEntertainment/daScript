@@ -1,1 +1,1 @@
-Adds `AstSimulateMacro` to the specific module.
+Adds an AstSimulateMacro adapter to the specified module.

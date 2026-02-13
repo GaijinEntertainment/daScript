@@ -1,1 +1,1 @@
-Returns if the given type is a numeric comparable type.
+Returns whether the given type supports numeric comparison.

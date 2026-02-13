@@ -1,1 +1,1 @@
-Returns true if the given type annotation represents a raw POD (plain old data) type - any basic type, but not a pointer or a string.
+Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` is a raw POD type — a basic value type excluding pointers and strings.

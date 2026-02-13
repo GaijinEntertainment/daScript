@@ -1,8 +1,8 @@
 require daslib/flat_hash_table
 require math
 
-typedef FlatHashMap_int_Foo = $FlatHashTable < int; FooType >
-typedef FlatHashMap_string_int = $FlatHashTable < string; int >
+typedef FlatHashMap_int_Foo = TFlatHashTable < int; FooType >
+typedef FlatHashMap_string_int = TFlatHashTable < string; int >
 
 struct Foo {
     a : int
@@ -11,16 +11,16 @@ struct Foo {
 typedef FooType = Foo
 
 [sideeffects]
-def take_any_hash_table(a : $FlatHashTable < auto(TT); auto(QQ) >) {
+def take_any_hash_table(a : TFlatHashTable < auto(TT); auto(QQ) >) {
     return "any"
 }
 
 [sideeffects]
-def take_any_hash_map(a : $FlatHashTable < string; auto(QQ) >) {
+def take_any_hash_map(a : TFlatHashTable < string; auto(QQ) >) {
     return "string;any"
 }
 
-typedef DictMap = $FlatHashTableEx < string; int > (@@hash_string)   // vs @@hash
+typedef DictMap = TFlatHashTable < string; int > (@@hash_string)   // vs @@hash
 
 def hash_string(s : string) : uint64 {
     var h : uint64 = 14695981039346656037ul

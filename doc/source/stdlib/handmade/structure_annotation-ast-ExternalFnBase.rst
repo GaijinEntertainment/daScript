@@ -1,5 +1,5 @@
 Base class for external function bindings.
-Bindings for the 'BuiltInFunction', which is used for the builtin (bound) functions in daScript.
+Bindings for the 'BuiltInFunction', which is used for the builtin (bound) functions in Daslang.
 Annotations attached to this function
 Name of the function
 Arguments of the function

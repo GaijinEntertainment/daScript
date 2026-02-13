@@ -1,1 +1,1 @@
-Decrease reference count of the job status or channel. Object is delete when reference count reaches 0.
+Decreases the reference count of a ``JobStatus`` or ``Channel``; the object is deleted when the count reaches zero.

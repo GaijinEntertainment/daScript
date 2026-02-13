@@ -1,1 +1,1 @@
-Quaternion which represents rotation from `v0` to `v1`, both arguments need to be normalized
+Creates a float4 quaternion representing the shortest rotation arc from unit-length float3 vector v0 to unit-length float3 vector v1; both input vectors must be normalized.

@@ -1,1 +1,1 @@
-clear will clear whole table or array `arg`. The size of `arg` after clear is 0.
+Removes all elements from the dynamic `array`, leaving it empty with a size of 0.

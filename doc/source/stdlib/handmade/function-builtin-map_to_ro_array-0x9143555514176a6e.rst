@@ -1,1 +1,1 @@
-same as `map_to_array` but array is read-only
+Constructs a temporary read-only array of type `TT` over raw memory at `data` with `len` elements, and passes it to `blk` without copying the underlying data.

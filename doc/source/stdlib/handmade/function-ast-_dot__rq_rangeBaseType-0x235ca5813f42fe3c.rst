@@ -1,1 +1,1 @@
-Returns the base type of a range type, e.g. for range64 it returns int64.
+Returns the base type of a range type, for example int64 for range64.

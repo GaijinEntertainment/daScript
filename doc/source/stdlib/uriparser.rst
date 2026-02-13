@@ -21,21 +21,21 @@ Handled structures
 
 .. das:attribute:: UriTextRangeA
 
-Range of text in the URI.
+ Range of text in the URI.
 
 
 .. _handle-uriparser-UriIp4Struct:
 
 .. das:attribute:: UriIp4Struct
 
-:Fields: * **data** : uint8[4] - IPv4 address portion of the URI.
+:Fields: * **data** : uint8[4] -  IPv4 address portion of the URI.
 
 
 .. _handle-uriparser-UriIp6Struct:
 
 .. das:attribute:: UriIp6Struct
 
-:Fields: * **data** : uint8[16] - IPv6 address porition of the URI.
+:Fields: * **data** : uint8[16] -  IPv6 address porition of the URI.
 
 
 .. _handle-uriparser-UriHostDataA:
@@ -43,12 +43,13 @@ Range of text in the URI.
 .. das:attribute:: UriHostDataA
 
 Host data portion of the URI (IPv4 or IPv6, or some future data).
+IPv4 address data.
 
-:Fields: * **ip4** :  :ref:`UriIp4Struct <handle-uriparser-UriIp4Struct>` ? - IPv4 address data.
+:Fields: * **ip4** :  :ref:`UriIp4Struct <handle-uriparser-UriIp4Struct>` ? - IPv6 address data.
 
-         * **ip6** :  :ref:`UriIp6Struct <handle-uriparser-UriIp6Struct>` ? - IPv6 address data.
+         * **ip6** :  :ref:`UriIp6Struct <handle-uriparser-UriIp6Struct>` ? - Future host address data.
 
-         * **ipFuture** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Future host address data.
+         * **ipFuture** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>` 
 
 
 .. _handle-uriparser-UriPathSegmentStructA:
@@ -67,28 +68,29 @@ Part of the path portion of the URI.
 .. das:attribute:: UriUriA
 
 URI base class, contains all URI data.
+Scheme of the URI.
 
-:Fields: * **scheme** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Scheme of the URI.
+:Fields: * **scheme** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - User information.
 
-         * **userInfo** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - User information.
+         * **userInfo** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Host text.
 
-         * **hostText** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Host text.
+         * **hostText** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Host data portion of the URI (IPv4 or IPv6, or some future data).
 
-         * **hostData** :  :ref:`UriHostDataA <handle-uriparser-UriHostDataA>`  - Host data portion of the URI (IPv4 or IPv6, or some future data).
+         * **hostData** :  :ref:`UriHostDataA <handle-uriparser-UriHostDataA>`  - Port text.
 
-         * **portText** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Port text.
+         * **portText** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Head of the path.
 
-         * **pathHead** :  :ref:`UriPathSegmentStructA <handle-uriparser-UriPathSegmentStructA>` ? - Head of the path.
+         * **pathHead** :  :ref:`UriPathSegmentStructA <handle-uriparser-UriPathSegmentStructA>` ? - Tail of the path.
 
-         * **pathTail** :  :ref:`UriPathSegmentStructA <handle-uriparser-UriPathSegmentStructA>` ? - Tail of the path.
+         * **pathTail** :  :ref:`UriPathSegmentStructA <handle-uriparser-UriPathSegmentStructA>` ? - Query portion of the URI.
 
-         * **query** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Query portion of the URI.
+         * **query** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Fragment portion of the URI.
 
-         * **fragment** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Fragment portion of the URI.
+         * **fragment** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Whether the path is absolute.
 
-         * **absolutePath** : int - Whether the path is absolute.
+         * **absolutePath** : int - Whether the URI is owned by the parser.
 
-         * **owner** : int - Whether the URI is owned by the parser.
+         * **owner** : int
 
 
 .. _handle-uriparser-Uri:
@@ -99,19 +101,19 @@ URI base class, contains all URI data.
 
 .. das:function:: Uri implicit.empty() : bool
 
-Returns true if the given URI is empty.
+Returns ``true`` if the ``Uri`` object contains no URI data.
 
 .. _function-uriparser__dot__rq_size_Uri_implicit:
 
 .. das:function:: Uri implicit.size() : int
 
-Returns the size of the given URI.
+Returns the string length of the URI.
 
 .. _function-uriparser__dot__rq_status_Uri_implicit:
 
 .. das:function:: Uri implicit.status() : int
 
-Returns the status of the given URI (URI_SUCCESS, URI_ERROR_SYNTAX, etc.).
+Returns the parse status code of the ``Uri`` object.
 
 :Properties: * **empty** : bool
 
@@ -119,7 +121,7 @@ Returns the status of the given URI (URI_SUCCESS, URI_ERROR_SYNTAX, etc.).
 
              * **status** : int
 
-:Fields: * **uri** :  :ref:`UriUriA <handle-uriparser-UriUriA>`  - URI implementation.
+:Fields: * **uri** :  :ref:`UriUriA <handle-uriparser-UriUriA>`  -  URI implementation.
 
 
 +++++++++++++++++++++++++++++++
@@ -137,12 +139,13 @@ Initialization and finalization
 
 .. das:function:: Uri() : Uri
 
-Constructs a new URI object by parsing the given string into its component parts (scheme, host, path, query, etc.).
+Constructs a new ``Uri`` object by parsing the given URI string.
+
 .. _function-uriparser_using_block_ls_Uri_hh__c_void_gr_:
 
 .. das:function:: using(arg0: block<(Uri#):void>)
 
-Creates scoped URI variable.
+Creates a scoped ``Uri`` variable that is automatically finalized at end of block.
 
 :Arguments: * **arg0** : block<( :ref:`Uri <handle-uriparser-Uri>` #):void> implicit
 
@@ -150,14 +153,15 @@ Creates scoped URI variable.
 
 .. das:function:: Uri(arg0: string implicit) : Uri
 
-Constructs a new URI object by parsing the given string into its component parts (scheme, host, path, query, etc.).
+Constructs a new ``Uri`` object by parsing the given URI string.
+
 :Arguments: * **arg0** : string implicit
 
 .. _function-uriparser_using_string_implicit_block_ls_Uri_hh__c_void_gr_:
 
 .. das:function:: using(arg0: string implicit; arg1: block<(Uri#):void>)
 
-Creates scoped URI variable.
+Creates a scoped ``Uri`` variable that is automatically finalized at end of block.
 
 :Arguments: * **arg0** : string implicit
 
@@ -167,7 +171,7 @@ Creates scoped URI variable.
 
 .. das:function:: finalize(uri: Uri implicit)
 
-Finalizer for the URI.
+Releases all resources held by the ``Uri`` object.
 
 :Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
@@ -175,7 +179,8 @@ Finalizer for the URI.
 
 .. das:function:: clone(dest: Uri implicit; src: Uri implicit)
 
-Creates a deep copy of the given URI object, producing an independent duplicate.
+Creates a deep copy of the given ``Uri`` object.
+
 :Arguments: * **dest** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
             * **src** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
@@ -191,7 +196,7 @@ Escape and unescape
 
 .. das:function:: escape_uri(uriStr: string implicit; spaceToPlus: bool; normalizeBreaks: bool) : string
 
-Adds escape characters to the URI.
+Percent-encodes reserved and special characters in the URI string.
 
 :Arguments: * **uriStr** : string implicit
 
@@ -203,7 +208,7 @@ Adds escape characters to the URI.
 
 .. das:function:: unescape_uri(uriStr: string implicit) : string
 
-Remove escape characters from the URI.
+Decodes percent-encoded characters in the URI string.
 
 :Arguments: * **uriStr** : string implicit
 
@@ -224,7 +229,7 @@ Uri manipulations
 
 .. das:function:: strip_uri(uri: Uri implicit; query: bool; fragment: bool) : Uri
 
-Removes query and fragment from the URI.
+Removes the query string and fragment from the URI.
 
 :Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
@@ -236,7 +241,7 @@ Removes query and fragment from the URI.
 
 .. das:function:: add_base_uri(base: Uri implicit; relative: Uri implicit) : Uri
 
-Adds `base` URI to the `relative` URI.
+Resolves a relative URI against a base URI, producing an absolute URI.
 
 :Arguments: * **base** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
@@ -246,7 +251,7 @@ Adds `base` URI to the `relative` URI.
 
 .. das:function:: remove_base_uri(base: Uri implicit; relative: Uri implicit) : Uri
 
-Removes `base` URI from the `relative` URI.
+Computes a relative URI by removing the base URI prefix from an absolute URI.
 
 :Arguments: * **base** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
@@ -256,7 +261,7 @@ Removes `base` URI from the `relative` URI.
 
 .. das:function:: normalize(uri: Uri implicit) : bool
 
-Normalizes URI, i.e. removes redundant `/` and `.` characters.
+Normalizes a ``Uri`` in place, removing redundant ``/``, ``.``, and ``..`` path segments.
 
 :Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
@@ -264,7 +269,7 @@ Normalizes URI, i.e. removes redundant `/` and `.` characters.
 
 .. das:function:: string(uri: Uri implicit) : string
 
-Converts URI to string.
+Converts a ``Uri`` object to its string representation.
 
 :Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
@@ -272,7 +277,7 @@ Converts URI to string.
 
 .. das:function:: string(range: UriTextRangeA implicit) : string
 
-Converts URI to string.
+Converts a ``Uri`` object to its string representation.
 
 :Arguments: * **range** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  implicit
 
@@ -280,7 +285,7 @@ Converts URI to string.
 
 .. das:function:: uri_for_each_query_kv(uri: Uri implicit; block: block<(string#;string#):void>)
 
-Iterates over the URI query parameters.
+Iterates over each key-value pair in the URI's query string, invoking a block for each.
 
 :Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
@@ -290,7 +295,7 @@ Iterates over the URI query parameters.
 
 .. das:function:: normalize_uri(uriStr: string implicit) : string
 
-Normalizes URI. i.e. removes redundant `/` and `.` characters.
+Returns a normalized copy of the URI string with redundant ``/``, ``.``, and ``..`` segments removed.
 
 :Arguments: * **uriStr** : string implicit
 
@@ -315,7 +320,7 @@ File name conversions
 
 .. das:function:: to_unix_file_name(uri: Uri implicit) : string
 
-Converts URI to Unix file name.
+Converts a ``Uri`` to a Unix-style file path.
 
 :Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
@@ -323,7 +328,7 @@ Converts URI to Unix file name.
 
 .. das:function:: to_windows_file_name(uri: Uri implicit) : string
 
-Converts URI to Windows file name.
+Converts a ``Uri`` to a Windows-style file path.
 
 :Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
@@ -331,7 +336,7 @@ Converts URI to Windows file name.
 
 .. das:function:: to_file_name(uri: Uri implicit) : string
 
-Converts URI to the current platform file name.
+Converts a ``Uri`` to a platform-native file path.
 
 :Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
@@ -339,7 +344,7 @@ Converts URI to the current platform file name.
 
 .. das:function:: uri_from_file_name(filename: string implicit) : Uri
 
-Converts current platform file name to URI.
+Converts a platform-native file path to a ``file://`` URI string.
 
 :Arguments: * **filename** : string implicit
 
@@ -347,7 +352,7 @@ Converts current platform file name to URI.
 
 .. das:function:: uri_from_windows_file_name(filename: string implicit) : Uri
 
-Converts Windows file name to URI.
+Converts a Windows-style file path to a ``file://`` URI string.
 
 :Arguments: * **filename** : string implicit
 
@@ -355,7 +360,7 @@ Converts Windows file name to URI.
 
 .. das:function:: uri_from_unix_file_name(filename: string implicit) : Uri
 
-Converts Unix file name to URI.
+Converts a Unix-style file path to a ``file://`` URI string.
 
 :Arguments: * **filename** : string implicit
 
@@ -363,7 +368,7 @@ Converts Unix file name to URI.
 
 .. das:function:: uri_to_unix_file_name(uriStr: string implicit) : string
 
-Converts URI to Unix file name.
+Converts a URI string to a Unix-style file path.
 
 :Arguments: * **uriStr** : string implicit
 
@@ -371,7 +376,7 @@ Converts URI to Unix file name.
 
 .. das:function:: uri_to_windows_file_name(uriStr: string implicit) : string
 
-Converts URI to Windows file name.
+Converts a URI string to a Windows-style file path.
 
 :Arguments: * **uriStr** : string implicit
 
@@ -379,7 +384,7 @@ Converts URI to Windows file name.
 
 .. das:function:: unix_file_name_to_uri(uriStr: string implicit) : string
 
-Converts Unix file name to URI.
+Converts a Unix-style file path to a ``file://`` URI string.
 
 :Arguments: * **uriStr** : string implicit
 
@@ -387,7 +392,7 @@ Converts Unix file name to URI.
 
 .. das:function:: windows_file_name_to_uri(uriStr: string implicit) : string
 
-Converts Windows file name to URI.
+Converts a Windows-style file path to a ``file://`` URI string.
 
 :Arguments: * **uriStr** : string implicit
 
@@ -395,7 +400,7 @@ Converts Windows file name to URI.
 
 .. das:function:: uri_to_file_name(uriStr: string implicit) : string
 
-Converts URI to the current platform file name.
+Converts a URI string to a platform-native file path.
 
 :Arguments: * **uriStr** : string implicit
 
@@ -403,7 +408,7 @@ Converts URI to the current platform file name.
 
 .. das:function:: file_name_to_uri(uriStr: string implicit) : string
 
-Converts current file name to URI.
+Converts a platform-native file path to a ``file://`` URI string.
 
 :Arguments: * **uriStr** : string implicit
 
@@ -417,5 +422,6 @@ GUID
 
 .. das:function:: make_new_guid() : string
 
-Generates a new universally unique identifier (GUID/UUID) string.
+Generates a new random GUID/UUID string.
+
 

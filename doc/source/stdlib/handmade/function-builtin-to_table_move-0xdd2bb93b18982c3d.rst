@@ -1,1 +1,1 @@
-will convert an array of key-value tuples into a table<key;value> type. arguments will be copied or moved
+Converts a generic key container `a` into a `table<keyT, void>` set, copying or moving each key.

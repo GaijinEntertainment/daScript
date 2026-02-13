@@ -1,1 +1,1 @@
-Sets source for the specified file in the `FileAccess` object.
+Registers a source code ``string`` for the given file name inside the ``FileAccess`` object, allowing in-memory compilation without disk files.

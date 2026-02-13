@@ -1,1 +1,1 @@
-Notifies compiler that AOT is no longer being generated.
+Notifies the compiler that ahead-of-time code generation has finished, restoring normal compilation mode.

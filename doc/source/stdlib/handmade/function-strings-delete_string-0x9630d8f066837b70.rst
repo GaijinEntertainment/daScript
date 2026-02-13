@@ -1,1 +1,1 @@
-Removes string from the string heap. This is unsafe because it will free the memory and all dangling strings will be broken.
+Frees the string `str` from the heap and clears the reference, returning true on success; unsafe because existing aliases become dangling pointers.

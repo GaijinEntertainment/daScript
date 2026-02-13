@@ -1,1 +1,1 @@
-indicates log level recoverable errors
+Log level constant for recoverable error conditions that do not require immediate shutdown.

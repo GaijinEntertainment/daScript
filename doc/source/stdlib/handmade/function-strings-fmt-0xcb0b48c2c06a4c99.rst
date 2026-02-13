@@ -1,1 +1,1 @@
-Converts value to string given specified format (that of libfmt or C++20 std::format).
+Formats a numeric value of type T into the StringBuilderWriter using a libfmt/C++20 std::format format string and returns a reference to the writer.

@@ -1,1 +1,1 @@
-returns FILE pointer to standard input.
+Returns the FILE pointer corresponding to the standard input stream.

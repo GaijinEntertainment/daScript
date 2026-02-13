@@ -1,1 +1,1 @@
-maximum number of arguments for the function. this is used to pre-allocate stack space for the function arguments
+Maximum number of arguments a function can accept, used to pre-allocate stack space for function call arguments.

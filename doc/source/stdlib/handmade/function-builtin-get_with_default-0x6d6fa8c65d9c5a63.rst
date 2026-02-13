@@ -1,1 +1,1 @@
-gets the value from the table, add it with a default value if it does not exist. Callback is invoked with the value.
+Looks up key `at` in the table `Tab`, inserting a default-initialized entry if the key is absent, then invokes `blk` with a mutable reference to the value.

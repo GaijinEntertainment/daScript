@@ -1,1 +1,1 @@
-Returns offset of the variant field in bytes.
+Returns the byte offset of a variant field.

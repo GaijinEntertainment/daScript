@@ -1,1 +1,1 @@
-returns a value representing the smallest integer (integer type!) that is greater than or equal to arg0
+Returns the smallest integer not less than x (rounds toward positive infinity), converting the float argument to an int result.

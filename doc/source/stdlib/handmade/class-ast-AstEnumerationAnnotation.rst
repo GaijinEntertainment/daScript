@@ -1,1 +1,1 @@
-Annotation macro which is attached to `Enumeration`.
+Annotation macro that attaches to `Enumeration` declarations. Provides compile-time hooks for inspecting and modifying enumeration definitions.

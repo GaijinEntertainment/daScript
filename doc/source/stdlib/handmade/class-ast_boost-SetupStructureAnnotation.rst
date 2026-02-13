@@ -1,1 +1,1 @@
-This is base class for structure annotation setup.
+Base class for creating structure annotations via the ``[structure_macro]`` structure annotation; registers an ``AstStructureAnnotation`` with the compiler.

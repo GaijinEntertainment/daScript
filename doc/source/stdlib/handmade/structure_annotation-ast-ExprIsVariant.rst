@@ -12,3 +12,4 @@ Index of the field in the type's field list
 Type annotation for the field
 Flags for dereferencing operations
 Flags specific to field access expressions
+

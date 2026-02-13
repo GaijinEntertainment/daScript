@@ -1,1 +1,1 @@
-similar to `push`, only values would be cloned instead of copied
+Clones a mutable fixed-size array `varr` and appends the copy to `Arr`, an array of fixed-size arrays.

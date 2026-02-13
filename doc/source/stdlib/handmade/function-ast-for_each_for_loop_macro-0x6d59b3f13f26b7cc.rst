@@ -1,1 +1,1 @@
-Iterates through each for loop macro in the given `Module`.
+Iterates through every for-loop macro in the specified module.

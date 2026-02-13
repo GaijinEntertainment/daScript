@@ -1,1 +1,1 @@
-Replaces multiple substrings in the source string according to the provided list of replacements.
+Applies multiple find-and-replace substitutions to a string in a single pass.

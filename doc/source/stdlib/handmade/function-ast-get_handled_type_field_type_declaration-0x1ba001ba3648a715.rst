@@ -1,1 +1,1 @@
-Returns type declaration of the field in the ManagedStructure handled type.
+Returns the type declaration of a field in a ManagedStructure handled type.

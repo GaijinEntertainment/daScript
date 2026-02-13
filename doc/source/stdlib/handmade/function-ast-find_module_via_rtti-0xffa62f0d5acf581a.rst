@@ -1,1 +1,1 @@
-Find module by name in the `Program`.
+Finds a module by name in the specified program using RTTI.

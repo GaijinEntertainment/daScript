@@ -1,1 +1,1 @@
-Smart pointer to `CallMacro` object.
+Smart pointer to a `CallMacro` object. Used for registering and managing custom call-like expression macros.

@@ -1,1 +1,1 @@
-moves value and returns it as local value on stack. used to work around aliasing issues
+Moves the value referenced by `a` onto the stack as a local copy and returns it, clearing the original; useful for resolving aliasing issues.

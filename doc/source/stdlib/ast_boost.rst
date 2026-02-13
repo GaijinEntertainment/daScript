@@ -22,13 +22,12 @@ Type aliases
 
 .. das:attribute:: AnnotationDeclarationPtr = smart_ptr<AnnotationDeclaration>
 
-Alias for smart_ptr<AnnotationDeclaration>
-
+Type alias for ``smart_ptr<AnnotationDeclaration>``, used when constructing or attaching annotation declarations to functions, blocks, or structures.
 .. _alias-DebugExpressionFlags:
 
 .. das:attribute:: bitfield DebugExpressionFlags
 
-:Fields: * **refCount** (0x1) - Which things to print in debug_expression.
+:Fields: * **refCount** (0x1) - Bitfield controlling ``debug_expression`` output — currently has a single ``refCount`` flag that includes smart pointer reference counts in the dump.
 
 
 ++++++++++++++++++++
@@ -39,14 +38,12 @@ Function annotations
 
 .. das:attribute:: macro
 
-MacroMacro function annotation.
-
+The ``[macro]`` function annotation — marks a function to run only during macro module compilation, gating its body behind ``is_compiling_macros``.
 .. _handle-ast_boost-tag_function:
 
 .. das:attribute:: tag_function
 
-TagFunctionAnnotation function annotation.
-
+The ``[tag_function]`` function annotation — attaches named tags to a function so that ``[tag_function_macro]``-based annotations can discover and process it.
 ++++++++++++++
 Variant macros
 ++++++++++++++
@@ -55,7 +52,8 @@ Variant macros
 
 .. das:attribute:: better_rtti_in_expr
 
-This macro is used to implement `is type`, `as type` and `?as type` runtime checks for the `Expression` class and its subclasses.
+Variant macro that enables improved RTTI type matching in `is` and `as` expressions.
+Varian macro better_rtti_in_expr
 
 ++++++++++++++++
 Structure macros
@@ -65,128 +63,107 @@ Structure macros
 
 .. das:attribute:: function_macro
 
-Turns AstFunctionAnnotation into a macro with the specified `name`.
-
+The ``[function_macro]`` structure annotation — registers an ``AstFunctionAnnotation`` subclass as a named function annotation available to the compiler.
 .. _handle-ast_boost-block_macro:
 
 .. das:attribute:: block_macro
 
-Turns AstBlockAnnotation into a macro with the specified `name`.
-
+The ``[block_macro]`` structure annotation — registers an ``AstBlockAnnotation`` subclass as a named block-level annotation available to the compiler.
 .. _handle-ast_boost-structure_macro:
 
 .. das:attribute:: structure_macro
 
-Turns AstStructureAnnotation into a macro with the specified `name`.
-
+The ``[structure_macro]`` structure annotation — registers an ``AstStructureAnnotation`` subclass as a named annotation applicable to structures and classes.
 .. _handle-ast_boost-enumeration_macro:
 
 .. das:attribute:: enumeration_macro
 
-Turns AstEnumerationAnnotation into a macro with the specified `name`.
-
+The ``[enumeration_macro]`` structure annotation — registers an ``AstEnumerationAnnotation`` subclass as a named annotation applicable to enumerations.
 .. _handle-ast_boost-contract:
 
 .. das:attribute:: contract
 
-Turns AstFunctionAnnotation into a contract macro with the specified `name`.
-
+The ``[contract]`` structure annotation — registers an ``AstFunctionAnnotation`` subclass as a named function contract that validates arguments or return values.
 .. _handle-ast_boost-reader_macro:
 
 .. das:attribute:: reader_macro
 
-Turns AstReaderMacro into a macro with the specified `name`.
-
+The ``[reader_macro]`` structure annotation — registers an ``AstReaderMacro`` subclass as a named reader macro invoked by the ``%name~...~~`` syntax during parsing.
 .. _handle-ast_boost-comment_reader:
 
 .. das:attribute:: comment_reader
 
-Turns AstCommentReader into a macro with the specified `name`.
-
+The ``[comment_reader]`` structure annotation — registers an ``AstCommentReader`` subclass as a named comment reader invoked during parsing.
 .. _handle-ast_boost-call_macro:
 
 .. das:attribute:: call_macro
 
-Turns AstCallMacro into a macro with the specified `name`.
-
+The ``[call_macro]`` structure annotation — registers an ``AstCallMacro`` subclass as a named call-expression macro available during compilation.
 .. _handle-ast_boost-typeinfo_macro:
 
 .. das:attribute:: typeinfo_macro
 
-Turns AstTypeInfoMacro into a macro with the specified `name`.
-
+The ``[typeinfo_macro]`` structure annotation — registers an ``AstTypeInfoMacro`` subclass as a named macro that extends the ``typeinfo(name ...)`` built-in.
 .. _handle-ast_boost-variant_macro:
 
 .. das:attribute:: variant_macro
 
-Turns AstVariantMacro into a macro with the specified `name`.
-
+The ``[variant_macro]`` structure annotation — registers an ``AstVariantMacro`` subclass as a named macro that can customize ``is``, ``as``, and ``?as`` variant operations.
 .. _handle-ast_boost-for_loop_macro:
 
 .. das:attribute:: for_loop_macro
 
-Turns AstForLoopMacro into a macro with the specified `name`.
-
+The ``[for_loop_macro]`` structure annotation — registers an ``AstForLoopMacro`` subclass as a named macro that can transform ``for`` loop expressions.
 .. _handle-ast_boost-capture_macro:
 
 .. das:attribute:: capture_macro
 
-Turns AstCaptureMacro into a macro with the specified `name`.
-
+The ``[capture_macro]`` structure annotation — registers an ``AstCaptureMacro`` subclass as a named capture macro that can customize lambda capture behavior.
 .. _handle-ast_boost-type_macro:
 
 .. das:attribute:: type_macro
 
-Turns AstTypeMacro into a macro with the specified `name`.
-
+The ``[type_macro]`` structure annotation — registers an ``AstTypeMacro`` subclass as a named macro that can intercept and transform type expressions.
 .. _handle-ast_boost-simulate_macro:
 
 .. das:attribute:: simulate_macro
 
-Turns AstSimulateMacro into a macro with the specified `name`.
-
+The ``[simulate_macro]`` structure annotation — registers an ``AstSimulateMacro`` subclass as a named macro invoked during the simulation (code generation) phase.
 .. _handle-ast_boost-tag_structure:
 
 .. das:attribute:: tag_structure
 
-This macro implements [tag_structure] annotation, which allows to add tag (name) to a specific structure.
-
+The ``[tag_structure]`` structure annotation — attaches named boolean tags to a structure, allowing macro code to discover and process tagged structures.
 .. _handle-ast_boost-tag_function_macro:
 
 .. das:attribute:: tag_function_macro
 
-This macro implements [tag_function_macro] annotation, which allows to add an AstFunctionAnnotation to any function with a specific [tag_function(name)] tag.
-
+The ``[tag_function_macro]`` structure annotation — registers an ``AstFunctionAnnotation`` that is automatically applied to every function carrying a matching ``[tag_function(tag)]`` tag.
 .. _handle-ast_boost-infer_macro:
 
 .. das:attribute:: infer_macro
 
-Turns AstPassMacro into a macro with the specified 'name', which is called during the `infer` pass.
-
+The ``[infer_macro]`` structure annotation — registers an ``AstPassMacro`` subclass that is invoked during the type inference compilation pass.
 .. _handle-ast_boost-dirty_infer_macro:
 
 .. das:attribute:: dirty_infer_macro
 
-Turns AstPassMacro into a macro with the specified 'name', which is called during the `dirty infer` pass.
-
+The ``[dirty_infer_macro]`` structure annotation — registers an ``AstPassMacro`` subclass that is invoked during the dirty infer compilation pass.
 .. _handle-ast_boost-optimization_macro:
 
 .. das:attribute:: optimization_macro
 
-Turns AstPassMacro into a macro with the specified 'name', which is called during the `optimization` pass.
-
+The ``[optimization_macro]`` structure annotation — registers an ``AstPassMacro`` subclass that is invoked during the optimization compilation pass.
 .. _handle-ast_boost-lint_macro:
 
 .. das:attribute:: lint_macro
 
-Turns AstPassMacro into a macro with the specified 'name', which is called during the `lint` pass.
-
+The ``[lint_macro]`` structure annotation — registers an ``AstPassMacro`` subclass that is invoked during the lint compilation pass.
 .. _handle-ast_boost-global_lint_macro:
 
 .. das:attribute:: global_lint_macro
 
-Turns AstPassMacro into a macro with the specified 'name', which is called during the `global lint` pass.
-
+The ``[global_lint_macro]`` structure annotation — registers an ``AstPassMacro`` subclass that is invoked during the global lint compilation pass.
 +++++++
 Classes
 +++++++
@@ -195,14 +172,14 @@ Classes
 
 .. das:attribute:: MacroMacro : AstFunctionAnnotation
 
-This macro implements [macro] function annotation.
+Implements the ``[macro]`` function annotation, which wraps the function body so it only executes during macro module compilation.
 
 
 .. _function-ast_boost_MacroMacro_rq_apply_MacroMacro_FunctionPtr_ModuleGroup_AnnotationArgumentList_das_string:
 
 .. das:function:: MacroMacro.apply(func: FunctionPtr; group: ModuleGroup; args: AnnotationArgumentList; errors: das_string) : bool
 
-Implementation details of a function annotation macro.
+Wraps the annotated function body in an ``is_compiling_macros`` guard and sets ``macroInit`` flag so it only runs during macro module compilation.
 
 :Arguments: * **func** :  :ref:`FunctionPtr <alias-FunctionPtr>` 
 
@@ -216,14 +193,14 @@ Implementation details of a function annotation macro.
 
 .. das:attribute:: TagFunctionAnnotation : AstFunctionAnnotation
 
-This annotation is used for tagging specific funcstion.
+Implements the ``[tag_function]`` function annotation, which attaches named boolean tags to functions so they can be discovered and processed by ``[tag_function_macro]``.
 
 
 .. _function-ast_boost_TagFunctionAnnotation_rq_apply_TagFunctionAnnotation_FunctionPtr_ModuleGroup_AnnotationArgumentList_das_string:
 
 .. das:function:: TagFunctionAnnotation.apply(func: FunctionPtr; group: ModuleGroup; args: AnnotationArgumentList; errors: das_string) : bool
 
-Implementation details of a function annotation macro.
+Validates that all ``[tag_function(...)]`` annotation arguments are tag names (boolean flags) and rejects any non-boolean arguments with an error.
 
 :Arguments: * **func** :  :ref:`FunctionPtr <alias-FunctionPtr>` 
 
@@ -237,14 +214,14 @@ Implementation details of a function annotation macro.
 
 .. das:attribute:: TagStructureAnnotation : AstStructureAnnotation
 
-This annotation is used for tagging specific structure.
+Implements the ``[tag_structure]`` structure annotation, which attaches named boolean tags to structures for later discovery by macro code.
 
 
 .. _function-ast_boost_TagStructureAnnotation_rq_apply_TagStructureAnnotation_StructurePtr_ModuleGroup_AnnotationArgumentList_das_string:
 
 .. das:function:: TagStructureAnnotation.apply(str: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList; errors: das_string) : bool
 
-Implementation details of a function annotation macro.
+Validates that all ``[tag_structure(...)]`` annotation arguments are tag names (boolean flags) and rejects any non-boolean arguments with an error.
 
 :Arguments: * **str** :  :ref:`StructurePtr <alias-StructurePtr>` 
 
@@ -269,7 +246,7 @@ This is base class for any annotation or macro setup.
 
 .. das:function:: SetupAnyAnnotation.apply(st: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList; errors: das_string) : bool
 
-Implementation details for setting up any type of annotation in the ast_boost module.
+Generates a macro-init function that constructs an instance of the annotated class and registers it with the compiler under the specified ``name``.
 
 :Arguments: * **st** :  :ref:`StructurePtr <alias-StructurePtr>` 
 
@@ -283,7 +260,7 @@ Implementation details for setting up any type of annotation in the ast_boost mo
 
 .. das:function:: SetupAnyAnnotation.setup_call(st: StructurePtr; cll: smart_ptr<ExprCall>)
 
-Implementation details for how the call is set up for any annotation.
+Populates the registration call arguments — by default adds the annotation ``name`` as a string constant; overridden in subclasses to add extra parameters.
 
 :Arguments: * **st** :  :ref:`StructurePtr <alias-StructurePtr>` 
 
@@ -293,133 +270,133 @@ Implementation details for how the call is set up for any annotation.
 
 .. das:attribute:: SetupFunctionAnnotation : SetupAnyAnnotation
 
-:Fields: * **annotation_function_call** : string = "add_new_function_annotation" - This is base class for function annotation setup.
+:Fields: * **annotation_function_call** : string = "add_new_function_annotation" - Base class for creating function annotations via the ``[function_macro]`` structure annotation; registers an ``AstFunctionAnnotation`` with the compiler.
 
 
 .. _struct-ast_boost-SetupBlockAnnotation:
 
 .. das:attribute:: SetupBlockAnnotation : SetupAnyAnnotation
 
-:Fields: * **annotation_function_call** : string = "add_new_block_annotation" - This is base class for block annotation setup.
+:Fields: * **annotation_function_call** : string = "add_new_block_annotation" - Base class for creating block annotations via the ``[block_macro]`` structure annotation; registers an ``AstBlockAnnotation`` with the compiler.
 
 
 .. _struct-ast_boost-SetupStructureAnnotation:
 
 .. das:attribute:: SetupStructureAnnotation : SetupAnyAnnotation
 
-:Fields: * **annotation_function_call** : string = "add_new_structure_annotation" - This is base class for structure annotation setup.
+:Fields: * **annotation_function_call** : string = "add_new_structure_annotation" - Base class for creating structure annotations via the ``[structure_macro]`` structure annotation; registers an ``AstStructureAnnotation`` with the compiler.
 
 
 .. _struct-ast_boost-SetupEnumerationAnnotation:
 
 .. das:attribute:: SetupEnumerationAnnotation : SetupAnyAnnotation
 
-:Fields: * **annotation_function_call** : string = "add_new_enumeration_annotation" - [enumration_macro] implementation.
+:Fields: * **annotation_function_call** : string = "add_new_enumeration_annotation" - Base class for creating enumeration annotations via the ``[enumeration_macro]`` structure annotation; registers an ``AstEnumerationAnnotation`` with the compiler.
 
 
 .. _struct-ast_boost-SetupContractAnnotation:
 
 .. das:attribute:: SetupContractAnnotation : SetupAnyAnnotation
 
-:Fields: * **annotation_function_call** : string = "add_new_contract_annotation" - This is base class for contract annotation setup.
+:Fields: * **annotation_function_call** : string = "add_new_contract_annotation" - Base class for creating function contract annotations via the ``[contract]`` structure annotation; registers an ``AstFunctionAnnotation`` as a contract.
 
 
 .. _struct-ast_boost-SetupReaderMacro:
 
 .. das:attribute:: SetupReaderMacro : SetupAnyAnnotation
 
-:Fields: * **annotation_function_call** : string = "add_new_reader_macro" - [reader_macro] implementation.
+:Fields: * **annotation_function_call** : string = "add_new_reader_macro" - Base class for creating reader macros via the ``[reader_macro]`` structure annotation; registers an ``AstReaderMacro`` with the compiler.
 
 
 .. _struct-ast_boost-SetupCommentReader:
 
 .. das:attribute:: SetupCommentReader : SetupAnyAnnotation
 
-:Fields: * **annotation_function_call** : string = "add_new_comment_reader" - [comment_reader] implementation.
+:Fields: * **annotation_function_call** : string = "add_new_comment_reader" - Base class for creating comment readers via the ``[comment_reader]`` structure annotation; registers an ``AstCommentReader`` with the compiler.
 
 
 .. _struct-ast_boost-SetupVariantMacro:
 
 .. das:attribute:: SetupVariantMacro : SetupAnyAnnotation
 
-:Fields: * **annotation_function_call** : string = "add_new_variant_macro" - [variant_macro] implementation.
+:Fields: * **annotation_function_call** : string = "add_new_variant_macro" - Base class for creating variant macros via the ``[variant_macro]`` structure annotation; registers an ``AstVariantMacro`` with the compiler.
 
 
 .. _struct-ast_boost-SetupForLoopMacro:
 
 .. das:attribute:: SetupForLoopMacro : SetupAnyAnnotation
 
-:Fields: * **annotation_function_call** : string = "add_new_for_loop_macro" - [for_loop_macro] implementation.
+:Fields: * **annotation_function_call** : string = "add_new_for_loop_macro" - Base class for creating for-loop macros via the ``[for_loop_macro]`` structure annotation; registers an ``AstForLoopMacro`` with the compiler.
 
 
 .. _struct-ast_boost-SetupCaptureMacro:
 
 .. das:attribute:: SetupCaptureMacro : SetupAnyAnnotation
 
-:Fields: * **annotation_function_call** : string = "add_new_capture_macro" - [capture_macro] implementation.
+:Fields: * **annotation_function_call** : string = "add_new_capture_macro" - Base class for creating capture macros via the ``[capture_macro]`` structure annotation; registers an ``AstCaptureMacro`` with the compiler.
 
 
 .. _struct-ast_boost-SetupTypeMacro:
 
 .. das:attribute:: SetupTypeMacro : SetupAnyAnnotation
 
-:Fields: * **annotation_function_call** : string = "add_new_type_macro" - This is base class for type macro setup.
+:Fields: * **annotation_function_call** : string = "add_new_type_macro" - Base class for creating type macros via the ``[type_macro]`` structure annotation; registers an ``AstTypeMacro`` with the compiler.
 
 
 .. _struct-ast_boost-SetupSimulateMacro:
 
 .. das:attribute:: SetupSimulateMacro : SetupAnyAnnotation
 
-:Fields: * **annotation_function_call** : string = "add_new_simulate_macro" - This is base class for a simulate macro.
+:Fields: * **annotation_function_call** : string = "add_new_simulate_macro" - Base class for creating simulate macros via the ``[simulate_macro]`` structure annotation; registers an ``AstSimulateMacro`` with the compiler.
 
 
 .. _struct-ast_boost-SetupCallMacro:
 
 .. das:attribute:: SetupCallMacro : SetupAnyAnnotation
 
-:Fields: * **annotation_function_call** : string = "add_new_call_macro" - [call_macro] implementation.
+:Fields: * **annotation_function_call** : string = "add_new_call_macro" - Base class for creating call macros via the ``[call_macro]`` structure annotation; registers an ``AstCallMacro`` with the compiler.
 
 
 .. _struct-ast_boost-SetupTypeInfoMacro:
 
 .. das:attribute:: SetupTypeInfoMacro : SetupAnyAnnotation
 
-:Fields: * **annotation_function_call** : string = "add_new_typeinfo_macro" - [typeinfo_macro] implementation.
+:Fields: * **annotation_function_call** : string = "add_new_typeinfo_macro" - Base class for creating typeinfo macros via the ``[typeinfo_macro]`` structure annotation; registers an ``AstTypeInfoMacro`` with the compiler.
 
 
 .. _struct-ast_boost-SetupInferMacro:
 
 .. das:attribute:: SetupInferMacro : SetupAnyAnnotation
 
-:Fields: * **annotation_function_call** : string = "add_new_infer_macro" - [infer_macro] implementation.
+:Fields: * **annotation_function_call** : string = "add_new_infer_macro" - Base class for creating infer pass macros via the ``[infer_macro]`` structure annotation; registers an ``AstPassMacro`` that runs during the type inference pass.
 
 
 .. _struct-ast_boost-SetupDirtyInferMacro:
 
 .. das:attribute:: SetupDirtyInferMacro : SetupAnyAnnotation
 
-:Fields: * **annotation_function_call** : string = "add_new_dirty_infer_macro" - [dirty_infer_macro] implementation.
+:Fields: * **annotation_function_call** : string = "add_new_dirty_infer_macro" - Base class for creating dirty-infer pass macros via the ``[dirty_infer_macro]`` structure annotation; registers an ``AstPassMacro`` that runs during the dirty infer pass.
 
 
 .. _struct-ast_boost-SetupLintMacro:
 
 .. das:attribute:: SetupLintMacro : SetupAnyAnnotation
 
-:Fields: * **annotation_function_call** : string = "add_new_lint_macro" - [lint_macro] implementation.
+:Fields: * **annotation_function_call** : string = "add_new_lint_macro" - Base class for creating lint pass macros via the ``[lint_macro]`` structure annotation; registers an ``AstPassMacro`` that runs during the lint pass.
 
 
 .. _struct-ast_boost-SetupGlobalLintMacro:
 
 .. das:attribute:: SetupGlobalLintMacro : SetupAnyAnnotation
 
-:Fields: * **annotation_function_call** : string = "add_new_global_lint_macro" - [global_lint_macro] implementation.
+:Fields: * **annotation_function_call** : string = "add_new_global_lint_macro" - Base class for creating global lint pass macros via the ``[global_lint_macro]`` structure annotation; registers an ``AstPassMacro`` that runs during the global lint pass.
 
 
 .. _struct-ast_boost-SetupOptimizationMacro:
 
 .. das:attribute:: SetupOptimizationMacro : SetupAnyAnnotation
 
-:Fields: * **annotation_function_call** : string = "add_new_optimization_macro" - [optimization_macro] implementation.
+:Fields: * **annotation_function_call** : string = "add_new_optimization_macro" - Base class for creating optimization pass macros via the ``[optimization_macro]`` structure annotation; registers an ``AstPassMacro`` that runs during the optimization pass.
 
 
 .. _struct-ast_boost-TagFunctionMacro:
@@ -437,7 +414,7 @@ Implementation details for how the call is set up for any annotation.
 
 .. das:function:: TagFunctionMacro.apply(st: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList; errors: das_string) : bool
 
-Implementation details for setting up tag function annotation in the ast_boost module.
+Extends ``SetupAnyAnnotation`` apply to extract the required ``tag`` argument and register a ``setup_tag_annotation`` call that links the annotation to tagged functions.
 
 :Arguments: * **st** :  :ref:`StructurePtr <alias-StructurePtr>` 
 
@@ -451,7 +428,7 @@ Implementation details for setting up tag function annotation in the ast_boost m
 
 .. das:function:: TagFunctionMacro.setup_call(st: StructurePtr; cll: smart_ptr<ExprCall>)
 
-Implementation details for how the call is set up for tag function annotation.
+Overrides the default ``setup_call`` to pass both the annotation ``name`` and the ``tag`` string as arguments to ``setup_tag_annotation``.
 
 :Arguments: * **st** :  :ref:`StructurePtr <alias-StructurePtr>` 
 
@@ -461,14 +438,14 @@ Implementation details for how the call is set up for tag function annotation.
 
 .. das:attribute:: BetterRttiVisitor : AstVariantMacro
 
-Implements `expr is type` and `expr as type` checks, using RTTI.
+An ``AstVariantMacro`` that replaces ``is``, ``as``, and ``?as`` variant operations on ``Expression`` subclasses with runtime ``__rtti`` string checks and casts.
 
 
 .. _function-ast_boost_BetterRttiVisitor_rq_visitExprIsVariant_BetterRttiVisitor_ProgramPtr_Module_q__smart_ptr_ls_ExprIsVariant_gr_:
 
 .. das:function:: BetterRttiVisitor.visitExprIsVariant(prog: ProgramPtr; mod: Module?; expr: smart_ptr<ExprIsVariant>) : ExpressionPtr
 
-For Expr* replaces 'is' with check of __rtti, and returns true if it matches.
+Visitor override that replaces ``expr is Type`` on ``Expression`` subclasses with an ``__rtti`` string comparison, returning ``true`` if the runtime type matches.
 
 :Arguments: * **prog** :  :ref:`ProgramPtr <alias-ProgramPtr>` 
 
@@ -480,7 +457,7 @@ For Expr* replaces 'is' with check of __rtti, and returns true if it matches.
 
 .. das:function:: BetterRttiVisitor.visitExprAsVariant(prog: ProgramPtr; mod: Module?; expr: smart_ptr<ExprAsVariant>) : ExpressionPtr
 
-For Expr* replaced 'as' with cast, which checks __rtti.
+Visitor override that replaces ``expr as Type`` on ``Expression`` subclasses with an RTTI-checked cast via ``__rtti``, panicking on mismatch.
 
 :Arguments: * **prog** :  :ref:`ProgramPtr <alias-ProgramPtr>` 
 
@@ -492,7 +469,7 @@ For Expr* replaced 'as' with cast, which checks __rtti.
 
 .. das:function:: BetterRttiVisitor.visitExprSafeAsVariant(prog: ProgramPtr; mod: Module?; expr: smart_ptr<ExprSafeAsVariant>) : ExpressionPtr
 
-For Expr* replaces 'as' with cast, which checks __rtti.
+Visitor override that replaces ``expr ?as Type`` on ``Expression`` subclasses with an RTTI-checked cast via ``__rtti``, returning ``null`` on mismatch instead of panicking.
 
 :Arguments: * **prog** :  :ref:`ProgramPtr <alias-ProgramPtr>` 
 
@@ -513,7 +490,7 @@ Containers
 
 .. das:function:: emplace_new(vec: dasvector`smart_ptr`Expression; ptr: smart_ptr<Expression>)
 
-Emplaces newly created object into the container without memory leak (i.e. correct ptr_ref_count).
+Moves a newly created ``smart_ptr`` (``Expression``, ``TypeDecl``, ``Variable``, or ``MakeFieldDecl``) into a vector container with correct reference counting.
 
 :Arguments: * **vec** : vector<smart_ptr<Expression>>
 
@@ -523,7 +500,7 @@ Emplaces newly created object into the container without memory leak (i.e. corre
 
 .. das:function:: emplace_new(vec: dasvector`smart_ptr`TypeDecl; ptr: smart_ptr<TypeDecl>)
 
-Emplaces newly created object into the container without memory leak (i.e. correct ptr_ref_count).
+Moves a newly created ``smart_ptr`` (``Expression``, ``TypeDecl``, ``Variable``, or ``MakeFieldDecl``) into a vector container with correct reference counting.
 
 :Arguments: * **vec** : vector<smart_ptr<TypeDecl>>
 
@@ -533,7 +510,7 @@ Emplaces newly created object into the container without memory leak (i.e. corre
 
 .. das:function:: emplace_new(vec: dasvector`smart_ptr`Variable; ptr: smart_ptr<Variable>)
 
-Emplaces newly created object into the container without memory leak (i.e. correct ptr_ref_count).
+Moves a newly created ``smart_ptr`` (``Expression``, ``TypeDecl``, ``Variable``, or ``MakeFieldDecl``) into a vector container with correct reference counting.
 
 :Arguments: * **vec** : vector<smart_ptr<Variable>>
 
@@ -543,7 +520,7 @@ Emplaces newly created object into the container without memory leak (i.e. corre
 
 .. das:function:: emplace_new(vec: MakeStruct; ptr: smart_ptr<MakeFieldDecl>)
 
-Emplaces newly created object into the container without memory leak (i.e. correct ptr_ref_count).
+Moves a newly created ``smart_ptr`` (``Expression``, ``TypeDecl``, ``Variable``, or ``MakeFieldDecl``) into a vector container with correct reference counting.
 
 :Arguments: * **vec** :  :ref:`MakeStruct <handle-ast-MakeStruct>` 
 
@@ -567,7 +544,7 @@ Textual descriptions of the objects
 
 .. das:function:: describe(list: AnnotationArgumentList) : string
 
-Returns textual description of the object.
+Returns a human-readable textual representation of an AST object (``AnnotationArgumentList``, ``AnnotationDeclaration``, ``AnnotationList``, ``Variable``, or ``Expression``).
 
 :Arguments: * **list** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
 
@@ -575,7 +552,7 @@ Returns textual description of the object.
 
 .. das:function:: describe(ann: AnnotationDeclaration) : string
 
-Returns textual description of the object.
+Returns a human-readable textual representation of an AST object (``AnnotationArgumentList``, ``AnnotationDeclaration``, ``AnnotationList``, ``Variable``, or ``Expression``).
 
 :Arguments: * **ann** :  :ref:`AnnotationDeclaration <handle-rtti-AnnotationDeclaration>` 
 
@@ -583,7 +560,7 @@ Returns textual description of the object.
 
 .. das:function:: describe(list: AnnotationList) : string
 
-Returns textual description of the object.
+Returns a human-readable textual representation of an AST object (``AnnotationArgumentList``, ``AnnotationDeclaration``, ``AnnotationList``, ``Variable``, or ``Expression``).
 
 :Arguments: * **list** :  :ref:`AnnotationList <handle-rtti-AnnotationList>` 
 
@@ -591,7 +568,7 @@ Returns textual description of the object.
 
 .. das:function:: describe(vvar: VariablePtr) : string
 
-Returns textual description of the object.
+Returns a human-readable textual representation of an AST object (``AnnotationArgumentList``, ``AnnotationDeclaration``, ``AnnotationList``, ``Variable``, or ``Expression``).
 
 :Arguments: * **vvar** :  :ref:`VariablePtr <alias-VariablePtr>` 
 
@@ -599,7 +576,7 @@ Returns textual description of the object.
 
 .. das:function:: debug_expression(expr: ExpressionPtr; deFlags: DebugExpressionFlags = bitfield(0x0)) : string
 
-Gives hierarchical lisp-like textual representation of `expression` with all its subexpressions.
+Returns a hierarchical, Lisp-like textual dump of an ``ExpressionPtr`` tree showing RTTI types, field values, and nested sub-expressions for debugging.
 
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
@@ -609,7 +586,7 @@ Gives hierarchical lisp-like textual representation of `expression` with all its
 
 .. das:function:: debug_expression(expr: Expression?) : string
 
-Gives hierarchical lisp-like textual representation of `expression` with all its subexpressions.
+Returns a hierarchical, Lisp-like textual dump of an ``ExpressionPtr`` tree showing RTTI types, field values, and nested sub-expressions for debugging.
 
 :Arguments: * **expr** :  :ref:`Expression <handle-ast-Expression>` ?
 
@@ -617,7 +594,7 @@ Gives hierarchical lisp-like textual representation of `expression` with all its
 
 .. das:function:: describe(expr: Expression?) : string
 
-Returns textual description of the object.
+Returns a human-readable textual representation of an AST object (``AnnotationArgumentList``, ``AnnotationDeclaration``, ``AnnotationList``, ``Variable``, or ``Expression``).
 
 :Arguments: * **expr** :  :ref:`Expression <handle-ast-Expression>` ?
 
@@ -625,7 +602,7 @@ Returns textual description of the object.
 
 .. das:function:: describe_bitfield(bf: auto; merger: string = "") : auto
 
-Returns textual description of the bitfield.
+Returns a textual representation of the set bits in a bitfield value, listing the names of all active flags joined by the specified ``merger`` string.
 
 :Arguments: * **bf** : auto
 
@@ -635,7 +612,7 @@ Returns textual description of the bitfield.
 
 .. das:function:: describe_function_short(func: smart_ptr<Function>|Function?) : auto
 
-Gives short (name, arguments with types, result type) description of the function.
+Returns a compact signature string for a function in the form ``name (arg:Type; ...) : ReturnType``.
 
 :Arguments: * **func** : option< :ref:`FunctionPtr <alias-FunctionPtr>` | :ref:`Function <handle-ast-Function>` ?>
 
@@ -670,7 +647,7 @@ Queries
 
 .. das:function:: isVectorType(typ: Type) : bool
 
-Returns true if type is vector type, i.e. int2, float3, and such, including range and urange.
+Returns ``true`` if the given ``Type`` is a vector, range, or urange type (``int2``..``int4``, ``uint2``..``uint4``, ``float2``..``float4``, ``range``, ``urange``, ``range64``, ``urange64``).
 
 :Arguments: * **typ** :  :ref:`Type <enum-rtti-Type>` 
 
@@ -678,7 +655,7 @@ Returns true if type is vector type, i.e. int2, float3, and such, including rang
 
 .. das:function:: isExpression(t: TypeDeclPtr; top: bool = true) : bool
 
-Returns true if given object is derived from ast::Expression.
+Returns ``true`` if the given ``TypeDeclPtr`` refers to an ``ast`` module handled type whose name starts with ``Expr``, including pointer-to-expression types.
 
 :Arguments: * **t** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
 
@@ -688,7 +665,7 @@ Returns true if given object is derived from ast::Expression.
 
 .. das:function:: is_same_or_inherited(parent: Structure const?; child: Structure const?) : bool
 
-Returns true if child is the same class as parent, or is inherited from the parent.
+Returns ``true`` if ``child`` is the same ``Structure`` as ``parent`` or is transitively inherited from ``parent`` by walking the parent chain.
 
 :Arguments: * **parent** :  :ref:`Structure <handle-ast-Structure>` ?
 
@@ -698,7 +675,7 @@ Returns true if child is the same class as parent, or is inherited from the pare
 
 .. das:function:: is_class_method(cinfo: StructurePtr; finfo: TypeDeclPtr) : bool
 
-Returns true if field is a class method.
+Returns ``true`` if a ``TypeDeclPtr`` field represents a class method — a non-dim ``tFunction`` whose first argument is the class structure (or a parent of it).
 
 :Arguments: * **cinfo** :  :ref:`StructurePtr <alias-StructurePtr>` 
 
@@ -711,7 +688,7 @@ Returns true if field is a class method.
 .. warning:: 
   This function is deprecated.
 
-Find argument in annotation argument list.
+Searches an ``AnnotationArgumentList`` for an argument by name and returns its ``RttiValue``; returns ``nothing`` if the argument is not present.
 
 :Arguments: * **argn** : string
 
@@ -721,7 +698,7 @@ Find argument in annotation argument list.
 
 .. das:function:: find_arg(args: AnnotationArgumentList; argn: string) : RttiValue
 
-Find argument in annotation argument list.
+Searches an ``AnnotationArgumentList`` for an argument by name and returns its ``RttiValue``; returns ``nothing`` if the argument is not present.
 
 :Arguments: * **args** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
 
@@ -731,7 +708,7 @@ Find argument in annotation argument list.
 
 .. das:function:: find_unique_function(mod: Module?; name: string; canfail: bool = false) : smart_ptr<Function>
 
-Returns unique function of that specific name, or null if there is none or more than one.
+Searches the compiling program for exactly one non-generic function with the given name; returns it or ``null`` if zero or multiple matches exist.
 
 :Arguments: * **mod** :  :ref:`Module <handle-rtti-Module>` ?
 
@@ -743,7 +720,7 @@ Returns unique function of that specific name, or null if there is none or more 
 
 .. das:function:: find_unique_generic(mod: Module?; name: string; canfail: bool = false) : smart_ptr<Function>
 
-Returns unique generic function of that specific name, or null if there is none or more than one.
+Searches the compiling program for exactly one generic function with the given name; returns it or ``null`` if zero or multiple matches exist.
 
 :Arguments: * **mod** :  :ref:`Module <handle-rtti-Module>` ?
 
@@ -755,7 +732,7 @@ Returns unique generic function of that specific name, or null if there is none 
 
 .. das:function:: find_annotation(mod_name: string; ann_name: string) : Annotation const?
 
-Finds annotation in the module.
+Looks up an ``Annotation`` by name within the specified module during compilation and returns a pointer to it, or ``null`` if not found.
 
 :Arguments: * **mod_name** : string
 
@@ -765,7 +742,7 @@ Finds annotation in the module.
 
 .. das:function:: get_for_source_index(expr: smart_ptr<ExprFor>; svar: VariablePtr) : int
 
-Find index of the for loop source variable.
+Returns the zero-based index of a given iterator variable or source expression within a ``for`` loop's source list, or ``-1`` if not found.
 
 :Arguments: * **expr** : smart_ptr< :ref:`ExprFor <handle-ast-ExprFor>` >
 
@@ -775,7 +752,7 @@ Find index of the for loop source variable.
 
 .. das:function:: get_for_source_index(expr: smart_ptr<ExprFor>; source: ExpressionPtr) : int
 
-Find index of the for loop source variable.
+Returns the zero-based index of a given iterator variable or source expression within a ``for`` loop's source list, or ``-1`` if not found.
 
 :Arguments: * **expr** : smart_ptr< :ref:`ExprFor <handle-ast-ExprFor>` >
 
@@ -785,7 +762,7 @@ Find index of the for loop source variable.
 
 .. das:function:: isCMRES(fun: FunctionPtr) : bool
 
-Returns true if function returns result by copy-or-move on the stack, as oppose to through the register ABI.
+Returns ``true`` if a ``Function`` returns its result via copy-or-move-result-on-stack (CMRES) semantics rather than through a register.
 
 :Arguments: * **fun** :  :ref:`FunctionPtr <alias-FunctionPtr>` 
 
@@ -793,7 +770,7 @@ Returns true if function returns result by copy-or-move on the stack, as oppose 
 
 .. das:function:: isCMRES(fun: Function?) : bool
 
-Returns true if function returns result by copy-or-move on the stack, as oppose to through the register ABI.
+Returns ``true`` if a ``Function`` returns its result via copy-or-move-result-on-stack (CMRES) semantics rather than through a register.
 
 :Arguments: * **fun** :  :ref:`Function <handle-ast-Function>` ?
 
@@ -801,7 +778,7 @@ Returns true if function returns result by copy-or-move on the stack, as oppose 
 
 .. das:function:: isMakeLocal(expr: ExpressionPtr) : bool
 
-Returns true if Expression is inherited from ExprMakeLocal, i.e. ExprMakeArray, ExprMakeStruct, ExprMakeTuple, or ExprMakeVariant.
+Returns ``true`` if the expression is any ``ExprMakeLocal`` subclass: ``ExprMakeStruct``, ``ExprMakeArray``, ``ExprMakeTuple``, or ``ExprMakeVariant``.
 
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
@@ -809,7 +786,7 @@ Returns true if Expression is inherited from ExprMakeLocal, i.e. ExprMakeArray, 
 
 .. das:function:: isExprCallFunc(expr: ExpressionPtr) : bool
 
-Returns true if expression is ExprCallFunction.
+Returns ``true`` if the expression's RTTI tag is ``ExprCallFunc``, ``ExprOp``, ``ExprNew``, or ``ExprCall`` — i.e., any function-call-like expression.
 
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
@@ -817,13 +794,13 @@ Returns true if expression is ExprCallFunction.
 
 .. das:function:: get_workhorse_types() : Type[34]
 
-Returns array which contains all `workhorse` base types.
+Returns a fixed array of all commonly used ``Type`` values — booleans, strings, pointers, numeric scalars, enumerations, bitfields, vectors, and ranges.
 
 .. _function-ast_boost_find_argument_index_TypeDeclPtr_string:
 
 .. das:function:: find_argument_index(typ: TypeDeclPtr; name: string) : int
 
-Returns index of the specific argument name, or -1 if its not found.
+Searches the ``argNames`` of a ``TypeDeclPtr`` (tuple or variant) for the given name and returns its zero-based index, or ``-1`` if not found.
 
 :Arguments: * **typ** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
 
@@ -833,7 +810,7 @@ Returns index of the specific argument name, or -1 if its not found.
 
 .. das:function:: isCMRESType(blockT: TypeDeclPtr) : bool
 
-Returns true if type is copy-or-move on the stack, as oppose to through the register ABI.
+Returns ``true`` if a ``TypeDeclPtr`` represents a reference type without an explicit ``ref`` flag, meaning it will use copy-or-move-on-stack semantics.
 
 :Arguments: * **blockT** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
 
@@ -841,7 +818,7 @@ Returns true if type is copy-or-move on the stack, as oppose to through the regi
 
 .. das:function:: getVectorElementCount(bt: Type) : int
 
-Number of elements in the vector type, for example 3 for float3.
+Returns the number of scalar elements in a vector ``Type`` (e.g., 2 for ``float2``/``range``, 3 for ``float3``, 4 for ``float4``), or 0 for non-vector types.
 
 :Arguments: * **bt** :  :ref:`Type <enum-rtti-Type>` 
 
@@ -849,7 +826,7 @@ Number of elements in the vector type, for example 3 for float3.
 
 .. das:function:: getVectorElementSize(bt: Type) : int
 
-Size of individual element in the vector type, for example 4 in float2 and 8 in range64.
+Returns the byte size of a single scalar element in a vector ``Type`` — 8 for ``range64``/``urange64``, 4 for all other vector types.
 
 :Arguments: * **bt** :  :ref:`Type <enum-rtti-Type>` 
 
@@ -857,7 +834,7 @@ Size of individual element in the vector type, for example 4 in float2 and 8 in 
 
 .. das:function:: getVectorElementType(bt: Type) : Type
 
-Type of individual element in the vector type, for example float in float2.
+Returns the scalar ``Type`` of each element in a vector type (e.g., ``tFloat`` for ``float2``, ``tInt`` for ``int3`` and ``range``, ``tInt64`` for ``range64``).
 
 :Arguments: * **bt** :  :ref:`Type <enum-rtti-Type>` 
 
@@ -865,7 +842,7 @@ Type of individual element in the vector type, for example float in float2.
 
 .. das:function:: getVectorOffset(bt: Type; ident: string) : int
 
-Offset of the element in the vector type, for example 4 for "y" in float2.
+Returns the zero-based element index for a named swizzle component (``x``/``y``/``z``/``w`` or ``r``/``g``/``b``/``a``) within a vector ``Type``, or ``-1`` if out of bounds.
 
 :Arguments: * **bt** :  :ref:`Type <enum-rtti-Type>` 
 
@@ -893,7 +870,7 @@ Annotations
 
 .. das:function:: append_annotation(mod_name: string; ann_name: string; args: array<tuple<argname:string;argvalue:variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>>>) : smart_ptr<AnnotationDeclaration>
 
-Appends function annotation to the function given its name and arguments.
+Creates an ``AnnotationDeclaration`` for the named annotation (with optional typed arguments) and attaches it to a ``Function``, ``ExprBlock``, or ``Structure``.
 
 :Arguments: * **mod_name** : string
 
@@ -905,7 +882,7 @@ Appends function annotation to the function given its name and arguments.
 
 .. das:function:: append_annotation(mod_name: string; ann_name: string) : smart_ptr<AnnotationDeclaration>
 
-Appends function annotation to the function given its name and arguments.
+Creates an ``AnnotationDeclaration`` for the named annotation (with optional typed arguments) and attaches it to a ``Function``, ``ExprBlock``, or ``Structure``.
 
 :Arguments: * **mod_name** : string
 
@@ -915,7 +892,7 @@ Appends function annotation to the function given its name and arguments.
 
 .. das:function:: append_annotation(func: FunctionPtr; mod_name: string; ann_name: string)
 
-Appends function annotation to the function given its name and arguments.
+Creates an ``AnnotationDeclaration`` for the named annotation (with optional typed arguments) and attaches it to a ``Function``, ``ExprBlock``, or ``Structure``.
 
 :Arguments: * **func** :  :ref:`FunctionPtr <alias-FunctionPtr>` 
 
@@ -927,7 +904,7 @@ Appends function annotation to the function given its name and arguments.
 
 .. das:function:: append_annotation(blk: smart_ptr<ExprBlock>; mod_name: string; ann_name: string)
 
-Appends function annotation to the function given its name and arguments.
+Creates an ``AnnotationDeclaration`` for the named annotation (with optional typed arguments) and attaches it to a ``Function``, ``ExprBlock``, or ``Structure``.
 
 :Arguments: * **blk** : smart_ptr< :ref:`ExprBlock <handle-ast-ExprBlock>` >
 
@@ -939,7 +916,7 @@ Appends function annotation to the function given its name and arguments.
 
 .. das:function:: append_annotation(st: smart_ptr<Structure>; mod_name: string; ann_name: string)
 
-Appends function annotation to the function given its name and arguments.
+Creates an ``AnnotationDeclaration`` for the named annotation (with optional typed arguments) and attaches it to a ``Function``, ``ExprBlock``, or ``Structure``.
 
 :Arguments: * **st** : smart_ptr< :ref:`Structure <handle-ast-Structure>` >
 
@@ -951,7 +928,7 @@ Appends function annotation to the function given its name and arguments.
 
 .. das:function:: append_annotation(func: FunctionPtr; mod_name: string; ann_name: string; args: array<tuple<argname:string;argvalue:variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>>>)
 
-Appends function annotation to the function given its name and arguments.
+Creates an ``AnnotationDeclaration`` for the named annotation (with optional typed arguments) and attaches it to a ``Function``, ``ExprBlock``, or ``Structure``.
 
 :Arguments: * **func** :  :ref:`FunctionPtr <alias-FunctionPtr>` 
 
@@ -965,7 +942,7 @@ Appends function annotation to the function given its name and arguments.
 
 .. das:function:: append_annotation(blk: smart_ptr<ExprBlock>; mod_name: string; ann_name: string; args: array<tuple<argname:string;argvalue:variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>>>)
 
-Appends function annotation to the function given its name and arguments.
+Creates an ``AnnotationDeclaration`` for the named annotation (with optional typed arguments) and attaches it to a ``Function``, ``ExprBlock``, or ``Structure``.
 
 :Arguments: * **blk** : smart_ptr< :ref:`ExprBlock <handle-ast-ExprBlock>` >
 
@@ -979,7 +956,7 @@ Appends function annotation to the function given its name and arguments.
 
 .. das:function:: append_annotation(st: smart_ptr<Structure>; mod_name: string; ann_name: string; args: array<tuple<argname:string;argvalue:variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>>>)
 
-Appends function annotation to the function given its name and arguments.
+Creates an ``AnnotationDeclaration`` for the named annotation (with optional typed arguments) and attaches it to a ``Function``, ``ExprBlock``, or ``Structure``.
 
 :Arguments: * **st** : smart_ptr< :ref:`Structure <handle-ast-Structure>` >
 
@@ -993,7 +970,7 @@ Appends function annotation to the function given its name and arguments.
 
 .. das:function:: add_annotation_argument(arguments: AnnotationArgumentList; argName: string; val: bool) : int
 
-Adds annotation argument to the argument list.
+Adds a typed annotation argument (``bool``, ``int``, ``float``, ``string``, or ``AnnotationArgument``) to an ``AnnotationArgumentList`` and returns the new argument index.
 
 :Arguments: * **arguments** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
 
@@ -1005,7 +982,7 @@ Adds annotation argument to the argument list.
 
 .. das:function:: add_annotation_argument(arguments: AnnotationArgumentList; argName: string; val: int) : int
 
-Adds annotation argument to the argument list.
+Adds a typed annotation argument (``bool``, ``int``, ``float``, ``string``, or ``AnnotationArgument``) to an ``AnnotationArgumentList`` and returns the new argument index.
 
 :Arguments: * **arguments** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
 
@@ -1017,7 +994,7 @@ Adds annotation argument to the argument list.
 
 .. das:function:: add_annotation_argument(arguments: AnnotationArgumentList; argName: string; val: float) : int
 
-Adds annotation argument to the argument list.
+Adds a typed annotation argument (``bool``, ``int``, ``float``, ``string``, or ``AnnotationArgument``) to an ``AnnotationArgumentList`` and returns the new argument index.
 
 :Arguments: * **arguments** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
 
@@ -1029,7 +1006,7 @@ Adds annotation argument to the argument list.
 
 .. das:function:: add_annotation_argument(arguments: AnnotationArgumentList; argName: string; val: string) : int
 
-Adds annotation argument to the argument list.
+Adds a typed annotation argument (``bool``, ``int``, ``float``, ``string``, or ``AnnotationArgument``) to an ``AnnotationArgumentList`` and returns the new argument index.
 
 :Arguments: * **arguments** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
 
@@ -1041,7 +1018,7 @@ Adds annotation argument to the argument list.
 
 .. das:function:: add_annotation_argument(arguments: AnnotationArgumentList; ann: AnnotationArgument) : int
 
-Adds annotation argument to the argument list.
+Adds a typed annotation argument (``bool``, ``int``, ``float``, ``string``, or ``AnnotationArgument``) to an ``AnnotationArgumentList`` and returns the new argument index.
 
 :Arguments: * **arguments** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
 
@@ -1063,7 +1040,7 @@ Expression generation
 
 .. das:function:: override_method(str: StructurePtr; name: string; funcName: string) : bool
 
-Override class method `name` with new function.
+Replaces the initializer of a field named ``name`` in the given structure with an ``@@funcName`` function address cast, effectively overriding that class method.
 
 :Arguments: * **str** :  :ref:`StructurePtr <alias-StructurePtr>` 
 
@@ -1075,13 +1052,13 @@ Override class method `name` with new function.
 
 .. das:function:: panic_expr_as() : void?
 
-Function call which panics with "invalid 'as' expression or null pointer dereference" message.
+Helper function that panics with ``"invalid 'as' expression or null pointer dereference"`` and returns ``null`` — used as the failure branch in ``as`` variant casts.
 
 .. _function-ast_boost_make_static_assert_false_string_LineInfo:
 
 .. das:function:: make_static_assert_false(text: string; at: LineInfo) : smart_ptr<ExprStaticAssert>
 
-Creates `static_assert(false,text)` expression.
+Creates an ``ExprStaticAssert`` expression node that always fails at compile time with the given error message text.
 
 :Arguments: * **text** : string
 
@@ -1091,7 +1068,7 @@ Creates `static_assert(false,text)` expression.
 
 .. das:function:: convert_to_expression(value: auto& ==const; at: LineInfo) : auto
 
-Converts value to expression, which generates this value.
+Converts a runtime value of any supported type to an equivalent AST ``ExpressionPtr`` that would produce that value when compiled, using ``typeinfo`` for reflection.
 
 :Arguments: * **value** : auto&!
 
@@ -1101,7 +1078,7 @@ Converts value to expression, which generates this value.
 
 .. das:function:: convert_to_expression(value: auto ==const; at: LineInfo) : auto
 
-Converts value to expression, which generates this value.
+Converts a runtime value of any supported type to an equivalent AST ``ExpressionPtr`` that would produce that value when compiled, using ``typeinfo`` for reflection.
 
 :Arguments: * **value** : auto!
 
@@ -1111,7 +1088,7 @@ Converts value to expression, which generates this value.
 
 .. das:function:: convert_to_expression(value: auto ==const) : auto
 
-Converts value to expression, which generates this value.
+Converts a runtime value of any supported type to an equivalent AST ``ExpressionPtr`` that would produce that value when compiled, using ``typeinfo`` for reflection.
 
 :Arguments: * **value** : auto!
 
@@ -1119,7 +1096,7 @@ Converts value to expression, which generates this value.
 
 .. das:function:: convert_to_expression(value: auto ==const) : auto
 
-Converts value to expression, which generates this value.
+Converts a runtime value of any supported type to an equivalent AST ``ExpressionPtr`` that would produce that value when compiled, using ``typeinfo`` for reflection.
 
 :Arguments: * **value** : auto!
 
@@ -1133,7 +1110,7 @@ Visitors
 
 .. das:function:: visit_finally(blk: ExprBlock?; adapter: smart_ptr<VisitorAdapter>)
 
-Calls visitor on the `finally` section of the block.
+Invokes the given ``VisitorAdapter`` on the ``finally`` section of an ``ExprBlock``, allowing macro visitors to inspect or transform finally-block code.
 
 :Arguments: * **blk** :  :ref:`ExprBlock <handle-ast-ExprBlock>` ?
 
@@ -1149,7 +1126,7 @@ Type generation
 
 .. das:function:: function_to_type(fn: FunctionPtr) : TypeDeclPtr
 
-Returns TypeDeclPtr of the tFunction type, based on the provided function.
+Constructs a ``TypeDeclPtr`` of ``tFunction`` base type from a ``FunctionPtr``, capturing its argument types and names plus the return type.
 
 :Arguments: * **fn** :  :ref:`FunctionPtr <alias-FunctionPtr>` 
 
@@ -1166,7 +1143,7 @@ Setup
 
 .. das:function:: setup_call_list(name: string; at: LineInfo; subblock: block<(var fn:FunctionPtr):void>) : ExprBlock?
 
-Create new function which will contain collection of calls. Returns body block to where the call is to be appended.
+Creates or locates a compilation-phase setup function (``__setup_macros``) and returns its body ``ExprBlock`` so callers can append registration calls to it.
 
 :Arguments: * **name** : string
 
@@ -1178,7 +1155,7 @@ Create new function which will contain collection of calls. Returns body block t
 
 .. das:function:: setup_call_list(name: string; at: LineInfo; isInit: bool = false; isPrivate: bool = true; isLateInit: bool = false) : ExprBlock?
 
-Create new function which will contain collection of calls. Returns body block to where the call is to be appended.
+Creates or locates a compilation-phase setup function (``__setup_macros``) and returns its body ``ExprBlock`` so callers can append registration calls to it.
 
 :Arguments: * **name** : string
 
@@ -1194,7 +1171,7 @@ Create new function which will contain collection of calls. Returns body block t
 
 .. das:function:: setup_macro(name: string; at: LineInfo) : ExprBlock?
 
-Setup macro initialization function, which will only be called during compilation of this module. Returns body block to where the macro initialization is to be appended.
+Creates or locates a macro initialization function (``__setup_macros``) guarded by ``is_compiling_macros`` and returns its body block for appending macro registration code.
 
 :Arguments: * **name** : string
 
@@ -1204,7 +1181,7 @@ Setup macro initialization function, which will only be called during compilatio
 
 .. das:function:: setup_tag_annotation(name: string; tag: string; classPtr: auto) : auto
 
-Creates annotation and applies it to all tagged functions given tag.
+Creates an ``AstFunctionAnnotation`` instance and automatically applies it to every function that carries a matching ``[tag_function(tag)]`` annotation in the module.
 
 :Arguments: * **name** : string
 
@@ -1220,7 +1197,7 @@ Uncategorized
 
 .. das:function:: Function?`is`BuiltInFunction(foo: Function?) : bool
 
-Returns true if foo is BuiltInFunction.
+Returns ``true`` if the given ``Function?`` has the ``builtIn`` flag set, indicating it is a ``BuiltInFunction``; returns ``false`` for any other type.
 
 :Arguments: * **foo** :  :ref:`Function <handle-ast-Function>` ?
 
@@ -1228,7 +1205,7 @@ Returns true if foo is BuiltInFunction.
 
 .. das:function:: Function?`as`BuiltInFunction(foo: Function?) : BuiltInFunction?
 
-Returns the BuiltInFunction or panics.
+Casts a ``Function?`` to ``BuiltInFunction?`` via ``reinterpret``, verifying the target is a built-in function first (panics otherwise).
 
 :Arguments: * **foo** :  :ref:`Function <handle-ast-Function>` ?
 
@@ -1236,7 +1213,7 @@ Returns the BuiltInFunction or panics.
 
 .. das:function:: Function?`is`ExternalFnBase(foo: Function?) : bool
 
-Returns true if foo is ExternalFnBase.
+Returns ``true`` if the given ``Function?`` is both ``builtIn`` and has the ``propertyFunction`` flag, indicating it is an ``ExternalFnBase``; returns ``false`` otherwise.
 
 :Arguments: * **foo** :  :ref:`Function <handle-ast-Function>` ?
 
@@ -1244,7 +1221,7 @@ Returns true if foo is ExternalFnBase.
 
 .. das:function:: Function?`as`ExternalFnBase(foo: Function?) : ExternalFnBase?
 
-Returns ExternalFnBase or panics.
+Casts a ``Function?`` to ``ExternalFnBase?`` via ``reinterpret``, verifying it is a property-flagged built-in function first (panics otherwise).
 
 :Arguments: * **foo** :  :ref:`Function <handle-ast-Function>` ?
 
@@ -1252,7 +1229,7 @@ Returns ExternalFnBase or panics.
 
 .. das:function:: Annotation?`is`FunctionAnnotation(foo: Annotation?) : bool
 
-Returns true if foo is FunctionAnnotation.
+Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a ``FunctionAnnotation`` according to its ``isFunctionAnnotation`` property.
 
 :Arguments: * **foo** :  :ref:`Annotation <handle-rtti-Annotation>` ?
 
@@ -1260,7 +1237,7 @@ Returns true if foo is FunctionAnnotation.
 
 .. das:function:: smart_ptr<Annotation>`is`FunctionAnnotation(foo: smart_ptr<Annotation>) : bool
 
-Returns true if foo is FunctionAnnotation.
+Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a ``FunctionAnnotation`` according to its ``isFunctionAnnotation`` property.
 
 :Arguments: * **foo** : smart_ptr< :ref:`Annotation <handle-rtti-Annotation>` >
 
@@ -1268,7 +1245,7 @@ Returns true if foo is FunctionAnnotation.
 
 .. das:function:: Annotation?`as`FunctionAnnotation(foo: Annotation?) : FunctionAnnotation?
 
-Returns FunctionAnnotation or panics.
+Casts an ``Annotation?`` or ``smart_ptr<Annotation>`` to ``FunctionAnnotation?`` via ``reinterpret``, verifying the annotation kind first (panics otherwise).
 
 :Arguments: * **foo** :  :ref:`Annotation <handle-rtti-Annotation>` ?
 
@@ -1276,7 +1253,7 @@ Returns FunctionAnnotation or panics.
 
 .. das:function:: smart_ptr<Annotation>`as`FunctionAnnotation(foo: smart_ptr<Annotation>) : FunctionAnnotation?
 
-Returns FunctionAnnotation or panics.
+Casts an ``Annotation?`` or ``smart_ptr<Annotation>`` to ``FunctionAnnotation?`` via ``reinterpret``, verifying the annotation kind first (panics otherwise).
 
 :Arguments: * **foo** : smart_ptr< :ref:`Annotation <handle-rtti-Annotation>` >
 
@@ -1284,7 +1261,7 @@ Returns FunctionAnnotation or panics.
 
 .. das:function:: Annotation?`is`StructureAnnotation(foo: Annotation?) : bool
 
-Returns true if foo is StructureAnnotation.
+Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a ``StructureAnnotation`` according to its ``isStructureAnnotation`` property.
 
 :Arguments: * **foo** :  :ref:`Annotation <handle-rtti-Annotation>` ?
 
@@ -1292,7 +1269,7 @@ Returns true if foo is StructureAnnotation.
 
 .. das:function:: smart_ptr<Annotation>`is`StructureAnnotation(foo: smart_ptr<Annotation>) : bool
 
-Returns true if foo is StructureAnnotation.
+Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a ``StructureAnnotation`` according to its ``isStructureAnnotation`` property.
 
 :Arguments: * **foo** : smart_ptr< :ref:`Annotation <handle-rtti-Annotation>` >
 
@@ -1300,7 +1277,7 @@ Returns true if foo is StructureAnnotation.
 
 .. das:function:: Annotation?`as`StructureAnnotation(foo: Annotation?) : StructureAnnotation?
 
-Returns StructureAnnotation or panics.
+Casts an ``Annotation?`` or ``smart_ptr<Annotation>`` to ``StructureAnnotation?`` via ``reinterpret``, verifying the annotation kind first (panics otherwise).
 
 :Arguments: * **foo** :  :ref:`Annotation <handle-rtti-Annotation>` ?
 
@@ -1308,7 +1285,7 @@ Returns StructureAnnotation or panics.
 
 .. das:function:: smart_ptr<Annotation>`as`StructureAnnotation(foo: smart_ptr<Annotation>) : StructureAnnotation?
 
-Returns StructureAnnotation or panics.
+Casts an ``Annotation?`` or ``smart_ptr<Annotation>`` to ``StructureAnnotation?`` via ``reinterpret``, verifying the annotation kind first (panics otherwise).
 
 :Arguments: * **foo** : smart_ptr< :ref:`Annotation <handle-rtti-Annotation>` >
 
@@ -1316,7 +1293,7 @@ Returns StructureAnnotation or panics.
 
 .. das:function:: walk_and_convert(data: uint8 const?; info: TypeDeclPtr; at: LineInfo) : ExpressionPtr
 
-Walks data and converts it to an AST which generates such data.
+Recursively walks raw data bytes using a ``TypeDeclPtr`` schema and builds an equivalent AST expression tree that would reproduce that data when compiled.
 
 :Arguments: * **data** : uint8?
 
@@ -1328,7 +1305,7 @@ Walks data and converts it to an AST which generates such data.
 
 .. das:function:: auto`is`BuiltInFunction(anything: auto) : auto
 
-Returns true if foo is BuiltInFunction.
+Returns ``true`` if the given ``Function?`` has the ``builtIn`` flag set, indicating it is a ``BuiltInFunction``; returns ``false`` for any other type.
 
 :Arguments: * **anything** : auto
 
@@ -1336,7 +1313,7 @@ Returns true if foo is BuiltInFunction.
 
 .. das:function:: auto`is`ExternalFnBase(anything: auto) : auto
 
-Returns true if foo is ExternalFnBase.
+Returns ``true`` if the given ``Function?`` is both ``builtIn`` and has the ``propertyFunction`` flag, indicating it is an ``ExternalFnBase``; returns ``false`` otherwise.
 
 :Arguments: * **anything** : auto
 
@@ -1344,7 +1321,7 @@ Returns true if foo is ExternalFnBase.
 
 .. das:function:: auto`is`FunctionAnnotation(anything: auto) : auto
 
-Returns true if foo is FunctionAnnotation.
+Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a ``FunctionAnnotation`` according to its ``isFunctionAnnotation`` property.
 
 :Arguments: * **anything** : auto
 
@@ -1352,7 +1329,7 @@ Returns true if foo is FunctionAnnotation.
 
 .. das:function:: auto`is`StructureAnnotation(anything: auto) : auto
 
-Returns true if foo is StructureAnnotation.
+Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a ``StructureAnnotation`` according to its ``isStructureAnnotation`` property.
 
 :Arguments: * **anything** : auto
 

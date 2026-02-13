@@ -1,1 +1,1 @@
-For Expr* replaces 'is' with check of __rtti, and returns true if it matches.
+Visitor override that replaces ``expr is Type`` on ``Expression`` subclasses with an ``__rtti`` string comparison, returning ``true`` if the runtime type matches.

@@ -1,1 +1,1 @@
-Iterates though each handled type in the module.
+Iterates through each annotation (handled type) in the given ``Module``, yielding an ``Annotation`` pointer for each registered annotation.

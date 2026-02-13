@@ -1,1 +1,1 @@
-Adds `AstReaderMacro` adapter to the specific module.
+Adds an AstReaderMacro adapter to the specified module.

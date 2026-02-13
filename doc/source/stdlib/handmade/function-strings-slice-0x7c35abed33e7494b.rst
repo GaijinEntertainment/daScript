@@ -1,1 +1,1 @@
-Return all part of the strings starting at start and ending by end. Start can be negative (-1 means "1 from the end").
+Returns a substring of `str` from index `start` to optional `end` (exclusive), where negative indices count from the end of the string.

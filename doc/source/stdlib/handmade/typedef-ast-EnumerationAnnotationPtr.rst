@@ -1,1 +1,1 @@
-Smart pointer to `EnumerationAnnotation` object.
+Smart pointer to an `EnumerationAnnotation` object. Used for registering and managing enumeration annotation macros.

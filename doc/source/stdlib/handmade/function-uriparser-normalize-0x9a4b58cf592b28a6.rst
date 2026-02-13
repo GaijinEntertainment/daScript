@@ -1,1 +1,1 @@
-Normalizes URI, i.e. removes redundant `/` and `.` characters.
+Normalizes a ``Uri`` in place, removing redundant ``/``, ``.``, and ``..`` path segments.

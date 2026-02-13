@@ -1,1 +1,1 @@
-Iterates over all type macros registered in the given module, calling the provided block for each one.
+Iterates over all type macros registered in the given module, invoking the provided block for each one.

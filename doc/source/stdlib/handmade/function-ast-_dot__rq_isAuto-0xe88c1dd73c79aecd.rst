@@ -1,1 +1,1 @@
-Returns if somewhere in the type definition there is an auto type.
+Returns whether the type definition contains an auto type.

@@ -1,1 +1,1 @@
-Clones `TypeDecl` with subtypes.
+Clones a TypeDecl along with all its subtypes.

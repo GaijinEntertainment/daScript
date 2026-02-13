@@ -1,1 +1,1 @@
-indicates that the lint pass should be skipped for the specific function
+Skips all lint-pass checks for the annotated function, suppressing any lint warnings or errors it would produce.

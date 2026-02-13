@@ -1,1 +1,1 @@
-Generates FunctInfo? for the specified function, given DebugInfoHelper.
+Generates a FuncInfo for the specified function using the given DebugInfoHelper.

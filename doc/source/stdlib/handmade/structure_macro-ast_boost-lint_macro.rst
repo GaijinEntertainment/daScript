@@ -1,1 +1,1 @@
-Turns AstPassMacro into a macro with the specified 'name', which is called during the `lint` pass.
+The ``[lint_macro]`` structure annotation — registers an ``AstPassMacro`` subclass that is invoked during the lint compilation pass.

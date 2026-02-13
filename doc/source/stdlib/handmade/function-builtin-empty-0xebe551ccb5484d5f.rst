@@ -1,1 +1,1 @@
-returns true if iterator is empty, i.e. would not produce any more values or uninitialized
+Checks whether the table `a` contains no entries and returns `true` if it is empty.

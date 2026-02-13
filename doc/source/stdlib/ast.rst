@@ -711,140 +711,117 @@ properties of the `ExprIf` object.
 
 .. das:attribute:: ExpressionPtr = smart_ptr<Expression>
 
-Smart pointer to `Expression` object.
-
+Smart pointer to an `Expression` object. The fundamental handle type for all AST expression nodes.
 .. _alias-ProgramPtr:
 
 .. das:attribute:: ProgramPtr = smart_ptr<Program>
 
-Smart pointer to `Program` object.
-
+Smart pointer to a `Program` object. Represents the root of a compiled daScript program, containing all modules, functions, and structures.
 .. _alias-TypeDeclPtr:
 
 .. das:attribute:: TypeDeclPtr = smart_ptr<TypeDecl>
 
-Smart pointer to `TypeDecl` object.
-
+Smart pointer to a `TypeDecl` object. The fundamental handle type for all type declarations in the AST type system.
 .. _alias-VectorTypeDeclPtr:
 
 .. das:attribute:: VectorTypeDeclPtr = dasvector`smart_ptr`TypeDecl
 
-Smart pointer to das::vector<ExpressionPtr>.
-
+Smart pointer to a ``das::vector<ExpressionPtr>``. Represents an ordered collection of type declarations, typically used for function argument lists and tuple fields.
 .. _alias-EnumerationPtr:
 
 .. das:attribute:: EnumerationPtr = smart_ptr<Enumeration>
 
-Smart pointer to `Enumeration` object.
-
+Smart pointer to an `Enumeration` object. Used for creating and manipulating enumeration declarations in the AST.
 .. _alias-StructurePtr:
 
 .. das:attribute:: StructurePtr = smart_ptr<Structure>
 
-Smart pointer to `Structure` object.
-
+Smart pointer to a `Structure` object. Used for creating and manipulating structure declarations in the AST.
 .. _alias-FunctionPtr:
 
 .. das:attribute:: FunctionPtr = smart_ptr<Function>
 
-Smart pointer to `Function` object.
-
+Smart pointer to a `Function` object. Used for creating and manipulating function declarations in the AST.
 .. _alias-VariablePtr:
 
 .. das:attribute:: VariablePtr = smart_ptr<Variable>
 
-Smart pointer to `Variable` object.
-
+Smart pointer to a `Variable` object. Used for creating and manipulating variable declarations in the AST.
 .. _alias-MakeFieldDeclPtr:
 
 .. das:attribute:: MakeFieldDeclPtr = smart_ptr<MakeFieldDecl>
 
-Smart pointer to `MakeFieldDecl` object.
-
+Smart pointer to a `MakeFieldDecl` object. Represents a single field initializer in structure or variant construction expressions.
 .. _alias-ExprMakeBlockPtr:
 
 .. das:attribute:: ExprMakeBlockPtr = smart_ptr<ExprMakeBlock>
 
-Smart pointer to 'ExprMakeBlock'.
-
+Smart pointer to an `ExprMakeBlock` expression. Wraps block or lambda creation expressions in the AST.
 .. _alias-FunctionAnnotationPtr:
 
 .. das:attribute:: FunctionAnnotationPtr = smart_ptr<FunctionAnnotation>
 
-Smart pointer to `FunctionAnnotation` object.
-
+Smart pointer to a `FunctionAnnotation` object. Used for registering and managing function annotation macros.
 .. _alias-StructureAnnotationPtr:
 
 .. das:attribute:: StructureAnnotationPtr = smart_ptr<StructureAnnotation>
 
-Smart pointer to `StructureAnnotation` object.
-
+Smart pointer to a `StructureAnnotation` object. Used for registering and managing structure annotation macros.
 .. _alias-EnumerationAnnotationPtr:
 
 .. das:attribute:: EnumerationAnnotationPtr = smart_ptr<EnumerationAnnotation>
 
-Smart pointer to `EnumerationAnnotation` object.
-
+Smart pointer to an `EnumerationAnnotation` object. Used for registering and managing enumeration annotation macros.
 .. _alias-PassMacroPtr:
 
 .. das:attribute:: PassMacroPtr = smart_ptr<PassMacro>
 
-Smart pointer to `PassMacro` object.
-
+Smart pointer to a `PassMacro` object. Used for registering and managing custom inference pass macros.
 .. _alias-VariantMacroPtr:
 
 .. das:attribute:: VariantMacroPtr = smart_ptr<VariantMacro>
 
-Smart pointer to `VariantMacro` object.
-
+Smart pointer to a `VariantMacro` object. Used for registering and managing custom variant dispatch macros.
 .. _alias-ReaderMacroPtr:
 
 .. das:attribute:: ReaderMacroPtr = smart_ptr<ReaderMacro>
 
-Smart pointer to `ReaderMacro` object.
-
+Smart pointer to a `ReaderMacro` object. Used for registering and managing custom reader (parsing) macros.
 .. _alias-CommentReaderPtr:
 
 .. das:attribute:: CommentReaderPtr = smart_ptr<CommentReader>
 
-Smart pointer to `CommentReader` object.
-
+Smart pointer to a `CommentReader` object. Used for registering and managing custom comment parsing macros.
 .. _alias-CallMacroPtr:
 
 .. das:attribute:: CallMacroPtr = smart_ptr<CallMacro>
 
-Smart pointer to `CallMacro` object.
-
+Smart pointer to a `CallMacro` object. Used for registering and managing custom call-like expression macros.
 .. _alias-TypeInfoMacroPtr:
 
 .. das:attribute:: TypeInfoMacroPtr = smart_ptr<TypeInfoMacro>
 
-Smart pointer to `TypeInfoMacro` object.
-
+Smart pointer to a `TypeInfoMacro` object. Used for registering and managing custom ``typeinfo`` trait macros.
 .. _alias-ForLoopMacroPtr:
 
 .. das:attribute:: ForLoopMacroPtr = smart_ptr<ForLoopMacro>
 
-Smart pointer to 'ForLoopMacro'.
-
+Smart pointer to a `ForLoopMacro` object. Used for registering and managing custom for-loop macros.
 .. _alias-CaptureMacroPtr:
 
 .. das:attribute:: CaptureMacroPtr = smart_ptr<CaptureMacro>
 
-Smart pointer to 'CaptureMacro'.
-
+Smart pointer to a `CaptureMacro` object. Used for registering and managing custom lambda capture macros.
 .. _alias-TypeMacroPtr:
 
 .. das:attribute:: TypeMacroPtr = smart_ptr<TypeMacro>
 
-Smart pointer to `TypeMacro` object.
-
+Smart pointer to a `TypeMacro` object. Used for registering and managing custom type declaration macros.
 .. _alias-SimulateMacroPtr:
 
 .. das:attribute:: SimulateMacroPtr = smart_ptr<SimulateMacro>
 
-Smart pointer to `SimulateMacro` object.
-
+Smart pointer to a `SimulateMacro` object. Used for registering and managing macros that hook into the simulation phase.
 ++++++++++++
 Enumerations
 ++++++++++++
@@ -903,7 +880,7 @@ Handled structures
 
 .. das:attribute:: ModuleLibrary
 
-Object which holds list of `Module` and provides access to them.
+ Object which holds list of `Module` and provides access to them.
 
 
 .. _handle-ast-Expression:
@@ -939,91 +916,91 @@ Returns whether the given type can be ahead-of-time compiled.
 
 .. das:function:: TypeDecl implicit.isExprType() : bool
 
-Returns if somewhere in the type hierarchy the given type is an expression type.
+Returns whether the type hierarchy contains an expression type.
 
 .. _function-ast__dot__rq_isSimpleType_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isSimpleType() : bool
 
-Returns if the given type is a simple type, and does not need resolve at infer time. Nor is it `void`.
+Returns whether the given type is a simple non-void type that does not require resolution at inference time.
 
 .. _function-ast__dot__rq_isArray_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isArray() : bool
 
-Returns if the given type is an array type.
+Returns whether the given type is an array type.
 
 .. _function-ast__dot__rq_isGoodIteratorType_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isGoodIteratorType() : bool
 
-Returns if the given type is an iterator type.
+Returns whether the given type is an iterator type.
 
 .. _function-ast__dot__rq_isGoodArrayType_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isGoodArrayType() : bool
 
-Returns if the given type is a dynamic array type.
+Returns whether the given type is a dynamic array type.
 
 .. _function-ast__dot__rq_isGoodTableType_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isGoodTableType() : bool
 
-Returns if the given type is a table type.
+Returns whether the given type is a table type.
 
 .. _function-ast__dot__rq_isGoodBlockType_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isGoodBlockType() : bool
 
-Returns if the given type is a block type.
+Returns whether the given type is a block type.
 
 .. _function-ast__dot__rq_isGoodFunctionType_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isGoodFunctionType() : bool
 
-Returns if the given type is a function type.
+Returns whether the given type is a function type.
 
 .. _function-ast__dot__rq_isGoodLambdaType_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isGoodLambdaType() : bool
 
-Returns if the given type is a lambda type.
+Returns whether the given type is a lambda type.
 
 .. _function-ast__dot__rq_isGoodTupleType_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isGoodTupleType() : bool
 
-Returns if the given type is a tuple type.
+Returns whether the given type is a tuple type.
 
 .. _function-ast__dot__rq_isGoodVariantType_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isGoodVariantType() : bool
 
-Returns if the given type is a variant type.
+Returns whether the given type is a variant type.
 
 .. _function-ast__dot__rq_isVoid_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isVoid() : bool
 
-Returns if the given type is a void type.
+Returns whether the given type is the void type.
 
 .. _function-ast__dot__rq_isAnyType_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isAnyType() : bool
 
-Returns whether the given type is the Any type (C++ side vec4f, passed via standard interop).
+Returns whether the given type is the any type, passed as vec4f via standard C++ interop.
 
 .. _function-ast__dot__rq_isRef_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isRef() : bool
 
-Returns if the given type is a reference value.
+Returns whether the given type is a reference value.
 
 .. _function-ast__dot__rq_isRefType_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isRefType() : bool
 
-Returns if the given type is a reference type.
+Returns whether the given type is a reference type.
 
 .. _function-ast__dot__rq_canWrite_TypeDecl_implicit:
 
@@ -1035,19 +1012,19 @@ Returns whether the given type can be written to.
 
 .. das:function:: TypeDecl implicit.isAotAlias() : bool
 
-Returns if somewhere in the type definition it is an AOT alias type.
+Returns whether the type definition contains an AOT alias type.
 
 .. _function-ast__dot__rq_isShareable_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isShareable() : bool
 
-Returns if the given type is a shareable type.
+Returns whether the given type is shareable across contexts.
 
 .. _function-ast__dot__rq_isIndex_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isIndex() : bool
 
-Returns if the given type is an index type.
+Returns whether the given type is an index type.
 
 .. _function-ast__dot__rq_isBool_TypeDecl_implicit:
 
@@ -1059,121 +1036,121 @@ Returns whether the given type is a boolean type.
 
 .. das:function:: TypeDecl implicit.isInteger() : bool
 
-Returns if the given type is an integer type.
+Returns whether the given type is an integer type.
 
 .. _function-ast__dot__rq_isSignedInteger_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isSignedInteger() : bool
 
-Returns if the given type is a signed integer type.
+Returns whether the given type is a signed integer type.
 
 .. _function-ast__dot__rq_isUnsignedInteger_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isUnsignedInteger() : bool
 
-Returns if the given type is an unsigned integer type.
+Returns whether the given type is an unsigned integer type.
 
 .. _function-ast__dot__rq_isSignedIntegerOrIntVec_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isSignedIntegerOrIntVec() : bool
 
-Returns if the given type is a signed integer or signed integer vector type.
+Returns whether the given type is a signed integer or signed integer vector type.
 
 .. _function-ast__dot__rq_isUnsignedIntegerOrIntVec_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isUnsignedIntegerOrIntVec() : bool
 
-Returns if the given type is an unsigned integer or unsigned integer vector type.
+Returns whether the given type is an unsigned integer or unsigned integer vector type.
 
 .. _function-ast__dot__rq_isFloatOrDouble_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isFloatOrDouble() : bool
 
-Returns if the given type is a float or double type.
+Returns whether the given type is a float or double type.
 
 .. _function-ast__dot__rq_isNumeric_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isNumeric() : bool
 
-Returns if the given type is a numeric type.
+Returns whether the given type is a numeric type.
 
 .. _function-ast__dot__rq_isNumericComparable_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isNumericComparable() : bool
 
-Returns if the given type is a numeric comparable type.
+Returns whether the given type supports numeric comparison.
 
 .. _function-ast__dot__rq_isPointer_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isPointer() : bool
 
-Returns if the given type is a pointer type.
+Returns whether the given type is a pointer type.
 
 .. _function-ast__dot__rq_isSmartPointer_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isSmartPointer() : bool
 
-Returns if the given type is a smart pointer type.
+Returns whether the given type is a smart pointer type.
 
 .. _function-ast__dot__rq_isVoidPointer_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isVoidPointer() : bool
 
-Returns if the given type is a void pointer type.
+Returns whether the given type is a void pointer type.
 
 .. _function-ast__dot__rq_isIterator_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isIterator() : bool
 
-Returns if the given type is an iterator type.
+Returns whether the given type is an iterator type.
 
 .. _function-ast__dot__rq_isEnum_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isEnum() : bool
 
-Returns if the given type is an enum type.
+Returns whether the given type is an enumeration type.
 
 .. _function-ast__dot__rq_isEnumT_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isEnumT() : bool
 
-Returns if the given type's base type is an enum type.
+Returns whether the base type of the given type is an enumeration type.
 
 .. _function-ast__dot__rq_isHandle_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isHandle() : bool
 
-Returns if the given type is a handle type, i.e. a C++ type exposed to DaScript via TypeAnnotation.
+Returns whether the given type is a handle type, representing a C++ type exposed to daScript via TypeAnnotation.
 
 .. _function-ast__dot__rq_isStructure_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isStructure() : bool
 
-Returns if the given type is a structure type.
+Returns whether the given type is a structure type.
 
 .. _function-ast__dot__rq_isClass_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isClass() : bool
 
-Returns if the given type is a class type.
+Returns whether the given type is a class type.
 
 .. _function-ast__dot__rq_isFunction_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isFunction() : bool
 
-Returns if the given type is a function type.
+Returns whether the given type is a function type.
 
 .. _function-ast__dot__rq_isTuple_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isTuple() : bool
 
-Returns if the given type is a tuple type.
+Returns whether the given type is a tuple type.
 
 .. _function-ast__dot__rq_isVariant_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isVariant() : bool
 
-Returns if the given type is a variant type.
+Returns whether the given type is a variant type.
 
 .. _function-ast__dot__rq_sizeOf_TypeDecl_implicit:
 
@@ -1185,24 +1162,26 @@ Returns the size of the given type in bytes.
 
 .. das:function:: TypeDecl implicit.countOf() : int
 
-Returns the number of elements in the given type if it is a fixed array; otherwise, returns 1.
+Returns the number of elements if the given type is a fixed array, otherwise returns 1.
 
 .. _function-ast__dot__rq_alignOf_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.alignOf() : int
 
-Returns the alignment requirement (in bytes) of the type declaration.
+Returns the memory alignment requirement of the type in bytes.
+def TypeDecl implicit.alignOf (this: TypeDecl implicit) : int
+
 .. _function-ast__dot__rq_baseSizeOf_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.baseSizeOf() : int
 
-Returns the size of the given type in bytes, not accounting for the fixed array dimensions.
+Returns the size of the given type in bytes, excluding fixed array dimensions.
 
 .. _function-ast__dot__rq_stride_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.stride() : int
 
-Returns if the given type is a fixed array, return the size of its stride (indexed element) in bytes.
+Returns the stride size in bytes of an element in a fixed array type.
 
 .. _function-ast__dot__rq_tupleSize_TypeDecl_implicit:
 
@@ -1256,13 +1235,13 @@ Returns whether the given type can be cloned from a const instance.
 
 .. das:function:: TypeDecl implicit.canNew() : bool
 
-Returns whether the given type can be instantiated via 'new' on the heap.
+Returns whether the given type can be heap-allocated via the new operator.
 
 .. _function-ast__dot__rq_canDeletePtr_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.canDeletePtr() : bool
 
-Returns whether the given type can have its pointer deleted.
+Returns whether the pointer to the given type can be deleted.
 
 .. _function-ast__dot__rq_canDelete_TypeDecl_implicit:
 
@@ -1274,145 +1253,145 @@ Returns whether the given type can be deleted.
 
 .. das:function:: TypeDecl implicit.needDelete() : bool
 
-Returns if the given type requires deletion.
+Returns whether the given type requires explicit deletion.
 
 .. _function-ast__dot__rq_isPod_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isPod() : bool
 
-Returns if the given type is a pod (plain old data) type.
+Returns whether the given type is a plain old data (POD) type.
 
 .. _function-ast__dot__rq_isRawPod_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isRawPod() : bool
 
-Returns if the given type is a raw pod (plain old data without any pointers or strings) type.
+Returns whether the given type is a raw POD type containing no pointers or strings.
 
 .. _function-ast__dot__rq_isNoHeapType_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isNoHeapType() : bool
 
-Returns if the given type is a no-heap type, i.e. can be used without heap allocation.
+Returns whether the given type can be used without heap allocation.
 
 .. _function-ast__dot__rq_isWorkhorseType_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isWorkhorseType() : bool
 
-Returns if the given type is a workhorse type, which is a built-in non-ref type.
+Returns whether the given type is a workhorse type, which is a built-in non-reference type.
 
 .. _function-ast__dot__rq_isPolicyType_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isPolicyType() : bool
 
-Returns if the given type is a policy type, i.e. there are SimNodes available for it.
+Returns whether the given type is a policy type with SimNode implementations available for it.
 
 .. _function-ast__dot__rq_isVecPolicyType_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isVecPolicyType() : bool
 
-Returns if the given type is a vector policy type, which is any policy type which is not a string.
+Returns whether the given type is a vector policy type, which is any policy type other than string.
 
 .. _function-ast__dot__rq_isReturnType_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isReturnType() : bool
 
-Returns if the given type is a return type (basically anything but block).
+Returns whether the given type can be used as a return type, which includes anything except block.
 
 .. _function-ast__dot__rq_isCtorType_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isCtorType() : bool
 
-Returns if the given basic type is a constructor type, i.e. can be constructed via type name, for example int(3.4)
+Returns whether the given basic type is a constructor type that can be constructed via its type name, such as int(3.4).
 
 .. _function-ast__dot__rq_isRange_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isRange() : bool
 
-Returns if the given type is a range type.
+Returns whether the given type is a range type.
 
 .. _function-ast__dot__rq_isString_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isString() : bool
 
-Returns if the given type is a string type.
+Returns whether the given type is a string type.
 
 .. _function-ast__dot__rq_isConst_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isConst() : bool
 
-Returns if the given type is a const type.
+Returns whether the given type is const-qualified.
 
 .. _function-ast__dot__rq_isFoldable_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isFoldable() : bool
 
-Returns if the given type is a foldable type, like integer or float and unlike pointer or array.
+Returns whether the given type is foldable, such as integer or float, as opposed to pointer or array.
 
 .. _function-ast__dot__rq_isAlias_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isAlias() : bool
 
-Returns of somehwere in the type definition it is an alias type.
+Returns whether the type definition contains an alias type.
 
 .. _function-ast__dot__rq_isAutoArrayResolved_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isAutoArrayResolved() : bool
 
-Returns if the fixed array dimensions are fully resolved (no 'auto' or expression dimensions).
+Returns whether all fixed array dimensions are fully resolved with no auto or expression dimensions remaining.
 
 .. _function-ast__dot__rq_isAuto_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isAuto() : bool
 
-Returns if somewhere in the type definition there is an auto type.
+Returns whether the type definition contains an auto type.
 
 .. _function-ast__dot__rq_isAutoOrAlias_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isAutoOrAlias() : bool
 
-Returns if somewhere in the type definition there is an auto or alias type.
+Returns whether the type definition contains an auto or alias type.
 
 .. _function-ast__dot__rq_isVectorType_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isVectorType() : bool
 
-Returns if the given type is a vector type, like int2 float3, or range64.
+Returns whether the given type is a vector type such as int2, float3, or range64.
 
 .. _function-ast__dot__rq_isBitfield_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isBitfield() : bool
 
-Returns whether the given type is a bitfield.
+Returns whether the given type is a bitfield type.
 
 .. _function-ast__dot__rq_isLocal_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.isLocal() : bool
 
-Returns if the given type is a local type, i.e. can be allocated on stack.
+Returns whether the given type is a local type that can be allocated on the stack.
 
 .. _function-ast__dot__rq_hasClasses_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.hasClasses() : bool
 
-Returns whether somewhere in the type definition there are classes.
+Returns whether the type definition contains any class types.
 
 .. _function-ast__dot__rq_hasNonTrivialCtor_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.hasNonTrivialCtor() : bool
 
-Returns whether somewhere in the type definition there are non-trivial constructors.
+Returns whether the type definition contains any non-trivial constructors.
 
 .. _function-ast__dot__rq_hasNonTrivialDtor_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.hasNonTrivialDtor() : bool
 
-Returns if somehwere in the type definition there are non-trivial destructors.
+Returns whether the type definition contains any non-trivial destructors.
 
 .. _function-ast__dot__rq_hasNonTrivialCopy_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.hasNonTrivialCopy() : bool
 
-Returns if somehwere in the type definition there are non-trivial copy operations.
+Returns whether the type definition contains any non-trivial copy operations.
 
 .. _function-ast__dot__rq_canBePlacedInContainer_TypeDecl_implicit:
 
@@ -1424,37 +1403,37 @@ Returns whether the given type can be placed in a container.
 
 .. das:function:: TypeDecl implicit.vectorBaseType() : Type
 
-Returns the base type of a vector type, e.g. for vector4 it returns float.
+Returns the scalar base type of a vector type, for example float for float4.
 
 .. _function-ast__dot__rq_vectorDim_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.vectorDim() : int
 
-Returns the dimension of a vector type, e.g. for vector4 it returns 4.
+Returns the number of components in a vector type, for example 4 for float4.
 
 .. _function-ast__dot__rq_canInitWithZero_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.canInitWithZero() : bool
 
-Returns whether the given type can be initialized with zero (i.e. memset its memory to zero).
+Returns whether the given type can be initialized by zeroing its memory.
 
 .. _function-ast__dot__rq_rangeBaseType_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.rangeBaseType() : Type
 
-Returns the base type of a range type, e.g. for range64 it returns int64.
+Returns the base type of a range type, for example int64 for range64.
 
 .. _function-ast__dot__rq_unsafeInit_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.unsafeInit() : bool
 
-Returns if the given type requires initialization, and its unsafe to skip it.
+Returns whether the given type requires initialization and skipping it would be unsafe.
 
 .. _function-ast__dot__rq_get_mnh_TypeDecl_implicit:
 
 .. das:function:: TypeDecl implicit.get_mnh() : uint64
 
-Returns mangled name hash for the given type.
+Returns the mangled name hash of the given type.
 
 :Properties: * **canAot** : bool
 
@@ -1761,19 +1740,19 @@ Enumeration declaration.
 
 .. das:function:: Function implicit.origin() : Function?
 
-Returns the origin function, i.e. which generic it came from (if any).
+Returns the origin function, indicating which generic function this was instantiated from, if any.
 
 .. _function-ast__dot__rq_getMangledNameHash_Function_implicit:
 
 .. das:function:: Function implicit.getMangledNameHash() : uint64
 
-Returns mangled name hash for the given function.
+Returns the mangled name hash of the given function.
 
 .. _function-ast__dot__rq_isGeneric_Function_implicit:
 
 .. das:function:: Function implicit.isGeneric() : bool
 
-Returns if the given function is a generic function.
+Returns whether the given function is a generic function.
 
 :Properties: * **origin** :  :ref:`Function <handle-ast-Function>` ?
 
@@ -1826,7 +1805,7 @@ Function declaration.
 
 .. das:attribute:: BuiltInFunction
 
-Bindings for the 'BuiltInFunction', which is used for the builtin (bound) functions in daScript.
+Bindings for the 'BuiltInFunction', which is used for the builtin (bound) functions in Daslang.
 
 :Fields: * **annotations** :  :ref:`AnnotationList <handle-rtti-AnnotationList>`  - Annotations attached to this function
 
@@ -1874,7 +1853,7 @@ Bindings for the 'BuiltInFunction', which is used for the builtin (bound) functi
 .. das:attribute:: ExternalFnBase
 
 Base class for external function bindings.
-Bindings for the 'BuiltInFunction', which is used for the builtin (bound) functions in daScript.
+Bindings for the 'BuiltInFunction', which is used for the builtin (bound) functions in Daslang.
 
 :Fields: * **annotations** :  :ref:`AnnotationList <handle-rtti-AnnotationList>`  - Annotations attached to this function
 
@@ -1942,7 +1921,7 @@ Returns whether the given variable is never accessed in the code.
 
 .. das:function:: Variable implicit.getMangledNameHash() : uint64
 
-Returns mangled name hash for the given function.
+Returns the mangled name hash of the given function.
 
 :Properties: * **isAccessUnused** : bool
 
@@ -2392,7 +2371,7 @@ Is expression for variants and such (`expr is Foo`).
 
 .. das:attribute:: ExprOp
 
-Compilation time only base class for any operator.
+ Compilation time only base class for any operator.
 
 
 .. _handle-ast-ExprOp2:
@@ -2779,7 +2758,7 @@ Any make expression (`ExprMakeBlock`, `ExprMakeTuple`, `ExprMakeVariant`, `ExprM
 
 .. das:attribute:: ExprMakeStruct
 
-ake structure expression (`[[YourStruct v1=expr1elem1, v2=expr2elem1, ...; v1=expr1elem2, ...  ]]`)
+ ake structure expression (`[[YourStruct v1=expr1elem1, v2=expr2elem1, ...; v1=expr1elem2, ...  ]]`)
 
 :Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  -  Location of the expression in source code
 
@@ -2844,32 +2823,33 @@ Make variant expression (`[YourVariant variantName=expr1]`)
 .. das:attribute:: ExprMakeArray
 
 Make array expression (`[[auto 1;2;3]]` or `[{auto "foo";"bar"}]` for static and dynamic arrays accordingly).
+Location of the expression in source code
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Type of the expression
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+         * **__rtti** : string - Expression generation flags
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression print flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Type being made
 
-         * **makeType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type being made
+         * **makeType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Stack top offset for the data, if applicable
 
-         * **stackTop** : uint - Stack top offset for the data, if applicable
+         * **stackTop** : uint - Extra offset for the data, if applicable. If part of the larger initialization, extra offset is that
 
-         * **extraOffset** : uint - Extra offset for the data, if applicable. If part of the larger initialization, extra offset is that
+         * **extraOffset** : uint - Flags specific to make-local expressions
 
-         * **makeFlags** :  :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>`  - Flags specific to make-local expressions
+         * **makeFlags** :  :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>`  - Type of the array elements
 
-         * **recordType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the array elements
+         * **recordType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Array of expressions for the elements
 
-         * **values** : vector<smart_ptr<Expression>> - Array of expressions for the elements
+         * **values** : vector<smart_ptr<Expression>> - If gen2 syntax is used (i.e. `[...]` instead of `[[...]]`)
 
-         * **gen2** : bool - If gen2 syntax is used (i.e. `[...]` instead of `[[...]]`)
+         * **gen2** : bool
 
 
 .. _handle-ast-ExprMakeTuple:
@@ -3230,7 +3210,7 @@ Debug expression (`debug(x)` or `debug(x,"x=")`)
 
 .. das:function:: ExprInvoke implicit.isCopyOrMove() : bool
 
-Returns if the given invoke expression requires copy or move of a ref type.
+Returns whether the given invoke expression requires a copy or move of a reference type.
 
 :Properties: * **isCopyOrMove** : bool
 
@@ -3539,7 +3519,7 @@ Vector swizzle operatrion (`vec.xxy` or `vec.y`)
 
 .. das:function:: ExprField implicit.field() : FieldDeclaration?
 
-Returns pointer to a field of a structure, or null if the field does not exist or its not a structure.
+Returns a pointer to the named field of a structure, or null if the field does not exist or the type is not a structure.
 
 :Properties: * **field** :  :ref:`FieldDeclaration <handle-ast-FieldDeclaration>` ?
 
@@ -3612,32 +3592,33 @@ Safe field lookup (`foo?.bar`)
 .. das:attribute:: ExprIsVariant
 
 Is expression (`foo is bar`)
+Location of the expression in source code
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Type of the expression
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+         * **__rtti** : string - Expression generation flags
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression print flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Subexpression whose field is being accessed
 
-         * **value** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Subexpression whose field is being accessed
+         * **value** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Name of the field being accessed
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the field being accessed
+         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Location of the field access in source code
 
-         * **atField** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the field access in source code
+         * **atField** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Index of the field in the type's field list
 
-         * **fieldIndex** : int - Index of the field in the type's field list
+         * **fieldIndex** : int - Type annotation for the field
 
-         * **annotation** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` > - Type annotation for the field
+         * **annotation** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` > - Flags for dereferencing operations
 
-         * **derefFlags** :  :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>`  - Flags for dereferencing operations
+         * **derefFlags** :  :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>`  - Flags specific to field access expressions
 
-         * **fieldFlags** :  :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>`  - Flags specific to field access expressions
+         * **fieldFlags** :  :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>` 
 
 
 .. _handle-ast-ExprAsVariant:
@@ -3885,7 +3866,7 @@ Compilation time only fake context expression. Will simulate as current evaluati
 
 .. das:function:: ExprFakeLineInfo implicit.getValue() : void?
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : void?
 
@@ -3916,7 +3897,7 @@ Compilation time only fake lineinfo expression. Will simulate as current file an
 
 .. das:function:: ExprConstPtr implicit.getValue() : void?
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : void?
 
@@ -3947,7 +3928,7 @@ Null (`null`). Technically can be any other pointer, but it is used for nullptr.
 
 .. das:function:: ExprConstInt8 implicit.getValue() : int8
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : int8
 
@@ -3978,7 +3959,7 @@ Holds int8 constant.
 
 .. das:function:: ExprConstInt16 implicit.getValue() : int16
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : int16
 
@@ -4009,7 +3990,7 @@ Holds int16 constant.
 
 .. das:function:: ExprConstInt64 implicit.getValue() : int64
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : int64
 
@@ -4040,7 +4021,7 @@ Holds int64 constant.
 
 .. das:function:: ExprConstInt implicit.getValue() : int
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : int
 
@@ -4071,7 +4052,7 @@ Holds int constant.
 
 .. das:function:: ExprConstInt2 implicit.getValue() : int2
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : int2
 
@@ -4102,7 +4083,7 @@ Holds int2 constant.
 
 .. das:function:: ExprConstInt3 implicit.getValue() : int3
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : int3
 
@@ -4133,7 +4114,7 @@ Holds int3 constant.
 
 .. das:function:: ExprConstInt4 implicit.getValue() : int4
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : int4
 
@@ -4164,7 +4145,7 @@ Holds int4 constant.
 
 .. das:function:: ExprConstUInt8 implicit.getValue() : uint8
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : uint8
 
@@ -4195,7 +4176,7 @@ Holds uint8 constant.
 
 .. das:function:: ExprConstUInt16 implicit.getValue() : uint16
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : uint16
 
@@ -4226,7 +4207,7 @@ Holds uint16 constant.
 
 .. das:function:: ExprConstUInt64 implicit.getValue() : uint64
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : uint64
 
@@ -4257,7 +4238,7 @@ Holds uint64 constant.
 
 .. das:function:: ExprConstUInt implicit.getValue() : uint
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : uint
 
@@ -4288,7 +4269,7 @@ Holds uint constant.
 
 .. das:function:: ExprConstUInt2 implicit.getValue() : uint2
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : uint2
 
@@ -4319,7 +4300,7 @@ Holds uint2 constant.
 
 .. das:function:: ExprConstUInt3 implicit.getValue() : uint3
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : uint3
 
@@ -4350,7 +4331,7 @@ Holds uint3 constant.
 
 .. das:function:: ExprConstUInt4 implicit.getValue() : uint4
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : uint4
 
@@ -4381,7 +4362,7 @@ Holds uint4 constant.
 
 .. das:function:: ExprConstRange implicit.getValue() : range
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : range
 
@@ -4412,7 +4393,7 @@ Holds range constant.
 
 .. das:function:: ExprConstURange implicit.getValue() : urange
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : urange
 
@@ -4443,7 +4424,7 @@ Holds urange constant.
 
 .. das:function:: ExprConstRange64 implicit.getValue() : range64
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : range64
 
@@ -4474,7 +4455,7 @@ Holds range64 constant.
 
 .. das:function:: ExprConstURange64 implicit.getValue() : urange64
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : urange64
 
@@ -4505,7 +4486,7 @@ Holds urange64 constant.
 
 .. das:function:: ExprConstFloat implicit.getValue() : float
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : float
 
@@ -4536,7 +4517,7 @@ Holds float constant.
 
 .. das:function:: ExprConstFloat2 implicit.getValue() : float2
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : float2
 
@@ -4567,7 +4548,7 @@ Holds float2 constant.
 
 .. das:function:: ExprConstFloat3 implicit.getValue() : float3
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : float3
 
@@ -4598,7 +4579,7 @@ Holds float3 constant.
 
 .. das:function:: ExprConstFloat4 implicit.getValue() : float4
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : float4
 
@@ -4629,7 +4610,7 @@ Holds float4 constant.
 
 .. das:function:: ExprConstDouble implicit.getValue() : double
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : double
 
@@ -4660,7 +4641,7 @@ Holds double constant.
 
 .. das:function:: ExprConstBool implicit.getValue() : bool
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : bool
 
@@ -4814,7 +4795,7 @@ Holds enumeration constant, both type and entry (`Foo bar`).
 
 .. das:function:: ExprConstBitfield implicit.getValue() : uint64
 
-Returns the pointer value to the LineInfo * associated with the expression, as a void pointer.
+Returns the LineInfo pointer associated with the expression as a void pointer.
 
 :Properties: * **getValue** : uint64
 
@@ -4887,28 +4868,28 @@ Unsafe expression (`unsafe(addr(x))`)
 
 .. das:attribute:: VisitorAdapter
 
-Adapter for the `AstVisitor` interface.
+ Adapter for the `AstVisitor` interface.
 
 
 .. _handle-ast-FunctionAnnotation:
 
 .. das:attribute:: FunctionAnnotation
 
-Adapter for the `AstFunctionAnnotation`.
+ Adapter for the `AstFunctionAnnotation`.
 
 
 .. _handle-ast-StructureAnnotation:
 
 .. das:attribute:: StructureAnnotation
 
-Adapter for the `AstStructureAnnotation`.
+ Adapter for the `AstStructureAnnotation`.
 
 
 .. _handle-ast-EnumerationAnnotation:
 
 .. das:attribute:: EnumerationAnnotation
 
-Adapater for the `AstEnumearationAnnotation`.
+ Adapater for the `AstEnumearationAnnotation`.
 
 
 .. _handle-ast-PassMacro:
@@ -4935,7 +4916,7 @@ Adapter for the `AstReaderMacro`.
 
 .. das:attribute:: CommentReader
 
-Adapter for the `AstCommentReader`.
+ Adapter for the `AstCommentReader`.
 
 
 .. _handle-ast-CallMacro:
@@ -5054,8 +5035,7 @@ Call macros
 
 .. das:attribute:: quote
 
-Returns ast expression tree of the input, without evaluating or infering it.
-
+Returns the AST expression tree of the provided code without evaluating or type-inferring it. Used in macro programming to capture source code as a manipulable AST.
 +++++++++++++++
 Typeinfo macros
 +++++++++++++++
@@ -5064,14 +5044,12 @@ Typeinfo macros
 
 .. das:attribute:: ast_typedecl
 
-Returns TypeDeclPtr of the type specified via type<> or subexpression type, for example typeinfo(ast_typedecl type<int?>)
-
+Returns a `TypeDeclPtr` for the type specified via `type<>` or subexpression type, for example `typeinfo(ast_typedecl type<int?>)`. Useful in macros that need compile-time access to type declarations.
 .. _call-macro-ast-ast_function:
 
 .. das:attribute:: ast_function
 
-Returns FunctionPtr to the function specified by subexrepssion, for example typeinfo(ast_function @@foo)
-
+Returns a `FunctionPtr` to the function specified by the subexpression, for example ``typeinfo(ast_function @@foo)``. Useful in macros that need compile-time access to function declarations.
 +++++++++++++
 Handled types
 +++++++++++++
@@ -5080,8 +5058,7 @@ Handled types
 
 .. das:attribute:: MakeStruct
 
-Part of `ExprMakeStruct`, happens to be vector of `MakeFieldDecl`.
-
+Annotation representing a vector of `MakeFieldDecl` used to initialize fields in `ExprMakeStruct` expressions.
 +++++++
 Classes
 +++++++
@@ -5090,105 +5067,105 @@ Classes
 
 .. das:attribute:: AstFunctionAnnotation
 
-Annotation macro which is attached to the `Function`.
+Annotation macro that attaches to `Function` declarations. Provides compile-time hooks for transforming functions, adding finalization logic, and controlling function compilation behavior.
 
 
 .. _struct-ast-AstBlockAnnotation:
 
 .. das:attribute:: AstBlockAnnotation
 
-Annotation macro which is attached to the `ExprBlock`.
+Annotation macro that attaches to `ExprBlock` nodes. Provides compile-time hooks for inspecting and transforming code blocks, including loop bodies and scoped blocks.
 
 
 .. _struct-ast-AstStructureAnnotation:
 
 .. das:attribute:: AstStructureAnnotation
 
-Annotation macro which is attached to the `Structure`.
+Annotation macro that attaches to `Structure` declarations. Provides compile-time hooks for inspecting and modifying structure definitions, fields, and layout.
 
 
 .. _struct-ast-AstPassMacro:
 
 .. das:attribute:: AstPassMacro
 
-This macro is used to implement custom `infer` passes.
+Macro that executes as an additional inference pass during compilation. Allows injecting custom analysis and transformation logic into the type-inference pipeline.
 
 
 .. _struct-ast-AstVariantMacro:
 
 .. das:attribute:: AstVariantMacro
 
-This macro is used to implement custom `is`, `as` and `?as` expressions.
+Macro for implementing custom ``is``, ``as``, and ``?as`` expressions. Allows user-defined variant-like dispatch and type-checking patterns beyond the built-in variant type.
 
 
 .. _struct-ast-AstForLoopMacro:
 
 .. das:attribute:: AstForLoopMacro
 
-This macro is used to implement custom for-loop handlers. It is similar to visitExprFor callback of the AstVisitor.
+Macro for implementing custom for-loop iteration patterns. Intercepts for-loop expressions during compilation, similar to the ``visitExprFor`` callback of `AstVisitor`.
 
 
 .. _struct-ast-AstCaptureMacro:
 
 .. das:attribute:: AstCaptureMacro
 
-This macro is used to implement custom lambda capturing functionality.
+Macro for implementing custom lambda capture behavior. Controls how variables are captured from the enclosing scope when creating lambdas and generators.
 
 
 .. _struct-ast-AstTypeMacro:
 
 .. das:attribute:: AstTypeMacro
 
-Macro which is part of the type declaration, for example $type_macro_name<type_macro_type_args...>(type_macro_args).
+Macro that participates in type declarations, enabling syntax like ``$macro_name<type_args...>(args)`` for custom type construction and transformation.
 
 
 .. _struct-ast-AstSimulateMacro:
 
 .. das:attribute:: AstSimulateMacro
 
-Macro which is attached to the context simulation.
+Macro that hooks into the context simulation phase — the final compilation step where the AST is translated into executable simulation nodes.
 
 
 .. _struct-ast-AstReaderMacro:
 
 .. das:attribute:: AstReaderMacro
 
-This macro is used to implement custom parsing functionality, i.e. anything starting with %NameOfTheMacro~ and ending when the macro says it ends.
+Macro for implementing custom parsing syntax using the ``%MacroName~`` notation. The reader macro controls the start and end of the custom parsing region and produces an AST expression from the parsed content.
 
 
 .. _struct-ast-AstCommentReader:
 
 .. das:attribute:: AstCommentReader
 
-This macro is used to implement custom comment parsing function (such as doxygen-style documentation etc).
+Macro for implementing custom comment parsing, such as extracting doxygen-style documentation or other structured metadata from source comments during compilation.
 
 
 .. _struct-ast-AstCallMacro:
 
 .. das:attribute:: AstCallMacro
 
-This macro is used to implement custom call-like expressions ( like `foo(bar,bar2,...)` ).
+Macro for implementing custom call-like expressions (e.g. ``foo(bar, bar2, ...)``). The macro intercepts specific function calls during compilation and can rewrite them into arbitrary AST.
 
 
 .. _struct-ast-AstTypeInfoMacro:
 
 .. das:attribute:: AstTypeInfoMacro
 
-This macro is used to implement type info traits, i.e. `typeinfo(YourTraitHere ...)` expressions.
+Macro for implementing custom ``typeinfo`` traits, enabling expressions like ``typeinfo(YourTraitHere ...)`` that extract compile-time type information.
 
 
 .. _struct-ast-AstEnumerationAnnotation:
 
 .. das:attribute:: AstEnumerationAnnotation
 
-Annotation macro which is attached to `Enumeration`.
+Annotation macro that attaches to `Enumeration` declarations. Provides compile-time hooks for inspecting and modifying enumeration definitions.
 
 
 .. _struct-ast-AstVisitor:
 
 .. das:attribute:: AstVisitor
 
-This class implements `Visitor` interface for the ast tree.
+Implements the `Visitor` interface for traversing and transforming the AST tree. Provides ``visit`` and ``preVisit`` callbacks for every expression and declaration node type.
 
 
 +++++++++++++++
@@ -5201,7 +5178,7 @@ Call generation
 
 .. das:function:: make_call(at: LineInfo implicit; name: string implicit) : smart_ptr<Expression>
 
-Creates appropriate call expression for the given call function name in the `Program`.
+Creates the appropriate call expression for a given function name in the program.
 
 :Arguments: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  implicit
 
@@ -5225,7 +5202,7 @@ Visitor pattern
 
 .. das:function:: visit(program: smart_ptr<Program> implicit; adapter: smart_ptr<VisitorAdapter> implicit)
 
-Invokes visitor for the given object.
+Invokes an AST visitor on the given object.
 
 :Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
 
@@ -5235,7 +5212,7 @@ Invokes visitor for the given object.
 
 .. das:function:: visit_modules(program: smart_ptr<Program> implicit; adapter: smart_ptr<VisitorAdapter> implicit)
 
-Invokes visitor for the given list of modules inside the `Program`.
+Invokes an AST visitor on all modules in the specified program.
 
 :Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
 
@@ -5245,7 +5222,7 @@ Invokes visitor for the given list of modules inside the `Program`.
 
 .. das:function:: visit_module(program: smart_ptr<Program> implicit; adapter: smart_ptr<VisitorAdapter> implicit; module: Module? implicit)
 
-Invokes visitor for the given module.
+Invokes an AST visitor on the given module.
 
 :Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
 
@@ -5257,7 +5234,7 @@ Invokes visitor for the given module.
 
 .. das:function:: visit(function: smart_ptr<Function> implicit; adapter: smart_ptr<VisitorAdapter> implicit)
 
-Invokes visitor for the given object.
+Invokes an AST visitor on the given object.
 
 :Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
 
@@ -5267,7 +5244,7 @@ Invokes visitor for the given object.
 
 .. das:function:: visit_enumeration(program: smart_ptr<Program> implicit; enumeration: smart_ptr<Enumeration> implicit; adapter: smart_ptr<VisitorAdapter> implicit)
 
-Invokes visitor for the given enumeration.
+Invokes an AST visitor on the given enumeration.
 
 :Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
 
@@ -5279,7 +5256,7 @@ Invokes visitor for the given enumeration.
 
 .. das:function:: visit_structure(program: smart_ptr<Program> implicit; structure: smart_ptr<Structure> implicit; adapter: smart_ptr<VisitorAdapter> implicit)
 
-Invokes visitor for the given structure.
+Invokes an AST visitor on the given structure.
 
 :Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
 
@@ -5291,7 +5268,7 @@ Invokes visitor for the given structure.
 
 .. das:function:: visit(expression: smart_ptr<Expression> implicit; adapter: smart_ptr<VisitorAdapter> implicit) : smart_ptr<Expression>
 
-Invokes visitor for the given object.
+Invokes an AST visitor on the given object.
 
 :Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > implicit
 
@@ -5301,7 +5278,7 @@ Invokes visitor for the given object.
 
 .. das:function:: visit(expression: smart_ptr<TypeDecl> implicit; adapter: smart_ptr<VisitorAdapter> implicit) : smart_ptr<TypeDecl>
 
-Invokes visitor for the given object.
+Invokes an AST visitor on the given object.
 
 :Arguments: * **expression** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
@@ -5311,7 +5288,7 @@ Invokes visitor for the given object.
 
 .. das:function:: visit_finally(expression: smart_ptr<ExprBlock> implicit; adapter: smart_ptr<VisitorAdapter> implicit)
 
-Calls visit on the `finally` section of the block.
+Invokes the visitor on the finally section of a block.
 
 :Arguments: * **expression** : smart_ptr< :ref:`ExprBlock <handle-ast-ExprBlock>` > implicit
 
@@ -5330,7 +5307,7 @@ Expression generation
 
 .. das:function:: force_generated(expression: smart_ptr<Expression> const& implicit; value: bool)
 
-Forces `generated` flag on subexrepssion.
+Sets the generated flag on an expression and its subexpressions.
 
 :Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>` >& implicit
 
@@ -5340,7 +5317,7 @@ Forces `generated` flag on subexrepssion.
 
 .. das:function:: force_generated(function: smart_ptr<Function> const& implicit; value: bool)
 
-Forces `generated` flag on subexrepssion.
+Sets the generated flag on an expression and its subexpressions.
 
 :Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` >& implicit
 
@@ -5350,7 +5327,7 @@ Forces `generated` flag on subexrepssion.
 
 .. das:function:: get_expression_annotation(expr: Expression? implicit) : Annotation?
 
-Get 'Annotation' for the 'ast::Expression' and its inherited types.
+Returns the Annotation associated with an Expression or its inherited types.
 
 :Arguments: * **expr** :  :ref:`Expression <handle-ast-Expression>` ? implicit
 
@@ -5358,7 +5335,7 @@ Get 'Annotation' for the 'ast::Expression' and its inherited types.
 
 .. das:function:: make_type_info_structure(ctx: Context implicit; type: smart_ptr<TypeDecl> implicit) : TypeInfo?
 
-Returns new `TypeInfo` corresponding to the specific type.
+Returns a new TypeInfo corresponding to the specified type.
 
 :Arguments: * **ctx** :  :ref:`Context <handle-rtti-Context>`  implicit
 
@@ -5412,7 +5389,7 @@ Adapter generation
 
 .. das:function:: make_visitor(class: void? implicit; info: StructInfo const? implicit) : smart_ptr<VisitorAdapter>
 
-Creates adapter for the `AstVisitor` interface.
+Creates an adapter for the AstVisitor interface.
 
 :Arguments: * **class** : void? implicit
 
@@ -5422,7 +5399,7 @@ Creates adapter for the `AstVisitor` interface.
 
 .. das:function:: make_function_annotation(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<FunctionAnnotation>
 
-Creates adapter for the `AstFunctionAnnotation`.
+Creates an adapter for the AstFunctionAnnotation interface.
 
 :Arguments: * **name** : string implicit
 
@@ -5434,7 +5411,7 @@ Creates adapter for the `AstFunctionAnnotation`.
 
 .. das:function:: make_block_annotation(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<FunctionAnnotation>
 
-Creates adapter for the `AstBlockAnnotation`.
+Creates an adapter for the AstBlockAnnotation interface.
 
 :Arguments: * **name** : string implicit
 
@@ -5446,7 +5423,7 @@ Creates adapter for the `AstBlockAnnotation`.
 
 .. das:function:: make_structure_annotation(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<StructureAnnotation>
 
-Creates adapter for the `AstStructureAnnotation`.
+Creates an adapter for the AstStructureAnnotation interface.
 
 :Arguments: * **name** : string implicit
 
@@ -5458,7 +5435,7 @@ Creates adapter for the `AstStructureAnnotation`.
 
 .. das:function:: make_enumeration_annotation(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<EnumerationAnnotation>
 
-Creates adapter for the `AstEnumearationAnnotation`.
+Creates an adapter for the AstEnumerationAnnotation interface.
 
 :Arguments: * **name** : string implicit
 
@@ -5470,7 +5447,7 @@ Creates adapter for the `AstEnumearationAnnotation`.
 
 .. das:function:: make_pass_macro(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<PassMacro>
 
-Creates adapter for the `AstPassMacro`.
+Creates an adapter for the AstPassMacro interface.
 
 :Arguments: * **name** : string implicit
 
@@ -5482,7 +5459,7 @@ Creates adapter for the `AstPassMacro`.
 
 .. das:function:: make_reader_macro(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<ReaderMacro>
 
-Creates adapter for the `AstReaderMacro`.
+Creates an adapter for the AstReaderMacro interface.
 
 :Arguments: * **name** : string implicit
 
@@ -5494,7 +5471,7 @@ Creates adapter for the `AstReaderMacro`.
 
 .. das:function:: make_comment_reader(class: void? implicit; info: StructInfo const? implicit) : smart_ptr<CommentReader>
 
-Creates adapter for the `AstCommentReader`.
+Creates an adapter for the AstCommentReader interface.
 
 :Arguments: * **class** : void? implicit
 
@@ -5504,7 +5481,7 @@ Creates adapter for the `AstCommentReader`.
 
 .. das:function:: make_call_macro(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<CallMacro>
 
-Creates adapter for the `AstCallMacro`.
+Creates an adapter for the AstCallMacro interface.
 
 :Arguments: * **name** : string implicit
 
@@ -5516,7 +5493,7 @@ Creates adapter for the `AstCallMacro`.
 
 .. das:function:: make_typeinfo_macro(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<TypeInfoMacro>
 
-Creates adapter for the `AstTypeInfo` macro.
+Creates an adapter for the AstTypeInfoMacro interface.
 
 :Arguments: * **name** : string implicit
 
@@ -5528,7 +5505,7 @@ Creates adapter for the `AstTypeInfo` macro.
 
 .. das:function:: make_variant_macro(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<VariantMacro>
 
-Creates adapter for the `AstVariantMacro`.
+Creates an adapter for the AstVariantMacro interface.
 
 :Arguments: * **name** : string implicit
 
@@ -5540,7 +5517,7 @@ Creates adapter for the `AstVariantMacro`.
 
 .. das:function:: make_for_loop_macro(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<ForLoopMacro>
 
-Creates adapter for the `AstForLoopMacro`.
+Creates an adapter for the AstForLoopMacro interface.
 
 :Arguments: * **name** : string implicit
 
@@ -5552,7 +5529,7 @@ Creates adapter for the `AstForLoopMacro`.
 
 .. das:function:: make_capture_macro(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<CaptureMacro>
 
-Creates adapter for the `AstCaptureMacro`.
+Creates an adapter for the AstCaptureMacro interface.
 
 :Arguments: * **name** : string implicit
 
@@ -5564,7 +5541,7 @@ Creates adapter for the `AstCaptureMacro`.
 
 .. das:function:: make_type_macro(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<TypeMacro>
 
-Creates adapter for the 'AstTypeMacro' interface.
+Creates an adapter for the AstTypeMacro interface.
 
 :Arguments: * **name** : string implicit
 
@@ -5576,7 +5553,7 @@ Creates adapter for the 'AstTypeMacro' interface.
 
 .. das:function:: make_simulate_macro(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<SimulateMacro>
 
-Creates adapter for the 'AstSimulateMacro' interface.
+Creates an adapter for the AstSimulateMacro interface.
 
 :Arguments: * **name** : string implicit
 
@@ -5588,7 +5565,7 @@ Creates adapter for the 'AstSimulateMacro' interface.
 
 .. das:function:: make_clone_structure(structure: Structure? implicit) : smart_ptr<Function>
 
-Generates `clone` function for the given structure.
+Generates a clone function for the given structure.
 
 :Arguments: * **structure** :  :ref:`Structure <handle-ast-Structure>` ? implicit
 
@@ -5596,7 +5573,7 @@ Generates `clone` function for the given structure.
 
 .. das:function:: make_type_info(helper: smart_ptr<DebugInfoHelper> implicit; info: TypeInfo? implicit; type: smart_ptr<TypeDecl> const& implicit) : TypeInfo?
 
-Generates TypeInfo? for the specified type, given DebugInfoHelper.
+Generates a TypeInfo for the specified type using the given DebugInfoHelper.
 
 :Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` > implicit
 
@@ -5608,7 +5585,7 @@ Generates TypeInfo? for the specified type, given DebugInfoHelper.
 
 .. das:function:: make_variable_debug_info(helper: smart_ptr<DebugInfoHelper> implicit; var: Variable? implicit) : VarInfo?
 
-Generates VariableInfo? for the specified variable, given DebugInfoHelper.
+Generates a VariableInfo for the specified variable using the given DebugInfoHelper.
 
 :Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` > implicit
 
@@ -5618,7 +5595,7 @@ Generates VariableInfo? for the specified variable, given DebugInfoHelper.
 
 .. das:function:: make_struct_variable_debug_info(helper: smart_ptr<DebugInfoHelper> implicit; st: Structure const? implicit; var: FieldDeclaration const? implicit) : VarInfo?
 
-Generates VariableInfo? for the specified structure field, given DebugInfoHelper.
+Generates a VariableInfo for a structure field using the given DebugInfoHelper.
 
 :Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` > implicit
 
@@ -5630,7 +5607,7 @@ Generates VariableInfo? for the specified structure field, given DebugInfoHelper
 
 .. das:function:: make_struct_debug_info(helper: smart_ptr<DebugInfoHelper> implicit; st: Structure const? implicit) : StructInfo?
 
-Generates StructInfo? for the specified structure, given DebugInfoHelper.
+Generates a StructInfo for the specified structure using the given DebugInfoHelper.
 
 :Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` > implicit
 
@@ -5640,7 +5617,7 @@ Generates StructInfo? for the specified structure, given DebugInfoHelper.
 
 .. das:function:: make_function_debug_info(helper: smart_ptr<DebugInfoHelper> implicit; fn: Function const? implicit) : FuncInfo?
 
-Generates FunctInfo? for the specified function, given DebugInfoHelper.
+Generates a FuncInfo for the specified function using the given DebugInfoHelper.
 
 :Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` > implicit
 
@@ -5650,7 +5627,7 @@ Generates FunctInfo? for the specified function, given DebugInfoHelper.
 
 .. das:function:: make_enum_debug_info(helper: smart_ptr<DebugInfoHelper> implicit; en: Enumeration const? implicit) : EnumInfo?
 
-Generates EnumInfo? for the specified enumeration, given DebugInfoHelper.
+Generates an EnumInfo for the specified enumeration using the given DebugInfoHelper.
 
 :Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` > implicit
 
@@ -5660,7 +5637,7 @@ Generates EnumInfo? for the specified enumeration, given DebugInfoHelper.
 
 .. das:function:: make_invokable_type_debug_info(helper: smart_ptr<DebugInfoHelper> implicit; blk: smart_ptr<TypeDecl> implicit; at: LineInfo implicit) : FuncInfo?
 
-Generates FuncInfo? for the specified invokable type (lambda, block), given DebugInfoHelper.
+Generates a FuncInfo for an invokable type such as a lambda or block using the given DebugInfoHelper.
 
 :Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` > implicit
 
@@ -5672,7 +5649,7 @@ Generates FuncInfo? for the specified invokable type (lambda, block), given Debu
 
 .. das:function:: make_block_type(blk: ExprBlock? implicit) : smart_ptr<TypeDecl>
 
-Generates TypeDeclPtr for the specified block or lambda type.
+Generates a TypeDeclPtr for a specified block or lambda type.
 
 :Arguments: * **blk** :  :ref:`ExprBlock <handle-ast-ExprBlock>` ? implicit
 
@@ -5680,7 +5657,7 @@ Generates TypeDeclPtr for the specified block or lambda type.
 
 .. das:function:: make_function_annotation(name: string; someClassPtr: auto) : FunctionAnnotationPtr
 
-Creates adapter for the `AstFunctionAnnotation`.
+Creates an adapter for the AstFunctionAnnotation interface.
 
 :Arguments: * **name** : string
 
@@ -5690,7 +5667,7 @@ Creates adapter for the `AstFunctionAnnotation`.
 
 .. das:function:: make_block_annotation(name: string; someClassPtr: auto) : FunctionAnnotationPtr
 
-Creates adapter for the `AstBlockAnnotation`.
+Creates an adapter for the AstBlockAnnotation interface.
 
 :Arguments: * **name** : string
 
@@ -5700,7 +5677,7 @@ Creates adapter for the `AstBlockAnnotation`.
 
 .. das:function:: make_structure_annotation(name: string; someClassPtr: auto) : StructureAnnotationPtr
 
-Creates adapter for the `AstStructureAnnotation`.
+Creates an adapter for the AstStructureAnnotation interface.
 
 :Arguments: * **name** : string
 
@@ -5710,7 +5687,7 @@ Creates adapter for the `AstStructureAnnotation`.
 
 .. das:function:: make_enumeration_annotation(name: string; someClassPtr: auto) : EnumerationAnnotationPtr
 
-Creates adapter for the `AstEnumearationAnnotation`.
+Creates an adapter for the AstEnumerationAnnotation interface.
 
 :Arguments: * **name** : string
 
@@ -5720,7 +5697,7 @@ Creates adapter for the `AstEnumearationAnnotation`.
 
 .. das:function:: make_visitor(someClass: auto) : smart_ptr<VisitorAdapter>
 
-Creates adapter for the `AstVisitor` interface.
+Creates an adapter for the AstVisitor interface.
 
 :Arguments: * **someClass** : auto
 
@@ -5728,7 +5705,7 @@ Creates adapter for the `AstVisitor` interface.
 
 .. das:function:: make_reader_macro(name: string; someClassPtr: auto) : ReaderMacroPtr
 
-Creates adapter for the `AstReaderMacro`.
+Creates an adapter for the AstReaderMacro interface.
 
 :Arguments: * **name** : string
 
@@ -5738,7 +5715,7 @@ Creates adapter for the `AstReaderMacro`.
 
 .. das:function:: make_comment_reader(name: string; someClassPtr: auto) : CommentReaderPtr
 
-Creates adapter for the `AstCommentReader`.
+Creates an adapter for the AstCommentReader interface.
 
 :Arguments: * **name** : string
 
@@ -5748,7 +5725,7 @@ Creates adapter for the `AstCommentReader`.
 
 .. das:function:: make_call_macro(name: string; someClassPtr: auto) : CallMacroPtr
 
-Creates adapter for the `AstCallMacro`.
+Creates an adapter for the AstCallMacro interface.
 
 :Arguments: * **name** : string
 
@@ -5758,7 +5735,7 @@ Creates adapter for the `AstCallMacro`.
 
 .. das:function:: make_typeinfo_macro(name: string; someClassPtr: auto) : TypeInfoMacroPtr
 
-Creates adapter for the `AstTypeInfo` macro.
+Creates an adapter for the AstTypeInfoMacro interface.
 
 :Arguments: * **name** : string
 
@@ -5768,7 +5745,7 @@ Creates adapter for the `AstTypeInfo` macro.
 
 .. das:function:: make_pass_macro(name: string; someClassPtr: auto) : PassMacroPtr
 
-Creates adapter for the `AstPassMacro`.
+Creates an adapter for the AstPassMacro interface.
 
 :Arguments: * **name** : string
 
@@ -5778,7 +5755,7 @@ Creates adapter for the `AstPassMacro`.
 
 .. das:function:: make_variant_macro(name: string; someClassPtr: auto) : VariantMacroPtr
 
-Creates adapter for the `AstVariantMacro`.
+Creates an adapter for the AstVariantMacro interface.
 
 :Arguments: * **name** : string
 
@@ -5788,7 +5765,7 @@ Creates adapter for the `AstVariantMacro`.
 
 .. das:function:: make_for_loop_macro(name: string; someClassPtr: auto) : ForLoopMacroPtr
 
-Creates adapter for the `AstForLoopMacro`.
+Creates an adapter for the AstForLoopMacro interface.
 
 :Arguments: * **name** : string
 
@@ -5798,7 +5775,7 @@ Creates adapter for the `AstForLoopMacro`.
 
 .. das:function:: make_capture_macro(name: string; someClassPtr: auto) : CaptureMacroPtr
 
-Creates adapter for the `AstCaptureMacro`.
+Creates an adapter for the AstCaptureMacro interface.
 
 :Arguments: * **name** : string
 
@@ -5808,7 +5785,7 @@ Creates adapter for the `AstCaptureMacro`.
 
 .. das:function:: make_type_macro(name: string; someClassPtr: auto) : TypeMacroPtr
 
-Creates adapter for the 'AstTypeMacro' interface.
+Creates an adapter for the AstTypeMacro interface.
 
 :Arguments: * **name** : string
 
@@ -5818,7 +5795,7 @@ Creates adapter for the 'AstTypeMacro' interface.
 
 .. das:function:: make_simulate_macro(name: string; someClassPtr: auto) : SimulateMacroPtr
 
-Creates adapter for the 'AstSimulateMacro' interface.
+Creates an adapter for the AstSimulateMacro interface.
 
 :Arguments: * **name** : string
 
@@ -5876,7 +5853,7 @@ Adapter application
 
 .. das:function:: add_function_annotation(module: Module? implicit; annotation: smart_ptr<FunctionAnnotation>& implicit)
 
-Adds function annotation to the given object. Calls `apply` if applicable.
+Adds an annotation to a function and calls apply if applicable.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -5886,7 +5863,7 @@ Adds function annotation to the given object. Calls `apply` if applicable.
 
 .. das:function:: add_function_annotation(function: smart_ptr<Function> implicit; annotation: smart_ptr<FunctionAnnotation>& implicit)
 
-Adds function annotation to the given object. Calls `apply` if applicable.
+Adds an annotation to a function and calls apply if applicable.
 
 :Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
 
@@ -5896,7 +5873,7 @@ Adds function annotation to the given object. Calls `apply` if applicable.
 
 .. das:function:: add_function_annotation(function: smart_ptr<Function> implicit; annotation: smart_ptr<AnnotationDeclaration>& implicit)
 
-Adds function annotation to the given object. Calls `apply` if applicable.
+Adds an annotation to a function and calls apply if applicable.
 
 :Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
 
@@ -5906,7 +5883,7 @@ Adds function annotation to the given object. Calls `apply` if applicable.
 
 .. das:function:: add_block_annotation(block: smart_ptr<ExprBlock> implicit; annotation: smart_ptr<FunctionAnnotation>& implicit)
 
-Adds annotation declaration to the block.
+Adds an annotation declaration to a block.
 
 :Arguments: * **block** : smart_ptr< :ref:`ExprBlock <handle-ast-ExprBlock>` > implicit
 
@@ -5916,7 +5893,7 @@ Adds annotation declaration to the block.
 
 .. das:function:: add_block_annotation(block: smart_ptr<ExprBlock> implicit; annotation: smart_ptr<AnnotationDeclaration>& implicit)
 
-Adds annotation declaration to the block.
+Adds an annotation declaration to a block.
 
 :Arguments: * **block** : smart_ptr< :ref:`ExprBlock <handle-ast-ExprBlock>` > implicit
 
@@ -5926,7 +5903,7 @@ Adds annotation declaration to the block.
 
 .. das:function:: add_structure_annotation(module: Module? implicit; annotation: smart_ptr<StructureAnnotation>& implicit)
 
-Adds structure annotation to the given object. Calls `apply` if applicable.
+Adds a structure annotation to the given object, calling apply if applicable.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -5936,7 +5913,7 @@ Adds structure annotation to the given object. Calls `apply` if applicable.
 
 .. das:function:: add_structure_annotation(structure: smart_ptr<Structure> implicit; annotation: smart_ptr<StructureAnnotation>& implicit)
 
-Adds structure annotation to the given object. Calls `apply` if applicable.
+Adds a structure annotation to the given object, calling apply if applicable.
 
 :Arguments: * **structure** : smart_ptr< :ref:`Structure <handle-ast-Structure>` > implicit
 
@@ -5946,7 +5923,7 @@ Adds structure annotation to the given object. Calls `apply` if applicable.
 
 .. das:function:: add_structure_annotation(structure: smart_ptr<Structure> implicit; annotation: smart_ptr<AnnotationDeclaration>& implicit)
 
-Adds structure annotation to the given object. Calls `apply` if applicable.
+Adds a structure annotation to the given object, calling apply if applicable.
 
 :Arguments: * **structure** : smart_ptr< :ref:`Structure <handle-ast-Structure>` > implicit
 
@@ -5956,7 +5933,7 @@ Adds structure annotation to the given object. Calls `apply` if applicable.
 
 .. das:function:: add_enumeration_annotation(module: Module? implicit; annotation: smart_ptr<EnumerationAnnotation>& implicit)
 
-Adds enumeration annotation to the given object. Calls `apply` if applicable.
+Adds an annotation to an enumeration and calls apply if applicable.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -5966,7 +5943,7 @@ Adds enumeration annotation to the given object. Calls `apply` if applicable.
 
 .. das:function:: add_infer_macro(module: Module? implicit; annotation: smart_ptr<PassMacro>& implicit)
 
-Adds `AstPassMacro` adapter to the `infer`` pass.
+Adds an AstPassMacro adapter to the type inference pass.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -5976,7 +5953,7 @@ Adds `AstPassMacro` adapter to the `infer`` pass.
 
 .. das:function:: add_dirty_infer_macro(module: Module? implicit; annotation: smart_ptr<PassMacro>& implicit)
 
-Adds `AstPassMacro` adapter to the `dirty infer` pass.
+Adds an AstPassMacro adapter to the dirty inference pass.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -5986,7 +5963,7 @@ Adds `AstPassMacro` adapter to the `dirty infer` pass.
 
 .. das:function:: add_lint_macro(module: Module? implicit; annotation: smart_ptr<PassMacro>& implicit)
 
-Adds `AstPassMacro` adapter to the `lint` pass.
+Adds an AstPassMacro adapter to the lint pass of the current module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -5996,7 +5973,7 @@ Adds `AstPassMacro` adapter to the `lint` pass.
 
 .. das:function:: add_global_lint_macro(module: Module? implicit; annotation: smart_ptr<PassMacro>& implicit)
 
-Adds `AstPassMacro` adapter to the `global lint` pass.
+Adds an AstPassMacro adapter to the global lint pass.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6006,7 +5983,7 @@ Adds `AstPassMacro` adapter to the `global lint` pass.
 
 .. das:function:: add_optimization_macro(module: Module? implicit; annotation: smart_ptr<PassMacro>& implicit)
 
-Adds `AstPassMacro` adapter to the `optimization` pass.
+Adds an AstPassMacro adapter to the optimization pass of a specific module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6016,7 +5993,7 @@ Adds `AstPassMacro` adapter to the `optimization` pass.
 
 .. das:function:: add_reader_macro(module: Module? implicit; annotation: smart_ptr<ReaderMacro>& implicit)
 
-Adds `AstReaderMacro` adapter to the specific module.
+Adds an AstReaderMacro adapter to the specified module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6026,7 +6003,7 @@ Adds `AstReaderMacro` adapter to the specific module.
 
 .. das:function:: add_comment_reader(module: Module? implicit; reader: smart_ptr<CommentReader>& implicit)
 
-Adds `AstCommentReader` adapter to the specific module.
+Adds an AstCommentReader adapter to the specified module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6036,7 +6013,7 @@ Adds `AstCommentReader` adapter to the specific module.
 
 .. das:function:: add_call_macro(module: Module? implicit; annotation: smart_ptr<CallMacro>& implicit)
 
-Adds `AstCallMacro` adapter to the specific module.
+Adds an AstCallMacro adapter to the specified module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6046,7 +6023,7 @@ Adds `AstCallMacro` adapter to the specific module.
 
 .. das:function:: add_typeinfo_macro(module: Module? implicit; annotation: smart_ptr<TypeInfoMacro>& implicit)
 
-Adds `AstTypeInfo` adapter to the specific module.
+Adds an AstTypeInfoMacro adapter to the specified module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6056,7 +6033,7 @@ Adds `AstTypeInfo` adapter to the specific module.
 
 .. das:function:: add_variant_macro(module: Module? implicit; annotation: smart_ptr<VariantMacro>& implicit)
 
-Adds `AstVariantMacro` to the specific module.
+Adds an AstVariantMacro adapter to the specified module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6066,7 +6043,7 @@ Adds `AstVariantMacro` to the specific module.
 
 .. das:function:: add_for_loop_macro(module: Module? implicit; annotation: smart_ptr<ForLoopMacro>& implicit)
 
-Adds `AstForLoopMacro` to the specific module.
+Adds an AstForLoopMacro to the specified module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6076,7 +6053,7 @@ Adds `AstForLoopMacro` to the specific module.
 
 .. das:function:: add_capture_macro(module: Module? implicit; annotation: smart_ptr<CaptureMacro>& implicit)
 
-Adds `AstCaptureMacro` to the specific module.
+Adds an AstCaptureMacro to the specified module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6086,7 +6063,7 @@ Adds `AstCaptureMacro` to the specific module.
 
 .. das:function:: add_type_macro(module: Module? implicit; annotation: smart_ptr<TypeMacro>& implicit)
 
-Adds 'AstTypeMacro' to the specific module.
+Adds an AstTypeMacro adapter to the specified module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6096,7 +6073,7 @@ Adds 'AstTypeMacro' to the specific module.
 
 .. das:function:: add_simulate_macro(module: Module? implicit; annotation: smart_ptr<SimulateMacro>& implicit)
 
-Adds `AstSimulateMacro` to the specific module.
+Adds an AstSimulateMacro adapter to the specified module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6106,7 +6083,7 @@ Adds `AstSimulateMacro` to the specific module.
 
 .. das:function:: add_module_option(module: Module? implicit; option: string implicit; type: Type)
 
-Add module-specific option, which is accessible via "options" keyword.
+Adds a module-specific option accessible via the `options` keyword.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6118,7 +6095,7 @@ Add module-specific option, which is accessible via "options" keyword.
 
 .. das:function:: add_new_block_annotation(name: string; someClassPtr: auto) : auto
 
-Makes adapter to the `AstBlockAnnotation` and adds it to the current module.
+Creates an AstBlockAnnotation adapter and adds it to the current module.
 
 :Arguments: * **name** : string
 
@@ -6128,7 +6105,7 @@ Makes adapter to the `AstBlockAnnotation` and adds it to the current module.
 
 .. das:function:: add_new_function_annotation(name: string; someClassPtr: auto) : auto
 
-Makes adapter to the `AstFunctionAnnotation` and adds it to the current module.
+Creates an AstFunctionAnnotation adapter and adds it to the current module.
 
 :Arguments: * **name** : string
 
@@ -6138,7 +6115,7 @@ Makes adapter to the `AstFunctionAnnotation` and adds it to the current module.
 
 .. das:function:: add_new_contract_annotation(name: string; someClassPtr: auto) : auto
 
-Makes adapter to the `AstContractAnnotation` and adds it to the current module.
+Creates an AstContractAnnotation adapter and adds it to the current module.
 
 :Arguments: * **name** : string
 
@@ -6148,7 +6125,7 @@ Makes adapter to the `AstContractAnnotation` and adds it to the current module.
 
 .. das:function:: add_new_structure_annotation(name: string; someClassPtr: auto) : auto
 
-Makes adapter to the `AstStructureAnnotation` and adds it to the current module.
+Creates an AstStructureAnnotation adapter and adds it to the current module.
 
 :Arguments: * **name** : string
 
@@ -6158,7 +6135,7 @@ Makes adapter to the `AstStructureAnnotation` and adds it to the current module.
 
 .. das:function:: add_new_enumeration_annotation(name: string; someClassPtr: auto) : auto
 
-Makes adapter to the `AstEnumerationAnnotation` and adds it to the current module.
+Creates an AstEnumerationAnnotation adapter and adds it to the current module.
 
 :Arguments: * **name** : string
 
@@ -6168,7 +6145,7 @@ Makes adapter to the `AstEnumerationAnnotation` and adds it to the current modul
 
 .. das:function:: add_new_variant_macro(name: string; someClassPtr: auto) : auto
 
-Makes adapter to the `AstVariantMacro` and adds it to the current module.
+Creates an AstVariantMacro adapter and adds it to the current module.
 
 :Arguments: * **name** : string
 
@@ -6178,7 +6155,7 @@ Makes adapter to the `AstVariantMacro` and adds it to the current module.
 
 .. das:function:: add_new_for_loop_macro(name: string; someClassPtr: auto) : auto
 
-Makes adapter to the `AstForLoopMacro` and adds it to the current module.
+Creates an AstForLoopMacro adapter and adds it to the current module.
 
 :Arguments: * **name** : string
 
@@ -6188,7 +6165,7 @@ Makes adapter to the `AstForLoopMacro` and adds it to the current module.
 
 .. das:function:: add_new_capture_macro(name: string; someClassPtr: auto) : auto
 
-Makes adapter to the `AstCaptureMacro` and adds it to the current module.
+Creates an AstCaptureMacro adapter and adds it to the current module.
 
 :Arguments: * **name** : string
 
@@ -6198,7 +6175,7 @@ Makes adapter to the `AstCaptureMacro` and adds it to the current module.
 
 .. das:function:: add_new_type_macro(name: string; someClassPtr: auto) : auto
 
-Makes adapter to the 'AstTypeMacro' and adds it to the current module.
+Creates an AstTypeMacro adapter and adds it to the current module.
 
 :Arguments: * **name** : string
 
@@ -6208,7 +6185,7 @@ Makes adapter to the 'AstTypeMacro' and adds it to the current module.
 
 .. das:function:: add_new_simulate_macro(name: string; someClassPtr: auto) : auto
 
-Makes adapter to the `AstSimulateMacro` and adds it to the current module.
+Creates an AstSimulateMacro adapter and adds it to the current module.
 
 :Arguments: * **name** : string
 
@@ -6218,7 +6195,7 @@ Makes adapter to the `AstSimulateMacro` and adds it to the current module.
 
 .. das:function:: add_new_reader_macro(name: string; someClassPtr: auto) : auto
 
-Makes adapter to the `AstReaderMacro` and adds it to the current module.
+Creates an AstReaderMacro adapter and adds it to the current module.
 
 :Arguments: * **name** : string
 
@@ -6228,7 +6205,7 @@ Makes adapter to the `AstReaderMacro` and adds it to the current module.
 
 .. das:function:: add_new_comment_reader(name: string; someClassPtr: auto) : auto
 
-Makes adapter to the `AstCommentReader` and adds it to the current module.
+Creates an AstCommentReader adapter and adds it to the current module.
 
 :Arguments: * **name** : string
 
@@ -6238,7 +6215,7 @@ Makes adapter to the `AstCommentReader` and adds it to the current module.
 
 .. das:function:: add_new_call_macro(name: string; someClassPtr: auto) : auto
 
-Makes adapter to the `AstCallMacro` and adds it to the current module.
+Creates an AstCallMacro adapter and adds it to the current module.
 
 :Arguments: * **name** : string
 
@@ -6248,7 +6225,7 @@ Makes adapter to the `AstCallMacro` and adds it to the current module.
 
 .. das:function:: add_new_typeinfo_macro(name: string; someClassPtr: auto) : auto
 
-Makes adapter to the `AstTypeInfoMacro` and adds it to the current module.
+Creates an AstTypeInfoMacro adapter and adds it to the current module.
 
 :Arguments: * **name** : string
 
@@ -6258,7 +6235,7 @@ Makes adapter to the `AstTypeInfoMacro` and adds it to the current module.
 
 .. das:function:: add_new_infer_macro(name: string; someClassPtr: auto) : auto
 
-Makes adapter to the `AstPassMacro` and adds it to the current module `infer` pass.
+Creates an AstPassMacro adapter and adds it to the current module's infer pass.
 
 :Arguments: * **name** : string
 
@@ -6268,7 +6245,7 @@ Makes adapter to the `AstPassMacro` and adds it to the current module `infer` pa
 
 .. das:function:: add_new_dirty_infer_macro(name: string; someClassPtr: auto) : auto
 
-Makes adapter to the `AstPassMacro` and adds it to the current module `dirty infer` pass.
+Creates an AstPassMacro adapter and adds it to the current module's dirty infer pass.
 
 :Arguments: * **name** : string
 
@@ -6278,7 +6255,7 @@ Makes adapter to the `AstPassMacro` and adds it to the current module `dirty inf
 
 .. das:function:: add_new_lint_macro(name: string; someClassPtr: auto) : auto
 
-Makes adapter to the `AstPassMacro` and adds it to the current module `lint` pass.
+Creates an AstPassMacro adapter and adds it to the current module's lint pass.
 
 :Arguments: * **name** : string
 
@@ -6288,7 +6265,7 @@ Makes adapter to the `AstPassMacro` and adds it to the current module `lint` pas
 
 .. das:function:: add_new_global_lint_macro(name: string; someClassPtr: auto) : auto
 
-Makes adapter to the `AstPassMacro` and adds it to the current module `global lint` pass.
+Creates an AstPassMacro adapter and adds it to the current module's global lint pass.
 
 :Arguments: * **name** : string
 
@@ -6298,7 +6275,7 @@ Makes adapter to the `AstPassMacro` and adds it to the current module `global li
 
 .. das:function:: add_new_optimization_macro(name: string; someClassPtr: auto) : auto
 
-Makes adapter to the `AstPassMacro` and adds it to the current module `optimization` pass.
+Creates an AstPassMacro adapter and adds it to the current module's optimization pass.
 
 :Arguments: * **name** : string
 
@@ -6323,7 +6300,7 @@ Adding objects to objects
 
 .. das:function:: add_enumeration_entry(enum: smart_ptr<Enumeration> implicit; name: string implicit) : int
 
-Adds entry to enumeration annotation.
+Adds a new entry to an enumeration annotation.
 
 :Arguments: * **enum** : smart_ptr< :ref:`Enumeration <handle-ast-Enumeration>` > implicit
 
@@ -6333,7 +6310,7 @@ Adds entry to enumeration annotation.
 
 .. das:function:: add_function(module: Module? implicit; function: smart_ptr<Function>& implicit) : bool
 
-Adds function to a `Module`. Will return false on duplicates.
+Adds a function to a module, returning false if a duplicate already exists.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6343,7 +6320,7 @@ Adds function to a `Module`. Will return false on duplicates.
 
 .. das:function:: add_generic(module: Module? implicit; function: smart_ptr<Function>& implicit) : bool
 
-Adds generic function to a `Module`. Will return false on duplicates.
+Adds a generic function to a module, returning false if a duplicate already exists.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6353,7 +6330,7 @@ Adds generic function to a `Module`. Will return false on duplicates.
 
 .. das:function:: add_variable(module: Module? implicit; variable: smart_ptr<Variable>& implicit) : bool
 
-Adds variable to a `Module`. Will return false on duplicates.
+Adds a variable to a module, returning false if a duplicate already exists.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6363,7 +6340,8 @@ Adds variable to a `Module`. Will return false on duplicates.
 
 .. das:function:: add_keyword(module: Module? implicit; keyword: string implicit; needOxfordComma: bool) : bool
 
-Adds new `keyword`. It can appear in the `keyword <type> expr` or `keyword expr block` syntax. See daslib/match as implementation example.
+Registers a new keyword in the specified module, making it available to the parser.
+def add_keyword (module: Module? implicit; keyword: string implicit; needOxfordComma: bool) : bool
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6375,7 +6353,7 @@ Adds new `keyword`. It can appear in the `keyword <type> expr` or `keyword expr 
 
 .. das:function:: add_type_function(module: Module? implicit; keyword: string implicit) : bool
 
-Adds type function keyword, i.e allow function call to have several type arguments first via the following syntax some_call<type_args>(regular_args).
+Adds a type function keyword, allowing function calls to accept type arguments before regular arguments via the `some_call<type_args>(regular_args)` syntax.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6385,7 +6363,7 @@ Adds type function keyword, i.e allow function call to have several type argumen
 
 .. das:function:: add_structure(module: Module? implicit; structure: smart_ptr<Structure>& implicit) : bool
 
-Adds structure to a `Module`. Will return false on duplicates.
+Adds a structure to a module, returning false if a duplicate already exists.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6395,7 +6373,7 @@ Adds structure to a `Module`. Will return false on duplicates.
 
 .. das:function:: add_alias(module: Module? implicit; structure: smart_ptr<TypeDecl>& implicit) : bool
 
-Adds type alias to the specified module.
+Adds a type alias to the specified module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6405,7 +6383,7 @@ Adds type alias to the specified module.
 
 .. das:function:: add_module_require(module: Module? implicit; publicModule: Module? implicit; pub: bool) : bool
 
-Add module dependencies similar to "require" keyword.
+Adds module dependencies, similar to the `require` keyword.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6417,7 +6395,7 @@ Add module dependencies similar to "require" keyword.
 
 .. das:function:: add_structure_alias(structure: Structure? implicit; aliasName: string implicit; alias: smart_ptr<TypeDecl> const& implicit) : bool
 
-Adds an alias to a structure type in the AST. Its the 'typedef' in the structure body.
+Adds a typedef alias to a structure type in the AST, equivalent to a typedef in the structure body.
 
 :Arguments: * **structure** :  :ref:`Structure <handle-ast-Structure>` ? implicit
 
@@ -6438,25 +6416,25 @@ Program and module access
 
 .. das:function:: this_program() : smart_ptr<Program>
 
-Program attached to the current context (or null if RTTI is disabled).
+Returns the program attached to the current context, or null if RTTI is disabled.
 
 .. _function-ast_this_module:
 
 .. das:function:: this_module() : Module?
 
-Main module attached to the current context (will through if RTTI is disabled).
+Returns the main module attached to the current context, throwing an error if RTTI is disabled.
 
 .. _function-ast_compiling_program:
 
 .. das:function:: compiling_program() : smart_ptr<Program>
 
-Currently compiling program.
+Returns the program currently being compiled.
 
 .. _function-ast_compiling_module:
 
 .. das:function:: compiling_module() : Module?
 
-Currently compiling module.
+Returns the module currently being compiled.
 
 +++++++++++++++++++++++++++++++++++
 Textual descriptions of the objects
@@ -6476,7 +6454,7 @@ Textual descriptions of the objects
 
 .. das:function:: describe_typedecl(type: smart_ptr<TypeDecl> implicit; extra: bool; contracts: bool; module: bool) : string
 
-Returns description of the `TypeDecl` which should match corresponding daScript type declaration.
+Returns a string description of the TypeDecl matching the corresponding daScript type declaration.
 
 :Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
@@ -6490,7 +6468,7 @@ Returns description of the `TypeDecl` which should match corresponding daScript 
 
 .. das:function:: describe_typedecl_cpp(type: smart_ptr<TypeDecl> implicit; substitueRef: bool; skipRef: bool; skipConst: bool; redundantConst: bool; choose_smart_ptr: bool) : string
 
-Returns description of the `TypeDecl` which should match corresponding C++ type declaration.
+Returns a string description of the TypeDecl matching the corresponding C++ type declaration.
 
 :Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
@@ -6508,7 +6486,7 @@ Returns description of the `TypeDecl` which should match corresponding C++ type 
 
 .. das:function:: describe_expression(expression: smart_ptr<Expression> implicit) : string
 
-Returns description of the `Expression` which should match corresponding daScript code.
+Returns a string description of the Expression matching the corresponding daScript source code.
 
 :Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > implicit
 
@@ -6516,7 +6494,7 @@ Returns description of the `Expression` which should match corresponding daScrip
 
 .. das:function:: describe_function(function: smart_ptr<Function> implicit) : string
 
-Returns description of the `Function` which should match corresponding daScript function declaration.
+Returns a string description of the Function matching the corresponding daScript function declaration.
 
 :Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
 
@@ -6524,7 +6502,7 @@ Returns description of the `Function` which should match corresponding daScript 
 
 .. das:function:: das_to_string(type: Type) : string
 
-Returns description (name) of the corresponding `Type`.
+Returns the name of the corresponding daScript base type as a string.
 
 :Arguments: * **type** :  :ref:`Type <enum-rtti-Type>` 
 
@@ -6532,7 +6510,7 @@ Returns description (name) of the corresponding `Type`.
 
 .. das:function:: describe(decl: smart_ptr<TypeDecl>; extra: bool = true; contracts: bool = true; modules: bool = true) : auto
 
-Describes object and produces corresponding daScript code as string.
+Produces a daScript source code string representation of the given AST object.
 
 :Arguments: * **decl** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` >
 
@@ -6546,7 +6524,7 @@ Describes object and produces corresponding daScript code as string.
 
 .. das:function:: describe_cpp(decl: smart_ptr<TypeDecl>; substitureRef: bool = false; skipRef: bool = false; skipConst: bool = false; redundantConst: bool = true; chooseSmartPtr: bool = true) : auto
 
-Describes `TypeDecl` and produces corresponding C++ code as a string.
+Produces a C++ source code string representation of the given TypeDecl.
 
 :Arguments: * **decl** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` >
 
@@ -6564,7 +6542,7 @@ Describes `TypeDecl` and produces corresponding C++ code as a string.
 
 .. das:function:: describe(expr: smart_ptr<Expression>) : auto
 
-Describes object and produces corresponding daScript code as string.
+Produces a daScript source code string representation of the given AST object.
 
 :Arguments: * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` >
 
@@ -6572,7 +6550,7 @@ Describes object and produces corresponding daScript code as string.
 
 .. das:function:: describe(expr: smart_ptr<Function>) : auto
 
-Describes object and produces corresponding daScript code as string.
+Produces a daScript source code string representation of the given AST object.
 
 :Arguments: * **expr** : smart_ptr< :ref:`Function <handle-ast-Function>` >
 
@@ -6601,7 +6579,7 @@ Searching
 
 .. das:function:: find_call_macro(module: Module? implicit; name: string implicit) : CallMacro?
 
-Find CallMacro by name in the Module.
+Finds a CallMacro by name in the specified module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6611,7 +6589,7 @@ Find CallMacro by name in the Module.
 
 .. das:function:: find_module_via_rtti(program: smart_ptr<Program> implicit; name: string implicit) : Module?
 
-Find module by name in the `Program`.
+Finds a module by name in the specified program using RTTI.
 
 :Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
 
@@ -6621,7 +6599,7 @@ Find module by name in the `Program`.
 
 .. das:function:: find_module_function_via_rtti(module: Module? implicit; function: function<():void>) : smart_ptr<Function>
 
-Find function by name in the `Module`.
+Finds a function by name in the specified module using RTTI.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6631,7 +6609,7 @@ Find function by name in the `Module`.
 
 .. das:function:: find_variable(module: Module? implicit; variable: string implicit) : smart_ptr<Variable>
 
-Finds variable in the `Module`.
+Finds a variable by name in the specified module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6641,7 +6619,7 @@ Finds variable in the `Module`.
 
 .. das:function:: find_matching_variable(program: Program? implicit; function: Function? implicit; name: string implicit; seePrivate: bool; block: block<(array<smart_ptr<Variable>>#):void>)
 
-Finds global or shared variable in the given function, according to visibility and privacy rules.
+Finds a global or shared variable accessible from the given function, according to visibility and privacy rules.
 
 :Arguments: * **program** :  :ref:`Program <handle-rtti-Program>` ? implicit
 
@@ -6657,7 +6635,7 @@ Finds global or shared variable in the given function, according to visibility a
 
 .. das:function:: find_bitfield_name(bit: smart_ptr<TypeDecl> implicit; value: bitfield) : string
 
-Finds name of the corresponding bitfield value in the specified type.
+Finds the name of a bitfield value in the specified type.
 
 :Arguments: * **bit** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
@@ -6667,7 +6645,7 @@ Finds name of the corresponding bitfield value in the specified type.
 
 .. das:function:: find_enum_name(enum: Enumeration? implicit; value: int64) : string
 
-Finds name of the corresponding enumeration value in the specified type.
+Finds the name corresponding to an enumeration value in the specified type.
 
 :Arguments: * **enum** :  :ref:`Enumeration <handle-ast-Enumeration>` ? implicit
 
@@ -6677,7 +6655,7 @@ Finds name of the corresponding enumeration value in the specified type.
 
 .. das:function:: find_enum_value(enum: smart_ptr<Enumeration> implicit; value: string implicit) : int64
 
-Finds name of the corresponding enumeration value in the specified type.
+Finds the integer value corresponding to an enumeration name in the specified type.
 
 :Arguments: * **enum** : smart_ptr< :ref:`Enumeration <handle-ast-Enumeration>` > implicit
 
@@ -6687,7 +6665,7 @@ Finds name of the corresponding enumeration value in the specified type.
 
 .. das:function:: find_enum_value(enum: Enumeration? implicit; value: string implicit) : int64
 
-Finds name of the corresponding enumeration value in the specified type.
+Finds the integer value corresponding to an enumeration name in the specified type.
 
 :Arguments: * **enum** :  :ref:`Enumeration <handle-ast-Enumeration>` ? implicit
 
@@ -6697,7 +6675,7 @@ Finds name of the corresponding enumeration value in the specified type.
 
 .. das:function:: find_structure_field(structPtr: Structure? implicit; field: string implicit) : FieldDeclaration?
 
-Returns `FieldDeclaration` for the specific field of the structure type, or `null` if not found.
+Returns the FieldDeclaration for a specific field of a structure type, or null if not found.
 
 :Arguments: * **structPtr** :  :ref:`Structure <handle-ast-Structure>` ? implicit
 
@@ -6707,7 +6685,7 @@ Returns `FieldDeclaration` for the specific field of the structure type, or `nul
 
 .. das:function:: find_unique_structure(program: smart_ptr<Program> implicit; name: string implicit) : Structure?
 
-Find structure in the program with the specified name. If its unique - return it, otherwise null.
+Finds a uniquely named structure in the program, returning it if unique or null if ambiguous.
 
 :Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
 
@@ -6717,7 +6695,7 @@ Find structure in the program with the specified name. If its unique - return it
 
 .. das:function:: find_struct_field_parent(structure: smart_ptr<Structure> implicit; name: string implicit) : Structure const?
 
-Finds parent structure of the specified field declaration.
+Finds the parent structure that declares the specified field.
 
 :Arguments: * **structure** : smart_ptr< :ref:`Structure <handle-ast-Structure>` > implicit
 
@@ -6727,7 +6705,7 @@ Finds parent structure of the specified field declaration.
 
 .. das:function:: find_compiling_function_by_mangled_name_hash(moduleName: string implicit; mangledNameHash: uint64) : smart_ptr<Function>
 
-Returns 'Function' in the currently compiling 'Program' given its mangled name hash.
+Returns a Function from the currently compiling program given its mangled name hash.
 
 :Arguments: * **moduleName** : string implicit
 
@@ -6737,7 +6715,7 @@ Returns 'Function' in the currently compiling 'Program' given its mangled name h
 
 .. das:function:: find_module(prog: smart_ptr<Program>; name: string) : Module?
 
-Finds `Module` in the `Program`.
+Finds a module by name in the specified program.
 
 :Arguments: * **prog** : smart_ptr< :ref:`Program <handle-rtti-Program>` >
 
@@ -6747,7 +6725,7 @@ Finds `Module` in the `Program`.
 
 .. das:function:: find_module(name: string) : Module?
 
-Finds `Module` in the `Program`.
+Finds a module by name in the specified program.
 
 :Arguments: * **name** : string
 
@@ -6755,7 +6733,7 @@ Finds `Module` in the `Program`.
 
 .. das:function:: find_compiling_module(name: string) : Module?
 
-Finds `Module` in the currently compiling `Program`.
+Finds a module by name in the currently compiling program.
 
 :Arguments: * **name** : string
 
@@ -6789,7 +6767,7 @@ Iterating
 
 .. das:function:: for_each_module(program: Program? implicit; block: block<(Module?):void>)
 
-Iterates through each module in the program.
+Iterates through each module in the program in dependency order.
 
 :Arguments: * **program** :  :ref:`Program <handle-rtti-Program>` ? implicit
 
@@ -6799,7 +6777,7 @@ Iterates through each module in the program.
 
 .. das:function:: for_each_module_no_order(program: Program? implicit; block: block<(Module?):void>)
 
-Iterates through each module in the program in no particular order (in order they appear in libgroup).
+Iterates through each module in the program in no particular order, as they appear in the library group.
 
 :Arguments: * **program** :  :ref:`Program <handle-rtti-Program>` ? implicit
 
@@ -6809,7 +6787,7 @@ Iterates through each module in the program in no particular order (in order the
 
 .. das:function:: for_each_function(module: Module? implicit; name: string implicit; block: block<(smart_ptr<Function>):void>)
 
-Iterates through each function in the given `Module`. If the `name` is empty matches all functions.
+Iterates through each function in the given module, matching all functions if the name is empty.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6821,7 +6799,7 @@ Iterates through each function in the given `Module`. If the `name` is empty mat
 
 .. das:function:: for_each_generic(module: Module? implicit; name: string implicit; block: block<(smart_ptr<Function>):void>)
 
-Iterates through each generic function in the given `Module`.
+Iterates through each generic function in the given module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6833,7 +6811,7 @@ Iterates through each generic function in the given `Module`.
 
 .. das:function:: any_table_foreach(table: void? implicit; keyStride: int; valueStride: int; block: block<(void?;void?):void>)
 
-Iterates through any table<> type in a typeless fasion (via void?)
+Iterates through any `table<>` type in a typeless fashion using `void?` pointers.
 
 :Arguments: * **table** : void? implicit
 
@@ -6847,7 +6825,7 @@ Iterates through any table<> type in a typeless fasion (via void?)
 
 .. das:function:: any_array_foreach(array: void? implicit; stride: int; block: block<(void?):void>)
 
-Iterates through any array<> type in a typeless fasion (via void?)
+Iterates through any `array<>` type in a typeless fashion using `void?` pointers.
 
 :Arguments: * **array** : void? implicit
 
@@ -6859,7 +6837,7 @@ Iterates through any array<> type in a typeless fasion (via void?)
 
 .. das:function:: for_each_typedef(module: Module? implicit; block: block<(string#;smart_ptr<TypeDecl>):void>)
 
-Iterates through every typedef in the `Module`.
+Iterates through every typedef in the specified module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6869,7 +6847,7 @@ Iterates through every typedef in the `Module`.
 
 .. das:function:: for_each_enumeration(module: Module? implicit; block: block<(smart_ptr<Enumeration>):void>)
 
-Iterates through every enumeration in the `Module`.
+Iterates through every enumeration in the specified module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6879,7 +6857,7 @@ Iterates through every enumeration in the `Module`.
 
 .. das:function:: for_each_structure(module: Module? implicit; block: block<(smart_ptr<Structure>):void>)
 
-Iterates through every structure in the `Module`.
+Iterates through every structure in the specified module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6889,7 +6867,7 @@ Iterates through every structure in the `Module`.
 
 .. das:function:: for_each_generic(module: Module? implicit; block: block<(smart_ptr<Function>):void>)
 
-Iterates through each generic function in the given `Module`.
+Iterates through each generic function in the given module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6899,7 +6877,7 @@ Iterates through each generic function in the given `Module`.
 
 .. das:function:: for_each_global(module: Module? implicit; block: block<(smart_ptr<Variable>):void>)
 
-Iterates through every global variable in the `Module`.
+Iterates through every global variable in the specified module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6919,7 +6897,7 @@ Iterates through each annotation in the given module in the order they were adde
 
 .. das:function:: for_each_call_macro(module: Module? implicit; block: block<(string#):void>)
 
-Iterates through every CallMacro adapter in the `Module`.
+Iterates through every CallMacro adapter in the specified module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6929,7 +6907,7 @@ Iterates through every CallMacro adapter in the `Module`.
 
 .. das:function:: for_each_reader_macro(module: Module? implicit; block: block<(string#):void>)
 
-Iterates through each reader macro in the given `Module`.
+Iterates through each reader macro in the given module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6939,7 +6917,7 @@ Iterates through each reader macro in the given `Module`.
 
 .. das:function:: for_each_variant_macro(module: Module? implicit; block: block<(smart_ptr<VariantMacro>):void>)
 
-Iterates through each variant macro in the given `Module`.
+Iterates through each variant macro in the given module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6949,7 +6927,7 @@ Iterates through each variant macro in the given `Module`.
 
 .. das:function:: for_each_for_loop_macro(module: Module? implicit; block: block<(smart_ptr<ForLoopMacro>):void>)
 
-Iterates through each for loop macro in the given `Module`.
+Iterates through every for-loop macro in the specified module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6959,7 +6937,7 @@ Iterates through each for loop macro in the given `Module`.
 
 .. das:function:: for_each_typeinfo_macro(module: Module? implicit; block: block<(smart_ptr<TypeInfoMacro>):void>)
 
-Iterates through each typeinfo macro in the given `Module`.
+Iterates through each typeinfo macro in the given module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -6969,7 +6947,8 @@ Iterates through each typeinfo macro in the given `Module`.
 
 .. das:function:: for_each_typemacro(module: Module? implicit; block: block<(smart_ptr<TypeMacro>):void>)
 
-Iterates over all type macros registered in the given module, calling the provided block for each one.
+Iterates over all type macros registered in the given module, invoking the provided block for each one.
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **block** : block<(smart_ptr< :ref:`TypeMacro <handle-ast-TypeMacro>` >):void> implicit
@@ -6978,7 +6957,7 @@ Iterates over all type macros registered in the given module, calling the provid
 
 .. das:function:: for_each_field(annotation: BasicStructureAnnotation implicit; block: block<(string;string;smart_ptr<TypeDecl>;uint):void>)
 
-Iterates through every field in the `BuiltinStructure` handled type.
+Iterates through every field in a BuiltinStructure handled type.
 
 :Arguments: * **annotation** :  :ref:`BasicStructureAnnotation <handle-rtti-BasicStructureAnnotation>`  implicit
 
@@ -6998,7 +6977,7 @@ Iterates through each function in the given module.
 
 .. das:function:: for_each_structure_alias(structure: Structure? implicit; block: block<(smart_ptr<TypeDecl>):void>)
 
-Iterates over all structure aliases defined in the given structure type and invokes the provided block for each alias.
+Iterates over all structure aliases defined in the given structure type, invoking the provided block for each alias.
 
 :Arguments: * **structure** :  :ref:`Structure <handle-ast-Structure>` ? implicit
 
@@ -7020,7 +6999,7 @@ Cloning
 
 .. das:function:: clone_structure(structure: Structure const? implicit) : smart_ptr<Structure>
 
-Returns clone of the `Structure`.
+Returns a deep clone of the specified Structure.
 
 :Arguments: * **structure** :  :ref:`Structure <handle-ast-Structure>` ? implicit
 
@@ -7028,7 +7007,7 @@ Returns clone of the `Structure`.
 
 .. das:function:: clone_expression(expression: smart_ptr<Expression> implicit) : smart_ptr<Expression>
 
-Clones `Expression` with subexpressions, including corresponding type.
+Clones an Expression along with all its subexpressions and corresponding type information.
 
 :Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > implicit
 
@@ -7036,7 +7015,7 @@ Clones `Expression` with subexpressions, including corresponding type.
 
 .. das:function:: clone_function(function: smart_ptr<Function> implicit) : smart_ptr<Function>
 
-Clones `Function` and everything in it.
+Clones a Function and all of its contents.
 
 :Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
 
@@ -7044,7 +7023,7 @@ Clones `Function` and everything in it.
 
 .. das:function:: clone_variable(variable: smart_ptr<Variable> implicit) : smart_ptr<Variable>
 
-Clones `Variable` and everything in it.
+Clones a Variable and all of its contents.
 
 :Arguments: * **variable** : smart_ptr< :ref:`Variable <handle-ast-Variable>` > implicit
 
@@ -7052,7 +7031,7 @@ Clones `Variable` and everything in it.
 
 .. das:function:: clone_type(type: smart_ptr<TypeDecl> implicit) : smart_ptr<TypeDecl>
 
-Clones `TypeDecl` with subtypes.
+Clones a TypeDecl along with all its subtypes.
 
 :Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
@@ -7060,7 +7039,7 @@ Clones `TypeDecl` with subtypes.
 
 .. das:function:: clone_file_info(name: string implicit; tab_size: int) : FileInfo?
 
-Clones FileInfo structure.
+Clones a FileInfo structure.
 
 :Arguments: * **name** : string implicit
 
@@ -7070,7 +7049,7 @@ Clones FileInfo structure.
 
 .. das:function:: clone_function(fn: Function?) : FunctionPtr
 
-Clones `Function` and everything in it.
+Clones a Function and all of its contents.
 
 :Arguments: * **fn** :  :ref:`Function <handle-ast-Function>` ?
 
@@ -7092,7 +7071,7 @@ Mangled name
 
 .. das:function:: parse_mangled_name(txt: string implicit; lib: ModuleGroup implicit; thisModule: Module? implicit) : smart_ptr<TypeDecl>
 
-Parses mangled name and creates corresponding `TypeDecl`.
+Parses a mangled name string and creates the corresponding TypeDecl.
 
 :Arguments: * **txt** : string implicit
 
@@ -7104,7 +7083,7 @@ Parses mangled name and creates corresponding `TypeDecl`.
 
 .. das:function:: get_mangled_name(function: smart_ptr<Function> implicit) : string
 
-Returns mangled name of the object.
+Returns the mangled name of the specified object.
 
 :Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
 
@@ -7112,7 +7091,7 @@ Returns mangled name of the object.
 
 .. das:function:: get_mangled_name(type: smart_ptr<TypeDecl> implicit) : string
 
-Returns mangled name of the object.
+Returns the mangled name of the specified object.
 
 :Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
@@ -7120,7 +7099,7 @@ Returns mangled name of the object.
 
 .. das:function:: get_mangled_name(variable: smart_ptr<Variable> implicit) : string
 
-Returns mangled name of the object.
+Returns the mangled name of the specified object.
 
 :Arguments: * **variable** : smart_ptr< :ref:`Variable <handle-ast-Variable>` > implicit
 
@@ -7128,7 +7107,7 @@ Returns mangled name of the object.
 
 .. das:function:: get_mangled_name(variable: smart_ptr<ExprBlock> implicit) : string
 
-Returns mangled name of the object.
+Returns the mangled name of the specified object.
 
 :Arguments: * **variable** : smart_ptr< :ref:`ExprBlock <handle-ast-ExprBlock>` > implicit
 
@@ -7136,7 +7115,7 @@ Returns mangled name of the object.
 
 .. das:function:: get_mangled_name(fn: Function?) : auto
 
-Returns mangled name of the object.
+Returns the mangled name of the specified object.
 
 :Arguments: * **fn** :  :ref:`Function <handle-ast-Function>` ?
 
@@ -7144,7 +7123,7 @@ Returns mangled name of the object.
 
 .. das:function:: get_mangled_name(decl: TypeDecl?) : auto
 
-Returns mangled name of the object.
+Returns the mangled name of the specified object.
 
 :Arguments: * **decl** :  :ref:`TypeDecl <handle-ast-TypeDecl>` ?
 
@@ -7152,7 +7131,7 @@ Returns mangled name of the object.
 
 .. das:function:: get_mangled_name(decl: Variable?) : auto
 
-Returns mangled name of the object.
+Returns the mangled name of the specified object.
 
 :Arguments: * **decl** :  :ref:`Variable <handle-ast-Variable>` ?
 
@@ -7160,7 +7139,7 @@ Returns mangled name of the object.
 
 .. das:function:: get_mangled_name(decl: ExprBlock?) : auto
 
-Returns mangled name of the object.
+Returns the mangled name of the specified object.
 
 :Arguments: * **decl** :  :ref:`ExprBlock <handle-ast-ExprBlock>` ?
 
@@ -7178,7 +7157,7 @@ Size and offset
 
 .. das:function:: get_variant_field_offset(variant: smart_ptr<TypeDecl> implicit; index: int) : int
 
-Returns offset of the variant field in bytes.
+Returns the byte offset of a variant field.
 
 :Arguments: * **variant** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
@@ -7188,7 +7167,7 @@ Returns offset of the variant field in bytes.
 
 .. das:function:: get_tuple_field_offset(typle: smart_ptr<TypeDecl> implicit; index: int) : int
 
-Returns offset of the tuple field in bytes.
+Returns the byte offset of a tuple field.
 
 :Arguments: * **typle** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
@@ -7198,7 +7177,7 @@ Returns offset of the tuple field in bytes.
 
 .. das:function:: any_array_size(array: void? implicit) : int
 
-Returns array size from pointer to array<> object.
+Returns the size of an array from a pointer to an `array<>` object.
 
 :Arguments: * **array** : void? implicit
 
@@ -7206,7 +7185,7 @@ Returns array size from pointer to array<> object.
 
 .. das:function:: any_table_size(table: void? implicit) : int
 
-Returns table size from pointer to the table<> object.
+Returns the size of a table from a pointer to a `table<>` object.
 
 :Arguments: * **table** : void? implicit
 
@@ -7214,7 +7193,7 @@ Returns table size from pointer to the table<> object.
 
 .. das:function:: get_handled_type_field_offset(type: smart_ptr<TypeAnnotation> implicit; field: string implicit) : uint
 
-Returns offset of the field in the ManagedStructure handled type.
+Returns the byte offset of a field in a ManagedStructure handled type.
 
 :Arguments: * **type** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` > implicit
 
@@ -7233,7 +7212,7 @@ Evaluations
 .. warning:: 
   This is unsafe operation.
 
-Simulates and evaluates single expression on the separate context.
+Simulates and evaluates a single expression on a separate context.
 
 :Arguments: * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` >& implicit
 
@@ -7249,7 +7228,7 @@ Error reporting
 
 .. das:function:: macro_error(porogram: smart_ptr<Program> implicit; at: LineInfo implicit; message: string implicit)
 
-Reports error to the currently compiling program to whatever current pass is.
+Reports an error to the currently compiling program during the active compilation pass.
 
 :Arguments: * **porogram** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
 
@@ -7270,7 +7249,7 @@ Location and context
 
 .. das:function:: force_at(expression: smart_ptr<Expression> const& implicit; at: LineInfo implicit)
 
-Replaces line info in the expression, its subexpressions, and its types.
+Replaces line info in an expression, its subexpressions, and their types.
 
 :Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>` >& implicit
 
@@ -7280,7 +7259,7 @@ Replaces line info in the expression, its subexpressions, and its types.
 
 .. das:function:: force_at(function: smart_ptr<Function> const& implicit; at: LineInfo implicit)
 
-Replaces line info in the expression, its subexpressions, and its types.
+Replaces line info in an expression, its subexpressions, and their types.
 
 :Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` >& implicit
 
@@ -7290,7 +7269,7 @@ Replaces line info in the expression, its subexpressions, and its types.
 
 .. das:function:: collect_dependencies(function: smart_ptr<Function> implicit; block: block<(array<Function?>;array<Variable?>):void>)
 
-Collects dependencies of the given function (other functions it calls, global variables it accesses).
+Collects dependencies of a given function, including other functions it calls and global variables it accesses.
 
 :Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
 
@@ -7300,7 +7279,7 @@ Collects dependencies of the given function (other functions it calls, global va
 
 .. das:function:: get_ast_context(program: smart_ptr<Program> implicit; expression: smart_ptr<Expression> implicit; block: block<(bool;AstContext):void>)
 
-Returns `AstContext` for the given expression. It includes current function (if applicable), loops, blocks, scopes, and with sections.
+Returns the AstContext for a given expression, including the current function, loops, blocks, scopes, and with sections.
 
 :Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
 
@@ -7319,7 +7298,7 @@ Use queries
 
 .. das:function:: get_use_global_variables(func: smart_ptr<Function> implicit; block: block<(smart_ptr<Variable>):void>)
 
-Provides invoked block with the list of all global variables, used by a function.
+Invokes a block with the list of all global variables accessed by the specified function.
 
 :Arguments: * **func** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
 
@@ -7329,7 +7308,7 @@ Provides invoked block with the list of all global variables, used by a function
 
 .. das:function:: get_use_functions(func: smart_ptr<Function> implicit; block: block<(smart_ptr<Function>):void>)
 
-Provides invoked block with the list of all functions, used by a function.
+Invokes a block with the list of all functions called by the specified function.
 
 :Arguments: * **func** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
 
@@ -7345,7 +7324,7 @@ Log
 
 .. das:function:: to_compilation_log(text: string implicit)
 
-Writes to compilation log from macro during compilation.
+Writes a message to the compilation log from a macro during compilation.
 
 :Arguments: * **text** : string implicit
 
@@ -7359,7 +7338,7 @@ Removal
 
 .. das:function:: remove_structure(module: Module? implicit; structure: smart_ptr<Structure>& implicit) : bool
 
-Removes structure declaration from the specified module.
+Removes a structure declaration from the specified module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -7398,7 +7377,7 @@ Properties
 
 .. das:function:: get_current_search_module(program: Program? implicit; function: Function? implicit; moduleName: string implicit) : Module?
 
-Returns the module which is currently being searched for the function, given module name. Resolves "", "_", "*", and "__" correctly.
+Returns the module currently being searched for a function by name, correctly resolving special names like `""`, `"_"`, `"*"`, and `"__"`.
 
 :Arguments: * **program** :  :ref:`Program <handle-rtti-Program>` ? implicit
 
@@ -7410,7 +7389,7 @@ Returns the module which is currently being searched for the function, given mod
 
 .. das:function:: can_access_global_variable(variable: smart_ptr<Variable> const& implicit; module: Module? implicit; thisModule: Module? implicit) : bool
 
-Returns true if global variable is accessible from the specified module.
+Returns true if a global variable is accessible from the specified module.
 
 :Arguments: * **variable** : smart_ptr< :ref:`Variable <handle-ast-Variable>` >& implicit
 
@@ -7422,7 +7401,7 @@ Returns true if global variable is accessible from the specified module.
 
 .. das:function:: is_temp_type(type: smart_ptr<TypeDecl> implicit; refMatters: bool) : bool
 
-Returns true if type can be temporary.
+Returns true if the specified type can be temporary.
 
 :Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
@@ -7432,7 +7411,7 @@ Returns true if type can be temporary.
 
 .. das:function:: is_same_type(leftType: smart_ptr<TypeDecl> implicit; rightType: smart_ptr<TypeDecl> implicit; refMatters: RefMatters; constMatters: ConstMatters; tempMatters: TemporaryMatters) : bool
 
-Compares two types given comparison parameters and returns true if they match.
+Compares two types using the given comparison parameters and returns true if they match.
 
 :Arguments: * **leftType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
@@ -7448,7 +7427,7 @@ Compares two types given comparison parameters and returns true if they match.
 
 .. das:function:: get_underlying_value_type(type: smart_ptr<TypeDecl> implicit) : smart_ptr<TypeDecl>
 
-Returns daScript type which is aliased with ManagedValue handled type.
+Returns the daScript type aliased by a ManagedValue handled type.
 
 :Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
@@ -7456,7 +7435,7 @@ Returns daScript type which is aliased with ManagedValue handled type.
 
 .. das:function:: get_handled_type_field_type(type: smart_ptr<TypeAnnotation> implicit; field: string implicit) : TypeInfo?
 
-Returns type of the field in the ManagedStructure handled type.
+Returns the type of a field in a ManagedStructure handled type.
 
 :Arguments: * **type** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` > implicit
 
@@ -7466,7 +7445,7 @@ Returns type of the field in the ManagedStructure handled type.
 
 .. das:function:: get_handled_type_field_type_declaration(type: smart_ptr<TypeAnnotation> implicit; field: string implicit; isConst: bool) : smart_ptr<TypeDecl>
 
-Returns type declaration of the field in the ManagedStructure handled type.
+Returns the type declaration of a field in a ManagedStructure handled type.
 
 :Arguments: * **type** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` > implicit
 
@@ -7478,7 +7457,7 @@ Returns type declaration of the field in the ManagedStructure handled type.
 
 .. das:function:: get_handled_type_index_type_declaration(type: TypeAnnotation? implicit; src: Expression? implicit; idx: Expression? implicit) : smart_ptr<TypeDecl>
 
-Returns type declaration of the index type in the handled type.
+Returns the type declaration of the index operator for a handled type.
 
 :Arguments: * **type** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` ? implicit
 
@@ -7490,7 +7469,7 @@ Returns type declaration of the index type in the handled type.
 
 .. das:function:: get_vector_ptr_at_index(vec: void? implicit; type: TypeDecl? implicit; idx: int) : void?
 
-Returns pointer to the vector element at the specified index, given pointer to the vector object and TypeDeclPtr.
+Returns a pointer to the vector element at the specified index given a pointer to the vector object and its TypeDeclPtr.
 
 :Arguments: * **vec** : void? implicit
 
@@ -7502,7 +7481,7 @@ Returns pointer to the vector element at the specified index, given pointer to t
 
 .. das:function:: get_vector_length(vec: void? implicit; type: smart_ptr<TypeDecl> implicit) : int
 
-Returns length of the vector, given pointer to the vector object and TypeDeclPtr.
+Returns the length of a vector given a pointer to the vector object and its TypeDeclPtr.
 
 :Arguments: * **vec** : void? implicit
 
@@ -7512,7 +7491,7 @@ Returns length of the vector, given pointer to the vector object and TypeDeclPtr
 
 .. das:function:: has_field(type: smart_ptr<TypeDecl> implicit; fieldName: string implicit; constant: bool) : bool
 
-Returns if structure, variant, tuple, or handled type or pointer to either of those has specific field.
+Returns true if a structure, variant, tuple, handled type, or pointer to any of those has the specified field.
 
 :Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
@@ -7524,7 +7503,7 @@ Returns if structure, variant, tuple, or handled type or pointer to either of th
 
 .. das:function:: get_field_type(type: smart_ptr<TypeDecl> implicit; fieldName: string implicit; constant: bool) : smart_ptr<TypeDecl>
 
-Returns type of the field if structure, variant, tuple, or handled type or pointer to either of those has it. It's null otherwise.
+Returns the type of a field if the target is a structure, variant, tuple, handled type, or pointer to any of those, or null otherwise.
 
 :Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
@@ -7536,7 +7515,7 @@ Returns type of the field if structure, variant, tuple, or handled type or point
 
 .. das:function:: is_visible_directly(from_module: Module? implicit; which_module: Module? implicit) : bool
 
-Returns true if module is visible directly from the other module.
+Returns true if one module is directly visible from another module.
 
 :Arguments: * **from_module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -7546,7 +7525,7 @@ Returns true if module is visible directly from the other module.
 
 .. das:function:: is_expr_like_call(expression: smart_ptr<Expression> const& implicit) : bool
 
-Returns true if expression is or inherited from `ExprLooksLikeCall`
+Returns true if the expression is or inherits from ExprLooksLikeCall.
 
 :Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>` >& implicit
 
@@ -7554,7 +7533,7 @@ Returns true if expression is or inherited from `ExprLooksLikeCall`
 
 .. das:function:: is_expr_const(expression: smart_ptr<Expression> const& implicit) : bool
 
-Returns true if expression is or inherited from `ExprConst`
+Returns true if the expression is or inherits from ExprConst.
 
 :Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>` >& implicit
 
@@ -7562,7 +7541,7 @@ Returns true if expression is or inherited from `ExprConst`
 
 .. das:function:: get_function_aot_hash(fun: Function const? implicit) : uint64
 
-Returns hash of the function for the AOT matching.
+Returns the hash of a function used for AOT matching.
 
 :Arguments: * **fun** :  :ref:`Function <handle-ast-Function>` ? implicit
 
@@ -7570,7 +7549,7 @@ Returns hash of the function for the AOT matching.
 
 .. das:function:: get_function_hash_by_id(fun: Function? implicit; id: int; pctx: void? implicit) : uint64
 
-Returns hash of the function by its unique id.
+Returns the hash of a function given its unique identifier.
 
 :Arguments: * **fun** :  :ref:`Function <handle-ast-Function>` ? implicit
 
@@ -7582,7 +7561,7 @@ Returns hash of the function by its unique id.
 
 .. das:function:: get_aot_arg_suffix(func: Function? implicit; call: ExprCallFunc? implicit; argIndex: int) : string
 
-Returns AOT argument suffix for the specified function.
+Returns the AOT argument suffix string for the specified function.
 
 :Arguments: * **func** :  :ref:`Function <handle-ast-Function>` ? implicit
 
@@ -7594,7 +7573,7 @@ Returns AOT argument suffix for the specified function.
 
 .. das:function:: get_aot_arg_prefix(func: Function? implicit; call: ExprCallFunc? implicit; argIndex: int) : string
 
-Returns AOT argument prefix for the specified function.
+Returns the AOT argument prefix string for the specified function.
 
 :Arguments: * **func** :  :ref:`Function <handle-ast-Function>` ? implicit
 
@@ -7606,7 +7585,7 @@ Returns AOT argument prefix for the specified function.
 
 .. das:function:: get_func_aot_prefix(ann: FunctionAnnotation? implicit; stg: StringBuilderWriter? implicit; call: ExprCallFunc? implicit)
 
-Returns AOT function prefix for the specified function.
+Returns the AOT function prefix string for the specified function.
 
 :Arguments: * **ann** :  :ref:`FunctionAnnotation <handle-ast-FunctionAnnotation>` ? implicit
 
@@ -7618,7 +7597,7 @@ Returns AOT function prefix for the specified function.
 
 .. das:function:: get_struct_aot_prefix(ann: StructureAnnotation? implicit; structure: Structure? implicit; args: AnnotationArgumentList implicit; stg: StringBuilderWriter? implicit)
 
-Returns AOT structure prefix for the specified structure.
+Returns the AOT prefix string for the specified structure.
 
 :Arguments: * **ann** :  :ref:`StructureAnnotation <handle-ast-StructureAnnotation>` ? implicit
 
@@ -7632,7 +7611,7 @@ Returns AOT structure prefix for the specified structure.
 
 .. das:function:: get_aot_name(func: Function? implicit; call: ExprCallFunc? implicit) : string
 
-Returns AOT name for the specified function.
+Returns the AOT-generated name for the specified function.
 
 :Arguments: * **func** :  :ref:`Function <handle-ast-Function>` ? implicit
 
@@ -7642,7 +7621,7 @@ Returns AOT name for the specified function.
 
 .. das:function:: is_same_type(argType: smart_ptr<TypeDecl> implicit; passType: smart_ptr<TypeDecl> implicit; refMatters: bool; constMatters: bool; temporaryMatters: bool; allowSubstitute: bool) : bool
 
-Compares two types given comparison parameters and returns true if they match.
+Compares two types using the given comparison parameters and returns true if they match.
 
 :Arguments: * **argType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
@@ -7660,7 +7639,7 @@ Compares two types given comparison parameters and returns true if they match.
 
 .. das:function:: get_structure_alias(structure: Structure? implicit; aliasName: string implicit) : smart_ptr<TypeDecl>
 
-Finds and returns the structure alias type given alias name.
+Finds and returns a structure alias type by its alias name.
 
 :Arguments: * **structure** :  :ref:`Structure <handle-ast-Structure>` ? implicit
 
@@ -7677,7 +7656,7 @@ Infer
 
 .. das:function:: infer_generic_type(type: smart_ptr<TypeDecl> implicit; passType: smart_ptr<TypeDecl> implicit; topLevel: bool; isPassType: bool) : smart_ptr<TypeDecl>
 
-Infers generic type for the specified type and pass type.
+Infers a concrete type from a generic type declaration and a pass type.
 
 :Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
@@ -7691,7 +7670,7 @@ Infers generic type for the specified type and pass type.
 
 .. das:function:: update_alias_map(program: smart_ptr<Program> implicit; argType: smart_ptr<TypeDecl> implicit; passType: smart_ptr<TypeDecl> implicit)
 
-Updates alias map for the specified infer.
+Updates the alias map for the specified type during inference.
 
 :Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
 
@@ -7707,7 +7686,7 @@ Uncategorized
 
 .. das:function:: module_find_annotation(module: Module const? implicit; name: string implicit) : smart_ptr<Annotation>
 
-Finds annotation of the specified type in the given module.
+Finds an annotation by name in the specified module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -7717,7 +7696,7 @@ Finds annotation of the specified type in the given module.
 
 .. das:function:: module_find_type_annotation(module: Module const? implicit; name: string implicit) : TypeAnnotation?
 
-Finds type annotation of the specified type in the given module.
+Finds a type annotation by name in the specified module.
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -7727,7 +7706,7 @@ Finds type annotation of the specified type in the given module.
 
 .. das:function:: not_inferred(function: Function? implicit)
 
-Specifies that function has been modified via macro and should be inferred again.
+Marks a function as modified by a macro so that it will be inferred again.
 
 :Arguments: * **function** :  :ref:`Function <handle-ast-Function>` ? implicit
 
@@ -7735,7 +7714,7 @@ Specifies that function has been modified via macro and should be inferred again
 
 .. das:function:: module_find_structure(program: Module const? implicit; name: string implicit) : Structure?
 
-Finds structure by name in the specified module.
+Finds a structure by name in the specified module.
 
 :Arguments: * **program** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -7745,7 +7724,7 @@ Finds structure by name in the specified module.
 
 .. das:function:: debug_helper_iter_structs(helper: smart_ptr<DebugInfoHelper> implicit; blk: block<(string;StructInfo?):void>)
 
-Iterates through all structures in the DebugInfoHelper, calling the provided block with each structure.
+Iterates through all structures in the DebugInfoHelper, invoking the provided block for each one.
 
 :Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` > implicit
 
@@ -7755,7 +7734,7 @@ Iterates through all structures in the DebugInfoHelper, calling the provided blo
 
 .. das:function:: debug_helper_iter_types(helper: smart_ptr<DebugInfoHelper> implicit; blk: block<(string;TypeInfo?):void>)
 
-Iterates through all types in the DebugInfoHelper, calling the provided block with each type.
+Iterates through all types in the DebugInfoHelper, invoking the provided block for each one.
 
 :Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` > implicit
 
@@ -7765,7 +7744,7 @@ Iterates through all types in the DebugInfoHelper, calling the provided block wi
 
 .. das:function:: debug_helper_iter_vars(helper: smart_ptr<DebugInfoHelper> implicit; blk: block<(string;VarInfo?):void>)
 
-Iterates through all variables in the DebugInfoHelper, calling the provided block with each variable.
+Iterates through all variables in the DebugInfoHelper, invoking the provided block for each one.
 
 :Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` > implicit
 
@@ -7775,7 +7754,7 @@ Iterates through all variables in the DebugInfoHelper, calling the provided bloc
 
 .. das:function:: debug_helper_iter_funcs(helper: smart_ptr<DebugInfoHelper> implicit; blk: block<(string;FuncInfo?):void>)
 
-Iterates through all functions in the DebugInfoHelper, calling the provided block with each function.
+Iterates through all functions in the DebugInfoHelper, invoking the provided block for each one.
 
 :Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` > implicit
 
@@ -7785,7 +7764,7 @@ Iterates through all functions in the DebugInfoHelper, calling the provided bloc
 
 .. das:function:: debug_helper_iter_enums(helper: smart_ptr<DebugInfoHelper> implicit; blk: block<(string;EnumInfo?):void>)
 
-Iterates through all enumerations in the DebugInfoHelper, calling the provided block with each enumeration.
+Iterates through all enumerations in the DebugInfoHelper, invoking the provided block for each one.
 
 :Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` > implicit
 
@@ -7795,7 +7774,7 @@ Iterates through all enumerations in the DebugInfoHelper, calling the provided b
 
 .. das:function:: debug_helper_find_type_cppname(helper: smart_ptr<DebugInfoHelper> const& implicit; type_info: TypeInfo? implicit) : string
 
-Finds type in the DebugInfoHelper and returns it C++ name.
+Finds a type in the DebugInfoHelper and returns its C++ name.
 
 :Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` >& implicit
 
@@ -7805,7 +7784,7 @@ Finds type in the DebugInfoHelper and returns it C++ name.
 
 .. das:function:: debug_helper_find_struct_cppname(helper: smart_ptr<DebugInfoHelper> const& implicit; struct_info: StructInfo? implicit) : string
 
-Finds structure in the DebugInfoHelper and returns it C++ name.
+Finds a structure in the DebugInfoHelper and returns its C++ name.
 
 :Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` >& implicit
 
@@ -7815,7 +7794,7 @@ Finds structure in the DebugInfoHelper and returns it C++ name.
 
 .. das:function:: macro_aot_infix(macro: TypeInfoMacro? implicit; ss: StringBuilderWriter? implicit; expr: smart_ptr<Expression> implicit) : bool
 
-Returns true if macro requires AOT infix for the specified handled type.
+Returns true if the macro requires an AOT infix operator for the specified handled type.
 
 :Arguments: * **macro** :  :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>` ? implicit
 
@@ -7827,7 +7806,7 @@ Returns true if macro requires AOT infix for the specified handled type.
 
 .. das:function:: getInitSemanticHashWithDep(program: smart_ptr<Program> implicit; init: uint64) : uint64
 
-Returns initialization semantic hash including dependencies for the entire program.
+Returns the initialization semantic hash including dependencies for the entire program.
 
 :Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
 
@@ -7837,7 +7816,7 @@ Returns initialization semantic hash including dependencies for the entire progr
 
 .. das:function:: aot_require(mod: Module? implicit; ss: StringBuilderWriter? implicit) : bool
 
-Write data to the 'require' section of the AOT module.
+Writes data to the require section of an AOT module.
 
 :Arguments: * **mod** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
@@ -7847,7 +7826,7 @@ Write data to the 'require' section of the AOT module.
 
 .. das:function:: aot_type_ann_get_field_ptr(ann: TypeAnnotation? implicit; ss: StringBuilderWriter? implicit; name: string implicit)
 
-Returns string with access symbol for the field (like -> for the pointer types, or . for the value types).
+Returns the access symbol string for a field, such as `->` for pointer types or `.` for value types.
 
 :Arguments: * **ann** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` ? implicit
 
@@ -7859,7 +7838,7 @@ Returns string with access symbol for the field (like -> for the pointer types, 
 
 .. das:function:: aot_need_type_info(macro: TypeInfoMacro const? implicit; expr: smart_ptr<Expression> implicit) : bool
 
-Returns true if TypeInfo? is needed for the specified type in 'typeinfo' expression.
+Returns true if a `TypeInfo?` is needed for the specified type in a typeinfo expression.
 
 :Arguments: * **macro** :  :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>` ? implicit
 
@@ -7869,7 +7848,7 @@ Returns true if TypeInfo? is needed for the specified type in 'typeinfo' express
 
 .. das:function:: write_aot_body(structure: StructureAnnotation? implicit; st: smart_ptr<Structure> implicit; args: AnnotationArgumentList implicit; writer: StringBuilderWriter? implicit)
 
-Writes AOT body for the specified StructureAnnotation.
+Writes the AOT body code for the specified StructureAnnotation.
 
 :Arguments: * **structure** :  :ref:`StructureAnnotation <handle-ast-StructureAnnotation>` ? implicit
 
@@ -7883,7 +7862,7 @@ Writes AOT body for the specified StructureAnnotation.
 
 .. das:function:: write_aot_suffix(structure: StructureAnnotation? implicit; st: smart_ptr<Structure> implicit; args: AnnotationArgumentList implicit; writer: StringBuilderWriter? implicit)
 
-Writes AOT suffix for the specified StructureAnnotation.
+Writes the AOT suffix code for the specified StructureAnnotation.
 
 :Arguments: * **structure** :  :ref:`StructureAnnotation <handle-ast-StructureAnnotation>` ? implicit
 
@@ -7897,7 +7876,7 @@ Writes AOT suffix for the specified StructureAnnotation.
 
 .. das:function:: write_aot_macro_suffix(macro: TypeInfoMacro? implicit; ss: StringBuilderWriter? implicit; expr: smart_ptr<Expression> implicit)
 
-Writes AOT macro suffix for the specified TypeInfoMacro.
+Writes the AOT macro suffix code for the specified TypeInfoMacro.
 
 :Arguments: * **macro** :  :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>` ? implicit
 
@@ -7909,7 +7888,7 @@ Writes AOT macro suffix for the specified TypeInfoMacro.
 
 .. das:function:: write_aot_macro_prefix(macro: TypeInfoMacro? implicit; ss: StringBuilderWriter? implicit; expr: smart_ptr<Expression> implicit)
 
-Writes AOT macro prefix for the specified TypeInfoMacro.
+Writes the AOT macro prefix code for the specified TypeInfoMacro.
 
 :Arguments: * **macro** :  :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>` ? implicit
 
@@ -7921,7 +7900,7 @@ Writes AOT macro prefix for the specified TypeInfoMacro.
 
 .. das:function:: aot_previsit_get_field_ptr(ann: TypeAnnotation? implicit; ss: StringBuilderWriter? implicit; name: string implicit)
 
-Previsit for getting field pointer in AOT generation.
+Performs the pre-visit step for field pointer access during AOT code generation.
 
 :Arguments: * **ann** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` ? implicit
 
@@ -7933,7 +7912,7 @@ Previsit for getting field pointer in AOT generation.
 
 .. das:function:: aot_previsit_get_field(ann: TypeAnnotation? implicit; ss: StringBuilderWriter? implicit; name: string implicit)
 
-Previsit for getting field in AOT generation.
+Performs the pre-visit step for field access during AOT code generation.
 
 :Arguments: * **ann** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` ? implicit
 
@@ -7945,7 +7924,7 @@ Previsit for getting field in AOT generation.
 
 .. das:function:: aot_visit_get_field(ann: TypeAnnotation? implicit; ss: StringBuilderWriter? implicit; name: string implicit)
 
-Visit for getting field in AOT generation.
+Performs the visit step for field access during AOT code generation.
 
 :Arguments: * **ann** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` ? implicit
 
@@ -7957,7 +7936,7 @@ Visit for getting field in AOT generation.
 
 .. das:function:: string_builder_str(ss: StringBuilderWriter? implicit) : string
 
-Returns string from the StringBuilder expression, given pointer to the StringBuilder object.
+Returns the accumulated string from a StringBuilder object given a pointer to it.
 
 :Arguments: * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ? implicit
 
@@ -7965,7 +7944,7 @@ Returns string from the StringBuilder expression, given pointer to the StringBui
 
 .. das:function:: string_builder_clear(ss: StringBuilderWriter? implicit)
 
-Clears the StringBuilder object, given pointer to the StringBuilder object.
+Clears a StringBuilder object given a pointer to it.
 
 :Arguments: * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ? implicit
 

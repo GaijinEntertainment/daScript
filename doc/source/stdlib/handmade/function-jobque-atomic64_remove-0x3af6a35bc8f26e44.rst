@@ -1,1 +1,1 @@
-Destroys atomic 64 bit integer.
+Destroys an ``Atomic64`` and releases its resources.

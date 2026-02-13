@@ -1,1 +1,1 @@
-Returns true if character is [0-9].
+Returns true if the integer character code represents a decimal digit [0-9].

@@ -1,1 +1,1 @@
-smallest possible non-zero value of 'float'. if u want minimum possible value use `-FLT_MAX`
+Smallest positive non-zero normalized value of the `float` type; for the most negative value use `-FLT_MAX`.

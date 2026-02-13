@@ -1,1 +1,1 @@
-length will return current size of table or array `arg`.
+Returns the number of elements currently stored in the given dynamic `array`.

@@ -1,1 +1,1 @@
-Returns true if the given annotation is a FunctionAnnotation.
+Property-like accessor that returns ``true`` if the given ``Annotation`` is a ``FunctionAnnotation`` (applied to functions).

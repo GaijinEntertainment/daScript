@@ -1,1 +1,1 @@
-Add module-specific option, which is accessible via "options" keyword.
+Adds a module-specific option accessible via the `options` keyword.

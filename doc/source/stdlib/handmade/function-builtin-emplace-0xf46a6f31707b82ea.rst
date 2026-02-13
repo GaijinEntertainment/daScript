@@ -1,1 +1,1 @@
-emplace will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be moved (<-) to it.
+Moves `value` into the table `Tab` at the specified `key` using move semantics, avoiding unnecessary copies.

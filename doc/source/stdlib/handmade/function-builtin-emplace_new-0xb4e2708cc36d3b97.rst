@@ -1,1 +1,1 @@
-constructs a new element in-place in the table, set, or array
+Moves a smart pointer `value` into the end of the array `Arr`, constructing the entry in-place and returning a reference to it.

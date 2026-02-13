@@ -1,1 +1,1 @@
-C-style free to be coupled with C-style malloc
+Frees memory previously allocated with `malloc`, following C-style manual memory management semantics.

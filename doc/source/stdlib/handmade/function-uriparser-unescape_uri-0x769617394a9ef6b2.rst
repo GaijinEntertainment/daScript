@@ -1,1 +1,1 @@
-Remove escape characters from the URI.
+Decodes percent-encoded characters in the URI string.

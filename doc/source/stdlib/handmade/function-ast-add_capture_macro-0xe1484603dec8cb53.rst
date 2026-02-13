@@ -1,1 +1,1 @@
-Adds `AstCaptureMacro` to the specific module.
+Adds an AstCaptureMacro to the specified module.

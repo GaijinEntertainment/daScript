@@ -1,1 +1,1 @@
-Returns if the given type is an index type.
+Returns whether the given type is an index type.

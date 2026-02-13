@@ -1,1 +1,2 @@
-Returns the atime of the file represented by the given FStat object.
+Returns the last access time of the file as a clock value.
+

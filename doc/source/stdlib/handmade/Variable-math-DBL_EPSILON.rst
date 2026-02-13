@@ -1,1 +1,1 @@
-the difference between 1 and the smallest double precision floating point number of type double that is greater than 1.
+The smallest double-precision value epsilon such that 1.0 + epsilon != 1.0, approximately 2.2204460492503131e-16.

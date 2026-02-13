@@ -1,1 +1,1 @@
-Adds functions matching a regex to a documentation group.
+Appends functions whose names match a regex to an existing documentation group.

@@ -1,1 +1,1 @@
-Returns type declaration of the index type in the handled type.
+Returns the type declaration of the index operator for a handled type.

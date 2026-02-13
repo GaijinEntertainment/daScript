@@ -1,1 +1,1 @@
-Unescape string i.e reverse effects of `escape`. For example "\\n" is converted to "\n".
+Returns a new string with printable escape sequences converted back to their original characters (e.g. \\n becomes a newline).

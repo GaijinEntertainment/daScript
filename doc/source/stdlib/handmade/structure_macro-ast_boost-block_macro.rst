@@ -1,1 +1,1 @@
-Turns AstBlockAnnotation into a macro with the specified `name`.
+The ``[block_macro]`` structure annotation — registers an ``AstBlockAnnotation`` subclass as a named block-level annotation available to the compiler.

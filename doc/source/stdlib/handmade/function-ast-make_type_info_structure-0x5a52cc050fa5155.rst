@@ -1,1 +1,1 @@
-Returns new `TypeInfo` corresponding to the specific type.
+Returns a new TypeInfo corresponding to the specified type.

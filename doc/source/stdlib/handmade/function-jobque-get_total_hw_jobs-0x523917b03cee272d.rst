@@ -1,1 +1,1 @@
-Total number of hardware threads supporting job system.
+Returns the total number of hardware threads allocated to the job system.

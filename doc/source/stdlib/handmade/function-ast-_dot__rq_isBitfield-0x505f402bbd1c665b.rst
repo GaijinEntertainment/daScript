@@ -1,1 +1,1 @@
-Returns whether the given type is a bitfield.
+Returns whether the given type is a bitfield type.

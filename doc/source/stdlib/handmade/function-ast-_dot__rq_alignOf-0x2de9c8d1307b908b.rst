@@ -1,1 +1,1 @@
-Returns the alignment requirement (in bytes) of the type declaration.
+Returns the memory alignment requirement of the type in bytes.

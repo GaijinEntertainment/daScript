@@ -1,1 +1,1 @@
-Returns if the given type requires deletion.
+Returns whether the given type requires explicit deletion.

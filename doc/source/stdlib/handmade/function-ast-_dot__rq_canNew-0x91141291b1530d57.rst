@@ -1,1 +1,1 @@
-Returns whether the given type can be instantiated via 'new' on the heap.
+Returns whether the given type can be heap-allocated via the new operator.

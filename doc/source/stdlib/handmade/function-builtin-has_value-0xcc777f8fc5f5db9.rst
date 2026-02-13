@@ -1,1 +1,1 @@
-returns true if iterable `a` (array, dim, etc) contains `key`
+Consumes elements from the iterator `a` and returns `true` if any element equals `key`.

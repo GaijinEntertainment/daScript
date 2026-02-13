@@ -1,1 +1,1 @@
-Return RttiValue which represents value of the global variable.
+Returns an ``RttiValue`` variant representing the current value of a global variable, looked up by ``VarInfo`` in the given ``Context``.

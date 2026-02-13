@@ -1,1 +1,1 @@
-Turns AstCaptureMacro into a macro with the specified `name`.
+The ``[capture_macro]`` structure annotation — registers an ``AstCaptureMacro`` subclass as a named capture macro that can customize lambda capture behavior.

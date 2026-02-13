@@ -1,1 +1,1 @@
-Returns if the given type is a shareable type.
+Returns whether the given type is shareable across contexts.

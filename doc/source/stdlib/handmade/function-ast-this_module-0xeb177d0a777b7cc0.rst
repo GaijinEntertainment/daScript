@@ -1,1 +1,1 @@
-Main module attached to the current context (will through if RTTI is disabled).
+Returns the main module attached to the current context, throwing an error if RTTI is disabled.

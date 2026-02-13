@@ -1,1 +1,1 @@
-Adds entry to enumeration annotation.
+Adds a new entry to an enumeration annotation.

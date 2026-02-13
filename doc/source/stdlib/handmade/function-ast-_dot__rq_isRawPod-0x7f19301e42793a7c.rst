@@ -1,1 +1,1 @@
-Returns if the given type is a raw pod (plain old data without any pointers or strings) type.
+Returns whether the given type is a raw POD type containing no pointers or strings.

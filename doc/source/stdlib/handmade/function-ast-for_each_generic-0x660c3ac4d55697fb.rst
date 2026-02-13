@@ -1,1 +1,1 @@
-Iterates through each generic function in the given `Module`.
+Iterates through each generic function in the given module.

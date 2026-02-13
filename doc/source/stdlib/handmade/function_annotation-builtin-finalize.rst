@@ -1,1 +1,1 @@
-indicates that the function would be called at the context shutdown time
+Registers a function to be called automatically when the context is shut down, for cleanup and resource release.

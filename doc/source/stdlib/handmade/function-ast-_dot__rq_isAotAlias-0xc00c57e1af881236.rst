@@ -1,1 +1,1 @@
-Returns if somewhere in the type definition it is an AOT alias type.
+Returns whether the type definition contains an AOT alias type.

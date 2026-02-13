@@ -1,1 +1,1 @@
-Get total number of functions in the context.
+Returns the total number of registered functions (``int``) in the given ``Context``.

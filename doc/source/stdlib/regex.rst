@@ -42,14 +42,13 @@ Type aliases
 
 .. das:attribute:: CharSet = uint[8]
 
-Character set for regex.
-
+Bitfield character set used internally by the regex engine.
 .. _alias-ReGenRandom:
 
 .. das:attribute:: ReGenRandom = iterator<uint>
 
-Regex generator random iterator.
-
+Random number generator callback used by ``re_gen`` for regex-based string generation.
+# === MODULE: regex_boost ===
 .. _alias-MaybeReNode:
 
 .. das:attribute:: variant MaybeReNode
@@ -166,7 +165,7 @@ Compilation and validation
 
 .. das:function:: visit_top_down(node: ReNode?; blk: block<(var n:ReNode?):void>)
 
-Visitor for regex nodes in top-down manner.
+Visits all nodes of a compiled regex tree in top-down order, invoking a callback for each node.
 
 :Arguments: * **node** :  :ref:`ReNode <struct-regex-ReNode>` ?
 
@@ -176,7 +175,7 @@ Visitor for regex nodes in top-down manner.
 
 .. das:function:: is_valid(re: Regex) : bool
 
-Whether the regex is valid.
+Returns ``true`` if the compiled regex is valid and ready for matching.
 
 :Arguments: * **re** :  :ref:`Regex <struct-regex-Regex>` 
 
@@ -184,7 +183,7 @@ Whether the regex is valid.
 
 .. das:function:: regex_compile(re: Regex; expr: string) : bool
 
-Precompile a regular expression.
+Compiles a regular expression pattern string into a ``Regex`` object.
 
 :Arguments: * **re** :  :ref:`Regex <struct-regex-Regex>` 
 
@@ -194,7 +193,7 @@ Precompile a regular expression.
 
 .. das:function:: regex_compile(expr: string) : Regex
 
-Precompiles regular expression.
+Compiles a regular expression pattern string into a ``Regex`` object.
 
 :Arguments: * **expr** : string
 
@@ -202,7 +201,7 @@ Precompiles regular expression.
 
 .. das:function:: regex_compile(re: Regex) : Regex
 
-Precompile a regular expression.
+Compiles a regular expression pattern string into a ``Regex`` object.
 
 :Arguments: * **re** :  :ref:`Regex <struct-regex-Regex>` 
 
@@ -210,7 +209,7 @@ Precompile a regular expression.
 
 .. das:function:: regex_debug(regex: Regex)
 
-Debugs regular expression by printing its structure.
+Prints the internal structure of a compiled regex for debugging purposes.
 
 :Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
@@ -218,7 +217,7 @@ Debugs regular expression by printing its structure.
 
 .. das:function:: debug_set(cset: CharSet)
 
-Debugs character set by printing all characters it contains.
+Prints all characters contained in a ``CharSet`` for debugging purposes.
 
 :Arguments: * **cset** :  :ref:`CharSet <alias-CharSet>` 
 
@@ -233,7 +232,7 @@ Access
 
 .. das:function:: regex_group(regex: Regex; index: int; match: string) : string
 
-Returns the substring matched by the specified regex group.
+Returns the substring captured by the specified group index after a successful match.
 
 :Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
@@ -245,7 +244,7 @@ Returns the substring matched by the specified regex group.
 
 .. das:function:: regex_foreach(regex: Regex; str: string; blk: block<(at:range):bool>)
 
-Iterate over all matches of a regex in a string.
+Iterates over all non-overlapping matches of a regex in a string, invoking a block for each match.
 
 :Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
@@ -264,7 +263,7 @@ Match & replace
 
 .. das:function:: regex_match(regex: Regex; str: string; offset: int = 0) : int
 
-Matches a regular expression against a string and returns the position of the match.
+Matches a compiled regex against a string and returns the end position of the match, or ``-1`` on failure.
 
 :Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
@@ -276,7 +275,7 @@ Matches a regular expression against a string and returns the position of the ma
 
 .. das:function:: regex_replace(regex: Regex; str: string; blk: block<(at:string):string>) : string
 
-Replaces substrings matched by the regex with the result of the provided block.
+Replaces each substring matched by the regex with the result returned by the provided block.
 
 :Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
@@ -295,13 +294,13 @@ Generation
 
 .. das:function:: re_gen_get_rep_limit() : uint
 
-Limit of repetitions for regex quantifiers.
+Returns the maximum repetition limit used by regex quantifiers during string generation.
 
 .. _function-regex_re_gen_Regex_ReGenRandom:
 
 .. das:function:: re_gen(re: Regex; rnd: ReGenRandom) : string
 
-Generate a random string matching the regex.
+Generates a random string that matches the given compiled regex.
 
 :Arguments: * **re** :  :ref:`Regex <struct-regex-Regex>` 
 

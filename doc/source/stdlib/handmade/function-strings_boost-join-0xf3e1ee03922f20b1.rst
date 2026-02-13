@@ -1,1 +1,1 @@
-Joins the elements of an array into a single string, separated by the specified separator, using a custom block to convert each element to a string.
+Joins the elements of an iterable into a single string using the specified separator.

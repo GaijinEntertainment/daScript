@@ -1,1 +1,1 @@
-Returns true if the given type annotation requires avoiding null pointers, i.e. for pointers to that type to be initialized.
+Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` requires pointers to its type to be non-null (i.e., must be initialized on creation).

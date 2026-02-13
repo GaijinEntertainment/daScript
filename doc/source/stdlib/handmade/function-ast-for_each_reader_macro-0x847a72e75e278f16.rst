@@ -1,1 +1,1 @@
-Iterates through each reader macro in the given `Module`.
+Iterates through each reader macro in the given module.

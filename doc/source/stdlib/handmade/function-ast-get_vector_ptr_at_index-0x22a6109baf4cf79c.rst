@@ -1,1 +1,1 @@
-Returns pointer to the vector element at the specified index, given pointer to the vector object and TypeDeclPtr.
+Returns a pointer to the vector element at the specified index given a pointer to the vector object and its TypeDeclPtr.

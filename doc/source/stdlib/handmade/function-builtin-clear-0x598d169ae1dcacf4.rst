@@ -1,1 +1,1 @@
-clear will clear whole table or array `arg`. The size of `arg` after clear is 0.
+Removes all key-value pairs from the table `t`, leaving it empty with a size of 0.

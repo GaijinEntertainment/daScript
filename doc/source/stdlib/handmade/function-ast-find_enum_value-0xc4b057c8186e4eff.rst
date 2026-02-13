@@ -1,1 +1,1 @@
-Finds name of the corresponding enumeration value in the specified type.
+Finds the integer value corresponding to an enumeration name in the specified type.

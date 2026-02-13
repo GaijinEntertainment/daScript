@@ -1,1 +1,1 @@
-Turns AstCallMacro into a macro with the specified `name`.
+The ``[call_macro]`` structure annotation — registers an ``AstCallMacro`` subclass as a named call-expression macro available during compilation.

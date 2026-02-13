@@ -1,1 +1,1 @@
-clones smart_ptr, internal use-count is incremented
+Clones smart pointer `src` into smart pointer `dest`, incrementing the internal reference count so both share ownership of the managed object.

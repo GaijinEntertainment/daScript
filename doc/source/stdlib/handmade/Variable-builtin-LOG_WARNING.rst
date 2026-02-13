@@ -1,1 +1,1 @@
-indicates log level for API misuse, non-fatal errors
+Log level constant for warnings about potential problems, API misuse, or non-fatal error conditions.

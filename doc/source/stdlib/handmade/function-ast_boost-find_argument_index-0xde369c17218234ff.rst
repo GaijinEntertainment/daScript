@@ -1,1 +1,1 @@
-Returns index of the specific argument name, or -1 if its not found.
+Searches the ``argNames`` of a ``TypeDeclPtr`` (tuple or variant) for the given name and returns its zero-based index, or ``-1`` if not found.

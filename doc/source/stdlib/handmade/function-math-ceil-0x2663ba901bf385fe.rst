@@ -1,1 +1,1 @@
-returns a float value representing the smallest integer (type is still float) that is greater than or equal to arg0
+Returns the smallest integral value not less than x (rounds toward positive infinity), computed component-wise for float2, float3, and float4 vector types; works with float and double scalars.

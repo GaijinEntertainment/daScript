@@ -1,1 +1,1 @@
-Describes `TypeDecl` and produces corresponding C++ code as a string.
+Produces a C++ source code string representation of the given TypeDecl.

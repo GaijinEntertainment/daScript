@@ -1,1 +1,1 @@
-Invokes visitor for the given list of modules inside the `Program`.
+Invokes an AST visitor on all modules in the specified program.

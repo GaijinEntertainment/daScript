@@ -1,1 +1,1 @@
-Adds `AstPassMacro` adapter to the `infer`` pass.
+Adds an AstPassMacro adapter to the type inference pass.

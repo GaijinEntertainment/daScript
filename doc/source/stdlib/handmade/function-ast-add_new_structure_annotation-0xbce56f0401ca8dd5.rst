@@ -1,1 +1,1 @@
-Makes adapter to the `AstStructureAnnotation` and adds it to the current module.
+Creates an AstStructureAnnotation adapter and adds it to the current module.

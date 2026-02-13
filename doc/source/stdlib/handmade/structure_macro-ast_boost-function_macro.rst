@@ -1,1 +1,1 @@
-Turns AstFunctionAnnotation into a macro with the specified `name`.
+The ``[function_macro]`` structure annotation — registers an ``AstFunctionAnnotation`` subclass as a named function annotation available to the compiler.

@@ -1,1 +1,1 @@
-returns true if compiler is currently generating AOT
+Returns `true` if the compiler is currently generating ahead-of-time (AOT) compiled code.

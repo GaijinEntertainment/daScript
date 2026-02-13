@@ -56,7 +56,7 @@ Document writers
 
 .. das:function:: document_enumerations(doc_file: file; mods: array<Module?>) : bool
 
-Documentation for enumerations in the given modules.
+Generates RST documentation for all enumerations in the given modules.
 
 :Arguments: * **doc_file** :  :ref:`file <alias-file>` 
 
@@ -66,7 +66,7 @@ Documentation for enumerations in the given modules.
 
 .. das:function:: document(name: string; mod: Module?; fname: string; groups: array<DocGroup>; hook: DocsHook = DocsHook())
 
-Documents the specified module into a RST file.
+Generates RST documentation for a single module and writes it to a file.
 
 :Arguments: * **name** : string
 
@@ -82,7 +82,7 @@ Documents the specified module into a RST file.
 
 .. das:function:: documents(name: string; mods: array<Module?>; fname: string; groups: array<DocGroup>; hook: DocsHook = DocsHook())
 
-Documents the specified modules into a RST file.
+Generates RST documentation for multiple modules and writes them to files.
 
 :Arguments: * **name** : string
 
@@ -98,7 +98,7 @@ Documents the specified modules into a RST file.
 
 .. das:function:: document_enumeration(doc_file: file; mod: Module?; value: auto) : auto
 
-Documentation for enumeration types.
+Generates RST documentation for a single enumeration type.
 
 :Arguments: * **doc_file** :  :ref:`file <alias-file>` 
 
@@ -116,7 +116,7 @@ Descriptions
 
 .. das:function:: describe_short(expr: Expression?|smart_ptr<Expression>) : auto
 
-Describes the expression in short form.
+Returns a concise one-line description of an expression or type.
 
 :Arguments: * **expr** : option< :ref:`Expression <handle-ast-Expression>` ?|smart_ptr< :ref:`Expression <handle-ast-Expression>` >&>
 
@@ -130,7 +130,7 @@ RST section makers
 
 .. das:function:: make_group(name: string; plus: string = "+") : string
 
-Creates a decorative group header for RST documentation.
+Creates a named documentation group with a decorative RST section header.
 
 :Arguments: * **name** : string
 
@@ -149,7 +149,7 @@ Group operations
 
 .. das:function:: append_to_group_by_regex(group: DocGroup; mod: Module?; reg: Regex) : DocGroup&
 
-Adds functions matching a regex to a documentation group.
+Appends functions whose names match a regex to an existing documentation group.
 
 :Arguments: * **group** :  :ref:`DocGroup <struct-rst-DocGroup>` 
 
@@ -161,7 +161,7 @@ Adds functions matching a regex to a documentation group.
 
 .. das:function:: group_by_regex(name: string; mod: Module?; reg: Regex) : DocGroup
 
-Groups module items by regex.
+Groups module items whose names match the provided regular expression under a documentation section.
 
 :Arguments: * **name** : string
 
@@ -173,7 +173,7 @@ Groups module items by regex.
 
 .. das:function:: group_by_regex(name: string; mods: array<Module?>; reg: Regex) : DocGroup
 
-Groups items in the module by matching their names against the provided regular expression.
+Groups module items whose names match the provided regular expression under a documentation section.
 
 :Arguments: * **name** : string
 
@@ -185,7 +185,7 @@ Groups items in the module by matching their names against the provided regular 
 
 .. das:function:: hide_group(group: DocGroup) : DocGroup
 
-Makes the specified documentation group hidden.
+Marks the specified documentation group as hidden so it is excluded from output.
 
 :Arguments: * **group** :  :ref:`DocGroup <struct-rst-DocGroup>` 
 
@@ -197,7 +197,8 @@ Uncategorized
 
 .. das:function:: safe_function_name(name: string) : string
 
-Creates a safe function name by replacing special characters.
+Escapes special characters in a function name to produce a safe identifier for RST output.
+# === MODULE: strings_boost ===
 
 :Arguments: * **name** : string
 
@@ -205,7 +206,7 @@ Creates a safe function name by replacing special characters.
 
 .. das:function:: function_label_file(value: smart_ptr<Function>|Function?; drop_args: int = 0) : auto
 
-Creates a unique label for a function suitable for use in file names.
+Creates a unique, file-name-safe label string for a function.
 
 :Arguments: * **value** : option< :ref:`FunctionPtr <alias-FunctionPtr>` | :ref:`Function <handle-ast-Function>` ?>
 
@@ -215,7 +216,7 @@ Creates a unique label for a function suitable for use in file names.
 
 .. das:function:: function_label_file(name: auto; value: smart_ptr<TypeDecl>; drop_args: int = 0) : auto
 
-Creates a unique label for a function based on its name and argument types.
+Creates a unique, file-name-safe label string for a function.
 
 :Arguments: * **name** : auto
 

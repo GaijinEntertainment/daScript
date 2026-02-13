@@ -1,1 +1,1 @@
-indicates that function can only accept local `make` expressions, like [[make tuple]] and [[make structure]]
+Restricts a function to accept only local `make` expressions such as structure initializers and tuple constructors.

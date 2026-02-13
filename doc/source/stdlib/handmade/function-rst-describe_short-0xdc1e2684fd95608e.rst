@@ -1,1 +1,1 @@
-Describes the expression in short form.
+Returns a concise one-line description of an expression or type.

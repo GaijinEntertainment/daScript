@@ -1,1 +1,1 @@
-This is base class for contract annotation setup.
+Base class for creating function contract annotations via the ``[contract]`` structure annotation; registers an ``AstFunctionAnnotation`` as a contract.

@@ -1,1 +1,1 @@
-Currently compiling module.
+Returns the module currently being compiled.

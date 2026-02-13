@@ -1,1 +1,1 @@
-Registers a native path mapping for a module. Maps `src` path prefix to `dst` when resolving module file paths.
+Registers a path prefix mapping for a module, redirecting file resolution from the src prefix to the dst prefix.

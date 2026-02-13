@@ -1,1 +1,1 @@
-Repeat string specified number of times, and return the result.
+Returns a new string formed by concatenating `str` repeated `count` times.

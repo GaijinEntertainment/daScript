@@ -1,1 +1,1 @@
-indicates log level for the most noisy debug and tracing messages
+Log level constant for the most verbose tracing and diagnostic output, typically used for detailed debugging.

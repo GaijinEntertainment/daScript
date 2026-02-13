@@ -1,4 +1,4 @@
-Object which represents any daScript type.
+Object which represents any Daslang type.
 first type parameter
 second type parameter
 argument types list

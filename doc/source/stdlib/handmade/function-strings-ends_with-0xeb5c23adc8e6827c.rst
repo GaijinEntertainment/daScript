@@ -1,1 +1,1 @@
-returns `true` if the end of the string `str`  matches a the string `cmp` otherwise returns `false`
+Returns true if the string `str` ends with the substring `cmp`, false otherwise.

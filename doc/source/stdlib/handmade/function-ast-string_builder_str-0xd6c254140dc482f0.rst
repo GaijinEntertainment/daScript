@@ -1,1 +1,1 @@
-Returns string from the StringBuilder expression, given pointer to the StringBuilder object.
+Returns the accumulated string from a StringBuilder object given a pointer to it.

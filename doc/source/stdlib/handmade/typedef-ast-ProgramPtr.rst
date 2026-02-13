@@ -1,1 +1,1 @@
-Smart pointer to `Program` object.
+Smart pointer to a `Program` object. Represents the root of a compiled daScript program, containing all modules, functions, and structures.

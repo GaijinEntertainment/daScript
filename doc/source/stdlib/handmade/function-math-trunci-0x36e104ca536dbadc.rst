@@ -1,1 +1,1 @@
-returns a integer value representing the float without fraction part of x
+Truncates the float x toward zero to the nearest integer and returns the result as an int.

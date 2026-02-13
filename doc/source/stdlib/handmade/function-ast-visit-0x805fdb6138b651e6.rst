@@ -1,1 +1,1 @@
-Invokes visitor for the given object.
+Invokes an AST visitor on the given object.

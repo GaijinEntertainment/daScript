@@ -1,1 +1,1 @@
-Notifies compiler that AOT is being generated.
+Notifies the compiler that ahead-of-time code generation is now in progress.

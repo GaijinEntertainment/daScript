@@ -1,1 +1,1 @@
-smallest possible non-zero value of 'double'. if u want minimum possible value use `-DBL_MAX`
+Smallest positive non-zero normalized value of the `double` type; for the most negative value use `-DBL_MAX`.

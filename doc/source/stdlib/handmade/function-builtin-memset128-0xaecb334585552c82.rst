@@ -1,1 +1,1 @@
-Similar to memset, but fills values with 128 bit vector type values.
+Fills memory at `left` with `count` copies of the 128-bit `uint4` vector `value`.

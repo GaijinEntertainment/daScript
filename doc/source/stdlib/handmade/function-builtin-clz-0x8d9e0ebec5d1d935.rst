@@ -1,1 +1,1 @@
-Counts the number of leading zero bits in the integer argument. Returns 32 (or 64 for 64-bit types) if the value is zero.
+Counts the number of leading zero bits in the 32-bit unsigned integer `bits`, returning 32 if the value is zero.

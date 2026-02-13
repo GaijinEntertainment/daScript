@@ -1,1 +1,1 @@
-Macro which is part of the type declaration, for example $type_macro_name<type_macro_type_args...>(type_macro_args).
+Macro that participates in type declarations, enabling syntax like ``$macro_name<type_args...>(args)`` for custom type construction and transformation.

@@ -1,1 +1,1 @@
-returns true if iterator is empty, i.e. would not produce any more values or uninitialized
+Returns `true` if the iterator is empty, meaning it would not produce any more values or has not been initialized.

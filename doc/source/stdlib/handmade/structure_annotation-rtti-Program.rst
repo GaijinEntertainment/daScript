@@ -1,4 +1,4 @@
-Object representing full information about daScript program during and after compilation (but not the simulated result of the program).
+Object representing full information about Daslang program during and after compilation (but not the simulated result of the program).
 namespace of the program
 module name
 total number of functions in the program

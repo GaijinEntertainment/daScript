@@ -1,1 +1,1 @@
-Get 'Annotation' for the 'ast::Expression' and its inherited types.
+Returns the Annotation associated with an Expression or its inherited types.

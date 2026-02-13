@@ -1,1 +1,1 @@
-Finds and returns the structure alias type given alias name.
+Finds and returns a structure alias type by its alias name.

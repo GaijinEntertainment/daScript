@@ -1,1 +1,1 @@
-Iterates through each global variable in the module.
+Iterates through each global variable declared in the given ``Module``, yielding a ``VarInfo`` pointer for each variable.

@@ -1,1 +1,1 @@
-Get total number of global variables in the context.
+Returns the total number of global variables (``int``) in the given ``Context``.

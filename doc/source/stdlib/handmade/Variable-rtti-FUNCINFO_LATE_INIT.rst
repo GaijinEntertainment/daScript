@@ -1,1 +1,1 @@
-Function flag which indicates that function initialization is ordered via custom init order.
+Bit flag constant on ``FuncInfo.flags`` indicating the function uses late initialization with a custom init order (``[init(order)]`` attribute).

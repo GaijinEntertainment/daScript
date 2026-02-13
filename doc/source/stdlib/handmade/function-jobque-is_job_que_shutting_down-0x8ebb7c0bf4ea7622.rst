@@ -1,1 +1,1 @@
-Returns true if job que infrastructure is shut-down or not initialized.
+Returns ``true`` if the job queue infrastructure is shutting down or has not been initialized.

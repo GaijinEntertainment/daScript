@@ -1,1 +1,1 @@
-will execute `block_arg` with argument reference-to-value in `table_arg` referencing value indexed by `key`. Will return false if `key` doesn't exist in `table_arg`, otherwise true.
+Looks up `at` in the temporary table `Tab` and, if found, invokes `blk` with a mutable handle reference to the value; returns `true` if the key existed.

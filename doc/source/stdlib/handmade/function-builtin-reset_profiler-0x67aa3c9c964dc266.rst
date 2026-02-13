@@ -1,1 +1,1 @@
-resets counters in the built-in profiler
+Resets all counters and accumulated data in the built-in profiler to zero.

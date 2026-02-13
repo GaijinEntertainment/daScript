@@ -1,1 +1,1 @@
-Adds `AstPassMacro` adapter to the `global lint` pass.
+Adds an AstPassMacro adapter to the global lint pass.

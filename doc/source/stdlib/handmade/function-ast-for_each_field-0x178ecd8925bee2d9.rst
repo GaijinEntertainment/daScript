@@ -1,1 +1,1 @@
-Iterates through every field in the `BuiltinStructure` handled type.
+Iterates through every field in a BuiltinStructure handled type.

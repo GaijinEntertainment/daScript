@@ -1,1 +1,1 @@
-MacroMacro function annotation.
+The ``[macro]`` function annotation — marks a function to run only during macro module compilation, gating its body behind ``is_compiling_macros``.

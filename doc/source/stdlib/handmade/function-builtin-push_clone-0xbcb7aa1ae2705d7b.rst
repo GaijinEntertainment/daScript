@@ -1,1 +1,1 @@
-similar to `push`, only values would be cloned instead of copied
+Clones a mutable `value` and appends the deep copy to the end of dynamic array `Arr`.

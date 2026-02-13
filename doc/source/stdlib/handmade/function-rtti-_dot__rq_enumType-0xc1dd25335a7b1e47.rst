@@ -1,1 +1,1 @@
-Returns underlying enum type info for the given enum type annotation.
+Property-like accessor that returns the ``EnumInfo`` pointer describing the underlying enumeration for the given enum ``TypeAnnotation``.

@@ -1,1 +1,1 @@
-Returns true if the given type annotation can be copied.
+Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` supports copy semantics.

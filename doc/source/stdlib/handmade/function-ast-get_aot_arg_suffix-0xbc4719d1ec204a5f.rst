@@ -1,1 +1,1 @@
-Returns AOT argument suffix for the specified function.
+Returns the AOT argument suffix string for the specified function.

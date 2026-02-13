@@ -1,1 +1,1 @@
-returns iterator which iterates from `start` value by incrementing it by `step` value. It is the intended way to have counter together with other values in the `for` loop.
+Creates an infinite iterator that yields integer values starting from `start` and incrementing by `step` on each iteration, intended for use as a counter alongside other sequences in a `for` loop.

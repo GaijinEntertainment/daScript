@@ -1,1 +1,1 @@
-Finds type in the DebugInfoHelper and returns it C++ name.
+Finds a type in the DebugInfoHelper and returns its C++ name.

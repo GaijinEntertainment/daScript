@@ -1,1 +1,1 @@
-Returns `LineInfo` object for the current line (line where get_line_info is called from).
+Returns a ``LineInfo`` structure representing the source location (file, line, column) of the call site where ``get_line_info`` is invoked.

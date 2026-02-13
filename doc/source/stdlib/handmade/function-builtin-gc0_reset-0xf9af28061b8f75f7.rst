@@ -1,1 +1,1 @@
-resets gc0 storage. stored pointers will no longer be accessible
+Clears the entire gc0 storage, invalidating all previously saved pointers and smart pointers stored within it.

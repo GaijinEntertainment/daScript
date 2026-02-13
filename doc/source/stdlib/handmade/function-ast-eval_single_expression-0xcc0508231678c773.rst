@@ -1,1 +1,1 @@
-Simulates and evaluates single expression on the separate context.
+Simulates and evaluates a single expression on a separate context.

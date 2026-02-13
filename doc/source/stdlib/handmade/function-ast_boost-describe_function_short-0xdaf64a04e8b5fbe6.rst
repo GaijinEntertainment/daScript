@@ -1,1 +1,1 @@
-Gives short (name, arguments with types, result type) description of the function.
+Returns a compact signature string for a function in the form ``name (arg:Type; ...) : ReturnType``.

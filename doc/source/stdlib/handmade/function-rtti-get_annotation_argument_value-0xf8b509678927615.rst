@@ -1,1 +1,1 @@
-Returns RttiValue which represents argument value for the specific annotation argument.
+Returns an ``RttiValue`` variant representing the value of a specific named argument from an ``AnnotationArgumentList``.

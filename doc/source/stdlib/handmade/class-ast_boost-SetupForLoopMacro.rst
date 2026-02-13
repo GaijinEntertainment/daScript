@@ -1,1 +1,1 @@
-[for_loop_macro] implementation.
+Base class for creating for-loop macros via the ``[for_loop_macro]`` structure annotation; registers an ``AstForLoopMacro`` with the compiler.

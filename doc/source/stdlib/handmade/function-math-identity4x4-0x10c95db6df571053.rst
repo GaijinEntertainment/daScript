@@ -1,1 +1,1 @@
-Returns identity matrix, where diagonal is 1 and every other component is 0.
+Returns a float4x4 identity matrix with ones on the diagonal and zeros elsewhere.

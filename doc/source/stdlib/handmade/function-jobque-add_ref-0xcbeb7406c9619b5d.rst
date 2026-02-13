@@ -1,1 +1,1 @@
-Increase reference count of the job status or channel.
+Increases the reference count of a ``JobStatus`` or ``Channel``, preventing premature deletion.

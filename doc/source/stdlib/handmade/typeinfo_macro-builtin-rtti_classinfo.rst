@@ -1,1 +1,1 @@
-Generates TypeInfo for the class initialization.
+Typeinfo macro that generates RTTI `TypeInfo` metadata required for class initialization and reflection.

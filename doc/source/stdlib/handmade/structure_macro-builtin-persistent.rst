@@ -1,1 +1,1 @@
-[persistent] annotation specifies that structure is allocated (via new) on the C++ heap, as oppose to daScript context heap.
+Allocates the structure on the C++ heap (via `new`) instead of the daScript context heap, allowing it to outlive the context.

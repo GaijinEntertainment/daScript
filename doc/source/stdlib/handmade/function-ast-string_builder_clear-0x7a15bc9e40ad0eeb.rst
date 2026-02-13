@@ -1,1 +1,1 @@
-Clears the StringBuilder object, given pointer to the StringBuilder object.
+Clears a StringBuilder object given a pointer to it.

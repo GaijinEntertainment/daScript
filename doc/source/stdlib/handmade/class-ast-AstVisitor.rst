@@ -1,1 +1,1 @@
-This class implements `Visitor` interface for the ast tree.
+Implements the `Visitor` interface for traversing and transforming the AST tree. Provides ``visit`` and ``preVisit`` callbacks for every expression and declaration node type.

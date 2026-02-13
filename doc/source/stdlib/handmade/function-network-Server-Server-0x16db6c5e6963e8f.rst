@@ -1,1 +1,1 @@
-Initializes and returns a new instance of the network Server class.
+Constructs a new ``Server`` instance with default settings.

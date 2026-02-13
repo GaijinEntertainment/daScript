@@ -1,1 +1,1 @@
-Returns if somehwere in the type definition there are non-trivial destructors.
+Returns whether the type definition contains any non-trivial destructors.

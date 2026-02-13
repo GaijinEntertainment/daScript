@@ -1,1 +1,1 @@
-Returns AOT argument prefix for the specified function.
+Returns the AOT argument prefix string for the specified function.

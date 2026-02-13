@@ -48,7 +48,7 @@ Split and join
 
 .. das:function:: split(text: string implicit; delim: string implicit) : array<string>
 
-Splits a string into an array of substrings based on the specified delimiter.
+Splits a string by the specified delimiter characters, invoking a block for each resulting substring.
 
 :Arguments: * **text** : string implicit
 
@@ -58,7 +58,7 @@ Splits a string into an array of substrings based on the specified delimiter.
 
 .. das:function:: split_by_chars(text: string implicit; delim: string implicit) : array<string>
 
-Splits the input string into an array of substrings based on the specified delimiter characters.
+Splits a string by the specified delimiter characters and returns an array of substrings.
 
 :Arguments: * **text** : string implicit
 
@@ -68,7 +68,7 @@ Splits the input string into an array of substrings based on the specified delim
 
 .. das:function:: join(it: auto; separator: string implicit) : auto
 
-Joins the elements of an iterable into a single string, separated by the specified separator.
+Joins the elements of an iterable into a single string using the specified separator.
 
 :Arguments: * **it** : auto
 
@@ -78,7 +78,7 @@ Joins the elements of an iterable into a single string, separated by the specifi
 
 .. das:function:: join(it: iterator<auto(TT)>; separator: string implicit) : auto
 
-Joins the elements of an iterable into a single string, separated by the specified separator.
+Joins the elements of an iterable into a single string using the specified separator.
 
 :Arguments: * **it** : iterator<auto(TT)>
 
@@ -88,7 +88,7 @@ Joins the elements of an iterable into a single string, separated by the specifi
 
 .. das:function:: join(iterable: array<auto(TT)>; separator: string; blk: block<(var writer:StringBuilderWriter;elem:TT):void>) : string
 
-Joins the elements of an array into a single string, separated by the specified separator, using a custom block to convert each element to a string.
+Joins the elements of an iterable into a single string using the specified separator.
 
 :Arguments: * **iterable** : array<auto(TT)>
 
@@ -100,7 +100,7 @@ Joins the elements of an array into a single string, separated by the specified 
 
 .. das:function:: join(iterable: iterator<auto(TT)>; separator: string; blk: block<(var writer:StringBuilderWriter;elem:TT):void>) : string
 
-Joins the elements of an iterable into a single string, separated by the specified separator, using a custom block to convert each element to a string.
+Joins the elements of an iterable into a single string using the specified separator.
 
 :Arguments: * **iterable** : iterator<auto(TT)>
 
@@ -112,7 +112,7 @@ Joins the elements of an iterable into a single string, separated by the specifi
 
 .. das:function:: join(iterable: auto(TT)[]; separator: string; blk: block<(var writer:StringBuilderWriter;elem:TT):void>) : string
 
-Joins the elements of an array into a single string, separated by the specified separator, using a custom block to convert each element to a string.
+Joins the elements of an iterable into a single string using the specified separator.
 
 :Arguments: * **iterable** : auto(TT)[-1]
 
@@ -124,7 +124,7 @@ Joins the elements of an array into a single string, separated by the specified 
 
 .. das:function:: split(text: string implicit; delim: string implicit; blk: block<(arg:array<string>#):auto>) : auto
 
-Splits a string into substrings based on the specified delimiter characters, invoking a custom block for each substring.
+Splits a string by the specified delimiter characters, invoking a block for each resulting substring.
 
 :Arguments: * **text** : string implicit
 
@@ -136,7 +136,7 @@ Splits a string into substrings based on the specified delimiter characters, inv
 
 .. das:function:: split_by_chars(text: string implicit; delim: string implicit; blk: block<(arg:array<string>#):auto>) : auto
 
-Splits a string into substrings based on the specified delimiter characters, invoking a custom block for each substring.
+Splits a string by the specified delimiter characters and returns an array of substrings.
 
 :Arguments: * **text** : string implicit
 
@@ -154,7 +154,8 @@ Formatting
 
 .. das:function:: wide(text: string implicit; width: int) : string
 
-Pads the given string to the specified width by appending spaces if necessary.
+Pads the string with trailing spaces to reach the specified minimum width.
+# === MODULE: uriparser ===
 
 :Arguments: * **text** : string implicit
 
@@ -172,7 +173,7 @@ Queries and comparisons
 
 .. das:function:: is_character_at(foo: array<uint8>; idx: int; ch: int) : auto
 
-Returns whether the character at the specified index in the byte array matches the given character code.
+Returns ``true`` if the byte at the specified index in the array equals the given character code.
 
 :Arguments: * **foo** : array<uint8> implicit
 
@@ -184,7 +185,7 @@ Returns whether the character at the specified index in the byte array matches t
 
 .. das:function:: eq(a: string implicit; b: das_string) : auto
 
-Compares a string with a das_string for equality.
+Compares a ``string`` with a ``das_string`` for equality, returning ``true`` if they match.
 
 :Arguments: * **a** : string implicit
 
@@ -194,7 +195,7 @@ Compares a string with a das_string for equality.
 
 .. das:function:: eq(b: das_string; a: string implicit) : auto
 
-Compares a das_string with a string for equality.
+Compares a ``string`` with a ``das_string`` for equality, returning ``true`` if they match.
 
 :Arguments: * **b** :  :ref:`das_string <handle-builtin-das_string>` 
 
@@ -210,7 +211,7 @@ Replace
 
 .. das:function:: replace_multiple(source: string; replaces: array<tuple<text:string;replacement:string>>) : string
 
-Replaces multiple substrings in the source string according to the provided list of replacements.
+Applies multiple find-and-replace substitutions to a string in a single pass.
 
 :Arguments: * **source** : string
 
@@ -227,7 +228,7 @@ Levenshtein distance
 
 .. das:function:: levenshtein_distance(s: string implicit; t: string implicit) : int
 
-Returns the Levenshtein distance between two strings.
+Computes the Levenshtein edit distance between two strings.
 
 :Arguments: * **s** : string implicit
 
@@ -237,7 +238,7 @@ Returns the Levenshtein distance between two strings.
 
 .. das:function:: levenshtein_distance_fast(s: string implicit; t: string implicit) : int
 
-Returns the Levenshtein distance between two strings, which is a measure of the difference between them.
+Computes the Levenshtein edit distance between two strings using an optimized algorithm.
 
 :Arguments: * **s** : string implicit
 

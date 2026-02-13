@@ -1,1 +1,1 @@
-Similar to memset, but fills values with 32 bit words.
+Fills memory at `left` with `count` copies of the 32-bit `value`.

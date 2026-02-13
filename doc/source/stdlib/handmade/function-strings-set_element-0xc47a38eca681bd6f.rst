@@ -1,1 +1,1 @@
-Gen character set element by element index (not character index).
+Returns the character code at the given element index within the 256-bit character set represented as a uint[8] array.

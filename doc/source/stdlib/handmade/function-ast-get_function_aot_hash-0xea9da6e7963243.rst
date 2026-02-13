@@ -1,1 +1,1 @@
-Returns hash of the function for the AOT matching.
+Returns the hash of a function used for AOT matching.

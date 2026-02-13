@@ -1,1 +1,1 @@
-Sends data to the connected client. Returns true if the data was sent successfully.
+Sends a data buffer to the connected client.

@@ -1,1 +1,1 @@
-Iterates through all dim values of the rtti type object, i.e. through all size properties of the array.
+Iterates through the dimension sizes of a fixed-size array ``TypeInfo``, yielding each ``int`` dimension value (e.g., ``int[3][4]`` yields 3 then 4).

@@ -1,1 +1,1 @@
-Converts value to string given specified format (that of libfmt or C++20 std::format).
+Formats a `uint16` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).

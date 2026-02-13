@@ -1,1 +1,1 @@
-returns contents of the das::string as temporary string value. this is fastest way to access contents of das::string as string
+Provides zero-copy read access to the contents of a `das_string` by invoking `block` with a temporary string reference, avoiding allocation.

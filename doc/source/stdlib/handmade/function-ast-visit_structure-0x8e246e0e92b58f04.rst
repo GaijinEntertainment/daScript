@@ -1,1 +1,1 @@
-Invokes visitor for the given structure.
+Invokes an AST visitor on the given structure.

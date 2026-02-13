@@ -1,1 +1,1 @@
-will execute `block_arg` with argument reference-to-value in `table_arg` referencing value indexed by `key`. Will return false if `key` doesn't exist in `table_arg`, otherwise true.
+Looks up `at` in the table `Tab` (whose values are fixed-size arrays) and, if found, invokes `blk` with a const reference to the array value; returns `true` if the key existed.

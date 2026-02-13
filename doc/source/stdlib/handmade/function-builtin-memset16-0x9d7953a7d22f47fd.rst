@@ -1,1 +1,1 @@
-Similar to memset, but fills values with 16 bit words.
+Fills memory at `left` with `count` copies of the 16-bit `value`.

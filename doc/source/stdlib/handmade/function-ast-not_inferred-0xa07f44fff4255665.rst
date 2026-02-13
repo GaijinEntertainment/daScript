@@ -1,1 +1,1 @@
-Specifies that function has been modified via macro and should be inferred again.
+Marks a function as modified by a macro so that it will be inferred again.

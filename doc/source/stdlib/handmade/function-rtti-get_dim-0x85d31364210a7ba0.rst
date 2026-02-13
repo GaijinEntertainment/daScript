@@ -1,1 +1,1 @@
-Get dim property of the type, i.e. size of the static array.
+Returns the dimension size (``int``) at the specified index for a fixed-size array type described by ``TypeInfo``.

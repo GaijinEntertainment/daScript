@@ -1,1 +1,1 @@
-Returns true if the given URI is empty.
+Returns ``true`` if the ``Uri`` object contains no URI data.

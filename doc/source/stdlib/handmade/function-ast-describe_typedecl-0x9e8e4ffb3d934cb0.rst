@@ -1,1 +1,1 @@
-Returns description of the `TypeDecl` which should match corresponding daScript type declaration.
+Returns a string description of the TypeDecl matching the corresponding daScript type declaration.

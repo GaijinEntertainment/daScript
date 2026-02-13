@@ -1,1 +1,1 @@
-will convert an array of key-value tuples into a table<key;value> type. arguments will be cloned
+Converts a fixed-size array of keys `a` into a `table<keyT, void>` set by cloning each key element.

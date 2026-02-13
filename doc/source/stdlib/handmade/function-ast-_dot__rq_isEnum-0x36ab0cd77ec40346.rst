@@ -1,1 +1,1 @@
-Returns if the given type is an enum type.
+Returns whether the given type is an enumeration type.

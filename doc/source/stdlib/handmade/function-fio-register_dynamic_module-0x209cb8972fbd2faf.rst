@@ -1,1 +1,1 @@
-Registers a dynamic (shared library) module by path and name. Loads the module and makes it available for `require`. The `on_error` callback receives error code if loading fails.
+Loads a shared library from the given path and registers it as a daScript module under the specified name, making it available for require.

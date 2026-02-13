@@ -1,1 +1,1 @@
-Adds structure annotation to the given object. Calls `apply` if applicable.
+Adds a structure annotation to the given object, calling apply if applicable.

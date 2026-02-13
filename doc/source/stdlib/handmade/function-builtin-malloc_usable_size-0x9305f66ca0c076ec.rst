@@ -1,1 +1,1 @@
-returns size of the allocated memory block
+Returns the usable size in bytes of the memory block pointed to by `ptr`, as reported by the underlying allocator.

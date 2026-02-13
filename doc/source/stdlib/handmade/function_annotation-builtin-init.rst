@@ -1,1 +1,1 @@
-indicates that the function would be called at the context initialization time
+Registers a function to be called automatically during context initialization, before any user code runs.

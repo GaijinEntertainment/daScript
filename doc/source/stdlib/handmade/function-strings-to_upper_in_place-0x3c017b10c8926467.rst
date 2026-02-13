@@ -1,1 +1,1 @@
-Modify string in place to be all upper case string
+Converts all characters of `str` to upper case in place and returns the modified string.

@@ -1,1 +1,1 @@
-[cpp_layout] specifies that structure uses C++ memory layout rules, as oppose to native daScript memory layout rules.
+Forces the structure to use C++ memory layout rules (alignment and padding) instead of native daScript layout.

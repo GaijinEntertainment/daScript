@@ -1,1 +1,1 @@
-Increase entry count to the channel.
+Increases the entry count of the channel, signaling that new work has been added.

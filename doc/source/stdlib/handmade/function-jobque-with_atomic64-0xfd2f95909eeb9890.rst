@@ -1,1 +1,1 @@
-Creates `Atomic64`, makes it available inside the scope of the block.
+Creates an ``Atomic64`` scoped to the given block and automatically destroys it afterward.

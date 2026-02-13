@@ -1,1 +1,1 @@
-Recursively creates directory and all its parents if they do not exist. Returns true if the directory already exists or was created successfully, false otherwise.
+Recursively creates the directory at the specified path along with any missing parent directories, returning true on success.

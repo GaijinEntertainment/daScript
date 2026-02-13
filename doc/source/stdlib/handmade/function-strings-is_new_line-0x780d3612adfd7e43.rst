@@ -1,1 +1,1 @@
-Returns true if character is '\n' or '\r'.
+Returns true if the integer character code is a newline character (\\n or \\r).

@@ -1,1 +1,1 @@
-Creates a deep copy of the given URI object, producing an independent duplicate.
+Creates a deep copy of the given ``Uri`` object.

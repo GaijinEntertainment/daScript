@@ -1,1 +1,1 @@
-This macro is used to implement custom parsing functionality, i.e. anything starting with %NameOfTheMacro~ and ending when the macro says it ends.
+Macro for implementing custom parsing syntax using the ``%MacroName~`` notation. The reader macro controls the start and end of the custom parsing region and produces an AST expression from the parsed content.

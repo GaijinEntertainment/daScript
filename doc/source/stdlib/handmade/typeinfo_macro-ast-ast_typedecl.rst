@@ -1,1 +1,1 @@
-Returns TypeDeclPtr of the type specified via type<> or subexpression type, for example typeinfo(ast_typedecl type<int?>)
+Returns a `TypeDeclPtr` for the type specified via `type<>` or subexpression type, for example `typeinfo(ast_typedecl type<int?>)`. Useful in macros that need compile-time access to type declarations.

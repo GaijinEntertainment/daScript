@@ -1,1 +1,1 @@
-Emplaces newly created object into the container without memory leak (i.e. correct ptr_ref_count).
+Moves a newly created ``smart_ptr`` (``Expression``, ``TypeDecl``, ``Variable``, or ``MakeFieldDecl``) into a vector container with correct reference counting.

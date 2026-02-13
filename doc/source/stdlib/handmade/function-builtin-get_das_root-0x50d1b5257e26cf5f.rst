@@ -1,1 +1,1 @@
-returns path to where `daslib` and other libraries exist. this is typically root folder of the daScript main repository
+Returns the file-system path to the daScript root directory, where `daslib` and other standard libraries are located.

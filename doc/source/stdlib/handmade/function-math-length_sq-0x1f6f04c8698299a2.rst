@@ -1,1 +1,1 @@
-returns a non-negative value representing squared magnitude of x
+Returns the squared Euclidean length of the vector as a float, equivalent to dot(x, x) and avoiding the square root for faster magnitude comparisons; works with float2, float3, and float4 vector types.

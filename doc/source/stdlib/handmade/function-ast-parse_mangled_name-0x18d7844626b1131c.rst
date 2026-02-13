@@ -1,1 +1,1 @@
-Parses mangled name and creates corresponding `TypeDecl`.
+Parses a mangled name string and creates the corresponding TypeDecl.

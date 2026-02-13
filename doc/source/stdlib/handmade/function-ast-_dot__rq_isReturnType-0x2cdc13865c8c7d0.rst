@@ -1,1 +1,1 @@
-Returns if the given type is a return type (basically anything but block).
+Returns whether the given type can be used as a return type, which includes anything except block.

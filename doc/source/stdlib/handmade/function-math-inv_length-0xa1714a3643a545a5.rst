@@ -1,1 +1,1 @@
-returns a non-negative value representing 1/magnitude of x
+Returns the reciprocal of the length of the vector (1 / length(x)) as a float; works with float2, float3, and float4 vector types.

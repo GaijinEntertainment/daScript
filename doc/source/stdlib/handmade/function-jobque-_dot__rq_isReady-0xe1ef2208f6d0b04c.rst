@@ -1,1 +1,1 @@
-Weather or not the job is completed.
+Whether the job has completed execution.

@@ -1,1 +1,1 @@
-Adds structure to a `Module`. Will return false on duplicates.
+Adds a structure to a module, returning false if a duplicate already exists.

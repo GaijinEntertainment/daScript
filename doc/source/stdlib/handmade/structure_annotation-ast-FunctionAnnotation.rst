@@ -1,1 +1,1 @@
-Adapter for the `AstFunctionAnnotation`.
+ Adapter for the `AstFunctionAnnotation`.

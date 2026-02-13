@@ -1,1 +1,1 @@
-returns true if iterator is empty, i.e. would not produce any more values or uninitialized
+Checks whether the `das_string` is empty (has zero length) and returns `true` if so.

@@ -1,1 +1,1 @@
-Returns true if the given annotation represents a structure annotation.
+Property-like accessor that returns ``true`` if the given ``Annotation`` is a structure annotation (applied to struct declarations).

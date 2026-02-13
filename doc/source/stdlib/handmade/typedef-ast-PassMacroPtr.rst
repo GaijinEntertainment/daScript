@@ -1,1 +1,1 @@
-Smart pointer to `PassMacro` object.
+Smart pointer to a `PassMacro` object. Used for registering and managing custom inference pass macros.

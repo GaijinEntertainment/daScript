@@ -1,1 +1,1 @@
-Returns if the given type is an array type.
+Returns whether the given type is an array type.

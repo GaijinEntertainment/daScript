@@ -1,1 +1,1 @@
-Size of individual element in the vector type, for example 4 in float2 and 8 in range64.
+Returns the byte size of a single scalar element in a vector ``Type`` — 8 for ``range64``/``urange64``, 4 for all other vector types.

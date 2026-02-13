@@ -1,1 +1,1 @@
-Get current `Program` object currently compiled module.
+Returns the ``Module`` pointer for the module currently being compiled or inferred, retrieved from the ``Program``.

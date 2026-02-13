@@ -1,1 +1,1 @@
-This macro implements [macro] function annotation.
+Implements the ``[macro]`` function annotation, which wraps the function body so it only executes during macro module compilation.

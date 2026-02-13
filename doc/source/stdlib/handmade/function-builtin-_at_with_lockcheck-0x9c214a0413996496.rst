@@ -1,1 +1,1 @@
-returns element of the table `Tab`, also checks if `Tab` is locked, recursively for each lockable element of `Tab`
+Looks up and returns a reference to the element at key `at` in the table `Tab`, while verifying that `Tab` and its lockable sub-elements are not locked.

@@ -1,1 +1,1 @@
-returns next element in the iterator as the 'value'. result is true if there is element returned, or false if iterator is null or empty
+Advances the iterator `it` and stores the next element in `value`, returning true if an element was retrieved or false if the iterator is exhausted or null.

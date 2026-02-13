@@ -1,1 +1,1 @@
-throws panic if first operand is false. can be disabled. second operand is error message
+Runtime assertion that panics with an optional error message when the first argument evaluates to false; can be disabled globally.

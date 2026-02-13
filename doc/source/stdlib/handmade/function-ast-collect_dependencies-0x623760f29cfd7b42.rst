@@ -1,1 +1,1 @@
-Collects dependencies of the given function (other functions it calls, global variables it accesses).
+Collects dependencies of a given function, including other functions it calls and global variables it accesses.

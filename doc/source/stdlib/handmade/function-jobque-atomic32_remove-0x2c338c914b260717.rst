@@ -1,1 +1,1 @@
-Destroys atomic 32 bit integer.
+Destroys an ``Atomic32`` and releases its resources.

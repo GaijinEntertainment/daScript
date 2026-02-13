@@ -1,1 +1,1 @@
-Implementation details for setting up tag function annotation in the ast_boost module.
+Extends ``SetupAnyAnnotation`` apply to extract the required ``tag`` argument and register a ``setup_tag_annotation`` call that links the annotation to tagged functions.

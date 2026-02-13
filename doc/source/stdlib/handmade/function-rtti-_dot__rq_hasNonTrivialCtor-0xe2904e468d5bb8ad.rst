@@ -1,1 +1,1 @@
-Returns true if the given type annotation represents a type with non-trivial constructor semantics.
+Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` has a non-trivial constructor (requires explicit initialization).
