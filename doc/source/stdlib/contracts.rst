@@ -1,9 +1,9 @@
 
 .. _stdlib_contracts:
 
-=================================
-Miscelanious contract annotations
-=================================
+==================================
+Miscellaneous contract annotations
+==================================
 
 The CONTRACTS module provides compile-time type constraints for generic function
 arguments. Annotations like ``[expect_any_array]``, ``[expect_any_enum]``,

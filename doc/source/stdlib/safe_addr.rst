@@ -104,9 +104,12 @@ returns temporary pointer from a given pointer
 
 :Arguments: * **x** : auto(T)? implicit!
 
-+++++++++++++
-Uncategorized
-+++++++++++++
+++++++++++++++++
+Temporary values
+++++++++++++++++
+
+  *  :ref:`temp_value (x: auto(T) const& ==const) : T const&# <function-safe_addr_temp_value_autoT_const__eq__eq_const>` 
+  *  :ref:`temp_value (var x: auto(T)& ==const) : T&# <function-safe_addr_temp_value__autoT__eq__eq_const>` 
 
 .. _function-safe_addr_temp_value_autoT_const__eq__eq_const:
 

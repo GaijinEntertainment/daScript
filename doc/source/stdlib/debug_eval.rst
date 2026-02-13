@@ -32,9 +32,11 @@ Result of evaluating a debug expression.
          * **error** : string - Error message, empty if evaluation succeeded.
 
 
-+++++++++++++
-Uncategorized
-+++++++++++++
+++++++++++
+Evaluation
+++++++++++
+
+  *  :ref:`debug_eval (context: table\<string, Result\>; expr: string) : Result <function-debug_eval_debug_eval_table_ls_string,_Result_gr__string>` 
 
 .. _function-debug_eval_debug_eval_table_ls_string,_Result_gr__string:
 

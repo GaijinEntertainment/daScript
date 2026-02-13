@@ -28,6 +28,8 @@ Dynamic casts
 +++++++++++++
 
   *  :ref:`is_instance_of (instance: auto(TCLS)?; otherclass: auto(TT)) : auto <function-dynamic_cast_rtti_is_instance_of_autoTCLS_q__autoTT>` 
+  *  :ref:`dynamic_type_cast (instance: auto; otherclass: auto(TT)) : TT? <function-dynamic_cast_rtti_dynamic_type_cast_auto_autoTT>` 
+  *  :ref:`force_dynamic_type_cast (instance: auto; otherclass: auto(TT)) : TT? <function-dynamic_cast_rtti_force_dynamic_type_cast_auto_autoTT>` 
 
 .. _function-dynamic_cast_rtti_is_instance_of_autoTCLS_q__autoTT:
 
@@ -38,10 +40,6 @@ Returns true if the class instance is an instance of the specified class using R
 :Arguments: * **instance** : auto(TCLS)?
 
             * **otherclass** : auto(TT)
-
-+++++++++++++
-Uncategorized
-+++++++++++++
 
 .. _function-dynamic_cast_rtti_dynamic_type_cast_auto_autoTT:
 

@@ -7677,9 +7677,14 @@ Updates the alias map for the specified type during inference.
 
             * **passType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
-+++++++++++++
-Uncategorized
-+++++++++++++
+++++++++++++++
+Module queries
+++++++++++++++
+
+  *  :ref:`module_find_annotation (module: Module const? implicit; name: string implicit) : smart_ptr\<Annotation\> <function-ast_module_find_annotation_Module_const_q__implicit_string_implicit>` 
+  *  :ref:`module_find_type_annotation (module: Module const? implicit; name: string implicit) : TypeAnnotation? <function-ast_module_find_type_annotation_Module_const_q__implicit_string_implicit>` 
+  *  :ref:`not_inferred (function: Function? implicit) <function-ast_not_inferred_Function_q__implicit>` 
+  *  :ref:`module_find_structure (program: Module const? implicit; name: string implicit) : Structure? <function-ast_module_find_structure_Module_const_q__implicit_string_implicit>` 
 
 .. _function-ast_module_find_annotation_Module_const_q__implicit_string_implicit:
 
@@ -7718,6 +7723,18 @@ Finds a structure by name in the specified module.
 :Arguments: * **program** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **name** : string implicit
+
+++++++++++++++++++
+Debug info helpers
+++++++++++++++++++
+
+  *  :ref:`debug_helper_iter_structs (helper: smart_ptr\<DebugInfoHelper\> implicit; blk: block\<(string;StructInfo?):void\>) <function-ast_debug_helper_iter_structs_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;StructInfo_q__c_void_gr_>` 
+  *  :ref:`debug_helper_iter_types (helper: smart_ptr\<DebugInfoHelper\> implicit; blk: block\<(string;TypeInfo?):void\>) <function-ast_debug_helper_iter_types_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;TypeInfo_q__c_void_gr_>` 
+  *  :ref:`debug_helper_iter_vars (helper: smart_ptr\<DebugInfoHelper\> implicit; blk: block\<(string;VarInfo?):void\>) <function-ast_debug_helper_iter_vars_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;VarInfo_q__c_void_gr_>` 
+  *  :ref:`debug_helper_iter_funcs (helper: smart_ptr\<DebugInfoHelper\> implicit; blk: block\<(string;FuncInfo?):void\>) <function-ast_debug_helper_iter_funcs_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;FuncInfo_q__c_void_gr_>` 
+  *  :ref:`debug_helper_iter_enums (helper: smart_ptr\<DebugInfoHelper\> implicit; blk: block\<(string;EnumInfo?):void\>) <function-ast_debug_helper_iter_enums_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;EnumInfo_q__c_void_gr_>` 
+  *  :ref:`debug_helper_find_type_cppname (helper: smart_ptr\<DebugInfoHelper\> const& implicit; type_info: TypeInfo? implicit) : string <function-ast_debug_helper_find_type_cppname_smart_ptr_ls_DebugInfoHelper_gr__const_implicit_TypeInfo_q__implicit>` 
+  *  :ref:`debug_helper_find_struct_cppname (helper: smart_ptr\<DebugInfoHelper\> const& implicit; struct_info: StructInfo? implicit) : string <function-ast_debug_helper_find_struct_cppname_smart_ptr_ls_DebugInfoHelper_gr__const_implicit_StructInfo_q__implicit>` 
 
 .. _function-ast_debug_helper_iter_structs_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;StructInfo_q__c_void_gr_:
 
@@ -7788,6 +7805,23 @@ Finds a structure in the DebugInfoHelper and returns its C++ name.
 :Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` >& implicit
 
             * **struct_info** :  :ref:`StructInfo <handle-rtti-StructInfo>` ? implicit
+
++++++++++++
+AOT support
++++++++++++
+
+  *  :ref:`macro_aot_infix (macro: TypeInfoMacro? implicit; ss: StringBuilderWriter? implicit; expr: smart_ptr\<Expression\> implicit) : bool <function-ast_macro_aot_infix_TypeInfoMacro_q__implicit_StringBuilderWriter_q__implicit_smart_ptr_ls_Expression_gr__implicit>` 
+  *  :ref:`getInitSemanticHashWithDep (program: smart_ptr\<Program\> implicit; init: uint64) : uint64 <function-ast_getInitSemanticHashWithDep_smart_ptr_ls_Program_gr__implicit_uint64>` 
+  *  :ref:`aot_require (mod: Module? implicit; ss: StringBuilderWriter? implicit) : bool <function-ast_aot_require_Module_q__implicit_StringBuilderWriter_q__implicit>` 
+  *  :ref:`aot_type_ann_get_field_ptr (ann: TypeAnnotation? implicit; ss: StringBuilderWriter? implicit; name: string implicit) <function-ast_aot_type_ann_get_field_ptr_TypeAnnotation_q__implicit_StringBuilderWriter_q__implicit_string_implicit>` 
+  *  :ref:`aot_need_type_info (macro: TypeInfoMacro const? implicit; expr: smart_ptr\<Expression\> implicit) : bool <function-ast_aot_need_type_info_TypeInfoMacro_const_q__implicit_smart_ptr_ls_Expression_gr__implicit>` 
+  *  :ref:`write_aot_body (structure: StructureAnnotation? implicit; st: smart_ptr\<Structure\> implicit; args: AnnotationArgumentList implicit; writer: StringBuilderWriter? implicit) <function-ast_write_aot_body_StructureAnnotation_q__implicit_smart_ptr_ls_Structure_gr__implicit_AnnotationArgumentList_implicit_StringBuilderWriter_q__implicit>` 
+  *  :ref:`write_aot_suffix (structure: StructureAnnotation? implicit; st: smart_ptr\<Structure\> implicit; args: AnnotationArgumentList implicit; writer: StringBuilderWriter? implicit) <function-ast_write_aot_suffix_StructureAnnotation_q__implicit_smart_ptr_ls_Structure_gr__implicit_AnnotationArgumentList_implicit_StringBuilderWriter_q__implicit>` 
+  *  :ref:`write_aot_macro_suffix (macro: TypeInfoMacro? implicit; ss: StringBuilderWriter? implicit; expr: smart_ptr\<Expression\> implicit) <function-ast_write_aot_macro_suffix_TypeInfoMacro_q__implicit_StringBuilderWriter_q__implicit_smart_ptr_ls_Expression_gr__implicit>` 
+  *  :ref:`write_aot_macro_prefix (macro: TypeInfoMacro? implicit; ss: StringBuilderWriter? implicit; expr: smart_ptr\<Expression\> implicit) <function-ast_write_aot_macro_prefix_TypeInfoMacro_q__implicit_StringBuilderWriter_q__implicit_smart_ptr_ls_Expression_gr__implicit>` 
+  *  :ref:`aot_previsit_get_field_ptr (ann: TypeAnnotation? implicit; ss: StringBuilderWriter? implicit; name: string implicit) <function-ast_aot_previsit_get_field_ptr_TypeAnnotation_q__implicit_StringBuilderWriter_q__implicit_string_implicit>` 
+  *  :ref:`aot_previsit_get_field (ann: TypeAnnotation? implicit; ss: StringBuilderWriter? implicit; name: string implicit) <function-ast_aot_previsit_get_field_TypeAnnotation_q__implicit_StringBuilderWriter_q__implicit_string_implicit>` 
+  *  :ref:`aot_visit_get_field (ann: TypeAnnotation? implicit; ss: StringBuilderWriter? implicit; name: string implicit) <function-ast_aot_visit_get_field_TypeAnnotation_q__implicit_StringBuilderWriter_q__implicit_string_implicit>` 
 
 .. _function-ast_macro_aot_infix_TypeInfoMacro_q__implicit_StringBuilderWriter_q__implicit_smart_ptr_ls_Expression_gr__implicit:
 
@@ -7930,6 +7964,13 @@ Performs the visit step for field access during AOT code generation.
             * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ? implicit
 
             * **name** : string implicit
+
++++++++++++++++++++++
+String builder writer
++++++++++++++++++++++
+
+  *  :ref:`string_builder_str (ss: StringBuilderWriter? implicit) : string <function-ast_string_builder_str_StringBuilderWriter_q__implicit>` 
+  *  :ref:`string_builder_clear (ss: StringBuilderWriter? implicit) <function-ast_string_builder_clear_StringBuilderWriter_q__implicit>` 
 
 .. _function-ast_string_builder_str_StringBuilderWriter_q__implicit:
 

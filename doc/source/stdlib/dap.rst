@@ -398,9 +398,27 @@ Response body for the evaluate request.
          * **threadId** : double - Thread identifier.
 
 
-+++++++++++++
-Uncategorized
-+++++++++++++
+++++++++++++++++++++
+JSON deserialization
+++++++++++++++++++++
+
+  *  :ref:`InitializeRequestArguments (data: JsonValue?) : InitializeRequestArguments <function-dap_InitializeRequestArguments_JsonValue_q_>` 
+  *  :ref:`DisconnectArguments (data: JsonValue?) : DisconnectArguments <function-dap_DisconnectArguments_JsonValue_q_>` 
+  *  :ref:`DataBreakpoint (data: JsonValue?) : DataBreakpoint <function-dap_DataBreakpoint_JsonValue_q_>` 
+  *  :ref:`SetDataBreakpointsArguments (data: JsonValue?) : SetDataBreakpointsArguments <function-dap_SetDataBreakpointsArguments_JsonValue_q_>` 
+  *  :ref:`DataBreakpointInfoArguments (data: JsonValue?) : DataBreakpointInfoArguments <function-dap_DataBreakpointInfoArguments_JsonValue_q_>` 
+  *  :ref:`SourceBreakpoint (data: JsonValue?) : SourceBreakpoint <function-dap_SourceBreakpoint_JsonValue_q_>` 
+  *  :ref:`Source (data: JsonValue?) : Source <function-dap_Source_JsonValue_q_>` 
+  *  :ref:`SetBreakpointsArguments (data: JsonValue?) : SetBreakpointsArguments <function-dap_SetBreakpointsArguments_JsonValue_q_>` 
+  *  :ref:`StackTraceArguments (data: JsonValue?) : StackTraceArguments <function-dap_StackTraceArguments_JsonValue_q_>` 
+  *  :ref:`ScopesArguments (data: JsonValue?) : ScopesArguments <function-dap_ScopesArguments_JsonValue_q_>` 
+  *  :ref:`VariablesArguments (data: JsonValue?) : VariablesArguments <function-dap_VariablesArguments_JsonValue_q_>` 
+  *  :ref:`ContinueArguments (data: JsonValue?) : ContinueArguments <function-dap_ContinueArguments_JsonValue_q_>` 
+  *  :ref:`PauseArguments (data: JsonValue?) : PauseArguments <function-dap_PauseArguments_JsonValue_q_>` 
+  *  :ref:`StepInArguments (data: JsonValue?) : StepInArguments <function-dap_StepInArguments_JsonValue_q_>` 
+  *  :ref:`NextArguments (data: JsonValue?) : NextArguments <function-dap_NextArguments_JsonValue_q_>` 
+  *  :ref:`StepOutArguments (data: JsonValue?) : StepOutArguments <function-dap_StepOutArguments_JsonValue_q_>` 
+  *  :ref:`EvaluateArguments (data: JsonValue?) : EvaluateArguments <function-dap_EvaluateArguments_JsonValue_q_>` 
 
 .. _function-dap_InitializeRequestArguments_JsonValue_q_:
 
@@ -490,14 +508,6 @@ Constructs a VariablesArguments from a JSON value.
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
-.. _function-dap_JV_Variable:
-
-.. das:function:: JV(data: Variable) : JsonValue?
-
-Converts a Variable struct to its DAP JSON representation.
-
-:Arguments: * **data** :  :ref:`Variable <struct-dap-Variable>` 
-
 .. _function-dap_ContinueArguments_JsonValue_q_:
 
 .. das:function:: ContinueArguments(data: JsonValue?) : ContinueArguments
@@ -546,6 +556,21 @@ Constructs an EvaluateArguments from a JSON value.
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
+++++++++++++++++++
+JSON serialization
+++++++++++++++++++
+
+  *  :ref:`JV (data: Variable) : JsonValue? <function-dap_JV_Variable>` 
+  *  :ref:`JV (data: EvaluateResponse) : JsonValue? <function-dap_JV_EvaluateResponse>` 
+
+.. _function-dap_JV_Variable:
+
+.. das:function:: JV(data: Variable) : JsonValue?
+
+Converts a Variable struct to its DAP JSON representation.
+
+:Arguments: * **data** :  :ref:`Variable <struct-dap-Variable>` 
+
 .. _function-dap_JV_EvaluateResponse:
 
 .. das:function:: JV(data: EvaluateResponse) : JsonValue?
@@ -553,6 +578,16 @@ Constructs an EvaluateArguments from a JSON value.
 Converts an EvaluateResponse struct to its DAP JSON representation.
 
 :Arguments: * **data** :  :ref:`EvaluateResponse <struct-dap-EvaluateResponse>` 
+
+++++++++++++++++++++
+JSON field accessors
+++++++++++++++++++++
+
+  *  :ref:`joj (val: JsonValue?; id: string) : JsonValue? <function-dap_joj_JsonValue_q__string>` 
+  *  :ref:`jon (val: JsonValue?; id: string; defVal: double = 0lf) : double <function-dap_jon_JsonValue_q__string_double>` 
+  *  :ref:`j_s (val: JsonValue?; defVal: string = "") : string <function-dap_j_s_JsonValue_q__string>` 
+  *  :ref:`jos (val: JsonValue?; id: string; defVal: string = "") : string <function-dap_jos_JsonValue_q__string_string>` 
+  *  :ref:`job (val: JsonValue?; id: string; defVal: bool = false) : bool <function-dap_job_JsonValue_q__string_bool>` 
 
 .. _function-dap_joj_JsonValue_q__string:
 

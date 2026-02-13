@@ -13,9 +13,15 @@ All functions and symbols are in "bitfield_boost" module, use require to get acc
 
     require daslib/bitfield_boost
 
-+++++++++++++
-Uncategorized
-+++++++++++++
++++++++++++++++++++++++
+Bitfield element access
++++++++++++++++++++++++
+
+  *  :ref:`auto[] (b: auto; i: int) : bool <function-bitfield_boost__auto_int>` 
+  *  :ref:`auto(TT)&[]= (var b: auto(TT)&; i: int; v: bool) : auto <function-bitfield_boost__eq__autoTT_int_bool>` 
+  *  :ref:`auto(TT)&[]&&= (var b: auto(TT)&; i: int; v: bool) : auto <function-bitfield_boost__eq__autoTT_int_bool>` 
+  *  :ref:`auto(TT)&[]||= (var b: auto(TT)&; i: int; v: bool) : auto <function-bitfield_boost__eq__autoTT_int_bool>` 
+  *  :ref:`auto(TT)&[]^^= (var b: auto(TT)&; i: int; v: bool) : auto <function-bitfield_boost_^^_eq__autoTT_int_bool>` 
 
 .. _function-bitfield_boost__auto_int:
 
@@ -74,6 +80,12 @@ toggle bitfield bit at index i if v is true
             * **i** : int
 
             * **v** : bool
+
++++++++++
+Iteration
++++++++++
+
+  *  :ref:`each (b: auto) : iterator\<bool\> <function-bitfield_boost_each_auto>` 
 
 .. _function-bitfield_boost_each_auto:
 

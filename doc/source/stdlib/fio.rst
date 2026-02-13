@@ -503,6 +503,7 @@ Directory manipulation
   *  :ref:`mkdir (path: string implicit) : bool <function-fio_mkdir_string_implicit>` 
   *  :ref:`chdir (path: string implicit) : bool <function-fio_chdir_string_implicit>` 
   *  :ref:`getcwd () : string <function-fio_getcwd>` 
+  *  :ref:`mkdir_rec (path: string) : bool <function-fio_mkdir_rec_string>` 
   *  :ref:`dir (path: string; blk: block\<(filename:string):void\>) : auto <function-fio_dir_string_block_ls_filename_c_string_c_void_gr_>` 
 
 .. _function-fio_mkdir_string_implicit:
@@ -526,6 +527,14 @@ Changes the current working directory to the specified path and returns true on 
 .. das:function:: getcwd() : string
 
 Returns the absolute path of the current working directory as a string.
+
+.. _function-fio_mkdir_rec_string:
+
+.. das:function:: mkdir_rec(path: string) : bool
+
+Recursively creates the directory at the specified path along with any missing parent directories, returning true on success.
+
+:Arguments: * **path** : string
 
 .. _function-fio_dir_string_block_ls_filename_c_string_c_void_gr_:
 
@@ -618,9 +627,13 @@ Escapes and sanitizes a command-line argument string to prevent shell injection.
 
 :Arguments: * **var** : string implicit
 
-+++++++++++++
-Uncategorized
-+++++++++++++
++++++++++++++++
+Dynamic modules
++++++++++++++++
+
+  *  :ref:`register_dynamic_module (path: string implicit; name: string implicit; on_error: int) : void? <function-fio_register_dynamic_module_string_implicit_string_implicit_int>` 
+  *  :ref:`register_dynamic_module (path: string implicit; name: string implicit) : void? <function-fio_register_dynamic_module_string_implicit_string_implicit>` 
+  *  :ref:`register_native_path (mod_name: string implicit; src: string implicit; dst: string implicit) <function-fio_register_native_path_string_implicit_string_implicit_string_implicit>` 
 
 .. _function-fio_register_dynamic_module_string_implicit_string_implicit_int:
 
@@ -655,13 +668,5 @@ Registers a path prefix mapping for a module, redirecting file resolution from t
             * **src** : string implicit
 
             * **dst** : string implicit
-
-.. _function-fio_mkdir_rec_string:
-
-.. das:function:: mkdir_rec(path: string) : bool
-
-Recursively creates the directory at the specified path along with any missing parent directories, returning true on success.
-
-:Arguments: * **path** : string
 
 

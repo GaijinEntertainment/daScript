@@ -120,6 +120,35 @@ Returns a concise one-line description of an expression or type.
 
 :Arguments: * **expr** : option< :ref:`Expression <handle-ast-Expression>` ?|smart_ptr< :ref:`Expression <handle-ast-Expression>` >&>
 
+++++++++++++
+Label makers
+++++++++++++
+
+  *  :ref:`function_label_file (value: smart_ptr\<Function\>|Function?; drop_args: int = 0) : auto <function-rst_function_label_file_smart_ptr_ls_Function_gr_Function_q__int>` 
+  *  :ref:`function_label_file (name: auto; value: smart_ptr\<TypeDecl\>; drop_args: int = 0) : auto <function-rst_function_label_file_auto_smart_ptr_ls_TypeDecl_gr__int>` 
+
+.. _function-rst_function_label_file_smart_ptr_ls_Function_gr_Function_q__int:
+
+.. das:function:: function_label_file(value: smart_ptr<Function>|Function?; drop_args: int = 0) : auto
+
+Creates a unique, file-name-safe label string for a function.
+
+:Arguments: * **value** : option< :ref:`FunctionPtr <alias-FunctionPtr>` | :ref:`Function <handle-ast-Function>` ?>
+
+            * **drop_args** : int
+
+.. _function-rst_function_label_file_auto_smart_ptr_ls_TypeDecl_gr__int:
+
+.. das:function:: function_label_file(name: auto; value: smart_ptr<TypeDecl>; drop_args: int = 0) : auto
+
+Creates a unique, file-name-safe label string for a function.
+
+:Arguments: * **name** : auto
+
+            * **value** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` >&
+
+            * **drop_args** : int
+
 ++++++++++++++++++
 RST section makers
 ++++++++++++++++++
@@ -189,9 +218,11 @@ Marks the specified documentation group as hidden so it is excluded from output.
 
 :Arguments: * **group** :  :ref:`DocGroup <struct-rst-DocGroup>` 
 
-+++++++++++++
-Uncategorized
-+++++++++++++
+++++++++++++++
+Naming helpers
+++++++++++++++
+
+  *  :ref:`safe_function_name (name: string) : string <function-rst_safe_function_name_string>` 
 
 .. _function-rst_safe_function_name_string:
 
@@ -201,27 +232,5 @@ Escapes special characters in a function name to produce a safe identifier for R
 # === MODULE: strings_boost ===
 
 :Arguments: * **name** : string
-
-.. _function-rst_function_label_file_smart_ptr_ls_Function_gr_Function_q__int:
-
-.. das:function:: function_label_file(value: smart_ptr<Function>|Function?; drop_args: int = 0) : auto
-
-Creates a unique, file-name-safe label string for a function.
-
-:Arguments: * **value** : option< :ref:`FunctionPtr <alias-FunctionPtr>` | :ref:`Function <handle-ast-Function>` ?>
-
-            * **drop_args** : int
-
-.. _function-rst_function_label_file_auto_smart_ptr_ls_TypeDecl_gr__int:
-
-.. das:function:: function_label_file(name: auto; value: smart_ptr<TypeDecl>; drop_args: int = 0) : auto
-
-Creates a unique, file-name-safe label string for a function.
-
-:Arguments: * **name** : auto
-
-            * **value** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` >&
-
-            * **drop_args** : int
 
 

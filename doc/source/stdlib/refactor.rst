@@ -44,6 +44,9 @@ Refactoring operations
 ++++++++++++++++++++++
 
   *  :ref:`extract_method (method_name: string; blk: block\<():void\>) <function-refactor_extract_method_string_block_ls__c_void_gr_>` 
+  *  :ref:`extract_expression (method_name: string; expr: auto) : auto <function-refactor_extract_expression_string_auto>` 
+  *  :ref:`extract_variable_nonref (method_name: string; expr: auto) : auto <function-refactor_extract_variable_nonref_string_auto>` 
+  *  :ref:`extract_variable_ref (method_name: string; var expr: auto(TT)& ==const) : TT& <function-refactor_extract_variable_ref_string__autoTT__eq__eq_const>` 
 
 .. _function-refactor_extract_method_string_block_ls__c_void_gr_:
 
@@ -54,10 +57,6 @@ Marks a block of code for method extraction refactoring.
 :Arguments: * **method_name** : string
 
             * **blk** : block<void>
-
-+++++++++++++
-Uncategorized
-+++++++++++++
 
 .. _function-refactor_extract_expression_string_auto:
 

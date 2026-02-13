@@ -3159,6 +3159,143 @@ Performs linear interpolation between a and b using the factor t, returning a + 
 
             * **t** : float
 
++++++++++++++++++++++
+Matrix element access
++++++++++++++++++++++
+
+  *  :ref:`float4x4 implicit ==const.[] (m: float4x4 implicit ==const; i: int) : float4& <function-math__dot__float4x4_implicit__eq__eq_const_int>` 
+  *  :ref:`float4x4 const implicit ==const.[] (m: float4x4 const implicit ==const; i: int) : float4 <function-math__dot__float4x4_const_implicit__eq__eq_const_int>` 
+  *  :ref:`float4x4 implicit ==const.[] (m: float4x4 implicit ==const; i: uint) : float4& <function-math__dot__float4x4_implicit__eq__eq_const_uint>` 
+  *  :ref:`float4x4 const implicit ==const.[] (m: float4x4 const implicit ==const; i: uint) : float4 <function-math__dot__float4x4_const_implicit__eq__eq_const_uint>` 
+  *  :ref:`float3x4 implicit ==const.[] (m: float3x4 implicit ==const; i: int) : float3& <function-math__dot__float3x4_implicit__eq__eq_const_int>` 
+  *  :ref:`float3x4 const implicit ==const.[] (m: float3x4 const implicit ==const; i: int) : float3 <function-math__dot__float3x4_const_implicit__eq__eq_const_int>` 
+  *  :ref:`float3x4 implicit ==const.[] (m: float3x4 implicit ==const; i: uint) : float3& <function-math__dot__float3x4_implicit__eq__eq_const_uint>` 
+  *  :ref:`float3x4 const implicit ==const.[] (m: float3x4 const implicit ==const; i: uint) : float3 <function-math__dot__float3x4_const_implicit__eq__eq_const_uint>` 
+  *  :ref:`float3x3 implicit ==const.[] (m: float3x3 implicit ==const; i: int) : float3& <function-math__dot__float3x3_implicit__eq__eq_const_int>` 
+  *  :ref:`float3x3 const implicit ==const.[] (m: float3x3 const implicit ==const; i: int) : float3 <function-math__dot__float3x3_const_implicit__eq__eq_const_int>` 
+  *  :ref:`float3x3 implicit ==const.[] (m: float3x3 implicit ==const; i: uint) : float3& <function-math__dot__float3x3_implicit__eq__eq_const_uint>` 
+  *  :ref:`float3x3 const implicit ==const.[] (m: float3x3 const implicit ==const; i: uint) : float3 <function-math__dot__float3x3_const_implicit__eq__eq_const_uint>` 
+
+.. _function-math__dot__float4x4_implicit__eq__eq_const_int:
+
+.. das:function:: float4x4 implicit ==const.[](m: float4x4 implicit ==const; i: int) : float4&
+
+Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
+
+:Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>`  implicit!
+
+            * **i** : int
+
+.. _function-math__dot__float4x4_const_implicit__eq__eq_const_int:
+
+.. das:function:: float4x4 const implicit ==const.[](m: float4x4 const implicit ==const; i: int) : float4
+
+Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
+
+:Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>`  implicit!
+
+            * **i** : int
+
+.. _function-math__dot__float4x4_implicit__eq__eq_const_uint:
+
+.. das:function:: float4x4 implicit ==const.[](m: float4x4 implicit ==const; i: uint) : float4&
+
+Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
+
+:Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>`  implicit!
+
+            * **i** : uint
+
+.. _function-math__dot__float4x4_const_implicit__eq__eq_const_uint:
+
+.. das:function:: float4x4 const implicit ==const.[](m: float4x4 const implicit ==const; i: uint) : float4
+
+Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
+
+:Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>`  implicit!
+
+            * **i** : uint
+
+.. _function-math__dot__float3x4_implicit__eq__eq_const_int:
+
+.. das:function:: float3x4 implicit ==const.[](m: float3x4 implicit ==const; i: int) : float3&
+
+Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
+
+:Arguments: * **m** :  :ref:`float3x4 <handle-math-float3x4>`  implicit!
+
+            * **i** : int
+
+.. _function-math__dot__float3x4_const_implicit__eq__eq_const_int:
+
+.. das:function:: float3x4 const implicit ==const.[](m: float3x4 const implicit ==const; i: int) : float3
+
+Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
+
+:Arguments: * **m** :  :ref:`float3x4 <handle-math-float3x4>`  implicit!
+
+            * **i** : int
+
+.. _function-math__dot__float3x4_implicit__eq__eq_const_uint:
+
+.. das:function:: float3x4 implicit ==const.[](m: float3x4 implicit ==const; i: uint) : float3&
+
+Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
+
+:Arguments: * **m** :  :ref:`float3x4 <handle-math-float3x4>`  implicit!
+
+            * **i** : uint
+
+.. _function-math__dot__float3x4_const_implicit__eq__eq_const_uint:
+
+.. das:function:: float3x4 const implicit ==const.[](m: float3x4 const implicit ==const; i: uint) : float3
+
+Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
+
+:Arguments: * **m** :  :ref:`float3x4 <handle-math-float3x4>`  implicit!
+
+            * **i** : uint
+
+.. _function-math__dot__float3x3_implicit__eq__eq_const_int:
+
+.. das:function:: float3x3 implicit ==const.[](m: float3x3 implicit ==const; i: int) : float3&
+
+Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
+
+:Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>`  implicit!
+
+            * **i** : int
+
+.. _function-math__dot__float3x3_const_implicit__eq__eq_const_int:
+
+.. das:function:: float3x3 const implicit ==const.[](m: float3x3 const implicit ==const; i: int) : float3
+
+Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
+
+:Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>`  implicit!
+
+            * **i** : int
+
+.. _function-math__dot__float3x3_implicit__eq__eq_const_uint:
+
+.. das:function:: float3x3 implicit ==const.[](m: float3x3 implicit ==const; i: uint) : float3&
+
+Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
+
+:Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>`  implicit!
+
+            * **i** : uint
+
+.. _function-math__dot__float3x3_const_implicit__eq__eq_const_uint:
+
+.. das:function:: float3x3 const implicit ==const.[](m: float3x3 const implicit ==const; i: uint) : float3
+
+Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
+
+:Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>`  implicit!
+
+            * **i** : uint
+
 +++++++++++++++++
 Matrix operations
 +++++++++++++++++
@@ -3398,12 +3535,15 @@ Matrix manipulation
   *  :ref:`compose (pos: float3; rot: float4; scale: float3) : float4x4 <function-math_compose_float3_float4_float3>` 
   *  :ref:`decompose (mat: float4x4 implicit; pos: float3& implicit; rot: float4& implicit; scale: float3& implicit) <function-math_decompose_float4x4_implicit_float3_implicit_float4_implicit_float3_implicit>` 
   *  :ref:`identity (x: float3x4 implicit) <function-math_identity_float3x4_implicit>` 
+  *  :ref:`determinant (x: float4x4 implicit) : float <function-math_determinant_float4x4_implicit>` 
   *  :ref:`inverse (x: float3x4 implicit) : float3x4 <function-math_inverse_float3x4_implicit>` 
   *  :ref:`inverse (m: float4x4 implicit) : float4x4 <function-math_inverse_float4x4_implicit>` 
   *  :ref:`orthonormal_inverse (m: float3x3 implicit) : float3x3 <function-math_orthonormal_inverse_float3x3_implicit>` 
   *  :ref:`orthonormal_inverse (m: float3x4 implicit) : float3x4 <function-math_orthonormal_inverse_float3x4_implicit>` 
   *  :ref:`rotate (x: float3x4 implicit; y: float3) : float3 <function-math_rotate_float3x4_implicit_float3>` 
+  *  :ref:`determinant (x: float3x4 implicit) : float <function-math_determinant_float3x4_implicit>` 
   *  :ref:`identity (x: float3x3 implicit) <function-math_identity_float3x3_implicit>` 
+  *  :ref:`determinant (x: float3x3 implicit) : float <function-math_determinant_float3x3_implicit>` 
 
 .. _function-math_identity_float4x4_implicit:
 
@@ -3503,6 +3643,14 @@ Sets the given float3x4 matrix to the identity transformation (rotation part is 
 
 :Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
 
+.. _function-math_determinant_float4x4_implicit:
+
+.. das:function:: determinant(x: float4x4 implicit) : float
+
+Returns the determinant of a float3x3 matrix as a float scalar; a zero determinant indicates the matrix is singular and non-invertible.
+
+:Arguments: * **x** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
+
 .. _function-math_inverse_float3x4_implicit:
 
 .. das:function:: inverse(x: float3x4 implicit) : float3x4
@@ -3545,11 +3693,27 @@ Rotates a float3 vector v by the 3x3 rotation part of the float3x4 matrix m, ign
 
             * **y** : float3
 
+.. _function-math_determinant_float3x4_implicit:
+
+.. das:function:: determinant(x: float3x4 implicit) : float
+
+Returns the determinant of a float3x3 matrix as a float scalar; a zero determinant indicates the matrix is singular and non-invertible.
+
+:Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
+
 .. _function-math_identity_float3x3_implicit:
 
 .. das:function:: identity(x: float3x3 implicit)
 
 Sets the given float3x4 matrix to the identity transformation (rotation part is the identity matrix, translation is zero) and returns it.
+
+:Arguments: * **x** :  :ref:`float3x3 <handle-math-float3x3>`  implicit
+
+.. _function-math_determinant_float3x3_implicit:
+
+.. das:function:: determinant(x: float3x3 implicit) : float
+
+Returns the determinant of a float3x3 matrix as a float scalar; a zero determinant indicates the matrix is singular and non-invertible.
 
 :Arguments: * **x** :  :ref:`float3x3 <handle-math-float3x3>`  implicit
 
@@ -3559,9 +3723,16 @@ Quaternion operations
 
   *  :ref:`quat_from_unit_arc (v0: float3; v1: float3) : float4 <function-math_quat_from_unit_arc_float3_float3>` 
   *  :ref:`quat_from_unit_vec_ang (v: float3; ang: float) : float4 <function-math_quat_from_unit_vec_ang_float3_float>` 
+  *  :ref:`quat_from_euler (angles: float3) : float4 <function-math_quat_from_euler_float3>` 
+  *  :ref:`quat_from_euler (x: float; y: float; z: float) : float4 <function-math_quat_from_euler_float_float_float>` 
+  *  :ref:`euler_from_quat (angles: float4) : float3 <function-math_euler_from_quat_float4>` 
+  *  :ref:`quat (m: float3x3 implicit) : float4 <function-math_quat_float3x3_implicit>` 
+  *  :ref:`quat (m: float3x4 implicit) : float4 <function-math_quat_float3x4_implicit>` 
+  *  :ref:`quat (m: float4x4 implicit) : float4 <function-math_quat_float4x4_implicit>` 
   *  :ref:`quat_mul (q1: float4; q2: float4) : float4 <function-math_quat_mul_float4_float4>` 
   *  :ref:`quat_mul_vec (q: float4; v: float3) : float3 <function-math_quat_mul_vec_float4_float3>` 
   *  :ref:`quat_conjugate (q: float4) : float4 <function-math_quat_conjugate_float4>` 
+  *  :ref:`quat_slerp (t: float; a: float4; b: float4) : float4 <function-math_quat_slerp_float_float4_float4>` 
 
 .. _function-math_quat_from_unit_arc_float3_float3:
 
@@ -3582,157 +3753,6 @@ Creates a float4 quaternion representing a rotation of ang radians around the un
 :Arguments: * **v** : float3
 
             * **ang** : float
-
-.. _function-math_quat_mul_float4_float4:
-
-.. das:function:: quat_mul(q1: float4; q2: float4) : float4
-
-Returns the float4 quaternion product of q1 and q2, representing the combined rotation of q2 followed by q1.
-
-:Arguments: * **q1** : float4
-
-            * **q2** : float4
-
-.. _function-math_quat_mul_vec_float4_float3:
-
-.. das:function:: quat_mul_vec(q: float4; v: float3) : float3
-
-Rotates a float3 vector v by the float4 quaternion q and returns the resulting float3 vector.
-
-:Arguments: * **q** : float4
-
-            * **v** : float3
-
-.. _function-math_quat_conjugate_float4:
-
-.. das:function:: quat_conjugate(q: float4) : float4
-
-Returns the conjugate of the float4 quaternion q by negating its xyz components, which for unit quaternions equals the inverse rotation.
-
-:Arguments: * **q** : float4
-
-+++++++++++++++++++++
-Packing and unpacking
-+++++++++++++++++++++
-
-  *  :ref:`pack_float_to_byte (x: float4) : uint <function-math_pack_float_to_byte_float4>` 
-  *  :ref:`unpack_byte_to_float (x: uint) : float4 <function-math_unpack_byte_to_float_uint>` 
-
-.. _function-math_pack_float_to_byte_float4:
-
-.. das:function:: pack_float_to_byte(x: float4) : uint
-
-Packs a float4 vector into a single uint by converting each component to an 8-bit byte value, mapping the XYZW components to the four bytes of the result.
-
-:Arguments: * **x** : float4
-
-.. _function-math_unpack_byte_to_float_uint:
-
-.. das:function:: unpack_byte_to_float(x: uint) : float4
-
-Unpacks the four bytes of a uint into a float4 vector, converting each 8-bit byte value to its corresponding floating-point component.
-
-:Arguments: * **x** : uint
-
-+++++++++++++
-Uncategorized
-+++++++++++++
-
-.. _function-math__dot__float4x4_implicit__eq__eq_const_int:
-
-.. das:function:: float4x4 implicit ==const.[](m: float4x4 implicit ==const; i: int) : float4&
-
-Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
-
-:Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>`  implicit!
-
-            * **i** : int
-
-.. _function-math__dot__float4x4_const_implicit__eq__eq_const_int:
-
-.. das:function:: float4x4 const implicit ==const.[](m: float4x4 const implicit ==const; i: int) : float4
-
-Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
-
-:Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>`  implicit!
-
-            * **i** : int
-
-.. _function-math__dot__float4x4_implicit__eq__eq_const_uint:
-
-.. das:function:: float4x4 implicit ==const.[](m: float4x4 implicit ==const; i: uint) : float4&
-
-Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
-
-:Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>`  implicit!
-
-            * **i** : uint
-
-.. _function-math__dot__float4x4_const_implicit__eq__eq_const_uint:
-
-.. das:function:: float4x4 const implicit ==const.[](m: float4x4 const implicit ==const; i: uint) : float4
-
-Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
-
-:Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>`  implicit!
-
-            * **i** : uint
-
-.. _function-math_determinant_float4x4_implicit:
-
-.. das:function:: determinant(x: float4x4 implicit) : float
-
-Returns the determinant of a float3x3 matrix as a float scalar; a zero determinant indicates the matrix is singular and non-invertible.
-
-:Arguments: * **x** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
-
-.. _function-math_determinant_float3x4_implicit:
-
-.. das:function:: determinant(x: float3x4 implicit) : float
-
-Returns the determinant of a float3x3 matrix as a float scalar; a zero determinant indicates the matrix is singular and non-invertible.
-
-:Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
-
-.. _function-math__dot__float3x4_implicit__eq__eq_const_int:
-
-.. das:function:: float3x4 implicit ==const.[](m: float3x4 implicit ==const; i: int) : float3&
-
-Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
-
-:Arguments: * **m** :  :ref:`float3x4 <handle-math-float3x4>`  implicit!
-
-            * **i** : int
-
-.. _function-math__dot__float3x4_const_implicit__eq__eq_const_int:
-
-.. das:function:: float3x4 const implicit ==const.[](m: float3x4 const implicit ==const; i: int) : float3
-
-Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
-
-:Arguments: * **m** :  :ref:`float3x4 <handle-math-float3x4>`  implicit!
-
-            * **i** : int
-
-.. _function-math__dot__float3x4_implicit__eq__eq_const_uint:
-
-.. das:function:: float3x4 implicit ==const.[](m: float3x4 implicit ==const; i: uint) : float3&
-
-Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
-
-:Arguments: * **m** :  :ref:`float3x4 <handle-math-float3x4>`  implicit!
-
-            * **i** : uint
-
-.. _function-math__dot__float3x4_const_implicit__eq__eq_const_uint:
-
-.. das:function:: float3x4 const implicit ==const.[](m: float3x4 const implicit ==const; i: uint) : float3
-
-Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
-
-:Arguments: * **m** :  :ref:`float3x4 <handle-math-float3x4>`  implicit!
-
-            * **i** : uint
 
 .. _function-math_quat_from_euler_float3:
 
@@ -3786,6 +3806,34 @@ Extracts the rotation part of a float3x4 matrix and returns it as a float4 quate
 
 :Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
 
+.. _function-math_quat_mul_float4_float4:
+
+.. das:function:: quat_mul(q1: float4; q2: float4) : float4
+
+Returns the float4 quaternion product of q1 and q2, representing the combined rotation of q2 followed by q1.
+
+:Arguments: * **q1** : float4
+
+            * **q2** : float4
+
+.. _function-math_quat_mul_vec_float4_float3:
+
+.. das:function:: quat_mul_vec(q: float4; v: float3) : float3
+
+Rotates a float3 vector v by the float4 quaternion q and returns the resulting float3 vector.
+
+:Arguments: * **q** : float4
+
+            * **v** : float3
+
+.. _function-math_quat_conjugate_float4:
+
+.. das:function:: quat_conjugate(q: float4) : float4
+
+Returns the conjugate of the float4 quaternion q by negating its xyz components, which for unit quaternions equals the inverse rotation.
+
+:Arguments: * **q** : float4
+
 .. _function-math_quat_slerp_float_float4_float4:
 
 .. das:function:: quat_slerp(t: float; a: float4; b: float4) : float4
@@ -3798,52 +3846,27 @@ Performs spherical linear interpolation between float4 quaternions a and b by fa
 
             * **b** : float4
 
-.. _function-math_determinant_float3x3_implicit:
++++++++++++++++++++++
+Packing and unpacking
++++++++++++++++++++++
 
-.. das:function:: determinant(x: float3x3 implicit) : float
+  *  :ref:`pack_float_to_byte (x: float4) : uint <function-math_pack_float_to_byte_float4>` 
+  *  :ref:`unpack_byte_to_float (x: uint) : float4 <function-math_unpack_byte_to_float_uint>` 
 
-Returns the determinant of a float3x3 matrix as a float scalar; a zero determinant indicates the matrix is singular and non-invertible.
+.. _function-math_pack_float_to_byte_float4:
 
-:Arguments: * **x** :  :ref:`float3x3 <handle-math-float3x3>`  implicit
+.. das:function:: pack_float_to_byte(x: float4) : uint
 
-.. _function-math__dot__float3x3_implicit__eq__eq_const_int:
+Packs a float4 vector into a single uint by converting each component to an 8-bit byte value, mapping the XYZW components to the four bytes of the result.
 
-.. das:function:: float3x3 implicit ==const.[](m: float3x3 implicit ==const; i: int) : float3&
+:Arguments: * **x** : float4
 
-Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
+.. _function-math_unpack_byte_to_float_uint:
 
-:Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>`  implicit!
+.. das:function:: unpack_byte_to_float(x: uint) : float4
 
-            * **i** : int
+Unpacks the four bytes of a uint into a float4 vector, converting each 8-bit byte value to its corresponding floating-point component.
 
-.. _function-math__dot__float3x3_const_implicit__eq__eq_const_int:
-
-.. das:function:: float3x3 const implicit ==const.[](m: float3x3 const implicit ==const; i: int) : float3
-
-Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
-
-:Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>`  implicit!
-
-            * **i** : int
-
-.. _function-math__dot__float3x3_implicit__eq__eq_const_uint:
-
-.. das:function:: float3x3 implicit ==const.[](m: float3x3 implicit ==const; i: uint) : float3&
-
-Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
-
-:Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>`  implicit!
-
-            * **i** : uint
-
-.. _function-math__dot__float3x3_const_implicit__eq__eq_const_uint:
-
-.. das:function:: float3x3 const implicit ==const.[](m: float3x3 const implicit ==const; i: uint) : float3
-
-Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
-
-:Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>`  implicit!
-
-            * **i** : uint
+:Arguments: * **x** : uint
 
 

@@ -77,9 +77,14 @@ Returns an iterator over all values of the given enumeration type.
 
 :Arguments: * **tt** : auto(TT)
 
-+++++++++++++
-Uncategorized
-+++++++++++++
+++++++++++++++++++++++
+Enumeration conversion
+++++++++++++++++++++++
+
+  *  :ref:`string (arg: auto) : auto <function-enum_trait_string_auto>` 
+  *  :ref:`to_enum (ent: auto(EnumT); name: string) : EnumT <function-enum_trait_to_enum_autoEnumT_string>` 
+  *  :ref:`to_enum (ent: auto(EnumT); name: string; defaultValue: EnumT) : EnumT <function-enum_trait_to_enum_autoEnumT_string_EnumT>` 
+  *  :ref:`enum_to_table (ent: auto(EnumT)) : table\<string, EnumT\> <function-enum_trait_enum_to_table_autoEnumT>` 
 
 .. _function-enum_trait_string_auto:
 

@@ -28,9 +28,11 @@ This macro converts each(bitfield) to the following code::
         ...
         return false
 
-+++++++++++++
-Uncategorized
-+++++++++++++
++++++++++
+Iteration
++++++++++
+
+  *  :ref:`each (argT: auto) : auto <function-bitfield_trait_each_auto>` 
 
 .. _function-bitfield_trait_each_auto:
 

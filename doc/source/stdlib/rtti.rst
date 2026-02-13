@@ -2049,12 +2049,23 @@ Iterates through all modules registered in the daScript runtime (globally, not p
 Module access
 +++++++++++++
 
+  *  :ref:`module_for_each_dependency (module: Module? implicit; block: block\<(Module?;bool):void\>) <function-rtti_module_for_each_dependency_Module_q__implicit_block_ls_Module_q_;bool_c_void_gr_>` 
   *  :ref:`module_for_each_structure (module: Module? implicit; block: block\<(StructInfo):void\>) <function-rtti_module_for_each_structure_Module_q__implicit_block_ls_StructInfo_c_void_gr_>` 
   *  :ref:`module_for_each_enumeration (module: Module? implicit; block: block\<(EnumInfo):void\>) <function-rtti_module_for_each_enumeration_Module_q__implicit_block_ls_EnumInfo_c_void_gr_>` 
   *  :ref:`module_for_each_function (module: Module? implicit; block: block\<(FuncInfo):void\>) <function-rtti_module_for_each_function_Module_q__implicit_block_ls_FuncInfo_c_void_gr_>` 
   *  :ref:`module_for_each_generic (module: Module? implicit; block: block\<(FuncInfo):void\>) <function-rtti_module_for_each_generic_Module_q__implicit_block_ls_FuncInfo_c_void_gr_>` 
   *  :ref:`module_for_each_global (module: Module? implicit; block: block\<(VarInfo):void\>) <function-rtti_module_for_each_global_Module_q__implicit_block_ls_VarInfo_c_void_gr_>` 
   *  :ref:`module_for_each_annotation (module: Module? implicit; block: block\<(Annotation):void\>) <function-rtti_module_for_each_annotation_Module_q__implicit_block_ls_Annotation_c_void_gr_>` 
+
+.. _function-rtti_module_for_each_dependency_Module_q__implicit_block_ls_Module_q_;bool_c_void_gr_:
+
+.. das:function:: module_for_each_dependency(module: Module? implicit; block: block<(Module?;bool):void>)
+
+Iterates through each module dependency of the given ``Module``, yielding the dependent ``Module`` pointer for each required module.
+
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+
+            * **block** : block<( :ref:`Module <handle-rtti-Module>` ?;bool):void> implicit
 
 .. _function-rtti_module_for_each_structure_Module_q__implicit_block_ls_StructInfo_c_void_gr_:
 
@@ -2478,19 +2489,12 @@ Returns the internal slot index (``int``) for the given key within a ``table`` v
 
             * **valueTypeSize** : int
 
-+++++++++++++
-Uncategorized
-+++++++++++++
+++++++++++++++++++++++++
+Tuple and variant access
+++++++++++++++++++++++++
 
-.. _function-rtti_module_for_each_dependency_Module_q__implicit_block_ls_Module_q_;bool_c_void_gr_:
-
-.. das:function:: module_for_each_dependency(module: Module? implicit; block: block<(Module?;bool):void>)
-
-Iterates through each module dependency of the given ``Module``, yielding the dependent ``Module`` pointer for each required module.
-
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
-
-            * **block** : block<( :ref:`Module <handle-rtti-Module>` ?;bool):void> implicit
+  *  :ref:`get_tuple_field_offset (type: TypeInfo? implicit; index: int) : int <function-rtti_get_tuple_field_offset_TypeInfo_q__implicit_int>` 
+  *  :ref:`get_variant_field_offset (type: TypeInfo? implicit; index: int) : int <function-rtti_get_variant_field_offset_TypeInfo_q__implicit_int>` 
 
 .. _function-rtti_get_tuple_field_offset_TypeInfo_q__implicit_int:
 
@@ -2511,6 +2515,17 @@ Returns the byte offset (``int``) of a field at the given index within a variant
 :Arguments: * **type** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? implicit
 
             * **index** : int
+
++++++++++
+Iteration
++++++++++
+
+  *  :ref:`each (info: FuncInfo implicit ==const) : iterator\<VarInfo&\> <function-rtti_each_FuncInfo_implicit__eq__eq_const>` 
+  *  :ref:`each (info: FuncInfo const implicit ==const) : iterator\<VarInfo const&\> <function-rtti_each_FuncInfo_const_implicit__eq__eq_const>` 
+  *  :ref:`each (info: StructInfo implicit ==const) : iterator\<VarInfo&\> <function-rtti_each_StructInfo_implicit__eq__eq_const>` 
+  *  :ref:`each (info: StructInfo const implicit ==const) : iterator\<VarInfo const&\> <function-rtti_each_StructInfo_const_implicit__eq__eq_const>` 
+  *  :ref:`each (info: EnumInfo implicit ==const) : iterator\<EnumValueInfo&\> <function-rtti_each_EnumInfo_implicit__eq__eq_const>` 
+  *  :ref:`each (info: EnumInfo const implicit ==const) : iterator\<EnumValueInfo const&\> <function-rtti_each_EnumInfo_const_implicit__eq__eq_const>` 
 
 .. _function-rtti_each_FuncInfo_implicit__eq__eq_const:
 

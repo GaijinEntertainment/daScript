@@ -18,6 +18,7 @@ File formatting
 +++++++++++++++
 
   *  :ref:`format_file (file_name: string) <function-das_source_formatter_fio_format_file_string>` 
+  *  :ref:`format_files (file_names: array\<string\>) <function-das_source_formatter_fio_format_files_array_ls_string_gr_>` 
 
 .. _function-das_source_formatter_fio_format_file_string:
 
@@ -26,10 +27,6 @@ File formatting
 Reads a daScript source file, formats it, and writes the result back if changed.
 
 :Arguments: * **file_name** : string
-
-+++++++++++++
-Uncategorized
-+++++++++++++
 
 .. _function-das_source_formatter_fio_format_files_array_ls_string_gr_:
 

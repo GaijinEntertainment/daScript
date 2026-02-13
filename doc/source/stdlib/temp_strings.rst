@@ -41,9 +41,12 @@ Intern strings are not deleted.
 
             * **cb** : block<(res:string#):void>
 
-+++++++++++++
-Uncategorized
-+++++++++++++
++++++++++++++++++++++++++++
+Temporary string conversion
++++++++++++++++++++++++++++
+
+  *  :ref:`temp_string (str: string; cb: block\<(res:string#):void\>) <function-temp_strings_temp_string_string_block_ls_res_c_string_hh__c_void_gr_>` 
+  *  :ref:`temp_string (arr: array\<uint8\>; cb: block\<(res:string#):void\>) <function-temp_strings_temp_string_array_ls_uint8_gr__block_ls_res_c_string_hh__c_void_gr_>` 
 
 .. _function-temp_strings_temp_string_string_block_ls_res_c_string_hh__c_void_gr_:
 

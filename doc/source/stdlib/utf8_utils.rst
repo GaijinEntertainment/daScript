@@ -42,6 +42,7 @@ Encoding and decoding
   *  :ref:`utf8_decode (source_utf8_string: array\<uint8\>) : array\<uint\> <function-utf8_utils_utf8_decode_array_ls_uint8_gr_>` 
   *  :ref:`utf8_decode (source_utf8_string: string) : array\<uint\> <function-utf8_utils_utf8_decode_string>` 
   *  :ref:`utf8_decode (var dest_utf32_string: array\<uint\>; source_utf8_string: string) <function-utf8_utils_utf8_decode_array_ls_uint_gr__string>` 
+  *  :ref:`decode_unicode_escape (str: string) : string <function-utf8_utils_decode_unicode_escape_string>` 
 
 .. _function-utf8_utils_utf16_to_utf32_uint_uint:
 
@@ -125,9 +126,20 @@ Converts UTF-8 string to UTF-32 and appends it to the array of codepoints (UTF-3
 
             * **source_utf8_string** : string
 
-+++++++++++++
-Uncategorized
-+++++++++++++
+.. _function-utf8_utils_decode_unicode_escape_string:
+
+.. das:function:: decode_unicode_escape(str: string) : string
+
+Decodes Unicode escape sequences (backslash followed by hex digits) in a string to UTF-8.
+
+:Arguments: * **str** : string
+
+++++++++++++++++++++++
+Length and measurement
+++++++++++++++++++++++
+
+  *  :ref:`utf8_length (utf8_string: array\<uint8\>) : int <function-utf8_utils_utf8_length_array_ls_uint8_gr_>` 
+  *  :ref:`utf8_length (utf8_string: string) : int <function-utf8_utils_utf8_length_string>` 
 
 .. _function-utf8_utils_utf8_length_array_ls_uint8_gr_:
 
@@ -144,6 +156,16 @@ Returns the number of characters in the UTF-8 string
 Returns the number of characters in the UTF-8 string
 
 :Arguments: * **utf8_string** : string
+
+++++++++++
+Validation
+++++++++++
+
+  *  :ref:`is_first_byte_of_utf8_char (ch: uint8) : bool <function-utf8_utils_is_first_byte_of_utf8_char_uint8>` 
+  *  :ref:`contains_utf8_bom (utf8_string: array\<uint8\>) : bool <function-utf8_utils_contains_utf8_bom_array_ls_uint8_gr_>` 
+  *  :ref:`contains_utf8_bom (utf8_string: string) : bool <function-utf8_utils_contains_utf8_bom_string>` 
+  *  :ref:`is_utf8_string_valid (utf8_string: array\<uint8\>) : bool <function-utf8_utils_is_utf8_string_valid_array_ls_uint8_gr_>` 
+  *  :ref:`is_utf8_string_valid (utf8_string: string) : bool <function-utf8_utils_is_utf8_string_valid_string>` 
 
 .. _function-utf8_utils_is_first_byte_of_utf8_char_uint8:
 
@@ -184,13 +206,5 @@ Returns true if the byte array contains a valid UTF-8 encoded string.
 Returns true if the string contains valid UTF-8 encoded data.
 
 :Arguments: * **utf8_string** : string
-
-.. _function-utf8_utils_decode_unicode_escape_string:
-
-.. das:function:: decode_unicode_escape(str: string) : string
-
-Decodes Unicode escape sequences (backslash followed by hex digits) in a string to UTF-8.
-
-:Arguments: * **str** : string
 
 

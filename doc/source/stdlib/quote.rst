@@ -14,9 +14,17 @@ All functions and symbols are in "quote" module, use require to get access to it
 
     require daslib/quote
 
-+++++++++++++
-Uncategorized
-+++++++++++++
+++++++++++++++++
+Clone operations
+++++++++++++++++
+
+  *  :ref:`clone (var a: dasvector`CaptureEntry; b: array\<CaptureEntryInitData\>) <function-quote_clone_dasvector_rq_CaptureEntry_array_ls_CaptureEntryInitData_gr_>` 
+  *  :ref:`clone_line_info (var b: LineInfoInitData) : LineInfo <function-quote_clone_line_info_LineInfoInitData>` 
+  *  :ref:`clone (var a: dasvector`LineInfo; b: array\<LineInfoInitData\>) <function-quote_clone_dasvector_rq_LineInfo_array_ls_LineInfoInitData_gr_>` 
+  *  :ref:`clone (var args: AnnotationList; var nargs: array\<smart_ptr\<AnnotationDeclaration\>\>) <function-quote_clone_AnnotationList_array_ls_smart_ptr_ls_AnnotationDeclaration_gr__gr_>` 
+  *  :ref:`clone (var a: dasvector`EnumEntry; var b: array\<EnumEntryInitData\>) <function-quote_clone_dasvector_rq_EnumEntry_array_ls_EnumEntryInitData_gr_>` 
+  *  :ref:`clone (var a: AnnotationArgumentList; b: array\<AnnotationArgumentInitData\>) <function-quote_clone_AnnotationArgumentList_array_ls_AnnotationArgumentInitData_gr_>` 
+  *  :ref:`clone_file_info (b: FileInfoInitData) : FileInfo? <function-quote_clone_file_info_FileInfoInitData>` 
 
 .. _function-quote_clone_dasvector_rq_CaptureEntry_array_ls_CaptureEntryInitData_gr_:
 
@@ -83,6 +91,12 @@ Clones an array of AnnotationArgumentInitData into an AnnotationArgumentList.
 Creates a FileInfo from a FileInfoInitData struct.
 
 :Arguments: * **b** :  :ref:`FileInfoInitData <struct-quote-FileInfoInitData>` 
+
+++++++++++
+Conversion
+++++++++++
+
+  *  :ref:`cvt_to_mks (var args: auto) : smart_ptr\<MakeStruct\> <function-quote_cvt_to_mks_auto>` 
 
 .. _function-quote_cvt_to_mks_auto:
 

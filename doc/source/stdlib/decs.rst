@@ -674,7 +674,7 @@ If value already exists, it is overwritten. If already existing value type is no
             * **value** : auto(TT)
 
 +++++++++++++++++++++++
-Deubg and serialization
+Debug and serialization
 +++++++++++++++++++++++
 
   *  :ref:`describe (info: CTypeInfo) : string <function-decs_describe_CTypeInfo>` 

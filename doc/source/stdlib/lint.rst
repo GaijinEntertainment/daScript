@@ -13,9 +13,11 @@ All functions and symbols are in "lint" module, use require to get access to it.
 
     require daslib/lint
 
-+++++++++++++
-Uncategorized
-+++++++++++++
++++++++++++++++
+Lint operations
++++++++++++++++
+
+  *  :ref:`paranoid (prog: ProgramPtr; compile_time_errors: bool) <function-lint_paranoid_ProgramPtr_bool>` 
 
 .. _function-lint_paranoid_ProgramPtr_bool:
 

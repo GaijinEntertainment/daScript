@@ -1,9 +1,9 @@
 
 .. _stdlib_macro_boost:
 
-======================================================
-Boost package for the miscelanious macro manipulations
-======================================================
+=====================================
+Boost package for macro manipulations
+=====================================
 
 The MACRO_BOOST module provides utility macros for macro authors, including
 pattern matching on AST nodes, code generation helpers, and common
@@ -73,9 +73,13 @@ Same as verify, only the check will produce macro error, followed by return [[Ex
 
             * **message** : string
 
-+++++++++++++
-Uncategorized
-+++++++++++++
+++++++++++++++
+Block analysis
+++++++++++++++
+
+  *  :ref:`capture_block (expr: ExpressionPtr) : array\<CapturedVariable\> <function-macro_boost_capture_block_ExpressionPtr>` 
+  *  :ref:`collect_finally (expr: ExpressionPtr; alwaysFor: bool = false) : array\<ExprBlock?\> <function-macro_boost_collect_finally_ExpressionPtr_bool>` 
+  *  :ref:`collect_labels (expr: ExpressionPtr) : array\<int\> <function-macro_boost_collect_labels_ExpressionPtr>` 
 
 .. _function-macro_boost_capture_block_ExpressionPtr:
 

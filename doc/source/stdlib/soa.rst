@@ -52,9 +52,11 @@ For a struct ``Foo`` with fields ``x : float`` and ``y : float``, generates:
   * ``operator []`` returning ``SOA_INDEX`` proxy
   * ``length``, ``push``, ``emplace``, ``push_clone``, ``erase`` functions
 
-+++++++++++++
-Uncategorized
-+++++++++++++
+++++++++++++++++
+SOA field access
+++++++++++++++++
+
+  *  :ref:`SOA_INDEX. (src: SOA_INDEX; field: string) <function-soa__dot__SOA_INDEX_string>` 
 
 .. _function-soa__dot__SOA_INDEX_string:
 

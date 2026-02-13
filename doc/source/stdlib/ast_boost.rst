@@ -1130,68 +1130,27 @@ Constructs a ``TypeDeclPtr`` of ``tFunction`` base type from a ``FunctionPtr``, 
 
 :Arguments: * **fn** :  :ref:`FunctionPtr <alias-FunctionPtr>` 
 
-+++++
-Setup
-+++++
+++++++++++
+Type casts
+++++++++++
 
-  *  :ref:`setup_call_list (name: string; at: LineInfo; subblock: block\<(var fn:FunctionPtr):void\>) : ExprBlock? <function-ast_boost_setup_call_list_string_LineInfo_block_ls_var_fn_c_FunctionPtr_c_void_gr_>` 
-  *  :ref:`setup_call_list (name: string; at: LineInfo; isInit: bool = false; isPrivate: bool = true; isLateInit: bool = false) : ExprBlock? <function-ast_boost_setup_call_list_string_LineInfo_bool_bool_bool>` 
-  *  :ref:`setup_macro (name: string; at: LineInfo) : ExprBlock? <function-ast_boost_setup_macro_string_LineInfo>` 
-  *  :ref:`setup_tag_annotation (name: string; tag: string; var classPtr: auto) : auto <function-ast_boost_setup_tag_annotation_string_string_auto>` 
-
-.. _function-ast_boost_setup_call_list_string_LineInfo_block_ls_var_fn_c_FunctionPtr_c_void_gr_:
-
-.. das:function:: setup_call_list(name: string; at: LineInfo; subblock: block<(var fn:FunctionPtr):void>) : ExprBlock?
-
-Creates or locates a compilation-phase setup function (``__setup_macros``) and returns its body ``ExprBlock`` so callers can append registration calls to it.
-
-:Arguments: * **name** : string
-
-            * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
-
-            * **subblock** : block<(fn: :ref:`FunctionPtr <alias-FunctionPtr>` ):void>
-
-.. _function-ast_boost_setup_call_list_string_LineInfo_bool_bool_bool:
-
-.. das:function:: setup_call_list(name: string; at: LineInfo; isInit: bool = false; isPrivate: bool = true; isLateInit: bool = false) : ExprBlock?
-
-Creates or locates a compilation-phase setup function (``__setup_macros``) and returns its body ``ExprBlock`` so callers can append registration calls to it.
-
-:Arguments: * **name** : string
-
-            * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
-
-            * **isInit** : bool
-
-            * **isPrivate** : bool
-
-            * **isLateInit** : bool
-
-.. _function-ast_boost_setup_macro_string_LineInfo:
-
-.. das:function:: setup_macro(name: string; at: LineInfo) : ExprBlock?
-
-Creates or locates a macro initialization function (``__setup_macros``) guarded by ``is_compiling_macros`` and returns its body block for appending macro registration code.
-
-:Arguments: * **name** : string
-
-            * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
-
-.. _function-ast_boost_setup_tag_annotation_string_string_auto:
-
-.. das:function:: setup_tag_annotation(name: string; tag: string; classPtr: auto) : auto
-
-Creates an ``AstFunctionAnnotation`` instance and automatically applies it to every function that carries a matching ``[tag_function(tag)]`` annotation in the module.
-
-:Arguments: * **name** : string
-
-            * **tag** : string
-
-            * **classPtr** : auto
-
-+++++++++++++
-Uncategorized
-+++++++++++++
+  *  :ref:`Function?`is`BuiltInFunction (foo: Function?) : bool <function-ast_boost__rq_is_rq_BuiltInFunction_Function_q_>` 
+  *  :ref:`Function?`as`BuiltInFunction (foo: Function?) : BuiltInFunction? <function-ast_boost__rq_as_rq_BuiltInFunction_Function_q_>` 
+  *  :ref:`Function?`is`ExternalFnBase (foo: Function?) : bool <function-ast_boost__rq_is_rq_ExternalFnBase_Function_q_>` 
+  *  :ref:`Function?`as`ExternalFnBase (foo: Function?) : ExternalFnBase? <function-ast_boost__rq_as_rq_ExternalFnBase_Function_q_>` 
+  *  :ref:`Annotation?`is`FunctionAnnotation (foo: Annotation?) : bool <function-ast_boost__rq_is_rq_FunctionAnnotation_Annotation_q_>` 
+  *  :ref:`smart_ptr\<Annotation\>`is`FunctionAnnotation (foo: smart_ptr\<Annotation\>) : bool <function-ast_boost__rq_is_rq_FunctionAnnotation_smart_ptr_ls_Annotation_gr_>` 
+  *  :ref:`Annotation?`as`FunctionAnnotation (foo: Annotation?) : FunctionAnnotation? <function-ast_boost__rq_as_rq_FunctionAnnotation_Annotation_q_>` 
+  *  :ref:`smart_ptr\<Annotation\>`as`FunctionAnnotation (foo: smart_ptr\<Annotation\>) : FunctionAnnotation? <function-ast_boost__rq_as_rq_FunctionAnnotation_smart_ptr_ls_Annotation_gr_>` 
+  *  :ref:`Annotation?`is`StructureAnnotation (foo: Annotation?) : bool <function-ast_boost__rq_is_rq_StructureAnnotation_Annotation_q_>` 
+  *  :ref:`smart_ptr\<Annotation\>`is`StructureAnnotation (foo: smart_ptr\<Annotation\>) : bool <function-ast_boost__rq_is_rq_StructureAnnotation_smart_ptr_ls_Annotation_gr_>` 
+  *  :ref:`Annotation?`as`StructureAnnotation (foo: Annotation?) : StructureAnnotation? <function-ast_boost__rq_as_rq_StructureAnnotation_Annotation_q_>` 
+  *  :ref:`smart_ptr\<Annotation\>`as`StructureAnnotation (foo: smart_ptr\<Annotation\>) : StructureAnnotation? <function-ast_boost__rq_as_rq_StructureAnnotation_smart_ptr_ls_Annotation_gr_>` 
+  *  :ref:`walk_and_convert (data: uint8 const?; info: TypeDeclPtr; at: LineInfo) : ExpressionPtr <function-ast_boost_walk_and_convert_uint8_const_q__TypeDeclPtr_LineInfo>` 
+  *  :ref:`auto`is`BuiltInFunction (anything: auto) : auto <function-ast_boost__rq_is_rq_BuiltInFunction_auto>` 
+  *  :ref:`auto`is`ExternalFnBase (anything: auto) : auto <function-ast_boost__rq_is_rq_ExternalFnBase_auto>` 
+  *  :ref:`auto`is`FunctionAnnotation (anything: auto) : auto <function-ast_boost__rq_is_rq_FunctionAnnotation_auto>` 
+  *  :ref:`auto`is`StructureAnnotation (anything: auto) : auto <function-ast_boost__rq_is_rq_StructureAnnotation_auto>` 
 
 .. _function-ast_boost__rq_is_rq_BuiltInFunction_Function_q_:
 
@@ -1332,5 +1291,64 @@ Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a 
 Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a ``StructureAnnotation`` according to its ``isStructureAnnotation`` property.
 
 :Arguments: * **anything** : auto
+
++++++
+Setup
++++++
+
+  *  :ref:`setup_call_list (name: string; at: LineInfo; subblock: block\<(var fn:FunctionPtr):void\>) : ExprBlock? <function-ast_boost_setup_call_list_string_LineInfo_block_ls_var_fn_c_FunctionPtr_c_void_gr_>` 
+  *  :ref:`setup_call_list (name: string; at: LineInfo; isInit: bool = false; isPrivate: bool = true; isLateInit: bool = false) : ExprBlock? <function-ast_boost_setup_call_list_string_LineInfo_bool_bool_bool>` 
+  *  :ref:`setup_macro (name: string; at: LineInfo) : ExprBlock? <function-ast_boost_setup_macro_string_LineInfo>` 
+  *  :ref:`setup_tag_annotation (name: string; tag: string; var classPtr: auto) : auto <function-ast_boost_setup_tag_annotation_string_string_auto>` 
+
+.. _function-ast_boost_setup_call_list_string_LineInfo_block_ls_var_fn_c_FunctionPtr_c_void_gr_:
+
+.. das:function:: setup_call_list(name: string; at: LineInfo; subblock: block<(var fn:FunctionPtr):void>) : ExprBlock?
+
+Creates or locates a compilation-phase setup function (``__setup_macros``) and returns its body ``ExprBlock`` so callers can append registration calls to it.
+
+:Arguments: * **name** : string
+
+            * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
+
+            * **subblock** : block<(fn: :ref:`FunctionPtr <alias-FunctionPtr>` ):void>
+
+.. _function-ast_boost_setup_call_list_string_LineInfo_bool_bool_bool:
+
+.. das:function:: setup_call_list(name: string; at: LineInfo; isInit: bool = false; isPrivate: bool = true; isLateInit: bool = false) : ExprBlock?
+
+Creates or locates a compilation-phase setup function (``__setup_macros``) and returns its body ``ExprBlock`` so callers can append registration calls to it.
+
+:Arguments: * **name** : string
+
+            * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
+
+            * **isInit** : bool
+
+            * **isPrivate** : bool
+
+            * **isLateInit** : bool
+
+.. _function-ast_boost_setup_macro_string_LineInfo:
+
+.. das:function:: setup_macro(name: string; at: LineInfo) : ExprBlock?
+
+Creates or locates a macro initialization function (``__setup_macros``) guarded by ``is_compiling_macros`` and returns its body block for appending macro registration code.
+
+:Arguments: * **name** : string
+
+            * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
+
+.. _function-ast_boost_setup_tag_annotation_string_string_auto:
+
+.. das:function:: setup_tag_annotation(name: string; tag: string; classPtr: auto) : auto
+
+Creates an ``AstFunctionAnnotation`` instance and automatically applies it to every function that carries a matching ``[tag_function(tag)]`` annotation in the module.
+
+:Arguments: * **name** : string
+
+            * **tag** : string
+
+            * **classPtr** : auto
 
 

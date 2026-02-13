@@ -80,7 +80,9 @@ Iteration
 +++++++++
 
   *  :ref:`for_each (channel: Channel?; blk: block\<(res:auto(TT)#):void\>) : auto <function-jobque_boost_for_each_Channel_q__block_ls_res_c_autoTT_hh__c_void_gr_>` 
+  *  :ref:`for_each_clone (channel: Channel?; blk: block\<(res:auto(TT)#):void\>) : auto <function-jobque_boost_for_each_clone_Channel_q__block_ls_res_c_autoTT_hh__c_void_gr_>` 
   *  :ref:`each (var channel: Channel?; tinfo: auto(TT)) : auto <function-jobque_boost_each_Channel_q__autoTT>` 
+  *  :ref:`each_clone (var channel: Channel?; tinfo: auto(TT)) : auto <function-jobque_boost_each_clone_Channel_q__autoTT>` 
 
 .. _function-jobque_boost_for_each_Channel_q__block_ls_res_c_autoTT_hh__c_void_gr_:
 
@@ -88,6 +90,18 @@ Iteration
 
 .. warning:: 
   This function is deprecated.
+
+reads input from the channel (in order it was pushed) and invokes the block on each input.
+stops once channel is depleted (internal entry counter is 0)
+this can happen on multiple threads or jobs at the same time.
+
+:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
+
+            * **blk** : block<(res:auto(TT)#):void>
+
+.. _function-jobque_boost_for_each_clone_Channel_q__block_ls_res_c_autoTT_hh__c_void_gr_:
+
+.. das:function:: for_each_clone(channel: Channel?; blk: block<(res:auto(TT)#):void>) : auto
 
 reads input from the channel (in order it was pushed) and invokes the block on each input.
 stops once channel is depleted (internal entry counter is 0)
@@ -112,12 +126,26 @@ iteration can happen on multiple threads or jobs at the same time.
 
             * **tinfo** : auto(TT)
 
+.. _function-jobque_boost_each_clone_Channel_q__autoTT:
+
+.. das:function:: each_clone(channel: Channel?; tinfo: auto(TT)) : auto
+
+this iterator is used to iterate over the channel in order it was pushed.
+iterator stops once channel is depleted (internal entry counter is 0)
+iteration can happen on multiple threads or jobs at the same time.
+
+:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
+
+            * **tinfo** : auto(TT)
+
 ++++++++++++
 Passing data
 ++++++++++++
 
   *  :ref:`push_clone (channel: Channel?; data: auto(TT)) : auto <function-jobque_boost_push_clone_Channel_q__autoTT>` 
   *  :ref:`push (channel: Channel?; data: auto?) : auto <function-jobque_boost_push_Channel_q__auto_q_>` 
+  *  :ref:`push_batch_clone (channel: Channel?; data: array\<auto(TT)\>) : auto <function-jobque_boost_push_batch_clone_Channel_q__array_ls_autoTT_gr_>` 
+  *  :ref:`push_batch (channel: Channel?; data: array\<auto?\>) : auto <function-jobque_boost_push_batch_Channel_q__array_ls_auto_q__gr_>` 
 
 .. _function-jobque_boost_push_clone_Channel_q__autoTT:
 
@@ -139,66 +167,36 @@ pushes value to the channel (at the end)
 
             * **data** : auto?
 
-++++++++++++++++++++++++
-Internal capture details
-++++++++++++++++++++++++
+.. _function-jobque_boost_push_batch_clone_Channel_q__array_ls_autoTT_gr_:
 
-  *  :ref:`capture_jobque_channel (var ch: Channel?) : Channel? <function-jobque_boost_capture_jobque_channel_Channel_q_>` 
-  *  :ref:`capture_jobque_job_status (var js: JobStatus?) : JobStatus? <function-jobque_boost_capture_jobque_job_status_JobStatus_q_>` 
-  *  :ref:`release_capture_jobque_channel (ch: Channel?) <function-jobque_boost_release_capture_jobque_channel_Channel_q_>` 
-  *  :ref:`release_capture_jobque_job_status (js: JobStatus?) <function-jobque_boost_release_capture_jobque_job_status_JobStatus_q_>` 
+.. das:function:: push_batch_clone(channel: Channel?; data: array<auto(TT)>) : auto
 
-.. _function-jobque_boost_capture_jobque_channel_Channel_q_:
+clones data and pushed values to the channel (at the end)
 
-.. das:function:: capture_jobque_channel(ch: Channel?) : Channel?
+:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
 
-this function is used to capture a channel that is used by the jobque.
+            * **data** : array<auto(TT)>
 
-:Arguments: * **ch** :  :ref:`Channel <handle-jobque-Channel>` ?
+.. _function-jobque_boost_push_batch_Channel_q__array_ls_auto_q__gr_:
 
-.. _function-jobque_boost_capture_jobque_job_status_JobStatus_q_:
+.. das:function:: push_batch(channel: Channel?; data: array<auto?>) : auto
 
-.. das:function:: capture_jobque_job_status(js: JobStatus?) : JobStatus?
+pushes values to the channel (at the end)
 
-this function is used to capture a job status that is used by the jobque.
+:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
 
-:Arguments: * **js** :  :ref:`JobStatus <handle-jobque-JobStatus>` ?
+            * **data** : array<auto?>
 
-.. _function-jobque_boost_release_capture_jobque_channel_Channel_q_:
+++++++++++++++
+Receiving data
+++++++++++++++
 
-.. das:function:: release_capture_jobque_channel(ch: Channel?)
-
-this function is used to release a channel that is used by the jobque.
-
-:Arguments: * **ch** :  :ref:`Channel <handle-jobque-Channel>` ?
-
-.. _function-jobque_boost_release_capture_jobque_job_status_JobStatus_q_:
-
-.. das:function:: release_capture_jobque_job_status(js: JobStatus?)
-
-this function is used to release a job status that is used by the jobque.
-
-:Arguments: * **js** :  :ref:`JobStatus <handle-jobque-JobStatus>` ?
-
-+++++++++++++
-Uncategorized
-+++++++++++++
-
-.. _function-jobque_boost_capture_jobque_lock_box_LockBox_q_:
-
-.. das:function:: capture_jobque_lock_box(js: LockBox?) : LockBox?
-
-this function is used to capture a lock box that is used by the jobque.
-
-:Arguments: * **js** :  :ref:`LockBox <handle-jobque-LockBox>` ?
-
-.. _function-jobque_boost_release_capture_jobque_lock_box_LockBox_q_:
-
-.. das:function:: release_capture_jobque_lock_box(js: LockBox?)
-
-this function is used to release a lock box that is used by the jobque.
-
-:Arguments: * **js** :  :ref:`LockBox <handle-jobque-LockBox>` ?
+  *  :ref:`gather (ch: Channel?; blk: block\<(arg:auto(TT)#):void\>) : auto <function-jobque_boost_gather_Channel_q__block_ls_arg_c_autoTT_hh__c_void_gr_>` 
+  *  :ref:`gather_ex (ch: Channel?; blk: block\<(arg:auto(TT)#;info:TypeInfo const?;var ctx:Context):void\>) : auto <function-jobque_boost_gather_ex_Channel_q__block_ls_arg_c_autoTT_hh_;info_c_TypeInfo_const_q_;var_ctx_c_Context_c_void_gr_>` 
+  *  :ref:`gather_and_forward (ch: Channel?; toCh: Channel?; blk: block\<(arg:auto(TT)#):void\>) : auto <function-jobque_boost_gather_and_forward_Channel_q__Channel_q__block_ls_arg_c_autoTT_hh__c_void_gr_>` 
+  *  :ref:`peek (ch: Channel?; blk: block\<(arg:auto(TT)#):void\>) : auto <function-jobque_boost_peek_Channel_q__block_ls_arg_c_autoTT_hh__c_void_gr_>` 
+  *  :ref:`pop_one (channel: Channel?; blk: block\<(res:auto(TT)#):void\>) : auto <function-jobque_boost_pop_one_Channel_q__block_ls_res_c_autoTT_hh__c_void_gr_>` 
+  *  :ref:`pop_and_clone_one (channel: Channel?; blk: block\<(res:auto(TT)#):void\>) : auto <function-jobque_boost_pop_and_clone_one_Channel_q__block_ls_res_c_autoTT_hh__c_void_gr_>` 
 
 .. _function-jobque_boost_gather_Channel_q__block_ls_arg_c_autoTT_hh__c_void_gr_:
 
@@ -246,18 +244,6 @@ afterwards input is not consumed
 
             * **blk** : block<(arg:auto(TT)#):void>
 
-.. _function-jobque_boost_for_each_clone_Channel_q__block_ls_res_c_autoTT_hh__c_void_gr_:
-
-.. das:function:: for_each_clone(channel: Channel?; blk: block<(res:auto(TT)#):void>) : auto
-
-reads input from the channel (in order it was pushed) and invokes the block on each input.
-stops once channel is depleted (internal entry counter is 0)
-this can happen on multiple threads or jobs at the same time.
-
-:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
-
-            * **blk** : block<(res:auto(TT)#):void>
-
 .. _function-jobque_boost_pop_one_Channel_q__block_ls_res_c_autoTT_hh__c_void_gr_:
 
 .. das:function:: pop_one(channel: Channel?; blk: block<(res:auto(TT)#):void>) : auto
@@ -281,25 +267,15 @@ reads one command from channel
 
             * **blk** : block<(res:auto(TT)#):void>
 
-.. _function-jobque_boost_push_batch_clone_Channel_q__array_ls_autoTT_gr_:
+++++++++++++++++++
+LockBox operations
+++++++++++++++++++
 
-.. das:function:: push_batch_clone(channel: Channel?; data: array<auto(TT)>) : auto
-
-clones data and pushed values to the channel (at the end)
-
-:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
-
-            * **data** : array<auto(TT)>
-
-.. _function-jobque_boost_push_batch_Channel_q__array_ls_auto_q__gr_:
-
-.. das:function:: push_batch(channel: Channel?; data: array<auto?>) : auto
-
-pushes values to the channel (at the end)
-
-:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
-
-            * **data** : array<auto?>
+  *  :ref:`set (box: LockBox?; data: auto(TT)) : auto <function-jobque_boost_set_LockBox_q__autoTT>` 
+  *  :ref:`set (box: LockBox?; data: auto?) : auto <function-jobque_boost_set_LockBox_q__auto_q_>` 
+  *  :ref:`get (box: LockBox?; blk: block\<(res:auto(TT)#):void\>) : auto <function-jobque_boost_get_LockBox_q__block_ls_res_c_autoTT_hh__c_void_gr_>` 
+  *  :ref:`update (box: LockBox?; blk: block\<(var res:auto(TT)#):void\>) : auto <function-jobque_boost_update_LockBox_q__block_ls_var_res_c_autoTT_hh__c_void_gr_>` 
+  *  :ref:`clear (box: LockBox?; type_: auto(TT)) : auto <function-jobque_boost_clear_LockBox_q__autoTT>` 
 
 .. _function-jobque_boost_set_LockBox_q__autoTT:
 
@@ -351,16 +327,63 @@ clear value from the lock box
 
             * **type_** : auto(TT)
 
-.. _function-jobque_boost_each_clone_Channel_q__autoTT:
+++++++++++++++++++++++++
+Internal capture details
+++++++++++++++++++++++++
 
-.. das:function:: each_clone(channel: Channel?; tinfo: auto(TT)) : auto
+  *  :ref:`capture_jobque_channel (var ch: Channel?) : Channel? <function-jobque_boost_capture_jobque_channel_Channel_q_>` 
+  *  :ref:`capture_jobque_job_status (var js: JobStatus?) : JobStatus? <function-jobque_boost_capture_jobque_job_status_JobStatus_q_>` 
+  *  :ref:`capture_jobque_lock_box (var js: LockBox?) : LockBox? <function-jobque_boost_capture_jobque_lock_box_LockBox_q_>` 
+  *  :ref:`release_capture_jobque_channel (ch: Channel?) <function-jobque_boost_release_capture_jobque_channel_Channel_q_>` 
+  *  :ref:`release_capture_jobque_job_status (js: JobStatus?) <function-jobque_boost_release_capture_jobque_job_status_JobStatus_q_>` 
+  *  :ref:`release_capture_jobque_lock_box (js: LockBox?) <function-jobque_boost_release_capture_jobque_lock_box_LockBox_q_>` 
 
-this iterator is used to iterate over the channel in order it was pushed.
-iterator stops once channel is depleted (internal entry counter is 0)
-iteration can happen on multiple threads or jobs at the same time.
+.. _function-jobque_boost_capture_jobque_channel_Channel_q_:
 
-:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
+.. das:function:: capture_jobque_channel(ch: Channel?) : Channel?
 
-            * **tinfo** : auto(TT)
+this function is used to capture a channel that is used by the jobque.
+
+:Arguments: * **ch** :  :ref:`Channel <handle-jobque-Channel>` ?
+
+.. _function-jobque_boost_capture_jobque_job_status_JobStatus_q_:
+
+.. das:function:: capture_jobque_job_status(js: JobStatus?) : JobStatus?
+
+this function is used to capture a job status that is used by the jobque.
+
+:Arguments: * **js** :  :ref:`JobStatus <handle-jobque-JobStatus>` ?
+
+.. _function-jobque_boost_capture_jobque_lock_box_LockBox_q_:
+
+.. das:function:: capture_jobque_lock_box(js: LockBox?) : LockBox?
+
+this function is used to capture a lock box that is used by the jobque.
+
+:Arguments: * **js** :  :ref:`LockBox <handle-jobque-LockBox>` ?
+
+.. _function-jobque_boost_release_capture_jobque_channel_Channel_q_:
+
+.. das:function:: release_capture_jobque_channel(ch: Channel?)
+
+this function is used to release a channel that is used by the jobque.
+
+:Arguments: * **ch** :  :ref:`Channel <handle-jobque-Channel>` ?
+
+.. _function-jobque_boost_release_capture_jobque_job_status_JobStatus_q_:
+
+.. das:function:: release_capture_jobque_job_status(js: JobStatus?)
+
+this function is used to release a job status that is used by the jobque.
+
+:Arguments: * **js** :  :ref:`JobStatus <handle-jobque-JobStatus>` ?
+
+.. _function-jobque_boost_release_capture_jobque_lock_box_LockBox_q_:
+
+.. das:function:: release_capture_jobque_lock_box(js: LockBox?)
+
+this function is used to release a lock box that is used by the jobque.
+
+:Arguments: * **js** :  :ref:`LockBox <handle-jobque-LockBox>` ?
 
 

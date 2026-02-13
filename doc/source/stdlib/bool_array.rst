@@ -24,9 +24,11 @@ Structures
 A dynamic array of booleans, stored as bits.
 
 
-+++++++++++++
-Uncategorized
-+++++++++++++
++++++++++
+Iteration
++++++++++
+
+  *  :ref:`each (self: BoolArray) : iterator\<bool\> <function-bool_array_each_BoolArray>` 
 
 .. _function-bool_array_each_BoolArray:
 

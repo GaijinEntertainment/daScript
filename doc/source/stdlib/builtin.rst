@@ -2504,9 +2504,9 @@ Executes `block` a total of `count` times under the given `category` label, prin
 
             * **block** : block<void> implicit
 
-++++++++++++++++++++
-System infastructure
-++++++++++++++++++++
++++++++++++++++++++++
+System infrastructure
++++++++++++++++++++++
 
   *  :ref:`get_das_root () : string <function-builtin_get_das_root>` 
   *  :ref:`panic (text: string implicit) <function-builtin_panic_string_implicit>` 
@@ -2992,6 +2992,168 @@ Computes the elapsed time in microseconds since the reference point `ref`, which
 Computes the elapsed time in nanoseconds since the reference point `ref`, which is typically obtained from `ref_time_ticks`.
 
 :Arguments: * **ref** : int64
+
+++++++++++++++++
+Platform queries
+++++++++++++++++
+
+  *  :ref:`get_context_share_counter () : uint64 <function-builtin_get_context_share_counter>` 
+  *  :ref:`das_is_dll_build () : bool <function-builtin_das_is_dll_build>` 
+  *  :ref:`get_platform_name () : string <function-builtin_get_platform_name>` 
+  *  :ref:`get_architecture_name () : string <function-builtin_get_architecture_name>` 
+
+.. _function-builtin_get_context_share_counter:
+
+.. das:function:: get_context_share_counter() : uint64
+
+Returns the use-count of the shared context, which is incremented each time a thread accesses it; useful for tracking concurrent context usage.
+
+.. _function-builtin_das_is_dll_build:
+
+.. das:function:: das_is_dll_build() : bool
+
+Checks whether the current build is configured as a DLL (dynamic library) build, which determines if daslib symbols are available for the JIT compiler.
+
+.. _function-builtin_get_platform_name:
+
+.. das:function:: get_platform_name() : string
+
+Returns the name of the operating system the program is running on, such as `"windows"`, `"linux"`, `"darwin"`, `"emscripten"`, or `"unknown"`.
+
+.. _function-builtin_get_architecture_name:
+
+.. das:function:: get_architecture_name() : string
+
+Returns the name of the CPU architecture the program is running on, such as `"x86_64"`, `"x86"`, `"arm64"`, `"arm"`, `"wasm32"`, or `"unknown"`.
+
++++++++++++++++++
+String formatting
++++++++++++++++++
+
+  *  :ref:`fmt (format: string implicit; value: int8) : string <function-builtin_fmt_string_implicit_int8>` 
+  *  :ref:`fmt (format: string implicit; value: uint8) : string <function-builtin_fmt_string_implicit_uint8>` 
+  *  :ref:`fmt (format: string implicit; value: int16) : string <function-builtin_fmt_string_implicit_int16>` 
+  *  :ref:`fmt (format: string implicit; value: uint16) : string <function-builtin_fmt_string_implicit_uint16>` 
+  *  :ref:`fmt (format: string implicit; value: int) : string <function-builtin_fmt_string_implicit_int>` 
+  *  :ref:`fmt (format: string implicit; value: uint) : string <function-builtin_fmt_string_implicit_uint>` 
+  *  :ref:`fmt (format: string implicit; value: int64) : string <function-builtin_fmt_string_implicit_int64>` 
+  *  :ref:`fmt (format: string implicit; value: uint64) : string <function-builtin_fmt_string_implicit_uint64>` 
+  *  :ref:`fmt (format: string implicit; value: float) : string <function-builtin_fmt_string_implicit_float>` 
+  *  :ref:`fmt (format: string implicit; value: double) : string <function-builtin_fmt_string_implicit_double>` 
+
+.. _function-builtin_fmt_string_implicit_int8:
+
+.. das:function:: fmt(format: string implicit; value: int8) : string
+
+Formats an `int8` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
+
+:Arguments: * **format** : string implicit
+
+            * **value** : int8
+
+.. _function-builtin_fmt_string_implicit_uint8:
+
+.. das:function:: fmt(format: string implicit; value: uint8) : string
+
+Formats a `uint8` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
+
+:Arguments: * **format** : string implicit
+
+            * **value** : uint8
+
+.. _function-builtin_fmt_string_implicit_int16:
+
+.. das:function:: fmt(format: string implicit; value: int16) : string
+
+Formats an `int16` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
+
+:Arguments: * **format** : string implicit
+
+            * **value** : int16
+
+.. _function-builtin_fmt_string_implicit_uint16:
+
+.. das:function:: fmt(format: string implicit; value: uint16) : string
+
+Formats a `uint16` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
+
+:Arguments: * **format** : string implicit
+
+            * **value** : uint16
+
+.. _function-builtin_fmt_string_implicit_int:
+
+.. das:function:: fmt(format: string implicit; value: int) : string
+
+Formats an `int` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
+
+:Arguments: * **format** : string implicit
+
+            * **value** : int
+
+.. _function-builtin_fmt_string_implicit_uint:
+
+.. das:function:: fmt(format: string implicit; value: uint) : string
+
+Formats a `uint` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
+
+:Arguments: * **format** : string implicit
+
+            * **value** : uint
+
+.. _function-builtin_fmt_string_implicit_int64:
+
+.. das:function:: fmt(format: string implicit; value: int64) : string
+
+Formats an `int64` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
+
+:Arguments: * **format** : string implicit
+
+            * **value** : int64
+
+.. _function-builtin_fmt_string_implicit_uint64:
+
+.. das:function:: fmt(format: string implicit; value: uint64) : string
+
+Formats a `uint64` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
+
+:Arguments: * **format** : string implicit
+
+            * **value** : uint64
+
+.. _function-builtin_fmt_string_implicit_float:
+
+.. das:function:: fmt(format: string implicit; value: float) : string
+
+Formats a `float` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
+
+:Arguments: * **format** : string implicit
+
+            * **value** : float
+
+.. _function-builtin_fmt_string_implicit_double:
+
+.. das:function:: fmt(format: string implicit; value: double) : string
+
+Formats a `double` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
+
+:Arguments: * **format** : string implicit
+
+            * **value** : double
+
+++++++++++++++++++++
+Argument consumption
+++++++++++++++++++++
+
+  *  :ref:`consume_argument (var a: auto(TT)&) : TT& <function-builtin_consume_argument_autoTT>` 
+
+.. _function-builtin_consume_argument_autoTT:
+
+.. das:function:: consume_argument(a: auto(TT)&) : TT&
+
+Marks argument `a` as consumed, signaling to the compiler that it will not be used after this call, which enables move optimizations and avoids unnecessary clones. Equivalent to the `<-arg` syntax.
+
+:Arguments: * **a** : auto(TT)&
 
 +++++++++++++
 Lock checking
@@ -3501,141 +3663,5 @@ Returns the file name of the source file currently being compiled, useful for co
 .. das:function:: compiling_module_name() : string
 
 Returns the name of the module currently being compiled, useful for compile-time metaprogramming and diagnostics.
-
-+++++++++++++
-Uncategorized
-+++++++++++++
-
-.. _function-builtin_get_context_share_counter:
-
-.. das:function:: get_context_share_counter() : uint64
-
-Returns the use-count of the shared context, which is incremented each time a thread accesses it; useful for tracking concurrent context usage.
-
-.. _function-builtin_das_is_dll_build:
-
-.. das:function:: das_is_dll_build() : bool
-
-Checks whether the current build is configured as a DLL (dynamic library) build, which determines if daslib symbols are available for the JIT compiler.
-
-.. _function-builtin_get_platform_name:
-
-.. das:function:: get_platform_name() : string
-
-Returns the name of the operating system the program is running on, such as `"windows"`, `"linux"`, `"darwin"`, `"emscripten"`, or `"unknown"`.
-
-.. _function-builtin_get_architecture_name:
-
-.. das:function:: get_architecture_name() : string
-
-Returns the name of the CPU architecture the program is running on, such as `"x86_64"`, `"x86"`, `"arm64"`, `"arm"`, `"wasm32"`, or `"unknown"`.
-
-.. _function-builtin_fmt_string_implicit_int8:
-
-.. das:function:: fmt(format: string implicit; value: int8) : string
-
-Formats an `int8` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : int8
-
-.. _function-builtin_fmt_string_implicit_uint8:
-
-.. das:function:: fmt(format: string implicit; value: uint8) : string
-
-Formats a `uint8` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : uint8
-
-.. _function-builtin_fmt_string_implicit_int16:
-
-.. das:function:: fmt(format: string implicit; value: int16) : string
-
-Formats an `int16` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : int16
-
-.. _function-builtin_fmt_string_implicit_uint16:
-
-.. das:function:: fmt(format: string implicit; value: uint16) : string
-
-Formats a `uint16` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : uint16
-
-.. _function-builtin_fmt_string_implicit_int:
-
-.. das:function:: fmt(format: string implicit; value: int) : string
-
-Formats an `int` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : int
-
-.. _function-builtin_fmt_string_implicit_uint:
-
-.. das:function:: fmt(format: string implicit; value: uint) : string
-
-Formats a `uint` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : uint
-
-.. _function-builtin_fmt_string_implicit_int64:
-
-.. das:function:: fmt(format: string implicit; value: int64) : string
-
-Formats an `int64` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : int64
-
-.. _function-builtin_fmt_string_implicit_uint64:
-
-.. das:function:: fmt(format: string implicit; value: uint64) : string
-
-Formats a `uint64` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : uint64
-
-.. _function-builtin_fmt_string_implicit_float:
-
-.. das:function:: fmt(format: string implicit; value: float) : string
-
-Formats a `float` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : float
-
-.. _function-builtin_fmt_string_implicit_double:
-
-.. das:function:: fmt(format: string implicit; value: double) : string
-
-Formats a `double` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
-
-:Arguments: * **format** : string implicit
-
-            * **value** : double
-
-.. _function-builtin_consume_argument_autoTT:
-
-.. das:function:: consume_argument(a: auto(TT)&) : TT&
-
-Marks argument `a` as consumed, signaling to the compiler that it will not be used after this call, which enables move optimizations and avoids unnecessary clones. Equivalent to the `<-arg` syntax.
-
-:Arguments: * **a** : auto(TT)&
 
 

@@ -536,9 +536,16 @@ Creates array of ten JsonValues.
 
             * **val10** : auto
 
-+++++++++++++
-Uncategorized
-+++++++++++++
+++++++++++++++++++++++++
+Element access operators
+++++++++++++++++++++++++
+
+  *  :ref:`JsonValue const? ==const?[] (a: JsonValue const? ==const; key: string) : JsonValue? <function-json_boost__q__JsonValue_const_q___eq__eq_const_string>` 
+  *  :ref:`JsonValue? ==const?[] (var a: JsonValue? ==const; key: string) : JsonValue? <function-json_boost__q___JsonValue_q___eq__eq_const_string>` 
+  *  :ref:`JsonValue const? ==const?. (a: JsonValue const? ==const; key: string) : JsonValue? <function-json_boost__q__dot__JsonValue_const_q___eq__eq_const_string>` 
+  *  :ref:`JsonValue? ==const?. (var a: JsonValue? ==const; key: string) : JsonValue? <function-json_boost__q__dot___JsonValue_q___eq__eq_const_string>` 
+  *  :ref:`JsonValue const? ==const?[] (a: JsonValue const? ==const; idx: int) : JsonValue? <function-json_boost__q__JsonValue_const_q___eq__eq_const_int>` 
+  *  :ref:`JsonValue? ==const?[] (var a: JsonValue? ==const; idx: int) : JsonValue? <function-json_boost__q___JsonValue_q___eq__eq_const_int>` 
 
 .. _function-json_boost__q__JsonValue_const_q___eq__eq_const_string:
 
@@ -599,6 +606,23 @@ Returns the value of the index in the JSON array, if it exists.
 :Arguments: * **a** :  :ref:`JsonValue <struct-json-JsonValue>` ?!
 
             * **idx** : int
+
++++++++++++++++++++++++++
+Null coalescing operators
++++++++++++++++++++++++++
+
+  *  :ref:`JsonValue const??? (a: JsonValue const?; val: double) : double <function-json_boost__q__q__JsonValue_const_q__double>` 
+  *  :ref:`JsonValue const??? (a: JsonValue const?; val: float) : float <function-json_boost__q__q__JsonValue_const_q__float>` 
+  *  :ref:`JsonValue const??? (a: JsonValue const?; val: int8) : int8 <function-json_boost__q__q__JsonValue_const_q__int8>` 
+  *  :ref:`JsonValue const??? (a: JsonValue const?; val: int16) : int16 <function-json_boost__q__q__JsonValue_const_q__int16>` 
+  *  :ref:`JsonValue const??? (a: JsonValue const?; val: int) : int <function-json_boost__q__q__JsonValue_const_q__int>` 
+  *  :ref:`JsonValue const??? (a: JsonValue const?; val: int64) : int64 <function-json_boost__q__q__JsonValue_const_q__int64>` 
+  *  :ref:`JsonValue const??? (a: JsonValue const?; val: uint8) : uint8 <function-json_boost__q__q__JsonValue_const_q__uint8>` 
+  *  :ref:`JsonValue const??? (a: JsonValue const?; val: uint16) : uint16 <function-json_boost__q__q__JsonValue_const_q__uint16>` 
+  *  :ref:`JsonValue const??? (a: JsonValue const?; val: uint) : uint <function-json_boost__q__q__JsonValue_const_q__uint>` 
+  *  :ref:`JsonValue const??? (a: JsonValue const?; val: uint64) : uint64 <function-json_boost__q__q__JsonValue_const_q__uint64>` 
+  *  :ref:`JsonValue const??? (a: JsonValue const?; val: bool) : bool <function-json_boost__q__q__JsonValue_const_q__bool>` 
+  *  :ref:`JsonValue const??? (a: JsonValue const?; val: string) : string <function-json_boost__q__q__JsonValue_const_q__string>` 
 
 .. _function-json_boost__q__q__JsonValue_const_q__double:
 
@@ -720,6 +744,13 @@ Returns the value of the JSON object, if it exists, otherwise returns the defaul
 
             * **val** : string
 
+++++++++++++++++
+Value extraction
+++++++++++++++++
+
+  *  :ref:`JsonValue const? ==const?.`value (a: JsonValue const? ==const) : variant\<_object:table\<string;JsonValue?\>;_array:array\<JsonValue?\>;_string:string;_number:double;_longint:int64;_bool:bool;_null:void?\> const? <function-json_boost__q__dot__rq_value_JsonValue_const_q___eq__eq_const>` 
+  *  :ref:`JsonValue? ==const?.`value (var a: JsonValue? ==const) : variant\<_object:table\<string;JsonValue?\>;_array:array\<JsonValue?\>;_string:string;_number:double;_longint:int64;_bool:bool;_null:void?\>? <function-json_boost__q__dot__rq_value__JsonValue_q___eq__eq_const>` 
+
 .. _function-json_boost__q__dot__rq_value_JsonValue_const_q___eq__eq_const:
 
 .. das:function:: JsonValue const? ==const?.`value(a: JsonValue const? ==const) : variant<_object:table<string;JsonValue?>;_array:array<JsonValue?>;_string:string;_number:double;_longint:int64;_bool:bool;_null:void?> const?
@@ -735,6 +766,12 @@ Returns the value of the JSON object, if it exists.
 Returns the value of the JSON object, if it exists.
 
 :Arguments: * **a** :  :ref:`JsonValue <struct-json-JsonValue>` ?!
+
+++++++++++++++++++
+Annotation parsing
+++++++++++++++++++
+
+  *  :ref:`parse_json_annotation (name: string; annotation: array\<tuple\<name:string;data:variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\>\>\>) : JsonFieldState <function-json_boost_parse_json_annotation_string_array_ls_tuple_ls_name_c_string;data_c_variant_ls_tBool_c_bool;tInt_c_int;tUInt_c_uint;tInt64_c_int64;tUInt64_c_uint64;tFloat_c_float;tDouble_c_double;tString_c_string;nothing_c_any_gr__gr__gr_>` 
 
 .. _function-json_boost_parse_json_annotation_string_array_ls_tuple_ls_name_c_string;data_c_variant_ls_tBool_c_bool;tInt_c_int;tUInt_c_uint;tInt64_c_int64;tUInt64_c_uint64;tFloat_c_float;tDouble_c_double;tString_c_string;nothing_c_any_gr__gr__gr_:
 

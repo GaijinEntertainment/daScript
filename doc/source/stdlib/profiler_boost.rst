@@ -13,9 +13,12 @@ All functions and symbols are in "profiler_boost" module, use require to get acc
 
     require daslib/profiler_boost
 
-+++++++++++++
-Uncategorized
-+++++++++++++
+++++++++++++++++++++++++
+Context profiler control
+++++++++++++++++++++++++
+
+  *  :ref:`enable_profiler (var ctx: Context) <function-profiler_boost_enable_profiler_Context>` 
+  *  :ref:`disable_profiler (var ctx: Context) <function-profiler_boost_disable_profiler_Context>` 
 
 .. _function-profiler_boost_enable_profiler_Context:
 

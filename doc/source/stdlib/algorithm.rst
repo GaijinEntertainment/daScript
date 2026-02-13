@@ -1,9 +1,9 @@
 
 .. _stdlib_algorithm:
 
-=======================
-Miscelanious algorithms
-=======================
+========================
+Miscellaneous algorithms
+========================
 
 The ALGORITHM module provides array and collection manipulation algorithms including
 sorting, searching, set operations, and element removal.
