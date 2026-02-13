@@ -20,16 +20,21 @@ namespace das {
         auto timeM = ref_time_ticks();
         auto bound = daScriptEnvironment::getBound();
         if ( !context->runWithCatch(subexpr) ) {
-            DAS_ASSERTF(bound->g_Program, "calling macros while not compiling a program");
-            bound->g_Program->error(
-                "macro caused exception during " + message,
-                context->getException(), "",
-                context->exceptionAt,
-                CompilationError::exception_during_macro
-            );
-            bound->g_Program->macroException = true;
+            if (bound->g_Program) {
+                bound->g_Program->error(
+                    "macro caused exception during " + message,
+                    context->getException(), "",
+                    context->exceptionAt,
+                    CompilationError::exception_during_macro
+                );
+                bound->g_Program->macroException = true;
+            } else {
+                context->to_err(&context->exceptionAt, ("macro caused exception during " + message + "\n" + context->getException()).c_str());
+            }
         }
-        bound->macroTimeTicks += ref_time_ticks() - timeM;
+        if (bound->g_Program) {
+            bound->macroTimeTicks += ref_time_ticks() - timeM;
+        }
     }
 
     VisitorAdapter::VisitorAdapter(char *pClass, const StructInfo *info, Context *ctx)
