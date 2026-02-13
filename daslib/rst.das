@@ -37,7 +37,7 @@ var public {
     strict_struct_fields = true
 }
 
-def PANIC ( message : string ) {
+def PANIC(message : string) {
     to_log(LOG_ERROR, "PANIC: {message}\n")
     unsafe(exit(-1))
 }
@@ -115,15 +115,43 @@ def public function_label_file(value : FunctionPtr | Function?; drop_args : int 
         if (drop-- > 0) {
             continue
         }
-        // if arg._type.baseType == Type autoinfer
-        //     error("autoinfer in function '{value.name}'")
-            // PANIC("autoinfer in function")
         let prefix = arg._type.flags.removeConstant ? "var " : ""
-        mn += "{prefix}{describe_type_short(arg._type)}"
+        if (arg._type.baseType == Type.autoinfer && arg.init != null) {
+            // During rst_comment (pre-inference), auto-inferred default arg types
+            // are unresolved. Determine the type from the init expression so the
+            // hash matches what das2rst (post-inference) produces.
+            let rtti = "{arg.init.__rtti}"
+            if (rtti == "ExprConstDouble") {
+                mn += "{prefix}double"
+            } elif (rtti == "ExprConstFloat") {
+                mn += "{prefix}float"
+            } elif (rtti == "ExprConstString") {
+                mn += "{prefix}string"
+            } elif (rtti == "ExprConstBool") {
+                mn += "{prefix}bool"
+            } elif (rtti == "ExprConstInt") {
+                mn += "{prefix}int"
+            } elif (rtti == "ExprConstUInt") {
+                mn += "{prefix}uint"
+            } elif (rtti == "ExprConstInt64") {
+                mn += "{prefix}int64"
+            } elif (rtti == "ExprConstUInt64") {
+                mn += "{prefix}uint64"
+            } elif (rtti == "ExprConstInt8") {
+                mn += "{prefix}int8"
+            } elif (rtti == "ExprConstUInt8") {
+                mn += "{prefix}uint8"
+            } elif (rtti == "ExprConstInt16") {
+                mn += "{prefix}int16"
+            } elif (rtti == "ExprConstUInt16") {
+                mn += "{prefix}uint16"
+            } else {
+                mn += "{prefix}auto"
+            }
+        } else {
+            mn += "{prefix}{describe_type_short(arg._type)}"
+        }
     }
-    // if value.name == "player_flash_blindness_es"
-    //     print("deep: {mn} {hash(mn)}\n")
-    //     stackwalk(false, false)
     return "{safe_function_name(string(value.name))}-{hash(mn)}"
 }
 

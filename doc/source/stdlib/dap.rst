@@ -568,7 +568,7 @@ Returns a nested JSON object field by name, or null if not found.
 
 .. das:function:: jon(val: JsonValue?; id: string; defVal: double = 0lf) : double
 
-|detail/function-dap-jon-0x9fdf0ee20ba20dd3|
+Returns a numeric JSON field by name, or `defVal` if not found.
 
 :Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -580,7 +580,7 @@ Returns a nested JSON object field by name, or null if not found.
 
 .. das:function:: j_s(val: JsonValue?; defVal: string = "") : string
 
-|detail/function-dap-j_s-0xab30853761d7730e|
+Returns the string value of a JSON value, or `defVal` if not a string.
 
 :Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -590,7 +590,7 @@ Returns a nested JSON object field by name, or null if not found.
 
 .. das:function:: jos(val: JsonValue?; id: string; defVal: string = "") : string
 
-|detail/function-dap-jos-0x78c9ca8c4b8bacc6|
+Returns a string JSON field by name, or `defVal` if not found.
 
 :Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -602,7 +602,7 @@ Returns a nested JSON object field by name, or null if not found.
 
 .. das:function:: job(val: JsonValue?; id: string; defVal: bool = false) : bool
 
-|detail/function-dap-job-0x478c3f582c0ab7e2|
+Returns a boolean JSON field by name, or `defVal` if not found.
 
 :Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
