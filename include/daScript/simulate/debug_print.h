@@ -430,8 +430,9 @@ namespace das {
             ss << "block" << HEX << getSemanticHash(pa->body, context) << DEC;
         }
         virtual void WalkEnumeration ( int32_t & value, EnumInfo * info ) override {
+            int64_t uvalue = uint64_t(value);
             for ( uint32_t t=0, ts=info->count; t!=ts; ++t ) {
-                if ( value == info->fields[t]->value ) {
+                if ( value == info->fields[t]->value || uvalue == info->fields[t]->value ) {
                     ss << info->fields[t]->name;
                     return;
                 }
@@ -439,8 +440,9 @@ namespace das {
             ss << "enum " << value;
         }
         virtual void WalkEnumeration8 ( int8_t & value, EnumInfo * info ) override {
+            int64_t uvalue = uint8_t(value);
             for ( uint32_t t=0, ts=info->count; t!=ts; ++t ) {
-                if ( value == info->fields[t]->value ) {
+                if ( value == info->fields[t]->value || uvalue == info->fields[t]->value ) {
                     ss << info->fields[t]->name;
                     return;
                 }
@@ -448,8 +450,9 @@ namespace das {
             ss << "enum " << value;
         }
         virtual void WalkEnumeration16 ( int16_t & value, EnumInfo * info ) override {
+            int64_t uvalue = uint16_t(value);
             for ( uint32_t t=0, ts=info->count; t!=ts; ++t ) {
-                if ( value == info->fields[t]->value ) {
+                if ( value == info->fields[t]->value || uvalue == info->fields[t]->value ) {
                     ss << info->fields[t]->name;
                     return;
                 }
