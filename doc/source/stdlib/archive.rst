@@ -84,7 +84,7 @@ current reading offset
 last error code
 
 
-.. _function-archive_MemSerializer_rq_write_MemSerializer_void_q__implicit_int:
+.. _function-archive_MemSerializer_rq_write_MemSerializer_void_q__implicit_int_0x3a:
 
 .. das:function:: MemSerializer.write(bytes: void? implicit; size: int) : bool
 
@@ -94,7 +94,7 @@ Appends bytes at the end of the data.
 
             * **size** : int
 
-.. _function-archive_MemSerializer_rq_read_MemSerializer_void_q__implicit_int:
+.. _function-archive_MemSerializer_rq_read_MemSerializer_void_q__implicit_int_0x43:
 
 .. das:function:: MemSerializer.read(bytes: void? implicit; size: int) : bool
 
@@ -104,7 +104,7 @@ Reads bytes from data, advances the reading position.
 
             * **size** : int
 
-.. _function-archive_MemSerializer_rq_error_MemSerializer_string:
+.. _function-archive_MemSerializer_rq_error_MemSerializer_string_0x52:
 
 .. das:function:: MemSerializer.error(code: string)
 
@@ -112,37 +112,37 @@ Sets the last error code.
 
 :Arguments: * **code** : string
 
-.. _function-archive_MemSerializer_rq_OK_MemSerializer:
+.. _function-archive_MemSerializer_rq_OK_MemSerializer_0x36:
 
 .. das:function:: MemSerializer.OK() : bool
 
 Implements 'OK' method, which returns true if the serializer is in a valid state.
 
-.. _function-archive_MemSerializer_rq_extractData_MemSerializer:
+.. _function-archive_MemSerializer_rq_extractData_MemSerializer_0x29:
 
 .. das:function:: MemSerializer.extractData() : array<uint8>
 
 Extract the data from the serializer.
 
-.. _function-archive_MemSerializer_rq_getCopyOfData_MemSerializer:
+.. _function-archive_MemSerializer_rq_getCopyOfData_MemSerializer_0x2d:
 
 .. das:function:: MemSerializer.getCopyOfData() : array<uint8>
 
 Returns copy of the data from the serializer.
 
-.. _function-archive_MemSerializer_rq_getLastError_MemSerializer:
+.. _function-archive_MemSerializer_rq_getLastError_MemSerializer_0x32:
 
 .. das:function:: MemSerializer.getLastError() : string
 
 Returns last serialization error.
 
-.. _function-archive_MemSerializer:
+.. _function-archive_MemSerializer_0x21:
 
 .. das:function:: MemSerializer() : MemSerializer
 
 Initialize the serializer for reading or writing.
 
-.. _function-archive_MemSerializer_array_ls_uint8_gr_:
+.. _function-archive_MemSerializer_array_ls_uint8_gr__0x25:
 
 .. das:function:: MemSerializer(from: array<uint8>) : MemSerializer
 

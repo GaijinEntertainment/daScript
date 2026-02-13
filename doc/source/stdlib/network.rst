@@ -35,13 +35,13 @@ Classes
 :Fields: * **_server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > - Single-socket listener that manages one client connection at a time.
 
 
-.. _function-network_Server_rq_make_server_adapter_Server:
+.. _function-network_Server_rq_make_server_adapter_Server_0xe:
 
 .. das:function:: Server.make_server_adapter()
 
 Creates a low-level server adapter bound to this ``Server`` instance.
 
-.. _function-network_Server_rq_init_Server_int:
+.. _function-network_Server_rq_init_Server_int_0x16:
 
 .. das:function:: Server.init(port: int) : bool
 
@@ -49,7 +49,7 @@ Initializes the server on the specified port; returns ``true`` on success.
 
 :Arguments: * **port** : int
 
-.. _function-network_Server_rq_restore_Server_smart_ptr_ls_NetworkServer_gr_:
+.. _function-network_Server_rq_restore_Server_smart_ptr_ls_NetworkServer_gr__0x19:
 
 .. das:function:: Server.restore(shared_orphan: smart_ptr<NetworkServer>&)
 
@@ -58,7 +58,7 @@ This is necessary to re-establish the server state after reload of a script.
 
 :Arguments: * **shared_orphan** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` >&
 
-.. _function-network_Server_rq_save_Server_smart_ptr_ls_NetworkServer_gr_:
+.. _function-network_Server_rq_save_Server_smart_ptr_ls_NetworkServer_gr__0x20:
 
 .. das:function:: Server.save(shared_orphan: smart_ptr<NetworkServer>&)
 
@@ -67,31 +67,31 @@ This is necessary to re-establish the server state after reload of a script.
 
 :Arguments: * **shared_orphan** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` >&
 
-.. _function-network_Server_rq_has_session_Server:
+.. _function-network_Server_rq_has_session_Server_0x23:
 
 .. das:function:: Server.has_session() : bool
 
 Returns ``true`` if the server has an active client session.
 
-.. _function-network_Server_rq_is_open_Server:
+.. _function-network_Server_rq_is_open_Server_0x26:
 
 .. das:function:: Server.is_open() : bool
 
 Returns ``true`` if the server is open and accepting connections.
 
-.. _function-network_Server_rq_is_connected_Server:
+.. _function-network_Server_rq_is_connected_Server_0x29:
 
 .. das:function:: Server.is_connected() : bool
 
 Returns ``true`` if the server is currently connected to a client.
 
-.. _function-network_Server_rq_tick_Server:
+.. _function-network_Server_rq_tick_Server_0x2c:
 
 .. das:function:: Server.tick()
 
 Processes pending connections and incoming data; must be called periodically.
 
-.. _function-network_Server_rq_send_Server_uint8_q__int:
+.. _function-network_Server_rq_send_Server_uint8_q__int_0x31:
 
 .. das:function:: Server.send(data: uint8?; size: int) : bool
 
@@ -101,7 +101,7 @@ Sends a data buffer to the connected client.
 
             * **size** : int
 
-.. _function-network_Server:
+.. _function-network_Server_0xb:
 
 .. das:function:: Server() : Server
 

@@ -196,7 +196,7 @@ def function_short_mangled_name(value : FunctionPtr | Function?) {
 def function_label_name(value : FunctionPtr | Function?) {
     let mn = function_short_mangled_name(value)
     let res = "function-{safe_function_name(mn)}"
-    // For generic functions, append a hash suffix to disambiguate overloads
+    // For generic functions, append a line suffix to disambiguate overloads
     // that have the same short mangled name
     var is_generic = false
     for (arg in value.arguments) {
@@ -206,6 +206,11 @@ def function_label_name(value : FunctionPtr | Function?) {
         }
     }
     if (is_generic) {
+        return "{res}_{value.at.line}"
+    }
+    // For class/struct methods, operators like []=, []&&=, []||= collapse
+    // to the same safe name. Disambiguate with line number.
+    if (value.flags.isClassMethod) {
         return "{res}_{value.at.line}"
     }
     return res
@@ -1176,6 +1181,55 @@ def document_class_method(doc_file : file; mod : Module?; value; var fld) {
     document_function_topic(doc_file, func.result, topic("function", mod, "{value.name}-{function_label_file(fld.name, fld.init._type, 1)}"), "def {fld.name} : {describe(fld._type)}", args)
 }
 
+def document_struct_method(doc_file : file; mod : Module?; value; var func) {
+    // For structs (not classes), methods become module-level functions with isClassMethod flag.
+    // Static methods get names like "BoolArray`clear"; non-static keep names like "[]", "finalize".
+    // We use moreFlags.isStaticClassMethod to distinguish them and rebuild the detail file key.
+    let fname = string(func.name)
+    let is_static = func.moreFlags.isStaticClassMethod
+    var method_name : string
+    if (is_static) {
+        let structPrefix = "{value.name}`"
+        method_name = fname |> slice(length(structPrefix))
+    } else {
+        method_name = fname
+    }
+
+    fwrite(doc_file, make_label(function_label_name(func)))
+
+    let argNames <- [for (arg in func.arguments); string(arg.name)]
+    let argTypes <- [for (arg in func.arguments); get_ptr(arg._type)]
+    let argInits <- [for (arg in func.arguments); get_ptr(arg.init)]
+    (document_function_declaration(doc_file, "das:function", "{value.name}.{method_name}",
+        argNames, argTypes, argInits, func.result, /*drop args*/1))
+
+    if (func.flags.unsafeOperation) {
+        document_warning(doc_file, "This is unsafe operation.")
+    }
+    if (func.moreFlags.deprecated) {
+        document_warning(doc_file, "This function is deprecated.")
+    }
+
+    var args <- document_function_arguments(doc_file, argNames, argTypes, /*skip args*/1)
+
+    // Build topic key matching rst_comment.das pre-inference output.
+    // Pre-inference: method name is unqualified, and:
+    //   non-static methods (isStaticClassMethod=false): self NOT in args (added during inference) → skip 1 for hash
+    //   static methods (isStaticClassMethod=true): self IS in args (explicit) → skip 0 for hash
+    let hash_drop = is_static ? 0 : 1
+    var mn = method_name
+    var drop = hash_drop
+    for (arg in func.arguments) {
+        if (drop-- > 0) {
+            continue
+        }
+        let prefix = arg._type.flags.removeConstant ? "var " : ""
+        mn += "{prefix}{describe_type_short(arg._type)}"
+    }
+    let file_label = "{safe_function_name(method_name)}-{hash(mn)}"
+    document_function_topic(doc_file, func.result, topic("function", mod, "{value.name}-{file_label}"), "def {value.name}.{method_name}", args)
+}
+
 def make_requirements_list(value : smart_ptr<ast::Structure>) {
     var inscope requiredComps : array<string>
     for (ann in value.annotations) {
@@ -1419,6 +1473,26 @@ def document_structure(doc_file : file; mod : Module?; var value : StructurePtr)
         if (is_class_method(value, fld) && !(fld.flags.generated) && !fld.flags.privateField && !(fld.flags.parentType) && (fld.flags.implemented)) {
             document_class_method(doc_file, mod, value, fld)
         }
+    }
+
+    // Document struct methods (module-level functions with isClassMethod flag).
+    // For structs (unlike classes), methods are not stored as struct fields after inference.
+    for_each_function(mod, "") <| $(func) {
+        if (!func.flags.isClassMethod || func.classParent != value) {
+            return
+        }
+        if (func.flags.generated) {
+            return
+        }
+        // Skip constructors (handled below)
+        if (func.name == value.name) {
+            return
+        }
+        // Skip property functions (handled below)
+        if (string(func.name) |> starts_with(".`")) {
+            return
+        }
+        document_struct_method(doc_file, mod, value, func)
     }
 
     var inscope annT <- new TypeDecl(baseType = Type.tStructure, structType = get_ptr(value))

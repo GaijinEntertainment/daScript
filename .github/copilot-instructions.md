@@ -94,6 +94,14 @@ When editing RST files in `doc/source/reference/language/`:
 - Lexer: `src/parser/ds2_lexer.lpp`
 - Parser: `src/parser/ds2_parser.ypp`
 
+### Key AST function flags
+
+- `func.flags.isClassMethod` — function is a struct/class method (set after inference)
+- `func.moreFlags.isStaticClassMethod` — static method (declared with `def static`); name is `StructName\`methodName`, self is explicit first argument
+- Non-static methods (`isClassMethod=true`, `isStaticClassMethod=false`) — self is added implicitly during inference; name stays unqualified (e.g. `finalize`, `[]`)
+- `func.moreFlags.propertyFunction` — property accessor (name starts with `.\``)
+- `func.classParent` — pointer to the struct/class that owns the method
+
 ## Keywords Reference
 
 `aka` — variable name alias (`var a aka alpha = 42`, `for (x aka element in arr)`)

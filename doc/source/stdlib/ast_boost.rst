@@ -175,7 +175,7 @@ Classes
 Implements the ``[macro]`` function annotation, which wraps the function body so it only executes during macro module compilation.
 
 
-.. _function-ast_boost_MacroMacro_rq_apply_MacroMacro_FunctionPtr_ModuleGroup_AnnotationArgumentList_das_string:
+.. _function-ast_boost_MacroMacro_rq_apply_MacroMacro_FunctionPtr_ModuleGroup_AnnotationArgumentList_das_string_0xab:
 
 .. das:function:: MacroMacro.apply(func: FunctionPtr; group: ModuleGroup; args: AnnotationArgumentList; errors: das_string) : bool
 
@@ -196,7 +196,7 @@ Wraps the annotated function body in an ``is_compiling_macros`` guard and sets `
 Implements the ``[tag_function]`` function annotation, which attaches named boolean tags to functions so they can be discovered and processed by ``[tag_function_macro]``.
 
 
-.. _function-ast_boost_TagFunctionAnnotation_rq_apply_TagFunctionAnnotation_FunctionPtr_ModuleGroup_AnnotationArgumentList_das_string:
+.. _function-ast_boost_TagFunctionAnnotation_rq_apply_TagFunctionAnnotation_FunctionPtr_ModuleGroup_AnnotationArgumentList_das_string_0xba:
 
 .. das:function:: TagFunctionAnnotation.apply(func: FunctionPtr; group: ModuleGroup; args: AnnotationArgumentList; errors: das_string) : bool
 
@@ -217,7 +217,7 @@ Validates that all ``[tag_function(...)]`` annotation arguments are tag names (b
 Implements the ``[tag_structure]`` structure annotation, which attaches named boolean tags to structures for later discovery by macro code.
 
 
-.. _function-ast_boost_TagStructureAnnotation_rq_apply_TagStructureAnnotation_StructurePtr_ModuleGroup_AnnotationArgumentList_das_string:
+.. _function-ast_boost_TagStructureAnnotation_rq_apply_TagStructureAnnotation_StructurePtr_ModuleGroup_AnnotationArgumentList_das_string_0xc9:
 
 .. das:function:: TagStructureAnnotation.apply(str: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList; errors: das_string) : bool
 
@@ -242,7 +242,7 @@ This is base class for any annotation or macro setup.
          * **name** : string - Name of the annotation to setup.
 
 
-.. _function-ast_boost_SetupAnyAnnotation_rq_apply_SetupAnyAnnotation_StructurePtr_ModuleGroup_AnnotationArgumentList_das_string:
+.. _function-ast_boost_SetupAnyAnnotation_rq_apply_SetupAnyAnnotation_StructurePtr_ModuleGroup_AnnotationArgumentList_das_string_0x18f:
 
 .. das:function:: SetupAnyAnnotation.apply(st: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList; errors: das_string) : bool
 
@@ -256,7 +256,7 @@ Generates a macro-init function that constructs an instance of the annotated cla
 
             * **errors** :  :ref:`das_string <handle-builtin-das_string>` 
 
-.. _function-ast_boost_SetupAnyAnnotation_rq_setup_call_SetupAnyAnnotation_StructurePtr_smart_ptr_ls_ExprCall_gr_:
+.. _function-ast_boost_SetupAnyAnnotation_rq_setup_call_SetupAnyAnnotation_StructurePtr_smart_ptr_ls_ExprCall_gr__0x18b:
 
 .. das:function:: SetupAnyAnnotation.setup_call(st: StructurePtr; cll: smart_ptr<ExprCall>)
 
@@ -410,7 +410,7 @@ Populates the registration call arguments — by default adds the annotation ``n
          * **tag** : string - Name of the tag.
 
 
-.. _function-ast_boost_TagFunctionMacro_rq_apply_TagFunctionMacro_StructurePtr_ModuleGroup_AnnotationArgumentList_das_string:
+.. _function-ast_boost_TagFunctionMacro_rq_apply_TagFunctionMacro_StructurePtr_ModuleGroup_AnnotationArgumentList_das_string_0x20e:
 
 .. das:function:: TagFunctionMacro.apply(st: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList; errors: das_string) : bool
 
@@ -424,7 +424,7 @@ Extends ``SetupAnyAnnotation`` apply to extract the required ``tag`` argument an
 
             * **errors** :  :ref:`das_string <handle-builtin-das_string>` 
 
-.. _function-ast_boost_TagFunctionMacro_rq_setup_call_TagFunctionMacro_StructurePtr_smart_ptr_ls_ExprCall_gr_:
+.. _function-ast_boost_TagFunctionMacro_rq_setup_call_TagFunctionMacro_StructurePtr_smart_ptr_ls_ExprCall_gr__0x209:
 
 .. das:function:: TagFunctionMacro.setup_call(st: StructurePtr; cll: smart_ptr<ExprCall>)
 
@@ -441,7 +441,7 @@ Overrides the default ``setup_call`` to pass both the annotation ``name`` and th
 An ``AstVariantMacro`` that replaces ``is``, ``as``, and ``?as`` variant operations on ``Expression`` subclasses with runtime ``__rtti`` string checks and casts.
 
 
-.. _function-ast_boost_BetterRttiVisitor_rq_visitExprIsVariant_BetterRttiVisitor_ProgramPtr_Module_q__smart_ptr_ls_ExprIsVariant_gr_:
+.. _function-ast_boost_BetterRttiVisitor_rq_visitExprIsVariant_BetterRttiVisitor_ProgramPtr_Module_q__smart_ptr_ls_ExprIsVariant_gr__0x250:
 
 .. das:function:: BetterRttiVisitor.visitExprIsVariant(prog: ProgramPtr; mod: Module?; expr: smart_ptr<ExprIsVariant>) : ExpressionPtr
 
@@ -453,7 +453,7 @@ Visitor override that replaces ``expr is Type`` on ``Expression`` subclasses wit
 
             * **expr** : smart_ptr< :ref:`ExprIsVariant <handle-ast-ExprIsVariant>` >
 
-.. _function-ast_boost_BetterRttiVisitor_rq_visitExprAsVariant_BetterRttiVisitor_ProgramPtr_Module_q__smart_ptr_ls_ExprAsVariant_gr_:
+.. _function-ast_boost_BetterRttiVisitor_rq_visitExprAsVariant_BetterRttiVisitor_ProgramPtr_Module_q__smart_ptr_ls_ExprAsVariant_gr__0x25a:
 
 .. das:function:: BetterRttiVisitor.visitExprAsVariant(prog: ProgramPtr; mod: Module?; expr: smart_ptr<ExprAsVariant>) : ExpressionPtr
 
@@ -465,7 +465,7 @@ Visitor override that replaces ``expr as Type`` on ``Expression`` subclasses wit
 
             * **expr** : smart_ptr< :ref:`ExprAsVariant <handle-ast-ExprAsVariant>` >
 
-.. _function-ast_boost_BetterRttiVisitor_rq_visitExprSafeAsVariant_BetterRttiVisitor_ProgramPtr_Module_q__smart_ptr_ls_ExprSafeAsVariant_gr_:
+.. _function-ast_boost_BetterRttiVisitor_rq_visitExprSafeAsVariant_BetterRttiVisitor_ProgramPtr_Module_q__smart_ptr_ls_ExprSafeAsVariant_gr__0x261:
 
 .. das:function:: BetterRttiVisitor.visitExprSafeAsVariant(prog: ProgramPtr; mod: Module?; expr: smart_ptr<ExprSafeAsVariant>) : ExpressionPtr
 
