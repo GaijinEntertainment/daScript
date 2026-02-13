@@ -292,7 +292,7 @@ def is_not_equal(a, b) {
 }
 
 def not(x) {
-    //! yeilds !x
+    //! yields !x
     return !x
 }
 
@@ -303,7 +303,7 @@ def echo(var x; extra : string = "\n") {
 }
 
 def private flatten_one(var src : iterator<iterator<auto(TT)>>) {
-    //! iterates over `src`, than iterates over each element of each element of `src` and yields it
+    //! iterates over `src`, then iterates over each element of each element of `src` and yields it
     static_if (!typeinfo is_ref_type(type<TT>)) {
         return <- generator<TT -&> capture(<- src) () <| $() {
             for (i in src) {
@@ -326,7 +326,7 @@ def private flatten_one(var src : iterator<iterator<auto(TT)>>) {
 }
 
 def flatten(var it : iterator<auto(TT)>) {
-    //! iterates over `it`, than iterates over each element of each element of `it` and yields it
+    //! iterates over `it`, then iterates over each element of each element of `it` and yields it
     unsafe {
         static_if (typeinfo is_iterator(type<TT>)) {
             return <- flatten_one([iterator for(i in it); flatten(i)])

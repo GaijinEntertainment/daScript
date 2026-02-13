@@ -1,4 +1,4 @@
-Vector swizzle operatrion (`vec.xxy` or `vec.y`)
+Vector swizzle operation (`vec.xxy` or `vec.y`)
 Location of the expression in source code
 Type of the expression
 Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)

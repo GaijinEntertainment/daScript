@@ -42,38 +42,34 @@ This macro reports an error if temp_value is attempted outside of function argum
 Safe temporary address
 ++++++++++++++++++++++
 
-  *  :ref:`safe_addr (var x: auto(T)& ==const) : T?# <function-safe_addr_safe_addr__autoT__eq__eq_const>` 
-  *  :ref:`safe_addr (x: auto(T) const& ==const) : T?# <function-safe_addr_safe_addr_autoT_const__eq__eq_const>` 
+  *  :ref:`safe_addr (x: auto(T) const& ==const) : T?# <function-safe_addr_safe_addr_autoT_const__eq__eq_const_0x1e>` 
+  *  :ref:`safe_addr (var x: auto(T)& ==const) : T?# <function-safe_addr_safe_addr__autoT__eq__eq_const_0x16>` 
+  *  :ref:`shared_addr (val: auto(VALUE)) : auto <function-safe_addr_shared_addr_autoVALUE_0x48>` 
   *  :ref:`shared_addr (tab: table\<auto(KEY), auto(VAL)\>; k: KEY) : auto <function-safe_addr_shared_addr_table_ls_autoKEY,_autoVAL_gr__KEY>` 
-  *  :ref:`shared_addr (val: auto(VALUE)) : auto <function-safe_addr_shared_addr_autoVALUE>` 
 
-.. _function-safe_addr_safe_addr__autoT__eq__eq_const:
 
-.. das:function:: safe_addr(x: auto(T)& ==const) : T?#
+safe_addr
+^^^^^^^^^
+
+.. _function-safe_addr_safe_addr_autoT_const__eq__eq_const_0x1e:
+
+.. das:function:: safe_addr(x: auto(T) const& ==const) : T?#
 
 returns temporary pointer to the given expression
 
 :Arguments: * **x** : auto(T)&!
 
-.. _function-safe_addr_safe_addr_autoT_const__eq__eq_const:
+.. _function-safe_addr_safe_addr__autoT__eq__eq_const_0x16:
 
-.. das:function:: safe_addr(x: auto(T) const& ==const) : T?#
+.. das:function:: safe_addr(x: auto(T)& ==const) : T?#
 
-returns temporary pointer to the given expressio
+----
 
-:Arguments: * **x** : auto(T)&!
 
-.. _function-safe_addr_shared_addr_table_ls_autoKEY,_autoVAL_gr__KEY:
+shared_addr
+^^^^^^^^^^^
 
-.. das:function:: shared_addr(tab: table<auto(KEY), auto(VAL)>; k: KEY) : auto
-
-returns address of the given shared variable. it's safe because shared variables never go out of scope
-
-:Arguments: * **tab** : table<auto(KEY);auto(VAL)>
-
-            * **k** : KEY
-
-.. _function-safe_addr_shared_addr_autoVALUE:
+.. _function-safe_addr_shared_addr_autoVALUE_0x48:
 
 .. das:function:: shared_addr(val: auto(VALUE)) : auto
 
@@ -81,20 +77,22 @@ returns address of the given shared variable. it's safe because shared variables
 
 :Arguments: * **val** : auto(VALUE)&
 
+.. _function-safe_addr_shared_addr_table_ls_autoKEY,_autoVAL_gr__KEY:
+
+.. das:function:: shared_addr(tab: table<auto(KEY), auto(VAL)>; k: KEY) : auto
+
+----
+
 ++++++++++++++++++
 Temporary pointers
 ++++++++++++++++++
 
-  *  :ref:`temp_ptr (x: auto(T)? const implicit ==const) : T?# <function-safe_addr_temp_ptr_autoT_q__const_implicit__eq__eq_const>` 
   *  :ref:`temp_ptr (var x: auto(T)? implicit ==const) : T?# <function-safe_addr_temp_ptr__autoT_q__implicit__eq__eq_const>` 
+  *  :ref:`temp_ptr (x: auto(T)? const implicit ==const) : T?# <function-safe_addr_temp_ptr_autoT_q__const_implicit__eq__eq_const>` 
 
-.. _function-safe_addr_temp_ptr_autoT_q__const_implicit__eq__eq_const:
 
-.. das:function:: temp_ptr(x: auto(T)? const implicit ==const) : T?#
-
-returns temporary pointer from a given pointer
-
-:Arguments: * **x** : auto(T)? implicit!
+temp_ptr
+^^^^^^^^
 
 .. _function-safe_addr_temp_ptr__autoT_q__implicit__eq__eq_const:
 
@@ -104,27 +102,35 @@ returns temporary pointer from a given pointer
 
 :Arguments: * **x** : auto(T)? implicit!
 
+.. _function-safe_addr_temp_ptr_autoT_q__const_implicit__eq__eq_const:
+
+.. das:function:: temp_ptr(x: auto(T)? const implicit ==const) : T?#
+
+----
+
 ++++++++++++++++
 Temporary values
 ++++++++++++++++
 
-  *  :ref:`temp_value (x: auto(T) const& ==const) : T const&# <function-safe_addr_temp_value_autoT_const__eq__eq_const>` 
-  *  :ref:`temp_value (var x: auto(T)& ==const) : T&# <function-safe_addr_temp_value__autoT__eq__eq_const>` 
+  *  :ref:`temp_value (var x: auto(T)& ==const) : T&# <function-safe_addr_temp_value__autoT__eq__eq_const_0x63>` 
+  *  :ref:`temp_value (x: auto(T) const& ==const) : T const&# <function-safe_addr_temp_value_autoT_const__eq__eq_const_0x5b>` 
 
-.. _function-safe_addr_temp_value_autoT_const__eq__eq_const:
 
-.. das:function:: temp_value(x: auto(T) const& ==const) : T const&#
+temp_value
+^^^^^^^^^^
 
-returns temporary pointer to the given expression
-
-:Arguments: * **x** : auto(T)&!
-
-.. _function-safe_addr_temp_value__autoT__eq__eq_const:
+.. _function-safe_addr_temp_value__autoT__eq__eq_const_0x63:
 
 .. das:function:: temp_value(x: auto(T)& ==const) : T&#
 
-returns temporary pointer to the given expression
+returns temporary reference to the given expression
 
 :Arguments: * **x** : auto(T)&!
+
+.. _function-safe_addr_temp_value_autoT_const__eq__eq_const_0x5b:
+
+.. das:function:: temp_value(x: auto(T) const& ==const) : T const&#
+
+----
 
 

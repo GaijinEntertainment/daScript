@@ -175,7 +175,7 @@ Classes
 Implements the ``[macro]`` function annotation, which wraps the function body so it only executes during macro module compilation.
 
 
-.. _function-ast_boost_MacroMacro_rq_apply_MacroMacro_FunctionPtr_ModuleGroup_AnnotationArgumentList_das_string:
+.. _function-ast_boost_MacroMacro_rq_apply_MacroMacro_FunctionPtr_ModuleGroup_AnnotationArgumentList_das_string_0xab:
 
 .. das:function:: MacroMacro.apply(func: FunctionPtr; group: ModuleGroup; args: AnnotationArgumentList; errors: das_string) : bool
 
@@ -196,7 +196,7 @@ Wraps the annotated function body in an ``is_compiling_macros`` guard and sets `
 Implements the ``[tag_function]`` function annotation, which attaches named boolean tags to functions so they can be discovered and processed by ``[tag_function_macro]``.
 
 
-.. _function-ast_boost_TagFunctionAnnotation_rq_apply_TagFunctionAnnotation_FunctionPtr_ModuleGroup_AnnotationArgumentList_das_string:
+.. _function-ast_boost_TagFunctionAnnotation_rq_apply_TagFunctionAnnotation_FunctionPtr_ModuleGroup_AnnotationArgumentList_das_string_0xba:
 
 .. das:function:: TagFunctionAnnotation.apply(func: FunctionPtr; group: ModuleGroup; args: AnnotationArgumentList; errors: das_string) : bool
 
@@ -217,7 +217,7 @@ Validates that all ``[tag_function(...)]`` annotation arguments are tag names (b
 Implements the ``[tag_structure]`` structure annotation, which attaches named boolean tags to structures for later discovery by macro code.
 
 
-.. _function-ast_boost_TagStructureAnnotation_rq_apply_TagStructureAnnotation_StructurePtr_ModuleGroup_AnnotationArgumentList_das_string:
+.. _function-ast_boost_TagStructureAnnotation_rq_apply_TagStructureAnnotation_StructurePtr_ModuleGroup_AnnotationArgumentList_das_string_0xc9:
 
 .. das:function:: TagStructureAnnotation.apply(str: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList; errors: das_string) : bool
 
@@ -242,7 +242,7 @@ This is base class for any annotation or macro setup.
          * **name** : string - Name of the annotation to setup.
 
 
-.. _function-ast_boost_SetupAnyAnnotation_rq_apply_SetupAnyAnnotation_StructurePtr_ModuleGroup_AnnotationArgumentList_das_string:
+.. _function-ast_boost_SetupAnyAnnotation_rq_apply_SetupAnyAnnotation_StructurePtr_ModuleGroup_AnnotationArgumentList_das_string_0x18f:
 
 .. das:function:: SetupAnyAnnotation.apply(st: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList; errors: das_string) : bool
 
@@ -256,7 +256,7 @@ Generates a macro-init function that constructs an instance of the annotated cla
 
             * **errors** :  :ref:`das_string <handle-builtin-das_string>` 
 
-.. _function-ast_boost_SetupAnyAnnotation_rq_setup_call_SetupAnyAnnotation_StructurePtr_smart_ptr_ls_ExprCall_gr_:
+.. _function-ast_boost_SetupAnyAnnotation_rq_setup_call_SetupAnyAnnotation_StructurePtr_smart_ptr_ls_ExprCall_gr__0x18b:
 
 .. das:function:: SetupAnyAnnotation.setup_call(st: StructurePtr; cll: smart_ptr<ExprCall>)
 
@@ -410,7 +410,7 @@ Populates the registration call arguments — by default adds the annotation ``n
          * **tag** : string - Name of the tag.
 
 
-.. _function-ast_boost_TagFunctionMacro_rq_apply_TagFunctionMacro_StructurePtr_ModuleGroup_AnnotationArgumentList_das_string:
+.. _function-ast_boost_TagFunctionMacro_rq_apply_TagFunctionMacro_StructurePtr_ModuleGroup_AnnotationArgumentList_das_string_0x20e:
 
 .. das:function:: TagFunctionMacro.apply(st: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList; errors: das_string) : bool
 
@@ -424,7 +424,7 @@ Extends ``SetupAnyAnnotation`` apply to extract the required ``tag`` argument an
 
             * **errors** :  :ref:`das_string <handle-builtin-das_string>` 
 
-.. _function-ast_boost_TagFunctionMacro_rq_setup_call_TagFunctionMacro_StructurePtr_smart_ptr_ls_ExprCall_gr_:
+.. _function-ast_boost_TagFunctionMacro_rq_setup_call_TagFunctionMacro_StructurePtr_smart_ptr_ls_ExprCall_gr__0x209:
 
 .. das:function:: TagFunctionMacro.setup_call(st: StructurePtr; cll: smart_ptr<ExprCall>)
 
@@ -441,7 +441,7 @@ Overrides the default ``setup_call`` to pass both the annotation ``name`` and th
 An ``AstVariantMacro`` that replaces ``is``, ``as``, and ``?as`` variant operations on ``Expression`` subclasses with runtime ``__rtti`` string checks and casts.
 
 
-.. _function-ast_boost_BetterRttiVisitor_rq_visitExprIsVariant_BetterRttiVisitor_ProgramPtr_Module_q__smart_ptr_ls_ExprIsVariant_gr_:
+.. _function-ast_boost_BetterRttiVisitor_rq_visitExprIsVariant_BetterRttiVisitor_ProgramPtr_Module_q__smart_ptr_ls_ExprIsVariant_gr__0x250:
 
 .. das:function:: BetterRttiVisitor.visitExprIsVariant(prog: ProgramPtr; mod: Module?; expr: smart_ptr<ExprIsVariant>) : ExpressionPtr
 
@@ -453,7 +453,7 @@ Visitor override that replaces ``expr is Type`` on ``Expression`` subclasses wit
 
             * **expr** : smart_ptr< :ref:`ExprIsVariant <handle-ast-ExprIsVariant>` >
 
-.. _function-ast_boost_BetterRttiVisitor_rq_visitExprAsVariant_BetterRttiVisitor_ProgramPtr_Module_q__smart_ptr_ls_ExprAsVariant_gr_:
+.. _function-ast_boost_BetterRttiVisitor_rq_visitExprAsVariant_BetterRttiVisitor_ProgramPtr_Module_q__smart_ptr_ls_ExprAsVariant_gr__0x25a:
 
 .. das:function:: BetterRttiVisitor.visitExprAsVariant(prog: ProgramPtr; mod: Module?; expr: smart_ptr<ExprAsVariant>) : ExpressionPtr
 
@@ -465,7 +465,7 @@ Visitor override that replaces ``expr as Type`` on ``Expression`` subclasses wit
 
             * **expr** : smart_ptr< :ref:`ExprAsVariant <handle-ast-ExprAsVariant>` >
 
-.. _function-ast_boost_BetterRttiVisitor_rq_visitExprSafeAsVariant_BetterRttiVisitor_ProgramPtr_Module_q__smart_ptr_ls_ExprSafeAsVariant_gr_:
+.. _function-ast_boost_BetterRttiVisitor_rq_visitExprSafeAsVariant_BetterRttiVisitor_ProgramPtr_Module_q__smart_ptr_ls_ExprSafeAsVariant_gr__0x261:
 
 .. das:function:: BetterRttiVisitor.visitExprSafeAsVariant(prog: ProgramPtr; mod: Module?; expr: smart_ptr<ExprSafeAsVariant>) : ExpressionPtr
 
@@ -481,20 +481,14 @@ Visitor override that replaces ``expr ?as Type`` on ``Expression`` subclasses wi
 Containers
 ++++++++++
 
-  *  :ref:`emplace_new (var vec: dasvector`smart_ptr`Expression; var ptr: smart_ptr\<Expression\>) <function-ast_boost_emplace_new_dasvector_rq_smart_ptr_rq_Expression_smart_ptr_ls_Expression_gr_>` 
   *  :ref:`emplace_new (var vec: dasvector`smart_ptr`TypeDecl; var ptr: smart_ptr\<TypeDecl\>) <function-ast_boost_emplace_new_dasvector_rq_smart_ptr_rq_TypeDecl_smart_ptr_ls_TypeDecl_gr_>` 
-  *  :ref:`emplace_new (var vec: dasvector`smart_ptr`Variable; var ptr: smart_ptr\<Variable\>) <function-ast_boost_emplace_new_dasvector_rq_smart_ptr_rq_Variable_smart_ptr_ls_Variable_gr_>` 
+  *  :ref:`emplace_new (var vec: dasvector`smart_ptr`Expression; var ptr: smart_ptr\<Expression\>) <function-ast_boost_emplace_new_dasvector_rq_smart_ptr_rq_Expression_smart_ptr_ls_Expression_gr_>` 
   *  :ref:`emplace_new (var vec: MakeStruct; var ptr: smart_ptr\<MakeFieldDecl\>) <function-ast_boost_emplace_new_MakeStruct_smart_ptr_ls_MakeFieldDecl_gr_>` 
+  *  :ref:`emplace_new (var vec: dasvector`smart_ptr`Variable; var ptr: smart_ptr\<Variable\>) <function-ast_boost_emplace_new_dasvector_rq_smart_ptr_rq_Variable_smart_ptr_ls_Variable_gr_>` 
 
-.. _function-ast_boost_emplace_new_dasvector_rq_smart_ptr_rq_Expression_smart_ptr_ls_Expression_gr_:
 
-.. das:function:: emplace_new(vec: dasvector`smart_ptr`Expression; ptr: smart_ptr<Expression>)
-
-Moves a newly created ``smart_ptr`` (``Expression``, ``TypeDecl``, ``Variable``, or ``MakeFieldDecl``) into a vector container with correct reference counting.
-
-:Arguments: * **vec** : vector<smart_ptr<Expression>>
-
-            * **ptr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` >
+emplace_new
+^^^^^^^^^^^
 
 .. _function-ast_boost_emplace_new_dasvector_rq_smart_ptr_rq_TypeDecl_smart_ptr_ls_TypeDecl_gr_:
 
@@ -506,81 +500,37 @@ Moves a newly created ``smart_ptr`` (``Expression``, ``TypeDecl``, ``Variable``,
 
             * **ptr** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` >
 
-.. _function-ast_boost_emplace_new_dasvector_rq_smart_ptr_rq_Variable_smart_ptr_ls_Variable_gr_:
+.. _function-ast_boost_emplace_new_dasvector_rq_smart_ptr_rq_Expression_smart_ptr_ls_Expression_gr_:
 
-.. das:function:: emplace_new(vec: dasvector`smart_ptr`Variable; ptr: smart_ptr<Variable>)
-
-Moves a newly created ``smart_ptr`` (``Expression``, ``TypeDecl``, ``Variable``, or ``MakeFieldDecl``) into a vector container with correct reference counting.
-
-:Arguments: * **vec** : vector<smart_ptr<Variable>>
-
-            * **ptr** : smart_ptr< :ref:`Variable <handle-ast-Variable>` >
+.. das:function:: emplace_new(vec: dasvector`smart_ptr`Expression; ptr: smart_ptr<Expression>)
 
 .. _function-ast_boost_emplace_new_MakeStruct_smart_ptr_ls_MakeFieldDecl_gr_:
 
 .. das:function:: emplace_new(vec: MakeStruct; ptr: smart_ptr<MakeFieldDecl>)
 
-Moves a newly created ``smart_ptr`` (``Expression``, ``TypeDecl``, ``Variable``, or ``MakeFieldDecl``) into a vector container with correct reference counting.
+.. _function-ast_boost_emplace_new_dasvector_rq_smart_ptr_rq_Variable_smart_ptr_ls_Variable_gr_:
 
-:Arguments: * **vec** :  :ref:`MakeStruct <handle-ast-MakeStruct>` 
+.. das:function:: emplace_new(vec: dasvector`smart_ptr`Variable; ptr: smart_ptr<Variable>)
 
-            * **ptr** : smart_ptr< :ref:`MakeFieldDecl <handle-ast-MakeFieldDecl>` >
+----
 
 +++++++++++++++++++++++++++++++++++
 Textual descriptions of the objects
 +++++++++++++++++++++++++++++++++++
 
-  *  :ref:`describe (list: AnnotationArgumentList) : string <function-ast_boost_describe_AnnotationArgumentList>` 
-  *  :ref:`describe (ann: AnnotationDeclaration) : string <function-ast_boost_describe_AnnotationDeclaration>` 
-  *  :ref:`describe (list: AnnotationList) : string <function-ast_boost_describe_AnnotationList>` 
-  *  :ref:`describe (vvar: VariablePtr) : string <function-ast_boost_describe_VariablePtr>` 
-  *  :ref:`debug_expression (expr: ExpressionPtr; deFlags: DebugExpressionFlags = bitfield(0x0)) : string <function-ast_boost_debug_expression_ExpressionPtr_DebugExpressionFlags>` 
   *  :ref:`debug_expression (expr: Expression?) : string <function-ast_boost_debug_expression_Expression_q_>` 
+  *  :ref:`debug_expression (expr: ExpressionPtr; deFlags: DebugExpressionFlags = bitfield(0x0)) : string <function-ast_boost_debug_expression_ExpressionPtr_DebugExpressionFlags>` 
+  *  :ref:`describe (vvar: VariablePtr) : string <function-ast_boost_describe_VariablePtr>` 
+  *  :ref:`describe (ann: AnnotationDeclaration) : string <function-ast_boost_describe_AnnotationDeclaration>` 
   *  :ref:`describe (expr: Expression?) : string <function-ast_boost_describe_Expression_q_>` 
-  *  :ref:`describe_bitfield (bf: auto; merger: string = "") : auto <function-ast_boost_describe_bitfield_auto_string>` 
+  *  :ref:`describe (list: AnnotationArgumentList) : string <function-ast_boost_describe_AnnotationArgumentList>` 
+  *  :ref:`describe (list: AnnotationList) : string <function-ast_boost_describe_AnnotationList>` 
+  *  :ref:`describe_bitfield (bf: auto; merger: string = "") : auto <function-ast_boost_describe_bitfield_auto_string_0x3d>` 
   *  :ref:`describe_function_short (func: smart_ptr\<Function\>|Function?) : auto <function-ast_boost_describe_function_short_smart_ptr_ls_Function_gr_Function_q_>` 
 
-.. _function-ast_boost_describe_AnnotationArgumentList:
 
-.. das:function:: describe(list: AnnotationArgumentList) : string
-
-Returns a human-readable textual representation of an AST object (``AnnotationArgumentList``, ``AnnotationDeclaration``, ``AnnotationList``, ``Variable``, or ``Expression``).
-
-:Arguments: * **list** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
-
-.. _function-ast_boost_describe_AnnotationDeclaration:
-
-.. das:function:: describe(ann: AnnotationDeclaration) : string
-
-Returns a human-readable textual representation of an AST object (``AnnotationArgumentList``, ``AnnotationDeclaration``, ``AnnotationList``, ``Variable``, or ``Expression``).
-
-:Arguments: * **ann** :  :ref:`AnnotationDeclaration <handle-rtti-AnnotationDeclaration>` 
-
-.. _function-ast_boost_describe_AnnotationList:
-
-.. das:function:: describe(list: AnnotationList) : string
-
-Returns a human-readable textual representation of an AST object (``AnnotationArgumentList``, ``AnnotationDeclaration``, ``AnnotationList``, ``Variable``, or ``Expression``).
-
-:Arguments: * **list** :  :ref:`AnnotationList <handle-rtti-AnnotationList>` 
-
-.. _function-ast_boost_describe_VariablePtr:
-
-.. das:function:: describe(vvar: VariablePtr) : string
-
-Returns a human-readable textual representation of an AST object (``AnnotationArgumentList``, ``AnnotationDeclaration``, ``AnnotationList``, ``Variable``, or ``Expression``).
-
-:Arguments: * **vvar** :  :ref:`VariablePtr <alias-VariablePtr>` 
-
-.. _function-ast_boost_debug_expression_ExpressionPtr_DebugExpressionFlags:
-
-.. das:function:: debug_expression(expr: ExpressionPtr; deFlags: DebugExpressionFlags = bitfield(0x0)) : string
-
-Returns a hierarchical, Lisp-like textual dump of an ``ExpressionPtr`` tree showing RTTI types, field values, and nested sub-expressions for debugging.
-
-:Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
-
-            * **deFlags** :  :ref:`DebugExpressionFlags <alias-DebugExpressionFlags>` 
+debug_expression
+^^^^^^^^^^^^^^^^
 
 .. _function-ast_boost_debug_expression_Expression_q_:
 
@@ -590,15 +540,43 @@ Returns a hierarchical, Lisp-like textual dump of an ``ExpressionPtr`` tree show
 
 :Arguments: * **expr** :  :ref:`Expression <handle-ast-Expression>` ?
 
+.. _function-ast_boost_debug_expression_ExpressionPtr_DebugExpressionFlags:
+
+.. das:function:: debug_expression(expr: ExpressionPtr; deFlags: DebugExpressionFlags = bitfield(0x0)) : string
+
+----
+
+
+describe
+^^^^^^^^
+
+.. _function-ast_boost_describe_VariablePtr:
+
+.. das:function:: describe(vvar: VariablePtr) : string
+
+Returns a human-readable textual representation of an AST object (``AnnotationArgumentList``, ``AnnotationDeclaration``, ``AnnotationList``, ``Variable``, or ``Expression``).
+
+:Arguments: * **vvar** :  :ref:`VariablePtr <alias-VariablePtr>` 
+
+.. _function-ast_boost_describe_AnnotationDeclaration:
+
+.. das:function:: describe(ann: AnnotationDeclaration) : string
+
 .. _function-ast_boost_describe_Expression_q_:
 
 .. das:function:: describe(expr: Expression?) : string
 
-Returns a human-readable textual representation of an AST object (``AnnotationArgumentList``, ``AnnotationDeclaration``, ``AnnotationList``, ``Variable``, or ``Expression``).
+.. _function-ast_boost_describe_AnnotationArgumentList:
 
-:Arguments: * **expr** :  :ref:`Expression <handle-ast-Expression>` ?
+.. das:function:: describe(list: AnnotationArgumentList) : string
 
-.. _function-ast_boost_describe_bitfield_auto_string:
+.. _function-ast_boost_describe_AnnotationList:
+
+.. das:function:: describe(list: AnnotationList) : string
+
+----
+
+.. _function-ast_boost_describe_bitfield_auto_string_0x3d:
 
 .. das:function:: describe_bitfield(bf: auto; merger: string = "") : auto
 
@@ -620,79 +598,42 @@ Returns a compact signature string for a function in the form ``name (arg:Type; 
 Queries
 +++++++
 
-  *  :ref:`isVectorType (typ: Type) : bool <function-ast_boost_isVectorType_Type>` 
-  *  :ref:`isExpression (t: TypeDeclPtr; top: bool = true) : bool <function-ast_boost_isExpression_TypeDeclPtr_bool>` 
-  *  :ref:`is_same_or_inherited (parent: Structure const?; child: Structure const?) : bool <function-ast_boost_is_same_or_inherited_Structure_const_q__Structure_const_q_>` 
-  *  :ref:`is_class_method (cinfo: StructurePtr; finfo: TypeDeclPtr) : bool <function-ast_boost_is_class_method_StructurePtr_TypeDeclPtr>` 
-  *  :ref:`find_arg (argn: string; args: AnnotationArgumentList) : RttiValue <function-ast_boost_find_arg_string_AnnotationArgumentList>` 
+  *  :ref:`find_annotation (mod_name: string; ann_name: string) : Annotation const? <function-ast_boost_find_annotation_string_string>` 
   *  :ref:`find_arg (args: AnnotationArgumentList; argn: string) : RttiValue <function-ast_boost_find_arg_AnnotationArgumentList_string>` 
+  *  :ref:`find_arg (argn: string; args: AnnotationArgumentList) : RttiValue <function-ast_boost_find_arg_string_AnnotationArgumentList>` 
+  *  :ref:`find_argument_index (typ: TypeDeclPtr; name: string) : int <function-ast_boost_find_argument_index_TypeDeclPtr_string>` 
   *  :ref:`find_unique_function (mod: Module?; name: string; canfail: bool = false) : smart_ptr\<Function\> <function-ast_boost_find_unique_function_Module_q__string_bool>` 
   *  :ref:`find_unique_generic (mod: Module?; name: string; canfail: bool = false) : smart_ptr\<Function\> <function-ast_boost_find_unique_generic_Module_q__string_bool>` 
-  *  :ref:`find_annotation (mod_name: string; ann_name: string) : Annotation const? <function-ast_boost_find_annotation_string_string>` 
-  *  :ref:`get_for_source_index (expr: smart_ptr\<ExprFor\>; svar: VariablePtr) : int <function-ast_boost_get_for_source_index_smart_ptr_ls_ExprFor_gr__VariablePtr>` 
-  *  :ref:`get_for_source_index (expr: smart_ptr\<ExprFor\>; source: ExpressionPtr) : int <function-ast_boost_get_for_source_index_smart_ptr_ls_ExprFor_gr__ExpressionPtr>` 
-  *  :ref:`isCMRES (fun: FunctionPtr) : bool <function-ast_boost_isCMRES_FunctionPtr>` 
-  *  :ref:`isCMRES (fun: Function?) : bool <function-ast_boost_isCMRES_Function_q_>` 
-  *  :ref:`isMakeLocal (expr: ExpressionPtr) : bool <function-ast_boost_isMakeLocal_ExpressionPtr>` 
-  *  :ref:`isExprCallFunc (expr: ExpressionPtr) : bool <function-ast_boost_isExprCallFunc_ExpressionPtr>` 
-  *  :ref:`get_workhorse_types () : Type[34] <function-ast_boost_get_workhorse_types>` 
-  *  :ref:`find_argument_index (typ: TypeDeclPtr; name: string) : int <function-ast_boost_find_argument_index_TypeDeclPtr_string>` 
-  *  :ref:`isCMRESType (blockT: TypeDeclPtr) : bool <function-ast_boost_isCMRESType_TypeDeclPtr>` 
   *  :ref:`getVectorElementCount (bt: Type) : int <function-ast_boost_getVectorElementCount_Type>` 
   *  :ref:`getVectorElementSize (bt: Type) : int <function-ast_boost_getVectorElementSize_Type>` 
   *  :ref:`getVectorElementType (bt: Type) : Type <function-ast_boost_getVectorElementType_Type>` 
   *  :ref:`getVectorOffset (bt: Type; ident: string) : int <function-ast_boost_getVectorOffset_Type_string>` 
+  *  :ref:`get_for_source_index (expr: smart_ptr\<ExprFor\>; svar: VariablePtr) : int <function-ast_boost_get_for_source_index_smart_ptr_ls_ExprFor_gr__VariablePtr>` 
+  *  :ref:`get_for_source_index (expr: smart_ptr\<ExprFor\>; source: ExpressionPtr) : int <function-ast_boost_get_for_source_index_smart_ptr_ls_ExprFor_gr__ExpressionPtr>` 
+  *  :ref:`get_workhorse_types () : Type[34] <function-ast_boost_get_workhorse_types>` 
+  *  :ref:`isCMRES (fun: Function?) : bool <function-ast_boost_isCMRES_Function_q_>` 
+  *  :ref:`isCMRES (fun: FunctionPtr) : bool <function-ast_boost_isCMRES_FunctionPtr>` 
+  *  :ref:`isCMRESType (blockT: TypeDeclPtr) : bool <function-ast_boost_isCMRESType_TypeDeclPtr>` 
+  *  :ref:`isExprCallFunc (expr: ExpressionPtr) : bool <function-ast_boost_isExprCallFunc_ExpressionPtr>` 
+  *  :ref:`isExpression (t: TypeDeclPtr; top: bool = true) : bool <function-ast_boost_isExpression_TypeDeclPtr_bool>` 
+  *  :ref:`isMakeLocal (expr: ExpressionPtr) : bool <function-ast_boost_isMakeLocal_ExpressionPtr>` 
+  *  :ref:`isVectorType (typ: Type) : bool <function-ast_boost_isVectorType_Type>` 
+  *  :ref:`is_class_method (cinfo: StructurePtr; finfo: TypeDeclPtr) : bool <function-ast_boost_is_class_method_StructurePtr_TypeDeclPtr>` 
+  *  :ref:`is_same_or_inherited (parent: Structure const?; child: Structure const?) : bool <function-ast_boost_is_same_or_inherited_Structure_const_q__Structure_const_q_>` 
 
-.. _function-ast_boost_isVectorType_Type:
+.. _function-ast_boost_find_annotation_string_string:
 
-.. das:function:: isVectorType(typ: Type) : bool
+.. das:function:: find_annotation(mod_name: string; ann_name: string) : Annotation const?
 
-Returns ``true`` if the given ``Type`` is a vector, range, or urange type (``int2``..``int4``, ``uint2``..``uint4``, ``float2``..``float4``, ``range``, ``urange``, ``range64``, ``urange64``).
+Looks up an ``Annotation`` by name within the specified module during compilation and returns a pointer to it, or ``null`` if not found.
 
-:Arguments: * **typ** :  :ref:`Type <enum-rtti-Type>` 
+:Arguments: * **mod_name** : string
 
-.. _function-ast_boost_isExpression_TypeDeclPtr_bool:
+            * **ann_name** : string
 
-.. das:function:: isExpression(t: TypeDeclPtr; top: bool = true) : bool
 
-Returns ``true`` if the given ``TypeDeclPtr`` refers to an ``ast`` module handled type whose name starts with ``Expr``, including pointer-to-expression types.
-
-:Arguments: * **t** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
-
-            * **top** : bool
-
-.. _function-ast_boost_is_same_or_inherited_Structure_const_q__Structure_const_q_:
-
-.. das:function:: is_same_or_inherited(parent: Structure const?; child: Structure const?) : bool
-
-Returns ``true`` if ``child`` is the same ``Structure`` as ``parent`` or is transitively inherited from ``parent`` by walking the parent chain.
-
-:Arguments: * **parent** :  :ref:`Structure <handle-ast-Structure>` ?
-
-            * **child** :  :ref:`Structure <handle-ast-Structure>` ?
-
-.. _function-ast_boost_is_class_method_StructurePtr_TypeDeclPtr:
-
-.. das:function:: is_class_method(cinfo: StructurePtr; finfo: TypeDeclPtr) : bool
-
-Returns ``true`` if a ``TypeDeclPtr`` field represents a class method — a non-dim ``tFunction`` whose first argument is the class structure (or a parent of it).
-
-:Arguments: * **cinfo** :  :ref:`StructurePtr <alias-StructurePtr>` 
-
-            * **finfo** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
-
-.. _function-ast_boost_find_arg_string_AnnotationArgumentList:
-
-.. das:function:: find_arg(argn: string; args: AnnotationArgumentList) : RttiValue
-
-.. warning:: 
-  This function is deprecated.
-
-Searches an ``AnnotationArgumentList`` for an argument by name and returns its ``RttiValue``; returns ``nothing`` if the argument is not present.
-
-:Arguments: * **argn** : string
-
-            * **args** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
+find_arg
+^^^^^^^^
 
 .. _function-ast_boost_find_arg_AnnotationArgumentList_string:
 
@@ -703,6 +644,22 @@ Searches an ``AnnotationArgumentList`` for an argument by name and returns its `
 :Arguments: * **args** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
 
             * **argn** : string
+
+.. _function-ast_boost_find_arg_string_AnnotationArgumentList:
+
+.. das:function:: find_arg(argn: string; args: AnnotationArgumentList) : RttiValue
+
+----
+
+.. _function-ast_boost_find_argument_index_TypeDeclPtr_string:
+
+.. das:function:: find_argument_index(typ: TypeDeclPtr; name: string) : int
+
+Searches the ``argNames`` of a ``TypeDeclPtr`` (tuple or variant) for the given name and returns its zero-based index, or ``-1`` if not found.
+
+:Arguments: * **typ** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
+
+            * **name** : string
 
 .. _function-ast_boost_find_unique_function_Module_q__string_bool:
 
@@ -727,92 +684,6 @@ Searches the compiling program for exactly one generic function with the given n
             * **name** : string
 
             * **canfail** : bool
-
-.. _function-ast_boost_find_annotation_string_string:
-
-.. das:function:: find_annotation(mod_name: string; ann_name: string) : Annotation const?
-
-Looks up an ``Annotation`` by name within the specified module during compilation and returns a pointer to it, or ``null`` if not found.
-
-:Arguments: * **mod_name** : string
-
-            * **ann_name** : string
-
-.. _function-ast_boost_get_for_source_index_smart_ptr_ls_ExprFor_gr__VariablePtr:
-
-.. das:function:: get_for_source_index(expr: smart_ptr<ExprFor>; svar: VariablePtr) : int
-
-Returns the zero-based index of a given iterator variable or source expression within a ``for`` loop's source list, or ``-1`` if not found.
-
-:Arguments: * **expr** : smart_ptr< :ref:`ExprFor <handle-ast-ExprFor>` >
-
-            * **svar** :  :ref:`VariablePtr <alias-VariablePtr>` 
-
-.. _function-ast_boost_get_for_source_index_smart_ptr_ls_ExprFor_gr__ExpressionPtr:
-
-.. das:function:: get_for_source_index(expr: smart_ptr<ExprFor>; source: ExpressionPtr) : int
-
-Returns the zero-based index of a given iterator variable or source expression within a ``for`` loop's source list, or ``-1`` if not found.
-
-:Arguments: * **expr** : smart_ptr< :ref:`ExprFor <handle-ast-ExprFor>` >
-
-            * **source** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
-
-.. _function-ast_boost_isCMRES_FunctionPtr:
-
-.. das:function:: isCMRES(fun: FunctionPtr) : bool
-
-Returns ``true`` if a ``Function`` returns its result via copy-or-move-result-on-stack (CMRES) semantics rather than through a register.
-
-:Arguments: * **fun** :  :ref:`FunctionPtr <alias-FunctionPtr>` 
-
-.. _function-ast_boost_isCMRES_Function_q_:
-
-.. das:function:: isCMRES(fun: Function?) : bool
-
-Returns ``true`` if a ``Function`` returns its result via copy-or-move-result-on-stack (CMRES) semantics rather than through a register.
-
-:Arguments: * **fun** :  :ref:`Function <handle-ast-Function>` ?
-
-.. _function-ast_boost_isMakeLocal_ExpressionPtr:
-
-.. das:function:: isMakeLocal(expr: ExpressionPtr) : bool
-
-Returns ``true`` if the expression is any ``ExprMakeLocal`` subclass: ``ExprMakeStruct``, ``ExprMakeArray``, ``ExprMakeTuple``, or ``ExprMakeVariant``.
-
-:Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
-
-.. _function-ast_boost_isExprCallFunc_ExpressionPtr:
-
-.. das:function:: isExprCallFunc(expr: ExpressionPtr) : bool
-
-Returns ``true`` if the expression's RTTI tag is ``ExprCallFunc``, ``ExprOp``, ``ExprNew``, or ``ExprCall`` — i.e., any function-call-like expression.
-
-:Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
-
-.. _function-ast_boost_get_workhorse_types:
-
-.. das:function:: get_workhorse_types() : Type[34]
-
-Returns a fixed array of all commonly used ``Type`` values — booleans, strings, pointers, numeric scalars, enumerations, bitfields, vectors, and ranges.
-
-.. _function-ast_boost_find_argument_index_TypeDeclPtr_string:
-
-.. das:function:: find_argument_index(typ: TypeDeclPtr; name: string) : int
-
-Searches the ``argNames`` of a ``TypeDeclPtr`` (tuple or variant) for the given name and returns its zero-based index, or ``-1`` if not found.
-
-:Arguments: * **typ** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
-
-            * **name** : string
-
-.. _function-ast_boost_isCMRESType_TypeDeclPtr:
-
-.. das:function:: isCMRESType(blockT: TypeDeclPtr) : bool
-
-Returns ``true`` if a ``TypeDeclPtr`` represents a reference type without an explicit ``ref`` flag, meaning it will use copy-or-move-on-stack semantics.
-
-:Arguments: * **blockT** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
 
 .. _function-ast_boost_getVectorElementCount_Type:
 
@@ -848,95 +719,167 @@ Returns the zero-based element index for a named swizzle component (``x``/``y``/
 
             * **ident** : string
 
+
+get_for_source_index
+^^^^^^^^^^^^^^^^^^^^
+
+.. _function-ast_boost_get_for_source_index_smart_ptr_ls_ExprFor_gr__VariablePtr:
+
+.. das:function:: get_for_source_index(expr: smart_ptr<ExprFor>; svar: VariablePtr) : int
+
+Returns the zero-based index of a given iterator variable or source expression within a ``for`` loop's source list, or ``-1`` if not found.
+
+:Arguments: * **expr** : smart_ptr< :ref:`ExprFor <handle-ast-ExprFor>` >
+
+            * **svar** :  :ref:`VariablePtr <alias-VariablePtr>` 
+
+.. _function-ast_boost_get_for_source_index_smart_ptr_ls_ExprFor_gr__ExpressionPtr:
+
+.. das:function:: get_for_source_index(expr: smart_ptr<ExprFor>; source: ExpressionPtr) : int
+
+----
+
+.. _function-ast_boost_get_workhorse_types:
+
+.. das:function:: get_workhorse_types() : Type[34]
+
+Returns a fixed array of all commonly used ``Type`` values — booleans, strings, pointers, numeric scalars, enumerations, bitfields, vectors, and ranges.
+
+
+isCMRES
+^^^^^^^
+
+.. _function-ast_boost_isCMRES_Function_q_:
+
+.. das:function:: isCMRES(fun: Function?) : bool
+
+Returns ``true`` if a ``Function`` returns its result via copy-or-move-result-on-stack (CMRES) semantics rather than through a register.
+
+:Arguments: * **fun** :  :ref:`Function <handle-ast-Function>` ?
+
+.. _function-ast_boost_isCMRES_FunctionPtr:
+
+.. das:function:: isCMRES(fun: FunctionPtr) : bool
+
+----
+
+.. _function-ast_boost_isCMRESType_TypeDeclPtr:
+
+.. das:function:: isCMRESType(blockT: TypeDeclPtr) : bool
+
+Returns ``true`` if a ``TypeDeclPtr`` represents a reference type without an explicit ``ref`` flag, meaning it will use copy-or-move-on-stack semantics.
+
+:Arguments: * **blockT** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
+
+.. _function-ast_boost_isExprCallFunc_ExpressionPtr:
+
+.. das:function:: isExprCallFunc(expr: ExpressionPtr) : bool
+
+Returns ``true`` if the expression's RTTI tag is ``ExprCallFunc``, ``ExprOp``, ``ExprNew``, or ``ExprCall`` — i.e., any function-call-like expression.
+
+:Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+
+.. _function-ast_boost_isExpression_TypeDeclPtr_bool:
+
+.. das:function:: isExpression(t: TypeDeclPtr; top: bool = true) : bool
+
+Returns ``true`` if the given ``TypeDeclPtr`` refers to an ``ast`` module handled type whose name starts with ``Expr``, including pointer-to-expression types.
+
+:Arguments: * **t** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
+
+            * **top** : bool
+
+.. _function-ast_boost_isMakeLocal_ExpressionPtr:
+
+.. das:function:: isMakeLocal(expr: ExpressionPtr) : bool
+
+Returns ``true`` if the expression is any ``ExprMakeLocal`` subclass: ``ExprMakeStruct``, ``ExprMakeArray``, ``ExprMakeTuple``, or ``ExprMakeVariant``.
+
+:Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+
+.. _function-ast_boost_isVectorType_Type:
+
+.. das:function:: isVectorType(typ: Type) : bool
+
+Returns ``true`` if the given ``Type`` is a vector, range, or urange type (``int2``..``int4``, ``uint2``..``uint4``, ``float2``..``float4``, ``range``, ``urange``, ``range64``, ``urange64``).
+
+:Arguments: * **typ** :  :ref:`Type <enum-rtti-Type>` 
+
+.. _function-ast_boost_is_class_method_StructurePtr_TypeDeclPtr:
+
+.. das:function:: is_class_method(cinfo: StructurePtr; finfo: TypeDeclPtr) : bool
+
+Returns ``true`` if a ``TypeDeclPtr`` field represents a class method — a non-dim ``tFunction`` whose first argument is the class structure (or a parent of it).
+
+:Arguments: * **cinfo** :  :ref:`StructurePtr <alias-StructurePtr>` 
+
+            * **finfo** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
+
+.. _function-ast_boost_is_same_or_inherited_Structure_const_q__Structure_const_q_:
+
+.. das:function:: is_same_or_inherited(parent: Structure const?; child: Structure const?) : bool
+
+Returns ``true`` if ``child`` is the same ``Structure`` as ``parent`` or is transitively inherited from ``parent`` by walking the parent chain.
+
+:Arguments: * **parent** :  :ref:`Structure <handle-ast-Structure>` ?
+
+            * **child** :  :ref:`Structure <handle-ast-Structure>` ?
+
 +++++++++++
 Annotations
 +++++++++++
 
-  *  :ref:`append_annotation (mod_name: string; ann_name: string; args: array\<tuple\<argname:string;argvalue:variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\>\>\>) : smart_ptr\<AnnotationDeclaration\> <function-ast_boost_append_annotation_string_string_array_ls_tuple_ls_argname_c_string;argvalue_c_variant_ls_tBool_c_bool;tInt_c_int;tUInt_c_uint;tInt64_c_int64;tUInt64_c_uint64;tFloat_c_float;tDouble_c_double;tString_c_string;nothing_c_any_gr__gr__gr_>` 
-  *  :ref:`append_annotation (mod_name: string; ann_name: string) : smart_ptr\<AnnotationDeclaration\> <function-ast_boost_append_annotation_string_string>` 
-  *  :ref:`append_annotation (var func: FunctionPtr; mod_name: string; ann_name: string) <function-ast_boost_append_annotation_FunctionPtr_string_string>` 
-  *  :ref:`append_annotation (var blk: smart_ptr\<ExprBlock\>; mod_name: string; ann_name: string) <function-ast_boost_append_annotation_smart_ptr_ls_ExprBlock_gr__string_string>` 
-  *  :ref:`append_annotation (var st: smart_ptr\<Structure\>; mod_name: string; ann_name: string) <function-ast_boost_append_annotation_smart_ptr_ls_Structure_gr__string_string>` 
-  *  :ref:`append_annotation (var func: FunctionPtr; mod_name: string; ann_name: string; args: array\<tuple\<argname:string;argvalue:variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\>\>\>) <function-ast_boost_append_annotation_FunctionPtr_string_string_array_ls_tuple_ls_argname_c_string;argvalue_c_variant_ls_tBool_c_bool;tInt_c_int;tUInt_c_uint;tInt64_c_int64;tUInt64_c_uint64;tFloat_c_float;tDouble_c_double;tString_c_string;nothing_c_any_gr__gr__gr_>` 
-  *  :ref:`append_annotation (var blk: smart_ptr\<ExprBlock\>; mod_name: string; ann_name: string; args: array\<tuple\<argname:string;argvalue:variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\>\>\>) <function-ast_boost_append_annotation_smart_ptr_ls_ExprBlock_gr__string_string_array_ls_tuple_ls_argname_c_string;argvalue_c_variant_ls_tBool_c_bool;tInt_c_int;tUInt_c_uint;tInt64_c_int64;tUInt64_c_uint64;tFloat_c_float;tDouble_c_double;tString_c_string;nothing_c_any_gr__gr__gr_>` 
-  *  :ref:`append_annotation (var st: smart_ptr\<Structure\>; mod_name: string; ann_name: string; args: array\<tuple\<argname:string;argvalue:variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\>\>\>) <function-ast_boost_append_annotation_smart_ptr_ls_Structure_gr__string_string_array_ls_tuple_ls_argname_c_string;argvalue_c_variant_ls_tBool_c_bool;tInt_c_int;tUInt_c_uint;tInt64_c_int64;tUInt64_c_uint64;tFloat_c_float;tDouble_c_double;tString_c_string;nothing_c_any_gr__gr__gr_>` 
+  *  :ref:`add_annotation_argument (var arguments: AnnotationArgumentList; argName: string; val: string) : int <function-ast_boost_add_annotation_argument_AnnotationArgumentList_string_string>` 
   *  :ref:`add_annotation_argument (var arguments: AnnotationArgumentList; argName: string; val: bool) : int <function-ast_boost_add_annotation_argument_AnnotationArgumentList_string_bool>` 
   *  :ref:`add_annotation_argument (var arguments: AnnotationArgumentList; argName: string; val: int) : int <function-ast_boost_add_annotation_argument_AnnotationArgumentList_string_int>` 
-  *  :ref:`add_annotation_argument (var arguments: AnnotationArgumentList; argName: string; val: float) : int <function-ast_boost_add_annotation_argument_AnnotationArgumentList_string_float>` 
-  *  :ref:`add_annotation_argument (var arguments: AnnotationArgumentList; argName: string; val: string) : int <function-ast_boost_add_annotation_argument_AnnotationArgumentList_string_string>` 
   *  :ref:`add_annotation_argument (var arguments: AnnotationArgumentList; ann: AnnotationArgument) : int <function-ast_boost_add_annotation_argument_AnnotationArgumentList_AnnotationArgument>` 
+  *  :ref:`add_annotation_argument (var arguments: AnnotationArgumentList; argName: string; val: float) : int <function-ast_boost_add_annotation_argument_AnnotationArgumentList_string_float>` 
+  *  :ref:`append_annotation (var blk: smart_ptr\<ExprBlock\>; mod_name: string; ann_name: string; args: array\<tuple\<argname:string;argvalue:variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\>\>\>) <function-ast_boost_append_annotation_smart_ptr_ls_ExprBlock_gr__string_string_array_ls_tuple_ls_argname_c_string;argvalue_c_variant_ls_tBool_c_bool;tInt_c_int;tUInt_c_uint;tInt64_c_int64;tUInt64_c_uint64;tFloat_c_float;tDouble_c_double;tString_c_string;nothing_c_any_gr__gr__gr_>` 
+  *  :ref:`append_annotation (var func: FunctionPtr; mod_name: string; ann_name: string; args: array\<tuple\<argname:string;argvalue:variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\>\>\>) <function-ast_boost_append_annotation_FunctionPtr_string_string_array_ls_tuple_ls_argname_c_string;argvalue_c_variant_ls_tBool_c_bool;tInt_c_int;tUInt_c_uint;tInt64_c_int64;tUInt64_c_uint64;tFloat_c_float;tDouble_c_double;tString_c_string;nothing_c_any_gr__gr__gr_>` 
+  *  :ref:`append_annotation (var st: smart_ptr\<Structure\>; mod_name: string; ann_name: string; args: array\<tuple\<argname:string;argvalue:variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\>\>\>) <function-ast_boost_append_annotation_smart_ptr_ls_Structure_gr__string_string_array_ls_tuple_ls_argname_c_string;argvalue_c_variant_ls_tBool_c_bool;tInt_c_int;tUInt_c_uint;tInt64_c_int64;tUInt64_c_uint64;tFloat_c_float;tDouble_c_double;tString_c_string;nothing_c_any_gr__gr__gr_>` 
+  *  :ref:`append_annotation (var blk: smart_ptr\<ExprBlock\>; mod_name: string; ann_name: string) <function-ast_boost_append_annotation_smart_ptr_ls_ExprBlock_gr__string_string>` 
+  *  :ref:`append_annotation (mod_name: string; ann_name: string) : smart_ptr\<AnnotationDeclaration\> <function-ast_boost_append_annotation_string_string>` 
+  *  :ref:`append_annotation (mod_name: string; ann_name: string; args: array\<tuple\<argname:string;argvalue:variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\>\>\>) : smart_ptr\<AnnotationDeclaration\> <function-ast_boost_append_annotation_string_string_array_ls_tuple_ls_argname_c_string;argvalue_c_variant_ls_tBool_c_bool;tInt_c_int;tUInt_c_uint;tInt64_c_int64;tUInt64_c_uint64;tFloat_c_float;tDouble_c_double;tString_c_string;nothing_c_any_gr__gr__gr_>` 
+  *  :ref:`append_annotation (var func: FunctionPtr; mod_name: string; ann_name: string) <function-ast_boost_append_annotation_FunctionPtr_string_string>` 
+  *  :ref:`append_annotation (var st: smart_ptr\<Structure\>; mod_name: string; ann_name: string) <function-ast_boost_append_annotation_smart_ptr_ls_Structure_gr__string_string>` 
 
-.. _function-ast_boost_append_annotation_string_string_array_ls_tuple_ls_argname_c_string;argvalue_c_variant_ls_tBool_c_bool;tInt_c_int;tUInt_c_uint;tInt64_c_int64;tUInt64_c_uint64;tFloat_c_float;tDouble_c_double;tString_c_string;nothing_c_any_gr__gr__gr_:
 
-.. das:function:: append_annotation(mod_name: string; ann_name: string; args: array<tuple<argname:string;argvalue:variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>>>) : smart_ptr<AnnotationDeclaration>
+add_annotation_argument
+^^^^^^^^^^^^^^^^^^^^^^^
 
-Creates an ``AnnotationDeclaration`` for the named annotation (with optional typed arguments) and attaches it to a ``Function``, ``ExprBlock``, or ``Structure``.
+.. _function-ast_boost_add_annotation_argument_AnnotationArgumentList_string_string:
 
-:Arguments: * **mod_name** : string
+.. das:function:: add_annotation_argument(arguments: AnnotationArgumentList; argName: string; val: string) : int
 
-            * **ann_name** : string
+Adds a typed annotation argument (``bool``, ``int``, ``float``, ``string``, or ``AnnotationArgument``) to an ``AnnotationArgumentList`` and returns the new argument index.
 
-            * **args** : array<tuple<argname:string;argvalue: :ref:`RttiValue <alias-RttiValue>` >>
+:Arguments: * **arguments** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
 
-.. _function-ast_boost_append_annotation_string_string:
+            * **argName** : string
 
-.. das:function:: append_annotation(mod_name: string; ann_name: string) : smart_ptr<AnnotationDeclaration>
+            * **val** : string
 
-Creates an ``AnnotationDeclaration`` for the named annotation (with optional typed arguments) and attaches it to a ``Function``, ``ExprBlock``, or ``Structure``.
+.. _function-ast_boost_add_annotation_argument_AnnotationArgumentList_string_bool:
 
-:Arguments: * **mod_name** : string
+.. das:function:: add_annotation_argument(arguments: AnnotationArgumentList; argName: string; val: bool) : int
 
-            * **ann_name** : string
+.. _function-ast_boost_add_annotation_argument_AnnotationArgumentList_string_int:
 
-.. _function-ast_boost_append_annotation_FunctionPtr_string_string:
+.. das:function:: add_annotation_argument(arguments: AnnotationArgumentList; argName: string; val: int) : int
 
-.. das:function:: append_annotation(func: FunctionPtr; mod_name: string; ann_name: string)
+.. _function-ast_boost_add_annotation_argument_AnnotationArgumentList_AnnotationArgument:
 
-Creates an ``AnnotationDeclaration`` for the named annotation (with optional typed arguments) and attaches it to a ``Function``, ``ExprBlock``, or ``Structure``.
+.. das:function:: add_annotation_argument(arguments: AnnotationArgumentList; ann: AnnotationArgument) : int
 
-:Arguments: * **func** :  :ref:`FunctionPtr <alias-FunctionPtr>` 
+.. _function-ast_boost_add_annotation_argument_AnnotationArgumentList_string_float:
 
-            * **mod_name** : string
+.. das:function:: add_annotation_argument(arguments: AnnotationArgumentList; argName: string; val: float) : int
 
-            * **ann_name** : string
+----
 
-.. _function-ast_boost_append_annotation_smart_ptr_ls_ExprBlock_gr__string_string:
 
-.. das:function:: append_annotation(blk: smart_ptr<ExprBlock>; mod_name: string; ann_name: string)
-
-Creates an ``AnnotationDeclaration`` for the named annotation (with optional typed arguments) and attaches it to a ``Function``, ``ExprBlock``, or ``Structure``.
-
-:Arguments: * **blk** : smart_ptr< :ref:`ExprBlock <handle-ast-ExprBlock>` >
-
-            * **mod_name** : string
-
-            * **ann_name** : string
-
-.. _function-ast_boost_append_annotation_smart_ptr_ls_Structure_gr__string_string:
-
-.. das:function:: append_annotation(st: smart_ptr<Structure>; mod_name: string; ann_name: string)
-
-Creates an ``AnnotationDeclaration`` for the named annotation (with optional typed arguments) and attaches it to a ``Function``, ``ExprBlock``, or ``Structure``.
-
-:Arguments: * **st** : smart_ptr< :ref:`Structure <handle-ast-Structure>` >
-
-            * **mod_name** : string
-
-            * **ann_name** : string
-
-.. _function-ast_boost_append_annotation_FunctionPtr_string_string_array_ls_tuple_ls_argname_c_string;argvalue_c_variant_ls_tBool_c_bool;tInt_c_int;tUInt_c_uint;tInt64_c_int64;tUInt64_c_uint64;tFloat_c_float;tDouble_c_double;tString_c_string;nothing_c_any_gr__gr__gr_:
-
-.. das:function:: append_annotation(func: FunctionPtr; mod_name: string; ann_name: string; args: array<tuple<argname:string;argvalue:variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>>>)
-
-Creates an ``AnnotationDeclaration`` for the named annotation (with optional typed arguments) and attaches it to a ``Function``, ``ExprBlock``, or ``Structure``.
-
-:Arguments: * **func** :  :ref:`FunctionPtr <alias-FunctionPtr>` 
-
-            * **mod_name** : string
-
-            * **ann_name** : string
-
-            * **args** : array<tuple<argname:string;argvalue: :ref:`RttiValue <alias-RttiValue>` >>
+append_annotation
+^^^^^^^^^^^^^^^^^
 
 .. _function-ast_boost_append_annotation_smart_ptr_ls_ExprBlock_gr__string_string_array_ls_tuple_ls_argname_c_string;argvalue_c_variant_ls_tBool_c_bool;tInt_c_int;tUInt_c_uint;tInt64_c_int64;tUInt64_c_uint64;tFloat_c_float;tDouble_c_double;tString_c_string;nothing_c_any_gr__gr__gr_:
 
@@ -952,89 +895,83 @@ Creates an ``AnnotationDeclaration`` for the named annotation (with optional typ
 
             * **args** : array<tuple<argname:string;argvalue: :ref:`RttiValue <alias-RttiValue>` >>
 
+.. _function-ast_boost_append_annotation_FunctionPtr_string_string_array_ls_tuple_ls_argname_c_string;argvalue_c_variant_ls_tBool_c_bool;tInt_c_int;tUInt_c_uint;tInt64_c_int64;tUInt64_c_uint64;tFloat_c_float;tDouble_c_double;tString_c_string;nothing_c_any_gr__gr__gr_:
+
+.. das:function:: append_annotation(func: FunctionPtr; mod_name: string; ann_name: string; args: array<tuple<argname:string;argvalue:variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>>>)
+
 .. _function-ast_boost_append_annotation_smart_ptr_ls_Structure_gr__string_string_array_ls_tuple_ls_argname_c_string;argvalue_c_variant_ls_tBool_c_bool;tInt_c_int;tUInt_c_uint;tInt64_c_int64;tUInt64_c_uint64;tFloat_c_float;tDouble_c_double;tString_c_string;nothing_c_any_gr__gr__gr_:
 
 .. das:function:: append_annotation(st: smart_ptr<Structure>; mod_name: string; ann_name: string; args: array<tuple<argname:string;argvalue:variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>>>)
 
-Creates an ``AnnotationDeclaration`` for the named annotation (with optional typed arguments) and attaches it to a ``Function``, ``ExprBlock``, or ``Structure``.
+.. _function-ast_boost_append_annotation_smart_ptr_ls_ExprBlock_gr__string_string:
 
-:Arguments: * **st** : smart_ptr< :ref:`Structure <handle-ast-Structure>` >
+.. das:function:: append_annotation(blk: smart_ptr<ExprBlock>; mod_name: string; ann_name: string)
 
-            * **mod_name** : string
+.. _function-ast_boost_append_annotation_string_string:
 
-            * **ann_name** : string
+.. das:function:: append_annotation(mod_name: string; ann_name: string) : smart_ptr<AnnotationDeclaration>
 
-            * **args** : array<tuple<argname:string;argvalue: :ref:`RttiValue <alias-RttiValue>` >>
+.. _function-ast_boost_append_annotation_string_string_array_ls_tuple_ls_argname_c_string;argvalue_c_variant_ls_tBool_c_bool;tInt_c_int;tUInt_c_uint;tInt64_c_int64;tUInt64_c_uint64;tFloat_c_float;tDouble_c_double;tString_c_string;nothing_c_any_gr__gr__gr_:
 
-.. _function-ast_boost_add_annotation_argument_AnnotationArgumentList_string_bool:
+.. das:function:: append_annotation(mod_name: string; ann_name: string; args: array<tuple<argname:string;argvalue:variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>>>) : smart_ptr<AnnotationDeclaration>
 
-.. das:function:: add_annotation_argument(arguments: AnnotationArgumentList; argName: string; val: bool) : int
+.. _function-ast_boost_append_annotation_FunctionPtr_string_string:
 
-Adds a typed annotation argument (``bool``, ``int``, ``float``, ``string``, or ``AnnotationArgument``) to an ``AnnotationArgumentList`` and returns the new argument index.
+.. das:function:: append_annotation(func: FunctionPtr; mod_name: string; ann_name: string)
 
-:Arguments: * **arguments** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
+.. _function-ast_boost_append_annotation_smart_ptr_ls_Structure_gr__string_string:
 
-            * **argName** : string
+.. das:function:: append_annotation(st: smart_ptr<Structure>; mod_name: string; ann_name: string)
 
-            * **val** : bool
-
-.. _function-ast_boost_add_annotation_argument_AnnotationArgumentList_string_int:
-
-.. das:function:: add_annotation_argument(arguments: AnnotationArgumentList; argName: string; val: int) : int
-
-Adds a typed annotation argument (``bool``, ``int``, ``float``, ``string``, or ``AnnotationArgument``) to an ``AnnotationArgumentList`` and returns the new argument index.
-
-:Arguments: * **arguments** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
-
-            * **argName** : string
-
-            * **val** : int
-
-.. _function-ast_boost_add_annotation_argument_AnnotationArgumentList_string_float:
-
-.. das:function:: add_annotation_argument(arguments: AnnotationArgumentList; argName: string; val: float) : int
-
-Adds a typed annotation argument (``bool``, ``int``, ``float``, ``string``, or ``AnnotationArgument``) to an ``AnnotationArgumentList`` and returns the new argument index.
-
-:Arguments: * **arguments** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
-
-            * **argName** : string
-
-            * **val** : float
-
-.. _function-ast_boost_add_annotation_argument_AnnotationArgumentList_string_string:
-
-.. das:function:: add_annotation_argument(arguments: AnnotationArgumentList; argName: string; val: string) : int
-
-Adds a typed annotation argument (``bool``, ``int``, ``float``, ``string``, or ``AnnotationArgument``) to an ``AnnotationArgumentList`` and returns the new argument index.
-
-:Arguments: * **arguments** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
-
-            * **argName** : string
-
-            * **val** : string
-
-.. _function-ast_boost_add_annotation_argument_AnnotationArgumentList_AnnotationArgument:
-
-.. das:function:: add_annotation_argument(arguments: AnnotationArgumentList; ann: AnnotationArgument) : int
-
-Adds a typed annotation argument (``bool``, ``int``, ``float``, ``string``, or ``AnnotationArgument``) to an ``AnnotationArgumentList`` and returns the new argument index.
-
-:Arguments: * **arguments** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
-
-            * **ann** :  :ref:`AnnotationArgument <handle-rtti-AnnotationArgument>` 
+----
 
 +++++++++++++++++++++
 Expression generation
 +++++++++++++++++++++
 
+  *  :ref:`convert_to_expression (var value: auto ==const) : auto <function-ast_boost_convert_to_expression__auto__eq__eq_const_0x3a5>` 
+  *  :ref:`convert_to_expression (value: auto ==const; at: LineInfo) : auto <function-ast_boost_convert_to_expression_auto__eq__eq_const_LineInfo_0x39c>` 
+  *  :ref:`convert_to_expression (var value: auto& ==const; at: LineInfo) : auto <function-ast_boost_convert_to_expression__auto__eq__eq_const_LineInfo_0x393>` 
+  *  :ref:`convert_to_expression (value: auto ==const) : auto <function-ast_boost_convert_to_expression_auto__eq__eq_const_0x3aa>` 
+  *  :ref:`make_static_assert_false (text: string; at: LineInfo) : smart_ptr\<ExprStaticAssert\> <function-ast_boost_make_static_assert_false_string_LineInfo>` 
   *  :ref:`override_method (var str: StructurePtr; name: string; funcName: string) : bool <function-ast_boost_override_method_StructurePtr_string_string>` 
   *  :ref:`panic_expr_as () : void? <function-ast_boost_panic_expr_as>` 
-  *  :ref:`make_static_assert_false (text: string; at: LineInfo) : smart_ptr\<ExprStaticAssert\> <function-ast_boost_make_static_assert_false_string_LineInfo>` 
-  *  :ref:`convert_to_expression (var value: auto& ==const; at: LineInfo) : auto <function-ast_boost_convert_to_expression__auto__eq__eq_const_LineInfo>` 
-  *  :ref:`convert_to_expression (value: auto ==const; at: LineInfo) : auto <function-ast_boost_convert_to_expression_auto__eq__eq_const_LineInfo>` 
-  *  :ref:`convert_to_expression (var value: auto ==const) : auto <function-ast_boost_convert_to_expression__auto__eq__eq_const>` 
-  *  :ref:`convert_to_expression (value: auto ==const) : auto <function-ast_boost_convert_to_expression_auto__eq__eq_const>` 
+
+
+convert_to_expression
+^^^^^^^^^^^^^^^^^^^^^
+
+.. _function-ast_boost_convert_to_expression__auto__eq__eq_const_0x3a5:
+
+.. das:function:: convert_to_expression(value: auto ==const) : auto
+
+Converts a runtime value of any supported type to an equivalent AST ``ExpressionPtr`` that would produce that value when compiled, using ``typeinfo`` for reflection.
+
+:Arguments: * **value** : auto!
+
+.. _function-ast_boost_convert_to_expression_auto__eq__eq_const_LineInfo_0x39c:
+
+.. das:function:: convert_to_expression(value: auto ==const; at: LineInfo) : auto
+
+.. _function-ast_boost_convert_to_expression__auto__eq__eq_const_LineInfo_0x393:
+
+.. das:function:: convert_to_expression(value: auto& ==const; at: LineInfo) : auto
+
+.. _function-ast_boost_convert_to_expression_auto__eq__eq_const_0x3aa:
+
+.. das:function:: convert_to_expression(value: auto ==const) : auto
+
+----
+
+.. _function-ast_boost_make_static_assert_false_string_LineInfo:
+
+.. das:function:: make_static_assert_false(text: string; at: LineInfo) : smart_ptr<ExprStaticAssert>
+
+Creates an ``ExprStaticAssert`` expression node that always fails at compile time with the given error message text.
+
+:Arguments: * **text** : string
+
+            * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
 
 .. _function-ast_boost_override_method_StructurePtr_string_string:
 
@@ -1053,52 +990,6 @@ Replaces the initializer of a field named ``name`` in the given structure with a
 .. das:function:: panic_expr_as() : void?
 
 Helper function that panics with ``"invalid 'as' expression or null pointer dereference"`` and returns ``null`` — used as the failure branch in ``as`` variant casts.
-
-.. _function-ast_boost_make_static_assert_false_string_LineInfo:
-
-.. das:function:: make_static_assert_false(text: string; at: LineInfo) : smart_ptr<ExprStaticAssert>
-
-Creates an ``ExprStaticAssert`` expression node that always fails at compile time with the given error message text.
-
-:Arguments: * **text** : string
-
-            * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
-
-.. _function-ast_boost_convert_to_expression__auto__eq__eq_const_LineInfo:
-
-.. das:function:: convert_to_expression(value: auto& ==const; at: LineInfo) : auto
-
-Converts a runtime value of any supported type to an equivalent AST ``ExpressionPtr`` that would produce that value when compiled, using ``typeinfo`` for reflection.
-
-:Arguments: * **value** : auto&!
-
-            * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
-
-.. _function-ast_boost_convert_to_expression_auto__eq__eq_const_LineInfo:
-
-.. das:function:: convert_to_expression(value: auto ==const; at: LineInfo) : auto
-
-Converts a runtime value of any supported type to an equivalent AST ``ExpressionPtr`` that would produce that value when compiled, using ``typeinfo`` for reflection.
-
-:Arguments: * **value** : auto!
-
-            * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
-
-.. _function-ast_boost_convert_to_expression__auto__eq__eq_const:
-
-.. das:function:: convert_to_expression(value: auto ==const) : auto
-
-Converts a runtime value of any supported type to an equivalent AST ``ExpressionPtr`` that would produce that value when compiled, using ``typeinfo`` for reflection.
-
-:Arguments: * **value** : auto!
-
-.. _function-ast_boost_convert_to_expression_auto__eq__eq_const:
-
-.. das:function:: convert_to_expression(value: auto ==const) : auto
-
-Converts a runtime value of any supported type to an equivalent AST ``ExpressionPtr`` that would produce that value when compiled, using ``typeinfo`` for reflection.
-
-:Arguments: * **value** : auto!
 
 ++++++++
 Visitors
@@ -1134,45 +1025,61 @@ Constructs a ``TypeDeclPtr`` of ``tFunction`` base type from a ``FunctionPtr``, 
 Type casts
 ++++++++++
 
-  *  :ref:`Function?`is`BuiltInFunction (foo: Function?) : bool <function-ast_boost__rq_is_rq_BuiltInFunction_Function_q_>` 
-  *  :ref:`Function?`as`BuiltInFunction (foo: Function?) : BuiltInFunction? <function-ast_boost__rq_as_rq_BuiltInFunction_Function_q_>` 
-  *  :ref:`Function?`is`ExternalFnBase (foo: Function?) : bool <function-ast_boost__rq_is_rq_ExternalFnBase_Function_q_>` 
-  *  :ref:`Function?`as`ExternalFnBase (foo: Function?) : ExternalFnBase? <function-ast_boost__rq_as_rq_ExternalFnBase_Function_q_>` 
-  *  :ref:`Annotation?`is`FunctionAnnotation (foo: Annotation?) : bool <function-ast_boost__rq_is_rq_FunctionAnnotation_Annotation_q_>` 
-  *  :ref:`smart_ptr\<Annotation\>`is`FunctionAnnotation (foo: smart_ptr\<Annotation\>) : bool <function-ast_boost__rq_is_rq_FunctionAnnotation_smart_ptr_ls_Annotation_gr_>` 
   *  :ref:`Annotation?`as`FunctionAnnotation (foo: Annotation?) : FunctionAnnotation? <function-ast_boost__rq_as_rq_FunctionAnnotation_Annotation_q_>` 
-  *  :ref:`smart_ptr\<Annotation\>`as`FunctionAnnotation (foo: smart_ptr\<Annotation\>) : FunctionAnnotation? <function-ast_boost__rq_as_rq_FunctionAnnotation_smart_ptr_ls_Annotation_gr_>` 
-  *  :ref:`Annotation?`is`StructureAnnotation (foo: Annotation?) : bool <function-ast_boost__rq_is_rq_StructureAnnotation_Annotation_q_>` 
-  *  :ref:`smart_ptr\<Annotation\>`is`StructureAnnotation (foo: smart_ptr\<Annotation\>) : bool <function-ast_boost__rq_is_rq_StructureAnnotation_smart_ptr_ls_Annotation_gr_>` 
   *  :ref:`Annotation?`as`StructureAnnotation (foo: Annotation?) : StructureAnnotation? <function-ast_boost__rq_as_rq_StructureAnnotation_Annotation_q_>` 
+  *  :ref:`Annotation?`is`FunctionAnnotation (foo: Annotation?) : bool <function-ast_boost__rq_is_rq_FunctionAnnotation_Annotation_q_>` 
+  *  :ref:`Annotation?`is`StructureAnnotation (foo: Annotation?) : bool <function-ast_boost__rq_is_rq_StructureAnnotation_Annotation_q_>` 
+  *  :ref:`Function?`as`BuiltInFunction (foo: Function?) : BuiltInFunction? <function-ast_boost__rq_as_rq_BuiltInFunction_Function_q_>` 
+  *  :ref:`Function?`as`ExternalFnBase (foo: Function?) : ExternalFnBase? <function-ast_boost__rq_as_rq_ExternalFnBase_Function_q_>` 
+  *  :ref:`Function?`is`BuiltInFunction (foo: Function?) : bool <function-ast_boost__rq_is_rq_BuiltInFunction_Function_q_>` 
+  *  :ref:`Function?`is`ExternalFnBase (foo: Function?) : bool <function-ast_boost__rq_is_rq_ExternalFnBase_Function_q_>` 
+  *  :ref:`auto`is`BuiltInFunction (anything: auto) : auto <function-ast_boost__rq_is_rq_BuiltInFunction_auto_0x26a>` 
+  *  :ref:`auto`is`ExternalFnBase (anything: auto) : auto <function-ast_boost__rq_is_rq_ExternalFnBase_auto_0x27a>` 
+  *  :ref:`auto`is`FunctionAnnotation (anything: auto) : auto <function-ast_boost__rq_is_rq_FunctionAnnotation_auto_0x28a>` 
+  *  :ref:`auto`is`StructureAnnotation (anything: auto) : auto <function-ast_boost__rq_is_rq_StructureAnnotation_auto_0x2a6>` 
+  *  :ref:`smart_ptr\<Annotation\>`as`FunctionAnnotation (foo: smart_ptr\<Annotation\>) : FunctionAnnotation? <function-ast_boost__rq_as_rq_FunctionAnnotation_smart_ptr_ls_Annotation_gr_>` 
   *  :ref:`smart_ptr\<Annotation\>`as`StructureAnnotation (foo: smart_ptr\<Annotation\>) : StructureAnnotation? <function-ast_boost__rq_as_rq_StructureAnnotation_smart_ptr_ls_Annotation_gr_>` 
+  *  :ref:`smart_ptr\<Annotation\>`is`FunctionAnnotation (foo: smart_ptr\<Annotation\>) : bool <function-ast_boost__rq_is_rq_FunctionAnnotation_smart_ptr_ls_Annotation_gr_>` 
+  *  :ref:`smart_ptr\<Annotation\>`is`StructureAnnotation (foo: smart_ptr\<Annotation\>) : bool <function-ast_boost__rq_is_rq_StructureAnnotation_smart_ptr_ls_Annotation_gr_>` 
   *  :ref:`walk_and_convert (data: uint8 const?; info: TypeDeclPtr; at: LineInfo) : ExpressionPtr <function-ast_boost_walk_and_convert_uint8_const_q__TypeDeclPtr_LineInfo>` 
-  *  :ref:`auto`is`BuiltInFunction (anything: auto) : auto <function-ast_boost__rq_is_rq_BuiltInFunction_auto>` 
-  *  :ref:`auto`is`ExternalFnBase (anything: auto) : auto <function-ast_boost__rq_is_rq_ExternalFnBase_auto>` 
-  *  :ref:`auto`is`FunctionAnnotation (anything: auto) : auto <function-ast_boost__rq_is_rq_FunctionAnnotation_auto>` 
-  *  :ref:`auto`is`StructureAnnotation (anything: auto) : auto <function-ast_boost__rq_is_rq_StructureAnnotation_auto>` 
 
-.. _function-ast_boost__rq_is_rq_BuiltInFunction_Function_q_:
+.. _function-ast_boost__rq_as_rq_FunctionAnnotation_Annotation_q_:
 
-.. das:function:: Function?`is`BuiltInFunction(foo: Function?) : bool
+.. das:function:: Annotation?`as`FunctionAnnotation(foo: Annotation?) : FunctionAnnotation?
 
-Returns ``true`` if the given ``Function?`` has the ``builtIn`` flag set, indicating it is a ``BuiltInFunction``; returns ``false`` for any other type.
+Casts an ``Annotation?`` or ``smart_ptr<Annotation>`` to ``FunctionAnnotation?`` via ``reinterpret``, verifying the annotation kind first (panics otherwise).
 
-:Arguments: * **foo** :  :ref:`Function <handle-ast-Function>` ?
+:Arguments: * **foo** :  :ref:`Annotation <handle-rtti-Annotation>` ?
+
+.. _function-ast_boost__rq_as_rq_StructureAnnotation_Annotation_q_:
+
+.. das:function:: Annotation?`as`StructureAnnotation(foo: Annotation?) : StructureAnnotation?
+
+Casts an ``Annotation?`` or ``smart_ptr<Annotation>`` to ``StructureAnnotation?`` via ``reinterpret``, verifying the annotation kind first (panics otherwise).
+
+:Arguments: * **foo** :  :ref:`Annotation <handle-rtti-Annotation>` ?
+
+.. _function-ast_boost__rq_is_rq_FunctionAnnotation_Annotation_q_:
+
+.. das:function:: Annotation?`is`FunctionAnnotation(foo: Annotation?) : bool
+
+Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a ``FunctionAnnotation`` according to its ``isFunctionAnnotation`` property.
+
+:Arguments: * **foo** :  :ref:`Annotation <handle-rtti-Annotation>` ?
+
+.. _function-ast_boost__rq_is_rq_StructureAnnotation_Annotation_q_:
+
+.. das:function:: Annotation?`is`StructureAnnotation(foo: Annotation?) : bool
+
+Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a ``StructureAnnotation`` according to its ``isStructureAnnotation`` property.
+
+:Arguments: * **foo** :  :ref:`Annotation <handle-rtti-Annotation>` ?
 
 .. _function-ast_boost__rq_as_rq_BuiltInFunction_Function_q_:
 
 .. das:function:: Function?`as`BuiltInFunction(foo: Function?) : BuiltInFunction?
 
 Casts a ``Function?`` to ``BuiltInFunction?`` via ``reinterpret``, verifying the target is a built-in function first (panics otherwise).
-
-:Arguments: * **foo** :  :ref:`Function <handle-ast-Function>` ?
-
-.. _function-ast_boost__rq_is_rq_ExternalFnBase_Function_q_:
-
-.. das:function:: Function?`is`ExternalFnBase(foo: Function?) : bool
-
-Returns ``true`` if the given ``Function?`` is both ``builtIn`` and has the ``propertyFunction`` flag, indicating it is an ``ExternalFnBase``; returns ``false`` otherwise.
 
 :Arguments: * **foo** :  :ref:`Function <handle-ast-Function>` ?
 
@@ -1184,29 +1091,53 @@ Casts a ``Function?`` to ``ExternalFnBase?`` via ``reinterpret``, verifying it i
 
 :Arguments: * **foo** :  :ref:`Function <handle-ast-Function>` ?
 
-.. _function-ast_boost__rq_is_rq_FunctionAnnotation_Annotation_q_:
+.. _function-ast_boost__rq_is_rq_BuiltInFunction_Function_q_:
 
-.. das:function:: Annotation?`is`FunctionAnnotation(foo: Annotation?) : bool
+.. das:function:: Function?`is`BuiltInFunction(foo: Function?) : bool
+
+Returns ``true`` if the given ``Function?`` has the ``builtIn`` flag set, indicating it is a ``BuiltInFunction``; returns ``false`` for any other type.
+
+:Arguments: * **foo** :  :ref:`Function <handle-ast-Function>` ?
+
+.. _function-ast_boost__rq_is_rq_ExternalFnBase_Function_q_:
+
+.. das:function:: Function?`is`ExternalFnBase(foo: Function?) : bool
+
+Returns ``true`` if the given ``Function?`` is both ``builtIn`` and has the ``propertyFunction`` flag, indicating it is an ``ExternalFnBase``; returns ``false`` otherwise.
+
+:Arguments: * **foo** :  :ref:`Function <handle-ast-Function>` ?
+
+.. _function-ast_boost__rq_is_rq_BuiltInFunction_auto_0x26a:
+
+.. das:function:: auto`is`BuiltInFunction(anything: auto) : auto
+
+Returns ``true`` if the given ``Function?`` has the ``builtIn`` flag set, indicating it is a ``BuiltInFunction``; returns ``false`` for any other type.
+
+:Arguments: * **anything** : auto
+
+.. _function-ast_boost__rq_is_rq_ExternalFnBase_auto_0x27a:
+
+.. das:function:: auto`is`ExternalFnBase(anything: auto) : auto
+
+Returns ``true`` if the given ``Function?`` is both ``builtIn`` and has the ``propertyFunction`` flag, indicating it is an ``ExternalFnBase``; returns ``false`` otherwise.
+
+:Arguments: * **anything** : auto
+
+.. _function-ast_boost__rq_is_rq_FunctionAnnotation_auto_0x28a:
+
+.. das:function:: auto`is`FunctionAnnotation(anything: auto) : auto
 
 Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a ``FunctionAnnotation`` according to its ``isFunctionAnnotation`` property.
 
-:Arguments: * **foo** :  :ref:`Annotation <handle-rtti-Annotation>` ?
+:Arguments: * **anything** : auto
 
-.. _function-ast_boost__rq_is_rq_FunctionAnnotation_smart_ptr_ls_Annotation_gr_:
+.. _function-ast_boost__rq_is_rq_StructureAnnotation_auto_0x2a6:
 
-.. das:function:: smart_ptr<Annotation>`is`FunctionAnnotation(foo: smart_ptr<Annotation>) : bool
+.. das:function:: auto`is`StructureAnnotation(anything: auto) : auto
 
-Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a ``FunctionAnnotation`` according to its ``isFunctionAnnotation`` property.
+Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a ``StructureAnnotation`` according to its ``isStructureAnnotation`` property.
 
-:Arguments: * **foo** : smart_ptr< :ref:`Annotation <handle-rtti-Annotation>` >
-
-.. _function-ast_boost__rq_as_rq_FunctionAnnotation_Annotation_q_:
-
-.. das:function:: Annotation?`as`FunctionAnnotation(foo: Annotation?) : FunctionAnnotation?
-
-Casts an ``Annotation?`` or ``smart_ptr<Annotation>`` to ``FunctionAnnotation?`` via ``reinterpret``, verifying the annotation kind first (panics otherwise).
-
-:Arguments: * **foo** :  :ref:`Annotation <handle-rtti-Annotation>` ?
+:Arguments: * **anything** : auto
 
 .. _function-ast_boost__rq_as_rq_FunctionAnnotation_smart_ptr_ls_Annotation_gr_:
 
@@ -1216,35 +1147,27 @@ Casts an ``Annotation?`` or ``smart_ptr<Annotation>`` to ``FunctionAnnotation?``
 
 :Arguments: * **foo** : smart_ptr< :ref:`Annotation <handle-rtti-Annotation>` >
 
-.. _function-ast_boost__rq_is_rq_StructureAnnotation_Annotation_q_:
+.. _function-ast_boost__rq_as_rq_StructureAnnotation_smart_ptr_ls_Annotation_gr_:
 
-.. das:function:: Annotation?`is`StructureAnnotation(foo: Annotation?) : bool
+.. das:function:: smart_ptr<Annotation>`as`StructureAnnotation(foo: smart_ptr<Annotation>) : StructureAnnotation?
 
-Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a ``StructureAnnotation`` according to its ``isStructureAnnotation`` property.
+Casts an ``Annotation?`` or ``smart_ptr<Annotation>`` to ``StructureAnnotation?`` via ``reinterpret``, verifying the annotation kind first (panics otherwise).
 
-:Arguments: * **foo** :  :ref:`Annotation <handle-rtti-Annotation>` ?
+:Arguments: * **foo** : smart_ptr< :ref:`Annotation <handle-rtti-Annotation>` >
+
+.. _function-ast_boost__rq_is_rq_FunctionAnnotation_smart_ptr_ls_Annotation_gr_:
+
+.. das:function:: smart_ptr<Annotation>`is`FunctionAnnotation(foo: smart_ptr<Annotation>) : bool
+
+Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a ``FunctionAnnotation`` according to its ``isFunctionAnnotation`` property.
+
+:Arguments: * **foo** : smart_ptr< :ref:`Annotation <handle-rtti-Annotation>` >
 
 .. _function-ast_boost__rq_is_rq_StructureAnnotation_smart_ptr_ls_Annotation_gr_:
 
 .. das:function:: smart_ptr<Annotation>`is`StructureAnnotation(foo: smart_ptr<Annotation>) : bool
 
 Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a ``StructureAnnotation`` according to its ``isStructureAnnotation`` property.
-
-:Arguments: * **foo** : smart_ptr< :ref:`Annotation <handle-rtti-Annotation>` >
-
-.. _function-ast_boost__rq_as_rq_StructureAnnotation_Annotation_q_:
-
-.. das:function:: Annotation?`as`StructureAnnotation(foo: Annotation?) : StructureAnnotation?
-
-Casts an ``Annotation?`` or ``smart_ptr<Annotation>`` to ``StructureAnnotation?`` via ``reinterpret``, verifying the annotation kind first (panics otherwise).
-
-:Arguments: * **foo** :  :ref:`Annotation <handle-rtti-Annotation>` ?
-
-.. _function-ast_boost__rq_as_rq_StructureAnnotation_smart_ptr_ls_Annotation_gr_:
-
-.. das:function:: smart_ptr<Annotation>`as`StructureAnnotation(foo: smart_ptr<Annotation>) : StructureAnnotation?
-
-Casts an ``Annotation?`` or ``smart_ptr<Annotation>`` to ``StructureAnnotation?`` via ``reinterpret``, verifying the annotation kind first (panics otherwise).
 
 :Arguments: * **foo** : smart_ptr< :ref:`Annotation <handle-rtti-Annotation>` >
 
@@ -1260,58 +1183,18 @@ Recursively walks raw data bytes using a ``TypeDeclPtr`` schema and builds an eq
 
             * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
 
-.. _function-ast_boost__rq_is_rq_BuiltInFunction_auto:
-
-.. das:function:: auto`is`BuiltInFunction(anything: auto) : auto
-
-Returns ``true`` if the given ``Function?`` has the ``builtIn`` flag set, indicating it is a ``BuiltInFunction``; returns ``false`` for any other type.
-
-:Arguments: * **anything** : auto
-
-.. _function-ast_boost__rq_is_rq_ExternalFnBase_auto:
-
-.. das:function:: auto`is`ExternalFnBase(anything: auto) : auto
-
-Returns ``true`` if the given ``Function?`` is both ``builtIn`` and has the ``propertyFunction`` flag, indicating it is an ``ExternalFnBase``; returns ``false`` otherwise.
-
-:Arguments: * **anything** : auto
-
-.. _function-ast_boost__rq_is_rq_FunctionAnnotation_auto:
-
-.. das:function:: auto`is`FunctionAnnotation(anything: auto) : auto
-
-Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a ``FunctionAnnotation`` according to its ``isFunctionAnnotation`` property.
-
-:Arguments: * **anything** : auto
-
-.. _function-ast_boost__rq_is_rq_StructureAnnotation_auto:
-
-.. das:function:: auto`is`StructureAnnotation(anything: auto) : auto
-
-Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a ``StructureAnnotation`` according to its ``isStructureAnnotation`` property.
-
-:Arguments: * **anything** : auto
-
 +++++
 Setup
 +++++
 
-  *  :ref:`setup_call_list (name: string; at: LineInfo; subblock: block\<(var fn:FunctionPtr):void\>) : ExprBlock? <function-ast_boost_setup_call_list_string_LineInfo_block_ls_var_fn_c_FunctionPtr_c_void_gr_>` 
   *  :ref:`setup_call_list (name: string; at: LineInfo; isInit: bool = false; isPrivate: bool = true; isLateInit: bool = false) : ExprBlock? <function-ast_boost_setup_call_list_string_LineInfo_bool_bool_bool>` 
+  *  :ref:`setup_call_list (name: string; at: LineInfo; subblock: block\<(var fn:FunctionPtr):void\>) : ExprBlock? <function-ast_boost_setup_call_list_string_LineInfo_block_ls_var_fn_c_FunctionPtr_c_void_gr_>` 
   *  :ref:`setup_macro (name: string; at: LineInfo) : ExprBlock? <function-ast_boost_setup_macro_string_LineInfo>` 
-  *  :ref:`setup_tag_annotation (name: string; tag: string; var classPtr: auto) : auto <function-ast_boost_setup_tag_annotation_string_string_auto>` 
+  *  :ref:`setup_tag_annotation (name: string; tag: string; var classPtr: auto) : auto <function-ast_boost_setup_tag_annotation_string_string_auto_0x111>` 
 
-.. _function-ast_boost_setup_call_list_string_LineInfo_block_ls_var_fn_c_FunctionPtr_c_void_gr_:
 
-.. das:function:: setup_call_list(name: string; at: LineInfo; subblock: block<(var fn:FunctionPtr):void>) : ExprBlock?
-
-Creates or locates a compilation-phase setup function (``__setup_macros``) and returns its body ``ExprBlock`` so callers can append registration calls to it.
-
-:Arguments: * **name** : string
-
-            * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
-
-            * **subblock** : block<(fn: :ref:`FunctionPtr <alias-FunctionPtr>` ):void>
+setup_call_list
+^^^^^^^^^^^^^^^
 
 .. _function-ast_boost_setup_call_list_string_LineInfo_bool_bool_bool:
 
@@ -1329,6 +1212,12 @@ Creates or locates a compilation-phase setup function (``__setup_macros``) and r
 
             * **isLateInit** : bool
 
+.. _function-ast_boost_setup_call_list_string_LineInfo_block_ls_var_fn_c_FunctionPtr_c_void_gr_:
+
+.. das:function:: setup_call_list(name: string; at: LineInfo; subblock: block<(var fn:FunctionPtr):void>) : ExprBlock?
+
+----
+
 .. _function-ast_boost_setup_macro_string_LineInfo:
 
 .. das:function:: setup_macro(name: string; at: LineInfo) : ExprBlock?
@@ -1339,7 +1228,7 @@ Creates or locates a macro initialization function (``__setup_macros``) guarded 
 
             * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
 
-.. _function-ast_boost_setup_tag_annotation_string_string_auto:
+.. _function-ast_boost_setup_tag_annotation_string_string_auto_0x111:
 
 .. das:function:: setup_tag_annotation(name: string; tag: string; classPtr: auto) : auto
 

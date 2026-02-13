@@ -11,6 +11,7 @@ module profiler_boost shared private
 //!
 //! Provides ``[apply_in_context(profiler)]`` wrappers that allow enabling
 //! and disabling the profiler from a different context.
+//! Requires the ``profiler`` module.
 
 require daslib/profiler
 require daslib/apply_in_context

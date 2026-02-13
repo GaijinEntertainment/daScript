@@ -1,1 +1,1 @@
- Base impliemntation of the server.
+ Base implementation of the server.

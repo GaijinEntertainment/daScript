@@ -11,6 +11,7 @@ module regex_boost shared private
 //! Provides the ``%regex~pattern%%`` reader macro that compiles a regular
 //! expression at parse time and embeds the resulting ``Regex`` object
 //! directly into the AST, avoiding runtime compilation overhead.
+//! Requires the ``regex`` module.
 
 require ast
 require strings

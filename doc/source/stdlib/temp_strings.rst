@@ -45,19 +45,12 @@ Intern strings are not deleted.
 Temporary string conversion
 +++++++++++++++++++++++++++
 
-  *  :ref:`temp_string (str: string; cb: block\<(res:string#):void\>) <function-temp_strings_temp_string_string_block_ls_res_c_string_hh__c_void_gr_>` 
   *  :ref:`temp_string (arr: array\<uint8\>; cb: block\<(res:string#):void\>) <function-temp_strings_temp_string_array_ls_uint8_gr__block_ls_res_c_string_hh__c_void_gr_>` 
+  *  :ref:`temp_string (str: string; cb: block\<(res:string#):void\>) <function-temp_strings_temp_string_string_block_ls_res_c_string_hh__c_void_gr_>` 
 
-.. _function-temp_strings_temp_string_string_block_ls_res_c_string_hh__c_void_gr_:
 
-.. das:function:: temp_string(str: string; cb: block<(res:string#):void>)
-
-Pass string to the callback and delete it after the callback is called.
-Accept only strings with substitutions (string builder). Intern strings are not deleted.
-
-:Arguments: * **str** : string
-
-            * **cb** : block<(res:string#):void>
+temp_string
+^^^^^^^^^^^
 
 .. _function-temp_strings_temp_string_array_ls_uint8_gr__block_ls_res_c_string_hh__c_void_gr_:
 
@@ -69,5 +62,11 @@ Delete the string after the callback is called. Intern strings are not deleted.
 :Arguments: * **arr** : array<uint8>
 
             * **cb** : block<(res:string#):void>
+
+.. _function-temp_strings_temp_string_string_block_ls_res_c_string_hh__c_void_gr_:
+
+.. das:function:: temp_string(str: string; cb: block<(res:string#):void>)
+
+----
 
 

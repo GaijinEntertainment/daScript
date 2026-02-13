@@ -3,6 +3,8 @@ It provides ``read_json`` for parsing JSON text into a ``JsonValue`` tree,
 ``write_json`` for serializing back to text, and ``JV`` helpers for constructing
 JSON values from daScript types.
 
+See also :doc:`json_boost` for automatic struct-to-JSON conversion and the ``%json~`` reader macro.
+
 All functions and symbols are in "json" module, use require to get access to it. ::
 
     require daslib/json

@@ -3,6 +3,8 @@ macro for compile-time regex construction, plus convenience functions
 for splitting strings by pattern, replacing matches, and iterating over
 capture groups.
 
+See also :doc:`regex` for the core regular expression engine.
+
 All functions and symbols are in "regex_boost" module, use require to get access to it. ::
 
     require daslib/regex_boost

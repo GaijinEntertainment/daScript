@@ -44,6 +44,10 @@ Returns the encoded output size for binary data of length `s`.
 
 :Arguments: * **s** : int
 
+
+base64_encode
+^^^^^^^^^^^^^
+
 .. _function-base64_base64_encode_string:
 
 .. das:function:: base64_encode(_inp: string) : string
@@ -56,9 +60,7 @@ Encodes a string to its Base64 text representation.
 
 .. das:function:: base64_encode(inp: array<uint8>|array<uint8>#) : auto
 
-Encodes a byte array to its Base64 text representation.
-
-:Arguments: * **inp** : option<array<uint8>|array<uint8>#>
+----
 
 ++++++++
 Decoding
@@ -76,6 +78,10 @@ Returns the maximum decoded output size for a Base64 string of length `s`.
 
 :Arguments: * **s** : int
 
+
+base64_decode
+^^^^^^^^^^^^^
+
 .. _function-base64_base64_decode_string:
 
 .. das:function:: base64_decode(_in: string) : tuple<text:string;size:int>
@@ -88,10 +94,6 @@ Decodes a Base64-encoded string. Returns a tuple of the decoded text and its byt
 
 .. das:function:: base64_decode(_in: string; out: array<uint8>) : int
 
-Decodes a Base64-encoded string into the provided byte array. Returns the decoded byte count, or -1 on error.
-
-:Arguments: * **_in** : string
-
-            * **out** : array<uint8>
+----
 
 

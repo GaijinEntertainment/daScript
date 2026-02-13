@@ -10,7 +10,7 @@ This structure is private.
 This structure is a macro interface.
 This structure is sealed. It cannot be inherited.
 Skip lock check.
-This structure has circulare references (and is invalid).
+This structure has circular references (and is invalid).
 This structure is a generator.
 This structure has static members.
 This structure has static functions.
@@ -18,3 +18,4 @@ This structure has initialized fields.
 This structure is safe when uninitialized.
 This structure is a template.
 This structure has a default initializer.
+This structure does not generate a default constructor.

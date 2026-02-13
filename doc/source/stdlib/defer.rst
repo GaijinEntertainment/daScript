@@ -38,7 +38,7 @@ Function annotations
 
 .. das:attribute:: DeferMacro
 
-This macro covnerts defer() <| block expression
+This macro converts defer() <| block expression
 into {}, and move block to the finally section of the current block
 
 +++++++++++

@@ -70,7 +70,7 @@ Function annotations
 
 .. das:attribute:: expect_any_struct
 
-[expect_any_struct(argname)] contract, which only accepts structs (byt not classes)
+[expect_any_struct(argname)] contract, which only accepts structs (but not classes)
 
 .. _handle-contracts-expect_any_numeric:
 
@@ -101,7 +101,7 @@ Workhorse types are: bool,int*,uint*,float*,double,range and urange, range64 and
 
 .. das:attribute:: expect_any_variant
 
-[expected_any_variant(argname)] contract, which only accepts variants
+[expect_any_variant(argname)] contract, which only accepts variants
 
 .. _handle-contracts-expect_any_function:
 

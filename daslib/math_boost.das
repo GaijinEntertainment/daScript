@@ -191,7 +191,7 @@ def perspective_rh_opengl(fovy, aspect, zn, zf : float) {
 }
 
 def ortho_rh(left, right, bottom, top, zNear, zFar : float) {
-    //! right handed (z towards viwer) orthographic (parallel) projection matrix
+    //! right handed (z towards viewer) orthographic (parallel) projection matrix
     var Result : float4x4
     identity(Result)
     Result[0][0] =  2. / (right - left)

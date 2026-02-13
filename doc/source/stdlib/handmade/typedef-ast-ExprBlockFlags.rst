@@ -15,3 +15,4 @@ Block has early out (break/continue/return).
 Block is a for loop body.
 Block has exit by label (goto outside).
 Block is a lambda block.
+Block is a generator block.

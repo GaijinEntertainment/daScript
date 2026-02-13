@@ -33,7 +33,7 @@ class private YieldFrom : AstCallMacro {
     //!     for t in THAT
     //!         yield t
     //!
-    //! The idea is that coroutine or generator can continuesly yield from another sub-coroutine or generator.
+    //! The idea is that coroutine or generator can continuously yield from another sub-coroutine or generator.
     def override visit(prog : ProgramPtr; mod : Module?; var call : smart_ptr<ExprCallMacro>) : ExpressionPtr {
         //! Visits the yeild_from macro call and rewrites it into a for-yield loop.
         macro_verify(call.arguments |> length == 1, prog, call.at, "expecting yeild_from(iterator)")
@@ -88,7 +88,7 @@ class private CoAwait : AstCallMacro {
 [function_macro(name="coroutine")]
 class private CoroutineMacro : AstFunctionAnnotation {
     //! This macro converts coroutine function into generator, adds return false.
-    //! Daslang impelmentation of coroutine is generator based. Function is converted into a state machine,
+    //! Daslang implementation of coroutine is generator based. Function is converted into a state machine,
     //! which can be resumed and suspended. The function is converted into a generator.
     //! Generator yields bool if its a void coroutine, and yields the return type otherwise.
     //! If return type is specified coroutine can serve as an advanced form of a generator.

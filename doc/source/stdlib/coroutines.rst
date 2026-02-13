@@ -71,7 +71,7 @@ Function annotations
 .. das:attribute:: coroutine
 
 This macro converts coroutine function into generator, adds return false.
-Daslang impelmentation of coroutine is generator based. Function is converted into a state machine,
+Daslang implementation of coroutine is generator based. Function is converted into a state machine,
 which can be resumed and suspended. The function is converted into a generator.
 Generator yields bool if its a void coroutine, and yields the return type otherwise.
 If return type is specified coroutine can serve as an advanced form of a generator.
@@ -108,7 +108,7 @@ This macro converts yield_from(THAT) expression into::
     for t in THAT
         yield t
 
-The idea is that coroutine or generator can continuesly yield from another sub-coroutine or generator.
+The idea is that coroutine or generator can continuously yield from another sub-coroutine or generator.
 
 ++++++++++++++++++++++++++++++
 Top level coroutine evaluation

@@ -2,6 +2,8 @@ The JOBQUE_BOOST module provides high-level job queue abstractions built on
 the low-level ``jobque`` primitives. It includes ``with_job``, ``with_job_status``,
 and channel-based patterns for simplified concurrent programming.
 
+See also :doc:`jobque` for the low-level job queue primitives.
+
 All functions and symbols are in "jobque_boost" module, use require to get access to it. ::
 
     require daslib/jobque_boost

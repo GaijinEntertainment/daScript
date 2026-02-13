@@ -11,6 +11,7 @@ module regex shared public
 //! Pure-daScript regex compiler and NFA matcher. Supports character
 //! classes, groups, quantifiers (``+``, ``*``, ``?``), alternation,
 //! and ``regex_match`` / ``regex_search`` / ``regex_replace`` operations.
+//! See also ``regex_boost`` for compile-time regex construction via reader macros.
 
 require daslib/strings_boost
 

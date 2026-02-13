@@ -10,6 +10,7 @@ module lint shared private
 //!
 //! When this module is required, the ``paranoid`` lint flag is turned on
 //! for the current module, enabling stricter compiler diagnostics.
+//! See also ``lint_everything`` for applying lint to all modules.
 
 require daslib/strings_boost
 require daslib/ast_boost

@@ -140,7 +140,7 @@ class IsAnyVectorType : IsAnyType {
 
 [contract(name="expect_any_struct")]
 class IsAnyStructMacro : IsAnyType {
-    //! [expect_any_struct(argname)] contract, which only accepts structs (byt not classes)
+    //! [expect_any_struct(argname)] contract, which only accepts structs (but not classes)
     def override isCompatible(var func : FunctionPtr; var types : VectorTypeDeclPtr; decl : AnnotationDeclaration; var errors : das_string) : bool {
         for (fna, typ in func.arguments, types) {// note: N^2
             for (argv in decl.arguments) {
@@ -231,7 +231,7 @@ class IsAnyTupleNonPtrMacro : IsAnyType {
 
 [contract(name="expect_any_variant")]
 class IsAnyVariantNonPtrMacro : IsAnyType {
-    //! [expected_any_variant(argname)] contract, which only accepts variants
+    //! [expect_any_variant(argname)] contract, which only accepts variants
     def override isCompatible(var func : FunctionPtr; var types : VectorTypeDeclPtr; decl : AnnotationDeclaration; var errors : das_string) : bool {
         for (fna, typ in func.arguments, types) {// note: N^2
             for (argv in decl.arguments) {

@@ -3,6 +3,8 @@ The LINQ module provides query-style operations on sequences: filtering
 deduplication (``distinct``), pagination (``skip``, ``take``), aggregation
 (``sum``, ``average``, ``aggregate``), and element access (``first``, ``last``).
 
+See also :doc:`linq_boost` for pipe-syntax macros with underscore shorthand.
+
 All functions and symbols are in "linq" module, use require to get access to it. ::
 
     require daslib/linq

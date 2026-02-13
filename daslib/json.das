@@ -12,6 +12,7 @@ module json shared public
 //! Implements a full JSON parser/writer. ``JsValue`` is the variant type
 //! representing any JSON element. Provides ``read_json``, ``write_json``,
 //! and helper accessors for objects, arrays, strings, numbers, and booleans.
+//! See also ``json_boost`` for automatic struct ↔ JSON conversion.
 
 require daslib/strings_boost
 

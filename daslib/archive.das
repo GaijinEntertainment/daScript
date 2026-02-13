@@ -43,7 +43,7 @@ class public MemSerializer : Serializer {
         return <- data
     }
     def getCopyOfData : array<uint8> {
-        //! Returns copy of the data from the seiralizer.
+        //! Returns copy of the data from the serializer.
         var cdata := data
         return <- cdata
     }

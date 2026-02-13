@@ -12,6 +12,7 @@ module templates_boost shared public
 //! stores substitution rules (rename variables, replace types, swap expressions)
 //! and `apply_template` walks an AST subtree applying them. Used internally by
 //! many other daslib macros.
+//! Requires the ``templates`` module.
 
 require ast
 require daslib/ast_boost
@@ -19,7 +20,7 @@ require daslib/algorithm
 require daslib/strings_boost
 
 struct Template {
-    //! This structure contains collection of subsitution rules for a template.
+    //! This structure contains collection of substitution rules for a template.
     kaboomVar : table<string; tuple<prefix : string; suffix : string> >         //! variable field access replacement rules
     call2name : table<string; string>                                           //! call name replacement rules
     field2name : table<string; string>                                          //! field name replacement rules
@@ -429,7 +430,7 @@ def apply_template(var rules : Template; at : LineInfo; var typ : smart_ptr<Type
 }
 
 def unquote_block(expr : ExpressionPtr) : smart_ptr<ExprBlock> {
-    //! Returns the corresponding block subexpression expression form the ExprMakeBlock.
+    //! Returns the corresponding block subexpression expression from the ExprMakeBlock.
     assert(expr is ExprMakeBlock)
     unsafe {
         let mkb <- reinterpret<smart_ptr<ExprMakeBlock>>(expr)
@@ -439,7 +440,7 @@ def unquote_block(expr : ExpressionPtr) : smart_ptr<ExprBlock> {
 }
 
 def move_unquote_block(var expr : ExpressionPtr&) : smart_ptr<ExprBlock> {
-    //! Moves the corresponding block subexpression expression form the ExprMakeBlock.
+    //! Moves the corresponding block subexpression expression from the ExprMakeBlock.
     assert(expr is ExprMakeBlock)
     unsafe {
         var mkb <- reinterpret<smart_ptr<ExprMakeBlock>>(expr)
@@ -614,7 +615,7 @@ def public add_array_ptr_ref(var a : array<smart_ptr<auto(TT)>>) : array<smart_p
 }
 
 def public add_type_ptr_ref(a : TypeDeclPtr; flags : TypeDeclFlags) : TypeDeclPtr {
-    //! Implementation details for the reification. This adds any array to the rules.
+    //! Implementation details for the reification. Clones a type declaration and applies given flags.
     // var q := a
     var inscope q <- clone_type(a)
     q.flags |= flags & (
@@ -640,28 +641,28 @@ def public enum_class_type(st) {
 }
 
 def public add_type_ptr_ref(var st : StructurePtr; flags : TypeDeclFlags) : TypeDeclPtr {
-    //! Implementation details for the reification. This adds any array to the rules.
+    //! Implementation details for the reification. Creates a type declaration from a structure smart pointer.
     return <- new TypeDecl(at = st.at, baseType = Type.tStructure, structType = get_ptr(st), flags = flags)
 }
 
 def public add_type_ptr_ref(var st : Structure?; flags : TypeDeclFlags) : TypeDeclPtr {
-    //! Implementation details for the reification. This adds any array to the rules.
+    //! Implementation details for the reification. Creates a type declaration from a structure raw pointer.
     return <- new TypeDecl(at = st.at, baseType = Type.tStructure, structType = st, flags = flags)
 }
 
 def public add_type_ptr_ref(var st : EnumerationPtr; flags : TypeDeclFlags) : TypeDeclPtr {
-    //! Implementation details for the reification. This adds any array to the rules.
+    //! Implementation details for the reification. Creates a type declaration from an enumeration smart pointer.
     return <- new TypeDecl(at = st.at, baseType = enum_class_type(st), enumType = get_ptr(st), flags = flags)
 }
 
 def public add_type_ptr_ref(var st : Enumeration?; flags : TypeDeclFlags) : TypeDeclPtr {
-    //! Implementation details for the reification. This adds any array to the rules.
+    //! Implementation details for the reification. Creates a type declaration from an enumeration raw pointer.
     return <- new TypeDecl(at = st.at, baseType = enum_class_type(st), enumType = st, flags = flags)
 }
 
 [unused_argument(anything), unused_argument(flags)]
 def public add_type_ptr_ref(anything : auto(TT); flags : TypeDeclFlags) : TypeDeclPtr {
-    //! Implementation details for the reification. This adds any array to the rules.
+    //! Implementation details for the reification. Fallback overload that produces a compile-time error for unsupported types.
     concept_assert(false, "$t reification expected type `TypeDeclPtr`, `StructurePtr`, or `Structure?`, but received {typeinfo typename(type<TT>)}")
     var inscope decl : TypeDeclPtr
     return <- decl
@@ -940,7 +941,7 @@ class private QRulesVisitor : AstVisitor {
 
 [macro_function]
 def private apply_qrules(var expr : smart_ptr<Expression>&) : smart_ptr<ExprBlock> {
-    //! Implementation details for the expression reificaiton.
+    //! Implementation details for the expression reification.
     var inscope eblk <- new ExprBlock(at = expr.at,
         returnType <- new TypeDecl(at = expr.at, baseType = Type.tVoid),
         arguments := array<VariablePtr>(
@@ -964,7 +965,7 @@ def private apply_qrules(var expr : smart_ptr<Expression>&) : smart_ptr<ExprBloc
 
 [macro_function]
 def private apply_function_qrules(var func : smart_ptr<Function>&) : smart_ptr<ExprBlock> {
-    //! Implementation details for the expression reificaiton.
+    //! Implementation details for the expression reification.
     var inscope eblk <- new ExprBlock(at = func.at,
         returnType <- new TypeDecl(at = func.at, baseType = Type.tVoid),
         arguments := array<VariablePtr>(
@@ -988,7 +989,7 @@ def private apply_function_qrules(var func : smart_ptr<Function>&) : smart_ptr<E
 
 [macro_function]
 def private apply_template_qrules(prog : ProgramPtr; var template_structure : Structure?) : smart_ptr<ExprBlock> {
-    //! Implementation details for the expression reificaiton.
+    //! Implementation details for the expression reification.
     var inscope eblk <- new ExprBlock(at = template_structure.at,
         returnType <- new TypeDecl(at = template_structure.at, baseType = Type.tVoid),
         arguments := array<VariablePtr>(
@@ -1029,12 +1030,12 @@ def private apply_template_qrules(prog : ProgramPtr; var template_structure : St
 }
 
 def public apply_qmacro(var expr : smart_ptr<Expression>; blk : block<(var rules : Template) : void>) : ExpressionPtr {
-    //! Implementation details for the expression reificaiton.
+    //! Implementation details for the expression reification.
     return <- apply_template(expr, blk)
 }
 
 def public apply_qblock(var expr : smart_ptr<Expression>; blk : block<(var rules : Template) : void>) : ExpressionPtr {
-    //! Implementation details for the expression reificaiton. This is a block reification.
+    //! Implementation details for the expression reification. This is a block reification.
     var inscope res <- apply_template(expr, blk)
     assert(res is ExprMakeBlock)
     var inscope qblk <- move_unquote_block(res)
@@ -1043,7 +1044,7 @@ def public apply_qblock(var expr : smart_ptr<Expression>; blk : block<(var rules
 }
 
 def public apply_qblock_to_array(var expr : smart_ptr<Expression>; blk : block<(var rules : Template) : void>) : array<ExpressionPtr> {
-    //! Implementation details for the expression reificaiton. This is a block reification.
+    //! Implementation details for the expression reification. This is a block reification.
     var inscope res <- apply_template(expr, blk)
     assert(res is ExprMakeBlock)
     var inscope qblk <- move_unquote_block(res)
@@ -1055,7 +1056,7 @@ def public apply_qblock_to_array(var expr : smart_ptr<Expression>; blk : block<(
 }
 
 def public apply_qblock_expr(var expr : smart_ptr<Expression>; blk : block<(var rules : Template) : void>) : ExpressionPtr {
-    //! Implementation details for the expression reificaiton. This is a frist line of the block as expression reification.
+    //! Implementation details for the expression reification. This is a first line of the block as expression reification.
     var inscope res <- apply_template(expr, blk)
     assert(res is ExprMakeBlock)
     var inscope qblk <- move_unquote_block(res)
@@ -1064,14 +1065,14 @@ def public apply_qblock_expr(var expr : smart_ptr<Expression>; blk : block<(var 
 }
 
 def public apply_qtype(var expr : smart_ptr<Expression>; blk : block<(var rules : Template) : void>) : TypeDeclPtr {
-    //! Implementation details for the expression reificaiton. This is a type declaration reification.
+    //! Implementation details for the expression reification. This is a type declaration reification.
     var inscope res <- apply_template(expr, blk)
     assert(res is ExprTypeDecl)
     return <- clone_type((res as ExprTypeDecl).typeexpr)
 }
 
 def public expression_at(var expr : ExpressionPtr; at : LineInfo) : ExpressionPtr {
-    //! Force expression location, than return it.
+    //! Force expression location, then return it.
     expr |> force_at(at)
     return <- expr
 }
@@ -1270,7 +1271,7 @@ class private AstQMethodMacro : AstQNamedClassMacro {
 }
 
 def public apply_qmacro_template_class(instance_name : string; var template_type : smart_ptr<TypeDecl>; blk : block<(var rules : Template) : void>) : TypeDeclPtr {
-    //! Implementation details for the expression reificaiton. This is a template class instantiation reification.
+    //! Implementation details for the expression reification. This is a template class instantiation reification.
     var mod = compiling_module()
     var template_structure = template_type.structType
     let template_name = string(template_structure.name)

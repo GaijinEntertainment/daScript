@@ -9,6 +9,8 @@ The DECS_BOOST module provides convenience macros and syntactic sugar for
 the DECS entity component system, including simplified component registration,
 entity creation, and system definition patterns.
 
+See also :doc:`decs` for the core ECS runtime and :doc:`decs_state` for entity state machines.
+
 All functions and symbols are in "decs_boost" module, use require to get access to it. ::
 
     require daslib/decs_boost
@@ -70,7 +72,7 @@ Call macros
 
 .. das:attribute:: query
 
-This macro implmenets 'query` functionality. There are 2 types of queries:
+This macro implements 'query` functionality. There are 2 types of queries:
     * query(...) - returns a list of entities matching the query
     * query(eid) - returns a single entity matching the eid
 For example::
@@ -93,7 +95,7 @@ Query can have `REQUIRE` and `REQUIRE_NOT` clauses::
 
 The query above will add `pos` components of all entities, which also have a `tank` component.
 
-Additionally queries can atuomaticall expand components of entities. For example::
+Additionally queries can automatically expand components of entities. For example::
 
     [decs_template(prefix="particle")]
     struct Particle
@@ -103,10 +105,10 @@ Additionally queries can atuomaticall expand components of entities. For example
         q.pos += q.vel                  // this is actually particlepos += particlevel
 
 
-In the example above structure q : Particle does not exist as a variable. Instead it is expanded into accessing individual componentes of the entity.
+In the example above structure q : Particle does not exist as a variable. Instead it is expanded into accessing individual components of the entity.
 REQURE section of the query is automatically filled with all components of the template.
 If template prefix is not specified, prefix is taken from the name of the template (would be "Particle_").
-Specifying empty prefix `[decs_template(prefix)]` will result in no prefix beeing added.
+Specifying empty prefix `[decs_template(prefix)]` will result in no prefix being added.
 
 Note: apart from tagging structure as a template, the macro also generates `apply_decs_template` and `remove_decs_template` functions.
 `apply_decs_template` is used to add template to an entity, and `remove_decs_template` is used to remove all components of the template from the entity::
@@ -119,7 +121,7 @@ Note: apart from tagging structure as a template, the macro also generates `appl
 
 .. das:attribute:: find_query
 
-This macro implmenets 'find_query` functionality.
+This macro implements 'find_query` functionality.
 It is similar to `query` in most ways, with the main differences being:
     * there is no eid-based find query
     * the find_query stops once the first match is found
@@ -132,7 +134,7 @@ For example::
     if is_intersecting(ray, aabb, 0.1, dist)
         return true
 
-In the example above the find_query will return `true` once the first intesection is found.
+In the example above the find_query will return `true` once the first intersection is found.
 Note: if return is missing, or end of find_query block is reached - its assumed that find_query did not find anything, and will return false.
 
 .. _call-macro-decs_boost-from_decs:

@@ -2,6 +2,8 @@ The JSON_BOOST module extends JSON support with operator overloads for convenien
 field access (``?[]``), null-coalescing (``??``), and automatic struct-to-JSON
 conversion macros (``from_JsValue``, ``to_JsValue``).
 
+See also :doc:`json` for core JSON parsing and writing.
+
 All functions and symbols are in "json_boost" module, use require to get access to it. ::
 
     require daslib/json_boost

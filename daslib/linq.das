@@ -11,6 +11,7 @@ module linq shared public
 //! ``order``, ``group_by``, ``distinct``, ``concat``, ``zip``, ``skip``,
 //! ``take``, ``aggregate``, set operations, and more. Operations produce
 //! lazy iterators or materialized arrays.
+//! See also ``linq_boost`` for pipe-syntax macro support.
 
 /*
 LINQ

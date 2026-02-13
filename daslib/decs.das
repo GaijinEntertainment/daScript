@@ -98,7 +98,7 @@ def EcsRequestPos(at : rtti::LineInfo) : EcsRequestPos {
 }
 
 struct public EcsRequest {
-    //! Individual ESC requests. Contains list of required components, list of components which are required to be absent.
+    //! Individual ECS requests. Contains list of required components, list of components which are required to be absent.
     //! Caches list of archetypes, which match the request.
     hash : ComponentHash        //! hash of the request
     req : array<string>         //! required components
@@ -109,7 +109,7 @@ struct public EcsRequest {
 
 struct public DecsState {
     //! Entire state of the ECS system.
-    //! Conntains archtypes, entities and entity free-list, entity lokup table, all archetypes and archetype lookups, etc.
+    //! Contains archetypes, entities and entity free-list, entity lookup table, all archetypes and archetype lookups, etc.
     archetypeLookup : table<ComponentHash; int>     //! lookup of archetype by its hash
     allArchetypes : array<Archetype>                //! all archetypes in the system
     entityFreeList : array<EntityId>                //! list of free entity IDs
@@ -123,12 +123,12 @@ typedef PassFunction = function<() : void>  //! One of the callbacks which form 
 
 struct public DecsPass {
     //! Individual pass of the update of the ECS system.
-    //! Contains pass name and list of all pass calblacks.
+    //! Contains pass name and list of all pass callbacks.
     name : string               //! name of the pass
     calls : array<PassFunction> //! list of all pass callbacks
 }
 
-var public decsState : DecsState    //! Full state of the ESC system.
+var public decsState : DecsState    //! Full state of the ECS system.
 var private deferActions : array<DeferAction>
 var private decsPasses : array<DecsPass>
 var private insideQuery : int
@@ -592,7 +592,7 @@ def private can_process_request(var erq : EcsRequest; var arch : Archetype) {
 }
 
 def public verify_request(var erq : EcsRequest) : tuple<ok : bool; error : string> {
-    //! Verifies ESC request. Returns pair of boolean (true for OK) and error message.
+    //! Verifies ECS request. Returns pair of boolean (true for OK) and error message.
     if (erq.hash == 0ul || (empty(erq.req) && empty(erq.reqn))) {
         return (true, "")     // this queries just about everything
     }
@@ -605,14 +605,14 @@ def public verify_request(var erq : EcsRequest) : tuple<ok : bool; error : strin
 }
 
 def public compile_request(var erq : EcsRequest) {
-    //! Compiles ESC request, by creating request hash.
+    //! Compiles ECS request, by creating request hash.
     sort_unique(erq.req)
     sort_unique(erq.reqn)
     erq.hash = req_hash(erq)
 }
 
 def public lookup_request(var erq : EcsRequest) {
-    //! Looks up ESC request in the request cache.
+    //! Looks up ECS request in the request cache.
     if (erq.hash == 0ul) {
         compile_request(erq)
     }
@@ -786,7 +786,7 @@ def public get_ro(arch : Archetype; name : string; value : auto(TT)) : array<TT 
 
 def public get_default_ro(arch : Archetype; name : string; value : auto(TT)) : iterator<TT const&> {
     //! Returns const iterator of component given specific name and type of component.
-    //! If component is not found - iterator will kepp returning the specified value.
+    //! If component is not found - iterator will keep returning the specified value.
     let idx = arch.components |> lower_bound(Component(name = name)) <| $(x, y) => x.name < y.name
     if (idx < length(arch.components)) {
         let comp & = unsafe(arch.components[idx])
@@ -818,7 +818,7 @@ def public get_default_ro(arch : Archetype; name : string; value : auto(TT)) : i
 
 def public get_optional(arch : Archetype; name : string; value : auto(TT)?) : iterator<TT -const -& -#?> {
     //! Returns const iterator of component given specific name and type of component.
-    //! If component is not found - iterator will kepp returning default value for the component type.
+    //! If component is not found - iterator will keep returning default value for the component type.
     let idx = arch.components |> lower_bound(Component(name = name)) <| $(x, y) => x.name < y.name
     if (idx < length(arch.components)) {
         let comp & = unsafe(arch.components[idx])
@@ -1183,7 +1183,7 @@ def public has(var cmp : ComponentMap; name : string) {
 }
 
 def public remove(var cmp : ComponentMap; name : string) {
-    //! Removes speicified value from the component map.
+    //! Removes specified value from the component map.
     let idx = lower_bound(cmp, ComponentValue(name = name)) <| $(x, y) => x.name < y.name
     if (idx < length(cmp) && cmp[idx].name == name) {
         cmp |> erase(idx)

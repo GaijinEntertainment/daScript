@@ -47,20 +47,10 @@ Hook for RST documentation generation.
 Document writers
 ++++++++++++++++
 
-  *  :ref:`document_enumerations (doc_file: file; mods: array\<Module?\>) : bool <function-rst_document_enumerations_file_array_ls_Module_q__gr_>` 
   *  :ref:`document (name: string; var mod: Module?; fname: string; var groups: array\<DocGroup\>; hook: DocsHook = DocsHook()) <function-rst_document_string_Module_q__string_array_ls_DocGroup_gr__DocsHook>` 
+  *  :ref:`document_enumeration (doc_file: file; mod: Module?; value: auto) : auto <function-rst_document_enumeration_file_Module_q__auto_0x41f>` 
+  *  :ref:`document_enumerations (doc_file: file; mods: array\<Module?\>) : bool <function-rst_document_enumerations_file_array_ls_Module_q__gr_>` 
   *  :ref:`documents (name: string; mods: array\<Module?\>; fname: string; var groups: array\<DocGroup\>; var hook: DocsHook = DocsHook()) <function-rst_documents_string_array_ls_Module_q__gr__string_array_ls_DocGroup_gr__DocsHook>` 
-  *  :ref:`document_enumeration (doc_file: file; mod: Module?; value: auto) : auto <function-rst_document_enumeration_file_Module_q__auto>` 
-
-.. _function-rst_document_enumerations_file_array_ls_Module_q__gr_:
-
-.. das:function:: document_enumerations(doc_file: file; mods: array<Module?>) : bool
-
-Generates RST documentation for all enumerations in the given modules.
-
-:Arguments: * **doc_file** :  :ref:`file <alias-file>` 
-
-            * **mods** : array< :ref:`Module <handle-rtti-Module>` ?>
 
 .. _function-rst_document_string_Module_q__string_array_ls_DocGroup_gr__DocsHook:
 
@@ -78,6 +68,28 @@ Generates RST documentation for a single module and writes it to a file.
 
             * **hook** :  :ref:`DocsHook <struct-rst-DocsHook>` 
 
+.. _function-rst_document_enumeration_file_Module_q__auto_0x41f:
+
+.. das:function:: document_enumeration(doc_file: file; mod: Module?; value: auto) : auto
+
+Generates RST documentation for a single enumeration type.
+
+:Arguments: * **doc_file** :  :ref:`file <alias-file>` 
+
+            * **mod** :  :ref:`Module <handle-rtti-Module>` ?
+
+            * **value** : auto
+
+.. _function-rst_document_enumerations_file_array_ls_Module_q__gr_:
+
+.. das:function:: document_enumerations(doc_file: file; mods: array<Module?>) : bool
+
+Generates RST documentation for all enumerations in the given modules.
+
+:Arguments: * **doc_file** :  :ref:`file <alias-file>` 
+
+            * **mods** : array< :ref:`Module <handle-rtti-Module>` ?>
+
 .. _function-rst_documents_string_array_ls_Module_q__gr__string_array_ls_DocGroup_gr__DocsHook:
 
 .. das:function:: documents(name: string; mods: array<Module?>; fname: string; groups: array<DocGroup>; hook: DocsHook = DocsHook())
@@ -93,18 +105,6 @@ Generates RST documentation for multiple modules and writes them to files.
             * **groups** : array< :ref:`DocGroup <struct-rst-DocGroup>` >
 
             * **hook** :  :ref:`DocsHook <struct-rst-DocsHook>` 
-
-.. _function-rst_document_enumeration_file_Module_q__auto:
-
-.. das:function:: document_enumeration(doc_file: file; mod: Module?; value: auto) : auto
-
-Generates RST documentation for a single enumeration type.
-
-:Arguments: * **doc_file** :  :ref:`file <alias-file>` 
-
-            * **mod** :  :ref:`Module <handle-rtti-Module>` ?
-
-            * **value** : auto
 
 ++++++++++++
 Descriptions
@@ -124,20 +124,14 @@ Returns a concise one-line description of an expression or type.
 Label makers
 ++++++++++++
 
+  *  :ref:`function_label_file (name: auto; value: smart_ptr\<TypeDecl\>; drop_args: int = 0) : auto <function-rst_function_label_file_auto_smart_ptr_ls_TypeDecl_gr__int_0x9e>` 
   *  :ref:`function_label_file (value: smart_ptr\<Function\>|Function?; drop_args: int = 0) : auto <function-rst_function_label_file_smart_ptr_ls_Function_gr_Function_q__int>` 
-  *  :ref:`function_label_file (name: auto; value: smart_ptr\<TypeDecl\>; drop_args: int = 0) : auto <function-rst_function_label_file_auto_smart_ptr_ls_TypeDecl_gr__int>` 
 
-.. _function-rst_function_label_file_smart_ptr_ls_Function_gr_Function_q__int:
 
-.. das:function:: function_label_file(value: smart_ptr<Function>|Function?; drop_args: int = 0) : auto
+function_label_file
+^^^^^^^^^^^^^^^^^^^
 
-Creates a unique, file-name-safe label string for a function.
-
-:Arguments: * **value** : option< :ref:`FunctionPtr <alias-FunctionPtr>` | :ref:`Function <handle-ast-Function>` ?>
-
-            * **drop_args** : int
-
-.. _function-rst_function_label_file_auto_smart_ptr_ls_TypeDecl_gr__int:
+.. _function-rst_function_label_file_auto_smart_ptr_ls_TypeDecl_gr__int_0x9e:
 
 .. das:function:: function_label_file(name: auto; value: smart_ptr<TypeDecl>; drop_args: int = 0) : auto
 
@@ -148,6 +142,12 @@ Creates a unique, file-name-safe label string for a function.
             * **value** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` >&
 
             * **drop_args** : int
+
+.. _function-rst_function_label_file_smart_ptr_ls_Function_gr_Function_q__int:
+
+.. das:function:: function_label_file(value: smart_ptr<Function>|Function?; drop_args: int = 0) : auto
+
+----
 
 ++++++++++++++++++
 RST section makers
@@ -186,6 +186,10 @@ Appends functions whose names match a regex to an existing documentation group.
 
             * **reg** :  :ref:`Regex <struct-regex-Regex>` 
 
+
+group_by_regex
+^^^^^^^^^^^^^^
+
 .. _function-rst_group_by_regex_string_Module_q__Regex:
 
 .. das:function:: group_by_regex(name: string; mod: Module?; reg: Regex) : DocGroup
@@ -202,13 +206,7 @@ Groups module items whose names match the provided regular expression under a do
 
 .. das:function:: group_by_regex(name: string; mods: array<Module?>; reg: Regex) : DocGroup
 
-Groups module items whose names match the provided regular expression under a documentation section.
-
-:Arguments: * **name** : string
-
-            * **mods** : array< :ref:`Module <handle-rtti-Module>` ?>
-
-            * **reg** :  :ref:`Regex <struct-regex-Regex>` 
+----
 
 .. _function-rst_hide_group_DocGroup:
 
@@ -229,7 +227,6 @@ Naming helpers
 .. das:function:: safe_function_name(name: string) : string
 
 Escapes special characters in a function name to produce a safe identifier for RST output.
-# === MODULE: strings_boost ===
 
 :Arguments: * **name** : string
 

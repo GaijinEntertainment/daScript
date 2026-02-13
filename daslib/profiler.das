@@ -12,6 +12,7 @@ module profiler shared private
 //! Attaches a debug agent that records per-function timing and optional heap-usage
 //! events. Results can be saved as Chrome-compatible trace JSON for visualization
 //! in ``chrome://tracing`` or Perfetto.
+//! See also ``profiler_boost`` for cross-context profiler control.
 
 require debugapi
 require fio

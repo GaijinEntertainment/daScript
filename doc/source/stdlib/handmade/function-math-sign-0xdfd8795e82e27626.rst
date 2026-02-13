@@ -1,1 +1,1 @@
-Returns the sign of the scalar value x as -1, 0, or 1 for double, float, int, or int64 types, indicating whether the value is negative, zero, or positive.
+Returns the sign of x component-wise: -1 for negative, 0 for zero, or 1 for positive. For unsigned types, the result is 0 or 1.

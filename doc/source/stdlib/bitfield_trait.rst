@@ -32,13 +32,13 @@ This macro converts each(bitfield) to the following code::
 Iteration
 +++++++++
 
-  *  :ref:`each (argT: auto) : auto <function-bitfield_trait_each_auto>` 
+  *  :ref:`each (argT: auto) : auto <function-bitfield_trait_each_auto_0x15>` 
 
-.. _function-bitfield_trait_each_auto:
+.. _function-bitfield_trait_each_auto_0x15:
 
 .. das:function:: each(argT: auto) : auto
 
-Same as assert, only the check will be not be repeated after the asseretion failed the first time.
+Iterates over the names of a bitfield type, yielding each bit name as a string.
 
 :Arguments: * **argT** : auto
 

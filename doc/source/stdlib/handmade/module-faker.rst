@@ -1,6 +1,8 @@
-The FAKER module implements function interception and mocking for testing.
-It allows replacing function implementations at runtime, enabling unit
-tests to substitute dependencies with test doubles.
+Random test-data generator.
+
+The ``Faker`` struct produces random values for every built-in type
+(integers, floats, vectors, strings, dates, booleans) using
+configurable ranges. Used by ``fuzzer`` for fuzz testing.
 
 All functions and symbols are in "faker" module, use require to get access to it. ::
 
