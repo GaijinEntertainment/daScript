@@ -50,7 +50,6 @@ Bitfield character set used internally by the regex engine.
 .. das:attribute:: ReGenRandom = iterator<uint>
 
 Random number generator callback used by ``re_gen`` for regex-based string generation.
-# === MODULE: regex_boost ===
 .. _alias-MaybeReNode:
 
 .. das:attribute:: variant MaybeReNode

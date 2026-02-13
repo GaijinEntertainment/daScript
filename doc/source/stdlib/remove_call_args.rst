@@ -21,6 +21,6 @@ Function annotations
 
 .. das:attribute:: remove_call_args
 
-This macro remove all arguments by given indeces [remove_call_args(arg=(1,2,3))]
+This macro removes all arguments by given indices [remove_call_args(arg=(1,2,3))]
 
 

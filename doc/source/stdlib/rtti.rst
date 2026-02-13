@@ -1241,18 +1241,11 @@ Property-like accessor that returns the number of fields declared in the given `
 
 :Properties: * **fieldCount** : int
 
-Handled type which represents structure-like object.
-name of the structure
-module where the structure is defined
-list of fields in the structure
-hash of the structure
-hash of the structure initializer
-flags associated with the structure
-number of fields in the structure
+Handled type which represents a structure-like annotation for exposing C++ types to daScript.
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  - size of the structure in bytes
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the annotation
 
-         * **cppName** :  :ref:`das_string <handle-builtin-das_string>`  - index of the first GC field, i.e. field which requires garbage collection marking
+         * **cppName** :  :ref:`das_string <handle-builtin-das_string>`  - C++ class name used in AOT code generation
 
 
 .. _handle-rtti-EnumValueInfo:

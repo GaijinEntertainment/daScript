@@ -1979,7 +1979,7 @@ Merges two iterators into an array by applying a specified function
 ----
 
 +++++++++++++++++++++
-Convertion operations
+Conversion operations
 +++++++++++++++++++++
 
   *  :ref:`to_sequence (a: array\<auto(TT)\>) : iterator\<TT\> <function-linq_to_sequence_array_ls_autoTT_gr_>` 

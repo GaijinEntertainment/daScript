@@ -35,7 +35,7 @@ Returns true if the expression is local to the current scope.
 
 .. das:function:: is_local_or_global_expr(expr: ExpressionPtr) : bool
 
-Returns true if expression is local the current scope or global scope.
+Returns true if expression is local to the current scope or global scope.
 
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 

@@ -96,7 +96,7 @@ def is_local_expr(expr : ExpressionPtr) {
 }
 
 def is_local_or_global_expr(expr : ExpressionPtr) {
-    //! Returns true if expression is local the current scope or global scope.
+    //! Returns true if expression is local to the current scope or global scope.
     if (expr is ExprVar) {
         let ev = expr as ExprVar
         return ev.varFlags.local || !(ev.varFlags.argument || ev.varFlags._block)

@@ -178,7 +178,7 @@ def private is_json_ptr_value(td : TypeDeclPtr) {
 [variant_macro(name="better_json")]
 class private BetterJsonMacro : AstVariantMacro {
     //! This macro is used to implement `is json_value` and `as json_value` runtime checks.
-    //! It essencially substitutes `value as name` with `value.value as name` and `value is name` with `value.value is name`.
+    //! It essentially substitutes `value as name` with `value.value as name` and `value is name` with `value.value is name`.
     def override visitExprIsVariant(prog : ProgramPtr; mod : Module?; expr : smart_ptr<ExprIsVariant>) : ExpressionPtr {
         //! Visit ExprIsVariant node.
         if (is_json_ptr_value(expr.value._type)) {

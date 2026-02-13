@@ -1,9 +1,9 @@
 
 .. _stdlib_ast_used:
 
-==========================
-AST type ussage collection
-==========================
+=========================
+AST type usage collection
+=========================
 
 The AST_USED module implements analysis passes that determine which AST nodes
 are actually used in the program. This information is used for dead code

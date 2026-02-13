@@ -162,7 +162,7 @@ right-handed (z towards viewer) look at matrix with origin at `Eye` and target a
 
 .. das:function:: ortho_rh(left: float; right: float; bottom: float; top: float; zNear: float; zFar: float) : float4x4
 
-right handed (z towards viwer) orthographic (parallel) projection matrix
+right handed (z towards viewer) orthographic (parallel) projection matrix
 
 :Arguments: * **left** : float
 
@@ -294,9 +294,9 @@ convert value from linear space to sRGB curve space
 
 ----
 
-++++++++++++++++++++++++++
-Color packig and unpacking
-++++++++++++++++++++++++++
++++++++++++++++++++++++++++
+Color packing and unpacking
++++++++++++++++++++++++++++
 
   *  :ref:`RGBA_TO_UCOLOR (xyzw: float4) : uint <function-math_boost_RGBA_TO_UCOLOR_float4>` 
   *  :ref:`RGBA_TO_UCOLOR (x: float; y: float; z: float; w: float) : uint <function-math_boost_RGBA_TO_UCOLOR_float_float_float_float>` 

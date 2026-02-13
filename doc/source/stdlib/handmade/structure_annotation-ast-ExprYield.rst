@@ -1,4 +1,4 @@
-Yield expression (`yield foo` or `yeild <- bar`)
+Yield expression (`yield foo` or `yield <- bar`)
 Location of the expression in source code
 Type of the expression
 Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)

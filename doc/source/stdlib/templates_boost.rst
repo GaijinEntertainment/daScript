@@ -397,7 +397,7 @@ Expression helpers
 
 .. das:function:: expression_at(expr: ExpressionPtr; at: LineInfo) : ExpressionPtr
 
-Force expression location, than return it.
+Force expression location, then return it.
 
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
@@ -460,7 +460,7 @@ Block helpers
 
 .. das:function:: move_unquote_block(expr: ExpressionPtr) : smart_ptr<ExprBlock>
 
-Moves the corresponding block subexpression expression form the ExprMakeBlock.
+Moves the corresponding block subexpression expression from the ExprMakeBlock.
 
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
@@ -468,7 +468,7 @@ Moves the corresponding block subexpression expression form the ExprMakeBlock.
 
 .. das:function:: unquote_block(expr: ExpressionPtr) : smart_ptr<ExprBlock>
 
-Returns the corresponding block subexpression expression form the ExprMakeBlock.
+Returns the corresponding block subexpression expression from the ExprMakeBlock.
 
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
@@ -734,7 +734,7 @@ add_type_ptr_ref
 
 .. das:function:: add_type_ptr_ref(st: StructurePtr; flags: TypeDeclFlags) : TypeDeclPtr
 
-Implementation details for the reification. This adds any array to the rules.
+Implementation details for the reification. Creates a type declaration from a structure smart pointer.
 
 :Arguments: * **st** :  :ref:`StructurePtr <alias-StructurePtr>` 
 

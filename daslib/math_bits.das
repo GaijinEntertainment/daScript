@@ -100,7 +100,7 @@ def public double_bits_to_int64(x : double) {
 }
 
 def public float_bits_to_int(x : float2) {
-    //! bit representation of x is interpreted as a int2
+    //! bit representation of x is interpreted as an int2
     unsafe {
         return reinterpret<int2> x
     }

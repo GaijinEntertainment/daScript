@@ -1,2 +1,1 @@
 Random number generator callback used by ``re_gen`` for regex-based string generation.
-# === MODULE: regex_boost ===

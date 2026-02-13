@@ -430,7 +430,7 @@ def apply_template(var rules : Template; at : LineInfo; var typ : smart_ptr<Type
 }
 
 def unquote_block(expr : ExpressionPtr) : smart_ptr<ExprBlock> {
-    //! Returns the corresponding block subexpression expression form the ExprMakeBlock.
+    //! Returns the corresponding block subexpression expression from the ExprMakeBlock.
     assert(expr is ExprMakeBlock)
     unsafe {
         let mkb <- reinterpret<smart_ptr<ExprMakeBlock>>(expr)
@@ -440,7 +440,7 @@ def unquote_block(expr : ExpressionPtr) : smart_ptr<ExprBlock> {
 }
 
 def move_unquote_block(var expr : ExpressionPtr&) : smart_ptr<ExprBlock> {
-    //! Moves the corresponding block subexpression expression form the ExprMakeBlock.
+    //! Moves the corresponding block subexpression expression from the ExprMakeBlock.
     assert(expr is ExprMakeBlock)
     unsafe {
         var mkb <- reinterpret<smart_ptr<ExprMakeBlock>>(expr)
@@ -615,7 +615,7 @@ def public add_array_ptr_ref(var a : array<smart_ptr<auto(TT)>>) : array<smart_p
 }
 
 def public add_type_ptr_ref(a : TypeDeclPtr; flags : TypeDeclFlags) : TypeDeclPtr {
-    //! Implementation details for the reification. This adds any array to the rules.
+    //! Implementation details for the reification. Clones a type declaration and applies given flags.
     // var q := a
     var inscope q <- clone_type(a)
     q.flags |= flags & (
@@ -641,28 +641,28 @@ def public enum_class_type(st) {
 }
 
 def public add_type_ptr_ref(var st : StructurePtr; flags : TypeDeclFlags) : TypeDeclPtr {
-    //! Implementation details for the reification. This adds any array to the rules.
+    //! Implementation details for the reification. Creates a type declaration from a structure smart pointer.
     return <- new TypeDecl(at = st.at, baseType = Type.tStructure, structType = get_ptr(st), flags = flags)
 }
 
 def public add_type_ptr_ref(var st : Structure?; flags : TypeDeclFlags) : TypeDeclPtr {
-    //! Implementation details for the reification. This adds any array to the rules.
+    //! Implementation details for the reification. Creates a type declaration from a structure raw pointer.
     return <- new TypeDecl(at = st.at, baseType = Type.tStructure, structType = st, flags = flags)
 }
 
 def public add_type_ptr_ref(var st : EnumerationPtr; flags : TypeDeclFlags) : TypeDeclPtr {
-    //! Implementation details for the reification. This adds any array to the rules.
+    //! Implementation details for the reification. Creates a type declaration from an enumeration smart pointer.
     return <- new TypeDecl(at = st.at, baseType = enum_class_type(st), enumType = get_ptr(st), flags = flags)
 }
 
 def public add_type_ptr_ref(var st : Enumeration?; flags : TypeDeclFlags) : TypeDeclPtr {
-    //! Implementation details for the reification. This adds any array to the rules.
+    //! Implementation details for the reification. Creates a type declaration from an enumeration raw pointer.
     return <- new TypeDecl(at = st.at, baseType = enum_class_type(st), enumType = st, flags = flags)
 }
 
 [unused_argument(anything), unused_argument(flags)]
 def public add_type_ptr_ref(anything : auto(TT); flags : TypeDeclFlags) : TypeDeclPtr {
-    //! Implementation details for the reification. This adds any array to the rules.
+    //! Implementation details for the reification. Fallback overload that produces a compile-time error for unsupported types.
     concept_assert(false, "$t reification expected type `TypeDeclPtr`, `StructurePtr`, or `Structure?`, but received {typeinfo typename(type<TT>)}")
     var inscope decl : TypeDeclPtr
     return <- decl
@@ -1072,7 +1072,7 @@ def public apply_qtype(var expr : smart_ptr<Expression>; blk : block<(var rules 
 }
 
 def public expression_at(var expr : ExpressionPtr; at : LineInfo) : ExpressionPtr {
-    //! Force expression location, than return it.
+    //! Force expression location, then return it.
     expr |> force_at(at)
     return <- expr
 }

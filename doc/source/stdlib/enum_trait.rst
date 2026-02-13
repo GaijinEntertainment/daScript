@@ -90,7 +90,7 @@ Enumeration conversion
 
 .. das:function:: enum_to_table(ent: auto(EnumT)) : table<string, EnumT>
 
-converts enum type to array of tuples (name, value)
+converts enum type to a table of name => value pairs
  usage: let t = enum_to_table(type<EnumType>)
 
 :Arguments: * **ent** : auto(EnumT)

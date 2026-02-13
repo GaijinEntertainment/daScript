@@ -115,7 +115,7 @@ float_bits_to_int
 
 .. das:function:: float_bits_to_int(x: float2) : int2
 
-bit representation of x is interpreted as a int2
+bit representation of x is interpreted as an int2
 
 :Arguments: * **x** : float2
 

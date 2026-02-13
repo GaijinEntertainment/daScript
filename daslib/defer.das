@@ -37,7 +37,7 @@ def public nada() {
 
 [tag_function_macro(tag="defer_tag")]
 class DeferMacro : AstFunctionAnnotation {
-    //! This macro covnerts defer() <| block expression
+    //! This macro converts defer() <| block expression
     //! into {}, and move block to the finally section of the current block
     def override transform(var call : smart_ptr<ExprCallFunc>; var errors : das_string) : ExpressionPtr {
         var success = true

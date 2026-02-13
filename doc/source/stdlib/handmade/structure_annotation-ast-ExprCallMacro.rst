@@ -1,4 +1,4 @@
-Compilation time only expression which holds temporary infromation for the `AstCallMacro`.
+Compilation time only expression which holds temporary information for the `AstCallMacro`.
 Location of the expression in source code
 Type of the expression
 Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)

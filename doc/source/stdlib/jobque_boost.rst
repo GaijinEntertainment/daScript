@@ -44,7 +44,7 @@ Function annotations
 
 this macro handles `new_job` and `new_thread` calls.
 the call is replaced with `new_job_invoke` and `new_thread_invoke` accordingly.
-a cloning infastructure is generated for the lambda, which is invoked in the new context.
+a cloning infrastructure is generated for the lambda, which is invoked in the new context.
 
 +++++++++++
 Invocations
@@ -173,7 +173,7 @@ pushes values to the channel (at the end)
 
 .. das:function:: push_batch_clone(channel: Channel?; data: array<auto(TT)>) : auto
 
-clones data and pushed values to the channel (at the end)
+clones data and pushes values to the channel (at the end)
 
 :Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
 
@@ -183,7 +183,7 @@ clones data and pushed values to the channel (at the end)
 
 .. das:function:: push_clone(channel: Channel?; data: auto(TT)) : auto
 
-clones data and pushed value to the channel (at the end)
+clones data and pushes value to the channel (at the end)
 
 :Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
 

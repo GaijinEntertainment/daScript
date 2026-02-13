@@ -5,7 +5,7 @@ Runtime type information of the class of the expression (i.e "ExprConstant", "Ex
 Expression generation flags
 Expression flags
 Expression print flags
-Name of the call (unsued)
+Name of the call (unused)
 Arguments (unused)
 If arguments failed to infer their types
 Location of the expression in source code

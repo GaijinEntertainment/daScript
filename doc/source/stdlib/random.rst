@@ -123,7 +123,7 @@ constructs seed vector out of 2d screen coordinates and frame counter `cf`
 
 .. das:function:: random_uint(seed: int4&) : auto
 
-random integer 0..32768*32768-1 (LCG_RAND_MAX_BIG)
+random unsigned integer using 3-component LCG, covering full uint range
 
 :Arguments: * **seed** : int4&
 
@@ -153,7 +153,7 @@ Specific distributions
 
 .. das:function:: random_in_unit_disk(seed: int4&) : auto
 
-random float3 unit vector (length=1) which happens to be inside a disk R=1, Z=0
+Returns a random float3 point uniformly distributed inside the unit disk (length <= 1, z=0).
 
 :Arguments: * **seed** : int4&
 
@@ -161,7 +161,7 @@ random float3 unit vector (length=1) which happens to be inside a disk R=1, Z=0
 
 .. das:function:: random_in_unit_sphere(seed: int4&) : auto
 
-random float3 unit vector (length=1) which happens to be inside a sphere R=1
+Returns a random float3 point uniformly distributed inside the unit sphere (length <= 1).
 
 :Arguments: * **seed** : int4&
 

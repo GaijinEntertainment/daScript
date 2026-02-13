@@ -1,1 +1,1 @@
-Computes the refraction of float2 or float3 vector v through a surface with unit normal n using Snell's law with index ratio nint, writing the result to outRefracted and returning false if total internal reflection occurs.
+Computes the refraction direction of vector v through a surface with unit normal n using Snell's law with index of refraction ratio nint. Returns a zero vector if total internal reflection occurs.

@@ -163,7 +163,7 @@ Location of the ECS request in the code (source file and line number).
 
 .. das:attribute:: EcsRequest
 
-Individual ESC requests. Contains list of required components, list of components which are required to be absent.
+Individual ECS requests. Contains list of required components, list of components which are required to be absent.
 Caches list of archetypes, which match the request.
 
 :Fields: * **hash** :  :ref:`ComponentHash <alias-ComponentHash>`  - hash of the request
@@ -204,7 +204,7 @@ Contains archetypes, entities and entity free-list, entity lookup table, all arc
 .. das:attribute:: DecsPass
 
 Individual pass of the update of the ECS system.
-Contains pass name and list of all pass calblacks.
+Contains pass name and list of all pass callbacks.
 
 :Fields: * **name** : string - name of the pass
 
@@ -473,7 +473,7 @@ Returns true if component map has specified component.
 
 .. das:function:: remove(cmp: ComponentMap; name: string)
 
-Removes speicified value from the component map.
+Removes specified value from the component map.
 
 :Arguments: * **cmp** :  :ref:`ComponentMap <alias-ComponentMap>` 
 
@@ -724,7 +724,7 @@ Request is returned by a specified function.
 .. das:function:: get_default_ro(arch: Archetype; name: string; value: auto(TT)) : iterator<TT const&>
 
 Returns const iterator of component given specific name and type of component.
-If component is not found - iterator will kepp returning the specified value.
+If component is not found - iterator will keep returning the specified value.
 
 :Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>` 
 
@@ -737,7 +737,7 @@ If component is not found - iterator will kepp returning the specified value.
 .. das:function:: get_optional(arch: Archetype; name: string; value: auto(TT)?) : iterator<TT?>
 
 Returns const iterator of component given specific name and type of component.
-If component is not found - iterator will kepp returning default value for the component type.
+If component is not found - iterator will keep returning default value for the component type.
 
 :Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>` 
 
@@ -788,7 +788,7 @@ Constructs EcsRequestPos from rtti::LineInfo.
 
 .. das:function:: compile_request(erq: EcsRequest)
 
-Compiles ESC request, by creating request hash.
+Compiles ECS request, by creating request hash.
 
 :Arguments: * **erq** :  :ref:`EcsRequest <struct-decs-EcsRequest>` 
 
@@ -796,7 +796,7 @@ Compiles ESC request, by creating request hash.
 
 .. das:function:: lookup_request(erq: EcsRequest) : int
 
-Looks up ESC request in the request cache.
+Looks up ECS request in the request cache.
 
 :Arguments: * **erq** :  :ref:`EcsRequest <struct-decs-EcsRequest>` 
 
@@ -804,7 +804,7 @@ Looks up ESC request in the request cache.
 
 .. das:function:: verify_request(erq: EcsRequest) : tuple<ok:bool;error:string>
 
-Verifies ESC request. Returns pair of boolean (true for OK) and error message.
+Verifies ECS request. Returns pair of boolean (true for OK) and error message.
 
 :Arguments: * **erq** :  :ref:`EcsRequest <struct-decs-EcsRequest>` 
 

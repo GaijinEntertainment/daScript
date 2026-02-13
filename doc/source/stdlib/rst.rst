@@ -227,7 +227,6 @@ Naming helpers
 .. das:function:: safe_function_name(name: string) : string
 
 Escapes special characters in a function name to produce a safe identifier for RST output.
-# === MODULE: strings_boost ===
 
 :Arguments: * **name** : string
 

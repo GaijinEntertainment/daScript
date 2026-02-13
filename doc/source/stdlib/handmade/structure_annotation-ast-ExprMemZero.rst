@@ -5,7 +5,7 @@ Runtime type information of the class of the expression (i.e "ExprConstant", "Ex
 Expression generation flags
 Expression flags
 Expression print flags
-Name of the set-insert expression
-Arguments of the set-insert expression
+Name of the memzero call
+Arguments of the memzero call
 Whether the arguments failed to infer types
-Location of the enclosure where the set-insert is used
+Location of the enclosure where the memzero is used

@@ -145,7 +145,7 @@ Uri
 
 .. das:function:: Uri(arg0: string implicit) : Uri
 
-Constructs a new ``Uri`` object by parsing the given URI string.
+Constructs a new empty ``Uri`` object.
 
 :Arguments: * **arg0** : string implicit
 

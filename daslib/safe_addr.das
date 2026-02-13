@@ -28,7 +28,7 @@ def public safe_addr(var x : auto(T)& ==const) : T -&?# {
 
 [tag_function(safe_addr_tag)]
 def public safe_addr(x : auto(T)& ==const) : T -&? const# {
-    //! returns temporary pointer to the given expressio
+    //! returns temporary pointer to the given expression
     unsafe {
         return reinterpret<T -&? const#>(addr(x))
     }
@@ -89,7 +89,7 @@ class SharedAddrMacro : AstFunctionAnnotation {
 
 [tag_function(temp_value_tag)]
 def public temp_value(x : auto(T)& ==const) : T&# const {
-    //! returns temporary pointer to the given expression
+    //! returns temporary reference to the given expression
     unsafe {
         return reinterpret<T&# const>(x)
     }
@@ -97,7 +97,7 @@ def public temp_value(x : auto(T)& ==const) : T&# const {
 
 [tag_function(temp_value_tag)]
 def public temp_value(var x : auto(T)& ==const) : T&# {
-    //! returns temporary pointer to the given expression
+    //! returns temporary reference to the given expression
     unsafe {
         return reinterpret<T&#>(x)
     }

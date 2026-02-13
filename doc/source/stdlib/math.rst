@@ -1010,7 +1010,7 @@ sign
 
 .. das:function:: sign(x: uint) : uint
 
-Returns the sign of the scalar value x as -1, 0, or 1 for double, float, int, or int64 types, indicating whether the value is negative, zero, or positive.
+Returns the sign of x component-wise: -1 for negative, 0 for zero, or 1 for positive. For unsigned types, the result is 0 or 1.
 
 :Arguments: * **x** : uint
 
@@ -1724,7 +1724,7 @@ refract
 
 .. das:function:: refract(v: float2; n: float2; nint: float) : float2
 
-Computes the refraction of float2 or float3 vector v through a surface with unit normal n using Snell's law with index ratio nint, writing the result to outRefracted and returning false if total internal reflection occurs.
+Computes the refraction direction of vector v through a surface with unit normal n using Snell's law with index of refraction ratio nint. Returns a zero vector if total internal reflection occurs.
 
 :Arguments: * **v** : float2
 
@@ -2439,7 +2439,7 @@ Returns true if two float3x3 matrices are exactly equal, comparing all elements 
 
 .. das:function:: float3x4 implicit!=(x: float3x4 implicit; y: float3x4 implicit) : bool
 
-Returns true if two float3x3 matrices are not equal, comparing all elements component-wise.
+Returns true if two float3x4 matrices are not equal, comparing all elements component-wise.
 
 :Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
 
@@ -2470,7 +2470,7 @@ Multiplies two 3x4 matrices and returns the resulting 3x4 matrix.
 
 .. das:function:: float3x4 implicit==(x: float3x4 implicit; y: float3x4 implicit) : bool
 
-Returns true if two float3x3 matrices are exactly equal, comparing all elements component-wise.
+Returns true if two float3x4 matrices are exactly equal, comparing all elements component-wise.
 
 :Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
 
@@ -2480,7 +2480,7 @@ Returns true if two float3x3 matrices are exactly equal, comparing all elements 
 
 .. das:function:: float4x4 implicit!=(x: float4x4 implicit; y: float4x4 implicit) : bool
 
-Returns true if two float3x3 matrices are not equal, comparing all elements component-wise.
+Returns true if two float4x4 matrices are not equal, comparing all elements component-wise.
 
 :Arguments: * **x** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
 
@@ -2511,7 +2511,7 @@ Transforms a float4 vector by a 4x4 matrix.
 
 .. das:function:: float4x4 implicit==(x: float4x4 implicit; y: float4x4 implicit) : bool
 
-Returns true if two float3x3 matrices are exactly equal, comparing all elements component-wise.
+Returns true if two float4x4 matrices are exactly equal, comparing all elements component-wise.
 
 :Arguments: * **x** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
 
@@ -2635,7 +2635,7 @@ Matrix manipulation
 
 .. das:function:: compose(pos: float3; rot: float4; scale: float3) : float4x4
 
-Constructs a float3x4 transformation matrix from a float3x3 rotation matrix and a float3 translation position.
+Constructs a float4x4 transformation matrix from a float3 translation position, a float4 quaternion rotation, and a float3 scale.
 
 :Arguments: * **pos** : float3
 
@@ -2647,7 +2647,7 @@ Constructs a float3x4 transformation matrix from a float3x3 rotation matrix and 
 
 .. das:function:: decompose(mat: float4x4 implicit; pos: float3& implicit; rot: float4& implicit; scale: float3& implicit)
 
-Decomposes a float3x4 transformation matrix into its float3x3 rotation component and float3 translation position, writing the results into the output arguments rot and pos.
+Decomposes a float4x4 transformation matrix into its float3 translation position, float4 quaternion rotation, and float3 scale components., writing the results into the output arguments rot and pos.
 
 :Arguments: * **mat** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
 
@@ -2665,7 +2665,7 @@ determinant
 
 .. das:function:: determinant(x: float3x4 implicit) : float
 
-Returns the determinant of a float3x3 matrix as a float scalar; a zero determinant indicates the matrix is singular and non-invertible.
+Returns the determinant of a float3x4 matrix as a float scalar; a zero determinant indicates the matrix is singular and non-invertible.
 
 :Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
 
@@ -2723,7 +2723,7 @@ Returns the inverse of a matrix, such that multiplying the original by its inver
 
 .. das:function:: look_at(eye: float3; at: float3; up: float3) : float4x4
 
-Constructs a float3x4 look-at view transformation matrix from an eye position, a target point to look at, and an up direction vector.
+Constructs a float4x4 look-at view transformation matrix from eye position, target position, and up vector. from an eye position, a target point to look at, and an up direction vector.
 
 :Arguments: * **eye** : float3
 
@@ -2739,7 +2739,7 @@ orthonormal_inverse
 
 .. das:function:: orthonormal_inverse(m: float3x3 implicit) : float3x3
 
-Returns the inverse of a float3x4 matrix whose rotational 3x3 part is orthonormal (each axis is unit length and mutually perpendicular), computed more efficiently than a general matrix inverse.
+Returns the inverse of a float3x3 orthonormal matrix (each axis is unit length and mutually perpendicular), computed more efficiently than a general matrix inverse.
 
 :Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>`  implicit
 
@@ -2791,7 +2791,7 @@ Rotates a float3 vector v by the 3x3 rotation part of the float3x4 matrix m, ign
 
 .. das:function:: translation(xyz: float3) : float4x4
 
-Constructs a float3x4 matrix representing a pure translation by the float3 offset xyz, with the rotation part set to identity.
+Constructs a float4x4 matrix representing a pure translation by the given float3 offset. by the float3 offset xyz, with the rotation part set to identity.
 
 :Arguments: * **xyz** : float3
 

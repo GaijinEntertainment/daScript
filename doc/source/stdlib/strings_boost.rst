@@ -127,7 +127,6 @@ Formatting
 .. das:function:: wide(text: string implicit; width: int) : string
 
 Pads the string with trailing spaces to reach the specified minimum width.
-# === MODULE: uriparser ===
 
 :Arguments: * **text** : string implicit
 

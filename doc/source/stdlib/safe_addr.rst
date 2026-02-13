@@ -55,7 +55,7 @@ safe_addr
 
 .. das:function:: safe_addr(x: auto(T) const& ==const) : T?#
 
-returns temporary pointer to the given expressio
+returns temporary pointer to the given expression
 
 :Arguments: * **x** : auto(T)&!
 
@@ -123,7 +123,7 @@ temp_value
 
 .. das:function:: temp_value(x: auto(T)& ==const) : T&#
 
-returns temporary pointer to the given expression
+returns temporary reference to the given expression
 
 :Arguments: * **x** : auto(T)&!
 

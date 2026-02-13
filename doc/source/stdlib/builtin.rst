@@ -2178,7 +2178,7 @@ Returns `true` if string interning is enabled in the current context, meaning id
 
 .. das:function:: panic(text: string implicit)
 
-will cause panic. The program will be determinated if there is no recover. Panic is not a error handling mechanism and can not be used as such. It is indeed panic, fatal error. It is not supposed that program can completely correctly recover from panic, recover construction is provided so program can try to correcly shut-down or report fatal error. If there is no recover withing script, it will be called in calling eval (in C++ callee code).
+will cause panic. The program will be terminated if there is no recover. Panic is not an error handling mechanism and can not be used as such. It is indeed panic, fatal error. It is not supposed that program can completely correctly recover from panic, recover construction is provided so program can try to correctly shut-down or report fatal error. If there is no recover within the script, it will be called in calling eval (in C++ callee code).
 
 :Arguments: * **text** : string implicit
 

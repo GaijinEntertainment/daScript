@@ -133,7 +133,7 @@ iterates over `src` and yields only those elements for which `blk` returns true
 
 .. das:function:: flatten(it: iterator<auto(TT)>) : auto
 
-iterates over `it`, than iterates over each element of each element of `it` and yields it
+iterates over `it`, then iterates over each element of each element of `it` and yields it
 
 :Arguments: * **it** : iterator<auto(TT)>
 
@@ -173,7 +173,7 @@ iterates over `src` and yields the result of `blk` for each element
 
 .. das:function:: not(x: auto) : auto
 
-yeilds !x
+yields !x
 
 :Arguments: * **x** : auto
 
