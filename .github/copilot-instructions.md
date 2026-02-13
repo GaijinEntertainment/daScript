@@ -24,8 +24,13 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - **Array literals:** `[1, 2, 3]` (commas, square brackets) — NOT `[[int 1; 2; 3]]`
 - **Struct init:** `Foo(a=1, b=2)` — NOT `[[Foo() a=1, b=2]]`
 - **No `[[ ]]` for `new`** — `new` always uses parentheses: `new Foo(x=1)`
+- **Table literals:** `{ "k" => v, "k2" => v2 }` (single braces, commas) — NOT `{{ "k" => v; "k2" => v2 }}`
+- **Named arguments:** `foo([name = value])` with square brackets — NOT `foo(name=value)`
 - **Block arguments with `<|`:** use `$()` or `@()` prefix: `defer() <| $() { ... }` — NOT `defer <| { ... }` (bare `{ }` creates a table literal)
 - **Lambda:** `@(args) { body }` or `@@(args) { body }` (no-capture)
+- **Bitfield variables** need explicit type for `.field` access and printing: `var f : MyBitfield`
+- **Bitfield dot access:** read with `f.flag` (returns bool), write with `f.flag = true/false`
+- **`typeinfo`** special syntax: `typeinfo enum_length(type<MyEnum>)` — NOT `typeinfo(enum_length type<MyEnum>)`
 - **`static_if`:** `static_if (condition) { ... }` — parentheses required in gen2
 
 ### Important defaults
@@ -34,8 +39,18 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - `smart_ptr<T>` only works with C++ handled types (not user structs)
 - No implicit type promotion: `int + float` is a compile error — both sides must match
 - No `bool(int)` cast — use `x != 0`
-- `string(x)` works for any type; `int("123")` does NOT work — use `to_int` from `require strings`
+- `string(x)` works for numeric types; `string(bool)` does NOT work — use string interpolation `"{flag}"`
+- `int("123")` does NOT work — use `to_int` from `require strings`
 - Hex literals like `0x3F800000` are `uint` by default — use `int(0x3F)` for int
+- Float printing is compact: `3.14` not `3.140000`; uint prints as hex: `0xff` not `255`
+
+### Memory management
+
+- daScript has garbage collection — `delete` is not required in most code
+- `delete` is available for explicit cleanup but requires `unsafe` for heap pointers
+- `var inscope` declares automatic cleanup in a `finally` block
+- Prefer omitting `delete` in tutorials and examples unless the topic is memory management
+- Struct fields without initializers require defaults or `@safe_when_uninitialized`
 
 ## Key Directories
 
@@ -47,6 +62,8 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - `doc/source/reference/language/` — RST language documentation (36 files)
 - `doc/source/stdlib/` — RST standard library documentation (auto-generated + handmade)
 - `doc/reflections/` — Documentation generation tools (das2rst.das, rst.das, gen_module_examples.py)
+- `tutorials/` — Language tutorial `.das` files (10 progressive tutorials)
+- `doc/source/reference/tutorials/` — RST companion pages for each tutorial
 - `modules/` — External plugin modules
 
 ## Standard Library Documentation
