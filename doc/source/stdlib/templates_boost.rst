@@ -82,6 +82,7 @@ This macro implements expression block to array reification 'qmacro_block_to_arr
 
 .. das:attribute:: qmacro_template_class
 
+Call macro for quoting named template class methods.
 This macro implements expression reification for the named expressions (function, variable, etc.)
 
 .. _call-macro-templates_boost-qmacro_method:
@@ -94,6 +95,7 @@ This macro implements expression reification for class methods.
 
 .. das:attribute:: qmacro_template_function
 
+Call macro for quoting named template functions.
 This macro implements expression reification for the named expressions (function, variable, etc.)
 
 .. _call-macro-templates_boost-qmacro:

@@ -55,6 +55,7 @@ def match_error(var errors : array<MatchError>; msg : string; at : LineInfo) {//
 }
 
 enum MatchType {
+    //! Type of pattern match clause.
     none
     as_is
     copy

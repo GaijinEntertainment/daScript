@@ -98,7 +98,6 @@ THE SOFTWARE.
    dynamic_cast_rtti.rst
    generic_return.rst
    heartbeat.rst
-   linked_list.rst
    lint.rst
    lint_everything.rst
    profiler.rst

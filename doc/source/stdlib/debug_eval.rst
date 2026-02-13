@@ -21,7 +21,16 @@ Structures
 
 .. das:attribute:: Result
 
-|detail/structure-debug_eval-Result|
+Result of evaluating a debug expression.
+
+:Fields: * **tinfo** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`  - Type information of the result.
+
+         * **value** : float4 - Raw value storage for the result.
+
+         * **data** : void? - Pointer to the result data, if available.
+
+         * **error** : string - Error message, empty if evaluation succeeded.
+
 
 +++++++++++++
 Uncategorized

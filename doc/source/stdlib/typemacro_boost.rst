@@ -21,7 +21,14 @@ Structures
 
 .. das:attribute:: TypeMacroTemplateArgument
 
-|detail/structure-typemacro_boost-TypeMacroTemplateArgument|
+Holds a type macro template argument with its name and inferred type.
+
+:Fields: * **name** : string - Name of the template argument.
+
+         * **argument_type** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>`  - Declared argument type from the template signature.
+
+         * **inferred_type** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>`  - Inferred concrete type after template instantiation.
+
 
 ++++++++++++++++++++
 Function annotations
@@ -49,13 +56,13 @@ Structure macros
 
 .. das:attribute:: typemacro_documentation
 
-|detail/structure_macro-typemacro_boost-typemacro_documentation|
+Structure annotation that stores type macro documentation metadata.
 
 .. _handle-typemacro_boost-typemacro_template:
 
 .. das:attribute:: typemacro_template
 
-|detail/structure_macro-typemacro_boost-typemacro_template|
+Structure annotation that marks a struct as a type macro template instance.
 
 .. _handle-typemacro_boost-template_structure:
 

@@ -21,6 +21,7 @@ struct public OnlyUsedTypes {
 }
 
 class TypeVisitor : AstVisitor {
+    //! AST visitor that collects referenced types and structures.
     usedTypes : OnlyUsedTypes //! collected used types
     def TypeVisitor {
         pass

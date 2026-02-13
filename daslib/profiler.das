@@ -21,6 +21,7 @@ require ast
 
 [skip_field_lock_check]
 struct PerfNode {
+    //! Performance tree node with timing data.
     fun : SimFunction?
     count : uint64
     total_time : int64
@@ -33,6 +34,7 @@ struct PerfNode {
 }
 
 struct PerfEvent {
+    //! Recorded performance event with mangled name.
     fun : SimFunction?
     ts : int64
     entering : bool
@@ -42,6 +44,7 @@ struct PerfEvent {
 
 [skip_field_lock_check]
 struct PerfContext {
+    //! Per-context profiling data with event history.
     events : array<PerfEvent>
     enabled : bool
 }
@@ -56,6 +59,7 @@ def public set_enable_profiler(var ctxId : uint64; enabled : bool) {
 }
 
 class ProfilerDebugAgent : DapiDebugAgent {
+    //! Debug agent that collects function-level profiling data.
     us0 : int64 = 0l
     events : table<uint64; PerfContext>
     out : FILE const?

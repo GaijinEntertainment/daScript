@@ -22,7 +22,7 @@ Function annotations
 
 .. das:attribute:: AwaitMacro
 
-|detail/function_annotation-async_boost-AwaitMacro|
+Function annotation that implements coroutine await semantics.
 
 .. _handle-async_boost-AwaitCoroutineMacro:
 

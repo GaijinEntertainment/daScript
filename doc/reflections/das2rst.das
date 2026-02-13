@@ -62,7 +62,7 @@ require daslib/macro_boost
 require daslib/class_boost
 require daslib/soa
 require daslib/base64
-require daslib/linked_list
+// require daslib/linked_list                  // spoof template, not documentable
 require daslib/bool_array
 require daslib/bitfield_boost
 require daslib/bitfield_trait
@@ -753,12 +753,12 @@ def document_module_base64(root : string) {
     document("Base64 encoding and decoding", mod, "base64.rst", groups)
 }
 
-def document_module_linked_list(root : string) {
-    var mod = find_module("linked_list")
-    var groups <- array<DocGroup>(
-    )
-    document("Intrusive linked list", mod, "linked_list.rst", groups)
-}
+// def document_module_linked_list(root : string) {
+//     var mod = find_module("linked_list")
+//     var groups <- array<DocGroup>(
+//     )
+//     document("Intrusive linked list", mod, "linked_list.rst", groups)
+// }
 
 def document_module_bool_array(root : string) {
     var mod = find_module("bool_array")
@@ -1037,7 +1037,7 @@ def main {
     document_module_jobque_boost(root)
     document_module_json_boost(root)
     document_module_json(root)
-    document_module_linked_list(root)
+    // document_module_linked_list(root)         // spoof template, not documentable
     document_module_linq(root)
     document_module_linq_boost(root)
     document_module_lint(root)

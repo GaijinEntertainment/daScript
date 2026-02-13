@@ -31,6 +31,7 @@ def noBracket(expr) {
 
 
 class PrintVisitor : AstVisitor {
+    //! AST visitor that pretty-prints daScript code back to source text.
     writer : StringBuilderWriter?
     extraTypeInfo : bool = true;
     printCStyle : bool = true;
@@ -1069,18 +1070,23 @@ class PrintVisitor : AstVisitor {
     }
 }
 
+//! Type alias for int, used in self-test pretty-printing.
 typedef Integer = int
+//! Variant type alias holding either an int or a float, used in self-test pretty-printing.
 typedef IorF = variant<i : int; f : float>
 
 
 enum FooBar {
+    //! Test enumeration used for self-test pretty-printing.
     Foo
     Bar = 13
 }
 
 
+//! Test structure used for self-test pretty-printing.
 [comment(x=5, msg="haha")]
 struct Foo {
+    //! Test structure used for self-test pretty-printing.
     @do_not_delete@temp = 13 a : int = 11;
     b : array<Foo?>;
 }

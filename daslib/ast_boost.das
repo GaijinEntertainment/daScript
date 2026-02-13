@@ -20,6 +20,7 @@ require ast public
 require strings
 require daslib/strings_boost
 
+//! Smart pointer type alias for AnnotationDeclaration.
 typedef AnnotationDeclarationPtr = smart_ptr<AnnotationDeclaration>
 
 def isVectorType(typ : Type) {
@@ -166,6 +167,7 @@ def override_method(var str : StructurePtr; name, funcName : string) : bool {
 }
 
 class MacroMacro : AstFunctionAnnotation {
+    //! Function annotation that guards the function body with an is_compiling_macros check.
     def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         //! Wraps function body in an `is_compiling_macros` guard and marks program as needing macro module.
         compiling_program().flags |= ProgramFlags.needMacroModule
@@ -180,6 +182,7 @@ class MacroMacro : AstFunctionAnnotation {
 }
 
 class TagFunctionAnnotation : AstFunctionAnnotation {
+    //! Function annotation that validates tag_function arguments are boolean tag names.
     def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         //! Validates that tag_function annotation arguments are boolean tag names.
         for (arg in args) {
@@ -194,6 +197,7 @@ class TagFunctionAnnotation : AstFunctionAnnotation {
 }
 
 class TagStructureAnnotation : AstStructureAnnotation {
+    //! Structure annotation that validates tag_structure arguments are boolean tag names.
     def override apply(var str : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         //! Validates that tag_structure annotation arguments are boolean tag names.
         for (arg in args) {
@@ -385,6 +389,7 @@ def setup_macro(name : string; at : LineInfo) : ExprBlock? {
 }
 
 class SetupAnyAnnotation : AstStructureAnnotation {
+    //! Base structure annotation for auto-registering macro classes via generated setup calls.
     annotation_function_call : string = ""
     name : string
     def setup_call(var st : StructurePtr; var cll : smart_ptr<ExprCall>) {
@@ -415,82 +420,102 @@ class SetupAnyAnnotation : AstStructureAnnotation {
 }
 
 class SetupFunctionAnnotation : SetupAnyAnnotation {
+    //! Registers annotated structure as a function annotation macro.
     override annotation_function_call : string = "add_new_function_annotation"
 }
 
 class SetupBlockAnnotation : SetupAnyAnnotation {
+    //! Registers annotated structure as a block annotation macro.
     override annotation_function_call : string = "add_new_block_annotation"
 }
 
 class SetupStructureAnnotation : SetupAnyAnnotation {
+    //! Registers annotated structure as a structure annotation macro.
     override annotation_function_call : string = "add_new_structure_annotation"
 }
 
 class SetupEnumerationAnnotation : SetupAnyAnnotation {
+    //! Registers annotated structure as an enumeration annotation macro.
     override annotation_function_call : string = "add_new_enumeration_annotation"
 }
 
 class SetupContractAnnotation : SetupAnyAnnotation {
+    //! Registers annotated structure as a contract annotation macro.
     override annotation_function_call : string = "add_new_contract_annotation"
 }
 
 class SetupReaderMacro : SetupAnyAnnotation {
+    //! Registers annotated structure as a reader macro.
     override annotation_function_call : string = "add_new_reader_macro"
 }
 
 class SetupCommentReader : SetupAnyAnnotation {
+    //! Registers annotated structure as a comment reader macro.
     override annotation_function_call : string = "add_new_comment_reader"
 }
 
 class SetupVariantMacro : SetupAnyAnnotation {
+    //! Registers annotated structure as a variant macro.
     override annotation_function_call : string = "add_new_variant_macro"
 }
 
 class SetupForLoopMacro : SetupAnyAnnotation {
+    //! Registers annotated structure as a for-loop macro.
     override annotation_function_call : string = "add_new_for_loop_macro"
 }
 
 class SetupCaptureMacro : SetupAnyAnnotation {
+    //! Registers annotated structure as a capture macro.
     override annotation_function_call : string = "add_new_capture_macro"
 }
 
 class SetupTypeMacro : SetupAnyAnnotation {
+    //! Registers annotated structure as a type macro.
     override annotation_function_call : string = "add_new_type_macro"
 }
 
 class SetupSimulateMacro : SetupAnyAnnotation {
+    //! Registers annotated structure as a simulate macro.
     override annotation_function_call : string = "add_new_simulate_macro"
 }
 
 class SetupCallMacro : SetupAnyAnnotation {
+    //! Registers annotated structure as a call macro.
     override annotation_function_call : string = "add_new_call_macro"
 }
 
 class SetupTypeInfoMacro : SetupAnyAnnotation {
+    //! Registers annotated structure as a typeinfo macro.
     override annotation_function_call : string = "add_new_typeinfo_macro"
 }
 
 class SetupInferMacro : SetupAnyAnnotation {
+    //! Registers annotated structure as an infer macro.
     override annotation_function_call : string = "add_new_infer_macro"
 }
 
 class SetupDirtyInferMacro : SetupAnyAnnotation {
+    //! Registers annotated structure as a dirty infer macro.
     override annotation_function_call : string = "add_new_dirty_infer_macro"
 }
 
 class SetupLintMacro : SetupAnyAnnotation {
+    //! Registers annotated structure as a lint macro.
     override annotation_function_call : string = "add_new_lint_macro"
 }
 
 class SetupGlobalLintMacro : SetupAnyAnnotation {
+    //! Registers annotated structure as a global lint macro.
     override annotation_function_call : string = "add_new_global_lint_macro"
 }
 
 class SetupOptimizationMacro : SetupAnyAnnotation {
+    //! Registers annotated structure as an optimization macro.
     override annotation_function_call : string = "add_new_optimization_macro"
 }
 
 class TagFunctionMacro : SetupAnyAnnotation {
+    //! Setup annotation that registers a tag-based function annotation with name and tag arguments.
     override annotation_function_call : string = "setup_tag_annotation"
     tag : string
     def override setup_call(var st : StructurePtr; var cll : smart_ptr<ExprCall>) {
@@ -563,6 +588,7 @@ def private makeAsOrSafeAs(expr; var enull : ExpressionPtr) {
 // replacing ExprIsVariant(value,name) => ExprOp2('==",value.__rtti,"name")
 // if value is ast::Expr*
 class BetterRttiVisitor : AstVariantMacro {
+    //! Variant macro that optimizes `is` checks on AST expression types to __rtti string comparison.
     def override visitExprIsVariant(prog : ProgramPtr; mod : Module?; expr : smart_ptr<ExprIsVariant>) : ExpressionPtr {
         //! Replaces `is` variant checks on AST expression types with __rtti string comparison.
         if (isExpression(expr.value._type)) {
@@ -1203,6 +1229,7 @@ def public isCMRESType(blockT : TypeDeclPtr) {
 }
 
 bitfield DebugExpressionFlags {
+    //! Flags controlling debug expression output formatting.
     refCount
 }
 

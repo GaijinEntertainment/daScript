@@ -136,7 +136,7 @@ def public contains_utf8_bom(utf8_string : string const) : bool {
 // Copyright (c) 2008-2009 Bjoern Hoehrmann <bjoern@hoehrmann.de>
 // See http://bjoern.hoehrmann.de/utf-8/decoder/dfa/ for details.
 
-let shared s_utf8d <-  fixed_array(
+let shared s_utf8d <-  fixed_array( //! Byte-class and state-transition table for the UTF-8 DFA decoder.
     // The first part of the table maps bytes to character classes that
     // to reduce the size of the transition table and create bitmasks.
    0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,  0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
@@ -157,8 +157,7 @@ let shared s_utf8d <-  fixed_array(
   12u, 36u, 12u, 12u, 12u, 12u, 12u, 12u, 12u, 12u, 12u, 12u
 );
 
-
-let UTF8_ACCEPT = 0u
+let UTF8_ACCEPT = 0u //! DFA accept state indicating a valid UTF-8 sequence.
 
 def public is_utf8_string_valid(utf8_string : array<uint8> const implicit) : bool {
     //! Returns true if the byte array contains a valid UTF-8 encoded string.

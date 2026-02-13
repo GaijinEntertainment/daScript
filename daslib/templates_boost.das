@@ -126,6 +126,7 @@ def renameCall(var self : Template; name : string; newName : das_string) {
 }
 
 class private TemplateVisitor : AstVisitor {
+    //! AST visitor that applies template substitutions.
     @do_not_delete rules : Template?
     def TemplateVisitor(var r : Template?) {
         //! Creates template visitor with given rules.
@@ -1356,7 +1357,7 @@ def public apply_qmacro_template_function(func : FunctionPtr; blk : block<(var r
 
 [call_macro(name="qmacro_template_function")]
 class private AstQNamedTemplateFunctionMacro : AstCallMacro {
-    ///! This macro implements expression reification for the templace function 'qmacro_template_function'
+    //! Call macro for quoting named template functions.
     apply_call = "apply_qmacro_template_function"
     macro_call = "qmacro_template_function"
    //! This macro implements expression reification for the named expressions (function, variable, etc.)
@@ -1399,7 +1400,7 @@ class private AstQNamedTemplateFunctionMacro : AstCallMacro {
 
 [call_macro(name="qmacro_template_class")]
 class private AstQNamedTemplateClassMacro : AstCallMacro {
-    ///! This macro implements expression reification for the templace class 'qmacro_template_class'
+    //! Call macro for quoting named template class methods.
     apply_call = "apply_qmacro_template_class"
     macro_call = "qmacro_template_class"
     //! This macro implements expression reification for the named expressions (function, variable, etc.)

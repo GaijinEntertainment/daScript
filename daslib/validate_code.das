@@ -66,6 +66,7 @@ def collect_call_tree(fun : Function?; var visited : table<Function?>) {
 
 [macro]
 class ValidateCompletionVisitor : AstVisitor {
+    //! AST visitor that validates code for completion safety.
     @do_not_delete thisFunc : Function?
     def override preVisitFunction(var fun : FunctionPtr) : void {
         thisFunc = get_ptr(fun)
@@ -131,6 +132,7 @@ class VerifyCompletion : AstFunctionAnnotation {
 
 [macro]
 class ValidateShaderVisitor : AstVisitor {
+    //! AST visitor that validates shader code restrictions.
     def override preVisitTypeDecl(typ : TypeDeclPtr) : void {
         if (!typ.isNoHeapType) {
             macro_error(compiling_program(), typ.at, "not shader-like, type requires heap {describe(typ)}")
@@ -146,6 +148,7 @@ class ValidateShaderVisitor : AstVisitor {
 
 [simulate_macro(name="shader_like")]
 class JIT_LLVM : AstSimulateMacro {
+    //! Simulate macro for LLVM JIT compilation.
     def lint_module(prog : Program?; var ctx : Context?) {
         var astVisitor = new ValidateShaderVisitor()
         var inscope adapter <- make_visitor(*astVisitor)

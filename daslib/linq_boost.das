@@ -25,6 +25,7 @@ def private clone_iterator_type(it : TypeDeclPtr) : TypeDeclPtr {
 }
 
 class private AstCallMacro_LinqPred2 : AstCallMacro {
+    //! Base call macro for LINQ-style two-argument predicate operators.
     predName = "where_"
     //! This macro converts _where(iterator, expresion) into::
     //!     where_(iterator, $(_) => expression)
@@ -227,6 +228,7 @@ class private LinqOrderByDescendingToArray : AstCallMacro_LinqPred2 {
 }
 
 class private AstCallMacro_LinqPredII2 : AstCallMacro {
+    //! Base call macro for LINQ-style two-iterator two-argument predicate operators.
     predName = "sequence_equal_by"
     //! implements sequence_equal_by(i1, i2, expresion) shorthand notation
     //! that expands into sequence_equal_by(i1, i2, $(_) => expression)
@@ -353,6 +355,7 @@ def private fold_linq_cond(var expr : ExpressionPtr; argName : string) : Express
 }
 
 struct private LinqCall {
+    //! Internal struct representing a chained LINQ method call.
     name : string
     moduleName : string = "linq"
     skip : bool = false             // if specified, expression is skipped in folding
@@ -513,6 +516,7 @@ def private flatten_linq(var expr : ExpressionPtr)  {
 }
 
 struct private FoldSequence {
+    //! Internal struct representing a fold operation sequence.
     calls : array<string>
     folder : function<(
         argIndex : int;

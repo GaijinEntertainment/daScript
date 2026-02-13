@@ -18,6 +18,7 @@ require daslib/ast_boost
 require daslib/strings_boost
 
 class SetPrinterFlags : AstVisitor {
+    //! AST visitor that sets expression print formatting flags for proper output.
     def override preVisitExprBlockExpression(block1 : smart_ptr<ExprBlock>; var expr : ExpressionPtr) {
         //! Sets argLevel print flag on block expressions.
         expr.printFlags := ExprPrintFlags.argLevel

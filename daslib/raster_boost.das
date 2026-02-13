@@ -10,6 +10,7 @@ require math
 require raster public
 
 bitfield RasterFlags {
+    //! Flags controlling raster line drawing options.
     column_major
 }
 

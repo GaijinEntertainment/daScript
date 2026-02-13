@@ -34,10 +34,14 @@ to:
 */
 
 [block_macro(name="REQUIRE")]
-class DecsReq : AstBlockAnnotation /*! This annotation provides list of required components for entity. */ {}
+class DecsReq : AstBlockAnnotation {
+    //! This annotation provides list of required components for entity.
+}
 
 [block_macro(name="REQUIRE_NOT")]
-class DecsReqN : AstBlockAnnotation /*! This annotation provides list of components, which are required to not be part of the entity. */ {}
+class DecsReqN : AstBlockAnnotation {
+    //! This annotation provides list of components, which are required to not be part of the entity.
+}
 
 [structure_macro(name="decs_template")]
 class DecsTemplate : AstStructureAnnotation {
@@ -254,6 +258,7 @@ def private append_index_lookup(arch_name : string; var qblock : smart_ptr<ExprB
 }
 
 enum private DecsQueryType {
+    //! Enum for ECS query types.
     query
     eid_query
     find_query

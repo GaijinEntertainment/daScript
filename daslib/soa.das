@@ -223,6 +223,7 @@ class SoaStructMacro : AstStructureAnnotation {
 }
 
 class CollectAndReplaceIteratorFields : AstVisitor {
+    //! AST visitor that collects and replaces SOA iterator field access.
     it_prefix : string
     names : table<string; bool>
     def CollectAndReplaceIteratorFields(prefix : string) {
@@ -256,6 +257,7 @@ def collect_and_replace_iterator_fields(prefix : string; blk : ExpressionPtr) : 
 
 [for_loop_macro(name=soa_for_loop)]
 class SoaForLoop : AstForLoopMacro {
+    //! For-loop macro that transforms SOA array iteration.
     def override visitExprFor(prog : ProgramPtr; mod : Module?; expr : smart_ptr<ExprFor>) : ExpressionPtr {
         if (is_in_completion()) {
             return <- default<ExpressionPtr>

@@ -21,6 +21,7 @@ require strings
 require daslib/strings_boost
 
 enum ParserState
+    //! State of the documentation comment parser.
     none
     structure
     field
@@ -78,6 +79,7 @@ def get_module_name(prog, mod)
 
 [comment_reader]
 class RstComment : AstCommentReader
+    //! Comment reader that extracts `//!` doc comments.
     chars : array<uint8>
     state : ParserState = ParserState.none
     comment : string

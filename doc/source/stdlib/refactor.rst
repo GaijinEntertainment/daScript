@@ -21,13 +21,13 @@ Function annotations
 
 .. das:attribute:: ExtractMethodMacro
 
-|detail/function_annotation-refactor-ExtractMethodMacro|
+Function annotation implementing extract-method refactoring.
 
 .. _handle-refactor-ExtractVariableFunction:
 
 .. das:attribute:: ExtractVariableFunction
 
-|detail/function_annotation-refactor-ExtractVariableFunction|
+Function annotation for extract-variable target functions.
 
 +++++++++++
 Call macros
@@ -37,7 +37,7 @@ Call macros
 
 .. das:attribute:: extract_variable
 
-|detail/function_annotation-refactor-extract_variable|
+Call macro implementing extract-variable refactoring.
 
 ++++++++++++++++++++++
 Refactoring operations

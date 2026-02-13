@@ -91,6 +91,7 @@ def public force_dynamic_type_cast(instance; otherclass : auto(TT)) : TT -const?
 
 [variant_macro(name="ClassAsIs")]
 class ClassAsIs : AstVariantMacro {
+    //! Variant macro that implements class dynamic casting via `is` and `as`.
     def override visitExprIsVariant(prog : ProgramPtr; mod : Module?; expr : smart_ptr<ExprIsVariant>) : ExpressionPtr {
         assume vtype = expr.value._type
         if (!(vtype.isPointer && vtype.firstType != null && vtype.firstType.isStructure && vtype.firstType.structType.flags.isClass)) {

@@ -17,6 +17,7 @@ require daslib/strings_boost
 
 [lint_macro]
 class LintEverything : AstPassMacro {
+    //! Pass macro that enables lint checking for modules.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         paranoid(prog, true)
         return true
@@ -24,6 +25,7 @@ class LintEverything : AstPassMacro {
 }
 
 class LintVisitor : AstVisitor {
+    //! AST visitor that performs lint checks.
     astVisitorAdapter : smart_ptr<ast::VisitorAdapter>
     exprForTerminator : array<uint64>
     compile_time_errors : bool

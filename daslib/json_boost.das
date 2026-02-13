@@ -421,6 +421,7 @@ def from_JV(v : JsonValue const explicit?; anything : table< auto(KT); auto(VT) 
 }
 
 struct public JsonFieldState {
+    //! Per-field serialization options for JSON struct conversion.
     argName : string        //! name of the field in JSON
     enumAsInt : bool        //! whether to parse enum as integer
     unescape : bool         //! whether to unescape strings

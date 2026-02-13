@@ -23,7 +23,7 @@ require daslib/strings_boost
 require daslib/regex
 require daslib/regex_boost
 
-let {
+let { //! Configuration constants for the RST documentation generator.
     log_documentation = false
     show_hidden_groups = false
     STUB = "// stub"
@@ -35,6 +35,11 @@ var public {
     add_stub_header = true
     add_empty_topic = true
     strict_struct_fields = true
+}
+
+def PANIC ( message : string ) {
+    to_log(LOG_ERROR, "PANIC: {message}\n")
+    unsafe(exit(-1))
 }
 
 def module_name(mod) {
@@ -112,7 +117,7 @@ def public function_label_file(value : FunctionPtr | Function?; drop_args : int 
         }
         // if arg._type.baseType == Type autoinfer
         //     error("autoinfer in function '{value.name}'")
-            // panic("autoinfer in function")
+            // PANIC("autoinfer in function")
         let prefix = arg._type.flags.removeConstant ? "var " : ""
         mn += "{prefix}{describe_type_short(arg._type)}"
     }
@@ -132,7 +137,7 @@ def public function_label_file(name; value : smart_ptr<TypeDecl>&; drop_args : i
         }
         // if arg.baseType == Type autoinfer
         //     error("autoinfer in function '{name}'")
-            // panic("autoinfer in function")
+            // PANIC("autoinfer in function")
         let prefix = arg.flags.removeConstant ? "var " : ""
         mn += "{prefix}{describe_type_short(arg)}"
     }
@@ -215,7 +220,7 @@ def cleanup_type_short(name : string) {
 
 def describe_type_short(td : TypeDeclPtr) {
     if (td == null) {
-        panic("describe_type_short: null type")
+        PANIC("describe_type_short: null type")
     }
     if (!empty(td.alias) && !td.isAuto && !td.isAlias) {
         return string(td.alias)
@@ -716,7 +721,7 @@ def document_function_topic(doc_file : file; resType : smart_ptr<TypeDecl>&; top
                 if (!found) {
                     var inscope names <- [for (arg in args); arg[0]]
                     error("function {topic} has no argument '{name}' names {names}")
-                    panic("invalid documentation")
+                    PANIC("invalid documentation")
                 }
             } elif (l |> starts_with(":returns:")) {
                 lines[lineIdx] = l |> replace(":returns:", ":Returns: * {describe_type(resType)} - ")
@@ -736,7 +741,7 @@ def document_function_topic(doc_file : file; resType : smart_ptr<TypeDecl>&; top
             for (i in range(1, length(args))) {
                 if (length(args[i]) < length(args[0])) {
                     error("function {topic} doesn't have enough documentation for argument {args[i][0]}")
-                    panic("invalid documentation")
+                    PANIC("invalid documentation")
                     while (length(args[i]) < length(args[0])) {
                         args[i] |> push("")
                     }
@@ -777,7 +782,7 @@ def document_topic(header : string; doc_file : file; topic, content : string imp
             if (got < expected) {
                 if (strict_struct_fields) {
                     error("{topic} has less documentation than values. Expected {expected} ({[for (it in tab); it[0]]}), got {got}\n")
-                    panic("invalid documentation")
+                    PANIC("invalid documentation")
                 }
 
                 for (i in range(got)) {
@@ -841,7 +846,7 @@ def document_topic(doc_file : file; topic, content : string implicit; cb : block
                     fwrite(topic_file, "{content}\n")
                 }
             } else {
-                panic("can't open {topic_file_name}")
+                PANIC("can't open {topic_file_name}")
             }
         }
     }
@@ -853,7 +858,7 @@ def document_topic(doc_file : file; topic, content : string implicit; cb : block
                 fwrite(doc_file, instxt)
                 fwrite(doc_file, "\n")
             } else {
-                panic("can't open {topic_file_name}")
+                PANIC("can't open {topic_file_name}")
             }
         }
     } elif (add_empty_topic) {
@@ -2072,7 +2077,7 @@ def private generate_substitute_stub(mod : Module?; substname : string) {
                 }
             }
         } else {
-            panic("can't generate stub at {substname}\n")
+            PANIC("can't generate stub at {substname}\n")
         }
     }
 }
@@ -2087,6 +2092,7 @@ def public document(name : string; var mod : Module?; fname : string; var groups
 }
 
 struct public DocsHook {
+    //! Callback hooks for customizing RST documentation output.
     annotationFilter : lambda<(ann : rtti::Annotation const) : bool>
     afterEnums : lambda<(var f : FILE const?; was_enums : bool) : void>
 }
@@ -2098,13 +2104,13 @@ def public documents(name : string; mods : array<Module?>; fname : string; var g
         print("Documenting {name} into {fname}\n")
     }
     if (length(mods) == 0) {
-        panic("missing module {name}")
+        PANIC("missing module {name}")
     }
     let path = "{topic_root}/{fname}"
     mkdir_rec(dir_name(path))
     var doc_file = fopen(path, "wb")
     if (doc_file == null) {
-        panic("can't open {path}")
+        PANIC("can't open {path}")
     }
     fwrite(doc_file, "\n")
     var mod_name = string(mods[0].name)

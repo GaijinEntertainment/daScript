@@ -35,6 +35,7 @@ let type_after_keyword <- fixed_array("generator", "cast", "upcast", "smart_ptr"
     )
 
 enum TokenType {
+    //! Classification of source tokens for formatting.
     UNKNOWN
     KEYWORD_OR_IDENTIFIER
     NUMBER
@@ -44,6 +45,7 @@ enum TokenType {
 
 [safe_when_uninitialized]
 struct TokenTemplate {
+    //! Pattern describing a token for template matching.
     firstChar : int = 0
     str : string = ""
     codes : array<uint8>
@@ -52,6 +54,7 @@ struct TokenTemplate {
 
 
 struct Token {
+    //! A parsed source token with type, text, and position.
     str : string
     spaces : int = 0
     newLines : int = 0
@@ -66,12 +69,14 @@ struct Token {
 
 
 struct FormatterToken {
+    //! An output token with text and formatting metadata.
     tokenIndex : int
     command : string
 }
 
 [safe_when_uninitialized]
 struct FormatterCtx {
+    //! Formatting context tracking indentation and state.
     tokenTemplates : array<TokenTemplate>
     tokens : array<Token>
     formatterTokens : array<FormatterToken>
@@ -384,6 +389,7 @@ def parse_all_tokens(var ctx : FormatterCtx) {
 
 [safe_when_uninitialized]
 struct ParenCounter {
+    //! Parenthesis/bracket depth counter for formatting.
     angle : int = 0
     paren : int = 0
     square : int = 0

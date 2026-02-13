@@ -44,6 +44,8 @@ Structures
 
 .. das:attribute:: JsonFieldState
 
+Per-field serialization options for JSON struct conversion.
+
 :Fields: * **argName** : string - name of the field in JSON
 
          * **enumAsInt** : bool - whether to parse enum as integer

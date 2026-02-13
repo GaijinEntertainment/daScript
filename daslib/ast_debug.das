@@ -107,6 +107,7 @@ def describe_arg(var ctxid : Context; vinfo; arg : void?) : void {
 }
 
 class SampleStackWalker : DapiStackWalker {
+    //! Sample stack walker that prints call stack to the log.
     ctxid : Context?
     def override onArgument(info : FuncInfo; index : int; vinfo : VarInfo; arg : float4) : void {
         if (vinfo.flags.ref || vinfo.flags.refType) {
@@ -131,6 +132,7 @@ class SampleStackWalker : DapiStackWalker {
 }
 
 class ContextStateAgent : DapiDebugAgent {
+    //! Debug agent that installs context-level stack walkers.
     walker_adapter : smart_ptr<StackWalker>
     walker : SampleStackWalker?
     def ContextStateAgent {

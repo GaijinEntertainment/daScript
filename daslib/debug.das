@@ -178,8 +178,9 @@ def private bytes_hr(value : uint64) {
     return "{int(value)} b"
 }
 
-
 class DAWalker : DapiDataWalker {
+
+//! Data walker for inspecting variables through the Debug Adapter Protocol.
 
     maxChildrenCount : uint = 1000u
 
@@ -478,6 +479,7 @@ class DAWalker : DapiDataWalker {
 }
 
 struct private DAVariable {
+    //! Internal DAP variable representation for the debugger.
     uid : uint64
     name : string
     value : string
@@ -583,6 +585,7 @@ def find_child_var(val : DAVariable; cb : block<(res : DAVariable) : bool>) {
 
 
 struct private DAStackFrame {
+    //! Internal DAP stack frame representation for the debugger.
     name : string
     path : string
     @do_not_delete func : FuncInfo?
@@ -670,6 +673,7 @@ def iter_top_child_var(stack : DAStackFrame; cb : block<(res : DAVariable) : voi
 
 
 class private DAStackWalker : DapiStackWalker {
+    //! Stack walker that collects frames for the DAP debugger.
     dataWalkerAdapter : smart_ptr<DataWalker>
     dataWalker : DAWalker?
 
@@ -857,17 +861,19 @@ class private DAStackWalker : DapiStackWalker {
         }
     }
 }
-
 enum DABreakpointState {
+    //! State of a DAP breakpoint during its lifecycle.
     Uninitialized = 0
     Initialized
     Instrumented
 }
 
+//! Opaque handle representing a debug context pointer.
 typedef DAContextAt = uint64
 
 
 struct private DABreakpoint {
+    //! Internal breakpoint descriptor for the DAP debugger.
     id : uint64
     line : uint
 
@@ -876,10 +882,12 @@ struct private DABreakpoint {
     ctxAt : DAContextAt
 }
 
+//! Mapping from source file path to its list of breakpoints.
 typedef DABreakpoints = table<string; array<DABreakpoint>>
 
 
 struct private DAContext {
+    //! Internal context state for the DAP debugger.
     id : uint64
     at : DAContextAt
     @do_not_delete ctx : Context?
@@ -933,6 +941,7 @@ def private compare_path(p1, p2 : string) {
 }
 
 class private DAgent : DapiDebugAgent {
+    //! Main debug agent implementing the DAP protocol.
 
     walkerAdapter : smart_ptr<StackWalker>
     walker : DAStackWalker?
@@ -1602,6 +1611,7 @@ class private DAgent : DapiDebugAgent {
 }
 
 class private DAServer : Server {
+    //! TCP server that handles DAP JSON-RPC communication.
     port : int
     @do_not_delete agent : DAgent?
 
@@ -2355,6 +2365,7 @@ class private DAServer : Server {
 
 
 class private EvalWalker : DapiStackWalker {
+    //! Stack walker for expression evaluation in debug sessions.
     W : StringBuilderWriter?
 
     def EvalWalker(var wr : StringBuilderWriter) {

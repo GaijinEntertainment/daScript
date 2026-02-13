@@ -20,6 +20,7 @@ options strict_smart_pointers = false
 
 
 struct StandaloneContextCfg {
+    //! Configuration for standalone context generation.
     context_name : string;
     class_name : string;
     cpp_output_dir : string;
@@ -212,6 +213,7 @@ def writeStandaloneContext(var program : ProgramPtr, initFunctions : string, var
 }
 
 class StandaloneContextGen : CppAot {
+    //! AOT visitor specialized for standalone context code generation.
 
     def StandaloneContextGen(var program_ : ProgramPtr; var ss_ : StringBuilderWriter?, var coll : BlockVariableCollector?, cp : bool) {
         ss <- ss_;

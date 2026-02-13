@@ -159,6 +159,7 @@ def instance_spoof(temp : string; passed_arguments : array<string>) : tuple<resu
 
 [reader_macro(name="spoof_template")]
 class SpoofTemplateReader : AstReaderMacro {
+    //! Reader macro that parses spoof template definitions.
     def override accept(prog : ProgramPtr; mod : Module?; var expr : ExprReader?; ch : int; info : LineInfo) : bool {
         if (ch != '\r') {
             append(expr.sequence, ch)
@@ -178,6 +179,7 @@ class SpoofTemplateReader : AstReaderMacro {
 }
 
 struct SpoofInvocation {
+    //! Describes a spoof template invocation with arguments.
     varName : string
     args : array<string>
 }
@@ -236,6 +238,7 @@ def instance_args(invocation : string; blk : block<(var res : SpoofInvocation; e
 
 [reader_macro(name="spoof_instance")]
 class SpoofInstanceReader : AstReaderMacro {
+    //! Reader macro that instantiates a spoof template.
     def override accept(prog : ProgramPtr; mod : Module?; var expr : ExprReader?; ch : int; info : LineInfo) : bool {
         if (ch != '\r') {
             append(expr.sequence, ch)

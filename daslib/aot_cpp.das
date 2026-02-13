@@ -168,16 +168,34 @@ def isConstRedundantForCpp(typeDecl : TypeDeclPtr) {
 
 
 enum CpptUseAlias {
+    //! Controls whether type aliases are used in C++ codegen output.
     no
     yes
 };
 
-enum CpptSubstitureRef { no, yes };
-enum CpptSkipRef { no, yes };
-enum CpptSkipConst { no, yes };
-enum CpptRedundantConst { no, yes };
+enum CpptSubstitureRef {
+    //! Controls whether references are substituted in C++ type printing.
+    no
+    yes
+};
+enum CpptSkipRef {
+    //! Controls whether references are skipped in C++ type printing.
+    no
+    yes
+};
+enum CpptSkipConst {
+    //! Controls whether const qualifiers are skipped in C++ type printing.
+    no
+    yes
+};
+enum CpptRedundantConst {
+    //! Controls whether redundant const qualifiers are emitted in C++ type printing.
+    no
+    yes
+};
 
 struct public DescribeConfig {
+    //! Configuration for C++ type description printing.
     substitute_ref : bool = false
     skip_ref : bool = false
     skip_const : bool = false
@@ -400,6 +418,7 @@ def public describeCppType(typeDecl : TypeDeclPtr;
 }
 
 class NoAotMarker : AstVisitor {
+    //! AST visitor that marks functions containing non-AOT-compatible types as noAot.
     @do_not_delete func : Function? <- null;
 
     // type
@@ -436,6 +455,7 @@ class NoAotMarker : AstVisitor {
 };
 
 class public PrologueMarker : AstVisitor {
+    //! AST visitor that marks functions requiring a prologue for AOT compilation.
     @do_not_delete func : Function? <- null;
 
     // function
@@ -458,6 +478,7 @@ class public PrologueMarker : AstVisitor {
 };
 
 class UseTypeMarker : AstVisitor {
+    //! AST visitor that collects structs and enums used in AOT-eligible functions.
     useStructs : table<Structure?>;
     useEnums : table<Enumeration?>;
 
@@ -522,6 +543,7 @@ def typeInfoName(info : TypeInfo?) {
 }
 
 class public DebugVarCache {
+    //! Cache for deduplicating debug variable declarations in AOT output.
     private argNamesCache : table<string; string>
     private info2Name : table<string; string>
 
@@ -559,6 +581,7 @@ class public DebugVarCache {
 
 
 class public AotDebugInfoHelper {
+    //! Helper for generating debug type and variable information in AOT C++ output.
     private info2Name  = new DebugVarCache()
     private info2TypeName = new DebugVarCache()
     helper : smart_ptr<DebugInfoHelper> <- new DebugInfoHelper(uninitialized);
@@ -854,6 +877,7 @@ def public aotFuncName(func : Function?) {
 }
 
 class public BlockVariableCollector : AstVisitor {
+    //! AST visitor that collects block-level variable declarations for AOT code generation.
     def override preVisitExprBlock(blk : smart_ptr<ExprBlock>) {
         push(stack, blk as ExprBlock);
     }
@@ -1033,6 +1057,7 @@ def public describeCppFunc(fn : FunctionPtr; var collector : BlockVariableCollec
 }
 
 class public CppAot : AstVisitor {
+    //! Main AST visitor that generates C++ ahead-of-time compiled code from daScript AST.
 /*
     CppAot ( const ProgramPtr & prog, BlockVariableCollector & cl ) : program(prog), collector(cl) {
         helper.rtti = program.options.getBoolOption("rtti",false);
@@ -3591,6 +3616,7 @@ def public dumpDependencies(program : ProgramPtr; var aotVisitor : CppAot?) {
 }
 
 class ArgsConverter : AstVisitor {
+    //! AST visitor that converts function arguments to C++ AOT calling conventions.
     private arg_id : uint = 0u
     private ss : StringBuilderWriter?
     private cross_platform : bool

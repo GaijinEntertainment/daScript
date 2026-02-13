@@ -10,8 +10,10 @@ require strings
 require fio
 
 
+//! Simulate macro that performs AOT compilation and writes output to the policy-specified file.
 [simulate_macro(name="ast_aot")]
 class AstAot : AstSimulateMacro {
+    //! Simulate macro that triggers AOT C++ code generation.
     def override simulate(prog : Program?; var ctx : Context?) : bool {
         //! Runs AOT compilation of the program and writes the result to the output file specified in policies.
         return true if (is_in_completion() || is_compiling_macros() || is_folding())

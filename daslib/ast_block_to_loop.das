@@ -14,6 +14,7 @@ module ast_block_to_loop shared private
 require daslib/ast_boost
 
 class B2LVisitor : AstVisitor {
+    //! AST visitor that converts block expressions to loop form.
     inClosure : int
     inArchetype : int
     failOnReturn : bool

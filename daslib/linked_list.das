@@ -13,7 +13,7 @@ module linked_list shared private
 
 require daslib/spoof public
 
-let public TLinkedList = %spoof_template~(ListClass,Foo)
+let public TLinkedList = %spoof_template~(ListClass,Foo) //! Spoof template that generates a doubly-linked list class for a given element type.
 struct LLNode_%ListClass {
     //! Node of the doubly-linked list. Contains data pointer and prev/next links.
     data : %Foo?                        //! pointer to the stored element

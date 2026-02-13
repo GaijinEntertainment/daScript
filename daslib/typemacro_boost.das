@@ -93,7 +93,9 @@ def public typemacro_argument(dimExpr; index : int; var constType : ExprConstStr
 }
 
 [structure_macro(name="typemacro_documentation")]
-class TypeMacroInfo : AstStructureAnnotation { }
+class TypeMacroInfo : AstStructureAnnotation {
+    //! Structure annotation that stores type macro documentation metadata.
+}
 
 [macro_function]
 def private append_arguments_annotation(var cls : StructurePtr; var func : FunctionPtr) {
@@ -235,7 +237,9 @@ class TypeMacroMacro : AstFunctionAnnotation {
 }
 
 [structure_macro(name="typemacro_template")]
-class TypeMacroTemplate : AstStructureAnnotation { }
+class TypeMacroTemplate : AstStructureAnnotation {
+    //! Structure annotation that marks a struct as a type macro template instance.
+}
 
 [macro_function]
 def public make_typemacro_template_instance(instance_type, template_type : Structure?; ex : array<tuple<string, string>> = array<tuple<string, string>>()) {
@@ -278,9 +282,10 @@ def public is_typemacro_template_instance(passArgument, templateType : TypeDeclP
 }
 
 struct public TypeMacroTemplateArgument {
-    name : string
-    argument_type : TypeDeclPtr
-    inferred_type : TypeDeclPtr
+    //! Holds a type macro template argument with its name and inferred type.
+    name : string //! Name of the template argument.
+    argument_type : TypeDeclPtr //! Declared argument type from the template signature.
+    inferred_type : TypeDeclPtr //! Inferred concrete type after template instantiation.
 }
 
 [macro_function]

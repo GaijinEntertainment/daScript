@@ -40,6 +40,7 @@ def public heartbeat() {
 }
 
 class AddHeartbeat : AstVisitor {
+    //! AST visitor that inserts heartbeat calls into function and loop bodies.
     astChanged : bool = false
     @do_not_delete func : Function?
     def heartbeatBlock(var body : ExprBlock?) {
@@ -84,6 +85,7 @@ class AddHeartbeat : AstVisitor {
 
 [infer_macro]
 class HeartbeatPass : AstPassMacro {
+    //! Pass macro that instruments functions with heartbeat calls.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         var astVisitor = new AddHeartbeat()
         var inscope astVisitorAdapter <- make_visitor(*astVisitor)

@@ -21,7 +21,7 @@ Variant macros
 
 .. das:attribute:: ClassAsIs
 
-|detail/variant_macro-dynamic_cast_rtti-ClassAsIs|
+Variant macro that implements class dynamic casting via `is` and `as`.
 
 +++++++++++++
 Dynamic casts

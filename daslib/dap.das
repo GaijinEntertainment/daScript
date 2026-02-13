@@ -20,7 +20,9 @@ require daslib/strings_boost
 
 
 // https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Initialize
-struct InitializeRequestArguments {}
+struct InitializeRequestArguments {
+    //! Arguments for the DAP initialize request.
+}
 
 def InitializeRequestArguments(data : JsonValue?) {
     //! Constructs an InitializeRequestArguments from a JSON value.
@@ -28,11 +30,11 @@ def InitializeRequestArguments(data : JsonValue?) {
 }
 
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Disconnect
 struct DisconnectArguments {
-    restart : bool
-    terminateDebuggee : bool
-    suspendDebuggee : bool
+    //! Arguments for the DAP disconnect request.
+    restart : bool //! Whether to restart the debuggee after disconnecting.
+    terminateDebuggee : bool //! Whether to terminate the debuggee when disconnecting.
+    suspendDebuggee : bool //! Whether to suspend the debuggee when disconnecting.
 }
 
 def DisconnectArguments(data : JsonValue?) {
@@ -44,28 +46,28 @@ def DisconnectArguments(data : JsonValue?) {
 }
 
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Types_Capabilities
 struct Capabilities {
-    supportsConfigurationDoneRequest : bool
-    supportsRestartRequest : bool
-    supportTerminateDebuggee : bool
-    supportsTerminateRequest : bool
-    supportsExceptionOptions : bool
-    supportsExceptionFilterOptions : bool
-    supportsDelayedStackTraceLoading : bool
-    supportsDataBreakpoints : bool
+    //! Debugger capabilities reported in the initialize response.
+    supportsConfigurationDoneRequest : bool //! Whether the adapter supports the configurationDone request.
+    supportsRestartRequest : bool //! Whether the adapter supports the restart request.
+    supportTerminateDebuggee : bool //! Whether the adapter supports terminating the debuggee.
+    supportsTerminateRequest : bool //! Whether the adapter supports the terminate request.
+    supportsExceptionOptions : bool //! Whether the adapter supports exception options.
+    supportsExceptionFilterOptions : bool //! Whether the adapter supports exception filter options.
+    supportsDelayedStackTraceLoading : bool //! Whether the adapter supports delayed stack trace loading.
+    supportsDataBreakpoints : bool //! Whether the adapter supports data breakpoints.
 }
 
 
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Types_DataBreakpoint
 struct DataBreakpoint {
-    dataId : string
-    accessType : string// 'read' | 'write' | 'readWrite'
-    condition : string
-    hitCondition : string
-    description : string
-    enabled : bool
+    //! A data breakpoint that triggers on memory access.
+    dataId : string //! Identifier for the data to watch.
+    accessType : string// 'read' | 'write' | 'readWrite' //! Access type that triggers the breakpoint: read, write, or readWrite.
+    condition : string //! Optional expression condition for the breakpoint.
+    hitCondition : string //! Optional hit count condition for the breakpoint.
+    description : string //! Human-readable description of the breakpoint.
+    enabled : bool //! Whether the breakpoint is enabled.
 }
 
 def DataBreakpoint(data : JsonValue?) {
@@ -79,9 +81,9 @@ def DataBreakpoint(data : JsonValue?) {
             )
 }
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_SetBreakpoints
 struct SetDataBreakpointsArguments {
-    breakpoints : array<DataBreakpoint>
+    //! Arguments for the setDataBreakpoints request.
+    breakpoints : array<DataBreakpoint> //! Array of data breakpoints to set.
 }
 
 def SetDataBreakpointsArguments(data : JsonValue?) {
@@ -96,10 +98,10 @@ def SetDataBreakpointsArguments(data : JsonValue?) {
     return <- res
 }
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_DataBreakpointInfo
 struct DataBreakpointInfoArguments {
-    variablesReference : double
-    name : string
+    //! Arguments for the dataBreakpointInfo request.
+    variablesReference : double //! Reference to the variable container.
+    name : string //! Name of the variable.
 }
 
 def DataBreakpointInfoArguments(data : JsonValue?) {
@@ -109,17 +111,17 @@ def DataBreakpointInfoArguments(data : JsonValue?) {
                 name = jos(data, "name")
             )
 }
-
 struct DataBreakpointInfoResponse {
-    dataId : string
-    description : string
+    //! Response body for the dataBreakpointInfo request.
+    dataId : string //! Identifier for the data, used when setting a data breakpoint.
+    description : string //! Human-readable description of the data.
     //accessTypes: DataBreakpointAccessType[];
 }
 
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Types_SourceBreakpoint
 struct SourceBreakpoint {
-    line : double
+    //! A breakpoint specified by source location line number.
+    line : double //! Line number of the breakpoint.
 }
 
 def SourceBreakpoint(data : JsonValue?) {
@@ -127,10 +129,10 @@ def SourceBreakpoint(data : JsonValue?) {
     return SourceBreakpoint(line = jon(data, "line"))
 }
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Types_Source
 struct Source {
-    name : string
-    path : string
+    //! A source file descriptor with name and path.
+    name : string //! Short name of the source.
+    path : string //! Full file-system path of the source.
 }
 
 def Source(data : JsonValue?) {
@@ -139,11 +141,11 @@ def Source(data : JsonValue?) {
 }
 
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_SetBreakpoints
 struct SetBreakpointsArguments {
-    source : Source
-    breakpoints : array<SourceBreakpoint>
-    sourceModified : bool
+    //! Arguments for the setBreakpoints request.
+    source : Source //! Source file for which breakpoints are set.
+    breakpoints : array<SourceBreakpoint> //! Array of source breakpoints to set.
+    sourceModified : bool //! Whether the source has been modified since last build.
 }
 
 def SetBreakpointsArguments(data : JsonValue?) {
@@ -160,64 +162,64 @@ def SetBreakpointsArguments(data : JsonValue?) {
 }
 
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Types_Breakpoint
 struct Breakpoint {
-    id : double
-    verified : bool
-    source : Source
-    line : double
-    message : string
+    //! A breakpoint with verification status and location.
+    id : double //! Unique identifier for the breakpoint.
+    verified : bool //! Whether the breakpoint has been verified by the debugger.
+    source : Source //! Source file containing the breakpoint.
+    line : double //! Actual line number of the breakpoint.
+    message : string //! Optional message about the breakpoint state.
 }
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_SetBreakpoints
 struct SetBreakpointsResponse {
-    breakpoints : array<Breakpoint>
+    //! Response body for the setBreakpoints request.
+    breakpoints : array<Breakpoint> //! Array of breakpoints with their verification status.
 }
 
 
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Types_Thread
 struct Thread {
-    id : double
-    name : string
+    //! A thread with an identifier and name.
+    id : double //! Unique identifier for the thread.
+    name : string //! Human-readable name of the thread.
 }
 
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Threads
 struct ThreadsResponseBody {
-    threads : array<Thread>
+    //! Response body for the threads request.
+    threads : array<Thread> //! Array of threads.
 }
 
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_StackTrace
 struct StackTraceArguments {
-    threadId : double
-    startFrame : double
-    levels : double
+    //! Arguments for the stackTrace request.
+    threadId : double //! Thread for which to retrieve the stack trace.
+    startFrame : double //! Index of the first frame to return.
+    levels : double //! Maximum number of frames to return.
 }
 
 def StackTraceArguments(data : JsonValue?) {
     //! Constructs a StackTraceArguments from a JSON value.
     return <- StackTraceArguments(threadId = jon(data, "threadId"), startFrame = jon(data, "startFrame"), levels = jon(data, "levels"))
 }
-
 struct StackFrame {
-    id : double
-    name : string
-    source : Source
-    line : double
-    column : double
+    //! A stack frame with source location and identifier.
+    id : double //! Unique identifier for the stack frame.
+    name : string //! Name of the frame, typically the function name.
+    source : Source //! Source file of the frame.
+    line : double //! Line number in the source file.
+    column : double //! Column number in the source file.
 }
-
 struct StackTraceResponseBody {
-    stackFrames : array<StackFrame>
-    totalFrames : double
+    //! Response body for the stackTrace request.
+    stackFrames : array<StackFrame> //! Array of stack frames.
+    totalFrames : double //! Total number of frames available.
 }
 
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Scopes
 struct ScopesArguments {
-    frameId : double
+    //! Arguments for the scopes request.
+    frameId : double //! Stack frame for which to retrieve scopes.
 }
 
 def ScopesArguments(data : JsonValue?) {
@@ -226,23 +228,23 @@ def ScopesArguments(data : JsonValue?) {
 }
 
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Types_Scope
 struct Scope {
-    name : string
-    variablesReference : double
+    //! A named variable scope with a variables reference.
+    name : string //! Name of the scope (e.g. Locals, Arguments).
+    variablesReference : double //! Reference used to retrieve the variables of this scope.
 }
-
 
 struct ScopesResponseBody {
-    scopes : array<Scope>
+    //! Response body for the scopes request.
+    scopes : array<Scope> //! Array of scopes for the given frame.
 }
 
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Variables
 struct VariablesArguments {
-    variablesReference : double
-    start : double
-    count : double
+    //! Arguments for the variables request.
+    variablesReference : double //! Reference to the variable container to expand.
+    start : double //! Start index of variables to return (for paging).
+    count : double //! Number of variables to return (for paging).
 }
 
 def VariablesArguments(data : JsonValue?) {
@@ -255,17 +257,18 @@ def VariablesArguments(data : JsonValue?) {
 }
 
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Types_Variable
 struct Variable {
-    name : string
-    value : string
-    variablesReference : double
+    //! A variable with name, value, and type information.
+    name : string //! Name of the variable.
+    value : string //! String representation of the variable's value.
+    variablesReference : double //! Reference to child variables, if any.
     @rename _type : string
-    indexedVariables : double
+    //! Type of the variable.
+    indexedVariables : double //! Number of indexed child variables.
 }
-
 struct VariablesResponseBody {
-    variables : array<Variable>
+    //! Response body for the variables request.
+    variables : array<Variable> //! Array of variables.
 }
 
 
@@ -281,16 +284,16 @@ def JV(data : Variable) {
     })
 }
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Events_Output
 struct OutputEventBody {
-    category : string
-    output : string
+    //! Body of the output event for debugger console messages.
+    category : string //! Category of the output (e.g. console, stdout, stderr).
+    output : string //! The output text.
 }
 
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Continue
 struct ContinueArguments {
-    threadId : double
+    //! Arguments for the continue request.
+    threadId : double //! Thread to continue.
 }
 
 def ContinueArguments(data : JsonValue?) {
@@ -299,9 +302,9 @@ def ContinueArguments(data : JsonValue?) {
 }
 
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Pause
 struct PauseArguments {
-    threadId : double
+    //! Arguments for the pause request.
+    threadId : double //! Thread to pause.
 }
 
 def PauseArguments(data : JsonValue?) {
@@ -310,9 +313,9 @@ def PauseArguments(data : JsonValue?) {
 }
 
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Pause
 struct StepInArguments {
-    threadId : double
+    //! Arguments for the stepIn request.
+    threadId : double //! Thread to step into.
 }
 
 def StepInArguments(data : JsonValue?) {
@@ -321,9 +324,9 @@ def StepInArguments(data : JsonValue?) {
 }
 
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Next
 struct NextArguments {
-    threadId : double
+    //! Arguments for the next (step over) request.
+    threadId : double //! Thread to step over.
 }
 
 def NextArguments(data : JsonValue?) {
@@ -332,9 +335,9 @@ def NextArguments(data : JsonValue?) {
 }
 
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_StepOut
 struct StepOutArguments {
-    threadId : double
+    //! Arguments for the stepOut request.
+    threadId : double //! Thread to step out of.
 }
 
 def StepOutArguments(data : JsonValue?) {
@@ -343,11 +346,11 @@ def StepOutArguments(data : JsonValue?) {
 }
 
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Evaluate
 struct EvaluateArguments {
-    expression : string
-    frameId : double
-    context : string
+    //! Arguments for the evaluate request.
+    expression : string //! Expression to evaluate.
+    frameId : double //! Stack frame in which to evaluate the expression.
+    context : string //! Context in which the expression is evaluated (e.g. watch, repl, hover).
 }
 
 def EvaluateArguments(data : JsonValue?) {
@@ -355,12 +358,13 @@ def EvaluateArguments(data : JsonValue?) {
     return <- EvaluateArguments(frameId = jon(data, "frameId"), expression = jos(data, "expression"), context = jos(data, "context"))
 }
 
-
 struct EvaluateResponse {
-    result : string
+    //! Response body for the evaluate request.
+    result : string //! String representation of the evaluation result.
     @rename _type : string
-    variablesReference : double
-    indexedVariables : double
+    //! Type of the evaluation result.
+    variablesReference : double //! Reference to child variables of the result, if any.
+    indexedVariables : double //! Number of indexed child variables in the result.
 }
 
 def JV(data : EvaluateResponse) {
@@ -374,16 +378,16 @@ def JV(data : EvaluateResponse) {
 }
 
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Events_Breakpoint
 struct BreakpointEvent {
-    reason : string // 'changed' | 'new' | 'removed' | string;
-    breakpoint : Breakpoint
+    //! Event body indicating a breakpoint status change.
+    reason : string // 'changed' | 'new' | 'removed' | string; //! Reason for the event: changed, new, or removed.
+    breakpoint : Breakpoint //! The breakpoint whose status changed.
 }
 
-// https://microsoft.github.io/debug-adapter-protocol/specification#Events_Thread
 struct ThreadEvent {
-    reason : string // 'started' | 'exited' | string;
-    threadId : double
+    //! Event body indicating a thread started or exited.
+    reason : string // 'started' | 'exited' | string; //! Reason for the event: started or exited.
+    threadId : double //! Thread identifier.
 }
 
 

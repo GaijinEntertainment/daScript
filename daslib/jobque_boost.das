@@ -397,6 +397,7 @@ def private isPtrToJQ(typ : TypeDeclPtr; jqt : string) : bool {
 
 [capture_macro(name=channel_and_status_capture_macro)]
 class private ChannelAndStatusCapture : AstCaptureMacro {
+    //! Capture macro for channel and job status objects in lambda captures.
     def make_capture_call(expr : ExpressionPtr; name : string) : ExpressionPtr {
         //! Creates a call expression that captures (adds a reference to) a jobque object.
         var inscope pCall <- new ExprCall(at = expr.at, name := name)

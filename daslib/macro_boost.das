@@ -43,6 +43,7 @@ class MacroVerifyMacro : AstFunctionAnnotation {
 
 [macro]
 class CaptureBlock : AstVisitor {
+    //! AST visitor that captures variables from a block scope.
     @do_not_delete scope : table<Variable?>
     @do_not_delete captured : table<Variable?; ExprVar?>
     def override preVisitExprVar(expr : smart_ptr<ExprVar>) : void {
@@ -87,6 +88,7 @@ def public capture_block(expr : ExpressionPtr) : array<CapturedVariable> {
 
 [macro]
 class ColletFinally : AstVisitor {
+    //! AST visitor that collects finally blocks.
     @do_not_delete blocks : table<ExprBlock?>
     alwaysFor : bool
     def override preVisitExprBlock(blk : smart_ptr<ExprBlock>) : void {
@@ -118,6 +120,7 @@ def public collect_finally(expr : ExpressionPtr; alwaysFor : bool = false) {
 
 [macro]
 class ColletLabels : AstVisitor {
+    //! AST visitor that collects label statements.
     labels : table<int>
     def override preVisitExprLabel(expr : smart_ptr<ExprLabel>) : void {
         labels |> insert(expr.labelName)

@@ -21,199 +21,382 @@ Structures
 
 .. das:attribute:: InitializeRequestArguments
 
-|detail/structure-dap-InitializeRequestArguments|
+Arguments for the DAP initialize request.
+
 
 .. _struct-dap-DisconnectArguments:
 
 .. das:attribute:: DisconnectArguments
 
-|detail/structure-dap-DisconnectArguments|
+Arguments for the DAP disconnect request.
+
+:Fields: * **restart** : bool - Whether to restart the debuggee after disconnecting.
+
+         * **terminateDebuggee** : bool - Whether to terminate the debuggee when disconnecting.
+
+         * **suspendDebuggee** : bool - Whether to suspend the debuggee when disconnecting.
+
 
 .. _struct-dap-Capabilities:
 
 .. das:attribute:: Capabilities
 
-|detail/structure-dap-Capabilities|
+Debugger capabilities reported in the initialize response.
+
+:Fields: * **supportsConfigurationDoneRequest** : bool - Whether the adapter supports the configurationDone request.
+
+         * **supportsRestartRequest** : bool - Whether the adapter supports the restart request.
+
+         * **supportTerminateDebuggee** : bool - Whether the adapter supports terminating the debuggee.
+
+         * **supportsTerminateRequest** : bool - Whether the adapter supports the terminate request.
+
+         * **supportsExceptionOptions** : bool - Whether the adapter supports exception options.
+
+         * **supportsExceptionFilterOptions** : bool - Whether the adapter supports exception filter options.
+
+         * **supportsDelayedStackTraceLoading** : bool - Whether the adapter supports delayed stack trace loading.
+
+         * **supportsDataBreakpoints** : bool - Whether the adapter supports data breakpoints.
+
 
 .. _struct-dap-DataBreakpoint:
 
 .. das:attribute:: DataBreakpoint
 
-|detail/structure-dap-DataBreakpoint|
+:Fields: * **dataId** : string - A data breakpoint that triggers on memory access.
+
+         * **accessType** : string - Identifier for the data to watch.
+
+         * **condition** : string - Optional expression condition for the breakpoint.
+
+         * **hitCondition** : string - Optional hit count condition for the breakpoint.
+
+         * **description** : string - Human-readable description of the breakpoint.
+
+         * **enabled** : bool - Whether the breakpoint is enabled.
+
 
 .. _struct-dap-SetDataBreakpointsArguments:
 
 .. das:attribute:: SetDataBreakpointsArguments
 
-|detail/structure-dap-SetDataBreakpointsArguments|
+Arguments for the setDataBreakpoints request.
+
+:Fields: * **breakpoints** : array< :ref:`DataBreakpoint <struct-dap-DataBreakpoint>` > - Array of data breakpoints to set.
+
 
 .. _struct-dap-DataBreakpointInfoArguments:
 
 .. das:attribute:: DataBreakpointInfoArguments
 
-|detail/structure-dap-DataBreakpointInfoArguments|
+Arguments for the dataBreakpointInfo request.
+
+:Fields: * **variablesReference** : double - Reference to the variable container.
+
+         * **name** : string - Name of the variable.
+
 
 .. _struct-dap-DataBreakpointInfoResponse:
 
 .. das:attribute:: DataBreakpointInfoResponse
 
-|detail/structure-dap-DataBreakpointInfoResponse|
+Response body for the dataBreakpointInfo request.
+
+:Fields: * **dataId** : string - Identifier for the data, used when setting a data breakpoint.
+
+         * **description** : string - Human-readable description of the data.
+
 
 .. _struct-dap-SourceBreakpoint:
 
 .. das:attribute:: SourceBreakpoint
 
-|detail/structure-dap-SourceBreakpoint|
+A breakpoint specified by source location line number.
+
+:Fields: * **line** : double - Line number of the breakpoint.
+
 
 .. _struct-dap-Source:
 
 .. das:attribute:: Source
 
-|detail/structure-dap-Source|
+A source file descriptor with name and path.
+
+:Fields: * **name** : string - Short name of the source.
+
+         * **path** : string - Full file-system path of the source.
+
 
 .. _struct-dap-SetBreakpointsArguments:
 
 .. das:attribute:: SetBreakpointsArguments
 
-|detail/structure-dap-SetBreakpointsArguments|
+Arguments for the setBreakpoints request.
+
+:Fields: * **source** :  :ref:`Source <struct-dap-Source>`  - Source file for which breakpoints are set.
+
+         * **breakpoints** : array< :ref:`SourceBreakpoint <struct-dap-SourceBreakpoint>` > - Array of source breakpoints to set.
+
+         * **sourceModified** : bool - Whether the source has been modified since last build.
+
 
 .. _struct-dap-Breakpoint:
 
 .. das:attribute:: Breakpoint
 
-|detail/structure-dap-Breakpoint|
+A breakpoint with verification status and location.
+
+:Fields: * **id** : double - Unique identifier for the breakpoint.
+
+         * **verified** : bool - Whether the breakpoint has been verified by the debugger.
+
+         * **source** :  :ref:`Source <struct-dap-Source>`  - Source file containing the breakpoint.
+
+         * **line** : double - Actual line number of the breakpoint.
+
+         * **message** : string - Optional message about the breakpoint state.
+
 
 .. _struct-dap-SetBreakpointsResponse:
 
 .. das:attribute:: SetBreakpointsResponse
 
-|detail/structure-dap-SetBreakpointsResponse|
+Response body for the setBreakpoints request.
+
+:Fields: * **breakpoints** : array< :ref:`Breakpoint <struct-dap-Breakpoint>` > - Array of breakpoints with their verification status.
+
 
 .. _struct-dap-Thread:
 
 .. das:attribute:: Thread
 
-|detail/structure-dap-Thread|
+A thread with an identifier and name.
+
+:Fields: * **id** : double - Unique identifier for the thread.
+
+         * **name** : string - Human-readable name of the thread.
+
 
 .. _struct-dap-ThreadsResponseBody:
 
 .. das:attribute:: ThreadsResponseBody
 
-|detail/structure-dap-ThreadsResponseBody|
+Response body for the threads request.
+
+:Fields: * **threads** : array< :ref:`Thread <struct-dap-Thread>` > - Array of threads.
+
 
 .. _struct-dap-StackTraceArguments:
 
 .. das:attribute:: StackTraceArguments
 
-|detail/structure-dap-StackTraceArguments|
+Arguments for the stackTrace request.
+
+:Fields: * **threadId** : double - Thread for which to retrieve the stack trace.
+
+         * **startFrame** : double - Index of the first frame to return.
+
+         * **levels** : double - Maximum number of frames to return.
+
 
 .. _struct-dap-StackFrame:
 
 .. das:attribute:: StackFrame
 
-|detail/structure-dap-StackFrame|
+A stack frame with source location and identifier.
+
+:Fields: * **id** : double - Unique identifier for the stack frame.
+
+         * **name** : string - Name of the frame, typically the function name.
+
+         * **source** :  :ref:`Source <struct-dap-Source>`  - Source file of the frame.
+
+         * **line** : double - Line number in the source file.
+
+         * **column** : double - Column number in the source file.
+
 
 .. _struct-dap-StackTraceResponseBody:
 
 .. das:attribute:: StackTraceResponseBody
 
-|detail/structure-dap-StackTraceResponseBody|
+Response body for the stackTrace request.
+
+:Fields: * **stackFrames** : array< :ref:`StackFrame <struct-dap-StackFrame>` > - Array of stack frames.
+
+         * **totalFrames** : double - Total number of frames available.
+
 
 .. _struct-dap-ScopesArguments:
 
 .. das:attribute:: ScopesArguments
 
-|detail/structure-dap-ScopesArguments|
+Arguments for the scopes request.
+
+:Fields: * **frameId** : double - Stack frame for which to retrieve scopes.
+
 
 .. _struct-dap-Scope:
 
 .. das:attribute:: Scope
 
-|detail/structure-dap-Scope|
+A named variable scope with a variables reference.
+
+:Fields: * **name** : string - Name of the scope (e.g. Locals, Arguments).
+
+         * **variablesReference** : double - Reference used to retrieve the variables of this scope.
+
 
 .. _struct-dap-ScopesResponseBody:
 
 .. das:attribute:: ScopesResponseBody
 
-|detail/structure-dap-ScopesResponseBody|
+Response body for the scopes request.
+
+:Fields: * **scopes** : array< :ref:`Scope <struct-dap-Scope>` > - Array of scopes for the given frame.
+
 
 .. _struct-dap-VariablesArguments:
 
 .. das:attribute:: VariablesArguments
 
-|detail/structure-dap-VariablesArguments|
+Arguments for the variables request.
+
+:Fields: * **variablesReference** : double - Reference to the variable container to expand.
+
+         * **start** : double - Start index of variables to return (for paging).
+
+         * **count** : double - Number of variables to return (for paging).
+
 
 .. _struct-dap-Variable:
 
 .. das:attribute:: Variable
 
-|detail/structure-dap-Variable|
+A variable with name, value, and type information.
+
+:Fields: * **name** : string - Type of the variable.
+
+         * **value** : string - Name of the variable.
+
+         * **variablesReference** : double - String representation of the variable's value.
+
+         * **_type** : string - Reference to child variables, if any.
+
+         * **indexedVariables** : double - Number of indexed child variables.
+
 
 .. _struct-dap-VariablesResponseBody:
 
 .. das:attribute:: VariablesResponseBody
 
-|detail/structure-dap-VariablesResponseBody|
+Response body for the variables request.
+
+:Fields: * **variables** : array< :ref:`Variable <struct-dap-Variable>` > - Array of variables.
+
 
 .. _struct-dap-OutputEventBody:
 
 .. das:attribute:: OutputEventBody
 
-|detail/structure-dap-OutputEventBody|
+Body of the output event for debugger console messages.
+
+:Fields: * **category** : string - Category of the output (e.g. console, stdout, stderr).
+
+         * **output** : string - The output text.
+
 
 .. _struct-dap-ContinueArguments:
 
 .. das:attribute:: ContinueArguments
 
-|detail/structure-dap-ContinueArguments|
+Arguments for the continue request.
+
+:Fields: * **threadId** : double - Thread to continue.
+
 
 .. _struct-dap-PauseArguments:
 
 .. das:attribute:: PauseArguments
 
-|detail/structure-dap-PauseArguments|
+Arguments for the pause request.
+
+:Fields: * **threadId** : double - Thread to pause.
+
 
 .. _struct-dap-StepInArguments:
 
 .. das:attribute:: StepInArguments
 
-|detail/structure-dap-StepInArguments|
+Arguments for the stepIn request.
+
+:Fields: * **threadId** : double - Thread to step into.
+
 
 .. _struct-dap-NextArguments:
 
 .. das:attribute:: NextArguments
 
-|detail/structure-dap-NextArguments|
+Arguments for the next (step over) request.
+
+:Fields: * **threadId** : double - Thread to step over.
+
 
 .. _struct-dap-StepOutArguments:
 
 .. das:attribute:: StepOutArguments
 
-|detail/structure-dap-StepOutArguments|
+Arguments for the stepOut request.
+
+:Fields: * **threadId** : double - Thread to step out of.
+
 
 .. _struct-dap-EvaluateArguments:
 
 .. das:attribute:: EvaluateArguments
 
-|detail/structure-dap-EvaluateArguments|
+Arguments for the evaluate request.
+
+:Fields: * **expression** : string - Expression to evaluate.
+
+         * **frameId** : double - Stack frame in which to evaluate the expression.
+
+         * **context** : string - Context in which the expression is evaluated (e.g. watch, repl, hover).
+
 
 .. _struct-dap-EvaluateResponse:
 
 .. das:attribute:: EvaluateResponse
 
-|detail/structure-dap-EvaluateResponse|
+Response body for the evaluate request.
+
+:Fields: * **result** : string - Type of the evaluation result.
+
+         * **_type** : string - String representation of the evaluation result.
+
+         * **variablesReference** : double - Reference to child variables of the result, if any.
+
+         * **indexedVariables** : double - Number of indexed child variables in the result.
+
 
 .. _struct-dap-BreakpointEvent:
 
 .. das:attribute:: BreakpointEvent
 
-|detail/structure-dap-BreakpointEvent|
+:Fields: * **reason** : string - Event body indicating a breakpoint status change.
+
+         * **breakpoint** :  :ref:`Breakpoint <struct-dap-Breakpoint>`  - The breakpoint whose status changed.
+
 
 .. _struct-dap-ThreadEvent:
 
 .. das:attribute:: ThreadEvent
 
-|detail/structure-dap-ThreadEvent|
+:Fields: * **reason** : string - Event body indicating a thread started or exited.
+
+         * **threadId** : double - Thread identifier.
+
 
 +++++++++++++
 Uncategorized

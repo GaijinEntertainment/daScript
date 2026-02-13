@@ -28,7 +28,9 @@ enum ReOp {
     Union
 }
 
+//! Bit-set representing a set of characters for regex matching.
 typedef CharSet = uint[8]
+//! Iterator of random uints used for regex-based string generation.
 typedef ReGenRandom = iterator<uint>
 
 

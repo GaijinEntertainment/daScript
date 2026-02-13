@@ -31,7 +31,7 @@ var private watchTime = get_clock()
 
 var private liveFunctionLookup : table<string; bool>
 
-var public decsLiveData : array<uint8>
+var public decsLiveData : array<uint8> //! Serialized ECS state preserved across live reloads.
 
 var private liveContext : smart_ptr<Context>
 

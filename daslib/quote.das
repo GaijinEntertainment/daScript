@@ -26,6 +26,7 @@ def find_unique_function_ptr(mod : Module?; name : string; canfail : bool = fals
  * We need this wrappers for initialization of Handle types
  */
 struct CaptureEntryInitData {
+    //! Initialization data for a captured variable entry.
     name : string
     mode : CaptureMode
 }
@@ -40,6 +41,7 @@ def public clone(var a : dasvector`CaptureEntry; b : array<CaptureEntryInitData>
 }
 
 struct LineInfoInitData {
+    //! Initialization data for source line info reconstruction.
     fileInfo : FileInfo?
     column : uint
     line : uint
@@ -79,6 +81,7 @@ def public clone(var args : rtti::AnnotationList; var nargs : array<smart_ptr<rt
 
 
 struct EnumEntryInitData {
+    //! Initialization data for a quoted enum entry.
     name : string
     cppName : string
     // at : LineInfo
@@ -96,6 +99,7 @@ def public clone(var a : dasvector`EnumEntry; var b : array<EnumEntryInitData>) 
 }
 
 struct AnnotationArgumentInitData {
+    //! Initialization data for a quoted annotation argument.
     basicType : Type
     name : string
     sValue : string
@@ -137,6 +141,7 @@ def public cvt_to_mks(var args) : smart_ptr<MakeStruct> {
 }
 
 struct FileInfoInitData {
+    //! Initialization data for reconstructing file info.
     name : string
     tabSize : int
 }
@@ -417,6 +422,7 @@ def convert_quote_to_expression(var arg_expr : ExpressionPtr; at : LineInfo) : E
 }
 
 class QuoteConverter : AstVisitor {
+    //! AST visitor that converts quoted expressions to init data.
     astChanged : bool = false
     def override visitExprQuote(var expr : smart_ptr<ExprQuote>) : ExpressionPtr {
         astChanged = true
@@ -426,6 +432,7 @@ class QuoteConverter : AstVisitor {
 
 [infer_macro]
 class QuotePass : AstPassMacro {
+    //! Pass macro that processes quoted AST expressions.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         // Unwrapping ExprQuote is slow and inefficient, do it only if necessary.
         if (!compiling_program().policies.aot_macros) {

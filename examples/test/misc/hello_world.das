@@ -20,7 +20,7 @@ def take_any_hash_map(a : TFlatHashTable < string; auto(QQ) >) {
     return "string;any"
 }
 
-typedef DictMap = TFlatHashTable < string; int > (@@hash_string)   // vs @@hash
+typedef DictMap = TFlatHashTable < string; int >(@@hash_string)    // vs @@hash
 
 def hash_string(s : string) : uint64 {
     var h : uint64 = 14695981039346656037ul

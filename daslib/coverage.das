@@ -25,6 +25,7 @@ require daslib/macro_boost
 
 
 struct FileCov {
+    //! Per-file coverage data storing line hit counts.
     lines : table<uint; uint>
 
     def insert(x : uint) {
@@ -33,8 +34,8 @@ struct FileCov {
     }
 }
 
-var coverageData = new table<string; FileCov>();
-var checkData = new table<string; table<uint>>();
+var coverageData = new table<string; FileCov>(); //! Global table storing per-file line coverage hit counts.
+var checkData = new table<string; table<uint>>(); //! Global table tracking which lines have already been instrumented.
 
 def private single_file_report(name : string) {
     var data : string;
@@ -66,6 +67,7 @@ def public add_coverage(file : string; line : uint) {
 }
 
 class CoverageMacro : AstVisitor {
+    //! AST visitor that instruments expression blocks with coverage tracking calls.
     astChanged : bool = false
 
     @do_not_delete func : Function?
@@ -95,8 +97,10 @@ class CoverageMacro : AstVisitor {
     }
 }
 
+//! Infer pass macro that applies coverage instrumentation to the program.
 [infer_macro]
 class CoveragePass : AstPassMacro {
+    //! Pass macro that instruments modules with code coverage.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         //! Applies the coverage instrumentation visitor to the program.
         var astVisitor = new CoverageMacro()

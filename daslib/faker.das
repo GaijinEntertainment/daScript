@@ -24,6 +24,7 @@ require daslib/math_bits
 require daslib/enum_trait
 
 struct MonthNameAndDay {
+    //! Month name with its number of days.
     name : string
     days : int
 }

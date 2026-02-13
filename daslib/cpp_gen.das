@@ -15,79 +15,80 @@ require daslib/strings_boost
 require daslib/regex
 require daslib/regex_boost
 
-let verbose = false
+let verbose = false //! Enables verbose output during C++ binding generation.
 
 /*
     config
 */
 
 struct ExEnum {
+    //! Configuration for an external enum to include in binding generation.
     name : string
     removePrefix : bool = true
     isFlags : bool = false
 }
 
-var extra_args = ""
+var extra_args = "" //! Extra command-line arguments passed to the Clang parser.
 
-var local_type_names : array<string>
+var local_type_names : array<string> //! List of type names treated as local (non-external) types.
 
-var blocked_type_names : array<string>
+var blocked_type_names : array<string> //! List of type names excluded from binding generation.
 
-var blocked_functions : array<string> <-  [
+var blocked_functions : array<string> <-  [ //! List of function names excluded from binding generation.
     "operator delete",
     "operator new",
     "__security_init_cookie",
     "__security_check_cookie"
 ];
 
-var blocked_functions_table : table<string; bool>
+var blocked_functions_table : table<string; bool> //! Lookup table built from blocked_functions for efficient exclusion checks.
 
-var blocked_defines : array<string> <- [
+var blocked_defines : array<string> <- [ //! List of preprocessor define names excluded from binding generation.
     "true",
     "false"
 ];
 
-var blocked_defines_table : table<string; bool>
+var blocked_defines_table : table<string; bool> //! Lookup table built from blocked_defines for efficient exclusion checks.
 
-var blocked_enumerations : array<string>
+var blocked_enumerations : array<string> //! List of enumeration names excluded from binding generation.
 
-var blocked_enumerations_table : table<string; bool>
+var blocked_enumerations_table : table<string; bool> //! Lookup table built from blocked_enumerations for efficient exclusion checks.
 
-var is_function_blocked : lambda<(name : string) : bool>
+var is_function_blocked : lambda<(name : string) : bool> //! Optional callback to determine if a function should be excluded from bindings.
 
-var is_const_blocked : lambda<(name : string) : bool>
+var is_const_blocked : lambda<(name : string) : bool> //! Optional callback to determine if a constant should be excluded from bindings.
 
-var is_struct_blocked : lambda<(name : string) : bool>
+var is_struct_blocked : lambda<(name : string) : bool> //! Optional callback to determine if a struct should be excluded from bindings.
 
-var alt_struct_name : lambda<(name : string) : string>
+var alt_struct_name : lambda<(name : string) : string> //! Optional callback to provide an alternative name for a struct binding.
 
-var cmres_functions : array<string>
+var cmres_functions : array<string> //! List of function names that return by value using copy-or-move semantics.
 
-var allow_extern_c = false
+var allow_extern_c = false //! When true, includes extern "C" functions in binding generation.
 
-var ex_enums : table<string; ExEnum>
+var ex_enums : table<string; ExEnum> //! Table of external enums to generate bindings for, keyed by name.
 
-var substitute_field_types : table<string; string>
+var substitute_field_types : table<string; string> //! Table mapping field types to substitute types in generated bindings.
 
-var alias_types : table<string; string>
+var alias_types : table<string; string> //! Table mapping C++ type names to their daScript alias types.
 
-var namespace_to_prefix : table<string; string>
+var namespace_to_prefix : table<string; string> //! Table mapping C++ namespace names to binding name prefixes.
 
-var generate_split_functions = false
-var split_prefix = ""
-var split_cpp_prefix = ""
-var split_cpp_suffix = ""
+var generate_split_functions = false //! When true, splits generated function bindings across multiple files.
+var split_prefix = "" //! Prefix for split output file names.
+var split_cpp_prefix = "" //! C++ prefix inserted at the top of each split file.
+var split_cpp_suffix = "" //! C++ suffix appended at the end of each split file.
 
-var enum_suffix = ""
+var enum_suffix = "" //! Suffix appended to generated enum type names.
 
-var const_type_table : table<string; string>
+var const_type_table : table<string; string> //! Table mapping constant macro names to their C++ types.
 
-var const_uint8_type = "uint8_t"
-var const_uint16_type = "uint16_t"
+var const_uint8_type = "uint8_t" //! C++ type name used for uint8 constants.
+var const_uint16_type = "uint16_t" //! C++ type name used for uint16 constants.
 
-var ex_keywords : table<string; bool>
+var ex_keywords : table<string; bool> //! Table of extra keywords that require name escaping in generated bindings.
 
-var all_keywords = fixed_array<string>(
+var all_keywords = fixed_array<string>( //! List of all daScript keywords that conflict with C++ names and need escaping.
     "float",    "double",
     "uint",     "uint8",    "uint16",   "uint64",   "uint2",    "uint3",    "uint4",
     "int",      "int8",     "int16",    "int64",    "int2",     "int3",     "int4",
@@ -99,54 +100,64 @@ var all_keywords = fixed_array<string>(
 */
 
 enum ScopeKind {
+    //! Kind of scope encountered during Clang AST traversal.
     Namespace
     Struct
 }
 
 struct Scope {
+    //! Represents a named scope (namespace or struct) during AST traversal.
     name : string
     kind : ScopeKind
 }
 
 enum AccessKind {
+    //! C++ access specifier kind for struct/class members.
     Private
     Public
     Protected
 }
 
 struct ClangAstDecl {
+    //! Base struct for all Clang AST declarations with name and C++ name.
     name    : string
     cppName : string
 }
 
 struct ClangTypedef : ClangAstDecl {
+    //! Represents a C++ typedef parsed from the Clang AST.
     qtype   : string
 }
 
 struct ClangEnum : ClangAstDecl {
+    //! Represents a C++ enum parsed from the Clang AST.
     eclass  : bool
     etype   : string
     edecl   : array<string>
 }
 
 struct ClangGlobalVar : ClangAstDecl {
+    //! Represents a C++ global variable parsed from the Clang AST.
     mangledName : string
     gtype       : string
 }
 
 struct ClangStructField : ClangAstDecl {
+    //! Represents a field within a C++ struct parsed from the Clang AST.
     qtype       : string
     access      : AccessKind
     isBitfield  : bool
 }
 
 struct ClangFuncArg : ClangAstDecl {
+    //! Represents a C++ function argument parsed from the Clang AST.
     atype   : string
     value   : string
     vtype   : string
 }
 
 struct ClangFunc : ClangAstDecl {
+    //! Represents a C++ function or method parsed from the Clang AST.
     mangledName : string
     ftype       : string
     isMethod    : bool
@@ -156,12 +167,14 @@ struct ClangFunc : ClangAstDecl {
 }
 
 struct ClangStruct : ClangAstDecl {
+    //! Represents a C++ struct or class parsed from the Clang AST.
     tag     : string
     fields  : array<ClangStructField>
     methods : array<ClangFunc>
 }
 
 struct ClangAst {
+    //! Top-level container for all declarations parsed from the Clang AST.
     typedefs : table<string; ClangTypedef>
     enums : table<string; ClangEnum>
     structs : table<string; ClangStruct>
@@ -169,11 +182,11 @@ struct ClangAst {
     globals : table<string; ClangGlobalVar>
 }
 
-var name_stack : array<Scope>
-var access_stack : array<AccessKind>
-var struct_stack : array<string>
-var ast : ClangAst
-var rev_enums : table<string; string>
+var name_stack : array<Scope> //! Stack of nested namespace/struct scopes during AST traversal.
+var access_stack : array<AccessKind> //! Stack of access specifiers (public/private/protected) during traversal.
+var struct_stack : array<string> //! Stack of struct names during nested struct traversal.
+var ast : ClangAst //! Parsed Clang AST containing all extracted declarations.
+var rev_enums : table<string; string> //! Reverse mapping from enum value to enum type name.
 
 def is_str(jso, str) {
     //! Checks if a JSON value is a string equal to the given value.
@@ -794,7 +807,7 @@ def genStructs(hf, mf, df : FILE const?) {
     fprint(df, "\n")
 }
 
-var op_regex <- %regex~operator[^a-zA-Z_]%%
+var op_regex <- %regex~operator[^a-zA-Z_]%% //! Regex pattern matching C++ operator overload names.
 
 def isBlockedFun(fn) {
     //! Checks if a function should be excluded from binding generation.
@@ -904,7 +917,7 @@ def isCmresFun(fn) {
     return false
 }
 
-var g_method_name = 0
+var g_method_name = 0 //! Counter for generating unique method binding names.
 
 def methodName(name : string) {
     //! Generates a unique internal name for a method binding.
@@ -912,9 +925,9 @@ def methodName(name : string) {
     return "_{name}_method_{g_method_name}"
 }
 
-var g_split_count = 0
-var g_split_factor = 20
-var g_split_file : FILE const? = null
+var g_split_count = 0 //! Counter for the number of functions generated in the current split file.
+var g_split_factor = 20 //! Number of functions per split output file.
+var g_split_file : FILE const? = null //! File handle for the current split output file.
 
 def openSplitFile {
     //! Opens a new split output file when the split threshold is reached.
@@ -1002,7 +1015,7 @@ def getDefinePrefix(xname : string) {
     return "GLOBAL_NAMESPACE"
 }
 
-var gen_fn_callback : lambda<(fn : ClangFunc) : void>
+var gen_fn_callback : lambda<(fn : ClangFunc) : void> //! Optional callback invoked for each generated function binding.
 
 def genFunction(fn : ClangFunc; castbind : bool; df : FILE const?) {
     //! Generates C++ binding code for a single function or method.

@@ -22,7 +22,7 @@ Function annotations
 
 .. das:attribute:: TempStringMacro
 
-|detail/function_annotation-temp_strings-TempStringMacro|
+Function annotation that enables temporary string optimization.
 
 +++++++++++++++++++++++++
 Temporary string builders

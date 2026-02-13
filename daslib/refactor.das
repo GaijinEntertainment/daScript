@@ -38,6 +38,7 @@ def log_range(at : LineInfo) {
 }
 
 struct ExtractMethodDesc {
+    //! Descriptor for extract-method refactoring.
     call_name : string
     function_declaration : string
     call_expression : string
@@ -54,6 +55,7 @@ def JV(li : LineInfo) {
 
 [tag_function_macro(tag="extract_method_tag")]
 class ExtractMethodMacro : AstFunctionAnnotation {
+    //! Function annotation implementing extract-method refactoring.
     method_tag = "!!!extract_method"
     def override verifyCall(var call : smart_ptr<ExprCallFunc>; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
         if (!(call.arguments[0] is ExprConstString)) {
@@ -123,6 +125,7 @@ class ExtractMethodMacro : AstFunctionAnnotation {
 }
 
 struct ExtractVariableDesc {
+    //! Descriptor for extract-variable refactoring.
     variable_name : string
     variable_type : string
     variable_keyword : string
@@ -147,6 +150,7 @@ def public extract_variable_ref(method_name : string; var expr : auto(TT)& ==con
 
 [call_macro(name="extract_variable")]
 class ExtractVariableMacro : AstCallMacro {
+    //! Call macro implementing extract-variable refactoring.
     def override visit(prog : ProgramPtr; mod : Module?; var expr : smart_ptr<ExprCallMacro>) : ExpressionPtr {
         if (!(expr.arguments[0] is ExprConstString)) {
             macro_error(prog, expr.at, "extract_variable: first argument must be a string literal")
@@ -167,6 +171,7 @@ class ExtractVariableMacro : AstCallMacro {
 
 [tag_function_macro(tag="extract_variable_tag")]
 class ExtractVariableFunction : AstFunctionAnnotation {
+    //! Function annotation for extract-variable target functions.
     method_tag = "!!!extract_variable"
     def override transform(var call : smart_ptr<ExprCallFunc>; var errors : das_string) : ExpressionPtr {
         assume cffg = call.func.fromGeneric

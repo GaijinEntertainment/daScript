@@ -41,13 +41,13 @@ Function annotations
 
 .. das:attribute:: REQUIRE
 
-This annotation provides list of required components for entity. 
+This annotation provides list of required components for entity.
 
 .. _handle-decs_boost-REQUIRE_NOT:
 
 .. das:attribute:: REQUIRE_NOT
 
-This annotation provides list of components, which are required to not be part of the entity. 
+This annotation provides list of components, which are required to not be part of the entity.
 
 .. _handle-decs_boost-decs:
 
