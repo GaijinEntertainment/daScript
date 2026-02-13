@@ -1,1 +1,1 @@
-Returns if the given type is a fixed array, return the size of its stride (indexed element) in bytes.
+Returns the stride size in bytes of an element in a fixed array type.

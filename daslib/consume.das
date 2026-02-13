@@ -6,6 +6,11 @@ options strict_smart_pointers = true
 
 module consume shared private
 
+//! Consume-argument optimization macro.
+//!
+//! Detects ``consume_argument`` calls in function bodies and optimizes them
+//! by removing unnecessary temporary copies when the argument can be moved.
+
 require daslib/ast_boost
 
 [macro_function]

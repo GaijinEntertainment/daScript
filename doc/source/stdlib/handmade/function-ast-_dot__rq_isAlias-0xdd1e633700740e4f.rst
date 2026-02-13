@@ -1,1 +1,1 @@
-Returns of somehwere in the type definition it is an alias type.
+Returns whether the type definition contains an alias type.

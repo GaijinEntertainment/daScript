@@ -1,2 +1,1 @@
-Returns true if the pointer to about given type can be deleted.
-
+Property-like accessor that returns ``true`` if a pointer to the given ``TypeAnnotation`` type can be explicitly deleted.

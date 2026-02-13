@@ -1,1 +1,1 @@
- Converts URI to the current platform file name.
+Converts a ``Uri`` to a platform-native file path.

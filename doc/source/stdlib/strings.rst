@@ -5,7 +5,10 @@
 String manipulation library
 ===========================
 
-The string library implements string formatting, conversion, searching, and modification routines.
+The STRINGS module implements string formatting, conversion, searching, and modification
+routines. It provides functions for building strings (``build_string``), parsing
+(``to_int``, ``to_float``), character classification (``is_alpha``, ``is_number``),
+and low-level string manipulation.
 
 All functions and symbols are in "strings" module, use require to get access to it. ::
 
@@ -51,7 +54,7 @@ Character set
 
 .. das:function:: is_char_in_set(Character: int; Charset: uint const[8] implicit) : bool
 
- Returns true if character bit is set in the set (of 256 bits in uint32[8]).
+Returns true if the character given by its integer code is present in the 256-bit character set represented as a uint[8] array.
 
 :Arguments: * **Character** : int
 
@@ -61,7 +64,7 @@ Character set
 
 .. das:function:: set_total(Charset: uint const[8] implicit) : uint
 
- Total number of elements in the character set.
+Returns the total number of characters present (bits set) in the 256-bit character set represented as a uint[8] array.
 
 :Arguments: * **Charset** : uint[8] implicit
 
@@ -69,7 +72,7 @@ Character set
 
 .. das:function:: set_element(Character: int; Charset: uint const[8] implicit) : int
 
- Gen character set element by element index (not character index).
+Returns the character code at the given element index within the 256-bit character set represented as a uint[8] array.
 
 :Arguments: * **Character** : int
 
@@ -91,7 +94,7 @@ Character groups
 
 .. das:function:: is_alpha(Character: int) : bool
 
- Returns true if character is [A-Za-z].
+Returns true if the integer character code represents an alphabetic ASCII character [A-Za-z].
 
 :Arguments: * **Character** : int
 
@@ -99,7 +102,7 @@ Character groups
 
 .. das:function:: is_alnum(Character: int) : bool
 
- Returns true if character is alphanumeric [A-Za-z0-9].
+Returns true if the integer character code represents an alphanumeric ASCII character [A-Za-z0-9].
 
 :Arguments: * **Character** : int
 
@@ -107,7 +110,7 @@ Character groups
 
 .. das:function:: is_hex(Character: int) : bool
 
- Returns true if character is hexadecimal [0-9A-Fa-f].
+Returns true if the integer character code represents a hexadecimal digit [0-9A-Fa-f].
 
 :Arguments: * **Character** : int
 
@@ -115,7 +118,7 @@ Character groups
 
 .. das:function:: is_tab_or_space(Character: int) : bool
 
- Returns true if character is tab or space [ \t].
+Returns true if the integer character code is a tab or space character.
 
 :Arguments: * **Character** : int
 
@@ -123,7 +126,7 @@ Character groups
 
 .. das:function:: is_new_line(Character: int) : bool
 
- Returns true if character is '\n' or '\r'.
+Returns true if the integer character code is a newline character (\\n or \\r).
 
 :Arguments: * **Character** : int
 
@@ -131,7 +134,7 @@ Character groups
 
 .. das:function:: is_white_space(Character: int) : bool
 
- Returns true if character is [ \t\n\r].
+Returns true if the integer character code is a whitespace character (space, tab, newline, carriage return, etc.).
 
 :Arguments: * **Character** : int
 
@@ -139,7 +142,7 @@ Character groups
 
 .. das:function:: is_number(Character: int) : bool
 
- Returns true if character is [0-9].
+Returns true if the integer character code represents a decimal digit [0-9].
 
 :Arguments: * **Character** : int
 
@@ -154,7 +157,7 @@ Character by index
 
 .. das:function:: character_at(str: string implicit; idx: int) : int
 
- Returns character of the string 'str' at index 'idx'.
+Returns the integer character code of string `str` at the given index `idx`, with bounds checking.
 
 :Arguments: * **str** : string implicit
 
@@ -167,7 +170,7 @@ Character by index
 .. warning:: 
   This is unsafe operation.
 
- Returns character of the string 'str' at index 'idx'. This function does not check bounds of index.
+Returns the integer character code of string `str` at the given index `idx` without performing bounds checking (unsafe).
 
 :Arguments: * **str** : string implicit
 
@@ -190,7 +193,7 @@ String properties
 
 .. das:function:: ends_with(str: string implicit; cmp: string implicit) : bool
 
- returns `true` if the end of the string `str`  matches a the string `cmp` otherwise returns `false`
+Returns true if the string `str` ends with the substring `cmp`, false otherwise.
 
 :Arguments: * **str** : string implicit
 
@@ -200,7 +203,7 @@ String properties
 
 .. das:function:: ends_with(str: das_string implicit; cmp: string implicit) : bool
 
- returns `true` if the end of the string `str`  matches a the string `cmp` otherwise returns `false`
+Returns true if the string `str` ends with the substring `cmp`, false otherwise.
 
 :Arguments: * **str** :  :ref:`das_string <handle-builtin-das_string>`  implicit
 
@@ -210,7 +213,7 @@ String properties
 
 .. das:function:: starts_with(str: string implicit; cmp: string implicit) : bool
 
- returns `true` if the beginning of the string `str` matches the string `cmp`; otherwise returns `false`
+Returns true if the beginning of string `str` matches the string `cmp`, with optional `offset` and `cmpLen` parameters to control the comparison start position and length.
 
 :Arguments: * **str** : string implicit
 
@@ -220,7 +223,7 @@ String properties
 
 .. das:function:: starts_with(str: string implicit; cmp: string implicit; cmpLen: uint) : bool
 
- returns `true` if the beginning of the string `str` matches the string `cmp`; otherwise returns `false`
+Returns true if the beginning of string `str` matches the string `cmp`, with optional `offset` and `cmpLen` parameters to control the comparison start position and length.
 
 :Arguments: * **str** : string implicit
 
@@ -232,7 +235,7 @@ String properties
 
 .. das:function:: starts_with(str: string implicit; offset: int; cmp: string implicit) : bool
 
- returns `true` if the beginning of the string `str` matches the string `cmp`; otherwise returns `false`
+Returns true if the beginning of string `str` matches the string `cmp`, with optional `offset` and `cmpLen` parameters to control the comparison start position and length.
 
 :Arguments: * **str** : string implicit
 
@@ -244,7 +247,7 @@ String properties
 
 .. das:function:: starts_with(str: string implicit; offset: int; cmp: string implicit; cmpLen: uint) : bool
 
- returns `true` if the beginning of the string `str` matches the string `cmp`; otherwise returns `false`
+Returns true if the beginning of string `str` matches the string `cmp`, with optional `offset` and `cmpLen` parameters to control the comparison start position and length.
 
 :Arguments: * **str** : string implicit
 
@@ -258,7 +261,7 @@ String properties
 
 .. das:function:: length(str: string implicit) : int
 
- Return length of string
+Returns the length of the string or das_string in characters as an int.
 
 :Arguments: * **str** : string implicit
 
@@ -266,7 +269,7 @@ String properties
 
 .. das:function:: length(str: das_string implicit) : int
 
- Return length of string
+Returns the length of the string or das_string in characters as an int.
 
 :Arguments: * **str** :  :ref:`das_string <handle-builtin-das_string>`  implicit
 
@@ -297,7 +300,7 @@ String builder
 
 .. das:function:: build_string(block: block<(StringBuilderWriter):void>) : string
 
- Create StringBuilderWriter and pass it to the block. Upon completion of a block, return whatever was written as string.
+Creates a StringBuilderWriter, passes it to `block` for writing, and returns the accumulated output as a string.
 
 :Arguments: * **block** : block<( :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ):void> implicit
 
@@ -305,7 +308,7 @@ String builder
 
 .. das:function:: build_hash(block: block<(StringBuilderWriter):void>) : uint64
 
- Build hash of the string (as oppose to building entire string).
+Computes a uint64 hash by streaming writes through a StringBuilderWriter passed to `block`, without allocating the full concatenated string.
 
 :Arguments: * **block** : block<( :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ):void> implicit
 
@@ -313,7 +316,7 @@ String builder
 
 .. das:function:: write(writer: StringBuilderWriter; anything: any) : StringBuilderWriter&
 
- Returns textual representation of the value.
+Writes the textual representation of any value into the StringBuilderWriter and returns a reference to the writer for chaining.
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` 
 
@@ -323,7 +326,7 @@ String builder
 
 .. das:function:: write_char(writer: StringBuilderWriter implicit; ch: int) : StringBuilderWriter&
 
- Writes character into StringBuilderWriter.
+Writes a single character specified by its integer code `ch` into the StringBuilderWriter and returns a reference to the writer.
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
@@ -333,7 +336,7 @@ String builder
 
 .. das:function:: write_chars(writer: StringBuilderWriter implicit; ch: int; count: int) : StringBuilderWriter&
 
- Writes multiple characters into StringBuilderWriter.
+Writes the character specified by integer code `ch` repeated `count` times into the StringBuilderWriter and returns a reference to the writer.
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
@@ -345,7 +348,7 @@ String builder
 
 .. das:function:: write_escape_string(writer: StringBuilderWriter implicit; str: string implicit) : StringBuilderWriter&
 
- Writes escaped string into StringBuilderWriter.
+Writes the escaped form of string `str` (with special characters converted to escape sequences) into the StringBuilderWriter and returns a reference to the writer.
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
@@ -358,7 +361,7 @@ String builder
 .. warning:: 
   This function is deprecated.
 
- Converts value to string given specified format (that of C printf).
+Formats a numeric value of type T using a C printf-style format string, either appending to a StringBuilderWriter and returning a reference to it, or returning the formatted result as a new string.
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
@@ -373,7 +376,7 @@ String builder
 .. warning:: 
   This function is deprecated.
 
- Converts value to string given specified format (that of C printf).
+Formats a numeric value of type T using a C printf-style format string, either appending to a StringBuilderWriter and returning a reference to it, or returning the formatted result as a new string.
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
@@ -388,7 +391,7 @@ String builder
 .. warning:: 
   This function is deprecated.
 
- Converts value to string given specified format (that of C printf).
+Formats a numeric value of type T using a C printf-style format string, either appending to a StringBuilderWriter and returning a reference to it, or returning the formatted result as a new string.
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
@@ -403,7 +406,7 @@ String builder
 .. warning:: 
   This function is deprecated.
 
- Converts value to string given specified format (that of C printf).
+Formats a numeric value of type T using a C printf-style format string, either appending to a StringBuilderWriter and returning a reference to it, or returning the formatted result as a new string.
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
@@ -418,7 +421,7 @@ String builder
 .. warning:: 
   This function is deprecated.
 
- Converts value to string given specified format (that of C printf).
+Formats a numeric value of type T using a C printf-style format string, either appending to a StringBuilderWriter and returning a reference to it, or returning the formatted result as a new string.
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
@@ -433,7 +436,7 @@ String builder
 .. warning:: 
   This function is deprecated.
 
- Converts value to string given specified format (that of C printf).
+Formats a numeric value of type T using a C printf-style format string, either appending to a StringBuilderWriter and returning a reference to it, or returning the formatted result as a new string.
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
@@ -448,7 +451,7 @@ String builder
 .. warning:: 
   This function is deprecated.
 
- Converts value to string given specified format (that of C printf).
+Formats a numeric value of type T using a C printf-style format string, either appending to a StringBuilderWriter and returning a reference to it, or returning the formatted result as a new string.
 
 :Arguments: * **format** : string implicit
 
@@ -461,7 +464,7 @@ String builder
 .. warning:: 
   This function is deprecated.
 
- Converts value to string given specified format (that of C printf).
+Formats a numeric value of type T using a C printf-style format string, either appending to a StringBuilderWriter and returning a reference to it, or returning the formatted result as a new string.
 
 :Arguments: * **format** : string implicit
 
@@ -474,7 +477,7 @@ String builder
 .. warning:: 
   This function is deprecated.
 
- Converts value to string given specified format (that of C printf).
+Formats a numeric value of type T using a C printf-style format string, either appending to a StringBuilderWriter and returning a reference to it, or returning the formatted result as a new string.
 
 :Arguments: * **format** : string implicit
 
@@ -487,7 +490,7 @@ String builder
 .. warning:: 
   This function is deprecated.
 
- Converts value to string given specified format (that of C printf).
+Formats a numeric value of type T using a C printf-style format string, either appending to a StringBuilderWriter and returning a reference to it, or returning the formatted result as a new string.
 
 :Arguments: * **format** : string implicit
 
@@ -500,7 +503,7 @@ String builder
 .. warning:: 
   This function is deprecated.
 
- Converts value to string given specified format (that of C printf).
+Formats a numeric value of type T using a C printf-style format string, either appending to a StringBuilderWriter and returning a reference to it, or returning the formatted result as a new string.
 
 :Arguments: * **format** : string implicit
 
@@ -513,7 +516,7 @@ String builder
 .. warning:: 
   This function is deprecated.
 
- Converts value to string given specified format (that of C printf).
+Formats a numeric value of type T using a C printf-style format string, either appending to a StringBuilderWriter and returning a reference to it, or returning the formatted result as a new string.
 
 :Arguments: * **format** : string implicit
 
@@ -530,7 +533,7 @@ das::string manipulation
 
 .. das:function:: append(str: das_string implicit; ch: int)
 
- Appends single character `ch` to das::string `str`.
+Appends a single character specified by its integer code `ch` to the mutable das_string `str`.
 
 :Arguments: * **str** :  :ref:`das_string <handle-builtin-das_string>`  implicit
 
@@ -540,7 +543,7 @@ das::string manipulation
 
 .. das:function:: resize(str: das_string implicit; new_length: int)
 
- Resize string, i.e make it specified length.
+Resizes the mutable das_string `str` in place to `new_length` characters.
 
 :Arguments: * **str** :  :ref:`das_string <handle-builtin-das_string>`  implicit
 
@@ -575,7 +578,7 @@ String modifications
 
 .. das:function:: repeat(str: string implicit; count: int) : string
 
- Repeat string specified number of times, and return the result.
+Returns a new string formed by concatenating `str` repeated `count` times.
 
 :Arguments: * **str** : string implicit
 
@@ -585,7 +588,7 @@ String modifications
 
 .. das:function:: strip(str: string implicit) : string
 
- Strips white-space-only characters that might appear at the beginning or end of the given string and returns the new stripped string.
+Returns a new string with all leading and trailing whitespace characters removed from `str`.
 
 :Arguments: * **str** : string implicit
 
@@ -593,7 +596,7 @@ String modifications
 
 .. das:function:: strip_right(str: string implicit) : string
 
- Strips white-space-only characters that might appear at the end of the given string and returns the new stripped string.
+Returns a new string with all trailing whitespace characters removed from `str`.
 
 :Arguments: * **str** : string implicit
 
@@ -601,7 +604,7 @@ String modifications
 
 .. das:function:: strip_left(str: string implicit) : string
 
- Strips white-space-only characters that might appear at the beginning of the given string and returns the new stripped string.
+Returns a new string with all leading whitespace characters removed from `str`.
 
 :Arguments: * **str** : string implicit
 
@@ -609,7 +612,7 @@ String modifications
 
 .. das:function:: chop(str: string implicit; start: int; length: int) : string
 
- Return all part of the strings starting at start and ending at start + length.
+Returns a substring of `str` beginning at index `start` with the specified `length`.
 
 :Arguments: * **str** : string implicit
 
@@ -621,7 +624,7 @@ String modifications
 
 .. das:function:: slice(str: string implicit; start: int; end: int) : string
 
- Return all part of the strings starting at start and ending by end. Start can be negative (-1 means "1 from the end").
+Returns a substring of `str` from index `start` to optional `end` (exclusive), where negative indices count from the end of the string.
 
 :Arguments: * **str** : string implicit
 
@@ -633,7 +636,7 @@ String modifications
 
 .. das:function:: slice(str: string implicit; start: int) : string
 
- Return all part of the strings starting at start and ending by end. Start can be negative (-1 means "1 from the end").
+Returns a substring of `str` from index `start` to optional `end` (exclusive), where negative indices count from the end of the string.
 
 :Arguments: * **str** : string implicit
 
@@ -643,7 +646,7 @@ String modifications
 
 .. das:function:: reverse(str: string implicit) : string
 
- Return reversed string
+Returns a new string with the characters of `str` in reverse order.
 
 :Arguments: * **str** : string implicit
 
@@ -651,7 +654,7 @@ String modifications
 
 .. das:function:: to_upper(str: string implicit) : string
 
- Return all upper case string
+Returns a new string with all characters of `str` converted to upper case.
 
 :Arguments: * **str** : string implicit
 
@@ -659,7 +662,7 @@ String modifications
 
 .. das:function:: to_lower(str: string implicit) : string
 
- Return all lower case string
+Returns a new string with all characters of `str` converted to lower case.
 
 :Arguments: * **str** : string implicit
 
@@ -670,7 +673,7 @@ String modifications
 .. warning:: 
   This is unsafe operation.
 
- Modify string in place to be all lower case
+Converts all characters of `str` to lower case in place and returns the modified string.
 
 :Arguments: * **str** : string implicit
 
@@ -681,7 +684,7 @@ String modifications
 .. warning:: 
   This is unsafe operation.
 
- Modify string in place to be all upper case string
+Converts all characters of `str` to upper case in place and returns the modified string.
 
 :Arguments: * **str** : string implicit
 
@@ -689,7 +692,7 @@ String modifications
 
 .. das:function:: escape(str: string implicit) : string
 
- Escape string so that escape sequences are printable, for example converting "\n" into "\\n".
+Returns a new string with special characters replaced by their printable escape sequences (e.g. newline becomes \\n).
 
 :Arguments: * **str** : string implicit
 
@@ -697,7 +700,7 @@ String modifications
 
 .. das:function:: unescape(str: string implicit) : string
 
- Unescape string i.e reverse effects of `escape`. For example "\\n" is converted to "\n".
+Returns a new string with printable escape sequences converted back to their original characters (e.g. \\n becomes a newline).
 
 :Arguments: * **str** : string implicit
 
@@ -705,7 +708,7 @@ String modifications
 
 .. das:function:: safe_unescape(str: string implicit) : string
 
- Unescape string i.e reverse effects of `escape`. For example "\\n" is converted to "\n".
+Unescapes a string by converting printable escape sequences back to their original characters (e.g. \\n becomes a newline), skipping invalid sequences instead of failing.
 
 :Arguments: * **str** : string implicit
 
@@ -713,7 +716,7 @@ String modifications
 
 .. das:function:: replace(str: string implicit; toSearch: string implicit; replace: string implicit) : string
 
- Replace all occurances of the stubstring in the string with another substring.
+Returns a new string with all occurrences of substring `toSearch` in `str` replaced by the substring `replace`.
 
 :Arguments: * **str** : string implicit
 
@@ -725,7 +728,7 @@ String modifications
 
 .. das:function:: rtrim(str: string implicit) : string
 
- Removes trailing white space.
+Returns a new string with trailing whitespace removed from `str`, or with trailing characters from the specified `chars` set removed.
 
 :Arguments: * **str** : string implicit
 
@@ -733,7 +736,7 @@ String modifications
 
 .. das:function:: rtrim(str: string implicit; chars: string implicit) : string
 
- Removes trailing white space.
+Returns a new string with trailing whitespace removed from `str`, or with trailing characters from the specified `chars` set removed.
 
 :Arguments: * **str** : string implicit
 
@@ -743,7 +746,7 @@ String modifications
 
 .. das:function:: ltrim(str: string implicit) : string
 
- Removes leading white space.
+Returns a new string with leading whitespace characters removed from `str`.
 
 :Arguments: * **str** : string implicit
 
@@ -751,7 +754,7 @@ String modifications
 
 .. das:function:: trim(str: string implicit) : string
 
- Removes leading and trailing white space.
+Returns a new string with both leading and trailing whitespace characters removed from `str`.
 
 :Arguments: * **str** : string implicit
 
@@ -768,7 +771,7 @@ Search substrings
 
 .. das:function:: find(str: string implicit; substr: string implicit; start: int) : int
 
- Return index where substr can be found within str (starting from optional 'start' at), or -1 if not found
+Returns the first index at which `substr` (string or character code) occurs in `str`, optionally searching from `start`, or -1 if not found.
 
 :Arguments: * **str** : string implicit
 
@@ -780,7 +783,7 @@ Search substrings
 
 .. das:function:: find(str: string implicit; substr: string implicit) : int
 
- Return index where substr can be found within str (starting from optional 'start' at), or -1 if not found
+Returns the first index at which `substr` (string or character code) occurs in `str`, optionally searching from `start`, or -1 if not found.
 
 :Arguments: * **str** : string implicit
 
@@ -790,7 +793,7 @@ Search substrings
 
 .. das:function:: find(str: string implicit; substr: int) : int
 
- Return index where substr can be found within str (starting from optional 'start' at), or -1 if not found
+Returns the first index at which `substr` (string or character code) occurs in `str`, optionally searching from `start`, or -1 if not found.
 
 :Arguments: * **str** : string implicit
 
@@ -800,7 +803,7 @@ Search substrings
 
 .. das:function:: find(str: string implicit; substr: int; start: int) : int
 
- Return index where substr can be found within str (starting from optional 'start' at), or -1 if not found
+Returns the first index at which `substr` (string or character code) occurs in `str`, optionally searching from `start`, or -1 if not found.
 
 :Arguments: * **str** : string implicit
 
@@ -859,7 +862,7 @@ String conversion routines
 
 .. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: int8) : StringBuilderWriter&
 
-Converts value to string given specified format (that of libfmt or C++20 std::format).
+Formats a numeric value of type T into the StringBuilderWriter using a libfmt/C++20 std::format format string and returns a reference to the writer.
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
@@ -871,7 +874,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: uint8) : StringBuilderWriter&
 
- Converts value to string given specified format (that of libfmt or C++20 std::format).
+Formats a numeric value of type T into the StringBuilderWriter using a libfmt/C++20 std::format format string and returns a reference to the writer.
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
@@ -883,7 +886,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: int16) : StringBuilderWriter&
 
- Converts value to string given specified format (that of libfmt or C++20 std::format).
+Formats a numeric value of type T into the StringBuilderWriter using a libfmt/C++20 std::format format string and returns a reference to the writer.
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
@@ -895,7 +898,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: uint16) : StringBuilderWriter&
 
- Converts value to string given specified format (that of libfmt or C++20 std::format).
+Formats a numeric value of type T into the StringBuilderWriter using a libfmt/C++20 std::format format string and returns a reference to the writer.
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
@@ -907,7 +910,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: int) : StringBuilderWriter&
 
- Converts value to string given specified format (that of libfmt or C++20 std::format).
+Formats a numeric value of type T into the StringBuilderWriter using a libfmt/C++20 std::format format string and returns a reference to the writer.
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
@@ -919,7 +922,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: uint) : StringBuilderWriter&
 
- Converts value to string given specified format (that of libfmt or C++20 std::format).
+Formats a numeric value of type T into the StringBuilderWriter using a libfmt/C++20 std::format format string and returns a reference to the writer.
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
@@ -931,7 +934,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: int64) : StringBuilderWriter&
 
- Converts value to string given specified format (that of libfmt or C++20 std::format).
+Formats a numeric value of type T into the StringBuilderWriter using a libfmt/C++20 std::format format string and returns a reference to the writer.
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
@@ -943,7 +946,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: uint64) : StringBuilderWriter&
 
- Converts value to string given specified format (that of libfmt or C++20 std::format).
+Formats a numeric value of type T into the StringBuilderWriter using a libfmt/C++20 std::format format string and returns a reference to the writer.
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
@@ -955,7 +958,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: float) : StringBuilderWriter&
 
- Converts value to string given specified format (that of libfmt or C++20 std::format).
+Formats a numeric value of type T into the StringBuilderWriter using a libfmt/C++20 std::format format string and returns a reference to the writer.
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
@@ -967,7 +970,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: double) : StringBuilderWriter&
 
- Converts value to string given specified format (that of libfmt or C++20 std::format).
+Formats a numeric value of type T into the StringBuilderWriter using a libfmt/C++20 std::format format string and returns a reference to the writer.
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
@@ -979,7 +982,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: string(bytes: array<uint8>) : string
 
- Return string from the byte array.
+Constructs and returns a new string from the contents of a uint8 byte array.
 
 :Arguments: * **bytes** : array<uint8> implicit
 
@@ -987,7 +990,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: to_char(char: int) : string
 
- Convert character to string.
+Converts an integer character code to a single-character string.
 
 :Arguments: * **char** : int
 
@@ -995,7 +998,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: int8(str: string implicit) : int8
 
- Converts string to int8. In case of error panic.
+Converts a string to an int8, panicking on failure; an overload accepts `result`, `offset`, and optional `hex` flag to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
@@ -1003,7 +1006,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: uint8(str: string implicit) : uint8
 
- Convert string to uint8. In case of error panic.
+Converts a string to a uint8, panicking on failure; an overload accepts `result`, `offset`, and optional `hex` flag to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
@@ -1011,7 +1014,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: int16(str: string implicit) : int16
 
- Converts string to int16. In case of error panic.
+Converts a string to an int16, panicking on failure; an overload accepts `result`, `offset`, and optional `hex` flag to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
@@ -1019,7 +1022,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: uint16(str: string implicit) : uint16
 
- Convert string to uint16. In case of error panic.
+Converts a string to a uint16, panicking on failure; an overload accepts `result`, `offset`, and optional `hex` flag to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
@@ -1027,7 +1030,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: int(str: string implicit) : int
 
- Converts string to integer. In case of error panic.
+Converts a string to an int, panicking on failure; an overload accepts `result`, `offset`, and optional `hex` flag to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
@@ -1035,7 +1038,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: uint(str: string implicit) : uint
 
- Convert string to uint. In case of error panic.
+Converts a string to a uint, panicking on failure; an overload accepts `result`, `offset`, and optional `hex` flag to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
@@ -1043,7 +1046,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: int64(str: string implicit) : int64
 
- Converts string to int64. In case of error panic.
+Converts a string to an int64, panicking on failure; an overload accepts `result`, `offset`, and optional `hex` flag to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
@@ -1051,7 +1054,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: uint64(str: string implicit) : uint64
 
- Convert string to uint64. In case of error panic.
+Converts a string to a uint64, panicking on failure; an overload accepts `result`, `offset`, and optional `hex` flag to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
@@ -1059,7 +1062,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: float(str: string implicit) : float
 
- Converts string to float. In case of error panic.
+Converts a string to a float value, panicking on failure; an overload accepts `result` and `offset` output parameters to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
@@ -1067,7 +1070,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: double(str: string implicit) : double
 
- Converts string to double. In case of error panic.
+Converts a string to a double value, panicking on failure; an overload accepts `result` and `offset` output parameters to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
@@ -1075,7 +1078,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: to_int8(value: string implicit; hex: bool = false) : int8
 
- Convert string to int8. In case of error returns 0
+Converts a string to an int8 value with optional hexadecimal parsing when `hex` is true, returning 0 if the conversion fails.
 
 :Arguments: * **value** : string implicit
 
@@ -1085,7 +1088,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: to_uint8(value: string implicit; hex: bool = false) : uint8
 
- Convert string to uint8. In case of error returns 0u
+Converts a string to a uint8 value with optional hexadecimal parsing when `hex` is true, returning 0u if the conversion fails.
 
 :Arguments: * **value** : string implicit
 
@@ -1095,7 +1098,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: to_int16(value: string implicit; hex: bool = false) : int16
 
- Convert string to int16. In case of error returns 0
+Converts a string to an int16 value with optional hexadecimal parsing when `hex` is true, returning 0 if the conversion fails.
 
 :Arguments: * **value** : string implicit
 
@@ -1105,7 +1108,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: to_int(value: string implicit; hex: bool = false) : int
 
- Convert string to int. In case of error returns 0
+Converts a string to an int value with optional hexadecimal parsing when `hex` is true, returning 0 if the conversion fails.
 
 :Arguments: * **value** : string implicit
 
@@ -1115,7 +1118,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: to_uint(value: string implicit; hex: bool = false) : uint
 
- Convert string to uint. In case of error returns 0u
+Converts a string to a uint value with optional hexadecimal parsing when `hex` is true, returning 0u if the conversion fails.
 
 :Arguments: * **value** : string implicit
 
@@ -1125,7 +1128,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: to_int64(value: string implicit; hex: bool = false) : int64
 
- Convert string to int64. In case of error returns 0l
+Converts a string to an int64 value with optional hexadecimal parsing when `hex` is true, returning 0l if the conversion fails.
 
 :Arguments: * **value** : string implicit
 
@@ -1135,7 +1138,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: to_uint64(value: string implicit; hex: bool = false) : uint64
 
- Convert string to uint64. In case of error returns 0ul
+Converts a string to a uint64 value with optional hexadecimal parsing when `hex` is true, returning 0ul if the conversion fails.
 
 :Arguments: * **value** : string implicit
 
@@ -1145,7 +1148,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: to_cpp_float(value: float) : string
 
- Convert string to float using C++ fmt::format_to, while also recognizing FLT_MIN, FLT_MAX, etc.
+Converts a float value to its string representation using C++ fmt::format_to, correctly handling special constants like FLT_MIN and FLT_MAX.
 
 :Arguments: * **value** : float
 
@@ -1153,7 +1156,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: to_float(value: string implicit) : float
 
- Convert string to float. In case of error returns 0.0
+Converts a string to a float value, returning 0.0 if the conversion fails.
 
 :Arguments: * **value** : string implicit
 
@@ -1161,7 +1164,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: to_double(value: string implicit) : double
 
- Convert string to double. In case of error returns 0.0lf
+Converts a string to a double value, returning 0.0lf if the conversion fails.
 
 :Arguments: * **value** : string implicit
 
@@ -1169,7 +1172,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: int8(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int8
 
- Converts string to int8. In case of error panic.
+Converts a string to an int8, panicking on failure; an overload accepts `result`, `offset`, and optional `hex` flag to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
@@ -1183,7 +1186,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: uint8(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint8
 
- Convert string to uint8. In case of error panic.
+Converts a string to a uint8, panicking on failure; an overload accepts `result`, `offset`, and optional `hex` flag to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
@@ -1197,7 +1200,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: int16(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int16
 
- Converts string to int16. In case of error panic.
+Converts a string to an int16, panicking on failure; an overload accepts `result`, `offset`, and optional `hex` flag to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
@@ -1211,7 +1214,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: uint16(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint16
 
- Convert string to uint16. In case of error panic.
+Converts a string to a uint16, panicking on failure; an overload accepts `result`, `offset`, and optional `hex` flag to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
@@ -1225,7 +1228,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: int(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int
 
- Converts string to integer. In case of error panic.
+Converts a string to an int, panicking on failure; an overload accepts `result`, `offset`, and optional `hex` flag to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
@@ -1239,7 +1242,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: uint(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint
 
- Convert string to uint. In case of error panic.
+Converts a string to a uint, panicking on failure; an overload accepts `result`, `offset`, and optional `hex` flag to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
@@ -1253,7 +1256,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: int64(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int64
 
- Converts string to int64. In case of error panic.
+Converts a string to an int64, panicking on failure; an overload accepts `result`, `offset`, and optional `hex` flag to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
@@ -1267,7 +1270,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: uint64(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint64
 
- Convert string to uint64. In case of error panic.
+Converts a string to a uint64, panicking on failure; an overload accepts `result`, `offset`, and optional `hex` flag to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
@@ -1281,7 +1284,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: float(str: string implicit; result: ConversionResult& implicit; offset: int& implicit) : float
 
- Converts string to float. In case of error panic.
+Converts a string to a float value, panicking on failure; an overload accepts `result` and `offset` output parameters to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
@@ -1293,7 +1296,7 @@ Converts value to string given specified format (that of libfmt or C++20 std::fo
 
 .. das:function:: double(str: string implicit; result: ConversionResult& implicit; offset: int& implicit) : double
 
- Converts string to double. In case of error panic.
+Converts a string to a double value, panicking on failure; an overload accepts `result` and `offset` output parameters to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
@@ -1312,7 +1315,7 @@ String as array
 
 .. das:function:: peek_data(str: string implicit; block: block<(array<uint8>#):void>)
 
- Passes temporary array which is mapped to the string data to a block as read-only.
+Maps the raw bytes of string `str` into a temporary read-only uint8 array and passes it to `block` for inspection.
 
 :Arguments: * **str** : string implicit
 
@@ -1322,7 +1325,7 @@ String as array
 
 .. das:function:: modify_data(str: string implicit; block: block<(array<uint8>#):void>) : string
 
- Passes temporary array which is mapped to the string data to a block for both reading and writing.
+Maps the raw bytes of string `str` into a temporary uint8 array, passes it to `block` for in-place reading and writing, and returns the modified string.
 
 :Arguments: * **str** : string implicit
 
@@ -1342,7 +1345,7 @@ Low level memory allocation
 .. warning:: 
   This is unsafe operation.
 
- Removes string from the string heap. This is unsafe because it will free the memory and all dangling strings will be broken.
+Frees the string `str` from the heap and clears the reference, returning true on success; unsafe because existing aliases become dangling pointers.
 
 :Arguments: * **str** : string& implicit
 
@@ -1350,7 +1353,7 @@ Low level memory allocation
 
 .. das:function:: reserve_string_buffer(str: string implicit; length: int) : string
 
- Allocate copy of the string data on the heap.
+Allocates a copy of the string data on the heap with at least `length` bytes reserved and returns the new string.
 
 :Arguments: * **str** : string implicit
 

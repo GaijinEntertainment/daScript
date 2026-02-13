@@ -1,1 +1,1 @@
- Notify channel or job status that entry is completed (decrease entry count) and decrease reference count of the job status or channel.
+Decreases the entry count and the reference count of a ``Channel`` or ``JobStatus`` in a single operation.

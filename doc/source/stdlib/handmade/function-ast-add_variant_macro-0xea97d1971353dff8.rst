@@ -1,1 +1,1 @@
- Adds `AstVariantMacro` to the specific module.
+Adds an AstVariantMacro adapter to the specified module.

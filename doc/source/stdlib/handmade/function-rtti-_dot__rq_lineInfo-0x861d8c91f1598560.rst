@@ -1,2 +1,1 @@
-Returns line information for the given function RTTI.
-
+Property-like accessor that returns the ``LineInfo`` (source location) associated with the given function's ``FuncInfo``.

@@ -1,1 +1,1 @@
- Annotation macro which is attached to the `Function`.
+Annotation macro that attaches to `Function` declarations. Provides compile-time hooks for transforming functions, adding finalization logic, and controlling function compilation behavior.

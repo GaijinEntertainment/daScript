@@ -1,1 +1,1 @@
- returns iterator, which iterates though each element of the object. object can be range, static or dynamic array, another iterator.
+Creates an iterator that yields each `int` value in the range `rng`.

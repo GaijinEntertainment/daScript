@@ -1,1 +1,1 @@
- similar to print but output goes to the logging infrastructure. `arg0` specifies log level, i.e. LOG_... constants
+Outputs `text` to the logging infrastructure at the specified `level` (e.g. LOG_INFO, LOG_ERROR), rather than to standard output.

@@ -1,1 +1,1 @@
- Returns unique generic function of that specific name, or null if there is none or more than one.
+Searches the compiling program for exactly one generic function with the given name; returns it or ``null`` if zero or multiple matches exist.

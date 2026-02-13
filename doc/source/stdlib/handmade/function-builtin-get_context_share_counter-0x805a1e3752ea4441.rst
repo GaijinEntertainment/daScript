@@ -1,1 +1,1 @@
-Returns use count for the shared context, which is incremented by each thread that accesses it.
+Returns the use-count of the shared context, which is incremented each time a thread accesses it; useful for tracking concurrent context usage.

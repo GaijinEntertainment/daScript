@@ -1,4 +1,6 @@
-The instance_function module exposes a way to declaratively instance a generic function with particular set of types.
+The INSTANCE_FUNCTION module provides the ``[instance_function]`` annotation
+for creating bound method-like functions. It captures the ``self`` reference
+at call time, enabling object-oriented dispatch patterns in daScript.
 
 All functions and symbols are in "instance_function" module, use require to get access to it. ::
 

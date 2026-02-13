@@ -1,1 +1,1 @@
- executes main loop for the application. has specific implementation in EMSCRIPTEN, otherwise invoke until false.
+Executes the application main loop by repeatedly invoking `block` until it returns `false`; on Emscripten targets, uses the platform-specific main loop mechanism instead.

@@ -1,1 +1,1 @@
-Creates a unique label for a function based on its name and argument types.
+Creates a unique, file-name-safe label string for a function.

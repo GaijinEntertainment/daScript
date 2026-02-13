@@ -1,1 +1,1 @@
- Creates appropriate call expression for the given call function name in the `Program`.
+Creates the appropriate call expression for a given function name in the program.

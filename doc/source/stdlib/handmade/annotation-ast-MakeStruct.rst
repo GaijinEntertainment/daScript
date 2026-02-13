@@ -1,1 +1,1 @@
- Part of `ExprMakeStruct`, happens to be vector of `MakeFieldDecl`.
+Annotation representing a vector of `MakeFieldDecl` used to initialize fields in `ExprMakeStruct` expressions.

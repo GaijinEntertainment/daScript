@@ -1,1 +1,1 @@
-Returns if the given type is a pod (plain old data) type.
+Returns whether the given type is a plain old data (POD) type.

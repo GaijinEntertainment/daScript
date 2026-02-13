@@ -1,1 +1,1 @@
- returns a integer value representing the largest integer that is less than or equal to x
+Returns the largest integer not greater than x (rounds toward negative infinity), converting the float argument to an int result.

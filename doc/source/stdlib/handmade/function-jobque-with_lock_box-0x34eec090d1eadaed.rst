@@ -1,1 +1,1 @@
- Creates `LockBox`, makes it available inside the scope of the block.
+Creates a ``LockBox`` scoped to the given block and automatically destroys it afterward.

@@ -1,1 +1,1 @@
- equivalent to linux `basename`. Splits path and returns the string up to, but not including, the final '/'.
+Extracts and returns the final component of a file path, equivalent to POSIX basename.

@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module faker shared private
 
+//! Random test-data generator.
+//!
+//! The ``Faker`` struct produces random values for every built-in type
+//! (integers, floats, vectors, strings, dates, booleans) using
+//! configurable ranges. Used by ``fuzzer`` for fuzz testing.
+
 // TODO: add control for the RNG source
 
 require daslib/regex_boost
@@ -18,6 +24,7 @@ require daslib/math_bits
 require daslib/enum_trait
 
 struct MonthNameAndDay {
+    //! Month name with its number of days.
     name : string
     days : int
 }
@@ -56,6 +63,7 @@ struct public Faker {
 }
 
 def public Faker(var rng : iterator<uint>) {
+    //! Constructs a Faker instance with the given random number generator.
     return <-  Faker(rnd <- rng)
 }
 

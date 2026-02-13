@@ -8,7 +8,7 @@ let AOT_INCLUDES = "#include \"daScript/misc/platform.h\"
 #include \"daScript/simulate/aot.h\"
 #include \"daScript/simulate/aot_library.h\"
 
-";
+";//! C++ include directives required for AOT-compiled daScript code.
 
 let AOT_HEADERS = "#if defined(_MSC_VER)
 #pragma warning(push)
@@ -44,7 +44,7 @@ let AOT_HEADERS = "#if defined(_MSC_VER)
 #pragma clang diagnostic ignored \"-Wunused-function\"
 #endif
 
-";
+";//! Compiler-specific warning suppression pragmas for AOT-generated C++ code.
 
 let AOT_FOOTER = "
 #if defined(_MSC_VER)
@@ -58,4 +58,4 @@ let AOT_FOOTER = "
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
-";
+";//! Compiler-specific warning restoration pragmas closing AOT-generated C++ code.

@@ -1,1 +1,1 @@
- returns time interval in usec, since the specified `reft` (usually from `ref_time_ticks`)
+Computes the elapsed time in microseconds since the reference point `ref`, which is typically obtained from `ref_time_ticks`.

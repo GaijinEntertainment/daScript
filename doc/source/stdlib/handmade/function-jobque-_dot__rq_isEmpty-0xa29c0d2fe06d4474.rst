@@ -1,1 +1,1 @@
-Weather there are no remaining elements in the pipe.
+Whether the channel or pipe contains no remaining elements.

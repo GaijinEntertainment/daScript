@@ -1,3 +1,1 @@
-Returns true if the given annotation represents a structure type annotation.
-
-
+Property-like accessor that returns ``true`` if the given ``Annotation`` is a ``StructureTypeAnnotation``, which binds a C++ class as a daScript handled struct.

@@ -1,1 +1,1 @@
- Explicitly marks (forces) function to be compiled with JIT compiler.
+Explicitly forces the annotated function to be compiled using the JIT compiler, overriding default compilation decisions.

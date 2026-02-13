@@ -1,1 +1,1 @@
- Which things to print in debug_expression.
+Bitfield controlling ``debug_expression`` output — currently has a single ``refCount`` flag that includes smart pointer reference counts in the dump.

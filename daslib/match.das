@@ -6,6 +6,14 @@ options strict_smart_pointers = true
 
 module match shared private
 
+//! Pattern matching macro for daScript.
+//!
+//! Provides ``match``, ``static_match``, ``multi_match``, and ``static_multi_match`` macros
+//! that decompose values by structure, variant, tuple, array, or constant comparison.
+//! Also provides ``match_type`` and ``match_expr`` helpers, guard expressions (``&&``),
+//! alternation (``||``), wildcard (``_``), and variable capture (``$v(name)``).
+//! Structures annotated with ``[match_as_is]`` or ``[match_copy]`` enable custom matching.
+
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/macro_boost
@@ -20,16 +28,18 @@ require daslib/debug
 let LOG_MATCH = false
 
 struct MatchError {
-    msg : string
-    @do_not_delete at : LineInfo const?
+    //! Stores a single pattern-matching compilation error with its source location.
+    msg : string                        //! error message text
+    @do_not_delete at : LineInfo const? //! source location of the error
 }
 
 struct MatchTo {
-    conditions   : array<ExpressionPtr>
-    declarations : table<string; ExpressionPtr>
-    prefix       : array<ExpressionPtr>
-    errors       : array<MatchError>
-    failed       : bool
+    //! Accumulates the result of pattern analysis for one match arm.
+    conditions   : array<ExpressionPtr>             //! boolean conditions that must all be true for the arm to match
+    declarations : table<string; ExpressionPtr>     //! captured variables (name → access expression)
+    prefix       : array<ExpressionPtr>             //! prefix statements (e.g. temporaries for match_copy)
+    errors       : array<MatchError>                //! errors encountered during pattern analysis
+    failed       : bool                             //! true if a hard error occurred (unresolved types etc.)
 }
 
 [macro_function]
@@ -45,6 +55,7 @@ def match_error(var errors : array<MatchError>; msg : string; at : LineInfo) {//
 }
 
 enum MatchType {
+    //! Type of pattern match clause.
     none
     as_is
     copy
@@ -740,12 +751,14 @@ class MatchCopy : AstStructureAnnotation {
 
 
 def public match_type(anytype, anything) : void {
-    //! this is a macro, it will be replaced with a match expression of specified type
+    //! Match by type. Inside a ``match`` arm, ``match_type(expr, Type)`` checks whether the
+    //! matched value has the given type and decomposes ``expr`` against it.
     pass
 }
 
 def public match_expr(anything) : void {
-    //! this is a macro, it will be replaced with a match expression
+    //! Match by expression equality. Inside a ``match`` arm, ``match_expr(expr)`` generates
+    //! a condition ``value == expr``. Captured variables (``$v``) are substituted before comparison.
     pass
 }
 

@@ -1,1 +1,1 @@
- Finalizer for the URI.
+Releases all resources held by the ``Uri`` object.

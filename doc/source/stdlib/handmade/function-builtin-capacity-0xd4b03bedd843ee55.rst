@@ -1,1 +1,1 @@
- capacity will return current capacity of table or array `arg`. Capacity is the count of elements, allocating (or pushing) until that size won't cause reallocating dynamic heap.
+Returns the current capacity of the `array` — the number of elements it can hold before triggering a reallocation.

@@ -1,1 +1,1 @@
- Adds `AstForLoopMacro` to the specific module.
+Adds an AstForLoopMacro to the specified module.

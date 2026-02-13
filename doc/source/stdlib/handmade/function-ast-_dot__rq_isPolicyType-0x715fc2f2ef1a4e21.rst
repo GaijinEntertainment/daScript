@@ -1,1 +1,1 @@
-Returns if the given type is a policy type, i.e. there are SimNodes available for it.
+Returns whether the given type is a policy type with SimNode implementations available for it.

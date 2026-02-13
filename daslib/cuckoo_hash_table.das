@@ -5,6 +5,13 @@ options no_unused_function_arguments = false
 
 module cuckoo_hash_table shared private
 
+//! Template cuckoo hash map.
+//!
+//! ``TCuckooHashTable`` is a ``[template_structure]`` implementing a
+//! cuckoo hash table with two hash functions and linear probing as
+//! fallback. Good worst-case lookup performance at the cost of more
+//! complex insertions.
+
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/typemacro_boost
@@ -20,6 +27,7 @@ def public hash0(data) {
 }
 
 def public hash_extra(data) {
+    //! Returns a secondary hash derived from the upper 32 bits of the primary hash, used for cuckoo hashing.
     var k64 = hash(data)
     k64 = k64 <= 2ul ? 0x9e3779b97f4a7c15ul : k64
     return k64 >>> 32ul
@@ -37,6 +45,7 @@ def public hash_extra(s : string) : uint64 {
 
 [skip_field_lock_check, template_structure(KeyType, ValueType, hashFunction0Name=@@hash0, hashFunction1Name=@@hash_extra)]
 struct template TCuckooHashTable {
+    //! Cuckoo hash table using two hash functions for collision resolution.
     typedef KHV_TCuckooHashTable = tuple<key : KeyType; hash : uint64; value : ValueType>
     khv : array<KHV_TCuckooHashTable>
     mask : int

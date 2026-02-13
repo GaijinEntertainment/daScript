@@ -6,6 +6,11 @@ options strict_smart_pointers = true
 
 module generic_return shared private
 
+//! Generic return-type instantiation macro.
+//!
+//! ``generic_return(func_id)`` replaces a call with the default-constructed
+//! value of the matching generic function's return type.
+
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/macro_boost

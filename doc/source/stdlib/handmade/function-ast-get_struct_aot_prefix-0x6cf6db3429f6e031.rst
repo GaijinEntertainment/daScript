@@ -1,1 +1,1 @@
- Returns AOT structure prefix for the specified structure.
+Returns the AOT prefix string for the specified structure.

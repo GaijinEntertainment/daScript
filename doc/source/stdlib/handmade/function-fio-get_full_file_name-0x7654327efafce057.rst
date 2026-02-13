@@ -1,1 +1,1 @@
- returns full name of the file in normalized form.
+Returns the fully resolved and normalized absolute path for the given file path string.

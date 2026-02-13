@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module functional shared public
 
+//! Functional programming primitives.
+//!
+//! Lazy iterator adapters: ``filter``, ``map``, ``reduce``, ``zip``,
+//! ``flatten``, ``range_each``, ``repeat``, ``take``, ``drop``,
+//! ``sum``, ``any``, ``all``, ``count_if``, and more.
+
 def private filter_any(var src : iterator<auto(TT)>; var blk) {
     //! iterates over `src` and yields only those elements for which `blk` returns true
     static_if (!typeinfo is_ref_type(type<TT>)) {

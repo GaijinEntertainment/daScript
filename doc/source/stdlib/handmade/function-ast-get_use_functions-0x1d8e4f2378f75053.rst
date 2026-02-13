@@ -1,1 +1,1 @@
- Provides invoked block with the list of all functions, used by a function.
+Invokes a block with the list of all functions called by the specified function.

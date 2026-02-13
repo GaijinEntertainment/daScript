@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module is_local shared public
 
+//! Expression locality analysis.
+//!
+//! Provides ``is_temp_safe`` and related helpers that determine whether
+//! an expression can be safely treated as temporary (no hidden references
+//! escape through calls, indexing, or field access).
+
 require ast public
 require rtti
 require daslib/ast_boost

@@ -1,1 +1,1 @@
- This macro is used to implement custom call-like expressions ( like `foo(bar,bar2,...)` ).
+Macro for implementing custom call-like expressions (e.g. ``foo(bar, bar2, ...)``). The macro intercepts specific function calls during compilation and can rewrite them into arbitrary AST.

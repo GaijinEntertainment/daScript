@@ -1,1 +1,1 @@
- Generates new GUID.
+Generates a new random GUID/UUID string.

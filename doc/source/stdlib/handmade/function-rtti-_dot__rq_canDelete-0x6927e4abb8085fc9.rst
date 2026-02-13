@@ -1,3 +1,1 @@
-Returns true if the given type annotation can be deleted.
-
-
+Property-like accessor that returns ``true`` if values of the given ``TypeAnnotation`` can be explicitly deleted.

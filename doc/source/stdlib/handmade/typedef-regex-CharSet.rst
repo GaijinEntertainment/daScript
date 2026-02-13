@@ -1,1 +1,1 @@
-Character set for regex.
+Bitfield character set used internally by the regex engine.

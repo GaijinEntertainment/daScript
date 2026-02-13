@@ -1,1 +1,1 @@
-Returns if the given type is a const type.
+Returns whether the given type is const-qualified.

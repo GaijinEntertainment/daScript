@@ -1,1 +1,1 @@
- Infers generic type for the specified type and pass type.
+Infers a concrete type from a generic type declaration and a pass type.

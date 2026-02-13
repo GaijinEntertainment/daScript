@@ -1,1 +1,1 @@
- Returns clone of the `Structure`.
+Returns a deep clone of the specified Structure.

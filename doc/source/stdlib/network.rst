@@ -5,10 +5,9 @@
 Network socket library
 ======================
 
-The NETWORK module implements basic TCP socket listening server (currently only one connection).
-It would eventually be expanded to support client as well.
-
-It its present form its used in Daslang Visual Studio Code plugin and upcoming debug server.
+The NETWORK module implements networking facilities including HTTP client/server
+and low-level socket operations. It provides ``Server`` and ``Client`` classes
+with event-driven callbacks for handling connections, requests, and responses.
 
 All functions and symbols are in "network" module, use require to get access to it. ::
 
@@ -33,20 +32,20 @@ Classes
 
 .. das:attribute:: Server
 
-:Fields: * **_server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > -  Single socket listener combined with single socket connection.
+:Fields: * **_server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > - Single-socket listener that manages one client connection at a time.
 
 
 .. _function-network_Server_rq_make_server_adapter_Server:
 
 .. das:function:: Server.make_server_adapter()
 
-Creates a server adapter for the given server instance.
+Creates a low-level server adapter bound to this ``Server`` instance.
 
 .. _function-network_Server_rq_init_Server_int:
 
 .. das:function:: Server.init(port: int) : bool
 
-Returns true if the server was successfully initialized on the given port.
+Initializes the server on the specified port; returns ``true`` on success.
 
 :Arguments: * **port** : int
 
@@ -56,7 +55,6 @@ Returns true if the server was successfully initialized on the given port.
 
 Restores the server with the given shared orphan network server pointer.
 This is necessary to re-establish the server state after reload of a script.
-
 
 :Arguments: * **shared_orphan** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` >&
 
@@ -73,31 +71,31 @@ This is necessary to re-establish the server state after reload of a script.
 
 .. das:function:: Server.has_session() : bool
 
-Returns true if the server has an active session.
+Returns ``true`` if the server has an active client session.
 
 .. _function-network_Server_rq_is_open_Server:
 
 .. das:function:: Server.is_open() : bool
 
-Return true if the server is open and ready to accept connections.
+Returns ``true`` if the server is open and accepting connections.
 
 .. _function-network_Server_rq_is_connected_Server:
 
 .. das:function:: Server.is_connected() : bool
 
-Returns true if the server is connected to a client.
+Returns ``true`` if the server is currently connected to a client.
 
 .. _function-network_Server_rq_tick_Server:
 
 .. das:function:: Server.tick()
 
-Ticks the server to process incoming connections and data.
+Processes pending connections and incoming data; must be called periodically.
 
 .. _function-network_Server_rq_send_Server_uint8_q__int:
 
 .. das:function:: Server.send(data: uint8?; size: int) : bool
 
-Sends data to the connected client. Returns true if the data was sent successfully.
+Sends a data buffer to the connected client.
 
 :Arguments: * **data** : uint8?
 
@@ -107,10 +105,7 @@ Sends data to the connected client. Returns true if the data was sent successful
 
 .. das:function:: Server() : Server
 
-Initializes and returns a new instance of the network Server class.
-
-
-
+Constructs a new ``Server`` instance with default settings.
 
 ++++++++++++++++++++++++++
 Low lever NetworkServer IO
@@ -128,7 +123,7 @@ Low lever NetworkServer IO
 
 .. das:function:: make_server(class: void? implicit; info: StructInfo const? implicit) : bool
 
- Creates new instance of the server.
+Creates a new ``Server`` instance.
 
 :Arguments: * **class** : void? implicit
 
@@ -138,7 +133,7 @@ Low lever NetworkServer IO
 
 .. das:function:: server_init(server: smart_ptr<NetworkServer> implicit; port: int) : bool
 
- Initializes server with given port.
+Initializes the server to listen on the specified port.
 
 :Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
 
@@ -148,7 +143,7 @@ Low lever NetworkServer IO
 
 .. das:function:: server_is_open(server: smart_ptr<NetworkServer> implicit) : bool
 
- Returns true if server is listening to the port.
+Returns ``true`` if the server is listening on its bound port.
 
 :Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
 
@@ -156,7 +151,7 @@ Low lever NetworkServer IO
 
 .. das:function:: server_is_connected(server: smart_ptr<NetworkServer> implicit) : bool
 
- Returns true if server is connected to the client.
+Returns ``true`` if the server has an active client connection.
 
 :Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
 
@@ -164,7 +159,7 @@ Low lever NetworkServer IO
 
 .. das:function:: server_tick(server: smart_ptr<NetworkServer> implicit)
 
- This needs to be called periodically for the server to work.
+Processes pending network I/O; must be called periodically for the server to function.
 
 :Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
 
@@ -172,7 +167,7 @@ Low lever NetworkServer IO
 
 .. das:function:: server_send(server: smart_ptr<NetworkServer> implicit; data: uint8? implicit; size: int) : bool
 
- Sends data from server to the client.
+Sends data from the server to the connected client.
 
 :Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
 
@@ -184,7 +179,7 @@ Low lever NetworkServer IO
 
 .. das:function:: server_restore(server: smart_ptr<NetworkServer> implicit; class: void? implicit; info: StructInfo const? implicit)
 
- Restores server from orphaned state.
+Restores a server from an orphaned or interrupted state.
 
 :Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
 

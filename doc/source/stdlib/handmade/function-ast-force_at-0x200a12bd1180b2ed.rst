@@ -1,1 +1,1 @@
- Replaces line info in the expression, its subexpressions, and its types.
+Replaces line info in an expression, its subexpressions, and their types.

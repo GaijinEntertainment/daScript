@@ -1,1 +1,1 @@
- indicates log level for debug messages
+Log level constant for debug-level diagnostic messages useful during development.

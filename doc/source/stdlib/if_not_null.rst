@@ -5,7 +5,9 @@
 if_not_null macro
 =================
 
-The if_not_null module exposes single `if_not_null` pattern.
+The IF_NOT_NULL module provides a null-safe call macro. The expression
+``ptr |> if_not_null <| call(args)`` expands to a null check followed by
+a dereferenced call: ``if (ptr != null) { call(*ptr, args) }``.
 
 All functions and symbols are in "if_not_null" module, use require to get access to it. ::
 

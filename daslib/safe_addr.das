@@ -6,6 +6,13 @@ options strict_smart_pointers = true
 
 module safe_addr shared private
 
+//! Safe temporary pointer macros.
+//!
+//! Provides ``safe_addr``, ``temp_ptr``, and ``shared_addr`` for obtaining
+//! temporary pointers with compile-time safety checks. ``safe_addr`` only works
+//! on local or global variables (not fields of expiring objects). ``shared_addr``
+//! only works on shared global variables.
+
 require ast
 require rtti
 require daslib/ast_boost
@@ -120,6 +127,7 @@ def public temp_addr(var x : auto(T)& ==const) : T-& ? #
 
 [tag_function(temp_addr_tag)]
 def public temp_addr(x : auto(T)& ==const) : T-& ? const #
+    //! Returns a temporary const pointer to the given expression.
     unsafe
         return reinterpret<T-&? const #>(addr(x))
 

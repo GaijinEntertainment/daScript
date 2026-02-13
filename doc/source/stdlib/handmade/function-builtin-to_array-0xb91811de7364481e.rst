@@ -1,1 +1,1 @@
- will convert argument (static array, iterator, another dynamic array) to an array. argument elements will be cloned
+Consumes iterator `it` and collects all yielded elements into a new dynamic array by cloning each one.

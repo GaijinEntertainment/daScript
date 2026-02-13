@@ -1,1 +1,1 @@
-Returns true if the server was successfully initialized on the given port.
+Initializes the server on the specified port; returns ``true`` on success.

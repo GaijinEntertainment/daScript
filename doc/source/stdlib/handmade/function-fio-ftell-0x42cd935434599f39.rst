@@ -1,1 +1,1 @@
- equivalent to C `ftell`. Returns current FILE pointer position.
+Returns the current byte offset of the file pointer for the given FILE, equivalent to C ftell.

@@ -1,1 +1,1 @@
- similar to 'print' but outputs to context error output
+Outputs the string `text` to the context's error stream, similar to `print` but directed to the error output channel.

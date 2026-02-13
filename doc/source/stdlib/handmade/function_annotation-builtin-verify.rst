@@ -1,1 +1,1 @@
- assert for the expression with side effects. expression will not be optimized out if asserts are disabled
+Assertion that preserves the evaluated expression even when asserts are disabled, ensuring side effects are never optimized out.

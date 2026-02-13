@@ -1,1 +1,1 @@
- Constructs new RttiValue of type 'nothing'.
+Constructs an ``RttiValue`` variant set to the ``nothing`` alternative, representing an absent or void value.

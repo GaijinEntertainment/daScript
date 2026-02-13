@@ -1,1 +1,1 @@
- This macro implements [tag_function_macro] annotation, which allows to add an AstFunctionAnnotation to any function with a specific [tag_function(name)] tag.
+The ``[tag_function_macro]`` structure annotation — registers an ``AstFunctionAnnotation`` that is automatically applied to every function carrying a matching ``[tag_function(tag)]`` tag.

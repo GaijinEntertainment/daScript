@@ -1,1 +1,1 @@
-Number of remaining elements, which were previously appended.
+Returns the string length of the URI.

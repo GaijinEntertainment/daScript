@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module ast_debug shared private
 
+//! AST-level debugger state reporting.
+//!
+//! Sends AST expression and program-structure data to the
+//! debug agent for live inspection of compilation state in
+//! the DAP variable view.
+
 require debugapi
 require daslib/ast_boost
 require daslib/strings
@@ -101,6 +107,7 @@ def describe_arg(var ctxid : Context; vinfo; arg : void?) : void {
 }
 
 class SampleStackWalker : DapiStackWalker {
+    //! Sample stack walker that prints call stack to the log.
     ctxid : Context?
     def override onArgument(info : FuncInfo; index : int; vinfo : VarInfo; arg : float4) : void {
         if (vinfo.flags.ref || vinfo.flags.refType) {
@@ -125,6 +132,7 @@ class SampleStackWalker : DapiStackWalker {
 }
 
 class ContextStateAgent : DapiDebugAgent {
+    //! Debug agent that installs context-level stack walkers.
     walker_adapter : smart_ptr<StackWalker>
     walker : SampleStackWalker?
     def ContextStateAgent {

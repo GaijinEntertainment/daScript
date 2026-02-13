@@ -1,1 +1,1 @@
- Compile Daslang program given as file in the `FileAccess` object.
+Compiles a daScript program from a file registered in the given ``FileAccess`` object, returning a ``ProgramPtr`` (null on failure).

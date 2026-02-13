@@ -1,1 +1,1 @@
-Creates a server adapter for the given server instance.
+Creates a low-level server adapter bound to this ``Server`` instance.

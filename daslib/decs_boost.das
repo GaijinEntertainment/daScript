@@ -8,6 +8,12 @@ options strict_smart_pointers = true
 
 module decs_boost shared private
 
+//! DECS query macro and compile-time helpers.
+//!
+//! Implements the ``decs_query`` block macro that generates
+//! type-safe, zero-overhead iteration over ECS archetypes.
+//! Also provides ``[decs_event]`` and ``[decs_template]``.
+
 require daslib/decs public
 require daslib/ast_boost
 require daslib/templates_boost
@@ -28,10 +34,14 @@ to:
 */
 
 [block_macro(name="REQUIRE")]
-class DecsReq : AstBlockAnnotation /*! This annotation provides list of required components for entity. */ {}
+class DecsReq : AstBlockAnnotation {
+    //! This annotation provides list of required components for entity.
+}
 
 [block_macro(name="REQUIRE_NOT")]
-class DecsReqN : AstBlockAnnotation /*! This annotation provides list of components, which are required to not be part of the entity. */ {}
+class DecsReqN : AstBlockAnnotation {
+    //! This annotation provides list of components, which are required to not be part of the entity.
+}
 
 [structure_macro(name="decs_template")]
 class DecsTemplate : AstStructureAnnotation {
@@ -248,6 +258,7 @@ def private append_index_lookup(arch_name : string; var qblock : smart_ptr<ExprB
 }
 
 enum private DecsQueryType {
+    //! Enum for ECS query types.
     query
     eid_query
     find_query

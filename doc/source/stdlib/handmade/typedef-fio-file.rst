@@ -1,1 +1,1 @@
- alias for the `FILE const?`; its there since most file functions expect exactly this type
+Type alias for FILE const? used as the standard file handle parameter type across fio functions.

@@ -1,1 +1,1 @@
- Makes adapter to the `AstCommentReader` and adds it to the current module.
+Creates an AstCommentReader adapter and adds it to the current module.

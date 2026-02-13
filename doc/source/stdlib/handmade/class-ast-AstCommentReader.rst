@@ -1,1 +1,1 @@
- This macro is used to implement custom comment parsing function (such as doxygen-style documentation etc).
+Macro for implementing custom comment parsing, such as extracting doxygen-style documentation or other structured metadata from source comments during compilation.

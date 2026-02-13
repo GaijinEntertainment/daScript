@@ -1,1 +1,1 @@
-Returns the substring matched by the specified regex group.
+Returns the substring captured by the specified group index after a successful match.

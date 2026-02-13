@@ -1,1 +1,1 @@
- Adds generic function to a `Module`. Will return false on duplicates.
+Adds a generic function to a module, returning false if a duplicate already exists.

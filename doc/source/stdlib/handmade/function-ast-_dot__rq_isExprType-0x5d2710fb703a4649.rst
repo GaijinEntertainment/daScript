@@ -1,1 +1,1 @@
-Returns if somewhere in the type hierarchy the given type is an expression type.
+Returns whether the type hierarchy contains an expression type.

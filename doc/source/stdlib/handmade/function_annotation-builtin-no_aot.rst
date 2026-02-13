@@ -1,1 +1,1 @@
- indicates that the AOT will not be generated for this specific function
+Prevents ahead-of-time (AOT) C++ code generation for the annotated function, keeping it interpreted only.

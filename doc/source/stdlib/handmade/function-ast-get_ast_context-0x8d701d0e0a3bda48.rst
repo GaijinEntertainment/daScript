@@ -1,1 +1,1 @@
- Returns `AstContext` for the given expression. It includes current function (if applicable), loops, blocks, scopes, and with sections.
+Returns the AstContext for a given expression, including the current function, loops, blocks, scopes, and with sections.

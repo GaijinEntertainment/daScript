@@ -1,3 +1,1 @@
-Returns the size of the given URI.
-
-
+Returns the string length of the URI.

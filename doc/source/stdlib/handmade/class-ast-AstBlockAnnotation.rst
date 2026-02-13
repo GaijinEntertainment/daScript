@@ -1,1 +1,1 @@
- Annotation macro which is attached to the `ExprBlock`.
+Annotation macro that attaches to `ExprBlock` nodes. Provides compile-time hooks for inspecting and transforming code blocks, including loop bodies and scoped blocks.

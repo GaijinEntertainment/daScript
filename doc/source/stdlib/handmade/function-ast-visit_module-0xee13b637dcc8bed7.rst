@@ -1,1 +1,1 @@
- Invokes visitor for the given module.
+Invokes an AST visitor on the given module.

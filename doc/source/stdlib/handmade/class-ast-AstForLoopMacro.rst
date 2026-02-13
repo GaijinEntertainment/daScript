@@ -1,1 +1,1 @@
- This macro is used to implement custom for-loop handlers. It is similar to visitExprFor callback of the AstVisitor.
+Macro for implementing custom for-loop iteration patterns. Intercepts for-loop expressions during compilation, similar to the ``visitExprFor`` callback of `AstVisitor`.

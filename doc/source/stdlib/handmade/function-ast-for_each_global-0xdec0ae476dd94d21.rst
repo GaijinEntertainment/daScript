@@ -1,1 +1,1 @@
- Iterates through every global variable in the `Module`.
+Iterates through every global variable in the specified module.

@@ -1,1 +1,1 @@
- similar to `push`, only values would be cloned instead of copied
+Clones all elements of a mutable static array `varr` and appends them to dynamic array `Arr`.

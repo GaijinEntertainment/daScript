@@ -6,6 +6,11 @@ options strict_smart_pointers = true
 
 module bitfield_trait shared private
 
+//! Compile-time bitfield name trait generation.
+//!
+//! Generates ``bitfield_trait`` functions that return the string name
+//! of a bitfield bit, enabling runtime bitfield-to-string conversion.
+
 require ast
 require daslib/ast_boost
 require daslib/contracts

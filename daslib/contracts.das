@@ -6,6 +6,21 @@ options strict_smart_pointers = true
 
 module contracts shared private
 
+//! Function argument contract annotations.
+//!
+//! Provides a family of ``[expect_*]`` annotations that constrain function argument types
+//! at specialization time. For example, ``[expect_any_array(arr)]`` ensures that ``arr``
+//! is an array, dynamic array, or C++ vector. Available contracts:
+//!   * ``[expect_any_array]`` — array<T>, T[], or das::vector<T>
+//!   * ``[expect_any_enum]`` — any enumeration type
+//!   * ``[expect_any_bitfield]`` — any bitfield type
+//!   * ``[expect_any_vector_type]`` — int2, float3, range, etc.
+//!   * ``[expect_any_struct]`` — structs (not classes)
+//!   * ``[expect_any_tuple]`` — tuple types
+//!   * ``[expect_any_variant]`` — variant types
+//!   * ``[expect_any_numeric]`` — numeric scalars (int, float, etc.)
+//!   * ``[expect_any_workhorse_raw]`` — non-abstract non-const types
+
 require ast
 require daslib/ast_boost
 
@@ -15,6 +30,8 @@ def public isYetAnotherVectorTemplate(td : TypeDeclPtr) {
 }
 
 class IsAnyType : AstFunctionAnnotation {
+    //! Base class for all ``[expect_*]`` contract annotations.
+    //! Subclasses override ``isCompatible`` to reject argument types that don't meet the contract.
     def override appendToMangledName(func : FunctionPtr; decl : AnnotationDeclaration; var mangledName : das_string) : void {
         mangledName := "{class_info(self).name}:{describe(decl)}"
     }

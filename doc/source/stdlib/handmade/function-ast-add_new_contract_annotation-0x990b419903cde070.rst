@@ -1,1 +1,1 @@
- Makes adapter to the `AstContractAnnotation` and adds it to the current module.
+Creates an AstContractAnnotation adapter and adds it to the current module.

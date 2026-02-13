@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module defer shared private
 
+//! Defer and defer_delete macros.
+//!
+//! ``defer`` moves a block of code to the ``finally`` section of the enclosing scope,
+//! ensuring it runs on scope exit (similar to Go's ``defer``). ``defer_delete`` is deprecated
+//! in favor of ``var inscope``.
+
 require ast
 require rtti
 require daslib/ast_boost

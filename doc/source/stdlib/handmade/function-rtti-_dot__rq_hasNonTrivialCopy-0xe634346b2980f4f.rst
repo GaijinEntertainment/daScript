@@ -1,1 +1,1 @@
-Returns true if the given type annotation represents a type with non-trivial copy semantics.
+Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` has non-trivial copy semantics (i.e., a custom copy constructor).

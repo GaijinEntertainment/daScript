@@ -1,1 +1,1 @@
- see function-math-refract.rst for details
+Computes the refraction of float2 or float3 vector v through a surface with unit normal n using Snell's law with index ratio nint, writing the result to outRefracted and returning false if total internal reflection occurs.

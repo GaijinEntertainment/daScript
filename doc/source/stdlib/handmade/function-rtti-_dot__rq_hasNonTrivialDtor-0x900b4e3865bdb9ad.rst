@@ -1,3 +1,1 @@
-Returns true if the given type annotation represents a type with non-trivial destructor semantics.
-
-
+Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` has a non-trivial destructor (requires explicit finalization).

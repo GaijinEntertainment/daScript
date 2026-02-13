@@ -1,1 +1,1 @@
- Returns string heap allocation count (total number of allocations).
+Returns the total number of individual string allocations performed on the current context's string heap.

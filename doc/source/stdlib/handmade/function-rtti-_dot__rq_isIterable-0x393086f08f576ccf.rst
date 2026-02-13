@@ -1,3 +1,1 @@
-Returns true if the given type annotation represents an iterable type.
-
-
+Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` supports iteration via ``for``.

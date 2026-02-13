@@ -1,1 +1,1 @@
- Iterates through each compilation error of the `Program` object.
+Iterates through each expected compilation error declared in the ``Program`` (via ``expect``), yielding the error code for each.

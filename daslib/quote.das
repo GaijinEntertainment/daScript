@@ -7,6 +7,12 @@ options strict_smart_pointers = true
 
 module quote shared private
 
+//! AST quasiquoting infrastructure.
+//!
+//! Internal module that provides the ``qmacro`` / ``qmacro_block`` /
+//! ``qmacro_type`` / ``qmacro_function`` quasiquoting macros and their
+//! supporting splicing and substitution helpers.
+
 require daslib/ast_boost public
 require daslib/strings_boost
 require daslib/contracts
@@ -20,11 +26,13 @@ def find_unique_function_ptr(mod : Module?; name : string; canfail : bool = fals
  * We need this wrappers for initialization of Handle types
  */
 struct CaptureEntryInitData {
+    //! Initialization data for a captured variable entry.
     name : string
     mode : CaptureMode
 }
 
 def public clone(var a : dasvector`CaptureEntry; b : array<CaptureEntryInitData>) {
+    //! Clones an array of CaptureEntryInitData into a dasvector of CaptureEntry.
     a |> resize(length(b))
     for (e, i in b, count()) {
         a[i].name := e.name
@@ -33,6 +41,7 @@ def public clone(var a : dasvector`CaptureEntry; b : array<CaptureEntryInitData>
 }
 
 struct LineInfoInitData {
+    //! Initialization data for source line info reconstruction.
     fileInfo : FileInfo?
     column : uint
     line : uint
@@ -42,6 +51,7 @@ struct LineInfoInitData {
 
 
 def public clone_line_info(var b : LineInfoInitData) : LineInfo {
+    //! Creates a LineInfo from a LineInfoInitData struct.
     return LineInfo(fileInfo = b.fileInfo,
                     column = b.column,
                     line = b.line,
@@ -50,6 +60,7 @@ def public clone_line_info(var b : LineInfoInitData) : LineInfo {
 }
 
 def public clone(var a : dasvector`LineInfo; b : array<LineInfoInitData>) {
+    //! Clones an array of LineInfoInitData into a dasvector of LineInfo.
     a |> resize(length(b))
     for (e, i in b, count()) {
         a[i].column := e.column
@@ -60,6 +71,7 @@ def public clone(var a : dasvector`LineInfo; b : array<LineInfoInitData>) {
 }
 
 def public clone(var args : rtti::AnnotationList; var nargs : array<smart_ptr<rtti::AnnotationDeclaration>>) {
+    //! Clones an array of AnnotationDeclaration smart pointers into an AnnotationList.
     _::clear(args)
     for (narg in nargs) {
         _::emplace(args, narg)
@@ -69,6 +81,7 @@ def public clone(var args : rtti::AnnotationList; var nargs : array<smart_ptr<rt
 
 
 struct EnumEntryInitData {
+    //! Initialization data for a quoted enum entry.
     name : string
     cppName : string
     // at : LineInfo
@@ -76,6 +89,7 @@ struct EnumEntryInitData {
 }
 
 def public clone(var a : dasvector`EnumEntry; var b : array<EnumEntryInitData>) {
+    //! Clones an array of EnumEntryInitData into a dasvector of EnumEntry.
     a |> resize(length(b))
     for (e, i in b, count()) {
         a[i].name := e.name
@@ -85,6 +99,7 @@ def public clone(var a : dasvector`EnumEntry; var b : array<EnumEntryInitData>) 
 }
 
 struct AnnotationArgumentInitData {
+    //! Initialization data for a quoted annotation argument.
     basicType : Type
     name : string
     sValue : string
@@ -95,6 +110,7 @@ struct AnnotationArgumentInitData {
 }
 
 def public clone(var a : AnnotationArgumentList; b : array<AnnotationArgumentInitData>) {
+    //! Clones an array of AnnotationArgumentInitData into an AnnotationArgumentList.
     a |> resize(length(b))
     for (e, i in b, count()) {
         a[i].name := e.name
@@ -113,6 +129,7 @@ def public clone(var a : AnnotationArgumentList; b : array<AnnotationArgumentIni
 }
 
 def public cvt_to_mks(var args) : smart_ptr<MakeStruct> {
+    //! Converts an array of arguments into a MakeStruct smart pointer.
     var inscope res <- new MakeStruct(uninitialized);
     *res |> resize(length(args))
     for (arg, i in args, count()) {
@@ -124,11 +141,13 @@ def public cvt_to_mks(var args) : smart_ptr<MakeStruct> {
 }
 
 struct FileInfoInitData {
+    //! Initialization data for reconstructing file info.
     name : string
     tabSize : int
 }
 
 def public clone_file_info(b : FileInfoInitData) : FileInfo? {
+    //! Creates a FileInfo from a FileInfoInitData struct.
     return clone_file_info(b.name, b.tabSize)
 }
 
@@ -403,6 +422,7 @@ def convert_quote_to_expression(var arg_expr : ExpressionPtr; at : LineInfo) : E
 }
 
 class QuoteConverter : AstVisitor {
+    //! AST visitor that converts quoted expressions to init data.
     astChanged : bool = false
     def override visitExprQuote(var expr : smart_ptr<ExprQuote>) : ExpressionPtr {
         astChanged = true
@@ -412,6 +432,7 @@ class QuoteConverter : AstVisitor {
 
 [infer_macro]
 class QuotePass : AstPassMacro {
+    //! Pass macro that processes quoted AST expressions.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         // Unwrapping ExprQuote is slow and inefficient, do it only if necessary.
         if (!compiling_program().policies.aot_macros) {

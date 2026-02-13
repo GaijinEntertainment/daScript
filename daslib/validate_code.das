@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module validate_code shared private
 
+//! Code validation and constraint annotations.
+//!
+//! Provides ``[non_recursive]`` (detects recursion at compile time),
+//! ``[validate_call]`` (custom call-site validation), and other
+//! structural code quality checks.
+
 require daslib/ast_boost
 require daslib/rtti
 require daslib/strings
@@ -60,6 +66,7 @@ def collect_call_tree(fun : Function?; var visited : table<Function?>) {
 
 [macro]
 class ValidateCompletionVisitor : AstVisitor {
+    //! AST visitor that validates code for completion safety.
     @do_not_delete thisFunc : Function?
     def override preVisitFunction(var fun : FunctionPtr) : void {
         thisFunc = get_ptr(fun)
@@ -104,6 +111,10 @@ class ValidateCompletionVisitor : AstVisitor {
 
 [function_macro(name="verify_completion")]
 class VerifyCompletion : AstFunctionAnnotation {
+    //! Verify that the function completes without infinite loops or recursion
+    //! This annotation checks for potential infinite loops and recursive calls
+    //! within the annotated function. If any are detected, a compile-time error
+    //! is generated, preventing the code from compiling.
     def override lint(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
         var visited : table<Function?>
         var astVisitor = new ValidateCompletionVisitor()
@@ -121,6 +132,7 @@ class VerifyCompletion : AstFunctionAnnotation {
 
 [macro]
 class ValidateShaderVisitor : AstVisitor {
+    //! AST visitor that validates shader code restrictions.
     def override preVisitTypeDecl(typ : TypeDeclPtr) : void {
         if (!typ.isNoHeapType) {
             macro_error(compiling_program(), typ.at, "not shader-like, type requires heap {describe(typ)}")
@@ -136,6 +148,7 @@ class ValidateShaderVisitor : AstVisitor {
 
 [simulate_macro(name="shader_like")]
 class JIT_LLVM : AstSimulateMacro {
+    //! Simulate macro for LLVM JIT compilation.
     def lint_module(prog : Program?; var ctx : Context?) {
         var astVisitor = new ValidateShaderVisitor()
         var inscope adapter <- make_visitor(*astVisitor)

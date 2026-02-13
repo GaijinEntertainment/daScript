@@ -1,1 +1,1 @@
- Converts Unix file name to URI.
+Converts a Unix-style file path to a ``file://`` URI string.

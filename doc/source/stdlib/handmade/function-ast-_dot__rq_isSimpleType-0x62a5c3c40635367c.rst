@@ -1,1 +1,1 @@
-Returns if the given type is a simple type, and does not need resolve at infer time. Nor is it `void`.
+Returns whether the given type is a simple non-void type that does not require resolution at inference time.

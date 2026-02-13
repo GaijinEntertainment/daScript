@@ -1,3 +1,2 @@
-Returns the mtime of the file represented by the given FStat object.
-
+Returns the last modification time of the file as a clock value.
 

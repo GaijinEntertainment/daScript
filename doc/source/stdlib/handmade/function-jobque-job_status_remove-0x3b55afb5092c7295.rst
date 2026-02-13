@@ -1,1 +1,1 @@
- Destroys job status.
+Destroys a ``JobStatus`` object and releases its resources.

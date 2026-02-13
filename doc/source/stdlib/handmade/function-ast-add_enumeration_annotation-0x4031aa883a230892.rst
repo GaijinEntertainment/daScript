@@ -1,1 +1,1 @@
- Adds enumeration annotation to the given object. Calls `apply` if applicable.
+Adds an annotation to an enumeration and calls apply if applicable.

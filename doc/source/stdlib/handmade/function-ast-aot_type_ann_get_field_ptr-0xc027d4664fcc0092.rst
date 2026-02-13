@@ -1,1 +1,1 @@
- Returns string with access symbol for the field (like -> for the pointer types, or . for the value types).
+Returns the access symbol string for a field, such as `->` for pointer types or `.` for value types.

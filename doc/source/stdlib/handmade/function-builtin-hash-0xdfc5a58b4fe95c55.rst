@@ -1,1 +1,1 @@
- returns hash value of the `data`. current implementation uses FNV64a hash.
+Computes a 64-bit FNV-1a hash of the given `float` value and returns it as `uint64`.

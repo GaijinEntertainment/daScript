@@ -1,1 +1,1 @@
- Iterates through each parent type of the `BasicStructureAnnotation` object.
+Iterates through each parent (base class) of a ``BasicStructureAnnotation``, yielding the parent ``TypeInfo`` for each ancestor.

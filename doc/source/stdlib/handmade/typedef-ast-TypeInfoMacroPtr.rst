@@ -1,1 +1,1 @@
- Smart pointer to `TypeInfoMacro` object.
+Smart pointer to a `TypeInfoMacro` object. Used for registering and managing custom ``typeinfo`` trait macros.

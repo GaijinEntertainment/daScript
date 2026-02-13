@@ -1,1 +1,1 @@
- Generates FuncInfo? for the specified invokable type (lambda, block), given DebugInfoHelper.
+Generates a FuncInfo for an invokable type such as a lambda or block using the given DebugInfoHelper.

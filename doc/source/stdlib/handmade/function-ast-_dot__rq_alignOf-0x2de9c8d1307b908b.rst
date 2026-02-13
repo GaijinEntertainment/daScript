@@ -1,4 +1,1 @@
-Returns the alignment requirement of the given type in bytes.
-
-
-
+Returns the memory alignment requirement of the type in bytes.

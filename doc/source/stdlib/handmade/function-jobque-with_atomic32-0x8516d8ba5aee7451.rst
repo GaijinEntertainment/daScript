@@ -1,1 +1,1 @@
- Creates `Atomic32`, makes it available inside the scope of the block.
+Creates an ``Atomic32`` scoped to the given block and automatically destroys it afterward.

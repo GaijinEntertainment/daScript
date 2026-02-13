@@ -1,1 +1,1 @@
- Currently compiling program.
+Returns the program currently being compiled.

@@ -1,1 +1,1 @@
- Makes recursive critical section of the given `Context` object.
+Acquires a recursive lock on the given ``Context`` and executes a block, ensuring thread-safe access to context data within the scope.

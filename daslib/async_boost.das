@@ -6,6 +6,11 @@ options strict_smart_pointers = true
 
 module async_boost shared private
 
+//! Async/await coroutine macros.
+//!
+//! Provides ``[async]`` function annotation and ``await`` call macro that
+//! rewrite annotated functions into generator-based coroutines.
+
 require strings
 require daslib/ast_boost
 require daslib/templates_boost
@@ -27,6 +32,7 @@ def public await(var a : iterator<variant<res : auto(T); wait : bool>>) : T {
 
 [tag_function_macro(tag="await_tag")]
 class AwaitMacro : AstFunctionAnnotation {
+    //! Function annotation that implements coroutine await semantics.
     def override transform(var call : smart_ptr<ExprCallFunc>; var errors : das_string) : ExpressionPtr {
         macro_error(compiling_program(), call.at, "result should be assigned to a variable, use 'let res <- await <| {call.arguments[0] |> describe()}'")
         return <- default<ExpressionPtr>
@@ -151,6 +157,7 @@ def validateAwaitFn(fn : smart_ptr<ast::Function>&; subCallName : das_string; va
 }
 
 enum AssignOp {
+    //! Assignment operation type for async field updates.
     copy
     move
     clone
@@ -201,6 +208,7 @@ def move_clone_copy(var expr; voidRoutine : bool; var retType : smart_ptr<TypeDe
 
 [macro_interface]
 class CollectAndReplaceIteratorFields : AstVisitor {
+    //! AST visitor that collects and replaces iterator field access in async generators.
     voidRoutine : bool
     retType : smart_ptr<TypeDecl>
 

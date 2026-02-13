@@ -1,1 +1,1 @@
- Create StringBuilderWriter and pass it to the block. Upon completion of a block, return whatever was written as string.
+Creates a StringBuilderWriter, passes it to `block` for writing, and returns the accumulated output as a string.

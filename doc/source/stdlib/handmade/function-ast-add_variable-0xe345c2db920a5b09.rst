@@ -1,1 +1,1 @@
- Adds variable to a `Module`. Will return false on duplicates.
+Adds a variable to a module, returning false if a duplicate already exists.

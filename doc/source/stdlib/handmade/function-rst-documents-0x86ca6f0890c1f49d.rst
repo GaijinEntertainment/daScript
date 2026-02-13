@@ -1,1 +1,1 @@
-Documents the specified modules into a RST file.
+Generates RST documentation for multiple modules and writes them to files.

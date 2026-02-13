@@ -1,1 +1,1 @@
- Adds type function keyword, i.e allow function call to have several type arguments first via the following syntax some_call<type_args>(regular_args).
+Adds a type function keyword, allowing function calls to accept type arguments before regular arguments via the `some_call<type_args>(regular_args)` syntax.

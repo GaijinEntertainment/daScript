@@ -1,1 +1,1 @@
- Returns true if server is connected to the client.
+Returns ``true`` if the server has an active client connection.

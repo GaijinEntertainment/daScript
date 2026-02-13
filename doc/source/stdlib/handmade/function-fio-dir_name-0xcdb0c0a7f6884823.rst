@@ -1,1 +1,1 @@
- equivalent to linux `dirname`. Splits path and returns the component preceding the final '/'.  Trailing '/' characters are not counted as part of the pathname.
+Extracts and returns the directory component of a file path, equivalent to POSIX dirname.

@@ -1,1 +1,1 @@
- Return all part of the strings starting at start and ending at start + length.
+Returns a substring of `str` beginning at index `start` with the specified `length`.

@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module json_boost shared public
 
+//! JSON ↔ struct automatic serialization.
+//!
+//! Generates ``from_JsValue`` and ``to_JsValue`` conversions for user
+//! structs using compile-time reflection. Also provides the ``%json~``
+//! reader macro for embedding JSON literals in source code.
+
 require rtti public
 require ast
 require strings
@@ -415,6 +421,7 @@ def from_JV(v : JsonValue const explicit?; anything : table< auto(KT); auto(VT) 
 }
 
 struct public JsonFieldState {
+    //! Per-field serialization options for JSON struct conversion.
     argName : string        //! name of the field in JSON
     enumAsInt : bool        //! whether to parse enum as integer
     unescape : bool         //! whether to unescape strings

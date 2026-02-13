@@ -1,1 +1,1 @@
- clones smart_ptr, internal use-count is incremented
+Clones a raw pointer `src` into smart pointer `dest`, incrementing the internal reference count to share ownership.

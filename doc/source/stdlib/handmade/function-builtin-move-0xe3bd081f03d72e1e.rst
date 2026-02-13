@@ -1,1 +1,1 @@
- Moves one smart_ptr into another. Semantic equivalent of move(a,b) => a := null, a <- b
+Moves smart pointer `src` into smart pointer `dest`, nullifying `src` and transferring ownership so that `dest` holds the managed object.

@@ -1,1 +1,1 @@
- Iterates through each enumeration in the module.
+Iterates through each enumeration declared in the given ``Module``, yielding an ``EnumInfo`` pointer for each enum.

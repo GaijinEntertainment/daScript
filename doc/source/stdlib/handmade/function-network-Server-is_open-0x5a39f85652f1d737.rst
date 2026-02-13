@@ -1,1 +1,1 @@
-Return true if the server is open and ready to accept connections.
+Returns ``true`` if the server is open and accepting connections.

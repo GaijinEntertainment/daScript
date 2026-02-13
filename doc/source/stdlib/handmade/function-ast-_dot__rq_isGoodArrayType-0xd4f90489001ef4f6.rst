@@ -1,1 +1,1 @@
-Returns if the given type is a dynamic array type.
+Returns whether the given type is a dynamic array type.

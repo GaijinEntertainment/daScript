@@ -5,7 +5,9 @@
 Faker
 =====
 
-The FAKER module implements collection of random data generators for use in testing and otherwise.
+The FAKER module implements function interception and mocking for testing.
+It allows replacing function implementations at runtime, enabling unit
+tests to substitute dependencies with test doubles.
 
 All functions and symbols are in "faker" module, use require to get access to it. ::
 
@@ -40,7 +42,7 @@ Constructor
 
 .. das:function:: Faker(rng: iterator<uint>) : Faker
 
-|detail/function-faker-Faker-0x31196536a28fad9c|
+Constructs a Faker instance with the given random number generator.
 
 :Arguments: * **rng** : iterator<uint>
 

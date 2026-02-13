@@ -1,1 +1,1 @@
- Adds `AstCallMacro` adapter to the specific module.
+Adds an AstCallMacro adapter to the specified module.

@@ -7,6 +7,12 @@ options strict_smart_pointers = true
 
 module rst shared private
 
+//! RST documentation generator.
+//!
+//! Core engine for producing reStructuredText files from compiled
+//! module RTTI. Provides ``document``, ``group_by_regex``,
+//! ``describe_type``, and other helpers used by ``das2rst``.
+
 require fio
 require math
 require rtti
@@ -17,7 +23,7 @@ require daslib/strings_boost
 require daslib/regex
 require daslib/regex_boost
 
-let {
+let { //! Configuration constants for the RST documentation generator.
     log_documentation = false
     show_hidden_groups = false
     STUB = "// stub"
@@ -29,6 +35,11 @@ var public {
     add_stub_header = true
     add_empty_topic = true
     strict_struct_fields = true
+}
+
+def PANIC(message : string) {
+    to_log(LOG_ERROR, "PANIC: {message}\n")
+    unsafe(exit(-1))
 }
 
 def module_name(mod) {
@@ -73,6 +84,7 @@ def call_macro_label_name(mod, value) {
 }
 
 def public safe_function_name(name : string) : string {
+    //! Replaces special characters in a function name to produce a safe RST label identifier.
     return name |> replace_multiple([
         (" ", "_"),
         ("$", "_builtin_"),
@@ -96,25 +108,55 @@ def public safe_function_name(name : string) : string {
 }
 
 def public function_label_file(value : FunctionPtr | Function?; drop_args : int = 0) {
+    //! Generates a unique RST label for a function based on its name and argument types.
     var mn = "{value.name}"
     var drop = drop_args
     for (arg in value.arguments) {
         if (drop-- > 0) {
             continue
         }
-        // if arg._type.baseType == Type autoinfer
-        //     error("autoinfer in function '{value.name}'")
-            // panic("autoinfer in function")
         let prefix = arg._type.flags.removeConstant ? "var " : ""
-        mn += "{prefix}{describe_type_short(arg._type)}"
+        if (arg._type.baseType == Type.autoinfer && arg.init != null) {
+            // During rst_comment (pre-inference), auto-inferred default arg types
+            // are unresolved. Determine the type from the init expression so the
+            // hash matches what das2rst (post-inference) produces.
+            let rtti = "{arg.init.__rtti}"
+            if (rtti == "ExprConstDouble") {
+                mn += "{prefix}double"
+            } elif (rtti == "ExprConstFloat") {
+                mn += "{prefix}float"
+            } elif (rtti == "ExprConstString") {
+                mn += "{prefix}string"
+            } elif (rtti == "ExprConstBool") {
+                mn += "{prefix}bool"
+            } elif (rtti == "ExprConstInt") {
+                mn += "{prefix}int"
+            } elif (rtti == "ExprConstUInt") {
+                mn += "{prefix}uint"
+            } elif (rtti == "ExprConstInt64") {
+                mn += "{prefix}int64"
+            } elif (rtti == "ExprConstUInt64") {
+                mn += "{prefix}uint64"
+            } elif (rtti == "ExprConstInt8") {
+                mn += "{prefix}int8"
+            } elif (rtti == "ExprConstUInt8") {
+                mn += "{prefix}uint8"
+            } elif (rtti == "ExprConstInt16") {
+                mn += "{prefix}int16"
+            } elif (rtti == "ExprConstUInt16") {
+                mn += "{prefix}uint16"
+            } else {
+                mn += "{prefix}auto"
+            }
+        } else {
+            mn += "{prefix}{describe_type_short(arg._type)}"
+        }
     }
-    // if value.name == "player_flash_blindness_es"
-    //     print("deep: {mn} {hash(mn)}\n")
-    //     stackwalk(false, false)
     return "{safe_function_name(string(value.name))}-{hash(mn)}"
 }
 
 def public function_label_file(name; value : smart_ptr<TypeDecl>&; drop_args : int = 0) {
+    //! Generates a unique RST label for a function type based on its name and argument types.
     var mn = "{name}"
     var drop = drop_args
     for (arg in value.argTypes) {
@@ -123,7 +165,7 @@ def public function_label_file(name; value : smart_ptr<TypeDecl>&; drop_args : i
         }
         // if arg.baseType == Type autoinfer
         //     error("autoinfer in function '{name}'")
-            // panic("autoinfer in function")
+            // PANIC("autoinfer in function")
         let prefix = arg.flags.removeConstant ? "var " : ""
         mn += "{prefix}{describe_type_short(arg)}"
     }
@@ -206,7 +248,7 @@ def cleanup_type_short(name : string) {
 
 def describe_type_short(td : TypeDeclPtr) {
     if (td == null) {
-        panic("describe_type_short: null type")
+        PANIC("describe_type_short: null type")
     }
     if (!empty(td.alias) && !td.isAuto && !td.isAlias) {
         return string(td.alias)
@@ -287,6 +329,7 @@ def describe_type_short(td : TypeDeclPtr) {
 }
 
 def public describe_short(expr : Expression? | smart_ptr<Expression>&) {
+    //! Returns a short description of an expression, using empty parentheses for empty make-structs.
     if (expr is ExprMakeStruct) {
         let str = expr as ExprMakeStruct
         var count = 0
@@ -541,6 +584,7 @@ def make_ref(name, text : string) {
 }
 
 def public make_group(name : string; plus : string = "+") {
+    //! Creates an RST group header with the given name surrounded by separator lines.
     let len = length(name)
     return "{strings::repeat(plus,len)}\n{name}\n{strings::repeat(plus,len)}\n\n"
 }
@@ -705,7 +749,7 @@ def document_function_topic(doc_file : file; resType : smart_ptr<TypeDecl>&; top
                 if (!found) {
                     var inscope names <- [for (arg in args); arg[0]]
                     error("function {topic} has no argument '{name}' names {names}")
-                    panic("invalid documentation")
+                    PANIC("invalid documentation")
                 }
             } elif (l |> starts_with(":returns:")) {
                 lines[lineIdx] = l |> replace(":returns:", ":Returns: * {describe_type(resType)} - ")
@@ -725,7 +769,7 @@ def document_function_topic(doc_file : file; resType : smart_ptr<TypeDecl>&; top
             for (i in range(1, length(args))) {
                 if (length(args[i]) < length(args[0])) {
                     error("function {topic} doesn't have enough documentation for argument {args[i][0]}")
-                    panic("invalid documentation")
+                    PANIC("invalid documentation")
                     while (length(args[i]) < length(args[0])) {
                         args[i] |> push("")
                     }
@@ -766,7 +810,7 @@ def document_topic(header : string; doc_file : file; topic, content : string imp
             if (got < expected) {
                 if (strict_struct_fields) {
                     error("{topic} has less documentation than values. Expected {expected} ({[for (it in tab); it[0]]}), got {got}\n")
-                    panic("invalid documentation")
+                    PANIC("invalid documentation")
                 }
 
                 for (i in range(got)) {
@@ -830,7 +874,7 @@ def document_topic(doc_file : file; topic, content : string implicit; cb : block
                     fwrite(topic_file, "{content}\n")
                 }
             } else {
-                panic("can't open {topic_file_name}")
+                PANIC("can't open {topic_file_name}")
             }
         }
     }
@@ -842,7 +886,7 @@ def document_topic(doc_file : file; topic, content : string implicit; cb : block
                 fwrite(doc_file, instxt)
                 fwrite(doc_file, "\n")
             } else {
-                panic("can't open {topic_file_name}")
+                PANIC("can't open {topic_file_name}")
             }
         }
     } elif (add_empty_topic) {
@@ -997,6 +1041,7 @@ def document_global_constants(doc_file : file; mods : array<Module?>) {
 }
 
 def public document_enumeration(doc_file : file; mod : Module?; value) {
+    //! Writes RST documentation for a single enumeration to the doc file.
     fwrite(doc_file, make_label(enum_label_name(value)))
     fwrite(doc_file, make_domain("das:attribute"))
     fwrite(doc_file, "{value.name}\n\n")
@@ -1013,6 +1058,7 @@ def public document_enumeration(doc_file : file; mod : Module?; value) {
 
 
 def public document_enumerations(doc_file : file; mods : array<Module?>) : bool {
+    //! Writes RST documentation for all public enumerations across the given modules.
     var any = false
     for (mod in mods) {
         if (any) {
@@ -1865,7 +1911,7 @@ def document_function(doc_file : file; mod : Module?; var func : FunctionPtr | F
     }
 
     var args <- document_function_arguments(doc_file, argNames, argTypes, drop_args)
-    document_function_topic(doc_file, func.result, topic("function", mod, "{prefix}{function_label_file(func,drop_args)}"), "def {describe_function(unsafe(reinterpret<FunctionPtr> func))}", args)
+    document_function_topic(doc_file, func.result, topic("function", mod, "{prefix}{function_label_file(func,drop_args)}"), "def {rst_describe_function_short(func)}", args)
 }
 
 
@@ -1952,6 +1998,7 @@ def debug_group(var group : DocGroup) {
 }
 
 def public append_to_group_by_regex(var group : DocGroup; var mod : Module?; var reg : Regex) : DocGroup& {
+    //! Appends functions whose names match the given regex to an existing DocGroup.
     for_each_function(mod, "") <| $(func) {
         if (function_needs_documenting(func)) {
             if (regex_match(reg, string(func.name)) != -1) {
@@ -2058,7 +2105,7 @@ def private generate_substitute_stub(mod : Module?; substname : string) {
                 }
             }
         } else {
-            panic("can't generate stub at {substname}\n")
+            PANIC("can't generate stub at {substname}\n")
         }
     }
 }
@@ -2073,23 +2120,25 @@ def public document(name : string; var mod : Module?; fname : string; var groups
 }
 
 struct public DocsHook {
+    //! Callback hooks for customizing RST documentation output.
     annotationFilter : lambda<(ann : rtti::Annotation const) : bool>
     afterEnums : lambda<(var f : FILE const?; was_enums : bool) : void>
 }
 
 
 def public documents(name : string; mods : array<Module?>; fname : string; var groups : array<DocGroup>; var hook : DocsHook = DocsHook()) {
+    //! Generates complete RST documentation for a set of modules into the specified file.
     static_if (log_documentation) {
         print("Documenting {name} into {fname}\n")
     }
     if (length(mods) == 0) {
-        panic("missing module {name}")
+        PANIC("missing module {name}")
     }
     let path = "{topic_root}/{fname}"
     mkdir_rec(dir_name(path))
     var doc_file = fopen(path, "wb")
     if (doc_file == null) {
-        panic("can't open {path}")
+        PANIC("can't open {path}")
     }
     fwrite(doc_file, "\n")
     var mod_name = string(mods[0].name)

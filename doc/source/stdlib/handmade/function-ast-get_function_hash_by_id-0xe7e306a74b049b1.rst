@@ -1,1 +1,1 @@
- Returns hash of the function by its unique id.
+Returns the hash of a function given its unique identifier.

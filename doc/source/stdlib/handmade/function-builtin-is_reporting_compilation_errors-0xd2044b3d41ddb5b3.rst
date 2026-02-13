@@ -1,1 +1,1 @@
- returns true if context failed to compile, and infer pass is reporting compilation errors
+Returns `true` if the context failed to compile and the inference pass is currently reporting compilation errors.

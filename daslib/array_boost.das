@@ -7,6 +7,12 @@ options strict_smart_pointers
 
 module array_boost shared public
 
+//! Extended array operations and operator overloads.
+//!
+//! Adds `push_clone`, `emplace`, `sort`, `sort_unique`, `remove_value`,
+//! arithmetic operators for fixed-size arrays, and array comparison
+//! operators. Automatically included by many other daslib modules.
+
 require daslib/templates
 require daslib/contracts
 

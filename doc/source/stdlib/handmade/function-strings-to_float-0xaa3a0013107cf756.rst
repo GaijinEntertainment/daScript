@@ -1,1 +1,1 @@
- Convert string to float. In case of error returns 0.0
+Converts a string to a float value, returning 0.0 if the conversion fails.

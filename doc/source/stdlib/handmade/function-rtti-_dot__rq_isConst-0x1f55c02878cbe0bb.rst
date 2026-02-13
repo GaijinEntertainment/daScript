@@ -1,3 +1,1 @@
-Returns true if the given type info represents a const type.
-
-
+Property-like accessor that returns ``true`` if the given ``TypeInfo`` describes a ``const``-qualified type.

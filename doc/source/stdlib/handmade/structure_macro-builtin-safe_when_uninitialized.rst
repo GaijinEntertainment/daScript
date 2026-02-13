@@ -1,1 +1,1 @@
- Marks structure as safe to be used when uninitialized.
+Declares that the structure is safe to access before explicit initialization, suppressing uninitialized-use errors.

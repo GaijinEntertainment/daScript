@@ -1,1 +1,1 @@
-Returns mangled name hash for the given function.
+Returns the mangled name hash of the given function.

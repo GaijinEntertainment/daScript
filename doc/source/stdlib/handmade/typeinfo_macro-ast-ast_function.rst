@@ -1,1 +1,1 @@
- Returns FunctionPtr to the function specified by subexrepssion, for example typeinfo(ast_function @@foo)
+Returns a `FunctionPtr` to the function specified by the subexpression, for example ``typeinfo(ast_function @@foo)``. Useful in macros that need compile-time access to function declarations.

@@ -1,1 +1,1 @@
- Appends single character `ch` to das::string `str`.
+Appends a single character specified by its integer code `ch` to the mutable das_string `str`.

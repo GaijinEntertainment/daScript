@@ -1,1 +1,1 @@
- optimization, which indicates that lock checks are not needed in this function.
+Optimization annotation that disables runtime lock-check validation for the annotated function.

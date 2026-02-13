@@ -1,1 +1,1 @@
- Find CallMacro by name in the Module.
+Finds a CallMacro by name in the specified module.

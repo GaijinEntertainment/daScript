@@ -1,1 +1,1 @@
- runtime optimization, which indicates that the table does not need lock checks.
+Enables or disables runtime lock verification for the given `table`; when `check` is false, lock safety checks are skipped as a performance optimization.

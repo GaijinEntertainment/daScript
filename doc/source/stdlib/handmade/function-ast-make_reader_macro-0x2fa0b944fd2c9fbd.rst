@@ -1,1 +1,1 @@
- Creates adapter for the `AstReaderMacro`.
+Creates an adapter for the AstReaderMacro interface.

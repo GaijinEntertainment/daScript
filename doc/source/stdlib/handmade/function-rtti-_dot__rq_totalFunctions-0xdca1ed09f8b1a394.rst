@@ -1,2 +1,1 @@
-Returns the total number of functions in the given Context.
-
+Property-like accessor that returns the total number of registered ``SimFunction`` entries in the given ``Context``.

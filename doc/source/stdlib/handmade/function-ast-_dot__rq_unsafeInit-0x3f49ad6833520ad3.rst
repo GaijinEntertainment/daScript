@@ -1,1 +1,1 @@
-Returns if the given type requires initialization, and its unsafe to skip it.
+Returns whether the given type requires initialization and skipping it would be unsafe.

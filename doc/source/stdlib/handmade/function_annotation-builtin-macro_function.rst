@@ -1,1 +1,1 @@
- indicates that the function is part of the macro implementation, and will not be present in the final compiled context, unless explicitly called.
+Marks a function as part of the macro subsystem, excluding it from the final compiled context unless it is explicitly referenced.

@@ -1,1 +1,1 @@
-Returns if the given type is a void pointer type.
+Returns whether the given type is a void pointer type.

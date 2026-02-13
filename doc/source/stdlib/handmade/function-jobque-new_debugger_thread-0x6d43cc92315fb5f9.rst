@@ -1,1 +1,1 @@
- Creates a new thread for debugging purposes (tick thread).
+Creates a new debugger tick thread for servicing debug connections.

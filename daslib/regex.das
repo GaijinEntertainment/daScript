@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module regex shared public
 
+//! Regular expression engine.
+//!
+//! Pure-daScript regex compiler and NFA matcher. Supports character
+//! classes, groups, quantifiers (``+``, ``*``, ``?``), alternation,
+//! and ``regex_match`` / ``regex_search`` / ``regex_replace`` operations.
+
 require daslib/strings_boost
 
 enum ReOp {
@@ -22,7 +28,9 @@ enum ReOp {
     Union
 }
 
+//! Bit-set representing a set of characters for regex matching.
 typedef CharSet = uint[8]
+//! Iterator of random uints used for regex-based string generation.
 typedef ReGenRandom = iterator<uint>
 
 
@@ -73,6 +81,7 @@ var private trace_tab = 0
 var private re_gen_rep_limit = 8u
 
 def public re_gen_get_rep_limit {
+    //! Returns the current repetition limit for regex string generation.
     return re_gen_rep_limit
 }
 
@@ -635,6 +644,7 @@ def private re_parse(expr : string) : ReNode? {
 }
 
 def public visit_top_down(var node : ReNode?; blk : block<(var n : ReNode?) : void>) {
+    //! Recursively visits all nodes in the regex tree in top-down order.
     invoke(blk, node)
     for (x in node.all) {
         visit_top_down(x, blk)
@@ -1084,6 +1094,7 @@ def regex_compile(var re : Regex; expr : string) : bool {
 }
 
 def regex_compile(expr : string) {
+    //! Compiles a regular expression string into a Regex object, panics on failure.
     var re : Regex
     if (!regex_compile(re, expr)) {
         panic("regular expression {expr} did not compile")
@@ -1092,6 +1103,7 @@ def regex_compile(expr : string) {
 }
 
 def regex_compile(var re : Regex) {
+    //! Finalizes compilation of a Regex by assigning next pointers and match functions.
     if (re.root != null) {
         re_assign_next(re)
         re_assign_match_functions(re)
@@ -1468,6 +1480,7 @@ def private re_gen2_group(var node : ReNode?; var rnd : ReGenRandom; var str : S
 }
 
 def public re_gen(var re : Regex; var rnd : ReGenRandom) : string {
+    //! Generates a random string that matches the compiled regular expression.
     return build_string <| $(writer) {
         invoke(re.root.gen2, re.root, rnd, writer)
     }

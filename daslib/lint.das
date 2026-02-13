@@ -6,12 +6,18 @@ options strict_smart_pointers = true
 
 module lint shared private
 
+//! Lint pass that enables paranoid compilation checks.
+//!
+//! When this module is required, the ``paranoid`` lint flag is turned on
+//! for the current module, enabling stricter compiler diagnostics.
+
 require daslib/strings_boost
 require daslib/ast_boost
 require daslib/strings_boost
 
 [lint_macro]
 class LintEverything : AstPassMacro {
+    //! Pass macro that enables lint checking for modules.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         paranoid(prog, true)
         return true
@@ -19,6 +25,7 @@ class LintEverything : AstPassMacro {
 }
 
 class LintVisitor : AstVisitor {
+    //! AST visitor that performs lint checks.
     astVisitorAdapter : smart_ptr<ast::VisitorAdapter>
     exprForTerminator : array<uint64>
     compile_time_errors : bool
@@ -146,6 +153,7 @@ class LintVisitor : AstVisitor {
 }
 
 def public paranoid(prog : ProgramPtr; compile_time_errors : bool) {
+    //! Runs the paranoid lint visitor on the program to check for common coding issues.
     var astVisitor = new LintVisitor(compile_time_errors = compile_time_errors)
     unsafe {
         astVisitor.astVisitorAdapter <- make_visitor(*astVisitor)

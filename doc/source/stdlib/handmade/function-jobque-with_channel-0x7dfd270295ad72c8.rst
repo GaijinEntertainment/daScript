@@ -1,1 +1,1 @@
- Creates `Channel`, makes it available inside the scope of the block.
+Creates a ``Channel`` scoped to the given block and automatically destroys it afterward.

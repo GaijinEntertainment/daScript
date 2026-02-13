@@ -1,1 +1,1 @@
-Creates a decorative group header for RST documentation.
+Creates a named documentation group with a decorative RST section header.

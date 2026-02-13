@@ -1,1 +1,1 @@
- constructs a new default element in-place in the table, set, or array, if it doesn't already exist
+Constructs a new default-initialized element in the table `tab` at the given `key`, only if that key does not already exist.

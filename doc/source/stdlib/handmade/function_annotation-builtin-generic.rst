@@ -1,1 +1,1 @@
- indicates that the function is generic, regardless of its argument types. generic functions will be instanced in the calling module
+Forces a function to be treated as generic regardless of its argument types, causing it to be instanced in each calling module.

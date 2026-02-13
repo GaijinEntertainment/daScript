@@ -1,1 +1,1 @@
- Strips white-space-only characters that might appear at the beginning of the given string and returns the new stripped string.
+Returns a new string with all leading whitespace characters removed from `str`.

@@ -1,1 +1,1 @@
- Iterates through each annotation for the `Structure` object.
+Iterates through each annotation attached to a ``StructInfo``, yielding the annotation name and its ``AnnotationArgumentList`` for each.

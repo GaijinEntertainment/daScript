@@ -1,1 +1,1 @@
- Passes temporary array which is mapped to the string data to a block as read-only.
+Maps the raw bytes of string `str` into a temporary read-only uint8 array and passes it to `block` for inspection.

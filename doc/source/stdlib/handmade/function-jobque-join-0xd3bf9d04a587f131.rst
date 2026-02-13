@@ -1,1 +1,1 @@
- Wait until channel entry count reaches 0.
+Joins the elements of an iterable into a single string using the specified separator.

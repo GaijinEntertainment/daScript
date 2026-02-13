@@ -1,1 +1,1 @@
-Returns if the given type is an iterator type.
+Returns whether the given type is an iterator type.

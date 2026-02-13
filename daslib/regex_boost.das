@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module regex_boost shared private
 
+//! Compile-time regex embedding.
+//!
+//! Provides the ``%regex~pattern%%`` reader macro that compiles a regular
+//! expression at parse time and embeds the resulting ``Regex`` object
+//! directly into the AST, avoiding runtime compilation overhead.
+
 require ast
 require strings
 require daslib/ast_boost

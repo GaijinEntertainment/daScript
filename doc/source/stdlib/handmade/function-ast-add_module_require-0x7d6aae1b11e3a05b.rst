@@ -1,1 +1,1 @@
- Add module dependencies similar to "require" keyword.
+Adds module dependencies, similar to the `require` keyword.

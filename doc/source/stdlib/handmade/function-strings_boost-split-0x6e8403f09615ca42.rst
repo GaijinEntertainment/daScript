@@ -1,1 +1,1 @@
-Splits a string into substrings based on the specified delimiter characters, invoking a custom block for each substring.
+Splits a string by the specified delimiter characters, invoking a block for each resulting substring.

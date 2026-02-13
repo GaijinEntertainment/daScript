@@ -1,1 +1,1 @@
- Calls visit on the `finally` section of the block.
+Invokes the visitor on the finally section of a block.

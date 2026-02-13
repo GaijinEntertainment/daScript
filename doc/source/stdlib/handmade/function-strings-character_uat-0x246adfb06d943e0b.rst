@@ -1,1 +1,1 @@
- Returns character of the string 'str' at index 'idx'. This function does not check bounds of index.
+Returns the integer character code of string `str` at the given index `idx` without performing bounds checking (unsafe).

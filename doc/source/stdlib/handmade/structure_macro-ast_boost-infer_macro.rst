@@ -1,1 +1,1 @@
- Turns AstPassMacro into a macro with the specified 'name', which is called during the `infer` pass.
+The ``[infer_macro]`` structure annotation — registers an ``AstPassMacro`` subclass that is invoked during the type inference compilation pass.

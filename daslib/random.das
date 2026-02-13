@@ -6,6 +6,13 @@ options strict_smart_pointers = true
 
 module random shared
 
+//! Pseudorandom number generation.
+//!
+//! LCG-based random number generators for integers, floats, and
+//! vector types (int2–int4, float2–float4). Also provides
+//! ``random_seed``, ``random_big_int``, and iterators via
+//! ``each_random_uint``.
+
 require math
 
 let LCG_RAND_MAX = 32767                                        //! maximum possible output of random number generator

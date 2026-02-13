@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module bool_array shared public
 
+//! Packed boolean array backed by uint32 storage.
+//!
+//! The ``BoolArray`` struct stores boolean flags as individual bits,
+//! providing ``set``, ``get``, ``resize``, ``clear``, and iteration
+//! methods. Memory usage is 32x smaller than an ``array<bool>``.
+
 require strings
 
 struct BoolArray {
@@ -14,6 +20,7 @@ struct BoolArray {
     private real_size : uint
     [hint(unsafe_range_check, noalias=self)]
     def finalize {
+        //! Releases the memory used by the BoolArray.
         delete bits
     }
     def const operator [] (index : int) : bool {
@@ -232,6 +239,7 @@ struct BoolArray {
 
 [unsafe_outside_of_for, unsafe_deref]
 def each(self : BoolArray) : iterator<bool> {
+    //! Returns an iterator over all boolean values in the BoolArray.
     let pself = unsafe(addr(self))
     return <- generator<bool>() <| $ {
         let len = (*pself).length()

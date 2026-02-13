@@ -1,1 +1,1 @@
- Smart pointer to `StructureAnnotation` object.
+Smart pointer to a `StructureAnnotation` object. Used for registering and managing structure annotation macros.

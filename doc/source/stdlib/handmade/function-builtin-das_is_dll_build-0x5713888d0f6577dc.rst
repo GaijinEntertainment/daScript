@@ -1,2 +1,1 @@
-Returns true if the current build is a DLL build, false otherwise.
-This determines if daslib symbols are available for the JIT.
+Checks whether the current build is configured as a DLL (dynamic library) build, which determines if daslib symbols are available for the JIT compiler.

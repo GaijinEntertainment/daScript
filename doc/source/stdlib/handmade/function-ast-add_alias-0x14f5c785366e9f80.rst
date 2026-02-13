@@ -1,1 +1,1 @@
- Adds type alias to the specified module.
+Adds a type alias to the specified module.

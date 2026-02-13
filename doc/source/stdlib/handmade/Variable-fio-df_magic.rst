@@ -1,1 +1,2 @@
- obsolete. magic number for `binary_save` and `binary_load`.
+Magic number constant used to identify daScript binary file format.
+df_magic:uint const

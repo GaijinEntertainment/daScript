@@ -1,1 +1,1 @@
- Describes object and produces corresponding Daslang code as string.
+Produces a daScript source code string representation of the given AST object.

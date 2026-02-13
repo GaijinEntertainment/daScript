@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module constant_expression shared private
 
+//! Compile-time constant-expression enforcement.
+//!
+//! ``[constexpr(arg)]`` verifies at compile time that the named argument
+//! is a constant expression and also implements ``[constant_expression(arg)]``
+//! which folds the argument to a compile-time value.
+
 require ast
 require daslib/ast_boost
 require daslib/strings_boost

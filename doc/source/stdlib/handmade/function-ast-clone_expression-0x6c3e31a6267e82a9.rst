@@ -1,1 +1,1 @@
- Clones `Expression` with subexpressions, including corresponding type.
+Clones an Expression along with all its subexpressions and corresponding type information.

@@ -7,6 +7,11 @@ options strict_smart_pointers = true
 
 module decs_state shared private
 
+//! DECS debugger state reporting.
+//!
+//! Sends entity and archetype data to the debug-agent context
+//! for live inspection in the DAP debugger's variable view.
+
 require daslib/decs
 require daslib/strings_boost
 require debugapi
@@ -18,6 +23,7 @@ def report_to_debugger(var ctx : Context; category, name : string; value : auto(
 }
 
 struct EcsRequestView {
+    //! Read-only view of an ECS request for debug inspection.
     hash        : uint64
     REQUIRE     : string
     REQUIRE_NOT : string
@@ -27,6 +33,7 @@ struct EcsRequestView {
 }
 
 struct EcsComponentView {
+    //! Read-only view of an ECS component for debug inspection.
     name        : string
     vtype       : string
     values      : string
@@ -34,12 +41,14 @@ struct EcsComponentView {
 }
 
 struct EcsArchetypeView {
+    //! Read-only view of an ECS archetype for debug inspection.
     hash        : uint64
     size        : int
     components  : array<EcsComponentView>
 }
 
 class ContextStateAgent : DapiDebugAgent {
+    //! Debug agent that exposes DECS state for inspection.
     def override onCollect(var ctx : Context; at : LineInfo) {
         let pState = unsafe(get_context_global_variable(ctx, "decsState"))
         if (pState == null) {

@@ -1,1 +1,1 @@
- Convert string to int16. In case of error returns 0
+Converts a string to an int16 value with optional hexadecimal parsing when `hex` is true, returning 0 if the conversion fails.

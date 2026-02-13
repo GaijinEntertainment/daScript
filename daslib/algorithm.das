@@ -5,6 +5,12 @@ options no_unused_function_arguments = false
 
 module algorithm shared public
 
+//! General-purpose algorithms.
+//!
+//! Collection of functional-style helpers: `unique`, `unique_pairs`, `top_sort`,
+//! `binary_search`, `lower_bound`, `upper_bound`, `has_value`, `reverse`, `flatten`,
+//! and more. Works on arrays and iterators.
+
 require daslib/array_boost
 require daslib/contracts
 

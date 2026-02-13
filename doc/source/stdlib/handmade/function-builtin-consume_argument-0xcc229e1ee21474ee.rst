@@ -1,3 +1,1 @@
-Notifies compiler that the argument is consumed, i.e. it will not be used after this call.
-This allows to avoid unnecessary clones and moves in some cases, for example when the argument is returned from the function.
-Alternative syntax is foo ( <-arg ) instead of foo ( consume_argument(arg) ).
+Marks argument `a` as consumed, signaling to the compiler that it will not be used after this call, which enables move optimizations and avoids unnecessary clones. Equivalent to the `<-arg` syntax.

@@ -5,14 +5,9 @@
 Export constructor
 ==================
 
-The export_constructor module simplifies creation of Daslang structure and classes from C++ side.
-
-In the following example::
-
-    [export_constructor]
-    class Foo {}
-
-Function make`Foo is generated with an export flag; it returns new Foo() object.
+The EXPORT_CONSTRUCTOR module provides the ``[export_constructor]`` annotation
+for struct types. Annotated structs automatically generate an exported
+constructor function that can be called from other modules or from C++ code.
 
 All functions and symbols are in "export_constructor" module, use require to get access to it. ::
 

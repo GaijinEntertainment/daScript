@@ -1,1 +1,1 @@
- List of all annotations attached to the object (function or structure).
+Handled type representing all annotations attached to a single object (function, structure, or variable), iterable via ``each``.

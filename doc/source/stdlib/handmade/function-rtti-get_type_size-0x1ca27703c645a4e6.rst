@@ -1,1 +1,1 @@
- Returns size of the type in bytes.
+Returns the size (``int``, in bytes) of the type described by the given ``TypeInfo``.

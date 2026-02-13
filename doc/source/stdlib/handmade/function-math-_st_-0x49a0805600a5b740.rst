@@ -1,3 +1,2 @@
-Multiplies a float3x3 matrix by a float3 vector.
-
+Transforms a float3 vector by a 3x3 matrix.
 

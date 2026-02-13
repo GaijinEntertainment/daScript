@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module enum_trait shared private
 
+//! Enumeration reflection traits.
+//!
+//! Generates helper functions for enumerations: ``each`` (iterate over all
+//! values), ``each_name`` (iterate over all name strings), and
+//! ``find_value`` (look up a value by name).
+
 require ast
 require daslib/ast_boost
 require daslib/templates_boost
@@ -14,6 +20,7 @@ require daslib/contracts
 
 [expect_any_enum(tt), unused_argument(tt), nodiscard]
 def public each(tt : auto(TT)) : iterator<TT -const -&> {
+    //! Returns an iterator over all values of the given enumeration type.
     concept_assert(typeinfo is_enum(tt), "expecting 'each(any_enum_value)'")
     var iter : iterator<TT -const -&>
     _builtin_make_enum_iterator(iter)

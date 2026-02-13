@@ -6,15 +6,21 @@ options strict_smart_pointers = true
 
 module class_boost shared private
 
+//! Class method macro.
+//!
+//! Provides ``[class_method]`` and ``[explicit_const_class_method]`` annotations
+//! that transform static functions into class methods by automatically injecting
+//! a ``self`` argument and wrapping the body in ``with (self)``.
+
 require daslib/ast_boost
 
 require daslib/templates_boost
 
 [function_macro(name="class_method")]
 class ClassMethodMacro : AstFunctionAnnotation {
-    //! turns static method into class method, by adding
-    //! self argument of the class type as the first argument
-    //! with (self) around main function body
+    //! Turns a static method into a class method by adding a ``self`` argument
+    //! of the class type as the first argument, and wrapping the function body
+    //! in ``with (self) { ... }``. Applied via ``[class_method]`` annotation.
     explicitConstClassMethod : bool = false
     def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         if (func.classParent == null) {
@@ -41,5 +47,7 @@ class ClassMethodMacro : AstFunctionAnnotation {
 
 [function_macro(name="explicit_const_class_method")]
 class ExplicitClassMethodMacro : ClassMethodMacro {
+    //! Same as ``[class_method]`` but marks the ``self`` parameter with ``explicitConst``,
+    //! allowing overloading of const and non-const class methods.
     override explicitConstClassMethod : bool = true
 }

@@ -1,1 +1,1 @@
- Hints the compiler to use specific optimization.
+Provides optimization hints to the compiler for the annotated function via annotation arguments.

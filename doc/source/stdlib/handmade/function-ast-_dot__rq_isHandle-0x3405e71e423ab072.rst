@@ -1,1 +1,1 @@
-Returns if the given type is a handle type, i.e. a C++ type exposed to DaScript via TypeAnnotation.
+Returns whether the given type is a handle type, representing a C++ type exposed to daScript via TypeAnnotation.

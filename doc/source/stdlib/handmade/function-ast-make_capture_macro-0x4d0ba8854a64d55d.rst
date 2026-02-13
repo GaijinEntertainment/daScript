@@ -1,1 +1,1 @@
- Creates adapter for the `AstCaptureMacro`.
+Creates an adapter for the AstCaptureMacro interface.

@@ -1,1 +1,1 @@
-Returns if the given type is a numeric type.
+Returns whether the given type is a numeric type.

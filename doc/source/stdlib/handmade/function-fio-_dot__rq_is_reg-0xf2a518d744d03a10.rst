@@ -1,3 +1,2 @@
-Returns true if the file represented by the given FStat object is a regular file.
-
+Returns true if the file status indicates a regular file.
 

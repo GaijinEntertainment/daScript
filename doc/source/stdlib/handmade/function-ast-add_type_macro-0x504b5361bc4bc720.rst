@@ -1,1 +1,1 @@
- Adds 'AstTypeMacro' to the specific module.
+Adds an AstTypeMacro adapter to the specified module.

@@ -1,1 +1,1 @@
-Splits the input string into an array of substrings based on the specified delimiter characters.
+Splits a string by the specified delimiter characters and returns an array of substrings.

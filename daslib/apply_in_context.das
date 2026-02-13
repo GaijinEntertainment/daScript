@@ -6,6 +6,13 @@ options strict_smart_pointers
 
 module apply_in_context shared private
 
+//! Cross-context function call annotation.
+//!
+//! ``[apply_in_context(agent_name)]`` rewrites a function so that its body
+//! executes inside a named debug-agent context rather than the caller's
+//! context. Useful for debug tooling, caches, and other agent-hosted
+//! services.
+
 require ast
 require daslib/ast_boost
 require daslib/templates_boost

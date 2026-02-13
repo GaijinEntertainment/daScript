@@ -1,1 +1,1 @@
- Finds name of the corresponding bitfield value in the specified type.
+Finds the name of a bitfield value in the specified type.

@@ -1,1 +1,1 @@
-Returns name of the platform (operating system) that the program is running on, such as "windows", "linux", "darwin" (for macOS), "emscripten" (for WebAssembly), or "unknown" if it cannot be determined.
+Returns the name of the operating system the program is running on, such as `"windows"`, `"linux"`, `"darwin"`, `"emscripten"`, or `"unknown"`.

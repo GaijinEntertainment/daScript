@@ -1,1 +1,1 @@
- Returns the module which is currently being searched for the function, given module name. Resolves "", "_", "*", and "__" correctly.
+Returns the module currently being searched for a function by name, correctly resolving special names like `""`, `"_"`, `"*"`, and `"__"`.

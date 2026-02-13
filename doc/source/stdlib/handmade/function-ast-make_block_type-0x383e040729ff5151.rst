@@ -1,1 +1,1 @@
- Generates TypeDeclPtr for the specified block or lambda type.
+Generates a TypeDeclPtr for a specified block or lambda type.

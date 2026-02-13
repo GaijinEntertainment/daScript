@@ -1,1 +1,1 @@
-Returns whether somewhere in the type definition there are classes.
+Returns whether the type definition contains any class types.

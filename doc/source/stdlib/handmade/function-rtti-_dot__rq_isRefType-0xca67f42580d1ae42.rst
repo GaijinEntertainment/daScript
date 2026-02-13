@@ -1,3 +1,1 @@
-Returns true if the given type annotation represents a reference type, i.e. something which is always passed by reference - or a literal reference.
-
-
+Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` is always passed by reference, or is itself a reference type.

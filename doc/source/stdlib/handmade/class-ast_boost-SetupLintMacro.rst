@@ -1,1 +1,1 @@
- [lint_macro] implementation.
+Base class for creating lint pass macros via the ``[lint_macro]`` structure annotation; registers an ``AstPassMacro`` that runs during the lint pass.

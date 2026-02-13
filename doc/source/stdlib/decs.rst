@@ -5,15 +5,14 @@
 DECS, Daslang entity component system
 =====================================
 
-The DECS module implements low level functionality of Daslang entity component system.
+The DECS module implements a Data-oriented Entity Component System.
+Entities are identified by integer IDs and store components as typed data.
+Systems query and process entities by their component signatures,
+enabling cache-friendly batch processing of game objects.
 
 All functions and symbols are in "decs" module, use require to get access to it. ::
 
     require daslib/decs
-
-Under normal circumstances, the module is not used without the boost package::
-
-    require daslib/desc_boost
 
 ++++++++++++
 Type aliases
@@ -675,7 +674,7 @@ If value already exists, it is overwritten. If already existing value type is no
             * **value** : auto(TT)
 
 +++++++++++++++++++++++
-Deubg and serialization
+Debug and serialization
 +++++++++++++++++++++++
 
   *  :ref:`describe (info: CTypeInfo) : string <function-decs_describe_CTypeInfo>` 

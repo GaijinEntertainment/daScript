@@ -1,1 +1,1 @@
- moves `b` into `a`, checks if `a` or `b` is locked, recursively for each lockable element of a and b
+Moves the contents of `b` into `a`, verifying that neither `a` nor `b` (nor any of their lockable sub-elements) is currently locked.

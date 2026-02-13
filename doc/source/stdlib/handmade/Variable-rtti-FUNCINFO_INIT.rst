@@ -1,1 +1,1 @@
- Function flag which indicates that function is called during the `Context` initialization.
+Bit flag constant on ``FuncInfo.flags`` indicating that the function runs during ``Context`` initialization (``[init]`` attribute).

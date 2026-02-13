@@ -1,1 +1,1 @@
- Iterates through all functions in the DebugInfoHelper, calling the provided block with each function.
+Iterates through all functions in the DebugInfoHelper, invoking the provided block for each one.

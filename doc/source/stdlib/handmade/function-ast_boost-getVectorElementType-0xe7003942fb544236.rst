@@ -1,1 +1,1 @@
- Type of individual element in the vector type, for example float in float2.
+Returns the scalar ``Type`` of each element in a vector type (e.g., ``tFloat`` for ``float2``, ``tInt`` for ``int3`` and ``range``, ``tInt64`` for ``range64``).

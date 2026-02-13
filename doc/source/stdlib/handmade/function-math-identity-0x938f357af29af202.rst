@@ -1,1 +1,1 @@
- Returns identity matrix, where diagonal is 1 and every other component is 0.
+Sets the given float3x4 matrix to the identity transformation (rotation part is the identity matrix, translation is zero) and returns it.

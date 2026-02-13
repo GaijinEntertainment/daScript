@@ -1,1 +1,1 @@
- Initializes server with given port.
+Initializes the server to listen on the specified port.

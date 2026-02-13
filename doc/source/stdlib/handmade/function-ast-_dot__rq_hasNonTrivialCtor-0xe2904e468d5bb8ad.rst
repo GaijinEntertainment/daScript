@@ -1,1 +1,1 @@
-Returns whether somewhere in the type definition there are non-trivial constructors.
+Returns whether the type definition contains any non-trivial constructors.

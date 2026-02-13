@@ -1,1 +1,1 @@
- optimization, which indicates that the structure does not need lock checks.
+Optimization annotation that disables runtime lock checks when accessing fields of the annotated structure.

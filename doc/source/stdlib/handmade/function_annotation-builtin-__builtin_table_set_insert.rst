@@ -1,1 +1,1 @@
- part of internal implementation for `insert` of the sets (tables with keys only).
+Internal function annotation that implements the low-level key insertion for set-style tables (tables with keys only).

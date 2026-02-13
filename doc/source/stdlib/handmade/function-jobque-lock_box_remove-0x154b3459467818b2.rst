@@ -1,1 +1,1 @@
- Destroys lockbox.
+Destroys a ``LockBox`` and releases its resources.

@@ -1,3 +1,2 @@
-Returns the ctime of the file represented by the given FStat object.
-
+Returns the creation time of the file as a clock value.
 

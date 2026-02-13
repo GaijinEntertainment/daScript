@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module strings_boost shared public
 
+//! Extended string manipulation functions.
+//!
+//! Adds ``wide``, ``split``, ``join``, ``escape``, ``unescape``,
+//! ``starts_with``, ``ends_with``, ``replace``, string-builder helpers,
+//! and many other utilities on top of the built-in ``strings`` module.
+
 require math
 require strings public
 

@@ -1,1 +1,1 @@
- terminates current context execution
+Immediately terminates execution of the current daScript context.

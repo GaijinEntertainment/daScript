@@ -5,6 +5,13 @@ options no_unused_function_arguments = false
 
 module flat_hash_table shared private
 
+//! Template flat hash map using open addressing with linear probing.
+//!
+//! ``TFlatHashTable`` is a ``[template_structure]`` parameterised by key type,
+//! value type, and hash function. It stores keys, values, and hashes in
+//! parallel arrays for cache-friendly access and supports ``insert``,
+//! ``erase``, iteration, and automatic growth.
+
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/typemacro_boost
@@ -14,6 +21,7 @@ require daslib/class_boost
 //! TFlatHashTable is a hash map that uses open addressing with linear probing.
 [skip_field_lock_check, template_structure(KeyType, ValueType, hashFunctionName=@@hash)]
 struct template TFlatHashTable {
+    //! Open-addressing hash table with linear probing.
     key_data   : array<KeyType>
     hashes : array<uint64>
     value_data : array<ValueType>

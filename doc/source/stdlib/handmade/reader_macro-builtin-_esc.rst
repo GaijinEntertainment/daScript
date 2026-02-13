@@ -1,1 +1,1 @@
- returns raw string input, without regards for escape sequences. For example %_esc\\n\\r%_esc will return 4 character string '\\','n','\\','r'
+Reader macro that returns the raw string content without processing escape sequences, e.g. `%_esc~\n\r~%_esc` yields the literal four characters `\`, `n`, `\`, `r`.

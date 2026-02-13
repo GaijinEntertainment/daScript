@@ -1,1 +1,1 @@
- Write data to the 'require' section of the AOT module.
+Writes data to the require section of an AOT module.

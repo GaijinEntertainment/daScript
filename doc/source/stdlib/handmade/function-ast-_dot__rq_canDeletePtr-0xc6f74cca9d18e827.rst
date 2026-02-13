@@ -1,1 +1,1 @@
-Returns whether the given type can have its pointer deleted.
+Returns whether the pointer to the given type can be deleted.

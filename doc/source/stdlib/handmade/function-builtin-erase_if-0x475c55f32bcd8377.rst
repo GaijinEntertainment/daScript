@@ -1,1 +1,1 @@
- Erases element from the array if it satisfies the condition.
+Iterates over the array `arr` and removes all elements for which the block `blk` returns `true`.

@@ -6,14 +6,25 @@ options strict_smart_pointers = true
 
 module coroutines shared public
 
+//! Coroutine and generator support.
+//!
+//! Provides the ``[coroutine]`` function annotation that transforms a function into
+//! a generator-based state machine, plus helper macros:
+//!   * ``yeild_from(iter)`` — yield all values from a sub-iterator
+//!   * ``co_continue()`` — yield true (continue running)
+//!   * ``co_await(sub)`` — wait for a sub-coroutine to finish
+//! And runner functions ``cr_run`` and ``cr_run_all`` for executing coroutines.
+
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/macro_boost
 require daslib/defer
 
-typedef Coroutine = iterator<bool> //! A coroutine is a generator that yields bool to indicate if it is still running.
+//! A coroutine is a generator that yields bool to indicate if it is still running.
+typedef Coroutine = iterator<bool>
 
-typedef Coroutines = array<Coroutine> //! An array of coroutines.
+//! An array of coroutines.
+typedef Coroutines = array<Coroutine>
 
 [call_macro(name="yeild_from")]
 class private YieldFrom : AstCallMacro {
@@ -24,6 +35,7 @@ class private YieldFrom : AstCallMacro {
     //!
     //! The idea is that coroutine or generator can continuesly yield from another sub-coroutine or generator.
     def override visit(prog : ProgramPtr; mod : Module?; var call : smart_ptr<ExprCallMacro>) : ExpressionPtr {
+        //! Visits the yeild_from macro call and rewrites it into a for-yield loop.
         macro_verify(call.arguments |> length == 1, prog, call.at, "expecting yeild_from(iterator)")
         macro_verify(call.arguments[0]._type != null, prog, call.at, "expecting iterator")
         macro_verify(call.arguments[0]._type.isIterator, prog, call.at, "expecting iterator")
@@ -42,6 +54,7 @@ class private CoContinue : AstCallMacro {
     //! The idea is that coroutine without specified type is underneath a coroutine which yields bool.
     //! That way co_continue() does not distract from the fact that it is a generator<bool>.
     def override visit(prog : ProgramPtr; mod : Module?; var call : smart_ptr<ExprCallMacro>) : ExpressionPtr {
+        //! Visits the co_continue macro call and rewrites it to ``yield true``.
         // TODO: verify if we are in coroutine
         // TODO: verify if we are in coroutine which returns bool
         macro_verify(call.arguments |> length == 0, prog, call.at, "expecting co_continue()")
@@ -60,6 +73,7 @@ class private CoAwait : AstCallMacro {
     //!
     //! The idea is that coroutine or generator can wait for a sub-coroutine to finish.
     def override visit(prog : ProgramPtr; mod : Module?; var call : smart_ptr<ExprCallMacro>) : ExpressionPtr {
+        //! Visits the co_await macro call and rewrites it into a for-yield loop over the sub-coroutine.
         // TODO: verify if we are calling co_await on a coroutine.
         macro_verify(call.arguments |> length == 1, prog, call.at, "expecting co_await(subroutine)")
         let iname = make_unique_private_name("_co_await_iterator", call.at)
@@ -79,6 +93,7 @@ class private CoroutineMacro : AstFunctionAnnotation {
     //! Generator yields bool if its a void coroutine, and yields the return type otherwise.
     //! If return type is specified coroutine can serve as an advanced form of a generator.
     def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+        //! Transforms the annotated function into a generator-based coroutine.
         var inscope retT : TypeDeclPtr
         if (func.result.baseType == Type.tVoid || func.result.baseType == Type.autoinfer) {
             move_new(retT) <| qmacro_type(type<bool>)

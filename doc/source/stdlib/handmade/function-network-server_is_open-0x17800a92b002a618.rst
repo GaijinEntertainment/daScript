@@ -1,1 +1,1 @@
- Returns true if server is listening to the port.
+Returns ``true`` if the server is listening on its bound port.

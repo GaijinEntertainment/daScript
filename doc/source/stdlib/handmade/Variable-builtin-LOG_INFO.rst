@@ -1,1 +1,1 @@
- indicates log level for miscellaneous informative messages
+Log level constant for general informational messages about normal program operation.

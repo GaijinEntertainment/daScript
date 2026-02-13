@@ -1,1 +1,1 @@
- erase will erase `at` index element in `arg` array.
+Erases the element at index `at` from the array `Arr`, shifting subsequent elements to fill the gap.

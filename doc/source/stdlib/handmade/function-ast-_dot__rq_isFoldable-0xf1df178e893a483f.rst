@@ -1,1 +1,1 @@
-Returns if the given type is a foldable type, like integer or float and unlike pointer or array.
+Returns whether the given type is foldable, such as integer or float, as opposed to pointer or array.

@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module ast_used shared private
 
+//! Used-type collection visitor.
+//!
+//! Walks the AST and collects all structure and enumeration types
+//! that are actually referenced, producing an ``OnlyUsedTypes`` set.
+//! Used by code generators to emit only the types that are needed.
+
 require daslib/ast_boost
 
 struct public OnlyUsedTypes {
@@ -15,6 +21,7 @@ struct public OnlyUsedTypes {
 }
 
 class TypeVisitor : AstVisitor {
+    //! AST visitor that collects referenced types and structures.
     usedTypes : OnlyUsedTypes //! collected used types
     def TypeVisitor {
         pass

@@ -1,3 +1,1 @@
-Returns true if the given type annotation represents a smart pointer type.
-
-
+Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` represents a ``smart_ptr`` managed type.

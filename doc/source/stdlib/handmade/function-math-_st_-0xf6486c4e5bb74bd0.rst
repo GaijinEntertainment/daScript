@@ -1,3 +1,2 @@
-Multiplies a float4x4 matrix by a float4x4 matrix.
-
+Multiplies two 4x4 matrices and returns the resulting 4x4 matrix.
 

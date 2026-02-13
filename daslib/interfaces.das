@@ -6,6 +6,13 @@ options strict_smart_pointers = true
 
 module interfaces shared private
 
+//! Interface-based polymorphism.
+//!
+//! Annotate a class with ``[interface]`` to declare it as an interface (functions only, no data fields).
+//! Annotate another struct with ``[implements(InterfaceName)]`` to generate the binding —
+//! this creates a proxy class, a ``get`InterfaceName`` method, and delegates all interface
+//! functions to the implementing struct's methods.
+
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/defer
@@ -15,7 +22,8 @@ require ast
 
 [structure_macro(name="interface")]
 class InterfaceMacro : AstStructureAnnotation {
-    //! implements 'interface' macro, which verifies if class is an interface (no own variables)
+    //! Verifies that the annotated class is a valid interface — it may only contain
+    //! function-typed fields (no data members). Applied via ``[interface]`` annotation.
     def override finish(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         for (fld in st.fields) {
             if (fld.name == "__rtti") {
@@ -32,7 +40,9 @@ class InterfaceMacro : AstStructureAnnotation {
 
 [structure_macro(name="implements")]
 class ImplementsMacro : AstStructureAnnotation {
-    //! implements 'implements' macro, adds get`{Interface} method as well as interface bindings and implementation.
+    //! Generates interface bindings for a struct. Creates a proxy class that delegates
+    //! interface method calls to the struct's own methods, and adds a ``get`InterfaceName``
+    //! method that lazily constructs the proxy. Applied via ``[implements(InterfaceName)]``.
     def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         if (length(args) != 1) {
             errors := "implements macro takes exactly one argument"

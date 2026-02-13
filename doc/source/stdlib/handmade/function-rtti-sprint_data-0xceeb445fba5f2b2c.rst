@@ -1,1 +1,1 @@
- Prints data given `TypeInfo` and returns result as a string, similar to `print` function.
+Returns a ``string`` representation of a value given its data pointer and ``TypeInfo``, similar to ``debug`` or ``print`` but capturing output as a string.

@@ -1,1 +1,1 @@
- Turns AstFunctionAnnotation into a contract macro with the specified `name`.
+The ``[contract]`` structure annotation — registers an ``AstFunctionAnnotation`` subclass as a named function contract that validates arguments or return values.

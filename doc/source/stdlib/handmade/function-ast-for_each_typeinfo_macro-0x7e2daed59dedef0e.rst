@@ -1,1 +1,1 @@
- Iterates through each typeinfo macro in the given `Module`.
+Iterates through each typeinfo macro in the given module.

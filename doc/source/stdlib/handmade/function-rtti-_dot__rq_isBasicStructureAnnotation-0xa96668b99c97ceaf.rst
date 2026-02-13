@@ -1,3 +1,1 @@
-Returns true if the given annotation is a BasicStructureAnnotation.
-
-
+Property-like accessor that returns ``true`` if the given ``Annotation`` is a ``BasicStructureAnnotation``, which exposes C++ struct fields to daScript.

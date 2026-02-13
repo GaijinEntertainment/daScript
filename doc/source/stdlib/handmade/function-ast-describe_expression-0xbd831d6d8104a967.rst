@@ -1,1 +1,1 @@
- Returns description of the `Expression` which should match corresponding Daslang code.
+Returns a string description of the Expression matching the corresponding daScript source code.

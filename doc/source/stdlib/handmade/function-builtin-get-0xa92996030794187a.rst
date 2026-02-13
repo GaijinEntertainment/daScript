@@ -1,1 +1,1 @@
- will execute `block_arg` with argument reference-to-value in `table_arg` referencing value indexed by `key`. Will return false if `key` doesn't exist in `table_arg`, otherwise true.
+Looks up `at` in the set-style table `Tab` (with `void` values) and, if found, invokes `blk` with a void pointer; returns `true` if the key existed.

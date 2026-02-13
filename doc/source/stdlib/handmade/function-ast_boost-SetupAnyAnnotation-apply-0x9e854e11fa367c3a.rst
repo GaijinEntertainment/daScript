@@ -1,1 +1,1 @@
-Implementation details for setting up any type of annotation in the ast_boost module.
+Generates a macro-init function that constructs an instance of the annotated class and registers it with the compiler under the specified ``name``.

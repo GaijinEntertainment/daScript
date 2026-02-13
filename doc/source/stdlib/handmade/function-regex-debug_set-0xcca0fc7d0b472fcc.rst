@@ -1,1 +1,1 @@
-Debugs character set by printing all characters it contains.
+Prints all characters contained in a ``CharSet`` for debugging purposes.

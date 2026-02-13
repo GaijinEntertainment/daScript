@@ -1,1 +1,1 @@
- Escape string so that escape sequences are printable, for example converting "\n" into "\\n".
+Returns a new string with special characters replaced by their printable escape sequences (e.g. newline becomes \\n).

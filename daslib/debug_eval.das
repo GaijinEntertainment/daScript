@@ -6,6 +6,12 @@ options indenting = 4
 
 module debug_eval shared private
 
+//! Expression evaluator for the debugger.
+//!
+//! Parses and evaluates simple C-like expressions (arithmetic, field access,
+//! indexing, casts) against live debug context data. Used by the DAP debug
+//! server to implement watch and hover evaluation.
+
 require daslib/strings_boost
 require daslib/match
 require daslib/math_bits
@@ -73,17 +79,19 @@ def each_token(st : string) {
 let INVALID_VALUE = LONG_MIN
 
 struct public Result {
-    tinfo : TypeInfo
-    value : float4
-    data  : void const?
-    error : string
+    //! Result of evaluating a debug expression.
+    tinfo : TypeInfo //! Type information of the result.
+    value : float4 //! Raw value storage for the result.
+    data  : void const? //! Pointer to the result data, if available.
+    error : string //! Error message, empty if evaluation succeeded.
 }
 
 struct TokenStream {
-    tokens : iterator<Token>
-    stream : array<Token>
-    errors : array<string>
-    names  : table<string; Result>
+    //! Token stream for parsing debug expressions.
+    tokens : iterator<Token> //! Iterator over lexed tokens.
+    stream : array<Token> //! Buffered array of tokens.
+    errors : array<string> //! Accumulated parsing errors.
+    names  : table<string; Result> //! Named variable lookup table for expression evaluation.
 }
 
 def TokenStream(st : string) {
@@ -611,6 +619,7 @@ def expr(var st : TokenStream) : Result {
 }
 
 def public debug_eval(context : table<string; Result>; expr : string) : Result {
+    //! Evaluates a debug expression string with the given variable context and returns the result.
     var st <- TokenStream(expr)
     st.names := context
     var result = expr(st)

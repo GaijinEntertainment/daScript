@@ -1,1 +1,1 @@
- Finds parent structure of the specified field declaration.
+Finds the parent structure that declares the specified field.

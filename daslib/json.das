@@ -7,6 +7,12 @@ options strict_smart_pointers = true
 
 module json shared public
 
+//! JSON parsing, serialization, and value manipulation.
+//!
+//! Implements a full JSON parser/writer. ``JsValue`` is the variant type
+//! representing any JSON element. Provides ``read_json``, ``write_json``,
+//! and helper accessors for objects, arrays, strings, numbers, and booleans.
+
 require daslib/strings_boost
 
 variant JsValue {

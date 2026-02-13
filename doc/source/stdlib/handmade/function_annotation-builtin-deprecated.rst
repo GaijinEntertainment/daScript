@@ -1,1 +1,1 @@
- deprecated annotation is used to mark a function as deprecated. it will generate a warning during compilation, and will not be callable from the final compiled context
+Marks a function as deprecated, causing a compilation warning when referenced and excluding it from the final compiled context.

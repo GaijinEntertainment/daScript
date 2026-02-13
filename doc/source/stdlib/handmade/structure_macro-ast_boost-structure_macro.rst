@@ -1,1 +1,1 @@
- Turns AstStructureAnnotation into a macro with the specified `name`.
+The ``[structure_macro]`` structure annotation — registers an ``AstStructureAnnotation`` subclass as a named annotation applicable to structures and classes.

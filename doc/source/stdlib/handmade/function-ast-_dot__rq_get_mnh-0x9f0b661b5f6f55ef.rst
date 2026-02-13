@@ -1,1 +1,1 @@
-Returns mangled name hash for the given type.
+Returns the mangled name hash of the given type.

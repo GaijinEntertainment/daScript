@@ -1,1 +1,1 @@
- returns true if context is beeing folded, i.e during constant folding pass
+Returns `true` if the compiler is currently performing its constant folding optimization pass.

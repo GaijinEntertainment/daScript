@@ -1,1 +1,1 @@
- Returns type of the field if structure, variant, tuple, or handled type or pointer to either of those has it. It's null otherwise.
+Returns the type of a field if the target is a structure, variant, tuple, handled type, or pointer to any of those, or null otherwise.

@@ -1,1 +1,1 @@
- das::string which is typically std::string or equivalent
+Handled type wrapping `das::string` (typically `std::string`), providing heap-allocated mutable string storage.

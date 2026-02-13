@@ -1,1 +1,1 @@
- returns iterator to all values of the table
+Returns a mutable iterator over all values in the given mutable `table<keyT, valT>`, yielding each value by reference.

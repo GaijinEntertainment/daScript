@@ -1,1 +1,1 @@
- locks array or table for the duration of the block invocation, so that it can't be resized. values can't be pushed or popped, etc.
+Locks a mutable array for the duration of `blk`, preventing resizing, push, or pop operations while allowing element access through a temporary reference.

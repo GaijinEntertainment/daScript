@@ -1,1 +1,1 @@
- indicates that function never aliases cmres (copy or move result), and cmres checks will not be performed
+Declares that the function never aliases cmres (copy-or-move result), disabling aliasing safety checks for the return value.

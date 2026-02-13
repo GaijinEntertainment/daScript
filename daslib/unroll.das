@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module unroll shared private
 
+//! Compile-time loop unrolling macro.
+//!
+//! ``unroll`` replaces a ``for`` loop with a fixed ``range`` by inlining
+//! each iteration at compile time. The loop variable is substituted with
+//! the constant index in each unrolled copy.
+
 require ast
 require rtti
 require daslib/ast_boost

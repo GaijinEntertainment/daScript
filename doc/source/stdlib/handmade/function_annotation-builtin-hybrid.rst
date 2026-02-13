@@ -1,1 +1,1 @@
- indicates that the function is likely candidate for later patching, and the AOT will generate hybrid calls to it - instead of direct calls. that way modyfing the function will not affect AOT of other functions.
+Marks a function as a hybrid call target so that AOT generates indirect calls to it, allowing the function to be patched without recompiling dependent AOT code.

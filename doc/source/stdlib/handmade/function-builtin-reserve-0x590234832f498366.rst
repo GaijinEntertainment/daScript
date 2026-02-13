@@ -1,1 +1,1 @@
- makes sure array has sufficient amount of memory to hold specified number of elements. reserving arrays will speed up pushing to it
+Pre-allocates memory in `Arr` to hold at least `newSize` elements without reallocation, improving performance of subsequent push operations.

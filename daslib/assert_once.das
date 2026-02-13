@@ -6,6 +6,12 @@ options strict_smart_pointers
 
 module assert_once shared private
 
+//! One-shot assertion macro.
+//!
+//! ``assert_once`` works like ``assert`` but fires only on the first failure.
+//! After the first failed check, the assertion is permanently disabled via
+//! an auto-generated global flag variable.
+
 require ast
 require rtti
 require daslib/ast_boost

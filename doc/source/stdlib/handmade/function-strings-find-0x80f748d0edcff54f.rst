@@ -1,1 +1,1 @@
- Return index where substr can be found within str (starting from optional 'start' at), or -1 if not found
+Returns the first index at which `substr` (string or character code) occurs in `str`, optionally searching from `start`, or -1 if not found.

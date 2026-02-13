@@ -6,6 +6,13 @@ options strict_smart_pointers
 
 module apply shared private
 
+//! Compile-time visitor/applicator generation for structs.
+//!
+//! Generates ``apply`StructName`` functions that iterate over struct fields,
+//! invoking a per-field block with the field value (and optionally RTTI
+//! annotation data). Useful for serialization, UI binding, and reflection
+//! without runtime RTTI overhead.
+
 require ast
 require daslib/ast_boost
 require daslib/defer

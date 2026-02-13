@@ -1,1 +1,1 @@
- will convert an array of key-value tuples into a table<key;value> type. arguments will be copied or moved
+Converts a single mutable key-value tuple `a` into a `table<keyT, valT>` containing one entry, moving the key and value.

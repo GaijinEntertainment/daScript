@@ -1,1 +1,1 @@
- Finds variable in the `Module`.
+Finds a variable by name in the specified module.

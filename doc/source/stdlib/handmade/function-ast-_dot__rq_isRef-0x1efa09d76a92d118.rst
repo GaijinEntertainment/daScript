@@ -1,1 +1,1 @@
-Returns if the given type is a reference value.
+Returns whether the given type is a reference value.

@@ -1,1 +1,1 @@
- maximum possible value of 'int64'
+Maximum representable value of a signed 64-bit integer (`int64`).

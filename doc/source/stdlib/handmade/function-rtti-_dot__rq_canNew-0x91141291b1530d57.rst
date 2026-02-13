@@ -1,3 +1,1 @@
-Returns true if the given type annotation can be instantiated (i.e., a new instance can be created via `new`).
-
-
+Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` supports heap allocation via ``new``.

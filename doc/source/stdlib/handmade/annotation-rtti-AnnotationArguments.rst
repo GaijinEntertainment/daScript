@@ -1,1 +1,1 @@
- List of annotation arguments.
+Handled type representing a collection of annotation arguments, typically the raw argument list parsed from an annotation declaration.

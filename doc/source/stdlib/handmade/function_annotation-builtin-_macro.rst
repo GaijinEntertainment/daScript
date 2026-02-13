@@ -1,1 +1,1 @@
- indicates that the function will be called during the macro pass, similar to `[init]`
+Marks a function to be executed during the macro compilation pass, similar to `[init]` but running at macro time.

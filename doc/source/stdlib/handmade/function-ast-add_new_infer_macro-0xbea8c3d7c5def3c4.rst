@@ -1,1 +1,1 @@
- Makes adapter to the `AstPassMacro` and adds it to the current module `infer` pass.
+Creates an AstPassMacro adapter and adds it to the current module's infer pass.

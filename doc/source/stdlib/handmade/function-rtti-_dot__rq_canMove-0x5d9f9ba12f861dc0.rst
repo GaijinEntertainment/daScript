@@ -1,3 +1,1 @@
-Returns true if the given type annotation can be moved.
-
-
+Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` supports move semantics.
