@@ -1,1 +1,1 @@
- see function-math-refract.rst for details
+see function-math-refract.rst for details

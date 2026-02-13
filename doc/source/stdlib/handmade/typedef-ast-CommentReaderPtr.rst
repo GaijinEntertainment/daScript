@@ -1,1 +1,1 @@
- Smart pointer to `CommentReader` object.
+Smart pointer to `CommentReader` object.

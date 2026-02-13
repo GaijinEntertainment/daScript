@@ -1,1 +1,1 @@
- Creates adapter for the 'AstSimulateMacro' interface.
+Creates adapter for the 'AstSimulateMacro' interface.

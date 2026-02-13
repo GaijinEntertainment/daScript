@@ -1,5 +1,27 @@
-The FIO module exposes C++ FILE * API, file mapping,  directory and file stat manipulation routines to Daslang.
+The FIO module implements file input/output and filesystem operations.
+It provides functions for reading and writing files (``fopen``, ``fread``, ``fwrite``),
+directory management (``mkdir``, ``dir``), path manipulation (``join_path``,
+``basename``, ``dirname``), and file metadata queries (``stat``, ``file_time``).
 
 All functions and symbols are in "fio" module, use require to get access to it. ::
 
     require fio
+
+Example: ::
+
+    require fio
+
+        [export]
+        def main() {
+            let fname = "_test_fio_tmp.txt"
+            fopen(fname, "wb") <| $(f) {
+                fwrite(f, "hello, daScript!")
+            }
+            fopen(fname, "rb") <| $(f) {
+                let content = fread(f)
+                print("{content}\n")
+            }
+            remove(fname)
+        }
+        // output:
+        // hello, daScript!

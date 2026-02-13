@@ -1,1 +1,1 @@
- Destroys atomic 32 bit integer.
+Destroys atomic 32 bit integer.

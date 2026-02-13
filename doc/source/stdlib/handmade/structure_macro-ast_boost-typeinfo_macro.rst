@@ -1,1 +1,1 @@
- Turns AstTypeInfoMacro into a macro with the specified `name`.
+Turns AstTypeInfoMacro into a macro with the specified `name`.

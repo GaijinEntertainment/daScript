@@ -1,1 +1,1 @@
- Returns mangled name of the object.
+Returns mangled name of the object.

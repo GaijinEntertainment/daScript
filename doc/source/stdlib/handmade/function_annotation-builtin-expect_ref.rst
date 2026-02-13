@@ -1,1 +1,1 @@
- A contract to mark function argument to be a reference.
+A contract to mark function argument to be a reference.

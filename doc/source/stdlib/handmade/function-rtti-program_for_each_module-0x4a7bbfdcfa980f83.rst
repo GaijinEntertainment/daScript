@@ -1,1 +1,1 @@
- Iterates through all modules of the `Program` object.
+Iterates through all modules of the `Program` object.

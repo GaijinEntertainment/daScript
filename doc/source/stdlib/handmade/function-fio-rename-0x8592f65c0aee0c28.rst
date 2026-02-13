@@ -1,1 +1,1 @@
- renames file.
+Renames or moves a file from the source path to the destination path. Returns ``true`` on success.

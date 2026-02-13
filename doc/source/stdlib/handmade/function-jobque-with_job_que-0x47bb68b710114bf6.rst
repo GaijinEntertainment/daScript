@@ -1,1 +1,1 @@
- Makes sure jobque infrastructure is available inside the scope of the block.
+Makes sure jobque infrastructure is available inside the scope of the block.

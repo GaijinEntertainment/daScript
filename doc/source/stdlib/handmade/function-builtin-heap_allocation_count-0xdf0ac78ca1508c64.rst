@@ -1,1 +1,1 @@
- Returns heap allocation count (total number of allocations).
+Returns heap allocation count (total number of allocations).

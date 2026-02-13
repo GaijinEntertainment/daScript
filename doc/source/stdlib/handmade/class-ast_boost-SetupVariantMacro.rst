@@ -1,1 +1,1 @@
- [variant_macro] implementation.
+[variant_macro] implementation.

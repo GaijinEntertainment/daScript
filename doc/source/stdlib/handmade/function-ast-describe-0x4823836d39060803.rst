@@ -1,1 +1,1 @@
- Describes object and produces corresponding Daslang code as string.
+Describes object and produces corresponding daScript code as string.

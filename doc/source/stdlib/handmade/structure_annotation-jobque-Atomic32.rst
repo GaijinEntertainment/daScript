@@ -1,1 +1,1 @@
- Atomic 32 bit integer.
+Atomic 32 bit integer.

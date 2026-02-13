@@ -7,6 +7,13 @@ options strict_smart_pointers = true
 
 module heartbeat private
 
+//! Heartbeat callback injection macro.
+//!
+//! Automatically inserts a ``heartbeat()`` call at the beginning of every
+//! function body and at the start of every ``for`` / ``while`` loop body.
+//! This allows long-running scripts to periodically yield control for
+//! cooperative multitasking or watchdog checks.
+
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/strings_boost

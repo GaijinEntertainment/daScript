@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module bool_array shared public
 
+//! Packed boolean array backed by uint32 storage.
+//!
+//! The ``BoolArray`` struct stores boolean flags as individual bits,
+//! providing ``set``, ``get``, ``resize``, ``clear``, and iteration
+//! methods. Memory usage is 32x smaller than an ``array<bool>``.
+
 require strings
 
 struct BoolArray {

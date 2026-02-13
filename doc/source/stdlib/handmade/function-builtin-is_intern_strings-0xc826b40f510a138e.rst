@@ -1,1 +1,1 @@
- returns true if string interning is enabled
+returns true if string interning is enabled

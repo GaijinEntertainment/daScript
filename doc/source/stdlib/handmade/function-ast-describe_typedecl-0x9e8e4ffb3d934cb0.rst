@@ -1,1 +1,1 @@
- Returns description of the `TypeDecl` which should match corresponding Daslang type declaration.
+Returns description of the `TypeDecl` which should match corresponding daScript type declaration.

@@ -22,4 +22,3 @@ This variable can be deleted as POD
 POD delete has been generated for this variable
 This variable is returned via move in a function with only one return path
 This variable has been passed via consume
-

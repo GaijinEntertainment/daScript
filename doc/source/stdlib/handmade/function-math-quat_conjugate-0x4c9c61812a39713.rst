@@ -1,1 +1,1 @@
- Quaternion which is conjugate of `q`
+Quaternion which is conjugate of `q`

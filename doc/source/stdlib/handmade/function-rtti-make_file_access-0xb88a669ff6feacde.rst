@@ -1,1 +1,1 @@
- Creates new `FileAccess` object.
+Creates new `FileAccess` object.

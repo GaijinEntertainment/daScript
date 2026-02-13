@@ -1,1 +1,1 @@
- sorts an array in ascending order.
+sorts an array in ascending order.

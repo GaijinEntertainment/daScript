@@ -1,1 +1,1 @@
- Return RttiValue which represents value of the global variable.
+Return RttiValue which represents value of the global variable.

@@ -1,1 +1,1 @@
- Writes AOT suffix for the specified StructureAnnotation.
+Writes AOT suffix for the specified StructureAnnotation.

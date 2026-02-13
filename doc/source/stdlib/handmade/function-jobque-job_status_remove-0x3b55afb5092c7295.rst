@@ -1,1 +1,1 @@
- Destroys job status.
+Destroys job status.

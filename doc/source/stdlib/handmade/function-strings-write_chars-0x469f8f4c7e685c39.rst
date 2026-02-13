@@ -1,1 +1,1 @@
- Writes multiple characters into StringBuilderWriter.
+Writes multiple characters into StringBuilderWriter.

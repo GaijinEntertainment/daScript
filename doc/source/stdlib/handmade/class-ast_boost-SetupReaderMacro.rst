@@ -1,1 +1,1 @@
- [reader_macro] implementation.
+[reader_macro] implementation.

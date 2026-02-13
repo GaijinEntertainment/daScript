@@ -1,1 +1,1 @@
- Find function by name in the `Module`.
+Find function by name in the `Module`.

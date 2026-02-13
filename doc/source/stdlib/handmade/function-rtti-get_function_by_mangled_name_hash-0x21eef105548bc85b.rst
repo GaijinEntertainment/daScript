@@ -1,1 +1,1 @@
- Returns `function<>` given mangled name hash.
+Returns `function<>` given mangled name hash.

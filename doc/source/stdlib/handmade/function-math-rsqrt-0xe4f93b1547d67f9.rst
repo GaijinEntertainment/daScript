@@ -1,1 +1,1 @@
- returns 1/sqrt(x)
+Returns the reciprocal square root (1/sqrt(x)) of the argument. For vector types, computes per-component reciprocal square root.

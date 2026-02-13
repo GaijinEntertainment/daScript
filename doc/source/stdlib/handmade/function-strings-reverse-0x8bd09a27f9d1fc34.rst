@@ -1,1 +1,1 @@
- Return reversed string
+Return reversed string

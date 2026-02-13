@@ -1,1 +1,1 @@
- Creates object which can be used inside of the block scope.
+Creates object which can be used inside of the block scope.

@@ -1,1 +1,1 @@
- Override class method `name` with new function.
+Override class method `name` with new function.

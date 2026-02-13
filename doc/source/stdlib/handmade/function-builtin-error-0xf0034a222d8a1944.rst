@@ -1,1 +1,1 @@
- similar to 'print' but outputs to context error output
+similar to 'print' but outputs to context error output

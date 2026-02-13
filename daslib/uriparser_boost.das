@@ -6,6 +6,11 @@ options strict_smart_pointers = true
 
 module uriparser_boost shared public
 
+//! Extended URI manipulation helpers.
+//!
+//! Adds convenience functions on top of the built-in ``uriparser`` module:
+//! ``uri_split_full_path``, path canonicalization, and file-URI conversion.
+
 require uriparser public
 
 require daslib/strings_boost

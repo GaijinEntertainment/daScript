@@ -1,1 +1,1 @@
- Restores server from orphaned state.
+Restores server from orphaned state.

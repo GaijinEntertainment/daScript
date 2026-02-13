@@ -1,1 +1,1 @@
- Helper structure to facilitate calculating hash values.
+Helper structure to facilitate calculating hash values.

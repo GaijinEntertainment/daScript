@@ -10,4 +10,3 @@ Query portion of the URI.
 Fragment portion of the URI.
 Whether the path is absolute.
 Whether the URI is owned by the parser.
-

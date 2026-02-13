@@ -1,1 +1,1 @@
- initializes section of memory with '0'
+initializes section of memory with '0'

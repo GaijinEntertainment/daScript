@@ -1,0 +1,1 @@
+Registers a native path mapping for a module. Maps `src` path prefix to `dst` when resolving module file paths.

@@ -1,1 +1,1 @@
- Increase entry count to the channel.
+Increase entry count to the channel.

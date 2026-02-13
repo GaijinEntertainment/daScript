@@ -1,1 +1,1 @@
- count trailing zeros
+count trailing zeros

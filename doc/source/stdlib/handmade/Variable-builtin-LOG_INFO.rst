@@ -1,1 +1,1 @@
- indicates log level for miscellaneous informative messages
+indicates log level for miscellaneous informative messages

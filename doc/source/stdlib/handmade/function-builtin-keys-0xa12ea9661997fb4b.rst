@@ -1,1 +1,1 @@
- returns iterator to all keys of the table
+returns iterator to all keys of the table

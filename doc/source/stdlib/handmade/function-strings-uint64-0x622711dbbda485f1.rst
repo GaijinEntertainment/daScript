@@ -1,1 +1,1 @@
- Convert string to uint64. In case of error panic.
+Convert string to uint64. In case of error panic.

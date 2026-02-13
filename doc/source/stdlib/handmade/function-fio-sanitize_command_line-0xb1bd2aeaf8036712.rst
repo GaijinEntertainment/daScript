@@ -1,1 +1,1 @@
- sanitizes command line arguments.
+sanitizes command line arguments.

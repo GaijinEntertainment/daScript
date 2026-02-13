@@ -6,6 +6,11 @@ options strict_smart_pointers = true
 
 module dynamic_cast_rtti shared private
 
+//! Runtime dynamic type checks for classes.
+//!
+//! Provides ``is_instance_of`` and ``as_instance_of`` functions that test
+//! and cast a class pointer to a derived type using RTTI at runtime.
+
 require rtti
 require daslib/contracts
 require daslib/templates

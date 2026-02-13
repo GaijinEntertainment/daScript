@@ -1,1 +1,1 @@
- Smart pointer to `Structure` object.
+Smart pointer to `Structure` object.

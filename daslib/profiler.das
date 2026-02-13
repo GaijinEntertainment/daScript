@@ -7,6 +7,12 @@ options strict_smart_pointers = true
 
 module profiler shared private
 
+//! Instrumenting profiler for daScript programs.
+//!
+//! Attaches a debug agent that records per-function timing and optional heap-usage
+//! events. Results can be saved as Chrome-compatible trace JSON for visualization
+//! in ``chrome://tracing`` or Perfetto.
+
 require debugapi
 require fio
 require strings

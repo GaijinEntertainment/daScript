@@ -1,1 +1,1 @@
- Moves the new [[...]] value into smart_ptr.
+Moves the new [[...]] value into smart_ptr.

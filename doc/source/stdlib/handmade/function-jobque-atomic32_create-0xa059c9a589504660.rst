@@ -1,1 +1,1 @@
- Creates atomic 32 bit integer.
+Creates atomic 32 bit integer.

@@ -1,1 +1,1 @@
- Smart pointer to `TypeMacro` object.
+Smart pointer to `TypeMacro` object.

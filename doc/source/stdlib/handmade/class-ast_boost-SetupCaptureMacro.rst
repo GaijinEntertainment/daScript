@@ -1,1 +1,1 @@
- [capture_macro] implementation.
+[capture_macro] implementation.

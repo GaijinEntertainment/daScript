@@ -1,1 +1,1 @@
- returns the arctangent of x
+returns the arctangent of x

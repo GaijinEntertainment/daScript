@@ -1,1 +1,1 @@
- Constructs new RttiValue of type 'nothing'.
+Constructs new RttiValue of type 'nothing'.

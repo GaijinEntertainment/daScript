@@ -1,1 +1,1 @@
- stackwalk prints call stack and local variables values
+stackwalk prints call stack and local variables values

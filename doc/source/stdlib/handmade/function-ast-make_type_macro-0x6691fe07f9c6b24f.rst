@@ -1,1 +1,1 @@
- Creates adapter for the 'AstTypeMacro' interface.
+Creates adapter for the 'AstTypeMacro' interface.

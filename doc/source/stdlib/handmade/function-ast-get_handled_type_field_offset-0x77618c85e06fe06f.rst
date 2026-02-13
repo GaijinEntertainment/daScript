@@ -1,1 +1,1 @@
- Returns offset of the field in the ManagedStructure handled type.
+Returns offset of the field in the ManagedStructure handled type.

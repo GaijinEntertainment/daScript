@@ -1,6 +1,11 @@
 options gen2
 module raster_boost private
 
+//! Raster surface helpers.
+//!
+//! Utility functions for working with ``raster`` module surfaces:
+//! allocation, resizing, and pixel access for bitmap data.
+
 require math
 require raster public
 

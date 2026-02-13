@@ -1,1 +1,1 @@
- Invokes visitor for the given object.
+Invokes visitor for the given object.

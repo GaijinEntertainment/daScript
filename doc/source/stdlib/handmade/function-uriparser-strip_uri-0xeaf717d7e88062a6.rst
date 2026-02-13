@@ -1,1 +1,1 @@
- Removes query and fragment from the URI.
+Removes query and fragment from the URI.

@@ -1,1 +1,1 @@
- Sends data from server to the client.
+Sends data from server to the client.

@@ -1,1 +1,1 @@
- Finds structure by name in the specified module.
+Finds structure by name in the specified module.

@@ -1,1 +1,1 @@
- Resizes array and initializes new elements.
+Resizes array and initializes new elements.

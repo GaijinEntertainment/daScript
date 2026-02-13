@@ -1,1 +1,1 @@
- Returns textual description of the bitfield.
+Returns textual description of the bitfield.

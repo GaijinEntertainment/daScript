@@ -1,1 +1,1 @@
- obsolete. magic number for `binary_save` and `binary_load`.
+obsolete. magic number for `binary_save` and `binary_load`.

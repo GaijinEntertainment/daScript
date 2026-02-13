@@ -6,13 +6,23 @@ options strict_smart_pointers = true
 
 module soa private
 
+//! Structure-of-Arrays (SOA) macro.
+//!
+//! Annotate a struct with ``[soa]`` to generate a parallel SOA layout:
+//! every field becomes an array, and ``[]`` indexing returns an ``SOA_INDEX``
+//! proxy that redirects field access (``soa[i].field`` becomes ``soa.field[i]``).
+//! Also generates ``length``, ``push``, ``emplace``, ``push_clone``, and ``erase``.
+
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/strings_boost
 
 // replacing a[index].b with a.b[index]
 
-struct public SOA_INDEX {}
+struct public SOA_INDEX {
+    //! Proxy type returned by the ``[]`` operator on an SOA structure.
+    //! Field access on this proxy is rewritten by `SoaCallMacro` to index into the correct column array.
+}
 
 [tag_function(soa_call)]
 def public operator .(src : SOA_INDEX explicit; field : string) {
@@ -22,7 +32,9 @@ def public operator .(src : SOA_INDEX explicit; field : string) {
 
 [tag_function_macro(tag="soa_call")]
 class SoaCallMacro : AstFunctionAnnotation {
-    //! This macro is used to promote a[index].b to a.b[index] for SOA operations
+    //! Rewrites ``soa[index].field`` into ``soa.field[index]`` at compile time.
+    //! This is the core of the SOA access pattern — it transforms AOS-style element access
+    //! into column-wise array indexing for better cache locality.
     def override transform(var expr : smart_ptr<ExprCallFunc>; var errors : das_string) : ExpressionPtr {
         if (is_in_completion()) {
             return <- default<ExpressionPtr>
@@ -61,10 +73,11 @@ class SoaCallMacro : AstFunctionAnnotation {
 
 [structure_macro(name=soa)]
 class SoaStructMacro : AstStructureAnnotation {
-    //! This macro generates the following::
-    //! * structure, where every field is replaced by an array
-    //! * operator [] to access the structure, which returns [[SOA_INDEX]]
-    //! * length, push, emplace, push_clone, erase
+    //! Generates a Structure-of-Arrays layout from a regular struct.
+    //! For a struct ``Foo`` with fields ``x : float`` and ``y : float``, generates:
+    //!   * ``Foo`SOA`` — struct where every field is ``array<FieldType>``
+    //!   * ``operator []`` returning ``SOA_INDEX`` proxy
+    //!   * ``length``, ``push``, ``emplace``, ``push_clone``, ``erase`` functions
     def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         if (is_in_completion()) {
             var inscope tdef <- new TypeDecl(at = st.at,

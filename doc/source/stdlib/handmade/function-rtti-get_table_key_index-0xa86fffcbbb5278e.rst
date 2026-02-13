@@ -1,1 +1,1 @@
- Returns index of the key in the table.
+Returns index of the key in the table.

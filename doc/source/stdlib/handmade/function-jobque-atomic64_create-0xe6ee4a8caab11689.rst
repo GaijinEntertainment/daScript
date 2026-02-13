@@ -1,1 +1,1 @@
- Creates atomic 64 bit integer.
+Creates atomic 64 bit integer.

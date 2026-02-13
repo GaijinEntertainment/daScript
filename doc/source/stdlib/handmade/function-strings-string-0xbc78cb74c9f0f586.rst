@@ -1,1 +1,1 @@
- Return string from the byte array.
+Return string from the byte array.

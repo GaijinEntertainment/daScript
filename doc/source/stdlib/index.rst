@@ -72,6 +72,7 @@ THE SOFTWARE.
    cpp_bind.rst
    decs.rst
    decs_boost.rst
+   decs_state.rst
    coroutines.rst
    interfaces.rst
    export_constructor.rst
@@ -81,6 +82,37 @@ THE SOFTWARE.
    linq.rst
    linq_boost.rst
    flat_hash_table.rst
+   cuckoo_hash_table.rst
+   async_boost.rst
+   base64.rst
+   bitfield_boost.rst
+   bitfield_trait.rst
+   bool_array.rst
+   class_boost.rst
+   consume.rst
+   coverage.rst
+   dap.rst
+   das_source_formatter.rst
+   das_source_formatter_fio.rst
+   debug_eval.rst
+   dynamic_cast_rtti.rst
+   generic_return.rst
+   heartbeat.rst
+   linked_list.rst
+   lint.rst
+   lint_everything.rst
+   profiler.rst
+   profiler_boost.rst
+   quote.rst
+   refactor.rst
+   remove_call_args.rst
+   soa.rst
+   stringify.rst
+   temp_strings.rst
+   type_traits.rst
+   typemacro_boost.rst
+   utf8_utils.rst
+   validate_code.rst
 
 
 

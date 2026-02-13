@@ -1,1 +1,1 @@
- Returns clone of the `Structure`.
+Returns clone of the `Structure`.

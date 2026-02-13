@@ -1,1 +1,1 @@
- equivalent to C `exit`. Terminates program.
+equivalent to C `exit`. Terminates program.

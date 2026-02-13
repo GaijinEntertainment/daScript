@@ -1,1 +1,1 @@
- Convert string to uint8. In case of error panic.
+Convert string to uint8. In case of error panic.

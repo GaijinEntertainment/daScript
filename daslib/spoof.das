@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module spoof shared private
 
+//! String-based macro invocation framework.
+//!
+//! ``spoof`` parses a string-encoded function invocation and generates
+//! the corresponding AST at compile time. Enables dynamic dispatch
+//! patterns where call targets are assembled from strings.
+
 require daslib/ast_boost
 require peg/peg
 require strings

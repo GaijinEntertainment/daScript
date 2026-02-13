@@ -1,1 +1,1 @@
- Generates TypeInfo? for the specified type, given DebugInfoHelper.
+Generates TypeInfo? for the specified type, given DebugInfoHelper.

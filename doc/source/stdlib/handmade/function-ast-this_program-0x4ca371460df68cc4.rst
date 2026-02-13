@@ -1,1 +1,1 @@
- Program attached to the current context (or null if RTTI is disabled).
+Program attached to the current context (or null if RTTI is disabled).

@@ -1,1 +1,1 @@
- [enumration_macro] implementation.
+[enumration_macro] implementation.

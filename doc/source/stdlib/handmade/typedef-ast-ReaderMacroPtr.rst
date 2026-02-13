@@ -1,1 +1,1 @@
- Smart pointer to `ReaderMacro` object.
+Smart pointer to `ReaderMacro` object.

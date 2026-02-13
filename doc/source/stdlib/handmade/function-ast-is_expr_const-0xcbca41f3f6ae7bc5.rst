@@ -1,1 +1,1 @@
- Returns true if expression is or inherited from `ExprConst`
+Returns true if expression is or inherited from `ExprConst`

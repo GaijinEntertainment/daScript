@@ -1,1 +1,1 @@
- Turns AstSimulateMacro into a macro with the specified `name`.
+Turns AstSimulateMacro into a macro with the specified `name`.

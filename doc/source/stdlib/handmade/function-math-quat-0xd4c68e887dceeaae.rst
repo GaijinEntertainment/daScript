@@ -1,1 +1,1 @@
- Construct quaternion from matrix.
+Construct quaternion from matrix.

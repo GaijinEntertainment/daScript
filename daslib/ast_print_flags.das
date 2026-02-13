@@ -1,5 +1,10 @@
 module ast_print_flags
 
+//! AST print-flag annotation pass.
+//!
+//! Visitor that sets ``ExprPrintFlags`` on AST nodes so that
+//! ``ast_print`` produces correctly formatted output.
+
 options gen2
 
 options rtti = true

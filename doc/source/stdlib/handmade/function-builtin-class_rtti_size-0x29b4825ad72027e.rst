@@ -1,1 +1,1 @@
- returns size of specific TypeInfo for the class
+returns size of specific TypeInfo for the class

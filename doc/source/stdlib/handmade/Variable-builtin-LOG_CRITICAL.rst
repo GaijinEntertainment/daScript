@@ -1,1 +1,1 @@
- indicates maximum log level. critial errors, panic, shutdown
+indicates maximum log level. critial errors, panic, shutdown

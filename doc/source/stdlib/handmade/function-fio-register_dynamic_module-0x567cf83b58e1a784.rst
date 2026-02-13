@@ -1,0 +1,1 @@
+Registers a dynamic (shared library) module by path and name. Loads the module and makes it available for `require`.

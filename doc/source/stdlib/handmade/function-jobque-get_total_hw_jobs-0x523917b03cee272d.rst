@@ -1,1 +1,1 @@
- Total number of hardware threads supporting job system.
+Total number of hardware threads supporting job system.

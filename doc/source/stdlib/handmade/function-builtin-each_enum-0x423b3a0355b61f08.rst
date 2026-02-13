@@ -1,1 +1,1 @@
- iterates over each element in the enumeration
+iterates over each element in the enumeration

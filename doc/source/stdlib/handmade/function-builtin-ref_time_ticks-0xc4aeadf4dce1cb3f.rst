@@ -1,1 +1,1 @@
- returns current time in ticks
+returns current time in ticks

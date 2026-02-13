@@ -1,1 +1,1 @@
- Decrease atomic integer value and returns result.
+Decrease atomic integer value and returns result.

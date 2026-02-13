@@ -1,1 +1,1 @@
- returns FILE pointer to standard output.
+returns FILE pointer to standard output.

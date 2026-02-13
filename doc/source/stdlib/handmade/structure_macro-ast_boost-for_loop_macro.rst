@@ -1,1 +1,1 @@
- Turns AstForLoopMacro into a macro with the specified `name`.
+Turns AstForLoopMacro into a macro with the specified `name`.

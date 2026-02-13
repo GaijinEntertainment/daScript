@@ -1,1 +1,1 @@
- Generates TypeInfo for the class initialization.
+Generates TypeInfo for the class initialization.

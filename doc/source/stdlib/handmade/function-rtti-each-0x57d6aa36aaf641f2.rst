@@ -1,1 +1,1 @@
- Iterates through each element of the object.
+Iterates through each element of the object.

@@ -1,1 +1,1 @@
- Smart pointer to `VariantMacro` object.
+Smart pointer to `VariantMacro` object.

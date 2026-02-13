@@ -1,1 +1,1 @@
- Adds annotation declaration to the block.
+Adds annotation declaration to the block.

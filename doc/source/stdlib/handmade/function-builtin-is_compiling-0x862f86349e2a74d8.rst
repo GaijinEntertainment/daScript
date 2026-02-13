@@ -1,1 +1,1 @@
- returns true if context is being compiled
+returns true if context is being compiled

@@ -1,1 +1,1 @@
- reports heap usage and allocations
+reports heap usage and allocations

@@ -1,1 +1,1 @@
- Creates adapter for the `AstTypeInfo` macro.
+Creates adapter for the `AstTypeInfo` macro.

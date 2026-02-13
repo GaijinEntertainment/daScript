@@ -1,1 +1,1 @@
- Iterates through each function in the given module.
+Iterates through each function in the given module.

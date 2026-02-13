@@ -1,1 +1,1 @@
- Creates `static_assert(false,text)` expression.
+Creates `static_assert(false,text)` expression.

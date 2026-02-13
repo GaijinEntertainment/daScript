@@ -5,11 +5,37 @@
 Enumeration traits
 ==================
 
-The enum_trait module implements typeinfo traits for the enumerations.
+The ENUM_TRAIT module provides reflection utilities for enumerations: iterating
+over all values, converting between enum values and strings, and building
+lookup tables. The ``[string_to_enum]`` annotation generates a string constructor
+for the annotated enum type.
 
 All functions and symbols are in "enum_trait" module, use require to get access to it. ::
 
     require daslib/enum_trait
+
+Example: ::
+
+    require daslib/enum_trait
+
+        enum Color {
+            red
+            green
+            blue
+        }
+
+        [export]
+        def main() {
+            print("{Color.green}\n")
+            let c = to_enum(type<Color>, "blue")
+            print("{c}\n")
+            let bad = to_enum(type<Color>, "purple", Color.red)
+            print("fallback = {bad}\n")
+        }
+        // output:
+        // green
+        // blue
+        // fallback = red
 
 +++++++++++++++
 Typeinfo macros
@@ -37,9 +63,11 @@ Handled enumerations
 
 Enumeration annotation which implements string constructor for enumeration.
 
-+++++++++++++
-Uncategorized
-+++++++++++++
++++++++++++++++++++++
+Enumeration iteration
++++++++++++++++++++++
+
+  *  :ref:`each (tt: auto(TT)) : iterator\<TT\> <function-enum_trait_each_autoTT>` 
 
 .. _function-enum_trait_each_autoTT:
 
@@ -48,6 +76,10 @@ Uncategorized
 |detail/function-enum_trait-each-0xfe83f9b247ca1480|
 
 :Arguments: * **tt** : auto(TT)
+
++++++++++++++
+Uncategorized
++++++++++++++
 
 .. _function-enum_trait_string_auto:
 

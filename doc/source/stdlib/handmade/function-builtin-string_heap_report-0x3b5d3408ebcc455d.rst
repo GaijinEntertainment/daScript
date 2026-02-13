@@ -1,1 +1,1 @@
- reports string heap usage and allocations
+reports string heap usage and allocations

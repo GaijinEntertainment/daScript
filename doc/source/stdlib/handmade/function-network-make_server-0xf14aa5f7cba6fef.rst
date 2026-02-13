@@ -1,1 +1,1 @@
- Creates new instance of the server.
+Creates new instance of the server.

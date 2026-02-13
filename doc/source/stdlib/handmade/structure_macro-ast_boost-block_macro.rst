@@ -1,1 +1,1 @@
- Turns AstBlockAnnotation into a macro with the specified `name`.
+Turns AstBlockAnnotation into a macro with the specified `name`.

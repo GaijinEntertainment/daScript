@@ -1,1 +1,1 @@
- Turns AstReaderMacro into a macro with the specified `name`.
+Turns AstReaderMacro into a macro with the specified `name`.

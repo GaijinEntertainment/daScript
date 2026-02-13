@@ -1,1 +1,1 @@
- Generates VariableInfo? for the specified variable, given DebugInfoHelper.
+Generates VariableInfo? for the specified variable, given DebugInfoHelper.

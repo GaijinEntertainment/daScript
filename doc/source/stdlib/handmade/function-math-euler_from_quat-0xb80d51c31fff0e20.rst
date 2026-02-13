@@ -1,1 +1,1 @@
- Construct euler angles from quaternion.
+Construct euler angles from quaternion.

@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module ast_debug shared private
 
+//! AST-level debugger state reporting.
+//!
+//! Sends AST expression and program-structure data to the
+//! debug agent for live inspection of compilation state in
+//! the DAP variable view.
+
 require debugapi
 require daslib/ast_boost
 require daslib/strings

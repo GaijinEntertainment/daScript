@@ -1,1 +1,1 @@
- IPv6 address porition of the URI.
+IPv6 address porition of the URI.

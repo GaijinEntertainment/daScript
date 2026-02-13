@@ -1,1 +1,1 @@
- Fast estimation for the `atan`.
+Fast estimation for the `atan`.

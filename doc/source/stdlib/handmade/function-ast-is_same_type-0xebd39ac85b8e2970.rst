@@ -1,1 +1,1 @@
- Compares two types given comparison parameters and returns true if they match.
+Compares two types given comparison parameters and returns true if they match.

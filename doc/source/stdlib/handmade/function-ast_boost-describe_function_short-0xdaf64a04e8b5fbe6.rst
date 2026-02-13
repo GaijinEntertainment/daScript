@@ -1,1 +1,1 @@
- Gives short (name, arguments with types, result type) description of the function.
+Gives short (name, arguments with types, result type) description of the function.

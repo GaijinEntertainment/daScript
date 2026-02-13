@@ -7,6 +7,13 @@ options strict_smart_pointers = true
 
 module jobque_boost shared public
 
+//! Job queue macro helpers.
+//!
+//! Provides ``new_job``, ``new_thread``, ``with_job_que``,
+//! ``with_job_status``, ``channel_next``, ``channel_push``, and
+//! other convenience wrappers that capture lambda closures and
+//! correctly manage context cloning for multi-threaded execution.
+
 require jobque public
 
 require daslib/rtti

@@ -1,1 +1,1 @@
- equivalent to C `fopen`. Opens file in different modes.
+equivalent to C `fopen`. Opens file in different modes.

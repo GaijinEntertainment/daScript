@@ -1,1 +1,1 @@
- reports memory allocation, optionally GC errors only
+reports memory allocation, optionally GC errors only

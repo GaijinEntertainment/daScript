@@ -1,1 +1,1 @@
- returns int64 representation of a pointer
+returns int64 representation of a pointer

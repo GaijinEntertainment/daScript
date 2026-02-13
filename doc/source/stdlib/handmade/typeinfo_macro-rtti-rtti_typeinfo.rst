@@ -1,1 +1,1 @@
- Generates `TypeInfo` for the given expression or type.
+Generates `TypeInfo` for the given expression or type.

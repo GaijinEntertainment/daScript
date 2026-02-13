@@ -1,1 +1,1 @@
- Output text to compiler log, usually from the macro.
+Output text to compiler log, usually from the macro.

@@ -1,1 +1,1 @@
- Simulates Daslang program and creates 'Context' object.
+Simulates daScript program and creates 'Context' object.

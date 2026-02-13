@@ -1,1 +1,1 @@
- LineInfo initializer.
+LineInfo initializer.

@@ -1,1 +1,1 @@
- return constant pointer from regular pointer
+return constant pointer from regular pointer

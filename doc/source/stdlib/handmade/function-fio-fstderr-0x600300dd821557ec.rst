@@ -1,1 +1,1 @@
- returns FILE pointer to standard error.
+returns FILE pointer to standard error.

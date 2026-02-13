@@ -1,1 +1,1 @@
- Returns mangled name of the function.
+Returns mangled name of the function.

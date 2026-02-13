@@ -1,1 +1,1 @@
- Compile Daslang program given as file in the `FileAccess` object.
+Compile daScript program given as file in the `FileAccess` object.

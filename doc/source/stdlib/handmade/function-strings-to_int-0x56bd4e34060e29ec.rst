@@ -1,1 +1,1 @@
- Convert string to int. In case of error returns 0
+Convert string to int. In case of error returns 0

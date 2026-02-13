@@ -1,1 +1,1 @@
- Smart pointer to `StructureAnnotation` object.
+Smart pointer to `StructureAnnotation` object.

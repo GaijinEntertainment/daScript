@@ -1,1 +1,1 @@
- Adds `base` URI to the `relative` URI.
+Adds `base` URI to the `relative` URI.

@@ -1,1 +1,1 @@
- indicates that function is unsafe, and will require `unsafe` keyword to be called
+indicates that function is unsafe, and will require `unsafe` keyword to be called

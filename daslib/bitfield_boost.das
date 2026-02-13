@@ -6,6 +6,11 @@ options strict_smart_pointers = true
 
 module bitfield_boost shared public
 
+//! Bitfield operator overloads.
+//!
+//! Adds index-style access ``bitfieldValue[fieldName]`` for reading and
+//! writing individual bits of a bitfield value.
+
 require daslib/contracts
 
 [expect_any_bitfield(b)]

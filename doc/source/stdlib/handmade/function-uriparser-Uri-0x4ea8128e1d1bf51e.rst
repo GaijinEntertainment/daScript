@@ -1,1 +1,1 @@
- Creates new URI.
+Constructs a new URI object by parsing the given string into its component parts (scheme, host, path, query, etc.).

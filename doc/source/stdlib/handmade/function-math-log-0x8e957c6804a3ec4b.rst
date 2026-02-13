@@ -1,1 +1,1 @@
- returns the natural logarithm of x
+returns the natural logarithm of x

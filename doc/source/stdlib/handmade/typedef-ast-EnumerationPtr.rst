@@ -1,1 +1,1 @@
- Smart pointer to `Enumeration` object.
+Smart pointer to `Enumeration` object.

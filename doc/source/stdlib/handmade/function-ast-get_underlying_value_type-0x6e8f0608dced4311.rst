@@ -1,1 +1,1 @@
- Returns Daslang type which is aliased with ManagedValue handled type.
+Returns daScript type which is aliased with ManagedValue handled type.

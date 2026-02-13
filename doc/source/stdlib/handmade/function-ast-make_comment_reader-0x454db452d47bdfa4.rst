@@ -1,1 +1,1 @@
- Creates adapter for the `AstCommentReader`.
+Creates adapter for the `AstCommentReader`.

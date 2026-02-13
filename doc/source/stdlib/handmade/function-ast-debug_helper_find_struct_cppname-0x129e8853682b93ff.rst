@@ -1,1 +1,1 @@
- Finds structure in the DebugInfoHelper and returns it C++ name.
+Finds structure in the DebugInfoHelper and returns it C++ name.

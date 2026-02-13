@@ -1,1 +1,1 @@
- Creates adapter for the `AstEnumearationAnnotation`.
+Creates adapter for the `AstEnumearationAnnotation`.

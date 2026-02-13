@@ -1,1 +1,1 @@
- returns number of bytes allocated in the string heap
+returns number of bytes allocated in the string heap

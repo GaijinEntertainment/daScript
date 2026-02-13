@@ -1,1 +1,1 @@
- Adds function to a `Module`. Will return false on duplicates.
+Adds function to a `Module`. Will return false on duplicates.

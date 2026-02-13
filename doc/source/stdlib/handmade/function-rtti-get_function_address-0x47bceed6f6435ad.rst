@@ -1,1 +1,1 @@
- Return function pointer `SimFunction *` given mangled name hash.
+Return function pointer `SimFunction *` given mangled name hash.

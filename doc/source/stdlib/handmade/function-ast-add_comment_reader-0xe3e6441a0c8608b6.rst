@@ -1,1 +1,1 @@
- Adds `AstCommentReader` adapter to the specific module.
+Adds `AstCommentReader` adapter to the specific module.

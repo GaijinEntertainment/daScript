@@ -5,6 +5,13 @@ options no_unused_function_arguments = false
 
 module cuckoo_hash_table shared private
 
+//! Template cuckoo hash map.
+//!
+//! ``TCuckooHashTable`` is a ``[template_structure]`` implementing a
+//! cuckoo hash table with two hash functions and linear probing as
+//! fallback. Good worst-case lookup performance at the cost of more
+//! complex insertions.
+
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/typemacro_boost

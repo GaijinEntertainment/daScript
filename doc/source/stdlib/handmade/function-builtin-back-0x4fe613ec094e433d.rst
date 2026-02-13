@@ -1,1 +1,1 @@
- returns last element of the array
+returns last element of the array

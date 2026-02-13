@@ -1,1 +1,1 @@
- Smart pointer to 'ForLoopMacro'.
+Smart pointer to 'ForLoopMacro'.

@@ -1,1 +1,1 @@
- Returns array which contains all `workhorse` base types.
+Returns array which contains all `workhorse` base types.

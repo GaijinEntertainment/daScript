@@ -1,4 +1,1 @@
 Returns FunctionAnnotation or panics.
-
-
-

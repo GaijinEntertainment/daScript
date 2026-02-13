@@ -1,1 +1,1 @@
- Clones `Function` and everything in it.
+Clones `Function` and everything in it.

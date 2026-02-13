@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module temp_strings shared private
 
+//! Temporary string builder utilities.
+//!
+//! ``build_temp_string`` works like ``build_string`` but automatically
+//! deletes the result after the callback returns, preventing string
+//! heap growth in tight loops.
+
 require daslib/ast_boost
 require strings public
 

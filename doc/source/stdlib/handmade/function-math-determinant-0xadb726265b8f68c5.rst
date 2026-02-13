@@ -1,1 +1,1 @@
- Returns the determinant of the matrix `m`.
+Returns the determinant of the matrix `m`.

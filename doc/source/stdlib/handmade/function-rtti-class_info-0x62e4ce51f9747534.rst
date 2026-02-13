@@ -1,1 +1,1 @@
- Returns `StructInfo?`` for the class.
+Returns `StructInfo?`` for the class.

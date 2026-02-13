@@ -6,6 +6,15 @@ options strict_smart_pointers = true
 
 module coroutines shared public
 
+//! Coroutine and generator support.
+//!
+//! Provides the ``[coroutine]`` function annotation that transforms a function into
+//! a generator-based state machine, plus helper macros:
+//!   * ``yeild_from(iter)`` — yield all values from a sub-iterator
+//!   * ``co_continue()`` — yield true (continue running)
+//!   * ``co_await(sub)`` — wait for a sub-coroutine to finish
+//! And runner functions ``cr_run`` and ``cr_run_all`` for executing coroutines.
+
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/macro_boost

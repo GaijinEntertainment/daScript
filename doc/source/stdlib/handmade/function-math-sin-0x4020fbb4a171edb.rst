@@ -1,1 +1,1 @@
- returns the sine of x
+returns the sine of x

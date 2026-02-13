@@ -1,1 +1,1 @@
- Clones the URI.
+Creates a deep copy of the given URI object, producing an independent duplicate.

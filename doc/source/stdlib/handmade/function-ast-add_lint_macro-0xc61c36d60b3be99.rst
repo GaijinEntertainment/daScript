@@ -1,1 +1,1 @@
- Adds `AstPassMacro` adapter to the `lint` pass.
+Adds `AstPassMacro` adapter to the `lint` pass.

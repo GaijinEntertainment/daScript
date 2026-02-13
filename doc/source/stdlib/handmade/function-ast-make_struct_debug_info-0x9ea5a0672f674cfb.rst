@@ -1,1 +1,1 @@
- Generates StructInfo? for the specified structure, given DebugInfoHelper.
+Generates StructInfo? for the specified structure, given DebugInfoHelper.

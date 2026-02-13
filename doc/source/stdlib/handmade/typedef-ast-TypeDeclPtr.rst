@@ -1,1 +1,1 @@
- Smart pointer to `TypeDecl` object.
+Smart pointer to `TypeDecl` object.

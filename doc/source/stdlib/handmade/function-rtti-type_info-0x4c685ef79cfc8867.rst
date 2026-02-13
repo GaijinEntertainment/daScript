@@ -1,1 +1,1 @@
- Returns `TypeInfo` object for the local variable.
+Returns `TypeInfo` object for the local variable.

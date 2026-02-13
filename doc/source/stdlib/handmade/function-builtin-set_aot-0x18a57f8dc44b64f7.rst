@@ -1,1 +1,1 @@
- Notifies compiler that AOT is being generated.
+Notifies compiler that AOT is being generated.

@@ -1,1 +1,1 @@
- Iterates through every CallMacro adapter in the `Module`.
+Iterates through every CallMacro adapter in the `Module`.

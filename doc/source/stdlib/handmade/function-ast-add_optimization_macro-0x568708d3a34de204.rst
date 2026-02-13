@@ -1,1 +1,1 @@
- Adds `AstPassMacro` adapter to the `optimization` pass.
+Adds `AstPassMacro` adapter to the `optimization` pass.

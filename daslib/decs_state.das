@@ -7,6 +7,11 @@ options strict_smart_pointers = true
 
 module decs_state shared private
 
+//! DECS debugger state reporting.
+//!
+//! Sends entity and archetype data to the debug-agent context
+//! for live inspection in the DAP debugger's variable view.
+
 require daslib/decs
 require daslib/strings_boost
 require debugapi

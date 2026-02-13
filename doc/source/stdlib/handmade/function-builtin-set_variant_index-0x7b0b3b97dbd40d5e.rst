@@ -1,1 +1,1 @@
- sets internal index of the variant value
+sets internal index of the variant value

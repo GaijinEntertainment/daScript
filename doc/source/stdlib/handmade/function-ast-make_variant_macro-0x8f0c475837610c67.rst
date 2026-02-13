@@ -1,1 +1,1 @@
- Creates adapter for the `AstVariantMacro`.
+Creates adapter for the `AstVariantMacro`.

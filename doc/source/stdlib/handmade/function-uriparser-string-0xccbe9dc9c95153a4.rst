@@ -1,1 +1,1 @@
- Converts URI to string.
+Converts URI to string.

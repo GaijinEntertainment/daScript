@@ -1,1 +1,1 @@
- returns the logarithm base-2 of x
+returns the logarithm base-2 of x

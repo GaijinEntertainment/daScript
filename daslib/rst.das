@@ -7,6 +7,12 @@ options strict_smart_pointers = true
 
 module rst shared private
 
+//! RST documentation generator.
+//!
+//! Core engine for producing reStructuredText files from compiled
+//! module RTTI. Provides ``document``, ``group_by_regex``,
+//! ``describe_type``, and other helpers used by ``das2rst``.
+
 require fio
 require math
 require rtti
@@ -1865,7 +1871,7 @@ def document_function(doc_file : file; mod : Module?; var func : FunctionPtr | F
     }
 
     var args <- document_function_arguments(doc_file, argNames, argTypes, drop_args)
-    document_function_topic(doc_file, func.result, topic("function", mod, "{prefix}{function_label_file(func,drop_args)}"), "def {describe_function(unsafe(reinterpret<FunctionPtr> func))}", args)
+    document_function_topic(doc_file, func.result, topic("function", mod, "{prefix}{function_label_file(func,drop_args)}"), "def {rst_describe_function_short(func)}", args)
 }
 
 

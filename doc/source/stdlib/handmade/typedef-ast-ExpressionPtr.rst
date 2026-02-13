@@ -1,1 +1,1 @@
- Smart pointer to `Expression` object.
+Smart pointer to `Expression` object.

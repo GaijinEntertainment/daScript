@@ -1,1 +1,1 @@
- Returns current `Context` object.
+Returns current `Context` object.

@@ -1,1 +1,1 @@
- Clones FileInfo structure.
+Clones FileInfo structure.

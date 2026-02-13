@@ -1,1 +1,1 @@
- inserts cloned key into the table
+inserts cloned key into the table

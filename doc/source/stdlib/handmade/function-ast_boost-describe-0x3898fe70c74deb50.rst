@@ -1,1 +1,1 @@
- Returns textual description of the object.
+Returns textual description of the object.

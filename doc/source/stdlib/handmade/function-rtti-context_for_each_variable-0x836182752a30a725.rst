@@ -1,1 +1,1 @@
- Iterates through all variables in the `Context`.
+Iterates through all variables in the `Context`.

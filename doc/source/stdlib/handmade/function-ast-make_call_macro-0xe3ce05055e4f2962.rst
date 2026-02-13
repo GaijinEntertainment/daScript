@@ -1,1 +1,1 @@
- Creates adapter for the `AstCallMacro`.
+Creates adapter for the `AstCallMacro`.

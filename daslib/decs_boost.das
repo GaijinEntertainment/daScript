@@ -8,6 +8,12 @@ options strict_smart_pointers = true
 
 module decs_boost shared private
 
+//! DECS query macro and compile-time helpers.
+//!
+//! Implements the ``decs_query`` block macro that generates
+//! type-safe, zero-overhead iteration over ECS archetypes.
+//! Also provides ``[decs_event]`` and ``[decs_template]``.
+
 require daslib/decs public
 require daslib/ast_boost
 require daslib/templates_boost

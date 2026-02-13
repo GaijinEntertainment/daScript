@@ -1,1 +1,1 @@
- Makes adapter to the `AstTypeInfoMacro` and adds it to the current module.
+Makes adapter to the `AstTypeInfoMacro` and adds it to the current module.

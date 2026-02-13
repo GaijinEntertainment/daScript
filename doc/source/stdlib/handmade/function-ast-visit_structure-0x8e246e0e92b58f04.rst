@@ -1,1 +1,1 @@
- Invokes visitor for the given structure.
+Invokes visitor for the given structure.

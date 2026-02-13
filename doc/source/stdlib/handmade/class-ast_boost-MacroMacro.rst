@@ -1,1 +1,1 @@
- This macro implements [macro] function annotation.
+This macro implements [macro] function annotation.

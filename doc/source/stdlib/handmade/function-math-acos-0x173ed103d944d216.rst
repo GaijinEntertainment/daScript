@@ -1,1 +1,1 @@
- returns the arccosine of x
+returns the arccosine of x

@@ -6,6 +6,13 @@ options strict_smart_pointers = true
 
 module math_boost shared public
 
+//! Extended math types and operations.
+//!
+//! Defines ``AABR``, ``AABB``, ``Ray``, and ``Plane`` structures,
+//! intersection tests, matrix construction helpers, angle conversion,
+//! clamping, and other math utilities built on top of the built-in
+//! ``math`` module.
+
 
 // _rh, _lh - right handed vs left handed
 //  OpenGL, Vulkan - RH

@@ -6,6 +6,11 @@ options strict_smart_pointers = true
 
 module export_constructor shared private
 
+//! Auto-export default constructor annotation.
+//!
+//! Annotate a struct or class with ``[export_constructor]`` to automatically generate
+//! and export a ``make`StructName`` function that creates a new instance.
+
 require ast
 require rtti
 require daslib/ast_boost

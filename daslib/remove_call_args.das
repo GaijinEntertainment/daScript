@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module remove_call_args shared private
 
+//! Call argument removal annotation.
+//!
+//! ``[remove_call_args(index_list)]`` strips the specified arguments from
+//! a function's call site after the function has been type-checked, while
+//! keeping the arguments available during inference.
+
 require ast
 require rtti
 require daslib/ast_boost

@@ -1,1 +1,1 @@
- Creates adapter for the `AstForLoopMacro`.
+Creates adapter for the `AstForLoopMacro`.

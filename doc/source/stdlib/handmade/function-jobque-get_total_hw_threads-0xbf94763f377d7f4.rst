@@ -1,1 +1,1 @@
- Total number of hardware threads available.
+Total number of hardware threads available.

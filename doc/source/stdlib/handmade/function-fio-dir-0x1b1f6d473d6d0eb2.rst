@@ -1,1 +1,1 @@
- iterates through all files in the specified `path`.
+iterates through all files in the specified `path`.

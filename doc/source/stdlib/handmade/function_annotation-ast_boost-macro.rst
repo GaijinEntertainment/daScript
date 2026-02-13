@@ -1,1 +1,1 @@
- MacroMacro function annotation.
+MacroMacro function annotation.

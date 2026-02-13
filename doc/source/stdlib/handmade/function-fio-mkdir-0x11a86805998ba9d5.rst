@@ -1,1 +1,1 @@
- makes directory.
+Creates a directory at the specified path. Returns ``true`` if the directory was created successfully.

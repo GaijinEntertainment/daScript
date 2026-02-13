@@ -1,1 +1,1 @@
- This is base class for function annotation setup.
+This is base class for function annotation setup.

@@ -1,1 +1,1 @@
- Quaternion which is multiplication of `q1` and `q2`
+Quaternion which is multiplication of `q1` and `q2`

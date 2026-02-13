@@ -1,1 +1,1 @@
- Iterates through all functions in the `Context`.
+Iterates through all functions in the `Context`.

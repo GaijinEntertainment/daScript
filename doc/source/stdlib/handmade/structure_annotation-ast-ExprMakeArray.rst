@@ -12,4 +12,3 @@ Flags specific to make-local expressions
 Type of the array elements
 Array of expressions for the elements
 If gen2 syntax is used (i.e. `[...]` instead of `[[...]]`)
-

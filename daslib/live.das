@@ -8,6 +8,12 @@ options multiple_contexts
 
 module live shared public
 
+//! Live-reload framework.
+//!
+//! Watches a daScript source file for changes and hot-reloads it into
+//! a running application context, preserving ECS (decs) state across
+//! reloads. Designed for rapid iteration during development.
+
 require strings
 require daslib/rtti
 require daslib/decs

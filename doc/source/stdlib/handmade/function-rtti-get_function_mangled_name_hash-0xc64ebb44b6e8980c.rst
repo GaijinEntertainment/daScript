@@ -1,1 +1,1 @@
- Returns mangled name hash of the `function<>` object.
+Returns mangled name hash of the `function<>` object.

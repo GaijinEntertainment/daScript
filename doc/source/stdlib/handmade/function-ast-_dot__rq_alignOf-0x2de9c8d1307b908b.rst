@@ -1,4 +1,1 @@
-Returns the alignment requirement of the given type in bytes.
-
-
-
+Returns the alignment requirement (in bytes) of the type declaration.

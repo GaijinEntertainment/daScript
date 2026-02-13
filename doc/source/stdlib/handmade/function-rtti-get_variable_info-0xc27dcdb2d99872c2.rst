@@ -1,1 +1,1 @@
- Get global variable type information by variable index.
+Get global variable type information by variable index.

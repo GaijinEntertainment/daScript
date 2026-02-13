@@ -1,1 +1,1 @@
- Returns description of the `Function` which should match corresponding Daslang function declaration.
+Returns description of the `Function` which should match corresponding daScript function declaration.

@@ -5,11 +5,33 @@
 File input output library
 =========================
 
-The FIO module exposes C++ FILE * API, file mapping,  directory and file stat manipulation routines to Daslang.
+The FIO module implements file input/output and filesystem operations.
+It provides functions for reading and writing files (``fopen``, ``fread``, ``fwrite``),
+directory management (``mkdir``, ``dir``), path manipulation (``join_path``,
+``basename``, ``dirname``), and file metadata queries (``stat``, ``file_time``).
 
 All functions and symbols are in "fio" module, use require to get access to it. ::
 
     require fio
+
+Example: ::
+
+    require fio
+
+        [export]
+        def main() {
+            let fname = "_test_fio_tmp.txt"
+            fopen(fname, "wb") <| $(f) {
+                fwrite(f, "hello, daScript!")
+            }
+            fopen(fname, "rb") <| $(f) {
+                let content = fread(f)
+                print("{content}\n")
+            }
+            remove(fname)
+        }
+        // output:
+        // hello, daScript!
 
 ++++++++++++
 Type aliases
@@ -19,7 +41,7 @@ Type aliases
 
 .. das:attribute:: file = FILE const?
 
- alias for the `FILE const?`; its there since most file functions expect exactly this type
+alias for the `FILE const?`; its there since most file functions expect exactly this type
 
 +++++++++
 Constants
@@ -29,25 +51,25 @@ Constants
 
 .. das:attribute:: seek_set = 0
 
- constant for `fseek` which sets the file pointer to the beginning of the file plus the offset.
+constant for `fseek` which sets the file pointer to the beginning of the file plus the offset.
 
 .. _global-fio-seek_cur:
 
 .. das:attribute:: seek_cur = 1
 
- constant for `fseek` which sets the file pointer to the current position of the file plus the offset.
+constant for `fseek` which sets the file pointer to the current position of the file plus the offset.
 
 .. _global-fio-seek_end:
 
 .. das:attribute:: seek_end = 2
 
- constant for `fseek` which sets the file pointer to the end of the file plus the offset.
+constant for `fseek` which sets the file pointer to the end of the file plus the offset.
 
 .. _global-fio-df_magic:
 
 .. das:attribute:: df_magic = 0x12345678
 
- obsolete. magic number for `binary_save` and `binary_load`.
+obsolete. magic number for `binary_save` and `binary_load`.
 
 ++++++++++
 Structures
@@ -78,15 +100,11 @@ Handled structures
 
 Returns the size of the file represented by the given FStat object.
 
-
-
 .. _function-fio__dot__rq_atime_FStat_implicit:
 
 .. das:function:: FStat implicit.atime() : clock
 
 Returns the atime of the file represented by the given FStat object.
-
-
 
 .. _function-fio__dot__rq_ctime_FStat_implicit:
 
@@ -94,15 +112,11 @@ Returns the atime of the file represented by the given FStat object.
 
 Returns the ctime of the file represented by the given FStat object.
 
-
-
 .. _function-fio__dot__rq_mtime_FStat_implicit:
 
 .. das:function:: FStat implicit.mtime() : clock
 
 Returns the mtime of the file represented by the given FStat object.
-
-
 
 .. _function-fio__dot__rq_is_reg_FStat_implicit:
 
@@ -110,15 +124,11 @@ Returns the mtime of the file represented by the given FStat object.
 
 Returns true if the file represented by the given FStat object is a regular file.
 
-
-
 .. _function-fio__dot__rq_is_dir_FStat_implicit:
 
 .. das:function:: FStat implicit.is_dir() : bool
 
 Returns true if the file represented by the given FStat object is a directory.
-
-
 
 :Properties: * **size** : uint64
 
@@ -132,7 +142,7 @@ Returns true if the file represented by the given FStat object is a directory.
 
              * **is_dir** : bool
 
-:Fields: * **is_valid** : bool -  `stat` and `fstat` return file information in this structure.
+:Fields: * **is_valid** : bool - `stat` and `fstat` return file information in this structure.
 
 
 +++++++++++++
@@ -143,7 +153,7 @@ Handled types
 
 .. das:attribute:: FILE
 
- Holds system specific `FILE` type.
+Holds system specific `FILE` type.
 
 +++++++++++++++++
 File manipulation
@@ -184,7 +194,7 @@ File manipulation
 
 .. das:function:: remove(name: string implicit) : bool
 
- deletes file specified by name
+deletes file specified by name
 
 :Arguments: * **name** : string implicit
 
@@ -192,8 +202,7 @@ File manipulation
 
 .. das:function:: rename(old_name: string implicit; new_name: string implicit) : bool
 
- renames file.
-
+Renames or moves a file from the source path to the destination path. Returns ``true`` on success.
 :Arguments: * **old_name** : string implicit
 
             * **new_name** : string implicit
@@ -202,7 +211,7 @@ File manipulation
 
 .. das:function:: fopen(name: string implicit; mode: string implicit) : FILE const?
 
- equivalent to C `fopen`. Opens file in different modes.
+equivalent to C `fopen`. Opens file in different modes.
 
 :Arguments: * **name** : string implicit
 
@@ -212,7 +221,7 @@ File manipulation
 
 .. das:function:: fclose(file: FILE const? implicit)
 
- equivalent to C `fclose`. Closes file.
+equivalent to C `fclose`. Closes file.
 
 :Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
@@ -220,7 +229,7 @@ File manipulation
 
 .. das:function:: fflush(file: FILE const? implicit)
 
- equivalent to C `fflush`. Flushes FILE buffers.
+equivalent to C `fflush`. Flushes FILE buffers.
 
 :Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
@@ -228,7 +237,7 @@ File manipulation
 
 .. das:function:: fprint(file: FILE const? implicit; text: string implicit)
 
- same as `print` but outputs to file.
+same as `print` but outputs to file.
 
 :Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
@@ -238,7 +247,7 @@ File manipulation
 
 .. das:function:: fread(file: FILE const? implicit) : string
 
- reads data from file.
+reads data from file.
 
 :Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
@@ -246,7 +255,7 @@ File manipulation
 
 .. das:function:: fmap(file: FILE const? implicit; block: block<(array<uint8>#):void>)
 
- create map view of file, i.e. maps file contents to memory. Data is available as array<uint8> inside the block.
+create map view of file, i.e. maps file contents to memory. Data is available as array<uint8> inside the block.
 
 :Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
@@ -256,7 +265,7 @@ File manipulation
 
 .. das:function:: fgets(file: FILE const? implicit) : string
 
- equivalent to C `fgets`. Reads and returns new string from the line.
+equivalent to C `fgets`. Reads and returns new string from the line.
 
 :Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
@@ -264,7 +273,7 @@ File manipulation
 
 .. das:function:: fwrite(file: FILE const? implicit; text: string implicit)
 
- writes data fo file.
+writes data fo file.
 
 :Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
@@ -274,7 +283,7 @@ File manipulation
 
 .. das:function:: feof(file: FILE const? implicit) : bool
 
- equivalent to C `feof`. Returns true if end of file has been reached.
+equivalent to C `feof`. Returns true if end of file has been reached.
 
 :Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
@@ -282,7 +291,7 @@ File manipulation
 
 .. das:function:: fseek(file: FILE const? implicit; offset: int64; mode: int) : int64
 
- equivalent to C `fseek`. Rewinds position of the current FILE pointer.
+equivalent to C `fseek`. Rewinds position of the current FILE pointer.
 
 :Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
@@ -294,7 +303,7 @@ File manipulation
 
 .. das:function:: ftell(file: FILE const? implicit) : int64
 
- equivalent to C `ftell`. Returns current FILE pointer position.
+equivalent to C `ftell`. Returns current FILE pointer position.
 
 :Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
@@ -302,7 +311,7 @@ File manipulation
 
 .. das:function:: fstat(file: FILE const? implicit; stat: FStat implicit) : bool
 
- equivalent to C `fstat`. Returns information about file, such as file size, timestamp, etc.
+equivalent to C `fstat`. Returns information about file, such as file size, timestamp, etc.
 
 :Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
@@ -312,7 +321,7 @@ File manipulation
 
 .. das:function:: stat(file: string implicit; stat: FStat implicit) : bool
 
- same as fstat, but file is specified by file name.
+same as fstat, but file is specified by file name.
 
 :Arguments: * **file** : string implicit
 
@@ -322,31 +331,31 @@ File manipulation
 
 .. das:function:: fstdin() : FILE const?
 
- returns FILE pointer to standard input.
+returns FILE pointer to standard input.
 
 .. _function-fio_fstdout:
 
 .. das:function:: fstdout() : FILE const?
 
- returns FILE pointer to standard output.
+returns FILE pointer to standard output.
 
 .. _function-fio_fstderr:
 
 .. das:function:: fstderr() : FILE const?
 
- returns FILE pointer to standard error.
+returns FILE pointer to standard error.
 
 .. _function-fio_getchar:
 
 .. das:function:: getchar() : int
 
- equivalent to C `getchar`. Reads and returns next character from standard input.
+equivalent to C `getchar`. Reads and returns next character from standard input.
 
 .. _function-fio_fload_file_int_block_ls_data_c_array_ls_uint8_gr__c_void_gr_:
 
 .. das:function:: fload(file: file; size: int; blk: block<(data:array<uint8>):void>)
 
- obsolete. saves data to file.
+obsolete. saves data to file.
 
 :Arguments: * **file** :  :ref:`file <alias-file>` 
 
@@ -358,7 +367,7 @@ File manipulation
 
 .. das:function:: fopen(name: string; mode: string; blk: block<(f:file):void>) : auto
 
- equivalent to C `fopen`. Opens file in different modes.
+equivalent to C `fopen`. Opens file in different modes.
 
 :Arguments: * **name** : string
 
@@ -370,7 +379,7 @@ File manipulation
 
 .. das:function:: stat(path: string) : FStat
 
- same as fstat, but file is specified by file name.
+same as fstat, but file is specified by file name.
 
 :Arguments: * **path** : string
 
@@ -378,7 +387,7 @@ File manipulation
 
 .. das:function:: fstat(f: file) : FStat
 
- equivalent to C `fstat`. Returns information about file, such as file size, timestamp, etc.
+equivalent to C `fstat`. Returns information about file, such as file size, timestamp, etc.
 
 :Arguments: * **f** :  :ref:`file <alias-file>` 
 
@@ -386,7 +395,7 @@ File manipulation
 
 .. das:function:: fread(f: file; blk: block<(data:string#):auto>) : auto
 
- reads data from file.
+reads data from file.
 
 :Arguments: * **f** :  :ref:`file <alias-file>` 
 
@@ -396,7 +405,7 @@ File manipulation
 
 .. das:function:: fload(f: file; buf: auto(BufType)) : auto
 
- obsolete. saves data to file.
+obsolete. saves data to file.
 
 :Arguments: * **f** :  :ref:`file <alias-file>` 
 
@@ -406,7 +415,7 @@ File manipulation
 
 .. das:function:: fsave(f: file; buf: auto(BufType)) : auto
 
- obsolete. loads data from file.
+obsolete. loads data from file.
 
 :Arguments: * **f** :  :ref:`file <alias-file>` 
 
@@ -416,7 +425,7 @@ File manipulation
 
 .. das:function:: fread(f: file; buf: auto(BufType) implicit) : auto
 
- reads data from file.
+reads data from file.
 
 :Arguments: * **f** :  :ref:`file <alias-file>` 
 
@@ -426,7 +435,7 @@ File manipulation
 
 .. das:function:: fread(f: file; buf: array<auto(BufType)>) : auto
 
- reads data from file.
+reads data from file.
 
 :Arguments: * **f** :  :ref:`file <alias-file>` 
 
@@ -436,7 +445,7 @@ File manipulation
 
 .. das:function:: fwrite(f: file; buf: auto(BufType) implicit) : auto
 
- writes data fo file.
+writes data fo file.
 
 :Arguments: * **f** :  :ref:`file <alias-file>` 
 
@@ -446,7 +455,7 @@ File manipulation
 
 .. das:function:: fwrite(f: file; buf: array<auto(BufType)>) : auto
 
- writes data fo file.
+writes data fo file.
 
 :Arguments: * **f** :  :ref:`file <alias-file>` 
 
@@ -464,7 +473,7 @@ Path manipulation
 
 .. das:function:: dir_name(name: string implicit) : string
 
- equivalent to linux `dirname`. Splits path and returns the component preceding the final '/'.  Trailing '/' characters are not counted as part of the pathname.
+equivalent to linux `dirname`. Splits path and returns the component preceding the final '/'.  Trailing '/' characters are not counted as part of the pathname.
 
 :Arguments: * **name** : string implicit
 
@@ -472,7 +481,7 @@ Path manipulation
 
 .. das:function:: base_name(name: string implicit) : string
 
- equivalent to linux `basename`. Splits path and returns the string up to, but not including, the final '/'.
+equivalent to linux `basename`. Splits path and returns the string up to, but not including, the final '/'.
 
 :Arguments: * **name** : string implicit
 
@@ -480,7 +489,7 @@ Path manipulation
 
 .. das:function:: get_full_file_name(path: string implicit) : string
 
- returns full name of the file in normalized form.
+returns full name of the file in normalized form.
 
 :Arguments: * **path** : string implicit
 
@@ -497,15 +506,14 @@ Directory manipulation
 
 .. das:function:: mkdir(path: string implicit) : bool
 
- makes directory.
-
+Creates a directory at the specified path. Returns ``true`` if the directory was created successfully.
 :Arguments: * **path** : string implicit
 
 .. _function-fio_chdir_string_implicit:
 
 .. das:function:: chdir(path: string implicit) : bool
 
- changes current directory.
+changes current directory.
 
 :Arguments: * **path** : string implicit
 
@@ -513,13 +521,13 @@ Directory manipulation
 
 .. das:function:: getcwd() : string
 
- returns current working directory.
+returns current working directory.
 
 .. _function-fio_dir_string_block_ls_filename_c_string_c_void_gr_:
 
 .. das:function:: dir(path: string; blk: block<(filename:string):void>) : auto
 
- iterates through all files in the specified `path`.
+iterates through all files in the specified `path`.
 
 :Arguments: * **path** : string
 
@@ -541,7 +549,7 @@ OS specific routines
 
 .. das:function:: sleep(msec: uint)
 
- sleeps for specified number of milliseconds.
+sleeps for specified number of milliseconds.
 
 :Arguments: * **msec** : uint
 
@@ -552,7 +560,7 @@ OS specific routines
 .. warning:: 
   This is unsafe operation.
 
- equivalent to C `exit`. Terminates program.
+equivalent to C `exit`. Terminates program.
 
 :Arguments: * **exitCode** : int
 
@@ -563,7 +571,7 @@ OS specific routines
 .. warning:: 
   This is unsafe operation.
 
- equivalent to linux `popen`. Opens pipe to command.
+equivalent to linux `popen`. Opens pipe to command.
 
 :Arguments: * **command** : string implicit
 
@@ -576,7 +584,7 @@ OS specific routines
 .. warning:: 
   This is unsafe operation.
 
- opens pipe to command and returns FILE pointer to it, in binary mode.
+opens pipe to command and returns FILE pointer to it, in binary mode.
 
 :Arguments: * **command** : string implicit
 
@@ -586,7 +594,7 @@ OS specific routines
 
 .. das:function:: get_env_variable(var: string implicit) : string
 
- returns value of the environment variable.
+returns value of the environment variable.
 
 :Arguments: * **var** : string implicit
 
@@ -594,7 +602,7 @@ OS specific routines
 
 .. das:function:: has_env_variable(var: string implicit) : bool
 
- returns true if the environment variable is defined.
+returns true if the environment variable is defined.
 
 :Arguments: * **var** : string implicit
 
@@ -602,13 +610,44 @@ OS specific routines
 
 .. das:function:: sanitize_command_line(var: string implicit) : string
 
- sanitizes command line arguments.
+sanitizes command line arguments.
 
 :Arguments: * **var** : string implicit
 
 +++++++++++++
 Uncategorized
 +++++++++++++
+
+.. _function-fio_register_dynamic_module_string_implicit_string_implicit_int:
+
+.. das:function:: register_dynamic_module(path: string implicit; name: string implicit; on_error: int) : void?
+
+Registers a dynamic (shared library) module by path and name. Loads the module and makes it available for `require`. The `on_error` callback receives error code if loading fails.
+:Arguments: * **path** : string implicit
+
+            * **name** : string implicit
+
+            * **on_error** : int
+
+.. _function-fio_register_dynamic_module_string_implicit_string_implicit:
+
+.. das:function:: register_dynamic_module(path: string implicit; name: string implicit) : void?
+
+Registers a dynamic (shared library) module by path and name. Loads the module and makes it available for `require`.
+:Arguments: * **path** : string implicit
+
+            * **name** : string implicit
+
+.. _function-fio_register_native_path_string_implicit_string_implicit_string_implicit:
+
+.. das:function:: register_native_path(mod_name: string implicit; src: string implicit; dst: string implicit)
+
+Registers a native path mapping for a module. Maps `src` path prefix to `dst` when resolving module file paths.
+:Arguments: * **mod_name** : string implicit
+
+            * **src** : string implicit
+
+            * **dst** : string implicit
 
 .. _function-fio_mkdir_rec_string:
 

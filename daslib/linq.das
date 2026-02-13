@@ -5,6 +5,13 @@ options no_unused_function_arguments = false
 
 module linq shared public
 
+//! LINQ-style query operations on iterators and arrays.
+//!
+//! Comprehensive collection of chainable operations: ``where``, ``select``,
+//! ``order``, ``group_by``, ``distinct``, ``concat``, ``zip``, ``skip``,
+//! ``take``, ``aggregate``, set operations, and more. Operations produce
+//! lazy iterators or materialized arrays.
+
 /*
 LINQ
 requirement:

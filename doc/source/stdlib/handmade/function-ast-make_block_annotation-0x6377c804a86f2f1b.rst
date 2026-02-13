@@ -1,1 +1,1 @@
- Creates adapter for the `AstBlockAnnotation`.
+Creates adapter for the `AstBlockAnnotation`.

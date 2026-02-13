@@ -1,1 +1,1 @@
- returns a fraction part of x
+returns a fraction part of x

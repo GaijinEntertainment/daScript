@@ -1,1 +1,1 @@
- Lockbox. Similar to channel, only for single object.
+Lockbox. Similar to channel, only for single object.

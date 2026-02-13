@@ -1,1 +1,1 @@
- Smart pointer to `Function` object.
+Smart pointer to `Function` object.

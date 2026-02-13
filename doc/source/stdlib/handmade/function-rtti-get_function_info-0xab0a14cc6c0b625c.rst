@@ -1,1 +1,1 @@
- Get function declaration info by index.
+Get function declaration info by index.

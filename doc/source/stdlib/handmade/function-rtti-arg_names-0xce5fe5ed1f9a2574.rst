@@ -1,1 +1,1 @@
- Iterates through argument names of the rtti type object.
+Iterates through argument names of the rtti type object.

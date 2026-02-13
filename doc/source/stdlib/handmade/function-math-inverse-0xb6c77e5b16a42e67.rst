@@ -1,1 +1,1 @@
- Returns the inverse of the matrix x.
+Returns the inverse of the matrix x.

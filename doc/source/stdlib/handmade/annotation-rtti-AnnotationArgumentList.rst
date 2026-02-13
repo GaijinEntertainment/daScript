@@ -1,1 +1,1 @@
- List of annotation arguments and properties.
+List of annotation arguments and properties.

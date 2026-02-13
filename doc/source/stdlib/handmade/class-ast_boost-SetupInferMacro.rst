@@ -1,1 +1,1 @@
- [infer_macro] implementation.
+[infer_macro] implementation.

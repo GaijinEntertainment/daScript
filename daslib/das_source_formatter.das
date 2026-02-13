@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module das_source_formatter shared private
 
+//! daScript source code formatter / pretty-printer.
+//!
+//! Tokenizes and reformats daScript source text, normalizing indentation,
+//! whitespace around operators, and brace style. Core formatting logic
+//! used by ``das_source_formatter_fio`` and editor integrations.
+
 require strings
 require math
 require daslib/defer

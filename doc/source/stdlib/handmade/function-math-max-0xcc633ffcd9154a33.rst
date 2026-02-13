@@ -1,1 +1,1 @@
- returns the maximum of x and y
+returns the maximum of x and y

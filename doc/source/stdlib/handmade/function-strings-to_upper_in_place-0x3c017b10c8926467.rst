@@ -1,1 +1,1 @@
- Modify string in place to be all upper case string
+Modify string in place to be all upper case string

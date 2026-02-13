@@ -1,1 +1,1 @@
- Generates EnumInfo? for the specified enumeration, given DebugInfoHelper.
+Generates EnumInfo? for the specified enumeration, given DebugInfoHelper.

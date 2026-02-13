@@ -1,1 +1,1 @@
- Generates VariableInfo? for the specified structure field, given DebugInfoHelper.
+Generates VariableInfo? for the specified structure field, given DebugInfoHelper.

@@ -4,6 +4,11 @@ options strict_smart_pointers = true
 
 module utf8_utils shared
 
+//! UTF-8 / UTF-16 / UTF-32 encoding utilities.
+//!
+//! Provides ``utf8_encode``, ``utf8_decode``, ``utf16_to_utf32``, and
+//! ``each_utf32`` for converting between Unicode representations.
+
 require daslib/strings_boost
 require math
 

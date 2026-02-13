@@ -1,1 +1,1 @@
- TagFunctionAnnotation function annotation.
+TagFunctionAnnotation function annotation.

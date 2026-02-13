@@ -1,1 +1,1 @@
- Iterates though each handled type in the module.
+Iterates though each handled type in the module.

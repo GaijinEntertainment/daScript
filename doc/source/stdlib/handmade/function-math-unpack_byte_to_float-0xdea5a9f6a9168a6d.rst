@@ -1,1 +1,1 @@
- Unpacks byte4 vector to float4 vector.
+Unpacks byte4 vector to float4 vector.

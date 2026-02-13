@@ -1,1 +1,1 @@
- Adapater for the `AstEnumearationAnnotation`.
+Adapater for the `AstEnumearationAnnotation`.

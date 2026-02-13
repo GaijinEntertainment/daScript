@@ -1,1 +1,1 @@
- Function flag which indicates that function is called during the `Context` initialization.
+Function flag which indicates that function is called during the `Context` initialization.

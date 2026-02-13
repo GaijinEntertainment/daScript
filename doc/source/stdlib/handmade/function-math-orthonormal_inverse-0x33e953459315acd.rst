@@ -1,1 +1,1 @@
- Fast `inverse` for the orthonormal matrix.
+Fast `inverse` for the orthonormal matrix.

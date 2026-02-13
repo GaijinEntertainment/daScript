@@ -1,1 +1,1 @@
- Returns true if type can be temporary.
+Returns true if type can be temporary.

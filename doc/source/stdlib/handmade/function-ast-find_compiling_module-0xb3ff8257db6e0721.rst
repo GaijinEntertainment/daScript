@@ -1,1 +1,1 @@
- Finds `Module` in the currently compiling `Program`.
+Finds `Module` in the currently compiling `Program`.

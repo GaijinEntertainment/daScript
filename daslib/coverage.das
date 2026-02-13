@@ -10,6 +10,12 @@
 options gen2
 module coverage shared public
 
+//! Code coverage instrumentation macro.
+//!
+//! Automatically inserts coverage tracking calls at every block entry point.
+//! After execution, call `get_report` to produce output in LCOV format,
+//! which can be converted to HTML via ``genhtml``.
+
 require ast
 require rtti
 require daslib/ast_boost

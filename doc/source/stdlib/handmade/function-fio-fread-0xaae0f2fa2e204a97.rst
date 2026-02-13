@@ -1,1 +1,1 @@
- reads data from file.
+reads data from file.

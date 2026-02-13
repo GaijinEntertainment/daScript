@@ -1,1 +1,1 @@
- Returns name of the `Type` object.
+Returns name of the `Type` object.

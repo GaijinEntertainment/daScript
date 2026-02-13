@@ -1,1 +1,1 @@
- Get `Module` object by name.
+Get `Module` object by name.

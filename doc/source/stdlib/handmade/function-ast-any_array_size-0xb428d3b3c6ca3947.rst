@@ -1,1 +1,1 @@
- Returns array size from pointer to array<> object.
+Returns array size from pointer to array<> object.

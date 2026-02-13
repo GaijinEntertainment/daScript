@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module regex shared public
 
+//! Regular expression engine.
+//!
+//! Pure-daScript regex compiler and NFA matcher. Supports character
+//! classes, groups, quantifiers (``+``, ``*``, ``?``), alternation,
+//! and ``regex_match`` / ``regex_search`` / ``regex_replace`` operations.
+
 require daslib/strings_boost
 
 enum ReOp {

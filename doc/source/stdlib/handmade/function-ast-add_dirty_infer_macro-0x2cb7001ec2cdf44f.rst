@@ -1,1 +1,1 @@
- Adds `AstPassMacro` adapter to the `dirty infer` pass.
+Adds `AstPassMacro` adapter to the `dirty infer` pass.

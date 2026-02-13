@@ -6,6 +6,13 @@ options strict_smart_pointers
 
 module templates_boost shared public
 
+//! AST template substitution engine.
+//!
+//! Core infrastructure for macro-driven code generation. The `Template` structure
+//! stores substitution rules (rename variables, replace types, swap expressions)
+//! and `apply_template` walks an AST subtree applying them. Used internally by
+//! many other daslib macros.
+
 require ast
 require daslib/ast_boost
 require daslib/algorithm

@@ -1,1 +1,1 @@
- Returns true if expression is ExprCallFunction.
+Returns true if expression is ExprCallFunction.

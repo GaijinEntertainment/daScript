@@ -1,1 +1,1 @@
- Finds `Module` in the `Program`.
+Finds `Module` in the `Program`.

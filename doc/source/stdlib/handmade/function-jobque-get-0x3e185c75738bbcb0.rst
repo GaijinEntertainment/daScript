@@ -1,1 +1,1 @@
- Get atomic integer value.
+Get atomic integer value.

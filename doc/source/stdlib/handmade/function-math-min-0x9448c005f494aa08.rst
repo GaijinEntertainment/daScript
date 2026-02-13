@@ -1,1 +1,1 @@
- returns the minimum of x and y
+returns the minimum of x and y

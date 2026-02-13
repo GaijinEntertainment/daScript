@@ -1,1 +1,1 @@
- Smart pointer to `FunctionAnnotation` object.
+Smart pointer to `FunctionAnnotation` object.

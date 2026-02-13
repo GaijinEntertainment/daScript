@@ -1,1 +1,1 @@
- Smart pointer to `SimulateMacro` object.
+Smart pointer to `SimulateMacro` object.

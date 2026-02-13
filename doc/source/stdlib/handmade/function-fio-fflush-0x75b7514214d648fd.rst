@@ -1,1 +1,1 @@
- equivalent to C `fflush`. Flushes FILE buffers.
+equivalent to C `fflush`. Flushes FILE buffers.

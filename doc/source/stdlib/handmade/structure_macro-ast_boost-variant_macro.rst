@@ -1,1 +1,1 @@
- Turns AstVariantMacro into a macro with the specified `name`.
+Turns AstVariantMacro into a macro with the specified `name`.

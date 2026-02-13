@@ -1,1 +1,1 @@
- returns the arcsine of x
+returns the arcsine of x

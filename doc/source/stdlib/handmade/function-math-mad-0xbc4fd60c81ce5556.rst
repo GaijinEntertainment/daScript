@@ -1,1 +1,1 @@
- returns vector or scalar representing a * b + c
+returns vector or scalar representing a * b + c

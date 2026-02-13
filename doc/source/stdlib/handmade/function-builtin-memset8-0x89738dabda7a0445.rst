@@ -1,1 +1,1 @@
- Effecitvely C memset.
+Effecitvely C memset.

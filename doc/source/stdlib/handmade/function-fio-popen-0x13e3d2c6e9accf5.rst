@@ -1,1 +1,1 @@
- equivalent to linux `popen`. Opens pipe to command.
+equivalent to linux `popen`. Opens pipe to command.

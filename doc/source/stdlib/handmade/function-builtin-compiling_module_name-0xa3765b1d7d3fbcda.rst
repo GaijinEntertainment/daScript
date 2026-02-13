@@ -1,1 +1,1 @@
- returns name of the module currently being compiled.
+returns name of the module currently being compiled.

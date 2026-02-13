@@ -1,1 +1,1 @@
- maximum possible value of 'double'
+maximum possible value of 'double'

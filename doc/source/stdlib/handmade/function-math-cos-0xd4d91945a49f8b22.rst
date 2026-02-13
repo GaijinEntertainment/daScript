@@ -1,1 +1,1 @@
- returns the cosine of x
+returns the cosine of x

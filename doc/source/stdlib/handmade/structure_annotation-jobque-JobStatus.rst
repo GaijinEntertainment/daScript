@@ -1,1 +1,1 @@
- Job status indicator (ready or not, as well as entry count).
+Job status indicator (ready or not, as well as entry count).

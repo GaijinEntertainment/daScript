@@ -5,6 +5,12 @@ options no_unused_function_arguments = false
 
 module linq_boost shared public
 
+//! LINQ operator-pipe macro support.
+//!
+//! Provides ``|>`` pipe-syntax rewrites for LINQ operations so that
+//! ``arr |> where(...) |> select(...)`` chains compile into efficient
+//! iterator pipelines.
+
 require daslib/linq public
 
 require daslib/ast_boost

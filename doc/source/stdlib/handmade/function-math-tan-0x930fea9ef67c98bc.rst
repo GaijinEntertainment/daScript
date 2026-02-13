@@ -1,1 +1,1 @@
- returns the tangent of x
+returns the tangent of x

@@ -6,6 +6,11 @@ options strict_smart_pointers = true
 
 module async_boost shared private
 
+//! Async/await coroutine macros.
+//!
+//! Provides ``[async]`` function annotation and ``await`` call macro that
+//! rewrite annotated functions into generator-based coroutines.
+
 require strings
 require daslib/ast_boost
 require daslib/templates_boost

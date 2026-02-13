@@ -1,1 +1,1 @@
- Returns size of the type in bytes.
+Returns size of the type in bytes.

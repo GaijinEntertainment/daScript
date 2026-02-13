@@ -1,1 +1,1 @@
- Modify string in place to be all lower case
+Modify string in place to be all lower case

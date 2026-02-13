@@ -1,1 +1,1 @@
- Compile Daslang program given as string.
+Compile daScript program given as string.

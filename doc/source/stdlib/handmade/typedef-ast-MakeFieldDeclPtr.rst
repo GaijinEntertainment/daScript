@@ -1,1 +1,1 @@
- Smart pointer to `MakeFieldDecl` object.
+Smart pointer to `MakeFieldDecl` object.

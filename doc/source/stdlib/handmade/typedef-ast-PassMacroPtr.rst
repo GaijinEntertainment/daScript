@@ -1,1 +1,1 @@
- Smart pointer to `PassMacro` object.
+Smart pointer to `PassMacro` object.

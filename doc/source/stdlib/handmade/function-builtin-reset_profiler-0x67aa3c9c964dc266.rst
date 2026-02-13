@@ -1,1 +1,1 @@
- resets counters in the built-in profiler
+resets counters in the built-in profiler

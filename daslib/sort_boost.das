@@ -6,6 +6,11 @@ options strict_smart_pointers = true
 
 module sort_boost shared private
 
+//! Extended sorting support.
+//!
+//! Provides the ``qsort`` macro that dispatches to `sort` for built-in arrays
+//! and ``sort(temp_array(...))`` for handled vector types.
+
 require daslib/ast_boost
 require daslib/array_boost public
 require daslib/macro_boost

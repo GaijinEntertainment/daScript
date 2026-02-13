@@ -1,1 +1,1 @@
- Iterates through all registered modules of the Daslang runtime.
+Iterates through all registered modules of the daScript runtime.

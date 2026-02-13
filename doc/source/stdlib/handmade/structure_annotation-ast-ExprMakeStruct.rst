@@ -1,4 +1,4 @@
- ake structure expression (`[[YourStruct v1=expr1elem1, v2=expr2elem1, ...; v1=expr1elem2, ...  ]]`)
+ake structure expression (`[[YourStruct v1=expr1elem1, v2=expr2elem1, ...; v1=expr1elem2, ...  ]]`)
  Location of the expression in source code
 Type of the expression
 Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)

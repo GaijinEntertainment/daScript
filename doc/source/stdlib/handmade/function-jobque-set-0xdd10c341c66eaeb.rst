@@ -1,1 +1,1 @@
- Set atomic integer value.
+Set atomic integer value.

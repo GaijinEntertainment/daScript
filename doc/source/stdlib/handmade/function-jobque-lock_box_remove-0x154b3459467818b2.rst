@@ -1,1 +1,1 @@
- Destroys lockbox.
+Destroys a lock box and releases its resources. The lock box must not be in use by any active jobs.

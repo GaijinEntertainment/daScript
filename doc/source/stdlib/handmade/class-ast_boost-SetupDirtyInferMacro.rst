@@ -1,1 +1,1 @@
- [dirty_infer_macro] implementation.
+[dirty_infer_macro] implementation.

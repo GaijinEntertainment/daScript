@@ -1,1 +1,1 @@
- Finds annotation of the specified type in the given module.
+Finds annotation of the specified type in the given module.

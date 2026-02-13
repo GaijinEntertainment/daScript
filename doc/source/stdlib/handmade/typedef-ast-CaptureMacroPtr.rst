@@ -1,1 +1,1 @@
- Smart pointer to 'CaptureMacro'.
+Smart pointer to 'CaptureMacro'.

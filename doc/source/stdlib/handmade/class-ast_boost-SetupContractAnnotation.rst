@@ -1,1 +1,1 @@
- This is base class for contract annotation setup.
+This is base class for contract annotation setup.

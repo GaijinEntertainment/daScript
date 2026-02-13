@@ -1,1 +1,1 @@
- [lint_macro] implementation.
+[lint_macro] implementation.

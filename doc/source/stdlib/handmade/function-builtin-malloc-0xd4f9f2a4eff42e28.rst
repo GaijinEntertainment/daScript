@@ -1,1 +1,1 @@
- C-style malloc
+Allocates a block of uninitialized memory of the specified size in bytes, C-style. Returns a raw pointer to the allocated memory. Must be freed with ``free``.

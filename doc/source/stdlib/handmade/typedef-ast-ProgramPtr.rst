@@ -1,1 +1,1 @@
- Smart pointer to `Program` object.
+Smart pointer to `Program` object.

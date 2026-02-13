@@ -1,1 +1,1 @@
- Returns table size from pointer to the table<> object.
+Returns table size from pointer to the table<> object.

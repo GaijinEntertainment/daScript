@@ -5,10 +5,9 @@
 Network socket library
 ======================
 
-The NETWORK module implements basic TCP socket listening server (currently only one connection).
-It would eventually be expanded to support client as well.
-
-It its present form its used in Daslang Visual Studio Code plugin and upcoming debug server.
+The NETWORK module implements networking facilities including HTTP client/server
+and low-level socket operations. It provides ``Server`` and ``Client`` classes
+with event-driven callbacks for handling connections, requests, and responses.
 
 All functions and symbols are in "network" module, use require to get access to it. ::
 
@@ -22,7 +21,7 @@ Handled structures
 
 .. das:attribute:: NetworkServer
 
- Base impliemntation of the server.
+Base impliemntation of the server.
 
 
 +++++++
@@ -33,7 +32,7 @@ Classes
 
 .. das:attribute:: Server
 
-:Fields: * **_server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > -  Single socket listener combined with single socket connection.
+:Fields: * **_server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > - Single socket listener combined with single socket connection.
 
 
 .. _function-network_Server_rq_make_server_adapter_Server:
@@ -56,7 +55,6 @@ Returns true if the server was successfully initialized on the given port.
 
 Restores the server with the given shared orphan network server pointer.
 This is necessary to re-establish the server state after reload of a script.
-
 
 :Arguments: * **shared_orphan** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` >&
 
@@ -109,9 +107,6 @@ Sends data to the connected client. Returns true if the data was sent successful
 
 Initializes and returns a new instance of the network Server class.
 
-
-
-
 ++++++++++++++++++++++++++
 Low lever NetworkServer IO
 ++++++++++++++++++++++++++
@@ -128,7 +123,7 @@ Low lever NetworkServer IO
 
 .. das:function:: make_server(class: void? implicit; info: StructInfo const? implicit) : bool
 
- Creates new instance of the server.
+Creates new instance of the server.
 
 :Arguments: * **class** : void? implicit
 
@@ -138,7 +133,7 @@ Low lever NetworkServer IO
 
 .. das:function:: server_init(server: smart_ptr<NetworkServer> implicit; port: int) : bool
 
- Initializes server with given port.
+Initializes server with given port.
 
 :Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
 
@@ -148,7 +143,7 @@ Low lever NetworkServer IO
 
 .. das:function:: server_is_open(server: smart_ptr<NetworkServer> implicit) : bool
 
- Returns true if server is listening to the port.
+Returns true if server is listening to the port.
 
 :Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
 
@@ -156,7 +151,7 @@ Low lever NetworkServer IO
 
 .. das:function:: server_is_connected(server: smart_ptr<NetworkServer> implicit) : bool
 
- Returns true if server is connected to the client.
+Returns true if server is connected to the client.
 
 :Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
 
@@ -164,7 +159,7 @@ Low lever NetworkServer IO
 
 .. das:function:: server_tick(server: smart_ptr<NetworkServer> implicit)
 
- This needs to be called periodically for the server to work.
+This needs to be called periodically for the server to work.
 
 :Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
 
@@ -172,7 +167,7 @@ Low lever NetworkServer IO
 
 .. das:function:: server_send(server: smart_ptr<NetworkServer> implicit; data: uint8? implicit; size: int) : bool
 
- Sends data from server to the client.
+Sends data from server to the client.
 
 :Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
 
@@ -184,7 +179,7 @@ Low lever NetworkServer IO
 
 .. das:function:: server_restore(server: smart_ptr<NetworkServer> implicit; class: void? implicit; info: StructInfo const? implicit)
 
- Restores server from orphaned state.
+Restores server from orphaned state.
 
 :Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
 

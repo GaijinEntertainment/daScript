@@ -1,1 +1,1 @@
- obsolete. loads data from file.
+obsolete. loads data from file.

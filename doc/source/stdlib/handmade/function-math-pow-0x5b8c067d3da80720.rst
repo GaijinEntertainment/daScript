@@ -1,1 +1,1 @@
- returns x raised to the power of y
+returns x raised to the power of y

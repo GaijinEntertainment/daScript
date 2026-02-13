@@ -6,6 +6,11 @@ options strict_smart_pointers = true
 
 module lint shared private
 
+//! Lint pass that enables paranoid compilation checks.
+//!
+//! When this module is required, the ``paranoid`` lint flag is turned on
+//! for the current module, enabling stricter compiler diagnostics.
+
 require daslib/strings_boost
 require daslib/ast_boost
 require daslib/strings_boost

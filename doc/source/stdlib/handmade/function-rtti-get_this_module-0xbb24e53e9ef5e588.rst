@@ -1,1 +1,1 @@
- Get current `Program` object currently compiled module.
+Get current `Program` object currently compiled module.

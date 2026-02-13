@@ -1,1 +1,1 @@
- Single socket listener combined with single socket connection.
+Single socket listener combined with single socket connection.

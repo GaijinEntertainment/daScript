@@ -1,1 +1,1 @@
- Converts calendar time to time since epoch.
+Converts calendar time to time since epoch.

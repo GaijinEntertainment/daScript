@@ -1,1 +1,1 @@
- Creates adapter for the `AstPassMacro`.
+Creates adapter for the `AstPassMacro`.

@@ -1,1 +1,1 @@
- Returns alignment of the type in bytes.
+Returns alignment of the type in bytes.

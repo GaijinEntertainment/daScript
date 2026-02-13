@@ -1,1 +1,1 @@
- returns true if compiler is currently generating AOT
+returns true if compiler is currently generating AOT

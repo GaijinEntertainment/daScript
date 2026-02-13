@@ -1,1 +1,1 @@
- Iterates through each dependency of the module.
+Iterates through each dependency of the module.

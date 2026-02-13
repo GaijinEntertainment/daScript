@@ -1,1 +1,1 @@
- Resize string, i.e make it specified length.
+Resize string, i.e make it specified length.

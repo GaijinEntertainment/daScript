@@ -1,1 +1,1 @@
- Creates adapter for the `AstStructureAnnotation`.
+Creates adapter for the `AstStructureAnnotation`.

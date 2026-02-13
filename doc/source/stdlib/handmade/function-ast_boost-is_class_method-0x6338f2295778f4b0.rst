@@ -1,1 +1,1 @@
- Returns true if field is a class method.
+Returns true if field is a class method.

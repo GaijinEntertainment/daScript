@@ -1,1 +1,1 @@
- Creates channel.
+Creates a new channel for inter-thread communication. Returns a channel handle used for sending and receiving messages between jobs.

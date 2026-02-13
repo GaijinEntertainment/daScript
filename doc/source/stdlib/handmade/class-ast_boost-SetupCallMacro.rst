@@ -1,1 +1,1 @@
- [call_macro] implementation.
+[call_macro] implementation.

@@ -1,1 +1,1 @@
- Creates lockbox.
+Creates a new lock box for thread-safe shared data access. A lock box allows one thread to update a value while others read it safely.

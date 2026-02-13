@@ -1,1 +1,1 @@
- returns size of the allocated memory block
+returns size of the allocated memory block

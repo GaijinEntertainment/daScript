@@ -1,1 +1,1 @@
- Removes `base` URI from the `relative` URI.
+Removes `base` URI from the `relative` URI.

@@ -1,1 +1,1 @@
- Notify channel that entry is completed (decrease entry count).
+Notify channel that entry is completed (decrease entry count).

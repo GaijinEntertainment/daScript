@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module stringify shared public
 
+//! Long-string embedding reader macro.
+//!
+//! ``%stringify~ ... %%`` embeds a multi-line string literal verbatim
+//! into the source code, preserving whitespace and special characters
+//! without requiring escaping.
+
 require strings
 require daslib/ast_boost
 

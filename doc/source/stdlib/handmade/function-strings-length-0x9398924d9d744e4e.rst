@@ -1,1 +1,1 @@
- Return length of string
+Return length of string

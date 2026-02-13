@@ -1,1 +1,1 @@
- Adds 'AstTypeMacro' to the specific module.
+Adds 'AstTypeMacro' to the specific module.

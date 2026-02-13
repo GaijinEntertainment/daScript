@@ -1,1 +1,1 @@
- Compose transformation out of translation, rotation and scale.
+Compose transformation out of translation, rotation and scale.

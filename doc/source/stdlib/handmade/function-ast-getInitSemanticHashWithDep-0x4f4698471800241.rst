@@ -1,1 +1,1 @@
- Returns initialization semantic hash including dependencies for the entire program.
+Returns initialization semantic hash including dependencies for the entire program.

@@ -1,1 +1,1 @@
- Iterates through each enumeration in the module.
+Iterates through each enumeration in the module.

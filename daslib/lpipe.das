@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module lpipe shared private
 
+//! Left-pipe macro.
+//!
+//! ``lpipe`` allows piping an additional block argument to the previous call
+//! on the preceding line. Useful when a function takes multiple block arguments
+//! and only ``<|`` can be used for the first one.
+
 require ast
 require rtti
 require daslib/ast_boost

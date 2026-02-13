@@ -1,1 +1,1 @@
- Convert string to uint16. In case of error panic.
+Convert string to uint16. In case of error panic.

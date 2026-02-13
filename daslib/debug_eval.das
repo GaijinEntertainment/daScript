@@ -6,6 +6,12 @@ options indenting = 4
 
 module debug_eval shared private
 
+//! Expression evaluator for the debugger.
+//!
+//! Parses and evaluates simple C-like expressions (arithmetic, field access,
+//! indexing, casts) against live debug context data. Used by the DAP debug
+//! server to implement watch and hover evaluation.
+
 require daslib/strings_boost
 require daslib/match
 require daslib/math_bits

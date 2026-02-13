@@ -1,1 +1,1 @@
- returns the square root of x
+returns the square root of x

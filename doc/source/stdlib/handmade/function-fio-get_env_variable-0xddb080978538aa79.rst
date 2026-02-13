@@ -1,1 +1,1 @@
- returns value of the environment variable.
+returns value of the environment variable.

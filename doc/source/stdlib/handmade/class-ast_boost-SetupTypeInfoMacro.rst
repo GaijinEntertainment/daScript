@@ -1,1 +1,1 @@
- [typeinfo_macro] implementation.
+[typeinfo_macro] implementation.

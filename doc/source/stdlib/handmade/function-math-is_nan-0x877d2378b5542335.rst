@@ -1,1 +1,1 @@
- Returns true if `x` is NaN (not a number)
+Returns true if `x` is NaN (not a number)

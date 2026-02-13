@@ -1,1 +1,1 @@
- locks array or table forever
+locks array or table forever

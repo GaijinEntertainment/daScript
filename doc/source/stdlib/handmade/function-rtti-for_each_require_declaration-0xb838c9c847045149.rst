@@ -1,1 +1,1 @@
- Iterates though each `require` declaration of the compiled program.
+Iterates though each `require` declaration of the compiled program.

@@ -1,1 +1,1 @@
- Creates job status.
+Creates a new job status object for tracking the completion state of asynchronous jobs.

@@ -1,1 +1,1 @@
- Return all upper case string
+Return all upper case string

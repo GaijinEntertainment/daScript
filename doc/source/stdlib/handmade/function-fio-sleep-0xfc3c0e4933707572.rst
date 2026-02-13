@@ -1,1 +1,1 @@
- sleeps for specified number of milliseconds.
+sleeps for specified number of milliseconds.

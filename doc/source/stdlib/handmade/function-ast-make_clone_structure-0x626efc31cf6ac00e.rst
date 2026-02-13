@@ -1,1 +1,1 @@
- Generates `clone` function for the given structure.
+Generates `clone` function for the given structure.

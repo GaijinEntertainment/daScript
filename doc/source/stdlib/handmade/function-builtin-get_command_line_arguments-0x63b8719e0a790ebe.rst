@@ -1,1 +1,1 @@
- returns array of command line arguments.
+returns array of command line arguments.

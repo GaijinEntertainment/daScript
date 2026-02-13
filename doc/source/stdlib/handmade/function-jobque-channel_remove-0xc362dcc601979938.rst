@@ -1,1 +1,1 @@
- Destroys channel.
+Destroys a channel and releases its resources. The channel must not be in use by any active jobs.

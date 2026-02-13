@@ -57,6 +57,41 @@ require daslib/match
 require daslib/linq
 require daslib/linq_boost
 require daslib/flat_hash_table
+require daslib/cuckoo_hash_table
+require daslib/macro_boost
+require daslib/class_boost
+require daslib/soa
+require daslib/base64
+require daslib/linked_list
+require daslib/bool_array
+require daslib/bitfield_boost
+require daslib/bitfield_trait
+require daslib/async_boost
+require daslib/consume
+require daslib/dap
+require daslib/das_source_formatter
+require daslib/das_source_formatter_fio
+// require daslib/debug                          // uses persistent_heap, gc, complex dependencies
+require daslib/debug_eval
+require daslib/decs_state
+require daslib/dynamic_cast_rtti
+require daslib/generic_return
+// require daslib/heartbeat                     // qmacro(heartbeat()) conflicts when used in das2rst context
+require daslib/lint
+// require daslib/lint_everything               // global_lint_macro causes lint errors in other modules
+// require daslib/live                            // uses multiple_contexts
+require daslib/profiler
+require daslib/profiler_boost
+require daslib/quote
+require daslib/refactor
+require daslib/remove_call_args
+// require daslib/raster_boost                    // depends on external raster module
+// require daslib/spoof                           // depends on peg module
+require daslib/stringify
+require daslib/temp_strings
+require daslib/type_traits
+require daslib/typemacro_boost
+require daslib/validate_code
 
 def document_module_math(root : string) {
     var mod = get_module("math")
@@ -285,8 +320,7 @@ def document_module_json(root : string) {
 def document_module_json_boost(root : string) {
     var mod = find_module("json_boost")
     var groups <- array<DocGroup>(
-        group_by_regex("Value conversion", mod, %regex~(JV|from_JV)$%%),
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+        group_by_regex("Value conversion", mod, %regex~(JV|from_JV)$%%)
     )
     document("Boost package for JSON", mod, "json_boost.rst", groups)
 }
@@ -305,8 +339,6 @@ def document_module_regex(root : string) {
 def document_module_regex_boost(root : string) {
     var mod = find_module("regex_boost")
     var groups <- array<DocGroup>(
-        group_by_regex("stub0", mod, %regex~(stub0)$%%),
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
     )
     document("Boost package for REGEX", mod, "regex_boost.rst", groups)
 }
@@ -328,8 +360,6 @@ def document_module_rst(root : string) {
 def document_module_apply(root : string) {
     var mod = find_module("apply")
     var groups <- array<DocGroup>(
-        group_by_regex("stub0", mod, %regex~(stub0)$%%),
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
     )
     document("Apply reflection pattern", mod, "apply.rst", groups)
 }
@@ -360,8 +390,6 @@ def document_module_jobque_boost(root : string) {
 def document_module_apply_in_context(root : string) {
     var mod = find_module("apply_in_context")
     var groups <- array<DocGroup>(
-        group_by_regex("stub0", mod, %regex~(stub0)$%%),
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
     )
     document("Cross-context evaluation helpers", mod, "apply_in_context.rst", groups)
 }
@@ -396,8 +424,6 @@ def document_module_defer(root : string) {
 def document_module_if_not_null(root : string) {
     var mod = find_module("if_not_null")
     var groups <- array<DocGroup>(
-        group_by_regex("stub0", mod, %regex~(stub0)$%%),
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
     )
     document("if_not_null macro", mod, "if_not_null.rst", groups)
 }
@@ -405,8 +431,6 @@ def document_module_if_not_null(root : string) {
 def document_module_instance_function(root : string) {
     var mod = find_module("instance_function")
     var groups <- array<DocGroup>(
-        group_by_regex("stub0", mod, %regex~(stub0)$%%),
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
     )
     document("instance_function function annotation", mod, "instance_function.rst", groups)
 }
@@ -414,8 +438,6 @@ def document_module_instance_function(root : string) {
 def document_module_templates(root : string) {
     var mod = find_module("templates")
     var groups <- array<DocGroup>(
-        group_by_regex("stub0", mod, %regex~(stub0)$%%),
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
     )
     document("decltype macro and template function annotation", mod, "templates.rst", groups)
 }
@@ -453,8 +475,7 @@ def document_module_safe_addr(root : string) {
 def document_module_static_let(root : string) {
     var mod = find_module("static_let")
     var groups <- array<DocGroup>(
-        group_by_regex("Static variable declarations", mod, %regex~(static_let|static_let_finalize)$%%),
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
+        group_by_regex("Static variable declarations", mod, %regex~(static_let|static_let_finalize)$%%)
     )
     document("static_let macro", mod, "static_let.rst", groups)
 }
@@ -462,8 +483,6 @@ def document_module_static_let(root : string) {
 def document_module_lpipe(root : string) {
     var mod = find_module("lpipe")
     var groups <- array<DocGroup>(
-        group_by_regex("stub0", mod, %regex~(stub0)$%%),
-        group_by_regex("stub1", mod, %regex~(stub1)$%%)
     )
     document("lpipe macro", mod, "lpipe.rst", groups)
 }
@@ -562,7 +581,6 @@ def document_module_uriparser_boost(root : string) {
 def document_module_sort_boost(root : string) {
     var mod = find_module("sort_boost")
     var groups <- array<DocGroup>(
-        group_by_regex("stub", mod, %regex~(stub)$%%)
     )
     document("Boost package for the builtin sort", mod, "sort_boost.rst", groups)
 }
@@ -570,7 +588,7 @@ def document_module_sort_boost(root : string) {
 def document_module_enum_trait(root : string) {
     var mod = find_module("enum_trait")
     var groups <- array<DocGroup>(
-        group_by_regex("stub", mod, %regex~(stub)$%%)
+        group_by_regex("Enumeration iteration", mod, %regex~(each|each_name|find_value)$%%)
     )
     document("Enumeration traits", mod, "enum_trait.rst", groups)
 }
@@ -601,8 +619,6 @@ def document_module_decs(root : string) {
 def document_module_decs_boost(root : string) {
     var mod = find_module("decs_boost")
     var groups <- array<DocGroup>(
-        group_by_regex("Stub1", mod, %regex~(stub1)$%%),
-        group_by_regex("Stub2", mod, %regex~(stub2)$%%)
     )
     document("Boost package for DECS", mod, "decs_boost.rst", groups)
 }
@@ -610,7 +626,8 @@ def document_module_decs_boost(root : string) {
 def document_module_utf8_utils(root : string) {
     var mod = find_module("utf8_utils")
     var groups <- array<DocGroup>(
-        group_by_regex("stub", mod, %regex~(stub)$%%)
+        group_by_regex("Encoding and decoding", mod, %regex~(utf8_encode|utf8_decode|utf16_to_utf32|utf32_to_utf16)$%%),
+        group_by_regex("Iteration", mod, %regex~(each_utf32)$%%)
     )
     document("UTF-8 utilities", mod, "utf8_utils.rst", groups)
 }
@@ -634,7 +651,6 @@ def document_module_coroutines(root : string) {
 def document_module_interfaces(root : string) {
     var mod = find_module("interfaces")
     var groups <- array<DocGroup>(
-        group_by_regex("Top level coroutine evaluation", mod, %regex~(cr_run|cr_run_all)$%%)
     )
     document("Interfaces", mod, "interfaces.rst", groups)
 }
@@ -642,7 +658,6 @@ def document_module_interfaces(root : string) {
 def document_module_export_constructor(root : string) {
     var mod = find_module("export_constructor")
     var groups <- array<DocGroup>(
-        group_by_regex("Top level coroutine evaluation", mod, %regex~(cr_run|cr_run_all)$%%)
     )
     document("Export constructor", mod, "export_constructor.rst", groups)
 }
@@ -715,6 +730,252 @@ def document_module_linq_boost(root : string) {
     document("Boost module for LINQ", mod, "linq_boost.rst", groups)
 }
 
+def document_module_class_boost(root : string) {
+    var mod = find_module("class_boost")
+    var groups <- array<DocGroup>(
+    )
+    document("Class method macros", mod, "class_boost.rst", groups)
+}
+
+def document_module_soa(root : string) {
+    var mod = find_module("soa")
+    var groups <- array<DocGroup>(
+    )
+    document("SOA (Structure of Arrays) transformation", mod, "soa.rst", groups)
+}
+
+def document_module_base64(root : string) {
+    var mod = find_module("base64")
+    var groups <- array<DocGroup>(
+        group_by_regex("Encoding", mod, %regex~(base64_encode|BASE64_ENCODE_OUT_SIZE)$%%),
+        group_by_regex("Decoding", mod, %regex~(base64_decode|BASE64_DECODE_OUT_SIZE)$%%)
+    )
+    document("Base64 encoding and decoding", mod, "base64.rst", groups)
+}
+
+def document_module_linked_list(root : string) {
+    var mod = find_module("linked_list")
+    var groups <- array<DocGroup>(
+    )
+    document("Intrusive linked list", mod, "linked_list.rst", groups)
+}
+
+def document_module_bool_array(root : string) {
+    var mod = find_module("bool_array")
+    var groups <- array<DocGroup>(
+    )
+    document("Packed boolean array", mod, "bool_array.rst", groups)
+}
+
+def document_module_bitfield_boost(root : string) {
+    var mod = find_module("bitfield_boost")
+    var groups <- array<DocGroup>(
+    )
+    document("Bitfield operator overloads", mod, "bitfield_boost.rst", groups)
+}
+
+def document_module_bitfield_trait(root : string) {
+    var mod = find_module("bitfield_trait")
+    var groups <- array<DocGroup>(
+    )
+    document("Bitfield name traits", mod, "bitfield_trait.rst", groups)
+}
+
+def document_module_async_boost(root : string) {
+    var mod = find_module("async_boost")
+    var groups <- array<DocGroup>(
+    )
+    document("Async/await coroutine macros", mod, "async_boost.rst", groups)
+}
+
+def document_module_cuckoo_hash_table(root : string) {
+    var mod = find_module("cuckoo_hash_table")
+    var groups <- array<DocGroup>(
+        group_by_regex("Hash functions", mod, %regex~(hash0|hash1)$%%)
+    )
+    document("Cuckoo hash table", mod, "cuckoo_hash_table.rst", groups)
+}
+
+def document_module_consume(root : string) {
+    var mod = find_module("consume")
+    var groups <- array<DocGroup>(
+    )
+    document("Consume argument optimization", mod, "consume.rst", groups)
+}
+
+def document_module_dap(root : string) {
+    var mod = find_module("dap")
+    var groups <- array<DocGroup>(
+    )
+    document("Debug Adapter Protocol data structures", mod, "dap.rst", groups)
+}
+
+def document_module_das_source_formatter(root : string) {
+    var mod = find_module("das_source_formatter")
+    var groups <- array<DocGroup>(
+        group_by_regex("Formatting", mod, %regex~(format_das_string)$%%)
+    )
+    document("Source code formatter", mod, "das_source_formatter.rst", groups)
+}
+
+def document_module_das_source_formatter_fio(root : string) {
+    var mod = find_module("das_source_formatter_fio")
+    var groups <- array<DocGroup>(
+        group_by_regex("File formatting", mod, %regex~(format_file)$%%)
+    )
+    document("File-based source code formatter", mod, "das_source_formatter_fio.rst", groups)
+}
+
+def document_module_debug(root : string) {
+    var mod = find_module("debug")
+    var groups <- array<DocGroup>(
+    )
+    document("DAP debug server", mod, "debug.rst", groups)
+}
+
+def document_module_debug_eval(root : string) {
+    var mod = find_module("debug_eval")
+    var groups <- array<DocGroup>(
+        group_by_regex("Evaluation", mod, %regex~(eval)$%%),
+        group_by_regex("Tokenization", mod, %regex~(each_token)$%%)
+    )
+    document("Debug expression evaluator", mod, "debug_eval.rst", groups)
+}
+
+def document_module_decs_state(root : string) {
+    var mod = find_module("decs_state")
+    var groups <- array<DocGroup>(
+    )
+    document("DECS debug state reporting", mod, "decs_state.rst", groups)
+}
+
+def document_module_dynamic_cast_rtti(root : string) {
+    var mod = find_module("dynamic_cast_rtti")
+    var groups <- array<DocGroup>(
+        group_by_regex("Dynamic casts", mod, %regex~(is_instance_of|as_instance_of)$%%)
+    )
+    document("Dynamic RTTI type casts", mod, "dynamic_cast_rtti.rst", groups)
+}
+
+def document_module_generic_return(root : string) {
+    var mod = find_module("generic_return")
+    var groups <- array<DocGroup>(
+    )
+    document("Generic return type instantiation", mod, "generic_return.rst", groups)
+}
+
+def document_module_heartbeat(root : string) {
+    var mod = find_module("heartbeat")
+    var groups <- array<DocGroup>(
+        group_by_regex("Heartbeat control", mod, %regex~(set_heartbeat|heartbeat)$%%)
+    )
+    document("Heartbeat callback injection", mod, "heartbeat.rst", groups)
+}
+
+def document_module_lint(root : string) {
+    var mod = find_module("lint")
+    var groups <- array<DocGroup>(
+    )
+    document("Paranoid lint pass", mod, "lint.rst", groups)
+}
+
+def document_module_lint_everything(root : string) {
+    var mod = find_module("lint_everything")
+    var groups <- array<DocGroup>(
+    )
+    document("Global paranoid lint pass", mod, "lint_everything.rst", groups)
+}
+
+def document_module_live(root : string) {
+    var mod = find_module("live")
+    var groups <- array<DocGroup>(
+        group_by_regex("Lifecycle", mod, %regex~(live_init|live_update|live_bind_server|live_main)$%%)
+    )
+    document("Live reload framework", mod, "live.rst", groups)
+}
+
+def document_module_profiler(root : string) {
+    var mod = find_module("profiler")
+    var groups <- array<DocGroup>(
+        group_by_regex("Profiler control", mod, %regex~(set_enable_profiler)$%%)
+    )
+    document("Instrumenting profiler", mod, "profiler.rst", groups)
+}
+
+def document_module_profiler_boost(root : string) {
+    var mod = find_module("profiler_boost")
+    var groups <- array<DocGroup>(
+    )
+    document("Profiler cross-context helpers", mod, "profiler_boost.rst", groups)
+}
+
+def document_module_coverage(root : string) {
+    var mod = find_module("coverage")
+    var groups <- array<DocGroup>(
+        group_by_regex("Coverage data access", mod, %regex~(get_report|add_coverage)$%%)
+    )
+    document("Code coverage instrumentation", mod, "coverage.rst", groups)
+}
+
+def document_module_quote(root : string) {
+    var mod = find_module("quote")
+    var groups <- array<DocGroup>(
+    )
+    document("AST quasiquoting infrastructure", mod, "quote.rst", groups)
+}
+
+def document_module_refactor(root : string) {
+    var mod = find_module("refactor")
+    var groups <- array<DocGroup>(
+        group_by_regex("Refactoring operations", mod, %regex~(extract_method|rename)$%%)
+    )
+    document("Automated refactoring tools", mod, "refactor.rst", groups)
+}
+
+def document_module_remove_call_args(root : string) {
+    var mod = find_module("remove_call_args")
+    var groups <- array<DocGroup>(
+    )
+    document("Call argument removal annotation", mod, "remove_call_args.rst", groups)
+}
+
+def document_module_stringify(root : string) {
+    var mod = find_module("stringify")
+    var groups <- array<DocGroup>(
+    )
+    document("Long string embedding macro", mod, "stringify.rst", groups)
+}
+
+def document_module_temp_strings(root : string) {
+    var mod = find_module("temp_strings")
+    var groups <- array<DocGroup>(
+        group_by_regex("Temporary string builders", mod, %regex~(build_temp_string)$%%)
+    )
+    document("Temporary string utilities", mod, "temp_strings.rst", groups)
+}
+
+def document_module_type_traits(root : string) {
+    var mod = find_module("type_traits")
+    var groups <- array<DocGroup>(
+    )
+    document("Type trait macros", mod, "type_traits.rst", groups)
+}
+
+def document_module_typemacro_boost(root : string) {
+    var mod = find_module("typemacro_boost")
+    var groups <- array<DocGroup>(
+        group_by_regex("Enum helpers", mod, %regex~(int64_to_enum)$%%)
+    )
+    document("Type macro and template structure support", mod, "typemacro_boost.rst", groups)
+}
+
+def document_module_validate_code(root : string) {
+    var mod = find_module("validate_code")
+    var groups <- array<DocGroup>(
+    )
+    document("Code validation annotations", mod, "validate_code.rst", groups)
+}
+
 [export]
 def main {
     let root = get_das_root() + "/doc/source/stdlib"// todo: modify to output /temp so that we can merge changes
@@ -728,6 +989,7 @@ def main {
     document_module_ast(root)
     document_module_strings(root)
     document_module_jobque(root)
+    // document daslib modules
     document_module_algorithm(root)
     document_module_apply_in_context(root)
     document_module_apply(root)
@@ -737,24 +999,37 @@ def main {
     document_module_ast_block_to_loop(root)
     document_module_ast_boost(root)
     document_module_ast_used(root)
+    document_module_async_boost(root)
+    document_module_base64(root)
+    document_module_bitfield_boost(root)
+    document_module_bitfield_trait(root)
+    document_module_bool_array(root)
+    document_module_class_boost(root)
     document_module_constexpr(root)
+    document_module_consume(root)
     document_module_contracts(root)
     document_module_coroutines(root)
+    // document_module_coverage(root)              // [infer_macro] modifies AST of all modules
     document_module_cpp_bind(root)
-    // document_module_cpp_gen(root)                // NOTE - do not document. its obsolete. use cbind_boost instead
-    // document_module_dap(root)                    // todo: ask to document
-    // document_module_das_source_formatter(root)   // todo: ask to document
-    // document_module_debug(root)                  // todo: document???
-    document_module_decs_boost(root)                 // DECS
-    // document_module_decs_state(root)                 // DECS
-    document_module_decs(root)                       // DECS
+    document_module_cuckoo_hash_table(root)
+    document_module_dap(root)
+    document_module_das_source_formatter(root)
+    document_module_das_source_formatter_fio(root)
+    // document_module_debug(root)                 // uses persistent_heap, complex deps
+    document_module_debug_eval(root)
+    document_module_decs(root)
+    document_module_decs_boost(root)
+    document_module_decs_state(root)
     document_module_defer(root)
+    document_module_dynamic_cast_rtti(root)
     document_module_enum_trait(root)
     document_module_export_constructor(root)
     document_module_faker(root)
     document_module_flat_hash_table(root)
     document_module_functional(root)
     document_module_fuzzer(root)
+    document_module_generic_return(root)
+    // document_module_heartbeat(root)              // qmacro(heartbeat()) conflicts when used in das2rst context
     document_module_if_not_null(root)
     document_module_instance_function(root)
     document_module_interfaces(root)
@@ -762,27 +1037,39 @@ def main {
     document_module_jobque_boost(root)
     document_module_json_boost(root)
     document_module_json(root)
-    // document_module_lint_everything(root)        // todo: document?
-    // document_module_lint(root)                   // todo: document?
-    // document_module_live(root)
+    document_module_linked_list(root)
+    document_module_linq(root)
+    document_module_linq_boost(root)
+    document_module_lint(root)
+    // document_module_lint_everything(root)       // global_lint_macro causes lint errors in other modules
+    // document_module_live(root)                  // uses multiple_contexts
     document_module_lpipe(root)
     document_module_macro_boost(root)
+    document_module_match(root)
     document_module_math_bits(root)
     document_module_math_boost(root)
+    document_module_profiler(root)
+    document_module_profiler_boost(root)
+    document_module_quote(root)
     document_module_random(root)
+    document_module_refactor(root)
     document_module_regex_boost(root)
     document_module_regex(root)
+    document_module_remove_call_args(root)
     document_module_rst(root)
     document_module_safe_addr(root)
+    document_module_soa(root)
     document_module_sort_boost(root)
     document_module_static_let(root)
+    document_module_stringify(root)
     document_module_strings_boost(root)
+    document_module_temp_strings(root)
     document_module_templates_boost(root)
     document_module_templates(root)
+    document_module_type_traits(root)
+    document_module_typemacro_boost(root)
     document_module_unroll(root)
     document_module_uriparser_boost(root)
     document_module_utf8_utils(root)
-    document_module_match(root)
-    document_module_linq(root)
-    document_module_linq_boost(root)
+    document_module_validate_code(root)
 }

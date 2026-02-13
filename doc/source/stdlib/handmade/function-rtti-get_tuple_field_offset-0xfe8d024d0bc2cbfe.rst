@@ -1,1 +1,1 @@
- Returns offset of the tuple field.
+Returns offset of the tuple field.

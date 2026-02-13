@@ -1,1 +1,1 @@
- Transposes the specified input matrix x.
+Transposes the specified input matrix x.

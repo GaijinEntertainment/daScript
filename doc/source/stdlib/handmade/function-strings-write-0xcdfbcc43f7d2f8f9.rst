@@ -1,1 +1,1 @@
- Returns textual representation of the value.
+Returns textual representation of the value.

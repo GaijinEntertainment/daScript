@@ -1,1 +1,1 @@
- calls garbage collection on the regular heap
+calls garbage collection on the regular heap

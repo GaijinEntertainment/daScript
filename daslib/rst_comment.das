@@ -8,6 +8,12 @@ options strict_smart_pointers = true
 
 module rst_comment shared private
 
+//! Documentation comment extractor.
+//!
+//! Implements the ``[comment_reader]`` annotation that collects
+//! ``//!`` doc-comments from source files and writes per-symbol
+//! RST snippets to the ``detail/`` directory.
+
 require daslib/ast_boost
 require daslib/rst
 require fio

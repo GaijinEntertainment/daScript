@@ -1,1 +1,1 @@
- List of all annotations attached to the object (function or structure).
+List of all annotations attached to the object (function or structure).

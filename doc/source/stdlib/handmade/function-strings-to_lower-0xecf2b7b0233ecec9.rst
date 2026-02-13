@@ -1,1 +1,1 @@
- Return all lower case string
+Return all lower case string

@@ -1,1 +1,1 @@
- returns true if the environment variable is defined.
+returns true if the environment variable is defined.

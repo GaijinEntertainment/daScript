@@ -1,1 +1,1 @@
- Generates new GUID.
+Generates a new universally unique identifier (GUID/UUID) string.

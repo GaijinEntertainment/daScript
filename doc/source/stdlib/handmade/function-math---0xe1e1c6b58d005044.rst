@@ -1,1 +1,1 @@
- returns -x
+Returns the arithmetic negation of the argument (unary minus). Works with scalar and vector types.

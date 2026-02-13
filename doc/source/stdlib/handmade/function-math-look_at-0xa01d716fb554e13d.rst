@@ -1,1 +1,1 @@
- Look-at matrix with the origin at `eye`, looking at `at`, with `up` as up direction.
+Look-at matrix with the origin at `eye`, looking at `at`, with `up` as up direction.

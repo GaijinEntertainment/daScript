@@ -1,1 +1,1 @@
- Iterates through every structure in the `Module`.
+Iterates through every structure in the `Module`.

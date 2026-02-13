@@ -1,1 +1,1 @@
- Returns the nearest integer to `x`.
+Returns the nearest integer to `x`.

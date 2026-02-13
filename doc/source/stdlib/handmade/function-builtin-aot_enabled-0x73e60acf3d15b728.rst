@@ -1,1 +1,1 @@
- Returns true if AOT is enabled.
+Returns true if AOT is enabled.

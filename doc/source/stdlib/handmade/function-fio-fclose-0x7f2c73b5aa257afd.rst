@@ -1,1 +1,1 @@
- equivalent to C `fclose`. Closes file.
+equivalent to C `fclose`. Closes file.

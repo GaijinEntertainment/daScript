@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module validate_code shared private
 
+//! Code validation and constraint annotations.
+//!
+//! Provides ``[non_recursive]`` (detects recursion at compile time),
+//! ``[validate_call]`` (custom call-site validation), and other
+//! structural code quality checks.
+
 require daslib/ast_boost
 require daslib/rtti
 require daslib/strings

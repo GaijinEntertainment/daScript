@@ -1,1 +1,1 @@
- Smart pointer to `CallMacro` object.
+Smart pointer to `CallMacro` object.

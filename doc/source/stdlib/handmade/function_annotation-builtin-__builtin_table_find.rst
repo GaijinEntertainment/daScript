@@ -1,1 +1,1 @@
- part of internal implementation for `find`
+part of internal implementation for `find`

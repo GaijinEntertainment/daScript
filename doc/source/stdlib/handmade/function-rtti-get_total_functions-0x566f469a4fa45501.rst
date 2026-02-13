@@ -1,1 +1,1 @@
- Get total number of functions in the context.
+Get total number of functions in the context.

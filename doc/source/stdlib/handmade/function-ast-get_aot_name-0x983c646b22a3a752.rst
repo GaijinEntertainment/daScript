@@ -1,1 +1,1 @@
- Returns AOT name for the specified function.
+Returns AOT name for the specified function.

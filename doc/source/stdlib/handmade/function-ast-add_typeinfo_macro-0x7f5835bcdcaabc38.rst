@@ -1,1 +1,1 @@
- Adds `AstTypeInfo` adapter to the specific module.
+Adds `AstTypeInfo` adapter to the specific module.

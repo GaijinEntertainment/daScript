@@ -1,1 +1,1 @@
- indicates log level recoverable errors
+indicates log level recoverable errors

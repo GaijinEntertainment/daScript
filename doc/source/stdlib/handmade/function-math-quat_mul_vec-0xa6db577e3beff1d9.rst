@@ -1,1 +1,1 @@
- Transform vector `v` by quaternion `q`
+Transform vector `v` by quaternion `q`

@@ -1,1 +1,1 @@
- indicates sort function for builtin 'sort' machinery. used internally
+indicates sort function for builtin 'sort' machinery. used internally

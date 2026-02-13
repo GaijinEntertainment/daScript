@@ -6,6 +6,15 @@ options strict_smart_pointers
 
 module ast_boost shared public
 
+//! AST macro authoring toolkit.
+//!
+//! Re-exports ``rtti`` and ``ast`` and provides the core annotations used by
+//! macro authors: ``[macro]``, ``[reader_macro]``, ``[call_macro]``,
+//! ``[function_macro]``, ``[block_macro]``, ``[variant_macro]``,
+//! ``[tag_function]``, ``[tag_structure]``, ``[infer_macro]``,
+//! ``[optimization_macro]``, ``[lint_macro]``, ``[global_lint_macro]``,
+//! and ``[macro_function]``.
+
 require rtti
 require ast public
 require strings

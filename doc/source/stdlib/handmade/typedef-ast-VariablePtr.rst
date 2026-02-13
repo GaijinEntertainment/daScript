@@ -1,1 +1,1 @@
- Smart pointer to `Variable` object.
+Smart pointer to `Variable` object.

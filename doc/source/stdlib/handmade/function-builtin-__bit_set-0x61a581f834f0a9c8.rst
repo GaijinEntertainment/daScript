@@ -1,1 +1,1 @@
- Sets the specified bit in the bitfield.
+Sets the specified bit in the bitfield.

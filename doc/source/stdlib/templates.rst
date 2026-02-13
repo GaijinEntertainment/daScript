@@ -5,7 +5,9 @@
 decltype macro and template function annotation
 ===============================================
 
-The templates exposes collection of template-like routines for Daslang.
+The TEMPLATES module implements template instantiation utilities for daScript
+code generation. It supports stamping out parameterized code patterns with
+type and value substitution.
 
 All functions and symbols are in "templates" module, use require to get access to it. ::
 

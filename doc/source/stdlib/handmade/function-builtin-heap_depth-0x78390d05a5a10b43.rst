@@ -1,1 +1,1 @@
- returns number of generations in the regular heap
+returns number of generations in the regular heap

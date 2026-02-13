@@ -7,6 +7,12 @@ options strict_smart_pointers = true
 
 module macro_boost shared private
 
+//! Macro helper utilities.
+//!
+//! Contains `macro_verify` (assertion that produces a macro error and returns
+//! an empty expression on failure), `capture_block` (collects captured variables
+//! from an expression), and other helpers used by macro authors.
+
 require daslib/ast_boost
 require daslib/templates_boost
 

@@ -5,9 +5,42 @@
 Built-in runtime
 ================
 
-Builtin module is automatically required by any other das file. It includes basic language infrastructure,
-support for containers, heap, miscellaneous iterators, profiler, and interaction with host application.
+The BUILTIN module contains core runtime functions available in all daScript programs
+without explicit ``require``. It includes:
 
+- Heap and memory management (``heap_bytes_allocated``, ``heap_report``, ``memory_report``)
+- Debug output (``print``, ``debug``, ``stackwalk``)
+- Panic and error handling (``panic``, ``terminate``, ``assert``)
+- Pointer and memory operations (``intptr``, ``malloc``, ``free``)
+- Profiling (``profile``)
+- Type conversion (``string``)
+
+All functions and symbols are in "builtin" module, use require to get access to it. ::
+
+    require builtin
+
+Example: ::
+
+    [export]
+        def main() {
+            print("hello, world!\n")
+            assert(1 + 1 == 2)
+            let s = string(42)
+            print("string(42) = {s}\n")
+            let name = "daScript"
+            print("welcome to {name}\n")
+            var arr : array<int>
+            arr |> push(10)
+            arr |> push(20)
+            print("length = {length(arr)}\n")
+            print("arr[0] = {arr[0]}\n")
+        }
+        // output:
+        // hello, world!
+        // string(42) = 42
+        // welcome to daScript
+        // length = 2
+        // arr[0] = 10
 
 ++++++++++++
 Type aliases
@@ -40,115 +73,115 @@ Constants
 
 .. das:attribute:: DAS_MAX_FUNCTION_ARGUMENTS = 32
 
- maximum number of arguments for the function. this is used to pre-allocate stack space for the function arguments
+maximum number of arguments for the function. this is used to pre-allocate stack space for the function arguments
 
 .. _global-builtin-INT_MIN:
 
 .. das:attribute:: INT_MIN = -2147483648
 
- minimum possible value of 'int'
+minimum possible value of 'int'
 
 .. _global-builtin-INT_MAX:
 
 .. das:attribute:: INT_MAX = 2147483647
 
- maximum possible value of 'int'
+maximum possible value of 'int'
 
 .. _global-builtin-UINT_MAX:
 
 .. das:attribute:: UINT_MAX = 0xffffffff
 
- maximum possible value of 'uint'
+maximum possible value of 'uint'
 
 .. _global-builtin-LONG_MIN:
 
 .. das:attribute:: LONG_MIN = -9223372036854775808
 
- minimum possible value of 'int64'
+minimum possible value of 'int64'
 
 .. _global-builtin-LONG_MAX:
 
 .. das:attribute:: LONG_MAX = 9223372036854775807
 
- maximum possible value of 'int64'
+maximum possible value of 'int64'
 
 .. _global-builtin-ULONG_MAX:
 
 .. das:attribute:: ULONG_MAX = 0xffffffffffffffff
 
- minimum possible value of 'uint64'
+minimum possible value of 'uint64'
 
 .. _global-builtin-FLT_MIN:
 
 .. das:attribute:: FLT_MIN = 1.1754944e-38f
 
- smallest possible non-zero value of 'float'. if u want minimum possible value use `-FLT_MAX`
+smallest possible non-zero value of 'float'. if u want minimum possible value use `-FLT_MAX`
 
 .. _global-builtin-FLT_MAX:
 
 .. das:attribute:: FLT_MAX = 3.4028235e+38f
 
- maximum possible value of 'float'
+maximum possible value of 'float'
 
 .. _global-builtin-DBL_MIN:
 
 .. das:attribute:: DBL_MIN = 2.2250738585072014e-308lf
 
- smallest possible non-zero value of 'double'. if u want minimum possible value use `-DBL_MAX`
+smallest possible non-zero value of 'double'. if u want minimum possible value use `-DBL_MAX`
 
 .. _global-builtin-DBL_MAX:
 
 .. das:attribute:: DBL_MAX = 1.7976931348623157e+308lf
 
- maximum possible value of 'double'
+maximum possible value of 'double'
 
 .. _global-builtin-LOG_CRITICAL:
 
 .. das:attribute:: LOG_CRITICAL = 50000
 
- indicates maximum log level. critial errors, panic, shutdown
+indicates maximum log level. critial errors, panic, shutdown
 
 .. _global-builtin-LOG_ERROR:
 
 .. das:attribute:: LOG_ERROR = 40000
 
- indicates log level recoverable errors
+indicates log level recoverable errors
 
 .. _global-builtin-LOG_WARNING:
 
 .. das:attribute:: LOG_WARNING = 30000
 
- indicates log level for API misuse, non-fatal errors
+indicates log level for API misuse, non-fatal errors
 
 .. _global-builtin-LOG_INFO:
 
 .. das:attribute:: LOG_INFO = 20000
 
- indicates log level for miscellaneous informative messages
+indicates log level for miscellaneous informative messages
 
 .. _global-builtin-LOG_DEBUG:
 
 .. das:attribute:: LOG_DEBUG = 10000
 
- indicates log level for debug messages
+indicates log level for debug messages
 
 .. _global-builtin-LOG_TRACE:
 
 .. das:attribute:: LOG_TRACE = 0
 
- indicates log level for the most noisy debug and tracing messages
+indicates log level for the most noisy debug and tracing messages
 
 .. _global-builtin-VEC_SEP:
 
 .. das:attribute:: VEC_SEP = ","
 
- Read-only string constant which is used to separate elements of vectors. By default its ","
+Read-only string constant which is used to separate elements of vectors. By default its ","
 
 .. _global-builtin-print_flags_debugger:
 
 .. das:attribute:: print_flags_debugger = bitfield(0xf)
 
- printing flags similar to those used by the 'debug' function
+printing flags similar to those used by the 'debug' function
 
 ++++++++++++++++++
 Handled structures
@@ -158,7 +191,7 @@ Handled structures
 
 .. das:attribute:: HashBuilder
 
- Helper structure to facilitate calculating hash values.
+Helper structure to facilitate calculating hash values.
 
 
 ++++++++++++++++++++
@@ -169,193 +202,193 @@ Function annotations
 
 .. das:attribute:: marker
 
- marker annotation is used to attach arbitrary marker values to a function (in form of annotation arguments). its typically used for implementation of macros
+marker annotation is used to attach arbitrary marker values to a function (in form of annotation arguments). its typically used for implementation of macros
 
 .. _handle-builtin-generic:
 
 .. das:attribute:: generic
 
- indicates that the function is generic, regardless of its argument types. generic functions will be instanced in the calling module
+indicates that the function is generic, regardless of its argument types. generic functions will be instanced in the calling module
 
 .. _handle-builtin-_macro:
 
 .. das:attribute:: _macro
 
- indicates that the function will be called during the macro pass, similar to `[init]`
+indicates that the function will be called during the macro pass, similar to `[init]`
 
 .. _handle-builtin-macro_function:
 
 .. das:attribute:: macro_function
 
- indicates that the function is part of the macro implementation, and will not be present in the final compiled context, unless explicitly called.
+indicates that the function is part of the macro implementation, and will not be present in the final compiled context, unless explicitly called.
 
 .. _handle-builtin-hint:
 
 .. das:attribute:: hint
 
- Hints the compiler to use specific optimization.
+Hints the compiler to use specific optimization.
 
 .. _handle-builtin-jit:
 
 .. das:attribute:: jit
 
- Explicitly marks (forces) function to be compiled with JIT compiler.
+Explicitly marks (forces) function to be compiled with JIT compiler.
 
 .. _handle-builtin-no_jit:
 
 .. das:attribute:: no_jit
 
- Disables JIT compilation for the function.
+Disables JIT compilation for the function.
 
 .. _handle-builtin-nodiscard:
 
 .. das:attribute:: nodiscard
 
- Marks function as nodiscard. Result of the function should be used.
+Marks function as nodiscard. Result of the function should be used.
 
 .. _handle-builtin-deprecated:
 
 .. das:attribute:: deprecated
 
- deprecated annotation is used to mark a function as deprecated. it will generate a warning during compilation, and will not be callable from the final compiled context
+deprecated annotation is used to mark a function as deprecated. it will generate a warning during compilation, and will not be callable from the final compiled context
 
 .. _handle-builtin-alias_cmres:
 
 .. das:attribute:: alias_cmres
 
- indicates that function always aliases cmres (copy or move result), and cmres optimizations are disabled.
+indicates that function always aliases cmres (copy or move result), and cmres optimizations are disabled.
 
 .. _handle-builtin-never_alias_cmres:
 
 .. das:attribute:: never_alias_cmres
 
- indicates that function never aliases cmres (copy or move result), and cmres checks will not be performed
+indicates that function never aliases cmres (copy or move result), and cmres checks will not be performed
 
 .. _handle-builtin-export:
 
 .. das:attribute:: export
 
- indicates that function is to be exported to the final compiled context
+indicates that function is to be exported to the final compiled context
 
 .. _handle-builtin-pinvoke:
 
 .. das:attribute:: pinvoke
 
- indicates that the function is a pinvoke function, and will be called via pinvoke machinery
+indicates that the function is a pinvoke function, and will be called via pinvoke machinery
 
 .. _handle-builtin-no_lint:
 
 .. das:attribute:: no_lint
 
- indicates that the lint pass should be skipped for the specific function
+indicates that the lint pass should be skipped for the specific function
 
 .. _handle-builtin-sideeffects:
 
 .. das:attribute:: sideeffects
 
- indicates that the function should be treated as if it has side-effects. for example it will not be optimized out
+indicates that the function should be treated as if it has side-effects. for example it will not be optimized out
 
 .. _handle-builtin-run:
 
 .. das:attribute:: run
 
- ensures that the function is always evaluated at compilation time
+ensures that the function is always evaluated at compilation time
 
 .. _handle-builtin-unsafe_operation:
 
 .. das:attribute:: unsafe_operation
 
- indicates that function is unsafe, and will require `unsafe` keyword to be called
+indicates that function is unsafe, and will require `unsafe` keyword to be called
 
 .. _handle-builtin-unsafe_outside_of_for:
 
 .. das:attribute:: unsafe_outside_of_for
 
- Marks function as unsafe to be called outside of the sources `for` loop.
+Marks function as unsafe to be called outside of the sources `for` loop.
 
 .. _handle-builtin-unsafe_when_not_clone_array:
 
 .. das:attribute:: unsafe_when_not_clone_array
 
- Marks function as unsafe to be called outside of the `clone` of the array.
+Marks function as unsafe to be called outside of the `clone` of the array.
 
 .. _handle-builtin-no_aot:
 
 .. das:attribute:: no_aot
 
- indicates that the AOT will not be generated for this specific function
+indicates that the AOT will not be generated for this specific function
 
 .. _handle-builtin-init:
 
 .. das:attribute:: init
 
- indicates that the function would be called at the context initialization time
+indicates that the function would be called at the context initialization time
 
 .. _handle-builtin-finalize:
 
 .. das:attribute:: finalize
 
- indicates that the function would be called at the context shutdown time
+indicates that the function would be called at the context shutdown time
 
 .. _handle-builtin-hybrid:
 
 .. das:attribute:: hybrid
 
- indicates that the function is likely candidate for later patching, and the AOT will generate hybrid calls to it - instead of direct calls. that way modyfing the function will not affect AOT of other functions.
+indicates that the function is likely candidate for later patching, and the AOT will generate hybrid calls to it - instead of direct calls. that way modyfing the function will not affect AOT of other functions.
 
 .. _handle-builtin-unsafe_deref:
 
 .. das:attribute:: unsafe_deref
 
- optimization, which indicates that pointer dereference, array and string indexing, and few other operations would not check for null or bounds
+optimization, which indicates that pointer dereference, array and string indexing, and few other operations would not check for null or bounds
 
 .. _handle-builtin-skip_lock_check:
 
 .. das:attribute:: skip_lock_check
 
- optimization, which indicates that lock checks are not needed in this function.
+optimization, which indicates that lock checks are not needed in this function.
 
 .. _handle-builtin-unused_argument:
 
 .. das:attribute:: unused_argument
 
- marks function arguments, which are unused. that way when code policies make unused arguments an error, a workaround can be provided
+marks function arguments, which are unused. that way when code policies make unused arguments an error, a workaround can be provided
 
 .. _handle-builtin-local_only:
 
 .. das:attribute:: local_only
 
- indicates that function can only accept local `make` expressions, like [[make tuple]] and [[make structure]]
+indicates that function can only accept local `make` expressions, like [[make tuple]] and [[make structure]]
 
 .. _handle-builtin-expect_any_vector:
 
 .. das:attribute:: expect_any_vector
 
- indicates that function can only accept das::vector templates
+indicates that function can only accept das::vector templates
 
 .. _handle-builtin-expect_dim:
 
 .. das:attribute:: expect_dim
 
- A contract to mark function argument to be a static array.
+A contract to mark function argument to be a static array.
 
 .. _handle-builtin-expect_ref:
 
 .. das:attribute:: expect_ref
 
- A contract to mark function argument to be a reference.
+A contract to mark function argument to be a reference.
 
 .. _handle-builtin-type_function:
 
 .. das:attribute:: type_function
 
- Marks function as a type function.
+Marks function as a type function.
 
 .. _handle-builtin-builtin_array_sort:
 
 .. das:attribute:: builtin_array_sort
 
- indicates sort function for builtin 'sort' machinery. used internally
+indicates sort function for builtin 'sort' machinery. used internally
 
 +++++++++++
 Call macros
@@ -365,73 +398,73 @@ Call macros
 
 .. das:attribute:: make_function_unsafe
 
- Marks function from which this is called from as unsafe.
+Marks function from which this is called from as unsafe.
 
 .. _call-macro-builtin-concept_assert:
 
 .. das:attribute:: concept_assert
 
- similar to regular `assert` function, but always happens at compilation time. it would also display the error message from where the asserted function was called from, not the assert line itself.
+similar to regular `assert` function, but always happens at compilation time. it would also display the error message from where the asserted function was called from, not the assert line itself.
 
 .. _call-macro-builtin-__builtin_table_set_insert:
 
 .. das:attribute:: __builtin_table_set_insert
 
- part of internal implementation for `insert` of the sets (tables with keys only).
+part of internal implementation for `insert` of the sets (tables with keys only).
 
 .. _call-macro-builtin-__builtin_table_key_exists:
 
 .. das:attribute:: __builtin_table_key_exists
 
- part of internal implementation for `key_exists`
+part of internal implementation for `key_exists`
 
 .. _call-macro-builtin-static_assert:
 
 .. das:attribute:: static_assert
 
- similar to regular `assert` function, but always happens at compilation time
+similar to regular `assert` function, but always happens at compilation time
 
 .. _call-macro-builtin-verify:
 
 .. das:attribute:: verify
 
- assert for the expression with side effects. expression will not be optimized out if asserts are disabled
+assert for the expression with side effects. expression will not be optimized out if asserts are disabled
 
 .. _call-macro-builtin-debug:
 
 .. das:attribute:: debug
 
- prints value and returns that same value
+prints value and returns that same value
 
 .. _call-macro-builtin-assert:
 
 .. das:attribute:: assert
 
- throws panic if first operand is false. can be disabled. second operand is error message
+throws panic if first operand is false. can be disabled. second operand is error message
 
 .. _call-macro-builtin-memzero:
 
 .. das:attribute:: memzero
 
- initializes section of memory with '0'
+initializes section of memory with '0'
 
 .. _call-macro-builtin-__builtin_table_find:
 
 .. das:attribute:: __builtin_table_find
 
- part of internal implementation for `find`
+part of internal implementation for `find`
 
 .. _call-macro-builtin-invoke:
 
 .. das:attribute:: invoke
 
- invokes block, function, or lambda
+invokes block, function, or lambda
 
 .. _call-macro-builtin-__builtin_table_erase:
 
 .. das:attribute:: __builtin_table_erase
 
- part of internal implementation for `erase`
+part of internal implementation for `erase`
 
 +++++++++++++
 Reader macros
@@ -441,7 +474,7 @@ Reader macros
 
 .. das:attribute:: _esc
 
- returns raw string input, without regards for escape sequences. For example %_esc\\n\\r%_esc will return 4 character string '\\','n','\\','r'
+returns raw string input, without regards for escape sequences. For example %_esc\\n\\r%_esc will return 4 character string '\\','n','\\','r'
 
 +++++++++++++++
 Typeinfo macros
@@ -451,7 +484,7 @@ Typeinfo macros
 
 .. das:attribute:: rtti_classinfo
 
- Generates TypeInfo for the class initialization.
+Generates TypeInfo for the class initialization.
 
 +++++++++++++
 Handled types
@@ -461,13 +494,13 @@ Handled types
 
 .. das:attribute:: das_string
 
- das::string which is typically std::string or equivalent
+das::string which is typically std::string or equivalent
 
 .. _handle-builtin-clock:
 
 .. das:attribute:: clock
 
- das::Time which is a wrapper around `time_t`
+das::Time which is a wrapper around `time_t`
 
 ++++++++++++++++
 Structure macros
@@ -477,43 +510,43 @@ Structure macros
 
 .. das:attribute:: comment
 
- [comment] macro, which does absolutely nothing but holds arguments.
+[comment] macro, which does absolutely nothing but holds arguments.
 
 .. _handle-builtin-no_default_initializer:
 
 .. das:attribute:: no_default_initializer
 
- [no_default_initializer] specifies that structure will not have default initializer generated by the compiler.
+[no_default_initializer] specifies that structure will not have default initializer generated by the compiler.
 
 .. _handle-builtin-macro_interface:
 
 .. das:attribute:: macro_interface
 
- [macro_interface] specifies that class and its inherited children are used as a macro interfaces, and would not be exported by default.
+[macro_interface] specifies that class and its inherited children are used as a macro interfaces, and would not be exported by default.
 
 .. _handle-builtin-skip_field_lock_check:
 
 .. das:attribute:: skip_field_lock_check
 
- optimization, which indicates that the structure does not need lock checks.
+optimization, which indicates that the structure does not need lock checks.
 
 .. _handle-builtin-cpp_layout:
 
 .. das:attribute:: cpp_layout
 
- [cpp_layout] specifies that structure uses C++ memory layout rules, as oppose to native Daslang memory layout rules.
+[cpp_layout] specifies that structure uses C++ memory layout rules, as oppose to native daScript memory layout rules.
 
 .. _handle-builtin-safe_when_uninitialized:
 
 .. das:attribute:: safe_when_uninitialized
 
- Marks structure as safe to be used when uninitialized.
+Marks structure as safe to be used when uninitialized.
 
 .. _handle-builtin-persistent:
 
 .. das:attribute:: persistent
 
- [persistent] annotation specifies that structure is allocated (via new) on the C++ heap, as oppose to Daslang context heap.
+[persistent] annotation specifies that structure is allocated (via new) on the C++ heap, as oppose to daScript context heap.
 
 ++++++++++
 Containers
@@ -672,7 +705,7 @@ Containers
 
 .. das:function:: clear(array: array<anything>)
 
- clear will clear whole table or array `arg`. The size of `arg` after clear is 0.
+clear will clear whole table or array `arg`. The size of `arg` after clear is 0.
 
 :Arguments: * **array** : array implicit
 
@@ -680,7 +713,7 @@ Containers
 
 .. das:function:: length(array: array<anything>) : int
 
- length will return current size of table or array `arg`.
+length will return current size of table or array `arg`.
 
 :Arguments: * **array** : array implicit
 
@@ -688,7 +721,7 @@ Containers
 
 .. das:function:: capacity(array: array<anything>) : int
 
- capacity will return current capacity of table or array `arg`. Capacity is the count of elements, allocating (or pushing) until that size won't cause reallocating dynamic heap.
+capacity will return current capacity of table or array `arg`. Capacity is the count of elements, allocating (or pushing) until that size won't cause reallocating dynamic heap.
 
 :Arguments: * **array** : array implicit
 
@@ -696,7 +729,7 @@ Containers
 
 .. das:function:: empty(iterator: iterator implicit) : bool
 
- returns true if iterator is empty, i.e. would not produce any more values or uninitialized
+returns true if iterator is empty, i.e. would not produce any more values or uninitialized
 
 :Arguments: * **iterator** : iterator implicit
 
@@ -704,7 +737,7 @@ Containers
 
 .. das:function:: length(table: table<anything, anything>) : int
 
- length will return current size of table or array `arg`.
+length will return current size of table or array `arg`.
 
 :Arguments: * **table** : table implicit
 
@@ -712,7 +745,7 @@ Containers
 
 .. das:function:: capacity(table: table<anything, anything>) : int
 
- capacity will return current capacity of table or array `arg`. Capacity is the count of elements, allocating (or pushing) until that size won't cause reallocating dynamic heap.
+capacity will return current capacity of table or array `arg`. Capacity is the count of elements, allocating (or pushing) until that size won't cause reallocating dynamic heap.
 
 :Arguments: * **table** : table implicit
 
@@ -720,7 +753,7 @@ Containers
 
 .. das:function:: empty(str: string implicit) : bool
 
- returns true if iterator is empty, i.e. would not produce any more values or uninitialized
+returns true if iterator is empty, i.e. would not produce any more values or uninitialized
 
 :Arguments: * **str** : string implicit
 
@@ -728,7 +761,7 @@ Containers
 
 .. das:function:: empty(str: das_string implicit) : bool
 
- returns true if iterator is empty, i.e. would not produce any more values or uninitialized
+returns true if iterator is empty, i.e. would not produce any more values or uninitialized
 
 :Arguments: * **str** :  :ref:`das_string <handle-builtin-das_string>`  implicit
 
@@ -736,7 +769,7 @@ Containers
 
 .. das:function:: resize(Arr: array<auto(numT)>; newSize: int) : auto
 
- Resize will resize `array_arg` array to a new size of `new_size`. If new_size is bigger than current, new elements will be zeroed.
+Resize will resize `array_arg` array to a new size of `new_size`. If new_size is bigger than current, new elements will be zeroed.
 
 :Arguments: * **Arr** : array<auto(numT)>
 
@@ -746,7 +779,7 @@ Containers
 
 .. das:function:: resize_and_init(Arr: array<auto(numT)>; newSize: int) : auto
 
- Resizes array and initializes new elements.
+Resizes array and initializes new elements.
 
 :Arguments: * **Arr** : array<auto(numT)>
 
@@ -756,7 +789,7 @@ Containers
 
 .. das:function:: resize_and_init(Arr: array<auto(numT)>; newSize: int; initValue: numT) : auto
 
- Resizes array and initializes new elements.
+Resizes array and initializes new elements.
 
 :Arguments: * **Arr** : array<auto(numT)>
 
@@ -768,7 +801,7 @@ Containers
 
 .. das:function:: resize_no_init(Arr: array<auto(numT)>; newSize: int) : auto
 
- Resize will resize `array_arg` array to a new size of `new_size`. If new_size is bigger than current, new elements will be left uninitialized.
+Resize will resize `array_arg` array to a new size of `new_size`. If new_size is bigger than current, new elements will be left uninitialized.
 
 :Arguments: * **Arr** : array<auto(numT)>
 
@@ -778,7 +811,7 @@ Containers
 
 .. das:function:: reserve(Arr: array<auto(numT)>; newSize: int) : auto
 
- makes sure array has sufficient amount of memory to hold specified number of elements. reserving arrays will speed up pushing to it
+makes sure array has sufficient amount of memory to hold specified number of elements. reserving arrays will speed up pushing to it
 
 :Arguments: * **Arr** : array<auto(numT)>
 
@@ -788,7 +821,7 @@ Containers
 
 .. das:function:: pop(Arr: array<auto(numT)>) : auto
 
- removes last element of the array
+removes last element of the array
 
 :Arguments: * **Arr** : array<auto(numT)>
 
@@ -796,7 +829,7 @@ Containers
 
 .. das:function:: push(Arr: array<auto(numT)>; value: numT ==const; at: int) : auto
 
- push will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be copied (assigned) to it.
+push will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be copied (assigned) to it.
 
 :Arguments: * **Arr** : array<auto(numT)>
 
@@ -808,7 +841,7 @@ Containers
 
 .. das:function:: push(Arr: array<auto(numT)>; value: numT ==const; at: int) : auto
 
- push will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be copied (assigned) to it.
+push will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be copied (assigned) to it.
 
 :Arguments: * **Arr** : array<auto(numT)>
 
@@ -820,7 +853,7 @@ Containers
 
 .. das:function:: push(Arr: array<auto(numT)>; value: numT ==const) : auto
 
- push will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be copied (assigned) to it.
+push will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be copied (assigned) to it.
 
 :Arguments: * **Arr** : array<auto(numT)>
 
@@ -830,7 +863,7 @@ Containers
 
 .. das:function:: push(Arr: array<auto(numT)>; value: numT ==const) : auto
 
- push will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be copied (assigned) to it.
+push will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be copied (assigned) to it.
 
 :Arguments: * **Arr** : array<auto(numT)>
 
@@ -840,7 +873,7 @@ Containers
 
 .. das:function:: push(Arr: array<auto(numT)>; varr: array<numT>) : auto
 
- push will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be copied (assigned) to it.
+push will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be copied (assigned) to it.
 
 :Arguments: * **Arr** : array<auto(numT)>
 
@@ -850,7 +883,7 @@ Containers
 
 .. das:function:: push(Arr: array<auto(numT)>; varr: array<numT>) : auto
 
- push will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be copied (assigned) to it.
+push will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be copied (assigned) to it.
 
 :Arguments: * **Arr** : array<auto(numT)>
 
@@ -860,7 +893,7 @@ Containers
 
 .. das:function:: push(Arr: array<auto(numT)>; varr: numT[]) : auto
 
- push will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be copied (assigned) to it.
+push will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be copied (assigned) to it.
 
 :Arguments: * **Arr** : array<auto(numT)>
 
@@ -870,7 +903,7 @@ Containers
 
 .. das:function:: push(Arr: array<auto(numT)[]>; varr: numT const[] ==const) : auto
 
- push will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be copied (assigned) to it.
+push will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be copied (assigned) to it.
 
 :Arguments: * **Arr** : array<auto(numT)[-1]>
 
@@ -880,7 +913,7 @@ Containers
 
 .. das:function:: push(Arr: array<auto(numT)[]>; varr: numT[] ==const) : auto
 
- push will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be copied (assigned) to it.
+push will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be copied (assigned) to it.
 
 :Arguments: * **Arr** : array<auto(numT)[-1]>
 
@@ -890,7 +923,7 @@ Containers
 
 .. das:function:: emplace(Arr: array<auto(numT)>; value: numT&; at: int) : auto
 
- emplace will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be moved (<-) to it.
+emplace will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be moved (<-) to it.
 
 :Arguments: * **Arr** : array<auto(numT)>
 
@@ -902,7 +935,7 @@ Containers
 
 .. das:function:: emplace(Arr: array<auto(numT)>; value: numT&) : auto
 
- emplace will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be moved (<-) to it.
+emplace will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be moved (<-) to it.
 
 :Arguments: * **Arr** : array<auto(numT)>
 
@@ -912,7 +945,7 @@ Containers
 
 .. das:function:: emplace(Arr: array<auto(numT)>; value: numT[]) : auto
 
- emplace will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be moved (<-) to it.
+emplace will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be moved (<-) to it.
 
 :Arguments: * **Arr** : array<auto(numT)>
 
@@ -922,7 +955,7 @@ Containers
 
 .. das:function:: emplace(Arr: array<auto(numT)[]>; value: numT[]) : auto
 
- emplace will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be moved (<-) to it.
+emplace will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be moved (<-) to it.
 
 :Arguments: * **Arr** : array<auto(numT)[-1]>
 
@@ -932,7 +965,7 @@ Containers
 
 .. das:function:: push_clone(Arr: array<auto(numT)>; value: numT ==const|numT const# ==const; at: int) : auto
 
- similar to `push`, only values would be cloned instead of copied
+similar to `push`, only values would be cloned instead of copied
 
 :Arguments: * **Arr** : array<auto(numT)>
 
@@ -944,7 +977,7 @@ Containers
 
 .. das:function:: push_clone(Arr: array<auto(numT)>; value: numT ==const|numT# ==const; at: int) : auto
 
- similar to `push`, only values would be cloned instead of copied
+similar to `push`, only values would be cloned instead of copied
 
 :Arguments: * **Arr** : array<auto(numT)>
 
@@ -956,7 +989,7 @@ Containers
 
 .. das:function:: push_clone(Arr: array<auto(numT)>; value: numT ==const|numT const# ==const) : auto
 
- similar to `push`, only values would be cloned instead of copied
+similar to `push`, only values would be cloned instead of copied
 
 :Arguments: * **Arr** : array<auto(numT)>
 
@@ -966,7 +999,7 @@ Containers
 
 .. das:function:: push_clone(Arr: array<auto(numT)>; value: numT ==const|numT# ==const) : auto
 
- similar to `push`, only values would be cloned instead of copied
+similar to `push`, only values would be cloned instead of copied
 
 :Arguments: * **Arr** : array<auto(numT)>
 
@@ -976,7 +1009,7 @@ Containers
 
 .. das:function:: push_clone(Arr: array<auto(numT)>; varr: numT const[] ==const) : auto
 
- similar to `push`, only values would be cloned instead of copied
+similar to `push`, only values would be cloned instead of copied
 
 :Arguments: * **Arr** : array<auto(numT)>
 
@@ -986,7 +1019,7 @@ Containers
 
 .. das:function:: push_clone(Arr: array<auto(numT)>; varr: numT[] ==const) : auto
 
- similar to `push`, only values would be cloned instead of copied
+similar to `push`, only values would be cloned instead of copied
 
 :Arguments: * **Arr** : array<auto(numT)>
 
@@ -996,7 +1029,7 @@ Containers
 
 .. das:function:: push_clone(Arr: array<auto(numT)[]>; varr: numT const[] ==const) : auto
 
- similar to `push`, only values would be cloned instead of copied
+similar to `push`, only values would be cloned instead of copied
 
 :Arguments: * **Arr** : array<auto(numT)[-1]>
 
@@ -1006,7 +1039,7 @@ Containers
 
 .. das:function:: push_clone(Arr: array<auto(numT)[]>; varr: numT[]) : auto
 
- similar to `push`, only values would be cloned instead of copied
+similar to `push`, only values would be cloned instead of copied
 
 :Arguments: * **Arr** : array<auto(numT)[-1]>
 
@@ -1016,7 +1049,7 @@ Containers
 
 .. das:function:: push_clone(A: auto(CT); b: auto(TT)|auto(TT)#) : auto
 
- similar to `push`, only values would be cloned instead of copied
+similar to `push`, only values would be cloned instead of copied
 
 :Arguments: * **A** : auto(CT)
 
@@ -1026,7 +1059,7 @@ Containers
 
 .. das:function:: back(a: array<auto(TT)>) : TT&
 
- returns last element of the array
+returns last element of the array
 
 :Arguments: * **a** : array<auto(TT)>!
 
@@ -1034,7 +1067,7 @@ Containers
 
 .. das:function:: back(a: array<auto(TT)>#) : TT&#
 
- returns last element of the array
+returns last element of the array
 
 :Arguments: * **a** : array<auto(TT)>#!
 
@@ -1042,7 +1075,7 @@ Containers
 
 .. das:function:: back(a: array<auto(TT)>) : TT
 
- returns last element of the array
+returns last element of the array
 
 :Arguments: * **a** : array<auto(TT)>!
 
@@ -1050,7 +1083,7 @@ Containers
 
 .. das:function:: back(a: array<auto(TT)>#) : TT const&#
 
- returns last element of the array
+returns last element of the array
 
 :Arguments: * **a** : array<auto(TT)>#!
 
@@ -1058,7 +1091,7 @@ Containers
 
 .. das:function:: back(arr: auto(TT) ==const) : auto&
 
- returns last element of the array
+returns last element of the array
 
 :Arguments: * **arr** : auto(TT)!
 
@@ -1066,7 +1099,7 @@ Containers
 
 .. das:function:: back(arr: auto(TT) ==const) : auto
 
- returns last element of the array
+returns last element of the array
 
 :Arguments: * **arr** : auto(TT)!
 
@@ -1074,7 +1107,7 @@ Containers
 
 .. das:function:: erase(Arr: array<auto(numT)>; at: int) : auto
 
- erase will erase `at` index element in `arg` array.
+erase will erase `at` index element in `arg` array.
 
 :Arguments: * **Arr** : array<auto(numT)>
 
@@ -1084,7 +1117,7 @@ Containers
 
 .. das:function:: erase(Arr: array<auto(numT)>; at: int; count: int) : auto
 
- erase will erase `at` index element in `arg` array.
+erase will erase `at` index element in `arg` array.
 
 :Arguments: * **Arr** : array<auto(numT)>
 
@@ -1096,7 +1129,7 @@ Containers
 
 .. das:function:: erase_if(arr: array<auto(TT)>; blk: block<(key:TT const):bool>|block<(var key:TT&):bool>) : auto
 
- Erases element from the array if it satisfies the condition.
+Erases element from the array if it satisfies the condition.
 
 :Arguments: * **arr** : array<auto(TT)>
 
@@ -1106,7 +1139,7 @@ Containers
 
 .. das:function:: remove_value(arr: array<auto(TT)>|array<auto(TT)>#; key: TT) : bool
 
- removes first occurance of the key from the array.
+removes first occurance of the key from the array.
 
 :Arguments: * **arr** : option<array<auto(TT)>|array<auto(TT)>#>
 
@@ -1116,7 +1149,7 @@ Containers
 
 .. das:function:: length(a: auto|auto#) : int
 
- length will return current size of table or array `arg`.
+length will return current size of table or array `arg`.
 
 :Arguments: * **a** : option<auto|auto#>
 
@@ -1124,7 +1157,7 @@ Containers
 
 .. das:function:: empty(a: array<auto>|array<auto>#) : bool
 
- returns true if iterator is empty, i.e. would not produce any more values or uninitialized
+returns true if iterator is empty, i.e. would not produce any more values or uninitialized
 
 :Arguments: * **a** : option<array<auto>|array<auto>#>
 
@@ -1132,7 +1165,7 @@ Containers
 
 .. das:function:: empty(a: table<auto;auto>|table<auto;auto>#) : bool
 
- returns true if iterator is empty, i.e. would not produce any more values or uninitialized
+returns true if iterator is empty, i.e. would not produce any more values or uninitialized
 
 :Arguments: * **a** : option<table<auto;auto>|table<auto;auto>#>
 
@@ -1140,7 +1173,7 @@ Containers
 
 .. das:function:: reserve(Tab: table<auto(keyT), auto>; newSize: int) : auto
 
- makes sure array has sufficient amount of memory to hold specified number of elements. reserving arrays will speed up pushing to it
+makes sure array has sufficient amount of memory to hold specified number of elements. reserving arrays will speed up pushing to it
 
 :Arguments: * **Tab** : table<auto(keyT);auto>
 
@@ -1150,7 +1183,7 @@ Containers
 
 .. das:function:: get(Tab: table<auto(keyT), auto(valT)>#; at: keyT|keyT#; blk: block<(p:valT const&#):void>) : auto
 
- will execute `block_arg` with argument reference-to-value in `table_arg` referencing value indexed by `key`. Will return false if `key` doesn't exist in `table_arg`, otherwise true.
+will execute `block_arg` with argument reference-to-value in `table_arg` referencing value indexed by `key`. Will return false if `key` doesn't exist in `table_arg`, otherwise true.
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)>#!
 
@@ -1162,7 +1195,7 @@ Containers
 
 .. das:function:: get(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#; blk: block<(p:valT):void>) : auto
 
- will execute `block_arg` with argument reference-to-value in `table_arg` referencing value indexed by `key`. Will return false if `key` doesn't exist in `table_arg`, otherwise true.
+will execute `block_arg` with argument reference-to-value in `table_arg` referencing value indexed by `key`. Will return false if `key` doesn't exist in `table_arg`, otherwise true.
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)>!
 
@@ -1174,7 +1207,7 @@ Containers
 
 .. das:function:: get(Tab: table<auto(keyT), auto(valT)>#; at: keyT|keyT#; blk: block<(var p:valT&#):void>) : auto
 
- will execute `block_arg` with argument reference-to-value in `table_arg` referencing value indexed by `key`. Will return false if `key` doesn't exist in `table_arg`, otherwise true.
+will execute `block_arg` with argument reference-to-value in `table_arg` referencing value indexed by `key`. Will return false if `key` doesn't exist in `table_arg`, otherwise true.
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)>#!
 
@@ -1186,7 +1219,7 @@ Containers
 
 .. das:function:: get(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#; blk: block<(var p:valT&):void>) : auto
 
- will execute `block_arg` with argument reference-to-value in `table_arg` referencing value indexed by `key`. Will return false if `key` doesn't exist in `table_arg`, otherwise true.
+will execute `block_arg` with argument reference-to-value in `table_arg` referencing value indexed by `key`. Will return false if `key` doesn't exist in `table_arg`, otherwise true.
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)>!
 
@@ -1198,7 +1231,7 @@ Containers
 
 .. das:function:: get(Tab: table<auto(keyT), auto(valT)[]>#; at: keyT|keyT#; blk: block<(p:valT const[-2]&#):void>) : auto
 
- will execute `block_arg` with argument reference-to-value in `table_arg` referencing value indexed by `key`. Will return false if `key` doesn't exist in `table_arg`, otherwise true.
+will execute `block_arg` with argument reference-to-value in `table_arg` referencing value indexed by `key`. Will return false if `key` doesn't exist in `table_arg`, otherwise true.
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)[-1]>#!
 
@@ -1210,7 +1243,7 @@ Containers
 
 .. das:function:: get(Tab: table<auto(keyT), auto(valT)[]>; at: keyT|keyT#; blk: block<(p:valT const[-2]&):void>) : auto
 
- will execute `block_arg` with argument reference-to-value in `table_arg` referencing value indexed by `key`. Will return false if `key` doesn't exist in `table_arg`, otherwise true.
+will execute `block_arg` with argument reference-to-value in `table_arg` referencing value indexed by `key`. Will return false if `key` doesn't exist in `table_arg`, otherwise true.
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)[-1]>!
 
@@ -1222,7 +1255,7 @@ Containers
 
 .. das:function:: get(Tab: table<auto(keyT), auto(valT)[]>#; at: keyT|keyT#; blk: block<(var p:valT[-2]&#):void>) : auto
 
- will execute `block_arg` with argument reference-to-value in `table_arg` referencing value indexed by `key`. Will return false if `key` doesn't exist in `table_arg`, otherwise true.
+will execute `block_arg` with argument reference-to-value in `table_arg` referencing value indexed by `key`. Will return false if `key` doesn't exist in `table_arg`, otherwise true.
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)[-1]>#!
 
@@ -1234,7 +1267,7 @@ Containers
 
 .. das:function:: get(Tab: table<auto(keyT), auto(valT)[]>; at: keyT|keyT#; blk: block<(var p:valT[-2]&):void>) : auto
 
- will execute `block_arg` with argument reference-to-value in `table_arg` referencing value indexed by `key`. Will return false if `key` doesn't exist in `table_arg`, otherwise true.
+will execute `block_arg` with argument reference-to-value in `table_arg` referencing value indexed by `key`. Will return false if `key` doesn't exist in `table_arg`, otherwise true.
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)[-1]>!
 
@@ -1246,7 +1279,7 @@ Containers
 
 .. das:function:: get(Tab: table<auto(keyT), void>; at: keyT|keyT#; blk: block<(var p:void?):void>) : auto
 
- will execute `block_arg` with argument reference-to-value in `table_arg` referencing value indexed by `key`. Will return false if `key` doesn't exist in `table_arg`, otherwise true.
+will execute `block_arg` with argument reference-to-value in `table_arg` referencing value indexed by `key`. Will return false if `key` doesn't exist in `table_arg`, otherwise true.
 
 :Arguments: * **Tab** : table<auto(keyT);void>
 
@@ -1258,7 +1291,7 @@ Containers
 
 .. das:function:: get_value(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#) : valT
 
- gets the value from the table.
+gets the value from the table.
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)>!
 
@@ -1268,7 +1301,7 @@ Containers
 
 .. das:function:: get_value(Tab: table<auto(keyT), smart_ptr<auto(valT)>>; at: keyT|keyT#) : smart_ptr<valT>
 
- gets the value from the table.
+gets the value from the table.
 
 :Arguments: * **Tab** : table<auto(keyT);smart_ptr<auto(valT)>>
 
@@ -1278,7 +1311,7 @@ Containers
 
 .. das:function:: get_value(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#) : valT
 
- gets the value from the table.
+gets the value from the table.
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)>!
 
@@ -1288,7 +1321,7 @@ Containers
 
 .. das:function:: get_value(Tab: table<auto(keyT), auto(valT)[]>; at: keyT|keyT#) : valT[-2]
 
- gets the value from the table.
+gets the value from the table.
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)[-1]>
 
@@ -1298,7 +1331,7 @@ Containers
 
 .. das:function:: erase(Tab: table<auto(keyT), auto(valT)>; at: string#) : bool
 
- erase will erase `at` index element in `arg` array.
+erase will erase `at` index element in `arg` array.
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)>
 
@@ -1308,7 +1341,7 @@ Containers
 
 .. das:function:: erase(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#) : bool
 
- erase will erase `at` index element in `arg` array.
+erase will erase `at` index element in `arg` array.
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)>
 
@@ -1318,7 +1351,7 @@ Containers
 
 .. das:function:: insert(Tab: table<auto(keyT), void>; at: keyT|keyT#) : auto
 
- inserts key into the set (table with no values) `Tab`
+inserts key into the set (table with no values) `Tab`
 
 :Arguments: * **Tab** : table<auto(keyT);void>
 
@@ -1328,7 +1361,7 @@ Containers
 
 .. das:function:: insert_clone(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#; val: valT ==const|valT# ==const) : auto
 
- inserts cloned key into the table
+inserts cloned key into the table
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)>
 
@@ -1340,7 +1373,7 @@ Containers
 
 .. das:function:: insert_clone(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#; val: valT ==const|valT const# ==const) : auto
 
- inserts cloned key into the table
+inserts cloned key into the table
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)>
 
@@ -1352,7 +1385,7 @@ Containers
 
 .. das:function:: insert_clone(Tab: table<auto(keyT), auto(valT)[]>; at: keyT|keyT#; val: valT[] ==const|valT[]# ==const) : auto
 
- inserts cloned key into the table
+inserts cloned key into the table
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)[-1]>
 
@@ -1364,7 +1397,7 @@ Containers
 
 .. das:function:: insert_clone(Tab: table<auto(keyT), auto(valT)[]>; at: keyT|keyT#; val: valT const[] ==const|valT const[]# ==const) : auto
 
- inserts cloned key into the table
+inserts cloned key into the table
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)[-1]>
 
@@ -1376,7 +1409,7 @@ Containers
 
 .. das:function:: insert(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#; val: valT ==const|valT# ==const) : auto
 
- inserts key into the set (table with no values) `Tab`
+inserts key into the set (table with no values) `Tab`
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)>
 
@@ -1388,7 +1421,7 @@ Containers
 
 .. das:function:: insert(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#; val: valT ==const|valT const# ==const) : auto
 
- inserts key into the set (table with no values) `Tab`
+inserts key into the set (table with no values) `Tab`
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)>
 
@@ -1400,7 +1433,7 @@ Containers
 
 .. das:function:: insert(Tab: table<auto(keyT), auto(valT)[]>; at: keyT|keyT#; val: valT[] ==const|valT[]# ==const) : auto
 
- inserts key into the set (table with no values) `Tab`
+inserts key into the set (table with no values) `Tab`
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)[-1]>
 
@@ -1412,7 +1445,7 @@ Containers
 
 .. das:function:: insert(Tab: table<auto(keyT), auto(valT)[]>; at: keyT|keyT#; val: valT const[] ==const|valT const[]# ==const) : auto
 
- inserts key into the set (table with no values) `Tab`
+inserts key into the set (table with no values) `Tab`
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)[-1]>
 
@@ -1424,7 +1457,7 @@ Containers
 
 .. das:function:: emplace(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#; val: valT&) : auto
 
- emplace will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be moved (<-) to it.
+emplace will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be moved (<-) to it.
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)>
 
@@ -1436,7 +1469,7 @@ Containers
 
 .. das:function:: emplace(Tab: table<auto(keyT), smart_ptr<auto(valT)>>; at: keyT|keyT#; val: smart_ptr<valT>&) : auto
 
- emplace will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be moved (<-) to it.
+emplace will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be moved (<-) to it.
 
 :Arguments: * **Tab** : table<auto(keyT);smart_ptr<auto(valT)>>
 
@@ -1448,7 +1481,7 @@ Containers
 
 .. das:function:: emplace(Tab: table<auto(keyT), auto(valT)[]>; at: keyT|keyT#; val: valT[]&) : auto
 
- emplace will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be moved (<-) to it.
+emplace will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be moved (<-) to it.
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)[-1]>
 
@@ -1460,7 +1493,7 @@ Containers
 
 .. das:function:: emplace_new(tab: table<auto(kT), smart_ptr<auto(vT)>>; key: kT; value: smart_ptr<vT>) : auto
 
- constructs a new element in-place in the table, set, or array
+constructs a new element in-place in the table, set, or array
 
 :Arguments: * **tab** : table<auto(kT);smart_ptr<auto(vT)>>
 
@@ -1472,7 +1505,7 @@ Containers
 
 .. das:function:: emplace(Tab: table<auto, auto>; key: auto; value: auto) : auto
 
- emplace will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be moved (<-) to it.
+emplace will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be moved (<-) to it.
 
 :Arguments: * **Tab** : table<auto;auto>
 
@@ -1484,7 +1517,7 @@ Containers
 
 .. das:function:: emplace(a: array<auto>; value: auto) : auto
 
- emplace will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be moved (<-) to it.
+emplace will push to dynamic array `array_arg` the content of `value`. `value` has to be of the same type (or const reference to same type) as array values. if `at` is provided `value` will be pushed at index `at`, otherwise to the end of array. The `content` of value will be moved (<-) to it.
 
 :Arguments: * **a** : array<auto>
 
@@ -1494,7 +1527,7 @@ Containers
 
 .. das:function:: emplace_new(Arr: array<smart_ptr<auto(numT)>>; value: smart_ptr<numT>) : auto
 
- constructs a new element in-place in the table, set, or array
+constructs a new element in-place in the table, set, or array
 
 :Arguments: * **Arr** : array<smart_ptr<auto(numT)>>
 
@@ -1504,7 +1537,7 @@ Containers
 
 .. das:function:: insert_default(tab: table<auto(TT), auto(QQ)>; key: TT|TT#; value: QQ ==const|QQ# ==const)
 
- inserts key into the table or set, if it doesn't already exist
+inserts key into the table or set, if it doesn't already exist
 
 :Arguments: * **tab** : table<auto(TT);auto(QQ)>
 
@@ -1516,7 +1549,7 @@ Containers
 
 .. das:function:: insert_default(tab: table<auto(keyT), auto(valT)>; key: keyT|keyT#; value: valT ==const|valT const# ==const)
 
- inserts key into the table or set, if it doesn't already exist
+inserts key into the table or set, if it doesn't already exist
 
 :Arguments: * **tab** : table<auto(keyT);auto(valT)>
 
@@ -1528,7 +1561,7 @@ Containers
 
 .. das:function:: insert_default(tab: table<auto(keyT), auto(valT)>; key: keyT|keyT#)
 
- inserts key into the table or set, if it doesn't already exist
+inserts key into the table or set, if it doesn't already exist
 
 :Arguments: * **tab** : table<auto(keyT);auto(valT)>
 
@@ -1538,7 +1571,7 @@ Containers
 
 .. das:function:: emplace_default(tab: table<auto(keyT), auto(valT)>; key: keyT|keyT#)
 
- constructs a new default element in-place in the table, set, or array, if it doesn't already exist
+constructs a new default element in-place in the table, set, or array, if it doesn't already exist
 
 :Arguments: * **tab** : table<auto(keyT);auto(valT)>
 
@@ -1548,7 +1581,7 @@ Containers
 
 .. das:function:: get_with_default(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#; blk: block<(var p:valT&):void>)
 
- gets the value from the table, add it with a default value if it does not exist. Callback is invoked with the value.
+gets the value from the table, add it with a default value if it does not exist. Callback is invoked with the value.
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)>!
 
@@ -1560,7 +1593,7 @@ Containers
 
 .. das:function:: modify(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#; blk: block<(p:valT):valT>)
 
- modifies the value in the table, if it exists. Callback is invoked with the value.
+modifies the value in the table, if it exists. Callback is invoked with the value.
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)>!
 
@@ -1572,7 +1605,7 @@ Containers
 
 .. das:function:: key_exists(Tab: table<auto(keyT);auto(valT)>|table<auto(keyT);auto(valT)>#; at: string#) : bool
 
- will return true if element `key` exists in table `table_arg`.
+will return true if element `key` exists in table `table_arg`.
 
 :Arguments: * **Tab** : option<table<auto(keyT);auto(valT)>|table<auto(keyT);auto(valT)>#>
 
@@ -1582,7 +1615,7 @@ Containers
 
 .. das:function:: key_exists(Tab: table<auto(keyT);auto(valT)>|table<auto(keyT);auto(valT)>#; at: keyT|keyT#) : bool
 
- will return true if element `key` exists in table `table_arg`.
+will return true if element `key` exists in table `table_arg`.
 
 :Arguments: * **Tab** : option<table<auto(keyT);auto(valT)>|table<auto(keyT);auto(valT)>#>
 
@@ -1592,7 +1625,7 @@ Containers
 
 .. das:function:: copy_to_local(a: auto(TT)) : TT
 
- copies value and returns it as local value on stack. used to work around aliasing issues
+copies value and returns it as local value on stack. used to work around aliasing issues
 
 :Arguments: * **a** : auto(TT)
 
@@ -1600,7 +1633,7 @@ Containers
 
 .. das:function:: move_to_local(a: auto(TT)&) : TT
 
- moves value and returns it as local value on stack. used to work around aliasing issues
+moves value and returns it as local value on stack. used to work around aliasing issues
 
 :Arguments: * **a** : auto(TT)&
 
@@ -1608,7 +1641,7 @@ Containers
 
 .. das:function:: keys(a: table<auto(keyT);auto(valT)> ==const|table<auto(keyT);auto(valT)> const# ==const) : iterator<keyT>
 
- returns iterator to all keys of the table
+returns iterator to all keys of the table
 
 :Arguments: * **a** : option<table<auto(keyT);auto(valT)>!|table<auto(keyT);auto(valT)>#!>
 
@@ -1616,7 +1649,7 @@ Containers
 
 .. das:function:: keys(a: table<auto(keyT);auto(valT)> ==const|table<auto(keyT);auto(valT)># ==const) : iterator<keyT>
 
- returns iterator to all keys of the table
+returns iterator to all keys of the table
 
 :Arguments: * **a** : option<table<auto(keyT);auto(valT)>!|table<auto(keyT);auto(valT)>#!>
 
@@ -1624,7 +1657,7 @@ Containers
 
 .. das:function:: values(a: table<auto(keyT);void> ==const|table<auto(keyT);void> const# ==const) : auto
 
- returns iterator to all values of the table
+returns iterator to all values of the table
 
 :Arguments: * **a** : option<table<auto(keyT);void>!|table<auto(keyT);void>#!>
 
@@ -1632,7 +1665,7 @@ Containers
 
 .. das:function:: values(a: table<auto(keyT);void> ==const|table<auto(keyT);void># ==const) : auto
 
- returns iterator to all values of the table
+returns iterator to all values of the table
 
 :Arguments: * **a** : option<table<auto(keyT);void>!|table<auto(keyT);void>#!>
 
@@ -1640,7 +1673,7 @@ Containers
 
 .. das:function:: values(a: table<auto(keyT);auto(valT)> ==const|table<auto(keyT);auto(valT)> const# ==const) : iterator<valT const&>
 
- returns iterator to all values of the table
+returns iterator to all values of the table
 
 :Arguments: * **a** : option<table<auto(keyT);auto(valT)>!|table<auto(keyT);auto(valT)>#!>
 
@@ -1648,7 +1681,7 @@ Containers
 
 .. das:function:: values(a: table<auto(keyT);auto(valT)> ==const|table<auto(keyT);auto(valT)># ==const) : iterator<valT&>
 
- returns iterator to all values of the table
+returns iterator to all values of the table
 
 :Arguments: * **a** : option<table<auto(keyT);auto(valT)>!|table<auto(keyT);auto(valT)>#!>
 
@@ -1656,7 +1689,7 @@ Containers
 
 .. das:function:: values(a: table<auto(keyT);auto(valT)[]> ==const|table<auto(keyT);auto(valT)[]> const# ==const) : iterator<valT const[-2]&>
 
- returns iterator to all values of the table
+returns iterator to all values of the table
 
 :Arguments: * **a** : option<table<auto(keyT);auto(valT)[-1]>!|table<auto(keyT);auto(valT)[-1]>#!>
 
@@ -1664,7 +1697,7 @@ Containers
 
 .. das:function:: values(a: table<auto(keyT);auto(valT)[]> ==const|table<auto(keyT);auto(valT)[]># ==const) : iterator<valT[-2]&>
 
- returns iterator to all values of the table
+returns iterator to all values of the table
 
 :Arguments: * **a** : option<table<auto(keyT);auto(valT)[-1]>!|table<auto(keyT);auto(valT)[-1]>#!>
 
@@ -1672,7 +1705,7 @@ Containers
 
 .. das:function:: lock(Tab: table<auto(keyT);auto(valT)>|table<auto(keyT);auto(valT)>#; blk: block<(t:table<keyT, valT>#):void>) : auto
 
- locks array or table for the duration of the block invocation, so that it can't be resized. values can't be pushed or popped, etc.
+locks array or table for the duration of the block invocation, so that it can't be resized. values can't be pushed or popped, etc.
 
 :Arguments: * **Tab** : option<table<auto(keyT);auto(valT)>|table<auto(keyT);auto(valT)>#>
 
@@ -1682,7 +1715,7 @@ Containers
 
 .. das:function:: lock_forever(Tab: table<auto(keyT);auto(valT)>|table<auto(keyT);auto(valT)>#) : table<keyT, valT>#
 
- locks array or table forever
+locks array or table forever
 
 :Arguments: * **Tab** : option<table<auto(keyT);auto(valT)>|table<auto(keyT);auto(valT)>#>
 
@@ -1690,7 +1723,7 @@ Containers
 
 .. das:function:: next(it: iterator<auto(TT)>; value: TT&) : bool
 
- returns next element in the iterator as the 'value'. result is true if there is element returned, or false if iterator is null or empty
+returns next element in the iterator as the 'value'. result is true if there is element returned, or false if iterator is null or empty
 
 :Arguments: * **it** : iterator<auto(TT)>
 
@@ -1700,7 +1733,7 @@ Containers
 
 .. das:function:: each(rng: range) : iterator<int>
 
- returns iterator, which iterates though each element of the object. object can be range, static or dynamic array, another iterator.
+returns iterator, which iterates though each element of the object. object can be range, static or dynamic array, another iterator.
 
 :Arguments: * **rng** : range
 
@@ -1732,7 +1765,7 @@ Returns iterator over the given range.
 
 .. das:function:: each(str: string) : iterator<int>
 
- returns iterator, which iterates though each element of the object. object can be range, static or dynamic array, another iterator.
+returns iterator, which iterates though each element of the object. object can be range, static or dynamic array, another iterator.
 
 :Arguments: * **str** : string
 
@@ -1740,7 +1773,7 @@ Returns iterator over the given range.
 
 .. das:function:: each(a: auto(TT)[]) : iterator<TT&>
 
- returns iterator, which iterates though each element of the object. object can be range, static or dynamic array, another iterator.
+returns iterator, which iterates though each element of the object. object can be range, static or dynamic array, another iterator.
 
 :Arguments: * **a** : auto(TT)[-1]
 
@@ -1748,7 +1781,7 @@ Returns iterator over the given range.
 
 .. das:function:: each(a: array<auto(TT)>) : iterator<TT&>
 
- returns iterator, which iterates though each element of the object. object can be range, static or dynamic array, another iterator.
+returns iterator, which iterates though each element of the object. object can be range, static or dynamic array, another iterator.
 
 :Arguments: * **a** : array<auto(TT)>
 
@@ -1756,7 +1789,7 @@ Returns iterator over the given range.
 
 .. das:function:: each(a: array<auto(TT)>#) : iterator<TT&#>
 
- returns iterator, which iterates though each element of the object. object can be range, static or dynamic array, another iterator.
+returns iterator, which iterates though each element of the object. object can be range, static or dynamic array, another iterator.
 
 :Arguments: * **a** : array<auto(TT)>#
 
@@ -1764,7 +1797,7 @@ Returns iterator over the given range.
 
 .. das:function:: each(lam: lambda<(var arg:auto(argT)):bool>) : iterator<argT>
 
- returns iterator, which iterates though each element of the object. object can be range, static or dynamic array, another iterator.
+returns iterator, which iterates though each element of the object. object can be range, static or dynamic array, another iterator.
 
 :Arguments: * **lam** : lambda<(arg:auto(argT)):bool>
 
@@ -1772,7 +1805,7 @@ Returns iterator over the given range.
 
 .. das:function:: each_ref(lam: lambda<(var arg:auto(argT)?):bool>) : iterator<argT&>
 
- similar to each, but iterator returns references instead of values
+similar to each, but iterator returns references instead of values
 
 :Arguments: * **lam** : lambda<(arg:auto(argT)?):bool>
 
@@ -1783,7 +1816,7 @@ Returns iterator over the given range.
 .. warning:: 
   This function is deprecated.
 
- iterates over each element in the enumeration
+iterates over each element in the enumeration
 
 :Arguments: * **tt** : auto(TT)
 
@@ -1791,7 +1824,7 @@ Returns iterator over the given range.
 
 .. das:function:: nothing(it: iterator<auto(TT)>) : iterator<TT>
 
- returns empty iterator
+returns empty iterator
 
 :Arguments: * **it** : iterator<auto(TT)>
 
@@ -1799,7 +1832,7 @@ Returns iterator over the given range.
 
 .. das:function:: to_array(it: iterator<auto(TT)>) : array<TT>
 
- will convert argument (static array, iterator, another dynamic array) to an array. argument elements will be cloned
+will convert argument (static array, iterator, another dynamic array) to an array. argument elements will be cloned
 
 :Arguments: * **it** : iterator<auto(TT)>
 
@@ -1807,7 +1840,7 @@ Returns iterator over the given range.
 
 .. das:function:: to_array(a: auto(TT)[]) : array<TT>
 
- will convert argument (static array, iterator, another dynamic array) to an array. argument elements will be cloned
+will convert argument (static array, iterator, another dynamic array) to an array. argument elements will be cloned
 
 :Arguments: * **a** : auto(TT)[-1]
 
@@ -1815,7 +1848,7 @@ Returns iterator over the given range.
 
 .. das:function:: to_array_move(a: auto(TT)[]) : array<TT>
 
- will convert argument (static array, iterator, another dynamic array) to an array. argument elements will be copied or moved
+will convert argument (static array, iterator, another dynamic array) to an array. argument elements will be copied or moved
 
 :Arguments: * **a** : auto(TT)[-1]
 
@@ -1823,7 +1856,7 @@ Returns iterator over the given range.
 
 .. das:function:: to_array_move(a: auto(TT) ==const) : array<TT>
 
- will convert argument (static array, iterator, another dynamic array) to an array. argument elements will be copied or moved
+will convert argument (static array, iterator, another dynamic array) to an array. argument elements will be copied or moved
 
 :Arguments: * **a** : auto(TT)!
 
@@ -1831,7 +1864,7 @@ Returns iterator over the given range.
 
 .. das:function:: to_array_move(a: auto(TT) ==const) : array<TT>
 
- will convert argument (static array, iterator, another dynamic array) to an array. argument elements will be copied or moved
+will convert argument (static array, iterator, another dynamic array) to an array. argument elements will be copied or moved
 
 :Arguments: * **a** : auto(TT)!
 
@@ -1839,7 +1872,7 @@ Returns iterator over the given range.
 
 .. das:function:: to_table(a: tuple<auto(keyT);auto(valT)>[]) : table<keyT, valT>
 
- will convert an array of key-value tuples into a table<key;value> type. arguments will be cloned
+will convert an array of key-value tuples into a table<key;value> type. arguments will be cloned
 
 :Arguments: * **a** : tuple<auto(keyT);auto(valT)>[-1]
 
@@ -1847,7 +1880,7 @@ Returns iterator over the given range.
 
 .. das:function:: to_table(a: auto(keyT)[]) : table<keyT, void>
 
- will convert an array of key-value tuples into a table<key;value> type. arguments will be cloned
+will convert an array of key-value tuples into a table<key;value> type. arguments will be cloned
 
 :Arguments: * **a** : auto(keyT)[-1]
 
@@ -1855,7 +1888,7 @@ Returns iterator over the given range.
 
 .. das:function:: to_table_move(a: auto(keyT)[]) : table<keyT, void>
 
- will convert an array of key-value tuples into a table<key;value> type. arguments will be copied or moved
+will convert an array of key-value tuples into a table<key;value> type. arguments will be copied or moved
 
 :Arguments: * **a** : auto(keyT)[-1]
 
@@ -1863,7 +1896,7 @@ Returns iterator over the given range.
 
 .. das:function:: to_table_move(a: array<auto(keyT)>) : table<keyT, void>
 
- will convert an array of key-value tuples into a table<key;value> type. arguments will be copied or moved
+will convert an array of key-value tuples into a table<key;value> type. arguments will be copied or moved
 
 :Arguments: * **a** : array<auto(keyT)>
 
@@ -1871,7 +1904,7 @@ Returns iterator over the given range.
 
 .. das:function:: to_table_move(a: auto(keyT)) : table<keyT, void>
 
- will convert an array of key-value tuples into a table<key;value> type. arguments will be copied or moved
+will convert an array of key-value tuples into a table<key;value> type. arguments will be copied or moved
 
 :Arguments: * **a** : auto(keyT)
 
@@ -1879,7 +1912,7 @@ Returns iterator over the given range.
 
 .. das:function:: to_table_move(a: tuple<auto(keyT);auto(valT)>) : table<keyT, valT>
 
- will convert an array of key-value tuples into a table<key;value> type. arguments will be copied or moved
+will convert an array of key-value tuples into a table<key;value> type. arguments will be copied or moved
 
 :Arguments: * **a** : tuple<auto(keyT);auto(valT)>
 
@@ -1887,7 +1920,7 @@ Returns iterator over the given range.
 
 .. das:function:: to_table_move(a: tuple<auto(keyT);auto(valT)>[]) : table<keyT, valT>
 
- will convert an array of key-value tuples into a table<key;value> type. arguments will be copied or moved
+will convert an array of key-value tuples into a table<key;value> type. arguments will be copied or moved
 
 :Arguments: * **a** : tuple<auto(keyT);auto(valT)>[-1]
 
@@ -1895,7 +1928,7 @@ Returns iterator over the given range.
 
 .. das:function:: to_table_move(a: array<tuple<auto(keyT);auto(valT)>>) : table<keyT, valT>
 
- will convert an array of key-value tuples into a table<key;value> type. arguments will be copied or moved
+will convert an array of key-value tuples into a table<key;value> type. arguments will be copied or moved
 
 :Arguments: * **a** : array<tuple<auto(keyT);auto(valT)>>
 
@@ -1903,7 +1936,7 @@ Returns iterator over the given range.
 
 .. das:function:: sort(a: auto(TT)[]|auto(TT)[]#) : auto
 
- sorts an array in ascending order.
+sorts an array in ascending order.
 
 :Arguments: * **a** : option<auto(TT)[-1]|auto(TT)[-1]#>
 
@@ -1911,7 +1944,7 @@ Returns iterator over the given range.
 
 .. das:function:: sort(a: array<auto(TT)>|array<auto(TT)>#) : auto
 
- sorts an array in ascending order.
+sorts an array in ascending order.
 
 :Arguments: * **a** : option<array<auto(TT)>|array<auto(TT)>#>
 
@@ -1919,7 +1952,7 @@ Returns iterator over the given range.
 
 .. das:function:: sort(a: auto(TT)[]|auto(TT)[]#; cmp: block<(x:TT;y:TT):bool>) : auto
 
- sorts an array in ascending order.
+sorts an array in ascending order.
 
 :Arguments: * **a** : option<auto(TT)[-1]|auto(TT)[-1]#>
 
@@ -1929,7 +1962,7 @@ Returns iterator over the given range.
 
 .. das:function:: sort(a: array<auto(TT)>|array<auto(TT)>#; cmp: block<(x:TT;y:TT):bool>) : auto
 
- sorts an array in ascending order.
+sorts an array in ascending order.
 
 :Arguments: * **a** : option<array<auto(TT)>|array<auto(TT)>#>
 
@@ -1939,7 +1972,7 @@ Returns iterator over the given range.
 
 .. das:function:: lock(a: array<auto(TT)> ==const|array<auto(TT)># ==const; blk: block<(var x:array<TT>#):auto>) : auto
 
- locks array or table for the duration of the block invocation, so that it can't be resized. values can't be pushed or popped, etc.
+locks array or table for the duration of the block invocation, so that it can't be resized. values can't be pushed or popped, etc.
 
 :Arguments: * **a** : option<array<auto(TT)>!|array<auto(TT)>#!>
 
@@ -1949,7 +1982,7 @@ Returns iterator over the given range.
 
 .. das:function:: lock(a: array<auto(TT)> ==const|array<auto(TT)> const# ==const; blk: block<(x:array<TT>#):auto>) : auto
 
- locks array or table for the duration of the block invocation, so that it can't be resized. values can't be pushed or popped, etc.
+locks array or table for the duration of the block invocation, so that it can't be resized. values can't be pushed or popped, etc.
 
 :Arguments: * **a** : option<array<auto(TT)>!|array<auto(TT)>#!>
 
@@ -1959,7 +1992,7 @@ Returns iterator over the given range.
 
 .. das:function:: find_index(arr: array<auto(TT)>|array<auto(TT)>#; key: TT) : auto
 
- returns index of they key in the array
+returns index of they key in the array
 
 :Arguments: * **arr** : option<array<auto(TT)>|array<auto(TT)>#>
 
@@ -1969,7 +2002,7 @@ Returns iterator over the given range.
 
 .. das:function:: find_index(arr: auto(TT)[]|auto(TT)[]#; key: TT) : auto
 
- returns index of they key in the array
+returns index of they key in the array
 
 :Arguments: * **arr** : option<auto(TT)[-1]|auto(TT)[-1]#>
 
@@ -1979,7 +2012,7 @@ Returns iterator over the given range.
 
 .. das:function:: find_index(arr: iterator<auto(TT)>; key: TT) : auto
 
- returns index of they key in the array
+returns index of they key in the array
 
 :Arguments: * **arr** : iterator<auto(TT)>
 
@@ -1989,7 +2022,7 @@ Returns iterator over the given range.
 
 .. das:function:: find_index_if(arr: array<auto(TT)>|array<auto(TT)>#; blk: block<(key:TT):bool>) : auto
 
- returns index of the key in the array, where key is checked via compare block
+returns index of the key in the array, where key is checked via compare block
 
 :Arguments: * **arr** : option<array<auto(TT)>|array<auto(TT)>#>
 
@@ -1999,7 +2032,7 @@ Returns iterator over the given range.
 
 .. das:function:: find_index_if(arr: auto(TT)[]|auto(TT)[]#; blk: block<(key:TT):bool>) : auto
 
- returns index of the key in the array, where key is checked via compare block
+returns index of the key in the array, where key is checked via compare block
 
 :Arguments: * **arr** : option<auto(TT)[-1]|auto(TT)[-1]#>
 
@@ -2009,7 +2042,7 @@ Returns iterator over the given range.
 
 .. das:function:: find_index_if(arr: iterator<auto(TT)>; blk: block<(key:TT):bool>) : auto
 
- returns index of the key in the array, where key is checked via compare block
+returns index of the key in the array, where key is checked via compare block
 
 :Arguments: * **arr** : iterator<auto(TT)>
 
@@ -2019,7 +2052,7 @@ Returns iterator over the given range.
 
 .. das:function:: has_value(a: auto; key: auto) : auto
 
- returns true if iterable `a` (array, dim, etc) contains `key`
+returns true if iterable `a` (array, dim, etc) contains `key`
 
 :Arguments: * **a** : auto
 
@@ -2029,7 +2062,7 @@ Returns iterator over the given range.
 
 .. das:function:: has_value(a: iterator<auto>; key: auto) : auto
 
- returns true if iterable `a` (array, dim, etc) contains `key`
+returns true if iterable `a` (array, dim, etc) contains `key`
 
 :Arguments: * **a** : iterator<auto>
 
@@ -2039,7 +2072,7 @@ Returns iterator over the given range.
 
 .. das:function:: subarray(a: auto(TT)[]; r: range) : auto
 
- returns new array which is copy of a slice of range of the source array
+returns new array which is copy of a slice of range of the source array
 
 :Arguments: * **a** : auto(TT)[-1]
 
@@ -2049,7 +2082,7 @@ Returns iterator over the given range.
 
 .. das:function:: subarray(a: auto(TT)[]; r: urange) : auto
 
- returns new array which is copy of a slice of range of the source array
+returns new array which is copy of a slice of range of the source array
 
 :Arguments: * **a** : auto(TT)[-1]
 
@@ -2059,7 +2092,7 @@ Returns iterator over the given range.
 
 .. das:function:: subarray(a: array<auto(TT)>; r: range) : auto
 
- returns new array which is copy of a slice of range of the source array
+returns new array which is copy of a slice of range of the source array
 
 :Arguments: * **a** : array<auto(TT)>!
 
@@ -2069,7 +2102,7 @@ Returns iterator over the given range.
 
 .. das:function:: subarray(a: array<auto(TT)>; r: range) : auto
 
- returns new array which is copy of a slice of range of the source array
+returns new array which is copy of a slice of range of the source array
 
 :Arguments: * **a** : array<auto(TT)>!
 
@@ -2079,7 +2112,7 @@ Returns iterator over the given range.
 
 .. das:function:: subarray(a: array<auto(TT)>; r: urange) : auto
 
- returns new array which is copy of a slice of range of the source array
+returns new array which is copy of a slice of range of the source array
 
 :Arguments: * **a** : array<auto(TT)>
 
@@ -2089,7 +2122,7 @@ Returns iterator over the given range.
 
 .. das:function:: move_to_ref(a: auto&; b: auto) : auto
 
- moves `b` into `a`. if `b` is value, it will be copied to `a` instead
+moves `b` into `a`. if `b` is value, it will be copied to `a` instead
 
 :Arguments: * **a** : auto&
 
@@ -2099,7 +2132,7 @@ Returns iterator over the given range.
 
 .. das:function:: clear(t: table<auto(KT), auto(VT)>) : auto
 
- clear will clear whole table or array `arg`. The size of `arg` after clear is 0.
+clear will clear whole table or array `arg`. The size of `arg` after clear is 0.
 
 :Arguments: * **t** : table<auto(KT);auto(VT)>
 
@@ -2113,7 +2146,7 @@ das::string manipulation
 
 .. das:function:: peek(src: das_string implicit; block: block<(string#):void>)
 
- returns contents of the das::string as temporary string value. this is fastest way to access contents of das::string as string
+returns contents of the das::string as temporary string value. this is fastest way to access contents of das::string as string
 
 :Arguments: * **src** :  :ref:`das_string <handle-builtin-das_string>`  implicit
 
@@ -2140,49 +2173,49 @@ Heap reporting
 
 .. das:function:: heap_allocation_stats() : urange64
 
- Returns heap allocation statistics (bytes allocated and bytes deleted).
+Returns heap allocation statistics (bytes allocated and bytes deleted).
 
 .. _function-builtin_heap_allocation_count:
 
 .. das:function:: heap_allocation_count() : uint64
 
- Returns heap allocation count (total number of allocations).
+Returns heap allocation count (total number of allocations).
 
 .. _function-builtin_string_heap_allocation_stats:
 
 .. das:function:: string_heap_allocation_stats() : urange64
 
- Returns string heap allocation statistics (bytes allocated and bytes deleted).
+Returns string heap allocation statistics (bytes allocated and bytes deleted).
 
 .. _function-builtin_string_heap_allocation_count:
 
 .. das:function:: string_heap_allocation_count() : uint64
 
- Returns string heap allocation count (total number of allocations).
+Returns string heap allocation count (total number of allocations).
 
 .. _function-builtin_heap_bytes_allocated:
 
 .. das:function:: heap_bytes_allocated() : uint64
 
- will return bytes allocated on heap (i.e. really used, not reserved)
+will return bytes allocated on heap (i.e. really used, not reserved)
 
 .. _function-builtin_heap_depth:
 
 .. das:function:: heap_depth() : int
 
- returns number of generations in the regular heap
+returns number of generations in the regular heap
 
 .. _function-builtin_string_heap_bytes_allocated:
 
 .. das:function:: string_heap_bytes_allocated() : uint64
 
- returns number of bytes allocated in the string heap
+returns number of bytes allocated in the string heap
 
 .. _function-builtin_string_heap_depth:
 
 .. das:function:: string_heap_depth() : int
 
- returns number of generations in the string heap
+returns number of generations in the string heap
 
 .. _function-builtin_heap_collect_bool_bool:
 
@@ -2191,7 +2224,7 @@ Heap reporting
 .. warning:: 
   This is unsafe operation.
 
- calls garbage collection on the regular heap
+calls garbage collection on the regular heap
 
 :Arguments: * **string_heap** : bool
 
@@ -2201,19 +2234,19 @@ Heap reporting
 
 .. das:function:: string_heap_report()
 
- reports string heap usage and allocations
+reports string heap usage and allocations
 
 .. _function-builtin_heap_report:
 
 .. das:function:: heap_report()
 
- reports heap usage and allocations
+reports heap usage and allocations
 
 .. _function-builtin_memory_report_bool:
 
 .. das:function:: memory_report(errorsOnly: bool)
 
- reports memory allocation, optionally GC errors only
+reports memory allocation, optionally GC errors only
 
 :Arguments: * **errorsOnly** : bool
 
@@ -2231,7 +2264,7 @@ GC0 infrastructure
 
 .. das:function:: gc0_save_ptr(name: string implicit; data: void? implicit)
 
- saves pointer to gc0 storage by specifying `name`
+saves pointer to gc0 storage by specifying `name`
 
 :Arguments: * **name** : string implicit
 
@@ -2241,7 +2274,7 @@ GC0 infrastructure
 
 .. das:function:: gc0_save_smart_ptr(name: string implicit; data: smart_ptr<void> implicit)
 
- saves smart_ptr to gc0 storage by specifying `name`
+saves smart_ptr to gc0 storage by specifying `name`
 
 :Arguments: * **name** : string implicit
 
@@ -2251,7 +2284,7 @@ GC0 infrastructure
 
 .. das:function:: gc0_restore_ptr(name: string implicit) : void?
 
- restores pointer from gc0 storage by `name`
+restores pointer from gc0 storage by `name`
 
 :Arguments: * **name** : string implicit
 
@@ -2259,7 +2292,7 @@ GC0 infrastructure
 
 .. das:function:: gc0_restore_smart_ptr(name: string implicit) : smart_ptr<void>
 
- restores smart_ptr from gc0 storage `name`
+restores smart_ptr from gc0 storage `name`
 
 :Arguments: * **name** : string implicit
 
@@ -2267,7 +2300,7 @@ GC0 infrastructure
 
 .. das:function:: gc0_reset()
 
- resets gc0 storage. stored pointers will no longer be accessible
+resets gc0 storage. stored pointers will no longer be accessible
 
 ++++++++++++++++++++++++
 Smart ptr infrastructure
@@ -2289,7 +2322,7 @@ Smart ptr infrastructure
 
 .. das:function:: move_new(dest: smart_ptr<void>& implicit; src: smart_ptr<void> implicit)
 
- Moves the new [[...]] value into smart_ptr.
+Moves the new [[...]] value into smart_ptr.
 
 :Arguments: * **dest** : smart_ptr<void>& implicit
 
@@ -2299,7 +2332,7 @@ Smart ptr infrastructure
 
 .. das:function:: move(dest: smart_ptr<void>& implicit; src: void? implicit)
 
- Moves one smart_ptr into another. Semantic equivalent of move(a,b) => a := null, a <- b
+Moves one smart_ptr into another. Semantic equivalent of move(a,b) => a := null, a <- b
 
 :Arguments: * **dest** : smart_ptr<void>& implicit
 
@@ -2309,7 +2342,7 @@ Smart ptr infrastructure
 
 .. das:function:: move(dest: smart_ptr<void>& implicit; src: smart_ptr<void>& implicit)
 
- Moves one smart_ptr into another. Semantic equivalent of move(a,b) => a := null, a <- b
+Moves one smart_ptr into another. Semantic equivalent of move(a,b) => a := null, a <- b
 
 :Arguments: * **dest** : smart_ptr<void>& implicit
 
@@ -2319,7 +2352,7 @@ Smart ptr infrastructure
 
 .. das:function:: smart_ptr_clone(dest: smart_ptr<void>& implicit; src: void? implicit)
 
- clones smart_ptr, internal use-count is incremented
+clones smart_ptr, internal use-count is incremented
 
 :Arguments: * **dest** : smart_ptr<void>& implicit
 
@@ -2329,7 +2362,7 @@ Smart ptr infrastructure
 
 .. das:function:: smart_ptr_clone(dest: smart_ptr<void>& implicit; src: smart_ptr<void> implicit)
 
- clones smart_ptr, internal use-count is incremented
+clones smart_ptr, internal use-count is incremented
 
 :Arguments: * **dest** : smart_ptr<void>& implicit
 
@@ -2339,7 +2372,7 @@ Smart ptr infrastructure
 
 .. das:function:: smart_ptr_use_count(ptr: smart_ptr<void> implicit) : uint
 
- returns internal use-count for the smart_ptr
+returns internal use-count for the smart_ptr
 
 :Arguments: * **ptr** : smart_ptr<void> implicit
 
@@ -2347,7 +2380,7 @@ Smart ptr infrastructure
 
 .. das:function:: smart_ptr_is_valid(dest: smart_ptr<void> implicit) : bool
 
- checks if smart pointer points to a valid data.
+checks if smart pointer points to a valid data.
 
 :Arguments: * **dest** : smart_ptr<void> implicit
 
@@ -2355,7 +2388,7 @@ Smart ptr infrastructure
 
 .. das:function:: get_ptr(src: smart_ptr<auto(TT)> ==const) : TT?
 
- returns regular pointer from the smart_ptr
+returns regular pointer from the smart_ptr
 
 :Arguments: * **src** : smart_ptr<auto(TT)>!
 
@@ -2363,7 +2396,7 @@ Smart ptr infrastructure
 
 .. das:function:: get_ptr(src: smart_ptr<auto(TT)> ==const) : TT?
 
- returns regular pointer from the smart_ptr
+returns regular pointer from the smart_ptr
 
 :Arguments: * **src** : smart_ptr<auto(TT)>!
 
@@ -2371,7 +2404,7 @@ Smart ptr infrastructure
 
 .. das:function:: get_const_ptr(src: smart_ptr<auto(TT)>) : TT?
 
- return constant pointer from regular pointer
+return constant pointer from regular pointer
 
 :Arguments: * **src** : smart_ptr<auto(TT)>
 
@@ -2379,7 +2412,7 @@ Smart ptr infrastructure
 
 .. das:function:: add_ptr_ref(src: smart_ptr<auto(TT)>) : smart_ptr<TT>
 
- increases reference count of the smart pointer.
+increases reference count of the smart pointer.
 
 :Arguments: * **src** : smart_ptr<auto(TT)>
 
@@ -2398,19 +2431,19 @@ Macro infrastructure
 
 .. das:function:: is_compiling() : bool
 
- returns true if context is being compiled
+returns true if context is being compiled
 
 .. _function-builtin_is_compiling_macros:
 
 .. das:function:: is_compiling_macros() : bool
 
- returns true if context is being compiled and the compiler is currently executing macro pass
+returns true if context is being compiled and the compiler is currently executing macro pass
 
 .. _function-builtin_is_compiling_macros_in_module_string_implicit:
 
 .. das:function:: is_compiling_macros_in_module(name: string implicit) : bool
 
- returns true if context is being compiled, its macro pass, and its in the specific module
+returns true if context is being compiled, its macro pass, and its in the specific module
 
 :Arguments: * **name** : string implicit
 
@@ -2418,19 +2451,19 @@ Macro infrastructure
 
 .. das:function:: is_reporting_compilation_errors() : bool
 
- returns true if context failed to compile, and infer pass is reporting compilation errors
+returns true if context failed to compile, and infer pass is reporting compilation errors
 
 .. _function-builtin_is_in_completion:
 
 .. das:function:: is_in_completion() : bool
 
- returns true if compiler is currently generating completion, i.e. lexical representation of the program for the text editor's text completion system.
+returns true if compiler is currently generating completion, i.e. lexical representation of the program for the text editor's text completion system.
 
 .. _function-builtin_is_folding:
 
 .. das:function:: is_folding() : bool
 
- returns true if context is beeing folded, i.e during constant folding pass
+returns true if context is beeing folded, i.e during constant folding pass
 
 ++++++++
 Profiler
@@ -2445,25 +2478,25 @@ Profiler
 
 .. das:function:: reset_profiler()
 
- resets counters in the built-in profiler
+resets counters in the built-in profiler
 
 .. _function-builtin_dump_profile_info:
 
 .. das:function:: dump_profile_info()
 
- dumps use counts of all lines collected by built-in profiler
+dumps use counts of all lines collected by built-in profiler
 
 .. _function-builtin_collect_profile_info:
 
 .. das:function:: collect_profile_info() : string
 
- enabling collecting of the use counts by built-in profiler
+enabling collecting of the use counts by built-in profiler
 
 .. _function-builtin_profile_int_string_implicit_block_ls__c_void_gr_:
 
 .. das:function:: profile(count: int; category: string implicit; block: block<():void>) : float
 
- profiles specified block by evaluating it `count` times and returns minimal time spent in the block in seconds, as well as prints it.
+profiles specified block by evaluating it `count` times and returns minimal time spent in the block in seconds, as well as prints it.
 
 :Arguments: * **count** : int
 
@@ -2495,13 +2528,13 @@ System infastructure
 
 .. das:function:: get_das_root() : string
 
- returns path to where `daslib` and other libraries exist. this is typically root folder of the Daslang main repository
+returns path to where `daslib` and other libraries exist. this is typically root folder of the daScript main repository
 
 .. _function-builtin_panic_string_implicit:
 
 .. das:function:: panic(text: string implicit)
 
- will cause panic. The program will be determinated if there is no recover. Panic is not a error handling mechanism and can not be used as such. It is indeed panic, fatal error. It is not supposed that program can completely correctly recover from panic, recover construction is provided so program can try to correcly shut-down or report fatal error. If there is no recover withing script, it will be called in calling eval (in C++ callee code).
+will cause panic. The program will be determinated if there is no recover. Panic is not a error handling mechanism and can not be used as such. It is indeed panic, fatal error. It is not supposed that program can completely correctly recover from panic, recover construction is provided so program can try to correcly shut-down or report fatal error. If there is no recover withing script, it will be called in calling eval (in C++ callee code).
 
 :Arguments: * **text** : string implicit
 
@@ -2509,7 +2542,7 @@ System infastructure
 
 .. das:function:: print(text: string implicit)
 
- outputs string into current context log output
+outputs string into current context log output
 
 :Arguments: * **text** : string implicit
 
@@ -2517,7 +2550,7 @@ System infastructure
 
 .. das:function:: error(text: string implicit)
 
- similar to 'print' but outputs to context error output
+similar to 'print' but outputs to context error output
 
 :Arguments: * **text** : string implicit
 
@@ -2525,7 +2558,7 @@ System infastructure
 
 .. das:function:: sprint(value: any; flags: print_flags) : string
 
- similar to 'print' but returns string instead of printing it
+similar to 'print' but returns string instead of printing it
 
 :Arguments: * **value** : any
 
@@ -2535,7 +2568,7 @@ System infastructure
 
 .. das:function:: sprint_json(value: any; humanReadable: bool) : string
 
- similar to 'write_json' but skips intermediate representation. this is faster but less flexible
+similar to 'write_json' but skips intermediate representation. this is faster but less flexible
 
 :Arguments: * **value** : any
 
@@ -2545,19 +2578,19 @@ System infastructure
 
 .. das:function:: terminate()
 
- terminates current context execution
+terminates current context execution
 
 .. _function-builtin_breakpoint:
 
 .. das:function:: breakpoint()
 
- breakpoint will call os_debugbreakpoint, which is link-time unresolved dependency. It's supposed to call breakpoint in debugger tool, as sample implementation does.
+breakpoint will call os_debugbreakpoint, which is link-time unresolved dependency. It's supposed to call breakpoint in debugger tool, as sample implementation does.
 
 .. _function-builtin_stackwalk_bool_bool:
 
 .. das:function:: stackwalk(args: bool = true; vars: bool = true)
 
- stackwalk prints call stack and local variables values
+stackwalk prints call stack and local variables values
 
 :Arguments: * **args** : bool
 
@@ -2567,19 +2600,19 @@ System infastructure
 
 .. das:function:: is_intern_strings() : bool
 
- returns true if string interning is enabled
+returns true if string interning is enabled
 
 .. _function-builtin_is_in_aot:
 
 .. das:function:: is_in_aot() : bool
 
- returns true if compiler is currently generating AOT
+returns true if compiler is currently generating AOT
 
 .. _function-builtin_to_log_int_string_implicit:
 
 .. das:function:: to_log(level: int; text: string implicit)
 
- similar to print but output goes to the logging infrastructure. `arg0` specifies log level, i.e. LOG_... constants
+similar to print but output goes to the logging infrastructure. `arg0` specifies log level, i.e. LOG_... constants
 
 :Arguments: * **level** : int
 
@@ -2589,7 +2622,7 @@ System infastructure
 
 .. das:function:: to_compiler_log(text: string implicit)
 
- Output text to compiler log, usually from the macro.
+Output text to compiler log, usually from the macro.
 
 :Arguments: * **text** : string implicit
 
@@ -2597,7 +2630,7 @@ System infastructure
 
 .. das:function:: eval_main_loop(block: block<():void>)
 
- executes main loop for the application. has specific implementation in EMSCRIPTEN, otherwise invoke until false.
+executes main loop for the application. has specific implementation in EMSCRIPTEN, otherwise invoke until false.
 
 :Arguments: * **block** : block<void> implicit
 
@@ -2605,7 +2638,7 @@ System infastructure
 
 .. das:function:: aot_enabled() : bool
 
- Returns true if AOT is enabled.
+Returns true if AOT is enabled.
 
 +++++++++++++++++++
 Memory manipulation
@@ -2640,7 +2673,7 @@ Memory manipulation
 
 .. das:function:: variant_index(arg0: variant<> implicit) : int
 
- returns internal index of the variant value
+returns internal index of the variant value
 
 :Arguments: * **arg0** : variant<> implicit
 
@@ -2651,7 +2684,7 @@ Memory manipulation
 .. warning:: 
   This is unsafe operation.
 
- sets internal index of the variant value
+sets internal index of the variant value
 
 :Arguments: * **variant** : variant<> implicit
 
@@ -2661,7 +2694,7 @@ Memory manipulation
 
 .. das:function:: hash(data: any) : uint64
 
- returns hash value of the `data`. current implementation uses FNV64a hash.
+returns hash value of the `data`. current implementation uses FNV64a hash.
 
 :Arguments: * **data** : any
 
@@ -2669,7 +2702,7 @@ Memory manipulation
 
 .. das:function:: hash(data: string implicit) : uint64
 
- returns hash value of the `data`. current implementation uses FNV64a hash.
+returns hash value of the `data`. current implementation uses FNV64a hash.
 
 :Arguments: * **data** : string implicit
 
@@ -2677,7 +2710,7 @@ Memory manipulation
 
 .. das:function:: hash(value: int8) : uint64
 
- returns hash value of the `data`. current implementation uses FNV64a hash.
+returns hash value of the `data`. current implementation uses FNV64a hash.
 
 :Arguments: * **value** : int8
 
@@ -2685,7 +2718,7 @@ Memory manipulation
 
 .. das:function:: hash(value: uint8) : uint64
 
- returns hash value of the `data`. current implementation uses FNV64a hash.
+returns hash value of the `data`. current implementation uses FNV64a hash.
 
 :Arguments: * **value** : uint8
 
@@ -2693,7 +2726,7 @@ Memory manipulation
 
 .. das:function:: hash(value: int16) : uint64
 
- returns hash value of the `data`. current implementation uses FNV64a hash.
+returns hash value of the `data`. current implementation uses FNV64a hash.
 
 :Arguments: * **value** : int16
 
@@ -2701,7 +2734,7 @@ Memory manipulation
 
 .. das:function:: hash(value: uint16) : uint64
 
- returns hash value of the `data`. current implementation uses FNV64a hash.
+returns hash value of the `data`. current implementation uses FNV64a hash.
 
 :Arguments: * **value** : uint16
 
@@ -2709,7 +2742,7 @@ Memory manipulation
 
 .. das:function:: hash(value: int) : uint64
 
- returns hash value of the `data`. current implementation uses FNV64a hash.
+returns hash value of the `data`. current implementation uses FNV64a hash.
 
 :Arguments: * **value** : int
 
@@ -2717,7 +2750,7 @@ Memory manipulation
 
 .. das:function:: hash(value: uint) : uint64
 
- returns hash value of the `data`. current implementation uses FNV64a hash.
+returns hash value of the `data`. current implementation uses FNV64a hash.
 
 :Arguments: * **value** : uint
 
@@ -2725,7 +2758,7 @@ Memory manipulation
 
 .. das:function:: hash(value: int64) : uint64
 
- returns hash value of the `data`. current implementation uses FNV64a hash.
+returns hash value of the `data`. current implementation uses FNV64a hash.
 
 :Arguments: * **value** : int64
 
@@ -2733,7 +2766,7 @@ Memory manipulation
 
 .. das:function:: hash(value: uint64) : uint64
 
- returns hash value of the `data`. current implementation uses FNV64a hash.
+returns hash value of the `data`. current implementation uses FNV64a hash.
 
 :Arguments: * **value** : uint64
 
@@ -2741,7 +2774,7 @@ Memory manipulation
 
 .. das:function:: hash(value: void? implicit) : uint64
 
- returns hash value of the `data`. current implementation uses FNV64a hash.
+returns hash value of the `data`. current implementation uses FNV64a hash.
 
 :Arguments: * **value** : void? implicit
 
@@ -2749,7 +2782,7 @@ Memory manipulation
 
 .. das:function:: hash(value: float) : uint64
 
- returns hash value of the `data`. current implementation uses FNV64a hash.
+returns hash value of the `data`. current implementation uses FNV64a hash.
 
 :Arguments: * **value** : float
 
@@ -2757,7 +2790,7 @@ Memory manipulation
 
 .. das:function:: hash(value: double) : uint64
 
- returns hash value of the `data`. current implementation uses FNV64a hash.
+returns hash value of the `data`. current implementation uses FNV64a hash.
 
 :Arguments: * **value** : double
 
@@ -2765,7 +2798,7 @@ Memory manipulation
 
 .. das:function:: hash(value: das_string implicit) : uint64
 
- returns hash value of the `data`. current implementation uses FNV64a hash.
+returns hash value of the `data`. current implementation uses FNV64a hash.
 
 :Arguments: * **value** :  :ref:`das_string <handle-builtin-das_string>`  implicit
 
@@ -2776,7 +2809,7 @@ Memory manipulation
 .. warning:: 
   This is unsafe operation.
 
- copies `size` bytes of memory from `right` to `left`
+copies `size` bytes of memory from `right` to `left`
 
 :Arguments: * **left** : void? implicit
 
@@ -2791,7 +2824,7 @@ Memory manipulation
 .. warning:: 
   This is unsafe operation.
 
- similar to C 'memcmp', compares `size` bytes of `left`` and `right` memory. returns -1 if left is less, 1 if left is greater, and 0 if left is same as right
+similar to C 'memcmp', compares `size` bytes of `left`` and `right` memory. returns -1 if left is less, 1 if left is greater, and 0 if left is same as right
 
 :Arguments: * **left** : void? implicit
 
@@ -2803,7 +2836,7 @@ Memory manipulation
 
 .. das:function:: intptr(p: void?) : uint64
 
- returns int64 representation of a pointer
+returns int64 representation of a pointer
 
 :Arguments: * **p** : void?
 
@@ -2811,7 +2844,7 @@ Memory manipulation
 
 .. das:function:: intptr(p: smart_ptr<auto>) : uint64
 
- returns int64 representation of a pointer
+returns int64 representation of a pointer
 
 :Arguments: * **p** : smart_ptr<auto>
 
@@ -2819,7 +2852,7 @@ Memory manipulation
 
 .. das:function:: lock_data(a: array<auto(TT)> ==const|array<auto(TT)># ==const; blk: block<(var p:TT?#;s:int):auto>) : auto
 
- locks array and invokes block with a pointer to array's data
+locks array and invokes block with a pointer to array's data
 
 :Arguments: * **a** : option<array<auto(TT)>!|array<auto(TT)>#!>
 
@@ -2829,7 +2862,7 @@ Memory manipulation
 
 .. das:function:: lock_data(a: array<auto(TT)> ==const|array<auto(TT)> const# ==const; blk: block<(p:TT const?#;s:int):auto>) : auto
 
- locks array and invokes block with a pointer to array's data
+locks array and invokes block with a pointer to array's data
 
 :Arguments: * **a** : option<array<auto(TT)>!|array<auto(TT)>#!>
 
@@ -2842,7 +2875,7 @@ Memory manipulation
 .. warning:: 
   This is unsafe operation.
 
- builds temporary array from the specified memory
+builds temporary array from the specified memory
 
 :Arguments: * **data** : void?
 
@@ -2857,7 +2890,7 @@ Memory manipulation
 .. warning:: 
   This is unsafe operation.
 
- same as `map_to_array` but array is read-only
+same as `map_to_array` but array is read-only
 
 :Arguments: * **data** : void?
 
@@ -2876,7 +2909,7 @@ Binary serializer
 
 .. das:function:: binary_save(obj: auto; subexpr: block<(data:array<uint8>#):void>) : auto
 
- saves any data to array<uint8>. obsolete, use daslib/archive instead
+saves any data to array<uint8>. obsolete, use daslib/archive instead
 
 :Arguments: * **obj** : auto
 
@@ -2886,7 +2919,7 @@ Binary serializer
 
 .. das:function:: binary_load(obj: auto; data: array<uint8>) : auto
 
- loads any data from array<uint8>. obsolete, use daslib/archive instead
+loads any data from array<uint8>. obsolete, use daslib/archive instead
 
 :Arguments: * **obj** : auto
 
@@ -2902,7 +2935,7 @@ Path and command line
 
 .. das:function:: get_command_line_arguments() : array<string>
 
- returns array of command line arguments.
+returns array of command line arguments.
 
 +++++++++++++
 Time and date
@@ -2918,13 +2951,13 @@ Time and date
 
 .. das:function:: get_clock() : clock
 
- return a current calendar time. The value returned generally represents the number of seconds since 00:00 hours, Jan 1, 1970 UTC (i.e., the current unix timestamp).
+return a current calendar time. The value returned generally represents the number of seconds since 00:00 hours, Jan 1, 1970 UTC (i.e., the current unix timestamp).
 
 .. _function-builtin_mktime_int_int_int_int_int_int:
 
 .. das:function:: mktime(year: int; month: int; mday: int; hour: int; min: int; sec: int) : clock
 
- Converts calendar time to time since epoch.
+Converts calendar time to time since epoch.
 
 :Arguments: * **year** : int
 
@@ -2942,13 +2975,13 @@ Time and date
 
 .. das:function:: ref_time_ticks() : int64
 
- returns current time in ticks
+returns current time in ticks
 
 .. _function-builtin_get_time_usec_int64:
 
 .. das:function:: get_time_usec(ref: int64) : int
 
- returns time interval in usec, since the specified `reft` (usually from `ref_time_ticks`)
+returns time interval in usec, since the specified `reft` (usually from `ref_time_ticks`)
 
 :Arguments: * **ref** : int64
 
@@ -2956,7 +2989,7 @@ Time and date
 
 .. das:function:: get_time_nsec(ref: int64) : int64
 
- returns time interval in nsec, since the specified `reft` (usually from `ref_time_ticks`)
+returns time interval in nsec, since the specified `reft` (usually from `ref_time_ticks`)
 
 :Arguments: * **ref** : int64
 
@@ -2972,7 +3005,7 @@ Lock checking
 
 .. das:function:: lock_count(array: array<anything>) : int
 
- returns internal lock count for the array or table
+returns internal lock count for the array or table
 
 :Arguments: * **array** : array implicit
 
@@ -2983,7 +3016,7 @@ Lock checking
 .. warning:: 
   This is unsafe operation.
 
- runtime optimization, which indicates that the array does not need lock checks.
+runtime optimization, which indicates that the array does not need lock checks.
 
 :Arguments: * **array** : array implicit
 
@@ -2996,7 +3029,7 @@ Lock checking
 .. warning:: 
   This is unsafe operation.
 
- runtime optimization, which indicates that the table does not need lock checks.
+runtime optimization, which indicates that the table does not need lock checks.
 
 :Arguments: * **table** : table implicit
 
@@ -3015,7 +3048,7 @@ Lock checking internals
 
 .. das:function:: _move_with_lockcheck(a: auto(valA)&; b: auto(valB)&) : auto
 
- moves `b` into `a`, checks if `a` or `b` is locked, recursively for each lockable element of a and b
+moves `b` into `a`, checks if `a` or `b` is locked, recursively for each lockable element of a and b
 
 :Arguments: * **a** : auto(valA)&
 
@@ -3025,7 +3058,7 @@ Lock checking internals
 
 .. das:function:: _return_with_lockcheck(a: auto(valT)& ==const) : auto&
 
- returns `a`. check if `a` is locked, recursively for each lockable element of a
+returns `a`. check if `a` is locked, recursively for each lockable element of a
 
 :Arguments: * **a** : auto(valT)&!
 
@@ -3033,7 +3066,7 @@ Lock checking internals
 
 .. das:function:: _return_with_lockcheck(a: auto(valT) const& ==const) : auto&
 
- returns `a`. check if `a` is locked, recursively for each lockable element of a
+returns `a`. check if `a` is locked, recursively for each lockable element of a
 
 :Arguments: * **a** : auto(valT)&!
 
@@ -3041,7 +3074,7 @@ Lock checking internals
 
 .. das:function:: _at_with_lockcheck(Tab: table<auto(keyT), auto(valT)>; at: keyT|keyT#) : valT&
 
- returns element of the table `Tab`, also checks if `Tab` is locked, recursively for each lockable element of `Tab`
+returns element of the table `Tab`, also checks if `Tab` is locked, recursively for each lockable element of `Tab`
 
 :Arguments: * **Tab** : table<auto(keyT);auto(valT)>
 
@@ -3067,23 +3100,21 @@ Bit operations
 
 .. das:function:: clz(bits: uint) : uint
 
- count leading zeros
-
+Counts the number of leading zero bits in the integer argument. Returns 32 (or 64 for 64-bit types) if the value is zero.
 :Arguments: * **bits** : uint
 
 .. _function-builtin_clz_uint64:
 
 .. das:function:: clz(bits: uint64) : uint64
 
- count leading zeros
-
+Counts the number of leading zero bits in the integer argument. Returns 32 (or 64 for 64-bit types) if the value is zero.
 :Arguments: * **bits** : uint64
 
 .. _function-builtin_ctz_uint:
 
 .. das:function:: ctz(bits: uint) : uint
 
- count trailing zeros
+count trailing zeros
 
 :Arguments: * **bits** : uint
 
@@ -3091,7 +3122,7 @@ Bit operations
 
 .. das:function:: ctz(bits: uint64) : uint64
 
- count trailing zeros
+count trailing zeros
 
 :Arguments: * **bits** : uint64
 
@@ -3099,7 +3130,7 @@ Bit operations
 
 .. das:function:: popcnt(bits: uint) : uint
 
- count number of set bits
+count number of set bits
 
 :Arguments: * **bits** : uint
 
@@ -3107,7 +3138,7 @@ Bit operations
 
 .. das:function:: popcnt(bits: uint64) : uint64
 
- count number of set bits
+count number of set bits
 
 :Arguments: * **bits** : uint64
 
@@ -3115,7 +3146,7 @@ Bit operations
 
 .. das:function:: mul128(a: uint64; b: uint64) : urange64
 
- Multiplies two 64 bit values and returns 128 bit result in form of two 64 bit values (low and high) as urange64.
+Multiplies two 64 bit values and returns 128 bit result in form of two 64 bit values (low and high) as urange64.
 
 :Arguments: * **a** : uint64
 
@@ -3125,7 +3156,7 @@ Bit operations
 
 .. das:function:: __bit_set(value: bitfield& implicit; mask: bitfield; on: bool)
 
- Sets the specified bit in the bitfield.
+Sets the specified bit in the bitfield.
 
 :Arguments: * **value** : bitfield<>& implicit
 
@@ -3182,7 +3213,7 @@ Intervals
 
 .. das:function:: interval(arg0: int; arg1: int) : range
 
- returns range('arg0','arg1')
+returns range('arg0','arg1')
 
 :Arguments: * **arg0** : int
 
@@ -3192,7 +3223,7 @@ Intervals
 
 .. das:function:: interval(arg0: uint; arg1: uint) : urange
 
- returns range('arg0','arg1')
+returns range('arg0','arg1')
 
 :Arguments: * **arg0** : uint
 
@@ -3202,7 +3233,7 @@ Intervals
 
 .. das:function:: interval(arg0: int64; arg1: int64) : range64
 
- returns range('arg0','arg1')
+returns range('arg0','arg1')
 
 :Arguments: * **arg0** : int64
 
@@ -3212,7 +3243,7 @@ Intervals
 
 .. das:function:: interval(arg0: uint64; arg1: uint64) : urange64
 
- returns range('arg0','arg1')
+returns range('arg0','arg1')
 
 :Arguments: * **arg0** : uint64
 
@@ -3228,7 +3259,7 @@ RTTI
 
 .. das:function:: class_rtti_size(ptr: void? implicit) : int
 
- returns size of specific TypeInfo for the class
+returns size of specific TypeInfo for the class
 
 :Arguments: * **ptr** : void? implicit
 
@@ -3245,7 +3276,7 @@ Lock verification
 .. warning:: 
   This is unsafe operation.
 
- Enables or disables array or table lock runtime verification per context
+Enables or disables array or table lock runtime verification per context
 
 :Arguments: * **check** : bool
 
@@ -3259,7 +3290,7 @@ Initialization and finalization
 
 .. das:function:: using(arg0: block<(das_string):void>)
 
- Creates temporary das_string.
+Creates temporary das_string.
 
 :Arguments: * **arg0** : block<( :ref:`das_string <handle-builtin-das_string>` ):void> implicit
 
@@ -3276,7 +3307,7 @@ Algorithms
 
 .. das:function:: count(start: int = 0; step: int = 1) : iterator<int>
 
- returns iterator which iterates from `start` value by incrementing it by `step` value. It is the intended way to have counter together with other values in the `for` loop.
+returns iterator which iterates from `start` value by incrementing it by `step` value. It is the intended way to have counter together with other values in the `for` loop.
 
 :Arguments: * **start** : int
 
@@ -3286,7 +3317,7 @@ Algorithms
 
 .. das:function:: ucount(start: uint = 0x0; step: uint = 0x1) : iterator<uint>
 
- returns iterator which iterates from `start` value by incrementing it by `step` value. It is the intended way to have counter together with other values in the `for` loop.
+returns iterator which iterates from `start` value by incrementing it by `step` value. It is the intended way to have counter together with other values in the `for` loop.
 
 :Arguments: * **start** : uint
 
@@ -3296,7 +3327,7 @@ Algorithms
 
 .. das:function:: iter_range(foo: auto) : auto
 
- returns range(`foo`)
+returns range(`foo`)
 
 :Arguments: * **foo** : auto
 
@@ -3304,7 +3335,7 @@ Algorithms
 
 .. das:function:: swap(a: auto(TT)&; b: auto(TT)&) : auto
 
- swaps two values `a` and 'b'
+swaps two values `a` and 'b'
 
 :Arguments: * **a** : auto(TT)&
 
@@ -3327,7 +3358,7 @@ Memset
 .. warning:: 
   This is unsafe operation.
 
- Effecitvely C memset.
+Effecitvely C memset.
 
 :Arguments: * **left** : void? implicit
 
@@ -3342,7 +3373,7 @@ Memset
 .. warning:: 
   This is unsafe operation.
 
- Similar to memset, but fills values with 16 bit words.
+Similar to memset, but fills values with 16 bit words.
 
 :Arguments: * **left** : void? implicit
 
@@ -3357,7 +3388,7 @@ Memset
 .. warning:: 
   This is unsafe operation.
 
- Similar to memset, but fills values with 32 bit words.
+Similar to memset, but fills values with 32 bit words.
 
 :Arguments: * **left** : void? implicit
 
@@ -3372,7 +3403,7 @@ Memset
 .. warning:: 
   This is unsafe operation.
 
- Similar to memset, but fills values with 64 bit words.
+Similar to memset, but fills values with 64 bit words.
 
 :Arguments: * **left** : void? implicit
 
@@ -3387,7 +3418,7 @@ Memset
 .. warning:: 
   This is unsafe operation.
 
- Similar to memset, but fills values with 128 bit vector type values.
+Similar to memset, but fills values with 128 bit vector type values.
 
 :Arguments: * **left** : void? implicit
 
@@ -3410,8 +3441,7 @@ Malloc
 .. warning:: 
   This is unsafe operation.
 
- C-style malloc
-
+Allocates a block of uninitialized memory of the specified size in bytes, C-style. Returns a raw pointer to the allocated memory. Must be freed with ``free``.
 :Arguments: * **size** : uint64
 
 .. _function-builtin_free_void_q__implicit:
@@ -3421,7 +3451,7 @@ Malloc
 .. warning:: 
   This is unsafe operation.
 
- C-style free to be coupled with C-style malloc
+C-style free to be coupled with C-style malloc
 
 :Arguments: * **ptr** : void? implicit
 
@@ -3432,7 +3462,7 @@ Malloc
 .. warning:: 
   This is unsafe operation.
 
- returns size of the allocated memory block
+returns size of the allocated memory block
 
 :Arguments: * **ptr** : void? implicit
 
@@ -3449,25 +3479,25 @@ Compilation and AOT
 
 .. das:function:: set_aot()
 
- Notifies compiler that AOT is being generated.
+Notifies compiler that AOT is being generated.
 
 .. _function-builtin_reset_aot:
 
 .. das:function:: reset_aot()
 
- Notifies compiler that AOT is no longer being generated.
+Notifies compiler that AOT is no longer being generated.
 
 .. _function-builtin_compiling_file_name:
 
 .. das:function:: compiling_file_name() : string
 
- returns name of the file currently being compiled.
+returns name of the file currently being compiled.
 
 .. _function-builtin_compiling_module_name:
 
 .. das:function:: compiling_module_name() : string
 
- returns name of the module currently being compiled.
+returns name of the module currently being compiled.
 
 +++++++++++++
 Uncategorized

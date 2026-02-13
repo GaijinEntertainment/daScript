@@ -1,1 +1,1 @@
- Returns offset of the variant field.
+Returns offset of the variant field.

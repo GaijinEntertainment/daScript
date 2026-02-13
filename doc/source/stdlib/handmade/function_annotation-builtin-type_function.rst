@@ -1,1 +1,1 @@
- Marks function as a type function.
+Marks function as a type function.

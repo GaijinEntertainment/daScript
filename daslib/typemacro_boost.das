@@ -6,6 +6,13 @@ options strict_smart_pointers
 
 module typemacro_boost shared private
 
+//! Type macro and template structure support.
+//!
+//! Implements ``[template_structure]`` annotation that generates
+//! type-parameterized structs (similar to C++ templates), and provides
+//! ``int64_to_enum``, enum-to-string, and other type-manipulation
+//! helpers.
+
 require daslib/ast_boost
 require daslib/macro_boost
 require daslib/templates_boost public

@@ -1,1 +1,1 @@
- returns internal use-count for the smart_ptr
+returns internal use-count for the smart_ptr

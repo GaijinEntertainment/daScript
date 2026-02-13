@@ -29,4 +29,3 @@ Function will shutdown after all other shutdonws are done.
 Function has try\recover blocks.
 Function has unsafe operations made by user.
 Function is a const class method.
-

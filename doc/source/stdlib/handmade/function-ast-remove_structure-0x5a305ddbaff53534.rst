@@ -1,1 +1,1 @@
- Removes structure declaration from the specified module.
+Removes structure declaration from the specified module.

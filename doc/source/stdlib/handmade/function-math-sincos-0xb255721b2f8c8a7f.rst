@@ -1,1 +1,1 @@
- returns oth sine and cosine of x
+returns oth sine and cosine of x

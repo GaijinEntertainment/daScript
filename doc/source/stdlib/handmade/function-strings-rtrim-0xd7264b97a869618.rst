@@ -1,1 +1,1 @@
- Removes trailing white space.
+Removes trailing white space.

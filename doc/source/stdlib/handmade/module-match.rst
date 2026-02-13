@@ -1,6 +1,39 @@
-The MATCH module implements pattern matching in Daslang.
-(See also the :ref:`pattern-matching` section.)
+The MATCH module implements pattern matching on variants, structs, tuples,
+arrays, and scalar values. Supports variable capture, wildcards, guard
+expressions, and alternation. ``static_match`` enforces exhaustive matching
+at compile time.
 
 All functions and symbols are in "match" module, use require to get access to it. ::
 
     require daslib/match
+
+Example: ::
+
+    require daslib/match
+
+        enum Color {
+            red
+            green
+            blue
+        }
+
+        [sideeffects]
+        def describe(c : Color) : string {
+            match (c) {
+                if (Color.red) { return "red"; }
+                if (Color.green) { return "green"; }
+                if (_) { return "other"; }
+            }
+            return "?"
+        }
+
+        [export]
+        def main() {
+            print("{describe(Color.red)}\n")
+            print("{describe(Color.green)}\n")
+            print("{describe(Color.blue)}\n")
+        }
+        // output:
+        // red
+        // green
+        // other

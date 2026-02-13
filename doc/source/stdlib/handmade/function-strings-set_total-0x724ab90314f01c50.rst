@@ -1,1 +1,1 @@
- Total number of elements in the character set.
+Total number of elements in the character set.

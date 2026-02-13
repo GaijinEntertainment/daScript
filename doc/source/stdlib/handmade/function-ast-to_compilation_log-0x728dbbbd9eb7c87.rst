@@ -1,1 +1,1 @@
- Writes to compilation log from macro during compilation.
+Writes to compilation log from macro during compilation.

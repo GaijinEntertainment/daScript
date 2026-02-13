@@ -1,1 +1,1 @@
- same as `print` but outputs to file.
+same as `print` but outputs to file.

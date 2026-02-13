@@ -1,1 +1,1 @@
- returns the 2^x value of x
+returns the 2^x value of x

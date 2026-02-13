@@ -1,1 +1,1 @@
- returns the arctangent of y/x
+returns the arctangent of y/x

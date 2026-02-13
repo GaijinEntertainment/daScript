@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module faker shared private
 
+//! Random test-data generator.
+//!
+//! The ``Faker`` struct produces random values for every built-in type
+//! (integers, floats, vectors, strings, dates, booleans) using
+//! configurable ranges. Used by ``fuzzer`` for fuzz testing.
+
 // TODO: add control for the RNG source
 
 require daslib/regex_boost

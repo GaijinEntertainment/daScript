@@ -5,7 +5,9 @@
 UTF-8 utilities
 ===============
 
-The utf8_utils module implements additional infrastructure for the UTF8 utilities.
+The UTF8_UTILS module provides Unicode UTF-8 string utilities including
+character iteration, codepoint extraction, byte length calculation, and
+validation of UTF-8 encoded text.
 
 All functions and symbols are in "utf8_utils" module, use require to get access to it. ::
 
@@ -27,9 +29,19 @@ Constants
 
 |detail/Variable-utf8_utils-UTF8_ACCEPT|
 
-+++++++++++++
-Uncategorized
-+++++++++++++
++++++++++++++++++++++
+Encoding and decoding
++++++++++++++++++++++
+
+  *  :ref:`utf16_to_utf32 (high: uint; low: uint) : uint <function-utf8_utils_utf16_to_utf32_uint_uint>` 
+  *  :ref:`utf8_encode (var dest_array: array\<uint8\>; ch: uint) <function-utf8_utils_utf8_encode_array_ls_uint8_gr__uint>` 
+  *  :ref:`utf8_encode (ch: uint) : array\<uint8\> <function-utf8_utils_utf8_encode_uint>` 
+  *  :ref:`utf8_encode (var dest_array: array\<uint8\>; source_utf32_string: array\<uint\>) <function-utf8_utils_utf8_encode_array_ls_uint8_gr__array_ls_uint_gr_>` 
+  *  :ref:`utf8_encode (source_utf32_string: array\<uint\>) : array\<uint8\> <function-utf8_utils_utf8_encode_array_ls_uint_gr_>` 
+  *  :ref:`utf8_decode (var dest_utf32_string: array\<uint\>; source_utf8_string: array\<uint8\>) <function-utf8_utils_utf8_decode_array_ls_uint_gr__array_ls_uint8_gr_>` 
+  *  :ref:`utf8_decode (source_utf8_string: array\<uint8\>) : array\<uint\> <function-utf8_utils_utf8_decode_array_ls_uint8_gr_>` 
+  *  :ref:`utf8_decode (source_utf8_string: string) : array\<uint\> <function-utf8_utils_utf8_decode_string>` 
+  *  :ref:`utf8_decode (var dest_utf32_string: array\<uint\>; source_utf8_string: string) <function-utf8_utils_utf8_decode_array_ls_uint_gr__string>` 
 
 .. _function-utf8_utils_utf16_to_utf32_uint_uint:
 
@@ -76,6 +88,46 @@ Converts UTF-32 string to UTF-8 and appends it to the UTF-8 byte array
 Converts UTF-32 string to UTF-8 and returns it as a UTF-8 byte array
 
 :Arguments: * **source_utf32_string** : array<uint> implicit
+
+.. _function-utf8_utils_utf8_decode_array_ls_uint_gr__array_ls_uint8_gr_:
+
+.. das:function:: utf8_decode(dest_utf32_string: array<uint>; source_utf8_string: array<uint8>)
+
+Converts UTF-8 string to UTF-32 and appends it to the array of codepoints (UTF-32 string)
+
+:Arguments: * **dest_utf32_string** : array<uint>
+
+            * **source_utf8_string** : array<uint8> implicit
+
+.. _function-utf8_utils_utf8_decode_array_ls_uint8_gr_:
+
+.. das:function:: utf8_decode(source_utf8_string: array<uint8>) : array<uint>
+
+Converts UTF-8 string to UTF-32 and returns it as an array of codepoints (UTF-32 string)
+
+:Arguments: * **source_utf8_string** : array<uint8> implicit
+
+.. _function-utf8_utils_utf8_decode_string:
+
+.. das:function:: utf8_decode(source_utf8_string: string) : array<uint>
+
+Converts UTF-8 string to UTF-32 and returns it as an array of codepoints (UTF-32 string)
+
+:Arguments: * **source_utf8_string** : string
+
+.. _function-utf8_utils_utf8_decode_array_ls_uint_gr__string:
+
+.. das:function:: utf8_decode(dest_utf32_string: array<uint>; source_utf8_string: string)
+
+Converts UTF-8 string to UTF-32 and appends it to the array of codepoints (UTF-32 string)
+
+:Arguments: * **dest_utf32_string** : array<uint>
+
+            * **source_utf8_string** : string
+
++++++++++++++
+Uncategorized
++++++++++++++
 
 .. _function-utf8_utils_utf8_length_array_ls_uint8_gr_:
 
@@ -132,42 +184,6 @@ Returns the number of characters in the UTF-8 string
 |detail/function-utf8_utils-is_utf8_string_valid-0xfa05575fb077659e|
 
 :Arguments: * **utf8_string** : string
-
-.. _function-utf8_utils_utf8_decode_array_ls_uint_gr__array_ls_uint8_gr_:
-
-.. das:function:: utf8_decode(dest_utf32_string: array<uint>; source_utf8_string: array<uint8>)
-
-Converts UTF-8 string to UTF-32 and appends it to the array of codepoints (UTF-32 string)
-
-:Arguments: * **dest_utf32_string** : array<uint>
-
-            * **source_utf8_string** : array<uint8> implicit
-
-.. _function-utf8_utils_utf8_decode_array_ls_uint8_gr_:
-
-.. das:function:: utf8_decode(source_utf8_string: array<uint8>) : array<uint>
-
-Converts UTF-8 string to UTF-32 and returns it as an array of codepoints (UTF-32 string)
-
-:Arguments: * **source_utf8_string** : array<uint8> implicit
-
-.. _function-utf8_utils_utf8_decode_string:
-
-.. das:function:: utf8_decode(source_utf8_string: string) : array<uint>
-
-Converts UTF-8 string to UTF-32 and returns it as an array of codepoints (UTF-32 string)
-
-:Arguments: * **source_utf8_string** : string
-
-.. _function-utf8_utils_utf8_decode_array_ls_uint_gr__string:
-
-.. das:function:: utf8_decode(dest_utf32_string: array<uint>; source_utf8_string: string)
-
-Converts UTF-8 string to UTF-32 and appends it to the array of codepoints (UTF-32 string)
-
-:Arguments: * **dest_utf32_string** : array<uint>
-
-            * **source_utf8_string** : string
 
 .. _function-utf8_utils_decode_unicode_escape_string:
 

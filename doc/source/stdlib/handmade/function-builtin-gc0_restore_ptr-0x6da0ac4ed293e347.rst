@@ -1,1 +1,1 @@
- restores pointer from gc0 storage by `name`
+restores pointer from gc0 storage by `name`

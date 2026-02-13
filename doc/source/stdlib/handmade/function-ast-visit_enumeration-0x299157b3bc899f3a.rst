@@ -1,1 +1,1 @@
- Invokes visitor for the given enumeration.
+Invokes visitor for the given enumeration.

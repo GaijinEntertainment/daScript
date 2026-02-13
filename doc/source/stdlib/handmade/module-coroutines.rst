@@ -1,34 +1,40 @@
-The COROUTINES module exposes coroutine infrastructure, as well as additional yielding facilities.
-
-The following example illustrates iterating over the elements of a tree. `each_async_generator` implements straight up iterator,
-where 'yield_from' helper is used to continue iterating over leafs. `[coroutine]` annotation converts function into coroutine.
-If need be, return type of the function can specify coroutine yield type::
-
-    require daslib/coroutines
-
-    struct Tree
-        data : int
-        left, right : Tree?
-
-    // yield from example
-    def each_async_generator(tree : Tree?)
-        return <- generator<int>() <|
-            if tree.left != null
-                yeild_from <| each_async_generator(tree.left)
-            yield tree.data
-            if tree.right != null
-                yeild_from <| each_async_generator(tree.right)
-            return false
-
-    // coroutine as function
-    [coroutine]
-    def each_async(tree : Tree?) : int
-        if tree.left != null
-            co_await <| each_async(tree.left)
-        yield tree.data
-        if tree.right != null
-            co_await <| each_async(tree.right)
+The COROUTINES module provides coroutine infrastructure including the
+``[coroutine]`` function annotation, ``yield_from`` for delegating to
+sub-coroutines, and ``co_await`` for composing asynchronous generators.
+Coroutines produce values lazily via ``yield`` and can be iterated with
+``for``.
 
 All functions and symbols are in "coroutines" module, use require to get access to it. ::
 
     require daslib/coroutines
+
+Example: ::
+
+    require daslib/coroutines
+
+        [coroutine]
+        def fibonacci() : int {
+            var a = 0
+            var b = 1
+            while (true) {
+                yield a
+                let next = a + b
+                a = b
+                b = next
+            }
+        }
+
+        [export]
+        def main() {
+            var count = 0
+            for (n in fibonacci()) {
+                print("{n} ")
+                count ++
+                if (count >= 10) {
+                    break
+                }
+            }
+            print("\n")
+        }
+        // output:
+        // 0 1 1 2 3 5 8 13 21 34

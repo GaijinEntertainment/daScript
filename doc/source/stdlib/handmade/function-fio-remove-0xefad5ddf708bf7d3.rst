@@ -1,1 +1,1 @@
- deletes file specified by name
+deletes file specified by name

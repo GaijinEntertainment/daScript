@@ -8,6 +8,12 @@ options strict_smart_pointers = true
 
 module dap shared
 
+//! Debug Adapter Protocol (DAP) data structures.
+//!
+//! Defines request, response, and event types for the
+//! `DAP specification <https://microsoft.github.io/debug-adapter-protocol/specification>`_.
+//! Used by the ``debug`` module to communicate with DAP clients.
+
 require daslib/json
 require daslib/json_boost
 require daslib/strings_boost

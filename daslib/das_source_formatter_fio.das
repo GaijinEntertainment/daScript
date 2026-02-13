@@ -6,6 +6,11 @@ options strict_smart_pointers = true
 
 module das_source_formatter_fio shared private
 
+//! File-based daScript source formatter.
+//!
+//! Wraps ``das_source_formatter`` with file I/O. ``format_file`` reads,
+//! formats, and optionally writes back a ``.das`` source file.
+
 require fio
 require strings
 require daslib/defer

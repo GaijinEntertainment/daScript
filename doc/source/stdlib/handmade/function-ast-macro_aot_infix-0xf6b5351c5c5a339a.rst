@@ -1,1 +1,1 @@
- Returns true if macro requires AOT infix for the specified handled type.
+Returns true if macro requires AOT infix for the specified handled type.

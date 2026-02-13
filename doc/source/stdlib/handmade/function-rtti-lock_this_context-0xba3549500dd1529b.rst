@@ -1,1 +1,1 @@
- Makes recursive critical section of the current `Context` object.
+Makes recursive critical section of the current `Context` object.

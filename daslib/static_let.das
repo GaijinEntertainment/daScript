@@ -6,6 +6,13 @@ options strict_smart_pointers = true
 
 module static_let shared private
 
+//! Static variable declarations.
+//!
+//! ``static_let`` promotes local variable declarations to global scope, so they are
+//! initialized once and persist across function calls (like C ``static``). The variable
+//! is renamed under the hood to avoid collisions. ``static_let_finalize`` additionally
+//! deletes the variable on context shutdown.
+
 require ast
 require rtti
 require daslib/ast_boost

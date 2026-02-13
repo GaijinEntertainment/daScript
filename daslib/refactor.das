@@ -6,6 +6,12 @@ options strict_smart_pointers = true
 
 module refactor shared private
 
+//! Automated refactoring tools.
+//!
+//! Provides ``extract_method`` and ``rename`` tag-function macros that
+//! restructure code at compile time. Used by editor tooling and IDE
+//! integration.
+
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/macro_boost

@@ -7,6 +7,11 @@ options strict_smart_pointers = true
 
 module profiler_boost shared private
 
+//! Profiler cross-context helpers.
+//!
+//! Provides ``[apply_in_context(profiler)]`` wrappers that allow enabling
+//! and disabling the profiler from a different context.
+
 require daslib/profiler
 require daslib/apply_in_context
 

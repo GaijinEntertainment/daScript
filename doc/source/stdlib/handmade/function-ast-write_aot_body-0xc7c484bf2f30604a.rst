@@ -1,1 +1,1 @@
- Writes AOT body for the specified StructureAnnotation.
+Writes AOT body for the specified StructureAnnotation.

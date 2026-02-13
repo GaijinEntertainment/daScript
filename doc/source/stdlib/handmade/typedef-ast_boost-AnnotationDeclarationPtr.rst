@@ -1,1 +1,1 @@
- Alias for smart_ptr<AnnotationDeclaration>
+Alias for smart_ptr<AnnotationDeclaration>

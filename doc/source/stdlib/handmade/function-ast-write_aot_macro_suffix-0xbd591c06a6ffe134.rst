@@ -1,1 +1,1 @@
- Writes AOT macro suffix for the specified TypeInfoMacro.
+Writes AOT macro suffix for the specified TypeInfoMacro.

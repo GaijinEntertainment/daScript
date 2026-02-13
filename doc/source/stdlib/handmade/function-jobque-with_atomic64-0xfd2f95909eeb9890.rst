@@ -1,1 +1,1 @@
- Creates `Atomic64`, makes it available inside the scope of the block.
+Creates `Atomic64`, makes it available inside the scope of the block.

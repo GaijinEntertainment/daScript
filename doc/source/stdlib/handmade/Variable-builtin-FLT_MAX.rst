@@ -1,1 +1,1 @@
- maximum possible value of 'float'
+maximum possible value of 'float'

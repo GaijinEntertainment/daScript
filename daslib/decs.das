@@ -7,6 +7,13 @@ options strict_smart_pointers = true
 
 module decs shared public
 
+//! daScript Entity Component System (DECS).
+//!
+//! A pure-daScript ECS runtime: entities with dynamic component
+//! composition, archetypal storage, queries, commit/deferred
+//! create/delete, and serialization. Use with ``decs_boost`` for
+//! the query macro syntax.
+
 require daslib/templates
 
 require daslib/rtti public

@@ -1,1 +1,1 @@
- Returns offset of the tuple field in bytes.
+Returns offset of the tuple field in bytes.

@@ -1,1 +1,1 @@
- Returns description (name) of the corresponding `Type`.
+Returns description (name) of the corresponding `Type`.

@@ -1,1 +1,1 @@
- Returns true if character is tab or space [ \t].
+Returns true if character is tab or space [ \t].

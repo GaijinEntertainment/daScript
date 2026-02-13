@@ -7,6 +7,12 @@ options strict_smart_pointers = true
 
 module quote shared private
 
+//! AST quasiquoting infrastructure.
+//!
+//! Internal module that provides the ``qmacro`` / ``qmacro_block`` /
+//! ``qmacro_type`` / ``qmacro_function`` quasiquoting macros and their
+//! supporting splicing and substitution helpers.
+
 require daslib/ast_boost public
 require daslib/strings_boost
 require daslib/contracts

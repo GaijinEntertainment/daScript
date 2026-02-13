@@ -1,1 +1,1 @@
- returns internal lock count for the array or table
+returns internal lock count for the array or table

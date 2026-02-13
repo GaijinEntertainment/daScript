@@ -1,1 +1,1 @@
- Turns AstFunctionAnnotation into a contract macro with the specified `name`.
+Turns AstFunctionAnnotation into a contract macro with the specified `name`.

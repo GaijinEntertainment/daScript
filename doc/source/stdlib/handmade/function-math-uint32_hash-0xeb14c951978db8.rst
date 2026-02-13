@@ -1,1 +1,1 @@
- returns hashed value of seed
+returns hashed value of seed

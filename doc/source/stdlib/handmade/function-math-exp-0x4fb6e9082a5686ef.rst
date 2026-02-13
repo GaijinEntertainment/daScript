@@ -1,1 +1,1 @@
- returns the e^x value of x
+returns the e^x value of x

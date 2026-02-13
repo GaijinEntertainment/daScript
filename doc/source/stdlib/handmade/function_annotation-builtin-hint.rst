@@ -1,1 +1,1 @@
- Hints the compiler to use specific optimization.
+Hints the compiler to use specific optimization.

@@ -1,1 +1,1 @@
- copies `size` bytes of memory from `right` to `left`
+copies `size` bytes of memory from `right` to `left`
