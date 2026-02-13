@@ -113,6 +113,25 @@ def find_bool(args : array<string>; key : string) {
     return idx >= 0 && idx + 1 < length(args)
 }
 
+def write_result(content : string; output_filename : string;
+                 mode : string; force_overwrite : bool) {
+    var result : bool = true
+    if (content |> length() > 0 && (force_overwrite || !is_content_same(content, output_filename))) {
+        fopen(output_filename, "wb") <| $(fw) {
+            if (fw != null) {
+                to_log(LOG_INFO, "{mode} to {output_filename}\n")
+                fwrite(fw, content)
+            } else {
+                to_log(LOG_ERROR, "Couldn't create output file {output_filename}\n")
+                result = false
+            }
+        }
+    } else {
+        to_log(LOG_INFO, "Content is same for {output_filename}\n")
+    }
+    return result
+}
+
 [export]
 def main() {
     let args <- get_command_line_arguments()
@@ -120,6 +139,7 @@ def main() {
     let cross_platform = find_bool(args, "-cross_platform");
     let gen1 = find_bool(args, "-gen1");
     let gen2_make = find_bool(args, "-gen2-make");
+    let force_overwrite = find_bool(args, "-force-overwrite");
 
     var aot_files = array<tuple<string; string>>()
     var aotlib_files = array<tuple<string; string>>()
@@ -136,54 +156,32 @@ def main() {
         aotlib_files = get_list_of_files(args, "-aotlib")
         ctx_files = get_list_of_files(args, "-ctx")
     }
+    // If no files provided return `0`
+    // Otherwise if at least 1 file succeeded return `0`
+    var result = (aot_files |> empty() &&
+                 aotlib_files |> empty() &&
+                 ctx_files |> empty())
     using <| $(var cop : CodeOfPolicies) {
         updateCOP(cop, !gen1, gen2_make, false)
         for ((aot_in, aot_out) in aot_files) {
             let res = aot(aot_in, false, cross_platform, cop)
-            if (res |> length() > 0 && !is_content_same(res, aot_out)) {
-                fopen(aot_out, "wb") <| $(fw) {
-                    if (fw != null) {
-                        to_log(LOG_INFO, "Aot to {aot_out}\n")
-                        fwrite(fw, res)
-                    } else {
-                        to_log(LOG_ERROR, "Couldn't create output file {aot_out}\n")
-                    }
-                }
-            } else {
-                to_log(LOG_INFO, "Content is same for {aot_out}\n")
-            }
+            let written = write_result(res, aot_out, "Aot", force_overwrite)
+            result = result || written
         }
         updateCOP(cop, !gen1, gen2_make, true)
         for ((aot_in, aot_out) in aotlib_files) {
             let res = aot(aot_in, false, cross_platform, cop)
-            if (res |> length() > 0 && !is_content_same(res, aot_out)) {
-                fopen(aot_out, "wb") <| $(fw) {
-                    if (fw != null) {
-                        to_log(LOG_INFO, "Aot library to {aot_out}\n")
-                        fwrite(fw, res)
-                    } else {
-                        to_log(LOG_ERROR, "Couldn't create output file {aot_out}\n")
-                    }
-                }
-            } else {
-                to_log(LOG_INFO, "Content is same for {aot_out}\n")
-            }
+            let written = write_result(res, aot_out, "Aot library", force_overwrite)
+            result = result || written
         }
         updateCOP(cop, !gen1, gen2_make, false)
         for ((ctx_in, ctx_out) in ctx_files) {
             let res = standalone_aot(ctx_in, ctx_out, cross_platform, false, cop)
-            if (res |> length() > 0 && !is_content_same(res, ctx_out)) {
-                fopen(ctx_out, "wb") <| $(fw) {
-                    if (fw != null) {
-                        to_log(LOG_INFO, "Standalone ctx to {ctx_out}\n")
-                        fwrite(fw, res)
-                    } else {
-                        to_log(LOG_ERROR, "Couldn't create output file {ctx_out}\n")
-                    }
-                }
-            } else {
-                to_log(LOG_INFO, "Content is same for {ctx_out}\n")
-            }
+            let written = write_result(res, ctx_out, "Standalone ctx", force_overwrite)
+            result = result || written
         }
+    }
+    unsafe {
+        fio::exit(result ? 0 : -1)
     }
 }
