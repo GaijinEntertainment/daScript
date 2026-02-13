@@ -273,8 +273,9 @@ namespace das {
                 << "\n\t";
             outputVariableAnnotation(var->annotation);
             if ( printUse && var->isAccessUnused() ) ss << " /*unused*/ ";
-            if ( printVarAccess && !var->access_ref ) ss << "$";
-            if ( printVarAccess && !var->access_pass ) ss << "%";
+            if ( printVarAccess && var->access_ref ) ss << "/*ref*/";
+            if ( printVarAccess && var->access_pass ) ss << "/*pass*/";
+            if ( printVarAccess && var->access_get ) ss << "/*get*/";
             ss << var->name << " : " << var->type->describe();
         }
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
@@ -290,6 +291,9 @@ namespace das {
     // function
         virtual void preVisit ( Function * fn) override {
             Visitor::preVisit(fn);
+            if ( fn->isFullyInferred ) {
+                ss << "/*FULLY INFERRED*/\n";
+            }
             if ( fn->unsafeFunction ) {
                 ss << "/*unsafe*/ ";
             }
@@ -398,8 +402,9 @@ namespace das {
             if ( !arg->type->isConst() ) ss << "var ";
             if ( printUse && arg->isAccessUnused() ) ss << " /*unused*/ ";
             if ( printUse && arg->no_capture ) ss << " /*no_capture*/ ";
-            if ( printVarAccess && !arg->access_ref ) ss << "$";
-            if ( printVarAccess && !arg->access_pass ) ss << "%";
+            if ( printVarAccess && arg->access_ref ) ss << "/*ref*/";
+            if ( printVarAccess && arg->access_pass ) ss << "/*pass*/";
+            if ( printVarAccess && arg->access_get ) ss << "/*get*/";
             ss << arg->name;
             if ( !arg->aka.empty() ) ss << " aka " << arg->aka;
             ss << ":" << arg->type->describe();
@@ -578,8 +583,9 @@ namespace das {
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(let, var, last);
             if ( printUse && var->isAccessUnused() ) ss << " /*unused*/ ";
-            if ( printVarAccess && !var->access_ref ) ss << "$";
-            if ( printVarAccess && !var->access_pass ) ss << "%";
+            if ( printVarAccess && var->access_ref ) ss << "/*ref*/";
+            if ( printVarAccess && var->access_pass ) ss << "/*pass*/";
+            if ( printVarAccess && var->access_get ) ss << "/*get*/";
             ss << var->name;
             if ( !var->aka.empty() ) ss << " aka " << var->aka;
             if ( printAliases && var->aliasCMRES ) ss << "/*cmres*/";

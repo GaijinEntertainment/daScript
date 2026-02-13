@@ -882,7 +882,14 @@ namespace das {
         // infer r2v(type<Foo...>)
         if (expr->subexpr->rtti_isTypeDecl()) {
             reportAstChanged();
-            if (expr->subexpr->type->isWorkhorseType()) {
+            if (expr->subexpr->type->isEnum()) {
+                auto ewsType = make_smart<TypeDecl>(*(expr->subexpr->type));
+                ewsType->ref = false;
+                auto anyEnumValue = expr->subexpr->type->enumType->list.size() ? expr->subexpr->type->enumType->list[0].name : "";
+                auto ews = make_smart<ExprConstEnumeration>(expr->at, anyEnumValue, ewsType);
+                ews->type = ewsType;
+                return ews;
+            } else if (expr->subexpr->type->isWorkhorseType()) {
                 auto ewsType = make_smart<TypeDecl>(*(expr->subexpr->type));
                 ewsType->ref = false;
                 auto ews = Program::makeConst(expr->at, ewsType, v_zero());
@@ -5050,9 +5057,11 @@ namespace das {
                     func->notInferred();
             }
         } else {
+            auto b4 = expr->func;
             expr->func = inferFunctionCall(expr, InferCallError::functionOrGeneric, expr->genericFunction ? expr->func : nullptr).get();
             if (expr->func && expr->func->fromGeneric)
                 expr->genericFunction = true;
+            if (b4 != expr->func) reportAstChanged();
         }
         if (expr->aliasSubstitution) {
             if (expr->arguments.size() != 1) {
