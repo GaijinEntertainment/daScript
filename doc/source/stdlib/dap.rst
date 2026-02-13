@@ -64,9 +64,11 @@ Debugger capabilities reported in the initialize response.
 
 .. das:attribute:: DataBreakpoint
 
-:Fields: * **dataId** : string - A data breakpoint that triggers on memory access.
+A data breakpoint that triggers on memory access.
 
-         * **accessType** : string - Identifier for the data to watch.
+:Fields: * **dataId** : string - Identifier for the data to watch.
+
+         * **accessType** : string - Access type that triggers the breakpoint: read, write, or readWrite.
 
          * **condition** : string - Optional expression condition for the breakpoint.
 
@@ -276,13 +278,13 @@ Arguments for the variables request.
 
 A variable with name, value, and type information.
 
-:Fields: * **name** : string - Type of the variable.
+:Fields: * **name** : string - Name of the variable.
 
-         * **value** : string - Name of the variable.
+         * **value** : string - String representation of the variable's value.
 
-         * **variablesReference** : double - String representation of the variable's value.
+         * **variablesReference** : double - Reference to child variables, if any.
 
-         * **_type** : string - Reference to child variables, if any.
+         * **_type** : string - Type of the variable.
 
          * **indexedVariables** : double - Number of indexed child variables.
 
@@ -384,7 +386,9 @@ Response body for the evaluate request.
 
 .. das:attribute:: BreakpointEvent
 
-:Fields: * **reason** : string - Event body indicating a breakpoint status change.
+Event body indicating a breakpoint status change.
+
+:Fields: * **reason** : string - Reason for the event: changed, new, or removed.
 
          * **breakpoint** :  :ref:`Breakpoint <struct-dap-Breakpoint>`  - The breakpoint whose status changed.
 
@@ -393,7 +397,9 @@ Response body for the evaluate request.
 
 .. das:attribute:: ThreadEvent
 
-:Fields: * **reason** : string - Event body indicating a thread started or exited.
+Event body indicating a thread started or exited.
+
+:Fields: * **reason** : string - Reason for the event: started or exited.
 
          * **threadId** : double - Thread identifier.
 

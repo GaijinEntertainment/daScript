@@ -84,9 +84,9 @@ creates:
 Enum helpers
 ++++++++++++
 
-  *  :ref:`int64_to_enum (_enu: auto(ET); value: int64) : ET <function-typemacro_boost_int64_to_enum_autoET_int64>` 
+  *  :ref:`int64_to_enum (_enu: auto(ET); value: int64) : ET <function-typemacro_boost_int64_to_enum_autoET_int64_0x16>` 
 
-.. _function-typemacro_boost_int64_to_enum_autoET_int64:
+.. _function-typemacro_boost_int64_to_enum_autoET_int64_0x16:
 
 .. das:function:: int64_to_enum(_enu: auto(ET); value: int64) : ET
 
@@ -228,10 +228,10 @@ Marks the template structure's custom work as complete in its annotation.
 Type macro arguments
 ++++++++++++++++++++
 
-  *  :ref:`typemacro_argument (dimExpr: auto; index: int; var constType: auto(ExprConstType); var defaultValue: auto(ValueT)) : ValueT <function-typemacro_boost_typemacro_argument_auto_int_autoExprConstType_autoValueT>` 
-  *  :ref:`typemacro_argument (dimExpr: auto; index: int; var constType: ExprConstString; var defaultValue: auto(ValueT)) : ValueT <function-typemacro_boost_typemacro_argument_auto_int_ExprConstString_autoValueT>` 
+  *  :ref:`typemacro_argument (dimExpr: auto; index: int; var constType: auto(ExprConstType); var defaultValue: auto(ValueT)) : ValueT <function-typemacro_boost_typemacro_argument_auto_int_autoExprConstType_autoValueT_0x44>` 
+  *  :ref:`typemacro_argument (dimExpr: auto; index: int; var constType: ExprConstString; var defaultValue: auto(ValueT)) : ValueT <function-typemacro_boost_typemacro_argument_auto_int_ExprConstString_autoValueT_0x51>` 
 
-.. _function-typemacro_boost_typemacro_argument_auto_int_autoExprConstType_autoValueT:
+.. _function-typemacro_boost_typemacro_argument_auto_int_autoExprConstType_autoValueT_0x44:
 
 .. das:function:: typemacro_argument(dimExpr: auto; index: int; constType: auto(ExprConstType); defaultValue: auto(ValueT)) : ValueT
 
@@ -245,7 +245,7 @@ Extracts a typed constant argument at the given index from a type macro's dimens
 
             * **defaultValue** : auto(ValueT)
 
-.. _function-typemacro_boost_typemacro_argument_auto_int_ExprConstString_autoValueT:
+.. _function-typemacro_boost_typemacro_argument_auto_int_ExprConstString_autoValueT_0x51:
 
 .. das:function:: typemacro_argument(dimExpr: auto; index: int; constType: ExprConstString; defaultValue: auto(ValueT)) : ValueT
 

@@ -2,7 +2,7 @@
 .. _stdlib_archive:
 
 =============================
-General prupose serialization
+General purpose serialization
 =============================
 
 The ARCHIVE module implements general-purpose serialization infrastructure.
@@ -128,7 +128,7 @@ Extract the data from the serializer.
 
 .. das:function:: MemSerializer.getCopyOfData() : array<uint8>
 
-Returns copy of the data from the seiralizer.
+Returns copy of the data from the serializer.
 
 .. _function-archive_MemSerializer_rq_getLastError_MemSerializer:
 
@@ -158,15 +158,15 @@ Serialization
   *  :ref:`serialize (var arch: Archive; var value: float3x4) <function-archive_serialize_Archive_float3x4>` 
   *  :ref:`serialize (var arch: Archive; var value: float4x4) <function-archive_serialize_Archive_float4x4>` 
   *  :ref:`serialize (var arch: Archive; var value: string&) <function-archive_serialize_Archive_string>` 
-  *  :ref:`serialize_raw (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_raw_Archive_autoTT>` 
-  *  :ref:`read_raw (var arch: Archive; var value: auto(TT)&) : auto <function-archive_read_raw_Archive_autoTT>` 
-  *  :ref:`write_raw (var arch: Archive; var value: auto(TT)&) : auto <function-archive_write_raw_Archive_autoTT>` 
-  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT>` 
-  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT>` 
-  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT>` 
-  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT>` 
-  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT>` 
-  *  :ref:`serialize (var arch: Archive; var value: auto(TT)[]) : auto <function-archive_serialize_Archive_autoTT>` 
+  *  :ref:`serialize_raw (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_raw_Archive_autoTT_0x62>` 
+  *  :ref:`read_raw (var arch: Archive; var value: auto(TT)&) : auto <function-archive_read_raw_Archive_autoTT_0x6b>` 
+  *  :ref:`write_raw (var arch: Archive; var value: auto(TT)&) : auto <function-archive_write_raw_Archive_autoTT_0x71>` 
+  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT_0x78>` 
+  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT_0x7e>` 
+  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT_0x9e>` 
+  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT_0xa9>` 
+  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT_0xb4>` 
+  *  :ref:`serialize (var arch: Archive; var value: auto(TT)[]) : auto <function-archive_serialize_Archive_autoTT_0xc6>` 
   *  :ref:`serialize (var arch: Archive; var value: array\<auto(TT)\>) : auto <function-archive_serialize_Archive_array_ls_autoTT_gr_>` 
   *  :ref:`serialize (var arch: Archive; var value: table\<auto(KT), auto(VT)\>) : auto <function-archive_serialize_Archive_table_ls_autoKT,_autoVT_gr_>` 
   *  :ref:`serialize (var arch: Archive; var value: auto(TT)?) : auto <function-archive_serialize_Archive_autoTT_q_>` 
@@ -211,7 +211,7 @@ Serializes string by serializing its length and characters.
 
             * **value** : string&
 
-.. _function-archive_serialize_raw_Archive_autoTT:
+.. _function-archive_serialize_raw_Archive_autoTT_0x62:
 
 .. das:function:: serialize_raw(arch: Archive; value: auto(TT)&) : auto
 
@@ -221,7 +221,7 @@ Serialize raw data (straight up bytes for raw pod)
 
             * **value** : auto(TT)&
 
-.. _function-archive_read_raw_Archive_autoTT:
+.. _function-archive_read_raw_Archive_autoTT_0x6b:
 
 .. das:function:: read_raw(arch: Archive; value: auto(TT)&) : auto
 
@@ -231,7 +231,7 @@ Read raw data (straight up bytes for raw pod)
 
             * **value** : auto(TT)&
 
-.. _function-archive_write_raw_Archive_autoTT:
+.. _function-archive_write_raw_Archive_autoTT_0x71:
 
 .. das:function:: write_raw(arch: Archive; value: auto(TT)&) : auto
 
@@ -241,7 +241,7 @@ Write raw data (straight up bytes for raw pod)
 
             * **value** : auto(TT)&
 
-.. _function-archive_serialize_Archive_autoTT:
+.. _function-archive_serialize_Archive_autoTT_0x78:
 
 .. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
 
@@ -251,7 +251,7 @@ Serializes variant by serializing the index and the active field.
 
             * **value** : auto(TT)&
 
-.. _function-archive_serialize_Archive_autoTT:
+.. _function-archive_serialize_Archive_autoTT_0x7e:
 
 .. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
 
@@ -261,7 +261,7 @@ Serializes variant by serializing the index and the active field.
 
             * **value** : auto(TT)&
 
-.. _function-archive_serialize_Archive_autoTT:
+.. _function-archive_serialize_Archive_autoTT_0x9e:
 
 .. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
 
@@ -271,7 +271,7 @@ Serializes variant by serializing the index and the active field.
 
             * **value** : auto(TT)&
 
-.. _function-archive_serialize_Archive_autoTT:
+.. _function-archive_serialize_Archive_autoTT_0xa9:
 
 .. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
 
@@ -281,7 +281,7 @@ Serializes variant by serializing the index and the active field.
 
             * **value** : auto(TT)&
 
-.. _function-archive_serialize_Archive_autoTT:
+.. _function-archive_serialize_Archive_autoTT_0xb4:
 
 .. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
 
@@ -291,7 +291,7 @@ Serializes variant by serializing the index and the active field.
 
             * **value** : auto(TT)&
 
-.. _function-archive_serialize_Archive_autoTT:
+.. _function-archive_serialize_Archive_autoTT_0xc6:
 
 .. das:function:: serialize(arch: Archive; value: auto(TT)[]) : auto
 
@@ -335,10 +335,10 @@ Serializes nullable type by serializing a flag and the value if present.
 Memory archive
 ++++++++++++++
 
-  *  :ref:`mem_archive_save (var t: auto&) : auto <function-archive_mem_archive_save_auto>` 
-  *  :ref:`mem_archive_load (var data: array\<uint8\>; var t: auto&; canfail: bool = false) : bool <function-archive_mem_archive_load_array_ls_uint8_gr__auto_bool>` 
+  *  :ref:`mem_archive_save (var t: auto&) : auto <function-archive_mem_archive_save_auto_0x119>` 
+  *  :ref:`mem_archive_load (var data: array\<uint8\>; var t: auto&; canfail: bool = false) : bool <function-archive_mem_archive_load_array_ls_uint8_gr__auto_bool_0x121>` 
 
-.. _function-archive_mem_archive_save_auto:
+.. _function-archive_mem_archive_save_auto_0x119:
 
 .. das:function:: mem_archive_save(t: auto&) : auto
 
@@ -346,7 +346,7 @@ Saves the object to a memory archive. Result is array<uint8> with the serialized
 
 :Arguments: * **t** : auto&
 
-.. _function-archive_mem_archive_load_array_ls_uint8_gr__auto_bool:
+.. _function-archive_mem_archive_load_array_ls_uint8_gr__auto_bool_0x121:
 
 .. das:function:: mem_archive_load(data: array<uint8>; t: auto&; canfail: bool = false) : bool
 

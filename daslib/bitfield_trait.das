@@ -19,7 +19,7 @@ require daslib/templates_boost
 
 [expect_any_bitfield(argT), tag_function(each_bitfield_tag), unused_argument(argT)]
 def public each(argT) {
-    //! Same as assert, only the check will be not be repeated after the asseretion failed the first time.
+    //! Iterates over the names of a bitfield type, yielding each bit name as a string.
     pass
 }
 

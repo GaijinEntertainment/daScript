@@ -42,12 +42,12 @@ This macro reports an error if temp_value is attempted outside of function argum
 Safe temporary address
 ++++++++++++++++++++++
 
-  *  :ref:`safe_addr (var x: auto(T)& ==const) : T?# <function-safe_addr_safe_addr__autoT__eq__eq_const>` 
-  *  :ref:`safe_addr (x: auto(T) const& ==const) : T?# <function-safe_addr_safe_addr_autoT_const__eq__eq_const>` 
+  *  :ref:`safe_addr (var x: auto(T)& ==const) : T?# <function-safe_addr_safe_addr__autoT__eq__eq_const_0x16>` 
+  *  :ref:`safe_addr (x: auto(T) const& ==const) : T?# <function-safe_addr_safe_addr_autoT_const__eq__eq_const_0x1e>` 
   *  :ref:`shared_addr (tab: table\<auto(KEY), auto(VAL)\>; k: KEY) : auto <function-safe_addr_shared_addr_table_ls_autoKEY,_autoVAL_gr__KEY>` 
-  *  :ref:`shared_addr (val: auto(VALUE)) : auto <function-safe_addr_shared_addr_autoVALUE>` 
+  *  :ref:`shared_addr (val: auto(VALUE)) : auto <function-safe_addr_shared_addr_autoVALUE_0x48>` 
 
-.. _function-safe_addr_safe_addr__autoT__eq__eq_const:
+.. _function-safe_addr_safe_addr__autoT__eq__eq_const_0x16:
 
 .. das:function:: safe_addr(x: auto(T)& ==const) : T?#
 
@@ -55,7 +55,7 @@ returns temporary pointer to the given expression
 
 :Arguments: * **x** : auto(T)&!
 
-.. _function-safe_addr_safe_addr_autoT_const__eq__eq_const:
+.. _function-safe_addr_safe_addr_autoT_const__eq__eq_const_0x1e:
 
 .. das:function:: safe_addr(x: auto(T) const& ==const) : T?#
 
@@ -73,7 +73,7 @@ returns address of the given shared variable. it's safe because shared variables
 
             * **k** : KEY
 
-.. _function-safe_addr_shared_addr_autoVALUE:
+.. _function-safe_addr_shared_addr_autoVALUE_0x48:
 
 .. das:function:: shared_addr(val: auto(VALUE)) : auto
 
@@ -108,10 +108,10 @@ returns temporary pointer from a given pointer
 Temporary values
 ++++++++++++++++
 
-  *  :ref:`temp_value (x: auto(T) const& ==const) : T const&# <function-safe_addr_temp_value_autoT_const__eq__eq_const>` 
-  *  :ref:`temp_value (var x: auto(T)& ==const) : T&# <function-safe_addr_temp_value__autoT__eq__eq_const>` 
+  *  :ref:`temp_value (x: auto(T) const& ==const) : T const&# <function-safe_addr_temp_value_autoT_const__eq__eq_const_0x5b>` 
+  *  :ref:`temp_value (var x: auto(T)& ==const) : T&# <function-safe_addr_temp_value__autoT__eq__eq_const_0x63>` 
 
-.. _function-safe_addr_temp_value_autoT_const__eq__eq_const:
+.. _function-safe_addr_temp_value_autoT_const__eq__eq_const_0x5b:
 
 .. das:function:: temp_value(x: auto(T) const& ==const) : T const&#
 
@@ -119,7 +119,7 @@ returns temporary pointer to the given expression
 
 :Arguments: * **x** : auto(T)&!
 
-.. _function-safe_addr_temp_value__autoT__eq__eq_const:
+.. _function-safe_addr_temp_value__autoT__eq__eq_const_0x63:
 
 .. das:function:: temp_value(x: auto(T)& ==const) : T&#
 

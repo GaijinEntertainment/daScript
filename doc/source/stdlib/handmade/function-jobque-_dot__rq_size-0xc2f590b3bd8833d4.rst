@@ -1,1 +1,1 @@
-Returns the string length of the URI.
+Returns the current entry count of the JobStatus or Channel.

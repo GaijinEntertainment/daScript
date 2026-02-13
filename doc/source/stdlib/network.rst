@@ -21,7 +21,7 @@ Handled structures
 
 .. das:attribute:: NetworkServer
 
- Base impliemntation of the server.
+ Base implementation of the server.
 
 
 +++++++
@@ -108,7 +108,7 @@ Sends a data buffer to the connected client.
 Constructs a new ``Server`` instance with default settings.
 
 ++++++++++++++++++++++++++
-Low lever NetworkServer IO
+Low level NetworkServer IO
 ++++++++++++++++++++++++++
 
   *  :ref:`make_server (class: void? implicit; info: StructInfo const? implicit) : bool <function-network_make_server_void_q__implicit_StructInfo_const_q__implicit>` 

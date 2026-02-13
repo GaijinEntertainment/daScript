@@ -21,7 +21,7 @@ Structures
 
 .. das:attribute:: Template
 
-This structure contains collection of subsitution rules for a template.
+This structure contains collection of substitution rules for a template.
 
 :Fields: * **kaboomVar** : table<string;tuple<prefix:string;suffix:string>> - variable field access replacement rules
 
@@ -648,7 +648,7 @@ Quoting macros
 
 .. das:function:: apply_qmacro(expr: smart_ptr<Expression>; blk: block<(var rules:Template):void>) : ExpressionPtr
 
-Implementation details for the expression reificaiton.
+Implementation details for the expression reification.
 
 :Arguments: * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` >
 
@@ -658,7 +658,7 @@ Implementation details for the expression reificaiton.
 
 .. das:function:: apply_qblock(expr: smart_ptr<Expression>; blk: block<(var rules:Template):void>) : ExpressionPtr
 
-Implementation details for the expression reificaiton. This is a block reification.
+Implementation details for the expression reification. This is a block reification.
 
 :Arguments: * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` >
 
@@ -668,7 +668,7 @@ Implementation details for the expression reificaiton. This is a block reificati
 
 .. das:function:: apply_qblock_to_array(expr: smart_ptr<Expression>; blk: block<(var rules:Template):void>) : array<ExpressionPtr>
 
-Implementation details for the expression reificaiton. This is a block reification.
+Implementation details for the expression reification. This is a block reification.
 
 :Arguments: * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` >
 
@@ -678,7 +678,7 @@ Implementation details for the expression reificaiton. This is a block reificati
 
 .. das:function:: apply_qblock_expr(expr: smart_ptr<Expression>; blk: block<(var rules:Template):void>) : ExpressionPtr
 
-Implementation details for the expression reificaiton. This is a frist line of the block as expression reification.
+Implementation details for the expression reification. This is a first line of the block as expression reification.
 
 :Arguments: * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` >
 
@@ -688,7 +688,7 @@ Implementation details for the expression reificaiton. This is a frist line of t
 
 .. das:function:: apply_qtype(expr: smart_ptr<Expression>; blk: block<(var rules:Template):void>) : TypeDeclPtr
 
-Implementation details for the expression reificaiton. This is a type declaration reification.
+Implementation details for the expression reification. This is a type declaration reification.
 
 :Arguments: * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` >
 
@@ -736,7 +736,7 @@ Implementation details for reification. This is a variable generation reificatio
 
 .. das:function:: apply_qmacro_template_class(instance_name: string; template_type: smart_ptr<TypeDecl>; blk: block<(var rules:Template):void>) : TypeDeclPtr
 
-Implementation details for the expression reificaiton. This is a template class instantiation reification.
+Implementation details for the expression reification. This is a template class instantiation reification.
 
 :Arguments: * **instance_name** : string
 
@@ -764,7 +764,7 @@ Type pointer helpers
   *  :ref:`add_type_ptr_ref (var st: EnumerationPtr; flags: TypeDeclFlags) : TypeDeclPtr <function-templates_boost_add_type_ptr_ref_EnumerationPtr_TypeDeclFlags>` 
   *  :ref:`add_type_ptr_ref (var st: Enumeration?; flags: TypeDeclFlags) : TypeDeclPtr <function-templates_boost_add_type_ptr_ref_Enumeration_q__TypeDeclFlags>` 
   *  :ref:`add_array_ptr_ref (var a: array\<smart_ptr\<auto(TT)\>\>) : array\<smart_ptr\<TT\>\> <function-templates_boost_add_array_ptr_ref_array_ls_smart_ptr_ls_autoTT_gr__gr_>` 
-  *  :ref:`add_type_ptr_ref (anything: auto(TT); flags: TypeDeclFlags) : TypeDeclPtr <function-templates_boost_add_type_ptr_ref_autoTT_TypeDeclFlags>` 
+  *  :ref:`add_type_ptr_ref (anything: auto(TT); flags: TypeDeclFlags) : TypeDeclPtr <function-templates_boost_add_type_ptr_ref_autoTT_TypeDeclFlags_0x297>` 
 
 .. _function-templates_boost_add_type_ptr_ref_TypeDeclPtr_TypeDeclFlags:
 
@@ -824,7 +824,7 @@ Implementation details for the reification. This adds any array to the rules.
 
 :Arguments: * **a** : array<smart_ptr<auto(TT)>>
 
-.. _function-templates_boost_add_type_ptr_ref_autoTT_TypeDeclFlags:
+.. _function-templates_boost_add_type_ptr_ref_autoTT_TypeDeclFlags_0x297:
 
 .. das:function:: add_type_ptr_ref(anything: auto(TT); flags: TypeDeclFlags) : TypeDeclPtr
 
@@ -863,7 +863,7 @@ Class generation
   *  :ref:`make_class (name: string; var baseClass: Structure?; mod: Module?) : smart_ptr\<Structure\> <function-templates_boost_make_class_string_Structure_q__Module_q_>` 
   *  :ref:`make_class_constructor (cls: StructurePtr; ctor: FunctionPtr) : smart_ptr\<Function\> <function-templates_boost_make_class_constructor_StructurePtr_FunctionPtr>` 
   *  :ref:`modify_to_class_member (cls: StructurePtr; fun: FunctionPtr; isExplicit: bool; Constant: bool) <function-templates_boost_modify_to_class_member_StructurePtr_FunctionPtr_bool_bool>` 
-  *  :ref:`enum_class_type (st: auto) : auto <function-templates_boost_enum_class_type_auto>` 
+  *  :ref:`enum_class_type (st: auto) : auto <function-templates_boost_enum_class_type_auto_0x275>` 
 
 .. _function-templates_boost_make_class_string_Module_q_:
 
@@ -923,7 +923,7 @@ Modifies function to be a member of a particular class.
 
             * **Constant** : bool
 
-.. _function-templates_boost_enum_class_type_auto:
+.. _function-templates_boost_enum_class_type_auto_0x275:
 
 .. das:function:: enum_class_type(st: auto) : auto
 

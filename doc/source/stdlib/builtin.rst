@@ -587,13 +587,13 @@ Containers
   *  :ref:`push_clone (var Arr: array\<auto(numT)\>; var varr: numT[] ==const) : auto <function-builtin_push_clone_array_ls_autonumT_gr___numT__eq__eq_const>` 
   *  :ref:`push_clone (var Arr: array\<auto(numT)[]\>; varr: numT const[] ==const) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT_const__eq__eq_const>` 
   *  :ref:`push_clone (var Arr: array\<auto(numT)[]\>; var varr: numT[]) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT>` 
-  *  :ref:`push_clone (var A: auto(CT); b: auto(TT)|auto(TT)#) : auto <function-builtin_push_clone_autoCT_autoTTautoTT_hh_>` 
+  *  :ref:`push_clone (var A: auto(CT); b: auto(TT)|auto(TT)#) : auto <function-builtin_push_clone_autoCT_autoTTautoTT_hh__0x1db>` 
   *  :ref:`back (var a: array\<auto(TT)\>) : TT& <function-builtin_back__array_ls_autoTT_gr_>` 
   *  :ref:`back (var a: array\<auto(TT)\>#) : TT&# <function-builtin_back__array_ls_autoTT_gr__hh_>` 
   *  :ref:`back (a: array\<auto(TT)\>) : TT <function-builtin_back_array_ls_autoTT_gr_>` 
   *  :ref:`back (a: array\<auto(TT)\>#) : TT const&# <function-builtin_back_array_ls_autoTT_gr__hh_>` 
-  *  :ref:`back (var arr: auto(TT) ==const) : auto& <function-builtin_back__autoTT__eq__eq_const>` 
-  *  :ref:`back (arr: auto(TT) ==const) : auto <function-builtin_back_autoTT__eq__eq_const>` 
+  *  :ref:`back (var arr: auto(TT) ==const) : auto& <function-builtin_back__autoTT__eq__eq_const_0x213>` 
+  *  :ref:`back (arr: auto(TT) ==const) : auto <function-builtin_back_autoTT__eq__eq_const_0x21e>` 
   *  :ref:`erase (var Arr: array\<auto(numT)\>; at: int) : auto <function-builtin_erase_array_ls_autonumT_gr__int>` 
   *  :ref:`erase (var Arr: array\<auto(numT)\>; at: int; count: int) : auto <function-builtin_erase_array_ls_autonumT_gr__int_int>` 
   *  :ref:`erase_if (var arr: array\<auto(TT)\>; blk: block\<(key:TT const):bool\>|block\<(var key:TT&):bool\>) : auto <function-builtin_erase_if_array_ls_autoTT_gr__block_ls_key_c_TT_const_c_bool_gr_block_ls_var_key_c_TT_c_bool_gr_>` 
@@ -630,8 +630,8 @@ Containers
   *  :ref:`emplace (var Tab: table\<auto(keyT), smart_ptr\<auto(valT)\>\>; at: keyT|keyT#; var val: smart_ptr\<valT\>&) : auto <function-builtin_emplace_table_ls_autokeyT,_smart_ptr_ls_autovalT_gr__gr__keyTkeyT_hh__smart_ptr_ls_valT_gr_>` 
   *  :ref:`emplace (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; var val: valT[]&) : auto <function-builtin_emplace_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT>` 
   *  :ref:`emplace_new (var tab: table\<auto(kT), smart_ptr\<auto(vT)\>\>; key: kT; var value: smart_ptr\<vT\>) : auto <function-builtin_emplace_new_table_ls_autokT,_smart_ptr_ls_autovT_gr__gr__kT_smart_ptr_ls_vT_gr_>` 
-  *  :ref:`emplace (var Tab: table\<auto, auto\>; key: auto; value: auto) : auto <function-builtin_emplace_table_ls_auto,_auto_gr__auto_auto>` 
-  *  :ref:`emplace (var a: array\<auto\>; value: auto) : auto <function-builtin_emplace_array_ls_auto_gr__auto>` 
+  *  :ref:`emplace (var Tab: table\<auto, auto\>; key: auto; value: auto) : auto <function-builtin_emplace_table_ls_auto,_auto_gr__auto_auto_0x3a9>` 
+  *  :ref:`emplace (var a: array\<auto\>; value: auto) : auto <function-builtin_emplace_array_ls_auto_gr__auto_0x3b6>` 
   *  :ref:`emplace_new (var Arr: array\<smart_ptr\<auto(numT)\>\>; var value: smart_ptr\<numT\>) : auto <function-builtin_emplace_new_array_ls_smart_ptr_ls_autonumT_gr__gr__smart_ptr_ls_numT_gr_>` 
   *  :ref:`insert_default (var tab: table\<auto(TT), auto(QQ)\>; key: TT|TT#; var value: QQ ==const|QQ# ==const) <function-builtin_insert_default_table_ls_autoTT,_autoQQ_gr__TTTT_hh__QQ__eq__eq_constQQ_hh___eq__eq_const>` 
   *  :ref:`insert_default (var tab: table\<auto(keyT), auto(valT)\>; key: keyT|keyT#; value: valT ==const|valT const# ==const) <function-builtin_insert_default_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_const_hh___eq__eq_const>` 
@@ -641,8 +641,8 @@ Containers
   *  :ref:`modify (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; blk: block\<(p:valT):valT\>) <function-builtin_modify__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_p_c_valT_c_valT_gr_>` 
   *  :ref:`key_exists (Tab: table\<auto(keyT);auto(valT)\>|table\<auto(keyT);auto(valT)\>#; at: string#) : bool <function-builtin_key_exists_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh__string_hh_>` 
   *  :ref:`key_exists (Tab: table\<auto(keyT);auto(valT)\>|table\<auto(keyT);auto(valT)\>#; at: keyT|keyT#) : bool <function-builtin_key_exists_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh__keyTkeyT_hh_>` 
-  *  :ref:`copy_to_local (a: auto(TT)) : TT <function-builtin_copy_to_local_autoTT>` 
-  *  :ref:`move_to_local (var a: auto(TT)&) : TT <function-builtin_move_to_local_autoTT>` 
+  *  :ref:`copy_to_local (a: auto(TT)) : TT <function-builtin_copy_to_local_autoTT_0x41f>` 
+  *  :ref:`move_to_local (var a: auto(TT)&) : TT <function-builtin_move_to_local_autoTT_0x428>` 
   *  :ref:`keys (a: table\<auto(keyT);auto(valT)\> ==const|table\<auto(keyT);auto(valT)\> const# ==const) : iterator\<keyT\> <function-builtin_keys_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__const_hh___eq__eq_const>` 
   *  :ref:`keys (var a: table\<auto(keyT);auto(valT)\> ==const|table\<auto(keyT);auto(valT)\># ==const) : iterator\<keyT\> <function-builtin_keys_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__hh___eq__eq_const>` 
   *  :ref:`values (a: table\<auto(keyT);void\> ==const|table\<auto(keyT);void\> const# ==const) : auto <function-builtin_values_table_ls_autokeyT;void_gr___eq__eq_consttable_ls_autokeyT;void_gr__const_hh___eq__eq_const>` 
@@ -659,23 +659,23 @@ Containers
   *  :ref:`each (rng: range64) : iterator\<int64\> <function-builtin_each_range64>` 
   *  :ref:`each (rng: urange64) : iterator\<uint64\> <function-builtin_each_urange64>` 
   *  :ref:`each (str: string) : iterator\<int\> <function-builtin_each_string>` 
-  *  :ref:`each (a: auto(TT)[]) : iterator\<TT&\> <function-builtin_each_autoTT>` 
+  *  :ref:`each (a: auto(TT)[]) : iterator\<TT&\> <function-builtin_each_autoTT_0x59e>` 
   *  :ref:`each (a: array\<auto(TT)\>) : iterator\<TT&\> <function-builtin_each_array_ls_autoTT_gr_>` 
   *  :ref:`each (a: array\<auto(TT)\>#) : iterator\<TT&#\> <function-builtin_each_array_ls_autoTT_gr__hh_>` 
   *  :ref:`each (lam: lambda\<(var arg:auto(argT)):bool\>) : iterator\<argT\> <function-builtin_each_lambda_ls_var_arg_c_autoargT_c_bool_gr_>` 
   *  :ref:`each_ref (lam: lambda\<(var arg:auto(argT)?):bool\>) : iterator\<argT&\> <function-builtin_each_ref_lambda_ls_var_arg_c_autoargT_q__c_bool_gr_>` 
-  *  :ref:`each_enum (tt: auto(TT)) : iterator\<TT\> <function-builtin_each_enum_autoTT>` 
+  *  :ref:`each_enum (tt: auto(TT)) : iterator\<TT\> <function-builtin_each_enum_autoTT_0x5cb>` 
   *  :ref:`nothing (var it: iterator\<auto(TT)\>) : iterator\<TT\> <function-builtin_nothing_iterator_ls_autoTT_gr_>` 
   *  :ref:`to_array (var it: iterator\<auto(TT)\>) : array\<TT\> <function-builtin_to_array_iterator_ls_autoTT_gr_>` 
-  *  :ref:`to_array (a: auto(TT)[]) : array\<TT\> <function-builtin_to_array_autoTT>` 
-  *  :ref:`to_array_move (var a: auto(TT)[]) : array\<TT\> <function-builtin_to_array_move_autoTT>` 
-  *  :ref:`to_array_move (a: auto(TT) ==const) : array\<TT\> <function-builtin_to_array_move_autoTT__eq__eq_const>` 
-  *  :ref:`to_array_move (var a: auto(TT) ==const) : array\<TT\> <function-builtin_to_array_move__autoTT__eq__eq_const>` 
+  *  :ref:`to_array (a: auto(TT)[]) : array\<TT\> <function-builtin_to_array_autoTT_0x5e9>` 
+  *  :ref:`to_array_move (var a: auto(TT)[]) : array\<TT\> <function-builtin_to_array_move_autoTT_0x5f3>` 
+  *  :ref:`to_array_move (a: auto(TT) ==const) : array\<TT\> <function-builtin_to_array_move_autoTT__eq__eq_const_0x608>` 
+  *  :ref:`to_array_move (var a: auto(TT) ==const) : array\<TT\> <function-builtin_to_array_move__autoTT__eq__eq_const_0x61a>` 
   *  :ref:`to_table (a: tuple\<auto(keyT);auto(valT)\>[]) : table\<keyT, valT\> <function-builtin_to_table_tuple_ls_autokeyT;autovalT_gr_>` 
-  *  :ref:`to_table (a: auto(keyT)[]) : table\<keyT, void\> <function-builtin_to_table_autokeyT>` 
-  *  :ref:`to_table_move (a: auto(keyT)[]) : table\<keyT, void\> <function-builtin_to_table_move_autokeyT>` 
+  *  :ref:`to_table (a: auto(keyT)[]) : table\<keyT, void\> <function-builtin_to_table_autokeyT_0x635>` 
+  *  :ref:`to_table_move (a: auto(keyT)[]) : table\<keyT, void\> <function-builtin_to_table_move_autokeyT_0x63e>` 
   *  :ref:`to_table_move (a: array\<auto(keyT)\>) : table\<keyT, void\> <function-builtin_to_table_move_array_ls_autokeyT_gr_>` 
-  *  :ref:`to_table_move (a: auto(keyT)) : table\<keyT, void\> <function-builtin_to_table_move_autokeyT>` 
+  *  :ref:`to_table_move (a: auto(keyT)) : table\<keyT, void\> <function-builtin_to_table_move_autokeyT_0x650>` 
   *  :ref:`to_table_move (var a: tuple\<auto(keyT);auto(valT)\>) : table\<keyT, valT\> <function-builtin_to_table_move_tuple_ls_autokeyT;autovalT_gr_>` 
   *  :ref:`to_table_move (var a: tuple\<auto(keyT);auto(valT)\>[]) : table\<keyT, valT\> <function-builtin_to_table_move_tuple_ls_autokeyT;autovalT_gr_>` 
   *  :ref:`to_table_move (var a: array\<tuple\<auto(keyT);auto(valT)\>\>) : table\<keyT, valT\> <function-builtin_to_table_move_array_ls_tuple_ls_autokeyT;autovalT_gr__gr_>` 
@@ -691,14 +691,14 @@ Containers
   *  :ref:`find_index_if (arr: array\<auto(TT)\>|array\<auto(TT)\>#; blk: block\<(key:TT):bool\>) : auto <function-builtin_find_index_if_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__block_ls_key_c_TT_c_bool_gr_>` 
   *  :ref:`find_index_if (arr: auto(TT)[]|auto(TT)[]#; blk: block\<(key:TT):bool\>) : auto <function-builtin_find_index_if_autoTTautoTT_hh__block_ls_key_c_TT_c_bool_gr_>` 
   *  :ref:`find_index_if (var arr: iterator\<auto(TT)\>; blk: block\<(key:TT):bool\>) : auto <function-builtin_find_index_if_iterator_ls_autoTT_gr__block_ls_key_c_TT_c_bool_gr_>` 
-  *  :ref:`has_value (a: auto; key: auto) : auto <function-builtin_has_value_auto_auto>` 
-  *  :ref:`has_value (var a: iterator\<auto\>; key: auto) : auto <function-builtin_has_value_iterator_ls_auto_gr__auto>` 
-  *  :ref:`subarray (a: auto(TT)[]; r: range) : auto <function-builtin_subarray_autoTT_range>` 
-  *  :ref:`subarray (a: auto(TT)[]; r: urange) : auto <function-builtin_subarray_autoTT_urange>` 
+  *  :ref:`has_value (a: auto; key: auto) : auto <function-builtin_has_value_auto_auto_0x75c>` 
+  *  :ref:`has_value (var a: iterator\<auto\>; key: auto) : auto <function-builtin_has_value_iterator_ls_auto_gr__auto_0x76a>` 
+  *  :ref:`subarray (a: auto(TT)[]; r: range) : auto <function-builtin_subarray_autoTT_range_0x7b1>` 
+  *  :ref:`subarray (a: auto(TT)[]; r: urange) : auto <function-builtin_subarray_autoTT_urange_0x7c2>` 
   *  :ref:`subarray (a: array\<auto(TT)\>; r: range) : auto <function-builtin_subarray_array_ls_autoTT_gr__range>` 
   *  :ref:`subarray (var a: array\<auto(TT)\>; r: range) : auto <function-builtin_subarray__array_ls_autoTT_gr__range>` 
   *  :ref:`subarray (a: array\<auto(TT)\>; r: urange) : auto <function-builtin_subarray_array_ls_autoTT_gr__urange>` 
-  *  :ref:`move_to_ref (var a: auto&; var b: auto) : auto <function-builtin_move_to_ref_auto_auto>` 
+  *  :ref:`move_to_ref (var a: auto&; var b: auto) : auto <function-builtin_move_to_ref_auto_auto_0x80c>` 
   *  :ref:`clear (var t: table\<auto(KT), auto(VT)\>) : auto <function-builtin_clear_table_ls_autoKT,_autoVT_gr_>` 
 
 .. _function-builtin_clear_array_ls_anything_gr_:
@@ -1045,7 +1045,7 @@ Clones a mutable fixed-size array `varr` and appends the copy to `Arr`, an array
 
             * **varr** : numT[-1]
 
-.. _function-builtin_push_clone_autoCT_autoTTautoTT_hh_:
+.. _function-builtin_push_clone_autoCT_autoTTautoTT_hh__0x1db:
 
 .. das:function:: push_clone(A: auto(CT); b: auto(TT)|auto(TT)#) : auto
 
@@ -1087,7 +1087,7 @@ Accesses and returns a const temporary reference to the last element of the temp
 
 :Arguments: * **a** : array<auto(TT)>#!
 
-.. _function-builtin_back__autoTT__eq__eq_const:
+.. _function-builtin_back__autoTT__eq__eq_const_0x213:
 
 .. das:function:: back(arr: auto(TT) ==const) : auto&
 
@@ -1095,7 +1095,7 @@ Accesses and returns a mutable reference to the last element of the fixed-size a
 
 :Arguments: * **arr** : auto(TT)!
 
-.. _function-builtin_back_autoTT__eq__eq_const:
+.. _function-builtin_back_autoTT__eq__eq_const_0x21e:
 
 .. das:function:: back(arr: auto(TT) ==const) : auto
 
@@ -1501,7 +1501,7 @@ Moves a smart pointer `value` into the table `tab` at the given `key`, construct
 
             * **value** : smart_ptr<vT>
 
-.. _function-builtin_emplace_table_ls_auto,_auto_gr__auto_auto:
+.. _function-builtin_emplace_table_ls_auto,_auto_gr__auto_auto_0x3a9:
 
 .. das:function:: emplace(Tab: table<auto, auto>; key: auto; value: auto) : auto
 
@@ -1513,7 +1513,7 @@ Moves `value` into the table `Tab` at the specified `key` using move semantics, 
 
             * **value** : auto
 
-.. _function-builtin_emplace_array_ls_auto_gr__auto:
+.. _function-builtin_emplace_array_ls_auto_gr__auto_0x3b6:
 
 .. das:function:: emplace(a: array<auto>; value: auto) : auto
 
@@ -1621,7 +1621,7 @@ Checks whether the key `at` exists in the table `Tab` and returns `true` if foun
 
             * **at** : option<keyT|keyT#>
 
-.. _function-builtin_copy_to_local_autoTT:
+.. _function-builtin_copy_to_local_autoTT_0x41f:
 
 .. das:function:: copy_to_local(a: auto(TT)) : TT
 
@@ -1629,7 +1629,7 @@ Copies the value `a` and returns it as a new local value on the stack, which can
 
 :Arguments: * **a** : auto(TT)
 
-.. _function-builtin_move_to_local_autoTT:
+.. _function-builtin_move_to_local_autoTT_0x428:
 
 .. das:function:: move_to_local(a: auto(TT)&) : TT
 
@@ -1769,7 +1769,7 @@ Creates an iterator that yields the Unicode codepoint (as `int`) of each charact
 
 :Arguments: * **str** : string
 
-.. _function-builtin_each_autoTT:
+.. _function-builtin_each_autoTT_0x59e:
 
 .. das:function:: each(a: auto(TT)[]) : iterator<TT&>
 
@@ -1809,7 +1809,7 @@ Wraps a lambda `lam` — which receives a mutable pointer argument and returns a
 
 :Arguments: * **lam** : lambda<(arg:auto(argT)?):bool>
 
-.. _function-builtin_each_enum_autoTT:
+.. _function-builtin_each_enum_autoTT_0x5cb:
 
 .. das:function:: each_enum(tt: auto(TT)) : iterator<TT>
 
@@ -1836,7 +1836,7 @@ Consumes iterator `it` and collects all yielded elements into a new dynamic arra
 
 :Arguments: * **it** : iterator<auto(TT)>
 
-.. _function-builtin_to_array_autoTT:
+.. _function-builtin_to_array_autoTT_0x5e9:
 
 .. das:function:: to_array(a: auto(TT)[]) : array<TT>
 
@@ -1844,7 +1844,7 @@ Converts a fixed-size array `a` into a new dynamic array by cloning each element
 
 :Arguments: * **a** : auto(TT)[-1]
 
-.. _function-builtin_to_array_move_autoTT:
+.. _function-builtin_to_array_move_autoTT_0x5f3:
 
 .. das:function:: to_array_move(a: auto(TT)[]) : array<TT>
 
@@ -1852,7 +1852,7 @@ Converts a mutable fixed-size array `a` into a new dynamic array, moving each el
 
 :Arguments: * **a** : auto(TT)[-1]
 
-.. _function-builtin_to_array_move_autoTT__eq__eq_const:
+.. _function-builtin_to_array_move_autoTT__eq__eq_const_0x608:
 
 .. das:function:: to_array_move(a: auto(TT) ==const) : array<TT>
 
@@ -1860,7 +1860,7 @@ Converts container `a` into a new dynamic array, copying elements into the resul
 
 :Arguments: * **a** : auto(TT)!
 
-.. _function-builtin_to_array_move__autoTT__eq__eq_const:
+.. _function-builtin_to_array_move__autoTT__eq__eq_const_0x61a:
 
 .. das:function:: to_array_move(a: auto(TT) ==const) : array<TT>
 
@@ -1876,7 +1876,7 @@ Converts a fixed-size array of key-value tuples `a` into a `table<keyT, valT>` b
 
 :Arguments: * **a** : tuple<auto(keyT);auto(valT)>[-1]
 
-.. _function-builtin_to_table_autokeyT:
+.. _function-builtin_to_table_autokeyT_0x635:
 
 .. das:function:: to_table(a: auto(keyT)[]) : table<keyT, void>
 
@@ -1884,7 +1884,7 @@ Converts a fixed-size array of keys `a` into a `table<keyT, void>` set by clonin
 
 :Arguments: * **a** : auto(keyT)[-1]
 
-.. _function-builtin_to_table_move_autokeyT:
+.. _function-builtin_to_table_move_autokeyT_0x63e:
 
 .. das:function:: to_table_move(a: auto(keyT)[]) : table<keyT, void>
 
@@ -1900,7 +1900,7 @@ Converts a dynamic array of keys `a` into a `table<keyT, void>` set, copying or 
 
 :Arguments: * **a** : array<auto(keyT)>
 
-.. _function-builtin_to_table_move_autokeyT:
+.. _function-builtin_to_table_move_autokeyT_0x650:
 
 .. das:function:: to_table_move(a: auto(keyT)) : table<keyT, void>
 
@@ -2048,7 +2048,7 @@ Consumes elements from the iterator `arr` and returns the index of the first ele
 
             * **blk** : block<(key:TT):bool>
 
-.. _function-builtin_has_value_auto_auto:
+.. _function-builtin_has_value_auto_auto_0x75c:
 
 .. das:function:: has_value(a: auto; key: auto) : auto
 
@@ -2058,7 +2058,7 @@ Checks whether the iterable container `a` (array, fixed-size array, etc.) contai
 
             * **key** : auto
 
-.. _function-builtin_has_value_iterator_ls_auto_gr__auto:
+.. _function-builtin_has_value_iterator_ls_auto_gr__auto_0x76a:
 
 .. das:function:: has_value(a: iterator<auto>; key: auto) : auto
 
@@ -2068,7 +2068,7 @@ Consumes elements from the iterator `a` and returns `true` if any element equals
 
             * **key** : auto
 
-.. _function-builtin_subarray_autoTT_range:
+.. _function-builtin_subarray_autoTT_range_0x7b1:
 
 .. das:function:: subarray(a: auto(TT)[]; r: range) : auto
 
@@ -2078,7 +2078,7 @@ Creates and returns a new dynamic array containing a copy of elements from fixed
 
             * **r** : range
 
-.. _function-builtin_subarray_autoTT_urange:
+.. _function-builtin_subarray_autoTT_urange_0x7c2:
 
 .. das:function:: subarray(a: auto(TT)[]; r: urange) : auto
 
@@ -2118,7 +2118,7 @@ Creates and returns a new dynamic array containing a copy of elements from `a` w
 
             * **r** : urange
 
-.. _function-builtin_move_to_ref_auto_auto:
+.. _function-builtin_move_to_ref_auto_auto_0x80c:
 
 .. das:function:: move_to_ref(a: auto&; b: auto) : auto
 
@@ -2902,10 +2902,10 @@ Constructs a temporary read-only array of type `TT` over raw memory at `data` wi
 Binary serializer
 +++++++++++++++++
 
-  *  :ref:`binary_save (obj: auto; subexpr: block\<(data:array\<uint8\>#):void\>) : auto <function-builtin_binary_save_auto_block_ls_data_c_array_ls_uint8_gr__hh__c_void_gr_>` 
-  *  :ref:`binary_load (var obj: auto; data: array\<uint8\>) : auto <function-builtin_binary_load_auto_array_ls_uint8_gr_>` 
+  *  :ref:`binary_save (obj: auto; subexpr: block\<(data:array\<uint8\>#):void\>) : auto <function-builtin_binary_save_auto_block_ls_data_c_array_ls_uint8_gr__hh__c_void_gr__0x414>` 
+  *  :ref:`binary_load (var obj: auto; data: array\<uint8\>) : auto <function-builtin_binary_load_auto_array_ls_uint8_gr__0x419>` 
 
-.. _function-builtin_binary_save_auto_block_ls_data_c_array_ls_uint8_gr__hh__c_void_gr_:
+.. _function-builtin_binary_save_auto_block_ls_data_c_array_ls_uint8_gr__hh__c_void_gr__0x414:
 
 .. das:function:: binary_save(obj: auto; subexpr: block<(data:array<uint8>#):void>) : auto
 
@@ -2915,7 +2915,7 @@ Serializes `obj` into a binary representation and passes the resulting uint8 byt
 
             * **subexpr** : block<(data:array<uint8>#):void>
 
-.. _function-builtin_binary_load_auto_array_ls_uint8_gr_:
+.. _function-builtin_binary_load_auto_array_ls_uint8_gr__0x419:
 
 .. das:function:: binary_load(obj: auto; data: array<uint8>) : auto
 
@@ -3145,9 +3145,9 @@ Formats a `double` value as a string using the given `format` specifier (followi
 Argument consumption
 ++++++++++++++++++++
 
-  *  :ref:`consume_argument (var a: auto(TT)&) : TT& <function-builtin_consume_argument_autoTT>` 
+  *  :ref:`consume_argument (var a: auto(TT)&) : TT& <function-builtin_consume_argument_autoTT_0x843>` 
 
-.. _function-builtin_consume_argument_autoTT:
+.. _function-builtin_consume_argument_autoTT_0x843:
 
 .. das:function:: consume_argument(a: auto(TT)&) : TT&
 
@@ -3201,12 +3201,12 @@ Enables or disables runtime lock verification for the given `table`; when `check
 Lock checking internals
 +++++++++++++++++++++++
 
-  *  :ref:`_move_with_lockcheck (var a: auto(valA)&; var b: auto(valB)&) : auto <function-builtin__move_with_lockcheck_autovalA_autovalB>` 
-  *  :ref:`_return_with_lockcheck (var a: auto(valT)& ==const) : auto& <function-builtin__return_with_lockcheck__autovalT__eq__eq_const>` 
-  *  :ref:`_return_with_lockcheck (a: auto(valT) const& ==const) : auto& <function-builtin__return_with_lockcheck_autovalT_const__eq__eq_const>` 
+  *  :ref:`_move_with_lockcheck (var a: auto(valA)&; var b: auto(valB)&) : auto <function-builtin__move_with_lockcheck_autovalA_autovalB_0x20>` 
+  *  :ref:`_return_with_lockcheck (var a: auto(valT)& ==const) : auto& <function-builtin__return_with_lockcheck__autovalT__eq__eq_const_0x32>` 
+  *  :ref:`_return_with_lockcheck (a: auto(valT) const& ==const) : auto& <function-builtin__return_with_lockcheck_autovalT_const__eq__eq_const_0x3b>` 
   *  :ref:`_at_with_lockcheck (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#) : valT& <function-builtin__at_with_lockcheck_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
 
-.. _function-builtin__move_with_lockcheck_autovalA_autovalB:
+.. _function-builtin__move_with_lockcheck_autovalA_autovalB_0x20:
 
 .. das:function:: _move_with_lockcheck(a: auto(valA)&; b: auto(valB)&) : auto
 
@@ -3216,7 +3216,7 @@ Moves the contents of `b` into `a`, verifying that neither `a` nor `b` (nor any 
 
             * **b** : auto(valB)&
 
-.. _function-builtin__return_with_lockcheck__autovalT__eq__eq_const:
+.. _function-builtin__return_with_lockcheck__autovalT__eq__eq_const_0x32:
 
 .. das:function:: _return_with_lockcheck(a: auto(valT)& ==const) : auto&
 
@@ -3224,7 +3224,7 @@ Passes through and returns a mutable reference to `a`, verifying that `a` and al
 
 :Arguments: * **a** : auto(valT)&!
 
-.. _function-builtin__return_with_lockcheck_autovalT_const__eq__eq_const:
+.. _function-builtin__return_with_lockcheck_autovalT_const__eq__eq_const_0x3b:
 
 .. das:function:: _return_with_lockcheck(a: auto(valT) const& ==const) : auto&
 
@@ -3464,8 +3464,8 @@ Algorithms
 
   *  :ref:`count (start: int = 0; step: int = 1) : iterator\<int\> <function-builtin_count_int_int>` 
   *  :ref:`ucount (start: uint = 0x0; step: uint = 0x1) : iterator\<uint\> <function-builtin_ucount_uint_uint>` 
-  *  :ref:`iter_range (foo: auto) : auto <function-builtin_iter_range_auto>` 
-  *  :ref:`swap (var a: auto(TT)&; var b: auto(TT)&) : auto <function-builtin_swap_autoTT_autoTT>` 
+  *  :ref:`iter_range (foo: auto) : auto <function-builtin_iter_range_auto_0x591>` 
+  *  :ref:`swap (var a: auto(TT)&; var b: auto(TT)&) : auto <function-builtin_swap_autoTT_autoTT_0x7a9>` 
 
 .. _function-builtin_count_int_int:
 
@@ -3487,7 +3487,7 @@ Creates an infinite iterator over unsigned integers beginning at `start` and inc
 
             * **step** : uint
 
-.. _function-builtin_iter_range_auto:
+.. _function-builtin_iter_range_auto_0x591:
 
 .. das:function:: iter_range(foo: auto) : auto
 
@@ -3495,7 +3495,7 @@ Creates a `range` from `0` to the length of the given iterable `foo`, useful for
 
 :Arguments: * **foo** : auto
 
-.. _function-builtin_swap_autoTT_autoTT:
+.. _function-builtin_swap_autoTT_autoTT_0x7a9:
 
 .. das:function:: swap(a: auto(TT)&; b: auto(TT)&) : auto
 

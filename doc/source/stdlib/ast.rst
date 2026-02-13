@@ -93,45 +93,47 @@ properties of the `FieldDeclaration` object.
 
 .. das:attribute:: bitfield StructureFlags
 
-:Fields: * **isClass** (0x1) - properties of the `Structure` object.
+properties of the `Structure` object.
 
-         * **genCtor** (0x2) - The structure is a class.
+:Fields: * **isClass** (0x1) - The structure is a class.
 
-         * **cppLayout** (0x4) - Generate constructor.
+         * **genCtor** (0x2) - Generate constructor.
 
-         * **cppLayoutNotPod** (0x8) - C++ data layout.
+         * **cppLayout** (0x4) - C++ data layout.
 
-         * **generated** (0x10) - C++ layout not POD type, i.e. has alignment to accommodate for inheritance.
+         * **cppLayoutNotPod** (0x8) - C++ layout not POD type, i.e. has alignment to accommodate for inheritance.
 
-         * **persistent** (0x20) - This structure is compiler-generated.
+         * **generated** (0x10) - This structure is compiler-generated.
 
-         * **isLambda** (0x40) - This structure is using persistent heap (C++ heap).
+         * **persistent** (0x20) - This structure is using persistent heap (C++ heap).
 
-         * **privateStructure** (0x80) - This structure is a lambda.
+         * **isLambda** (0x40) - This structure is a lambda.
 
-         * **macroInterface** (0x100) - This structure is private.
+         * **privateStructure** (0x80) - This structure is private.
 
-         * **_sealed** (0x200) - This structure is a macro interface.
+         * **macroInterface** (0x100) - This structure is a macro interface.
 
-         * **skipLockCheck** (0x400) - This structure is sealed. It cannot be inherited.
+         * **_sealed** (0x200) - This structure is sealed. It cannot be inherited.
 
-         * **circular** (0x800) - Skip lock check.
+         * **skipLockCheck** (0x400) - Skip lock check.
 
-         * **_generator** (0x1000) - This structure has circulare references (and is invalid).
+         * **circular** (0x800) - This structure has circular references (and is invalid).
 
-         * **hasStaticMembers** (0x2000) - This structure is a generator.
+         * **_generator** (0x1000) - This structure is a generator.
 
-         * **hasStaticFunctions** (0x4000) - This structure has static members.
+         * **hasStaticMembers** (0x2000) - This structure has static members.
 
-         * **hasInitFields** (0x8000) - This structure has static functions.
+         * **hasStaticFunctions** (0x4000) - This structure has static functions.
 
-         * **safeWhenUninitialized** (0x10000) - This structure has initialized fields.
+         * **hasInitFields** (0x8000) - This structure has initialized fields.
 
-         * **isTemplate** (0x20000) - This structure is safe when uninitialized.
+         * **safeWhenUninitialized** (0x10000) - This structure is safe when uninitialized.
 
-         * **hasDefaultInitializer** (0x40000) - This structure is a template.
+         * **isTemplate** (0x20000) - This structure is a template.
 
-         * **noGenCtor** (0x80000) - This structure has a default initializer.
+         * **hasDefaultInitializer** (0x40000) - This structure has a default initializer.
+
+         * **noGenCtor** (0x80000) - This structure does not generate a default constructor.
 
 
 .. _alias-ExprGenFlags:
@@ -422,54 +424,58 @@ access properties of the `Variable` object.
 
 .. das:attribute:: bitfield ExprBlockFlags
 
-:Fields: * **isClosure** (0x1) - properties of the `ExprBlock` object.
+properties of the `ExprBlock` object.
 
-         * **hasReturn** (0x2) - Block is a closure, and not a regular expression list.
+:Fields: * **isClosure** (0x1) - Block is a closure, and not a regular expression list.
 
-         * **copyOnReturn** (0x4) - Block has a return statement.
+         * **hasReturn** (0x2) - Block has a return statement.
 
-         * **moveOnReturn** (0x8) - When invoked, the block result is copied on return.
+         * **copyOnReturn** (0x4) - When invoked, the block result is copied on return.
 
-         * **inTheLoop** (0x10) - When invoked, the block result is moved on return.
+         * **moveOnReturn** (0x8) - When invoked, the block result is moved on return.
 
-         * **finallyBeforeBody** (0x20) - Block is inside a loop.
+         * **inTheLoop** (0x10) - Block is inside a loop.
 
-         * **finallyDisabled** (0x40) - Finally is to be visited before the body.
+         * **finallyBeforeBody** (0x20) - Finally is to be visited before the body.
 
-         * **aotSkipMakeBlock** (0x80) - Finally is disabled.
+         * **finallyDisabled** (0x40) - Finally is disabled.
 
-         * **aotDoNotSkipAnnotationData** (0x100) - AOT is allowed to skip make block generation, and pass [&]() directly.
+         * **aotSkipMakeBlock** (0x80) - AOT is allowed to skip make block generation, and pass [&]() directly.
 
-         * **isCollapseable** (0x200) - AOT should not skip annotation data even if make block is skipped.
+         * **aotDoNotSkipAnnotationData** (0x100) - AOT should not skip annotation data even if make block is skipped.
 
-         * **needCollapse** (0x400) - Block is eligible for collapse optimization.
+         * **isCollapseable** (0x200) - Block is eligible for collapse optimization.
 
-         * **hasMakeBlock** (0x800) - Block needs to be collapsed.
+         * **needCollapse** (0x400) - Block needs to be collapsed.
 
-         * **hasEarlyOut** (0x1000) - Block has make block operation.
+         * **hasMakeBlock** (0x800) - Block has make block operation.
 
-         * **forLoop** (0x2000) - Block has early out (break/continue/return).
+         * **hasEarlyOut** (0x1000) - Block has early out (break/continue/return).
 
-         * **hasExitByLabel** (0x4000) - Block is a for loop body.
+         * **forLoop** (0x2000) - Block is a for loop body.
 
-         * **isLambdaBlock** (0x8000) - Block has exit by label (goto outside).
+         * **hasExitByLabel** (0x4000) - Block has exit by label (goto outside).
 
-         * **isGeneratorBlock** (0x10000) - Block is a lambda block.
+         * **isLambdaBlock** (0x8000) - Block is a lambda block.
+
+         * **isGeneratorBlock** (0x10000) - Block is a generator block.
 
 
 .. _alias-ExprAtFlags:
 
 .. das:attribute:: bitfield ExprAtFlags
 
-:Fields: * **r2v** (0x1) - properties of the `ExprAt` object.
+properties of the `ExprAt` object.
 
-         * **r2cr** (0x2) - Reference to value conversion is applied.
+:Fields: * **r2v** (0x1) - Reference to value conversion is applied.
 
-         * **write** (0x4) - Read to const reference is propagated.
+         * **r2cr** (0x2) - Read to const reference is propagated.
 
-         * **no_promotion** (0x8) - The result is written to.
+         * **write** (0x4) - The result is written to.
 
-         * **under_clone** (0x10) - Promotion to operator is disabled, even if operator [] is overloaded.
+         * **no_promotion** (0x8) - Promotion to operator is disabled, even if operator [] is overloaded.
+
+         * **under_clone** (0x10) - The expression is under a clone operation.
 
 
 .. _alias-ExprMakeLocalFlags:
@@ -2822,33 +2828,32 @@ Make variant expression (`[YourVariant variantName=expr1]`)
 .. das:attribute:: ExprMakeArray
 
 Make array expression (`[[auto 1;2;3]]` or `[{auto "foo";"bar"}]` for static and dynamic arrays accordingly).
-Location of the expression in source code
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Type of the expression
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
 
-         * **__rtti** : string - Expression generation flags
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression print flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Type being made
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
 
-         * **makeType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Stack top offset for the data, if applicable
+         * **makeType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type being made
 
-         * **stackTop** : uint - Extra offset for the data, if applicable. If part of the larger initialization, extra offset is that
+         * **stackTop** : uint - Stack top offset for the data, if applicable
 
-         * **extraOffset** : uint - Flags specific to make-local expressions
+         * **extraOffset** : uint - Extra offset for the data, if applicable. If part of the larger initialization, extra offset is that
 
-         * **makeFlags** :  :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>`  - Type of the array elements
+         * **makeFlags** :  :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>`  - Flags specific to make-local expressions
 
-         * **recordType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Array of expressions for the elements
+         * **recordType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the array elements
 
-         * **values** : vector<smart_ptr<Expression>> - If gen2 syntax is used (i.e. `[...]` instead of `[[...]]`)
+         * **values** : vector<smart_ptr<Expression>> - Array of expressions for the elements
 
-         * **gen2** : bool
+         * **gen2** : bool - If gen2 syntax is used (i.e. `[...]` instead of `[[...]]`)
 
 
 .. _handle-ast-ExprMakeTuple:
@@ -3591,33 +3596,32 @@ Safe field lookup (`foo?.bar`)
 .. das:attribute:: ExprIsVariant
 
 Is expression (`foo is bar`)
-Location of the expression in source code
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Type of the expression
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
 
-         * **__rtti** : string - Expression generation flags
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression print flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Subexpression whose field is being accessed
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
 
-         * **value** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Name of the field being accessed
+         * **value** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Subexpression whose field is being accessed
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Location of the field access in source code
+         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the field being accessed
 
-         * **atField** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Index of the field in the type's field list
+         * **atField** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the field access in source code
 
-         * **fieldIndex** : int - Type annotation for the field
+         * **fieldIndex** : int - Index of the field in the type's field list
 
-         * **annotation** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` > - Flags for dereferencing operations
+         * **annotation** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` > - Type annotation for the field
 
-         * **derefFlags** :  :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>`  - Flags specific to field access expressions
+         * **derefFlags** :  :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>`  - Flags for dereferencing operations
 
-         * **fieldFlags** :  :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>` 
+         * **fieldFlags** :  :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>`  - Flags specific to field access expressions
 
 
 .. _handle-ast-ExprAsVariant:
@@ -5368,21 +5372,21 @@ Adapter generation
   *  :ref:`make_enum_debug_info (helper: smart_ptr\<DebugInfoHelper\> implicit; en: Enumeration const? implicit) : EnumInfo? <function-ast_make_enum_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_Enumeration_const_q__implicit>` 
   *  :ref:`make_invokable_type_debug_info (helper: smart_ptr\<DebugInfoHelper\> implicit; blk: smart_ptr\<TypeDecl\> implicit; at: LineInfo implicit) : FuncInfo? <function-ast_make_invokable_type_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit_LineInfo_implicit>` 
   *  :ref:`make_block_type (blk: ExprBlock? implicit) : smart_ptr\<TypeDecl\> <function-ast_make_block_type_ExprBlock_q__implicit>` 
-  *  :ref:`make_function_annotation (name: string; var someClassPtr: auto) : FunctionAnnotationPtr <function-ast_make_function_annotation_string_auto>` 
-  *  :ref:`make_block_annotation (name: string; var someClassPtr: auto) : FunctionAnnotationPtr <function-ast_make_block_annotation_string_auto>` 
-  *  :ref:`make_structure_annotation (name: string; var someClassPtr: auto) : StructureAnnotationPtr <function-ast_make_structure_annotation_string_auto>` 
-  *  :ref:`make_enumeration_annotation (name: string; var someClassPtr: auto) : EnumerationAnnotationPtr <function-ast_make_enumeration_annotation_string_auto>` 
-  *  :ref:`make_visitor (someClass: auto) : smart_ptr\<VisitorAdapter\> <function-ast_make_visitor_auto>` 
-  *  :ref:`make_reader_macro (name: string; var someClassPtr: auto) : ReaderMacroPtr <function-ast_make_reader_macro_string_auto>` 
-  *  :ref:`make_comment_reader (name: string; var someClassPtr: auto) : CommentReaderPtr <function-ast_make_comment_reader_string_auto>` 
-  *  :ref:`make_call_macro (name: string; var someClassPtr: auto) : CallMacroPtr <function-ast_make_call_macro_string_auto>` 
-  *  :ref:`make_typeinfo_macro (name: string; var someClassPtr: auto) : TypeInfoMacroPtr <function-ast_make_typeinfo_macro_string_auto>` 
-  *  :ref:`make_pass_macro (name: string; var someClassPtr: auto) : PassMacroPtr <function-ast_make_pass_macro_string_auto>` 
-  *  :ref:`make_variant_macro (name: string; var someClassPtr: auto) : VariantMacroPtr <function-ast_make_variant_macro_string_auto>` 
-  *  :ref:`make_for_loop_macro (name: string; var someClassPtr: auto) : ForLoopMacroPtr <function-ast_make_for_loop_macro_string_auto>` 
-  *  :ref:`make_capture_macro (name: string; var someClassPtr: auto) : CaptureMacroPtr <function-ast_make_capture_macro_string_auto>` 
-  *  :ref:`make_type_macro (name: string; var someClassPtr: auto) : TypeMacroPtr <function-ast_make_type_macro_string_auto>` 
-  *  :ref:`make_simulate_macro (name: string; var someClassPtr: auto) : SimulateMacroPtr <function-ast_make_simulate_macro_string_auto>` 
+  *  :ref:`make_function_annotation (name: string; var someClassPtr: auto) : FunctionAnnotationPtr <function-ast_make_function_annotation_string_auto_0x279>` 
+  *  :ref:`make_block_annotation (name: string; var someClassPtr: auto) : FunctionAnnotationPtr <function-ast_make_block_annotation_string_auto_0x287>` 
+  *  :ref:`make_structure_annotation (name: string; var someClassPtr: auto) : StructureAnnotationPtr <function-ast_make_structure_annotation_string_auto_0x295>` 
+  *  :ref:`make_enumeration_annotation (name: string; var someClassPtr: auto) : EnumerationAnnotationPtr <function-ast_make_enumeration_annotation_string_auto_0x2a3>` 
+  *  :ref:`make_visitor (someClass: auto) : smart_ptr\<VisitorAdapter\> <function-ast_make_visitor_auto_0x2ae>` 
+  *  :ref:`make_reader_macro (name: string; var someClassPtr: auto) : ReaderMacroPtr <function-ast_make_reader_macro_string_auto_0x2be>` 
+  *  :ref:`make_comment_reader (name: string; var someClassPtr: auto) : CommentReaderPtr <function-ast_make_comment_reader_string_auto_0x2cc>` 
+  *  :ref:`make_call_macro (name: string; var someClassPtr: auto) : CallMacroPtr <function-ast_make_call_macro_string_auto_0x2da>` 
+  *  :ref:`make_typeinfo_macro (name: string; var someClassPtr: auto) : TypeInfoMacroPtr <function-ast_make_typeinfo_macro_string_auto_0x2e8>` 
+  *  :ref:`make_pass_macro (name: string; var someClassPtr: auto) : PassMacroPtr <function-ast_make_pass_macro_string_auto_0x2f6>` 
+  *  :ref:`make_variant_macro (name: string; var someClassPtr: auto) : VariantMacroPtr <function-ast_make_variant_macro_string_auto_0x304>` 
+  *  :ref:`make_for_loop_macro (name: string; var someClassPtr: auto) : ForLoopMacroPtr <function-ast_make_for_loop_macro_string_auto_0x312>` 
+  *  :ref:`make_capture_macro (name: string; var someClassPtr: auto) : CaptureMacroPtr <function-ast_make_capture_macro_string_auto_0x320>` 
+  *  :ref:`make_type_macro (name: string; var someClassPtr: auto) : TypeMacroPtr <function-ast_make_type_macro_string_auto_0x32c>` 
+  *  :ref:`make_simulate_macro (name: string; var someClassPtr: auto) : SimulateMacroPtr <function-ast_make_simulate_macro_string_auto_0x339>` 
 
 .. _function-ast_make_visitor_void_q__implicit_StructInfo_const_q__implicit:
 
@@ -5652,7 +5656,7 @@ Generates a TypeDeclPtr for a specified block or lambda type.
 
 :Arguments: * **blk** :  :ref:`ExprBlock <handle-ast-ExprBlock>` ? implicit
 
-.. _function-ast_make_function_annotation_string_auto:
+.. _function-ast_make_function_annotation_string_auto_0x279:
 
 .. das:function:: make_function_annotation(name: string; someClassPtr: auto) : FunctionAnnotationPtr
 
@@ -5662,7 +5666,7 @@ Creates an adapter for the AstFunctionAnnotation interface.
 
             * **someClassPtr** : auto
 
-.. _function-ast_make_block_annotation_string_auto:
+.. _function-ast_make_block_annotation_string_auto_0x287:
 
 .. das:function:: make_block_annotation(name: string; someClassPtr: auto) : FunctionAnnotationPtr
 
@@ -5672,7 +5676,7 @@ Creates an adapter for the AstBlockAnnotation interface.
 
             * **someClassPtr** : auto
 
-.. _function-ast_make_structure_annotation_string_auto:
+.. _function-ast_make_structure_annotation_string_auto_0x295:
 
 .. das:function:: make_structure_annotation(name: string; someClassPtr: auto) : StructureAnnotationPtr
 
@@ -5682,7 +5686,7 @@ Creates an adapter for the AstStructureAnnotation interface.
 
             * **someClassPtr** : auto
 
-.. _function-ast_make_enumeration_annotation_string_auto:
+.. _function-ast_make_enumeration_annotation_string_auto_0x2a3:
 
 .. das:function:: make_enumeration_annotation(name: string; someClassPtr: auto) : EnumerationAnnotationPtr
 
@@ -5692,7 +5696,7 @@ Creates an adapter for the AstEnumerationAnnotation interface.
 
             * **someClassPtr** : auto
 
-.. _function-ast_make_visitor_auto:
+.. _function-ast_make_visitor_auto_0x2ae:
 
 .. das:function:: make_visitor(someClass: auto) : smart_ptr<VisitorAdapter>
 
@@ -5700,7 +5704,7 @@ Creates an adapter for the AstVisitor interface.
 
 :Arguments: * **someClass** : auto
 
-.. _function-ast_make_reader_macro_string_auto:
+.. _function-ast_make_reader_macro_string_auto_0x2be:
 
 .. das:function:: make_reader_macro(name: string; someClassPtr: auto) : ReaderMacroPtr
 
@@ -5710,7 +5714,7 @@ Creates an adapter for the AstReaderMacro interface.
 
             * **someClassPtr** : auto
 
-.. _function-ast_make_comment_reader_string_auto:
+.. _function-ast_make_comment_reader_string_auto_0x2cc:
 
 .. das:function:: make_comment_reader(name: string; someClassPtr: auto) : CommentReaderPtr
 
@@ -5720,7 +5724,7 @@ Creates an adapter for the AstCommentReader interface.
 
             * **someClassPtr** : auto
 
-.. _function-ast_make_call_macro_string_auto:
+.. _function-ast_make_call_macro_string_auto_0x2da:
 
 .. das:function:: make_call_macro(name: string; someClassPtr: auto) : CallMacroPtr
 
@@ -5730,7 +5734,7 @@ Creates an adapter for the AstCallMacro interface.
 
             * **someClassPtr** : auto
 
-.. _function-ast_make_typeinfo_macro_string_auto:
+.. _function-ast_make_typeinfo_macro_string_auto_0x2e8:
 
 .. das:function:: make_typeinfo_macro(name: string; someClassPtr: auto) : TypeInfoMacroPtr
 
@@ -5740,7 +5744,7 @@ Creates an adapter for the AstTypeInfoMacro interface.
 
             * **someClassPtr** : auto
 
-.. _function-ast_make_pass_macro_string_auto:
+.. _function-ast_make_pass_macro_string_auto_0x2f6:
 
 .. das:function:: make_pass_macro(name: string; someClassPtr: auto) : PassMacroPtr
 
@@ -5750,7 +5754,7 @@ Creates an adapter for the AstPassMacro interface.
 
             * **someClassPtr** : auto
 
-.. _function-ast_make_variant_macro_string_auto:
+.. _function-ast_make_variant_macro_string_auto_0x304:
 
 .. das:function:: make_variant_macro(name: string; someClassPtr: auto) : VariantMacroPtr
 
@@ -5760,7 +5764,7 @@ Creates an adapter for the AstVariantMacro interface.
 
             * **someClassPtr** : auto
 
-.. _function-ast_make_for_loop_macro_string_auto:
+.. _function-ast_make_for_loop_macro_string_auto_0x312:
 
 .. das:function:: make_for_loop_macro(name: string; someClassPtr: auto) : ForLoopMacroPtr
 
@@ -5770,7 +5774,7 @@ Creates an adapter for the AstForLoopMacro interface.
 
             * **someClassPtr** : auto
 
-.. _function-ast_make_capture_macro_string_auto:
+.. _function-ast_make_capture_macro_string_auto_0x320:
 
 .. das:function:: make_capture_macro(name: string; someClassPtr: auto) : CaptureMacroPtr
 
@@ -5780,7 +5784,7 @@ Creates an adapter for the AstCaptureMacro interface.
 
             * **someClassPtr** : auto
 
-.. _function-ast_make_type_macro_string_auto:
+.. _function-ast_make_type_macro_string_auto_0x32c:
 
 .. das:function:: make_type_macro(name: string; someClassPtr: auto) : TypeMacroPtr
 
@@ -5790,7 +5794,7 @@ Creates an adapter for the AstTypeMacro interface.
 
             * **someClassPtr** : auto
 
-.. _function-ast_make_simulate_macro_string_auto:
+.. _function-ast_make_simulate_macro_string_auto_0x339:
 
 .. das:function:: make_simulate_macro(name: string; someClassPtr: auto) : SimulateMacroPtr
 
@@ -5828,25 +5832,25 @@ Adapter application
   *  :ref:`add_type_macro (module: Module? implicit; annotation: smart_ptr\<TypeMacro\>& implicit) <function-ast_add_type_macro_Module_q__implicit_smart_ptr_ls_TypeMacro_gr__implicit>` 
   *  :ref:`add_simulate_macro (module: Module? implicit; annotation: smart_ptr\<SimulateMacro\>& implicit) <function-ast_add_simulate_macro_Module_q__implicit_smart_ptr_ls_SimulateMacro_gr__implicit>` 
   *  :ref:`add_module_option (module: Module? implicit; option: string implicit; type: Type) <function-ast_add_module_option_Module_q__implicit_string_implicit_Type>` 
-  *  :ref:`add_new_block_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_block_annotation_string_auto>` 
-  *  :ref:`add_new_function_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_function_annotation_string_auto>` 
-  *  :ref:`add_new_contract_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_contract_annotation_string_auto>` 
-  *  :ref:`add_new_structure_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_structure_annotation_string_auto>` 
-  *  :ref:`add_new_enumeration_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_enumeration_annotation_string_auto>` 
-  *  :ref:`add_new_variant_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_variant_macro_string_auto>` 
-  *  :ref:`add_new_for_loop_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_for_loop_macro_string_auto>` 
-  *  :ref:`add_new_capture_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_capture_macro_string_auto>` 
-  *  :ref:`add_new_type_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_type_macro_string_auto>` 
-  *  :ref:`add_new_simulate_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_simulate_macro_string_auto>` 
-  *  :ref:`add_new_reader_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_reader_macro_string_auto>` 
-  *  :ref:`add_new_comment_reader (name: string; var someClassPtr: auto) : auto <function-ast_add_new_comment_reader_string_auto>` 
-  *  :ref:`add_new_call_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_call_macro_string_auto>` 
-  *  :ref:`add_new_typeinfo_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_typeinfo_macro_string_auto>` 
-  *  :ref:`add_new_infer_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_infer_macro_string_auto>` 
-  *  :ref:`add_new_dirty_infer_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_dirty_infer_macro_string_auto>` 
-  *  :ref:`add_new_lint_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_lint_macro_string_auto>` 
-  *  :ref:`add_new_global_lint_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_global_lint_macro_string_auto>` 
-  *  :ref:`add_new_optimization_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_optimization_macro_string_auto>` 
+  *  :ref:`add_new_block_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_block_annotation_string_auto_0x345>` 
+  *  :ref:`add_new_function_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_function_annotation_string_auto_0x34b>` 
+  *  :ref:`add_new_contract_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_contract_annotation_string_auto_0x351>` 
+  *  :ref:`add_new_structure_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_structure_annotation_string_auto_0x357>` 
+  *  :ref:`add_new_enumeration_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_enumeration_annotation_string_auto_0x35d>` 
+  *  :ref:`add_new_variant_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_variant_macro_string_auto_0x363>` 
+  *  :ref:`add_new_for_loop_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_for_loop_macro_string_auto_0x369>` 
+  *  :ref:`add_new_capture_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_capture_macro_string_auto_0x36f>` 
+  *  :ref:`add_new_type_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_type_macro_string_auto_0x375>` 
+  *  :ref:`add_new_simulate_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_simulate_macro_string_auto_0x37b>` 
+  *  :ref:`add_new_reader_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_reader_macro_string_auto_0x381>` 
+  *  :ref:`add_new_comment_reader (name: string; var someClassPtr: auto) : auto <function-ast_add_new_comment_reader_string_auto_0x386>` 
+  *  :ref:`add_new_call_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_call_macro_string_auto_0x38c>` 
+  *  :ref:`add_new_typeinfo_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_typeinfo_macro_string_auto_0x392>` 
+  *  :ref:`add_new_infer_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_infer_macro_string_auto_0x398>` 
+  *  :ref:`add_new_dirty_infer_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_dirty_infer_macro_string_auto_0x39e>` 
+  *  :ref:`add_new_lint_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_lint_macro_string_auto_0x3a4>` 
+  *  :ref:`add_new_global_lint_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_global_lint_macro_string_auto_0x3aa>` 
+  *  :ref:`add_new_optimization_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_optimization_macro_string_auto_0x3b0>` 
 
 .. _function-ast_add_function_annotation_Module_q__implicit_smart_ptr_ls_FunctionAnnotation_gr__implicit:
 
@@ -6090,7 +6094,7 @@ Adds a module-specific option accessible via the `options` keyword.
 
             * **type** :  :ref:`Type <enum-rtti-Type>` 
 
-.. _function-ast_add_new_block_annotation_string_auto:
+.. _function-ast_add_new_block_annotation_string_auto_0x345:
 
 .. das:function:: add_new_block_annotation(name: string; someClassPtr: auto) : auto
 
@@ -6100,7 +6104,7 @@ Creates an AstBlockAnnotation adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_function_annotation_string_auto:
+.. _function-ast_add_new_function_annotation_string_auto_0x34b:
 
 .. das:function:: add_new_function_annotation(name: string; someClassPtr: auto) : auto
 
@@ -6110,7 +6114,7 @@ Creates an AstFunctionAnnotation adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_contract_annotation_string_auto:
+.. _function-ast_add_new_contract_annotation_string_auto_0x351:
 
 .. das:function:: add_new_contract_annotation(name: string; someClassPtr: auto) : auto
 
@@ -6120,7 +6124,7 @@ Creates an AstContractAnnotation adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_structure_annotation_string_auto:
+.. _function-ast_add_new_structure_annotation_string_auto_0x357:
 
 .. das:function:: add_new_structure_annotation(name: string; someClassPtr: auto) : auto
 
@@ -6130,7 +6134,7 @@ Creates an AstStructureAnnotation adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_enumeration_annotation_string_auto:
+.. _function-ast_add_new_enumeration_annotation_string_auto_0x35d:
 
 .. das:function:: add_new_enumeration_annotation(name: string; someClassPtr: auto) : auto
 
@@ -6140,7 +6144,7 @@ Creates an AstEnumerationAnnotation adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_variant_macro_string_auto:
+.. _function-ast_add_new_variant_macro_string_auto_0x363:
 
 .. das:function:: add_new_variant_macro(name: string; someClassPtr: auto) : auto
 
@@ -6150,7 +6154,7 @@ Creates an AstVariantMacro adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_for_loop_macro_string_auto:
+.. _function-ast_add_new_for_loop_macro_string_auto_0x369:
 
 .. das:function:: add_new_for_loop_macro(name: string; someClassPtr: auto) : auto
 
@@ -6160,7 +6164,7 @@ Creates an AstForLoopMacro adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_capture_macro_string_auto:
+.. _function-ast_add_new_capture_macro_string_auto_0x36f:
 
 .. das:function:: add_new_capture_macro(name: string; someClassPtr: auto) : auto
 
@@ -6170,7 +6174,7 @@ Creates an AstCaptureMacro adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_type_macro_string_auto:
+.. _function-ast_add_new_type_macro_string_auto_0x375:
 
 .. das:function:: add_new_type_macro(name: string; someClassPtr: auto) : auto
 
@@ -6180,7 +6184,7 @@ Creates an AstTypeMacro adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_simulate_macro_string_auto:
+.. _function-ast_add_new_simulate_macro_string_auto_0x37b:
 
 .. das:function:: add_new_simulate_macro(name: string; someClassPtr: auto) : auto
 
@@ -6190,7 +6194,7 @@ Creates an AstSimulateMacro adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_reader_macro_string_auto:
+.. _function-ast_add_new_reader_macro_string_auto_0x381:
 
 .. das:function:: add_new_reader_macro(name: string; someClassPtr: auto) : auto
 
@@ -6200,7 +6204,7 @@ Creates an AstReaderMacro adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_comment_reader_string_auto:
+.. _function-ast_add_new_comment_reader_string_auto_0x386:
 
 .. das:function:: add_new_comment_reader(name: string; someClassPtr: auto) : auto
 
@@ -6210,7 +6214,7 @@ Creates an AstCommentReader adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_call_macro_string_auto:
+.. _function-ast_add_new_call_macro_string_auto_0x38c:
 
 .. das:function:: add_new_call_macro(name: string; someClassPtr: auto) : auto
 
@@ -6220,7 +6224,7 @@ Creates an AstCallMacro adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_typeinfo_macro_string_auto:
+.. _function-ast_add_new_typeinfo_macro_string_auto_0x392:
 
 .. das:function:: add_new_typeinfo_macro(name: string; someClassPtr: auto) : auto
 
@@ -6230,7 +6234,7 @@ Creates an AstTypeInfoMacro adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_infer_macro_string_auto:
+.. _function-ast_add_new_infer_macro_string_auto_0x398:
 
 .. das:function:: add_new_infer_macro(name: string; someClassPtr: auto) : auto
 
@@ -6240,7 +6244,7 @@ Creates an AstPassMacro adapter and adds it to the current module's infer pass.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_dirty_infer_macro_string_auto:
+.. _function-ast_add_new_dirty_infer_macro_string_auto_0x39e:
 
 .. das:function:: add_new_dirty_infer_macro(name: string; someClassPtr: auto) : auto
 
@@ -6250,7 +6254,7 @@ Creates an AstPassMacro adapter and adds it to the current module's dirty infer 
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_lint_macro_string_auto:
+.. _function-ast_add_new_lint_macro_string_auto_0x3a4:
 
 .. das:function:: add_new_lint_macro(name: string; someClassPtr: auto) : auto
 
@@ -6260,7 +6264,7 @@ Creates an AstPassMacro adapter and adds it to the current module's lint pass.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_global_lint_macro_string_auto:
+.. _function-ast_add_new_global_lint_macro_string_auto_0x3aa:
 
 .. das:function:: add_new_global_lint_macro(name: string; someClassPtr: auto) : auto
 
@@ -6270,7 +6274,7 @@ Creates an AstPassMacro adapter and adds it to the current module's global lint 
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_optimization_macro_string_auto:
+.. _function-ast_add_new_optimization_macro_string_auto_0x3b0:
 
 .. das:function:: add_new_optimization_macro(name: string; someClassPtr: auto) : auto
 

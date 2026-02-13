@@ -109,7 +109,7 @@ struct public EcsRequest {
 
 struct public DecsState {
     //! Entire state of the ECS system.
-    //! Conntains archtypes, entities and entity free-list, entity lokup table, all archetypes and archetype lookups, etc.
+    //! Contains archetypes, entities and entity free-list, entity lookup table, all archetypes and archetype lookups, etc.
     archetypeLookup : table<ComponentHash; int>     //! lookup of archetype by its hash
     allArchetypes : array<Archetype>                //! all archetypes in the system
     entityFreeList : array<EntityId>                //! list of free entity IDs

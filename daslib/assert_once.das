@@ -19,7 +19,7 @@ require daslib/templates_boost
 
 [tag_function(asset_once_tag)]
 def public assert_once(expr : bool; message : string = "") {
-    //! Same as assert, only the check will be not be repeated after the asseretion failed the first time.
+    //! Same as assert, only the check will be not be repeated after the assertion failed the first time.
     pass
 }
 

@@ -41,16 +41,16 @@ Map, reduce
   *  :ref:`reduce (var it: iterator\<auto(TT)\>; blk: function\<(left:TT;right:TT):TT\>) : auto <function-functional_reduce_iterator_ls_autoTT_gr__function_ls_left_c_TT;right_c_TT_c_TT_gr_>` 
   *  :ref:`reduce (var it: iterator\<auto(TT)\>; blk: block\<(left:TT;right:TT):TT\>) : auto <function-functional_reduce_iterator_ls_autoTT_gr__block_ls_left_c_TT;right_c_TT_c_TT_gr_>` 
   *  :ref:`sum (var it: iterator\<auto(TT)\>) : auto <function-functional_sum_iterator_ls_autoTT_gr_>` 
-  *  :ref:`any (it: auto) : auto <function-functional_any_auto>` 
+  *  :ref:`any (it: auto) : auto <function-functional_any_auto_0x95>` 
   *  :ref:`any (var it: iterator\<auto(TT)\>) : auto <function-functional_any_iterator_ls_autoTT_gr_>` 
-  *  :ref:`all (it: auto) : auto <function-functional_all_auto>` 
+  *  :ref:`all (it: auto) : auto <function-functional_all_auto_0xaf>` 
   *  :ref:`all (var it: iterator\<auto(TT)\>) : auto <function-functional_all_iterator_ls_autoTT_gr_>` 
   *  :ref:`cycle (var src: iterator\<auto(TT)\>) : auto <function-functional_cycle_iterator_ls_autoTT_gr_>` 
   *  :ref:`islice (var src: iterator\<auto(TT)\>; start: int; stop: int) : auto <function-functional_islice_iterator_ls_autoTT_gr__int_int>` 
-  *  :ref:`repeat_ref (value: auto(TT); var total: int) : auto <function-functional_repeat_ref_autoTT_int>` 
-  *  :ref:`repeat (value: auto(TT); var count: int = 0) : auto <function-functional_repeat_autoTT_int>` 
-  *  :ref:`not (x: auto) : auto <function-functional_not_auto>` 
-  *  :ref:`echo (var x: auto; extra: string = "\n") : auto <function-functional_echo_auto_string>` 
+  *  :ref:`repeat_ref (value: auto(TT); var total: int) : auto <function-functional_repeat_ref_autoTT_int_0x101>` 
+  *  :ref:`repeat (value: auto(TT); var count: int = 0) : auto <function-functional_repeat_autoTT_int_0x10d>` 
+  *  :ref:`not (x: auto) : auto <function-functional_not_auto_0x126>` 
+  *  :ref:`echo (var x: auto; extra: string = "\n") : auto <function-functional_echo_auto_string_0x12b>` 
   *  :ref:`flatten (var it: iterator\<auto(TT)\>) : auto <function-functional_flatten_iterator_ls_autoTT_gr_>` 
   *  :ref:`sorted (var arr: array\<auto\>) : auto <function-functional_sorted_array_ls_auto_gr_>` 
   *  :ref:`sorted (var it: iterator\<auto(TT)\>) : auto <function-functional_sorted_iterator_ls_autoTT_gr_>` 
@@ -137,7 +137,7 @@ same as reduce(it, @(a,b) => a + b)
 
 :Arguments: * **it** : iterator<auto(TT)>
 
-.. _function-functional_any_auto:
+.. _function-functional_any_auto_0x95:
 
 .. das:function:: any(it: auto) : auto
 
@@ -153,7 +153,7 @@ iterates over `it` and yields true if any element is true
 
 :Arguments: * **it** : iterator<auto(TT)>
 
-.. _function-functional_all_auto:
+.. _function-functional_all_auto_0xaf:
 
 .. das:function:: all(it: auto) : auto
 
@@ -189,7 +189,7 @@ iterates over `src` and yields only the elements in the range [start,stop)
 
             * **stop** : int
 
-.. _function-functional_repeat_ref_autoTT_int:
+.. _function-functional_repeat_ref_autoTT_int_0x101:
 
 .. das:function:: repeat_ref(value: auto(TT); total: int) : auto
 
@@ -199,7 +199,7 @@ yields `value` by reference `count` times
 
             * **total** : int
 
-.. _function-functional_repeat_autoTT_int:
+.. _function-functional_repeat_autoTT_int_0x10d:
 
 .. das:function:: repeat(value: auto(TT); count: int = 0) : auto
 
@@ -209,7 +209,7 @@ yields `value` `count` times
 
             * **count** : int
 
-.. _function-functional_not_auto:
+.. _function-functional_not_auto_0x126:
 
 .. das:function:: not(x: auto) : auto
 
@@ -217,7 +217,7 @@ yeilds !x
 
 :Arguments: * **x** : auto
 
-.. _function-functional_echo_auto_string:
+.. _function-functional_echo_auto_string_0x12b:
 
 .. das:function:: echo(x: auto; extra: string = "\n") : auto
 
@@ -255,10 +255,10 @@ iterates over input and returns it sorted version
 Queries
 +++++++
 
-  *  :ref:`is_equal (a: auto; b: auto) : auto <function-functional_is_equal_auto_auto>` 
-  *  :ref:`is_not_equal (a: auto; b: auto) : auto <function-functional_is_not_equal_auto_auto>` 
+  *  :ref:`is_equal (a: auto; b: auto) : auto <function-functional_is_equal_auto_auto_0x11c>` 
+  *  :ref:`is_not_equal (a: auto; b: auto) : auto <function-functional_is_not_equal_auto_auto_0x121>` 
 
-.. _function-functional_is_equal_auto_auto:
+.. _function-functional_is_equal_auto_auto_0x11c:
 
 .. das:function:: is_equal(a: auto; b: auto) : auto
 
@@ -268,7 +268,7 @@ yields true if `a` and `b` are equal
 
             * **b** : auto
 
-.. _function-functional_is_not_equal_auto_auto:
+.. _function-functional_is_not_equal_auto_auto_0x121:
 
 .. das:function:: is_not_equal(a: auto; b: auto) : auto
 

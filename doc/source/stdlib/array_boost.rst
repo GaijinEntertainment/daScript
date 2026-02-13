@@ -17,12 +17,12 @@ All functions and symbols are in "array_boost" module, use require to get access
 Temporary arrays
 ++++++++++++++++
 
-  *  :ref:`temp_array (var arr: auto implicit ==const) : auto <function-array_boost_temp_array__auto_implicit__eq__eq_const>` 
-  *  :ref:`temp_array (arr: auto const implicit ==const) : auto <function-array_boost_temp_array_auto_const_implicit__eq__eq_const>` 
-  *  :ref:`temp_array (var data: auto? ==const; lenA: int; a: auto(TT)) : array\<TT\> <function-array_boost_temp_array__auto_q___eq__eq_const_int_autoTT>` 
-  *  :ref:`temp_array (data: auto? ==const; lenA: int; a: auto(TT)) : array\<TT\> <function-array_boost_temp_array_auto_q___eq__eq_const_int_autoTT>` 
+  *  :ref:`temp_array (var arr: auto implicit ==const) : auto <function-array_boost_temp_array__auto_implicit__eq__eq_const_0x2e>` 
+  *  :ref:`temp_array (arr: auto const implicit ==const) : auto <function-array_boost_temp_array_auto_const_implicit__eq__eq_const_0x3a>` 
+  *  :ref:`temp_array (var data: auto? ==const; lenA: int; a: auto(TT)) : array\<TT\> <function-array_boost_temp_array__auto_q___eq__eq_const_int_autoTT_0x4c>` 
+  *  :ref:`temp_array (data: auto? ==const; lenA: int; a: auto(TT)) : array\<TT\> <function-array_boost_temp_array_auto_q___eq__eq_const_int_autoTT_0x5c>` 
 
-.. _function-array_boost_temp_array__auto_implicit__eq__eq_const:
+.. _function-array_boost_temp_array__auto_implicit__eq__eq_const_0x2e:
 
 .. das:function:: temp_array(arr: auto implicit ==const) : auto
 
@@ -37,7 +37,7 @@ Important requirements are:
 
 :Arguments: * **arr** : auto implicit!
 
-.. _function-array_boost_temp_array_auto_const_implicit__eq__eq_const:
+.. _function-array_boost_temp_array_auto_const_implicit__eq__eq_const_0x3a:
 
 .. das:function:: temp_array(arr: auto const implicit ==const) : auto
 
@@ -52,7 +52,7 @@ Important requirements are:
 
 :Arguments: * **arr** : auto implicit!
 
-.. _function-array_boost_temp_array__auto_q___eq__eq_const_int_autoTT:
+.. _function-array_boost_temp_array__auto_q___eq__eq_const_int_autoTT_0x4c:
 
 .. das:function:: temp_array(data: auto? ==const; lenA: int; a: auto(TT)) : array<TT>
 
@@ -71,7 +71,7 @@ Important requirements are:
 
             * **a** : auto(TT)
 
-.. _function-array_boost_temp_array_auto_q___eq__eq_const_int_autoTT:
+.. _function-array_boost_temp_array_auto_q___eq__eq_const_int_autoTT_0x5c:
 
 .. das:function:: temp_array(data: auto? ==const; lenA: int; a: auto(TT)) : array<TT>
 
@@ -94,9 +94,9 @@ Important requirements are:
 Empty check
 +++++++++++
 
-  *  :ref:`empty (v: auto(VecT)) : auto <function-array_boost_empty_autoVecT>` 
+  *  :ref:`empty (v: auto(VecT)) : auto <function-array_boost_empty_autoVecT_0x46>` 
 
-.. _function-array_boost_empty_autoVecT:
+.. _function-array_boost_empty_autoVecT_0x46:
 
 .. das:function:: empty(v: auto(VecT)) : auto
 

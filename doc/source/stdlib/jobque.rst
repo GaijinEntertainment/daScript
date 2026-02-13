@@ -58,7 +58,7 @@ Whether the job status object refers to a valid, active job.
 
 .. das:function:: JobStatus implicit.size() : int
 
-Returns the string length of the URI.
+Returns the current entry count of the JobStatus or Channel.
 
 :Properties: * **isReady** : bool
 
@@ -197,7 +197,7 @@ Decreases the reference count of a ``JobStatus`` or ``Channel``; the object is d
 
 .. das:function:: join(job: JobStatus? implicit)
 
-Joins the elements of an iterable into a single string using the specified separator.
+Blocks the current thread until the job or channel's entry count reaches zero, indicating all work is complete.
 
 :Arguments: * **job** :  :ref:`JobStatus <handle-jobque-JobStatus>` ? implicit
 

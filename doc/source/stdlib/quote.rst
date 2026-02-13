@@ -96,9 +96,9 @@ Creates a FileInfo from a FileInfoInitData struct.
 Conversion
 ++++++++++
 
-  *  :ref:`cvt_to_mks (var args: auto) : smart_ptr\<MakeStruct\> <function-quote_cvt_to_mks_auto>` 
+  *  :ref:`cvt_to_mks (var args: auto) : smart_ptr\<MakeStruct\> <function-quote_cvt_to_mks_auto_0x83>` 
 
-.. _function-quote_cvt_to_mks_auto:
+.. _function-quote_cvt_to_mks_auto_0x83:
 
 .. das:function:: cvt_to_mks(args: auto) : smart_ptr<MakeStruct>
 

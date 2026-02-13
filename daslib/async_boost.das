@@ -54,7 +54,7 @@ class AwaitCoroutineMacro : AstFunctionAnnotation {
     //!     for t in THAT
     //!         yield t
     //!
-    //! The idea is that coroutine or generator can continuesly yield from another sub-coroutine or generator.
+    //! The idea is that coroutine or generator can continuously yield from another sub-coroutine or generator.
     def override transform(var call : smart_ptr<ExprCallFunc>; var errors : das_string) : ExpressionPtr {
         let iname = make_unique_private_name("_await_coroutine", call.at)
         var inscope res <- qmacro_block <| $() {

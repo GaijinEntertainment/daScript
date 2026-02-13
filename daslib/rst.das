@@ -196,13 +196,17 @@ def function_short_mangled_name(value : FunctionPtr | Function?) {
 def function_label_name(value : FunctionPtr | Function?) {
     let mn = function_short_mangled_name(value)
     let res = "function-{safe_function_name(mn)}"
-    if (false) {
-        fopen("function_names.txt", "ab") <| $(f) {
-            if (f != null) {
-                fwrite(f, "{function_label_name0(value)}\n")
-                fwrite(f, "{res}\n")
-            }
+    // For generic functions, append a hash suffix to disambiguate overloads
+    // that have the same short mangled name
+    var is_generic = false
+    for (arg in value.arguments) {
+        if (arg._type.baseType == Type.autoinfer) {
+            is_generic = true
+            break
         }
+    }
+    if (is_generic) {
+        return "{res}_{value.at.line}"
     }
     return res
 }
@@ -805,7 +809,10 @@ def document_topic(header : string; doc_file : file; topic, content : string imp
 
         var hasDoc = false
         txt |> replace("\r\n", "\n") |> split("\n") <| $(lines) {
-            let got = length(lines) - (length(lines) > 0 && trim(lines[length(lines) - 1]) == "" ? 1 : 0)
+            var got = length(lines)
+            while (got > 0 && trim(lines[got - 1]) == "") {
+                got -= 1
+            }
             let expected = length(tab) - 1
             if (got < expected) {
                 if (strict_struct_fields) {
@@ -1317,7 +1324,7 @@ def document_typemacro(doc_file : file; mod : Module?; value) {
             var tab : array<array<string>>
             for (arg in ann.arguments) {
                 if (first) {
-                    fwrite(doc_file, make_label(call_macro_label_name(mod, value)))
+                    fwrite(doc_file, make_label(call_macro_label_name(mod, string(arg.name))))
                     fwrite(doc_file, make_domain("das:attribute"))
                     fwrite(doc_file, "type macro {arg.name}")
                     fwrite(doc_file, "\n\n")
@@ -1748,7 +1755,7 @@ def document_variant_macro(doc_file : file; mod : Module?; value : string implic
     fwrite(doc_file, make_label(call_macro_label_name(mod, value)))
     fwrite(doc_file, make_domain("das:attribute"))
     fwrite(doc_file, "{value}\n\n")
-    document_topic(doc_file, topic("variant_macro", mod, value), "Varian macro {value}")
+    document_topic(doc_file, topic("variant_macro", mod, value), "Variant macro {value}")
 }
 
 def document_variant_macros(doc_file : file; mods : array<Module?>) {

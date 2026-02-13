@@ -22,6 +22,6 @@ Call macros
 
 .. das:attribute:: generic_return
 
-This macro convert fake_numeric(func_id) to the comprehensive faker test::
+Replaces generic_return(expr) with a block that calls expr and returns its result, handling void, copyable, and movable return types.
 
 

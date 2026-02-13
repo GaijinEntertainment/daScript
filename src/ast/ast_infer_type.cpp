@@ -5317,7 +5317,7 @@ namespace das {
         }
         if (pass >= maxInferPasses) {
             error("type inference exceeded maximum allowed number of passes (" + to_string(maxInferPasses) + ")\n"
-                                                                                                             "this is likely due to a macro continuesly beeing applied",
+                                                                                                             "this is likely due to a macro continuously being applied",
                   "", "",
                   LineInfo(), CompilationError::too_many_infer_passes);
         }

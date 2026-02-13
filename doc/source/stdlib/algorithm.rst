@@ -40,20 +40,20 @@ Search
 
   *  :ref:`lower_bound (a: array\<auto(TT)\>; f: int; l: int; val: TT) : auto <function-algorithm_lower_bound_array_ls_autoTT_gr__int_int_TT>` 
   *  :ref:`lower_bound (a: array\<auto(TT)\>; val: TT) : auto <function-algorithm_lower_bound_array_ls_autoTT_gr__TT>` 
-  *  :ref:`lower_bound (a: array\<auto(TT)\>; f: int; l: int; value: auto(QQ); less: block\<(a:TT;b:QQ):bool\>) : auto <function-algorithm_lower_bound_array_ls_autoTT_gr__int_int_autoQQ_block_ls_a_c_TT;b_c_QQ_c_bool_gr_>` 
-  *  :ref:`lower_bound (a: array\<auto(TT)\>; value: auto(QQ); less: block\<(a:TT;b:QQ):bool\>) : auto <function-algorithm_lower_bound_array_ls_autoTT_gr__autoQQ_block_ls_a_c_TT;b_c_QQ_c_bool_gr_>` 
+  *  :ref:`lower_bound (a: array\<auto(TT)\>; f: int; l: int; value: auto(QQ); less: block\<(a:TT;b:QQ):bool\>) : auto <function-algorithm_lower_bound_array_ls_autoTT_gr__int_int_autoQQ_block_ls_a_c_TT;b_c_QQ_c_bool_gr__0x5a>` 
+  *  :ref:`lower_bound (a: array\<auto(TT)\>; value: auto(QQ); less: block\<(a:TT;b:QQ):bool\>) : auto <function-algorithm_lower_bound_array_ls_autoTT_gr__autoQQ_block_ls_a_c_TT;b_c_QQ_c_bool_gr__0x6d>` 
   *  :ref:`binary_search (a: array\<auto(TT)\>; val: TT) : auto <function-algorithm_binary_search_array_ls_autoTT_gr__TT>` 
   *  :ref:`binary_search (a: array\<auto(TT)\>; f: int; last: int; val: TT) : auto <function-algorithm_binary_search_array_ls_autoTT_gr__int_int_TT>` 
   *  :ref:`binary_search (a: array\<auto(TT)\>; val: TT; less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_binary_search_array_ls_autoTT_gr__TT_block_ls_a_c_TT;b_c_TT_c_bool_gr_>` 
   *  :ref:`binary_search (a: array\<auto(TT)\>; f: int; last: int; val: TT; less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_binary_search_array_ls_autoTT_gr__int_int_TT_block_ls_a_c_TT;b_c_TT_c_bool_gr_>` 
-  *  :ref:`lower_bound (a: auto; f: int; l: int; val: auto) : auto <function-algorithm_lower_bound_auto_int_int_auto>` 
-  *  :ref:`lower_bound (a: auto; val: auto) : auto <function-algorithm_lower_bound_auto_auto>` 
-  *  :ref:`lower_bound (a: auto; f: int; l: int; val: auto(TT); less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_lower_bound_auto_int_int_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr_>` 
-  *  :ref:`lower_bound (a: auto; val: auto(TT); less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_lower_bound_auto_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr_>` 
-  *  :ref:`binary_search (a: auto; val: auto) : auto <function-algorithm_binary_search_auto_auto>` 
-  *  :ref:`binary_search (a: auto; f: int; last: int; val: auto) : auto <function-algorithm_binary_search_auto_int_int_auto>` 
-  *  :ref:`binary_search (a: auto; val: auto(TT); less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_binary_search_auto_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr_>` 
-  *  :ref:`binary_search (a: auto; f: int; last: int; val: auto(TT); less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_binary_search_auto_int_int_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr_>` 
+  *  :ref:`lower_bound (a: auto; f: int; l: int; val: auto) : auto <function-algorithm_lower_bound_auto_int_int_auto_0xa2>` 
+  *  :ref:`lower_bound (a: auto; val: auto) : auto <function-algorithm_lower_bound_auto_auto_0xaf>` 
+  *  :ref:`lower_bound (a: auto; f: int; l: int; val: auto(TT); less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_lower_bound_auto_int_int_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr__0xbc>` 
+  *  :ref:`lower_bound (a: auto; val: auto(TT); less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_lower_bound_auto_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr__0xc9>` 
+  *  :ref:`binary_search (a: auto; val: auto) : auto <function-algorithm_binary_search_auto_auto_0xd6>` 
+  *  :ref:`binary_search (a: auto; f: int; last: int; val: auto) : auto <function-algorithm_binary_search_auto_int_int_auto_0xe3>` 
+  *  :ref:`binary_search (a: auto; val: auto(TT); less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_binary_search_auto_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr__0xf0>` 
+  *  :ref:`binary_search (a: auto; f: int; last: int; val: auto(TT); less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_binary_search_auto_int_int_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr__0xfd>` 
 
 .. _function-algorithm_lower_bound_array_ls_autoTT_gr__int_int_TT:
 
@@ -79,7 +79,7 @@ Returns an iterator pointing to the first element in the array that is not less 
 
             * **val** : TT
 
-.. _function-algorithm_lower_bound_array_ls_autoTT_gr__int_int_autoQQ_block_ls_a_c_TT;b_c_QQ_c_bool_gr_:
+.. _function-algorithm_lower_bound_array_ls_autoTT_gr__int_int_autoQQ_block_ls_a_c_TT;b_c_QQ_c_bool_gr__0x5a:
 
 .. das:function:: lower_bound(a: array<auto(TT)>; f: int; l: int; value: auto(QQ); less: block<(a:TT;b:QQ):bool>) : auto
 
@@ -95,7 +95,7 @@ Returns an iterator pointing to the first element in the range [first, last) tha
 
             * **less** : block<(a:TT;b:QQ):bool>
 
-.. _function-algorithm_lower_bound_array_ls_autoTT_gr__autoQQ_block_ls_a_c_TT;b_c_QQ_c_bool_gr_:
+.. _function-algorithm_lower_bound_array_ls_autoTT_gr__autoQQ_block_ls_a_c_TT;b_c_QQ_c_bool_gr__0x6d:
 
 .. das:function:: lower_bound(a: array<auto(TT)>; value: auto(QQ); less: block<(a:TT;b:QQ):bool>) : auto
 
@@ -163,7 +163,7 @@ Array a must be sorted according to the provided less function.
 
             * **less** : block<(a:TT;b:TT):bool>
 
-.. _function-algorithm_lower_bound_auto_int_int_auto:
+.. _function-algorithm_lower_bound_auto_int_int_auto_0xa2:
 
 .. das:function:: lower_bound(a: auto; f: int; l: int; val: auto) : auto
 
@@ -177,7 +177,7 @@ Returns an iterator pointing to the first element in the range [first, last) tha
 
             * **val** : auto
 
-.. _function-algorithm_lower_bound_auto_auto:
+.. _function-algorithm_lower_bound_auto_auto_0xaf:
 
 .. das:function:: lower_bound(a: auto; val: auto) : auto
 
@@ -187,7 +187,7 @@ Returns an iterator pointing to the first element in the array that is not less 
 
             * **val** : auto
 
-.. _function-algorithm_lower_bound_auto_int_int_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr_:
+.. _function-algorithm_lower_bound_auto_int_int_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr__0xbc:
 
 .. das:function:: lower_bound(a: auto; f: int; l: int; val: auto(TT); less: block<(a:TT;b:TT):bool>) : auto
 
@@ -203,7 +203,7 @@ Returns an iterator pointing to the first element in the range [first, last) tha
 
             * **less** : block<(a:TT;b:TT):bool>
 
-.. _function-algorithm_lower_bound_auto_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr_:
+.. _function-algorithm_lower_bound_auto_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr__0xc9:
 
 .. das:function:: lower_bound(a: auto; val: auto(TT); less: block<(a:TT;b:TT):bool>) : auto
 
@@ -215,7 +215,7 @@ Returns an iterator pointing to the first element in the array that is not less 
 
             * **less** : block<(a:TT;b:TT):bool>
 
-.. _function-algorithm_binary_search_auto_auto:
+.. _function-algorithm_binary_search_auto_auto_0xd6:
 
 .. das:function:: binary_search(a: auto; val: auto) : auto
 
@@ -225,7 +225,7 @@ Returns true if an val appears within the array a.
 
             * **val** : auto
 
-.. _function-algorithm_binary_search_auto_int_int_auto:
+.. _function-algorithm_binary_search_auto_int_int_auto_0xe3:
 
 .. das:function:: binary_search(a: auto; f: int; last: int; val: auto) : auto
 
@@ -239,7 +239,7 @@ Returns true if an val appears within the range [f, last).
 
             * **val** : auto
 
-.. _function-algorithm_binary_search_auto_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr_:
+.. _function-algorithm_binary_search_auto_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr__0xf0:
 
 .. das:function:: binary_search(a: auto; val: auto(TT); less: block<(a:TT;b:TT):bool>) : auto
 
@@ -251,7 +251,7 @@ Returns true if an val appears within the array a.
 
             * **less** : block<(a:TT;b:TT):bool>
 
-.. _function-algorithm_binary_search_auto_int_int_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr_:
+.. _function-algorithm_binary_search_auto_int_int_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr__0xfd:
 
 .. das:function:: binary_search(a: auto; f: int; last: int; val: auto(TT); less: block<(a:TT;b:TT):bool>) : auto
 
@@ -275,9 +275,9 @@ Array manipulation
   *  :ref:`sort_unique (var a: array\<auto(TT)\>) : auto <function-algorithm_sort_unique_array_ls_autoTT_gr_>` 
   *  :ref:`reverse (var a: array\<auto\>) : auto <function-algorithm_reverse_array_ls_auto_gr_>` 
   *  :ref:`combine (a: array\<auto(TT)\>; b: array\<auto(TT)\>) : auto <function-algorithm_combine_array_ls_autoTT_gr__array_ls_autoTT_gr_>` 
-  *  :ref:`reverse (var a: auto) : auto <function-algorithm_reverse_auto>` 
-  *  :ref:`combine (a: auto; b: auto) : auto <function-algorithm_combine_auto_auto>` 
-  *  :ref:`erase_all (var arr: auto; value: auto) : auto <function-algorithm_erase_all_auto_auto>` 
+  *  :ref:`reverse (var a: auto) : auto <function-algorithm_reverse_auto_0x92>` 
+  *  :ref:`combine (a: auto; b: auto) : auto <function-algorithm_combine_auto_auto_0x9a>` 
+  *  :ref:`erase_all (var arr: auto; value: auto) : auto <function-algorithm_erase_all_auto_auto_0x10a>` 
   *  :ref:`topological_sort (nodes: array\<auto(Node)\>) : auto <function-algorithm_topological_sort_array_ls_autoNode_gr_>` 
 
 .. _function-algorithm_unique_array_ls_autoTT_gr_:
@@ -316,7 +316,7 @@ Returns array of the elements of a and then b.
 
             * **b** : array<auto(TT)>
 
-.. _function-algorithm_reverse_auto:
+.. _function-algorithm_reverse_auto_0x92:
 
 .. das:function:: reverse(a: auto) : auto
 
@@ -324,7 +324,7 @@ Reverses the elements of array a in place.
 
 :Arguments: * **a** : auto
 
-.. _function-algorithm_combine_auto_auto:
+.. _function-algorithm_combine_auto_auto_0x9a:
 
 .. das:function:: combine(a: auto; b: auto) : auto
 
@@ -334,7 +334,7 @@ Returns array of the elements of a and then b.
 
             * **b** : auto
 
-.. _function-algorithm_erase_all_auto_auto:
+.. _function-algorithm_erase_all_auto_auto_0x10a:
 
 .. das:function:: erase_all(arr: auto; value: auto) : auto
 

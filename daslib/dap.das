@@ -63,7 +63,7 @@ struct Capabilities {
 struct DataBreakpoint {
     //! A data breakpoint that triggers on memory access.
     dataId : string //! Identifier for the data to watch.
-    accessType : string// 'read' | 'write' | 'readWrite' //! Access type that triggers the breakpoint: read, write, or readWrite.
+    accessType : string //! Access type that triggers the breakpoint: read, write, or readWrite.
     condition : string //! Optional expression condition for the breakpoint.
     hitCondition : string //! Optional hit count condition for the breakpoint.
     description : string //! Human-readable description of the breakpoint.
@@ -262,8 +262,7 @@ struct Variable {
     name : string //! Name of the variable.
     value : string //! String representation of the variable's value.
     variablesReference : double //! Reference to child variables, if any.
-    @rename _type : string
-    //! Type of the variable.
+    @rename _type : string //! Type of the variable.
     indexedVariables : double //! Number of indexed child variables.
 }
 struct VariablesResponseBody {
@@ -380,13 +379,13 @@ def JV(data : EvaluateResponse) {
 
 struct BreakpointEvent {
     //! Event body indicating a breakpoint status change.
-    reason : string // 'changed' | 'new' | 'removed' | string; //! Reason for the event: changed, new, or removed.
+    reason : string //! Reason for the event: changed, new, or removed.
     breakpoint : Breakpoint //! The breakpoint whose status changed.
 }
 
 struct ThreadEvent {
     //! Event body indicating a thread started or exited.
-    reason : string // 'started' | 'exited' | string; //! Reason for the event: started or exited.
+    reason : string //! Reason for the event: started or exited.
     threadId : double //! Thread identifier.
 }
 

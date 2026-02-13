@@ -537,7 +537,7 @@ Textual descriptions of the objects
   *  :ref:`debug_expression (expr: ExpressionPtr; deFlags: DebugExpressionFlags = bitfield(0x0)) : string <function-ast_boost_debug_expression_ExpressionPtr_DebugExpressionFlags>` 
   *  :ref:`debug_expression (expr: Expression?) : string <function-ast_boost_debug_expression_Expression_q_>` 
   *  :ref:`describe (expr: Expression?) : string <function-ast_boost_describe_Expression_q_>` 
-  *  :ref:`describe_bitfield (bf: auto; merger: string = "") : auto <function-ast_boost_describe_bitfield_auto_string>` 
+  *  :ref:`describe_bitfield (bf: auto; merger: string = "") : auto <function-ast_boost_describe_bitfield_auto_string_0x3d>` 
   *  :ref:`describe_function_short (func: smart_ptr\<Function\>|Function?) : auto <function-ast_boost_describe_function_short_smart_ptr_ls_Function_gr_Function_q_>` 
 
 .. _function-ast_boost_describe_AnnotationArgumentList:
@@ -598,7 +598,7 @@ Returns a human-readable textual representation of an AST object (``AnnotationAr
 
 :Arguments: * **expr** :  :ref:`Expression <handle-ast-Expression>` ?
 
-.. _function-ast_boost_describe_bitfield_auto_string:
+.. _function-ast_boost_describe_bitfield_auto_string_0x3d:
 
 .. das:function:: describe_bitfield(bf: auto; merger: string = "") : auto
 
@@ -1031,10 +1031,10 @@ Expression generation
   *  :ref:`override_method (var str: StructurePtr; name: string; funcName: string) : bool <function-ast_boost_override_method_StructurePtr_string_string>` 
   *  :ref:`panic_expr_as () : void? <function-ast_boost_panic_expr_as>` 
   *  :ref:`make_static_assert_false (text: string; at: LineInfo) : smart_ptr\<ExprStaticAssert\> <function-ast_boost_make_static_assert_false_string_LineInfo>` 
-  *  :ref:`convert_to_expression (var value: auto& ==const; at: LineInfo) : auto <function-ast_boost_convert_to_expression__auto__eq__eq_const_LineInfo>` 
-  *  :ref:`convert_to_expression (value: auto ==const; at: LineInfo) : auto <function-ast_boost_convert_to_expression_auto__eq__eq_const_LineInfo>` 
-  *  :ref:`convert_to_expression (var value: auto ==const) : auto <function-ast_boost_convert_to_expression__auto__eq__eq_const>` 
-  *  :ref:`convert_to_expression (value: auto ==const) : auto <function-ast_boost_convert_to_expression_auto__eq__eq_const>` 
+  *  :ref:`convert_to_expression (var value: auto& ==const; at: LineInfo) : auto <function-ast_boost_convert_to_expression__auto__eq__eq_const_LineInfo_0x393>` 
+  *  :ref:`convert_to_expression (value: auto ==const; at: LineInfo) : auto <function-ast_boost_convert_to_expression_auto__eq__eq_const_LineInfo_0x39c>` 
+  *  :ref:`convert_to_expression (var value: auto ==const) : auto <function-ast_boost_convert_to_expression__auto__eq__eq_const_0x3a5>` 
+  *  :ref:`convert_to_expression (value: auto ==const) : auto <function-ast_boost_convert_to_expression_auto__eq__eq_const_0x3aa>` 
 
 .. _function-ast_boost_override_method_StructurePtr_string_string:
 
@@ -1064,7 +1064,7 @@ Creates an ``ExprStaticAssert`` expression node that always fails at compile tim
 
             * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
 
-.. _function-ast_boost_convert_to_expression__auto__eq__eq_const_LineInfo:
+.. _function-ast_boost_convert_to_expression__auto__eq__eq_const_LineInfo_0x393:
 
 .. das:function:: convert_to_expression(value: auto& ==const; at: LineInfo) : auto
 
@@ -1074,7 +1074,7 @@ Converts a runtime value of any supported type to an equivalent AST ``Expression
 
             * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
 
-.. _function-ast_boost_convert_to_expression_auto__eq__eq_const_LineInfo:
+.. _function-ast_boost_convert_to_expression_auto__eq__eq_const_LineInfo_0x39c:
 
 .. das:function:: convert_to_expression(value: auto ==const; at: LineInfo) : auto
 
@@ -1084,7 +1084,7 @@ Converts a runtime value of any supported type to an equivalent AST ``Expression
 
             * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
 
-.. _function-ast_boost_convert_to_expression__auto__eq__eq_const:
+.. _function-ast_boost_convert_to_expression__auto__eq__eq_const_0x3a5:
 
 .. das:function:: convert_to_expression(value: auto ==const) : auto
 
@@ -1092,7 +1092,7 @@ Converts a runtime value of any supported type to an equivalent AST ``Expression
 
 :Arguments: * **value** : auto!
 
-.. _function-ast_boost_convert_to_expression_auto__eq__eq_const:
+.. _function-ast_boost_convert_to_expression_auto__eq__eq_const_0x3aa:
 
 .. das:function:: convert_to_expression(value: auto ==const) : auto
 
@@ -1147,10 +1147,10 @@ Type casts
   *  :ref:`Annotation?`as`StructureAnnotation (foo: Annotation?) : StructureAnnotation? <function-ast_boost__rq_as_rq_StructureAnnotation_Annotation_q_>` 
   *  :ref:`smart_ptr\<Annotation\>`as`StructureAnnotation (foo: smart_ptr\<Annotation\>) : StructureAnnotation? <function-ast_boost__rq_as_rq_StructureAnnotation_smart_ptr_ls_Annotation_gr_>` 
   *  :ref:`walk_and_convert (data: uint8 const?; info: TypeDeclPtr; at: LineInfo) : ExpressionPtr <function-ast_boost_walk_and_convert_uint8_const_q__TypeDeclPtr_LineInfo>` 
-  *  :ref:`auto`is`BuiltInFunction (anything: auto) : auto <function-ast_boost__rq_is_rq_BuiltInFunction_auto>` 
-  *  :ref:`auto`is`ExternalFnBase (anything: auto) : auto <function-ast_boost__rq_is_rq_ExternalFnBase_auto>` 
-  *  :ref:`auto`is`FunctionAnnotation (anything: auto) : auto <function-ast_boost__rq_is_rq_FunctionAnnotation_auto>` 
-  *  :ref:`auto`is`StructureAnnotation (anything: auto) : auto <function-ast_boost__rq_is_rq_StructureAnnotation_auto>` 
+  *  :ref:`auto`is`BuiltInFunction (anything: auto) : auto <function-ast_boost__rq_is_rq_BuiltInFunction_auto_0x26a>` 
+  *  :ref:`auto`is`ExternalFnBase (anything: auto) : auto <function-ast_boost__rq_is_rq_ExternalFnBase_auto_0x27a>` 
+  *  :ref:`auto`is`FunctionAnnotation (anything: auto) : auto <function-ast_boost__rq_is_rq_FunctionAnnotation_auto_0x28a>` 
+  *  :ref:`auto`is`StructureAnnotation (anything: auto) : auto <function-ast_boost__rq_is_rq_StructureAnnotation_auto_0x2a6>` 
 
 .. _function-ast_boost__rq_is_rq_BuiltInFunction_Function_q_:
 
@@ -1260,7 +1260,7 @@ Recursively walks raw data bytes using a ``TypeDeclPtr`` schema and builds an eq
 
             * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
 
-.. _function-ast_boost__rq_is_rq_BuiltInFunction_auto:
+.. _function-ast_boost__rq_is_rq_BuiltInFunction_auto_0x26a:
 
 .. das:function:: auto`is`BuiltInFunction(anything: auto) : auto
 
@@ -1268,7 +1268,7 @@ Returns ``true`` if the given ``Function?`` has the ``builtIn`` flag set, indica
 
 :Arguments: * **anything** : auto
 
-.. _function-ast_boost__rq_is_rq_ExternalFnBase_auto:
+.. _function-ast_boost__rq_is_rq_ExternalFnBase_auto_0x27a:
 
 .. das:function:: auto`is`ExternalFnBase(anything: auto) : auto
 
@@ -1276,7 +1276,7 @@ Returns ``true`` if the given ``Function?`` is both ``builtIn`` and has the ``pr
 
 :Arguments: * **anything** : auto
 
-.. _function-ast_boost__rq_is_rq_FunctionAnnotation_auto:
+.. _function-ast_boost__rq_is_rq_FunctionAnnotation_auto_0x28a:
 
 .. das:function:: auto`is`FunctionAnnotation(anything: auto) : auto
 
@@ -1284,7 +1284,7 @@ Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a 
 
 :Arguments: * **anything** : auto
 
-.. _function-ast_boost__rq_is_rq_StructureAnnotation_auto:
+.. _function-ast_boost__rq_is_rq_StructureAnnotation_auto_0x2a6:
 
 .. das:function:: auto`is`StructureAnnotation(anything: auto) : auto
 
@@ -1299,7 +1299,7 @@ Setup
   *  :ref:`setup_call_list (name: string; at: LineInfo; subblock: block\<(var fn:FunctionPtr):void\>) : ExprBlock? <function-ast_boost_setup_call_list_string_LineInfo_block_ls_var_fn_c_FunctionPtr_c_void_gr_>` 
   *  :ref:`setup_call_list (name: string; at: LineInfo; isInit: bool = false; isPrivate: bool = true; isLateInit: bool = false) : ExprBlock? <function-ast_boost_setup_call_list_string_LineInfo_bool_bool_bool>` 
   *  :ref:`setup_macro (name: string; at: LineInfo) : ExprBlock? <function-ast_boost_setup_macro_string_LineInfo>` 
-  *  :ref:`setup_tag_annotation (name: string; tag: string; var classPtr: auto) : auto <function-ast_boost_setup_tag_annotation_string_string_auto>` 
+  *  :ref:`setup_tag_annotation (name: string; tag: string; var classPtr: auto) : auto <function-ast_boost_setup_tag_annotation_string_string_auto_0x111>` 
 
 .. _function-ast_boost_setup_call_list_string_LineInfo_block_ls_var_fn_c_FunctionPtr_c_void_gr_:
 
@@ -1339,7 +1339,7 @@ Creates or locates a macro initialization function (``__setup_macros``) guarded 
 
             * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
 
-.. _function-ast_boost_setup_tag_annotation_string_string_auto:
+.. _function-ast_boost_setup_tag_annotation_string_string_auto_0x111:
 
 .. das:function:: setup_tag_annotation(name: string; tag: string; classPtr: auto) : auto
 

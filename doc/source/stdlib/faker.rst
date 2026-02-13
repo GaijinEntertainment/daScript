@@ -300,7 +300,7 @@ Random strings
   *  :ref:`any_hex (var faker: Faker) : string <function-faker_any_hex_Faker>` 
   *  :ref:`any_float (var faker: Faker) : string <function-faker_any_float_Faker>` 
   *  :ref:`any_uint (var faker: Faker) : string <function-faker_any_uint_Faker>` 
-  *  :ref:`any_enum (var faker: Faker; enum_value: auto(TT)) : TT <function-faker_any_enum_Faker_autoTT>` 
+  *  :ref:`any_enum (var faker: Faker; enum_value: auto(TT)) : TT <function-faker_any_enum_Faker_autoTT_0x13e>` 
 
 .. _function-faker_long_string_Faker:
 
@@ -390,7 +390,7 @@ Generates random unsigned integer string.
 
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
 
-.. _function-faker_any_enum_Faker_autoTT:
+.. _function-faker_any_enum_Faker_autoTT_0x13e:
 
 .. das:function:: any_enum(faker: Faker; enum_value: auto(TT)) : TT
 

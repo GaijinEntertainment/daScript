@@ -185,11 +185,11 @@ File manipulation
   *  :ref:`stat (path: string) : FStat <function-fio_stat_string>` 
   *  :ref:`fstat (f: file) : FStat <function-fio_fstat_file>` 
   *  :ref:`fread (f: file; blk: block\<(data:string#):auto\>) : auto <function-fio_fread_file_block_ls_data_c_string_hh__c_auto_gr_>` 
-  *  :ref:`fload (f: file; var buf: auto(BufType)) : auto <function-fio_fload_file_autoBufType>` 
-  *  :ref:`fsave (f: file; buf: auto(BufType)) : auto <function-fio_fsave_file_autoBufType>` 
-  *  :ref:`fread (f: file; buf: auto(BufType) implicit) : auto <function-fio_fread_file_autoBufType_implicit>` 
+  *  :ref:`fload (f: file; var buf: auto(BufType)) : auto <function-fio_fload_file_autoBufType_0x40>` 
+  *  :ref:`fsave (f: file; buf: auto(BufType)) : auto <function-fio_fsave_file_autoBufType_0x53>` 
+  *  :ref:`fread (f: file; buf: auto(BufType) implicit) : auto <function-fio_fread_file_autoBufType_implicit_0x66>` 
   *  :ref:`fread (f: file; buf: array\<auto(BufType)\>) : auto <function-fio_fread_file_array_ls_autoBufType_gr_>` 
-  *  :ref:`fwrite (f: file; buf: auto(BufType) implicit) : auto <function-fio_fwrite_file_autoBufType_implicit>` 
+  *  :ref:`fwrite (f: file; buf: auto(BufType) implicit) : auto <function-fio_fwrite_file_autoBufType_implicit_0x74>` 
   *  :ref:`fwrite (f: file; buf: array\<auto(BufType)\>) : auto <function-fio_fwrite_file_array_ls_autoBufType_gr_>` 
 
 .. _function-fio_remove_string_implicit:
@@ -404,7 +404,7 @@ Reads data from a file into a buffer, an array, or returns the full contents as 
 
             * **blk** : block<(data:string#):auto>
 
-.. _function-fio_fload_file_autoBufType:
+.. _function-fio_fload_file_autoBufType_0x40:
 
 .. das:function:: fload(f: file; buf: auto(BufType)) : auto
 
@@ -414,7 +414,7 @@ Obsolete; loads binary data from a file into the provided buffer or passes it as
 
             * **buf** : auto(BufType)
 
-.. _function-fio_fsave_file_autoBufType:
+.. _function-fio_fsave_file_autoBufType_0x53:
 
 .. das:function:: fsave(f: file; buf: auto(BufType)) : auto
 
@@ -424,7 +424,7 @@ Obsolete; saves the provided buffer data to a file in binary format.
 
             * **buf** : auto(BufType)
 
-.. _function-fio_fread_file_autoBufType_implicit:
+.. _function-fio_fread_file_autoBufType_implicit_0x66:
 
 .. das:function:: fread(f: file; buf: auto(BufType) implicit) : auto
 
@@ -444,7 +444,7 @@ Reads data from a file into a buffer, an array, or returns the full contents as 
 
             * **buf** : array<auto(BufType)> implicit
 
-.. _function-fio_fwrite_file_autoBufType_implicit:
+.. _function-fio_fwrite_file_autoBufType_implicit_0x74:
 
 .. das:function:: fwrite(f: file; buf: auto(BufType) implicit) : auto
 

@@ -30,7 +30,7 @@ class ConstExprAnnotation : AstFunctionAnnotation {
     //!     [export]
     //!     def main
     //!         foo("blah", 1)
-    //!         foo("ouch", BOO)    // comilation error: `a is not a constexpr, BOO`
+    //!         foo("ouch", BOO)    // compilation error: `a is not a constexpr, BOO`
     def override verifyCall(var call : smart_ptr<ExprCallFunc>; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
         for (aa in args) {
             if (aa.basicType == Type.tBool) {
@@ -50,7 +50,7 @@ class ConstExprAnnotation : AstFunctionAnnotation {
 
 [macro_function]
 def public isConstantExpression(expr : ExpressionPtr) : bool {
-    //! This macro function retrusn true if the expression is a constant expression
+    //! This macro function returns true if the expression is a constant expression
     if (expr is ExprRef2Value) {
         return isConstantExpression((expr as ExprRef2Value).subexpr)
     } else {
@@ -60,8 +60,8 @@ def public isConstantExpression(expr : ExpressionPtr) : bool {
 
 [function_macro(name="constant_expression")]
 class ConstantExpressionMacro : AstFunctionAnnotation {
-    //! This function annotation implments constant expression folding for the given arguments.
-    //! When argument is specified in the annotation, and is passed as a contstant expression,
+    //! This function annotation implements constant expression folding for the given arguments.
+    //! When argument is specified in the annotation, and is passed as a constant expression,
     //! custom version of the function is generated, and an argument is substituted with a constant value.
     //! This allows using of static_if expression on the said arguments, as well as other optimizations.
     //! For example::

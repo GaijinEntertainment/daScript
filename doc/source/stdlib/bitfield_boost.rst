@@ -17,13 +17,13 @@ All functions and symbols are in "bitfield_boost" module, use require to get acc
 Bitfield element access
 +++++++++++++++++++++++
 
-  *  :ref:`auto[] (b: auto; i: int) : bool <function-bitfield_boost__auto_int>` 
-  *  :ref:`auto(TT)&[]= (var b: auto(TT)&; i: int; v: bool) : auto <function-bitfield_boost__eq__autoTT_int_bool>` 
-  *  :ref:`auto(TT)&[]&&= (var b: auto(TT)&; i: int; v: bool) : auto <function-bitfield_boost__eq__autoTT_int_bool>` 
-  *  :ref:`auto(TT)&[]||= (var b: auto(TT)&; i: int; v: bool) : auto <function-bitfield_boost__eq__autoTT_int_bool>` 
-  *  :ref:`auto(TT)&[]^^= (var b: auto(TT)&; i: int; v: bool) : auto <function-bitfield_boost_^^_eq__autoTT_int_bool>` 
+  *  :ref:`auto[] (b: auto; i: int) : bool <function-bitfield_boost__auto_int_0x11>` 
+  *  :ref:`auto(TT)&[]= (var b: auto(TT)&; i: int; v: bool) : auto <function-bitfield_boost__eq__autoTT_int_bool_0x17>` 
+  *  :ref:`auto(TT)&[]&&= (var b: auto(TT)&; i: int; v: bool) : auto <function-bitfield_boost__eq__autoTT_int_bool_0x25>` 
+  *  :ref:`auto(TT)&[]||= (var b: auto(TT)&; i: int; v: bool) : auto <function-bitfield_boost__eq__autoTT_int_bool_0x31>` 
+  *  :ref:`auto(TT)&[]^^= (var b: auto(TT)&; i: int; v: bool) : auto <function-bitfield_boost_^^_eq__autoTT_int_bool_0x3d>` 
 
-.. _function-bitfield_boost__auto_int:
+.. _function-bitfield_boost__auto_int_0x11:
 
 .. das:function:: auto[](b: auto; i: int) : bool
 
@@ -33,7 +33,7 @@ get bitfield bit at index i
 
             * **i** : int
 
-.. _function-bitfield_boost__eq__autoTT_int_bool:
+.. _function-bitfield_boost__eq__autoTT_int_bool_0x17:
 
 .. das:function:: auto(TT)&[]=(b: auto(TT)&; i: int; v: bool) : auto
 
@@ -45,7 +45,7 @@ set bitfield bit at index i to v
 
             * **v** : bool
 
-.. _function-bitfield_boost__eq__autoTT_int_bool:
+.. _function-bitfield_boost__eq__autoTT_int_bool_0x25:
 
 .. das:function:: auto(TT)&[]&&=(b: auto(TT)&; i: int; v: bool) : auto
 
@@ -57,7 +57,7 @@ set bitfield bit at index i to v
 
             * **v** : bool
 
-.. _function-bitfield_boost__eq__autoTT_int_bool:
+.. _function-bitfield_boost__eq__autoTT_int_bool_0x31:
 
 .. das:function:: auto(TT)&[]||=(b: auto(TT)&; i: int; v: bool) : auto
 
@@ -69,7 +69,7 @@ set bitfield bit at index i to v
 
             * **v** : bool
 
-.. _function-bitfield_boost_^^_eq__autoTT_int_bool:
+.. _function-bitfield_boost_^^_eq__autoTT_int_bool_0x3d:
 
 .. das:function:: auto(TT)&[]^^=(b: auto(TT)&; i: int; v: bool) : auto
 
@@ -85,9 +85,9 @@ toggle bitfield bit at index i if v is true
 Iteration
 +++++++++
 
-  *  :ref:`each (b: auto) : iterator\<bool\> <function-bitfield_boost_each_auto>` 
+  *  :ref:`each (b: auto) : iterator\<bool\> <function-bitfield_boost_each_auto_0x49>` 
 
-.. _function-bitfield_boost_each_auto:
+.. _function-bitfield_boost_each_auto_0x49:
 
 .. das:function:: each(b: auto) : iterator<bool>
 

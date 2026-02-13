@@ -70,7 +70,7 @@ Function annotations
 
 .. das:attribute:: expect_any_struct
 
-[expect_any_struct(argname)] contract, which only accepts structs (byt not classes)
+[expect_any_struct(argname)] contract, which only accepts structs (but not classes)
 
 .. _handle-contracts-expect_any_numeric:
 

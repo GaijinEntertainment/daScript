@@ -67,9 +67,9 @@ Enumeration annotation which implements string constructor for enumeration.
 Enumeration iteration
 +++++++++++++++++++++
 
-  *  :ref:`each (tt: auto(TT)) : iterator\<TT\> <function-enum_trait_each_autoTT>` 
+  *  :ref:`each (tt: auto(TT)) : iterator\<TT\> <function-enum_trait_each_autoTT_0x16>` 
 
-.. _function-enum_trait_each_autoTT:
+.. _function-enum_trait_each_autoTT_0x16:
 
 .. das:function:: each(tt: auto(TT)) : iterator<TT>
 
@@ -81,12 +81,12 @@ Returns an iterator over all values of the given enumeration type.
 Enumeration conversion
 ++++++++++++++++++++++
 
-  *  :ref:`string (arg: auto) : auto <function-enum_trait_string_auto>` 
-  *  :ref:`to_enum (ent: auto(EnumT); name: string) : EnumT <function-enum_trait_to_enum_autoEnumT_string>` 
-  *  :ref:`to_enum (ent: auto(EnumT); name: string; defaultValue: EnumT) : EnumT <function-enum_trait_to_enum_autoEnumT_string_EnumT>` 
-  *  :ref:`enum_to_table (ent: auto(EnumT)) : table\<string, EnumT\> <function-enum_trait_enum_to_table_autoEnumT>` 
+  *  :ref:`string (arg: auto) : auto <function-enum_trait_string_auto_0x21>` 
+  *  :ref:`to_enum (ent: auto(EnumT); name: string) : EnumT <function-enum_trait_to_enum_autoEnumT_string_0x28>` 
+  *  :ref:`to_enum (ent: auto(EnumT); name: string; defaultValue: EnumT) : EnumT <function-enum_trait_to_enum_autoEnumT_string_EnumT_0x35>` 
+  *  :ref:`enum_to_table (ent: auto(EnumT)) : table\<string, EnumT\> <function-enum_trait_enum_to_table_autoEnumT_0x41>` 
 
-.. _function-enum_trait_string_auto:
+.. _function-enum_trait_string_auto_0x21:
 
 .. das:function:: string(arg: auto) : auto
 
@@ -95,7 +95,7 @@ converts enum value to string
 
 :Arguments: * **arg** : auto
 
-.. _function-enum_trait_to_enum_autoEnumT_string:
+.. _function-enum_trait_to_enum_autoEnumT_string_0x28:
 
 .. das:function:: to_enum(ent: auto(EnumT); name: string) : EnumT
 
@@ -106,7 +106,7 @@ converts string to enum value, panics if not found
 
             * **name** : string
 
-.. _function-enum_trait_to_enum_autoEnumT_string_EnumT:
+.. _function-enum_trait_to_enum_autoEnumT_string_EnumT_0x35:
 
 .. das:function:: to_enum(ent: auto(EnumT); name: string; defaultValue: EnumT) : EnumT
 
@@ -119,7 +119,7 @@ converts string to enum value, returns defaultValue if not found
 
             * **defaultValue** : EnumT
 
-.. _function-enum_trait_enum_to_table_autoEnumT:
+.. _function-enum_trait_enum_to_table_autoEnumT_0x41:
 
 .. das:function:: enum_to_table(ent: auto(EnumT)) : table<string, EnumT>
 

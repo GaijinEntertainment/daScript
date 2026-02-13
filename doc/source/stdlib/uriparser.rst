@@ -28,14 +28,18 @@ Handled structures
 
 .. das:attribute:: UriIp4Struct
 
-:Fields: * **data** : uint8[4] -  IPv4 address portion of the URI.
+ IPv4 address portion of the URI.
+
+:Fields: * **data** : uint8[4] - IPv4 address data.
 
 
 .. _handle-uriparser-UriIp6Struct:
 
 .. das:attribute:: UriIp6Struct
 
-:Fields: * **data** : uint8[16] -  IPv6 address porition of the URI.
+ IPv6 address portion of the URI.
+
+:Fields: * **data** : uint8[16] - IPv6 address data.
 
 
 .. _handle-uriparser-UriHostDataA:
@@ -43,13 +47,12 @@ Handled structures
 .. das:attribute:: UriHostDataA
 
 Host data portion of the URI (IPv4 or IPv6, or some future data).
-IPv4 address data.
 
-:Fields: * **ip4** :  :ref:`UriIp4Struct <handle-uriparser-UriIp4Struct>` ? - IPv6 address data.
+:Fields: * **ip4** :  :ref:`UriIp4Struct <handle-uriparser-UriIp4Struct>` ? - IPv4 address data.
 
-         * **ip6** :  :ref:`UriIp6Struct <handle-uriparser-UriIp6Struct>` ? - Future host address data.
+         * **ip6** :  :ref:`UriIp6Struct <handle-uriparser-UriIp6Struct>` ? - IPv6 address data.
 
-         * **ipFuture** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>` 
+         * **ipFuture** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Future host address data.
 
 
 .. _handle-uriparser-UriPathSegmentStructA:
@@ -68,29 +71,28 @@ Part of the path portion of the URI.
 .. das:attribute:: UriUriA
 
 URI base class, contains all URI data.
-Scheme of the URI.
 
-:Fields: * **scheme** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - User information.
+:Fields: * **scheme** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Scheme of the URI.
 
-         * **userInfo** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Host text.
+         * **userInfo** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - User information.
 
-         * **hostText** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Host data portion of the URI (IPv4 or IPv6, or some future data).
+         * **hostText** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Host text.
 
-         * **hostData** :  :ref:`UriHostDataA <handle-uriparser-UriHostDataA>`  - Port text.
+         * **hostData** :  :ref:`UriHostDataA <handle-uriparser-UriHostDataA>`  - Host data portion of the URI (IPv4 or IPv6, or some future data).
 
-         * **portText** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Head of the path.
+         * **portText** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Port text.
 
-         * **pathHead** :  :ref:`UriPathSegmentStructA <handle-uriparser-UriPathSegmentStructA>` ? - Tail of the path.
+         * **pathHead** :  :ref:`UriPathSegmentStructA <handle-uriparser-UriPathSegmentStructA>` ? - Head of the path.
 
-         * **pathTail** :  :ref:`UriPathSegmentStructA <handle-uriparser-UriPathSegmentStructA>` ? - Query portion of the URI.
+         * **pathTail** :  :ref:`UriPathSegmentStructA <handle-uriparser-UriPathSegmentStructA>` ? - Tail of the path.
 
-         * **query** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Fragment portion of the URI.
+         * **query** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Query portion of the URI.
 
-         * **fragment** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Whether the path is absolute.
+         * **fragment** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  - Fragment portion of the URI.
 
-         * **absolutePath** : int - Whether the URI is owned by the parser.
+         * **absolutePath** : int - Whether the path is absolute.
 
-         * **owner** : int
+         * **owner** : int - Whether the URI is owned by the parser.
 
 
 .. _handle-uriparser-Uri:

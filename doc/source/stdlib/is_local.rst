@@ -27,7 +27,7 @@ Scope checks
 
 .. das:function:: is_temp_safe(expr: ExpressionPtr) : bool
 
-Returns true if the exression had no calls, [] or table [] operators of any kind.
+Returns true if the expression had no calls, [] or table [] operators of any kind.
 This is used to check expression can be safely casted to temp type.
 
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
@@ -36,7 +36,7 @@ This is used to check expression can be safely casted to temp type.
 
 .. das:function:: is_shared_expr(expr: ExpressionPtr) : bool
 
-Returns true if the expression is local to the current scope.
+Returns true if the expression refers to a global shared variable.
 
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 

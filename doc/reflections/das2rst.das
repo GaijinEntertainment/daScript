@@ -186,7 +186,7 @@ def document_module_random(root : string) {
 def document_module_network(root : string) {
     var mod = get_module("network")
     var groups <- array<DocGroup>(
-        group_by_regex("Low lever NetworkServer IO", mod, %regex~(make_server|server_init|server_is_open|server_is_connected|server_tick|server_send|server_restore)$%%)
+        group_by_regex("Low level NetworkServer IO", mod, %regex~(make_server|server_init|server_is_open|server_is_connected|server_tick|server_send|server_restore)$%%)
     )
     document("Network socket library", mod, "network.rst", groups)
 }
@@ -550,7 +550,7 @@ def document_module_archive(root : string) {
         group_by_regex("Serialization", mod, %regex~(serialize|serialize_raw|read_raw|write_raw)$%%),
         group_by_regex("Memory archive", mod, %regex~(mem_archive_save|mem_archive_load)$%%)
     )
-    document("General prupose serialization", mod, "archive.rst", groups)
+    document("General purpose serialization", mod, "archive.rst", groups)
 }
 
 def document_module_unroll(root : string) {

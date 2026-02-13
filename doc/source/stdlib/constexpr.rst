@@ -31,14 +31,14 @@ This macro implements a constexpr function argument checker. Given list of argum
     [export]
     def main
         foo("blah", 1)
-        foo("ouch", BOO)    // comilation error: `a is not a constexpr, BOO`
+        foo("ouch", BOO)    // compilation error: `a is not a constexpr, BOO`
 
 .. _handle-constant_expression-constant_expression:
 
 .. das:attribute:: constant_expression
 
-This function annotation implments constant expression folding for the given arguments.
-When argument is specified in the annotation, and is passed as a contstant expression,
+This function annotation implements constant expression folding for the given arguments.
+When argument is specified in the annotation, and is passed as a constant expression,
 custom version of the function is generated, and an argument is substituted with a constant value.
 This allows using of static_if expression on the said arguments, as well as other optimizations.
 For example::
@@ -58,7 +58,7 @@ Macro helpers
 
 .. das:function:: isConstantExpression(expr: ExpressionPtr) : bool
 
-This macro function retrusn true if the expression is a constant expression
+This macro function returns true if the expression is a constant expression
 
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
