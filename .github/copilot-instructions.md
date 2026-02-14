@@ -52,6 +52,37 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - Prefer omitting `delete` in tutorials and examples unless the topic is memory management
 - Struct fields without initializers require defaults or `@safe_when_uninitialized`
 
+### Move semantics (`<-` vs `move`)
+
+- **`<-` operator**: ALWAYS `memcpy(dest, src) + memset(src, 0)` — it is a raw memory operation, NOT smart_ptr-aware. It zeros the source regardless of type.
+- **`move` function**: Bound via C++ `builtin_smart_ptr_move*` family in `module_builtin_runtime.cpp` — proper smart pointer move with reference counting. Use `move(dest, src)` or `move(dest) <| src` for `smart_ptr<T>` transfers.
+- **`return <- expr`**: Moves value to return slot and zeroes `expr`. If `expr` is a `&` ref parameter, this zeroes the *caller's* variable since they share memory.
+- **Key subtlety**: When a function takes `var x : smart_ptr<T>&` (by reference) and internally calls a function that takes `var x : smart_ptr<T>` (by value/move), the `<-` inside `return` zeroes the `&` ref. Callers MUST capture the return value: `unsafe { expr <- apply_template(expr) <| ... }`
+- **Safe pattern**: `unsafe { variable <- function_returning_smart_ptr(variable) <| ... }` — captures return value back into the same variable
+
+### Error handling
+
+- `try/recover` — NOT `try/catch` (`recover` is the keyword)
+- `panic("message")` — abort with message
+- `assert(condition)` / `assert(condition, "message")` — debug assertion
+- `verify(condition)` — assertion that remains in release builds
+
+### Common gotchas
+
+- Lambda params can shadow function params — use distinct names (e.g., `$(lhs, rhs)` not `$(a, b)` when `a` is already in scope)
+- `struct Foo { ... }` requires braces in gen2 — empty struct is `struct Foo {}`
+- String builder: `build_string() <| $(var writer) { write(writer, "text") }` — requires `unsafe` or `options persistent_heap` if returned
+- `options persistent_heap` — needed when returning strings built with `build_string`
+- Tuple field access uses underscore prefix: `t._0`, `t._1`, `t._2`
+- Annotations: `[export]` for entry points, `[private]` for private functions, `[test]` for test functions
+- `options no_aot` — disable ahead-of-time compilation (common in test files)
+- `options rtti` — enable runtime type information (needed for some daslib features)
+- `require` uses forward slash paths: `require daslib/linq` — NOT `require daslib\linq`
+- `<-` is memcpy+memset(0), NOT a smart_ptr-aware move — see "Move semantics" section above
+- When calling `apply_template`, always capture the return value: `unsafe { expr <- apply_template(expr) <| ... }` — discarding the return loses the expression data
+- Iterator comprehension: `[iterator for(x in src); expression]` — semicolon separates generator from body
+- `to_array` (from `daslib/builtin`) converts any iterator to an array
+
 ## Key Directories
 
 - `src/` — C++ compiler/runtime source
@@ -62,8 +93,9 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - `doc/source/reference/language/` — RST language documentation (36 files)
 - `doc/source/stdlib/` — RST standard library documentation (auto-generated + handmade)
 - `doc/reflections/` — Documentation generation tools (das2rst.das, rst.das, gen_module_examples.py)
-- `tutorials/` — Language tutorial `.das` files (10 progressive tutorials)
+- `tutorials/language/` — Language tutorial `.das` files (28 progressive tutorials)
 - `doc/source/reference/tutorials/` — RST companion pages for each tutorial
+- `tests/linq/` — LINQ module tests (15 test files, ~500 tests)
 - `modules/` — External plugin modules
 
 ## Standard Library Documentation
@@ -102,6 +134,20 @@ When editing RST files in `doc/source/reference/language/`:
 - Use `:ref:` cross-references to link between pages (labels: `_structs`, `_classes`, `_functions`, `_statements`, `_expressions`, `_arrays`, `_tables`, `_iterators`, `_generators`, `_lambdas`, `_blocks`, `_tuples`, `_variants`, `_bitfields`, `_aliases`, `_modules`, `_options`, `_unsafe`, `_enumerations`, `_generic_programming`, `_pattern-matching`, `_comprehensions`, `_string_builder`, `_macros`, `_reification`, `_finalizers`, `_clone`, `_temporary`, `_move_copy_clone`, `_annotations`, `_program_structure`, `_type_conversions`, `_contexts`, `_locks`, `_datatypes_and_values`)
 - Verify examples compile: `bin/Release/daslang.exe example.das`
 
+### Tutorial RST conventions
+
+Tutorial RST files live in `doc/source/reference/tutorials/` with companion `.das` files in `tutorials/language/`.
+
+- Each RST starts with a label: `.. _tutorial_name:` (e.g., `.. _tutorial_linq:`)
+- Include `.. index::` directive with relevant `single: Tutorial; Topic` entries
+- Code blocks use `.. code-block:: das` with gen2 syntax
+- End each RST with a `.. seealso::` block containing:
+  - Full source as `:download:` link: `Full source: :download:\`tutorials/language/XX_name.das <../../../../tutorials/language/XX_name.das>\``
+  - Next tutorial link (except last): `Next tutorial: :ref:\`tutorial_next_name\``
+  - Related language reference links via `:ref:`
+- Toctree is in `doc/source/reference/tutorials.rst` — add new tutorials there
+- Tutorial labels for cross-references: `tutorial_hello_world`, `tutorial_variables`, `tutorial_operators`, `tutorial_control_flow`, `tutorial_functions`, `tutorial_arrays`, `tutorial_strings`, `tutorial_structs`, `tutorial_enumerations`, `tutorial_tables`, `tutorial_tuples_and_variants`, `tutorial_function_pointers`, `tutorial_blocks`, `tutorial_lambdas`, `tutorial_iterators_and_generators`, `tutorial_modules`, `tutorial_move_copy_clone`, `tutorial_classes`, `tutorial_generics`, `tutorial_lifetime`, `tutorial_error_handling`, `tutorial_unsafe`, `tutorial_string_format`, `tutorial_pattern_matching`, `tutorial_annotations`, `tutorial_contracts`, `tutorial_testing`, `tutorial_linq`
+
 ## C++ Codebase Notes
 
 - Main type inference: `src/ast/ast_infer_type.cpp` (very large file)
@@ -130,6 +176,77 @@ When editing RST files in `doc/source/reference/language/`:
 - **Never use two `[]` lookups on the same table in one expression** (e.g. `tab[k1] = tab[k2]`) — tables are unboxed containers and re-hashing on insert can invalidate the first reference
 - `find(table, key) <| $(pval) { ... }` — block-based lookup; block receives pointer to value if found
 - `get(table, key, blk)` — similar block-based access (see `daslib/builtin.das`)
+
+## Testing Conventions (dastest)
+
+Tests use the `dastest` framework. Test files live in `tests/` with per-module subfolders.
+
+### Test file structure
+
+```das
+options gen2
+require dastest/testing_boost public
+require daslib/module_under_test
+
+[test]
+def test_something(t : T?) {
+    t |> run("description") <| @(t : T?) {
+        t |> equal(actual, expected)
+        t |> success()
+    }
+}
+```
+
+### Key test functions
+
+- `t |> equal(actual, expected)` — value equality assertion
+- `t |> success()` — mark subtest as passed
+- `t |> run("name") <| @(t : T?) { ... }` — named subtest
+- `t |> expect_true(cond)` / `t |> expect_false(cond)` — boolean assertions
+- `t |> expect_eq(actual, expected)` — equality assertion (alternative name)
+
+### Common test options
+
+- `options no_unused_function_arguments = false` — suppress warnings for test params
+- `options no_unused_block_arguments = false` — suppress warnings for block params
+- Shared test helpers go in `_common.das` module files (e.g., `tests/linq/_common.das`)
+
+### Running tests
+
+- Single file: `bin/Release/daslang.exe dastest/dastest.das -- --test tests/linq/test_linq_aggregation.das`
+- Directory: `bin/Release/daslang.exe dastest/dastest.das -- --test tests/linq/`
+- All tests: `bin/Release/daslang.exe dastest/dastest.das -- --test tests/`
+
+## Standard Library Module Conventions
+
+### Base + boost pattern
+
+Many modules come in pairs: `daslib/foo.das` (core) + `daslib/foo_boost.das` (macro layer):
+
+- **Base module** (`linq.das`, `json.das`, `regex.das`, etc.): pure functional API, runtime functions, iterator implementations
+- **Boost module** (`linq_boost.das`, `json_boost.das`, etc.): macro-based sugar, compile-time optimizations, pipe-syntax rewrites
+- Example: `linq.das` provides `where`, `select`, `order_by` functions; `linq_boost.das` adds `_fold` macro that rewrites iterator chains into imperative loops
+
+### Iterator implementation pattern
+
+Many daslib functions follow this convention for iterator-based operations:
+
+- `foo_impl` — internal generator function (yields values)
+- `foo` — public function returning `iterator<T>` (calls `_impl`)
+- `foo_to_array` — convenience wrapper returning `array<T>` (pipes through `to_array`)
+- Inplace `foo` on arrays — overload taking `var arr : array<T>` and modifying in place
+
+### Key daslib modules
+
+- `daslib/linq.das` — LINQ-style queries (where, select, order_by, group_by, zip, etc.)
+- `daslib/linq_boost.das` — `_fold` optimization macro, pipe-syntax macros
+- `daslib/match.das` — pattern matching on variants and types
+- `daslib/templates_boost.das` — template/reification infrastructure for AST macros; `apply_template` rewrites AST nodes
+- `daslib/functional.das` — higher-order function utilities
+- `daslib/strings_boost.das` — string manipulation helpers
+- `daslib/json.das` / `daslib/json_boost.das` — JSON parsing/generation
+- `daslib/regex.das` / `daslib/regex_boost.das` — regular expressions
+- `daslib/builtin.das` — core builtins like `to_array`, `to_table`
 
 ## Keywords Reference
 

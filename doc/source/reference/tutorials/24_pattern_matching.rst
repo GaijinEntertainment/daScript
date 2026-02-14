@@ -87,6 +87,44 @@ Match tuple elements positionally::
       if (($v(n), "hello")) { return "hello #{n}" }
   }
 
+Array matching
+==============
+
+Static arrays match element-by-element. Dynamic arrays match head
+elements; use ``...`` to ignore the tail::
+
+  match (sa) {
+      if (fixed_array<int>(0, 0, 0)) { return "zeros" }
+      if (fixed_array<int>(1, $v(b), $v(c))) { return "1,{b},{c}" }
+  }
+
+  match (da) {
+      if (array<int>(0, 0, ...)) { return "starts with 0,0" }
+      if (array<int>($v(x), $v(y), ...)) { return "starts with {x},{y}" }
+  }
+
+match_expr — computed patterns
+===============================
+
+``match_expr(expression)`` evaluates at runtime instead of matching
+literally. Useful when the expected value depends on a captured variable::
+
+  match (t) {
+      if (($v(a), match_expr(a + 1), match_expr(a + 2))) {
+          return true   // matches consecutive triples
+      }
+  }
+
+Bool matching
+=============
+
+``match`` works on booleans::
+
+  match (b) {
+      if (true) { return "yes" }
+      if (false) { return "no" }
+  }
+
 multi_match and static_match
 =============================
 

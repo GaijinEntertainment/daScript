@@ -406,11 +406,13 @@ def match_expr(what : TypeDeclPtr; wthmt : ExprCall?; access : ExpressionPtr; va
         return false
     }
     var inscope expr <- clone_expression(value)
-    apply_template(expr) <| $(rules) {
-        for (dv, dn in keys(to.declarations), values(to.declarations)) {
-            rules |> replaceVariable(dv) <| clone_expression(dn)
+    unsafe {
+        expr <- apply_template(expr) <| $(rules) {
+            for (dv, dn in keys(to.declarations), values(to.declarations)) {
+                rules |> replaceVariable(dv) <| clone_expression(dn)
+            }
+            rules |> replaceVarTag("_") <| clone_expression(access)
         }
-        rules |> replaceVarTag("_") <| clone_expression(access)
     }
     var inscope cond <- qmacro($e(access) == $e(expr))
     cond |> force_at(value.at)
@@ -423,11 +425,13 @@ def match_guards(what : TypeDeclPtr; wth : ExprOp2?; access : ExpressionPtr; var
     if (match_any(what, get_ptr(wth.left), access, to)) {
         log_m("\tguards {describe(wth.right)} at {wth.right.at}\n")
         var inscope guards <- clone_expression(wth.right)
-        apply_template(guards) <| $(rules) {
-            for (dv, dn in keys(to.declarations), values(to.declarations)) {
-                rules |> replaceVariable(dv) <| clone_expression(dn)
+        unsafe {
+            guards <- apply_template(guards) <| $(rules) {
+                for (dv, dn in keys(to.declarations), values(to.declarations)) {
+                    rules |> replaceVariable(dv) <| clone_expression(dn)
+                }
+                rules |> replaceVarTag("_") <| clone_expression(access)
             }
-            rules |> replaceVarTag("_") <| clone_expression(access)
         }
         to.conditions |> emplace(guards)
         return true
@@ -615,10 +619,11 @@ class MatchMacro : AstCallMacro {
     def override preVisit(prog : ProgramPtr; mod : Module?; expr : smart_ptr<ExprCallMacro>) : void {
         return if (length(expr.arguments) != 2)
         assume blk = expr.arguments[1]
-        return if (blk._type == null)
-        return if (!blk._type.isGoodBlockType)
         return if (!(blk is ExprMakeBlock))
         // we mark all if's inside the match to not fold, so that we can fold the match later
+        // Note: must set doNotFold even before blk._type is resolved, otherwise
+        // if(true)/if(false) literal conditions get constant-folded before the
+        // match macro can analyze them as patterns.
         var eblk = ((blk as ExprMakeBlock)._block as ExprBlock)
         for (ee in eblk.list) {
             if (ee is ExprIfThenElse) {
@@ -641,6 +646,7 @@ class MatchMacro : AstCallMacro {
                 macro_verify(eite.if_false == null, prog, expr.at, "match to `if` can't have `else` section")
             } else {
                 macro_error(prog, ee.at, "match `block` argument can only contain match-to calls, not {ee.__rtti}")
+                return <- default<ExpressionPtr>
             }
         }
         var inscope access <- clone_expression(what)
