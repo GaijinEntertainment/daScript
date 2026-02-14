@@ -42,3 +42,4 @@ introduced in earlier tutorials.
    tutorials/25_annotations_and_options.rst
    tutorials/26_contracts.rst
    tutorials/27_testing.rst
+   tutorials/28_linq.rst

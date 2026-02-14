@@ -125,7 +125,7 @@ Running the tutorial
 
   daslang.exe tutorials/language/10_tables.das
 
-Full source: ``tutorials/language/10_tables.das``
+Full source: :download:`tutorials/language/10_tables.das <../../../../tutorials/language/10_tables.das>`
 
 See also
 ========

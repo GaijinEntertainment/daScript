@@ -330,3 +330,56 @@ def test_zip(t : T?) {
         }
     }
 }
+
+[test]
+def test_zip3(t : T?) {
+    t |> run("basic zip 3 iterators") <| @(t : T?) {
+        var query = zip(
+            [iterator for(x in 0..3); x],
+            [iterator for(x in 10..13); x],
+            [iterator for(x in 100..103); x]
+        )
+        var idx = 0
+        for (c in query) {
+            t |> equal(c._0, idx)
+            t |> equal(c._1, idx + 10)
+            t |> equal(c._2, idx + 100)
+            idx ++
+        }
+        t |> equal(idx, 3)
+    }
+    t |> run("zip 3 arrays") <| @(t : T?) {
+        var a = [0, 1, 2]
+        var b = [10, 11, 12]
+        var c = [100, 101, 102]
+        var result = zip(a, b, c)
+        t |> equal(3, length(result))
+        for (r, i in result, 0..3) {
+            t |> equal(r._0, i)
+            t |> equal(r._1, i + 10)
+            t |> equal(r._2, i + 100)
+        }
+    }
+    t |> run("zip 3 to array") <| @(t : T?) {
+        var result = zip_to_array(
+            [iterator for(x in 0..3); x],
+            [iterator for(x in 10..13); x],
+            [iterator for(x in 100..103); x]
+        )
+        static_assert(typeinfo is_array(result))
+        t |> equal(3, length(result))
+        for (r, i in result, 0..3) {
+            t |> equal(r._0, i)
+            t |> equal(r._1, i + 10)
+            t |> equal(r._2, i + 100)
+        }
+    }
+    t |> run("zip 3 with unequal lengths") <| @(t : T?) {
+        var result = zip_to_array(
+            [iterator for(x in 0..5); x],
+            [iterator for(x in 10..13); x],
+            [iterator for(x in 100..104); x]
+        )
+        t |> equal(3, length(result))  // stops at shortest
+    }
+}

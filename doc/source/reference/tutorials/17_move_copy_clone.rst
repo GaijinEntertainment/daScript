@@ -134,6 +134,6 @@ Override clone behavior by defining a ``clone`` function for your type::
 
    :ref:`Move, Copy, and Clone <move_copy_clone>` in the language reference.
 
-   Full source: ``tutorials/language/17_move_copy_clone.das``
+   Full source: :download:`tutorials/language/17_move_copy_clone.das <../../../../tutorials/language/17_move_copy_clone.das>`
 
 Next tutorial: :ref:`tutorial_classes`

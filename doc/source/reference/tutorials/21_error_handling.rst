@@ -98,6 +98,6 @@ enclosing scope exits. Multiple defers run in LIFO order::
    :ref:`Statements <statements>`, :ref:`Unsafe <unsafe>` in the
    language reference.
 
-   Full source: ``tutorials/language/21_error_handling.das``
+   Full source: :download:`tutorials/language/21_error_handling.das <../../../../tutorials/language/21_error_handling.das>`
 
    Next tutorial: :ref:`tutorial_unsafe`

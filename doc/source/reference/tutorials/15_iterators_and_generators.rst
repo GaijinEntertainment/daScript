@@ -101,6 +101,6 @@ Define an ``each()`` function to make any struct iterable::
 
    :ref:`Iterators <iterators>`, :ref:`Generators <generators>` in the language reference.
 
-   Full source: ``tutorials/language/15_iterators_and_generators.das``
+   Full source: :download:`tutorials/language/15_iterators_and_generators.das <../../../../tutorials/language/15_iterators_and_generators.das>`
 
 Next tutorial: :ref:`tutorial_modules`

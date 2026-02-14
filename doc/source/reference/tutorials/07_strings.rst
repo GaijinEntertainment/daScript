@@ -108,7 +108,7 @@ Running the tutorial
 
   daslang.exe tutorials/language/07_strings.das
 
-Full source: ``tutorials/language/07_strings.das``
+Full source: :download:`tutorials/language/07_strings.das <../../../../tutorials/language/07_strings.das>`
 
 See also
 ========

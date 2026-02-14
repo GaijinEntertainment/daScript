@@ -91,7 +91,7 @@ Running the tutorial
 
   daslang.exe tutorials/language/06_arrays.das
 
-Full source: ``tutorials/language/06_arrays.das``
+Full source: :download:`tutorials/language/06_arrays.das <../../../../tutorials/language/06_arrays.das>`
 
 See also
 ========

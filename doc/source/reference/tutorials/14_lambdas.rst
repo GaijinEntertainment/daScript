@@ -129,6 +129,6 @@ See :ref:`tutorial_function_pointers` for ``@@`` and ``function<>`` details.
 
    :ref:`Lambdas <lambdas>`, :ref:`Functions <functions>` in the language reference.
 
-   Full source: ``tutorials/language/14_lambdas.das``
+   Full source: :download:`tutorials/language/14_lambdas.das <../../../../tutorials/language/14_lambdas.das>`
 
 Next tutorial: :ref:`tutorial_iterators_and_generators`

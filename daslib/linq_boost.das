@@ -156,6 +156,15 @@ class private LinqAny : AstCallMacro_LinqPred2 {
     override predName = "any"
 }
 
+[call_macro(name="_count")]
+class private LinqCount : AstCallMacro_LinqPred2 {
+    //! implements _count(iterator, expression) shorthand notation
+    //! that expands into count(iterator, $(_) => expression)
+    //! for example::
+    //!   each(foo)._count(_ > 3)
+    override predName = "count"
+}
+
 [call_macro(name="_unique_by")]
 class private LinqUnique : AstCallMacro_LinqPred2 {
     //! implements _unique_by(iterator, expression) shorthand notation
@@ -409,6 +418,10 @@ var private linqCalls = {
     "take_to_array" => LinqCall(name = "take", inplace = true),
     "take_while" => LinqCall(name = "take_while"),
     "take_while_to_array" => LinqCall(name = "take_while"),
+    "skip_last" => LinqCall(name = "skip_last", inplace = true),
+    "skip_last_to_array" => LinqCall(name = "skip_last", inplace = true),
+    "take_last" => LinqCall(name = "take_last", inplace = true),
+    "take_last_to_array" => LinqCall(name = "take_last", inplace = true),
     "chunk" => LinqCall(name = "chunk"),
     "chunk_to_array" => LinqCall(name = "chunk"),
 // concatenation operations
@@ -716,9 +729,7 @@ def private fold_linq_default(var expr : ExpressionPtr) : ExpressionPtr {
             }
             if (found != null) {
                 var sub = subarray(calls, argIndex .. argIndex + found.calls |> length)
-                print("before topValue = {describe(topValue)}\n")
                 topValue |> move_new <| found.folder(argIndex, topValue, blk.get_ptr(), sub)
-                print("after topValue = {describe(topValue)}\n")
                 argIndex += found.calls |> length
             } else {
                 if (cll._0._type.isIterator || cll._0._type.isGoodArrayType) {

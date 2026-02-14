@@ -83,6 +83,6 @@ They cannot be stored in containers or returned from functions — use
 
    :ref:`Functions <functions>` in the language reference.
 
-   Full source: ``tutorials/language/13_blocks.das``
+   Full source: :download:`tutorials/language/13_blocks.das <../../../../tutorials/language/13_blocks.das>`
 
 Next tutorial: :ref:`tutorial_lambdas`

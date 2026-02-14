@@ -139,7 +139,7 @@ Running the tutorial
 
   daslang.exe tutorials/language/09_enumerations.das
 
-Full source: ``tutorials/language/09_enumerations.das``
+Full source: :download:`tutorials/language/09_enumerations.das <../../../../tutorials/language/09_enumerations.das>`
 
 See also
 ========

@@ -104,6 +104,6 @@ multi_match and static_match
 
    :ref:`Pattern matching <pattern-matching>` in the language reference.
 
-   Full source: ``tutorials/language/24_pattern_matching.das``
+   Full source: :download:`tutorials/language/24_pattern_matching.das <../../../../tutorials/language/24_pattern_matching.das>`
 
    Next tutorial: :ref:`tutorial_annotations`

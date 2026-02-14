@@ -127,6 +127,6 @@ When to use what
    :ref:`Finalizers <finalizers>`, :ref:`Statements <statements>` in the
    language reference.
 
-   Full source: ``tutorials/language/20_lifetime.das``
+   Full source: :download:`tutorials/language/20_lifetime.das <../../../../tutorials/language/20_lifetime.das>`
 
    Next tutorial: :ref:`tutorial_error_handling`

@@ -38,6 +38,35 @@ def test_count(t : T?) {
         var arrayLongTotal = long_count(arr)
         t |> equal(arrayLongTotal, 5l)
     }
+    t |> run("count with predicate from iterator") <| @(t : T?) {
+        var total = count(
+            [iterator for(x in 0..10); x],
+            $(v) => v > 5
+        )
+        t |> equal(total, 4)  // 6,7,8,9
+    }
+    t |> run("count with predicate from array") <| @(t : T?) {
+        var arr = [for (x in 0..10); x]
+        var total = count(arr, $(v) => v % 2 == 0)
+        t |> equal(total, 5)  // 0,2,4,6,8
+    }
+    t |> run("count with _count shorthand") <| @(t : T?) {
+        var total = _count(
+            [iterator for(x in 0..10); x],
+            _ > 5
+        )
+        t |> equal(total, 4)
+    }
+    t |> run("count predicate none match") <| @(t : T?) {
+        var arr = [1, 2, 3]
+        var total = count(arr, $(v) => v > 10)
+        t |> equal(total, 0)
+    }
+    t |> run("count predicate all match") <| @(t : T?) {
+        var arr = [1, 2, 3]
+        var total = count(arr, $(v) => v > 0)
+        t |> equal(total, 3)
+    }
 }
 
 [test]

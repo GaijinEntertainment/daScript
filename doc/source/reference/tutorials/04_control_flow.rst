@@ -119,7 +119,7 @@ Running the tutorial
 
   daslang.exe tutorials/language/04_control_flow.das
 
-Full source: ``tutorials/language/04_control_flow.das``
+Full source: :download:`tutorials/language/04_control_flow.das <../../../../tutorials/language/04_control_flow.das>`
 
 See also
 ========

@@ -153,6 +153,135 @@ def test_take(t : T?) {
 }
 
 [test]
+def test_skip_last(t : T?) {
+    t |> run("skip last from iterator") <| @(t : T?) {
+        var query = skip_last(
+            [iterator for(x in 0..5); x],
+            2
+        )
+        var result : array<int>
+        for (c in query) {
+            result |> push(c)
+        }
+        t |> equal(3, length(result))
+        t |> equal(result[0], 0)
+        t |> equal(result[1], 1)
+        t |> equal(result[2], 2)
+    }
+    t |> run("skip last from array") <| @(t : T?) {
+        var arr = [0, 1, 2, 3, 4]
+        var result = skip_last(arr, 2)
+        t |> equal(3, length(result))
+        for (c, i in result, 0..3) {
+            t |> equal(c, i)
+        }
+    }
+    t |> run("skip last in place") <| @(t : T?) {
+        var arr = [0, 1, 2, 3, 4]
+        skip_last_inplace(arr, 2)
+        t |> equal(3, length(arr))
+        for (c, i in arr, 0..3) {
+            t |> equal(c, i)
+        }
+    }
+    t |> run("skip last to array") <| @(t : T?) {
+        var result = skip_last_to_array(
+            [iterator for(x in 0..5); x],
+            2
+        )
+        static_assert(typeinfo is_array(result))
+        t |> equal(3, length(result))
+        for (c, i in result, 0..3) {
+            t |> equal(c, i)
+        }
+    }
+    t |> run("skip last all") <| @(t : T?) {
+        var arr = [0, 1, 2]
+        var result = skip_last(arr, 5)
+        t |> equal(0, length(result))
+    }
+    t |> run("skip last zero") <| @(t : T?) {
+        var arr = [0, 1, 2]
+        var result = skip_last(arr, 0)
+        t |> equal(3, length(result))
+    }
+    t |> run("skip last with _fold") <| @(t : T?) {
+        var result = (
+            [0, 1, 2, 3, 4]
+            .skip_last(2)
+            ._fold()
+        )
+        t |> equal(typeinfo typename(result), "array<int>")
+        t |> equal(3, length(result))
+        for (c, i in result, 0..3) {
+            t |> equal(c, i)
+        }
+    }
+}
+
+[test]
+def test_take_last(t : T?) {
+    t |> run("take last from iterator") <| @(t : T?) {
+        var query = take_last(
+            [iterator for(x in 0..5); x],
+            2
+        )
+        var result : array<int>
+        for (c in query) {
+            result |> push(c)
+        }
+        t |> equal(2, length(result))
+        t |> equal(result[0], 3)
+        t |> equal(result[1], 4)
+    }
+    t |> run("take last from array") <| @(t : T?) {
+        var arr = [0, 1, 2, 3, 4]
+        var result = take_last(arr, 2)
+        t |> equal(2, length(result))
+        t |> equal(result[0], 3)
+        t |> equal(result[1], 4)
+    }
+    t |> run("take last in place") <| @(t : T?) {
+        var arr = [0, 1, 2, 3, 4]
+        take_last_inplace(arr, 2)
+        t |> equal(2, length(arr))
+        t |> equal(arr[0], 3)
+        t |> equal(arr[1], 4)
+    }
+    t |> run("take last to array") <| @(t : T?) {
+        var result = take_last_to_array(
+            [iterator for(x in 0..5); x],
+            2
+        )
+        static_assert(typeinfo is_array(result))
+        t |> equal(2, length(result))
+        t |> equal(result[0], 3)
+        t |> equal(result[1], 4)
+    }
+    t |> run("take last all") <| @(t : T?) {
+        var arr = [0, 1, 2]
+        var result = take_last(arr, 5)
+        t |> equal(3, length(result))
+    }
+    t |> run("take last zero") <| @(t : T?) {
+        var arr = [0, 1, 2]
+        var result = take_last(arr, 0)
+        t |> equal(0, length(result))
+    }
+    t |> run("take last with _fold") <| @(t : T?) {
+        var result = (
+            [0, 1, 2, 3, 4]
+            .take_last(2)
+            ._fold()
+        )
+        t |> equal(typeinfo typename(result), "array<int>")
+        t |> equal(2, length(result))
+        t |> equal(result[0], 3)
+        t |> equal(result[1], 4)
+    }
+}
+
+[test]
 def text_chunk(t : T?) {
     t |> run("basic chunk") <| @(t : T?) {
         var query = chunk(

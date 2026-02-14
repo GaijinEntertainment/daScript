@@ -87,6 +87,6 @@ reports errors at the **caller's** line (not inside the generic)::
    :ref:`Generic programming <generic_programming>` in the
    language reference.
 
-   Full source: ``tutorials/language/26_contracts.das``
+   Full source: :download:`tutorials/language/26_contracts.das <../../../../tutorials/language/26_contracts.das>`
 
    Next tutorial: :ref:`tutorial_testing`
