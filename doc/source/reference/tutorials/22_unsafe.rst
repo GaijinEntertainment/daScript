@@ -83,6 +83,6 @@ reinterpret
 
    :ref:`Unsafe <unsafe>` in the language reference.
 
-   Full source: ``tutorials/language/22_unsafe.das``
+   Full source: :download:`tutorials/language/22_unsafe.das <../../../../tutorials/language/22_unsafe.das>`
 
    Next tutorial: :ref:`tutorial_string_format`

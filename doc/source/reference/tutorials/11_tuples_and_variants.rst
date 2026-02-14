@@ -89,6 +89,6 @@ The ``variant_index()`` function returns the zero-based index of the active case
 
    :ref:`Tuples <tuples>`, :ref:`Variants <variants>` in the language reference.
 
-   Full source: ``tutorials/language/11_tuples_and_variants.das``
+   Full source: :download:`tutorials/language/11_tuples_and_variants.das <../../../../tutorials/language/11_tuples_and_variants.das>`
 
 Next tutorial: :ref:`tutorial_function_pointers`

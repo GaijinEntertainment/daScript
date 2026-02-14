@@ -152,6 +152,6 @@ Use ``has_field`` to write functions that work on multiple struct types::
 
    :ref:`Generic Programming <generic_programming>` in the language reference.
 
-   Full source: ``tutorials/language/19_generics.das``
+   Full source: :download:`tutorials/language/19_generics.das <../../../../tutorials/language/19_generics.das>`
 
 Next tutorial: :ref:`tutorial_lifetime`

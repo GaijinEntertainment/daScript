@@ -84,7 +84,7 @@ Running the tutorial
 
   daslang.exe tutorials/language/02_variables.das
 
-Full source: ``tutorials/language/02_variables.das``
+Full source: :download:`tutorials/language/02_variables.das <../../../../tutorials/language/02_variables.das>`
 
 See also
 ========

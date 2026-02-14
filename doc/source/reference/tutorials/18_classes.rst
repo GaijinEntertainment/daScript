@@ -158,6 +158,6 @@ Key concepts
 
    :ref:`Classes <classes>`, :ref:`Structs <structs>` in the language reference.
 
-   Full source: ``tutorials/language/18_classes.das``
+   Full source: :download:`tutorials/language/18_classes.das <../../../../tutorials/language/18_classes.das>`
 
 Next tutorial: :ref:`tutorial_generics`

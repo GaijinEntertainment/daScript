@@ -66,7 +66,7 @@ Expected output::
   10 + 20 = 30
   Use {braces} for interpolation
 
-Full source: ``tutorials/language/01_hello_world.das``
+Full source: :download:`tutorials/language/01_hello_world.das <../../../../tutorials/language/01_hello_world.das>`
 
 See also
 ========

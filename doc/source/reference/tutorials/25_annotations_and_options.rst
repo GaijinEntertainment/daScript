@@ -104,6 +104,6 @@ Key options:
    :ref:`Annotations <annotations>`, :ref:`Options <options>` in the
    language reference.
 
-   Full source: ``tutorials/language/25_annotations_and_options.das``
+   Full source: :download:`tutorials/language/25_annotations_and_options.das <../../../../tutorials/language/25_annotations_and_options.das>`
 
    Next tutorial: :ref:`tutorial_contracts`

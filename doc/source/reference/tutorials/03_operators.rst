@@ -103,7 +103,7 @@ Running the tutorial
 
   daslang.exe tutorials/language/03_operators.das
 
-Full source: ``tutorials/language/03_operators.das``
+Full source: :download:`tutorials/language/03_operators.das <../../../../tutorials/language/03_operators.das>`
 
 See also
 ========

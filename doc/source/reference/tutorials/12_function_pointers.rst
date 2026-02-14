@@ -129,6 +129,6 @@ Use ``block<>`` for temporary callback parameters.
 
    :ref:`Functions <functions>` in the language reference.
 
-   Full source: ``tutorials/language/12_function_pointers.das``
+   Full source: :download:`tutorials/language/12_function_pointers.das <../../../../tutorials/language/12_function_pointers.das>`
 
 Next tutorial: :ref:`tutorial_blocks`

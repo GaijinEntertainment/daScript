@@ -66,6 +66,6 @@ Writer functions:
    :ref:`String builder <string_builder>`, :ref:`Strings <strings>` in
    the language reference.
 
-   Full source: ``tutorials/language/23_string_format.das``
+   Full source: :download:`tutorials/language/23_string_format.das <../../../../tutorials/language/23_string_format.das>`
 
    Next tutorial: :ref:`tutorial_pattern_matching`

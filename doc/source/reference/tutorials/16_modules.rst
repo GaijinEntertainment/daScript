@@ -134,7 +134,7 @@ Common standard library modules
    :ref:`Modules <modules>`, :ref:`Program Structure <program_structure>` in the
    language reference.
 
-   Full source: ``tutorials/language/16_modules.das`` and
-   ``tutorials/language/tutorial_helpers.das``
+   Full source: :download:`tutorials/language/16_modules.das <../../../../tutorials/language/16_modules.das>` and
+   :download:`tutorials/language/tutorial_helpers.das <../../../../tutorials/language/tutorial_helpers.das>`
 
 Next tutorial: :ref:`tutorial_move_copy_clone`

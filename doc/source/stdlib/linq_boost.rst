@@ -144,6 +144,15 @@ that expands into unique_by_to_array(iterator, $(_) => expression)
 for example::
   each(foo)._unique_by_to_array(_.id)
 
+.. _call-macro-linq_boost-_count:
+
+.. das:attribute:: _count
+
+implements _count(iterator, expression) shorthand notation
+that expands into count(iterator, $(_) => expression)
+for example::
+  each(foo)._count(_ > 3)
+
 .. _call-macro-linq_boost-_max_by:
 
 .. das:attribute:: _max_by

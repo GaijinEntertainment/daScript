@@ -190,6 +190,48 @@ def test_order(t : T?) {
 }
 
 [test]
+def test_order_descending_default(t : T?) {
+    t |> run("order descending default key") <| @(t : T?) {
+        var numbers = [5, 3, 8, 1, 4]
+        var query = order_descending(numbers)
+        var expected = [8, 5, 4, 3, 1]
+        for (n, e in query, expected) {
+            t |> equal(n, e)
+        }
+    }
+    t |> run("order descending default to array") <| @(t : T?) {
+        var result = order_descending_to_array(
+            [iterator for(x in range(5)); [5, 3, 8, 1, 4][x]]
+        )
+        static_assert(typeinfo is_array(result))
+        var expected = [8, 5, 4, 3, 1]
+        for (n, e in result, expected) {
+            t |> equal(n, e)
+        }
+    }
+    t |> run("order descending default inplace") <| @(t : T?) {
+        var numbers = [5, 3, 8, 1, 4]
+        order_descending_inplace(numbers)
+        var expected = [8, 5, 4, 3, 1]
+        for (n, e in numbers, expected) {
+            t |> equal(n, e)
+        }
+    }
+    t |> run("order descending default with _fold") <| @(t : T?) {
+        var result = (
+            [5, 3, 8, 1, 4]
+            .order_descending()
+            ._fold()
+        )
+        t |> equal(typeinfo typename(result), "array<int>")
+        var expected = [8, 5, 4, 3, 1]
+        for (n, e in result, expected) {
+            t |> equal(n, e)
+        }
+    }
+}
+
+[test]
 def test_unique(t : T?) {
     t |> run("basic unique") <| @(t : T?) {
         var numbers = [
