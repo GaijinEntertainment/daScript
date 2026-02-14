@@ -202,3 +202,5 @@ compile time, avoiding intermediate allocations.
 .. seealso::
 
    Full source: :download:`tutorials/language/28_linq.das <../../../../tutorials/language/28_linq.das>`
+
+   Next tutorial: :ref:`tutorial_functional`

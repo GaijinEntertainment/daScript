@@ -93,9 +93,10 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - `doc/source/reference/language/` — RST language documentation (36 files)
 - `doc/source/stdlib/` — RST standard library documentation (auto-generated + handmade)
 - `doc/reflections/` — Documentation generation tools (das2rst.das, rst.das, gen_module_examples.py)
-- `tutorials/language/` — Language tutorial `.das` files (28 progressive tutorials)
+- `tutorials/language/` — Language tutorial `.das` files (29 progressive tutorials)
 - `doc/source/reference/tutorials/` — RST companion pages for each tutorial
 - `tests/linq/` — LINQ module tests (15 test files, ~500 tests)
+- `tests/functional/` — Functional module tests
 - `modules/` — External plugin modules
 
 ## Standard Library Documentation
@@ -146,7 +147,7 @@ Tutorial RST files live in `doc/source/reference/tutorials/` with companion `.da
   - Next tutorial link (except last): `Next tutorial: :ref:\`tutorial_next_name\``
   - Related language reference links via `:ref:`
 - Toctree is in `doc/source/reference/tutorials.rst` — add new tutorials there
-- Tutorial labels for cross-references: `tutorial_hello_world`, `tutorial_variables`, `tutorial_operators`, `tutorial_control_flow`, `tutorial_functions`, `tutorial_arrays`, `tutorial_strings`, `tutorial_structs`, `tutorial_enumerations`, `tutorial_tables`, `tutorial_tuples_and_variants`, `tutorial_function_pointers`, `tutorial_blocks`, `tutorial_lambdas`, `tutorial_iterators_and_generators`, `tutorial_modules`, `tutorial_move_copy_clone`, `tutorial_classes`, `tutorial_generics`, `tutorial_lifetime`, `tutorial_error_handling`, `tutorial_unsafe`, `tutorial_string_format`, `tutorial_pattern_matching`, `tutorial_annotations`, `tutorial_contracts`, `tutorial_testing`, `tutorial_linq`
+- Tutorial labels for cross-references: `tutorial_hello_world`, `tutorial_variables`, `tutorial_operators`, `tutorial_control_flow`, `tutorial_functions`, `tutorial_arrays`, `tutorial_strings`, `tutorial_structs`, `tutorial_enumerations`, `tutorial_tables`, `tutorial_tuples_and_variants`, `tutorial_function_pointers`, `tutorial_blocks`, `tutorial_lambdas`, `tutorial_iterators_and_generators`, `tutorial_modules`, `tutorial_move_copy_clone`, `tutorial_classes`, `tutorial_generics`, `tutorial_lifetime`, `tutorial_error_handling`, `tutorial_unsafe`, `tutorial_string_format`, `tutorial_pattern_matching`, `tutorial_annotations`, `tutorial_contracts`, `tutorial_testing`, `tutorial_linq`, `tutorial_functional`
 
 ## C++ Codebase Notes
 
@@ -202,8 +203,8 @@ def test_something(t : T?) {
 - `t |> equal(actual, expected)` — value equality assertion
 - `t |> success()` — mark subtest as passed
 - `t |> run("name") <| @(t : T?) { ... }` — named subtest
-- `t |> expect_true(cond)` / `t |> expect_false(cond)` — boolean assertions
-- `t |> expect_eq(actual, expected)` — equality assertion (alternative name)
+- `t |> equal(actual, true)` / `t |> equal(actual, false)` — boolean assertions (there is no `expect_true`/`expect_false`)
+- `t |> strictEqual(actual, expected)` — strict equality assertion
 
 ### Common test options
 
@@ -242,7 +243,7 @@ Many daslib functions follow this convention for iterator-based operations:
 - `daslib/linq_boost.das` — `_fold` optimization macro, pipe-syntax macros
 - `daslib/match.das` — pattern matching on variants and types
 - `daslib/templates_boost.das` — template/reification infrastructure for AST macros; `apply_template` rewrites AST nodes
-- `daslib/functional.das` — higher-order function utilities
+- `daslib/functional.das` — lazy iterator adapters and higher-order function utilities (filter, map, reduce, fold, scan, enumerate, chain, pairwise, iterate, find, find_index, partition, tap, for_each, flat_map, sorted, repeat, cycle, islice, echo, sum, any, all). Uses lambdas/functions for generator-returning functions (blocks cannot be captured into generators). Non-generator functions (reduce, fold, for_each, find, find_index, partition) also accept blocks.
 - `daslib/strings_boost.das` — string manipulation helpers
 - `daslib/json.das` / `daslib/json_boost.das` — JSON parsing/generation
 - `daslib/regex.das` / `daslib/regex_boost.das` — regular expressions
