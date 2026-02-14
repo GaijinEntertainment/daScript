@@ -9,6 +9,8 @@
 //   - Tuple and array matching
 //   - Variant matching
 //   - Null/pointer matching
+//   - match_expr for computed patterns
+//   - Bool matching
 //   - multi_match (all arms)
 //   - static_match (generic-safe)
 //
@@ -267,6 +269,80 @@ def static_type_name(what) : string {
 }
 
 // ===========================
+//  Array matching
+// ===========================
+// Static arrays match element-by-element.
+// Dynamic arrays match head elements; tail is ignored.
+
+[sideeffects]
+def classify_static_arr(a : int[3]) : string {
+    match (a) {
+        if (fixed_array<int>(0, 0, 0)) {        // all zeros
+            return "zeros"
+        }
+        if (fixed_array<int>(1, $v(b), $v(c))) { // first is 1, bind rest
+            return "1,{b},{c}"
+        }
+        if (_) {
+            return "other"
+        }
+    }
+    return "unreachable"
+}
+
+[sideeffects]
+def classify_dynamic_arr(a : array<int>) : string {
+    match (a) {
+        if (array<int>(0, 0, ...)) {             // starts with 0, 0
+            return "starts with 0,0"
+        }
+        if (array<int>($v(x), $v(y), ...)) {     // bind first two (any length)
+            return "starts with {x},{y}"
+        }
+        if (_) {
+            return "other"
+        }
+    }
+    return "unreachable"
+}
+
+// ===========================
+//  match_expr — computed patterns
+// ===========================
+// match_expr(expression) evaluates at runtime instead of matching literally.
+// Useful when the expected value depends on captured variables.
+
+[sideeffects]
+def is_consecutive_triple(t : tuple<int; int; int>) : bool {
+    match (t) {
+        if (($v(a), match_expr(a + 1), match_expr(a + 2))) {
+            return true
+        }
+        if (_) {
+            return false
+        }
+    }
+    return false
+}
+
+// ===========================
+//  Bool matching
+// ===========================
+
+[sideeffects]
+def describe_bool(b : bool) : string {
+    match (b) {
+        if (true) {
+            return "yes"
+        }
+        if (false) {
+            return "no"
+        }
+    }
+    return "unreachable"
+}
+
+// ===========================
 //  Main
 // ===========================
 
@@ -347,6 +423,33 @@ def main {
     print("  {static_type_name(3.14)}\n")
     print("  {static_type_name("hi")}\n")
 
+    // Array matching
+    print("array matching:\n")
+    var sa : int[3]
+    sa = fixed_array<int>(0, 0, 0)
+    print("  [0,0,0] -> {classify_static_arr(sa)}\n")
+    sa = fixed_array<int>(1, 5, 9)
+    print("  [1,5,9] -> {classify_static_arr(sa)}\n")
+    sa = fixed_array<int>(7, 7, 7)
+    print("  [7,7,7] -> {classify_static_arr(sa)}\n")
+    var da : array<int>
+    da |> push(0); da |> push(0); da |> push(3); da |> push(4)
+    print("  [0,0,3,4] -> {classify_dynamic_arr(da)}\n")
+    var da2 : array<int>
+    da2 |> push(5); da2 |> push(6)
+    print("  [5,6] -> {classify_dynamic_arr(da2)}\n")
+
+    // match_expr
+    print("match_expr:\n")
+    print("  (1,2,3) consecutive? {is_consecutive_triple((1, 2, 3))}\n")
+    print("  (5,6,7) consecutive? {is_consecutive_triple((5, 6, 7))}\n")
+    print("  (1,3,5) consecutive? {is_consecutive_triple((1, 3, 5))}\n")
+
+    // Bool matching
+    print("bool matching:\n")
+    print("  true -> {describe_bool(true)}\n")
+    print("  false -> {describe_bool(false)}\n")
+
     // ===========================
     //  Summary
     // ===========================
@@ -361,6 +464,9 @@ def main {
     // - Enums: if (Enum.value) { ... }
     // - Variants: if ($v(x) as alternative_name) { ... }
     // - Tuples: if ((val, _, $v(x))) { ... }
+    // - Arrays: if (fixed_array<int>(1, $v(b), $v(c))) { ... }
+    // - match_expr: if (($v(a), match_expr(a+1))) — computed patterns
+    // - Bool: if (true) / if (false)
     // - Null: if (null) { ... } for pointer types
     // - multi_match — all matching arms execute
     // - static_match — silently drops type-mismatched arms (generics)
@@ -409,4 +515,17 @@ def main {
 //   int(42)
 //   float(3.14)
 //   string(hi)
+// array matching:
+//   [0,0,0] -> zeros
+//   [1,5,9] -> 1,5,9
+//   [7,7,7] -> other
+//   [0,0,3,4] -> starts with 0,0
+//   [5,6] -> starts with 5,6
+// match_expr:
+//   (1,2,3) consecutive? true
+//   (5,6,7) consecutive? true
+//   (1,3,5) consecutive? false
+// bool matching:
+//   true -> yes
+//   false -> no
 // done
