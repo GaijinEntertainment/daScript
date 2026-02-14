@@ -113,7 +113,7 @@ def main {
     //   block<(x:int):int>     — accepts all three (most flexible)
 
     // === Practical example: stateful counter factory ===
-    var make_counter <- @() : lambda<():int> {
+    var make_counter <- @() : lambda<() : int> {
         var n = 0
         return <- @() : int => ++n
     }
@@ -121,7 +121,7 @@ def main {
     print("c1: {c1()}, {c1()}, {c1()}\n")   // 1, 2, 3
 }
 
-def apply_lambda(fn : lambda<(x:int):int>; value : int) : int {
+def apply_lambda(fn : lambda<(x : int) : int>; value : int) : int {
     return fn(value)
 }
 

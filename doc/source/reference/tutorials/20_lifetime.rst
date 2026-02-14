@@ -128,3 +128,5 @@ When to use what
    language reference.
 
    Full source: ``tutorials/language/20_lifetime.das``
+
+   Next tutorial: :ref:`tutorial_error_handling`

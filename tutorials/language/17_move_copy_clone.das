@@ -168,7 +168,7 @@ def main {
     // Define a custom 'clone' function to control how := works.
     // The signature is: def clone(var dst : T; src : T)
 
-    var game = GameState(name="save1", level=5)
+    var game = GameState(name = "save1", level = 5)
     game.scores |> push(100)
     game.scores |> push(200)
 

@@ -168,9 +168,9 @@ def main {
 
     // === has_field introspection ===
     print("get_name:\n")
-    let p = Player(name="Hero", health=100)
-    let item = Item(name="Sword", weight=5)
-    let thing = Nameless(id=7)
+    let p = Player(name = "Hero", health = 100)
+    let item = Item(name = "Sword", weight = 5)
+    let thing = Nameless(id = 7)
     print("  player: {get_name(p)}\n")
     print("  item:   {get_name(item)}\n")
     print("  nameless: {get_name(thing)}\n")

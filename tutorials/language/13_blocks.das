@@ -23,12 +23,12 @@ def do_twice(action : block) {
 }
 
 // A function that takes a block with parameters and a return value.
-def apply_to(value : int; transform : block<(x:int):int>) : int {
+def apply_to(value : int; transform : block<(x : int) : int>) : int {
     return transform(value)    // call syntax, not invoke
 }
 
 // Filter elements using a predicate block
-def filter_array(arr : array<int>; predicate : block<(x:int):bool>) {
+def filter_array(arr : array<int>; predicate : block<(x : int) : bool>) {
     for (v in arr) {
         if (predicate(v)) {
             print("{v} ")
@@ -38,7 +38,7 @@ def filter_array(arr : array<int>; predicate : block<(x:int):bool>) {
 }
 
 // Iterate with index
-def each_indexed(arr : array<int>; action : block<(idx:int; val:int):void>) {
+def each_indexed(arr : array<int>; action : block<(idx : int; val : int) : void>) {
     for (i, v in count(), arr) {
         action(i, v)
     }
@@ -92,7 +92,7 @@ def main {
     // === Blocks cannot be stored or returned ===
     // Blocks live on the stack — they can only be passed DOWN as arguments.
     // This makes them very fast (no heap allocation).
-    // If you need to store or return a callable, use a lambda (tutorial 13).
+    // If you need to store or return a callable, use a lambda (tutorial 14).
 
     // === Local block variables and invoke() ===
     // You CAN assign a block to a local variable.
@@ -126,7 +126,7 @@ def main {
 }
 
 // A helper that iterates until the block returns true
-def find_first(arr : array<string>; predicate : block<(s:string):bool>) {
+def find_first(arr : array<string>; predicate : block<(s : string) : bool>) {
     for (s in arr) {
         if (predicate(s)) {
             return

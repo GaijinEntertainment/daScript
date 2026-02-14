@@ -131,7 +131,7 @@ def main {
     // The NumberRange struct has an each() function defined above.
     // This means we can iterate over it directly.
 
-    var r = NumberRange(low=3, high=8)
+    var r = NumberRange(low = 3, high = 8)
     print("NumberRange(3,8): ")
     for (i in r) {
         print("{i} ")

@@ -35,3 +35,10 @@ introduced in earlier tutorials.
    tutorials/18_classes.rst
    tutorials/19_generics.rst
    tutorials/20_lifetime.rst
+   tutorials/21_error_handling.rst
+   tutorials/22_unsafe.rst
+   tutorials/23_string_format.rst
+   tutorials/24_pattern_matching.rst
+   tutorials/25_annotations_and_options.rst
+   tutorials/26_contracts.rst
+   tutorials/27_testing.rst

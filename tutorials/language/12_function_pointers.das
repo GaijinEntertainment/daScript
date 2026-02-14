@@ -39,11 +39,11 @@ def add(a, b : float) : float {
 
 // === Function that accepts a function<> parameter ===
 
-def apply(f : function<(x:int):int>; value : int) : int {
+def apply(f : function<(x : int) : int>; value : int) : int {
     return f(value)    // call syntax — just like calling a regular function
 }
 
-def transform_array(arr : array<int>; f : function<(x:int):int>) {
+def transform_array(arr : array<int>; f : function<(x : int) : int>) {
     for (i, v in count(), arr) {
         print("  {v} -> {f(v)}\n")
     }
@@ -88,8 +88,8 @@ def main {
     // ===========================
 
     // When multiple functions share a name, specify the signature:
-    let fn_add_int = @@<(a:int;b:int):int> add
-    let fn_add_flt = @@<(a:float;b:float):float> add
+    let fn_add_int = @@ < (a : int; b : int) : int > add
+    let fn_add_flt = @@ < (a : float; b : float) : float > add
     print("add_int(3,4) = {fn_add_int(3, 4)}\n")
     print("add_flt(1.5,2.5) = {fn_add_flt(1.5, 2.5)}\n")
 

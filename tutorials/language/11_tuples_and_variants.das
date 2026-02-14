@@ -61,7 +61,7 @@ def main {
 
     // --- Named tuples ---
     // Use the tuple alias declared above.
-    var p = Point2D(x=3.0, y=4.0)
+    var p = Point2D(x = 3.0, y = 4.0)
     print("point = ({p.x}, {p.y})\n")
 
     // Named fields are also accessible via _0, _1
@@ -77,7 +77,7 @@ def main {
     print("destructured: a={a}, b={b}, c=\"{c}\"\n")
 
     // Destructuring works with named tuples too
-    var (px, py) = Point2D(x=5.0, y=6.0)
+    var (px, py) = Point2D(x = 5.0, y = 6.0)
     print("destructured point: px={px}, py={py}\n")
 
     // --- Destructuring in for loops ---
