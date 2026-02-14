@@ -73,23 +73,23 @@ def main {
     print("p1 = {describe(p1)}\n")
 
     // Named field construction
-    var p2 = Point(x=3.0, y=4.0)
+    var p2 = Point(x = 3.0, y = 4.0)
     print("p2 = {describe(p2)}\n")
 
     // Partial initialization — unspecified fields get their defaults
-    var cfg = Config(title="Tutorial")    // width=800, height=600, fullscreen=false
+    var cfg = Config(title = "Tutorial")  // width=800, height=600, fullscreen=false
     print("config: {cfg.width}x{cfg.height} \"{cfg.title}\" fullscreen={cfg.fullscreen}\n")
 
     // === Field access and modification ===
-    var player = Point(x=10.0, y=20.0)
+    var player = Point(x = 10.0, y = 20.0)
     print("player = {describe(player)}\n")
     translate(player, 5.0, -3.0)
     print("after translate = {describe(player)}\n")
 
     // === Nested structs ===
     var rect = Rect(
-        topLeft = Point(x=0.0, y=0.0),
-        bottomRight = Point(x=10.0, y=5.0)
+        topLeft = Point(x = 0.0, y = 0.0),
+        bottomRight = Point(x = 10.0, y = 5.0)
     )
     print("rect area = {area(rect)}\n")
 
@@ -116,7 +116,7 @@ def main {
     // === Heap allocation with new ===
     // new creates a pointer to a heap-allocated struct.
     // Useful when you need the struct to outlive the current scope.
-    var p3 = new Point(x=7.0, y=8.0)
+    var p3 = new Point(x = 7.0, y = 8.0)
     // p3 is of type Point? (pointer to Point)
     print("p3 = ({p3.x}, {p3.y})\n")
 

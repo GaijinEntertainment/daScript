@@ -7,7 +7,7 @@ struct Item {
 }
 
 def make_item(n : string; v : int) : Item {
-    return Item(name=n, value=v)
+    return Item(name = n, value = v)
 }
 
 def describe(item : Item) : string {
