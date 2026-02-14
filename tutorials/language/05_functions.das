@@ -70,7 +70,7 @@ def describe(x : string) {
 
 // === Returning multiple values with tuples ===
 
-def divmod(a, b : int) : tuple<quotient:int; remainder:int> {
+def divmod(a, b : int) : tuple<quotient : int; remainder : int> {
     return (quotient = a / b, remainder = a % b)
 }
 

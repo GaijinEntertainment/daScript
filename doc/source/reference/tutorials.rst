@@ -25,3 +25,13 @@ introduced in earlier tutorials.
    tutorials/08_structs.rst
    tutorials/09_enumerations.rst
    tutorials/10_tables.rst
+   tutorials/11_tuples_and_variants.rst
+   tutorials/12_function_pointers.rst
+   tutorials/13_blocks.rst
+   tutorials/14_lambdas.rst
+   tutorials/15_iterators_and_generators.rst
+   tutorials/16_modules.rst
+   tutorials/17_move_copy_clone.rst
+   tutorials/18_classes.rst
+   tutorials/19_generics.rst
+   tutorials/20_lifetime.rst

@@ -132,3 +132,5 @@ See also
 
 * :ref:`Tables <tables>` — full table reference
 * :ref:`Comprehensions <comprehensions>` — comprehension syntax
+
+Next tutorial: :ref:`tutorial_tuples_and_variants`
