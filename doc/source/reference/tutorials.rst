@@ -46,3 +46,4 @@ introduced in earlier tutorials.
    tutorials/29_functional.rst
    tutorials/30_json.rst
    tutorials/31_regex.rst
+   tutorials/32_operator_overloading.rst

@@ -8,10 +8,21 @@ module regex shared public
 
 //! Regular expression engine.
 //!
-//! Pure-daScript regex compiler and NFA matcher. Supports character
-//! classes, groups, quantifiers (``+``, ``*``, ``?``), alternation,
-//! and ``regex_match`` / ``regex_search`` / ``regex_replace`` operations.
-//! See also ``regex_boost`` for compile-time regex construction via reader macros.
+//! Pure-daScript regex compiler and NFA matcher. Supports character classes,
+//! capturing and non-capturing groups, named groups ``(?P<name>...)``,
+//! quantifiers (greedy and lazy), counted repetitions ``{n,m}``,
+//! alternation, anchors, word boundaries, character sets,
+//! lookahead assertions ``(?=...)`` and ``(?!...)``,
+//! case-insensitive matching, and dot-all mode.
+//!
+//! Key functions: ``regex_compile``, ``regex_match``, ``regex_search``,
+//! ``regex_foreach``, ``regex_replace`` (block and template-string forms),
+//! ``regex_split``, ``regex_match_all``, ``regex_group``,
+//! ``regex_group_by_name``.
+//!
+//! See also ``regex_boost`` for compile-time regex construction via the
+//! ``%regex~`` reader macro with optional flags (``~i`` for case-insensitive,
+//! ``~s`` for dot-all).
 
 require daslib/strings_boost
 require strings public
@@ -32,6 +43,8 @@ enum ReOp {
     Repeat
     WordBoundary
     NonWordBoundary
+    Lookahead
+    NegativeLookahead
 }
 
 //! Bit-set representing a set of characters for regex matching.
@@ -64,11 +77,13 @@ struct ReNode {
 
 struct Regex {
     //! Regular expression.
-    root        : ReNode?
+    root            : ReNode?
     @do_not_convert match : uint8 const?
-    groups      : array<tuple<range; string>>
-    earlyOut    : CharSet
-    canEarlyOut : bool
+    groups          : array<tuple<range; string>>
+    earlyOut        : CharSet
+    canEarlyOut     : bool
+    caseInsensitive : bool   //! when true, matching is case-insensitive (ASCII)
+    dotAll          : bool   //! when true, ``.`` matches ``\n`` as well
 }
 
 variant MaybeReNode {
@@ -530,10 +545,17 @@ def private re_group(expr : string; offset : int) : MaybeReNode {
     var group_offset = offset + 1
     var non_capturing = false
     var group_name = ""
-    // check for (?:...) or (?P<name>...)
+    var lookahead_op = ReOp.Group  // default — regular group
+    // check for (?:...) or (?P<name>...) or (?=...) or (?!...)
     if (!eos(expr, group_offset) && at(expr, group_offset) == '?') {
         if (!eos(expr, group_offset + 1) && at(expr, group_offset + 1) == ':') {
             non_capturing = true
+            group_offset += 2
+        } elif (!eos(expr, group_offset + 1) && at(expr, group_offset + 1) == '=') {
+            lookahead_op = ReOp.Lookahead
+            group_offset += 2
+        } elif (!eos(expr, group_offset + 1) && at(expr, group_offset + 1) == '!') {
+            lookahead_op = ReOp.NegativeLookahead
             group_offset += 2
         } elif (!eos(expr, group_offset + 1) && at(expr, group_offset + 1) == 'P') {
             if (!eos(expr, group_offset + 2) && at(expr, group_offset + 2) == '<') {
@@ -558,6 +580,11 @@ def private re_group(expr : string; offset : int) : MaybeReNode {
     if (at(expr, next(ore)) != ')') {
         delete ore
         return nada()
+    }
+    if (lookahead_op != ReOp.Group) {
+        var node = new ReNode(op = lookahead_op, subexpr = ore as value, at = range(offset, next(ore) + 1))
+        node.index = -1
+        return maybe(node)
     }
     var node = new ReNode(op = ReOp.Group, subexpr = ore as value, at = range(offset, next(ore) + 1))
     if (non_capturing) {
@@ -704,6 +731,14 @@ def private re_basic(expr : string; offset : int) : MaybeReNode {
         return nada()
     }
     let ch = at(expr, next(oelem))
+    // prevent quantifiers on lookahead assertions
+    if (ch == '*' || ch == '+' || ch == '?' || ch == '{') {
+        let eop = (oelem as value).op
+        if (eop == ReOp.Lookahead || eop == ReOp.NegativeLookahead) {
+            note("quantifier on lookahead is not allowed", next(oelem))
+            return nada()
+        }
+    }
     if (ch == '*') {
         var end_ofs = next(oelem) + 1
         var is_lazy = false
@@ -826,6 +861,8 @@ def private re_assign_next(var re : Regex) {
             node.right.next = node.next
         } elif (node.op == ReOp.Group) {
             node.subexpr.next = node.next
+        } elif (node.op == ReOp.Lookahead || node.op == ReOp.NegativeLookahead) {
+            node.subexpr.next = null  // isolated — subexpr must not chain to outer next
         } elif (node.op == ReOp.Union) {
             for (sub in node.all) {
                 sub.next = node.next
@@ -859,16 +896,27 @@ def private re_assign_groups(var re : Regex) {
 def private re_assign_match_functions(var re : Regex) {
     visit_top_down(re.root) <| $(var node) {
         if (node.op == ReOp.Char) {
-            if (node.textLen == 1) {
-                node.fun2 = @@re_match2_single_char
+            if (re.caseInsensitive) {
+                if (node.textLen == 1) {
+                    node.fun2 = @@re_match2_single_char_ci
+                } else {
+                    node.fun2 = @@re_match2_char_ci
+                }
             } else {
-                node.fun2 = @@re_match2_char
+                if (node.textLen == 1) {
+                    node.fun2 = @@re_match2_single_char
+                } else {
+                    node.fun2 = @@re_match2_char
+                }
             }
             node.gen2 = @@re_gen2_char
         } elif (node.op == ReOp.Union) {
             node.fun2 = @@re_match2_union
             node.gen2 = @@re_gen2_union
         } elif (node.op == ReOp.Set) {
+            if (re.caseInsensitive) {
+                case_fold_set(node.cset)
+            }
             node.fun2 = @@re_match2_set
             node.gen2 = @@re_gen2_set
         } elif (node.op == ReOp.Any) {
@@ -885,6 +933,9 @@ def private re_assign_match_functions(var re : Regex) {
                 node.fun2 = @@re_match2_plus_lazy
             } elif (node.subexpr.op == ReOp.Set) {
                 node.cset = node.subexpr.cset
+                if (re.caseInsensitive) {
+                    case_fold_set(node.cset)
+                }
                 node.fun2 = @@re_match2_plus_set
             } else {
                 node.fun2 = @@re_match2_plus
@@ -923,8 +974,34 @@ def private re_assign_match_functions(var re : Regex) {
         } elif (node.op == ReOp.NonWordBoundary) {
             node.fun2 = @@re_match2_non_word_boundary
             node.gen2 = @@re_gen2_non_word_boundary
+        } elif (node.op == ReOp.Lookahead) {
+            node.fun2 = @@re_match2_lookahead
+            node.gen2 = @@re_gen2_lookahead
+        } elif (node.op == ReOp.NegativeLookahead) {
+            node.fun2 = @@re_match2_negative_lookahead
+            node.gen2 = @@re_gen2_negative_lookahead
         } else {
             panic("unsupported {node.op}")
+        }
+    }
+}
+
+def private ci_lower(ch : int) : int {
+    //! Converts ASCII uppercase to lowercase for case-insensitive matching.
+    if (ch >= 'A' && ch <= 'Z') {
+        return ch + 32
+    }
+    return ch
+}
+
+def private case_fold_set(var cset : CharSet) {
+    //! Expands a charset to include both upper and lower case variants for case-insensitive matching.
+    for (ch in range(0, 256)) {
+        if (is_char_in_set(ch, cset)) {
+            let lo = ci_lower(ch)
+            let up = (lo >= 'a' && lo <= 'z') ? lo - 32 : lo
+            set_or_char(cset, lo)
+            set_or_char(cset, up)
         }
     }
 }
@@ -979,6 +1056,54 @@ def private re_match2_char(var regex : Regex; var node : ReNode?; str : uint8 co
 }
 
 [unsafe_deref]
+def private re_match2_single_char_ci(var regex : Regex; var node : ReNode?; str : uint8 const?) : uint8 const? {
+    if (log_match_enabled) {
+        print("match single char ci `{node.text}` {str}\n")
+    }
+    if (*str == 0u8) {
+        return null
+    }
+    unsafe {
+        if (ci_lower(character_uat(node.text, 0)) != ci_lower(int(*str))) {
+            return null
+        }
+        var tail = str + 1
+        node.tail = tail
+        var node2 = node.next
+        if (node2 != null) {
+            return invoke(node2.fun2, regex, node2, tail)
+        } else {
+            return tail
+        }
+    }
+}
+
+[unsafe_deref]
+def private re_match2_char_ci(var regex : Regex; var node : ReNode?; str : uint8 const?) : uint8 const? {
+    if (log_match_enabled) {
+        print("match char ci `{node.text}` {str}\n")
+    }
+    if (*str == 0u8) {
+        return null
+    }
+    unsafe {
+        for (i in range(node.textLen)) {
+            if (ci_lower(character_uat(node.text, i)) != ci_lower(int(*(str + i)))) {
+                return null
+            }
+        }
+        var tail = str + node.textLen
+        node.tail = tail
+        var node2 = node.next
+        if (node2 != null) {
+            return invoke(node2.fun2, regex, node2, tail)
+        } else {
+            return tail
+        }
+    }
+}
+
+[unsafe_deref]
 def private re_match2_union(var regex : Regex; var node : ReNode?; str : uint8 const?) : uint8 const? {
     if (log_match_enabled) {
         print("match union {str}\n")
@@ -1022,6 +1147,9 @@ def private re_match2_any(var regex : Regex; var node : ReNode?; str : uint8 con
         print("match2 any {str}\n")
     }
     if (*str == 0u8) {
+        return null
+    }
+    if (!regex.dotAll && int(*str) == '\n') {
         return null
     }
     unsafe {
@@ -1271,6 +1399,46 @@ def private re_match2_non_word_boundary(var regex : Regex; var node : ReNode?; s
         } else {
             return str
         }
+    }
+}
+
+[unsafe_deref]
+def private re_match2_lookahead(var regex : Regex; var node : ReNode?; str : uint8 const?) : uint8 const? {
+    if (log_match_enabled) {
+        print("match lookahead {str}\n")
+    }
+    var nsub = node.subexpr
+    let osub = invoke(nsub.fun2, regex, nsub, str)
+    if (osub == null) {
+        return null
+    }
+    // zero-width: don't advance position
+    node.tail = str
+    var node2 = node.next
+    if (node2 != null) {
+        return invoke(node2.fun2, regex, node2, str)
+    } else {
+        return str
+    }
+}
+
+[unsafe_deref]
+def private re_match2_negative_lookahead(var regex : Regex; var node : ReNode?; str : uint8 const?) : uint8 const? {
+    if (log_match_enabled) {
+        print("match negative_lookahead {str}\n")
+    }
+    var nsub = node.subexpr
+    let osub = invoke(nsub.fun2, regex, nsub, str)
+    if (osub != null) {
+        return null   // subexpr matched → negative lookahead fails
+    }
+    // zero-width: don't advance position
+    node.tail = str
+    var node2 = node.next
+    if (node2 != null) {
+        return invoke(node2.fun2, regex, node2, str)
+    } else {
+        return str
     }
 }
 
@@ -1540,6 +1708,13 @@ def private re_match2_repeat_lazy(var regex : Regex; var node : ReNode?; str : u
 def private re_early_out(var cset : CharSet; node : ReNode?) : bool {
     if (node.op == ReOp.Char) {
         set_or_char(cset, character_at(node.text, 0))
+        // if case-insensitive, also add the opposite-case first char
+        let fc = character_at(node.text, 0)
+        if (fc >= 'A' && fc <= 'Z') {
+            set_or_char(cset, fc + 32)
+        } elif (fc >= 'a' && fc <= 'z') {
+            set_or_char(cset, fc - 32)
+        }
         return false
     } elif (node.op == ReOp.Set) {
         set_or_set(cset, node.cset)
@@ -1574,6 +1749,8 @@ def private re_early_out(var cset : CharSet; node : ReNode?) : bool {
         return true  // zero-width, transparent
     } elif (node.op == ReOp.WordBoundary || node.op == ReOp.NonWordBoundary) {
         return true  // zero-width, transparent
+    } elif (node.op == ReOp.Lookahead || node.op == ReOp.NegativeLookahead) {
+        return true  // zero-width, transparent
     } elif (node.op == ReOp.Repeat) {
         re_early_out(cset, node.subexpr)
         return node.min_rep == 0
@@ -1592,9 +1769,13 @@ def is_valid(var re : Regex) {
     return re.root != null
 }
 
-def regex_compile(var re : Regex; expr : string) : bool {
+def regex_compile(var re : Regex; expr : string; case_insensitive : bool = false; dot_all : bool = false) : bool {
     //! Compile regular expression.
+    //! When `case_insensitive` is true, matching ignores ASCII case.
+    //! When `dot_all` is true, '.' also matches newline characters.
     //! Validity of the compiled expression is checked by `is_valid`.
+    re.caseInsensitive = case_insensitive
+    re.dotAll = dot_all
     re.root = re_parse(expr)
     if (re.root != null) {
         re_assign_next(re)
@@ -1606,10 +1787,12 @@ def regex_compile(var re : Regex; expr : string) : bool {
     return re.root != null
 }
 
-def regex_compile(expr : string) {
+def regex_compile(expr : string; case_insensitive : bool = false; dot_all : bool = false) {
     //! Compiles a regular expression string into a Regex object, panics on failure.
+    //! When `case_insensitive` is true, matching ignores ASCII case.
+    //! When `dot_all` is true, '.' also matches newline characters.
     var re : Regex
-    if (!regex_compile(re, expr)) {
+    if (!regex_compile(re, expr, case_insensitive, dot_all)) {
         panic("regular expression {expr} did not compile")
     }
     return <- re
@@ -1759,6 +1942,140 @@ def regex_replace(var regex : Regex; str : string; blk : block<(at : string) : s
                     } else {
                         writer |> write_char(int(*cstr))
                         cstr ++
+                    }
+                }
+            }
+        }
+    }
+}
+
+def private expand_replacement(var regex : Regex; str : string; replacement : string; match_start, match_end : int) : string {
+    //! Expands replacement template with group references: $0 or $& for whole match,
+    //! $1-$9 for numbered groups, ${name} for named groups, $$ for literal $.
+    return build_string <| $(writer) {
+        var i = 0
+        let rlen = length(replacement)
+        while (i < rlen) {
+            let ch = character_at(replacement, i)
+            if (ch == '$' && i + 1 < rlen) {
+                let nch = character_at(replacement, i + 1)
+                if (nch == '$') {
+                    writer |> write_char('$')
+                    i += 2
+                } elif (nch == '&' || nch == '0') {
+                    writer |> write(slice(str, match_start, match_end))
+                    i += 2
+                } elif (nch >= '1' && nch <= '9') {
+                    let group_num = nch - '0'
+                    if (group_num < length(regex.groups)) {
+                        let grng = regex.groups[group_num]._0
+                        writer |> write(slice(str, grng.x, grng.y))
+                    }
+                    i += 2
+                } elif (nch == '{') {
+                    let close = find(replacement, "}", i + 2)
+                    if (close != -1) {
+                        let name = slice(replacement, i + 2, close)
+                        // try numeric group reference first (${0}, ${1}, ...)
+                        var is_numeric = !empty(name)
+                        for (nc in name) {
+                            if (nc < '0' || nc > '9') {
+                                is_numeric = false
+                                break
+                            }
+                        }
+                        if (is_numeric) {
+                            var group_num = 0
+                            for (nc in name) {
+                                group_num = group_num * 10 + (nc - '0')
+                            }
+                            if (group_num == 0) {
+                                writer |> write(slice(str, match_start, match_end))
+                            } elif (group_num < length(regex.groups)) {
+                                let grng = regex.groups[group_num]._0
+                                writer |> write(slice(str, grng.x, grng.y))
+                            }
+                        } else {
+                            let grp = regex_group_by_name(regex, name, str)
+                            writer |> write(grp)
+                        }
+                        i = close + 1
+                    } else {
+                        writer |> write_char(ch)
+                        i++
+                    }
+                } else {
+                    writer |> write_char(ch)
+                    i++
+                }
+            } else {
+                writer |> write_char(ch)
+                i++
+            }
+        }
+    }
+}
+
+[unsafe_deref]
+def regex_replace(var regex : Regex; str : string; replacement : string) : string {
+    //! Replaces all matches of the regular expression in `str` with `replacement`.
+    //! Supports group references in the replacement string:
+    //! `$0` or `$&` for whole match, `$1`-`$9` for numbered groups,
+    //! `${name}` for named groups, `$$` for literal `$`.
+    if (empty(str)) {
+        return ""
+    }
+    unsafe {
+        return build_string <| $(writer) {
+            regex.match = reinterpret<uint8 const?> str
+            var root = regex.root
+            var pstr = reinterpret<uint8 const?> str
+            var cstr = pstr
+            if (regex.canEarlyOut) {
+                while (true) {
+                    let Ch = int(*cstr)
+                    if (Ch == 0) {
+                        break
+                    }
+                    if (is_char_in_set(Ch, regex.earlyOut)) {
+                        let om = invoke(root.fun2, regex, root, cstr)
+                        if (om != null) {
+                            let match_start = int(cstr - pstr)
+                            let match_end = int(om - pstr)
+                            let repl = expand_replacement(regex, str, replacement, match_start, match_end)
+                            writer |> write(repl)
+                            if (om == cstr) {
+                                writer |> write_char(Ch)
+                                cstr++
+                            } else {
+                                cstr = om
+                            }
+                        } else {
+                            writer |> write_char(Ch)
+                            cstr++
+                        }
+                    } else {
+                        writer |> write_char(Ch)
+                        cstr++
+                    }
+                }
+            } else {
+                while (int(*cstr) != 0) {
+                    let om = invoke(root.fun2, regex, root, cstr)
+                    if (om != null) {
+                        let match_start = int(cstr - pstr)
+                        let match_end = int(om - pstr)
+                        let repl = expand_replacement(regex, str, replacement, match_start, match_end)
+                        writer |> write(repl)
+                        if (om == cstr) {
+                            writer |> write_char(int(*cstr))
+                            cstr++
+                        } else {
+                            cstr = om
+                        }
+                    } else {
+                        writer |> write_char(int(*cstr))
+                        cstr++
                     }
                 }
             }
@@ -1963,6 +2280,14 @@ def private debug_re(node : ReNode?; tab : int) {
         print("WordBoundary)")
     } elif (node.op == ReOp.NonWordBoundary) {
         print("NonWordBoundary)")
+    } elif (node.op == ReOp.Lookahead) {
+        print("Lookahead ")
+        debug_re(node.subexpr, tab + 1)
+        print(")")
+    } elif (node.op == ReOp.NegativeLookahead) {
+        print("NegLookahead ")
+        debug_re(node.subexpr, tab + 1)
+        print(")")
     } else {
         panic("unsupported op")
     }
@@ -2024,7 +2349,11 @@ def private re_gen2_any(var node : ReNode?; var rnd : ReGenRandom; var str : Str
     }
     var ch : uint
     next(rnd, ch)
-    str |> write_char(int((ch % 255u) + 1u))
+    ch = (ch % 254u) + 1u  // 1..254, avoids 0 and newline (10)
+    if (ch >= 10u) {
+        ch++  // skip newline character
+    }
+    str |> write_char(int(ch))
     var node2 = node.next
     if (node2 != null) {
         invoke(node2.gen2, node2, rnd, str)
@@ -2172,6 +2501,32 @@ def private re_gen2_non_word_boundary(var node : ReNode?; var rnd : ReGenRandom;
         print("gen non_word_boundary\n")
     }
     // zero-width, nothing to emit
+    var node2 = node.next
+    if (node2 != null) {
+        invoke(node2.gen2, node2, rnd, str)
+    }
+}
+
+def private re_gen2_lookahead(var node : ReNode?; var rnd : ReGenRandom; var str : StringBuilderWriter) : void {
+    if (log_gen_enabled) {
+        print("gen lookahead\n")
+    }
+    // zero-width, nothing to emit — subexpr contributes to continuation
+    var nsub = node.subexpr
+    if (nsub != null) {
+        invoke(nsub.gen2, nsub, rnd, str)
+    }
+    var node2 = node.next
+    if (node2 != null) {
+        invoke(node2.gen2, node2, rnd, str)
+    }
+}
+
+def private re_gen2_negative_lookahead(var node : ReNode?; var rnd : ReGenRandom; var str : StringBuilderWriter) : void {
+    if (log_gen_enabled) {
+        print("gen negative_lookahead\n")
+    }
+    // cannot meaningfully generate for negative lookahead — skip subexpr, chain to next
     var node2 = node.next
     if (node2 != null) {
         invoke(node2.gen2, node2, rnd, str)

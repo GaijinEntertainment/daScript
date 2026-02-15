@@ -8,14 +8,14 @@ Regular expression library
 The REGEX module implements regular expression matching and searching.
 It provides ``regex_compile`` for building patterns, ``regex_match`` for
 full-string matching, ``regex_search`` for finding the first match anywhere,
-``regex_foreach`` for iterating all matches, ``regex_replace`` for substitution,
-``regex_split`` for splitting strings, ``regex_match_all`` for collecting all
-match ranges, ``regex_group`` for capturing groups by index, and
-``regex_group_by_name`` for named group lookup.
+``regex_foreach`` for iterating all matches, ``regex_replace`` for substitution
+(both block-based and template-string forms), ``regex_split`` for splitting strings,
+``regex_match_all`` for collecting all match ranges, ``regex_group`` for
+capturing groups by index, and ``regex_group_by_name`` for named group lookup.
 
 Supported syntax:
 
-- ``.`` — any character
+- ``.`` — any character except newline (use ``dot_all=true`` to also match ``\n``)
 - ``^`` — beginning of string (or offset position)
 - ``$`` — end of string
 - ``+`` — one or more (greedy)
@@ -31,6 +31,8 @@ Supported syntax:
 - ``(...)`` — capturing group
 - ``(?:...)`` — non-capturing group
 - ``(?P<name>...)`` — named capturing group
+- ``(?=...)`` — positive lookahead assertion
+- ``(?!...)`` — negative lookahead assertion
 - ``|`` — alternation
 - ``[abc]``, ``[a-z]``, ``[^abc]`` — character sets (negated with ``^``)
 - ``\w`` ``\W`` — word / non-word characters
@@ -40,6 +42,17 @@ Supported syntax:
 - ``\t`` ``\n`` ``\r`` ``\f`` ``\v`` — whitespace escapes
 - ``\xHH`` — hexadecimal character escape
 - ``\.`` ``\+`` ``\*`` ``\(`` ``\)`` ``\[`` ``\]`` ``\|`` ``\\`` ``\^`` ``\{`` ``\}`` — escaped metacharacters
+
+Flags:
+
+- ``case_insensitive=true`` — ASCII case-insensitive matching (pass to ``regex_compile``)
+- ``dot_all=true`` — ``.`` also matches ``\n`` (pass to ``regex_compile``)
+
+Template-string replacement:
+
+``regex_replace(re, str, replacement)`` replaces matches using a template string.
+Supported references: ``$0`` or ``$&`` for the whole match, ``$1``–``$9`` for
+numbered groups, ``${name}`` for named groups, ``$$`` for a literal ``$``.
 
 The engine is ASCII-only (256-bit ``CharSet``). Matching is anchored — ``regex_match`` tests from
 position 0 (or the given offset) and does NOT search; use ``regex_search`` to find the first
@@ -135,6 +148,10 @@ Type of regular expression operation.
 
          * **NonWordBoundary** = 13 - Matches at a non-word boundary
 
+         * **Lookahead** = 14 - Positive lookahead assertion (?=...)
+
+         * **NegativeLookahead** = 15 - Negative lookahead assertion (?!...)
+
 
 ++++++++++
 Structures
@@ -199,6 +216,10 @@ Regular expression structure.
 
          * **canEarlyOut** : bool - Whether early out optimization is enabled.
 
+         * **caseInsensitive** : bool - When true, matching is case-insensitive (ASCII only).
+
+         * **dotAll** : bool - When true, ``.`` matches newline characters as well.
+
 
 ++++++++++++++++++++++++++
 Compilation and validation
@@ -206,8 +227,8 @@ Compilation and validation
 
   *  :ref:`debug_set (cset: CharSet) <function-regex_debug_set_CharSet>` 
   *  :ref:`is_valid (var re: Regex) : bool <function-regex_is_valid_Regex>` 
-  *  :ref:`regex_compile (expr: string) : Regex <function-regex_regex_compile_string>` 
-  *  :ref:`regex_compile (var re: Regex; expr: string) : bool <function-regex_regex_compile_Regex_string>` 
+  *  :ref:`regex_compile (expr: string; case_insensitive: bool = false; dot_all: bool = false) : Regex <function-regex_regex_compile_string_bool_bool>` 
+  *  :ref:`regex_compile (var re: Regex; expr: string; case_insensitive: bool = false; dot_all: bool = false) : bool <function-regex_regex_compile_Regex_string_bool_bool>` 
   *  :ref:`regex_compile (var re: Regex) : Regex <function-regex_regex_compile_Regex>` 
   *  :ref:`regex_debug (regex: Regex) <function-regex_regex_debug_Regex>` 
   *  :ref:`visit_top_down (var node: ReNode?; blk: block\<(var n:ReNode?):void\>) <function-regex_visit_top_down_ReNode_q__block_ls_var_n_c_ReNode_q__c_void_gr_>` 
@@ -232,17 +253,21 @@ Returns ``true`` if the compiled regex is valid and ready for matching.
 regex_compile
 ^^^^^^^^^^^^^
 
-.. _function-regex_regex_compile_string:
+.. _function-regex_regex_compile_string_bool_bool:
 
-.. das:function:: regex_compile(expr: string) : Regex
+.. das:function:: regex_compile(expr: string; case_insensitive: bool = false; dot_all: bool = false) : Regex
 
-Compiles a regular expression pattern string into a ``Regex`` object.
+Compiles a regular expression pattern string into a ``Regex`` object. Panics if the pattern is invalid. An overload taking a ``var re : Regex`` out-parameter returns ``bool`` instead of panicking. Optional flags: ``case_insensitive=true`` for ASCII case-insensitive matching, ``dot_all=true`` for ``.`` to also match newline characters.
 
 :Arguments: * **expr** : string
 
-.. _function-regex_regex_compile_Regex_string:
+            * **case_insensitive** : bool
 
-.. das:function:: regex_compile(re: Regex; expr: string) : bool
+            * **dot_all** : bool
+
+.. _function-regex_regex_compile_Regex_string_bool_bool:
+
+.. das:function:: regex_compile(re: Regex; expr: string; case_insensitive: bool = false; dot_all: bool = false) : bool
 
 .. _function-regex_regex_compile_Regex:
 
@@ -286,7 +311,7 @@ Regex[]
 
 .. das:function:: Regex[](regex: Regex; index: int) : range
 
-Returns the match ``range`` for the capturing group at the given integer index (1-based). Use with ``slice`` to extract the matched substring.
+Returns the match ``range`` for the capturing group at the given integer index (1-based). An overload accepting a string name for named capturing groups ``(?P<name>...)`` is also available (returns ``range(0,0)`` if not found). Use with ``slice`` to extract the matched substring.
 
 :Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
@@ -341,6 +366,7 @@ Match & replace
   *  :ref:`regex_match (var regex: Regex; str: string; offset: int = 0) : int <function-regex_regex_match_Regex_string_int>` 
   *  :ref:`regex_match_all (var regex: Regex; str: string) : array\<range\> <function-regex_regex_match_all_Regex_string>` 
   *  :ref:`regex_replace (var regex: Regex; str: string; blk: block\<(at:string):string\>) : string <function-regex_regex_replace_Regex_string_block_ls_at_c_string_c_string_gr_>` 
+  *  :ref:`regex_replace (var regex: Regex; str: string; replacement: string) : string <function-regex_regex_replace_Regex_string_string>` 
   *  :ref:`regex_search (var regex: Regex; str: string; offset: int = 0) : int2 <function-regex_regex_search_Regex_string_int>` 
   *  :ref:`regex_split (var regex: Regex; str: string) : array\<string\> <function-regex_regex_split_Regex_string>` 
 
@@ -366,17 +392,27 @@ Returns an array of all non-overlapping match ranges for the regular expression 
 
             * **str** : string
 
+
+regex_replace
+^^^^^^^^^^^^^
+
 .. _function-regex_regex_replace_Regex_string_block_ls_at_c_string_c_string_gr_:
 
 .. das:function:: regex_replace(regex: Regex; str: string; blk: block<(at:string):string>) : string
 
-Replaces each substring matched by the regex with the result returned by the provided block.
+Replaces each substring matched by the regex with the result returned by the provided block. An overload accepting a template string is also available, supporting ``$0``/``$&`` for the whole match, ``$1``–``$9`` for numbered groups, ``${name}`` for named groups, and ``$$`` for a literal ``$``.
 
 :Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
             * **str** : string
 
             * **blk** : block<(at:string):string>
+
+.. _function-regex_regex_replace_Regex_string_string:
+
+.. das:function:: regex_replace(regex: Regex; str: string; replacement: string) : string
+
+----
 
 .. _function-regex_regex_search_Regex_string_int:
 

@@ -1,1 +1,1 @@
-Compiles a regular expression pattern string into a ``Regex`` object.
+Compiles a regular expression pattern string into a ``Regex`` object. Optional flags: ``case_insensitive=true`` for ASCII case-insensitive matching, ``dot_all=true`` for ``.`` to also match newline characters.
