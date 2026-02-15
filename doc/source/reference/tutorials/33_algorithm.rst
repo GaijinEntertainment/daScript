@@ -163,6 +163,8 @@ Most functions (``reverse``, ``fill``, ``lower_bound``, ``binary_search``,
 
    Previous tutorial: :ref:`tutorial_operator_overloading`
 
+   Next tutorial: :ref:`tutorial_decs`
+
    :ref:`Arrays <arrays>` — array language reference.
 
    :ref:`Tables <tables>` — table language reference.

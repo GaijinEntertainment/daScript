@@ -286,12 +286,12 @@ Access (get/set/clone)
   *  :ref:`clone (var cv: ComponentValue; val: double) <function-decs_clone_ComponentValue_double>` 
   *  :ref:`clone (var dst: Component; src: Component) <function-decs_clone_Component_Component>` 
   *  :ref:`clone (var cv: ComponentValue; val: float4) <function-decs_clone_ComponentValue_float4>` 
-  *  :ref:`get (var cmp: ComponentMap; name: string; var value: auto(TT)) : auto <function-decs_get_ComponentMap_string_autoTT_0x3b5>` 
-  *  :ref:`get (arch: Archetype; name: string; value: auto(TT)) : auto <function-decs_get_Archetype_string_autoTT_0x2e0>` 
+  *  :ref:`get (var cmp: ComponentMap; name: string; var value: auto(TT)) : auto <function-decs_get_ComponentMap_string_autoTT_0x3ac>` 
+  *  :ref:`get (arch: Archetype; name: string; value: auto(TT)) : auto <function-decs_get_Archetype_string_autoTT_0x2d7>` 
   *  :ref:`has (var cmp: ComponentMap; name: string) : bool <function-decs_has_ComponentMap_string>` 
   *  :ref:`has (arch: Archetype; name: string) : bool <function-decs_has_Archetype_string>` 
   *  :ref:`remove (var cmp: ComponentMap; name: string) <function-decs_remove_ComponentMap_string>` 
-  *  :ref:`set (var cmp: ComponentMap; name: string; value: auto(TT)) : auto <function-decs_set_ComponentMap_string_autoTT_0x48c>` 
+  *  :ref:`set (var cmp: ComponentMap; name: string; value: auto(TT)) : auto <function-decs_set_ComponentMap_string_autoTT_0x483>` 
   *  :ref:`set (var cv: ComponentValue; val: auto) : auto <function-decs_set_ComponentValue_auto_0xa7>` 
 
 
@@ -430,7 +430,7 @@ Sets individual component value. Verifies that the value is of the correct type.
 get
 ^^^
 
-.. _function-decs_get_ComponentMap_string_autoTT_0x3b5:
+.. _function-decs_get_ComponentMap_string_autoTT_0x3ac:
 
 .. das:function:: get(cmp: ComponentMap; name: string; value: auto(TT)) : auto
 
@@ -443,7 +443,7 @@ Will panic if name matches but type does not.
 
             * **value** : auto(TT)
 
-.. _function-decs_get_Archetype_string_autoTT_0x2e0:
+.. _function-decs_get_Archetype_string_autoTT_0x2d7:
 
 .. das:function:: get(arch: Archetype; name: string; value: auto(TT)) : auto
 
@@ -483,7 +483,7 @@ Removes specified value from the component map.
 set
 ^^^
 
-.. _function-decs_set_ComponentMap_string_autoTT_0x48c:
+.. _function-decs_set_ComponentMap_string_autoTT_0x483:
 
 .. das:function:: set(cmp: ComponentMap; name: string; value: auto(TT)) : auto
 
@@ -642,17 +642,17 @@ Restarts ECS by erasing all deferred actions and entire state.
 Iteration
 +++++++++
 
-  *  :ref:`decs_array (atype: auto(TT); src: array\<uint8\>; capacity: int) : auto <function-decs_decs_array_autoTT_array_ls_uint8_gr__int_0x2cd>` 
+  *  :ref:`decs_array (atype: auto(TT); src: array\<uint8\>; capacity: int) : auto <function-decs_decs_array_autoTT_array_ls_uint8_gr__int_0x2c4>` 
   *  :ref:`for_each_archetype (hash: ComponentHash; var erq: function\<():void\>; blk: block\<(arch:Archetype):void\>) <function-decs_for_each_archetype_ComponentHash_function_ls__c_void_gr__block_ls_arch_c_Archetype_c_void_gr_>` 
   *  :ref:`for_each_archetype (var erq: EcsRequest; blk: block\<(arch:Archetype):void\>) <function-decs_for_each_archetype_EcsRequest_block_ls_arch_c_Archetype_c_void_gr_>` 
   *  :ref:`for_each_archetype_find (hash: ComponentHash; var erq: function\<():void\>; blk: block\<(arch:Archetype):bool\>) : bool <function-decs_for_each_archetype_find_ComponentHash_function_ls__c_void_gr__block_ls_arch_c_Archetype_c_bool_gr_>` 
   *  :ref:`for_eid_archetype (eid: EntityId implicit; hash: ComponentHash; var erq: function\<():void\>; blk: block\<(arch:Archetype;index:int):void\>) : bool <function-decs_for_eid_archetype_EntityId_implicit_ComponentHash_function_ls__c_void_gr__block_ls_arch_c_Archetype;index_c_int_c_void_gr_>` 
-  *  :ref:`get_default_ro (arch: Archetype; name: string; value: auto(TT)) : iterator\<TT const&\> <function-decs_get_default_ro_Archetype_string_autoTT_0x313>` 
+  *  :ref:`get_default_ro (arch: Archetype; name: string; value: auto(TT)) : iterator\<TT const&\> <function-decs_get_default_ro_Archetype_string_autoTT_0x30a>` 
   *  :ref:`get_optional (arch: Archetype; name: string; value: auto(TT)?) : iterator\<TT?\> <function-decs_get_optional_Archetype_string_autoTT_q_>` 
-  *  :ref:`get_ro (arch: Archetype; name: string; value: auto(TT)) : array\<TT\> <function-decs_get_ro_Archetype_string_autoTT_0x30c>` 
-  *  :ref:`get_ro (arch: Archetype; name: string; value: auto(TT)[]) : array\<TT[-2]\> <function-decs_get_ro_Archetype_string_autoTT_0x304>` 
+  *  :ref:`get_ro (arch: Archetype; name: string; value: auto(TT)) : array\<TT\> <function-decs_get_ro_Archetype_string_autoTT_0x303>` 
+  *  :ref:`get_ro (arch: Archetype; name: string; value: auto(TT)[]) : array\<TT[-2]\> <function-decs_get_ro_Archetype_string_autoTT_0x2fb>` 
 
-.. _function-decs_decs_array_autoTT_array_ls_uint8_gr__int_0x2cd:
+.. _function-decs_decs_array_autoTT_array_ls_uint8_gr__int_0x2c4:
 
 .. das:function:: decs_array(atype: auto(TT); src: array<uint8>; capacity: int) : auto
 
@@ -719,7 +719,7 @@ Request is returned by a specified function.
 
             * **blk** : block<(arch: :ref:`Archetype <struct-decs-Archetype>` ;index:int):void>
 
-.. _function-decs_get_default_ro_Archetype_string_autoTT_0x313:
+.. _function-decs_get_default_ro_Archetype_string_autoTT_0x30a:
 
 .. das:function:: get_default_ro(arch: Archetype; name: string; value: auto(TT)) : iterator<TT const&>
 
@@ -749,7 +749,7 @@ If component is not found - iterator will keep returning default value for the c
 get_ro
 ^^^^^^
 
-.. _function-decs_get_ro_Archetype_string_autoTT_0x30c:
+.. _function-decs_get_ro_Archetype_string_autoTT_0x303:
 
 .. das:function:: get_ro(arch: Archetype; name: string; value: auto(TT)) : array<TT>
 
@@ -761,7 +761,7 @@ Returns const temporary array of component given specific name and type of compo
 
             * **value** : auto(TT)
 
-.. _function-decs_get_ro_Archetype_string_autoTT_0x304:
+.. _function-decs_get_ro_Archetype_string_autoTT_0x2fb:
 
 .. das:function:: get_ro(arch: Archetype; name: string; value: auto(TT)[]) : array<TT[-2]>
 

@@ -437,24 +437,15 @@ def public debug_dump {
     //! Prints out state of the ECS system.
     for (arch in decsState.allArchetypes) {
         to_log(LOG_DEBUG, "archtype {arch.hash} : {arch.size}\n")
-        // debug(arch)
         for (index in range(arch.size)) {
             to_log(LOG_DEBUG, "\tentity[{index}]\n")
             for (c in arch.components) {
                 if (c.info.dumper != null) {
-                    let dump = build_string() <| $(wr) {
-                        for (x in range(arch.size)) {
-                            if (x != 0) {
-                                wr |> write(", ")
-                            }
-                            let offset = x * c.stride
-                            unsafe {
-                                let txt = invoke(c.info.dumper, addr(c.data[offset]))
-                                wr |> write(txt)
-                            }
-                        }
+                    let offset = index * c.stride
+                    unsafe {
+                        let dump = invoke(c.info.dumper, addr(c.data[offset]))
+                        to_log(LOG_DEBUG, "\t\t{c.name} : {describe(c.info)} = {dump}\n")
                     }
-                    to_log(LOG_DEBUG, "\t\t{c.name} : {describe(c.info)}\n\t\t\t{dump}\n")
                 } else {
                     to_log(LOG_DEBUG, "\t\t{c.name} : {describe(c.info)}\n")
                 }
@@ -1073,7 +1064,7 @@ def private make_callbacks(var cv : ComponentValue; value : auto(TT)) {
                 }
             } else {
                 arch |> _::serialize(stride)
-                var ssrc : array<TT -const -& -#>
+                var ssrc : array<TT[typeinfo dim(value)] -const -& -#>
                 let size = length(src) / stride
                 unsafe {
                     if (length(src) > 0) {
