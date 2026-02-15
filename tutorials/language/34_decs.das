@@ -11,6 +11,7 @@
 //   - Default and optional component values in queries
 //   - Stage functions for game-loop-style processing
 //   - Serialization and deserialization of ECS state
+//   - Utility functions: is_alive, entity_count, get_component
 //
 // requires: daslib/decs_boost
 // Run: daslang.exe tutorials/language/34_decs.das
@@ -487,6 +488,67 @@ def archetype_inspection() {
     //   Archetype 1: 1 entities, components: eid x y
 }
 
+// === Utility functions ===
+
+def utility_functions_demo() {
+    print("\n=== Utility functions ===\n")
+
+    restart()
+
+    // is_alive checks whether an EntityId refers to a living entity.
+    // Before any entities exist, INVALID_ENTITY_ID is not alive:
+    print("INVALID alive? {is_alive(INVALID_ENTITY_ID)}\n")
+    // output: INVALID alive? false
+
+    // Create some entities
+    let hero = create_entity <| @(eid, cmp) {
+        cmp.name := "hero"
+        cmp.hp   := 100
+        cmp.pos  := float3(1, 2, 3)
+    }
+    let goblin = create_entity <| @(eid, cmp) {
+        cmp.name := "goblin"
+        cmp.hp   := 30
+    }
+    commit()
+
+    print("hero alive? {is_alive(hero)}\n")
+    // output: hero alive? true
+
+    // entity_count returns the total number of alive entities
+    print("entity count: {entity_count()}\n")
+    // output: entity count: 2
+
+    // Delete the goblin and check again
+    delete_entity(goblin)
+    commit()
+    print("goblin alive after delete? {is_alive(goblin)}\n")
+    print("entity count after delete: {entity_count()}\n")
+    // output: goblin alive after delete? false
+    // output: entity count after delete: 1
+
+    // get_component retrieves a single component value by entity ID and name.
+    // The type is inferred from the default value. If the entity is dead or
+    // the component is missing, the default is returned.
+    let hp = get_component(hero, "hp", 0)
+    print("hero hp: {hp}\n")
+    // output: hero hp: 100
+
+    let pos = get_component(hero, "pos", float3(0))
+    print("hero pos: {pos}\n")
+    // output: hero pos: 1,2,3
+
+    // Missing component returns default
+    let shield = get_component(hero, "shield", -1)
+    print("hero shield (missing): {shield}\n")
+    // output: hero shield (missing): -1
+
+    // Dead entity returns default
+    let dead_hp = get_component(goblin, "hp", -999)
+    print("dead goblin hp: {dead_hp}\n")
+    // output: dead goblin hp: -999
+}
+
 [export]
 def main() {
     creating_entities()
@@ -504,5 +566,6 @@ def main() {
     serialization_demo()
     entity_recycling_demo()
     archetype_inspection()
+    utility_functions_demo()
     return
 }

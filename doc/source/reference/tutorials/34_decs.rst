@@ -275,6 +275,38 @@ You can inspect the world state through ``decsState``:
         print("\n")
     }
 
+Utility functions
+=================
+
+``is_alive`` checks whether an ``EntityId`` still refers to a living entity.
+It returns ``false`` for ``INVALID_ENTITY_ID``, deleted entities, and stale
+generation IDs after slot recycling:
+
+.. code-block:: das
+
+    print("alive? {is_alive(hero)}\n")        // true
+    delete_entity(hero)
+    commit()
+    print("alive? {is_alive(hero)}\n")        // false
+
+``entity_count`` returns the total number of alive entities across all
+archetypes:
+
+.. code-block:: das
+
+    print("entity count: {entity_count()}\n")
+
+``get_component`` retrieves a single component value by entity ID and name.
+The type is inferred from the default value parameter. If the entity is dead
+or the component is not present, the default is returned:
+
+.. code-block:: das
+
+    let hp = get_component(hero, "hp", 0)            // returns int
+    let pos = get_component(hero, "pos", float3(0))   // returns float3
+    let missing = get_component(hero, "shield", -1)    // returns -1 (not found)
+    let dead = get_component(deleted_eid, "hp", -999)  // returns -999 (dead)
+
 .. seealso::
 
    Full source: :download:`tutorials/language/34_decs.das <../../../../tutorials/language/34_decs.das>`

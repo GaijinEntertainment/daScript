@@ -634,7 +634,8 @@ def document_module_decs(root : string) {
     var mod = find_module("decs")
     var groups <- array<DocGroup>(
         group_by_regex("Comparison and access", mod, %regex~(\=\=|\!\=|\.)$%%),
-        group_by_regex("Access (get/set/clone)", mod, %regex~(has|get|set|clone|remove)$%%),
+        group_by_regex("Access (get/set/clone)", mod, %regex~(has|get|set|clone|remove|get_component)$%%),
+        group_by_regex("Entity status", mod, %regex~(is_alive|entity_count)$%%),
         group_by_regex("Debug and serialization", mod, %regex~(describe|serialize|finalize|debug_dump)$%%),
         group_by_regex("Stages", mod, %regex~(register_decs_stage_call|decs_stage|commit)$%%),
         group_by_regex("Deferred actions", mod, %regex~(update_entity|create_entity|delete_entity)$%%),

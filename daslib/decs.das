@@ -937,6 +937,61 @@ def public commit {
     delete actions
 }
 
+def public is_alive(eid : EntityId) : bool {
+    //! Returns true if the entity is alive (exists and has not been deleted).
+    //! An entity is alive when its id is within bounds and its generation matches the lookup table.
+    if (eid == INVALID_ENTITY_ID) {
+        return false
+    }
+    if (int(eid.id) >= length(decsState.entityLookup)) {
+        return false
+    }
+    return decsState.entityLookup[eid.id].generation == eid.generation
+}
+
+def public entity_count() : int {
+    //! Returns the total number of alive entities across all archetypes.
+    var total = 0
+    for (arch in decsState.allArchetypes) {
+        total += arch.size
+    }
+    return total
+}
+
+def public get_component(eid : EntityId; name : string; defval : auto(TT)) : TT -const -& -# {
+    //! Returns a copy of the named component for the given entity.
+    //! If the entity is dead or the component is not found, returns ``defval``.
+    //! The type of the component is inferred from the type of ``defval``.
+    //! Panics if the component exists but its type does not match.
+    if (!is_alive(eid)) {
+        return defval
+    }
+    var lookup = decsState.entityLookup[eid.id]
+    let arch_index = unsafe(decsState.archetypeLookup[lookup.archetype]) - 1
+    var arch & = unsafe(decsState.allArchetypes[arch_index])
+    let cidx = arch.components |> lower_bound(Component(name = name)) <| $(x, y) => x.name < y.name
+    if (cidx < length(arch.components)) {
+        var comp & = unsafe(arch.components[cidx])
+        if (comp.name == name) {
+            unsafe {
+                var cvinfo : TypeInfo const?
+                static_if (typeinfo is_dim(defval)) {
+                    cvinfo = addr(typeinfo rtti_typeinfo(type<TT[typeinfo dim(defval)] -const -& -#>))
+                } else {
+                    cvinfo = addr(typeinfo rtti_typeinfo(type<TT -const -& -#>))
+                }
+                if (comp.info.hash != cvinfo.hash) {
+                    panic("decs: get_component {name} type mismatch, expecting {describe(comp.info)} vs {describe(cvinfo)} MNH={get_mangled_name(cvinfo)} hash={cvinfo.hash} size={cvinfo.size}")
+                }
+                var result : TT -const -& -#
+                memcpy(addr(result), addr(comp.data[lookup.index * comp.stride]), comp.stride)
+                return result
+            }
+        }
+    }
+    return defval
+}
+
 def public get(var cmp : ComponentMap; name : string; var value : auto(TT)) {
     //! Gets component value specified by name and type.
     //! Will panic if name matches but type does not.
