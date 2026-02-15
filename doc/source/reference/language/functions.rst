@@ -418,6 +418,196 @@ In this example, we create three iVec2 objects and compare them using the == ope
 The second comparison (v1 == v3) returns false because the x and y components of v1 and v3 are not equal.
 
 ---------------------------------------------
+Overloadable operators
+---------------------------------------------
+
+The following table lists all operators that can be overloaded in Daslang:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   * - Category
+     - Operators
+   * - Arithmetic
+     - ``+``  ``-``  ``*``  ``/``  ``%``
+   * - Comparison
+     - ``==``  ``!=``  ``<``  ``>``  ``<=``  ``>=``
+   * - Bitwise
+     - ``&``  ``|``  ``^``  ``~``  ``<<``  ``>>``  ``<<<``  ``>>>``
+   * - Logical
+     - ``&&``  ``||``  ``^^``  ``!``
+   * - Unary
+     - ``-`` (negate)  ``~`` (complement)  ``++``  ``--``
+   * - Compound assignment
+     - ``+=``  ``-=``  ``*=``  ``/=``  ``%=``  ``&=``  ``|=``  ``^=``  ``<<=``  ``>>=``  ``<<<=``  ``>>>=``  ``&&=``  ``||=``  ``^^=``
+   * - Index
+     - ``[]``  ``[]=``  ``[]<-``  ``[]:=``  ``[]+=``  ``[]-=``  ``[]*=``  etc.
+   * - Safe index
+     - ``?[]``
+   * - Dot
+     - ``.``  ``?.``  ``. name``  ``. name :=``  ``. name +=``  etc.
+   * - Type
+     - ``:=`` (clone)  ``delete`` (finalize)  ``is``  ``as``  ``?as``
+   * - Null coalesce
+     - ``??``
+   * - Interval
+     - ``..``
+
+Operators can be defined as free functions or as struct methods.
+
+---------------------------------------------
+Unary operators
+---------------------------------------------
+
+Unary operators take a single argument. To overload unary minus (negate)::
+
+    def operator -(a : Vec2) : Vec2 {
+        return Vec2(x = -a.x, y = -a.y)
+    }
+
+Prefix increment (``++x``) and postfix increment (``x++``) are separate operators.
+In the parser, ``++operator`` is the prefix form and ``operator++`` is the postfix form::
+
+    struct Counter {
+        value : int
+    }
+
+    def operator ++(var c : Counter) : Counter {
+        c.value += 1
+        return c
+    }
+
+The same pattern applies to ``--``.
+
+---------------------------------------------
+Compound assignment operators
+---------------------------------------------
+
+Compound assignment operators modify the left-hand operand in place.
+The first parameter must be a mutable reference (``var ... &``)::
+
+    def operator +=(var a : Vec2&; b : Vec2) {
+        a.x += b.x
+        a.y += b.y
+    }
+
+    def operator *=(var a : Vec2&; s : float) {
+        a.x *= s
+        a.y *= s
+    }
+
+This pattern works for all compound assignments: ``-=``, ``/=``, ``%=``, ``&=``, ``|=``, ``^=``,
+``<<=``, ``>>=``, ``<<<=``, ``>>>=``, ``&&=``, ``||=``, ``^^=``.
+
+---------------------------------------------
+Index operators
+---------------------------------------------
+
+Index operators control how ``[]`` behaves on your types.
+
+``operator []`` defines read access, ``operator []=`` defines write access, and
+compound variants like ``operator []+=`` define in-place index operations::
+
+    struct Matrix2x2 {
+        data : float[4]
+    }
+
+    def operator [](m : Matrix2x2; i : int) : float {
+        return m.data[i]
+    }
+
+    def operator []=(var m : Matrix2x2&; i : int; v : float) {
+        m.data[i] = v
+    }
+
+    def operator []+=(var m : Matrix2x2&; i : int; v : float) {
+        m.data[i] += v
+    }
+
+Additional index operators include ``[]<-`` (move into index), ``[]:=`` (clone into index),
+``[]-=``, ``[]*=``, and others matching the compound assignment family.
+
+The safe index operator ``?[]`` can be overloaded to return a default value when the
+index is out of range.
+
+---------------------------------------------
+Clone and finalize operators
+---------------------------------------------
+
+``operator :=`` overloads clone behaviour::
+
+    struct Resource {
+        name : string
+        refcount : int
+    }
+
+    def operator :=(var dst : Resource&; src : Resource) {
+        dst.name = src.name
+        dst.refcount = src.refcount + 1
+    }
+
+Custom finalization can be defined via a ``finalize`` function or ``operator delete``::
+
+    def finalize(var r : Resource) {
+        print("releasing {r.name}\n")
+    }
+
+---------------------------------------------
+is, as, and ?as operators
+---------------------------------------------
+
+The ``is``, ``as``, and ``?as`` operators can be overloaded for custom type-checking
+and casting behaviour::
+
+    def operator is(a : MyVariant; b : type<int>) : bool {
+        // return true if MyVariant currently holds an int
+    }
+
+    def operator as(a : MyVariant; b : type<int>) : int {
+        // extract int value, panic if wrong type
+    }
+
+    def operator ?as(a : MyVariant; b : type<int>) : int? {
+        // extract int value or return null
+    }
+
+These are commonly used with variant types and in libraries like ``daslib/ast_boost``
+and ``daslib/json_boost``.
+
+---------------------------------------------
+Null-coalesce operator
+---------------------------------------------
+
+``operator ??`` can be overloaded to provide a default value when a nullable
+or optional type is null::
+
+    def operator ??(a : MyOptional; default_value : int) : int {
+        // return contained value or default_value
+    }
+
+---------------------------------------------
+Struct method operators
+---------------------------------------------
+
+Operators can be defined as struct methods instead of free functions::
+
+    struct Stack {
+        items : array<int>
+
+        def const operator [](index : int) : int {
+            return items[index]
+        }
+
+        def operator []=(index : int; value : int) {
+            items[index] = value
+        }
+    }
+
+Use the ``const`` qualifier on read-only operators. Write operators omit ``const``
+because they mutate the struct's state.
+
+---------------------------------------------
 Overloading the '.' and '?.' operators
 ---------------------------------------------
 

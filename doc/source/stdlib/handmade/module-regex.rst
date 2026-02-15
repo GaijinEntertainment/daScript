@@ -1,14 +1,14 @@
 The REGEX module implements regular expression matching and searching.
 It provides ``regex_compile`` for building patterns, ``regex_match`` for
 full-string matching, ``regex_search`` for finding the first match anywhere,
-``regex_foreach`` for iterating all matches, ``regex_replace`` for substitution,
-``regex_split`` for splitting strings, ``regex_match_all`` for collecting all
-match ranges, ``regex_group`` for capturing groups by index, and
-``regex_group_by_name`` for named group lookup.
+``regex_foreach`` for iterating all matches, ``regex_replace`` for substitution
+(both block-based and template-string forms), ``regex_split`` for splitting strings,
+``regex_match_all`` for collecting all match ranges, ``regex_group`` for
+capturing groups by index, and ``regex_group_by_name`` for named group lookup.
 
 Supported syntax:
 
-- ``.`` — any character
+- ``.`` — any character except newline (use ``dot_all=true`` to also match ``\n``)
 - ``^`` — beginning of string (or offset position)
 - ``$`` — end of string
 - ``+`` — one or more (greedy)
@@ -24,6 +24,8 @@ Supported syntax:
 - ``(...)`` — capturing group
 - ``(?:...)`` — non-capturing group
 - ``(?P<name>...)`` — named capturing group
+- ``(?=...)`` — positive lookahead assertion
+- ``(?!...)`` — negative lookahead assertion
 - ``|`` — alternation
 - ``[abc]``, ``[a-z]``, ``[^abc]`` — character sets (negated with ``^``)
 - ``\w`` ``\W`` — word / non-word characters
@@ -33,6 +35,17 @@ Supported syntax:
 - ``\t`` ``\n`` ``\r`` ``\f`` ``\v`` — whitespace escapes
 - ``\xHH`` — hexadecimal character escape
 - ``\.`` ``\+`` ``\*`` ``\(`` ``\)`` ``\[`` ``\]`` ``\|`` ``\\`` ``\^`` ``\{`` ``\}`` — escaped metacharacters
+
+Flags:
+
+- ``case_insensitive=true`` — ASCII case-insensitive matching (pass to ``regex_compile``)
+- ``dot_all=true`` — ``.`` also matches ``\n`` (pass to ``regex_compile``)
+
+Template-string replacement:
+
+``regex_replace(re, str, replacement)`` replaces matches using a template string.
+Supported references: ``$0`` or ``$&`` for the whole match, ``$1``–``$9`` for
+numbered groups, ``${name}`` for named groups, ``$$`` for a literal ``$``.
 
 The engine is ASCII-only (256-bit ``CharSet``). Matching is anchored — ``regex_match`` tests from
 position 0 (or the given offset) and does NOT search; use ``regex_search`` to find the first

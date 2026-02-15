@@ -13,3 +13,5 @@ Either first or second
 Counted repetition: {n}, {n,}, {n,m}
 Matches at a word boundary
 Matches at a non-word boundary
+Positive lookahead assertion (?=...)
+Negative lookahead assertion (?!...)

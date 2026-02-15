@@ -318,11 +318,140 @@ IP address pattern::
   var re_ip <- %regex~\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}%%
   regex_match(re_ip, "192.168.1.1")   // 11
 
+Case-insensitive matching
+=========================
+
+Pass ``case_insensitive=true`` to ``regex_compile`` for ASCII case-insensitive
+matching. Character classes and sets are also affected::
+
+  // default: case-sensitive
+  var re <- regex_compile("hello")
+  regex_match(re, "HELLO")    // -1
+
+  // case-insensitive
+  var re_ci <- regex_compile("hello", [case_insensitive=true])
+  regex_match(re_ci, "HELLO")    // 5
+  regex_match(re_ci, "HeLLo")   // 5
+
+  // character sets are also case-insensitive
+  var re_set <- regex_compile("[a-z]+", [case_insensitive=true])
+  regex_match(re_set, "AbCdE")   // 5
+
+Dot and newline
+===============
+
+By default, ``.`` matches any character **except** newline (``\n``).
+Pass ``dot_all=true`` to ``regex_compile`` to make ``.`` match newlines too::
+
+  // default: '.' does NOT match newline
+  var re <- regex_compile(".+")
+  regex_match(re, "ab\nc")     // 2
+
+  // dot_all=true: '.' also matches newline
+  var re_all <- regex_compile(".+", [dot_all=true])
+  regex_match(re_all, "ab\nc")   // 4
+
+This is useful for multi-line content extraction::
+
+  var re <- regex_compile("START(.+?)END", [dot_all=true])
+  let text = "START\nhello\nEND"
+  regex_match(re, text)
+  regex_group(re, 1, text)   // "\nhello\n"
+
+Lookahead assertions
+====================
+
+Lookahead assertions check what follows the current position without consuming
+any input.
+
+``(?=...)`` is a **positive lookahead** — the overall match succeeds only if
+the lookahead pattern matches::
+
+  // "foo" only if followed by "bar"
+  var re <- regex_compile("foo(?=bar)")
+  regex_match(re, "foobar")   // 3 (matches "foo", not "foobar")
+  regex_match(re, "foobaz")   // -1
+
+  // extract digits before " dollars"
+  var re2 <- regex_compile("\\d+(?= dollars)")
+  let pos = regex_search(re2, "100 dollars")
+  // pos == int2(0, 3) — matches "100"
+
+``(?!...)`` is a **negative lookahead** — the match succeeds only if the
+lookahead pattern does NOT match::
+
+  // "foo" only if NOT followed by "bar"
+  var re <- regex_compile("foo(?!bar)")
+  regex_match(re, "foobar")   // -1
+  regex_match(re, "foobaz")   // 3
+
+  // single char NOT followed by "!"
+  var re2 <- regex_compile("\\w(?!!)")
+  regex_match(re2, "a!")   // -1
+  regex_match(re2, "a.")   // 1
+
+Template-string replace
+=======================
+
+``regex_replace`` also accepts a replacement template string instead of a
+block. The template supports group references:
+
+============  ====================================
+Reference     Meaning
+============  ====================================
+``$0``        Whole match
+``$&``        Whole match (alternative syntax)
+``$1``–``$9`` Numbered capturing groups
+``${name}``   Named capturing group
+``$$``        Literal ``$`` character
+============  ====================================
+
+::
+
+  // swap first and last name
+  var re <- regex_compile("(\\w+) (\\w+)")
+  regex_replace(re, "John Smith", "$2 $1")     // "Smith John"
+
+  // wrap each word in brackets
+  var re2 <- regex_compile("\\w+")
+  regex_replace(re2, "hello world", "[$0]")    // "[hello] [world]"
+
+Named group references use ``${name}`` syntax::
+
+  var re <- regex_compile("(?P<m>\\d+)/(?P<d>\\d+)/(?P<y>\\d+)")
+  regex_replace(re, "12/25/2024", "${y}-${m}-${d}")   // "2024-12-25"
+
+Reader macro flags
+==================
+
+Flags can be appended after a second ``~`` in the ``%regex~`` reader macro:
+
+=========================  ====================================
+Syntax                     Effect
+=========================  ====================================
+``%regex~pattern~i%%``     Case-insensitive matching
+``%regex~pattern~s%%``     Dot-all mode (``.`` matches ``\n``)
+``%regex~pattern~is%%``    Both flags combined
+=========================  ====================================
+
+::
+
+  var re_ci <- %regex~hello~i%%
+  regex_match(re_ci, "HELLO")   // 5
+
+  var re_s <- %regex~.+~s%%
+  regex_match(re_s, "ab\nc")    // 4
+
+  var re_is <- %regex~hello.+world~is%%
+  regex_match(re_is, "Hello\nWorld")   // 11
+
 .. seealso::
 
    Full source: :download:`tutorials/language/31_regex.das <../../../../tutorials/language/31_regex.das>`
 
    :ref:`JSON tutorial <tutorial_json>` (previous tutorial).
+
+   Next tutorial: :ref:`Operator overloading <tutorial_operator_overloading>`.
 
    :doc:`/stdlib/regex` — core regex module reference.
 
