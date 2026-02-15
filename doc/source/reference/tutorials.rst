@@ -43,3 +43,4 @@ introduced in earlier tutorials.
    tutorials/26_contracts.rst
    tutorials/27_testing.rst
    tutorials/28_linq.rst
+   tutorials/29_functional.rst

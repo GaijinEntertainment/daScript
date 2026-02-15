@@ -1,6 +1,9 @@
-The FUNCTIONAL module implements higher-order functions and itertools-style
-patterns including ``filter``, ``map``, ``reduce``, ``zip``, ``flatten``,
-``islice``, ``cycle``, ``repeat``, and ``sorted``.
+The FUNCTIONAL module implements lazy iterator adapters and higher-order
+function utilities including ``filter``, ``map``, ``reduce``, ``fold``,
+``scan``, ``flatten``, ``flat_map``, ``enumerate``, ``chain``, ``pairwise``,
+``iterate``, ``islice``, ``cycle``, ``repeat``, ``sorted``, ``sum``,
+``any``, ``all``, ``tap``, ``for_each``, ``find``, ``find_index``, and
+``partition``.
 
 All functions and symbols are in "functional" module, use require to get access to it. ::
 
