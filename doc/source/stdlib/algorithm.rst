@@ -247,20 +247,20 @@ Array manipulation
   *  :ref:`combine (a: auto; b: auto) : auto <function-algorithm_combine_auto_auto_0xe1>` 
   *  :ref:`erase_all (var arr: auto; value: auto) : auto <function-algorithm_erase_all_auto_auto_0x185>` 
   *  :ref:`fill (var a: array\<auto(TT)\>; value: TT) : auto <function-algorithm_fill_array_ls_autoTT_gr__TT>` 
-  *  :ref:`fill (var a: auto; value: auto) : auto <function-algorithm_fill_auto_auto_0x1a1>` 
-  *  :ref:`is_sorted (a: auto) : bool <function-algorithm_is_sorted_auto_0x1c3>` 
+  *  :ref:`fill (var a: auto; value: auto) : auto <function-algorithm_fill_auto_auto_0x1a3>` 
+  *  :ref:`is_sorted (a: auto) : bool <function-algorithm_is_sorted_auto_0x1c5>` 
   *  :ref:`is_sorted (a: array\<auto(TT)\>) : bool <function-algorithm_is_sorted_array_ls_autoTT_gr_>` 
   *  :ref:`is_sorted (a: array\<auto(TT)\>; less: block\<(a:TT;b:TT):bool\>) : bool <function-algorithm_is_sorted_array_ls_autoTT_gr__block_ls_a_c_TT;b_c_TT_c_bool_gr_>` 
-  *  :ref:`max_element (a: auto) : int <function-algorithm_max_element_auto_0x22e>` 
+  *  :ref:`max_element (a: auto) : int <function-algorithm_max_element_auto_0x230>` 
   *  :ref:`max_element (a: array\<auto(TT)\>; less: block\<(a:TT;b:TT):bool\>) : int <function-algorithm_max_element_array_ls_autoTT_gr__block_ls_a_c_TT;b_c_TT_c_bool_gr_>` 
   *  :ref:`max_element (a: array\<auto(TT)\>) : int <function-algorithm_max_element_array_ls_autoTT_gr_>` 
   *  :ref:`min_element (a: array\<auto(TT)\>; less: block\<(a:TT;b:TT):bool\>) : int <function-algorithm_min_element_array_ls_autoTT_gr__block_ls_a_c_TT;b_c_TT_c_bool_gr_>` 
-  *  :ref:`min_element (a: auto) : int <function-algorithm_min_element_auto_0x226>` 
+  *  :ref:`min_element (a: auto) : int <function-algorithm_min_element_auto_0x228>` 
   *  :ref:`min_element (a: array\<auto(TT)\>) : int <function-algorithm_min_element_array_ls_autoTT_gr_>` 
   *  :ref:`reverse (var a: auto) : auto <function-algorithm_reverse_auto_0xd9>` 
   *  :ref:`reverse (var a: array\<auto\>) : auto <function-algorithm_reverse_array_ls_auto_gr_>` 
   *  :ref:`rotate (var a: array\<auto\>; mid: int) : auto <function-algorithm_rotate_array_ls_auto_gr__int>` 
-  *  :ref:`rotate (var a: auto; mid: int) : auto <function-algorithm_rotate_auto_int_0x1e4>` 
+  *  :ref:`rotate (var a: auto; mid: int) : auto <function-algorithm_rotate_auto_int_0x1e6>` 
   *  :ref:`sort_unique (var a: array\<auto(TT)\>) : auto <function-algorithm_sort_unique_array_ls_autoTT_gr_>` 
   *  :ref:`topological_sort (nodes: array\<auto(Node)\>) : auto <function-algorithm_topological_sort_array_ls_autoNode_gr_>` 
   *  :ref:`unique (var a: array\<auto(TT)\>) : auto <function-algorithm_unique_array_ls_autoTT_gr_>` 
@@ -290,6 +290,8 @@ Returns a new array containing elements from a followed by b.
 .. das:function:: erase_all(arr: auto; value: auto) : auto
 
 Erases all elements equal to value from arr in O(n) time.
+Uses swap to support non-copyable types. Removed elements are swapped to the tail
+and properly finalized by resize.
 
 :Arguments: * **arr** : auto
 
@@ -303,13 +305,13 @@ fill
 
 .. das:function:: fill(a: array<auto(TT)>; value: TT) : auto
 
-Sets all elements of the array to the given value.
+Sets all elements of the array to the given value using clone.
 
 :Arguments: * **a** : array<auto(TT)>
 
             * **value** : TT
 
-.. _function-algorithm_fill_auto_auto_0x1a1:
+.. _function-algorithm_fill_auto_auto_0x1a3:
 
 .. das:function:: fill(a: auto; value: auto) : auto
 
@@ -319,7 +321,7 @@ Sets all elements of the array to the given value.
 is_sorted
 ^^^^^^^^^
 
-.. _function-algorithm_is_sorted_auto_0x1c3:
+.. _function-algorithm_is_sorted_auto_0x1c5:
 
 .. das:function:: is_sorted(a: auto) : bool
 
@@ -341,7 +343,7 @@ Returns true if the array is sorted in non-descending order.
 max_element
 ^^^^^^^^^^^
 
-.. _function-algorithm_max_element_auto_0x22e:
+.. _function-algorithm_max_element_auto_0x230:
 
 .. das:function:: max_element(a: auto) : int
 
@@ -373,7 +375,7 @@ Returns the index of the minimum element according to the provided less function
 
             * **less** : block<(a:TT;b:TT):bool>
 
-.. _function-algorithm_min_element_auto_0x226:
+.. _function-algorithm_min_element_auto_0x228:
 
 .. das:function:: min_element(a: auto) : int
 
@@ -416,7 +418,7 @@ Elements before mid are moved to the end.
 
             * **mid** : int
 
-.. _function-algorithm_rotate_auto_int_0x1e4:
+.. _function-algorithm_rotate_auto_int_0x1e6:
 
 .. das:function:: rotate(a: auto; mid: int) : auto
 
