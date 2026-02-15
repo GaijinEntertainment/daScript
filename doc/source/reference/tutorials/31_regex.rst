@@ -209,18 +209,97 @@ are literal in the macro body::
   var re2 <- %regex~[a-z]+%%
   regex_match(re2, "hello")   // 5
 
+Search, split, match_all
+========================
+
+``regex_search`` finds the first match anywhere in the string (unlike
+``regex_match`` which only matches at position 0). Returns ``int2(start, end)``
+or ``int2(-1, -1)``::
+
+  var re_num <- regex_compile("\\d+")
+  let pos = regex_search(re_num, "abc 123 def")   // int2(4, 7)
+
+``regex_split`` splits a string by pattern matches::
+
+  var re_comma <- regex_compile(",\\s*")
+  var parts <- regex_split(re_comma, "a, b,c, d")
+  // parts == ["a", "b", "c", "d"]
+
+``regex_match_all`` collects all match ranges::
+
+  var re_word <- regex_compile("\\w+")
+  var matches <- regex_match_all(re_word, "foo bar baz")
+  // length(matches) == 3
+
+Non-capturing groups
+====================
+
+``(?:...)`` groups without creating a capture. Useful for applying
+quantifiers or alternation without increasing the group count::
+
+  var re <- regex_compile("(?:cat|dog)fish")
+  regex_match(re, "catfish")     // 7
+  length(re.groups)              // 1 (only group 0)
+
+  var re2 <- regex_compile("(?:ab)\{3}")
+  regex_match(re2, "ababab")     // 6
+
+Named groups
+============
+
+``(?P<name>...)`` creates a named capturing group, accessible via
+``regex_group_by_name``::
+
+  var re <- regex_compile("(?P<user>\\w+)@(?P<host>\\w+)")
+  let email = "alice@example"
+  regex_match(re, email)
+  regex_group_by_name(re, "user", email)   // "alice"
+  regex_group_by_name(re, "host", email)   // "example"
+
+Named groups are also accessible by their numeric index (1, 2, ...)
+via ``regex_group``.
+
+Lazy quantifiers
+================
+
+Greedy quantifiers (``+``, ``*``, ``?``, ``{n,m}``) match as much as possible.
+Appending ``?`` makes them lazy — matching as little as possible:
+
+============  ==========  ====================================
+Greedy        Lazy        Meaning
+============  ==========  ====================================
+``+``         ``+?``      One or more (prefer fewer)
+``*``         ``*?``      Zero or more (prefer fewer)
+``?``         ``??``      Zero or one (prefer zero)
+``{n,m}``     ``{n,m}?``  Counted (prefer *n*)
+============  ==========  ====================================
+
+::
+
+  // lazy +? takes the shortest match
+  var re <- regex_compile("<.+?>")
+  let pos = regex_search(re, "<b>bold</b>")
+  // pos == int2(0, 3) — matches "<b>" not "<b>bold</b>"
+
+  // greedy vs lazy at end of pattern
+  regex_match(regex_compile("a+"),  "aaa")   // 3 (greedy: all)
+  regex_match(regex_compile("a+?"), "aaa")   // 1 (lazy: one)
+
 Practical examples
 ==================
 
+The ``%regex~`` reader macro avoids double-escaping, making real-world
+patterns much more readable.
+
 Phone number validation::
 
-  var re_phone <- regex_compile("^\\d\{3}-\\d\{4}$")
+  var re_phone <- %regex~^\d{3}-\d{4}$%%
   regex_match(re_phone, "555-1234") != -1   // true
   regex_match(re_phone, "55-1234")  != -1   // false
 
 Strip non-word characters::
 
-  var re_strip <- regex_compile("[^\\w]+")
+  var re_strip <- %regex~[^\w]+%%
   let cleaned = regex_replace(re_strip, "he!l@l#o") <| $(m) {
       return ""
   }
@@ -228,7 +307,7 @@ Strip non-word characters::
 
 Extract email parts::
 
-  var re_email <- regex_compile("([\\w.]+)@([\\w.]+)")
+  var re_email <- %regex~([\w.]+)@([\w.]+)%%
   let email = "user@example.com"
   regex_match(re_email, email)
   regex_group(re_email, 1, email)   // "user"
@@ -236,7 +315,7 @@ Extract email parts::
 
 IP address pattern::
 
-  var re_ip <- regex_compile("\\d\{1,3}\\.\\d\{1,3}\\.\\d\{1,3}\\.\\d\{1,3}")
+  var re_ip <- %regex~\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}%%
   regex_match(re_ip, "192.168.1.1")   // 11
 
 .. seealso::

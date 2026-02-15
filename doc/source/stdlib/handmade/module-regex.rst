@@ -1,7 +1,10 @@
 The REGEX module implements regular expression matching and searching.
 It provides ``regex_compile`` for building patterns, ``regex_match`` for
-full-string matching, ``regex_foreach`` for finding all matches within text,
-``regex_replace`` for substitution, and ``regex_group`` for capturing groups.
+full-string matching, ``regex_search`` for finding the first match anywhere,
+``regex_foreach`` for iterating all matches, ``regex_replace`` for substitution,
+``regex_split`` for splitting strings, ``regex_match_all`` for collecting all
+match ranges, ``regex_group`` for capturing groups by index, and
+``regex_group_by_name`` for named group lookup.
 
 Supported syntax:
 
@@ -10,11 +13,17 @@ Supported syntax:
 - ``$`` — end of string
 - ``+`` — one or more (greedy)
 - ``*`` — zero or more (greedy)
-- ``?`` — zero or one
+- ``?`` — zero or one (greedy)
+- ``+?`` — one or more (lazy)
+- ``*?`` — zero or more (lazy)
+- ``??`` — zero or one (lazy)
 - ``{n}`` — exactly *n* repetitions
 - ``{n,}`` — *n* or more (greedy)
 - ``{n,m}`` — between *n* and *m* (greedy)
+- ``{n}?`` ``{n,}?`` ``{n,m}?`` — counted repetitions (lazy)
 - ``(...)`` — capturing group
+- ``(?:...)`` — non-capturing group
+- ``(?P<name>...)`` — named capturing group
 - ``|`` — alternation
 - ``[abc]``, ``[a-z]``, ``[^abc]`` — character sets (negated with ``^``)
 - ``\w`` ``\W`` — word / non-word characters
@@ -26,7 +35,8 @@ Supported syntax:
 - ``\.`` ``\+`` ``\*`` ``\(`` ``\)`` ``\[`` ``\]`` ``\|`` ``\\`` ``\^`` ``\{`` ``\}`` — escaped metacharacters
 
 The engine is ASCII-only (256-bit ``CharSet``). Matching is anchored — ``regex_match`` tests from
-position 0 (or the given offset) and does NOT search; use ``regex_foreach`` to find all occurrences.
+position 0 (or the given offset) and does NOT search; use ``regex_search`` to find the first
+occurrence, or ``regex_foreach`` / ``regex_match_all`` to find all occurrences.
 
 See also :doc:`regex_boost` for compile-time regex construction via the ``%regex~`` reader macro.
 

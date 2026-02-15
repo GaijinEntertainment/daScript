@@ -349,8 +349,8 @@ def document_module_regex(root : string) {
     var mod = find_module("regex")
     var groups <- array<DocGroup>(
         group_by_regex("Compilation and validation", mod, %regex~(regex_compile|is_valid|regex_debug|debug_set|visit_top_down)$%%),
-        group_by_regex("Access", mod, %regex~(regex_group|regex_foreach)$%%),
-        group_by_regex("Match & replace", mod, %regex~(regex_match|regex_replace)$%%),
+        group_by_regex("Access", mod, %regex~(regex_group|regex_group_by_name|regex_foreach|\[\])$%%),
+        group_by_regex("Match & replace", mod, %regex~(regex_match|regex_replace|regex_search|regex_split|regex_match_all)$%%),
         group_by_regex("Generation", mod, %regex~(re_gen.*)$%%)
     )
     document("Regular expression library", mod, "regex.rst", groups)
