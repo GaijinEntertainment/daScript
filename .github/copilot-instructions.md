@@ -98,6 +98,7 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - `tests/linq/` — LINQ module tests (15 test files, ~500 tests)
 - `tests/functional/` — Functional module tests
 - `tests/json/` — JSON module tests (4 test files, ~148 tests)
+- `tests/regex/` — Regex module tests (5 test files, 162 tests)
 - `modules/` — External plugin modules
 
 ## Standard Library Documentation
@@ -148,7 +149,7 @@ Tutorial RST files live in `doc/source/reference/tutorials/` with companion `.da
   - Next tutorial link (except last): `Next tutorial: :ref:\`tutorial_next_name\``
   - Related language reference links via `:ref:`
 - Toctree is in `doc/source/reference/tutorials.rst` — add new tutorials there
-- Tutorial labels for cross-references: `tutorial_hello_world`, `tutorial_variables`, `tutorial_operators`, `tutorial_control_flow`, `tutorial_functions`, `tutorial_arrays`, `tutorial_strings`, `tutorial_structs`, `tutorial_enumerations`, `tutorial_tables`, `tutorial_tuples_and_variants`, `tutorial_function_pointers`, `tutorial_blocks`, `tutorial_lambdas`, `tutorial_iterators_and_generators`, `tutorial_modules`, `tutorial_move_copy_clone`, `tutorial_classes`, `tutorial_generics`, `tutorial_lifetime`, `tutorial_error_handling`, `tutorial_unsafe`, `tutorial_string_format`, `tutorial_pattern_matching`, `tutorial_annotations`, `tutorial_contracts`, `tutorial_testing`, `tutorial_linq`, `tutorial_functional`, `tutorial_json`
+- Tutorial labels for cross-references: `tutorial_hello_world`, `tutorial_variables`, `tutorial_operators`, `tutorial_control_flow`, `tutorial_functions`, `tutorial_arrays`, `tutorial_strings`, `tutorial_structs`, `tutorial_enumerations`, `tutorial_tables`, `tutorial_tuples_and_variants`, `tutorial_function_pointers`, `tutorial_blocks`, `tutorial_lambdas`, `tutorial_iterators_and_generators`, `tutorial_modules`, `tutorial_move_copy_clone`, `tutorial_classes`, `tutorial_generics`, `tutorial_lifetime`, `tutorial_error_handling`, `tutorial_unsafe`, `tutorial_string_format`, `tutorial_pattern_matching`, `tutorial_annotations`, `tutorial_contracts`, `tutorial_testing`, `tutorial_linq`, `tutorial_functional`, `tutorial_json`, `tutorial_regex`
 
 ## C++ Codebase Notes
 
@@ -247,7 +248,7 @@ Many daslib functions follow this convention for iterator-based operations:
 - `daslib/functional.das` — lazy iterator adapters and higher-order function utilities (filter, map, reduce, fold, scan, enumerate, chain, pairwise, iterate, find, find_index, partition, tap, for_each, flat_map, sorted, repeat, cycle, islice, echo, sum, any, all). Uses lambdas/functions for generator-returning functions (blocks cannot be captured into generators). Non-generator functions (reduce, fold, for_each, find, find_index, partition) also accept blocks.
 - `daslib/strings_boost.das` — string manipulation helpers
 - `daslib/json.das` / `daslib/json_boost.das` — JSON parsing/generation. Core: `JsValue` variant (7 types: `_object`, `_array`, `_string`, `_number`, `_longint`, `_bool`, `_null`), `JsonValue` struct wrapper, `read_json`, `write_json`, `JV()` constructors, `JVNull()`. Boost: safe access (`?.`, `?[]`, `??`), `from_JV`/`JV` generic struct↔JSON conversion, `%json~...%%` reader macro, `BetterJsonMacro` (`is`/`as` on `JsonValue?`). Settings: `set_no_trailing_zeros`, `set_no_empty_arrays`, `set_allow_duplicate_keys`. `try_fixing_broken_json` repairs LLM output. Key gotcha: `js?.value` accesses `JsonValue.value` field (returns `JsValue`), not a JSON key named "value" — use `js?["value"]` for that.
-- `daslib/regex.das` / `daslib/regex_boost.das` — regular expressions
+- `daslib/regex.das` / `daslib/regex_boost.das` — regular expressions. Core: recursive-descent parser building `ReNode` AST, function-pointer-driven backtracking matcher. `Regex` struct, `regex_compile(pattern)`, `regex_match(re, str, offset=0)` → end position or -1, `regex_group(re, group_num, str)` → captured substring, `regex_foreach(re, str, block)` iterates all matches passing `int2` ranges, `regex_replace(re, str, block)` replaces matches, `is_valid(re)` checks compilation. Supports: `.` (any), `^` (BOL), `$` (EOL), `+` `*` `?` quantifiers, `{n}` `{n,}` `{n,m}` counted quantifiers, `(...)` groups, `|` alternation, `[abc]` `[a-z]` `[^...]` character sets, `\w` `\W` `\d` `\D` `\s` `\S` classes, `\b` `\B` word boundaries, `\t` `\n` `\r` `\f` `\v` escapes, `\xHH` hex escapes. ASCII only (256-bit CharSet). Boost: `%regex~pattern%%` reader macro (compile-time, no double-escaping). Key gotchas: `{` must be escaped as `\{` in daScript strings for counted quantifiers (`"\\d\{3}"`), but reader macro takes literal text (`%regex~\d{3}%%`). `regex_match` always matches from position 0 (or offset) — it does NOT search for the pattern; use `regex_foreach` to find all occurrences. Nested groups have limited support — prefer sequential groups. `-` is only special inside `[...]` character sets.
 - `daslib/builtin.das` — core builtins like `to_array`, `to_table`
 
 ## Keywords Reference

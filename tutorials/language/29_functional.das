@@ -41,7 +41,7 @@ def main {
 
     // --- filter ---
     print("filter:\n")
-    var src <- [iterator for (x in range(8)); x]
+    var src <- [iterator for(x in range(8)); x]
     var evens <- filter(src, @(x : int) : bool { return x % 2 == 0; })
     for (v in evens) {
         print("  {v}")
@@ -49,7 +49,7 @@ def main {
     print("\n")
 
     // filter with named function
-    var src2 <- [iterator for (x in range(6)); x]
+    var src2 <- [iterator for(x in range(6)); x]
     var evens2 <- filter(src2, @@is_even)
     print("  with @@is_even:")
     for (v in evens2) {
@@ -59,7 +59,7 @@ def main {
 
     // --- map ---
     print("map:\n")
-    var nums <- [iterator for (x in range(5)); x]
+    var nums <- [iterator for(x in range(5)); x]
     var squared <- map(nums, @(x : int) : int { return x * x; })
     for (v in squared) {
         print("  {v}")
@@ -67,7 +67,7 @@ def main {
     print("\n")
 
     // map with type conversion
-    var ints <- [iterator for (x in range(3)); x]
+    var ints <- [iterator for(x in range(3)); x]
     var floats <- map(ints, @(x : int) : float { return float(x) * 1.5; })
     print("  as float:")
     for (v in floats) {
@@ -77,32 +77,32 @@ def main {
 
     // --- reduce ---
     print("reduce:\n")
-    var r1 <- [iterator for (x in range(1, 6)); x]
+    var r1 <- [iterator for(x in range(1, 6)); x]
     var total = reduce(r1) <| $(a, b : int) : int {
         return a + b
     }
     print("  sum 1..5 = {total}\n")
 
     // reduce with function
-    var r2 <- [iterator for (x in range(1, 6)); x]
+    var r2 <- [iterator for(x in range(1, 6)); x]
     print("  sum (@@add) = {reduce(r2, @@add)}\n")
 
     // --- reduce_or_default ---
     print("reduce_or_default:\n")
-    var empty_it <- [iterator for (x in range(0)); x]
+    var empty_it <- [iterator for(x in range(0)); x]
     var safe_sum = reduce_or_default(empty_it, @(a, b : int) : int { return a + b; }, -1)
     print("  empty → {safe_sum}\n") // -1, no panic
 
     // --- fold ---
     print("fold:\n")
-    var f1 <- [iterator for (x in range(1, 5)); x]
+    var f1 <- [iterator for(x in range(1, 5)); x]
     var product = fold(f1, 1) <| $(acc, x : int) : int {
         return acc * x
     }
     print("  product 1..4 = {product}\n")
 
     // fold with different accumulator type
-    var f2 <- [iterator for (x in range(1, 4)); x]
+    var f2 <- [iterator for(x in range(1, 4)); x]
     var csv = fold(f2, "items:") <| $(acc : string; x : int) : string {
         return "{acc} {x}"
     }
@@ -110,7 +110,7 @@ def main {
 
     // --- scan ---
     print("scan (running sum):\n")
-    var s1 <- [iterator for (x in range(1, 6)); x]
+    var s1 <- [iterator for(x in range(1, 6)); x]
     var running <- scan(s1, 0, @(acc, x : int) : int { return acc + x; })
     for (v in running) {
         print("  {v}")
@@ -119,19 +119,19 @@ def main {
 
     // --- sum ---
     print("sum:\n")
-    var sm <- [iterator for (x in range(1, 11)); x]
+    var sm <- [iterator for(x in range(1, 11)); x]
     print("  1..10 = {sum(sm)}\n")
 
     // --- any / all ---
     print("any/all:\n")
-    var a1 <- [iterator for (x in [false, false, true]); x]
+    var a1 <- [iterator for(x in [false, false, true]); x]
     print("  any [F,F,T] = {any(a1)}\n")
-    var a2 <- [iterator for (x in [true, true, true]); x]
+    var a2 <- [iterator for(x in [true, true, true]); x]
     print("  all [T,T,T] = {all(a2)}\n")
 
     // --- enumerate ---
     print("enumerate:\n")
-    var names <- [iterator for (x in ["alpha", "beta", "gamma"]); x]
+    var names <- [iterator for(x in ["alpha", "beta", "gamma"]); x]
     var en <- enumerate(names)
     for (v in en) {
         print("  {v._0}: {v._1}\n")
@@ -139,8 +139,8 @@ def main {
 
     // --- chain ---
     print("chain:\n")
-    var ca <- [iterator for (x in range(1, 4)); x]
-    var cb <- [iterator for (x in range(4, 7)); x]
+    var ca <- [iterator for(x in range(1, 4)); x]
+    var cb <- [iterator for(x in range(4, 7)); x]
     var combined <- chain(ca, cb)
     for (v in combined) {
         print("  {v}")
@@ -149,7 +149,7 @@ def main {
 
     // --- pairwise ---
     print("pairwise:\n")
-    var pw <- [iterator for (x in range(1, 6)); x]
+    var pw <- [iterator for(x in range(1, 6)); x]
     var pairs <- pairwise(pw)
     for (v in pairs) {
         print("  ({v._0},{v._1})")
@@ -179,7 +179,7 @@ def main {
 
     // --- cycle ---
     print("cycle:\n")
-    var cy <- [iterator for (x in range(1, 4)); x]
+    var cy <- [iterator for(x in range(1, 4)); x]
     var cyc <- cycle(cy)
     cnt = 0
     for (v in cyc) {
@@ -193,7 +193,7 @@ def main {
 
     // --- islice ---
     print("islice:\n")
-    var isl <- [iterator for (x in range(10)); x]
+    var isl <- [iterator for(x in range(10)); x]
     var sliced <- islice(isl, 3, 7)
     for (v in sliced) {
         print("  {v}")
@@ -202,7 +202,7 @@ def main {
 
     // --- sorted ---
     print("sorted:\n")
-    var sa <- [iterator for (x in [5, 3, 1, 4, 2]); x]
+    var sa <- [iterator for(x in [5, 3, 1, 4, 2]); x]
     var ss <- sorted(sa)
     for (v in ss) {
         print("  {v}")
@@ -211,23 +211,23 @@ def main {
 
     // --- find ---
     print("find:\n")
-    var fd <- [iterator for (x in range(10)); x]
+    var fd <- [iterator for(x in range(10)); x]
     var found = find(fd, @(x : int) : bool { return x > 5; }, -1)
     print("  first > 5: {found}\n")
 
-    var fd2 <- [iterator for (x in range(3)); x]
+    var fd2 <- [iterator for(x in range(3)); x]
     var notfound = find(fd2, @(x : int) : bool { return x > 100; }, -1)
     print("  first > 100: {notfound}\n")
 
     // --- find_index ---
     print("find_index:\n")
-    var fi <- [iterator for (x in range(10, 20)); x]
+    var fi <- [iterator for(x in range(10, 20)); x]
     var idx = find_index(fi, @(x : int) : bool { return x == 15; })
     print("  15 in 10..19: index {idx}\n")
 
     // --- partition ---
     print("partition:\n")
-    var pt <- [iterator for (x in range(8)); x]
+    var pt <- [iterator for(x in range(8)); x]
     var parts = partition(pt, @@is_even)
     print("  evens: ")
     for (v in parts._0) {
@@ -242,7 +242,7 @@ def main {
     // --- for_each ---
     print("for_each:\n")
     var total2 = 0
-    var fe <- [iterator for (x in range(1, 5)); x]
+    var fe <- [iterator for(x in range(1, 5)); x]
     for_each(fe) <| $(x : int) {
         total2 += x
     }
@@ -250,7 +250,7 @@ def main {
 
     // --- tap ---
     print("tap:\n")
-    var tp <- [iterator for (x in range(1, 4)); x]
+    var tp <- [iterator for(x in range(1, 4)); x]
     var tapped <- tap(tp, @(x : int) { print("  tap:{x}"); })
     var tsum = 0
     for (v in tapped) {
@@ -265,7 +265,7 @@ def main {
 
     // --- flatten ---
     print("flatten:\n")
-    var nested <- [iterator for (x in range(3)); [iterator for (y in range(x, x + 2)); y]]
+    var nested <- [iterator for(x in range(3)); [iterator for(y in range(x, x + 2)); y]]
     var flat <- flatten(nested)
     for (v in flat) {
         print("  {v}")
@@ -274,7 +274,7 @@ def main {
 
     // --- composition ---
     print("composition (filter→map→fold):\n")
-    var pipe <- [iterator for (x in range(10)); x]
+    var pipe <- [iterator for(x in range(10)); x]
     var big <- filter(pipe, @(x : int) : bool { return x >= 5; })
     var doubled <- map(big, @(x : int) : int { return x * 2; })
     var result = fold(doubled, 0) <| $(acc, x : int) : int {

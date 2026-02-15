@@ -6,11 +6,11 @@ Boost package for REGEX
 =======================
 
 The REGEX_BOOST module extends regular expressions with the ``%regex~`` reader
-macro for compile-time regex construction, plus convenience functions
-for splitting strings by pattern, replacing matches, and iterating over
-capture groups.
+macro for compile-time regex construction. Inside the reader macro, backslashes are
+literal — no double-escaping is needed (e.g. ``%regex~\d{3}%%`` instead of
+``"\\d\{3}"``).
 
-See also :doc:`regex` for the core regular expression engine.
+See :doc:`regex` for the full list of supported syntax.
 
 All functions and symbols are in "regex_boost" module, use require to get access to it. ::
 

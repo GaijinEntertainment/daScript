@@ -199,6 +199,8 @@ Broken JSON repair
 
    Full source: :download:`tutorials/language/30_json.das <../../../../tutorials/language/30_json.das>`
 
+   Next tutorial: :ref:`Regular expressions <tutorial_regex>`.
+
    :ref:`Functional programming tutorial <tutorial_functional>` (previous tutorial).
 
    :doc:`/stdlib/json` — core JSON module reference.
