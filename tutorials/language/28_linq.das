@@ -18,7 +18,6 @@
 
 options gen2
 
-require daslib/linq
 require daslib/linq_boost
 
 struct Person {

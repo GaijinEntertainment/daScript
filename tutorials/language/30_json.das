@@ -20,7 +20,6 @@
 options gen2
 options persistent_heap
 
-require daslib/json
 require daslib/json_boost
 
 // ===========================

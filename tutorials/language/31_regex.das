@@ -15,6 +15,12 @@
 //   - Compile-time regex with %regex~ reader macro
 //   - Hex escapes: \x41
 //   - Escaped metacharacters: \. \+ \* etc.
+//   - Searching with regex_search
+//   - Splitting with regex_split
+//   - Collecting all matches with regex_match_all
+//   - Non-capturing groups (?:...)
+//   - Named groups (?P<name>...) and regex_group_by_name
+//   - Lazy quantifiers: *? +? ?? {n,m}?
 //
 // requires:  daslib/regex, daslib/regex_boost
 // Run: daslang.exe tutorials/language/31_regex.das
@@ -22,9 +28,7 @@
 options gen2
 options persistent_heap
 
-require daslib/regex
 require daslib/regex_boost
-require strings
 
 // ===========================
 //  Compiling and Matching
@@ -314,6 +318,127 @@ def reader_macro() {
 }
 
 // ===========================
+//  Search, Split, Match All
+// ===========================
+// regex_search finds the first match anywhere (unlike regex_match which only matches at offset 0).
+// regex_split splits a string by regex matches.
+// regex_match_all collects all match ranges.
+
+def search_split_matchall() {
+    print("\n=== Search, split, match_all ===\n")
+
+    // regex_search returns int2(start, end) or int2(-1,-1)
+    var re_num <- regex_compile("\\d+")
+    let pos = regex_search(re_num, "abc 123 def")
+    print("search digits: start={pos.x}, end={pos.y}\n")
+    // output: search digits: start=4, end=7
+
+    // regex_split splits by matches
+    var re_comma <- regex_compile(",\\s*")
+    var parts <- regex_split(re_comma, "a, b,c, d")
+    print("split: ")
+    for (p in parts) {
+        print("'{p}' ")
+    }
+    print("\n")
+    // output: split: 'a' 'b' 'c' 'd'
+
+    // regex_match_all returns array<range>
+    var re_word <- regex_compile("\\w+")
+    var matches <- regex_match_all(re_word, "foo bar baz")
+    print("match_all count: {length(matches)}\n")
+    // output: match_all count: 3
+}
+
+// ===========================
+//  Non-Capturing Groups
+// ===========================
+// (?:...) groups without capturing — useful for alternation/quantifiers
+// without adding to the group count.
+
+def non_capturing_groups() {
+    print("\n=== Non-capturing groups ===\n")
+
+    // (?:cat|dog) matches either but doesn't capture
+    var re <- regex_compile("(?:cat|dog)fish")
+    print("catfish: {regex_match(re, "catfish")}\n")
+    // output: catfish: 7
+    print("dogfish: {regex_match(re, "dogfish")}\n")
+    // output: dogfish: 7
+    print("group count: {length(re.groups)}\n")
+    // output: group count: 1
+
+    // non-capturing with quantifier
+    var re2 <- regex_compile("(?:ab)\{3}")
+    print("ababab: {regex_match(re2, "ababab")}\n")
+    // output: ababab: 6
+}
+
+// ===========================
+//  Named Groups
+// ===========================
+// (?P<name>...) — capturing group accessible by name via regex_group_by_name.
+
+def named_groups() {
+    print("\n=== Named groups ===\n")
+
+    var re <- regex_compile("(?P<user>\\w+)@(?P<host>\\w+)")
+    let email = "alice@example"
+    let m = regex_match(re, email)
+    if (m != -1) {
+        print("user: {regex_group_by_name(re, "user", email)}\n")
+        // output: user: alice
+        print("host: {regex_group_by_name(re, "host", email)}\n")
+        // output: host: example
+        // named groups are also accessible by index
+        print("group 1: {regex_group(re, 1, email)}\n")
+        // output: group 1: alice
+    }
+}
+
+// ===========================
+//  Lazy Quantifiers
+// ===========================
+// Greedy quantifiers (+, *, ?, {n,m}) match as much as possible.
+// Lazy quantifiers (+?, *?, ??, {n,m}?) match as little as possible.
+
+def lazy_quantifiers() {
+    print("\n=== Lazy quantifiers ===\n")
+
+    // lazy .*? — matches the shortest possible
+    var re_lazy <- regex_compile("\".*?\"")
+    let text = "say \"hi\" and \"bye\""
+    let lazy_pos = regex_search(re_lazy, text)
+    print("lazy .*?: '{slice(text, lazy_pos.x, lazy_pos.y)}'\n")
+    // output: lazy .*?: '"hi"'
+
+    // lazy +? — match one or more, but as few as possible
+    var re_plus <- regex_compile("<.+?>")
+    let html = "<b>bold</b>"
+    let tag_pos = regex_search(re_plus, html)
+    print("lazy tag: '{slice(html, tag_pos.x, tag_pos.y)}'\n")
+    // output: lazy tag: '<b>'
+
+    // greedy vs lazy with quantifiers at end of pattern
+    var re_g <- regex_compile("a+")
+    var re_l <- regex_compile("a+?")
+    print("greedy a+:  {regex_match(re_g, "aaa")}\n")
+    // output: greedy a+:  3
+    print("lazy   a+?: {regex_match(re_l, "aaa")}\n")
+    // output: lazy   a+?: 1
+
+    // lazy {n,m}? — prefer minimum repetitions
+    var re_rep_g <- regex_compile("a\{2,5}")
+    var re_rep_l <- regex_compile("a\{2,5}?")
+    print("greedy a\{2,5\}:  ")
+    print("{regex_match(re_rep_g, "aaaaa")}\n")
+    // output: greedy a{2,5}:  5
+    print("lazy   a\{2,5\}?: ")
+    print("{regex_match(re_rep_l, "aaaaa")}\n")
+    // output: lazy   a{2,5}?: 2
+}
+
+// ===========================
 //  Practical Examples
 // ===========================
 
@@ -321,14 +446,14 @@ def practical_examples() {
     print("\n=== Practical examples ===\n")
 
     // validate a phone pattern: 3 digits, dash, 4 digits
-    var re_phone <- regex_compile("^\\d\{3}-\\d\{4}$")
+    var re_phone <- %regex~^\d{3}-\d{4}$%%
     print("555-1234 valid: {regex_match(re_phone, "555-1234") != -1}\n")
     // output: 555-1234 valid: true
     print("55-1234 valid: {regex_match(re_phone, "55-1234") != -1}\n")
     // output: 55-1234 valid: false
 
     // strip non-word characters from a string
-    var re_strip <- regex_compile("[^\\w]+")
+    var re_strip <- %regex~[^\w]+%%
     let cleaned = regex_replace(re_strip, "he!l@l#o") <| $(match_str) {
         return ""
     }
@@ -336,7 +461,7 @@ def practical_examples() {
     // output: cleaned: hello
 
     // extract email-like pattern with groups
-    var re_email <- regex_compile("([\\w.]+)@([\\w.]+)")
+    var re_email <- %regex~([\w.]+)@([\w.]+)%%
     let email = "user@example.com"
     let m = regex_match(re_email, email)
     if (m != -1) {
@@ -347,7 +472,7 @@ def practical_examples() {
     }
 
     // IP-like pattern with counted quantifiers
-    var re_ip <- regex_compile("\\d\{1,3}\\.\\d\{1,3}\\.\\d\{1,3}\\.\\d\{1,3}")
+    var re_ip <- %regex~\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}%%
     print("IP match: {regex_match(re_ip, "192.168.1.1")}\n")
     // output: IP match: 11
 }
@@ -364,5 +489,9 @@ def main() {
     foreach_and_replace()
     escaped_meta()
     reader_macro()
+    search_split_matchall()
+    non_capturing_groups()
+    named_groups()
+    lazy_quantifiers()
     practical_examples()
 }

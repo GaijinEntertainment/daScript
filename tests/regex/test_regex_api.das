@@ -4,9 +4,7 @@ options no_unused_block_arguments = false
 options no_aot
 options persistent_heap
 require dastest/testing_boost public
-require daslib/regex
 require daslib/regex_boost
-require strings
 
 // ── regex_match API ─────────────────────────────────────────
 

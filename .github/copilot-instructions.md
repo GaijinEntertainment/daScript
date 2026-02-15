@@ -78,6 +78,7 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - `options no_aot` — disable ahead-of-time compilation (common in test files)
 - `options rtti` — enable runtime type information (needed for some daslib features)
 - `require` uses forward slash paths: `require daslib/linq` — NOT `require daslib\linq`
+- `require foo public` — re-exports `foo` so that any module requiring the current module also sees `foo`'s symbols transitively. Example: `regex.das` has `require strings public`, so `require daslib/regex` automatically makes `slice`, `starts_with`, etc. visible without a separate `require strings`
 - `<-` is memcpy+memset(0), NOT a smart_ptr-aware move — see "Move semantics" section above
 - When calling `apply_template`, always capture the return value: `unsafe { expr <- apply_template(expr) <| ... }` — discarding the return loses the expression data
 - Iterator comprehension: `[iterator for(x in src); expression]` — semicolon separates generator from body
@@ -119,6 +120,15 @@ The stdlib docs live in `doc/source/stdlib/` and are generated from `//!` doc-co
 - `doc/reflections/test_new_examples.py` — tests all example snippets by running them through `daslang.exe`
 - `doc/reflections/fix_short_docs.py` — fixes terse function documentation
 - Validate: `bin/Release/daslang.exe doc/reflections/das2rst.das` (exit code 0 = success)
+
+### Function grouping in generated docs
+
+Functions in each module's RST are organized into named groups (e.g. "Compilation and validation", "Access", "Match & replace"). Groups are defined in `doc/reflections/das2rst.das` via `group_by_regex("Group Name", mod, %regex~(func1|func2)$%%)`. Any public function not matched by a group regex ends up in an **"Uncategorized"** section. After adding new public functions to a module:
+
+1. Add the function name to the appropriate `group_by_regex` call in the module's `document_module_*` function in `das2rst.das`
+2. Create or update the handmade doc file in `doc/source/stdlib/handmade/` (replace `// stub` with a description)
+3. Regenerate: `bin/Release/daslang.exe doc/reflections/das2rst.das`
+4. Verify no "Uncategorized" section remains: search for `Uncategorized` in the generated `doc/source/stdlib/*.rst`
 
 ### Adding a module example
 
@@ -228,6 +238,8 @@ Many modules come in pairs: `daslib/foo.das` (core) + `daslib/foo_boost.das` (ma
 
 - **Base module** (`linq.das`, `json.das`, `regex.das`, etc.): pure functional API, runtime functions, iterator implementations
 - **Boost module** (`linq_boost.das`, `json_boost.das`, etc.): macro-based sugar, compile-time optimizations, pipe-syntax rewrites
+- All boost modules re-export their base module publicly (`require daslib/foo public`), so only `require daslib/foo_boost` is needed — do NOT add a separate `require daslib/foo`
+- `regex.das` also has `require strings public`, so `require daslib/regex` (or `require daslib/regex_boost`) makes `slice`, `starts_with`, etc. available
 - Example: `linq.das` provides `where`, `select`, `order_by` functions; `linq_boost.das` adds `_fold` macro that rewrites iterator chains into imperative loops
 
 ### Iterator implementation pattern
@@ -248,7 +260,7 @@ Many daslib functions follow this convention for iterator-based operations:
 - `daslib/functional.das` — lazy iterator adapters and higher-order function utilities (filter, map, reduce, fold, scan, enumerate, chain, pairwise, iterate, find, find_index, partition, tap, for_each, flat_map, sorted, repeat, cycle, islice, echo, sum, any, all). Uses lambdas/functions for generator-returning functions (blocks cannot be captured into generators). Non-generator functions (reduce, fold, for_each, find, find_index, partition) also accept blocks.
 - `daslib/strings_boost.das` — string manipulation helpers
 - `daslib/json.das` / `daslib/json_boost.das` — JSON parsing/generation. Core: `JsValue` variant (7 types: `_object`, `_array`, `_string`, `_number`, `_longint`, `_bool`, `_null`), `JsonValue` struct wrapper, `read_json`, `write_json`, `JV()` constructors, `JVNull()`. Boost: safe access (`?.`, `?[]`, `??`), `from_JV`/`JV` generic struct↔JSON conversion, `%json~...%%` reader macro, `BetterJsonMacro` (`is`/`as` on `JsonValue?`). Settings: `set_no_trailing_zeros`, `set_no_empty_arrays`, `set_allow_duplicate_keys`. `try_fixing_broken_json` repairs LLM output. Key gotcha: `js?.value` accesses `JsonValue.value` field (returns `JsValue`), not a JSON key named "value" — use `js?["value"]` for that.
-- `daslib/regex.das` / `daslib/regex_boost.das` — regular expressions. Core: recursive-descent parser building `ReNode` AST, function-pointer-driven backtracking matcher. `Regex` struct, `regex_compile(pattern)`, `regex_match(re, str, offset=0)` → end position or -1, `regex_group(re, group_num, str)` → captured substring, `regex_foreach(re, str, block)` iterates all matches passing `int2` ranges, `regex_replace(re, str, block)` replaces matches, `is_valid(re)` checks compilation. Supports: `.` (any), `^` (BOL), `$` (EOL), `+` `*` `?` quantifiers, `{n}` `{n,}` `{n,m}` counted quantifiers, `(...)` groups, `|` alternation, `[abc]` `[a-z]` `[^...]` character sets, `\w` `\W` `\d` `\D` `\s` `\S` classes, `\b` `\B` word boundaries, `\t` `\n` `\r` `\f` `\v` escapes, `\xHH` hex escapes. ASCII only (256-bit CharSet). Boost: `%regex~pattern%%` reader macro (compile-time, no double-escaping). Key gotchas: `{` must be escaped as `\{` in daScript strings for counted quantifiers (`"\\d\{3}"`), but reader macro takes literal text (`%regex~\d{3}%%`). `regex_match` always matches from position 0 (or offset) — it does NOT search for the pattern; use `regex_foreach` to find all occurrences. Nested groups have limited support — prefer sequential groups. `-` is only special inside `[...]` character sets.
+- `daslib/regex.das` / `daslib/regex_boost.das` — regular expressions. Re-exports `strings` publicly (`require strings public`), so `require daslib/regex` makes `slice`, `starts_with`, etc. available. Core: recursive-descent parser building `ReNode` AST, function-pointer-driven backtracking matcher. `Regex` struct, `regex_compile(pattern)`, `regex_match(re, str, offset=0)` → end position or -1, `regex_search(re, str, offset=0)` → `int2(start, end)` or `int2(-1,-1)` (finds first match anywhere), `regex_group(re, group_num, str)` → captured substring, `regex_group_by_name(re, name, str)` → named group substring, `re[index]` → `range` for group by int index (1-based), `re["name"]` → `range` for named group (returns `range(0,0)` if not found), `regex_foreach(re, str, block)` iterates all matches passing `range` values, `regex_replace(re, str, block)` replaces matches, `regex_split(re, str)` → `array<string>` of substrings between matches, `regex_match_all(re, str)` → `array<range>` of all match ranges, `is_valid(re)` checks compilation. Supports: `.` (any), `^` (BOL), `$` (EOL), `+` `*` `?` quantifiers (greedy), `+?` `*?` `??` quantifiers (lazy), `{n}` `{n,}` `{n,m}` counted quantifiers (greedy), `{n}?` `{n,}?` `{n,m}?` counted quantifiers (lazy), `(...)` capturing groups, `(?:...)` non-capturing groups, `(?P<name>...)` named capturing groups, `|` alternation, `[abc]` `[a-z]` `[^...]` character sets, `\w` `\W` `\d` `\D` `\s` `\S` classes, `\b` `\B` word boundaries, `\t` `\n` `\r` `\f` `\v` escapes, `\xHH` hex escapes. ASCII only (256-bit CharSet). Boost: `%regex~pattern%%` reader macro (compile-time, no double-escaping). Key gotchas: `{` must be escaped as `\{` in daScript strings for counted quantifiers (`"\\d\{3}"`), but reader macro takes literal text (`%regex~\d{3}%%`). `regex_match` always matches from position 0 (or offset) — it does NOT search for the pattern; use `regex_search` for first occurrence or `regex_foreach`/`regex_match_all` to find all occurrences. Nested groups have limited support — prefer sequential groups. `-` is only special inside `[...]` character sets.
 - `daslib/builtin.das` — core builtins like `to_array`, `to_table`
 
 ## Keywords Reference
