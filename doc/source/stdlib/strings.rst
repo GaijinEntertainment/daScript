@@ -674,12 +674,29 @@ Returns the first index at which `substr` (string or character code) occurs in `
 
 ----
 
++++++++++++++++++
+String comparison
++++++++++++++++++
+
+  *  :ref:`compare_ignore_case (a: string implicit; b: string implicit) : int <function-strings_compare_ignore_case_string_implicit_string_implicit>` 
+
+.. _function-strings_compare_ignore_case_string_implicit_string_implicit:
+
+.. das:function:: compare_ignore_case(a: string implicit; b: string implicit) : int
+
+// stub
+def compare_ignore_case (a: string implicit; b: string implicit) : int
+
+:Arguments: * **a** : string implicit
+
+            * **b** : string implicit
+
 ++++++++++++++++++++++++++
 String conversion routines
 ++++++++++++++++++++++++++
 
-  *  :ref:`double (str: string implicit) : double <function-strings_double_string_implicit>` 
   *  :ref:`double (str: string implicit; result: ConversionResult& implicit; offset: int& implicit) : double <function-strings_double_string_implicit_ConversionResult_implicit_int_implicit>` 
+  *  :ref:`double (str: string implicit) : double <function-strings_double_string_implicit>` 
   *  :ref:`float (str: string implicit) : float <function-strings_float_string_implicit>` 
   *  :ref:`float (str: string implicit; result: ConversionResult& implicit; offset: int& implicit) : float <function-strings_float_string_implicit_ConversionResult_implicit_int_implicit>` 
   *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: int64) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_int64>` 
@@ -694,8 +711,8 @@ String conversion routines
   *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: float) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_float>` 
   *  :ref:`int (str: string implicit) : int <function-strings_int_string_implicit>` 
   *  :ref:`int (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int <function-strings_int_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
-  *  :ref:`int16 (str: string implicit) : int16 <function-strings_int16_string_implicit>` 
   *  :ref:`int16 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int16 <function-strings_int16_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
+  *  :ref:`int16 (str: string implicit) : int16 <function-strings_int16_string_implicit>` 
   *  :ref:`int64 (str: string implicit) : int64 <function-strings_int64_string_implicit>` 
   *  :ref:`int64 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int64 <function-strings_int64_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
   *  :ref:`int8 (str: string implicit) : int8 <function-strings_int8_string_implicit>` 
@@ -710,14 +727,15 @@ String conversion routines
   *  :ref:`to_int64 (value: string implicit; hex: bool = false) : int64 <function-strings_to_int64_string_implicit_bool>` 
   *  :ref:`to_int8 (value: string implicit; hex: bool = false) : int8 <function-strings_to_int8_string_implicit_bool>` 
   *  :ref:`to_uint (value: string implicit; hex: bool = false) : uint <function-strings_to_uint_string_implicit_bool>` 
+  *  :ref:`to_uint16 (value: string implicit; hex: bool = false) : uint16 <function-strings_to_uint16_string_implicit_bool>` 
   *  :ref:`to_uint64 (value: string implicit; hex: bool = false) : uint64 <function-strings_to_uint64_string_implicit_bool>` 
   *  :ref:`to_uint8 (value: string implicit; hex: bool = false) : uint8 <function-strings_to_uint8_string_implicit_bool>` 
-  *  :ref:`uint (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint <function-strings_uint_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
   *  :ref:`uint (str: string implicit) : uint <function-strings_uint_string_implicit>` 
-  *  :ref:`uint16 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint16 <function-strings_uint16_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
+  *  :ref:`uint (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint <function-strings_uint_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
   *  :ref:`uint16 (str: string implicit) : uint16 <function-strings_uint16_string_implicit>` 
-  *  :ref:`uint64 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint64 <function-strings_uint64_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
+  *  :ref:`uint16 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint16 <function-strings_uint16_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
   *  :ref:`uint64 (str: string implicit) : uint64 <function-strings_uint64_string_implicit>` 
+  *  :ref:`uint64 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint64 <function-strings_uint64_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
   *  :ref:`uint8 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint8 <function-strings_uint8_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
   *  :ref:`uint8 (str: string implicit) : uint8 <function-strings_uint8_string_implicit>` 
 
@@ -725,17 +743,21 @@ String conversion routines
 double
 ^^^^^^
 
-.. _function-strings_double_string_implicit:
+.. _function-strings_double_string_implicit_ConversionResult_implicit_int_implicit:
 
-.. das:function:: double(str: string implicit) : double
+.. das:function:: double(str: string implicit; result: ConversionResult& implicit; offset: int& implicit) : double
 
 Converts a string to a double value, panicking on failure; an overload accepts `result` and `offset` output parameters to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
-.. _function-strings_double_string_implicit_ConversionResult_implicit_int_implicit:
+            * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>` & implicit
 
-.. das:function:: double(str: string implicit; result: ConversionResult& implicit; offset: int& implicit) : double
+            * **offset** : int& implicit
+
+.. _function-strings_double_string_implicit:
+
+.. das:function:: double(str: string implicit) : double
 
 ----
 
@@ -833,17 +855,23 @@ Converts a string to an int, panicking on failure; an overload accepts `result`,
 int16
 ^^^^^
 
-.. _function-strings_int16_string_implicit:
+.. _function-strings_int16_string_implicit_ConversionResult_implicit_int_implicit_bool:
 
-.. das:function:: int16(str: string implicit) : int16
+.. das:function:: int16(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int16
 
 Converts a string to an int16, panicking on failure; an overload accepts `result`, `offset`, and optional `hex` flag to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
-.. _function-strings_int16_string_implicit_ConversionResult_implicit_int_implicit_bool:
+            * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>` & implicit
 
-.. das:function:: int16(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int16
+            * **offset** : int& implicit
+
+            * **hex** : bool
+
+.. _function-strings_int16_string_implicit:
+
+.. das:function:: int16(str: string implicit) : int16
 
 ----
 
@@ -973,6 +1001,17 @@ Converts a string to a uint value with optional hexadecimal parsing when `hex` i
 
             * **hex** : bool
 
+.. _function-strings_to_uint16_string_implicit_bool:
+
+.. das:function:: to_uint16(value: string implicit; hex: bool = false) : uint16
+
+// stub
+def to_uint16 (value: string implicit; hex: bool = false) : uint16
+
+:Arguments: * **value** : string implicit
+
+            * **hex** : bool
+
 .. _function-strings_to_uint64_string_implicit_bool:
 
 .. das:function:: to_uint64(value: string implicit; hex: bool = false) : uint64
@@ -997,23 +1036,17 @@ Converts a string to a uint8 value with optional hexadecimal parsing when `hex` 
 uint
 ^^^^
 
-.. _function-strings_uint_string_implicit_ConversionResult_implicit_int_implicit_bool:
+.. _function-strings_uint_string_implicit:
 
-.. das:function:: uint(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint
+.. das:function:: uint(str: string implicit) : uint
 
 Converts a string to a uint, panicking on failure; an overload accepts `result`, `offset`, and optional `hex` flag to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
-            * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>` & implicit
+.. _function-strings_uint_string_implicit_ConversionResult_implicit_int_implicit_bool:
 
-            * **offset** : int& implicit
-
-            * **hex** : bool
-
-.. _function-strings_uint_string_implicit:
-
-.. das:function:: uint(str: string implicit) : uint
+.. das:function:: uint(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint
 
 ----
 
@@ -1021,23 +1054,17 @@ Converts a string to a uint, panicking on failure; an overload accepts `result`,
 uint16
 ^^^^^^
 
-.. _function-strings_uint16_string_implicit_ConversionResult_implicit_int_implicit_bool:
+.. _function-strings_uint16_string_implicit:
 
-.. das:function:: uint16(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint16
+.. das:function:: uint16(str: string implicit) : uint16
 
 Converts a string to a uint16, panicking on failure; an overload accepts `result`, `offset`, and optional `hex` flag to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
-            * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>` & implicit
+.. _function-strings_uint16_string_implicit_ConversionResult_implicit_int_implicit_bool:
 
-            * **offset** : int& implicit
-
-            * **hex** : bool
-
-.. _function-strings_uint16_string_implicit:
-
-.. das:function:: uint16(str: string implicit) : uint16
+.. das:function:: uint16(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint16
 
 ----
 
@@ -1045,23 +1072,17 @@ Converts a string to a uint16, panicking on failure; an overload accepts `result
 uint64
 ^^^^^^
 
-.. _function-strings_uint64_string_implicit_ConversionResult_implicit_int_implicit_bool:
+.. _function-strings_uint64_string_implicit:
 
-.. das:function:: uint64(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint64
+.. das:function:: uint64(str: string implicit) : uint64
 
 Converts a string to a uint64, panicking on failure; an overload accepts `result`, `offset`, and optional `hex` flag to report the ConversionResult status and parsed position instead of panicking.
 
 :Arguments: * **str** : string implicit
 
-            * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>` & implicit
+.. _function-strings_uint64_string_implicit_ConversionResult_implicit_int_implicit_bool:
 
-            * **offset** : int& implicit
-
-            * **hex** : bool
-
-.. _function-strings_uint64_string_implicit:
-
-.. das:function:: uint64(str: string implicit) : uint64
+.. das:function:: uint64(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint64
 
 ----
 
