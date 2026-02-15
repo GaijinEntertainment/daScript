@@ -28,9 +28,7 @@ require math               // sin, cos, sqrt, etc.
 [export]
 def main {
 
-    // ===========================
-    //  File layout
-    // ===========================
+    // === File layout ===
 
     // Every daScript file follows this layout:
     //   1. options gen2                 // compiler options (optional)
@@ -42,9 +40,7 @@ def main {
     // 'options' and 'require' can be in any order, but convention is:
     //   options → module → require → declarations
 
-    // ===========================
-    //  Using our own module
-    // ===========================
+    // === Using our own module ===
 
     // tutorial_helpers.das defines:
     //   module tutorial_helpers public
@@ -70,16 +66,12 @@ def main {
     // Trying to call it from here is a compile error:
     //   internal_id(sword)   // ERROR: can't access private function
 
-    // ===========================
-    //  Using standard library
-    // ===========================
+    // === Using standard library ===
 
     let root = math::sqrt(144.0)
     print("math::sqrt(144) = {root}\n")
 
-    // ===========================
-    //  Module declaration
-    // ===========================
+    // === Module declaration ===
 
     // The 'module' keyword names the current file:
     //     module my_lib
@@ -94,9 +86,7 @@ def main {
     // Modifiers combine:
     //   module my_lib shared public
 
-    // ===========================
-    //  Visibility
-    // ===========================
+    // === Visibility ===
 
     // Each declaration can override the module default:
     //
@@ -106,18 +96,14 @@ def main {
     //
     // Private declarations are invisible to modules that 'require' you.
 
-    // ===========================
-    //  Re-exporting
-    // ===========================
+    // === Re-exporting ===
 
     // 'require ... public' re-exports a module to your importers:
     //   require math public
     //
     // Anyone who requires YOUR module will also get math's functions.
 
-    // ===========================
-    //  Common standard library modules
-    // ===========================
+    // === Common standard library modules ===
 
     // Built-in modules:
     //   require math              -- math functions
@@ -132,9 +118,7 @@ def main {
     //   require daslib/strings_boost  -- advanced string utils
     //   require daslib/enum_trait     -- enum utilities
 
-    // ===========================
-    //  Options
-    // ===========================
+    // === Options ===
 
     // 'options' sets compiler flags for the file:
     //   options gen2                              // enable gen2 syntax
@@ -144,9 +128,7 @@ def main {
     // A bare option name is shorthand for = true:
     //   options gen2    is equivalent to    options gen2 = true
 
-    // ===========================
-    //  Special module references
-    // ===========================
+    // === Special module references ===
 
     // _::  refers to the current module (for generics)
     // __:: refers to the current module ONLY (strict)

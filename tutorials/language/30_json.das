@@ -22,9 +22,7 @@ options persistent_heap
 
 require daslib/json_boost
 
-// ===========================
-//  Parsing JSON
-// ===========================
+// === Parsing JSON ===
 // read_json takes a string and returns a JsonValue? pointer.
 // If parsing fails, the error string is set and null is returned.
 
@@ -51,9 +49,7 @@ def parsing_basics() {
     // output: is object: true
 }
 
-// ===========================
-//  Building JSON with JV
-// ===========================
+// === Building JSON with JV ===
 // JV() constructors wrap native values into JsonValue?.
 // JVNull() creates a JSON null.
 
@@ -83,9 +79,7 @@ def building_json() {
     // output: array: [1,"two",true]
 }
 
-// ===========================
-//  Writing JSON
-// ===========================
+// === Writing JSON ===
 // write_json converts a JsonValue? back to a string.
 // It handles null pointers gracefully.
 
@@ -103,9 +97,7 @@ def writing_json() {
     // output: null ptr: null
 }
 
-// ===========================
-//  Safe access operators
-// ===========================
+// === Safe access operators ===
 // json_boost provides ?., ?[], and ?? for convenient access.
 // These never crash — they return null/default on missing keys.
 
@@ -142,9 +134,7 @@ def safe_access() {
     // output: null ?.: safe
 }
 
-// ===========================
-//  is / as variant checks
-// ===========================
+// === is / as variant checks ===
 // json_boost rewrites is/as on JsonValue? to check the underlying
 // JsValue variant. This works even through the pointer.
 
@@ -164,9 +154,7 @@ def variant_checks() {
     // output: is longint: true
 }
 
-// ===========================
-//  Struct serialization
-// ===========================
+// === Struct serialization ===
 // json_boost provides generic JV() and from_JV() that convert
 // daScript structs to/from JSON objects using compile-time reflection.
 
@@ -198,9 +186,7 @@ def struct_serialization() {
     // output: roundtrip name: Hero
 }
 
-// ===========================
-//  Enum serialization
-// ===========================
+// === Enum serialization ===
 // Enums serialize as strings by default.
 
 enum Weapon {
@@ -221,9 +207,7 @@ def enum_serialization() {
     // output: weapon: staff
 }
 
-// ===========================
-//  Modifying JSON values
-// ===========================
+// === Modifying JSON values ===
 // You can manipulate JSON trees by building them incrementally.
 
 def modifying_json() {
@@ -246,9 +230,7 @@ def modifying_json() {
     // output: array: [1,"two",true]
 }
 
-// ===========================
-//  Reader macro %json~...%%
-// ===========================
+// === Reader macro %json~...%% ===
 // The %json~ reader macro lets you embed JSON directly in daScript code.
 // It parses at compile time and creates a JsonValue? at runtime.
 
@@ -270,9 +252,7 @@ def reader_macro_demo() {
     // output: title: My Game, fullscreen: true, width: 1920
 }
 
-// ===========================
-//  Writer settings
-// ===========================
+// === Writer settings ===
 // Global settings control write_json behavior:
 //   set_no_trailing_zeros(true) — omit .000000 from round floats
 //   set_no_empty_arrays(true)   — skip empty array fields in objects
@@ -293,9 +273,7 @@ def writer_settings() {
     set_no_trailing_zeros(old_tz)
 }
 
-// ===========================
-//  Tables and arrays
-// ===========================
+// === Tables and arrays ===
 // JV and from_JV work with table<string;T> and array<T>.
 
 def collections_demo() {
@@ -317,9 +295,7 @@ def collections_demo() {
     print("table: {write_json(js_tab)}\n")
 }
 
-// ===========================
-//  Broken JSON repair
-// ===========================
+// === Broken JSON repair ===
 // try_fixing_broken_json attempts to fix common issues from LLM output:
 //   - String concatenation: "hello" + "world" → "helloworld"
 //   - Trailing commas: [1, 2, ] → [1, 2]
@@ -339,9 +315,7 @@ def broken_json_demo() {
     }
 }
 
-// ===========================
-//  Tuples and variants
-// ===========================
+// === Tuples and variants ===
 // Tuples serialize as objects with "_0", "_1", ... keys.
 // Variants serialize with the active variant name as key.
 
@@ -366,9 +340,7 @@ def tuples_and_variants() {
     // output: variant: {"circle":5}
 }
 
-// ===========================
-//  Vector types
-// ===========================
+// === Vector types ===
 // float2/3/4 and int2/3/4 serialize as objects with x/y/z/w keys.
 
 def vectors_demo() {

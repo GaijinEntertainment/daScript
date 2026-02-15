@@ -18,9 +18,7 @@ options gen2
 
 require daslib/functional
 
-// ===========================
-//  Helper functions
-// ===========================
+// === Helper functions ===
 
 def is_even(x : int) : bool {
     return x % 2 == 0
@@ -30,9 +28,7 @@ def add(a, b : int) : int {
     return a + b
 }
 
-// ===========================
-//  filter — keep matching elements
-// ===========================
+// === filter — keep matching elements ===
 // filter takes an iterator and a lambda or function predicate.
 // It yields only elements for which the predicate returns true.
 
@@ -288,9 +284,7 @@ def main {
     print("  is_not_equal(1,2) = {is_not_equal(1, 2)}\n")
     print("  not(false) = {not(false)}\n")
 
-    // ===========================
-    //  Summary
-    // ===========================
+    // === Summary ===
     // - require daslib/functional
     // - filter(src, lambda/function) — keep matching elements
     // - map(src, lambda/function) — transform each element

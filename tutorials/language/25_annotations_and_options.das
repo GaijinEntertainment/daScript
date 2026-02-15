@@ -13,9 +13,7 @@
 
 options gen2
 
-// ===========================
-//  Options overview
-// ===========================
+// === Options overview ===
 // Options are set at the top of a file:
 //   options name = value
 //   options gen2             // shorthand for = true
@@ -34,18 +32,14 @@ options gen2
 //   no_deprecated                — deprecated usage becomes an error
 //   unsafe_table_lookup          — tab[key] requires unsafe (default: true)
 
-// ===========================
-//  Private functions
-// ===========================
+// === Private functions ===
 // Use the `private` keyword — not callable from other modules.
 
 def private helper() : string {
     return "I'm private"
 }
 
-// ===========================
-//  [sideeffects]
-// ===========================
+// === [sideeffects] ===
 // Tells the compiler this function has side effects.
 // Without it, calls whose return values are unused may be eliminated.
 // Required for functions using match, or that only do I/O.
@@ -55,9 +49,7 @@ def log_message(msg : string) {
     print("  LOG: {msg}\n")
 }
 
-// ===========================
-//  [unused_argument]
-// ===========================
+// === [unused_argument] ===
 // Suppresses the "unused argument" warning for specific args.
 // Useful for callback signatures where some args are required but not used.
 
@@ -66,9 +58,7 @@ def use_only_x(x : int; y : int) : int {
     return x * 2
 }
 
-// ===========================
-//  [deprecated]
-// ===========================
+// === [deprecated] ===
 // Using a deprecated function produces a compile-time warning.
 // (We won't call it here to avoid the warning in this tutorial.)
 
@@ -81,9 +71,7 @@ def new_greet(name : string) : string {
     return "Hello, {name}!"
 }
 
-// ===========================
-//  [unsafe_operation]
-// ===========================
+// === [unsafe_operation] ===
 // Calling this function requires an unsafe block.
 
 [unsafe_operation]
@@ -91,9 +79,7 @@ def dangerous_compute(x : int) : int {
     return x * x  // pretend this does something unsafe
 }
 
-// ===========================
-//  Struct annotations
-// ===========================
+// === Struct annotations ===
 
 // [safe_when_uninitialized] — the struct is safe even if zero-filled.
 // Without it, structs with fields lacking initializers may cause errors.
@@ -104,9 +90,7 @@ struct RawData {
     c : bool
 }
 
-// ===========================
-//  Combining annotations
-// ===========================
+// === Combining annotations ===
 // Multiple annotations separated by commas.
 
 [export, sideeffects]
@@ -114,9 +98,7 @@ def annotated_func() {
     print("  exported with sideeffects\n")
 }
 
-// ===========================
-//  [init] — runs when the context initializes
-// ===========================
+// === [init] — runs when the context initializes ===
 // The function must take no arguments and return void.
 // Multiple [init] functions run in unspecified order
 // unless ordered with [init(after="tag")] or [init(before="tag")].
@@ -128,9 +110,7 @@ def on_startup {
     initialized = true
 }
 
-// ===========================
-//  Main
-// ===========================
+// === Main ===
 
 [export]
 def main {
@@ -165,9 +145,7 @@ def main {
     print("init:\n")
     print("  initialized = {initialized}\n")
 
-    // ===========================
-    //  Summary tables
-    // ===========================
+    // === Summary tables ===
     //
     // Function annotations:
     //   [export]          — callable from host application

@@ -18,9 +18,7 @@ require strings
 [export]
 def main {
 
-    // ===========================
-    //  Basic interpolation (review)
-    // ===========================
+    // === Basic interpolation (review) ===
 
     print("basic interpolation:\n")
     let name = "world"
@@ -28,9 +26,7 @@ def main {
     print("  Hello, {name}!\n")
     print("  x = {x}, x*2 = {x * 2}\n")
 
-    // ===========================
-    //  Format specifiers
-    // ===========================
+    // === Format specifiers ===
     // Syntax: {expression:flags width.precision type}
     //
     // Flags:
@@ -86,9 +82,7 @@ def main {
     print("  literal braces: \{value\}\n")
     print("  mixed: \{{val}\}\n")
 
-    // ===========================
-    //  build_string()
-    // ===========================
+    // === build_string() ===
     // Programmatically build a string using a StringBuilderWriter.
     // More efficient than concatenating strings in a loop.
 
@@ -129,9 +123,7 @@ def main {
     }
     print("  escaped: {escaped}\n")
 
-    // ===========================
-    //  Practical example: table formatting
-    // ===========================
+    // === Practical example: table formatting ===
     print("table:\n")
     var tbl = build_string() <| $(var writer : StringBuilderWriter) {
         writer |> write("  ")
@@ -148,9 +140,7 @@ def main {
     }
     print(tbl)
 
-    // ===========================
-    //  Summary
-    // ===========================
+    // === Summary ===
     // - {expr:flags width.precision type} — format specifier
     // - Flags: 0 (zero-pad), + (force sign)
     // - Types: d/i, u, x/X, o, f, e/E, g/G

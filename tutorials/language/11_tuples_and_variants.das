@@ -46,9 +46,7 @@ def describeValue(v : Value) : string {
 [export]
 def main {
 
-    // ===========================
-    //  Part 1: Tuples
-    // ===========================
+    // === Part 1: Tuples ===
 
     // --- Anonymous tuples ---
     // Create a tuple with parentheses and commas.
@@ -93,9 +91,7 @@ def main {
     var (q, r) = divmod_tuple(17, 5)
     print("17 / 5 = {q} remainder {r}\n")
 
-    // ===========================
-    //  Part 2: Variants
-    // ===========================
+    // === Part 2: Variants ===
 
     // --- Creating variants ---
     // Construct by specifying which alternative is active.
@@ -139,9 +135,7 @@ def main {
     print("index of i case: {variant_index(vi)}\n")
     print("index of f case: {variant_index(vf)}\n")
 
-    // ===========================
-    //  Part 3: Type Aliases
-    // ===========================
+    // === Part 3: Type Aliases ===
 
     // typedef creates a name for any type.
     // StringArray was declared above as array<string>.

@@ -29,9 +29,7 @@ struct Person {
 def main {
     print("=== Tutorial 28: LINQ ===\n\n")
 
-    // ===========================
-    //  Overview
-    // ===========================
+    // === Overview ===
     // daScript's LINQ module (daslib/linq) provides C#-style query
     // operations for iterators and arrays. daslib/linq_boost adds
     // shorthand macros (_where, _select, etc.) and the _fold macro
@@ -43,9 +41,7 @@ def main {
     //   func_to_array(iterator, ...)   → materializes into array
     //   func_inplace(var array, ...)   → mutates in place
 
-    // ===========================
-    //  1. Filtering — where_
-    // ===========================
+    // === 1. Filtering — where_ ===
     // where_ filters elements by a predicate.
     // (Named "where_" with a trailing underscore to avoid
     // collision with the built-in "where" keyword.)
@@ -64,9 +60,7 @@ def main {
     print("big (>4): {big}\n")
     // output: big (>4): [[ 5; 9; 6; 5]]
 
-    // ===========================
-    //  2. Projection — select
-    // ===========================
+    // === 2. Projection — select ===
     // select transforms each element through a function.
 
     print("\n--- 2. Projection ---\n")
@@ -87,9 +81,7 @@ def main {
     print("select_many: {flat}\n")
     // output: select_many: [[ a!; b!; c!; d!; e!; f!]]
 
-    // ===========================
-    //  3. Sorting
-    // ===========================
+    // === 3. Sorting ===
     // order — ascending (by default key or custom comparator)
     // order_by — ascending by a key expression
     // order_descending — descending
@@ -122,9 +114,7 @@ def main {
     // output:   Charlie (30)
     // output:   Bob (35)
 
-    // ===========================
-    //  4. Partitioning
-    // ===========================
+    // === 4. Partitioning ===
     // skip / take — from the front
     // skip_last / take_last — from the end
     // skip_while / take_while — by predicate
@@ -168,9 +158,7 @@ def main {
     print("\n")
     // output: chunks of 3: [[ 0; 1; 2]] [[ 3; 4; 5]] [[ 6]]
 
-    // ===========================
-    //  5. Aggregation
-    // ===========================
+    // === 5. Aggregation ===
     // count, sum, average, min, max, aggregate
 
     print("\n--- 5. Aggregation ---\n")
@@ -206,9 +194,7 @@ def main {
     print("product: {product}\n")
     // output: product: 12000000
 
-    // ===========================
-    //  6. Element access
-    // ===========================
+    // === 6. Element access ===
     // first, last, single, element_at — and _or_default variants
 
     print("\n--- 6. Element access ---\n")
@@ -226,9 +212,7 @@ def main {
     print("element_at_or_default(99): {element_at_or_default(vals.to_sequence(), 99)}\n")
     // output: element_at_or_default(99): 0
 
-    // ===========================
-    //  7. Querying — any, all, contains
-    // ===========================
+    // === 7. Querying — any, all, contains ===
 
     print("\n--- 7. Querying ---\n")
 
@@ -241,9 +225,7 @@ def main {
     print("contains 30: {contains(vals.to_sequence(), 30)}\n")
     // output: contains 30: true
 
-    // ===========================
-    //  8. Set operations
-    // ===========================
+    // === 8. Set operations ===
     // distinct, union, except, intersect
 
     print("\n--- 8. Set operations ---\n")
@@ -267,9 +249,7 @@ def main {
     print("intersect: {inter}\n")
     // output: intersect: [[ 2; 3]]
 
-    // ===========================
-    //  9. Zip — combining sequences
-    // ===========================
+    // === 9. Zip — combining sequences ===
     // zip merges two (or three) sequences into tuples
 
     print("\n--- 9. Zip ---\n")
@@ -295,9 +275,7 @@ def main {
     // output:   Bob (age 35): score 87
     // output:   Charlie (age 30): score 91
 
-    // ===========================
-    //  10. group_by
-    // ===========================
+    // === 10. group_by ===
 
     print("\n--- 10. Group by ---\n")
 
@@ -321,9 +299,7 @@ def main {
     // output:   Engineering: 2 members
     // output:   Marketing: 3 members
 
-    // ===========================
-    //  11. The _fold macro
-    // ===========================
+    // === 11. The _fold macro ===
     // _fold composes multiple LINQ operations into an optimized pipeline.
     // It uses dot-chaining: array.op1().op2()...._fold()
     // The _fold macro rewrites the chain into efficient imperative code.

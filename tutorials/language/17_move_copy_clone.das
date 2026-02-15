@@ -51,9 +51,7 @@ def make_numbers() : array<int> {
 [export]
 def main {
 
-    // ===========================
-    //  Copy (=)
-    // ===========================
+    // === Copy (=) ===
 
     // For simple types, = does a bitwise copy. Both sides remain valid.
     var a = 42
@@ -67,9 +65,7 @@ def main {
     // Structs with only POD fields can be copied too:
     // (struct with arrays CANNOT be copied — see below)
 
-    // ===========================
-    //  Move (<-)
-    // ===========================
+    // === Move (<-) ===
 
     // Move transfers ownership. The source is zeroed after the move.
     // This is the primary way to work with arrays, tables, and other containers.
@@ -82,9 +78,7 @@ def main {
     print("after move: other={other}\n")
     print("nums is now empty: length={length(nums)}\n")
 
-    // ===========================
-    //  Clone (:=)
-    // ===========================
+    // === Clone (:=) ===
 
     // Clone creates a deep, independent copy. Both sides remain valid.
     var original : array<int>
@@ -103,9 +97,7 @@ def main {
     var another := original
     print("clone-init: {another}\n")
 
-    // ===========================
-    //  Structs with containers
-    // ===========================
+    // === Structs with containers ===
 
     // Structs containing arrays/tables must be moved or cloned, not copied.
     var inv <- make_inventory()
@@ -117,9 +109,7 @@ def main {
     print("original items: {inv.items}\n")
     print("backup items:   {backup.items}\n")
 
-    // ===========================
-    //  Struct field initialization
-    // ===========================
+    // === Struct field initialization ===
 
     // Each field can use a different mode in construction:
     var weapons : array<string>
@@ -131,12 +121,10 @@ def main {
     print("loadout: {loadout.items}\n")
     print("weapons after move: length={length(weapons)}\n")
 
-    // ===========================
-    //  Type compatibility summary
-    // ===========================
+    // === Type compatibility summary ===
 
     // Type            =    <-   :=
-    // ─────────────────────────────
+    // -----------------------------
     // int, float      ✓    ✓    ✓
     // string          ✓    ✓    ✓
     // array<T>        ✗    ✓    ✓
@@ -147,9 +135,7 @@ def main {
     // POD struct      ✓    ✓    ✓
     // struct w/array  ✗    ✓    ✓
 
-    // ===========================
-    //  Relaxed assign
-    // ===========================
+    // === Relaxed assign ===
 
     // By default, the compiler auto-promotes = to <- when:
     //   - the right side is temporary (literal, function return)
@@ -161,9 +147,7 @@ def main {
     // To disable this: options relaxed_assign = false
     // Then you must always write <- explicitly for non-copyable types.
 
-    // ===========================
-    //  Custom clone function
-    // ===========================
+    // === Custom clone function ===
 
     // Define a custom 'clone' function to control how := works.
     // The signature is: def clone(var dst : T; src : T)

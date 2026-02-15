@@ -14,9 +14,7 @@ options gen2
 require dastest/testing_boost public
 require strings
 
-// ===========================
-//  Basic test functions
-// ===========================
+// === Basic test functions ===
 // A test function is annotated with [test] and takes a `t : T?` argument.
 // T is the test context — use it for assertions and sub-tests.
 
@@ -29,9 +27,7 @@ def test_arithmetic(t : T?) {
     t |> equal(10 - 3, 7, "subtraction")
 }
 
-// ===========================
-//  Assertion functions
-// ===========================
+// === Assertion functions ===
 //
 // equal(t, a, b, msg="")        — check a == b; non-fatal on failure
 // strictEqual(t, a, b, msg="")  — check a == b; FATAL on failure (stops test)
@@ -57,9 +53,7 @@ def test_assertions(t : T?) {
     t |> accept(x)
 }
 
-// ===========================
-//  Sub-tests with run
-// ===========================
+// === Sub-tests with run ===
 // Group related checks into named sub-tests.
 // Each sub-test gets its own T? context.
 // Use @@(t : T?) { ... } for the callback (no-capture lambda).
@@ -78,9 +72,7 @@ def test_string_operations(t : T?) {
     }
 }
 
-// ===========================
-//  Testing data structures
-// ===========================
+// === Testing data structures ===
 
 [test]
 def test_array_operations(t : T?) {
@@ -98,9 +90,7 @@ def test_array_operations(t : T?) {
     t |> equal(arr[0], 20, "new first element")
 }
 
-// ===========================
-//  Testing with helper functions
-// ===========================
+// === Testing with helper functions ===
 
 def factorial(n : int) : int {
     if (n <= 1) {
@@ -139,9 +129,7 @@ def test_palindrome(t : T?) {
     t |> success(is_palindrome(""), "empty string")
 }
 
-// ===========================
-//  Summary
-// ===========================
+// === Summary ===
 //
 // Import:
 //   require dastest/testing_boost public

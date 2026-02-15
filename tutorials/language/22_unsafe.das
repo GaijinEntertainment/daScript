@@ -16,9 +16,7 @@ options gen2
 [export]
 def main {
 
-    // ===========================
-    //  addr() — get pointer to variable
-    // ===========================
+    // === addr() — get pointer to variable ===
     // addr() creates a pointer (T?) to a local variable.
     // Requires unsafe because the pointer could outlive the variable.
 
@@ -33,9 +31,7 @@ def main {
         print("  after *p = 100: x = {x}\n")
     }
 
-    // ===========================
-    //  Dereferencing
-    // ===========================
+    // === Dereferencing ===
     // * dereferences a pointer. Panics if null.
     // deref(p) is the same as *p.
 
@@ -57,9 +53,7 @@ def main {
         print("  caught null dereference\n")
     }
 
-    // ===========================
-    //  Null checks
-    // ===========================
+    // === Null checks ===
     // Pointers are nullable. Check with != null or ??.
 
     print("null check:\n")
@@ -76,9 +70,7 @@ def main {
         }
     }
 
-    // ===========================
-    //  Pointer arithmetic
-    // ===========================
+    // === Pointer arithmetic ===
     // Pointer indexing with p[i] is unsafe.
 
     print("pointer indexing:\n")
@@ -90,9 +82,7 @@ def main {
         print("  p[4] = {p[4]}\n")
     }
 
-    // ===========================
-    //  reinterpret — raw bit cast
-    // ===========================
+    // === reinterpret — raw bit cast ===
     // Reinterprets the raw bits of a value as a different type.
     // Extremely dangerous — types don't need any relationship.
 
@@ -106,9 +96,7 @@ def main {
         print("  back to float: {back}\n")
     }
 
-    // ===========================
-    //  unsafe expression form
-    // ===========================
+    // === unsafe expression form ===
     // For single expressions, use unsafe() instead of a block.
 
     print("unsafe expression:\n")
@@ -118,9 +106,7 @@ def main {
         print("  unsafe(addr(z)) = {*ptr}\n")
     }
 
-    // ===========================
-    //  When unsafe is required
-    // ===========================
+    // === When unsafe is required ===
     //
     // 1.  addr(x)                  — pointer can outlive variable
     // 2.  delete pointer           — other refs may still exist
@@ -137,9 +123,7 @@ def main {
     // Note: unsafe is NOT inherited into lambdas or generators.
     // Each lambda/generator needs its own unsafe block.
 
-    // ===========================
-    //  Summary
-    // ===========================
+    // === Summary ===
     // - unsafe { } — block form, unsafe() — expression form
     // - addr(x) creates T? pointer to x
     // - *p / deref(p) — dereference (panics if null)

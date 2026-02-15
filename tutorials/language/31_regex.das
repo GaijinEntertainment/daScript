@@ -35,9 +35,7 @@ options persistent_heap
 
 require daslib/regex_boost
 
-// ===========================
-//  Compiling and Matching
-// ===========================
+// === Compiling and Matching ===
 // regex_compile creates a Regex from a pattern string.
 // regex_match returns the end position of the match from position 0, or -1.
 
@@ -64,9 +62,7 @@ def compiling_and_matching() {
     // output: match 'world' at offset 6: 11
 }
 
-// ===========================
-//  Character Classes
-// ===========================
+// === Character Classes ===
 // \w = word chars [a-zA-Z0-9_]   \W = non-word chars
 // \d = digits [0-9]               \D = non-digits
 // \s = whitespace (space, \t, \n, \r, \f, \v)  \S = non-whitespace
@@ -95,9 +91,7 @@ def character_classes() {
     // output: non-space: 3
 }
 
-// ===========================
-//  Anchors
-// ===========================
+// === Anchors ===
 // ^ anchors to the beginning of the string
 // $ anchors to the end of the string
 
@@ -126,9 +120,7 @@ def anchors() {
     // output: ^abc$ on 'abcd': -1
 }
 
-// ===========================
-//  Quantifiers
-// ===========================
+// === Quantifiers ===
 // +  one or more (greedy)
 // *  zero or more (greedy)
 // ?  zero or one
@@ -173,9 +165,7 @@ def quantifiers() {
     // output: x 2+ on 'xxxxx': 5
 }
 
-// ===========================
-//  Groups and Alternation
-// ===========================
+// === Groups and Alternation ===
 // (...) creates a capturing group
 // a|b alternation — matches either a or b
 
@@ -201,9 +191,7 @@ def groups_and_alternation() {
     // output: group 2: host
 }
 
-// ===========================
-//  Character Sets
-// ===========================
+// === Character Sets ===
 // [abc]   matches any of a, b, c
 // [a-z]   matches range a through z
 // [^abc]  matches any char NOT in the set
@@ -229,9 +217,7 @@ def character_sets() {
     // output: digits or underscore: 5
 }
 
-// ===========================
-//  Word Boundaries
-// ===========================
+// === Word Boundaries ===
 // \b matches at a word boundary (between \w and \W or start/end)
 // \B matches at a non-word boundary
 
@@ -259,9 +245,7 @@ def word_boundaries() {
     // output: interior: 4
 }
 
-// ===========================
-//  Foreach and Replace
-// ===========================
+// === Foreach and Replace ===
 // regex_foreach iterates all matches, calling a block with the range
 // regex_replace replaces all matches using a block
 
@@ -287,9 +271,7 @@ def foreach_and_replace() {
     // output: replaced: aXbXcX
 }
 
-// ===========================
-//  Escaped Metacharacters
-// ===========================
+// === Escaped Metacharacters ===
 // Use backslash to match literal metacharacters: \. \+ \* \( \) etc.
 
 def escaped_meta() {
@@ -304,9 +286,7 @@ def escaped_meta() {
     // output: parens: 7
 }
 
-// ===========================
-//  Reader Macro
-// ===========================
+// === Reader Macro ===
 // %regex~pattern%% compiles a regex at compile time
 // No double-escaping needed — backslashes are literal
 
@@ -322,9 +302,7 @@ def reader_macro() {
     // output: reader macro lower: 5
 }
 
-// ===========================
-//  Search, Split, Match All
-// ===========================
+// === Search, Split, Match All ===
 // regex_search finds the first match anywhere (unlike regex_match which only matches at offset 0).
 // regex_split splits a string by regex matches.
 // regex_match_all collects all match ranges.
@@ -355,9 +333,7 @@ def search_split_matchall() {
     // output: match_all count: 3
 }
 
-// ===========================
-//  Non-Capturing Groups
-// ===========================
+// === Non-Capturing Groups ===
 // (?:...) groups without capturing — useful for alternation/quantifiers
 // without adding to the group count.
 
@@ -379,9 +355,7 @@ def non_capturing_groups() {
     // output: ababab: 6
 }
 
-// ===========================
-//  Named Groups
-// ===========================
+// === Named Groups ===
 // (?P<name>...) — capturing group accessible by name via regex_group_by_name.
 
 def named_groups() {
@@ -401,9 +375,7 @@ def named_groups() {
     }
 }
 
-// ===========================
-//  Lazy Quantifiers
-// ===========================
+// === Lazy Quantifiers ===
 // Greedy quantifiers (+, *, ?, {n,m}) match as much as possible.
 // Lazy quantifiers (+?, *?, ??, {n,m}?) match as little as possible.
 
@@ -443,9 +415,7 @@ def lazy_quantifiers() {
     // output: lazy   a{2,5}?: 2
 }
 
-// ===========================
-//  Practical Examples
-// ===========================
+// === Practical Examples ===
 
 def practical_examples() {
     print("\n=== Practical examples ===\n")
@@ -482,9 +452,7 @@ def practical_examples() {
     // output: IP match: 11
 }
 
-// ===========================
-//  Case-Insensitive Matching
-// ===========================
+// === Case-Insensitive Matching ===
 // Pass case_insensitive=true to regex_compile for ASCII case-insensitive matching.
 
 def case_insensitive_matching() {
@@ -514,9 +482,7 @@ def case_insensitive_matching() {
     // output: search WORLD: [6,11]
 }
 
-// ===========================
-//  Dot and Newline Behavior
-// ===========================
+// === Dot and Newline Behavior ===
 // By default, '.' matches any character EXCEPT newline (\n).
 // Pass dot_all=true to regex_compile to make '.' match newlines too.
 
@@ -543,9 +509,7 @@ def dot_and_newline() {
     }
 }
 
-// ===========================
-//  Lookahead Assertions
-// ===========================
+// === Lookahead Assertions ===
 // (?=...) positive lookahead — matches if ... follows, without consuming it
 // (?!...) negative lookahead — matches if ... does NOT follow
 
@@ -581,9 +545,7 @@ def lookahead_assertions() {
     // output: calm on 'a.': 1
 }
 
-// ===========================
-//  Template-String Replace
-// ===========================
+// === Template-String Replace ===
 // regex_replace(re, str, replacement) replaces matches with a template string.
 // $0 or $& = whole match, $1-$9 = numbered groups,
 // ${name} = named groups, $$ = literal $
@@ -616,9 +578,7 @@ def template_replace() {
     // output: priced: Price: $42.00
 }
 
-// ===========================
-//  Reader Macro Flags
-// ===========================
+// === Reader Macro Flags ===
 // Flags are appended after a second ~ in the reader macro:
 //   %regex~pattern~i%%  — case-insensitive
 //   %regex~pattern~s%%  — dot matches newline (dot_all)

@@ -20,9 +20,7 @@ options persistent_heap
 
 require math
 
-// ===========================
-//  Arithmetic Operators
-// ===========================
+// === Arithmetic Operators ===
 // Define custom +, -, * and / for your own types.
 // Operators are regular functions named "operator <op>".
 
@@ -74,9 +72,7 @@ def arithmetic_operators() {
     // output: b / 2 = (1.5, 2)
 }
 
-// ===========================
-//  Comparison Operators
-// ===========================
+// === Comparison Operators ===
 // Overload ==, !=, <, >, <=, >= for custom ordering.
 
 def operator ==(a, b : Vec2) : bool {
@@ -107,9 +103,7 @@ def comparison_operators() {
     // output: a < c: true
 }
 
-// ===========================
-//  Unary Operators
-// ===========================
+// === Unary Operators ===
 // Overload unary -, !, ~, prefix ++/-- and postfix ++/--.
 
 def operator -(a : Vec2) : Vec2 {
@@ -145,9 +139,7 @@ def unary_operators() {
     // output: -a = (-1, -2)
 }
 
-// ===========================
-//  Compound Assignment
-// ===========================
+// === Compound Assignment ===
 // Overload +=, -=, *=, /= for in-place modification.
 
 def operator +=(var a : Vec2&; b : Vec2) {
@@ -184,9 +176,7 @@ def compound_assignment() {
     // output: a *= 10: (10, 20)
 }
 
-// ===========================
-//  Index Operators
-// ===========================
+// === Index Operators ===
 // operator []     — read access
 // operator [] =   — write access
 // operator [] +=  — compound index assignment
@@ -231,9 +221,7 @@ def index_operators() {
     // output: after m[1]+=5: 7
 }
 
-// ===========================
-//  Dot Operator
-// ===========================
+// === Dot Operator ===
 // operator .          — generic field access (takes field name as string)
 // operator . name     — named property getter
 // operator . name :=  — named property setter
@@ -276,9 +264,7 @@ def dot_operators() {
     // output: real pos_x = 6
 }
 
-// ===========================
-//  Clone and Finalize
-// ===========================
+// === Clone and Finalize ===
 // operator :=    — custom clone behavior
 // operator delete (or finalize) — custom cleanup
 
@@ -305,9 +291,7 @@ def clone_and_finalize() {
     // output: copy refcount: 2
 }
 
-// ===========================
-//  Struct Method Operators
-// ===========================
+// === Struct Method Operators ===
 // Operators can be defined as struct methods instead of free functions.
 // This is useful for encapsulation — the operator lives with the type.
 
@@ -347,9 +331,7 @@ def struct_method_operators() {
     // output: after s[1]=99: 99
 }
 
-// ===========================
-//  Generic Operators
-// ===========================
+// === Generic Operators ===
 // Operators can be generic using `auto` types with contracts.
 // This lets one definition cover multiple types.
 
@@ -379,9 +361,7 @@ def generic_operators() {
     // output: Vec3 dot(2d): 3
 }
 
-// ===========================
-//  Complete Operator List
-// ===========================
+// === Complete Operator List ===
 // daScript supports overloading the following operators:
 //
 // Arithmetic:     +  -  *  /  %

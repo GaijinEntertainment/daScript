@@ -56,9 +56,7 @@ def main {
         print("  {k}: {v}\n")
     }
 
-    // ===========================
-    //  Generators
-    // ===========================
+    // === Generators ===
 
     // A generator creates an iterator using yield.
     // generator<ElementType>() <| $ { ... yield value ... return false }

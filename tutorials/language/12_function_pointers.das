@@ -52,9 +52,7 @@ def transform_array(arr : array<int>; f : function<(x : int) : int>) {
 [export]
 def main {
 
-    // ===========================
-    //  Getting function pointers
-    // ===========================
+    // === Getting function pointers ===
 
     // Use @@ to get a pointer to a named function.
     // The result is a value of type function<(x:int):int>.
@@ -68,9 +66,7 @@ def main {
     // invoke() is the explicit alternative — same result
     print("invoke: {invoke(fn_double, 5)}\n")
 
-    // ===========================
-    //  Passing functions as arguments
-    // ===========================
+    // === Passing functions as arguments ===
 
     print("apply(double, 7) = {apply(fn_double, 7)}\n")
     print("apply(triple, 7) = {apply(fn_triple, 7)}\n")
@@ -83,9 +79,7 @@ def main {
     print("negate:\n")
     transform_array(nums, @@negate)
 
-    // ===========================
-    //  Disambiguating overloads
-    // ===========================
+    // === Disambiguating overloads ===
 
     // When multiple functions share a name, specify the signature:
     let fn_add_int = @@ < (a : int; b : int) : int > add
@@ -93,9 +87,7 @@ def main {
     print("add_int(3,4) = {fn_add_int(3, 4)}\n")
     print("add_flt(1.5,2.5) = {fn_add_flt(1.5, 2.5)}\n")
 
-    // ===========================
-    //  Anonymous functions (nameless @@)
-    // ===========================
+    // === Anonymous functions (nameless @@) ===
 
     // @@ can also create an anonymous function inline.
     // Like a lambda, but it's a function<> — no capture, no heap allocation.
@@ -123,9 +115,7 @@ def main {
     // Anonymous functions can be passed directly to function<> parameters
     print("apply(@@, 8) = {apply(@@(x : int) : int => x * x + 1, 8)}\n")
 
-    // ===========================
-    //  function<> vs lambda<> vs block<>
-    // ===========================
+    // === function<> vs lambda<> vs block<> ===
 
     // These are three DISTINCT callable types:
     //

@@ -109,9 +109,7 @@ class Tracker {
 [export]
 def main {
 
-    // ===========================
-    //  Creating instances
-    // ===========================
+    // === Creating instances ===
 
     // 'new' creates a class on the heap, returns a pointer
     var c = new Circle(5.0)
@@ -121,9 +119,7 @@ def main {
     c.describe()
     r.describe()    // calls overridden describe → super.describe() + dimensions
 
-    // ===========================
-    //  Polymorphism
-    // ===========================
+    // === Polymorphism ===
 
     // Base pointer can hold any derived instance
     var shapes : array<Shape?>
@@ -136,9 +132,7 @@ def main {
         s.describe()    // virtual dispatch calls correct area()
     }
 
-    // ===========================
-    //  Private members
-    // ===========================
+    // === Private members ===
 
     var ctr = new Counter()
     ctr.increment()
@@ -148,9 +142,7 @@ def main {
 
     // ctr.count = 10  // ERROR: 'count' is private
 
-    // ===========================
-    //  Static fields and methods
-    // ===========================
+    // === Static fields and methods ===
 
     // Static fields are shared across all instances
     var t1 = new Tracker()
@@ -166,9 +158,7 @@ def main {
     Tracker`reset()
     print("after reset: {Tracker`getTotal()}\n")
 
-    // ===========================
-    //  super() summary
-    // ===========================
+    // === super() summary ===
 
     // super() — calls parent constructor:
     //     def Circle(r : float) {
@@ -184,9 +174,7 @@ def main {
     // You can also use the backtick syntax directly:
     //     Shape`Shape(self, "Circle")   // same as super("Circle")
 
-    // ===========================
-    //  Summary
-    // ===========================
+    // === Summary ===
 
     // - 'class' defines a type with virtual methods
     // - 'abstract' methods must be implemented by subclasses
