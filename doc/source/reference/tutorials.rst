@@ -44,3 +44,5 @@ introduced in earlier tutorials.
    tutorials/27_testing.rst
    tutorials/28_linq.rst
    tutorials/29_functional.rst
+   tutorials/30_json.rst
+   tutorials/31_regex.rst

@@ -7,7 +7,33 @@ Regular expression library
 
 The REGEX module implements regular expression matching and searching.
 It provides ``regex_compile`` for building patterns, ``regex_match`` for
-full-string matching, and ``regex_foreach`` for finding all matches within text.
+full-string matching, ``regex_foreach`` for finding all matches within text,
+``regex_replace`` for substitution, and ``regex_group`` for capturing groups.
+
+Supported syntax:
+
+- ``.`` — any character
+- ``^`` — beginning of string (or offset position)
+- ``$`` — end of string
+- ``+`` — one or more (greedy)
+- ``*`` — zero or more (greedy)
+- ``?`` — zero or one
+- ``{n}`` — exactly *n* repetitions
+- ``{n,}`` — *n* or more (greedy)
+- ``{n,m}`` — between *n* and *m* (greedy)
+- ``(...)`` — capturing group
+- ``|`` — alternation
+- ``[abc]``, ``[a-z]``, ``[^abc]`` — character sets (negated with ``^``)
+- ``\w`` ``\W`` — word / non-word characters
+- ``\d`` ``\D`` — digit / non-digit characters
+- ``\s`` ``\S`` — whitespace / non-whitespace characters
+- ``\b`` ``\B`` — word boundary / non-boundary assertions
+- ``\t`` ``\n`` ``\r`` ``\f`` ``\v`` — whitespace escapes
+- ``\xHH`` — hexadecimal character escape
+- ``\.`` ``\+`` ``\*`` ``\(`` ``\)`` ``\[`` ``\]`` ``\|`` ``\\`` ``\^`` ``\{`` ``\}`` — escaped metacharacters
+
+The engine is ASCII-only (256-bit ``CharSet``). Matching is anchored — ``regex_match`` tests from
+position 0 (or the given offset) and does NOT search; use ``regex_foreach`` to find all occurrences.
 
 See also :doc:`regex_boost` for compile-time regex construction via the ``%regex~`` reader macro.
 
@@ -79,17 +105,25 @@ Type of regular expression operation.
 
          * **Eos** = 3 - Matches end of string
 
-         * **Group** = 4 - Matching a group
+         * **Bos** = 4 - Matches beginning of string
 
-         * **Plus** = 5 - Repetition: one or more
+         * **Group** = 5 - Matching a group
 
-         * **Star** = 6 - Repetition: zero or more
+         * **Plus** = 6 - Repetition: one or more
 
-         * **Question** = 7 - Repetition: zero or one
+         * **Star** = 7 - Repetition: zero or more
 
-         * **Concat** = 8 - First followed by second
+         * **Question** = 8 - Repetition: zero or one
 
-         * **Union** = 9 - Either first or second
+         * **Concat** = 9 - First followed by second
+
+         * **Union** = 10 - Either first or second
+
+         * **Repeat** = 11 - Counted repetition: {n}, {n,}, {n,m}
+
+         * **WordBoundary** = 12 - Matches at a word boundary
+
+         * **NonWordBoundary** = 13 - Matches at a non-word boundary
 
 
 ++++++++++
@@ -129,6 +163,10 @@ Regular expression node.
          * **cset** :  :ref:`CharSet <alias-CharSet>`  - Character set for character class matching
 
          * **index** : int - Index for character class matching
+
+         * **min_rep** : int - Minimum repetition count for counted quantifiers
+
+         * **max_rep** : int - Maximum repetition count for counted quantifiers (-1 means unlimited)
 
          * **tail** : uint8? - Tail of the string
 

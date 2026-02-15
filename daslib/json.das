@@ -210,8 +210,58 @@ def private _lexer(var stext : string implicit) {
                                 ahead = '\r'
                             } elif (ahead == 't') {
                                 ahead = '\t'
+                            } elif (ahead == '/') {
+                                ahead = '/'
                             } elif (ahead == 'u') {
-                                ahead = int(0x5c)
+                                var hex_str : array<uint8>
+                                var valid_hex = true
+                                for (_ in range(4)) {
+                                    if (!next(tin, ahead, line, row)) {
+                                        yield TokenAt(value = Token(_error = "incomplete \\u escape"), line = line, row = row)
+                                        return false
+                                    }
+                                    if (!is_hex(ahead)) {
+                                        valid_hex = false
+                                        break
+                                    }
+                                    push(hex_str, uint8(ahead))
+                                }
+                                if (valid_hex && length(hex_str) == 4) {
+                                    var codepoint = uint(0)
+                                    for (hb in hex_str) {
+                                        codepoint = codepoint << uint(4)
+                                        let c = int(hb)
+                                        if (c >= '0' && c <= '9') {
+                                            codepoint += uint(c - '0')
+                                        } elif (c >= 'a' && c <= 'f') {
+                                            codepoint += uint(c - 'a' + 10)
+                                        } elif (c >= 'A' && c <= 'F') {
+                                            codepoint += uint(c - 'A' + 10)
+                                        }
+                                    }
+                                    // encode codepoint as UTF-8
+                                    if (codepoint <= uint(0x7F)) {
+                                        push(str, uint8(codepoint))
+                                    } elif (codepoint <= uint(0x7FF)) {
+                                        push(str, uint8(uint(0xC0) | (codepoint >> uint(6))))
+                                        push(str, uint8(uint(0x80) | (codepoint & uint(0x3F))))
+                                    } elif (codepoint <= uint(0xFFFF)) {
+                                        push(str, uint8(uint(0xE0) | (codepoint >> uint(12))))
+                                        push(str, uint8(uint(0x80) | ((codepoint >> uint(6)) & uint(0x3F))))
+                                        push(str, uint8(uint(0x80) | (codepoint & uint(0x3F))))
+                                    }
+                                } else {
+                                    // invalid hex sequence, preserve as-is
+                                    push(str, uint8('\\'))
+                                    push(str, uint8('u'))
+                                    for (b in hex_str) {
+                                        push(str, b)
+                                    }
+                                    if (!valid_hex) {
+                                        push(str, uint8(ahead))
+                                    }
+                                }
+                                continue
                             }
                             push(str, uint8(ahead))
                         } else {
@@ -330,7 +380,7 @@ def private expect_symbol(var itv : iterator<TokenAt>; var ahead : TokenAt; sym 
         return false
     } elif (!(ahead.value as _symbol == sym)) {
         error = "unexpected {ahead.value}, expecting symbol `{to_char(sym)}` aka ASCII {sym} at {ahead.line}:{ahead.row}"
-        return true
+        return false
     } else {
         return true
     }
@@ -367,7 +417,7 @@ def private parse_value(var itv : iterator<TokenAt>; var error : string&) : Json
                 if (sepsym == ']') {
                     break;
                 } elif (sepsym != ',') {
-                    error = "unsepected array seaprator symbol `{to_char(sepsym)}` aka ASCII {sepsym} at {ahead.line}:{ahead.row}";
+                    error = "unexpected array separator symbol `{to_char(sepsym)}` aka ASCII {sepsym} at {ahead.line}:{ahead.row}";
                     return null;
                 }
             }
@@ -406,7 +456,7 @@ def private parse_value(var itv : iterator<TokenAt>; var error : string&) : Json
                 if (sepsym == '}') {
                     break;
                 } elif (sepsym != ',') {
-                    error = "unsepected object seaprator symbol `{to_char(sepsym)}` aka ASCII {sepsym} at {ahead.line}:{ahead.row}";
+                    error = "unexpected object separator symbol `{to_char(sepsym)}` aka ASCII {sepsym} at {ahead.line}:{ahead.row}";
                     return null;
                 }
             }
