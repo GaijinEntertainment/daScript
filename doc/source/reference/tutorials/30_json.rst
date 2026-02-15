@@ -1,0 +1,206 @@
+.. _tutorial_json:
+
+========================
+JSON
+========================
+
+.. index::
+    single: Tutorial; JSON
+    single: Tutorial; JSON Parsing
+    single: Tutorial; JSON Serialization
+    single: Tutorial; json_boost
+
+This tutorial covers ``daslib/json`` and ``daslib/json_boost`` — parsing,
+building, writing, and querying JSON data in daScript.
+
+``json`` provides the core parser, writer, and ``JsValue`` variant type.
+``json_boost`` adds safe access operators, struct serialization, and
+the ``%json~`` reader macro.
+
+Parsing JSON
+============
+
+``read_json`` takes a string and returns ``JsonValue?``.
+If parsing fails, the error string is set and null is returned::
+
+  var error : string
+  var js = read_json("{ \"name\": \"Alice\", \"age\": 30 }", error)
+  if (js != null) {
+      print("parsed OK\n")
+  }
+
+The ``JsonValue`` struct wraps a ``JsValue`` variant with these cases:
+
+- ``_object``  — ``table<string; JsonValue?>``
+- ``_array``   — ``array<JsonValue?>``
+- ``_string``  — ``string``
+- ``_number``  — ``double`` (floating point)
+- ``_longint`` — ``int64`` (integer)
+- ``_bool``    — ``bool``
+- ``_null``    — ``void?``
+
+Building JSON with JV
+=====================
+
+``JV()`` constructors wrap native values into ``JsonValue?``::
+
+  var str_val  = JV("hello")   // _string
+  var int_val  = JV(42)        // _longint
+  var flt_val  = JV(3.14)      // _number
+  var bool_val = JV(true)      // _bool
+  var null_val = JVNull()      // _null
+
+Multi-value ``JV`` creates an array::
+
+  var arr = JV(1, "two", true)   // [1, "two", true]
+
+Writing JSON
+============
+
+``write_json`` converts a ``JsonValue?`` back to a string::
+
+  var js = JV(42)
+  print(write_json(js))   // 42
+
+  var empty : JsonValue?
+  print(write_json(empty))  // null
+
+Safe access operators
+=====================
+
+``json_boost`` provides ``?.``, ``?[]``, and ``??`` for convenient access.
+These never crash — they return null or a default value on missing keys::
+
+  var js = read_json("{ \"user\": { \"name\": \"Bob\" } }", error)
+
+  let name = js?.user?.name ?? "unknown"     // "Bob"
+  let age  = js?.user?.age ?? 0              // 0 (missing key)
+
+  // Array indexing
+  var arr = read_json("[10, 20, 30]", error)
+  let first = arr?[0] ?? -1                  // 10
+
+  // Chained access on deeply missing paths returns the default
+  let deep = js?.a?.b?.c ?? -1               // -1
+
+  // null pointer is safe
+  var nothing : JsonValue?
+  let safe = nothing?.foo ?? "safe"          // "safe"
+
+Variant checks with is/as
+=========================
+
+``json_boost`` rewrites ``is`` and ``as`` on ``JsonValue?`` to check
+the underlying ``JsValue`` variant::
+
+  var js = JV("hello")
+  print("{js is _string}\n")     // true
+  print("{js as _string}\n")     // hello
+
+  var jn = JV(42)
+  print("{jn is _longint}\n")    // true
+
+Struct serialization
+====================
+
+``json_boost`` provides generic ``JV()`` and ``from_JV()`` that convert
+structs to/from JSON using compile-time reflection::
+
+  struct Player {
+      name  : string
+      hp    : int
+      speed : float
+  }
+
+  let p = Player(name = "Hero", hp = 100, speed = 5.5)
+  var js = JV(p)
+  // {"speed":5.5, "name":"Hero", "hp":100}
+
+  var p2 = from_JV(parsed, type<Player>)
+  print("{p2.name}, hp={p2.hp}\n")
+
+Enum serialization
+==================
+
+Enums serialize as strings by default::
+
+  enum Weapon { sword; bow; staff }
+
+  var js = JV(Weapon.bow)      // "bow"
+  var w  = from_JV(js, type<Weapon>)   // Weapon.bow
+
+Reader macro
+============
+
+The ``%json~`` reader macro embeds JSON directly in daScript code.
+It parses at compile time and creates a ``JsonValue?`` at runtime::
+
+  var settings = %json~
+  {
+      "resolution": [1920, 1080],
+      "fullscreen": true,
+      "title": "My Game"
+  }
+  %%
+
+  let title = settings?.title ?? "untitled"   // "My Game"
+
+Writer settings
+===============
+
+Global settings control ``write_json`` behavior:
+
+- ``set_no_trailing_zeros(true)`` — omit trailing zeros from round doubles (``1.0`` → ``1``)
+- ``set_no_empty_arrays(true)`` — skip empty array fields in objects
+
+::
+
+  let old = set_no_trailing_zeros(true)
+  print(write_json(JV(1.0lf)))  // 1
+  set_no_trailing_zeros(old)
+
+Collections
+===========
+
+``JV`` and ``from_JV`` work with ``array<T>`` and ``table<string;T>``::
+
+  var arr <- array<int>(10, 20, 30)
+  var js = JV(arr)           // [10, 20, 30]
+  var back = from_JV(js, type<array<int>>)
+
+  var tab <- { "x" => 1, "y" => 2 }
+  var jt = JV(tab)           // {"x":1, "y":2}
+
+Vector types (``float2/3/4``, ``int2/3/4``) serialize as objects
+with ``x``, ``y``, ``z``, ``w`` keys::
+
+  var js = JV(float3(1.0, 2.0, 3.0))
+  // {"x":1, "y":2, "z":3}
+
+Tuples serialize with ``_0``, ``_1``, ... keys.
+Variants include a ``$variant`` field.
+
+Broken JSON repair
+==================
+
+``try_fixing_broken_json`` attempts to fix common issues from LLM output:
+
+- String concatenation: ``"hello" + "world"`` → ``"helloworld"``
+- Trailing commas: ``[1, 2, ]`` → ``[1, 2]``
+- Nested quotes: ``"she said "hi""`` → ``"she said \"hi\""``
+
+::
+
+  let bad = "{ \"msg\": \"hello\", }"
+  let fixed = try_fixing_broken_json(bad)
+  var js = read_json(fixed, error)
+
+.. seealso::
+
+   Full source: :download:`tutorials/language/30_json.das <../../../../tutorials/language/30_json.das>`
+
+   :ref:`Functional programming tutorial <tutorial_functional>` (previous tutorial).
+
+   :doc:`/stdlib/json` — core JSON module reference.
+
+   :doc:`/stdlib/json_boost` — JSON boost module reference.
