@@ -13,9 +13,7 @@ options gen2
 
 require daslib/contracts
 
-// ===========================
-//  What are contracts?
-// ===========================
+// === What are contracts? ===
 // Contracts are compile-time constraints on generic function arguments.
 // When a generic function is called, the contract checks whether each
 // argument satisfies the required type constraint. If not, the function
@@ -24,17 +22,13 @@ require daslib/contracts
 // Syntax: [expect_something(arg_name)]
 // The arg_name refers to a parameter of the function.
 
-// ===========================
-//  Built-in contracts (always available)
-// ===========================
+// === Built-in contracts (always available) ===
 // These are always available without imports:
 //   [expect_ref(arg)]     — argument must be a reference (var)
 //   [expect_dim(arg)]     — argument must be a fixed-size array
 //   [expect_any_vector(arg)] — argument must be a C++ vector type
 
-// ===========================
-//  Library contracts (require daslib/contracts)
-// ===========================
+// === Library contracts (require daslib/contracts) ===
 
 // [expect_any_array] — matches array<T>, T[N], or das::vector<T>
 [expect_any_array(arr)]
@@ -75,9 +69,7 @@ def struct_info(s) {
     print("  got a struct\n")
 }
 
-// ===========================
-//  Combining contracts
-// ===========================
+// === Combining contracts ===
 
 // AND (&&) — both constraints must match
 [expect_any_numeric(a) && expect_any_numeric(b)]
@@ -113,9 +105,7 @@ def not_a_number(x : int) : string {
     return "is numeric"
 }
 
-// ===========================
-//  concept_assert — custom compile-time checks
-// ===========================
+// === concept_assert — custom compile-time checks ===
 // concept_assert(condition, "message")
 // Like static_assert, but reports the error at the CALL SITE,
 // not inside the generic function. This gives clear error messages.
@@ -130,9 +120,7 @@ def sum_all(arr : array<auto(TT)>) : TT {
     return total
 }
 
-// ===========================
-//  Main
-// ===========================
+// === Main ===
 
 [export]
 def main {
@@ -187,9 +175,7 @@ def main {
     // strs |> push("a")
     // sum_all(strs)  // concept_assert error: "sum_all requires numeric elements"
 
-    // ===========================
-    //  Summary
-    // ===========================
+    // === Summary ===
     // Contracts constrain generic function arguments at compile time.
     //
     // Built-in (always available):

@@ -20,9 +20,7 @@ options gen2
 
 require daslib/match
 
-// ===========================
-//  Enums and structs for examples
-// ===========================
+// === Enums and structs for examples ===
 
 enum Color {
     red
@@ -47,9 +45,7 @@ variant Value {
     s : string
 }
 
-// ===========================
-//  Basic integer matching
-// ===========================
+// === Basic integer matching ===
 
 [sideeffects]
 def describe_number(n : int) : string {
@@ -70,9 +66,7 @@ def describe_number(n : int) : string {
     return "unreachable"
 }
 
-// ===========================
-//  Enum matching
-// ===========================
+// === Enum matching ===
 
 [sideeffects]
 def color_code(c : Color) : int {
@@ -93,9 +87,7 @@ def color_code(c : Color) : int {
     return -1
 }
 
-// ===========================
-//  Struct matching + variable binding
-// ===========================
+// === Struct matching + variable binding ===
 
 [sideeffects]
 def describe_point(p : Point) : string {
@@ -116,9 +108,7 @@ def describe_point(p : Point) : string {
     return "unreachable"
 }
 
-// ===========================
-//  Guards
-// ===========================
+// === Guards ===
 
 [sideeffects]
 def classify_shape(s : Shape) : string {
@@ -136,9 +126,7 @@ def classify_shape(s : Shape) : string {
     return "unknown"
 }
 
-// ===========================
-//  OR patterns
-// ===========================
+// === OR patterns ===
 
 [sideeffects]
 def is_primary(c : Color) : bool {
@@ -153,9 +141,7 @@ def is_primary(c : Color) : bool {
     return false
 }
 
-// ===========================
-//  Tuple matching
-// ===========================
+// === Tuple matching ===
 
 [sideeffects]
 def classify_pair(t : tuple<int; string>) : string {
@@ -176,9 +162,7 @@ def classify_pair(t : tuple<int; string>) : string {
     return "unreachable"
 }
 
-// ===========================
-//  Variant matching
-// ===========================
+// === Variant matching ===
 
 [sideeffects]
 def describe_value(v : Value) : string {
@@ -196,9 +180,7 @@ def describe_value(v : Value) : string {
     return "unknown"
 }
 
-// ===========================
-//  Null / pointer matching
-// ===========================
+// === Null / pointer matching ===
 
 [sideeffects]
 def describe_point_ptr(p : Point?) : string {
@@ -216,9 +198,7 @@ def describe_point_ptr(p : Point?) : string {
     return "unreachable"
 }
 
-// ===========================
-//  multi_match — all matching arms execute
-// ===========================
+// === multi_match — all matching arms execute ===
 
 [sideeffects]
 def tag_number(n : int) : string {
@@ -243,9 +223,7 @@ def tag_number(n : int) : string {
     return tags
 }
 
-// ===========================
-//  static_match — safe in generics
-// ===========================
+// === static_match — safe in generics ===
 // Arms with type mismatches are silently dropped,
 // so this function works regardless of argument type.
 
@@ -268,9 +246,7 @@ def static_type_name(what) : string {
     return "unreachable"
 }
 
-// ===========================
-//  Array matching
-// ===========================
+// === Array matching ===
 // Static arrays match element-by-element.
 // Dynamic arrays match head elements; tail is ignored.
 
@@ -306,9 +282,7 @@ def classify_dynamic_arr(a : array<int>) : string {
     return "unreachable"
 }
 
-// ===========================
-//  match_expr — computed patterns
-// ===========================
+// === match_expr — computed patterns ===
 // match_expr(expression) evaluates at runtime instead of matching literally.
 // Useful when the expected value depends on captured variables.
 
@@ -325,9 +299,7 @@ def is_consecutive_triple(t : tuple<int; int; int>) : bool {
     return false
 }
 
-// ===========================
-//  Bool matching
-// ===========================
+// === Bool matching ===
 
 [sideeffects]
 def describe_bool(b : bool) : string {
@@ -342,9 +314,7 @@ def describe_bool(b : bool) : string {
     return "unreachable"
 }
 
-// ===========================
-//  Main
-// ===========================
+// === Main ===
 
 [export]
 def main {
@@ -450,9 +420,7 @@ def main {
     print("  true -> {describe_bool(true)}\n")
     print("  false -> {describe_bool(false)}\n")
 
-    // ===========================
-    //  Summary
-    // ===========================
+    // === Summary ===
     // - require daslib/match
     // - match(expr) { if (pattern) { body } }
     // - [sideeffects] annotation required on functions using match

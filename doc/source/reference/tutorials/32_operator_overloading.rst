@@ -374,6 +374,8 @@ The full list of overloadable operators in daScript:
 
    Full source: :download:`tutorials/language/32_operator_overloading.das <../../../../tutorials/language/32_operator_overloading.das>`
 
+   Next tutorial: :ref:`tutorial_algorithm`
+
    :ref:`Regular expressions tutorial <tutorial_regex>` (previous tutorial).
 
    :ref:`Functions <functions>` — function declaration and operator overloading reference.

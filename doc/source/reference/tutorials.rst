@@ -47,3 +47,4 @@ introduced in earlier tutorials.
    tutorials/30_json.rst
    tutorials/31_regex.rst
    tutorials/32_operator_overloading.rst
+   tutorials/33_algorithm.rst

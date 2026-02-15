@@ -419,9 +419,9 @@ def document_module_apply_in_context(root : string) {
 def document_module_algorithm(root : string) {
     var mod = find_module("algorithm")
     var groups <- array<DocGroup>(
-        group_by_regex("Search", mod, %regex~(lower_bound|binary_search)$%%),
-        group_by_regex("Array manipulation", mod, %regex~(unique|sort_unique|reverse|combine|erase_all|topological_sort)$%%),
-        group_by_regex("Table manipulation", mod, %regex~(intersection|union|difference|identical)$%%)
+        group_by_regex("Search", mod, %regex~(lower_bound|upper_bound|binary_search|equal_range)$%%),
+        group_by_regex("Array manipulation", mod, %regex~(unique|sort_unique|reverse|combine|erase_all|topological_sort|fill|is_sorted|rotate|min_element|max_element)$%%),
+        group_by_regex("Table manipulation", mod, %regex~(intersection|union|difference|symmetric_difference|identical|is_subset)$%%)
     )
     document("Miscellaneous algorithms", mod, "algorithm.rst", groups)
 }

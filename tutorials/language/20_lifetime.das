@@ -42,9 +42,7 @@ def make_data() : array<int> {
 [export]
 def main {
 
-    // ===========================
-    //  Memory model
-    // ===========================
+    // === Memory model ===
 
     // daScript does NOT automatically clean up local variables when they
     // go out of scope. There is no implicit destructor call.
@@ -59,9 +57,7 @@ def main {
     // reclaims all memory on exit. But for long-running applications
     // or resource management, use the tools below.
 
-    // ===========================
-    //  Explicit delete
-    // ===========================
+    // === Explicit delete ===
 
     // 'delete' zeroes out a variable and calls its finalizer.
     // For containers (array, table), it frees all elements.
@@ -79,9 +75,7 @@ def main {
     delete res
     // The finalize function printed the cleanup message
 
-    // ===========================
-    //  var inscope
-    // ===========================
+    // === var inscope ===
 
     // 'var inscope' automatically calls 'delete' at the end of the scope.
     // This is the recommended way to ensure deterministic cleanup.
@@ -96,9 +90,7 @@ def main {
     }
     print("  inscope block ended\n")
 
-    // ===========================
-    //  finally blocks
-    // ===========================
+    // === finally blocks ===
 
     // 'finally' runs cleanup code when a block exits,
     // even if an error occurs.
@@ -111,9 +103,7 @@ def main {
         print("  loop done, counter={counter}\n")
     }
 
-    // ===========================
-    //  Heap pointers (new)
-    // ===========================
+    // === Heap pointers (new) ===
 
     // For class instances created with 'new', delete requires 'unsafe':
     //   var p = new MyClass()
@@ -124,9 +114,7 @@ def main {
     //   var inscope p = new MyClass()
     //   // deleted automatically at end of scope
 
-    // ===========================
-    //  When to use what
-    // ===========================
+    // === When to use what ===
 
     // In everyday code:
     //   - Most code doesn't need delete — memory is reclaimed on exit
