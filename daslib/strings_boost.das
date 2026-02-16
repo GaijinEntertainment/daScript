@@ -233,3 +233,127 @@ def replace_multiple(source : string; replaces : array<tuple<text : string; repl
         }
     }
 }
+
+def public contains(str, sub : string) : bool {
+    //! Returns true if ``sub`` is found anywhere within ``str``.
+    return find(str, sub) >= 0
+}
+
+def public count(str, sub : string) : int {
+    //! Counts non-overlapping occurrences of ``sub`` in ``str``.
+    //! Returns 0 if ``sub`` is empty or not found.
+    if (sub |> empty()) {
+        return 0
+    }
+    var n = 0
+    var pos = find(str, sub)
+    let subLen = sub |> length()
+    while (pos >= 0) {
+        n ++
+        pos = find(str, sub, pos + subLen)
+    }
+    return n
+}
+
+def public last_index_of(str, sub : string) : int {
+    //! Returns the index of the last occurrence of ``sub`` in ``str``, or -1 if not found.
+    if (sub |> empty() || str |> empty()) {
+        return -1
+    }
+    var lastPos = -1
+    var pos = find(str, sub)
+    while (pos >= 0) {
+        lastPos = pos
+        pos = find(str, sub, pos + 1)
+    }
+    return lastPos
+}
+
+def public last_index_of(str, sub : string; start : int) : int {
+    //! Returns the index of the last occurrence of ``sub`` in ``str`` searching only up to position ``start`` (exclusive), or -1 if not found.
+    if (sub |> empty() || str |> empty()) {
+        return -1
+    }
+    var lastPos = -1
+    var pos = find(str, sub)
+    while (pos >= 0 && pos < start) {
+        lastPos = pos
+        pos = find(str, sub, pos + 1)
+    }
+    return lastPos
+}
+
+def public pad_right(str : string; width : int; ch : int = ' ') : string {
+    //! Pads the string with the character ``ch`` on the right to reach the specified minimum ``width``.
+    //! If the string is already at least ``width`` characters, it is returned unchanged.
+    let l = str |> length()
+    if (l >= width) {
+        return str
+    }
+    return build_string <| $(writer) {
+        writer |> write(str)
+        writer |> write_chars(ch, width - l)
+    }
+}
+
+def public pad_left(str : string; width : int; ch : int = ' ') : string {
+    //! Pads the string with the character ``ch`` on the left to reach the specified minimum ``width``.
+    //! If the string is already at least ``width`` characters, it is returned unchanged.
+    let l = str |> length()
+    if (l >= width) {
+        return str
+    }
+    return build_string <| $(writer) {
+        writer |> write_chars(ch, width - l)
+        writer |> write(str)
+    }
+}
+
+def public trim_prefix(str, prefix : string) : string {
+    //! Removes ``prefix`` from the beginning of ``str`` if present.
+    //! Returns the string unchanged if it does not start with ``prefix``.
+    if (str |> starts_with(prefix)) {
+        return str |> slice(prefix |> length())
+    }
+    return str
+}
+
+def public trim_suffix(str, suffix : string) : string {
+    //! Removes ``suffix`` from the end of ``str`` if present.
+    //! Returns the string unchanged if it does not end with ``suffix``.
+    if (str |> ends_with(suffix)) {
+        return str |> slice(0, (str |> length()) - (suffix |> length()))
+    }
+    return str
+}
+
+def public capitalize(str : string) : string {
+    //! Returns a copy of ``str`` with the first character converted to uppercase.
+    //! The rest of the string is unchanged.
+    if (str |> empty()) {
+        return str
+    }
+    let first = character_at(str, 0)
+    if (first >= 'a' && first <= 'z') {
+        return build_string <| $(writer) {
+            writer |> write_char(first - 'a' + 'A')
+            if (str |> length() > 1) {
+                writer |> write(str |> slice(1))
+            }
+        }
+    }
+    return str
+}
+
+def public is_null_or_whitespace(str : string) : bool {
+    //! Returns true if the string is null, empty, or contains only whitespace characters (space, tab, CR, LF).
+    if (str |> empty()) {
+        return true
+    }
+    for (i in range(str |> length())) {
+        if (!is_white_space(character_at(str, i))) {
+            return false
+        }
+    }
+    return true
+}

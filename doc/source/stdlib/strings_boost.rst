@@ -120,7 +120,45 @@ Splits a string by the specified delimiter characters and returns an array of su
 Formatting
 ++++++++++
 
+  *  :ref:`capitalize (str: string) : string <function-strings_boost_capitalize_string>` 
+  *  :ref:`pad_left (str: string; width: int; ch: int = 32) : string <function-strings_boost_pad_left_string_int_int>` 
+  *  :ref:`pad_right (str: string; width: int; ch: int = 32) : string <function-strings_boost_pad_right_string_int_int>` 
   *  :ref:`wide (text: string implicit; width: int) : string <function-strings_boost_wide_string_implicit_int>` 
+
+.. _function-strings_boost_capitalize_string:
+
+.. das:function:: capitalize(str: string) : string
+
+// stub
+def capitalize (str: string) : string
+
+:Arguments: * **str** : string
+
+.. _function-strings_boost_pad_left_string_int_int:
+
+.. das:function:: pad_left(str: string; width: int; ch: int = 32) : string
+
+// stub
+def pad_left (str: string; width: int; ch: int = 32) : string
+
+:Arguments: * **str** : string
+
+            * **width** : int
+
+            * **ch** : int
+
+.. _function-strings_boost_pad_right_string_int_int:
+
+.. das:function:: pad_right(str: string; width: int; ch: int = 32) : string
+
+// stub
+def pad_right (str: string; width: int; ch: int = 32) : string
+
+:Arguments: * **str** : string
+
+            * **width** : int
+
+            * **ch** : int
 
 .. _function-strings_boost_wide_string_implicit_int:
 
@@ -136,27 +174,52 @@ Pads the string with trailing spaces to reach the specified minimum width.
 Queries and comparisons
 +++++++++++++++++++++++
 
-  *  :ref:`eq (a: string implicit; b: das_string) : auto <function-strings_boost_eq_string_implicit_das_string>` 
+  *  :ref:`contains (str: string; sub: string) : bool <function-strings_boost_contains_string_string>` 
+  *  :ref:`count (str: string; sub: string) : int <function-strings_boost_count_string_string>` 
   *  :ref:`eq (b: das_string; a: string implicit) : auto <function-strings_boost_eq_das_string_string_implicit>` 
+  *  :ref:`eq (a: string implicit; b: das_string) : auto <function-strings_boost_eq_string_implicit_das_string>` 
   *  :ref:`is_character_at (foo: array\<uint8\>; idx: int; ch: int) : auto <function-strings_boost_is_character_at_array_ls_uint8_gr__int_int>` 
+  *  :ref:`is_null_or_whitespace (str: string) : bool <function-strings_boost_is_null_or_whitespace_string>` 
+
+.. _function-strings_boost_contains_string_string:
+
+.. das:function:: contains(str: string; sub: string) : bool
+
+// stub
+def contains (str: string; sub: string) : bool
+
+:Arguments: * **str** : string
+
+            * **sub** : string
+
+.. _function-strings_boost_count_string_string:
+
+.. das:function:: count(str: string; sub: string) : int
+
+// stub
+def count (str: string; sub: string) : int
+
+:Arguments: * **str** : string
+
+            * **sub** : string
 
 
 eq
 ^^
 
-.. _function-strings_boost_eq_string_implicit_das_string:
-
-.. das:function:: eq(a: string implicit; b: das_string) : auto
-
-Compares a ``string`` with a ``das_string`` for equality, returning ``true`` if they match.
-
-:Arguments: * **a** : string implicit
-
-            * **b** :  :ref:`das_string <handle-builtin-das_string>` 
-
 .. _function-strings_boost_eq_das_string_string_implicit:
 
 .. das:function:: eq(b: das_string; a: string implicit) : auto
+
+Compares a ``string`` with a ``das_string`` for equality, returning ``true`` if they match.
+
+:Arguments: * **b** :  :ref:`das_string <handle-builtin-das_string>` 
+
+            * **a** : string implicit
+
+.. _function-strings_boost_eq_string_implicit_das_string:
+
+.. das:function:: eq(a: string implicit; b: das_string) : auto
 
 ----
 
@@ -171,6 +234,45 @@ Returns ``true`` if the byte at the specified index in the array equals the give
             * **idx** : int
 
             * **ch** : int
+
+.. _function-strings_boost_is_null_or_whitespace_string:
+
+.. das:function:: is_null_or_whitespace(str: string) : bool
+
+// stub
+def is_null_or_whitespace (str: string) : bool
+
+:Arguments: * **str** : string
+
+++++++
+Search
+++++++
+
+  *  :ref:`last_index_of (str: string; sub: string; start: int) : int <function-strings_boost_last_index_of_string_string_int>` 
+  *  :ref:`last_index_of (str: string; sub: string) : int <function-strings_boost_last_index_of_string_string>` 
+
+
+last_index_of
+^^^^^^^^^^^^^
+
+.. _function-strings_boost_last_index_of_string_string_int:
+
+.. das:function:: last_index_of(str: string; sub: string; start: int) : int
+
+// stub
+def last_index_of (str: string; sub: string; start: int) : int
+
+:Arguments: * **str** : string
+
+            * **sub** : string
+
+            * **start** : int
+
+.. _function-strings_boost_last_index_of_string_string:
+
+.. das:function:: last_index_of(str: string; sub: string) : int
+
+----
 
 +++++++
 Replace
@@ -187,6 +289,35 @@ Applies multiple find-and-replace substitutions to a string in a single pass.
 :Arguments: * **source** : string
 
             * **replaces** : array<tuple<text:string;replacement:string>>
+
++++++++++++++++++
+Prefix and suffix
++++++++++++++++++
+
+  *  :ref:`trim_prefix (str: string; prefix: string) : string <function-strings_boost_trim_prefix_string_string>` 
+  *  :ref:`trim_suffix (str: string; suffix: string) : string <function-strings_boost_trim_suffix_string_string>` 
+
+.. _function-strings_boost_trim_prefix_string_string:
+
+.. das:function:: trim_prefix(str: string; prefix: string) : string
+
+// stub
+def trim_prefix (str: string; prefix: string) : string
+
+:Arguments: * **str** : string
+
+            * **prefix** : string
+
+.. _function-strings_boost_trim_suffix_string_string:
+
+.. das:function:: trim_suffix(str: string; suffix: string) : string
+
+// stub
+def trim_suffix (str: string; suffix: string) : string
+
+:Arguments: * **str** : string
+
+            * **suffix** : string
 
 ++++++++++++++++++++
 Levenshtein distance

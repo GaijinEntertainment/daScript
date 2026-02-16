@@ -143,6 +143,10 @@ namespace das
 
     char* builtin_string_chop(const char* str, int start, int length, Context* context, LineInfoArg * at) {
         if ( !str || length<=0 ) return nullptr;
+        const int32_t strLen = int32_t(stringLengthSafe(*context, str));
+        if ( start < 0 ) start = 0;
+        if ( start >= strLen ) return nullptr;
+        if ( length > strLen - start ) length = strLen - start;
         return context->allocateString(str + start, length, at);
     }
 
@@ -230,6 +234,9 @@ namespace das
 
     int builtin_string_stricmp( const char *a, const char *b )
     {
+        if ( !a && !b ) return 0;
+        if ( !a ) return -1;
+        if ( !b ) return 1;
         int d;
         for (;; ++a, ++b){
             d = to_lower(*a) - to_lower(*b);
@@ -771,14 +778,15 @@ namespace das
             return TT();
         }
         TT value = 0;
-        while ( is_white_space(str[offset]) ) offset++;
+        const char * original = str;
+        while ( is_white_space(*str) ) str++;
         if ( hex && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) str += 2;
-        auto res = fast_float::from_chars(str+offset, str+strlen(str), value, hex ? 16 : 10);
+        auto res = fast_float::from_chars(str, str+strlen(str), value, hex ? 16 : 10);
         if (res.ec != std::errc()) {
             result = ConversionResult(res.ec);
             return TT();
         }
-        offset = int32_t(res.ptr - str);
+        offset = int32_t(res.ptr - original);
         return value;
     }
 
@@ -979,6 +987,8 @@ namespace das
                 SideEffects::none, "fast_to_uint8")->args({"value","hex"})->arg_init(1,make_smart<ExprConstBool>(false));
             addExtern<DAS_BIND_FUN(fast_to_int16)>(*this, lib, "to_int16",
                 SideEffects::none, "fast_to_int16")->args({"value","hex"})->arg_init(1,make_smart<ExprConstBool>(false));
+            addExtern<DAS_BIND_FUN(fast_to_uint16)>(*this, lib, "to_uint16",
+                SideEffects::none, "fast_to_uint16")->args({"value","hex"})->arg_init(1,make_smart<ExprConstBool>(false));
             addExtern<DAS_BIND_FUN(fast_to_int)>(*this, lib, "to_int",
                 SideEffects::none, "fast_to_int")->args({"value","hex"})->arg_init(1,make_smart<ExprConstBool>(false));
             addExtern<DAS_BIND_FUN(fast_to_uint)>(*this, lib, "to_uint",
@@ -1066,6 +1076,9 @@ namespace das
                 SideEffects::none,"char_set_total")->arg("Charset");
             addExtern<DAS_BIND_FUN(char_set_element)>(*this, lib, "set_element",
                 SideEffects::none,"char_set_element")->args({"Character","Charset"});
+            // case-insensitive comparison
+            addExtern<DAS_BIND_FUN(builtin_string_stricmp)>(*this, lib, "compare_ignore_case",
+                SideEffects::none, "builtin_string_stricmp")->args({"a","b"});
             // string buffer
             addExtern<DAS_BIND_FUN(builtin_reserve_string_buffer)>(*this, lib, "reserve_string_buffer",
                 SideEffects::none,"builtin_reserve_string_buffer")->args({"str","length","context"});
