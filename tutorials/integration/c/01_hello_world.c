@@ -16,7 +16,7 @@
 #include <string.h>
 #include <assert.h>
 
-#include "daslang/daScriptC.h"
+#include "daScript/daScriptC.h"
 
 #define SCRIPT_NAME "/tutorials/integration/c/01_hello_world.das"
 

@@ -19,7 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "daslang/daScriptC.h"
+#include "daScript/daScriptC.h"
 
 int main(int argc, char ** argv) {
     (void)argc; (void)argv;

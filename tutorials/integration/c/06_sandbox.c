@@ -23,7 +23,7 @@
 #include <string.h>
 #include <assert.h>
 
-#include "daslang/daScriptC.h"
+#include "daScript/daScriptC.h"
 
 // -----------------------------------------------------------------------
 // Inline script sources
