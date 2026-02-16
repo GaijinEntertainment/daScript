@@ -32,6 +32,7 @@ namespace das {
             const char * fnName = context.code->allocateName(this->name);
             return context.code->makeNode<SimNode_CFuncCall>(BuiltInFunction::at,fnName,fn);
         }
+        virtual void * getBuiltinAddress() const override { return (void *) fn; }
         das_interop_function * fn;
     };
 
