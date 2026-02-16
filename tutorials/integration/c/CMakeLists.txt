@@ -22,3 +22,31 @@ ENDMACRO()
 DAS_C_INTEGRATION_TUTORIAL(integration_c_01
     ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/c/01_hello_world.c
 )
+
+#################################
+# Tutorial 2 — Calling daScript Functions
+#################################
+DAS_C_INTEGRATION_TUTORIAL(integration_c_02
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/c/02_calling_functions.c
+)
+
+#################################
+# Tutorial 3 — Binding C Types
+#################################
+DAS_C_INTEGRATION_TUTORIAL(integration_c_03
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/c/03_binding_types.c
+)
+
+#################################
+# Tutorial 4 — Callbacks and Closures
+#################################
+DAS_C_INTEGRATION_TUTORIAL(integration_c_04
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/c/04_callbacks.c
+)
+
+#################################
+# Tutorial 5 — Unaligned ABI & Advanced
+#################################
+DAS_C_INTEGRATION_TUTORIAL(integration_c_05
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/c/05_unaligned_advanced.c
+)

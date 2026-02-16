@@ -47,5 +47,6 @@
 .. toctree::
    language/contexts.rst
    language/locks.rst
+   language/type_mangling.rst
 
 
