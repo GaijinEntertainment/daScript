@@ -66,3 +66,30 @@ companion ``.das`` script in ``tutorials/integration/c/``.
    tutorials/integration_c_04_callbacks.rst
    tutorials/integration_c_05_unaligned_advanced.rst
    tutorials/integration_c_06_sandbox.rst
+
+C++ Integration Tutorials
+--------------------------
+
+These tutorials show how to embed daScript in a C++ application using the
+native ``daScript.h`` API.  Each tutorial comes with a ``.cpp`` source file
+and a companion ``.das`` script in ``tutorials/integration/cpp/``.
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/integration_cpp_01_hello_world.rst
+   tutorials/integration_cpp_02_calling_functions.rst
+   tutorials/integration_cpp_03_binding_functions.rst
+   tutorials/integration_cpp_04_binding_types.rst
+   tutorials/integration_cpp_05_binding_enums.rst
+   tutorials/integration_cpp_06_interop.rst
+   tutorials/integration_cpp_07_callbacks.rst
+   tutorials/integration_cpp_08_methods.rst
+   tutorials/integration_cpp_09_operators_and_properties.rst
+   tutorials/integration_cpp_10_custom_modules.rst
+   tutorials/integration_cpp_11_context_variables.rst
+   tutorials/integration_cpp_12_smart_pointers.rst
+   tutorials/integration_cpp_13_aot.rst
+   tutorials/integration_cpp_14_serialization.rst
+   tutorials/integration_cpp_15_custom_annotations.rst
+   tutorials/integration_cpp_16_sandbox.rst
