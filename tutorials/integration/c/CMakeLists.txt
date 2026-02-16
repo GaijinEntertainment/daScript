@@ -57,3 +57,13 @@ DAS_C_INTEGRATION_TUTORIAL(integration_c_05
 DAS_C_INTEGRATION_TUTORIAL(integration_c_06
     ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/c/06_sandbox.c
 )
+
+# Install C integration tutorial source files
+file(GLOB C_INTEGRATION_TUTORIAL_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/c/*.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/c/*.das
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/c/*.das_project
+)
+install(FILES ${C_INTEGRATION_TUTORIAL_SOURCES}
+    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/integration/c
+)

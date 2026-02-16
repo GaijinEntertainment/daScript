@@ -37,6 +37,7 @@ set(DAS_INSTALL_DOCDIR . CACHE STRING "Directory where to install documentation"
 set(DAS_INSTALL_DASLIBDIR daslib CACHE STRING "Directory where to install daslib")
 set(DAS_INSTALL_EXAMPLESDIR examples CACHE STRING "Directory where to install examples")
 set(DAS_INSTALL_MODULESDIR modules CACHE STRING "Directory where to install modules")
+set(DAS_INSTALL_TUTORIALSDIR tutorials CACHE STRING "Directory where to install tutorial sources")
 
 IF(WIN32)
     IF(DAS_LLVM_DISABLED)
@@ -1114,3 +1115,11 @@ install(FILES ${PROJECT_SOURCE_DIR}/3rdparty/uriparser/COPYING DESTINATION ${DAS
 install(FILES ${PROJECT_SOURCE_DIR}/include/dag_noise/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME DAG_NOISE.LICENSE)
 install(FILES ${PROJECT_SOURCE_DIR}/include/ska/LICENSE_1_0.txt DESTINATION ${DAS_INSTALL_DOCDIR} RENAME SKA.LICENSE)
 install(FILES ${PROJECT_SOURCE_DIR}/include/vecmath/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME VEC_MATH.LICENSE)
+
+# Install language tutorial .das files
+file(GLOB LANGUAGE_TUTORIAL_SOURCES
+    ${PROJECT_SOURCE_DIR}/tutorials/language/*.das
+)
+install(FILES ${LANGUAGE_TUTORIAL_SOURCES}
+    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/language
+)
