@@ -94,7 +94,7 @@ static void run_inline_script(void) {
     das_file_access  * file_access  = das_fileaccess_make_default();
 
     // Register the inline script as a virtual file.
-    das_fileaccess_introduce_file(file_access, "inline_script.das", INLINE_SCRIPT);
+    das_fileaccess_introduce_file(file_access, "inline_script.das", INLINE_SCRIPT, 0);
 
     // Compile from the virtual file name — no disk access needed.
     das_program * program = das_program_compile("inline_script.das",
@@ -163,7 +163,7 @@ static void demonstrate_error_reporting(void) {
     das_module_group * module_group = das_modulegroup_make();
     das_file_access  * file_access  = das_fileaccess_make_default();
 
-    das_fileaccess_introduce_file(file_access, "bad_script.das", BAD_SCRIPT);
+    das_fileaccess_introduce_file(file_access, "bad_script.das", BAD_SCRIPT, 0);
     das_program * program = das_program_compile("bad_script.das",
                                                  file_access, tout, module_group);
 

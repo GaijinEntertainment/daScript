@@ -65,3 +65,4 @@ companion ``.das`` script in ``tutorials/integration/c/``.
    tutorials/integration_c_03_binding_types.rst
    tutorials/integration_c_04_callbacks.rst
    tutorials/integration_c_05_unaligned_advanced.rst
+   tutorials/integration_c_06_sandbox.rst

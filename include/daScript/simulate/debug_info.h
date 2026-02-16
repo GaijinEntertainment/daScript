@@ -224,10 +224,14 @@ namespace das
             return false;
         }
 
+        void lock() { locked = true; }
+        void unlock() { locked = false; }
+        bool isLocked() const { return locked; }
     protected:
         virtual FileInfo * getNewFileInfo ( const string & ) { return nullptr; }
     protected:
         das_hash_map<string, FileInfoPtr>    files;
+        bool    locked = false;
     };
     template <> struct isCloneable<FileAccess> : false_type {};
 

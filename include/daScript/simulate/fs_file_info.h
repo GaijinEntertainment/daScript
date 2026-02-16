@@ -36,6 +36,11 @@ namespace das {
         virtual das::FileInfo * getNewFileInfo(const das::string & fileName) override;
         virtual ModuleInfo getModuleInfo ( const string & req, const string & from ) const override;
         virtual bool addFsRoot ( const string & , const string & ) override;
+        // sandbox support
+        bool introduceFileFromDisk ( const string & name, const string & diskPath );
+        void introduceDaslib();
+        void introduceNativeModules();
+        bool introduceNativeModule ( const string & req );
     protected:
         das_map<string, string> extraRoots;
         vector<pair<AnyFileSystem *,bool>>   fileSystems;

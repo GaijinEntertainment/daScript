@@ -50,3 +50,10 @@ DAS_C_INTEGRATION_TUTORIAL(integration_c_04
 DAS_C_INTEGRATION_TUTORIAL(integration_c_05
     ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/c/05_unaligned_advanced.c
 )
+
+#################################
+# Tutorial 6 — Sandbox
+#################################
+DAS_C_INTEGRATION_TUTORIAL(integration_c_06
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/c/06_sandbox.c
+)

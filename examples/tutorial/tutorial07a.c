@@ -32,7 +32,7 @@ void tutorial () {
     das_file_access * fAccess = das_fileaccess_make_default();      // default file access
     das_context * ctx = NULL;
     // compile program
-    das_fileaccess_introduce_file(fAccess, "tutorial.das", TUTORIAL_SOURCE_CODE);
+    das_fileaccess_introduce_file(fAccess, "tutorial.das", TUTORIAL_SOURCE_CODE, 0);
     das_program * program = das_program_compile("tutorial.das", fAccess, tout, dummyLibGroup);
     int err_count = das_program_err_count(program);
     if ( err_count ) {

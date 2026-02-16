@@ -89,7 +89,7 @@ a C string and register it as a virtual file:
        "}\n";
 
    das_file_access * fa = das_fileaccess_make_default();
-   das_fileaccess_introduce_file(fa, "inline.das", SCRIPT);
+   das_fileaccess_introduce_file(fa, "inline.das", SCRIPT, 0);
 
    das_program * prog = das_program_compile("inline.das", fa, tout, lib);
 
@@ -154,6 +154,8 @@ Expected output (Part 2 — error reporting)::
    :download:`05_unaligned_advanced.das <../../../../tutorials/integration/c/05_unaligned_advanced.das>`
 
    Previous tutorial: :ref:`tutorial_integration_c_callbacks`
+
+   Next tutorial: :ref:`tutorial_integration_c_sandbox`
 
    :ref:`type_mangling` — complete type mangling reference
 

@@ -144,7 +144,30 @@ DAS_API das_file_access * das_fileaccess_make_project ( const char * project_fil
 // release file access
 DAS_API void das_fileaccess_release ( das_file_access * access );
 // introduce file content to file access. this is used to provide content of a file without actually having it on disk. this is useful for testing and for providing virtual files.
-DAS_API void das_fileaccess_introduce_file ( das_file_access * access, const char * file_name, const char * file_content );
+// if owns is non-zero, the content is copied internally and the caller does not need to keep file_content alive.
+// if owns is zero, the content is borrowed and the caller must keep file_content alive for the lifetime of the file access.
+DAS_API void das_fileaccess_introduce_file ( das_file_access * access, const char * file_name, const char * file_content, int owns );
+
+// introduce file from disk. reads file at disk_path and caches it under name 'name' in the file access.
+// 'name' is the virtual path (matching what getModuleInfo returns), 'disk_path' is the actual file location on disk.
+DAS_API void das_fileaccess_introduce_file_from_disk ( das_file_access * access, const char * name, const char * disk_path );
+// pre-load all daslib modules from getDasRoot()/daslib/ directory into the file access cache.
+// this is typically called before locking the file access for sandboxed execution.
+DAS_API void das_fileaccess_introduce_daslib ( das_file_access * access );
+// pre-load all native modules (from external_resolve.inc) into the file access cache.
+// modules not present on disk are silently skipped.
+DAS_API void das_fileaccess_introduce_native_modules ( das_file_access * access );
+// pre-load a specific native module by require-style path (e.g. "opengl/opengl_boost").
+// returns 1 if the module was found and loaded, 0 otherwise.
+DAS_API int das_fileaccess_introduce_native_module ( das_file_access * access, const char * req );
+
+// lock the file access. when locked, getNewFileInfo returns nullptr for all files,
+// so only pre-cached files (via introduce functions or setFileInfo) can be accessed.
+DAS_API void das_fileaccess_lock ( das_file_access * access );
+// unlock the file access. allows introducing more files and accessing the filesystem again.
+DAS_API void das_fileaccess_unlock ( das_file_access * access );
+// returns 1 if the file access is locked, 0 otherwise.
+DAS_API int das_fileaccess_is_locked ( das_file_access * access );
 
 // get root path to daScript. this is used to find modules, libraries, etc.
 DAS_API void das_get_root ( char * root, int maxbuf );
