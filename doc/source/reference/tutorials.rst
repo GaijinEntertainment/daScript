@@ -86,3 +86,6 @@ and a companion ``.das`` script in ``tutorials/integration/cpp/``.
    tutorials/integration_cpp_07_callbacks.rst
    tutorials/integration_cpp_08_methods.rst
    tutorials/integration_cpp_09_operators_and_properties.rst
+   tutorials/integration_cpp_10_custom_modules.rst
+   tutorials/integration_cpp_11_context_variables.rst
+   tutorials/integration_cpp_12_smart_pointers.rst

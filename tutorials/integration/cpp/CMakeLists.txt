@@ -74,6 +74,27 @@ DAS_CPP_INTEGRATION_TUTORIAL(integration_cpp_09
     ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/09_operators_and_properties.cpp
 )
 
+#################################
+# Tutorial 10 — Custom Modules
+#################################
+DAS_CPP_INTEGRATION_TUTORIAL(integration_cpp_10
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/10_custom_modules.cpp
+)
+
+#################################
+# Tutorial 11 — Context Variables
+#################################
+DAS_CPP_INTEGRATION_TUTORIAL(integration_cpp_11
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/11_context_variables.cpp
+)
+
+#################################
+# Tutorial 12 — Smart Pointers
+#################################
+DAS_CPP_INTEGRATION_TUTORIAL(integration_cpp_12
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/12_smart_pointers.cpp
+)
+
 # Install C++ integration tutorial source files
 file(GLOB CPP_INTEGRATION_TUTORIAL_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/*.cpp
