@@ -58,6 +58,44 @@ DAS_C_INTEGRATION_TUTORIAL(integration_c_06
     ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/c/06_sandbox.c
 )
 
+#################################
+# Tutorial 7 — Context Variables
+#################################
+DAS_C_INTEGRATION_TUTORIAL(integration_c_07
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/c/07_context_variables.c
+)
+
+#################################
+# Tutorial 8 — Serialization
+#################################
+DAS_C_INTEGRATION_TUTORIAL(integration_c_08
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/c/08_serialization.c
+)
+
+#################################
+# Tutorial 9 — AOT
+#################################
+# AOT requires a two-stage build:
+#   1. Generate C++ from the .das script using daslang's AOT tool
+#   2. Compile the generated .cpp into the tutorial executable
+SET(INTEGRATION_C_09_AOT_GENERATED_SRC)
+add_custom_target(integration_c_09_dasAotStub)
+DAS_AOT("tutorials/integration/cpp/13_aot.das"
+        INTEGRATION_C_09_AOT_GENERATED_SRC integration_c_09_dasAotStub daslang)
+
+add_executable(integration_c_09
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/c/09_aot.c
+    ${INTEGRATION_C_09_AOT_GENERATED_SRC}
+)
+TARGET_COMPILE_DEFINITIONS(integration_c_09 PRIVATE DAS_MOD_EXPORTS)
+TARGET_LINK_LIBRARIES(integration_c_09 libDaScript Threads::Threads)
+ADD_DEPENDENCIES(integration_c_09 libDaScript integration_c_09_dasAotStub)
+SETUP_CPP11(integration_c_09)
+set_target_properties(integration_c_09 PROPERTIES
+    LINKER_LANGUAGE CXX
+    CXX_STANDARD 17
+)
+
 # Install C integration tutorial source files
 file(GLOB C_INTEGRATION_TUTORIAL_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/c/*.c

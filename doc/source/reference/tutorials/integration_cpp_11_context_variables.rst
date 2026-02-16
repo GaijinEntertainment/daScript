@@ -14,7 +14,6 @@ from C++ host code.  Topics covered:
 * ``ctx.getVariable()`` — get a raw pointer to variable data
 * Reading and writing scalar, string, and struct globals
 * ``ctx.getTotalVariables()`` and ``ctx.getVariableInfo()`` — enumeration
-* ``runInitScript()`` — initializing global variables
 
 
 Prerequisites
@@ -27,7 +26,7 @@ Prerequisites
 Global variable layout
 ========================
 
-After ``program->simulate(ctx, tout)`` and ``ctx.runInitScript()``,
+After ``program->simulate(ctx, tout)``,
 global variables live in a contiguous memory buffer inside the
 ``Context``.  The ``Context`` provides methods to find variables by
 name and access their raw data:
@@ -111,20 +110,13 @@ returns a ``VarInfo *`` with name and size:
    }
 
 
-``runInitScript()``
-=====================
+Initialization
+================
 
-After ``simulate()`` but before accessing globals, call
-``ctx.runInitScript()`` to execute global initializers and
-``[init]`` functions:
-
-.. code-block:: cpp
-
-   Context ctx(program->getContextStackSize());
-   program->simulate(ctx, tout);
-   ctx.runInitScript();   // ← initializers run here
-
-   // Now globals have their initial values
+``simulate()`` automatically calls ``runInitScript()`` internally,
+executing global initializers and ``[init]`` functions.  No separate
+initialization step is needed — globals have their initial values
+immediately after simulation.
 
 
 The daScript side

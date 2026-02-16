@@ -4,6 +4,7 @@
 #include "daScript/daScriptC.h"
 #include "daScript/ast/dyn_modules.h"
 #include "daScript/misc/sysos.h"
+#include "daScript/ast/ast_serializer.h"
 
 using namespace das;
 
@@ -541,5 +542,121 @@ void das_result_ptr_unaligned ( vec4f_unaligned * result, void * r ) { v_stu((fl
 void das_result_function_unaligned ( vec4f_unaligned * result, das_function * r ) { v_stu((float *)result, cast<Func>::from((Func)r)); }
 void das_result_lambda_unaligned ( vec4f_unaligned * result, das_lambda * r ) { v_stu((float *)result, cast<Lambda>::from((Lambda)r)); }
 void das_result_block_unaligned ( vec4f_unaligned * result, das_block * r ) { v_stu((float *)result, cast<void *>::from(r)); }
+
+// --- Compilation policies ---
+
+das_policies * das_policies_make() {
+    return (das_policies *) new CodeOfPolicies();
+}
+
+void das_policies_release ( das_policies * policies ) {
+    if ( policies ) delete (CodeOfPolicies *) policies;
+}
+
+int das_policies_set_bool ( das_policies * policies, das_bool_policy flag, int value ) {
+    auto * p = (CodeOfPolicies *) policies;
+    bool v = value != 0;
+    switch ( flag ) {
+        case DAS_POLICY_AOT:                    p->aot = v; break;
+        case DAS_POLICY_NO_UNSAFE:              p->no_unsafe = v; break;
+        case DAS_POLICY_NO_GLOBAL_VARIABLES:    p->no_global_variables = v; break;
+        case DAS_POLICY_NO_GLOBAL_HEAP:         p->no_global_heap = v; break;
+        case DAS_POLICY_NO_INIT:                p->no_init = v; break;
+        case DAS_POLICY_FAIL_ON_NO_AOT:         p->fail_on_no_aot = v; break;
+        case DAS_POLICY_THREADLOCK_CONTEXT:     p->threadlock_context = v; break;
+        case DAS_POLICY_INTERN_STRINGS:         p->intern_strings = v; break;
+        case DAS_POLICY_PERSISTENT_HEAP:        p->persistent_heap = v; break;
+        case DAS_POLICY_MULTIPLE_CONTEXTS:      p->multiple_contexts = v; break;
+        case DAS_POLICY_STRICT_SMART_POINTERS:  p->strict_smart_pointers = v; break;
+        case DAS_POLICY_RTTI:                   p->rtti = v; break;
+        case DAS_POLICY_NO_OPTIMIZATIONS:       p->no_optimizations = v; break;
+        default: return 0;
+    }
+    return 1;
+}
+
+int das_policies_set_int ( das_policies * policies, das_int_policy field, int64_t value ) {
+    auto * p = (CodeOfPolicies *) policies;
+    switch ( field ) {
+        case DAS_POLICY_STACK:                      p->stack = (uint32_t) value; break;
+        case DAS_POLICY_MAX_HEAP_ALLOCATED:         p->max_heap_allocated = (uint64_t) value; break;
+        case DAS_POLICY_MAX_STRING_HEAP_ALLOCATED:  p->max_string_heap_allocated = (uint64_t) value; break;
+        case DAS_POLICY_HEAP_SIZE_HINT:             p->heap_size_hint = (uint32_t) value; break;
+        case DAS_POLICY_STRING_HEAP_SIZE_HINT:      p->string_heap_size_hint = (uint32_t) value; break;
+        default: return 0;
+    }
+    return 1;
+}
+
+das_program * das_program_compile_policies ( char * program_file, das_file_access * access, das_text_writer * tout, das_module_group * libgroup, das_policies * policies ) {
+    auto program = compileDaScript(program_file,
+        (FileAccess *) access,
+        *((TextWriter *) tout),
+        *((ModuleGroup *) libgroup),
+        *((CodeOfPolicies *) policies));
+    return (das_program *) program.orphan();
+}
+
+// --- Context variables ---
+
+int das_context_find_variable ( das_context * context, const char * name ) {
+    return ((Context *)context)->findVariable(name);
+}
+
+void * das_context_get_variable ( das_context * context, int idx ) {
+    return ((Context *)context)->getVariable(idx);
+}
+
+int das_context_get_total_variables ( das_context * context ) {
+    return ((Context *)context)->getTotalVariables();
+}
+
+const char * das_context_get_variable_name ( das_context * context, int idx ) {
+    auto * info = ((Context *)context)->getVariableInfo(idx);
+    return info ? info->name : nullptr;
+}
+
+int das_context_get_variable_size ( das_context * context, int idx ) {
+    auto * info = ((Context *)context)->getVariableInfo(idx);
+    return info ? (int)info->size : 0;
+}
+
+// --- Serialization ---
+
+das_serialized_data * das_program_serialize ( das_program * program, const void ** out_data, int64_t * out_size ) {
+    auto * storage = new SerializationStorageVector();
+    {
+        AstSerializer ser(storage, true);       // writing = true
+        ((Program *)program)->serialize(ser);
+        ser.moduleLibrary = nullptr;
+    }
+    *out_data = storage->buffer.data();
+    *out_size = (int64_t) storage->buffer.size();
+    return (das_serialized_data *) storage;
+}
+
+das_program * das_program_deserialize ( const void * data, int64_t size ) {
+    auto * storage = new SerializationStorageVector();
+    storage->buffer.assign((const uint8_t *)data, (const uint8_t *)data + size);
+    ProgramPtr program;
+    {
+        AstSerializer deser(storage, false);    // writing = false
+        program = make_smart<Program>();
+        program->serialize(deser);
+        deser.moduleLibrary = nullptr;
+    }
+    delete storage;
+    return (das_program *) program.orphan();
+}
+
+void das_serialized_data_release ( das_serialized_data * blob ) {
+    if ( blob ) delete (SerializationStorageVector *) blob;
+}
+
+// --- Function info ---
+
+int das_function_is_aot ( das_function * func ) {
+    return ((SimFunction *)func)->aot ? 1 : 0;
+}
 
 }

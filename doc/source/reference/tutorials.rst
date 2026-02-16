@@ -66,6 +66,9 @@ companion ``.das`` script in ``tutorials/integration/c/``.
    tutorials/integration_c_04_callbacks.rst
    tutorials/integration_c_05_unaligned_advanced.rst
    tutorials/integration_c_06_sandbox.rst
+   tutorials/integration_c_07_context_variables.rst
+   tutorials/integration_c_08_serialization.rst
+   tutorials/integration_c_09_aot.rst
 
 C++ Integration Tutorials
 --------------------------

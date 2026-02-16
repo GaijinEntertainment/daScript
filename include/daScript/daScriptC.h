@@ -78,6 +78,8 @@ typedef struct dasStructure das_structure;
 typedef struct dasEnumeration das_enumeration;
 typedef struct dasLambda das_lambda;
 typedef struct dasBlock das_block;
+typedef struct dasPolicies das_policies;
+typedef struct dasSerializedData das_serialized_data;
 
 typedef struct {
     float x, y, z, w;
@@ -409,6 +411,87 @@ DAS_API void das_result_ptr_unaligned ( vec4f_unaligned * result, void * r );
 DAS_API void das_result_function_unaligned ( vec4f_unaligned * result, das_function * r );
 DAS_API void das_result_lambda_unaligned ( vec4f_unaligned * result, das_lambda * r );
 DAS_API void das_result_block_unaligned ( vec4f_unaligned * result, das_block * r );
+
+// --- Compilation policies ---
+// CodeOfPolicies controls compiler and runtime behavior: AOT, safety,
+// memory limits, and more.  Create a policies object, set individual
+// fields, then pass it to das_program_compile_policies().
+
+// Boolean policy flags (on / off).
+typedef enum das_bool_policy {
+    DAS_POLICY_AOT = 1,                         // Enable ahead-of-time compilation linking
+    DAS_POLICY_NO_UNSAFE,                        // Forbid unsafe blocks
+    DAS_POLICY_NO_GLOBAL_VARIABLES,              // Forbid module-level var declarations
+    DAS_POLICY_NO_GLOBAL_HEAP,                   // Forbid heap allocations for globals
+    DAS_POLICY_NO_INIT,                          // Forbid [init] functions
+    DAS_POLICY_FAIL_ON_NO_AOT,                   // Treat missing AOT as error
+    DAS_POLICY_THREADLOCK_CONTEXT,               // Enable context mutex for threading
+    DAS_POLICY_INTERN_STRINGS,                   // Use string interning for the string heap
+    DAS_POLICY_PERSISTENT_HEAP,                  // Persistent heap (no GC between calls)
+    DAS_POLICY_MULTIPLE_CONTEXTS,                // Enable context-safe code generation
+    DAS_POLICY_STRICT_SMART_POINTERS,            // Strict smart pointer rules (var inscope, etc.)
+    DAS_POLICY_RTTI,                             // Generate extended RTTI
+    DAS_POLICY_NO_OPTIMIZATIONS                  // Disable all optimizations
+} das_bool_policy;
+
+// Integer policy fields (stack size, heap limits).
+typedef enum das_int_policy {
+    DAS_POLICY_STACK = 1,                        // Context stack size in bytes (uint32)
+    DAS_POLICY_MAX_HEAP_ALLOCATED,               // Max heap allocated in bytes (uint64, 0 = unlimited)
+    DAS_POLICY_MAX_STRING_HEAP_ALLOCATED,         // Max string heap allocated in bytes (uint64, 0 = unlimited)
+    DAS_POLICY_HEAP_SIZE_HINT,                   // Initial heap size hint in bytes (uint32)
+    DAS_POLICY_STRING_HEAP_SIZE_HINT             // Initial string heap size hint in bytes (uint32)
+} das_int_policy;
+
+// Create a new policies object with default values.
+DAS_API das_policies * das_policies_make();
+// Release a policies object.
+DAS_API void das_policies_release ( das_policies * policies );
+// Set a boolean policy flag. Returns 1 on success, 0 if the flag is unknown.
+DAS_API int das_policies_set_bool ( das_policies * policies, das_bool_policy flag, int value );
+// Set an integer policy field. Returns 1 on success, 0 if the field is unknown.
+DAS_API int das_policies_set_int ( das_policies * policies, das_int_policy field, int64_t value );
+
+// Compile a daScript program with custom compilation policies.
+// Same as das_program_compile() but applies the given CodeOfPolicies.
+DAS_API das_program * das_program_compile_policies ( char * program_file, das_file_access * access, das_text_writer * tout, das_module_group * libgroup, das_policies * policies );
+
+// --- Context variables ---
+// After simulation, global variables declared in daScript are accessible
+// by name or by index. findVariable returns -1 if not found.
+
+// Look up a global variable by name. Returns its index, or -1 if not found.
+DAS_API int das_context_find_variable ( das_context * context, const char * name );
+// Get a raw pointer to the storage of a global variable at index 'idx'.
+// Cast to the appropriate C type (e.g. int32_t*, float*, char**).
+DAS_API void * das_context_get_variable ( das_context * context, int idx );
+// Return the total number of global variables in the context.
+DAS_API int das_context_get_total_variables ( das_context * context );
+// Return the name of the global variable at index 'idx', or NULL if out of range.
+DAS_API const char * das_context_get_variable_name ( das_context * context, int idx );
+// Return the size (in bytes) of the global variable at index 'idx', or 0 if out of range.
+DAS_API int das_context_get_variable_size ( das_context * context, int idx );
+
+// --- Serialization ---
+// Serialize a compiled+simulated program to a binary blob and deserialize
+// it back. Deserialized programs skip parsing and type inference.
+
+// Serialize a compiled program to an opaque binary blob.
+// The program must have been simulated at least once before serialization.
+// Returns a handle to the serialized data; use das_serialized_data_release() to free it.
+// 'out_data' receives a pointer to the raw bytes, 'out_size' receives the byte count.
+DAS_API das_serialized_data * das_program_serialize ( das_program * program, const void ** out_data, int64_t * out_size );
+// Deserialize a program from a raw byte buffer.
+// Returns a new program handle that must be released with das_program_release().
+DAS_API das_program * das_program_deserialize ( const void * data, int64_t size );
+// Release serialized data returned by das_program_serialize().
+DAS_API void das_serialized_data_release ( das_serialized_data * blob );
+
+// --- Function info ---
+
+// Return 1 if the function has been AOT-linked, 0 otherwise.
+// Use this after simulation to check whether functions execute as native code.
+DAS_API int das_function_is_aot ( das_function * func );
 
 #ifdef __cplusplus
 }

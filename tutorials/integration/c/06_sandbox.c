@@ -6,6 +6,8 @@
 //   2. Policy enforcement via .das_project — whitelist modules, options,
 //      and annotations; forbid unsafe blocks.
 //   3. Combining both layers for a complete sandboxed scripting environment.
+//   4. CodeOfPolicies via the C API — enforce policies like no_unsafe
+//      without a .das_project file.
 //
 // The two layers are independent and complementary:
 //   - Filesystem lock:  controls WHICH FILES exist (physical layer)
@@ -225,6 +227,58 @@ static void compile_and_report(const char * label, const char * script_source) {
 }
 
 // -----------------------------------------------------------------------
+// Part 5: CodeOfPolicies — enforce no_unsafe from the C API
+//
+// Instead of (or in addition to) using a .das_project file, you can
+// set compilation policies directly via the C API.
+// -----------------------------------------------------------------------
+static void compile_with_policies(void) {
+    printf("\n=== Part 5: CodeOfPolicies via C API ===\n\n");
+
+    // A simple script that uses an unsafe block.
+    static const char * UNSAFE_SCRIPT =
+        "options gen2\n"
+        "\n"
+        "[export]\n"
+        "def test() {\n"
+        "    unsafe {\n"
+        "        print(\"this should not compile\\n\")\n"
+        "    }\n"
+        "}\n"
+    ;
+
+    das_text_writer  * tout   = das_text_make_writer();
+    das_module_group * libgrp = das_modulegroup_make();
+    das_file_access  * fa     = das_fileaccess_make_default();
+
+    das_fileaccess_introduce_file(fa, "policy_test.das", UNSAFE_SCRIPT, 0);
+
+    // Create policies and set no_unsafe = true.
+    das_policies * pol = das_policies_make();
+    das_policies_set_bool(pol, DAS_POLICY_NO_UNSAFE, 1);
+
+    // Compile with policies — unsafe blocks will be rejected.
+    das_program * program = das_program_compile_policies(
+        "policy_test.das", fa, tout, libgrp, pol);
+
+    das_policies_release(pol);
+
+    int err_count = das_program_err_count(program);
+    printf("Compilation with DAS_POLICY_NO_UNSAFE produced %d error(s):\n", err_count);
+    for (int i = 0; i < err_count; i++) {
+        das_error * error = das_program_get_error(program, i);
+        char buf[1024];
+        das_error_report(error, buf, sizeof(buf));
+        printf("  error %d: %s\n", i, buf);
+    }
+
+    das_program_release(program);
+    das_fileaccess_release(fa);
+    das_modulegroup_release(libgrp);
+    das_text_release(tout);
+}
+
+// -----------------------------------------------------------------------
 // Main
 // -----------------------------------------------------------------------
 int main(int argc, char ** argv) {
@@ -236,6 +290,7 @@ int main(int argc, char ** argv) {
     compile_and_report("Part 2: Banned option", VIOLATES_OPTION);
     compile_and_report("Part 3: Unsafe block forbidden", VIOLATES_UNSAFE);
     compile_and_report("Part 4: Banned module", VIOLATES_MODULE);
+    compile_with_policies();
 
     das_shutdown();
     return 0;

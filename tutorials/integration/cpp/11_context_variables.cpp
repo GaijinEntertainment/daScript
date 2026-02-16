@@ -93,11 +93,6 @@ void tutorial() {
         return;
     }
 
-    // Initialize globals (runs default initializers and [init] functions)
-    if (!program->unsafe) {
-        ctx.runInitScript();
-    }
-
     // ---------------------------------------------------------------
     // 1. Reading scalar globals by name
     // ---------------------------------------------------------------

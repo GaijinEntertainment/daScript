@@ -5,6 +5,7 @@
    single: Tutorial; C Integration; das_project
    single: Tutorial; C Integration; File Access Lock
    single: Tutorial; C Integration; Policy Enforcement
+   single: Tutorial; C Integration; CodeOfPolicies
 
 =============================================
  C Integration: Sandbox
@@ -331,6 +332,18 @@ Expected output (Part 4 — banned module)::
    Compilation produced 1 error(s):
      error 0: module not allowed 'fio' ...
 
+Expected output (Part 5 — CodeOfPolicies via C API)::
+
+   === Part 5: CodeOfPolicies via C API ===
+
+   Compilation with DAS_POLICY_NO_UNSAFE produced 1 error(s):
+     error 0: unsafe function test ...
+
+Part 5 uses ``das_policies_make`` and ``das_policies_set_bool`` to set
+``DAS_POLICY_NO_UNSAFE`` directly from C, without a ``.das_project``
+file.  The error is identical to the one produced by the project-based
+sandbox in Part 3.
+
 
 .. seealso::
 
@@ -339,6 +352,8 @@ Expected output (Part 4 — banned module)::
    :download:`06_sandbox.das_project <../../../../tutorials/integration/c/06_sandbox.das_project>`
 
    Previous tutorial: :ref:`tutorial_integration_c_unaligned_advanced`
+
+   Next tutorial: :ref:`tutorial_integration_c_context_variables`
 
    :ref:`type_mangling` — complete type mangling reference
 
