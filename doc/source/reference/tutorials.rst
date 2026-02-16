@@ -49,3 +49,15 @@ introduced in earlier tutorials.
    tutorials/32_operator_overloading.rst
    tutorials/33_algorithm.rst
    tutorials/34_decs.rst
+
+C Integration Tutorials
+-----------------------
+
+These tutorials show how to embed daScript in a C application using the
+``daScriptC.h`` API.  Each tutorial comes with a ``.c`` source file and a
+companion ``.das`` script in ``tutorials/integration/c/``.
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/integration_c_01_hello_world.rst
