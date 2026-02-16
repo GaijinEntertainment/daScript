@@ -99,7 +99,7 @@ public:
                 ->args({"x", "y"});
 
         // --- Constants ---
-        // addConstant exports compile-time constants to daScript.
+        // addConstant exports compile-time constants to daslang.
         // These appear as `let` constants in scripts.
         addConstant(*this, "PI",      (float)M_PI);
         addConstant(*this, "TWO_PI",  (float)(2.0 * M_PI));
@@ -114,7 +114,7 @@ REGISTER_MODULE(Module_MathTypes);
 // Module B: "math_utils" — depends on "math_types"
 //
 // Uses initDependencies() instead of the constructor for registration.
-// This deferred-init pattern is the production standard in daScript
+// This deferred-init pattern is the production standard in daslang
 // modules that depend on other custom modules:
 //   1. The constructor only sets the module name — nothing else.
 //   2. initDependencies() is called later, when all modules exist.

@@ -4,10 +4,10 @@
    single: Tutorial; C Integration; Calling Functions
 
 ==========================================
- C Integration: Calling daScript Functions
+ C Integration: Calling daslang Functions
 ==========================================
 
-This tutorial shows how to pass arguments to daScript functions from C and
+This tutorial shows how to pass arguments to daslang functions from C and
 retrieve their return values.  It covers all the common scalar types (int,
 float, string, bool) and introduces the **complex result** (cmres) calling
 convention for functions that return structures.
@@ -16,11 +16,11 @@ convention for functions that return structures.
 Arguments and return values
 ===========================
 
-Every value crossing the C ↔ daScript boundary is carried in a ``vec4f`` —
+Every value crossing the C ↔ daslang boundary is carried in a ``vec4f`` —
 a 128-bit SSE register.  The API provides symmetric helper pairs:
 
 =============================  ==============================
-Packing (C → daScript)        Unpacking (daScript → C)
+Packing (C → daslang)        Unpacking (daslang → C)
 =============================  ==============================
 ``das_result_int(value)``      ``das_argument_int(vec4f)``
 ``das_result_float(value)``    ``das_argument_float(vec4f)``
@@ -29,7 +29,7 @@ Packing (C → daScript)        Unpacking (daScript → C)
 =============================  ==============================
 
 Despite their names, the ``das_result_*`` helpers are also used to **pack
-arguments** into a ``vec4f`` array before calling a daScript function.
+arguments** into a ``vec4f`` array before calling a daslang function.
 
 
 Calling a function with arguments
@@ -49,7 +49,7 @@ Calling a function with arguments
    vec4f ret = das_context_eval_with_catch(ctx, fn, args);
    int result = das_argument_int(ret);    // 42
 
-The corresponding daScript function:
+The corresponding daslang function:
 
 .. code-block:: das
 
@@ -62,7 +62,7 @@ The corresponding daScript function:
 String arguments and return values
 ===================================
 
-Strings are passed as plain ``char *`` pointers.  When daScript **returns**
+Strings are passed as plain ``char *`` pointers.  When daslang **returns**
 a string, it lives on the context's heap and remains valid until the context
 is released:
 
@@ -79,7 +79,7 @@ is released:
 Returning structures (complex results)
 =======================================
 
-When a daScript function returns a struct, use
+When a daslang function returns a struct, use
 ``das_context_eval_with_catch_cmres``.  You allocate the struct on the C side
 and pass a pointer:
 
@@ -95,7 +95,7 @@ and pass a pointer:
    das_context_eval_with_catch_cmres(ctx, fn_make_vec2, args, &v);
    printf("x=%.1f y=%.1f\n", v.x, v.y);   // x=1.5 y=2.5
 
-The C struct layout **must** match the daScript struct exactly (same field
+The C struct layout **must** match the daslang struct exactly (same field
 order, same types, same padding).
 
 

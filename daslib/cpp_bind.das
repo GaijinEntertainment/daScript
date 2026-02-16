@@ -8,8 +8,8 @@ module cpp_bind public
 
 //! C++ adapter code generator.
 //!
-//! Given a daScript class type, generates C++ header code for a class adapter
-//! that forwards virtual method calls from C++ into the daScript context.
+//! Given a daslang class type, generates C++ header code for a class adapter
+//! that forwards virtual method calls from C++ into the daslang context.
 //! Used together with ``log_cpp_class_adapter``.
 
 require fio

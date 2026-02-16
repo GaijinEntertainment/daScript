@@ -8,7 +8,7 @@ let AOT_INCLUDES = "#include \"daScript/misc/platform.h\"
 #include \"daScript/simulate/aot.h\"
 #include \"daScript/simulate/aot_library.h\"
 
-";//! C++ include directives required for AOT-compiled daScript code.
+";//! C++ include directives required for AOT-compiled daslang code.
 
 let AOT_HEADERS = "#if defined(_MSC_VER)
 #pragma warning(push)

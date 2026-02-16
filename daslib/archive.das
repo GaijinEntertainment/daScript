@@ -8,7 +8,7 @@ module archive shared private
 
 //! Binary serialization and deserialization framework.
 //!
-//! Provides ``serialize`` generics that read/write daScript values to binary
+//! Provides ``serialize`` generics that read/write daslang values to binary
 //! archives. The `Archive` structure wraps a stream and tracks
 //! read vs. write direction. Supports primitive types, arrays, tables,
 //! variants, tuples, smart pointers, and user-extensible overloads.

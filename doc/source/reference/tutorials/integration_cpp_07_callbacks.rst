@@ -7,7 +7,7 @@
  C++ Integration: Callbacks
 ============================================
 
-This tutorial shows how C++ code can receive and invoke daScript
+This tutorial shows how C++ code can receive and invoke daslang
 closures.  Topics covered:
 
 * ``TBlock<Ret, Args...>`` — typed block parameters (stack-bound closures)
@@ -29,11 +29,11 @@ Blocks — ``TBlock<Ret, Args...>``
 ===================================
 
 Blocks are stack-bound closures — the primary callback mechanism in
-daScript.  They are only valid **during the C++ call** that receives them.
+daslang.  They are only valid **during the C++ call** that receives them.
 Never store a block for later use.
 
 The template ``TBlock<ReturnType, ArgType1, ArgType2, ...>`` provides
-type safety: daScript's compiler checks the argument types at compile
+type safety: daslang's compiler checks the argument types at compile
 time.
 
 .. code-block:: cpp
@@ -73,9 +73,9 @@ script code:
 Function pointers — ``Func``
 ===============================
 
-``Func`` is a reference to a daScript-side function.  Unlike blocks,
+``Func`` is a reference to a daslang-side function.  Unlike blocks,
 function pointers can be stored and invoked multiple times (within the
-same context).  In daScript, ``@@function_name`` creates a ``Func``
+same context).  In daslang, ``@@function_name`` creates a ``Func``
 value.
 
 .. code-block:: cpp
@@ -96,7 +96,7 @@ and ``TFunc``).  Invoke with ``das_invoke_lambda<Ret>::invoke()``.
 
 .. note::
 
-   The untyped ``Lambda`` maps to ``lambda<>`` in daScript and will not
+   The untyped ``Lambda`` maps to ``lambda<>`` in daslang and will not
    match typed lambdas like ``lambda<(x:int):int>``.  Use
    ``TLambda<Ret, Args...>`` for type-safe lambda acceptance.
 
@@ -136,7 +136,7 @@ And the accumulator/reduce pattern:
    }
 
 
-Calling from daScript
+Calling from daslang
 =======================
 
 Blocks use the ``<|`` pipe syntax with ``$()`` lambda prefix.

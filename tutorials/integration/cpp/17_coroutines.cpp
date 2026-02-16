@@ -1,12 +1,12 @@
 // Tutorial 17 — Coroutines (C++ integration)
 //
-// Shows how to consume a daScript generator (coroutine) from C++.
-// A daScript function returns a generator<int> via "return <-".
+// Shows how to consume a daslang generator (coroutine) from C++.
+// A daslang function returns a generator<int> via "return <-".
 // The C++ host receives a Sequence iterator and steps through it
 // with builtin_iterator_iterate(), receiving one value per call.
 //
 // Key concepts:
-//   - Sequence — the C++ type that wraps a daScript generator
+//   - Sequence — the C++ type that wraps a daslang generator
 //   - evalWithCatch with a third &Sequence parameter to capture generators
 //   - builtin_iterator_iterate — single-step the generator
 //   - builtin_iterator_close — clean up when done (or early-exit)
@@ -56,7 +56,7 @@ void tutorial() {
 
     // --- Call the function, capturing the returned generator ---
     //
-    // When a daScript function returns a generator, we pass a pointer
+    // When a daslang function returns a generator, we pass a pointer
     // to a Sequence as the third argument to evalWithCatch.
     // After the call, 'it' holds the iterator state.
     Sequence it;

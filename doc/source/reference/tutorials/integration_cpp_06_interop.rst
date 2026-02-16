@@ -8,7 +8,7 @@
 ============================================
 
 This tutorial covers ``addInterop`` — the low-level alternative to
-``addExtern`` for binding C++ functions to daScript.  Topics covered:
+``addExtern`` for binding C++ functions to daslang.  Topics covered:
 
 * ``addInterop`` vs ``addExtern`` — when to use each
 * Accepting "any type" arguments (``vec4f`` template parameter)
@@ -30,7 +30,7 @@ When to use ``addInterop``
 ``addExtern`` handles most function binding needs.  Use ``addInterop``
 when you need capabilities that ``addExtern`` cannot provide:
 
-* **"Any type" arguments** — accept values of any daScript type and
+* **"Any type" arguments** — accept values of any daslang type and
   inspect them at runtime
 * **TypeInfo access** — inspect type metadata like field names, enum
   values, struct layout
@@ -124,7 +124,7 @@ Use ``addInterop<FuncPtr, ReturnType, ArgTypes...>``:
        SideEffects::none, "describe_type")
            ->arg("value");
 
-When an ``ArgType`` is ``vec4f``, it means "any daScript type."  Concrete
+When an ``ArgType`` is ``vec4f``, it means "any daslang type."  Concrete
 types like ``int32_t`` or ``const char *`` are also valid and work like
 ``addExtern``.
 
@@ -149,10 +149,10 @@ Accessing call-site debug info
    }
 
 
-Using interop functions from daScript
+Using interop functions from daslang
 =======================================
 
-The interop functions look like regular functions in daScript — the
+The interop functions look like regular functions in daslang — the
 "any type" argument accepts any value:
 
 .. code-block:: das
@@ -174,7 +174,7 @@ The interop functions look like regular functions in daScript — the
        let p = make_particle(1.0, 2.0, 0.5, -0.3)
        print("{describe_type(p)}\n")
 
-       // Pure daScript struct — has StructInfo with field metadata
+       // Pure daslang struct — has StructInfo with field metadata
        let pt = MyPoint(x = 10.0, y = 20.0, tag = "origin")
        print("{describe_type(pt)}\n")
        print("fields: {struct_field_names(pt)}\n")

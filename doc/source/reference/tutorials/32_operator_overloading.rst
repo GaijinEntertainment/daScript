@@ -10,10 +10,10 @@ Operator Overloading
     single: Tutorial; Custom Operators
     single: Tutorial; Property Accessors
 
-This tutorial covers operator overloading in daScript — defining custom behavior
+This tutorial covers operator overloading in daslang — defining custom behavior
 for built-in operators when applied to your own types.
 
-daScript operators are regular functions named ``def operator <op>`` and follow
+daslang operators are regular functions named ``def operator <op>`` and follow
 standard overload‑resolution rules. They can be declared as free functions or
 as struct methods.
 
@@ -59,7 +59,7 @@ Usage::
     print("{(a * 3.0).x}\n")             // 3
 
 Note that ``operator *`` is defined twice — once for ``Vec2 * float`` and once
-for ``float * Vec2`` — because daScript does not automatically commute
+for ``float * Vec2`` — because daslang does not automatically commute
 arguments.
 
 Comparison operators
@@ -91,7 +91,7 @@ Usage::
 
 .. note::
 
-    daScript does **not** auto-generate ``!=`` from ``==``, or ``>`` from ``<``.
+    daslang does **not** auto-generate ``!=`` from ``==``, or ``>`` from ``<``.
     Each comparison operator must be defined explicitly if needed.
 
 Unary operators
@@ -337,7 +337,7 @@ For more sophisticated constraints, use :ref:`contracts <tutorial_contracts>`.
 Complete operator reference
 ===========================
 
-The full list of overloadable operators in daScript:
+The full list of overloadable operators in daslang:
 
 .. list-table::
    :header-rows: 1

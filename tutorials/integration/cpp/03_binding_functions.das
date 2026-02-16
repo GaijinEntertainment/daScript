@@ -21,7 +21,7 @@ def test() {
 
     // --- Calling a function with external side effects ---
     // This prints directly to stdout from C++.
-    greet("daScript")
+    greet("daslang")
 
     // --- Calling a function that modifies its argument ---
     var val = 21
@@ -29,7 +29,7 @@ def test() {
     print("double_it(21) = {val}\n")
 
     // --- Calling a context-aware function ---
-    // print_stack_info takes no arguments in daScript —
+    // print_stack_info takes no arguments in daslang —
     // the Context* is injected automatically by the runtime.
     print_stack_info()
 }

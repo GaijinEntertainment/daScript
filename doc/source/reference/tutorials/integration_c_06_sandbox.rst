@@ -11,7 +11,7 @@
  C Integration: Sandbox
 =============================================
 
-This tutorial demonstrates how to run daScript code in a **sandboxed
+This tutorial demonstrates how to run daslang code in a **sandboxed
 environment** from a C host.  The sandbox has two independent layers:
 
 .. list-table::
@@ -70,7 +70,7 @@ Function                          Purpose
 The .das_project file
 =====================
 
-A ``.das_project`` is a regular daScript file that the compiler loads
+A ``.das_project`` is a regular daslang file that the compiler loads
 **before** compiling user scripts.  It exports ``[export]`` callback
 functions that the compiler invokes during compilation.
 
@@ -83,7 +83,7 @@ The project file is loaded via ``das_fileaccess_make_project``:
 
 Internally, the constructor:
 
-1. Compiles the ``.das_project`` file as a normal daScript program
+1. Compiles the ``.das_project`` file as a normal daslang program
 2. Simulates it in a fresh context
 3. Looks up ``[export]`` functions by name (``module_get``,
    ``module_allowed``, etc.)
@@ -242,7 +242,7 @@ Called for each annotation used in the script:
 The C host code
 ===============
 
-The tutorial embeds four inline daScript scripts as C string constants:
+The tutorial embeds four inline daslang scripts as C string constants:
 
 - **HELPER_MODULE** — a utility module (``sandbox_helpers``) with two
   simple functions (``clamp_value`` and ``greet``)

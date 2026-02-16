@@ -7,10 +7,10 @@
  C Integration: Hello World
 =================================
 
-This tutorial shows how to embed daScript in a C application using the
+This tutorial shows how to embed daslang in a C application using the
 ``daScriptC.h`` pure-C API.  By the end you will have a standalone C program
 that compiles a ``.das`` script, finds a function, calls it, and prints
-``Hello from daScript!``.
+``Hello from daslang!``.
 
 .. note::
 
@@ -22,12 +22,12 @@ that compiles a ``.das`` script, finds a function, calls it, and prints
 Prerequisites
 =============
 
-* daScript built from source (``cmake --build build --config Release``).
+* daslang built from source (``cmake --build build --config Release``).
   The build produces ``libDaScript`` which the C tutorial links against.
 * The ``daScriptC.h`` header — located in ``include/daScript/daScriptC.h``.
 
 
-The daScript file
+The daslang file
 =================
 
 Create a minimal script with a single exported function:
@@ -38,7 +38,7 @@ Create a minimal script with a single exported function:
 
    [export]
    def test() {
-       print("Hello from daScript!\n")
+       print("Hello from daslang!\n")
    }
 
 The ``[export]`` annotation makes the function visible to the host so that
@@ -144,7 +144,7 @@ Step 6 — Call the function
        }
 
 ``das_context_eval_with_catch`` runs the function inside a try/catch so that
-daScript exceptions do not crash the host application.  The third argument is
+daslang exceptions do not crash the host application.  The third argument is
 an array of ``vec4f`` arguments — ``NULL`` here because ``test`` takes no
 parameters.
 
@@ -172,7 +172,7 @@ Key concepts
 ============
 
 Opaque handles
-   Every daScript object (program, context, function, etc.) is an **opaque
+   Every daslang object (program, context, function, etc.) is an **opaque
    handle** — a pointer whose internal layout is hidden from C.  You create
    them with ``das_*_make`` / ``das_*_create`` and free them with
    ``das_*_release``.  Never cast or dereference them.
@@ -191,7 +191,7 @@ Error checking
 Building and running
 ====================
 
-The tutorial is built automatically by CMake as part of the daScript project::
+The tutorial is built automatically by CMake as part of the daslang project::
 
    cmake --build build --config Release --target integration_c_01
 
@@ -201,7 +201,7 @@ Run from the project root so that the script path resolves correctly::
 
 Expected output::
 
-   Hello from daScript!
+   Hello from daslang!
 
 
 .. seealso::

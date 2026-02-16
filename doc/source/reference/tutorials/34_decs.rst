@@ -14,7 +14,7 @@ Entity Component System (DECS)
     single: Tutorial; Queries
     single: Tutorial; Stages
 
-This tutorial covers the ``decs`` module — daScript's built-in Entity Component
+This tutorial covers the ``decs`` module — daslang's built-in Entity Component
 System. DECS provides a lightweight ECS where entities are identified by
 ``EntityId``, carry dynamically typed components, and are grouped into
 archetypes based on their component sets. All mutations are deferred and

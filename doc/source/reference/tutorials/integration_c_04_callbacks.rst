@@ -7,14 +7,14 @@
  C Integration: Callbacks and Closures
 ======================================
 
-This tutorial shows how C code can **receive and invoke** daScript callable
+This tutorial shows how C code can **receive and invoke** daslang callable
 types: function pointers, lambdas, and blocks.
 
 
 Three callable types
 ====================
 
-daScript has three callable types, each with different semantics:
+daslang has three callable types, each with different semantics:
 
 =====================  ========  =============================================
 Type                   Mangled   Characteristics
@@ -53,7 +53,7 @@ Calling a function pointer
        return ret;
    }
 
-From daScript, pass a function pointer with ``@@``:
+From daslang, pass a function pointer with ``@@``:
 
 .. code-block:: das
 
@@ -92,7 +92,7 @@ must be the lambda itself** (its capture block):
    ``das_context_eval_lambda`` requires the lambda as ``lmb_args[0]``.
    Omitting it will crash or produce garbage results.
 
-From daScript:
+From daslang:
 
 .. code-block:: das
 
@@ -126,7 +126,7 @@ include the block itself**:
        return ret;
    }
 
-From daScript:
+From daslang:
 
 .. code-block:: das
 

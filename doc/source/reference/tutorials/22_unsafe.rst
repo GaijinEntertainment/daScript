@@ -10,7 +10,7 @@ Unsafe and Pointers
     single: Tutorial; Addr
     single: Tutorial; Reinterpret
 
-This tutorial covers daScript's ``unsafe`` block for opt-in low-level
+This tutorial covers daslang's ``unsafe`` block for opt-in low-level
 operations: raw pointers, ``addr``/``deref``, null handling, pointer
 arithmetic, and ``reinterpret`` casts.
 

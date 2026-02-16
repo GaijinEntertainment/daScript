@@ -11,7 +11,7 @@ LINQ — Language-Integrated Query
     single: Tutorial; Queries
     single: Tutorial; Pipelines
 
-This tutorial covers daScript's LINQ module for C#-style query operations on
+This tutorial covers daslang's LINQ module for C#-style query operations on
 iterators and arrays, plus the ``linq_boost`` macros for composing pipelines.
 
 Setup

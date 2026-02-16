@@ -30,7 +30,7 @@ def main {
     print("=== Tutorial 28: LINQ ===\n\n")
 
     // === Overview ===
-    // daScript's LINQ module (daslib/linq) provides C#-style query
+    // daslang's LINQ module (daslib/linq) provides C#-style query
     // operations for iterators and arrays. daslib/linq_boost adds
     // shorthand macros (_where, _select, etc.) and the _fold macro
     // for composing multi-step pipelines.

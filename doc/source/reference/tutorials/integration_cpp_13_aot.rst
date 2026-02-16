@@ -7,8 +7,8 @@
  C++ Integration: AOT Compilation
 ====================================
 
-This tutorial explains daScript's ahead-of-time (AOT) compilation
-system, which transpiles daScript functions into C++ source code
+This tutorial explains daslang's ahead-of-time (AOT) compilation
+system, which transpiles daslang functions into C++ source code
 for near-native performance.  Topics covered:
 
 * The AOT workflow — generate, compile, link
@@ -27,10 +27,10 @@ Prerequisites
 What AOT does
 =============
 
-AOT in daScript does **not** JIT-compile to machine code at runtime.
+AOT in daslang does **not** JIT-compile to machine code at runtime.
 Instead, it follows a **two-stage build** pattern:
 
-1. **Generate** — the ``daslang`` tool transpiles daScript functions
+1. **Generate** — the ``daslang`` tool transpiles daslang functions
    into C++ source code
 2. **Compile** — the generated ``.cpp`` file is compiled by your C++
    compiler and linked into the host executable
@@ -45,7 +45,7 @@ scripting during development.
 The AOT workflow
 ================
 
-Stage 1 — Generate C++ from daScript
+Stage 1 — Generate C++ from daslang
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The project's ``CMakeLists.txt`` uses the ``DAS_AOT`` macro,
@@ -56,7 +56,7 @@ which runs ``daslang.exe`` with the AOT tool script at build time:
    daslang.exe utils/aot/main.das -- -aot script.das output.cpp
 
 This produces a ``.cpp`` file containing C++ implementations of all
-daScript functions, plus a self-registration block:
+daslang functions, plus a self-registration block:
 
 .. code-block:: cpp
 
@@ -64,7 +64,7 @@ daScript functions, plus a self-registration block:
    namespace das {
        namespace _anon_XXX {
            inline bool test(Context * __context__) {
-               // ... translated daScript code ...
+               // ... translated daslang code ...
            }
 
            static void registerAotFunctions(AotLibrary & aotLib) {
@@ -216,7 +216,7 @@ Expected output::
 
    === AOT workflow summary ===
    1. daslang.exe -aot script.das script.das.cpp
-      -> generates C++ source from daScript functions
+      -> generates C++ source from daslang functions
    2. Compile the .cpp into your executable
       -> functions self-register via static AotListBase
    3. Set CodeOfPolicies::aot = true before compileDaScript

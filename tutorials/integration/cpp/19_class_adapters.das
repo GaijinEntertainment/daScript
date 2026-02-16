@@ -4,7 +4,7 @@ require tutorial_19
 // We need RTTI to pass StructInfo to C++ via class_info().
 require rtti
 
-// Derive a daScript class from the C++ abstract base class.
+// Derive a daslang class from the C++ abstract base class.
 // Override the virtual methods — these will be called from C++ through
 // the class adapter's virtual dispatch bridge.
 
@@ -31,7 +31,7 @@ def add_new_object(classPtr) {
 
 [export]
 def test {
-    print("Class adapter tutorial: daScript classes implementing C++ interfaces\n\n")
+    print("Class adapter tutorial: daslang classes implementing C++ interfaces\n\n")
     // No objects yet — tick returns zero.
     print("tick(0.0) = {tick(0.0)}\n\n")
     // Register object A and simulate a few ticks.

@@ -10,7 +10,7 @@ serialization, regular expressions, AST manipulation, and more.
 
 Some modules are implemented in C++ and are available by default (``builtin``, ``math``,
 ``strings``, ``fio``, ``rtti``, ``ast``, ``network``, ``jobque``, ``uriparser``).
-The rest are written in daScript itself and live in the ``daslib/`` directory;
+The rest are written in daslang itself and live in the ``daslib/`` directory;
 import them with ``require daslib/<module_name>``.
 
 Core runtime
@@ -162,6 +162,6 @@ Code quality and tooling
 Developer tools
 ---------------
 
-* :doc:`das_source_formatter <das_source_formatter>` — daScript source code formatter
+* :doc:`das_source_formatter <das_source_formatter>` — daslang source code formatter
 * :doc:`das_source_formatter_fio <das_source_formatter_fio>` — file-based source code formatting
 * :doc:`rst <rst>` — RST documentation generator used to produce this reference

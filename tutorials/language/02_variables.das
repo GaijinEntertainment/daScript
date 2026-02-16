@@ -47,7 +47,7 @@ def main {
 
     // === No implicit type conversions ===
 
-    // daScript is strict: you CANNOT mix int and float in arithmetic.
+    // daslang is strict: you CANNOT mix int and float in arithmetic.
     // let bad = i + f           // ERROR: int + float
     // You must explicitly cast one side to match the other.
     let result = float(i) + f    // cast int to float

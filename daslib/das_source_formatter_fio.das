@@ -6,7 +6,7 @@ options strict_smart_pointers = true
 
 module das_source_formatter_fio shared private
 
-//! File-based daScript source formatter.
+//! File-based daslang source formatter.
 //!
 //! Wraps ``das_source_formatter`` with file I/O. ``format_file`` reads,
 //! formats, and optionally writes back a ``.das`` source file.
@@ -18,7 +18,7 @@ require daslib/das_source_formatter
 
 
 def public format_file(file_name : string const) {
-    //! Reads a daScript source file, formats it, and writes the result back if changed.
+    //! Reads a daslang source file, formats it, and writes the result back if changed.
     var unformatted : string = ""
     var formatted : string = ""
     fopen(file_name, "rb") <| $(fr) {
@@ -46,7 +46,7 @@ def public format_file(file_name : string const) {
 
 
 def public format_files(file_names : array<string>&) {
-    //! Formats multiple daScript source files in place.
+    //! Formats multiple daslang source files in place.
     for (fname in file_names) {
         format_file(fname)
     }

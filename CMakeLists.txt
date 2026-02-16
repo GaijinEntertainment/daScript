@@ -1,5 +1,5 @@
 cmake_minimum_required (VERSION 3.16)
-project (DAS VERSION 0.5.9)
+project (DAS VERSION 0.6.0)
 include(GNUInstallDirs)
 
 # for now we gonna run with exceptions enabled
@@ -994,8 +994,8 @@ get_target_property(DAS_FMT_LIBS das-fmt LINK_LIBRARIES)
     #  SETUP_LTO(daslangOsx)
     #  set_target_properties(daslangOsx PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME "daslang")
     #  set_target_properties(daslangOsx PROPERTIES
-    #      MACOSX_BUNDLE_SHORT_VERSION_STRING "0.5"
-    #      MACOSX_BUNDLE_LONG_VERSION_STRING  "daslang 0.5"
+    #      MACOSX_BUNDLE_SHORT_VERSION_STRING "0.6"
+    #      MACOSX_BUNDLE_LONG_VERSION_STRING  "daslang 0.6"
     #      MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/utils/daScript/MacOSXBundleInfo.plist.in)
     #ENDIF()
 

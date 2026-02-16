@@ -1,9 +1,9 @@
 // Tutorial 20 — Standalone Context (C++ integration)
 //
-// Shows how to use a pre-compiled daScript program as a standalone
+// Shows how to use a pre-compiled daslang program as a standalone
 // C++ context with zero runtime compilation overhead.
 //
-// Normal daScript embedding compiles .das files at startup:
+// Normal daslang embedding compiles .das files at startup:
 //   compileDaScript → simulate → evalWithCatch
 //
 // A standalone context eliminates the compile step entirely.  The AOT

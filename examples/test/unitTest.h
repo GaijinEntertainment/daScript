@@ -51,7 +51,7 @@ DAS_MOD_API SomeEnum efn_takeOne_giveTwo ( SomeEnum one );
 DAS_MOD_API SomeEnum98 efn_takeOne_giveTwo_98 ( SomeEnum98 one );
 DAS_MOD_API SomeEnum98_DasProxy efn_takeOne_giveTwo_98_DasProxy ( SomeEnum98_DasProxy two );
 
-//sample of your-engine-float3-type to be aliased as float3 in daScript.
+//sample of your-engine-float3-type to be aliased as float3 in daslang.
 class Point3 {
 public:
     float x, y, z;

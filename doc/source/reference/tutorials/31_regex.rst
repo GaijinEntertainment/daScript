@@ -11,7 +11,7 @@ Regular Expressions
     single: Tutorial; regex_boost
 
 This tutorial covers ``daslib/regex`` and ``daslib/regex_boost`` — compiling,
-matching, and replacing text with regular expressions in daScript.
+matching, and replacing text with regular expressions in daslang.
 
 ``regex`` provides the core compiler, matcher, and iterator APIs.
 ``regex_boost`` adds the ``%regex~`` reader macro for compile-time patterns.
@@ -96,7 +96,7 @@ Syntax      Meaning
   regex_match(re_q, "color")        // 5
   regex_match(re_q, "colour")       // 6
 
-Counted quantifiers use braces (escaped as ``\{`` in daScript strings)::
+Counted quantifiers use braces (escaped as ``\{`` in daslang strings)::
 
   var re_exact <- regex_compile("\\d\{4}")
   regex_match(re_exact, "1234")     // 4

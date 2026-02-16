@@ -2,7 +2,7 @@ options gen2
 
 // Companion script for the "Smart Pointers" tutorial.
 // Entity is a reference-counted C++ type (inherits ptr_ref_count).
-// In daScript, smart_ptr<Entity> variables use `var inscope` to
+// In daslang, smart_ptr<Entity> variables use `var inscope` to
 // ensure proper cleanup when they go out of scope.
 
 require tutorial_12_cpp

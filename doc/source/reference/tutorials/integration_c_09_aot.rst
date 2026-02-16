@@ -11,7 +11,7 @@
 =============================================
 
 This tutorial demonstrates **Ahead-of-Time compilation** via the C API.
-AOT translates daScript functions into C++ source code at build time.
+AOT translates daslang functions into C++ source code at build time.
 When linked into the host executable and enabled via policies, ``simulate()``
 replaces interpreter nodes with direct native calls — near-C++ performance.
 

@@ -8,13 +8,13 @@
 ============================================
 
 This tutorial shows how to bind C++ operators and property accessors
-to daScript, making custom types feel native.  Topics covered:
+to daslang, making custom types feel native.  Topics covered:
 
 * ``addEquNeq<T>`` — binding ``==`` and ``!=`` operators
 * Custom arithmetic operators via ``addExtern`` with operator names
 * ``addProperty<DAS_BIND_MANAGED_PROP(method)>`` — property accessors
 * ``addPropertyExtConst`` — const/non-const property overloads
-* ``addCtorAndUsing`` — exposing C++ constructors to daScript
+* ``addCtorAndUsing`` — exposing C++ constructors to daslang
 * Overriding ``isPod()`` / ``hasNonTrivialCtor()`` for non-POD types
 * Properties vs fields in ``ManagedStructureAnnotation``
 
@@ -29,8 +29,8 @@ Prerequisites
 Operators via ``addExtern``
 =============================
 
-daScript resolves operators by name.  To bind a C++ operator, register a
-function with the operator symbol as its daScript name:
+daslang resolves operators by name.  To bind a C++ operator, register a
+function with the operator symbol as its daslang name:
 
 .. code-block:: cpp
 
@@ -115,7 +115,7 @@ getter methods on the C++ type, then register them in the annotation:
        }
    };
 
-In daScript, properties are accessed with dot syntax just like fields:
+In daslang, properties are accessed with dot syntax just like fields:
 
 .. code-block:: das
 
@@ -129,7 +129,7 @@ Const/non-const properties — ``addPropertyExtConst``
 ======================================================
 
 When a C++ type has both const and non-const overloads of a method, use
-``addPropertyExtConst`` to bind them as a single property.  daScript will
+``addPropertyExtConst`` to bind them as a single property.  daslang will
 call the appropriate overload depending on whether the object is mutable
 (``var``) or immutable (``let``):
 
@@ -152,7 +152,7 @@ Register with explicit function-pointer types for both overloads:
        bool (Vec3::*)() const, &Vec3::editable     // const
    >("editable", "editable");
 
-In daScript, the property value depends on the variable's mutability:
+In daslang, the property value depends on the variable's mutability:
 
 .. code-block:: das
 
@@ -223,7 +223,7 @@ Without annotation overrides, local Color variables need workarounds:
 ``addCtorAndUsing<T>`` registers two things:
 
 1. A **constructor function** named after the type — calls placement new
-   in daScript.
+   in daslang.
 2. A **``using`` function** for block-based construction —
    ``using() <| $(var c : Type#) { ... }``.
 
@@ -243,7 +243,7 @@ Overriding ``isPod()`` — ``SafeColor``
 
 If you know a C++ type's non-trivial constructor is harmless (e.g., it
 just zero-initializes fields), you can override the annotation to tell
-daScript it is safe for local variables.  This avoids the need for
+daslang it is safe for local variables.  This avoids the need for
 ``unsafe`` or ``using``.
 
 We define ``SafeColor`` as a separate struct with the same layout:
@@ -277,7 +277,7 @@ Now scripts can use SafeColor without ``unsafe``:
    print("{sc2.brightness}\n")   // 0.299
 
 
-Using operators in daScript
+Using operators in daslang
 =============================
 
 All operators work naturally:

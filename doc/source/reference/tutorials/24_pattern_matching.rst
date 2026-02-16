@@ -9,7 +9,7 @@ Pattern Matching
     single: Tutorial; Match
     single: Tutorial; Variable Binding
 
-This tutorial covers daScript's pattern matching with the ``match``
+This tutorial covers daslang's pattern matching with the ``match``
 macro from ``daslib/match``.
 
 Basic match

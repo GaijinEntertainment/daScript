@@ -2,7 +2,7 @@ options gen2
 
 // Companion script for the "Binding Methods" tutorial.
 // The module "tutorial_08_cpp" exposes Counter and StringBuffer types
-// with C++ methods bound as daScript functions.
+// with C++ methods bound as daslang functions.
 
 require tutorial_08_cpp
 
@@ -39,7 +39,7 @@ def test() {
         print("is_zero: {is_zero(c)}\n")
     }
 
-    // --- Counter: pipe syntax (idiomatic daScript) ---
+    // --- Counter: pipe syntax (idiomatic daslang) ---
     print("\n=== Counter with pipe syntax ===\n")
 
     unsafe {
@@ -66,7 +66,7 @@ def test() {
         sb |> clear()
         print("after clear, empty: {buf_empty(sb)}\n")
 
-        sb |> append("daScript")
+        sb |> append("daslang")
         print("content: {c_str(sb)}\n")
     }
 }

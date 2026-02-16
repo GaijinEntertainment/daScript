@@ -51,7 +51,7 @@ Partial initialization fills unspecified fields with their defaults::
 Structs are pure data
 =====================
 
-daScript structs have no methods.  Write free functions that take a struct as a
+daslang structs have no methods.  Write free functions that take a struct as a
 parameter::
 
   def area(r : Rect) : float {

@@ -6,7 +6,7 @@
     this is NOT a general purpose replacement of std::function
     this concept wraps around lambda, which is passed on the stack, and only exists at eval time, i.e
         foo ( callable([&](...){}) )
-    this is as close to daScript block, as we can get
+    this is as close to daslang block, as we can get
 */
 
 namespace das {

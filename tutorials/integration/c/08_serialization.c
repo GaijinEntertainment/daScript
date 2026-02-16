@@ -1,7 +1,7 @@
 // Tutorial: Serialization — Save and Restore Compiled Programs (C API)
 //
 // This tutorial covers:
-//   1. Compiling a daScript program normally
+//   1. Compiling a daslang program normally
 //   2. Serializing the compiled program to an in-memory binary blob
 //   3. Releasing the original program
 //   4. Deserializing from the blob — no parsing, no type inference
@@ -19,7 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "daScript/daScriptC.h"
+#include "daslang/daScriptC.h"
 
 int main(int argc, char ** argv) {
     (void)argc; (void)argv;

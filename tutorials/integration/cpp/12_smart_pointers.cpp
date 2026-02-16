@@ -1,11 +1,11 @@
 // Tutorial 12 — Smart Pointers (C++ integration)
 //
-// Demonstrates how to expose reference-counted C++ types to daScript:
+// Demonstrates how to expose reference-counted C++ types to daslang:
 //   - Inheriting from das::ptr_ref_count for reference counting
 //   - ManagedStructureAnnotation with canNew/canDelete
-//   - smart_ptr<T> in daScript scripts (var inscope)
+//   - smart_ptr<T> in daslang scripts (var inscope)
 //   - Factory functions returning smart_ptr
-//   - Passing smart_ptr between C++ and daScript
+//   - Passing smart_ptr between C++ and daslang
 
 #include "daScript/daScript.h"
 #include "daScript/ast/ast_interop.h"
@@ -19,7 +19,7 @@ using namespace das;
 // -----------------------------------------------------------------------
 // A reference-counted C++ type.
 // Inheriting from ptr_ref_count gives addRef()/delRef()/use_count().
-// This is the ONLY requirement for smart_ptr support in daScript.
+// This is the ONLY requirement for smart_ptr support in daslang.
 // -----------------------------------------------------------------------
 
 class Entity : public ptr_ref_count {
@@ -57,7 +57,7 @@ public:
     }
 };
 
-// Factory — returns a smart_ptr so daScript manages the lifetime
+// Factory — returns a smart_ptr so daslang manages the lifetime
 smart_ptr<Entity> make_entity(const char * name, float x, float y) {
     auto e = make_smart<Entity>();
     e->name = name;
@@ -67,7 +67,7 @@ smart_ptr<Entity> make_entity(const char * name, float x, float y) {
 }
 
 // -----------------------------------------------------------------------
-// Method wrappers (daScript has no member functions — use free functions)
+// Method wrappers (daslang has no member functions — use free functions)
 // -----------------------------------------------------------------------
 
 void entity_move(Entity & e, float dx, float dy) {
@@ -94,8 +94,8 @@ struct EntityAnnotation : ManagedStructureAnnotation<Entity, true, true> {
     //                                                       ^^^^  ^^^^
     //                                              canNew --+      |
     //                                              canDelete ------+
-    // canNew=true:    daScript can call `new Entity()` → allocates + addRef
-    // canDelete=true: daScript can call `delete ptr`   → delRef
+    // canNew=true:    daslang can call `new Entity()` → allocates + addRef
+    // canDelete=true: daslang can call `delete ptr`   → delRef
     EntityAnnotation(ModuleLibrary & ml)
         : ManagedStructureAnnotation("Entity", ml)
     {

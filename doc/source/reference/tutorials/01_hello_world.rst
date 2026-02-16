@@ -7,14 +7,14 @@ Hello World
 .. index::
     single: Tutorial; Hello World
 
-Your first daScript program introduces the essential building blocks:
+Your first daslang program introduces the essential building blocks:
 ``options gen2`` to enable modern syntax, ``[export] def main`` as the entry
 point, ``print`` for console output, and string interpolation.
 
 Setup
 =====
 
-Every daScript source file in this tutorial series starts with::
+Every daslang source file in this tutorial series starts with::
 
   options gen2
 
@@ -25,7 +25,7 @@ from C, C++, or similar languages.
 Entry point
 ===========
 
-A runnable daScript program needs a ``main`` function marked with ``[export]``::
+A runnable daslang program needs a ``main`` function marked with ``[export]``::
 
   [export]
   def main {
@@ -42,7 +42,7 @@ String interpolation
 Inside a string literal, any expression enclosed in ``{ }`` is evaluated and
 converted to text::
 
-  let name = "daScript"
+  let name = "daslang"
   print("Welcome to {name}!\n")
 
   let a = 10
@@ -61,7 +61,7 @@ Running the tutorial
 Expected output::
 
   Hello, World!
-  Welcome to daScript!
+  Welcome to daslang!
   2 + 3 = 5
   10 + 20 = 30
   Use {braces} for interpolation
@@ -72,5 +72,5 @@ See also
 ========
 
 * **Next:** :ref:`tutorial_variables` — variables and types
-* :ref:`Program structure <program_structure>` — how daScript programs are organized
+* :ref:`Program structure <program_structure>` — how daslang programs are organized
 * :ref:`Expressions <expressions>` — expression syntax including string builders

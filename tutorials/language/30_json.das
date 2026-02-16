@@ -156,7 +156,7 @@ def variant_checks() {
 
 // === Struct serialization ===
 // json_boost provides generic JV() and from_JV() that convert
-// daScript structs to/from JSON objects using compile-time reflection.
+// daslang structs to/from JSON objects using compile-time reflection.
 
 struct Player {
     name : string
@@ -231,7 +231,7 @@ def modifying_json() {
 }
 
 // === Reader macro %json~...%% ===
-// The %json~ reader macro lets you embed JSON directly in daScript code.
+// The %json~ reader macro lets you embed JSON directly in daslang code.
 // It parses at compile time and creates a JsonValue? at runtime.
 
 def reader_macro_demo() {

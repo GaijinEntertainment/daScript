@@ -1,10 +1,10 @@
 // Tutorial 09 — Operators and Properties (C++ integration)
 //
-// Demonstrates how to expose C++ operators and properties to daScript:
+// Demonstrates how to expose C++ operators and properties to daslang:
 //   - addEquNeq — binding == and != operators
 //   - Custom operators (+, -, *, etc.) via addExtern
 //   - addProperty / addPropertyExtConst — property accessors
-//   - Properties appear as field-like access in daScript
+//   - Properties appear as field-like access in daslang
 
 #include "daScript/daScript.h"
 #include "daScript/ast/ast_interop.h"
@@ -60,7 +60,7 @@ Vec3 make_vec3(float x, float y, float z) {
 
 // -----------------------------------------------------------------------
 // Non-POD type — has a non-trivial constructor, so isPod() returns false.
-// This means mutable local variables (var) require `unsafe` in daScript.
+// This means mutable local variables (var) require `unsafe` in daslang.
 // -----------------------------------------------------------------------
 
 struct Color {
@@ -130,7 +130,7 @@ MAKE_TYPE_FACTORY(Vec3, Vec3);
 MAKE_TYPE_FACTORY(Color, Color);
 
 // SafeColor — identical layout to Color but with annotation overrides
-// that make it usable without `unsafe` in daScript.
+// that make it usable without `unsafe` in daslang.
 // Defined as a separate struct (not inheriting Color) so that
 // member-function pointers resolve to SafeColor, not Color.
 struct SafeColor {
@@ -191,7 +191,7 @@ struct ColorAnnotation : ManagedStructureAnnotation<Color, false> {
 };
 
 // SafeColorAnnotation — same C++ type, but with annotation overrides
-// that tell daScript "treat this as POD-like".
+// that tell daslang "treat this as POD-like".
 // This makes local variables work without `unsafe`.
 struct SafeColorAnnotation : ManagedStructureAnnotation<SafeColor, false> {
     SafeColorAnnotation(ModuleLibrary & ml)
@@ -255,7 +255,7 @@ public:
 
         // --- Arithmetic operators ---
         // Bind C++ functions with operator names (+, -, *, etc.)
-        // daScript resolves operators by name, so "+" becomes the + operator.
+        // daslang resolves operators by name, so "+" becomes the + operator.
         addExtern<DAS_BIND_FUN(vec3_add), SimNode_ExtFuncCallAndCopyOrMove>(
             *this, lib, "+",
             SideEffects::none, "vec3_add")

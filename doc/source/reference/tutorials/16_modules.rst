@@ -16,7 +16,7 @@ calls with ``::``, and common standard library modules.
 File layout
 ===========
 
-A typical daScript file follows this order::
+A typical daslang file follows this order::
 
   options gen2                         // compiler options
   module my_module public              // module declaration

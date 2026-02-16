@@ -5,7 +5,7 @@
 AST manipulation library
 ========================
 
-The AST module provides access to the abstract syntax tree representation of daScript programs.
+The AST module provides access to the abstract syntax tree representation of daslang programs.
 It defines node types for all language constructs (expressions, statements, types, functions,
 structures, enumerations, etc.), visitors for tree traversal, and utilities for AST
 construction and manipulation. This module is the foundation for writing macros, code
@@ -721,7 +721,7 @@ Smart pointer to an `Expression` object. The fundamental handle type for all AST
 
 .. das:attribute:: ProgramPtr = smart_ptr<Program>
 
-Smart pointer to a `Program` object. Represents the root of a compiled daScript program, containing all modules, functions, and structures.
+Smart pointer to a `Program` object. Represents the root of a compiled daslang program, containing all modules, functions, and structures.
 .. _alias-TypeDeclPtr:
 
 .. das:attribute:: TypeDeclPtr = smart_ptr<TypeDecl>
@@ -1125,7 +1125,7 @@ Returns whether the base type of the given type is an enumeration type.
 
 .. das:function:: TypeDecl implicit.isHandle() : bool
 
-Returns whether the given type is a handle type, representing a C++ type exposed to daScript via TypeAnnotation.
+Returns whether the given type is a handle type, representing a C++ type exposed to daslang via TypeAnnotation.
 
 .. _function-ast__dot__rq_isStructure_TypeDecl_implicit:
 
@@ -6416,7 +6416,7 @@ Textual descriptions of the objects
 
 .. das:function:: das_to_string(type: Type) : string
 
-Returns the name of the corresponding daScript base type as a string.
+Returns the name of the corresponding daslang base type as a string.
 
 :Arguments: * **type** :  :ref:`Type <enum-rtti-Type>` 
 
@@ -6428,7 +6428,7 @@ describe
 
 .. das:function:: describe(expr: smart_ptr<Function>) : auto
 
-Produces a daScript source code string representation of the given AST object.
+Produces a daslang source code string representation of the given AST object.
 
 :Arguments: * **expr** : smart_ptr< :ref:`Function <handle-ast-Function>` >
 
@@ -6464,7 +6464,7 @@ Produces a C++ source code string representation of the given TypeDecl.
 
 .. das:function:: describe_expression(expression: smart_ptr<Expression> implicit) : string
 
-Returns a string description of the Expression matching the corresponding daScript source code.
+Returns a string description of the Expression matching the corresponding daslang source code.
 
 :Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > implicit
 
@@ -6472,7 +6472,7 @@ Returns a string description of the Expression matching the corresponding daScri
 
 .. das:function:: describe_function(function: smart_ptr<Function> implicit) : string
 
-Returns a string description of the Function matching the corresponding daScript function declaration.
+Returns a string description of the Function matching the corresponding daslang function declaration.
 
 :Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
 
@@ -6480,7 +6480,7 @@ Returns a string description of the Function matching the corresponding daScript
 
 .. das:function:: describe_typedecl(type: smart_ptr<TypeDecl> implicit; extra: bool; contracts: bool; module: bool) : string
 
-Returns a string description of the TypeDecl matching the corresponding daScript type declaration.
+Returns a string description of the TypeDecl matching the corresponding daslang type declaration.
 
 :Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
@@ -7471,7 +7471,7 @@ Finds and returns a structure alias type by its alias name.
 
 .. das:function:: get_underlying_value_type(type: smart_ptr<TypeDecl> implicit) : smart_ptr<TypeDecl>
 
-Returns the daScript type aliased by a ManagedValue handled type.
+Returns the daslang type aliased by a ManagedValue handled type.
 
 :Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 

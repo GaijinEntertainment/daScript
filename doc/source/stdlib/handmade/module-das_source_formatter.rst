@@ -1,5 +1,5 @@
-The DAS_SOURCE_FORMATTER module implements source code formatting for daScript.
-It can parse and re-emit daScript source code with consistent indentation,
+The DAS_SOURCE_FORMATTER module implements source code formatting for daslang.
+It can parse and re-emit daslang source code with consistent indentation,
 spacing, and line breaking rules. Used by editor integrations and code
 quality tools.
 

@@ -8,7 +8,7 @@
 ============================================
 
 This tutorial shows how to expose C++ ``enum`` and ``enum class`` types
-to daScript.  Topics covered:
+to daslang.  Topics covered:
 
 * ``DAS_BASE_BIND_ENUM`` — the macro approach to enum binding
 * ``DAS_BIND_ENUM_CAST`` — cast specialization (when needed)
@@ -71,7 +71,7 @@ The primary macro for binding enums.  It creates:
        Error
    )
 
-The first argument is the C++ enum type, the second is the daScript
+The first argument is the C++ enum type, the second is the daslang
 name, and the remaining arguments are the enum values.  The generated
 class names follow the pattern ``Enumeration<DasName>`` — e.g.
 ``EnumerationDirection``.
@@ -89,7 +89,7 @@ For unscoped (C-style) enums, use ``DAS_BASE_BIND_ENUM_98`` instead.
 ========================
 
 This macro creates a ``cast<>`` specialization that lets enum values
-cross the C++ / daScript boundary.  In many cases the SFINAE default in
+cross the C++ / daslang boundary.  In many cases the SFINAE default in
 the engine already handles this, but you may need it for more complex
 enum types:
 
@@ -156,7 +156,7 @@ and return values automatically — no special treatment is required:
            ->args({"d"});
 
 
-Using bound enums in daScript
+Using bound enums in daslang
 ==============================
 
 Enum values are accessed with dot syntax — ``EnumName.Value``:
@@ -186,7 +186,7 @@ Enum values are accessed with dot syntax — ``EnumName.Value``:
 Name collision warning
 ========================
 
-The daScript engine defines some enum names internally (e.g.
+The daslang engine defines some enum names internally (e.g.
 ``das::LogLevel`` in ``string_writer.h``).  If your C++ enum has the same
 name as an engine-internal enum **and** you use ``using namespace das``,
 you will get ambiguous symbol errors.  Rename your enum to avoid the

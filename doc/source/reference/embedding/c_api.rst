@@ -43,7 +43,7 @@ Initialization and shutdown
 
 .. code-block:: c
 
-   #include "daScript/daScriptC.h"
+   #include "daslang/daScriptC.h"
 
    int main() {
        das_initialize();

@@ -7,14 +7,14 @@
  C++ Integration: Binding Methods
 ============================================
 
-This tutorial shows how to expose C++ member functions to daScript.
+This tutorial shows how to expose C++ member functions to daslang.
 Topics covered:
 
 * ``DAS_CALL_MEMBER`` — wrapping a member function as a static callable
 * ``DAS_CALL_METHOD`` — using the wrapper as an ``addExtern`` template argument
 * ``DAS_CALL_MEMBER_CPP`` — providing the AOT-compatible name
 * Const vs non-const methods and ``SideEffects``
-* Pipe syntax for method-like calls in daScript
+* Pipe syntax for method-like calls in daslang
 
 
 Prerequisites
@@ -25,10 +25,10 @@ Prerequisites
   ``MAKE_TYPE_FACTORY``.
 
 
-How methods work in daScript
+How methods work in daslang
 ==============================
 
-daScript does not have member functions.  "Methods" are free functions
+daslang does not have member functions.  "Methods" are free functions
 whose first parameter is the struct instance (``self``).  Pipe syntax
 (``obj |> method()``) provides method-call ergonomics.
 
@@ -105,7 +105,7 @@ provide factory functions that return by value so scripts can use
            ->args({"initial", "step"});
 
 
-Calling methods from daScript
+Calling methods from daslang
 ===============================
 
 The bound methods are called as free functions.  Because handled types
@@ -126,7 +126,7 @@ need mutable access under ``unsafe``, the pattern is:
            print("value = {get(c)}\n")  // 12
        }
 
-       // Pipe syntax — idiomatic daScript
+       // Pipe syntax — idiomatic daslang
        unsafe {
            var c = make_counter(100, 10)
            c |> decrement()
@@ -164,7 +164,7 @@ Expected output::
    content: Hello, World!
    length: 13
    after clear, empty: true
-   content: daScript
+   content: daslang
 
 
 .. seealso::

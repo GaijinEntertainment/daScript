@@ -6,7 +6,7 @@ options strict_smart_pointers = true
 
 module fuzzer shared private
 
-//! Fuzz-testing helpers for daScript programs.
+//! Fuzz-testing helpers for daslang programs.
 //!
 //! Provides `fuzz` and `fuzz_debug` runners that execute a block many times,
 //! and a set of ``fuzz_numeric_and_vector_op*`` helpers that call a function

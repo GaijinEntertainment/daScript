@@ -9,7 +9,7 @@
  C Integration: Serialization
 =============================================
 
-This tutorial demonstrates how to **serialize** a compiled daScript program
+This tutorial demonstrates how to **serialize** a compiled daslang program
 to a binary blob and **deserialize** it back, skipping recompilation on
 subsequent runs.
 

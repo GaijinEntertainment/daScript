@@ -1,6 +1,6 @@
 // Tutorial 1: Hello World
 //
-// Your first daScript program. This tutorial covers:
+// Your first daslang program. This tutorial covers:
 //   - options gen2     (enabling modern syntax)
 //   - [export] def main (the entry point)
 //   - print            (writing to the console)
@@ -10,7 +10,7 @@
 
 options gen2
 
-// Every daScript program needs an entry point.
+// Every daslang program needs an entry point.
 // [export] marks the function as callable by the host.
 // def main is the conventional entry point function.
 
@@ -23,7 +23,7 @@ def main {
 
     // String interpolation: any expression inside {braces} within
     // a string literal is evaluated and converted to text.
-    let name = "daScript"
+    let name = "daslang"
     print("Welcome to {name}!\n")
 
     // You can put arbitrary expressions inside {braces}.
@@ -40,7 +40,7 @@ def main {
 
 // output:
 // Hello, World!
-// Welcome to daScript!
+// Welcome to daslang!
 // 2 + 3 = 5
 // 10 + 20 = 30
 // Use {braces} for interpolation

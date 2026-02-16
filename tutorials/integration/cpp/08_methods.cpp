@@ -1,12 +1,12 @@
 // Tutorial 08 — Binding Methods (C++ integration)
 //
-// Demonstrates how to expose C++ class/struct methods to daScript:
+// Demonstrates how to expose C++ class/struct methods to daslang:
 //   - DAS_CALL_MEMBER / DAS_CALL_MEMBER_CPP — wrapping member functions
 //   - addExtern with method wrappers — registering methods as free functions
 //   - Const and non-const method overloads
 //   - addCtorAndUsing — binding constructors
 //
-// In daScript, "methods" are free functions whose first argument is the
+// In daslang, "methods" are free functions whose first argument is the
 // struct instance.  DAS_CALL_MEMBER generates a static wrapper that
 // forwards the call to the C++ member function.
 

@@ -6,7 +6,7 @@ MacOS/linux/win64 wasm build status [![wasm_build](https://github.com/GaijinEnte
 
 Read my [BLOG](https://borisbat.github.io/dascf-blog)
 
-0.5 version is coming soon.
+0.6 version is coming soon.
 
 Serialization, JIT (via LLVM), and many more good language features are in.
 We are putting in last finishing touches, documentation, and all that jazz.
@@ -15,8 +15,8 @@ See you soon...
 ## Installation
 
 ```sh
-git clone https://github.com/GaijinEntertainment/daScript.git daScript
-cd daScript
+git clone https://github.com/GaijinEntertainment/daScript.git daslang
+cd daslang
 git submodule update --init --recursive
 ```
 

@@ -2,11 +2,11 @@ options gen2
 
 // Companion script for the "Low-Level Interop" tutorial.
 // The module "tutorial_06_cpp" exposes interop functions that accept
-// any daScript type and inspect TypeInfo at runtime.
+// any daslang type and inspect TypeInfo at runtime.
 
 require tutorial_06_cpp
 
-// A pure daScript struct — TypeInfo has type==tStructure with StructInfo
+// A pure daslang struct — TypeInfo has type==tStructure with StructInfo
 // (unlike C++ handled types which have type==tHandle)
 struct MyPoint {
     x : float
@@ -27,7 +27,7 @@ def test() {
     let p = make_particle(1.0, 2.0, 0.5, -0.3)
     print("{describe_type(p)}\n")
 
-    // Pure daScript struct
+    // Pure daslang struct
     let pt = MyPoint(x = 10.0, y = 20.0, tag = "origin")
     print("{describe_type(pt)}\n")
 
@@ -48,7 +48,7 @@ def test() {
     print("hash(42) again = {h3}\n")
     print("same hash? {h1 == h3}\n")
 
-    // --- struct_field_names: inspect pure daScript struct fields ---
+    // --- struct_field_names: inspect pure daslang struct fields ---
     print("\n=== struct_field_names ===\n")
     print("MyPoint fields: {struct_field_names(pt)}\n")
 

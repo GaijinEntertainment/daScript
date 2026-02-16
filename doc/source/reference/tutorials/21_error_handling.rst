@@ -11,7 +11,7 @@ Error Handling
     single: Tutorial; Assert
     single: Tutorial; Defer
 
-This tutorial covers daScript's error-handling mechanisms: ``panic`` for
+This tutorial covers daslang's error-handling mechanisms: ``panic`` for
 fatal errors, ``try``/``recover`` for catching panics, assertions for
 invariants, and ``defer`` for cleanup actions.
 

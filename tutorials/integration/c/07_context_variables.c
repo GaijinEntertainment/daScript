@@ -1,9 +1,9 @@
-// Tutorial: Context Variables — Accessing daScript Globals from C
+// Tutorial: Context Variables — Accessing daslang Globals from C
 //
 // This tutorial covers:
 //   1. Reading scalar global variables (int, float, string, bool) from C
 //   2. Writing global variables from C
-//   3. Calling a daScript function that verifies the C-side writes
+//   3. Calling a daslang function that verifies the C-side writes
 //   4. Enumerating all global variables by index
 //
 // Build: link against libDaScript (C++ linker required).
@@ -12,7 +12,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "daScript/daScriptC.h"
+#include "daslang/daScriptC.h"
 
 int main(int argc, char ** argv) {
     (void)argc; (void)argv;
@@ -100,9 +100,9 @@ int main(int argc, char ** argv) {
         }
 
         // ---------------------------------------------------------------
-        // 3. Call a daScript function to verify the C-side changes
+        // 3. Call a daslang function to verify the C-side changes
         // ---------------------------------------------------------------
-        printf("\n=== Calling daScript to verify ===\n");
+        printf("\n=== Calling daslang to verify ===\n");
         das_function * fn = das_context_find_function(ctx, "print_globals");
         if (fn) {
             das_context_eval_with_catch(ctx, fn, NULL);

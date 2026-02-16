@@ -209,7 +209,7 @@ Bit flag constant on ``FuncInfo.flags`` indicating that the function runs during
 
 .. das:attribute:: FUNCINFO_BUILTIN = 0x2
 
-Bit flag constant on ``FuncInfo.flags`` indicating that the function is a built-in (C++-bound) function rather than a daScript-defined one.
+Bit flag constant on ``FuncInfo.flags`` indicating that the function is a built-in (C++-bound) function rather than a daslang-defined one.
 .. _global-rtti-FUNCINFO_PRIVATE:
 
 .. das:attribute:: FUNCINFO_PRIVATE = 0x4
@@ -978,7 +978,7 @@ Property-like accessor that returns ``true`` if the given ``Annotation`` is a ``
 
 .. das:function:: Annotation implicit.isBasicStructureAnnotation() : bool
 
-Property-like accessor that returns ``true`` if the given ``Annotation`` is a ``BasicStructureAnnotation``, which exposes C++ struct fields to daScript.
+Property-like accessor that returns ``true`` if the given ``Annotation`` is a ``BasicStructureAnnotation``, which exposes C++ struct fields to daslang.
 
 .. _function-rtti__dot__rq_isStructureAnnotation_Annotation_implicit:
 
@@ -990,7 +990,7 @@ Property-like accessor that returns ``true`` if the given ``Annotation`` is a st
 
 .. das:function:: Annotation implicit.isStructureTypeAnnotation() : bool
 
-Property-like accessor that returns ``true`` if the given ``Annotation`` is a ``StructureTypeAnnotation``, which binds a C++ class as a daScript handled struct.
+Property-like accessor that returns ``true`` if the given ``Annotation`` is a ``StructureTypeAnnotation``, which binds a C++ class as a daslang handled struct.
 
 .. _function-rtti__dot__rq_isFunctionAnnotation_Annotation_implicit:
 
@@ -1241,7 +1241,7 @@ Property-like accessor that returns the number of fields declared in the given `
 
 :Properties: * **fieldCount** : int
 
-Handled type which represents a structure-like annotation for exposing C++ types to daScript.
+Handled type which represents a structure-like annotation for exposing C++ types to daslang.
 
 :Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the annotation
 
@@ -2040,7 +2040,7 @@ Iterates through all modules referenced by the given ``Program`` (including tran
 
 .. das:function:: program_for_each_registered_module(block: block<(Module?):void>)
 
-Iterates through all modules registered in the daScript runtime (globally, not per-program), yielding a ``Module`` pointer for each.
+Iterates through all modules registered in the daslang runtime (globally, not per-program), yielding a ``Module`` pointer for each.
 
 :Arguments: * **block** : block<( :ref:`Module <handle-rtti-Module>` ?):void> implicit
 
@@ -2170,7 +2170,7 @@ compile
 
 .. das:function:: compile(module_name: string implicit; codeText: string implicit; codeOfPolicies: CodeOfPolicies implicit; exportAll: bool; block: block<(bool;smart_ptr<Program>;das_string):void>)
 
-Compiles a daScript program from a source code string using the provided ``FileAccess`` and ``ModuleGroup``, returning a ``ProgramPtr`` (null on failure).
+Compiles a daslang program from a source code string using the provided ``FileAccess`` and ``ModuleGroup``, returning a ``ProgramPtr`` (null on failure).
 
 :Arguments: * **module_name** : string implicit
 
@@ -2192,7 +2192,7 @@ Compiles a daScript program from a source code string using the provided ``FileA
 
 .. das:function:: compile_file(module_name: string implicit; fileAccess: smart_ptr<FileAccess> implicit; moduleGroup: ModuleGroup? implicit; codeOfPolicies: CodeOfPolicies implicit; block: block<(bool;smart_ptr<Program>;das_string):void>)
 
-Compiles a daScript program from a file registered in the given ``FileAccess`` object, returning a ``ProgramPtr`` (null on failure).
+Compiles a daslang program from a file registered in the given ``FileAccess`` object, returning a ``ProgramPtr`` (null on failure).
 
 :Arguments: * **module_name** : string implicit
 

@@ -8,7 +8,7 @@ module regex shared public
 
 //! Regular expression engine.
 //!
-//! Pure-daScript regex compiler and NFA matcher. Supports character classes,
+//! Pure-daslang regex compiler and NFA matcher. Supports character classes,
 //! capturing and non-capturing groups, named groups ``(?P<name>...)``,
 //! quantifiers (greedy and lazy), counted repetitions ``{n,m}``,
 //! alternation, anchors, word boundaries, character sets,

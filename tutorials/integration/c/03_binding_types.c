@@ -1,13 +1,13 @@
-// Tutorial: Binding C Types to daScript
+// Tutorial: Binding C Types to daslang
 //
 // This tutorial shows how to:
 //   - Create a custom module
-//   - Bind a C enumeration so daScript can use it
-//   - Bind a C structure so daScript can access its fields
+//   - Bind a C enumeration so daslang can use it
+//   - Bind a C structure so daslang can access its fields
 //   - Bind a type alias
 //   - Bind interop functions that operate on custom types
 //
-// Key concept: type mangling.  Every type in the daScriptC API is described
+// Key concept: type mangling.  Every type in the daslangC API is described
 // by a compact mangled string.  Common manglings:
 //   "i" = int,  "u" = uint,  "f" = float,  "d" = double,
 //   "b" = bool, "s" = string, "v" = void,
@@ -24,12 +24,12 @@
 #include <math.h>
 #include <assert.h>
 
-#include "daScript/daScriptC.h"
+#include "daslang/daScriptC.h"
 
 #define SCRIPT_NAME "/tutorials/integration/c/03_binding_types.das"
 
 // -----------------------------------------------------------------------
-// C types that we will expose to daScript
+// C types that we will expose to daslang
 // -----------------------------------------------------------------------
 
 typedef enum {
@@ -44,7 +44,7 @@ typedef struct {
 } Point2D;
 
 // -----------------------------------------------------------------------
-// Interop functions — called from daScript, implemented in C
+// Interop functions — called from daslang, implemented in C
 // -----------------------------------------------------------------------
 
 // def point_distance(p : Point2D) : float
@@ -65,7 +65,7 @@ vec4f c_point_to_string(das_context * ctx, das_node * node, vec4f * args) {
     Point2D * p = (Point2D *)das_argument_ptr(args[0]);
     char buf[128];
     snprintf(buf, sizeof(buf), "(%.2f, %.2f)", p->x, p->y);
-    // Allocate the string in the daScript context so it survives the call.
+    // Allocate the string in the daslang context so it survives the call.
     char * result = das_allocate_string(ctx, buf);
     return das_result_string(result);
 }

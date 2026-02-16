@@ -94,7 +94,7 @@ def main {
 
     // Call a simple function
     greet("World")
-    greet("daScript")
+    greet("daslang")
 
     // Call a function with a return value
     print("add(3, 4) = {add(3, 4)}\n")
@@ -137,7 +137,7 @@ def main {
 
 // output:
 // Hello, World!
-// Hello, daScript!
+// Hello, daslang!
 // add(3, 4) = 7
 // multiply(2.5, 4.0) = 10
 //   tryModify received: 42

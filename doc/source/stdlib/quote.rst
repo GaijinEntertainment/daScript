@@ -6,7 +6,7 @@ AST quasiquoting infrastructure
 ===============================
 
 The QUOTE module provides quasiquotation support for AST construction.
-It allows building AST nodes using daScript syntax with ``$``-prefixed
+It allows building AST nodes using daslang syntax with ``$``-prefixed
 splice points for inserting computed values, making macro writing more
 readable and less error-prone than manual AST construction.
 

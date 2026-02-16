@@ -4,7 +4,7 @@
   Tutorials
 *****************************
 
-This section provides a series of hands-on tutorials that introduce daScript's
+This section provides a series of hands-on tutorials that introduce daslang's
 core features step by step. Each tutorial comes with a companion ``.das`` file
 in the ``tutorials/language/`` directory that you can run directly::
 
@@ -53,7 +53,7 @@ introduced in earlier tutorials.
 C Integration Tutorials
 -----------------------
 
-These tutorials show how to embed daScript in a C application using the
+These tutorials show how to embed daslang in a C application using the
 ``daScriptC.h`` API.  Each tutorial comes with a ``.c`` source file and a
 companion ``.das`` script in ``tutorials/integration/c/``.
 
@@ -73,7 +73,7 @@ companion ``.das`` script in ``tutorials/integration/c/``.
 C++ Integration Tutorials
 --------------------------
 
-These tutorials show how to embed daScript in a C++ application using the
+These tutorials show how to embed daslang in a C++ application using the
 native ``daScript.h`` API.  Each tutorial comes with a ``.cpp`` source file
 and a companion ``.das`` script in ``tutorials/integration/cpp/``.
 

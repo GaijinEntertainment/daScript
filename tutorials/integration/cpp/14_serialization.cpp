@@ -1,10 +1,10 @@
 // Tutorial 14 — Serialization (C++ integration)
 //
-// Demonstrates how to serialize a compiled daScript program to a
+// Demonstrates how to serialize a compiled daslang program to a
 // binary blob and deserialize it back, skipping recompilation.
 //
 // Workflow:
-//   1. Compile a daScript program normally
+//   1. Compile a daslang program normally
 //   2. Serialize the compiled program to memory (or to a file)
 //   3. Release the original program
 //   4. Deserialize from the blob — no parsing, no type inference

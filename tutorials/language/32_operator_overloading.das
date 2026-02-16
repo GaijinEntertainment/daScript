@@ -122,10 +122,10 @@ def operator ++(var c : Counter) : Counter {
 }
 
 // postfix ++: called after the value is used (note: "operator ++" for prefix, "operator ++" for postfix)
-// In daScript, prefix is "++operator" and postfix is "operator ++".
+// In daslang, prefix is "++operator" and postfix is "operator ++".
 // Since postfix returns a copy, the syntax is:
-//   def operator ++(var c : Counter; postfix : int) — not supported this way in daScript
-// Actually in daScript:
+//   def operator ++(var c : Counter; postfix : int) — not supported this way in daslang
+// Actually in daslang:
 //   ++operator → prefix increment (modifies and returns)
 //   operator ++ → postfix increment
 // Both take a single mutable argument.
@@ -362,7 +362,7 @@ def generic_operators() {
 }
 
 // === Complete Operator List ===
-// daScript supports overloading the following operators:
+// daslang supports overloading the following operators:
 //
 // Arithmetic:     +  -  *  /  %
 // Comparison:     ==  !=  <  >  <=  >=

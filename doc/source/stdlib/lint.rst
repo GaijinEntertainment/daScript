@@ -5,7 +5,7 @@
 Paranoid lint pass
 ==================
 
-The LINT module implements static analysis checks for daScript code.
+The LINT module implements static analysis checks for daslang code.
 It provides customizable lint rules that detect common mistakes, style
 violations, and potential bugs at compile time.
 

@@ -5,7 +5,7 @@
 Fuzzer
 ======
 
-The FUZZER module implements fuzz testing infrastructure for daScript programs.
+The FUZZER module implements fuzz testing infrastructure for daslang programs.
 It generates random inputs for functions and verifies they do not crash or
 produce unexpected errors, helping discover edge cases and robustness issues.
 

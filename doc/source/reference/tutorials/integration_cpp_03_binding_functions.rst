@@ -7,7 +7,7 @@
  C++ Integration: Binding Functions
 ============================================
 
-This tutorial shows how to expose C++ functions to daScript scripts by
+This tutorial shows how to expose C++ functions to daslang scripts by
 creating a **custom module**.  Topics covered:
 
 * ``addExtern`` with ``DAS_BIND_FUN`` — binding free C++ functions
@@ -20,7 +20,7 @@ Prerequisites
 =============
 
 * Tutorial 02 completed (:ref:`tutorial_integration_cpp_calling_functions`).
-* Understanding of ``cast<T>`` and the daScript calling convention.
+* Understanding of ``cast<T>`` and the daslang calling convention.
 
 
 Creating a module
@@ -67,7 +67,7 @@ In the script:
 Binding functions with ``addExtern``
 =====================================
 
-``addExtern`` is the primary way to expose a C++ function to daScript.
+``addExtern`` is the primary way to expose a C++ function to daslang.
 The ``DAS_BIND_FUN`` macro generates the template machinery needed for
 automatic argument marshalling:
 
@@ -85,7 +85,7 @@ Parameters:
 1. ``DAS_BIND_FUN(xmadd)`` — the C++ function to bind
 2. ``*this`` — the module being populated
 3. ``lib`` — the module library (for type resolution)
-4. ``"xmadd"`` — the name visible in daScript
+4. ``"xmadd"`` — the name visible in daslang
 5. ``SideEffects::none`` — optimizer hint (see below)
 6. ``"xmadd"`` — C++ function name for AOT (used in generated code)
 
@@ -112,7 +112,7 @@ or folded:
    * - ``accessGlobal``
      - Reads global/shared mutable state.
    * - ``invoke``
-     - Calls a daScript function or lambda.
+     - Calls a daslang function or lambda.
    * - ``worstDefault``
      - Combines ``modifyArgument | modifyExternal``.  Use when unsure.
 
@@ -156,7 +156,7 @@ Context-aware functions
 ========================
 
 If a C++ function takes ``Context *`` as its first parameter (or
-``LineInfoArg *`` as its last), daScript injects them automatically — the
+``LineInfoArg *`` as its last), daslang injects them automatically — the
 script caller does **not** see these parameters:
 
 .. code-block:: cpp
@@ -212,7 +212,7 @@ Expected output::
    SQRT2 = 1.4142135
    xmadd(SQRT2, SQRT2, 1.0, 1.0) = 3
    factorial(10) = 3628800
-   Hello from C++, daScript!
+   Hello from C++, daslang!
    double_it(21) = 42
    Context stack size: 16384 bytes
 

@@ -1,6 +1,6 @@
 // Tutorial 18 — Dynamic Script Generation (C++ integration)
 //
-// Shows how to build a daScript program from a string at run-time,
+// Shows how to build a daslang program from a string at run-time,
 // compile it from a virtual file (no disk I/O), and interact with its
 // global variables directly through context memory pointers.
 //
@@ -8,7 +8,7 @@
 // values and evaluate arbitrary math expressions at near-native speed.
 //
 // Key concepts:
-//   - TextWriter — build daScript source as a C++ string
+//   - TextWriter — build daslang source as a C++ string
 //   - TextFileInfo + FsFileAccess::setFileInfo — register a virtual file
 //   - compileDaScript on a virtual file name
 //   - ctx.findVariable / ctx.getVariable — locate globals in context memory
@@ -20,7 +20,7 @@
 using namespace das;
 
 // ---------------------------------------------------------------------------
-// ExprCalc — a simple expression calculator backed by a compiled daScript
+// ExprCalc — a simple expression calculator backed by a compiled daslang
 // program.  Construction compiles the expression; compute() sets variables
 // and evaluates it.
 // ---------------------------------------------------------------------------
@@ -37,7 +37,7 @@ private:
     das_map<string, float *>    variables;   // pointers into context global data
 };
 
-// Compile the expression into a tiny daScript program.
+// Compile the expression into a tiny daslang program.
 // Each variable becomes a global "var name = 0.0f".
 // A single [export] function "eval" returns the expression result.
 ExprCalc::ExprCalc(const string & expr, const ExprVars & vars) {

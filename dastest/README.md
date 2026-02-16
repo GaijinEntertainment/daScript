@@ -1,4 +1,4 @@
-# daScript testing framework
+# daslang testing framework
 
 ## Introduction
 
@@ -6,7 +6,7 @@ Inspired by [Golang testing framework](https://pkg.go.dev/testing), this framewo
 
 ## Usage
 
-- `dascript dastest.das -- --test folderWithScriptsOrSingleScript [--test anotherPath]`
+- `daslang dastest.das -- --test folderWithScriptsOrSingleScript [--test anotherPath]`
 
 ### dastest.das arguments
 - `--test`: Path to the folder with scripts or single script to test
