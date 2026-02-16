@@ -225,10 +225,17 @@ latex_elements = {
 #'pointsize': '10pt',
 
 # Additional stuff for the LaTeX preamble.
-# This unicode characters is not known to LaTeX.
+#
+# These unicode characters is not known to LaTeX. If new used in .rst
+# they should be added here.
 'preamble': r'''
 \newunicodechar{✓}{\checkmark}
 \newunicodechar{✗}{\texttimes}
+\DeclareUnicodeCharacter{2194}{\ensuremath{\leftrightarrow}}
+\DeclareUnicodeCharacter{2195}{\ensuremath{\updownarrow}}
+\DeclareUnicodeCharacter{2260}{\ensuremath{\neq}}
+\DeclareUnicodeCharacter{2264}{\ensuremath{\leq}}
+\DeclareUnicodeCharacter{2265}{\ensuremath{\geq}}
 ''',
 
 # Latex figure (float) alignment
