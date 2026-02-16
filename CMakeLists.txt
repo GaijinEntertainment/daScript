@@ -929,7 +929,6 @@ if (NOT ${DAS_PROFILE_DISABLED})
 endif()
 
 if (NOT ${DAS_TUTORIAL_DISABLED})
-    include(examples/tutorial/CMakeLists.txt)
     include(tutorials/integration/c/CMakeLists.txt)
     include(tutorials/integration/cpp/CMakeLists.txt)
 endif()

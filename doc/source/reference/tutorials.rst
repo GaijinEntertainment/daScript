@@ -96,3 +96,7 @@ and a companion ``.das`` script in ``tutorials/integration/cpp/``.
    tutorials/integration_cpp_14_serialization.rst
    tutorials/integration_cpp_15_custom_annotations.rst
    tutorials/integration_cpp_16_sandbox.rst
+   tutorials/integration_cpp_17_coroutines.rst
+   tutorials/integration_cpp_18_dynamic_scripts.rst
+   tutorials/integration_cpp_19_class_adapters.rst
+   tutorials/integration_cpp_20_standalone_contexts.rst

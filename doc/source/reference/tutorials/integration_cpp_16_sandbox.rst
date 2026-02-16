@@ -341,3 +341,5 @@ Expected output::
    :download:`16_sandbox.das_project <../../../../tutorials/integration/cpp/16_sandbox.das_project>`
 
    Previous tutorial: :ref:`tutorial_integration_cpp_custom_annotations`
+
+   Next tutorial: :ref:`tutorial_integration_cpp_coroutines`
