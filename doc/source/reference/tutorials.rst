@@ -82,3 +82,7 @@ and a companion ``.das`` script in ``tutorials/integration/cpp/``.
    tutorials/integration_cpp_03_binding_functions.rst
    tutorials/integration_cpp_04_binding_types.rst
    tutorials/integration_cpp_05_binding_enums.rst
+   tutorials/integration_cpp_06_interop.rst
+   tutorials/integration_cpp_07_callbacks.rst
+   tutorials/integration_cpp_08_methods.rst
+   tutorials/integration_cpp_09_operators_and_properties.rst

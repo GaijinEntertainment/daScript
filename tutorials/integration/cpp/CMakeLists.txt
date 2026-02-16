@@ -46,6 +46,34 @@ DAS_CPP_INTEGRATION_TUTORIAL(integration_cpp_05
     ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/05_binding_enums.cpp
 )
 
+#################################
+# Tutorial 6 — Low-Level Interop
+#################################
+DAS_CPP_INTEGRATION_TUTORIAL(integration_cpp_06
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/06_interop.cpp
+)
+
+#################################
+# Tutorial 7 — Callbacks
+#################################
+DAS_CPP_INTEGRATION_TUTORIAL(integration_cpp_07
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/07_callbacks.cpp
+)
+
+#################################
+# Tutorial 8 — Binding Methods
+#################################
+DAS_CPP_INTEGRATION_TUTORIAL(integration_cpp_08
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/08_methods.cpp
+)
+
+#################################
+# Tutorial 9 — Operators & Properties
+#################################
+DAS_CPP_INTEGRATION_TUTORIAL(integration_cpp_09
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/09_operators_and_properties.cpp
+)
+
 # Install C++ integration tutorial source files
 file(GLOB CPP_INTEGRATION_TUTORIAL_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/*.cpp

@@ -201,8 +201,8 @@ C++ integration tutorial RST files live in `doc/source/reference/tutorials/` wit
 - Tutorial CMake targets: `integration_cpp_01` through `integration_cpp_NN` (defined in `tutorials/integration/cpp/CMakeLists.txt`)
 
 - Tutorial labels for cross-references: `tutorial_hello_world`, `tutorial_variables`, `tutorial_operators`, `tutorial_control_flow`, `tutorial_functions`, `tutorial_arrays`, `tutorial_strings`, `tutorial_structs`, `tutorial_enumerations`, `tutorial_tables`, `tutorial_tuples_and_variants`, `tutorial_function_pointers`, `tutorial_blocks`, `tutorial_lambdas`, `tutorial_iterators_and_generators`, `tutorial_modules`, `tutorial_move_copy_clone`, `tutorial_classes`, `tutorial_generics`, `tutorial_lifetime`, `tutorial_error_handling`, `tutorial_unsafe`, `tutorial_string_format`, `tutorial_pattern_matching`, `tutorial_annotations`, `tutorial_contracts`, `tutorial_testing`, `tutorial_linq`, `tutorial_functional`, `tutorial_json`, `tutorial_regex`, `tutorial_operator_overloading`
-- C++ integration tutorial labels: `tutorial_integration_cpp_hello_world`, `tutorial_integration_cpp_calling_functions`, `tutorial_integration_cpp_binding_functions`, `tutorial_integration_cpp_binding_types`, `tutorial_integration_cpp_binding_enums`
-- C++ integration tutorial plan (remaining): 06 Interop (addInterop, any-type args, TypeInfo inspection), 07 Callbacks (blocks/lambdas from script to C++), 08 Class Adapters, 09 Operators & Properties, 10 Custom Modules, 11 Context Variables, 12 Smart Pointers & GC, 13 AOT, 14 Serialization, 15 Custom Annotations, 16 Sandbox
+- C++ integration tutorial labels: `tutorial_integration_cpp_hello_world`, `tutorial_integration_cpp_calling_functions`, `tutorial_integration_cpp_binding_functions`, `tutorial_integration_cpp_binding_types`, `tutorial_integration_cpp_binding_enums`, `tutorial_integration_cpp_interop`, `tutorial_integration_cpp_callbacks`, `tutorial_integration_cpp_methods`, `tutorial_integration_cpp_operators_and_properties`
+- C++ integration tutorial plan (remaining): 10 Custom Modules, 11 Context Variables, 12 Smart Pointers & GC, 13 AOT, 14 Serialization, 15 Custom Annotations, 16 Sandbox
 
 ## C++ Integration Patterns
 
@@ -257,9 +257,39 @@ REGISTER_MODULE(Module_MyMod);
 
 The host uses `NEED_MODULE(Module_MyMod)` before `Module::Initialize()`.  Scripts access it via `require my_module_name`.
 
+### Callbacks — `TBlock<>`, `TFunc<>`, `TLambda<>`, `das_invoke*`
+
+Three closure types exist, each with a typed template and an invocation helper:
+
+| Type | Template | Invocation | Lifetime |
+|------|----------|------------|----------|
+| Block | `TBlock<Ret, Args...>` | `das_invoke<Ret>::invoke(ctx, at, blk, args...)` | Stack-bound — valid only during the call |
+| Func | `TFunc<Ret, Args...>` (or untyped `Func`) | `das_invoke_function<Ret>::invoke(ctx, at, fn, args...)` | Context-bound — storable |
+| Lambda | `TLambda<Ret, Args...>` (or untyped `Lambda`) | `das_invoke_lambda<Ret>::invoke(ctx, at, lmb, args...)` | Heap-allocated — captures variables |
+
+**Typed vs untyped**: `TBlock<int,int>` maps to `block<(arg:int):int>` in daScript — the compiler checks signatures. Untyped `Lambda` maps to `lambda<>` and will **not** match typed lambdas like `lambda<(x:int):int>`. Prefer typed templates.
+
+**Block callback example**:
+
+```cpp
+void with_values(int32_t a, int32_t b,
+                 const TBlock<void, int32_t, int32_t> & blk,
+                 Context * context, LineInfoArg * at) {
+    das_invoke<void>::invoke(context, at, blk, a, b);
+}
+
+addExtern<DAS_BIND_FUN(with_values)>(*this, lib, "with_values",
+    SideEffects::invoke, "with_values")
+        ->args({"a", "b", "blk", "context", "at"});
+```
+
+Use `SideEffects::invoke` for any function that invokes script callbacks.
+
+In daScript: blocks use `<|` with `$()` prefix, function pointers use `@@func_name`, lambdas use `@(args) { body }`.
+
 ### Calling daScript functions from C++ — `das_invoke_function`
 
-The high-level `das_invoke_function<ReturnType>::invoke(ctx, fnPtr, arg1, arg2, ...)` handles argument marshalling automatically.  Preferred over raw `cast<>` + `evalWithCatch`.
+The high-level `das_invoke_function<ReturnType>::invoke(ctx, at, fnPtr, arg1, arg2, ...)` handles argument marshalling automatically.  Preferred over raw `cast<>` + `evalWithCatch`.
 
 ### Binding C++ functions — `addExtern` + `DAS_BIND_FUN`
 
@@ -283,6 +313,53 @@ addExtern<DAS_BIND_FUN(cpp_function)>(*this, lib, "das_name",
 - Immutable locals (`let`) returned from factory functions work without `unsafe`
 - **Factory function pattern**: provide `make_xxx()` functions returning by value so scripts can create instances ergonomically with `let x = make_xxx(...)` — no `unsafe` needed
 - POD structs (no default member initializers, no virtual functions) work best with `ManagedStructureAnnotation`
+
+### Binding C++ methods — `DAS_CALL_MEMBER` + `DAS_CALL_METHOD`
+
+daScript has no member functions — "methods" are free functions where the first argument is `self`. Pipe syntax (`obj |> method()`) provides method-call ergonomics.
+
+```cpp
+// Step 1: Create wrapper aliases
+using method_increment = DAS_CALL_MEMBER(Counter::increment);
+using method_get       = DAS_CALL_MEMBER(Counter::get);
+
+// Step 2: Register with addExtern
+addExtern<DAS_CALL_METHOD(method_increment)>(*this, lib, "increment",
+    SideEffects::modifyArgument,
+    DAS_CALL_MEMBER_CPP(Counter::increment))
+        ->args({"self"});
+
+addExtern<DAS_CALL_METHOD(method_get)>(*this, lib, "get",
+    SideEffects::none,
+    DAS_CALL_MEMBER_CPP(Counter::get))
+        ->args({"self"});
+```
+
+- **Non-const methods**: `SideEffects::modifyArgument` (they mutate the object)
+- **Const methods**: `SideEffects::none`
+- `DAS_CALL_MEMBER_CPP(Class::method)` provides the AOT-compatible name string
+
+### Binding operators and properties
+
+**Operators**: register functions with the operator symbol as the daScript name:
+
+```cpp
+addExtern<DAS_BIND_FUN(vec3_add), SimNode_ExtFuncCallAndCopyOrMove>(
+    *this, lib, "+", SideEffects::none, "vec3_add")->args({"a", "b"});
+// Unary: addExtern<...>(*this, lib, "-", ...)->args({"a"});
+```
+
+Available operator names: `+`, `-`, `*`, `/`, `%`, `<<`, `>>`, `<`, `>`, `<=`, `>=`, `&`, `|`, `^`.
+
+**Equality**: `addEquNeq<T>(*this, lib)` binds both `==` and `!=` (requires `operator==` and `operator!=` on T).
+
+**Properties**: method calls disguised as field access in `ManagedStructureAnnotation`:
+
+```cpp
+addProperty<DAS_BIND_MANAGED_PROP(length)>("length", "length");
+```
+
+In daScript, `v.length` calls `Vec3::length()` — looks like a field, calls a method.
 
 ### Binding C++ enums — `DAS_BASE_BIND_ENUM`
 
@@ -332,6 +409,13 @@ Where `vec4f` as an `ArgType` means "any type" — the argument accepts any daSc
 - Access to `call->debugInfo` — source location of the call site
 - `vec4f` argument type = "any" — accept arguments of any daScript type
 - Used internally for `sprint`, `hash`, `write`, `binary_save/load`, `invoke_in_context`
+
+**TypeInfo union warning**: `TypeInfo` has a union — `structType`, `enumType`, and `annotation_or_name` share the same memory. Which member is valid depends on `ti->type`:
+- `tStructure` → `ti->structType` (StructInfo *)
+- `tEnumeration` / `tEnumeration8` / `tEnumeration16` → `ti->enumType` (EnumInfo *)
+- `tHandle` → use `ti->getAnnotation()` (resolves tagged pointer safely)
+
+Accessing the wrong union member is **undefined behavior**. `das_to_string(Type::tHandle)` returns an empty string — use `ti->getAnnotation()->name` for handled type names.
 
 **Example** — `new_and_init` allocates and initializes any struct:
 

@@ -227,3 +227,5 @@ Expected output::
    :download:`05_binding_enums.das <../../../../tutorials/integration/cpp/05_binding_enums.das>`
 
    Previous tutorial: :ref:`tutorial_integration_cpp_binding_types`
+
+   Next tutorial: :ref:`tutorial_integration_cpp_interop`
