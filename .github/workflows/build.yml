@@ -243,7 +243,7 @@ jobs:
                 ninja
                 ;;
               windows32)
-                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=x86 -A ${{ matrix.architecture_string }}
+                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=x64 -A ${{ matrix.architecture_string }}
                 cmake --build ./build --config ${{ matrix.cmake_preset }} --target daslang
                 cmake --build ./build --config ${{ matrix.cmake_preset }}
                 ;;
