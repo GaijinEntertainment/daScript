@@ -183,7 +183,7 @@ int das_aot_main ( int argc, char * argv[] ) {
         for (int ai = 1; ai != argc; ++ai) {
             if ( strcmp(argv[ai],"-q")==0 ) {
                 quiet = true;
-            } else if ( strcmp(argv[ai],"-aot")==0 ) {
+            } else if ( strcmp(argv[ai],"-aot")==0 || strcmp(argv[ai],"-aotlib")==0 ) {
                 if (ai + 2 >= argc) {
                     tout << "-aot requires 2 arguments <in> <out>.";
                     return -1;
