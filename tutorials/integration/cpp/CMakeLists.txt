@@ -95,6 +95,47 @@ DAS_CPP_INTEGRATION_TUTORIAL(integration_cpp_12
     ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/12_smart_pointers.cpp
 )
 
+#################################
+# Tutorial 13 — AOT
+#################################
+# AOT requires a two-stage build:
+#   1. Generate C++ from the .das script using daslang's AOT tool
+#   2. Compile the generated .cpp into the tutorial executable
+SET(INTEGRATION_13_AOT_GENERATED_SRC)
+add_custom_target(integration_cpp_13_dasAotStub)
+DAS_AOT("tutorials/integration/cpp/13_aot.das"
+        INTEGRATION_13_AOT_GENERATED_SRC integration_cpp_13_dasAotStub daslang)
+
+add_executable(integration_cpp_13
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/13_aot.cpp
+    ${INTEGRATION_13_AOT_GENERATED_SRC}
+)
+TARGET_COMPILE_DEFINITIONS(integration_cpp_13 PRIVATE DAS_MOD_EXPORTS)
+TARGET_LINK_LIBRARIES(integration_cpp_13 libDaScript Threads::Threads)
+ADD_DEPENDENCIES(integration_cpp_13 libDaScript integration_cpp_13_dasAotStub)
+SETUP_CPP11(integration_cpp_13)
+
+#################################
+# Tutorial 14 — Serialization
+#################################
+DAS_CPP_INTEGRATION_TUTORIAL(integration_cpp_14
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/14_serialization.cpp
+)
+
+#################################
+# Tutorial 15 — Custom Annotations
+#################################
+DAS_CPP_INTEGRATION_TUTORIAL(integration_cpp_15
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/15_custom_annotations.cpp
+)
+
+#################################
+# Tutorial 16 — Sandbox
+#################################
+DAS_CPP_INTEGRATION_TUTORIAL(integration_cpp_16
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/16_sandbox.cpp
+)
+
 # Install C++ integration tutorial source files
 file(GLOB CPP_INTEGRATION_TUTORIAL_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/*.cpp

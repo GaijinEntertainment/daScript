@@ -205,3 +205,5 @@ Expected output::
    :download:`12_smart_pointers.das <../../../../tutorials/integration/cpp/12_smart_pointers.das>`
 
    Previous tutorial: :ref:`tutorial_integration_cpp_context_variables`
+
+   Next tutorial: :ref:`tutorial_integration_cpp_aot`

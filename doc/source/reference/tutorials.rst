@@ -89,3 +89,7 @@ and a companion ``.das`` script in ``tutorials/integration/cpp/``.
    tutorials/integration_cpp_10_custom_modules.rst
    tutorials/integration_cpp_11_context_variables.rst
    tutorials/integration_cpp_12_smart_pointers.rst
+   tutorials/integration_cpp_13_aot.rst
+   tutorials/integration_cpp_14_serialization.rst
+   tutorials/integration_cpp_15_custom_annotations.rst
+   tutorials/integration_cpp_16_sandbox.rst
