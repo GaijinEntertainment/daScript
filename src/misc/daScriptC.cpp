@@ -167,9 +167,45 @@ void das_fileaccess_release ( das_file_access * access ) {
     if ( access ) ((FileAccess *) access)->delRef();
 }
 
-void das_fileaccess_introduce_file ( das_file_access * access, const char * file_name, const char * file_content ) {
-    auto fileInfo = make_unique<TextFileInfo>((char *) file_content, uint32_t(strlen(file_content)), false);
-    ((FileAccess *) access)->setFileInfo(file_name, das::move(fileInfo));
+void das_fileaccess_introduce_file ( das_file_access * access, const char * file_name, const char * file_content, int owns ) {
+    auto len = uint32_t(strlen(file_content));
+    if ( owns ) {
+        char * content_copy = (char *) das_aligned_alloc16(len ? len : 1);
+        memcpy(content_copy, file_content, len);
+        auto fileInfo = make_unique<TextFileInfo>(content_copy, len, true);
+        ((FileAccess *) access)->setFileInfo(file_name, das::move(fileInfo));
+    } else {
+        auto fileInfo = make_unique<TextFileInfo>((char *) file_content, len, false);
+        ((FileAccess *) access)->setFileInfo(file_name, das::move(fileInfo));
+    }
+}
+
+void das_fileaccess_introduce_file_from_disk ( das_file_access * access, const char * name, const char * disk_path ) {
+    ((FsFileAccess *) access)->introduceFileFromDisk(name, disk_path);
+}
+
+void das_fileaccess_introduce_daslib ( das_file_access * access ) {
+    ((FsFileAccess *) access)->introduceDaslib();
+}
+
+void das_fileaccess_introduce_native_modules ( das_file_access * access ) {
+    ((FsFileAccess *) access)->introduceNativeModules();
+}
+
+int das_fileaccess_introduce_native_module ( das_file_access * access, const char * req ) {
+    return ((FsFileAccess *) access)->introduceNativeModule(req) ? 1 : 0;
+}
+
+void das_fileaccess_lock ( das_file_access * access ) {
+    ((FileAccess *) access)->lock();
+}
+
+void das_fileaccess_unlock ( das_file_access * access ) {
+    ((FileAccess *) access)->unlock();
+}
+
+int das_fileaccess_is_locked ( das_file_access * access ) {
+    return ((FileAccess *) access)->isLocked() ? 1 : 0;
 }
 
 void das_get_root ( char * root, int maxbuf ) {
