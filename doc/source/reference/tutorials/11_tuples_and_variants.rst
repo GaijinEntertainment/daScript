@@ -9,9 +9,9 @@ Tuples and Variants
     single: Tutorial; Variants
     single: Tutorial; Union Types
 
-This tutorial covers tuples (anonymous and named), tuple destructuring,
-variants (tagged unions), and type-safe variant access with ``is``, ``as``,
-and ``?as``.
+This tutorial covers tuples (anonymous and named), the ``=>`` tuple construction
+operator, tuple destructuring, variants (tagged unions), and type-safe variant
+access with ``is``, ``as``, and ``?as``.
 
 Tuples
 ======
@@ -25,6 +25,25 @@ Access fields by index::
 Use ``tuple()`` for explicit construction::
 
   var t = tuple(1, 2.0, "three")
+
+The ``=>`` operator
+===================
+
+The ``=>`` operator creates a 2-element tuple from its left and right operands.
+It works in any expression context, not just table literals::
+
+  var kv = "age" => 25       // tuple<string; int>
+  print("{kv._0}: {kv._1}\n")  // age: 25
+
+This is useful for building arrays of key-value pairs::
+
+  var entries <- ["one" => 1, "two" => 2]
+  for (entry in entries) {
+      print("{entry._0} => {entry._1}\n")
+  }
+
+Table literals also use ``=>`` — each ``key => value`` pair forms a tuple that
+is inserted into the table.
 
 Named tuples
 ============

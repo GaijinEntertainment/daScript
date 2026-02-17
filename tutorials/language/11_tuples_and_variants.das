@@ -2,6 +2,7 @@
 //
 // This tutorial covers:
 //   - Tuple creation and field access (_0, _1, or named)
+//   - The => operator for 2-element tuple construction
 //   - Tuple destructuring in var and for
 //   - Named tuple aliases with 'tuple Name { ... }'
 //   - Variant types (tagged unions)
@@ -68,6 +69,18 @@ def main {
     // --- Tuple with tuple() constructor ---
     var triple = tuple(1, 2.0, "three")
     print("triple = ({triple._0}, {triple._1}, {triple._2})\n")
+
+    // --- The => operator ---
+    // The => operator creates a 2-element tuple from its operands.
+    // It works in any expression, not just table literals.
+    var kv = "age" => 25
+    print("kv = ({kv._0}, {kv._1})\n")
+
+    // This is handy for building arrays of key-value pairs.
+    var entries <- ["one" => 1, "two" => 2, "three" => 3]
+    for (entry in entries) {
+        print("  {entry._0} => {entry._1}\n")
+    }
 
     // --- Destructuring ---
     // Unpack a tuple into individual variables.
@@ -159,6 +172,10 @@ def divmod_tuple(a, b : int) : tuple<int; int> {
 // point = (3, 4)
 // point._0 = 3
 // triple = (1, 2, three)
+// kv = (age, 25)
+//   one => 1
+//   two => 2
+//   three => 3
 // destructured: a=10, b=20, c="hello"
 // destructured point: px=5, py=6
 // pairs:

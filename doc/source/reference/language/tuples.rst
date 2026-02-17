@@ -46,6 +46,14 @@ Tuples can be constructed using the tuple constructor, for example::
     var a = (1,2.0,"3")
     var b = tuple(1, 2.0, "3")
 
+The ``=>`` operator creates a 2-element tuple from its left and right operands::
+
+    var c = "one" => 1   // same as tuple<string,int>("one", 1)
+
+This works in any expression context, not just table literals.
+Table literals like ``{ "one"=>1, "two"=>2 }`` use ``=>`` to form key-value tuples
+that are then inserted into the table (see :ref:`Tables <tables>`).
+
 Tuple elements can be assigned names via tuple constructor::
 
     var a = tuple<a:int,b:float,c:string>(a=1, b=2.0, c="3")
