@@ -11,7 +11,7 @@ bitfield Test {
 
 [test]
 def test_bitfield_traits(t : T?) {
-    for (name, bit in each(type<Test>), count()) {
+    for (name, bit in each_bit_name(type<Test>), count()) {
         if (bit == 0) {
             t |> equal("one", name)
         } elif (bit == 1) {

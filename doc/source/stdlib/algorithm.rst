@@ -45,32 +45,32 @@ Example: ::
 Search
 ++++++
 
-  *  :ref:`binary_search (a: auto; f: int; last: int; val: auto) : auto <function-algorithm_binary_search_auto_int_int_auto_0x12a>`
-  *  :ref:`binary_search (a: array\<auto(TT)\>; val: TT) : auto <function-algorithm_binary_search_array_ls_autoTT_gr__TT>`
-  *  :ref:`binary_search (a: auto; f: int; last: int; val: auto(TT); less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_binary_search_auto_int_int_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr__0x144>`
-  *  :ref:`binary_search (a: auto; val: auto) : auto <function-algorithm_binary_search_auto_auto_0x11d>`
-  *  :ref:`binary_search (a: array\<auto(TT)\>; val: TT; less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_binary_search_array_ls_autoTT_gr__TT_block_ls_a_c_TT;b_c_TT_c_bool_gr_>`
-  *  :ref:`binary_search (a: array\<auto(TT)\>; f: int; last: int; val: TT) : auto <function-algorithm_binary_search_array_ls_autoTT_gr__int_int_TT>`
-  *  :ref:`binary_search (a: array\<auto(TT)\>; f: int; last: int; val: TT; less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_binary_search_array_ls_autoTT_gr__int_int_TT_block_ls_a_c_TT;b_c_TT_c_bool_gr_>`
-  *  :ref:`binary_search (a: auto; val: auto(TT); less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_binary_search_auto_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr__0x137>`
-  *  :ref:`equal_range (a: array\<auto(TT)\>; f: int; l: int; val: TT) : auto <function-algorithm_equal_range_array_ls_autoTT_gr__int_int_TT>`
-  *  :ref:`equal_range (a: array\<auto(TT)\>; val: TT) : auto <function-algorithm_equal_range_array_ls_autoTT_gr__TT>`
-  *  :ref:`lower_bound (a: array\<auto(TT)\>; value: auto(QQ); less: block\<(a:TT;b:QQ):bool\>) : auto <function-algorithm_lower_bound_array_ls_autoTT_gr__autoQQ_block_ls_a_c_TT;b_c_QQ_c_bool_gr__0x70>`
-  *  :ref:`lower_bound (a: array\<auto(TT)\>; val: TT) : auto <function-algorithm_lower_bound_array_ls_autoTT_gr__TT>`
-  *  :ref:`lower_bound (a: auto; val: auto(TT); less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_lower_bound_auto_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr__0x110>`
-  *  :ref:`lower_bound (a: array\<auto(TT)\>; f: int; l: int; val: TT) : auto <function-algorithm_lower_bound_array_ls_autoTT_gr__int_int_TT>`
-  *  :ref:`lower_bound (a: array\<auto(TT)\>; f: int; l: int; value: auto(QQ); less: block\<(a:TT;b:QQ):bool\>) : auto <function-algorithm_lower_bound_array_ls_autoTT_gr__int_int_autoQQ_block_ls_a_c_TT;b_c_QQ_c_bool_gr__0x5d>`
-  *  :ref:`lower_bound (a: auto; f: int; l: int; val: auto) : auto <function-algorithm_lower_bound_auto_int_int_auto_0xe9>`
-  *  :ref:`lower_bound (a: auto; val: auto) : auto <function-algorithm_lower_bound_auto_auto_0xf6>`
-  *  :ref:`lower_bound (a: auto; f: int; l: int; val: auto(TT); less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_lower_bound_auto_int_int_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr__0x103>`
-  *  :ref:`upper_bound (a: array\<auto(TT)\>; f: int; l: int; value: auto(QQ); less: block\<(a:TT;b:QQ):bool\>) : auto <function-algorithm_upper_bound_array_ls_autoTT_gr__int_int_autoQQ_block_ls_a_c_TT;b_c_QQ_c_bool_gr__0xac>`
-  *  :ref:`upper_bound (a: array\<auto(TT)\>; val: TT) : auto <function-algorithm_upper_bound_array_ls_autoTT_gr__TT>`
-  *  :ref:`upper_bound (a: auto; f: int; l: int; val: auto) : auto <function-algorithm_upper_bound_auto_int_int_auto_0x151>`
-  *  :ref:`upper_bound (a: array\<auto(TT)\>; value: auto(QQ); less: block\<(a:TT;b:QQ):bool\>) : auto <function-algorithm_upper_bound_array_ls_autoTT_gr__autoQQ_block_ls_a_c_TT;b_c_QQ_c_bool_gr__0xbf>`
-  *  :ref:`upper_bound (a: auto; val: auto) : auto <function-algorithm_upper_bound_auto_auto_0x15e>`
-  *  :ref:`upper_bound (a: array\<auto(TT)\>; f: int; l: int; val: TT) : auto <function-algorithm_upper_bound_array_ls_autoTT_gr__int_int_TT>`
-  *  :ref:`upper_bound (a: auto; val: auto(TT); less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_upper_bound_auto_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr__0x178>`
-  *  :ref:`upper_bound (a: auto; f: int; l: int; val: auto(TT); less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_upper_bound_auto_int_int_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr__0x16b>`
+  *  :ref:`binary_search (a: auto; f: int; last: int; val: auto) : auto <function-algorithm_binary_search_auto_int_int_auto_0x12a>` 
+  *  :ref:`binary_search (a: array\<auto(TT)\>; val: TT) : auto <function-algorithm_binary_search_array_ls_autoTT_gr__TT>` 
+  *  :ref:`binary_search (a: auto; f: int; last: int; val: auto(TT); less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_binary_search_auto_int_int_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr__0x144>` 
+  *  :ref:`binary_search (a: auto; val: auto) : auto <function-algorithm_binary_search_auto_auto_0x11d>` 
+  *  :ref:`binary_search (a: array\<auto(TT)\>; val: TT; less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_binary_search_array_ls_autoTT_gr__TT_block_ls_a_c_TT;b_c_TT_c_bool_gr_>` 
+  *  :ref:`binary_search (a: array\<auto(TT)\>; f: int; last: int; val: TT) : auto <function-algorithm_binary_search_array_ls_autoTT_gr__int_int_TT>` 
+  *  :ref:`binary_search (a: array\<auto(TT)\>; f: int; last: int; val: TT; less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_binary_search_array_ls_autoTT_gr__int_int_TT_block_ls_a_c_TT;b_c_TT_c_bool_gr_>` 
+  *  :ref:`binary_search (a: auto; val: auto(TT); less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_binary_search_auto_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr__0x137>` 
+  *  :ref:`equal_range (a: array\<auto(TT)\>; f: int; l: int; val: TT) : auto <function-algorithm_equal_range_array_ls_autoTT_gr__int_int_TT>` 
+  *  :ref:`equal_range (a: array\<auto(TT)\>; val: TT) : auto <function-algorithm_equal_range_array_ls_autoTT_gr__TT>` 
+  *  :ref:`lower_bound (a: array\<auto(TT)\>; value: auto(QQ); less: block\<(a:TT;b:QQ):bool\>) : auto <function-algorithm_lower_bound_array_ls_autoTT_gr__autoQQ_block_ls_a_c_TT;b_c_QQ_c_bool_gr__0x70>` 
+  *  :ref:`lower_bound (a: array\<auto(TT)\>; val: TT) : auto <function-algorithm_lower_bound_array_ls_autoTT_gr__TT>` 
+  *  :ref:`lower_bound (a: auto; val: auto(TT); less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_lower_bound_auto_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr__0x110>` 
+  *  :ref:`lower_bound (a: array\<auto(TT)\>; f: int; l: int; val: TT) : auto <function-algorithm_lower_bound_array_ls_autoTT_gr__int_int_TT>` 
+  *  :ref:`lower_bound (a: array\<auto(TT)\>; f: int; l: int; value: auto(QQ); less: block\<(a:TT;b:QQ):bool\>) : auto <function-algorithm_lower_bound_array_ls_autoTT_gr__int_int_autoQQ_block_ls_a_c_TT;b_c_QQ_c_bool_gr__0x5d>` 
+  *  :ref:`lower_bound (a: auto; f: int; l: int; val: auto) : auto <function-algorithm_lower_bound_auto_int_int_auto_0xe9>` 
+  *  :ref:`lower_bound (a: auto; val: auto) : auto <function-algorithm_lower_bound_auto_auto_0xf6>` 
+  *  :ref:`lower_bound (a: auto; f: int; l: int; val: auto(TT); less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_lower_bound_auto_int_int_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr__0x103>` 
+  *  :ref:`upper_bound (a: array\<auto(TT)\>; f: int; l: int; value: auto(QQ); less: block\<(a:TT;b:QQ):bool\>) : auto <function-algorithm_upper_bound_array_ls_autoTT_gr__int_int_autoQQ_block_ls_a_c_TT;b_c_QQ_c_bool_gr__0xac>` 
+  *  :ref:`upper_bound (a: array\<auto(TT)\>; val: TT) : auto <function-algorithm_upper_bound_array_ls_autoTT_gr__TT>` 
+  *  :ref:`upper_bound (a: auto; f: int; l: int; val: auto) : auto <function-algorithm_upper_bound_auto_int_int_auto_0x151>` 
+  *  :ref:`upper_bound (a: array\<auto(TT)\>; value: auto(QQ); less: block\<(a:TT;b:QQ):bool\>) : auto <function-algorithm_upper_bound_array_ls_autoTT_gr__autoQQ_block_ls_a_c_TT;b_c_QQ_c_bool_gr__0xbf>` 
+  *  :ref:`upper_bound (a: auto; val: auto) : auto <function-algorithm_upper_bound_auto_auto_0x15e>` 
+  *  :ref:`upper_bound (a: array\<auto(TT)\>; f: int; l: int; val: TT) : auto <function-algorithm_upper_bound_array_ls_autoTT_gr__int_int_TT>` 
+  *  :ref:`upper_bound (a: auto; val: auto(TT); less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_upper_bound_auto_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr__0x178>` 
+  *  :ref:`upper_bound (a: auto; f: int; l: int; val: auto(TT); less: block\<(a:TT;b:TT):bool\>) : auto <function-algorithm_upper_bound_auto_int_int_autoTT_block_ls_a_c_TT;b_c_TT_c_bool_gr__0x16b>` 
 
 
 binary_search
@@ -245,27 +245,27 @@ Returns the index of the first element in the range [f, l) for which less(val, e
 Array manipulation
 ++++++++++++++++++
 
-  *  :ref:`combine (a: array\<auto(TT)\>; b: array\<auto(TT)\>) : auto <function-algorithm_combine_array_ls_autoTT_gr__array_ls_autoTT_gr_>`
-  *  :ref:`combine (a: auto; b: auto) : auto <function-algorithm_combine_auto_auto_0xe1>`
-  *  :ref:`erase_all (var arr: auto; value: auto) : auto <function-algorithm_erase_all_auto_auto_0x185>`
-  *  :ref:`fill (var a: array\<auto(TT)\>; value: TT) : auto <function-algorithm_fill_array_ls_autoTT_gr__TT>`
-  *  :ref:`fill (var a: auto; value: auto) : auto <function-algorithm_fill_auto_auto_0x1a3>`
-  *  :ref:`is_sorted (a: auto) : bool <function-algorithm_is_sorted_auto_0x1c5>`
-  *  :ref:`is_sorted (a: array\<auto(TT)\>) : bool <function-algorithm_is_sorted_array_ls_autoTT_gr_>`
-  *  :ref:`is_sorted (a: array\<auto(TT)\>; less: block\<(a:TT;b:TT):bool\>) : bool <function-algorithm_is_sorted_array_ls_autoTT_gr__block_ls_a_c_TT;b_c_TT_c_bool_gr_>`
-  *  :ref:`max_element (a: auto) : int <function-algorithm_max_element_auto_0x230>`
-  *  :ref:`max_element (a: array\<auto(TT)\>; less: block\<(a:TT;b:TT):bool\>) : int <function-algorithm_max_element_array_ls_autoTT_gr__block_ls_a_c_TT;b_c_TT_c_bool_gr_>`
-  *  :ref:`max_element (a: array\<auto(TT)\>) : int <function-algorithm_max_element_array_ls_autoTT_gr_>`
-  *  :ref:`min_element (a: array\<auto(TT)\>; less: block\<(a:TT;b:TT):bool\>) : int <function-algorithm_min_element_array_ls_autoTT_gr__block_ls_a_c_TT;b_c_TT_c_bool_gr_>`
-  *  :ref:`min_element (a: auto) : int <function-algorithm_min_element_auto_0x228>`
-  *  :ref:`min_element (a: array\<auto(TT)\>) : int <function-algorithm_min_element_array_ls_autoTT_gr_>`
-  *  :ref:`reverse (var a: auto) : auto <function-algorithm_reverse_auto_0xd9>`
-  *  :ref:`reverse (var a: array\<auto\>) : auto <function-algorithm_reverse_array_ls_auto_gr_>`
-  *  :ref:`rotate (var a: array\<auto\>; mid: int) : auto <function-algorithm_rotate_array_ls_auto_gr__int>`
-  *  :ref:`rotate (var a: auto; mid: int) : auto <function-algorithm_rotate_auto_int_0x1e6>`
-  *  :ref:`sort_unique (var a: array\<auto(TT)\>) : auto <function-algorithm_sort_unique_array_ls_autoTT_gr_>`
-  *  :ref:`topological_sort (nodes: array\<auto(Node)\>) : auto <function-algorithm_topological_sort_array_ls_autoNode_gr_>`
-  *  :ref:`unique (var a: array\<auto(TT)\>) : auto <function-algorithm_unique_array_ls_autoTT_gr_>`
+  *  :ref:`combine (a: array\<auto(TT)\>; b: array\<auto(TT)\>) : auto <function-algorithm_combine_array_ls_autoTT_gr__array_ls_autoTT_gr_>` 
+  *  :ref:`combine (a: auto; b: auto) : auto <function-algorithm_combine_auto_auto_0xe1>` 
+  *  :ref:`erase_all (var arr: auto; value: auto) : auto <function-algorithm_erase_all_auto_auto_0x185>` 
+  *  :ref:`fill (var a: array\<auto(TT)\>; value: TT) : auto <function-algorithm_fill_array_ls_autoTT_gr__TT>` 
+  *  :ref:`fill (var a: auto; value: auto) : auto <function-algorithm_fill_auto_auto_0x1a3>` 
+  *  :ref:`is_sorted (a: auto) : bool <function-algorithm_is_sorted_auto_0x1c5>` 
+  *  :ref:`is_sorted (a: array\<auto(TT)\>) : bool <function-algorithm_is_sorted_array_ls_autoTT_gr_>` 
+  *  :ref:`is_sorted (a: array\<auto(TT)\>; less: block\<(a:TT;b:TT):bool\>) : bool <function-algorithm_is_sorted_array_ls_autoTT_gr__block_ls_a_c_TT;b_c_TT_c_bool_gr_>` 
+  *  :ref:`max_element (a: auto) : int <function-algorithm_max_element_auto_0x230>` 
+  *  :ref:`max_element (a: array\<auto(TT)\>; less: block\<(a:TT;b:TT):bool\>) : int <function-algorithm_max_element_array_ls_autoTT_gr__block_ls_a_c_TT;b_c_TT_c_bool_gr_>` 
+  *  :ref:`max_element (a: array\<auto(TT)\>) : int <function-algorithm_max_element_array_ls_autoTT_gr_>` 
+  *  :ref:`min_element (a: array\<auto(TT)\>; less: block\<(a:TT;b:TT):bool\>) : int <function-algorithm_min_element_array_ls_autoTT_gr__block_ls_a_c_TT;b_c_TT_c_bool_gr_>` 
+  *  :ref:`min_element (a: auto) : int <function-algorithm_min_element_auto_0x228>` 
+  *  :ref:`min_element (a: array\<auto(TT)\>) : int <function-algorithm_min_element_array_ls_autoTT_gr_>` 
+  *  :ref:`reverse (var a: auto) : auto <function-algorithm_reverse_auto_0xd9>` 
+  *  :ref:`reverse (var a: array\<auto\>) : auto <function-algorithm_reverse_array_ls_auto_gr_>` 
+  *  :ref:`rotate (var a: array\<auto\>; mid: int) : auto <function-algorithm_rotate_array_ls_auto_gr__int>` 
+  *  :ref:`rotate (var a: auto; mid: int) : auto <function-algorithm_rotate_auto_int_0x1e6>` 
+  *  :ref:`sort_unique (var a: array\<auto(TT)\>) : auto <function-algorithm_sort_unique_array_ls_autoTT_gr_>` 
+  *  :ref:`topological_sort (nodes: array\<auto(Node)\>) : auto <function-algorithm_topological_sort_array_ls_autoNode_gr_>` 
+  *  :ref:`unique (var a: array\<auto(TT)\>) : auto <function-algorithm_unique_array_ls_autoTT_gr_>` 
 
 
 combine
@@ -460,12 +460,12 @@ The array should be sorted first if all duplicates need to be removed.
 Table manipulation
 ++++++++++++++++++
 
-  *  :ref:`difference (a: table\<auto(TT), void\>; b: table\<auto(TT), void\>) : table\<TT, void\> <function-algorithm_difference_table_ls_autoTT,_void_gr__table_ls_autoTT,_void_gr_>`
-  *  :ref:`identical (a: table\<auto(TT), void\>; b: table\<auto(TT), void\>) : bool <function-algorithm_identical_table_ls_autoTT,_void_gr__table_ls_autoTT,_void_gr_>`
-  *  :ref:`intersection (a: table\<auto(TT), void\>; b: table\<auto(TT), void\>) : table\<TT, void\> <function-algorithm_intersection_table_ls_autoTT,_void_gr__table_ls_autoTT,_void_gr_>`
-  *  :ref:`is_subset (a: table\<auto(TT), void\>; b: table\<auto(TT), void\>) : bool <function-algorithm_is_subset_table_ls_autoTT,_void_gr__table_ls_autoTT,_void_gr_>`
-  *  :ref:`symmetric_difference (a: table\<auto(TT), void\>; b: table\<auto(TT), void\>) : table\<TT, void\> <function-algorithm_symmetric_difference_table_ls_autoTT,_void_gr__table_ls_autoTT,_void_gr_>`
-  *  :ref:`union (a: table\<auto(TT), void\>; b: table\<auto(TT), void\>) : table\<TT, void\> <function-algorithm_union_table_ls_autoTT,_void_gr__table_ls_autoTT,_void_gr_>`
+  *  :ref:`difference (a: table\<auto(TT), void\>; b: table\<auto(TT), void\>) : table\<TT, void\> <function-algorithm_difference_table_ls_autoTT,_void_gr__table_ls_autoTT,_void_gr_>` 
+  *  :ref:`identical (a: table\<auto(TT), void\>; b: table\<auto(TT), void\>) : bool <function-algorithm_identical_table_ls_autoTT,_void_gr__table_ls_autoTT,_void_gr_>` 
+  *  :ref:`intersection (a: table\<auto(TT), void\>; b: table\<auto(TT), void\>) : table\<TT, void\> <function-algorithm_intersection_table_ls_autoTT,_void_gr__table_ls_autoTT,_void_gr_>` 
+  *  :ref:`is_subset (a: table\<auto(TT), void\>; b: table\<auto(TT), void\>) : bool <function-algorithm_is_subset_table_ls_autoTT,_void_gr__table_ls_autoTT,_void_gr_>` 
+  *  :ref:`symmetric_difference (a: table\<auto(TT), void\>; b: table\<auto(TT), void\>) : table\<TT, void\> <function-algorithm_symmetric_difference_table_ls_autoTT,_void_gr__table_ls_autoTT,_void_gr_>` 
+  *  :ref:`union (a: table\<auto(TT), void\>; b: table\<auto(TT), void\>) : table\<TT, void\> <function-algorithm_union_table_ls_autoTT,_void_gr__table_ls_autoTT,_void_gr_>` 
 
 .. _function-algorithm_difference_table_ls_autoTT,_void_gr__table_ls_autoTT,_void_gr_:
 

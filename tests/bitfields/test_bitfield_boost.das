@@ -16,7 +16,7 @@ def test_any_bitfield(t : T?; bf : auto(BitFieldType)) {
     for (i in range(typeinfo sizeof(bf) << 3)) {
         b[i] = (i & 1) == 0
     }
-    for (i, bit in count(), b) {
+    for (i, bit in count(), each_bit(b)) {
         let expected = (i & 1) == 0
         t |> equal(bit, expected, "bit {i} should be {expected} after setting via iteration")
     }

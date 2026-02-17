@@ -110,25 +110,25 @@ JSON parsing token. Contains token and its position.
 Value conversion
 ++++++++++++++++
 
-  *  :ref:`JV (v: string) : JsonValue? <function-json_JV_string>`
-  *  :ref:`JV (v: double) : JsonValue? <function-json_JV_double>`
-  *  :ref:`JV (v: bool) : JsonValue? <function-json_JV_bool>`
-  *  :ref:`JV (var v: table\<string, JsonValue?\>) : JsonValue? <function-json_JV_table_ls_string,_JsonValue_q__gr_>`
-  *  :ref:`JV (v: float) : JsonValue? <function-json_JV_float>`
-  *  :ref:`JV (var v: array\<JsonValue?\>) : JsonValue? <function-json_JV_array_ls_JsonValue_q__gr_>`
-  *  :ref:`JV (v: int) : JsonValue? <function-json_JV_int>`
-  *  :ref:`JV (v: bitfield) : JsonValue? <function-json_JV_bitfield>`
-  *  :ref:`JV (v: bitfield16:uint16\<\>) : JsonValue? <function-json_JV_bitfield16_c_uint16_ls__gr_>`
-  *  :ref:`JV (v: bitfield8:uint8\<\>) : JsonValue? <function-json_JV_bitfield8_c_uint8_ls__gr_>`
-  *  :ref:`JV (v: bitfield64:uint64\<\>) : JsonValue? <function-json_JV_bitfield64_c_uint64_ls__gr_>`
-  *  :ref:`JV (val: int8) : JsonValue? <function-json_JV_int8>`
-  *  :ref:`JV (val: uint8) : JsonValue? <function-json_JV_uint8>`
-  *  :ref:`JV (val: int16) : JsonValue? <function-json_JV_int16>`
-  *  :ref:`JV (val: uint) : JsonValue? <function-json_JV_uint>`
-  *  :ref:`JV (val: uint16) : JsonValue? <function-json_JV_uint16>`
-  *  :ref:`JV (val: int64) : JsonValue? <function-json_JV_int64>`
-  *  :ref:`JV (val: uint64) : JsonValue? <function-json_JV_uint64>`
-  *  :ref:`JVNull () : JsonValue? <function-json_JVNull>`
+  *  :ref:`JV (v: string) : JsonValue? <function-json_JV_string>` 
+  *  :ref:`JV (v: double) : JsonValue? <function-json_JV_double>` 
+  *  :ref:`JV (v: bool) : JsonValue? <function-json_JV_bool>` 
+  *  :ref:`JV (var v: table\<string, JsonValue?\>) : JsonValue? <function-json_JV_table_ls_string,_JsonValue_q__gr_>` 
+  *  :ref:`JV (v: float) : JsonValue? <function-json_JV_float>` 
+  *  :ref:`JV (var v: array\<JsonValue?\>) : JsonValue? <function-json_JV_array_ls_JsonValue_q__gr_>` 
+  *  :ref:`JV (v: int) : JsonValue? <function-json_JV_int>` 
+  *  :ref:`JV (v: bitfield) : JsonValue? <function-json_JV_bitfield>` 
+  *  :ref:`JV (v: bitfield16:uint16\<\>) : JsonValue? <function-json_JV_bitfield16_c_uint16_ls__gr_>` 
+  *  :ref:`JV (v: bitfield8:uint8\<\>) : JsonValue? <function-json_JV_bitfield8_c_uint8_ls__gr_>` 
+  *  :ref:`JV (v: bitfield64:uint64\<\>) : JsonValue? <function-json_JV_bitfield64_c_uint64_ls__gr_>` 
+  *  :ref:`JV (val: int8) : JsonValue? <function-json_JV_int8>` 
+  *  :ref:`JV (val: uint8) : JsonValue? <function-json_JV_uint8>` 
+  *  :ref:`JV (val: int16) : JsonValue? <function-json_JV_int16>` 
+  *  :ref:`JV (val: uint) : JsonValue? <function-json_JV_uint>` 
+  *  :ref:`JV (val: uint16) : JsonValue? <function-json_JV_uint16>` 
+  *  :ref:`JV (val: int64) : JsonValue? <function-json_JV_int64>` 
+  *  :ref:`JV (val: uint64) : JsonValue? <function-json_JV_uint64>` 
+  *  :ref:`JVNull () : JsonValue? <function-json_JVNull>` 
 
 
 JV
@@ -222,10 +222,10 @@ Creates `JsonValue` representing `null`.
 Read and write
 ++++++++++++++
 
-  *  :ref:`read_json (text: array\<uint8\>; var error: string&) : JsonValue? <function-json_read_json_array_ls_uint8_gr__string>`
-  *  :ref:`read_json (text: string implicit; var error: string&) : JsonValue? <function-json_read_json_string_implicit_string>`
-  *  :ref:`write_json (val: JsonValue?#) : string <function-json_write_json_JsonValue_q__hh_>`
-  *  :ref:`write_json (val: JsonValue?) : string <function-json_write_json_JsonValue_q_>`
+  *  :ref:`read_json (text: array\<uint8\>; var error: string&) : JsonValue? <function-json_read_json_array_ls_uint8_gr__string>` 
+  *  :ref:`read_json (text: string implicit; var error: string&) : JsonValue? <function-json_read_json_string_implicit_string>` 
+  *  :ref:`write_json (val: JsonValue?#) : string <function-json_write_json_JsonValue_q__hh_>` 
+  *  :ref:`write_json (val: JsonValue?) : string <function-json_write_json_JsonValue_q_>` 
 
 
 read_json
@@ -270,9 +270,9 @@ Overload accepting temporary type
 JSON properties
 +++++++++++++++
 
-  *  :ref:`set_allow_duplicate_keys (value: bool) : bool <function-json_set_allow_duplicate_keys_bool>`
-  *  :ref:`set_no_empty_arrays (value: bool) : bool <function-json_set_no_empty_arrays_bool>`
-  *  :ref:`set_no_trailing_zeros (value: bool) : bool <function-json_set_no_trailing_zeros_bool>`
+  *  :ref:`set_allow_duplicate_keys (value: bool) : bool <function-json_set_allow_duplicate_keys_bool>` 
+  *  :ref:`set_no_empty_arrays (value: bool) : bool <function-json_set_no_empty_arrays_bool>` 
+  *  :ref:`set_no_trailing_zeros (value: bool) : bool <function-json_set_no_trailing_zeros_bool>` 
 
 .. _function-json_set_allow_duplicate_keys_bool:
 
@@ -302,7 +302,7 @@ if `value` is true, then numbers are written without trailing zeros.
 Broken JSON
 +++++++++++
 
-  *  :ref:`try_fixing_broken_json (var bad: string) : string <function-json_try_fixing_broken_json_string>`
+  *  :ref:`try_fixing_broken_json (var bad: string) : string <function-json_try_fixing_broken_json_string>` 
 
 .. _function-json_try_fixing_broken_json_string:
 

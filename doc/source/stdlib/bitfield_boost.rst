@@ -85,11 +85,11 @@ get bitfield bit at index i
 Iteration
 +++++++++
 
-  *  :ref:`each (b: auto) : iterator\<bool\> <function-bitfield_boost_each_auto_0x49>` 
+  *  :ref:`each_bit (b: auto) : iterator\<bool\> <function-bitfield_boost_each_bit_auto_0x49>` 
 
-.. _function-bitfield_boost_each_auto_0x49:
+.. _function-bitfield_boost_each_bit_auto_0x49:
 
-.. das:function:: each(b: auto) : iterator<bool>
+.. das:function:: each_bit(b: auto) : iterator<bool>
 
 Iterates over each bit of a bitfield value, yielding true or false for each bit.
 

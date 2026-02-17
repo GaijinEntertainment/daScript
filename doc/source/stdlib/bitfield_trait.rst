@@ -23,6 +23,17 @@ Function annotations
 
 This macro converts each(bitfield) to the following code::
     generator<string>() <|
+        yield field1
+        yield field2
+        ...
+        return false
+
+.. _handle-bitfield_trait-EachBitNameBitfieldMacro:
+
+.. das:attribute:: EachBitNameBitfieldMacro
+
+This macro converts each(bitfield) to the following code::
+    generator<string>() <|
         yield "field1"
         yield "field2"
         ...
@@ -32,11 +43,20 @@ This macro converts each(bitfield) to the following code::
 Iteration
 +++++++++
 
-  *  :ref:`each (argT: auto) : auto <function-bitfield_trait_each_auto_0x15>` 
+  *  :ref:`each (argT: auto) : auto <function-bitfield_trait_each_auto_0x16>` 
+  *  :ref:`each_bit_name (argT: auto) : auto <function-bitfield_trait_each_bit_name_auto_0x39>` 
 
-.. _function-bitfield_trait_each_auto_0x15:
+.. _function-bitfield_trait_each_auto_0x16:
 
 .. das:function:: each(argT: auto) : auto
+
+Iterates over the names of a bitfield type, yielding each bit as a bitfield value (1ul << bitIndex).
+
+:Arguments: * **argT** : auto
+
+.. _function-bitfield_trait_each_bit_name_auto_0x39:
+
+.. das:function:: each_bit_name(argT: auto) : auto
 
 Iterates over the names of a bitfield type, yielding each bit name as a string.
 
