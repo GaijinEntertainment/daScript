@@ -241,23 +241,25 @@ namespace das {
         mMagic = 0;
     }
 
-    void JobStatus::Notify() {
+    bool JobStatus::Notify() {
         lock_guard<mutex> guard(mCompleteMutex);
-        DAS_VERIFYF(mRemaining != 0, "Nothing to notify!");
+        if ( mRemaining == 0 ) return false;
         --mRemaining;
         if ( mRemaining==0 ) {
             mCond.notify_all();
         }
+        return true;
     }
 
-    void JobStatus::NotifyAndRelease() {
+    bool JobStatus::NotifyAndRelease() {
         lock_guard<mutex> guard(mCompleteMutex);
         mRef--;
-        DAS_VERIFYF(mRemaining != 0, "Nothing to notify!");
+        if ( mRemaining == 0 ) return false;
         --mRemaining;
         if ( mRemaining==0 ) {
             mCond.notify_all();
         }
+        return true;
     }
 
     void JobStatus::Wait() {

@@ -516,12 +516,12 @@ namespace das {
 
     void notifyJob ( JobStatus * status, Context * context, LineInfoArg * at ) {
         if ( !status ) context->throw_error_at(at, "notifyJob: status is null");
-        status->Notify();
+        if ( !status->Notify() ) context->throw_error_at(at, "notifyJob: nothing to notify");
     }
 
     void notifyAndReleaseJob ( JobStatus * & status, Context * context, LineInfoArg * at ) {
         if ( !status ) context->throw_error_at(at, "notifyAndReleaseJob: status is null");
-        status->NotifyAndRelease();
+        if ( !status->NotifyAndRelease() ) context->throw_error_at(at, "notifyAndReleaseJob: nothing to notify");
         status = nullptr;
     }
 
