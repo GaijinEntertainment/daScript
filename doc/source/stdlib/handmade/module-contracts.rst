@@ -3,6 +3,8 @@ arguments. Annotations like ``[expect_any_array]``, ``[expect_any_enum]``,
 ``[expect_any_numeric]``, and ``[expect_any_struct]`` restrict which types
 can instantiate a generic parameter, producing clear error messages on mismatch.
 
+See :ref:`tutorial_contracts` for a hands-on tutorial.
+
 All functions and symbols are in "contracts" module, use require to get access to it. ::
 
     require daslib/contracts

@@ -3,6 +3,7 @@ field access (``?[]``), null-coalescing (``??``), and automatic struct-to-JSON
 conversion macros (``from_JsValue``, ``to_JsValue``).
 
 See also :doc:`json` for core JSON parsing and writing.
+See :ref:`tutorial_json` for a hands-on tutorial.
 
 All functions and symbols are in "json_boost" module, use require to get access to it. ::
 

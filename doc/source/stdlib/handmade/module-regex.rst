@@ -6,6 +6,8 @@ full-string matching, ``regex_search`` for finding the first match anywhere,
 ``regex_match_all`` for collecting all match ranges, ``regex_group`` for
 capturing groups by index, and ``regex_group_by_name`` for named group lookup.
 
+See :ref:`tutorial_regex` for a hands-on tutorial.
+
 Supported syntax:
 
 - ``.`` — any character except newline (use ``dot_all=true`` to also match ``\n``)

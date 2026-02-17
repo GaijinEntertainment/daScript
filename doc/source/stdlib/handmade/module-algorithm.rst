@@ -9,6 +9,8 @@ Key features:
 
 Most functions also support fixed-size arrays via `[expect_any_array]` overloads.
 
+See :ref:`tutorial_algorithm` for a hands-on tutorial.
+
 All functions and symbols are in "algorithm" module, use require to get access to it. ::
 
     require daslib/algorithm

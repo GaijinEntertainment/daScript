@@ -84,3 +84,5 @@ To test an entire directory::
 .. seealso::
 
    Full source: :download:`tutorials/language/27_testing.das <../../../../tutorials/language/27_testing.das>`
+
+   Next tutorial: :ref:`tutorial_linq`

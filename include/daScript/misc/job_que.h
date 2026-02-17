@@ -33,8 +33,8 @@ namespace das {
         virtual ~JobStatus();
         JobStatus & operator = ( JobStatus && ) = delete;
         JobStatus & operator = ( const JobStatus & ) = delete;
-        void Notify();
-        void NotifyAndRelease();
+        bool Notify();
+        bool NotifyAndRelease();
         bool isReady();
         void Wait();
         void Clear(uint32_t count = 1);

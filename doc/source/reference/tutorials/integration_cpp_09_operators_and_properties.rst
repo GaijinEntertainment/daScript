@@ -357,3 +357,4 @@ Expected output::
    :download:`09_operators_and_properties.das <../../../../tutorials/integration/cpp/09_operators_and_properties.das>`
 
    Previous tutorial: :ref:`tutorial_integration_cpp_methods`
+   Next tutorial: :ref:`tutorial_integration_cpp_custom_modules`

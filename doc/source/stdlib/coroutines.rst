@@ -11,6 +11,8 @@ sub-coroutines, and ``co_await`` for composing asynchronous generators.
 Coroutines produce values lazily via ``yield`` and can be iterated with
 ``for``.
 
+See :ref:`tutorial_iterators_and_generators` for a hands-on tutorial.
+
 All functions and symbols are in "coroutines" module, use require to get access to it. ::
 
     require daslib/coroutines
@@ -114,8 +116,8 @@ The idea is that coroutine or generator can continuously yield from another sub-
 Top level coroutine evaluation
 ++++++++++++++++++++++++++++++
 
-  *  :ref:`cr_run (var a: Coroutine) <function-coroutines_cr_run_Coroutine>` 
-  *  :ref:`cr_run_all (var a: Coroutines) <function-coroutines_cr_run_all_Coroutines>` 
+  *  :ref:`cr_run (var a: Coroutine) <function-coroutines_cr_run_Coroutine>`
+  *  :ref:`cr_run_all (var a: Coroutines) <function-coroutines_cr_run_all_Coroutines>`
 
 .. _function-coroutines_cr_run_Coroutine:
 
@@ -123,7 +125,7 @@ Top level coroutine evaluation
 
 This function runs coroutine until it is finished.
 
-:Arguments: * **a** :  :ref:`Coroutine <alias-Coroutine>` 
+:Arguments: * **a** :  :ref:`Coroutine <alias-Coroutine>`
 
 .. _function-coroutines_cr_run_all_Coroutines:
 
@@ -131,6 +133,6 @@ This function runs coroutine until it is finished.
 
 This function runs all coroutines until they are finished.
 
-:Arguments: * **a** :  :ref:`Coroutines <alias-Coroutines>` 
+:Arguments: * **a** :  :ref:`Coroutines <alias-Coroutines>`
 
 

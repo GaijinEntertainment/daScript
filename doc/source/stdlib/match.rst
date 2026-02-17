@@ -10,6 +10,8 @@ arrays, and scalar values. Supports variable capture, wildcards, guard
 expressions, and alternation. ``static_match`` enforces exhaustive matching
 at compile time.
 
+See :ref:`tutorial_pattern_matching` for a hands-on tutorial.
+
 All functions and symbols are in "match" module, use require to get access to it. ::
 
     require daslib/match

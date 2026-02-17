@@ -62,6 +62,8 @@ namespace das {
         void push ( void * data, TypeInfo * ti, Context * context );
         void pushBatch ( void ** data, int count, TypeInfo * ti, Context * context );
         void pop ( const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
+        bool tryPop ( const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
+        bool popWithTimeout ( int timeoutMs, const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
         bool isEmpty() const;
         int total() const;
         Context * getOwner() { return owner; }
@@ -131,6 +133,8 @@ namespace das {
     DAS_API vec4f channelPush ( Context & context, SimNode_CallBase * call, vec4f * args );
     DAS_API vec4f channelPushBatch ( Context & context, SimNode_CallBase * call, vec4f * args );
     DAS_API void channelPop ( Channel * ch, const TBlock<void,void*> & blk, Context * context, LineInfoArg * at );
+    DAS_API bool channelTryPop ( Channel * ch, const TBlock<void,void*> & blk, Context * context, LineInfoArg * at );
+    DAS_API bool channelPopWithTimeout ( Channel * ch, int32_t timeoutMs, const TBlock<void,void*> & blk, Context * context, LineInfoArg * at );
     DAS_API int jobAppend ( JobStatus * ch, int size, Context * context, LineInfoArg * at );
     DAS_API void withChannel ( const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * lineinfo );
     DAS_API void withChannelEx ( int32_t count, const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * lineinfo );
@@ -151,14 +155,16 @@ namespace das {
     template <typename TT>
     AtomicTT<TT> * atomicCreate( Context *, LineInfoArg * ) {
         auto ch = new AtomicTT<TT>();
+        ch->set(0);
         ch->addRef();
         return ch;
     }
 
     template <typename TT>
     void atomicRemove( AtomicTT<TT> * & ch, Context * context, LineInfoArg * at ) {
+        if ( !ch ) context->throw_error_at(at, "atomicRemove: atomic is null");
         if (!ch->isValid()) context->throw_error_at(at, "atomic is invalid (already deleted?)");
-        if (ch->releaseRef()) context->throw_error_at(at, "atomic beeing deleted while being used");
+        if (ch->releaseRef()) context->throw_error_at(at, "atomic being deleted while being used");
         delete ch;
         ch = nullptr;
     }
@@ -167,10 +173,11 @@ namespace das {
     void withAtomic ( const TBlock<void,AtomicTT<TT> *> & blk, Context * context, LineInfoArg * at ) {
         using TAtomic = AtomicTT<TT>;
         TAtomic ch;
+        ch.set(0);
         ch.addRef();
         das::das_invoke<void>::invoke<TAtomic *>(context, at, blk, &ch);
         if ( ch.releaseRef() ) {
-            context->throw_error_at(at, "atomic box beeing deleted while being used");
+            context->throw_error_at(at, "atomic box being deleted while being used");
         }
     }
 

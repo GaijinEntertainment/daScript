@@ -10,6 +10,8 @@ It includes thread-safe channels for inter-thread communication, lock boxes
 for shared data access, job status tracking, and fine-grained thread
 management. For higher-level job abstractions, see ``jobque_boost``.
 
+See :ref:`tutorial_jobque` for a hands-on tutorial.
+
 All functions and symbols are in "jobque" module, use require to get access to it. ::
 
     require jobque
@@ -117,18 +119,18 @@ Total number of elements that have been added to the pipe.
 Channel, JobStatus, Lockbox
 +++++++++++++++++++++++++++
 
-  *  :ref:`add_ref (status: JobStatus? implicit) <function-jobque_add_ref_JobStatus_q__implicit>` 
-  *  :ref:`append (channel: JobStatus? implicit; size: int) : int <function-jobque_append_JobStatus_q__implicit_int>` 
-  *  :ref:`channel_create () : Channel? <function-jobque_channel_create>` 
-  *  :ref:`channel_remove (channel: Channel?& implicit) <function-jobque_channel_remove_Channel_q__implicit>` 
-  *  :ref:`job_status_create () : JobStatus? <function-jobque_job_status_create>` 
-  *  :ref:`job_status_remove (jobStatus: JobStatus?& implicit) <function-jobque_job_status_remove_JobStatus_q__implicit>` 
-  *  :ref:`join (job: JobStatus? implicit) <function-jobque_join_JobStatus_q__implicit>` 
-  *  :ref:`lock_box_create () : LockBox? <function-jobque_lock_box_create>` 
-  *  :ref:`lock_box_remove (box: LockBox?& implicit) <function-jobque_lock_box_remove_LockBox_q__implicit>` 
-  *  :ref:`notify (job: JobStatus? implicit) <function-jobque_notify_JobStatus_q__implicit>` 
-  *  :ref:`notify_and_release (job: JobStatus?& implicit) <function-jobque_notify_and_release_JobStatus_q__implicit>` 
-  *  :ref:`release (status: JobStatus?& implicit) <function-jobque_release_JobStatus_q__implicit>` 
+  *  :ref:`add_ref (status: JobStatus? implicit) <function-jobque_add_ref_JobStatus_q__implicit>`
+  *  :ref:`append (channel: JobStatus? implicit; size: int) : int <function-jobque_append_JobStatus_q__implicit_int>`
+  *  :ref:`channel_create () : Channel? <function-jobque_channel_create>`
+  *  :ref:`channel_remove (channel: Channel?& implicit) <function-jobque_channel_remove_Channel_q__implicit>`
+  *  :ref:`job_status_create () : JobStatus? <function-jobque_job_status_create>`
+  *  :ref:`job_status_remove (jobStatus: JobStatus?& implicit) <function-jobque_job_status_remove_JobStatus_q__implicit>`
+  *  :ref:`join (job: JobStatus? implicit) <function-jobque_join_JobStatus_q__implicit>`
+  *  :ref:`lock_box_create () : LockBox? <function-jobque_lock_box_create>`
+  *  :ref:`lock_box_remove (box: LockBox?& implicit) <function-jobque_lock_box_remove_LockBox_q__implicit>`
+  *  :ref:`notify (job: JobStatus? implicit) <function-jobque_notify_JobStatus_q__implicit>`
+  *  :ref:`notify_and_release (job: JobStatus?& implicit) <function-jobque_notify_and_release_JobStatus_q__implicit>`
+  *  :ref:`release (status: JobStatus?& implicit) <function-jobque_release_JobStatus_q__implicit>`
 
 .. _function-jobque_add_ref_JobStatus_q__implicit:
 
@@ -152,7 +154,7 @@ Increases the entry count of the channel, signaling that new work has been added
 
 .. das:function:: channel_create() : Channel?
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Creates a new ``Channel`` for inter-thread communication and synchronization.
@@ -161,7 +163,7 @@ Creates a new ``Channel`` for inter-thread communication and synchronization.
 
 .. das:function:: channel_remove(channel: Channel?& implicit)
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Destroys a ``Channel`` and releases its resources.
@@ -178,7 +180,7 @@ Creates a new ``JobStatus`` object for tracking the completion state of asynchro
 
 .. das:function:: job_status_remove(jobStatus: JobStatus?& implicit)
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Destroys a ``JobStatus`` object and releases its resources.
@@ -203,7 +205,7 @@ Creates a new ``LockBox`` for thread-safe shared access to a single value.
 
 .. das:function:: lock_box_remove(box: LockBox?& implicit)
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Destroys a ``LockBox`` and releases its resources.
@@ -238,9 +240,9 @@ Decreases the reference count of a ``JobStatus`` or ``Channel``; the object is d
 Queries
 +++++++
 
-  *  :ref:`get_total_hw_jobs () : int <function-jobque_get_total_hw_jobs>` 
-  *  :ref:`get_total_hw_threads () : int <function-jobque_get_total_hw_threads>` 
-  *  :ref:`is_job_que_shutting_down () : bool <function-jobque_is_job_que_shutting_down>` 
+  *  :ref:`get_total_hw_jobs () : int <function-jobque_get_total_hw_jobs>`
+  *  :ref:`get_total_hw_threads () : int <function-jobque_get_total_hw_threads>`
+  *  :ref:`is_job_que_shutting_down () : bool <function-jobque_is_job_que_shutting_down>`
 
 .. _function-jobque_get_total_hw_jobs:
 
@@ -264,9 +266,9 @@ Returns ``true`` if the job queue infrastructure is shutting down or has not bee
 Internal invocations
 ++++++++++++++++++++
 
-  *  :ref:`new_debugger_thread (block: block\<():void\>) <function-jobque_new_debugger_thread_block_ls__c_void_gr_>` 
-  *  :ref:`new_job_invoke (lambda: lambda\<():void\>; function: function\<():void\>; lambdaSize: int) <function-jobque_new_job_invoke_lambda_ls__c_void_gr__function_ls__c_void_gr__int>` 
-  *  :ref:`new_thread_invoke (lambda: lambda\<():void\>; function: function\<():void\>; lambdaSize: int) <function-jobque_new_thread_invoke_lambda_ls__c_void_gr__function_ls__c_void_gr__int>` 
+  *  :ref:`new_debugger_thread (block: block\<():void\>) <function-jobque_new_debugger_thread_block_ls__c_void_gr_>`
+  *  :ref:`new_job_invoke (lambda: lambda\<():void\>; function: function\<():void\>; lambdaSize: int) <function-jobque_new_job_invoke_lambda_ls__c_void_gr__function_ls__c_void_gr__int>`
+  *  :ref:`new_thread_invoke (lambda: lambda\<():void\>; function: function\<():void\>; lambdaSize: int) <function-jobque_new_thread_invoke_lambda_ls__c_void_gr__function_ls__c_void_gr__int>`
 
 .. _function-jobque_new_debugger_thread_block_ls__c_void_gr_:
 
@@ -304,11 +306,11 @@ Clones the current context, moves the attached lambda into it, and runs it on a 
 Construction
 ++++++++++++
 
-  *  :ref:`with_channel (block: block\<(Channel?):void\>) <function-jobque_with_channel_block_ls_Channel_q__c_void_gr_>` 
-  *  :ref:`with_channel (count: int; block: block\<(Channel?):void\>) <function-jobque_with_channel_int_block_ls_Channel_q__c_void_gr_>` 
-  *  :ref:`with_job_que (block: block\<():void\>) <function-jobque_with_job_que_block_ls__c_void_gr_>` 
-  *  :ref:`with_job_status (total: int; block: block\<(JobStatus?):void\>) <function-jobque_with_job_status_int_block_ls_JobStatus_q__c_void_gr_>` 
-  *  :ref:`with_lock_box (block: block\<(LockBox?):void\>) <function-jobque_with_lock_box_block_ls_LockBox_q__c_void_gr_>` 
+  *  :ref:`with_channel (block: block\<(Channel?):void\>) <function-jobque_with_channel_block_ls_Channel_q__c_void_gr_>`
+  *  :ref:`with_channel (count: int; block: block\<(Channel?):void\>) <function-jobque_with_channel_int_block_ls_Channel_q__c_void_gr_>`
+  *  :ref:`with_job_que (block: block\<():void\>) <function-jobque_with_job_que_block_ls__c_void_gr_>`
+  *  :ref:`with_job_status (total: int; block: block\<(JobStatus?):void\>) <function-jobque_with_job_status_int_block_ls_JobStatus_q__c_void_gr_>`
+  *  :ref:`with_lock_box (block: block\<(LockBox?):void\>) <function-jobque_with_lock_box_block_ls_LockBox_q__c_void_gr_>`
 
 
 with_channel
@@ -358,20 +360,20 @@ Creates a ``LockBox`` scoped to the given block and automatically destroys it af
 Atomic
 ++++++
 
-  *  :ref:`atomic32_create () : Atomic32? <function-jobque_atomic32_create>` 
-  *  :ref:`atomic32_remove (atomic: Atomic32?& implicit) <function-jobque_atomic32_remove_Atomic32_q__implicit>` 
-  *  :ref:`atomic64_create () : Atomic64? <function-jobque_atomic64_create>` 
-  *  :ref:`atomic64_remove (atomic: Atomic64?& implicit) <function-jobque_atomic64_remove_Atomic64_q__implicit>` 
-  *  :ref:`dec (atomic: Atomic32? implicit) : int <function-jobque_dec_Atomic32_q__implicit>` 
-  *  :ref:`dec (atomic: Atomic64? implicit) : int64 <function-jobque_dec_Atomic64_q__implicit>` 
-  *  :ref:`get (atomic: Atomic32? implicit) : int <function-jobque_get_Atomic32_q__implicit>` 
-  *  :ref:`get (atomic: Atomic64? implicit) : int64 <function-jobque_get_Atomic64_q__implicit>` 
-  *  :ref:`inc (atomic: Atomic32? implicit) : int <function-jobque_inc_Atomic32_q__implicit>` 
-  *  :ref:`inc (atomic: Atomic64? implicit) : int64 <function-jobque_inc_Atomic64_q__implicit>` 
-  *  :ref:`set (atomic: Atomic32? implicit; value: int) <function-jobque_set_Atomic32_q__implicit_int>` 
-  *  :ref:`set (atomic: Atomic64? implicit; value: int64) <function-jobque_set_Atomic64_q__implicit_int64>` 
-  *  :ref:`with_atomic32 (block: block\<(Atomic32?):void\>) <function-jobque_with_atomic32_block_ls_Atomic32_q__c_void_gr_>` 
-  *  :ref:`with_atomic64 (block: block\<(Atomic64?):void\>) <function-jobque_with_atomic64_block_ls_Atomic64_q__c_void_gr_>` 
+  *  :ref:`atomic32_create () : Atomic32? <function-jobque_atomic32_create>`
+  *  :ref:`atomic32_remove (atomic: Atomic32?& implicit) <function-jobque_atomic32_remove_Atomic32_q__implicit>`
+  *  :ref:`atomic64_create () : Atomic64? <function-jobque_atomic64_create>`
+  *  :ref:`atomic64_remove (atomic: Atomic64?& implicit) <function-jobque_atomic64_remove_Atomic64_q__implicit>`
+  *  :ref:`dec (atomic: Atomic32? implicit) : int <function-jobque_dec_Atomic32_q__implicit>`
+  *  :ref:`dec (atomic: Atomic64? implicit) : int64 <function-jobque_dec_Atomic64_q__implicit>`
+  *  :ref:`get (atomic: Atomic32? implicit) : int <function-jobque_get_Atomic32_q__implicit>`
+  *  :ref:`get (atomic: Atomic64? implicit) : int64 <function-jobque_get_Atomic64_q__implicit>`
+  *  :ref:`inc (atomic: Atomic32? implicit) : int <function-jobque_inc_Atomic32_q__implicit>`
+  *  :ref:`inc (atomic: Atomic64? implicit) : int64 <function-jobque_inc_Atomic64_q__implicit>`
+  *  :ref:`set (atomic: Atomic32? implicit; value: int) <function-jobque_set_Atomic32_q__implicit_int>`
+  *  :ref:`set (atomic: Atomic64? implicit; value: int64) <function-jobque_set_Atomic64_q__implicit_int64>`
+  *  :ref:`with_atomic32 (block: block\<(Atomic32?):void\>) <function-jobque_with_atomic32_block_ls_Atomic32_q__c_void_gr_>`
+  *  :ref:`with_atomic64 (block: block\<(Atomic64?):void\>) <function-jobque_with_atomic64_block_ls_Atomic64_q__c_void_gr_>`
 
 .. _function-jobque_atomic32_create:
 
@@ -383,7 +385,7 @@ Creates an ``Atomic32`` — a thread-safe 32-bit integer for lock-free concurren
 
 .. das:function:: atomic32_remove(atomic: Atomic32?& implicit)
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Destroys an ``Atomic32`` and releases its resources.
@@ -400,7 +402,7 @@ Creates an ``Atomic64`` — a thread-safe 64-bit integer for lock-free concurren
 
 .. das:function:: atomic64_remove(atomic: Atomic64?& implicit)
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Destroys an ``Atomic64`` and releases its resources.

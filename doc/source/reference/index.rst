@@ -22,6 +22,6 @@ THE SOFTWARE.
    :numbered:
 
    introduction.rst
-   tutorials.rst
    language.rst
    embedding.rst
+   tutorials.rst
