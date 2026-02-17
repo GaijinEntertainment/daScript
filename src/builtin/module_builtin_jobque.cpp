@@ -102,6 +102,33 @@ namespace das {
         das_invoke<void>::invoke<void *>(context, at, blk, tail.data);
     }
 
+    bool Channel::tryPop ( const TBlock<void,void *> & blk, Context * context, LineInfoArg * at ) {
+        lock_guard<mutex> guard(mCompleteMutex);
+        if ( pipe.empty() ) {
+            return false;
+        }
+        tail = das::move(pipe.front());
+        pipe.pop_front();
+        das_invoke<void>::invoke<void *>(context, at, blk, tail.data);
+        return true;
+    }
+
+    bool Channel::popWithTimeout ( int timeoutMs, const TBlock<void,void *> & blk, Context * context, LineInfoArg * at ) {
+        unique_lock<mutex> uguard(mCompleteMutex);
+        if ( !mCond.wait_for(uguard, chrono::milliseconds(timeoutMs), [&]() {
+            return !pipe.empty() || mRemaining <= 0;
+        }) ) {
+            return false;
+        }
+        if ( pipe.empty() ) {
+            return false;
+        }
+        tail = das::move(pipe.front());
+        pipe.pop_front();
+        das_invoke<void>::invoke<void *>(context, at, blk, tail.data);
+        return true;
+    }
+
     bool Channel::isEmpty() const {
         lock_guard<mutex> guard(mCompleteMutex);
         return pipe.empty();
@@ -192,6 +219,16 @@ namespace das {
     void channelPop ( Channel * ch, const TBlock<void,void*> & blk, Context * context, LineInfoArg * at ) {
         if ( !ch ) context->throw_error_at(at, "channelPop: channel is null");
         ch->pop(blk,context,at);
+    }
+
+    bool channelTryPop ( Channel * ch, const TBlock<void,void*> & blk, Context * context, LineInfoArg * at ) {
+        if ( !ch ) context->throw_error_at(at, "channelTryPop: channel is null");
+        return ch->tryPop(blk,context,at);
+    }
+
+    bool channelPopWithTimeout ( Channel * ch, int32_t timeoutMs, const TBlock<void,void*> & blk, Context * context, LineInfoArg * at ) {
+        if ( !ch ) context->throw_error_at(at, "channelPopWithTimeout: channel is null");
+        return ch->popWithTimeout(timeoutMs,blk,context,at);
     }
 
     int jobAppend ( JobStatus * ch, int size, Context * context, LineInfoArg * at ) {
@@ -592,6 +629,12 @@ namespace das {
             addExtern<DAS_BIND_FUN(channelPop)>(*this, lib,  "_builtin_channel_pop",
                 SideEffects::modifyArgumentAndExternal, "channelPop")
                     ->args({"channel","block","context","line"});
+            addExtern<DAS_BIND_FUN(channelTryPop)>(*this, lib,  "_builtin_channel_try_pop",
+                SideEffects::modifyArgumentAndExternal, "channelTryPop")
+                    ->args({"channel","block","context","line"});
+            addExtern<DAS_BIND_FUN(channelPopWithTimeout)>(*this, lib,  "_builtin_channel_pop_with_timeout",
+                SideEffects::modifyArgumentAndExternal, "channelPopWithTimeout")
+                    ->args({"channel","timeout_ms","block","context","line"});
             addExtern<DAS_BIND_FUN(channelGather)>(*this, lib,  "_builtin_channel_gather",
                 SideEffects::modifyArgumentAndExternal, "channelGather")
                     ->args({"channel","block","context","line"});
