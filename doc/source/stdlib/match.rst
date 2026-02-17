@@ -28,7 +28,6 @@ Example: ::
             blue
         }
 
-        [sideeffects]
         def describe(c : Color) : string {
             match (c) {
                 if (Color.red) { return "red"; }

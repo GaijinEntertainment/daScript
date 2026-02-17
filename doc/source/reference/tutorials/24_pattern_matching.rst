@@ -19,7 +19,6 @@ Basic match
 
   require daslib/match
 
-  [sideeffects]
   def describe(n : int) : string {
       match (n) {
           if (0) { return "zero" }
@@ -31,7 +30,7 @@ Basic match
 
 .. note::
 
-   Functions using ``match`` need the ``[sideeffects]`` annotation.
+   ``match`` works on functions that return values.
 
 Wildcards and binding
 =====================

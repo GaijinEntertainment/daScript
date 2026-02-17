@@ -213,7 +213,7 @@ def fixed_array_demo() {
 
     // Most algorithm functions also work on fixed-size arrays
     // via [expect_any_array] overloads.
-    var a = [5, 3, 1, 4, 2]
+    var a = fixed_array<int>(5, 3, 1, 4, 2)
     print("min_element: {min_element(a)}\n")  // index of 1
     print("max_element: {max_element(a)}\n")  // index of 5
     print("is_sorted: {is_sorted(a)}\n")      // false

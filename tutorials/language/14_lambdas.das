@@ -48,6 +48,24 @@ def main {
     // var copy = doubler      // ERROR: lambdas can't be copied
     // var moved <- doubler    // OK but doubler becomes null
 
+    // === Storing lambdas in arrays ===
+    // Lambdas can be stored in arrays using emplace (which moves them in).
+    // Blocks CANNOT be stored in arrays — they are stack-bound.
+    var callbacks : array<lambda<() : void>>
+    var greet <- @() {
+        print("hello from callback\n")
+    }
+    callbacks |> emplace(greet)
+    var farewell <- @() {
+        print("goodbye from callback\n")
+    }
+    callbacks |> emplace(farewell)
+    for (cb in callbacks) {
+        invoke(cb)
+    }
+    print("stored {length(callbacks)} lambdas in array\n")
+    delete callbacks
+
     // === Passing lambdas to functions ===
     // Functions that take lambda<> accept only @ lambdas (not @@ functions).
     print("apply(doubler, 21) = {apply_lambda(doubler, 21)}\n")
@@ -99,12 +117,12 @@ def main {
     // BLOCK ($):
     //   - Stack-allocated, very fast
     //   - Captures by reference automatically
-    //   - Cannot be stored or returned — only passed as argument
+    //   - Cannot be stored, returned, or put in arrays — only passed as argument
     //   - Type: block<>
     //
     // LAMBDA (@):
     //   - Heap-allocated, captures by copy (default), move, clone, or ref
-    //   - Can be stored in variables (moved), passed around
+    //   - Can be stored in variables (moved), passed around, stored in arrays
     //   - Type: lambda<>
     //
     // Each type has its own parameter type:
@@ -131,6 +149,9 @@ def apply_lambda(fn : lambda<(x : int) : int>; value : int) : int {
 // doubler(7) = 14
 // call syntax: 6
 // invoke:      6
+// hello from callback
+// goodbye from callback
+// stored 2 lambdas in array
 // apply(doubler, 21) = 42
 // inc() = 1
 // inc() = 2
