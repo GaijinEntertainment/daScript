@@ -423,7 +423,7 @@ extern "C" {
 
         #if defined(_WIN32) || defined(_WIN64) || defined(__APPLE__)
         if (!check_file_present(dasLibrary.c_str())) {
-            LOG(LogLevel::error) << "File '" << dasLibrary << "' , containing daScript library, does not exist\n";
+            LOG(LogLevel::error) << "File '" << dasLibrary << "' , containing daslang library, does not exist\n";
             return;
         }
         #endif

@@ -4,7 +4,7 @@ module ast_print
 
 //! AST pretty-printer.
 //!
-//! Walks a compiled daScript AST and produces human-readable source-like
+//! Walks a compiled daslang AST and produces human-readable source-like
 //! output. Useful for debugging macros and inspecting transformed code.
 
 options rtti = true
@@ -31,7 +31,7 @@ def noBracket(expr) {
 
 
 class PrintVisitor : AstVisitor {
-    //! AST visitor that pretty-prints daScript code back to source text.
+    //! AST visitor that pretty-prints daslang code back to source text.
     writer : StringBuilderWriter?
     extraTypeInfo : bool = true;
     printCStyle : bool = true;

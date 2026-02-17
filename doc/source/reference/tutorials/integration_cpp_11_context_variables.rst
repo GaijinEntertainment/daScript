@@ -7,7 +7,7 @@
  C++ Integration: Context Variables
 ==========================================
 
-This tutorial shows how to read and write daScript global variables
+This tutorial shows how to read and write daslang global variables
 from C++ host code.  Topics covered:
 
 * ``ctx.findVariable()`` — look up globals by name
@@ -41,7 +41,7 @@ name and access their raw data:
 
    // Cast and use
    int32_t value = *(int32_t *)ptr;    // read
-   *(int32_t *)ptr = 9999;             // write — visible to daScript!
+   *(int32_t *)ptr = 9999;             // write — visible to daslang!
 
 
 Reading scalar globals
@@ -82,13 +82,13 @@ Writing globals from C++
 ===========================
 
 Any changes made through the raw pointer are immediately visible
-to daScript code:
+to daslang code:
 
 .. code-block:: cpp
 
    *(int32_t *)ctx.getVariable(idx_score) = 9999;
 
-   // Call a daScript function — it will see score == 9999
+   // Call a daslang function — it will see score == 9999
    auto fn = ctx.findFunction("print_globals");
    ctx.evalWithCatch(fn, nullptr);
 
@@ -119,7 +119,7 @@ initialization step is needed — globals have their initial values
 immediately after simulation.
 
 
-The daScript side
+The daslang side
 ===================
 
 .. code-block:: das
@@ -160,7 +160,7 @@ Expected output::
    C++ set score = 9999
    C++ set config.gravity = 20.0, max_enemies = 100
 
-   === Calling daScript to verify ===
+   === Calling daslang to verify ===
      score        = 9999
      player_name  = Hero
      alive        = true

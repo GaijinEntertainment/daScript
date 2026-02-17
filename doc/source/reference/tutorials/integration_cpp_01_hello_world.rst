@@ -7,10 +7,10 @@
  C++ Integration: Hello World
 ====================================
 
-This tutorial shows how to embed daScript in a C++ application using the
+This tutorial shows how to embed daslang in a C++ application using the
 native ``daScript.h`` API.  By the end you will have a standalone program that
 compiles a ``.das`` script, finds a function, calls it, and prints
-``Hello from daScript!``.
+``Hello from daslang!``.
 
 .. note::
 
@@ -24,14 +24,14 @@ compiles a ``.das`` script, finds a function, calls it, and prints
 Prerequisites
 =============
 
-* daScript built from source (``cmake --build build --config Release``).
+* daslang built from source (``cmake --build build --config Release``).
   The build produces ``libDaScript`` which the tutorial links against.
 * The ``daScript.h`` header — located in ``include/daScript/daScript.h``.
   This is the main C++ header that pulls in the full API (type system,
   compilation, contexts, module registration, etc.).
 
 
-The daScript file
+The daslang file
 =================
 
 Create a minimal script with a single exported function:
@@ -42,7 +42,7 @@ Create a minimal script with a single exported function:
 
    [export]
    def test() {
-       print("Hello from daScript!\n")
+       print("Hello from daslang!\n")
    }
 
 The ``[export]`` annotation makes the function visible to the host application
@@ -169,7 +169,7 @@ Step 6 — Call the function
        tout << "exception: " << ex << "\n";
    }
 
-``evalWithCatch`` runs the function inside a C++ try/catch so that a daScript
+``evalWithCatch`` runs the function inside a C++ try/catch so that a daslang
 ``panic()`` does not crash the host.  The second argument is an array of
 ``vec4f`` arguments — ``nullptr`` here because ``test`` takes none.
 
@@ -183,7 +183,7 @@ Step 7 — Shut down
        return 0;
    }
 
-``Module::Shutdown`` frees all global state.  No daScript API calls are
+``Module::Shutdown`` frees all global state.  No daslang API calls are
 allowed after it.  Note that unlike the C API, there is no need to manually
 release the program, module group, or text printer — these are either
 stack-allocated or reference-counted smart pointers.
@@ -210,7 +210,7 @@ Key concepts
 ============
 
 Smart pointers
-   The C++ API uses ``smart_ptr<T>`` (daScript's own reference-counted
+   The C++ API uses ``smart_ptr<T>`` (daslang's own reference-counted
    smart pointer) and ``make_smart<T>()`` for heap-allocated objects.
    ``ProgramPtr`` returned by ``compileDaScript`` is one example.
 
@@ -219,7 +219,7 @@ Stack-allocated objects
    stack.  Their destructors handle cleanup automatically.
 
 ``getDasRoot``
-   Returns the root of the daScript installation as a ``string``.  Use it
+   Returns the root of the daslang installation as a ``string``.  Use it
    to build paths to scripts so they resolve regardless of working directory.
 
 ``verifyCall``
@@ -230,7 +230,7 @@ Stack-allocated objects
 Building and running
 ====================
 
-The tutorial is built automatically by CMake as part of the daScript project::
+The tutorial is built automatically by CMake as part of the daslang project::
 
    cmake --build build --config Release --target integration_cpp_01
 
@@ -240,7 +240,7 @@ Run from the project root so that the script path resolves correctly::
 
 Expected output::
 
-   Hello from daScript!
+   Hello from daslang!
 
 
 .. seealso::

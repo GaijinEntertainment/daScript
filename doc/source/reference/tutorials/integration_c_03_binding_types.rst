@@ -8,7 +8,7 @@
 ================================
 
 This tutorial shows how to create a **custom module** in C and expose C types
-(enumerations, structures, aliases) to daScript so that scripts can use them
+(enumerations, structures, aliases) to daslang so that scripts can use them
 as native types.
 
 
@@ -35,7 +35,7 @@ Binding an enumeration
    // C enum
    typedef enum { Color_red = 0, Color_green = 1, Color_blue = 2 } Color;
 
-   // Bind to daScript
+   // Bind to daslang
    das_enumeration * en = das_enumeration_make("Color", "Color", 1);
    das_enumeration_add_value(en, "red",   "Color_red",   Color_red);
    das_enumeration_add_value(en, "green", "Color_green", Color_green);
@@ -45,7 +45,7 @@ Binding an enumeration
 The third argument to ``das_enumeration_make`` selects the underlying
 integer type: ``0`` = int8, ``1`` = int32, ``2`` = int16.
 
-In daScript:
+In daslang:
 
 .. code-block:: das
 
@@ -69,7 +69,7 @@ and each field's offset and mangled type:
    das_structure_add_field(st, mod, lib, "y", "y", offsetof(Point2D, y), "f");
    das_module_bind_structure(mod, st);
 
-In daScript:
+In daslang:
 
 .. code-block:: das
 
@@ -108,7 +108,7 @@ Binding a type alias
 
    das_module_bind_alias(mod, lib, "IntArray", "1<i>A");
 
-In daScript, ``IntArray`` is now a synonym for ``array<int>``.
+In daslang, ``IntArray`` is now a synonym for ``array<int>``.
 
 
 Binding interop functions

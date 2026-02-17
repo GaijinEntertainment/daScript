@@ -8,7 +8,7 @@ Variables and Types
     single: Tutorial; Variables
     single: Tutorial; Types
 
-This tutorial covers mutable and immutable variables, daScript's basic types,
+This tutorial covers mutable and immutable variables, daslang's basic types,
 type inference, explicit annotations, and the strict no-implicit-conversion
 rule.
 
@@ -43,7 +43,7 @@ You can also state the type explicitly with ``: Type``::
 No implicit conversions
 =======================
 
-daScript is strict — you cannot mix ``int`` and ``float`` in arithmetic.
+daslang is strict — you cannot mix ``int`` and ``float`` in arithmetic.
 Both sides must match::
 
   var i = 42

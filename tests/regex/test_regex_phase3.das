@@ -1,4 +1,4 @@
-﻿options gen2
+options gen2
 options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 options no_aot
@@ -6,7 +6,7 @@ options persistent_heap
 require dastest/testing_boost public
 require daslib/regex_boost
 
-// helper to build replacement strings containing ${...} without daScript interpolation
+// helper to build replacement strings containing ${...} without daslang interpolation
 def make_dollar_brace(inner : string) : string {
     return build_string() <| $(var w) {
         w |> write("$")
@@ -15,7 +15,7 @@ def make_dollar_brace(inner : string) : string {
         w |> write_char('}')
     }
 }
-// â”€â”€ Feature 4: dot does not match newline by default â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Feature 4: dot does not match newline by default ─────────
 [test]
 def test_dot_newline(t : T?) {
     t |> run("dot rejects newline") <| @(t : T?) {
@@ -44,7 +44,7 @@ def test_dot_newline(t : T?) {
         t |> equal(regex_match(re, "hel\nlo"), 6)
     }
 }
-// â”€â”€ Feature 1: case-insensitive matching â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Feature 1: case-insensitive matching ─────────────────────
 [test]
 def test_case_insensitive(t : T?) {
     t |> run("simple CI match") <| @(t : T?) {
@@ -87,7 +87,7 @@ def test_case_insensitive(t : T?) {
         t |> equal(regex_match(re, "A"), 1)
     }
 }
-// â”€â”€ Feature 2: lookahead assertions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Feature 2: lookahead assertions ──────────────────────────
 [test]
 def test_lookahead(t : T?) {
     t |> run("positive lookahead basic") <| @(t : T?) {
@@ -109,7 +109,7 @@ def test_lookahead(t : T?) {
     t |> run("negative lookahead at end") <| @(t : T?) {
         var re <- regex_compile("\\d+(?!\\d)")
         let m = regex_match(re, "123")
-        t |> equal(m, 3)  // matches all digits â€” no digit follows
+        t |> equal(m, 3)  // matches all digits — no digit follows
     }
     t |> run("lookahead is zero-width") <| @(t : T?) {
         var re <- regex_compile("(?=hello)hello")
@@ -121,7 +121,7 @@ def test_lookahead(t : T?) {
         t |> equal(regex_match(re, "xyz"), 3)    // "xyz" doesn't match, so proceeds
     }
 }
-// â”€â”€ Feature 3: string-based regex_replace â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Feature 3: string-based regex_replace ────────────────────
 [test]
 def test_string_replace(t : T?) {
     t |> run("simple literal replace") <| @(t : T?) {
@@ -166,7 +166,7 @@ def test_string_replace(t : T?) {
         t |> equal(result, "")
     }
 }
-// â”€â”€ Reader macro flags â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Reader macro flags ───────────────────────────────────────
 [test]
 def test_reader_macro_flags(t : T?) {
     t |> run("reader macro case insensitive") <| @(t : T?) {
@@ -189,7 +189,7 @@ def test_reader_macro_flags(t : T?) {
         t |> equal(regex_match(re, "HELLO"), -1)
     }
 }
-// â”€â”€ Cross-feature interactions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Cross-feature interactions ───────────────────────────────
 [test]
 def test_cross_features(t : T?) {
     t |> run("CI + lookahead") <| @(t : T?) {

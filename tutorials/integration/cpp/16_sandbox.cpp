@@ -1,15 +1,15 @@
 // Tutorial 16 — Sandbox (C++ integration)
 //
-// Demonstrates how to restrict what daScript scripts can do:
+// Demonstrates how to restrict what daslang scripts can do:
 //   - CodeOfPolicies — compile-time language restrictions
 //   - Memory limits — heap and stack size caps
 //   - Custom FileAccess — restrict which modules can be required
 //   - Subclassing FileAccess virtual methods for fine-grained control
-//   - .das_project — policy file written in daScript itself
+//   - .das_project — policy file written in daslang itself
 //
 // Two sandboxing approaches are shown:
 //   A) C++ subclass of FileAccess (Demos 1–4) — policies defined in code
-//   B) .das_project file (Demos 5–6) — policies defined in a daScript file
+//   B) .das_project file (Demos 5–6) — policies defined in a daslang file
 //
 // Sandboxing is essential when running untrusted scripts (user mods,
 // plugin systems, online code playgrounds).
@@ -229,7 +229,7 @@ void tutorial() {
     // Demo 5: .das_project — sandbox via policy file
     //
     // Instead of subclassing FileAccess in C++, you can write the
-    // sandbox policy in daScript itself.  A .das_project file is a
+    // sandbox policy in daslang itself.  A .das_project file is a
     // regular .das script that exports callback functions:
     //   module_get()           — resolve require paths (REQUIRED)
     //   module_allowed()       — whitelist loadable modules

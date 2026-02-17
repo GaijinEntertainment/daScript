@@ -413,7 +413,7 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
 
 def public describeCppType(typeDecl : TypeDeclPtr;
                            cfg : DescribeConfig) {
-    //! Returns the C++ type string for a daScript TypeDecl using the given configuration.
+    //! Returns the C++ type string for a daslang TypeDecl using the given configuration.
     return describeCppTypeEx(typeDecl, cfg, CpptUseAlias.no);
 }
 
@@ -868,7 +868,7 @@ def describeVarLocalCppType(var writer : StringBuilderWriter?; vtype : TypeDeclP
 }
 
 def public aotFuncName(func : Function?) {
-    //! Returns the AOT C++ function name for a daScript function, including its hash suffix.
+    //! Returns the AOT C++ function name for a daslang function, including its hash suffix.
     if (func.hash != uint64(0)) {
         return "{aotSuffixNameEx(func.name,"_Func")}_{func.hash:x}";
     } else {
@@ -1057,7 +1057,7 @@ def public describeCppFunc(fn : FunctionPtr; var collector : BlockVariableCollec
 }
 
 class public CppAot : AstVisitor {
-    //! Main AST visitor that generates C++ ahead-of-time compiled code from daScript AST.
+    //! Main AST visitor that generates C++ ahead-of-time compiled code from daslang AST.
 /*
     CppAot ( const ProgramPtr & prog, BlockVariableCollector & cl ) : program(prog), collector(cl) {
         helper.rtti = program.options.getBoolOption("rtti",false);
@@ -3833,7 +3833,7 @@ def public getRequiredModulesFor(program : ProgramPtr) {
 }
 
 def public compile_and_simulate(input : string, var access; var mg : ModuleGroup?, cop, blk) {
-    //! Compiles a daScript file, simulates it, and invokes a callback with the program and context.
+    //! Compiles a daslang file, simulates it, and invokes a callback with the program and context.
     set_aot();
     compile_file(input, access, mg, cop) <| $(ok; var program : smart_ptr<Program>; issues) {
         if (!ok) {
@@ -3939,7 +3939,7 @@ def public run_aot(prog : Program?; var pctx : Context?; cop : CodeOfPolicies) :
 
 [export]
 def public aot(input : string; paranoid_validation : bool, cross_platform : bool; cop : CodeOfPolicies) : string {
-    //! Compiles, simulates, and generates AOT C++ code for a daScript input file.
+    //! Compiles, simulates, and generates AOT C++ code for a daslang input file.
     var result = "";
     using <| $(var mg : ModuleGroup) {
         var inscope access <- make_file_access("")

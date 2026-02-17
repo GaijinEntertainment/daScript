@@ -10,7 +10,7 @@
 #endif
 
 /*
-    NOTE: this should be the only file where daScript needs exceptions enabled.
+    NOTE: this should be the only file where daslang needs exceptions enabled.
 */
 
 // Workaround for https://github.com/google/sanitizers/issues/749

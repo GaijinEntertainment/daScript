@@ -42,7 +42,7 @@ DAS_API smart_ptr<das::FileAccess> get_file_access( char * pak ) {
     }
 #else
     DAS_FATAL_ERROR(
-        "daScript is configured with DAS_NO_FILEIO. However file access is not specified."
+        "daslang is configured with DAS_NO_FILEIO. However file access is not specified."
         "set_project_specific_fs_callbacks or link-time dependency in project_specific_file_info.cpp "
         "needs to be speicied."
     )

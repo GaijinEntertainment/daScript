@@ -13,7 +13,7 @@ Functional Programming
     single: Tutorial; Iterator Combinators
 
 This tutorial covers ``daslib/functional`` — lazy iterator adapters
-and higher-order combinators for daScript.
+and higher-order combinators for daslang.
 
 Unlike ``daslib/linq`` which uses blocks and focuses on query syntax,
 ``functional`` accepts lambdas and functions, emphasising composability.

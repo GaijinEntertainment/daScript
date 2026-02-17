@@ -1,8 +1,8 @@
 // Tutorial 01 — Hello World (C++ integration)
 //
-// The simplest C++ program that embeds and runs a daScript script.
+// The simplest C++ program that embeds and runs a daslang script.
 // Demonstrates the full lifecycle:
-//   1. Initialize the daScript runtime
+//   1. Initialize the daslang runtime
 //   2. Compile a script from a file
 //   3. Create a context and simulate (link) the program
 //   4. Find and call an exported function
@@ -15,7 +15,7 @@
 
 using namespace das;
 
-// Path to the script, relative to the daScript root directory.
+// Path to the script, relative to the daslang root directory.
 #define SCRIPT_NAME "/tutorials/integration/cpp/01_hello_world.das"
 
 void tutorial() {
@@ -83,7 +83,7 @@ void tutorial() {
     // --- Step 5: call the function ---
     //
     // evalWithCatch runs the function inside a try/catch so that a
-    // daScript panic() does not crash the host process.
+    // daslang panic() does not crash the host process.
     // The second argument is an array of vec4f arguments (nullptr = none).
     ctx.evalWithCatch(fnTest, nullptr);
     if (auto ex = ctx.getException()) {
@@ -101,8 +101,8 @@ int main(int, char * []) {
     // Run the tutorial.
     tutorial();
 
-    // Shut down daScript and free all global state.
-    // No daScript API calls are allowed after this.
+    // Shut down daslang and free all global state.
+    // No daslang API calls are allowed after this.
     Module::Shutdown();
     return 0;
 }

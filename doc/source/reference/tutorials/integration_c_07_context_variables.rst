@@ -9,7 +9,7 @@
  C Integration: Context Variables
 =============================================
 
-This tutorial demonstrates how to **read, write, and enumerate** daScript
+This tutorial demonstrates how to **read, write, and enumerate** daslang
 global variables from a C host using the ``daScriptC.h`` API.
 
 After a program is compiled and simulated, its global variables live in
@@ -26,7 +26,7 @@ Function                                  Purpose
 ========================================  ==========================================
 
 
-The daScript script
+The daslang script
 ===================
 
 The companion script declares four scalar globals:
@@ -85,12 +85,12 @@ Writing globals
 ===============
 
 The pointer returned by ``das_context_get_variable`` is **read-write**.
-Modifications are immediately visible to daScript functions:
+Modifications are immediately visible to daslang functions:
 
 .. code-block:: c
 
    int * p = (int *)das_context_get_variable(ctx, idx_score);
-   *p = 9999;    // next call to a daScript function sees score == 9999
+   *p = 9999;    // next call to a daslang function sees score == 9999
 
 
 Enumerating all globals
@@ -129,7 +129,7 @@ Expected output::
    C set score = 9999
    C set speed = 99.5
 
-   === Calling daScript to verify ===
+   === Calling daslang to verify ===
      score       = 9999
      speed       = 99.5
      player_name = Hero

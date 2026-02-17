@@ -1,7 +1,7 @@
 // Tutorial 20: Lifetime and Cleanup
 //
 // This tutorial covers:
-//   - daScript memory model: no implicit cleanup
+//   - daslang memory model: no implicit cleanup
 //   - delete for explicit cleanup
 //   - var inscope for deterministic cleanup (RAII-like)
 //   - Custom finalizers
@@ -44,7 +44,7 @@ def main {
 
     // === Memory model ===
 
-    // daScript does NOT automatically clean up local variables when they
+    // daslang does NOT automatically clean up local variables when they
     // go out of scope. There is no implicit destructor call.
     //
     // Containers (arrays, tables) will have their memory reclaimed eventually,

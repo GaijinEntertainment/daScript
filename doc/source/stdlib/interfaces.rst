@@ -5,7 +5,7 @@
 Interfaces
 ==========
 
-The INTERFACES module implements interface-based polymorphism for daScript.
+The INTERFACES module implements interface-based polymorphism for daslang.
 It provides the ``[interface]`` annotation for defining abstract interfaces
 with virtual method tables, supporting multiple implementations and dynamic
 dispatch without class inheritance.

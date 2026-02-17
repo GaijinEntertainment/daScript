@@ -6,9 +6,9 @@ options strict_smart_pointers = true
 
 module das_source_formatter shared private
 
-//! daScript source code formatter / pretty-printer.
+//! daslang source code formatter / pretty-printer.
 //!
-//! Tokenizes and reformats daScript source text, normalizing indentation,
+//! Tokenizes and reformats daslang source text, normalizing indentation,
 //! whitespace around operators, and brace style. Core formatting logic
 //! used by ``das_source_formatter_fio`` and editor integrations.
 
@@ -1289,7 +1289,7 @@ def do_format(var ctx : FormatterCtx) {
 
 
 def public format_source_string(file_data : string const& implicit) : string {
-    //! Formats a daScript source code string and returns the formatted result.
+    //! Formats a daslang source code string and returns the formatted result.
     var inscope ctx : FormatterCtx
     ctx.data <- [ for (c in file_data); uint8(c) ]
     ctx.data |> push(uint8(0))
@@ -1307,7 +1307,7 @@ def format_source(var ctx : FormatterCtx; file_data : array<uint8> const& implic
 
 
 def public format_source(file_data : array<uint8> const& implicit) : string {
-    //! Formats daScript source code given as a byte array and returns the formatted result.
+    //! Formats daslang source code given as a byte array and returns the formatted result.
     var inscope ctx : FormatterCtx
     return ctx |> format_source(file_data)
 }

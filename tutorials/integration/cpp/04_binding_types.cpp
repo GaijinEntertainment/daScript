@@ -1,7 +1,7 @@
 // Tutorial 04 — Binding C++ Types (C++ integration)
 //
-// Demonstrates how to expose C++ structs/classes to daScript:
-//   - MAKE_TYPE_FACTORY — register a C++ type so daScript can see it
+// Demonstrates how to expose C++ structs/classes to daslang:
+//   - MAKE_TYPE_FACTORY — register a C++ type so daslang can see it
 //   - ManagedStructureAnnotation — describe struct layout (fields)
 //   - addAnnotation — plug the annotation into a module
 //   - addExtern for functions taking/returning the bound type
@@ -20,7 +20,7 @@
 using namespace das;
 
 // -----------------------------------------------------------------------
-// C++ types that we want to expose to daScript
+// C++ types that we want to expose to daslang
 // -----------------------------------------------------------------------
 
 // A simple 2D vector (POD — no default initializers).
@@ -107,7 +107,7 @@ bool rect_contains(const Rect & r, const Vec2 & p) {
 // -----------------------------------------------------------------------
 // Each MAKE_TYPE_FACTORY creates:
 //   - typeFactory<CppType> so addExtern can map parameters automatically
-//   - typeName<CppType>   so daScript knows the type's name
+//   - typeName<CppType>   so daslang knows the type's name
 
 MAKE_TYPE_FACTORY(Vec2,  Vec2);
 MAKE_TYPE_FACTORY(Color, Color);

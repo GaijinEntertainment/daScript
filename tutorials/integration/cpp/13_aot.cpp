@@ -1,12 +1,12 @@
 // Tutorial 13 — Ahead-of-Time Compilation (C++ integration)
 //
 // Demonstrates the AOT workflow:
-//   - Compiling a daScript program in interpreter mode vs AOT mode
+//   - Compiling a daslang program in interpreter mode vs AOT mode
 //   - The two-stage build: generate C++ from script, then link it in
 //   - CodeOfPolicies::aot — enabling AOT linking during simulate
 //   - How AOT functions self-register via AotListBase
 //
-// AOT generates C++ source code from daScript functions.  When linked
+// AOT generates C++ source code from daslang functions.  When linked
 // into the host and policies.aot is true, simulate() replaces the
 // interpreter's simulation nodes with direct calls to the generated
 // native C++ functions, resulting in near-C++ performance.
@@ -14,7 +14,7 @@
 // Build stages (handled by CMake in this project):
 //   1. Compile daslang.exe (the compiler tool)
 //   2. Run: daslang.exe utils/aot/main.das -- -aot script.das script.das.cpp
-//      This transpiles daScript → C++ source
+//      This transpiles daslang → C++ source
 //   3. Compile the generated .cpp into the host executable
 //   4. At runtime, call compileDaScript with policies.aot = true
 //      simulate() links the AOT functions automatically
@@ -119,7 +119,7 @@ void tutorial() {
     // --- Summary ---
     tout << "\n=== AOT workflow summary ===\n";
     tout << "1. daslang.exe -aot script.das script.das.cpp\n";
-    tout << "   -> generates C++ source from daScript functions\n";
+    tout << "   -> generates C++ source from daslang functions\n";
     tout << "2. Compile the .cpp into your executable\n";
     tout << "   -> functions self-register via static AotListBase\n";
     tout << "3. Set CodeOfPolicies::aot = true before compileDaScript\n";

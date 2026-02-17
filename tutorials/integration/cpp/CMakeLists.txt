@@ -136,6 +136,54 @@ DAS_CPP_INTEGRATION_TUTORIAL(integration_cpp_16
     ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/16_sandbox.cpp
 )
 
+#################################
+# Tutorial 17 — Coroutines
+#################################
+DAS_CPP_INTEGRATION_TUTORIAL(integration_cpp_17
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/17_coroutines.cpp
+)
+
+#################################
+# Tutorial 18 — Dynamic Scripts
+#################################
+DAS_CPP_INTEGRATION_TUTORIAL(integration_cpp_18
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/18_dynamic_scripts.cpp
+)
+
+#################################
+# Tutorial 19 — Class Adapters
+#################################
+DAS_CPP_INTEGRATION_TUTORIAL(integration_cpp_19
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/19_class_adapters.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/19_class_adapters.das
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/class_adapters_module.das
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/class_adapters_module.das.inc
+)
+target_include_directories(integration_cpp_19 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src/builtin)
+CMAKE_TEXT_XXD(integration_cpp_19 ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/class_adapters_module.das)
+ADD_PROJECT_XXD_DEPENDS(integration_cpp_19)
+
+#################################
+# Tutorial 20 — Standalone Context
+#################################
+# Step 1: Generate standalone context files from the .das script.
+SET(INTEGRATION_20_STANDALONE_CTX_GENERATED_SRC)
+add_custom_target(integration_cpp_20_dasAotStubStandalone)
+DAS_AOT_CTX("tutorials/integration/cpp/standalone_context.das"
+            INTEGRATION_20_STANDALONE_CTX_GENERATED_SRC
+            integration_cpp_20_dasAotStubStandalone daslang_dyn)
+
+# Step 2: Build the tutorial executable with the generated files.
+add_executable(integration_cpp_20
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/20_standalone_context.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/standalone_context.das
+    ${INTEGRATION_20_STANDALONE_CTX_GENERATED_SRC}
+)
+TARGET_COMPILE_DEFINITIONS(integration_cpp_20 PRIVATE DAS_MOD_EXPORTS)
+TARGET_LINK_LIBRARIES(integration_cpp_20 libDaScript Threads::Threads)
+ADD_DEPENDENCIES(integration_cpp_20 libDaScript integration_cpp_20_dasAotStubStandalone)
+SETUP_CPP11(integration_cpp_20)
+
 # Install C++ integration tutorial source files
 file(GLOB CPP_INTEGRATION_TUTORIAL_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/*.cpp

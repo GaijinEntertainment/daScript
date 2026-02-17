@@ -14,7 +14,7 @@ module debug shared
 
 //! Debug server and Debug Adapter Protocol (DAP) implementation.
 //!
-//! Provides a full-featured debugger for daScript programs, implementing the
+//! Provides a full-featured debugger for daslang programs, implementing the
 //! `Debug Adapter Protocol <https://microsoft.github.io/debug-adapter-protocol/>`_.
 //! Supports breakpoints, stepping, variable inspection, watch expressions,
 //! call stacks, and interactive evaluation via a debug agent.

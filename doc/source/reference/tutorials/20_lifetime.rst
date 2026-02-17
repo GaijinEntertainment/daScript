@@ -10,14 +10,14 @@ Lifetime and Cleanup
     single: Tutorial; Delete
     single: Tutorial; Inscope
 
-This tutorial covers daScript's memory model, explicit cleanup with
+This tutorial covers daslang's memory model, explicit cleanup with
 ``delete``, automatic cleanup with ``var inscope``, custom finalizers,
 and ``finally`` blocks.
 
 Memory model
 =============
 
-daScript does **not** automatically clean up local variables when they go
+daslang does **not** automatically clean up local variables when they go
 out of scope. There is no implicit destructor call. Containers (arrays,
 tables) will have their memory reclaimed eventually, but finalizers are
 not called automatically.

@@ -1,10 +1,10 @@
 // Tutorial 11 — Context Variables (C++ integration)
 //
-// Demonstrates how to access daScript global variables from C++:
+// Demonstrates how to access daslang global variables from C++:
 //   - ctx.findVariable() — look up a variable by name
 //   - ctx.getVariable() — get a raw pointer to variable data
 //   - Reading and writing global variables from the host
-//   - Calling daScript functions that use those globals
+//   - Calling daslang functions that use those globals
 
 #include "daScript/daScript.h"
 #include "daScript/ast/ast_interop.h"
@@ -16,7 +16,7 @@
 using namespace das;
 
 // -----------------------------------------------------------------------
-// A simple C++ type that will be a global variable in daScript
+// A simple C++ type that will be a global variable in daslang
 // -----------------------------------------------------------------------
 
 struct GameConfig {
@@ -62,7 +62,7 @@ public:
 REGISTER_MODULE(Module_Tutorial11);
 
 // -----------------------------------------------------------------------
-// Host program — reads and writes daScript globals from C++
+// Host program — reads and writes daslang globals from C++
 // -----------------------------------------------------------------------
 
 #define SCRIPT_NAME "/tutorials/integration/cpp/11_context_variables.das"
@@ -130,7 +130,7 @@ void tutorial() {
     }
 
     // ---------------------------------------------------------------
-    // 3. Writing globals from C++ — changes are visible to daScript
+    // 3. Writing globals from C++ — changes are visible to daslang
     // ---------------------------------------------------------------
     printf("\n=== Writing globals from C++ ===\n");
 
@@ -148,9 +148,9 @@ void tutorial() {
     }
 
     // ---------------------------------------------------------------
-    // 4. Call a daScript function that reads the modified globals
+    // 4. Call a daslang function that reads the modified globals
     // ---------------------------------------------------------------
-    printf("\n=== Calling daScript to verify ===\n");
+    printf("\n=== Calling daslang to verify ===\n");
     auto fnPrint = ctx.findFunction("print_globals");
     if (fnPrint) {
         ctx.evalWithCatch(fnPrint, nullptr);

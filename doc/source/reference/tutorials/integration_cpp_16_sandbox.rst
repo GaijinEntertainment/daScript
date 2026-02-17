@@ -7,12 +7,12 @@
  C++ Integration: Sandbox
 =====================================
 
-This tutorial shows how to restrict what daScript scripts can do,
+This tutorial shows how to restrict what daslang scripts can do,
 which is essential when running untrusted code (user mods, plugin
 systems, online playgrounds).  Two complementary approaches are shown:
 
 * **Approach A — C++**: ``CodeOfPolicies`` + ``FileAccess`` subclass
-* **Approach B — .das_project**: sandbox policy written in daScript
+* **Approach B — .das_project**: sandbox policy written in daslang
 
 Topics covered:
 
@@ -31,7 +31,7 @@ Prerequisites
 Sandboxing approaches
 =====================
 
-daScript provides two complementary approaches:
+daslang provides two complementary approaches:
 
 **Approach A — C++ code** (Demos 1–4):
 
@@ -42,7 +42,7 @@ daScript provides two complementary approaches:
 
 **Approach B — .das_project file** (Demos 5–6):
 
-3. A ``.das_project`` file — a regular daScript script that exports
+3. A ``.das_project`` file — a regular daslang script that exports
    callback functions.  The host loads it, and the compiler calls
    the callbacks during compilation of user scripts.
 
@@ -141,7 +141,7 @@ Available virtual overrides:
 All return ``true`` by default (no restrictions).
 
 
-.das_project — policy in daScript
+.das_project — policy in daslang
 =================================
 
 Instead of writing C++ code, you can define sandbox policies in a
@@ -341,3 +341,5 @@ Expected output::
    :download:`16_sandbox.das_project <../../../../tutorials/integration/cpp/16_sandbox.das_project>`
 
    Previous tutorial: :ref:`tutorial_integration_cpp_custom_annotations`
+
+   Next tutorial: :ref:`tutorial_integration_cpp_coroutines`

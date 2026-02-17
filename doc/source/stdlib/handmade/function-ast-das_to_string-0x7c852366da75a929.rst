@@ -1,1 +1,1 @@
-Returns the name of the corresponding daScript base type as a string.
+Returns the name of the corresponding daslang base type as a string.

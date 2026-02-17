@@ -1,4 +1,4 @@
-The ASYNC_BOOST module implements an async/await pattern for daScript using
+The ASYNC_BOOST module implements an async/await pattern for daslang using
 channels and coroutines. It provides ``async`` for launching concurrent tasks
 and ``await`` for waiting on their results, built on top of the job queue
 infrastructure.

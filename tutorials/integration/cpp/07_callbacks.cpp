@@ -1,6 +1,6 @@
 // Tutorial 07 — Callbacks: Blocks, Lambdas, and Functions (C++ integration)
 //
-// Demonstrates how to receive and invoke daScript closures in C++:
+// Demonstrates how to receive and invoke daslang closures in C++:
 //   - Blocks (stack-bound closures) via `const Block &` / `TBlock<>`
 //   - Function pointers via `Func`
 //   - Lambdas via `Lambda`
@@ -59,7 +59,7 @@ int32_t count_matching(const TArray<int32_t> & arr,
 // -----------------------------------------------------------------------
 // 2. Receiving a Function pointer — `Func`
 //
-// `Func` is a reference to a daScript function.  Function pointers
+// `Func` is a reference to a daslang function.  Function pointers
 // can be stored and invoked later (within the same context).
 // Use `das_invoke_function<RetType>::invoke(ctx, li, fn, args...)`.
 // -----------------------------------------------------------------------
@@ -76,7 +76,7 @@ void call_function_twice(Func fn, int32_t value,
 // Lambdas are heap-allocated closures that can capture variables.
 // Use `das_invoke_lambda<RetType>::invoke(ctx, li, lambda, args...)`.
 //
-// NOTE: The untyped `Lambda` maps to `lambda<>` in daScript, which does not
+// NOTE: The untyped `Lambda` maps to `lambda<>` in daslang, which does not
 // match typed lambdas like `lambda<(x:int):int>`.  For type-safe lambda
 // acceptance, use `TLambda<RetType, ArgTypes...>` (similar to TBlock/TFunc).
 // However, TLambda may require manual addExtern registration.

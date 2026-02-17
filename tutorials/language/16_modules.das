@@ -30,7 +30,7 @@ def main {
 
     // === File layout ===
 
-    // Every daScript file follows this layout:
+    // Every daslang file follows this layout:
     //   1. options gen2                 // compiler options (optional)
     //   2. module my_name public       // module name (optional)
     //   3. require math                // imports

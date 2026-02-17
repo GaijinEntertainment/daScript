@@ -22,7 +22,7 @@ Example: ::
         def main() {
             let fname = "_test_fio_tmp.txt"
             fopen(fname, "wb") <| $(f) {
-                fwrite(f, "hello, daScript!")
+                fwrite(f, "hello, daslang!")
             }
             fopen(fname, "rb") <| $(f) {
                 let content = fread(f)
@@ -31,7 +31,7 @@ Example: ::
             remove(fname)
         }
         // output:
-        // hello, daScript!
+        // hello, daslang!
 
 ++++++++++++
 Type aliases
@@ -65,7 +65,7 @@ Constant for fseek that positions the file pointer relative to the end of the fi
 
 .. das:attribute:: df_magic = 0x12345678
 
-Magic number constant used to identify daScript binary file format.
+Magic number constant used to identify daslang binary file format.
 df_magic:uint const
 
 ++++++++++
@@ -629,7 +629,7 @@ register_dynamic_module
 
 .. das:function:: register_dynamic_module(path: string implicit; name: string implicit) : void?
 
-Loads a shared library from the given path and registers it as a daScript module under the specified name, making it available for require.
+Loads a shared library from the given path and registers it as a daslang module under the specified name, making it available for require.
 
 :Arguments: * **path** : string implicit
 

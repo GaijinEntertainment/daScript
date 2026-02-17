@@ -32,8 +32,8 @@ Expressions inside ``{ }`` are evaluated and inserted:
 
 .. code-block:: das
 
-    let name = "daScript"
-    let version = 0.5
+    let name = "daslang"
+    let version = 0.6
     print("{name} version {version}\n")
 
 Length and character access

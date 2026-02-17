@@ -1,6 +1,6 @@
 // Tutorial 03 — Binding C++ Functions (C++ integration)
 //
-// Demonstrates how to expose C++ functions to daScript:
+// Demonstrates how to expose C++ functions to daslang:
 //   - addExtern with DAS_BIND_FUN — automatic binding of free functions
 //   - SideEffects flags — how the optimizer uses purity information
 //   - addConstant — exposing C++ constants to scripts
@@ -18,7 +18,7 @@
 using namespace das;
 
 // -----------------------------------------------------------------------
-// C++ functions that we want to expose to daScript
+// C++ functions that we want to expose to daslang
 // -----------------------------------------------------------------------
 
 // A pure function — no side effects; the optimizer may fold or eliminate
@@ -49,9 +49,9 @@ void double_it(int32_t & value) {
     value *= 2;
 }
 
-// A function that needs access to the daScript evaluation context.
+// A function that needs access to the daslang evaluation context.
 // When a C++ function takes Context* as its first argument (or
-// LineInfoArg* as its last argument), daScript passes them automatically
+// LineInfoArg* as its last argument), daslang passes them automatically
 // — the script caller does not see these parameters.
 void print_stack_info(Context * ctx) {
     printf("Context stack size: %d bytes\n", ctx->stack.size());
@@ -92,7 +92,7 @@ public:
             SideEffects::modifyArgument, "double_it");
 
         // --- Context-aware functions ---
-        // print_stack_info takes Context* — daScript injects it
+        // print_stack_info takes Context* — daslang injects it
         // automatically; the script signature has zero parameters.
         addExtern<DAS_BIND_FUN(print_stack_info)>(*this, lib, "print_stack_info",
             SideEffects::modifyExternal, "print_stack_info");

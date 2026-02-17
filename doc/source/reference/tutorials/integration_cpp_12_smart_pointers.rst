@@ -8,7 +8,7 @@
 =======================================
 
 This tutorial shows how to expose reference-counted C++ types to
-daScript using ``smart_ptr<T>``.  Topics covered:
+daslang using ``smart_ptr<T>``.  Topics covered:
 
 * Inheriting from ``das::ptr_ref_count`` for reference counting
 * ``ManagedStructureAnnotation`` with ``canNew`` / ``canDelete``
@@ -112,7 +112,7 @@ The typical pattern is a factory function that returns ``smart_ptr``:
            ->args({"name", "x", "y"});
 
 
-Using smart pointers in daScript
+Using smart pointers in daslang
 ==================================
 
 Smart pointer variables must be declared with ``var inscope``, which

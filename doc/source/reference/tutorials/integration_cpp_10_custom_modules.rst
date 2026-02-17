@@ -60,7 +60,7 @@ The first module registers a type and several constants:
                SideEffects::none, "make_vec2")
                    ->args({"x", "y"});
 
-           // Constants — appear as `let` in daScript
+           // Constants — appear as `let` in daslang
            addConstant(*this, "PI",      (float)M_PI);
            addConstant(*this, "TWO_PI",  (float)(2.0 * M_PI));
            addConstant(*this, "HALF_PI", (float)(M_PI / 2.0));
@@ -157,7 +157,7 @@ Key elements:
 Real-world examples
 ~~~~~~~~~~~~~~~~~~~
 
-This pattern appears throughout the daScript ecosystem:
+This pattern appears throughout the daslang ecosystem:
 
 **dasAudio** (requires ``rtti``):
 
@@ -237,7 +237,7 @@ unit.  ``Module::require("name")`` finds a module by its registered
 name string, returning ``nullptr`` if not found.
 
 
-Using both modules from daScript
+Using both modules from daslang
 ==================================
 
 Scripts ``require`` each module independently:

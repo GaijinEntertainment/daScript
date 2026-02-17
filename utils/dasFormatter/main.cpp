@@ -45,7 +45,7 @@ void InitModules() {
 }
 
 string help() {
-    return "Tool to convert dascript v1 syntax to v2\n"
+    return "Tool to convert daslang v1 syntax to v2\n"
            "das-fmt {-i} filename1 {filename2} ...:\n"
            "   -i inplace conversion, write to the same file. Multiple filenames only allowed in inplace mode\n"
            "   --tests Run tests, no filenames required\n"

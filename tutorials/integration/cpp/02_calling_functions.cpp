@@ -1,6 +1,6 @@
-// Tutorial 02 — Calling daScript Functions (C++ integration)
+// Tutorial 02 — Calling daslang Functions (C++ integration)
 //
-// Demonstrates TWO ways to call daScript functions from C++:
+// Demonstrates TWO ways to call daslang functions from C++:
 //
 // Part A — Low-level: manual cast<T>::from/to + evalWithCatch
 //   The raw approach — you build a vec4f array, call evalWithCatch,
@@ -12,7 +12,7 @@
 //   handle cast<> and AOT dispatch automatically.  Prefer this in
 //   production code.
 //
-// Both parts call the same daScript functions so you can compare.
+// Both parts call the same daslang functions so you can compare.
 //
 // Compare with tutorials/integration/c/02_calling_functions.c for the
 // C API equivalent.
@@ -26,7 +26,7 @@ using namespace das;
 
 #define SCRIPT_NAME "/tutorials/integration/cpp/02_calling_functions.das"
 
-// Structure layout must exactly match the daScript struct Vec2.
+// Structure layout must exactly match the daslang struct Vec2.
 struct Vec2 {
     float x;
     float y;

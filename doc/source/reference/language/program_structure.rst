@@ -10,14 +10,14 @@ Program Structure
     single: require
     single: options
 
-A daScript source file is a sequence of top-level declarations. This page describes the overall
+A daslang source file is a sequence of top-level declarations. This page describes the overall
 layout of a file and the key declarations that control how it interacts with the rest of the program.
 
 --------------------
 File Layout
 --------------------
 
-A typical daScript file follows this layout::
+A typical daslang file follows this layout::
 
     options gen2                              // compilation options
 
@@ -200,7 +200,7 @@ Shared global variables use the ``shared`` keyword and are shared across cloned 
 Entry Points
 --------------------
 
-A daScript program is compiled and simulated by the host application (a C++ executable).
+A daslang program is compiled and simulated by the host application (a C++ executable).
 The host decides which functions to call. Several annotations mark functions with special roles.
 
 ^^^^^^^^^^^^^^^^^^^

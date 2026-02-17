@@ -312,7 +312,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         }
 #if !DAS_BIND_EXTERNAL
         virtual bool apply ( const FunctionPtr & fun, ModuleGroup &, const AnnotationArgumentList &, string & err )  override {
-            err = "daScript is configured with extern functions disabled";
+            err = "daslang is configured with extern functions disabled";
             return false;
         }
 #else

@@ -1,6 +1,6 @@
 // Tutorial 05 — Binding C++ Enumerations (C++ integration)
 //
-// Demonstrates how to expose C++ enums to daScript:
+// Demonstrates how to expose C++ enums to daslang:
 //   - DAS_BASE_BIND_ENUM / DAS_BIND_ENUM_CAST — the macro approach
 //   - addEnumeration — registering enums in a module
 //   - Using enums in addExtern functions (parameters and return types)
@@ -92,7 +92,7 @@ bool is_severe(Severity level) {
 //
 // DAS_BIND_ENUM_CAST(CppEnum)
 //   Creates the cast<> specialization so enum values can cross
-//   the C++ ↔ daScript boundary.
+//   the C++ ↔ daslang boundary.
 
 DAS_BASE_BIND_ENUM(Severity, Severity,
     Debug,

@@ -8,7 +8,7 @@
  Type Mangling
 ==============
 
-daScript uses a compact text encoding called **type mangling** to represent
+daslang uses a compact text encoding called **type mangling** to represent
 types as strings.  Mangled names are used internally for function overload
 resolution, ABI hashing, and debug information.  They are also the format
 accepted by the C integration API (``daScriptC.h``) when binding interop
@@ -25,7 +25,7 @@ Primitive types
 Each primitive type has a short mnemonic:
 
 ===========  ========  ============================
-daScript     Mangled   Notes
+daslang     Mangled   Notes
 ===========  ========  ============================
 ``void``     ``v``
 ``bool``     ``b``
@@ -79,7 +79,7 @@ Pointers
 A raw pointer is ``?``, followed by an optional smart-pointer marker:
 
 ====================  ========
-daScript              Mangled
+daslang              Mangled
 ====================  ========
 ``Foo?``              ``?``
 ``smart_ptr<Foo>``    ``?M``
@@ -107,7 +107,7 @@ Container types
 ===============
 
 =============  ========  ===============================
-daScript       Mangled   Encoding pattern
+daslang       Mangled   Encoding pattern
 =============  ========  ===============================
 ``array``      ``A``     ``1<element>A``
 ``table``      ``T``     ``1<key>2<value>T``
@@ -136,10 +136,10 @@ Fixed-size dimensions are encoded with square brackets before the base type:
 Callable types
 ==============
 
-daScript has three callable types, each with its own suffix:
+daslang has three callable types, each with its own suffix:
 
 ================  ========  ============================
-daScript          Mangled   Characteristics
+daslang          Mangled   Characteristics
 ================  ========  ============================
 function pointer  ``@@``    No capture, cheapest call
 lambda            ``@``     Heap-allocated, captures variables
@@ -201,7 +201,7 @@ Bitfields
 =========
 
 =========  ========
-daScript   Mangled
+daslang   Mangled
 =========  ========
 bitfield   ``t``
 bitfield8  ``t8``
@@ -278,7 +278,7 @@ Examples
 Querying mangled names at runtime
 =================================
 
-From daScript code, mangled names can be obtained with ``typeinfo``:
+From daslang code, mangled names can be obtained with ``typeinfo``:
 
 .. code-block:: das
 
@@ -295,7 +295,7 @@ From daScript code, mangled names can be obtained with ``typeinfo``:
    }
 
 This is useful for debugging type signatures and verifying that C-side
-mangled strings match the daScript-side expectations.
+mangled strings match the daslang-side expectations.
 
 
 .. seealso::

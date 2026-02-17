@@ -1,6 +1,6 @@
 options gen2
 
-// Companion script for the "Calling daScript Functions" C integration tutorial.
+// Companion script for the "Calling daslang Functions" C integration tutorial.
 // The C host calls these functions, passing arguments and reading return values.
 
 // A simple function that adds two integers.

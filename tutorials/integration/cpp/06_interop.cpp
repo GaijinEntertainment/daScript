@@ -8,7 +8,7 @@
 //   - Access call-site debug info (call->debugInfo)
 //
 // Use `addInterop` when you need type-generic functions that work with
-// arbitrary daScript types — like `sprint`, `hash`, or `write`.
+// arbitrary daslang types — like `sprint`, `hash`, or `write`.
 
 #include "daScript/daScript.h"
 #include "daScript/ast/ast_interop.h"
@@ -24,7 +24,7 @@ using namespace das;
 // -----------------------------------------------------------------------
 // Interop function 1: describe_type
 //
-// Takes ANY daScript value and prints its type name and basic info.
+// Takes ANY daslang value and prints its type name and basic info.
 // The `vec4f` template parameter means "any type" — the C++ function
 // inspects `call->types[0]` at runtime to determine what was passed.
 // -----------------------------------------------------------------------
@@ -79,7 +79,7 @@ vec4f describe_type(Context & context, SimNode_CallBase * call, vec4f * args) {
 // -----------------------------------------------------------------------
 // Interop function 2: debug_print
 //
-// Takes ANY value and prints it using the daScript debug printer.
+// Takes ANY value and prints it using the daslang debug printer.
 // Similar to the built-in `sprint` but simplified for the tutorial.
 // -----------------------------------------------------------------------
 
@@ -119,7 +119,7 @@ vec4f struct_field_names(Context & context, SimNode_CallBase * call, vec4f * arg
 
     if (ti->type != Type::tStructure || !ti->structType) {
         context.throw_error_at(call->debugInfo,
-            "struct_field_names: expected a daScript struct (not a handled type)");
+            "struct_field_names: expected a daslang struct (not a handled type)");
         return v_zero();
     }
 
@@ -203,7 +203,7 @@ public:
 
         // --- Interop functions ---
         // Note the signature: addInterop<FunctionPtr, ReturnType, ArgTypes...>
-        // When ArgType is `vec4f`, it means "any daScript type".
+        // When ArgType is `vec4f`, it means "any daslang type".
 
         // describe_type(value) — any type → string
         addInterop<describe_type, char *, vec4f>(*this, lib, "describe_type",

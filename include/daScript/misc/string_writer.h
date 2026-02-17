@@ -137,7 +137,7 @@ namespace das {
         debug       = 10000,
         defaultPrint = debug,
 
-        // TRACE - information useful for developers of subsystems, libraries, daScript etc.
+        // TRACE - information useful for developers of subsystems, libraries, daslang etc.
         // For example: application activation/deactivation, key pressed, texture loaded from a file, sound file loaded.
         trace       = 0,
     };

@@ -1,10 +1,10 @@
 // Tutorial: Callbacks and Closures
 //
 // This tutorial shows how to:
-//   - Bind C interop functions that receive daScript callable types
-//   - Call a daScript function pointer (@@function) from C
-//   - Call a daScript lambda from C
-//   - Call a daScript block from C
+//   - Bind C interop functions that receive daslang callable types
+//   - Call a daslang function pointer (@@function) from C
+//   - Call a daslang lambda from C
+//   - Call a daslang block from C
 //
 // Key concept: mangled name encoding for callable types
 //   "0<args>@@" = function pointer (no capture)
@@ -29,7 +29,7 @@
 // -----------------------------------------------------------------------
 // Interop: c_call_function — receives a function pointer and calls it
 //
-// daScript signature:
+// daslang signature:
 //   def c_call_function(callback : function<(a:int; b:float) : string>;
 //                       a : int; b : float) : string
 //
@@ -52,7 +52,7 @@ vec4f c_call_function_impl(das_context * ctx, das_node * node, vec4f * args) {
     cb_args[0] = das_result_int(a);
     cb_args[1] = das_result_float(b);
 
-    // Call the daScript function.
+    // Call the daslang function.
     vec4f ret = das_context_eval_with_catch(ctx, callback, cb_args);
     char * ex = das_context_get_exception(ctx);
     if (ex) {
@@ -68,7 +68,7 @@ vec4f c_call_function_impl(das_context * ctx, das_node * node, vec4f * args) {
 // -----------------------------------------------------------------------
 // Interop: c_call_lambda — receives a lambda and calls it
 //
-// daScript signature:
+// daslang signature:
 //   def c_call_lambda(callback : lambda<(a:int; b:float) : string>;
 //                     a : int; b : float) : string
 //
@@ -109,7 +109,7 @@ vec4f c_call_lambda_impl(das_context * ctx, das_node * node, vec4f * args) {
 // -----------------------------------------------------------------------
 // Interop: c_call_block — receives a block and calls it
 //
-// daScript signature:
+// daslang signature:
 //   def c_call_block(callback : block<(a:int; b:float) : string>;
 //                    a : int; b : float) : string
 //

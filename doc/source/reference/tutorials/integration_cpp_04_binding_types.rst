@@ -7,11 +7,11 @@
  C++ Integration: Binding Types
 ============================================
 
-This tutorial shows how to expose C++ structs to daScript so that scripts
+This tutorial shows how to expose C++ structs to daslang so that scripts
 can create instances, access fields, and pass them to/from C++ functions.
 Topics covered:
 
-* ``MAKE_TYPE_FACTORY`` — registering a C++ type with the daScript type system
+* ``MAKE_TYPE_FACTORY`` — registering a C++ type with the daslang type system
 * ``ManagedStructureAnnotation`` — describing struct fields
 * ``addAnnotation`` — plugging type metadata into a module
 * ``SimNode_ExtFuncCallAndCopyOrMove`` — returning bound types by value
@@ -29,7 +29,7 @@ Defining the C++ types
 =======================
 
 We define three simple structs.  They are intentionally **POD** (no default
-member initializers, no virtual functions) so that the daScript type system
+member initializers, no virtual functions) so that the daslang type system
 sees them as plain data:
 
 .. code-block:: cpp
@@ -55,7 +55,7 @@ sees them as plain data:
 ``MAKE_TYPE_FACTORY``
 ======================
 
-Before daScript can work with a C++ type, you must declare a
+Before daslang can work with a C++ type, you must declare a
 **type factory** at file scope.  ``MAKE_TYPE_FACTORY`` creates two things:
 ``typeFactory<CppType>`` (so ``addExtern`` resolves the type in function
 signatures) and ``typeName<CppType>`` (the type's display name):
@@ -66,7 +66,7 @@ signatures) and ``typeName<CppType>`` (the type's display name):
    MAKE_TYPE_FACTORY(Color, Color);
    MAKE_TYPE_FACTORY(Rect,  Rect);
 
-The first argument is the daScript-visible name; the second is the C++
+The first argument is the daslang-visible name; the second is the C++
 type.  They can differ when the C++ name lives in a namespace — e.g.
 ``MAKE_TYPE_FACTORY(Vec2, math::Vec2)``.
 
@@ -74,7 +74,7 @@ type.  They can differ when the C++ name lives in a namespace — e.g.
 ``ManagedStructureAnnotation``
 ================================
 
-An **annotation** describes a type's layout to daScript.  For structs,
+An **annotation** describes a type's layout to daslang.  For structs,
 derive from ``ManagedStructureAnnotation<T>`` and call ``addField`` for
 each member:
 
@@ -94,7 +94,7 @@ The template parameters are ``<CppType, canNew, canDelete>``.  Passing
 directly (we provide factory functions instead).
 
 ``DAS_BIND_MANAGED_FIELD(member)`` resolves the offset and type of a
-struct member at compile time.  The two string arguments are the daScript
+struct member at compile time.  The two string arguments are the daslang
 field name and the C++ field name (used for AOT).
 
 Nested bound types work naturally — ``Rect`` has ``Vec2`` fields:
@@ -129,7 +129,7 @@ Returning bound types by value
 
 When a C++ function returns a bound struct by value, ``addExtern`` needs
 the ``SimNode_ExtFuncCallAndCopyOrMove`` sim-node so that the return
-value is properly copied into daScript's stack:
+value is properly copied into daslang's stack:
 
 .. code-block:: cpp
 
@@ -177,7 +177,7 @@ types.  Creating a mutable local variable of such a type requires an
            ->args({"x", "y"});
 
 
-Using bound types in daScript
+Using bound types in daslang
 ==============================
 
 .. code-block:: das

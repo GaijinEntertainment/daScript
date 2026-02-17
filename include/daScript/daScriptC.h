@@ -111,10 +111,10 @@ typedef void (das_interop_function_unaligned) ( das_context * ctx, das_node * no
 // --- Lifecycle ---
 
 // Initialize all built-in modules and internal structures.
-// Must be called once before any other daScript C API call.
+// Must be called once before any other daslang C API call.
 DAS_API void das_initialize();
-// Shut down the daScript runtime and free all internal structures and memory.
-// Must be called once when the host application is done with daScript.
+// Shut down the daslang runtime and free all internal structures and memory.
+// Must be called once when the host application is done with daslang.
 DAS_API void das_shutdown();
 
 // --- Text output ---
@@ -157,7 +157,7 @@ DAS_API int das_register_dynamic_modules(das_file_access *file_access,
 // Create a default file access that reads directly from the filesystem.
 DAS_API das_file_access * das_fileaccess_make_default (  );
 // Create a file access backed by a .das_project file.
-// The project file is a daScript program that exports callback functions
+// The project file is a daslang program that exports callback functions
 // controlling module resolution, permissions, and compilation policies.
 // See tutorial 06 (sandbox) for a complete example.
 DAS_API das_file_access * das_fileaccess_make_project ( const char * project_file  );
@@ -192,13 +192,13 @@ DAS_API void das_fileaccess_unlock ( das_file_access * access );
 // Return 1 if the file access is locked, 0 otherwise.
 DAS_API int das_fileaccess_is_locked ( das_file_access * access );
 
-// Copy the daScript root path into 'root'. At most 'maxbuf' bytes are written
+// Copy the daslang root path into 'root'. At most 'maxbuf' bytes are written
 // (including the null terminator). The root path is used to locate daslib/ and other resources.
 DAS_API void das_get_root ( char * root, int maxbuf );
 
 // --- Compilation ---
 
-// Compile a daScript program from the file at 'program_file'.
+// Compile a daslang program from the file at 'program_file'.
 // Compiler diagnostics are written to 'tout'. The returned program is always
 // non-NULL; check das_program_err_count() to determine if compilation succeeded.
 DAS_API das_program * das_program_compile ( char * program_file, das_file_access * access, das_text_writer * tout, das_module_group * libgroup );
@@ -294,7 +294,7 @@ DAS_API void das_context_eval_block_cmres_unaligned ( das_context * context, das
 // --- Type binding: structures ---
 
 // Create a handled structure type that mirrors a C struct.
-// 'name' is the daScript name, 'cppname' is the C/C++ type name used for mangling,
+// 'name' is the daslang name, 'cppname' is the C/C++ type name used for mangling,
 // 'sz' and 'al' are sizeof() and alignof() of the C struct.
 // The returned handle must be populated with das_structure_add_field() and then
 // registered into a module with das_module_bind_structure().
@@ -307,7 +307,7 @@ DAS_API void das_structure_add_field ( das_structure * st, das_module * mod, das
 // --- Type binding: enumerations ---
 
 // Create an enumeration type.
-// 'name' is the daScript name, 'cppname' is the C/C++ type name.
+// 'name' is the daslang name, 'cppname' is the C/C++ type name.
 // 'ext' is non-zero if the enum's underlying storage is int64 (otherwise int).
 // Populate with das_enumeration_add_value(), then register with das_module_bind_enumeration().
 DAS_API das_enumeration * das_enumeration_make ( const char * name, const char * cppname, int ext );
@@ -320,7 +320,7 @@ DAS_API void das_enumeration_add_value ( das_enumeration * enu, const char * nam
 // After populating it with bindings, add it to a module group with das_modulegroup_add_module().
 DAS_API das_module * das_module_create ( char * name );
 // Bind a C interop function (aligned, vec4f calling convention) to a module.
-// 'name' is the daScript function name, 'cppName' is the C symbol name.
+// 'name' is the daslang function name, 'cppName' is the C symbol name.
 // 'sideffects' is a combination of SIDEEFFECTS_* flags.
 // 'args' is a mangled signature string describing argument and return types
 // (see type_mangling.rst).
@@ -329,7 +329,7 @@ DAS_API void das_module_bind_interop_function ( das_module * mod, das_module_gro
 // Same parameters as das_module_bind_interop_function(); use this variant when the
 // interop function uses vec4f_unaligned arguments and result.
 DAS_API void das_module_bind_interop_function_unaligned ( das_module * mod, das_module_group * lib, das_interop_function_unaligned * fun, char * name, char * cppName, uint32_t sideffects, char* args );
-// Bind a type alias to a module. 'aname' is the alias name visible in daScript,
+// Bind a type alias to a module. 'aname' is the alias name visible in daslang,
 // 'tname' is the target type in mangled-name format.
 DAS_API void das_module_bind_alias ( das_module * mod, das_module_group * lib, char * aname, char * tname );
 // Register a structure (from das_structure_make()) into a module.
@@ -339,7 +339,7 @@ DAS_API void das_module_bind_enumeration ( das_module * mod, das_enumeration * e
 
 // --- String allocation ---
 
-// Allocate a copy of 'str' on the daScript string heap.
+// Allocate a copy of 'str' on the daslang string heap.
 // Use this to return strings from interop functions; the returned pointer
 // is managed by the context and must not be freed by the caller.
 char * das_allocate_string ( das_context * context, char * str );
@@ -452,12 +452,12 @@ DAS_API int das_policies_set_bool ( das_policies * policies, das_bool_policy fla
 // Set an integer policy field. Returns 1 on success, 0 if the field is unknown.
 DAS_API int das_policies_set_int ( das_policies * policies, das_int_policy field, int64_t value );
 
-// Compile a daScript program with custom compilation policies.
+// Compile a daslang program with custom compilation policies.
 // Same as das_program_compile() but applies the given CodeOfPolicies.
 DAS_API das_program * das_program_compile_policies ( char * program_file, das_file_access * access, das_text_writer * tout, das_module_group * libgroup, das_policies * policies );
 
 // --- Context variables ---
-// After simulation, global variables declared in daScript are accessible
+// After simulation, global variables declared in daslang are accessible
 // by name or by index. findVariable returns -1 if not found.
 
 // Look up a global variable by name. Returns its index, or -1 if not found.

@@ -7,7 +7,7 @@
  C++ Integration: Calling Functions
 ==========================================
 
-This tutorial shows **two ways** to call daScript functions from C++:
+This tutorial shows **two ways** to call daslang functions from C++:
 
 * **Part A — Low-level:** manual ``cast<T>::from`` / ``to`` +
   ``evalWithCatch``.  Gives maximum control over the calling convention.
@@ -18,7 +18,7 @@ This tutorial shows **two ways** to call daScript functions from C++:
 .. note::
 
    All argument and return value marshalling goes through ``vec4f``, the
-   SIMD-aligned register type that daScript uses for its calling convention.
+   SIMD-aligned register type that daslang uses for its calling convention.
    Part A works with ``vec4f`` directly; Part B hides it behind templates.
 
 
@@ -26,11 +26,11 @@ Prerequisites
 =============
 
 * Tutorial 01 completed (:ref:`tutorial_integration_cpp_hello_world`).
-* Familiarity with the daScript lifecycle (init → compile → simulate →
+* Familiarity with the daslang lifecycle (init → compile → simulate →
   eval → shutdown).
 
 
-The daScript file
+The daslang file
 =================
 
 The script exports several functions with different signatures:
@@ -76,7 +76,7 @@ Part A — Low-level calling
 Passing arguments with ``cast<T>::from``
 -----------------------------------------
 
-Every daScript function takes arguments as an array of ``vec4f``.  Use
+Every daslang function takes arguments as an array of ``vec4f``.  Use
 ``cast<T>::from(value)`` to pack a C++ value into a ``vec4f`` slot:
 
 .. code-block:: cpp
@@ -141,12 +141,12 @@ slow, so call it once during setup, never in a hot loop.
 Functions returning structs (cmres)
 ------------------------------------
 
-When a daScript function returns a struct, the caller supplies a result
+When a daslang function returns a struct, the caller supplies a result
 buffer.  Use the three-argument form of ``evalWithCatch``:
 
 .. code-block:: cpp
 
-   // C++ struct layout must exactly match the daScript struct.
+   // C++ struct layout must exactly match the daslang struct.
    struct Vec2 { float x; float y; };
 
    Vec2 v;
@@ -175,7 +175,7 @@ Part B — High-level calling
 ``das_invoke_function`` (from ``daScript/simulate/aot.h``) is a family of
 variadic templates that handle argument marshalling, AOT dispatch, and
 return-value extraction in a single call.  **This is the recommended way
-to call daScript functions from C++.**
+to call daslang functions from C++.**
 
 Include the header:
 
@@ -225,7 +225,7 @@ It is used for error reporting and stack traces.
 Calling with ``invoke_cmres``
 ------------------------------
 
-When a daScript function returns a struct, use ``invoke_cmres`` instead:
+When a daslang function returns a struct, use ``invoke_cmres`` instead:
 
 .. code-block:: cpp
 

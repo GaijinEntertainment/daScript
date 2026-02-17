@@ -1,7 +1,7 @@
 // Tutorial: AOT — Ahead-of-Time Compilation (C API)
 //
 // This tutorial covers:
-//   1. Compiling a daScript program in interpreter mode (no AOT)
+//   1. Compiling a daslang program in interpreter mode (no AOT)
 //   2. Compiling the same program with AOT enabled via das_policies
 //   3. Checking whether functions are AOT-linked with das_function_is_aot
 //
@@ -117,7 +117,7 @@ int main(int argc, char ** argv) {
     // ================================================================
     printf("\n=== AOT workflow summary ===\n");
     printf("1. daslang.exe -aot script.das script.das.cpp\n");
-    printf("   -> generates C++ source from daScript functions\n");
+    printf("   -> generates C++ source from daslang functions\n");
     printf("2. Compile the .cpp into your executable\n");
     printf("   -> functions self-register via static AotListBase\n");
     printf("3. Create policies with DAS_POLICY_AOT enabled\n");

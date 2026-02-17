@@ -5,7 +5,7 @@
 Built-in runtime
 ================
 
-The BUILTIN module contains core runtime functions available in all daScript programs
+The BUILTIN module contains core runtime functions available in all daslang programs
 without explicit ``require``. It includes:
 
 - Heap and memory management (``heap_bytes_allocated``, ``heap_report``, ``memory_report``)
@@ -27,7 +27,7 @@ Example: ::
             assert(1 + 1 == 2)
             let s = string(42)
             print("string(42) = {s}\n")
-            let name = "daScript"
+            let name = "daslang"
             print("welcome to {name}\n")
             var arr : array<int>
             arr |> push(10)
@@ -38,7 +38,7 @@ Example: ::
         // output:
         // hello, world!
         // string(42) = 42
-        // welcome to daScript
+        // welcome to daslang
         // length = 2
         // arr[0] = 10
 
@@ -534,7 +534,7 @@ Optimization annotation that disables runtime lock checks when accessing fields 
 
 .. das:attribute:: cpp_layout
 
-Forces the structure to use C++ memory layout rules (alignment and padding) instead of native daScript layout.
+Forces the structure to use C++ memory layout rules (alignment and padding) instead of native daslang layout.
 
 .. _handle-builtin-safe_when_uninitialized:
 
@@ -546,7 +546,7 @@ Declares that the structure is safe to access before explicit initialization, su
 
 .. das:attribute:: persistent
 
-Allocates the structure on the C++ heap (via `new`) instead of the daScript context heap, allowing it to outlive the context.
+Allocates the structure on the C++ heap (via `new`) instead of the daslang context heap, allowing it to outlive the context.
 
 ++++++++++
 Containers
@@ -2160,7 +2160,7 @@ Executes the application main loop by repeatedly invoking `block` until it retur
 
 .. das:function:: get_das_root() : string
 
-Returns the file-system path to the daScript root directory, where `daslib` and other standard libraries are located.
+Returns the file-system path to the daslang root directory, where `daslib` and other standard libraries are located.
 
 .. _function-builtin_is_in_aot:
 
@@ -2224,7 +2224,7 @@ Prints the current call stack to the log; set `args` to include function argumen
 
 .. das:function:: terminate()
 
-Immediately terminates execution of the current daScript context.
+Immediately terminates execution of the current daslang context.
 
 .. _function-builtin_to_compiler_log_string_implicit:
 

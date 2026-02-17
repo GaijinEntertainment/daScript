@@ -24,7 +24,7 @@ require daslib/archive
 
 // === What is DECS? ===
 
-// DECS is daScript's built-in Entity Component System.
+// DECS is daslang's built-in Entity Component System.
 // - An "entity" is just an ID (EntityId) with associated data.
 // - "Components" are named, typed values attached to entities.
 // - Entities with the same set of component names share an "archetype".

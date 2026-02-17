@@ -5,7 +5,7 @@
 decltype macro and template function annotation
 ===============================================
 
-The TEMPLATES module implements template instantiation utilities for daScript
+The TEMPLATES module implements template instantiation utilities for daslang
 code generation. It supports stamping out parameterized code patterns with
 type and value substitution.
 

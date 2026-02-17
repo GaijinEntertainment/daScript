@@ -9,7 +9,7 @@
 
  int32_t TestObjectSmart::total = 0;
 
-//sample of your-engine-float3-type to be aliased as float3 in daScript.
+//sample of your-engine-float3-type to be aliased as float3 in daslang.
 template<> struct das::cast <Point3>  : cast_fVec<Point3> {};
 
 namespace das {

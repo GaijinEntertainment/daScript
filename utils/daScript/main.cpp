@@ -494,7 +494,7 @@ void print_help() {
         << "    -pause      pause after errors and pause again before exiting program\n"
         << "    -dry-run    compile and simulate script without execution\n"
         << "    -compile-only compile script without simulation and execution\n"
-        << "    -dasroot    set path to dascript root folder (with daslib)\n"
+        << "    -dasroot    set path to daslang root folder (with daslib)\n"
 #if DAS_SMART_PTR_ID
         << "    -track-smart-ptr <id> track smart pointer with id\n"
 #endif
@@ -509,7 +509,7 @@ void print_help() {
         << "    -p          paranoid validation of CPP AOT\n"
         << "    -q          suppress all output\n"
         << "    -dry-run    no changes will be written\n"
-        << "    -dasroot    set path to dascript root folder (with daslib)\n"
+        << "    -dasroot    set path to daslang root folder (with daslib)\n"
     ;
 }
 

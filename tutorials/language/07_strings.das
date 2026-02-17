@@ -38,8 +38,8 @@ def main {
 
     // === String Interpolation ===
     // Any expression inside {braces} is evaluated and inserted.
-    let name = "daScript"
-    let version = 0.5
+    let name = "daslang"
+    let version = 0.6
     print("{name} version {version}\n")
 
     // Complex expressions work too
@@ -191,7 +191,7 @@ def main {
 // here
 // backslash: \
 // quote: "
-// daScript version 0.5
+// daslang version 0.6
 // powers of 2: 1 2 4 8 16
 // length of "Hello" = 5
 // first char code of "Hello" = 72

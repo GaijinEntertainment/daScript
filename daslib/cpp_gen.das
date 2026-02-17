@@ -70,7 +70,7 @@ var ex_enums : table<string; ExEnum> //! Table of external enums to generate bin
 
 var substitute_field_types : table<string; string> //! Table mapping field types to substitute types in generated bindings.
 
-var alias_types : table<string; string> //! Table mapping C++ type names to their daScript alias types.
+var alias_types : table<string; string> //! Table mapping C++ type names to their daslang alias types.
 
 var namespace_to_prefix : table<string; string> //! Table mapping C++ namespace names to binding name prefixes.
 
@@ -88,7 +88,7 @@ var const_uint16_type = "uint16_t" //! C++ type name used for uint16 constants.
 
 var ex_keywords : table<string; bool> //! Table of extra keywords that require name escaping in generated bindings.
 
-var all_keywords = fixed_array<string>( //! List of all daScript keywords that conflict with C++ names and need escaping.
+var all_keywords = fixed_array<string>( //! List of all daslang keywords that conflict with C++ names and need escaping.
     "float",    "double",
     "uint",     "uint8",    "uint16",   "uint64",   "uint2",    "uint3",    "uint4",
     "int",      "int8",     "int16",    "int64",    "int2",     "int3",     "int4",

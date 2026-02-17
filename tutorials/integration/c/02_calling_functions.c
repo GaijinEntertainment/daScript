@@ -1,7 +1,7 @@
-// Tutorial: Calling daScript Functions from C
+// Tutorial: Calling daslang Functions from C
 //
 // This tutorial shows how to:
-//   - Pass arguments of various types (int, float, string, bool) to daScript
+//   - Pass arguments of various types (int, float, string, bool) to daslang
 //   - Read return values (int, float, string)
 //   - Call functions that return complex results (structures)
 //
@@ -17,7 +17,7 @@
 
 #define SCRIPT_NAME "/tutorials/integration/c/02_calling_functions.das"
 
-// Structure layout must exactly match the daScript struct Vec2.
+// Structure layout must exactly match the daslang struct Vec2.
 typedef struct {
     float x;
     float y;
@@ -110,7 +110,7 @@ int main(int argc, char ** argv) {
     // -----------------------------------------------------------------------
     // 3. Calling a function with string argument and string return value
     //
-    // Strings returned from daScript live in the context's heap.
+    // Strings returned from daslang live in the context's heap.
     // They remain valid until the context is released or GC'd.
     // -----------------------------------------------------------------------
     {

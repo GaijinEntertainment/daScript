@@ -1,8 +1,8 @@
 // Tutorial: Hello World from C
 //
-// This is the simplest possible C program that embeds and runs a daScript file.
+// This is the simplest possible C program that embeds and runs a daslang file.
 // It demonstrates the full lifecycle:
-//   1. Initialize daScript
+//   1. Initialize daslang
 //   2. Compile a script from a file
 //   3. Simulate (prepare for execution)
 //   4. Find and call a function
@@ -24,8 +24,8 @@ int main(int argc, char ** argv) {
     (void)argc; (void)argv;
 
     // -----------------------------------------------------------------------
-    // Step 1: Initialize daScript
-    // This must be called once before any other daScript API call.
+    // Step 1: Initialize daslang
+    // This must be called once before any other daslang API call.
     // It registers all built-in modules (math, strings, etc.).
     // -----------------------------------------------------------------------
     das_initialize();
@@ -41,7 +41,7 @@ int main(int argc, char ** argv) {
     das_module_group * module_group = das_modulegroup_make();
     das_file_access * file_access  = das_fileaccess_make_default();
 
-    // Build the full path to the script relative to the daScript root.
+    // Build the full path to the script relative to the daslang root.
     char script_path[512];
     das_get_root(script_path, sizeof(script_path));
     int chars_left = ((int)sizeof(script_path)) - ((int)strlen(script_path)) - 1;
@@ -103,7 +103,7 @@ int main(int argc, char ** argv) {
     // Step 6: Call the function
     //
     // das_context_eval_with_catch runs the function inside a try/catch so
-    // that daScript exceptions don't crash the host.  The second argument
+    // that daslang exceptions don't crash the host.  The second argument
     // is an array of vec4f arguments — NULL because "test" takes none.
     // -----------------------------------------------------------------------
     das_context_eval_with_catch(ctx, fn_test, NULL);
@@ -130,9 +130,9 @@ cleanup:
     das_text_release(tout);
 
     // -----------------------------------------------------------------------
-    // Step 8: Shut down daScript
+    // Step 8: Shut down daslang
     //
-    // Frees all global state.  No daScript API calls are allowed after this.
+    // Frees all global state.  No daslang API calls are allowed after this.
     // -----------------------------------------------------------------------
     das_shutdown();
 

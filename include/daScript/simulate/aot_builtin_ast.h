@@ -115,7 +115,7 @@ namespace das {
         virtual bool canVisitFunction ( Function * fun ) override;
         virtual bool canVisitEnumeration ( Enumeration * en ) override;
         /*
-        // TODO: implement on daScript side
+        // TODO: implement on daslang side
         virtual bool canVisitStructureFieldInit ( Structure * var ) override {
             if ( auto fnCanVisit = get_canVisitStructureFieldInit(classPtr) ) {
                 bool result = true;

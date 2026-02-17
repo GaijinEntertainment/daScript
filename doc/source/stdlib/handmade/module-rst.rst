@@ -1,4 +1,4 @@
-The RST module implements the documentation generation pipeline for daScript.
+The RST module implements the documentation generation pipeline for daslang.
 It uses RTTI to introspect modules, types, and functions, then produces
 reStructuredText output suitable for Sphinx documentation builds.
 

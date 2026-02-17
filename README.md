@@ -6,7 +6,7 @@ MacOS/linux/win64 wasm build status [![wasm_build](https://github.com/GaijinEnte
 
 Read my [BLOG](https://borisbat.github.io/dascf-blog)
 
-0.5 version is coming soon.
+0.6 version is coming soon.
 
 Serialization, JIT (via LLVM), and many more good language features are in.
 We are putting in last finishing touches, documentation, and all that jazz.
@@ -15,8 +15,8 @@ See you soon...
 ## Installation
 
 ```sh
-git clone https://github.com/GaijinEntertainment/daScript.git daScript
-cd daScript
+git clone https://github.com/GaijinEntertainment/daScript.git daslang
+cd daslang
 git submodule update --init --recursive
 ```
 
@@ -28,7 +28,7 @@ cmake --build build --target daslang --config RelWithDebInfo
 ```
 
 ## Aot usage
-For detailed usage see [tutorial02aot.cpp](examples/tutorial/tutorial02aot.cpp).
+For detailed usage see [integration_cpp_13.cpp](tutorials/integration/cpp/integration_cpp_13.cpp) and the [AOT tutorial](doc/source/reference/tutorials/integration_cpp_13_aot.rst).
 Here's a short version:
 First compile `daslang`:
 ```sh
@@ -41,7 +41,7 @@ Now let's create a `main.das` file with the following content:
 def main() { print("Hello world\n"); }
 ```
 Create a `C++` application, called `test_aot.cpp`. For simplicity we don't
-use error checking here (this example was taken from [tutorial02aot.cpp](examples/tutorial/tutorial02aot.cpp)):
+use error checking here (based on the [AOT integration tutorial](tutorials/integration/cpp/integration_cpp_13.cpp)):
 ```cpp
 #include "daScript/daScript.h"
 int main(int argc, char **argv) {

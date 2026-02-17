@@ -1,13 +1,13 @@
 // Tutorial 15 — Custom Annotations (C++ integration)
 //
 // Demonstrates how to create custom annotations in C++ that modify
-// daScript compilation behavior:
+// daslang compilation behavior:
 //   - FunctionAnnotation — hooks into function compilation
 //   - StructureAnnotation — hooks into struct compilation
 //   - MarkFunctionAnnotation — convenience base for function annotations
 //   - Adding fields to structs at compile time via touch()
 //
-// Annotations are the foundation of daScript's metaprogramming from
+// Annotations are the foundation of daslang's metaprogramming from
 // the C++ side.  They let the host application control, validate, or
 // transform script code during compilation.
 

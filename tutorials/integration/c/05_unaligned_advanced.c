@@ -3,7 +3,7 @@
 // This tutorial covers:
 //   1. The unaligned calling convention (vec4f_unaligned) — portable, no
 //      SSE alignment requirements, works on all platforms.
-//   2. Inline script source — compile daScript from a C string instead of
+//   2. Inline script source — compile daslang from a C string instead of
 //      a file on disk (das_fileaccess_introduce_file).
 //   3. Detailed error reporting — iterating compilation errors.
 //
@@ -55,7 +55,7 @@ static const char * BAD_SCRIPT =
 // Signature: void (das_context*, das_node*, vec4f_unaligned*, vec4f_unaligned*)
 // Unlike the aligned variant, arguments and result use vec4f_unaligned.
 //
-// daScript signature: def c_greet(n : int) : void
+// daslang signature: def c_greet(n : int) : void
 // Mangled: "v i"
 // -----------------------------------------------------------------------
 void c_greet_unaligned(das_context * ctx, das_node * node,

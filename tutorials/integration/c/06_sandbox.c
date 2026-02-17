@@ -28,7 +28,7 @@
 // -----------------------------------------------------------------------
 // Inline script sources
 //
-// All daScript code is embedded as C string constants — the host controls
+// All daslang code is embedded as C string constants — the host controls
 // exactly what the compiler can see.
 // -----------------------------------------------------------------------
 

@@ -6,7 +6,7 @@ options strict_smart_pointers = true
 
 module match shared private
 
-//! Pattern matching macro for daScript.
+//! Pattern matching macro for daslang.
 //!
 //! Provides ``match``, ``static_match``, ``multi_match``, and ``static_multi_match`` macros
 //! that decompose values by structure, variant, tuple, array, or constant comparison.

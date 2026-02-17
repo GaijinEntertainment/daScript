@@ -7,7 +7,7 @@
  C++ Integration: Serialization
 ========================================
 
-This tutorial shows how to serialize a compiled daScript program to
+This tutorial shows how to serialize a compiled daslang program to
 a binary blob and deserialize it, skipping recompilation on subsequent
 runs.  Topics covered:
 
@@ -26,7 +26,7 @@ Prerequisites
 Why serialize?
 ==============
 
-Compiling a daScript program involves parsing, type inference, and
+Compiling a daslang program involves parsing, type inference, and
 optimization — this can take noticeable time for large scripts.
 Serialization saves the compiled program to a binary blob so that
 future runs can skip compilation entirely:

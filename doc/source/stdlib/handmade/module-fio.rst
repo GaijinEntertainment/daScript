@@ -15,7 +15,7 @@ Example: ::
         def main() {
             let fname = "_test_fio_tmp.txt"
             fopen(fname, "wb") <| $(f) {
-                fwrite(f, "hello, daScript!")
+                fwrite(f, "hello, daslang!")
             }
             fopen(fname, "rb") <| $(f) {
                 let content = fread(f)
@@ -24,4 +24,4 @@ Example: ::
             remove(fname)
         }
         // output:
-        // hello, daScript!
+        // hello, daslang!

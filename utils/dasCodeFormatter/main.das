@@ -9,7 +9,7 @@ require daslib/das_source_formatter_fio
 
 
 def print_usage() {
-    print("daScript Code Formatter\n")
+    print("daslang Code Formatter\n")
     print("Usage: daslang.exe utils/dasCodeFormatter/main.das -- [options] <file1.das> [file2.das ...]\n\n")
     print("Options:\n")
     print("  --files:<path>   Read list of files to format from a text file (one per line)\n")

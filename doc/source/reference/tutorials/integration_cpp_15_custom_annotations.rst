@@ -8,7 +8,7 @@
 ============================================
 
 This tutorial shows how to create custom annotations in C++ that
-modify daScript compilation behavior.  Topics covered:
+modify daslang compilation behavior.  Topics covered:
 
 * ``FunctionAnnotation`` — hooks into function compilation
 * ``StructureAnnotation`` — hooks into struct compilation
@@ -27,7 +27,7 @@ What are annotations?
 =====================
 
 Annotations are compile-time hooks defined in C++ and used from
-daScript with the ``[annotation_name]`` syntax.  They let the host
+daslang with the ``[annotation_name]`` syntax.  They let the host
 application validate, modify, or transform script code during
 compilation.
 
@@ -49,7 +49,7 @@ Annotation class hierarchy
 
 ``TypeAnnotation`` / ``ManagedStructureAnnotation`` describe **how a
 C++ type is exposed** (fields, size, simulation nodes).
-``StructureAnnotation`` is a **compile-time hook** on daScript
+``StructureAnnotation`` is a **compile-time hook** on daslang
 ``struct`` declarations — they are unrelated concepts.
 
 
@@ -172,7 +172,7 @@ Register annotations in the module constructor:
    addAnnotation(make_smart<AddFieldAnnotation>());
 
 
-Using from daScript
+Using from daslang
 ====================
 
 .. code-block:: das

@@ -11,7 +11,7 @@ JSON
     single: Tutorial; json_boost
 
 This tutorial covers ``daslib/json`` and ``daslib/json_boost`` — parsing,
-building, writing, and querying JSON data in daScript.
+building, writing, and querying JSON data in daslang.
 
 ``json`` provides the core parser, writer, and ``JsValue`` variant type.
 ``json_boost`` adds safe access operators, struct serialization, and
@@ -132,7 +132,7 @@ Enums serialize as strings by default::
 Reader macro
 ============
 
-The ``%json~`` reader macro embeds JSON directly in daScript code.
+The ``%json~`` reader macro embeds JSON directly in daslang code.
 It parses at compile time and creates a ``JsonValue?`` at runtime::
 
   var settings = %json~

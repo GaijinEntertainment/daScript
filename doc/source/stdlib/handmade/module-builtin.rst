@@ -1,4 +1,4 @@
-The BUILTIN module contains core runtime functions available in all daScript programs
+The BUILTIN module contains core runtime functions available in all daslang programs
 without explicit ``require``. It includes:
 
 - Heap and memory management (``heap_bytes_allocated``, ``heap_report``, ``memory_report``)
@@ -20,7 +20,7 @@ Example: ::
             assert(1 + 1 == 2)
             let s = string(42)
             print("string(42) = {s}\n")
-            let name = "daScript"
+            let name = "daslang"
             print("welcome to {name}\n")
             var arr : array<int>
             arr |> push(10)
@@ -31,6 +31,6 @@ Example: ::
         // output:
         // hello, world!
         // string(42) = 42
-        // welcome to daScript
+        // welcome to daslang
         // length = 2
         // arr[0] = 10
