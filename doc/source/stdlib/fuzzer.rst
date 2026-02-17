@@ -17,35 +17,35 @@ All functions and symbols are in "fuzzer" module, use require to get access to i
 Fuzzer tests
 ++++++++++++
 
-  *  :ref:`fuzz (fuzz_count: int; blk: block\<():void\>) <function-fuzzer_fuzz_int_block_ls__c_void_gr_>` 
-  *  :ref:`fuzz (blk: block\<():void\>) <function-fuzzer_fuzz_block_ls__c_void_gr_>` 
-  *  :ref:`fuzz_all_ints_op1 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_all_ints_op1_auto_Faker_string_0x7c>` 
-  *  :ref:`fuzz_all_unsigned_ints_op1 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_all_unsigned_ints_op1_auto_Faker_string_0x86>` 
-  *  :ref:`fuzz_compareable_op2 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_compareable_op2_auto_Faker_string_0xe6>` 
-  *  :ref:`fuzz_debug (fuzz_count: int; blk: block\<():void\>) <function-fuzzer_fuzz_debug_int_block_ls__c_void_gr_>` 
-  *  :ref:`fuzz_debug (blk: block\<():void\>) <function-fuzzer_fuzz_debug_block_ls__c_void_gr_>` 
-  *  :ref:`fuzz_eq_neq_op2 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_eq_neq_op2_auto_Faker_string_0xf3>` 
-  *  :ref:`fuzz_float_double_or_float_vec_op1 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_float_double_or_float_vec_op1_auto_Faker_string_0x8e>` 
-  *  :ref:`fuzz_float_double_or_float_vec_op2 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_float_double_or_float_vec_op2_auto_Faker_string_0xad>` 
-  *  :ref:`fuzz_float_double_or_float_vec_op3 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_float_double_or_float_vec_op3_auto_Faker_string_0x173>` 
-  *  :ref:`fuzz_float_or_float_vec_op1 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_float_or_float_vec_op1_auto_Faker_string_0x99>` 
-  *  :ref:`fuzz_float_or_float_vec_op2 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_float_or_float_vec_op2_auto_Faker_string_0xa3>` 
-  *  :ref:`fuzz_int_vector_op2 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_int_vector_op2_auto_Faker_string_0x127>` 
-  *  :ref:`fuzz_numeric_and_storage_op1 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_numeric_and_storage_op1_auto_Faker_string_0x6c>` 
-  *  :ref:`fuzz_numeric_and_vector_op1 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_numeric_and_vector_op1_auto_Faker_string_0x40>` 
-  *  :ref:`fuzz_numeric_and_vector_op2 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_numeric_and_vector_op2_auto_Faker_string_0xb8>` 
-  *  :ref:`fuzz_numeric_and_vector_op2_no_unint_vec (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_numeric_and_vector_op2_no_unint_vec_auto_Faker_string_0xcb>` 
-  *  :ref:`fuzz_numeric_and_vector_signed_op1 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_numeric_and_vector_signed_op1_auto_Faker_string_0x53>` 
-  *  :ref:`fuzz_numeric_op1 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_numeric_op1_auto_Faker_string_0x62>` 
-  *  :ref:`fuzz_numeric_op2 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_numeric_op2_auto_Faker_string_0xdc>` 
-  *  :ref:`fuzz_numeric_op3 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_numeric_op3_auto_Faker_string_0x14b>` 
-  *  :ref:`fuzz_numeric_op4 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_numeric_op4_auto_Faker_string_0x17f>` 
-  *  :ref:`fuzz_numeric_scal_vec_op2 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_numeric_scal_vec_op2_auto_Faker_string_0x118>` 
-  *  :ref:`fuzz_numeric_vec_scal_op2 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_numeric_vec_scal_op2_auto_Faker_string_0x109>` 
-  *  :ref:`fuzz_rotate_op2 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_rotate_op2_auto_Faker_string_0x143>` 
-  *  :ref:`fuzz_shift_op2 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_shift_op2_auto_Faker_string_0x135>` 
-  *  :ref:`fuzz_vec_mad_op3 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_vec_mad_op3_auto_Faker_string_0x164>` 
-  *  :ref:`fuzz_vec_op3 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_vec_op3_auto_Faker_string_0x155>` 
+  *  :ref:`fuzz (fuzz_count: int; blk: block\<():void\>) <function-fuzzer_fuzz_int_block_ls__c_void_gr_>`
+  *  :ref:`fuzz (blk: block\<():void\>) <function-fuzzer_fuzz_block_ls__c_void_gr_>`
+  *  :ref:`fuzz_all_ints_op1 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_all_ints_op1_auto_Faker_string_0x7c>`
+  *  :ref:`fuzz_all_unsigned_ints_op1 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_all_unsigned_ints_op1_auto_Faker_string_0x86>`
+  *  :ref:`fuzz_compareable_op2 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_compareable_op2_auto_Faker_string_0xe6>`
+  *  :ref:`fuzz_debug (fuzz_count: int; blk: block\<():void\>) <function-fuzzer_fuzz_debug_int_block_ls__c_void_gr_>`
+  *  :ref:`fuzz_debug (blk: block\<():void\>) <function-fuzzer_fuzz_debug_block_ls__c_void_gr_>`
+  *  :ref:`fuzz_eq_neq_op2 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_eq_neq_op2_auto_Faker_string_0xf3>`
+  *  :ref:`fuzz_float_double_or_float_vec_op1 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_float_double_or_float_vec_op1_auto_Faker_string_0x8e>`
+  *  :ref:`fuzz_float_double_or_float_vec_op2 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_float_double_or_float_vec_op2_auto_Faker_string_0xad>`
+  *  :ref:`fuzz_float_double_or_float_vec_op3 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_float_double_or_float_vec_op3_auto_Faker_string_0x173>`
+  *  :ref:`fuzz_float_or_float_vec_op1 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_float_or_float_vec_op1_auto_Faker_string_0x99>`
+  *  :ref:`fuzz_float_or_float_vec_op2 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_float_or_float_vec_op2_auto_Faker_string_0xa3>`
+  *  :ref:`fuzz_int_vector_op2 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_int_vector_op2_auto_Faker_string_0x127>`
+  *  :ref:`fuzz_numeric_and_storage_op1 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_numeric_and_storage_op1_auto_Faker_string_0x6c>`
+  *  :ref:`fuzz_numeric_and_vector_op1 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_numeric_and_vector_op1_auto_Faker_string_0x40>`
+  *  :ref:`fuzz_numeric_and_vector_op2 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_numeric_and_vector_op2_auto_Faker_string_0xb8>`
+  *  :ref:`fuzz_numeric_and_vector_op2_no_unint_vec (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_numeric_and_vector_op2_no_unint_vec_auto_Faker_string_0xcb>`
+  *  :ref:`fuzz_numeric_and_vector_signed_op1 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_numeric_and_vector_signed_op1_auto_Faker_string_0x53>`
+  *  :ref:`fuzz_numeric_op1 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_numeric_op1_auto_Faker_string_0x62>`
+  *  :ref:`fuzz_numeric_op2 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_numeric_op2_auto_Faker_string_0xdc>`
+  *  :ref:`fuzz_numeric_op3 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_numeric_op3_auto_Faker_string_0x14b>`
+  *  :ref:`fuzz_numeric_op4 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_numeric_op4_auto_Faker_string_0x17f>`
+  *  :ref:`fuzz_numeric_scal_vec_op2 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_numeric_scal_vec_op2_auto_Faker_string_0x118>`
+  *  :ref:`fuzz_numeric_vec_scal_op2 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_numeric_vec_scal_op2_auto_Faker_string_0x109>`
+  *  :ref:`fuzz_rotate_op2 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_rotate_op2_auto_Faker_string_0x143>`
+  *  :ref:`fuzz_shift_op2 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_shift_op2_auto_Faker_string_0x135>`
+  *  :ref:`fuzz_vec_mad_op3 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_vec_mad_op3_auto_Faker_string_0x164>`
+  *  :ref:`fuzz_vec_op3 (t: auto; var fake: Faker; funcname: string) : auto <function-fuzzer_fuzz_vec_op3_auto_Faker_string_0x155>`
 
 
 fuzz
@@ -77,7 +77,7 @@ arguments are: int, uint, int64, uint64
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 
@@ -90,7 +90,7 @@ arguments are: uint, uint64
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 
@@ -103,7 +103,7 @@ arguments are: int, uint, float, double, int64, uint64, string
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 
@@ -138,7 +138,7 @@ arguments are: int, uint, int64, uint64, float, double, string, int2, int3, int4
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 
@@ -151,7 +151,7 @@ arguments are: float, double, float2, float3, float4
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 
@@ -164,7 +164,7 @@ arguments are: float, double, float2, float3, float4
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 
@@ -177,7 +177,7 @@ arguments are: float, double, float2, float3, float4
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 
@@ -190,7 +190,7 @@ arguments are: float, float2, float3, float4
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 
@@ -203,7 +203,7 @@ arguments are: float, float2, float3, float4
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 
@@ -216,7 +216,7 @@ arguments are: int, uint, int2, int3, int4, uint2, uint3, uint4
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 
@@ -229,7 +229,7 @@ arguments are: int, uint, int8, uint8, int16, uint16, int64, uint64, float, doub
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 
@@ -242,7 +242,7 @@ arguments are: int, uint, float, double, string, int2, int3, int4, uint2, uint3,
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 
@@ -255,7 +255,7 @@ arguments are: int, uint, float, double, int2, int3, int4, uint2, uint3, uint4, 
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 
@@ -268,7 +268,7 @@ arguments are: int, uint, float, double, int2, int3, int4, float2, float3, float
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 
@@ -281,7 +281,7 @@ arguments are: int, uint, float, double, string, int2, int3, int4, uint2, uint3,
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 
@@ -294,7 +294,7 @@ arguments are: int, uint, float, double
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 
@@ -307,7 +307,7 @@ arguments are: int, uint, float, double
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 
@@ -320,7 +320,7 @@ arguments are: int, uint, float, double
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 
@@ -333,7 +333,7 @@ arguments are: int, uint, float, double
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 
@@ -346,7 +346,7 @@ arguments pairs are: int2,int; int3,int; uint2,uint; uint3,uint; uint4,uint; int
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 
@@ -359,7 +359,7 @@ arguments pairs are: int2,int; int3,int; uint2,uint; uint3,uint; uint4,uint; int
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 
@@ -372,7 +372,7 @@ arguments are: int, uint
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 
@@ -385,7 +385,7 @@ arguments are: int, uint, int2, int3, int4, uint2, uint3, uint4
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 
@@ -398,7 +398,7 @@ arguments are: float2, float3, float4, int2, int3, int4, uint2, uint3, uint4 sec
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 
@@ -411,7 +411,7 @@ arguments are: float2, float3, float4, int2, int3, int4, uint2, uint3, uint4
 
 :Arguments: * **t** : auto
 
-            * **fake** :  :ref:`Faker <struct-faker-Faker>` 
+            * **fake** :  :ref:`Faker <struct-faker-Faker>`
 
             * **funcname** : string
 

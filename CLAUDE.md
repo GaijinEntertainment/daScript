@@ -1,6 +1,6 @@
 # daslang Project Instructions
 
-> **Keep in sync:** This file and `CLAUDE.md` (repo root) share identical content. When updating one, copy the changes to the other so both GitHub Copilot and Claude Code see the same project instructions.
+> **Keep in sync:** This file and `.github/copilot-instructions.md` share identical content. When updating one, copy the changes to the other so both GitHub Copilot and Claude Code see the same project instructions.
 
 ## Project Overview
 

@@ -17,7 +17,7 @@ All functions and symbols are in "cpp_bind" module, use require to get access to
 Generation of bindings
 ++++++++++++++++++++++
 
-  *  :ref:`log_cpp_class_adapter (cpp_file: file; name: string; cinfo: TypeDeclPtr) <function-cpp_bind_log_cpp_class_adapter_file_string_TypeDeclPtr>` 
+  *  :ref:`log_cpp_class_adapter (cpp_file: file; name: string; cinfo: TypeDeclPtr) <function-cpp_bind_log_cpp_class_adapter_file_string_TypeDeclPtr>`
 
 .. _function-cpp_bind_log_cpp_class_adapter_file_string_TypeDeclPtr:
 
@@ -28,10 +28,10 @@ Intended use::
 
     log_cpp_class_adapter(cppFileNameDotInc, "daslangClassName", typeinfo(ast_typedecl type<daslangClassName>))
 
-:Arguments: * **cpp_file** :  :ref:`file <alias-file>` 
+:Arguments: * **cpp_file** :  :ref:`file <alias-file>`
 
             * **name** : string
 
-            * **cinfo** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
+            * **cinfo** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>`
 
 

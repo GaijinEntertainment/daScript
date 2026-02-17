@@ -19,7 +19,7 @@ All functions and symbols are in "lint" module, use require to get access to it.
 Lint operations
 +++++++++++++++
 
-  *  :ref:`paranoid (prog: ProgramPtr; compile_time_errors: bool) <function-lint_paranoid_ProgramPtr_bool>` 
+  *  :ref:`paranoid (prog: ProgramPtr; compile_time_errors: bool) <function-lint_paranoid_ProgramPtr_bool>`
 
 .. _function-lint_paranoid_ProgramPtr_bool:
 
@@ -27,7 +27,7 @@ Lint operations
 
 Runs the paranoid lint visitor on the program to check for common coding issues.
 
-:Arguments: * **prog** :  :ref:`ProgramPtr <alias-ProgramPtr>` 
+:Arguments: * **prog** :  :ref:`ProgramPtr <alias-ProgramPtr>`
 
             * **compile_time_errors** : bool
 

@@ -552,154 +552,154 @@ Allocates the structure on the C++ heap (via `new`) instead of the daslang conte
 Containers
 ++++++++++
 
-  *  :ref:`back (a: array\<auto(TT)\>#) : TT const&# <function-builtin_back_array_ls_autoTT_gr__hh_>` 
-  *  :ref:`back (a: array\<auto(TT)\>) : TT <function-builtin_back_array_ls_autoTT_gr_>` 
-  *  :ref:`back (var a: array\<auto(TT)\>#) : TT&# <function-builtin_back__array_ls_autoTT_gr__hh_>` 
-  *  :ref:`back (var arr: auto(TT) ==const) : auto& <function-builtin_back__autoTT__eq__eq_const_0x213>` 
-  *  :ref:`back (arr: auto(TT) ==const) : auto <function-builtin_back_autoTT__eq__eq_const_0x21e>` 
-  *  :ref:`back (var a: array\<auto(TT)\>) : TT& <function-builtin_back__array_ls_autoTT_gr_>` 
-  *  :ref:`capacity (table: table\<anything, anything\>) : int <function-builtin_capacity_table_ls_anything,_anything_gr_>` 
-  *  :ref:`capacity (array: array\<anything\>) : int <function-builtin_capacity_array_ls_anything_gr_>` 
-  *  :ref:`clear (array: array\<anything\>) <function-builtin_clear_array_ls_anything_gr_>` 
-  *  :ref:`clear (var t: table\<auto(KT), auto(VT)\>) : auto <function-builtin_clear_table_ls_autoKT,_autoVT_gr_>` 
-  *  :ref:`copy_to_local (a: auto(TT)) : TT <function-builtin_copy_to_local_autoTT_0x41f>` 
-  *  :ref:`each (a: array\<auto(TT)\>#) : iterator\<TT&#\> <function-builtin_each_array_ls_autoTT_gr__hh_>` 
-  *  :ref:`each (str: string) : iterator\<int\> <function-builtin_each_string>` 
-  *  :ref:`each (a: array\<auto(TT)\>) : iterator\<TT&\> <function-builtin_each_array_ls_autoTT_gr_>` 
-  *  :ref:`each (a: auto(TT)[]) : iterator\<TT&\> <function-builtin_each_autoTT_0x59e>` 
-  *  :ref:`each (lam: lambda\<(var arg:auto(argT)):bool\>) : iterator\<argT\> <function-builtin_each_lambda_ls_var_arg_c_autoargT_c_bool_gr_>` 
-  *  :ref:`each (rng: range) : iterator\<int\> <function-builtin_each_range>` 
-  *  :ref:`each (rng: urange64) : iterator\<uint64\> <function-builtin_each_urange64>` 
-  *  :ref:`each (rng: range64) : iterator\<int64\> <function-builtin_each_range64>` 
-  *  :ref:`each (rng: urange) : iterator\<uint\> <function-builtin_each_urange>` 
-  *  :ref:`each_enum (tt: auto(TT)) : iterator\<TT\> <function-builtin_each_enum_autoTT_0x5cb>` 
-  *  :ref:`each_ref (lam: lambda\<(var arg:auto(argT)?):bool\>) : iterator\<argT&\> <function-builtin_each_ref_lambda_ls_var_arg_c_autoargT_q__c_bool_gr_>` 
-  *  :ref:`emplace (var Arr: array\<auto(numT)\>; var value: numT&; at: int) : auto <function-builtin_emplace_array_ls_autonumT_gr__numT_int>` 
-  *  :ref:`emplace (var Arr: array\<auto(numT)\>; var value: numT&) : auto <function-builtin_emplace_array_ls_autonumT_gr__numT>` 
-  *  :ref:`emplace (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; var val: valT[]&) : auto <function-builtin_emplace_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT>` 
-  *  :ref:`emplace (var Tab: table\<auto, auto\>; key: auto; value: auto) : auto <function-builtin_emplace_table_ls_auto,_auto_gr__auto_auto_0x3a9>` 
-  *  :ref:`emplace (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; var val: valT&) : auto <function-builtin_emplace_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT>` 
-  *  :ref:`emplace (var Tab: table\<auto(keyT), smart_ptr\<auto(valT)\>\>; at: keyT|keyT#; var val: smart_ptr\<valT\>&) : auto <function-builtin_emplace_table_ls_autokeyT,_smart_ptr_ls_autovalT_gr__gr__keyTkeyT_hh__smart_ptr_ls_valT_gr_>` 
-  *  :ref:`emplace (var a: array\<auto\>; value: auto) : auto <function-builtin_emplace_array_ls_auto_gr__auto_0x3b6>` 
-  *  :ref:`emplace (var Arr: array\<auto(numT)\>; var value: numT[]) : auto <function-builtin_emplace_array_ls_autonumT_gr__numT>` 
-  *  :ref:`emplace (var Arr: array\<auto(numT)[]\>; var value: numT[]) : auto <function-builtin_emplace_array_ls_autonumT_gr__numT>` 
-  *  :ref:`emplace_default (var tab: table\<auto(keyT), auto(valT)\>; key: keyT|keyT#) <function-builtin_emplace_default_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
-  *  :ref:`emplace_new (var Arr: array\<smart_ptr\<auto(numT)\>\>; var value: smart_ptr\<numT\>) : auto <function-builtin_emplace_new_array_ls_smart_ptr_ls_autonumT_gr__gr__smart_ptr_ls_numT_gr_>` 
-  *  :ref:`emplace_new (var tab: table\<auto(kT), smart_ptr\<auto(vT)\>\>; key: kT; var value: smart_ptr\<vT\>) : auto <function-builtin_emplace_new_table_ls_autokT,_smart_ptr_ls_autovT_gr__gr__kT_smart_ptr_ls_vT_gr_>` 
-  *  :ref:`empty (str: string implicit) : bool <function-builtin_empty_string_implicit>` 
-  *  :ref:`empty (str: das_string implicit) : bool <function-builtin_empty_das_string_implicit>` 
-  *  :ref:`empty (a: table\<auto;auto\>|table\<auto;auto\>#) : bool <function-builtin_empty_table_ls_auto;auto_gr_table_ls_auto;auto_gr__hh_>` 
-  *  :ref:`empty (a: array\<auto\>|array\<auto\>#) : bool <function-builtin_empty_array_ls_auto_gr_array_ls_auto_gr__hh_>` 
-  *  :ref:`empty (iterator: iterator implicit) : bool <function-builtin_empty_iterator_implicit>` 
-  *  :ref:`erase (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#) : bool <function-builtin_erase_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
-  *  :ref:`erase (var Arr: array\<auto(numT)\>; at: int) : auto <function-builtin_erase_array_ls_autonumT_gr__int>` 
-  *  :ref:`erase (var Arr: array\<auto(numT)\>; at: int; count: int) : auto <function-builtin_erase_array_ls_autonumT_gr__int_int>` 
-  *  :ref:`erase (var Tab: table\<auto(keyT), auto(valT)\>; at: string#) : bool <function-builtin_erase_table_ls_autokeyT,_autovalT_gr__string_hh_>` 
-  *  :ref:`erase_if (var arr: array\<auto(TT)\>; blk: block\<(key:TT const):bool\>|block\<(var key:TT&):bool\>) : auto <function-builtin_erase_if_array_ls_autoTT_gr__block_ls_key_c_TT_const_c_bool_gr_block_ls_var_key_c_TT_c_bool_gr_>` 
-  *  :ref:`find_index (arr: array\<auto(TT)\>|array\<auto(TT)\>#; key: TT) : auto <function-builtin_find_index_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__TT>` 
-  *  :ref:`find_index (var arr: iterator\<auto(TT)\>; key: TT) : auto <function-builtin_find_index_iterator_ls_autoTT_gr__TT>` 
-  *  :ref:`find_index (arr: auto(TT)[]|auto(TT)[]#; key: TT) : auto <function-builtin_find_index_autoTTautoTT_hh__TT>` 
-  *  :ref:`find_index_if (var arr: iterator\<auto(TT)\>; blk: block\<(key:TT):bool\>) : auto <function-builtin_find_index_if_iterator_ls_autoTT_gr__block_ls_key_c_TT_c_bool_gr_>` 
-  *  :ref:`find_index_if (arr: array\<auto(TT)\>|array\<auto(TT)\>#; blk: block\<(key:TT):bool\>) : auto <function-builtin_find_index_if_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__block_ls_key_c_TT_c_bool_gr_>` 
-  *  :ref:`find_index_if (arr: auto(TT)[]|auto(TT)[]#; blk: block\<(key:TT):bool\>) : auto <function-builtin_find_index_if_autoTTautoTT_hh__block_ls_key_c_TT_c_bool_gr_>` 
-  *  :ref:`get (Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; blk: block\<(p:valT):void\>) : auto <function-builtin_get_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_p_c_valT_c_void_gr_>` 
-  *  :ref:`get (Tab: table\<auto(keyT), auto(valT)\>#; at: keyT|keyT#; blk: block\<(p:valT const&#):void\>) : auto <function-builtin_get_table_ls_autokeyT,_autovalT_gr__hh__keyTkeyT_hh__block_ls_p_c_valT_const_hh__c_void_gr_>` 
-  *  :ref:`get (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; blk: block\<(var p:valT&):void\>) : auto <function-builtin_get__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_var_p_c_valT_c_void_gr_>` 
-  *  :ref:`get (var Tab: table\<auto(keyT), auto(valT)\>#; at: keyT|keyT#; blk: block\<(var p:valT&#):void\>) : auto <function-builtin_get__table_ls_autokeyT,_autovalT_gr__hh__keyTkeyT_hh__block_ls_var_p_c_valT_hh__c_void_gr_>` 
-  *  :ref:`get (Tab: table\<auto(keyT), auto(valT)[]\>#; at: keyT|keyT#; blk: block\<(p:valT const[-2]&#):void\>) : auto <function-builtin_get_table_ls_autokeyT,_autovalT_gr__hh__keyTkeyT_hh__block_ls_p_c_valT_const-2_hh__c_void_gr_>` 
-  *  :ref:`get (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; blk: block\<(var p:valT[-2]&):void\>) : auto <function-builtin_get__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_var_p_c_valT-2_c_void_gr_>` 
-  *  :ref:`get (Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; blk: block\<(p:valT const[-2]&):void\>) : auto <function-builtin_get_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_p_c_valT_const-2_c_void_gr_>` 
-  *  :ref:`get (Tab: table\<auto(keyT), void\>; at: keyT|keyT#; blk: block\<(var p:void?):void\>) : auto <function-builtin_get_table_ls_autokeyT,_void_gr__keyTkeyT_hh__block_ls_var_p_c_void_q__c_void_gr_>` 
-  *  :ref:`get (var Tab: table\<auto(keyT), auto(valT)[]\>#; at: keyT|keyT#; blk: block\<(var p:valT[-2]&#):void\>) : auto <function-builtin_get__table_ls_autokeyT,_autovalT_gr__hh__keyTkeyT_hh__block_ls_var_p_c_valT-2_hh__c_void_gr_>` 
-  *  :ref:`get_value (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#) : valT[-2] <function-builtin_get_value_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
-  *  :ref:`get_value (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#) : valT <function-builtin_get_value__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
-  *  :ref:`get_value (Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#) : valT <function-builtin_get_value_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
-  *  :ref:`get_value (var Tab: table\<auto(keyT), smart_ptr\<auto(valT)\>\>; at: keyT|keyT#) : smart_ptr\<valT\> <function-builtin_get_value_table_ls_autokeyT,_smart_ptr_ls_autovalT_gr__gr__keyTkeyT_hh_>` 
-  *  :ref:`get_with_default (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; blk: block\<(var p:valT&):void\>) <function-builtin_get_with_default__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_var_p_c_valT_c_void_gr_>` 
-  *  :ref:`has_value (var a: iterator\<auto\>; key: auto) : auto <function-builtin_has_value_iterator_ls_auto_gr__auto_0x76a>` 
-  *  :ref:`has_value (a: auto; key: auto) : auto <function-builtin_has_value_auto_auto_0x75c>` 
-  *  :ref:`insert (var Tab: table\<auto(keyT), void\>; at: keyT|keyT#) : auto <function-builtin_insert_table_ls_autokeyT,_void_gr__keyTkeyT_hh_>` 
-  *  :ref:`insert (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; val: valT ==const|valT const# ==const) : auto <function-builtin_insert_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_const_hh___eq__eq_const>` 
-  *  :ref:`insert (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; var val: valT[] ==const|valT[]# ==const) : auto <function-builtin_insert_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_hh___eq__eq_const>` 
-  *  :ref:`insert (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; var val: valT ==const|valT# ==const) : auto <function-builtin_insert_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_hh___eq__eq_const>` 
-  *  :ref:`insert (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; val: valT const[] ==const|valT const[]# ==const) : auto <function-builtin_insert_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT_const__eq__eq_constvalT_const_hh___eq__eq_const>` 
-  *  :ref:`insert_clone (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; var val: valT ==const|valT# ==const) : auto <function-builtin_insert_clone_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_hh___eq__eq_const>` 
-  *  :ref:`insert_clone (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; val: valT ==const|valT const# ==const) : auto <function-builtin_insert_clone_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_const_hh___eq__eq_const>` 
-  *  :ref:`insert_clone (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; var val: valT[] ==const|valT[]# ==const) : auto <function-builtin_insert_clone_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_hh___eq__eq_const>` 
-  *  :ref:`insert_clone (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; val: valT const[] ==const|valT const[]# ==const) : auto <function-builtin_insert_clone_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT_const__eq__eq_constvalT_const_hh___eq__eq_const>` 
-  *  :ref:`insert_default (var tab: table\<auto(keyT), auto(valT)\>; key: keyT|keyT#; value: valT ==const|valT const# ==const) <function-builtin_insert_default_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_const_hh___eq__eq_const>` 
-  *  :ref:`insert_default (var tab: table\<auto(keyT), auto(valT)\>; key: keyT|keyT#) <function-builtin_insert_default_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
-  *  :ref:`insert_default (var tab: table\<auto(TT), auto(QQ)\>; key: TT|TT#; var value: QQ ==const|QQ# ==const) <function-builtin_insert_default_table_ls_autoTT,_autoQQ_gr__TTTT_hh__QQ__eq__eq_constQQ_hh___eq__eq_const>` 
-  *  :ref:`key_exists (Tab: table\<auto(keyT);auto(valT)\>|table\<auto(keyT);auto(valT)\>#; at: keyT|keyT#) : bool <function-builtin_key_exists_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh__keyTkeyT_hh_>` 
-  *  :ref:`key_exists (Tab: table\<auto(keyT);auto(valT)\>|table\<auto(keyT);auto(valT)\>#; at: string#) : bool <function-builtin_key_exists_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh__string_hh_>` 
-  *  :ref:`keys (var a: table\<auto(keyT);auto(valT)\> ==const|table\<auto(keyT);auto(valT)\># ==const) : iterator\<keyT\> <function-builtin_keys_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__hh___eq__eq_const>` 
-  *  :ref:`keys (a: table\<auto(keyT);auto(valT)\> ==const|table\<auto(keyT);auto(valT)\> const# ==const) : iterator\<keyT\> <function-builtin_keys_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__const_hh___eq__eq_const>` 
-  *  :ref:`length (a: auto|auto#) : int <function-builtin_length_autoauto_hh_>` 
-  *  :ref:`length (array: array\<anything\>) : int <function-builtin_length_array_ls_anything_gr_>` 
-  *  :ref:`length (table: table\<anything, anything\>) : int <function-builtin_length_table_ls_anything,_anything_gr_>` 
-  *  :ref:`lock (a: array\<auto(TT)\> ==const|array\<auto(TT)\> const# ==const; blk: block\<(x:array\<TT\>#):auto\>) : auto <function-builtin_lock_array_ls_autoTT_gr___eq__eq_constarray_ls_autoTT_gr__const_hh___eq__eq_const_block_ls_x_c_array_ls_TT_gr__hh__c_auto_gr_>` 
-  *  :ref:`lock (var a: array\<auto(TT)\> ==const|array\<auto(TT)\># ==const; blk: block\<(var x:array\<TT\>#):auto\>) : auto <function-builtin_lock_array_ls_autoTT_gr___eq__eq_constarray_ls_autoTT_gr__hh___eq__eq_const_block_ls_var_x_c_array_ls_TT_gr__hh__c_auto_gr_>` 
-  *  :ref:`lock (Tab: table\<auto(keyT);auto(valT)\>|table\<auto(keyT);auto(valT)\>#; blk: block\<(t:table\<keyT, valT\>#):void\>) : auto <function-builtin_lock_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh__block_ls_t_c_table_ls_keyT,_valT_gr__hh__c_void_gr_>` 
-  *  :ref:`lock_forever (var Tab: table\<auto(keyT);auto(valT)\>|table\<auto(keyT);auto(valT)\>#) : table\<keyT, valT\># <function-builtin_lock_forever_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh_>` 
-  *  :ref:`modify (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; blk: block\<(p:valT):valT\>) <function-builtin_modify__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_p_c_valT_c_valT_gr_>` 
-  *  :ref:`move_to_local (var a: auto(TT)&) : TT <function-builtin_move_to_local_autoTT_0x428>` 
-  *  :ref:`move_to_ref (var a: auto&; var b: auto) : auto <function-builtin_move_to_ref_auto_auto_0x80c>` 
-  *  :ref:`next (var it: iterator\<auto(TT)\>; var value: TT&) : bool <function-builtin_next_iterator_ls_autoTT_gr__TT>` 
-  *  :ref:`nothing (var it: iterator\<auto(TT)\>) : iterator\<TT\> <function-builtin_nothing_iterator_ls_autoTT_gr_>` 
-  *  :ref:`pop (var Arr: array\<auto(numT)\>) : auto <function-builtin_pop_array_ls_autonumT_gr_>` 
-  *  :ref:`push (var Arr: array\<auto(numT)[]\>; varr: numT const[] ==const) : auto <function-builtin_push_array_ls_autonumT_gr__numT_const__eq__eq_const>` 
-  *  :ref:`push (var Arr: array\<auto(numT)\>; varr: numT[]) : auto <function-builtin_push_array_ls_autonumT_gr__numT>` 
-  *  :ref:`push (var Arr: array\<auto(numT)[]\>; var varr: numT[] ==const) : auto <function-builtin_push_array_ls_autonumT_gr___numT__eq__eq_const>` 
-  *  :ref:`push (var Arr: array\<auto(numT)\>; varr: array\<numT\>) : auto <function-builtin_push_array_ls_autonumT_gr__array_ls_numT_gr_>` 
-  *  :ref:`push (var Arr: array\<auto(numT)\>; value: numT ==const) : auto <function-builtin_push_array_ls_autonumT_gr__numT__eq__eq_const>` 
-  *  :ref:`push (var Arr: array\<auto(numT)\>; var value: numT ==const; at: int) : auto <function-builtin_push_array_ls_autonumT_gr___numT__eq__eq_const_int>` 
-  *  :ref:`push (var Arr: array\<auto(numT)\>; var value: numT ==const) : auto <function-builtin_push_array_ls_autonumT_gr___numT__eq__eq_const>` 
-  *  :ref:`push (var Arr: array\<auto(numT)\>; var varr: array\<numT\>) : auto <function-builtin_push_array_ls_autonumT_gr___array_ls_numT_gr_>` 
-  *  :ref:`push (var Arr: array\<auto(numT)\>; value: numT ==const; at: int) : auto <function-builtin_push_array_ls_autonumT_gr__numT__eq__eq_const_int>` 
-  *  :ref:`push_clone (var A: auto(CT); b: auto(TT)|auto(TT)#) : auto <function-builtin_push_clone_autoCT_autoTTautoTT_hh__0x1db>` 
-  *  :ref:`push_clone (var Arr: array\<auto(numT)[]\>; var varr: numT[]) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT>` 
-  *  :ref:`push_clone (var Arr: array\<auto(numT)\>; varr: numT const[] ==const) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT_const__eq__eq_const>` 
-  *  :ref:`push_clone (var Arr: array\<auto(numT)\>; var value: numT ==const|numT# ==const) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT__eq__eq_constnumT_hh___eq__eq_const>` 
-  *  :ref:`push_clone (var Arr: array\<auto(numT)\>; var varr: numT[] ==const) : auto <function-builtin_push_clone_array_ls_autonumT_gr___numT__eq__eq_const>` 
-  *  :ref:`push_clone (var Arr: array\<auto(numT)\>; var value: numT ==const|numT# ==const; at: int) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT__eq__eq_constnumT_hh___eq__eq_const_int>` 
-  *  :ref:`push_clone (var Arr: array\<auto(numT)\>; value: numT ==const|numT const# ==const; at: int) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT__eq__eq_constnumT_const_hh___eq__eq_const_int>` 
-  *  :ref:`push_clone (var Arr: array\<auto(numT)\>; value: numT ==const|numT const# ==const) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT__eq__eq_constnumT_const_hh___eq__eq_const>` 
-  *  :ref:`push_clone (var Arr: array\<auto(numT)[]\>; varr: numT const[] ==const) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT_const__eq__eq_const>` 
-  *  :ref:`remove_value (var arr: array\<auto(TT)\>|array\<auto(TT)\>#; key: TT) : bool <function-builtin_remove_value_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__TT>` 
-  *  :ref:`reserve (var Tab: table\<auto(keyT), auto\>; newSize: int) : auto <function-builtin_reserve_table_ls_autokeyT,_auto_gr__int>` 
-  *  :ref:`reserve (var Arr: array\<auto(numT)\>; newSize: int) : auto <function-builtin_reserve_array_ls_autonumT_gr__int>` 
-  *  :ref:`resize (var Arr: array\<auto(numT)\>; newSize: int) : auto <function-builtin_resize_array_ls_autonumT_gr__int>` 
-  *  :ref:`resize_and_init (var Arr: array\<auto(numT)\>; newSize: int; initValue: numT) : auto <function-builtin_resize_and_init_array_ls_autonumT_gr__int_numT>` 
-  *  :ref:`resize_and_init (var Arr: array\<auto(numT)\>; newSize: int) : auto <function-builtin_resize_and_init_array_ls_autonumT_gr__int>` 
-  *  :ref:`resize_no_init (var Arr: array\<auto(numT)\>; newSize: int) : auto <function-builtin_resize_no_init_array_ls_autonumT_gr__int>` 
-  *  :ref:`sort (var a: array\<auto(TT)\>|array\<auto(TT)\>#) : auto <function-builtin_sort_array_ls_autoTT_gr_array_ls_autoTT_gr__hh_>` 
-  *  :ref:`sort (var a: array\<auto(TT)\>|array\<auto(TT)\>#; cmp: block\<(x:TT;y:TT):bool\>) : auto <function-builtin_sort_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__block_ls_x_c_TT;y_c_TT_c_bool_gr_>` 
-  *  :ref:`sort (var a: auto(TT)[]|auto(TT)[]#) : auto <function-builtin_sort_autoTTautoTT_hh_>` 
-  *  :ref:`sort (var a: auto(TT)[]|auto(TT)[]#; cmp: block\<(x:TT;y:TT):bool\>) : auto <function-builtin_sort_autoTTautoTT_hh__block_ls_x_c_TT;y_c_TT_c_bool_gr_>` 
-  *  :ref:`subarray (a: auto(TT)[]; r: urange) : auto <function-builtin_subarray_autoTT_urange_0x7c2>` 
-  *  :ref:`subarray (a: array\<auto(TT)\>; r: urange) : auto <function-builtin_subarray_array_ls_autoTT_gr__urange>` 
-  *  :ref:`subarray (a: array\<auto(TT)\>; r: range) : auto <function-builtin_subarray_array_ls_autoTT_gr__range>` 
-  *  :ref:`subarray (var a: array\<auto(TT)\>; r: range) : auto <function-builtin_subarray__array_ls_autoTT_gr__range>` 
-  *  :ref:`subarray (a: auto(TT)[]; r: range) : auto <function-builtin_subarray_autoTT_range_0x7b1>` 
-  *  :ref:`to_array (a: auto(TT)[]) : array\<TT\> <function-builtin_to_array_autoTT_0x5e9>` 
-  *  :ref:`to_array (var it: iterator\<auto(TT)\>) : array\<TT\> <function-builtin_to_array_iterator_ls_autoTT_gr_>` 
-  *  :ref:`to_array_move (var a: auto(TT) ==const) : array\<TT\> <function-builtin_to_array_move__autoTT__eq__eq_const_0x61a>` 
-  *  :ref:`to_array_move (var a: auto(TT)[]) : array\<TT\> <function-builtin_to_array_move_autoTT_0x5f3>` 
-  *  :ref:`to_array_move (a: auto(TT) ==const) : array\<TT\> <function-builtin_to_array_move_autoTT__eq__eq_const_0x608>` 
-  *  :ref:`to_table (a: tuple\<auto(keyT);auto(valT)\>[]) : table\<keyT, valT\> <function-builtin_to_table_tuple_ls_autokeyT;autovalT_gr_>` 
-  *  :ref:`to_table (a: auto(keyT)[]) : table\<keyT, void\> <function-builtin_to_table_autokeyT_0x635>` 
-  *  :ref:`to_table_move (var a: tuple\<auto(keyT);auto(valT)\>[]) : table\<keyT, valT\> <function-builtin_to_table_move_tuple_ls_autokeyT;autovalT_gr_>` 
-  *  :ref:`to_table_move (var a: tuple\<auto(keyT);auto(valT)\>) : table\<keyT, valT\> <function-builtin_to_table_move_tuple_ls_autokeyT;autovalT_gr_>` 
-  *  :ref:`to_table_move (var a: array\<tuple\<auto(keyT);auto(valT)\>\>) : table\<keyT, valT\> <function-builtin_to_table_move_array_ls_tuple_ls_autokeyT;autovalT_gr__gr_>` 
-  *  :ref:`to_table_move (a: auto(keyT)[]) : table\<keyT, void\> <function-builtin_to_table_move_autokeyT_0x63e>` 
-  *  :ref:`to_table_move (a: array\<auto(keyT)\>) : table\<keyT, void\> <function-builtin_to_table_move_array_ls_autokeyT_gr_>` 
-  *  :ref:`to_table_move (a: auto(keyT)) : table\<keyT, void\> <function-builtin_to_table_move_autokeyT_0x650>` 
-  *  :ref:`values (var a: table\<auto(keyT);auto(valT)[]\> ==const|table\<auto(keyT);auto(valT)[]\># ==const) : iterator\<valT[-2]&\> <function-builtin_values_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__hh___eq__eq_const>` 
-  *  :ref:`values (a: table\<auto(keyT);auto(valT)[]\> ==const|table\<auto(keyT);auto(valT)[]\> const# ==const) : iterator\<valT const[-2]&\> <function-builtin_values_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__const_hh___eq__eq_const>` 
-  *  :ref:`values (a: table\<auto(keyT);auto(valT)\> ==const|table\<auto(keyT);auto(valT)\> const# ==const) : iterator\<valT const&\> <function-builtin_values_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__const_hh___eq__eq_const>` 
-  *  :ref:`values (a: table\<auto(keyT);void\> ==const|table\<auto(keyT);void\> const# ==const) : auto <function-builtin_values_table_ls_autokeyT;void_gr___eq__eq_consttable_ls_autokeyT;void_gr__const_hh___eq__eq_const>` 
-  *  :ref:`values (var a: table\<auto(keyT);void\> ==const|table\<auto(keyT);void\># ==const) : auto <function-builtin_values_table_ls_autokeyT;void_gr___eq__eq_consttable_ls_autokeyT;void_gr__hh___eq__eq_const>` 
-  *  :ref:`values (var a: table\<auto(keyT);auto(valT)\> ==const|table\<auto(keyT);auto(valT)\># ==const) : iterator\<valT&\> <function-builtin_values_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__hh___eq__eq_const>` 
+  *  :ref:`back (a: array\<auto(TT)\>#) : TT const&# <function-builtin_back_array_ls_autoTT_gr__hh_>`
+  *  :ref:`back (a: array\<auto(TT)\>) : TT <function-builtin_back_array_ls_autoTT_gr_>`
+  *  :ref:`back (var a: array\<auto(TT)\>#) : TT&# <function-builtin_back__array_ls_autoTT_gr__hh_>`
+  *  :ref:`back (var arr: auto(TT) ==const) : auto& <function-builtin_back__autoTT__eq__eq_const_0x213>`
+  *  :ref:`back (arr: auto(TT) ==const) : auto <function-builtin_back_autoTT__eq__eq_const_0x21e>`
+  *  :ref:`back (var a: array\<auto(TT)\>) : TT& <function-builtin_back__array_ls_autoTT_gr_>`
+  *  :ref:`capacity (table: table\<anything, anything\>) : int <function-builtin_capacity_table_ls_anything,_anything_gr_>`
+  *  :ref:`capacity (array: array\<anything\>) : int <function-builtin_capacity_array_ls_anything_gr_>`
+  *  :ref:`clear (array: array\<anything\>) <function-builtin_clear_array_ls_anything_gr_>`
+  *  :ref:`clear (var t: table\<auto(KT), auto(VT)\>) : auto <function-builtin_clear_table_ls_autoKT,_autoVT_gr_>`
+  *  :ref:`copy_to_local (a: auto(TT)) : TT <function-builtin_copy_to_local_autoTT_0x41f>`
+  *  :ref:`each (a: array\<auto(TT)\>#) : iterator\<TT&#\> <function-builtin_each_array_ls_autoTT_gr__hh_>`
+  *  :ref:`each (str: string) : iterator\<int\> <function-builtin_each_string>`
+  *  :ref:`each (a: array\<auto(TT)\>) : iterator\<TT&\> <function-builtin_each_array_ls_autoTT_gr_>`
+  *  :ref:`each (a: auto(TT)[]) : iterator\<TT&\> <function-builtin_each_autoTT_0x59e>`
+  *  :ref:`each (lam: lambda\<(var arg:auto(argT)):bool\>) : iterator\<argT\> <function-builtin_each_lambda_ls_var_arg_c_autoargT_c_bool_gr_>`
+  *  :ref:`each (rng: range) : iterator\<int\> <function-builtin_each_range>`
+  *  :ref:`each (rng: urange64) : iterator\<uint64\> <function-builtin_each_urange64>`
+  *  :ref:`each (rng: range64) : iterator\<int64\> <function-builtin_each_range64>`
+  *  :ref:`each (rng: urange) : iterator\<uint\> <function-builtin_each_urange>`
+  *  :ref:`each_enum (tt: auto(TT)) : iterator\<TT\> <function-builtin_each_enum_autoTT_0x5cb>`
+  *  :ref:`each_ref (lam: lambda\<(var arg:auto(argT)?):bool\>) : iterator\<argT&\> <function-builtin_each_ref_lambda_ls_var_arg_c_autoargT_q__c_bool_gr_>`
+  *  :ref:`emplace (var Arr: array\<auto(numT)\>; var value: numT&; at: int) : auto <function-builtin_emplace_array_ls_autonumT_gr__numT_int>`
+  *  :ref:`emplace (var Arr: array\<auto(numT)\>; var value: numT&) : auto <function-builtin_emplace_array_ls_autonumT_gr__numT>`
+  *  :ref:`emplace (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; var val: valT[]&) : auto <function-builtin_emplace_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT>`
+  *  :ref:`emplace (var Tab: table\<auto, auto\>; key: auto; value: auto) : auto <function-builtin_emplace_table_ls_auto,_auto_gr__auto_auto_0x3a9>`
+  *  :ref:`emplace (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; var val: valT&) : auto <function-builtin_emplace_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT>`
+  *  :ref:`emplace (var Tab: table\<auto(keyT), smart_ptr\<auto(valT)\>\>; at: keyT|keyT#; var val: smart_ptr\<valT\>&) : auto <function-builtin_emplace_table_ls_autokeyT,_smart_ptr_ls_autovalT_gr__gr__keyTkeyT_hh__smart_ptr_ls_valT_gr_>`
+  *  :ref:`emplace (var a: array\<auto\>; value: auto) : auto <function-builtin_emplace_array_ls_auto_gr__auto_0x3b6>`
+  *  :ref:`emplace (var Arr: array\<auto(numT)\>; var value: numT[]) : auto <function-builtin_emplace_array_ls_autonumT_gr__numT>`
+  *  :ref:`emplace (var Arr: array\<auto(numT)[]\>; var value: numT[]) : auto <function-builtin_emplace_array_ls_autonumT_gr__numT>`
+  *  :ref:`emplace_default (var tab: table\<auto(keyT), auto(valT)\>; key: keyT|keyT#) <function-builtin_emplace_default_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>`
+  *  :ref:`emplace_new (var Arr: array\<smart_ptr\<auto(numT)\>\>; var value: smart_ptr\<numT\>) : auto <function-builtin_emplace_new_array_ls_smart_ptr_ls_autonumT_gr__gr__smart_ptr_ls_numT_gr_>`
+  *  :ref:`emplace_new (var tab: table\<auto(kT), smart_ptr\<auto(vT)\>\>; key: kT; var value: smart_ptr\<vT\>) : auto <function-builtin_emplace_new_table_ls_autokT,_smart_ptr_ls_autovT_gr__gr__kT_smart_ptr_ls_vT_gr_>`
+  *  :ref:`empty (str: string implicit) : bool <function-builtin_empty_string_implicit>`
+  *  :ref:`empty (str: das_string implicit) : bool <function-builtin_empty_das_string_implicit>`
+  *  :ref:`empty (a: table\<auto;auto\>|table\<auto;auto\>#) : bool <function-builtin_empty_table_ls_auto;auto_gr_table_ls_auto;auto_gr__hh_>`
+  *  :ref:`empty (a: array\<auto\>|array\<auto\>#) : bool <function-builtin_empty_array_ls_auto_gr_array_ls_auto_gr__hh_>`
+  *  :ref:`empty (iterator: iterator implicit) : bool <function-builtin_empty_iterator_implicit>`
+  *  :ref:`erase (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#) : bool <function-builtin_erase_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>`
+  *  :ref:`erase (var Arr: array\<auto(numT)\>; at: int) : auto <function-builtin_erase_array_ls_autonumT_gr__int>`
+  *  :ref:`erase (var Arr: array\<auto(numT)\>; at: int; count: int) : auto <function-builtin_erase_array_ls_autonumT_gr__int_int>`
+  *  :ref:`erase (var Tab: table\<auto(keyT), auto(valT)\>; at: string#) : bool <function-builtin_erase_table_ls_autokeyT,_autovalT_gr__string_hh_>`
+  *  :ref:`erase_if (var arr: array\<auto(TT)\>; blk: block\<(key:TT const):bool\>|block\<(var key:TT&):bool\>) : auto <function-builtin_erase_if_array_ls_autoTT_gr__block_ls_key_c_TT_const_c_bool_gr_block_ls_var_key_c_TT_c_bool_gr_>`
+  *  :ref:`find_index (arr: array\<auto(TT)\>|array\<auto(TT)\>#; key: TT) : auto <function-builtin_find_index_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__TT>`
+  *  :ref:`find_index (var arr: iterator\<auto(TT)\>; key: TT) : auto <function-builtin_find_index_iterator_ls_autoTT_gr__TT>`
+  *  :ref:`find_index (arr: auto(TT)[]|auto(TT)[]#; key: TT) : auto <function-builtin_find_index_autoTTautoTT_hh__TT>`
+  *  :ref:`find_index_if (var arr: iterator\<auto(TT)\>; blk: block\<(key:TT):bool\>) : auto <function-builtin_find_index_if_iterator_ls_autoTT_gr__block_ls_key_c_TT_c_bool_gr_>`
+  *  :ref:`find_index_if (arr: array\<auto(TT)\>|array\<auto(TT)\>#; blk: block\<(key:TT):bool\>) : auto <function-builtin_find_index_if_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__block_ls_key_c_TT_c_bool_gr_>`
+  *  :ref:`find_index_if (arr: auto(TT)[]|auto(TT)[]#; blk: block\<(key:TT):bool\>) : auto <function-builtin_find_index_if_autoTTautoTT_hh__block_ls_key_c_TT_c_bool_gr_>`
+  *  :ref:`get (Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; blk: block\<(p:valT):void\>) : auto <function-builtin_get_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_p_c_valT_c_void_gr_>`
+  *  :ref:`get (Tab: table\<auto(keyT), auto(valT)\>#; at: keyT|keyT#; blk: block\<(p:valT const&#):void\>) : auto <function-builtin_get_table_ls_autokeyT,_autovalT_gr__hh__keyTkeyT_hh__block_ls_p_c_valT_const_hh__c_void_gr_>`
+  *  :ref:`get (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; blk: block\<(var p:valT&):void\>) : auto <function-builtin_get__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_var_p_c_valT_c_void_gr_>`
+  *  :ref:`get (var Tab: table\<auto(keyT), auto(valT)\>#; at: keyT|keyT#; blk: block\<(var p:valT&#):void\>) : auto <function-builtin_get__table_ls_autokeyT,_autovalT_gr__hh__keyTkeyT_hh__block_ls_var_p_c_valT_hh__c_void_gr_>`
+  *  :ref:`get (Tab: table\<auto(keyT), auto(valT)[]\>#; at: keyT|keyT#; blk: block\<(p:valT const[-2]&#):void\>) : auto <function-builtin_get_table_ls_autokeyT,_autovalT_gr__hh__keyTkeyT_hh__block_ls_p_c_valT_const-2_hh__c_void_gr_>`
+  *  :ref:`get (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; blk: block\<(var p:valT[-2]&):void\>) : auto <function-builtin_get__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_var_p_c_valT-2_c_void_gr_>`
+  *  :ref:`get (Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; blk: block\<(p:valT const[-2]&):void\>) : auto <function-builtin_get_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_p_c_valT_const-2_c_void_gr_>`
+  *  :ref:`get (Tab: table\<auto(keyT), void\>; at: keyT|keyT#; blk: block\<(var p:void?):void\>) : auto <function-builtin_get_table_ls_autokeyT,_void_gr__keyTkeyT_hh__block_ls_var_p_c_void_q__c_void_gr_>`
+  *  :ref:`get (var Tab: table\<auto(keyT), auto(valT)[]\>#; at: keyT|keyT#; blk: block\<(var p:valT[-2]&#):void\>) : auto <function-builtin_get__table_ls_autokeyT,_autovalT_gr__hh__keyTkeyT_hh__block_ls_var_p_c_valT-2_hh__c_void_gr_>`
+  *  :ref:`get_value (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#) : valT[-2] <function-builtin_get_value_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>`
+  *  :ref:`get_value (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#) : valT <function-builtin_get_value__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>`
+  *  :ref:`get_value (Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#) : valT <function-builtin_get_value_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>`
+  *  :ref:`get_value (var Tab: table\<auto(keyT), smart_ptr\<auto(valT)\>\>; at: keyT|keyT#) : smart_ptr\<valT\> <function-builtin_get_value_table_ls_autokeyT,_smart_ptr_ls_autovalT_gr__gr__keyTkeyT_hh_>`
+  *  :ref:`get_with_default (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; blk: block\<(var p:valT&):void\>) <function-builtin_get_with_default__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_var_p_c_valT_c_void_gr_>`
+  *  :ref:`has_value (var a: iterator\<auto\>; key: auto) : auto <function-builtin_has_value_iterator_ls_auto_gr__auto_0x76a>`
+  *  :ref:`has_value (a: auto; key: auto) : auto <function-builtin_has_value_auto_auto_0x75c>`
+  *  :ref:`insert (var Tab: table\<auto(keyT), void\>; at: keyT|keyT#) : auto <function-builtin_insert_table_ls_autokeyT,_void_gr__keyTkeyT_hh_>`
+  *  :ref:`insert (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; val: valT ==const|valT const# ==const) : auto <function-builtin_insert_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_const_hh___eq__eq_const>`
+  *  :ref:`insert (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; var val: valT[] ==const|valT[]# ==const) : auto <function-builtin_insert_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_hh___eq__eq_const>`
+  *  :ref:`insert (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; var val: valT ==const|valT# ==const) : auto <function-builtin_insert_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_hh___eq__eq_const>`
+  *  :ref:`insert (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; val: valT const[] ==const|valT const[]# ==const) : auto <function-builtin_insert_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT_const__eq__eq_constvalT_const_hh___eq__eq_const>`
+  *  :ref:`insert_clone (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; var val: valT ==const|valT# ==const) : auto <function-builtin_insert_clone_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_hh___eq__eq_const>`
+  *  :ref:`insert_clone (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; val: valT ==const|valT const# ==const) : auto <function-builtin_insert_clone_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_const_hh___eq__eq_const>`
+  *  :ref:`insert_clone (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; var val: valT[] ==const|valT[]# ==const) : auto <function-builtin_insert_clone_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_hh___eq__eq_const>`
+  *  :ref:`insert_clone (var Tab: table\<auto(keyT), auto(valT)[]\>; at: keyT|keyT#; val: valT const[] ==const|valT const[]# ==const) : auto <function-builtin_insert_clone_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT_const__eq__eq_constvalT_const_hh___eq__eq_const>`
+  *  :ref:`insert_default (var tab: table\<auto(keyT), auto(valT)\>; key: keyT|keyT#; value: valT ==const|valT const# ==const) <function-builtin_insert_default_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__valT__eq__eq_constvalT_const_hh___eq__eq_const>`
+  *  :ref:`insert_default (var tab: table\<auto(keyT), auto(valT)\>; key: keyT|keyT#) <function-builtin_insert_default_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>`
+  *  :ref:`insert_default (var tab: table\<auto(TT), auto(QQ)\>; key: TT|TT#; var value: QQ ==const|QQ# ==const) <function-builtin_insert_default_table_ls_autoTT,_autoQQ_gr__TTTT_hh__QQ__eq__eq_constQQ_hh___eq__eq_const>`
+  *  :ref:`key_exists (Tab: table\<auto(keyT);auto(valT)\>|table\<auto(keyT);auto(valT)\>#; at: keyT|keyT#) : bool <function-builtin_key_exists_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh__keyTkeyT_hh_>`
+  *  :ref:`key_exists (Tab: table\<auto(keyT);auto(valT)\>|table\<auto(keyT);auto(valT)\>#; at: string#) : bool <function-builtin_key_exists_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh__string_hh_>`
+  *  :ref:`keys (var a: table\<auto(keyT);auto(valT)\> ==const|table\<auto(keyT);auto(valT)\># ==const) : iterator\<keyT\> <function-builtin_keys_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__hh___eq__eq_const>`
+  *  :ref:`keys (a: table\<auto(keyT);auto(valT)\> ==const|table\<auto(keyT);auto(valT)\> const# ==const) : iterator\<keyT\> <function-builtin_keys_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__const_hh___eq__eq_const>`
+  *  :ref:`length (a: auto|auto#) : int <function-builtin_length_autoauto_hh_>`
+  *  :ref:`length (array: array\<anything\>) : int <function-builtin_length_array_ls_anything_gr_>`
+  *  :ref:`length (table: table\<anything, anything\>) : int <function-builtin_length_table_ls_anything,_anything_gr_>`
+  *  :ref:`lock (a: array\<auto(TT)\> ==const|array\<auto(TT)\> const# ==const; blk: block\<(x:array\<TT\>#):auto\>) : auto <function-builtin_lock_array_ls_autoTT_gr___eq__eq_constarray_ls_autoTT_gr__const_hh___eq__eq_const_block_ls_x_c_array_ls_TT_gr__hh__c_auto_gr_>`
+  *  :ref:`lock (var a: array\<auto(TT)\> ==const|array\<auto(TT)\># ==const; blk: block\<(var x:array\<TT\>#):auto\>) : auto <function-builtin_lock_array_ls_autoTT_gr___eq__eq_constarray_ls_autoTT_gr__hh___eq__eq_const_block_ls_var_x_c_array_ls_TT_gr__hh__c_auto_gr_>`
+  *  :ref:`lock (Tab: table\<auto(keyT);auto(valT)\>|table\<auto(keyT);auto(valT)\>#; blk: block\<(t:table\<keyT, valT\>#):void\>) : auto <function-builtin_lock_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh__block_ls_t_c_table_ls_keyT,_valT_gr__hh__c_void_gr_>`
+  *  :ref:`lock_forever (var Tab: table\<auto(keyT);auto(valT)\>|table\<auto(keyT);auto(valT)\>#) : table\<keyT, valT\># <function-builtin_lock_forever_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh_>`
+  *  :ref:`modify (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; blk: block\<(p:valT):valT\>) <function-builtin_modify__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_p_c_valT_c_valT_gr_>`
+  *  :ref:`move_to_local (var a: auto(TT)&) : TT <function-builtin_move_to_local_autoTT_0x428>`
+  *  :ref:`move_to_ref (var a: auto&; var b: auto) : auto <function-builtin_move_to_ref_auto_auto_0x80c>`
+  *  :ref:`next (var it: iterator\<auto(TT)\>; var value: TT&) : bool <function-builtin_next_iterator_ls_autoTT_gr__TT>`
+  *  :ref:`nothing (var it: iterator\<auto(TT)\>) : iterator\<TT\> <function-builtin_nothing_iterator_ls_autoTT_gr_>`
+  *  :ref:`pop (var Arr: array\<auto(numT)\>) : auto <function-builtin_pop_array_ls_autonumT_gr_>`
+  *  :ref:`push (var Arr: array\<auto(numT)[]\>; varr: numT const[] ==const) : auto <function-builtin_push_array_ls_autonumT_gr__numT_const__eq__eq_const>`
+  *  :ref:`push (var Arr: array\<auto(numT)\>; varr: numT[]) : auto <function-builtin_push_array_ls_autonumT_gr__numT>`
+  *  :ref:`push (var Arr: array\<auto(numT)[]\>; var varr: numT[] ==const) : auto <function-builtin_push_array_ls_autonumT_gr___numT__eq__eq_const>`
+  *  :ref:`push (var Arr: array\<auto(numT)\>; varr: array\<numT\>) : auto <function-builtin_push_array_ls_autonumT_gr__array_ls_numT_gr_>`
+  *  :ref:`push (var Arr: array\<auto(numT)\>; value: numT ==const) : auto <function-builtin_push_array_ls_autonumT_gr__numT__eq__eq_const>`
+  *  :ref:`push (var Arr: array\<auto(numT)\>; var value: numT ==const; at: int) : auto <function-builtin_push_array_ls_autonumT_gr___numT__eq__eq_const_int>`
+  *  :ref:`push (var Arr: array\<auto(numT)\>; var value: numT ==const) : auto <function-builtin_push_array_ls_autonumT_gr___numT__eq__eq_const>`
+  *  :ref:`push (var Arr: array\<auto(numT)\>; var varr: array\<numT\>) : auto <function-builtin_push_array_ls_autonumT_gr___array_ls_numT_gr_>`
+  *  :ref:`push (var Arr: array\<auto(numT)\>; value: numT ==const; at: int) : auto <function-builtin_push_array_ls_autonumT_gr__numT__eq__eq_const_int>`
+  *  :ref:`push_clone (var A: auto(CT); b: auto(TT)|auto(TT)#) : auto <function-builtin_push_clone_autoCT_autoTTautoTT_hh__0x1db>`
+  *  :ref:`push_clone (var Arr: array\<auto(numT)[]\>; var varr: numT[]) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT>`
+  *  :ref:`push_clone (var Arr: array\<auto(numT)\>; varr: numT const[] ==const) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT_const__eq__eq_const>`
+  *  :ref:`push_clone (var Arr: array\<auto(numT)\>; var value: numT ==const|numT# ==const) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT__eq__eq_constnumT_hh___eq__eq_const>`
+  *  :ref:`push_clone (var Arr: array\<auto(numT)\>; var varr: numT[] ==const) : auto <function-builtin_push_clone_array_ls_autonumT_gr___numT__eq__eq_const>`
+  *  :ref:`push_clone (var Arr: array\<auto(numT)\>; var value: numT ==const|numT# ==const; at: int) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT__eq__eq_constnumT_hh___eq__eq_const_int>`
+  *  :ref:`push_clone (var Arr: array\<auto(numT)\>; value: numT ==const|numT const# ==const; at: int) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT__eq__eq_constnumT_const_hh___eq__eq_const_int>`
+  *  :ref:`push_clone (var Arr: array\<auto(numT)\>; value: numT ==const|numT const# ==const) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT__eq__eq_constnumT_const_hh___eq__eq_const>`
+  *  :ref:`push_clone (var Arr: array\<auto(numT)[]\>; varr: numT const[] ==const) : auto <function-builtin_push_clone_array_ls_autonumT_gr__numT_const__eq__eq_const>`
+  *  :ref:`remove_value (var arr: array\<auto(TT)\>|array\<auto(TT)\>#; key: TT) : bool <function-builtin_remove_value_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__TT>`
+  *  :ref:`reserve (var Tab: table\<auto(keyT), auto\>; newSize: int) : auto <function-builtin_reserve_table_ls_autokeyT,_auto_gr__int>`
+  *  :ref:`reserve (var Arr: array\<auto(numT)\>; newSize: int) : auto <function-builtin_reserve_array_ls_autonumT_gr__int>`
+  *  :ref:`resize (var Arr: array\<auto(numT)\>; newSize: int) : auto <function-builtin_resize_array_ls_autonumT_gr__int>`
+  *  :ref:`resize_and_init (var Arr: array\<auto(numT)\>; newSize: int; initValue: numT) : auto <function-builtin_resize_and_init_array_ls_autonumT_gr__int_numT>`
+  *  :ref:`resize_and_init (var Arr: array\<auto(numT)\>; newSize: int) : auto <function-builtin_resize_and_init_array_ls_autonumT_gr__int>`
+  *  :ref:`resize_no_init (var Arr: array\<auto(numT)\>; newSize: int) : auto <function-builtin_resize_no_init_array_ls_autonumT_gr__int>`
+  *  :ref:`sort (var a: array\<auto(TT)\>|array\<auto(TT)\>#) : auto <function-builtin_sort_array_ls_autoTT_gr_array_ls_autoTT_gr__hh_>`
+  *  :ref:`sort (var a: array\<auto(TT)\>|array\<auto(TT)\>#; cmp: block\<(x:TT;y:TT):bool\>) : auto <function-builtin_sort_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__block_ls_x_c_TT;y_c_TT_c_bool_gr_>`
+  *  :ref:`sort (var a: auto(TT)[]|auto(TT)[]#) : auto <function-builtin_sort_autoTTautoTT_hh_>`
+  *  :ref:`sort (var a: auto(TT)[]|auto(TT)[]#; cmp: block\<(x:TT;y:TT):bool\>) : auto <function-builtin_sort_autoTTautoTT_hh__block_ls_x_c_TT;y_c_TT_c_bool_gr_>`
+  *  :ref:`subarray (a: auto(TT)[]; r: urange) : auto <function-builtin_subarray_autoTT_urange_0x7c2>`
+  *  :ref:`subarray (a: array\<auto(TT)\>; r: urange) : auto <function-builtin_subarray_array_ls_autoTT_gr__urange>`
+  *  :ref:`subarray (a: array\<auto(TT)\>; r: range) : auto <function-builtin_subarray_array_ls_autoTT_gr__range>`
+  *  :ref:`subarray (var a: array\<auto(TT)\>; r: range) : auto <function-builtin_subarray__array_ls_autoTT_gr__range>`
+  *  :ref:`subarray (a: auto(TT)[]; r: range) : auto <function-builtin_subarray_autoTT_range_0x7b1>`
+  *  :ref:`to_array (a: auto(TT)[]) : array\<TT\> <function-builtin_to_array_autoTT_0x5e9>`
+  *  :ref:`to_array (var it: iterator\<auto(TT)\>) : array\<TT\> <function-builtin_to_array_iterator_ls_autoTT_gr_>`
+  *  :ref:`to_array_move (var a: auto(TT) ==const) : array\<TT\> <function-builtin_to_array_move__autoTT__eq__eq_const_0x61a>`
+  *  :ref:`to_array_move (var a: auto(TT)[]) : array\<TT\> <function-builtin_to_array_move_autoTT_0x5f3>`
+  *  :ref:`to_array_move (a: auto(TT) ==const) : array\<TT\> <function-builtin_to_array_move_autoTT__eq__eq_const_0x608>`
+  *  :ref:`to_table (a: tuple\<auto(keyT);auto(valT)\>[]) : table\<keyT, valT\> <function-builtin_to_table_tuple_ls_autokeyT;autovalT_gr_>`
+  *  :ref:`to_table (a: auto(keyT)[]) : table\<keyT, void\> <function-builtin_to_table_autokeyT_0x635>`
+  *  :ref:`to_table_move (var a: tuple\<auto(keyT);auto(valT)\>[]) : table\<keyT, valT\> <function-builtin_to_table_move_tuple_ls_autokeyT;autovalT_gr_>`
+  *  :ref:`to_table_move (var a: tuple\<auto(keyT);auto(valT)\>) : table\<keyT, valT\> <function-builtin_to_table_move_tuple_ls_autokeyT;autovalT_gr_>`
+  *  :ref:`to_table_move (var a: array\<tuple\<auto(keyT);auto(valT)\>\>) : table\<keyT, valT\> <function-builtin_to_table_move_array_ls_tuple_ls_autokeyT;autovalT_gr__gr_>`
+  *  :ref:`to_table_move (a: auto(keyT)[]) : table\<keyT, void\> <function-builtin_to_table_move_autokeyT_0x63e>`
+  *  :ref:`to_table_move (a: array\<auto(keyT)\>) : table\<keyT, void\> <function-builtin_to_table_move_array_ls_autokeyT_gr_>`
+  *  :ref:`to_table_move (a: auto(keyT)) : table\<keyT, void\> <function-builtin_to_table_move_autokeyT_0x650>`
+  *  :ref:`values (var a: table\<auto(keyT);auto(valT)[]\> ==const|table\<auto(keyT);auto(valT)[]\># ==const) : iterator\<valT[-2]&\> <function-builtin_values_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__hh___eq__eq_const>`
+  *  :ref:`values (a: table\<auto(keyT);auto(valT)[]\> ==const|table\<auto(keyT);auto(valT)[]\> const# ==const) : iterator\<valT const[-2]&\> <function-builtin_values_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__const_hh___eq__eq_const>`
+  *  :ref:`values (a: table\<auto(keyT);auto(valT)\> ==const|table\<auto(keyT);auto(valT)\> const# ==const) : iterator\<valT const&\> <function-builtin_values_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__const_hh___eq__eq_const>`
+  *  :ref:`values (a: table\<auto(keyT);void\> ==const|table\<auto(keyT);void\> const# ==const) : auto <function-builtin_values_table_ls_autokeyT;void_gr___eq__eq_consttable_ls_autokeyT;void_gr__const_hh___eq__eq_const>`
+  *  :ref:`values (var a: table\<auto(keyT);void\> ==const|table\<auto(keyT);void\># ==const) : auto <function-builtin_values_table_ls_autokeyT;void_gr___eq__eq_consttable_ls_autokeyT;void_gr__hh___eq__eq_const>`
+  *  :ref:`values (var a: table\<auto(keyT);auto(valT)\> ==const|table\<auto(keyT);auto(valT)\># ==const) : iterator\<valT&\> <function-builtin_values_table_ls_autokeyT;autovalT_gr___eq__eq_consttable_ls_autokeyT;autovalT_gr__hh___eq__eq_const>`
 
 
 back
@@ -829,7 +829,7 @@ Creates an iterator that yields temporary references to each element of the temp
 
 .. das:function:: each_enum(tt: auto(TT)) : iterator<TT>
 
-.. warning:: 
+.. warning::
   This function is deprecated.
 
 Creates an iterator that yields every value of the enumeration type inferred from `tt`, allowing iteration over all members of an enum.
@@ -1742,7 +1742,7 @@ Returns a mutable iterator over all fixed-size array values in a mutable `table<
 das::string manipulation
 ++++++++++++++++++++++++
 
-  *  :ref:`peek (src: das_string implicit; block: block\<(string#):void\>) <function-builtin_peek_das_string_implicit_block_ls_string_hh__c_void_gr_>` 
+  *  :ref:`peek (src: das_string implicit; block: block\<(string#):void\>) <function-builtin_peek_das_string_implicit_block_ls_string_hh__c_void_gr_>`
 
 .. _function-builtin_peek_das_string_implicit_block_ls_string_hh__c_void_gr_:
 
@@ -1750,7 +1750,7 @@ das::string manipulation
 
 Provides zero-copy read access to the contents of a `das_string` by invoking `block` with a temporary string reference, avoiding allocation.
 
-:Arguments: * **src** :  :ref:`das_string <handle-builtin-das_string>`  implicit
+:Arguments: * **src** :  :ref:`das_string <handle-builtin-das_string>` implicit
 
             * **block** : block<(string#):void> implicit
 
@@ -1758,18 +1758,18 @@ Provides zero-copy read access to the contents of a `das_string` by invoking `bl
 Heap reporting
 ++++++++++++++
 
-  *  :ref:`heap_allocation_count () : uint64 <function-builtin_heap_allocation_count>` 
-  *  :ref:`heap_allocation_stats () : urange64 <function-builtin_heap_allocation_stats>` 
-  *  :ref:`heap_bytes_allocated () : uint64 <function-builtin_heap_bytes_allocated>` 
-  *  :ref:`heap_collect (string_heap: bool = true; validate: bool = false) <function-builtin_heap_collect_bool_bool>` 
-  *  :ref:`heap_depth () : int <function-builtin_heap_depth>` 
-  *  :ref:`heap_report () <function-builtin_heap_report>` 
-  *  :ref:`memory_report (errorsOnly: bool) <function-builtin_memory_report_bool>` 
-  *  :ref:`string_heap_allocation_count () : uint64 <function-builtin_string_heap_allocation_count>` 
-  *  :ref:`string_heap_allocation_stats () : urange64 <function-builtin_string_heap_allocation_stats>` 
-  *  :ref:`string_heap_bytes_allocated () : uint64 <function-builtin_string_heap_bytes_allocated>` 
-  *  :ref:`string_heap_depth () : int <function-builtin_string_heap_depth>` 
-  *  :ref:`string_heap_report () <function-builtin_string_heap_report>` 
+  *  :ref:`heap_allocation_count () : uint64 <function-builtin_heap_allocation_count>`
+  *  :ref:`heap_allocation_stats () : urange64 <function-builtin_heap_allocation_stats>`
+  *  :ref:`heap_bytes_allocated () : uint64 <function-builtin_heap_bytes_allocated>`
+  *  :ref:`heap_collect (string_heap: bool = true; validate: bool = false) <function-builtin_heap_collect_bool_bool>`
+  *  :ref:`heap_depth () : int <function-builtin_heap_depth>`
+  *  :ref:`heap_report () <function-builtin_heap_report>`
+  *  :ref:`memory_report (errorsOnly: bool) <function-builtin_memory_report_bool>`
+  *  :ref:`string_heap_allocation_count () : uint64 <function-builtin_string_heap_allocation_count>`
+  *  :ref:`string_heap_allocation_stats () : urange64 <function-builtin_string_heap_allocation_stats>`
+  *  :ref:`string_heap_bytes_allocated () : uint64 <function-builtin_string_heap_bytes_allocated>`
+  *  :ref:`string_heap_depth () : int <function-builtin_string_heap_depth>`
+  *  :ref:`string_heap_report () <function-builtin_string_heap_report>`
 
 .. _function-builtin_heap_allocation_count:
 
@@ -1793,7 +1793,7 @@ Returns the number of bytes currently in use on the heap (allocated minus freed)
 
 .. das:function:: heap_collect(string_heap: bool = true; validate: bool = false)
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Triggers garbage collection on the context heap; when `string_heap` is `true` the string heap is also collected, and when `validate` is `true` additional validation checks are performed.
@@ -1856,11 +1856,11 @@ Prints a detailed report of string heap usage, including allocation counts and b
 GC0 infrastructure
 ++++++++++++++++++
 
-  *  :ref:`gc0_reset () <function-builtin_gc0_reset>` 
-  *  :ref:`gc0_restore_ptr (name: string implicit) : void? <function-builtin_gc0_restore_ptr_string_implicit>` 
-  *  :ref:`gc0_restore_smart_ptr (name: string implicit) : smart_ptr\<void\> <function-builtin_gc0_restore_smart_ptr_string_implicit>` 
-  *  :ref:`gc0_save_ptr (name: string implicit; data: void? implicit) <function-builtin_gc0_save_ptr_string_implicit_void_q__implicit>` 
-  *  :ref:`gc0_save_smart_ptr (name: string implicit; data: smart_ptr\<void\> implicit) <function-builtin_gc0_save_smart_ptr_string_implicit_smart_ptr_ls_void_gr__implicit>` 
+  *  :ref:`gc0_reset () <function-builtin_gc0_reset>`
+  *  :ref:`gc0_restore_ptr (name: string implicit) : void? <function-builtin_gc0_restore_ptr_string_implicit>`
+  *  :ref:`gc0_restore_smart_ptr (name: string implicit) : smart_ptr\<void\> <function-builtin_gc0_restore_smart_ptr_string_implicit>`
+  *  :ref:`gc0_save_ptr (name: string implicit; data: void? implicit) <function-builtin_gc0_save_ptr_string_implicit_void_q__implicit>`
+  *  :ref:`gc0_save_smart_ptr (name: string implicit; data: smart_ptr\<void\> implicit) <function-builtin_gc0_save_smart_ptr_string_implicit_smart_ptr_ls_void_gr__implicit>`
 
 .. _function-builtin_gc0_reset:
 
@@ -1908,17 +1908,17 @@ Stores a `smart_ptr<void>` `data` into gc0 storage under the specified `name`, a
 Smart ptr infrastructure
 ++++++++++++++++++++++++
 
-  *  :ref:`add_ptr_ref (src: smart_ptr\<auto(TT)\>) : smart_ptr\<TT\> <function-builtin_add_ptr_ref_smart_ptr_ls_autoTT_gr_>` 
-  *  :ref:`get_const_ptr (src: smart_ptr\<auto(TT)\>) : TT? <function-builtin_get_const_ptr_smart_ptr_ls_autoTT_gr_>` 
-  *  :ref:`get_ptr (var src: smart_ptr\<auto(TT)\> ==const) : TT? <function-builtin_get_ptr__smart_ptr_ls_autoTT_gr___eq__eq_const>` 
-  *  :ref:`get_ptr (src: smart_ptr\<auto(TT)\> ==const) : TT? <function-builtin_get_ptr_smart_ptr_ls_autoTT_gr___eq__eq_const>` 
-  *  :ref:`move (dest: smart_ptr\<void\>& implicit; src: void? implicit) <function-builtin_move_smart_ptr_ls_void_gr__implicit_void_q__implicit>` 
-  *  :ref:`move (dest: smart_ptr\<void\>& implicit; src: smart_ptr\<void\>& implicit) <function-builtin_move_smart_ptr_ls_void_gr__implicit_smart_ptr_ls_void_gr__implicit>` 
-  *  :ref:`move_new (dest: smart_ptr\<void\>& implicit; src: smart_ptr\<void\> implicit) <function-builtin_move_new_smart_ptr_ls_void_gr__implicit_smart_ptr_ls_void_gr__implicit>` 
-  *  :ref:`smart_ptr_clone (dest: smart_ptr\<void\>& implicit; src: void? implicit) <function-builtin_smart_ptr_clone_smart_ptr_ls_void_gr__implicit_void_q__implicit>` 
-  *  :ref:`smart_ptr_clone (dest: smart_ptr\<void\>& implicit; src: smart_ptr\<void\> implicit) <function-builtin_smart_ptr_clone_smart_ptr_ls_void_gr__implicit_smart_ptr_ls_void_gr__implicit>` 
-  *  :ref:`smart_ptr_is_valid (dest: smart_ptr\<void\> implicit) : bool <function-builtin_smart_ptr_is_valid_smart_ptr_ls_void_gr__implicit>` 
-  *  :ref:`smart_ptr_use_count (ptr: smart_ptr\<void\> implicit) : uint <function-builtin_smart_ptr_use_count_smart_ptr_ls_void_gr__implicit>` 
+  *  :ref:`add_ptr_ref (src: smart_ptr\<auto(TT)\>) : smart_ptr\<TT\> <function-builtin_add_ptr_ref_smart_ptr_ls_autoTT_gr_>`
+  *  :ref:`get_const_ptr (src: smart_ptr\<auto(TT)\>) : TT? <function-builtin_get_const_ptr_smart_ptr_ls_autoTT_gr_>`
+  *  :ref:`get_ptr (var src: smart_ptr\<auto(TT)\> ==const) : TT? <function-builtin_get_ptr__smart_ptr_ls_autoTT_gr___eq__eq_const>`
+  *  :ref:`get_ptr (src: smart_ptr\<auto(TT)\> ==const) : TT? <function-builtin_get_ptr_smart_ptr_ls_autoTT_gr___eq__eq_const>`
+  *  :ref:`move (dest: smart_ptr\<void\>& implicit; src: void? implicit) <function-builtin_move_smart_ptr_ls_void_gr__implicit_void_q__implicit>`
+  *  :ref:`move (dest: smart_ptr\<void\>& implicit; src: smart_ptr\<void\>& implicit) <function-builtin_move_smart_ptr_ls_void_gr__implicit_smart_ptr_ls_void_gr__implicit>`
+  *  :ref:`move_new (dest: smart_ptr\<void\>& implicit; src: smart_ptr\<void\> implicit) <function-builtin_move_new_smart_ptr_ls_void_gr__implicit_smart_ptr_ls_void_gr__implicit>`
+  *  :ref:`smart_ptr_clone (dest: smart_ptr\<void\>& implicit; src: void? implicit) <function-builtin_smart_ptr_clone_smart_ptr_ls_void_gr__implicit_void_q__implicit>`
+  *  :ref:`smart_ptr_clone (dest: smart_ptr\<void\>& implicit; src: smart_ptr\<void\> implicit) <function-builtin_smart_ptr_clone_smart_ptr_ls_void_gr__implicit_smart_ptr_ls_void_gr__implicit>`
+  *  :ref:`smart_ptr_is_valid (dest: smart_ptr\<void\> implicit) : bool <function-builtin_smart_ptr_is_valid_smart_ptr_ls_void_gr__implicit>`
+  *  :ref:`smart_ptr_use_count (ptr: smart_ptr\<void\> implicit) : uint <function-builtin_smart_ptr_use_count_smart_ptr_ls_void_gr__implicit>`
 
 .. _function-builtin_add_ptr_ref_smart_ptr_ls_autoTT_gr_:
 
@@ -2024,12 +2024,12 @@ Returns the current reference count of the object managed by `ptr`, indicating h
 Macro infrastructure
 ++++++++++++++++++++
 
-  *  :ref:`is_compiling () : bool <function-builtin_is_compiling>` 
-  *  :ref:`is_compiling_macros () : bool <function-builtin_is_compiling_macros>` 
-  *  :ref:`is_compiling_macros_in_module (name: string implicit) : bool <function-builtin_is_compiling_macros_in_module_string_implicit>` 
-  *  :ref:`is_folding () : bool <function-builtin_is_folding>` 
-  *  :ref:`is_in_completion () : bool <function-builtin_is_in_completion>` 
-  *  :ref:`is_reporting_compilation_errors () : bool <function-builtin_is_reporting_compilation_errors>` 
+  *  :ref:`is_compiling () : bool <function-builtin_is_compiling>`
+  *  :ref:`is_compiling_macros () : bool <function-builtin_is_compiling_macros>`
+  *  :ref:`is_compiling_macros_in_module (name: string implicit) : bool <function-builtin_is_compiling_macros_in_module_string_implicit>`
+  *  :ref:`is_folding () : bool <function-builtin_is_folding>`
+  *  :ref:`is_in_completion () : bool <function-builtin_is_in_completion>`
+  *  :ref:`is_reporting_compilation_errors () : bool <function-builtin_is_reporting_compilation_errors>`
 
 .. _function-builtin_is_compiling:
 
@@ -2073,10 +2073,10 @@ Returns `true` if the context failed to compile and the inference pass is curren
 Profiler
 ++++++++
 
-  *  :ref:`collect_profile_info () : string <function-builtin_collect_profile_info>` 
-  *  :ref:`dump_profile_info () <function-builtin_dump_profile_info>` 
-  *  :ref:`profile (count: int; category: string implicit; block: block\<():void\>) : float <function-builtin_profile_int_string_implicit_block_ls__c_void_gr_>` 
-  *  :ref:`reset_profiler () <function-builtin_reset_profiler>` 
+  *  :ref:`collect_profile_info () : string <function-builtin_collect_profile_info>`
+  *  :ref:`dump_profile_info () <function-builtin_dump_profile_info>`
+  *  :ref:`profile (count: int; category: string implicit; block: block\<():void\>) : float <function-builtin_profile_int_string_implicit_block_ls__c_void_gr_>`
+  *  :ref:`reset_profiler () <function-builtin_reset_profiler>`
 
 .. _function-builtin_collect_profile_info:
 
@@ -2112,21 +2112,21 @@ Resets all counters and accumulated data in the built-in profiler to zero.
 System infrastructure
 +++++++++++++++++++++
 
-  *  :ref:`aot_enabled () : bool <function-builtin_aot_enabled>` 
-  *  :ref:`breakpoint () <function-builtin_breakpoint>` 
-  *  :ref:`error (text: string implicit) <function-builtin_error_string_implicit>` 
-  *  :ref:`eval_main_loop (block: block\<():void\>) <function-builtin_eval_main_loop_block_ls__c_void_gr_>` 
-  *  :ref:`get_das_root () : string <function-builtin_get_das_root>` 
-  *  :ref:`is_in_aot () : bool <function-builtin_is_in_aot>` 
-  *  :ref:`is_intern_strings () : bool <function-builtin_is_intern_strings>` 
-  *  :ref:`panic (text: string implicit) <function-builtin_panic_string_implicit>` 
-  *  :ref:`print (text: string implicit) <function-builtin_print_string_implicit>` 
-  *  :ref:`sprint (value: any; flags: print_flags) : string <function-builtin_sprint_any_print_flags>` 
-  *  :ref:`sprint_json (value: any; humanReadable: bool) : string <function-builtin_sprint_json_any_bool>` 
-  *  :ref:`stackwalk (args: bool = true; vars: bool = true) <function-builtin_stackwalk_bool_bool>` 
-  *  :ref:`terminate () <function-builtin_terminate>` 
-  *  :ref:`to_compiler_log (text: string implicit) <function-builtin_to_compiler_log_string_implicit>` 
-  *  :ref:`to_log (level: int; text: string implicit) <function-builtin_to_log_int_string_implicit>` 
+  *  :ref:`aot_enabled () : bool <function-builtin_aot_enabled>`
+  *  :ref:`breakpoint () <function-builtin_breakpoint>`
+  *  :ref:`error (text: string implicit) <function-builtin_error_string_implicit>`
+  *  :ref:`eval_main_loop (block: block\<():void\>) <function-builtin_eval_main_loop_block_ls__c_void_gr_>`
+  *  :ref:`get_das_root () : string <function-builtin_get_das_root>`
+  *  :ref:`is_in_aot () : bool <function-builtin_is_in_aot>`
+  *  :ref:`is_intern_strings () : bool <function-builtin_is_intern_strings>`
+  *  :ref:`panic (text: string implicit) <function-builtin_panic_string_implicit>`
+  *  :ref:`print (text: string implicit) <function-builtin_print_string_implicit>`
+  *  :ref:`sprint (value: any; flags: print_flags) : string <function-builtin_sprint_any_print_flags>`
+  *  :ref:`sprint_json (value: any; humanReadable: bool) : string <function-builtin_sprint_json_any_bool>`
+  *  :ref:`stackwalk (args: bool = true; vars: bool = true) <function-builtin_stackwalk_bool_bool>`
+  *  :ref:`terminate () <function-builtin_terminate>`
+  *  :ref:`to_compiler_log (text: string implicit) <function-builtin_to_compiler_log_string_implicit>`
+  *  :ref:`to_log (level: int; text: string implicit) <function-builtin_to_log_int_string_implicit>`
 
 .. _function-builtin_aot_enabled:
 
@@ -2198,7 +2198,7 @@ Converts `value` to its string representation using the specified `flags` to con
 
 :Arguments: * **value** : any
 
-            * **flags** :  :ref:`print_flags <alias-print_flags>` 
+            * **flags** :  :ref:`print_flags <alias-print_flags>`
 
 .. _function-builtin_sprint_json_any_bool:
 
@@ -2248,30 +2248,30 @@ Outputs `text` to the logging infrastructure at the specified `level` (e.g. LOG_
 Memory manipulation
 +++++++++++++++++++
 
-  *  :ref:`hash (value: int8) : uint64 <function-builtin_hash_int8>` 
-  *  :ref:`hash (data: any) : uint64 <function-builtin_hash_any>` 
-  *  :ref:`hash (data: string implicit) : uint64 <function-builtin_hash_string_implicit>` 
-  *  :ref:`hash (value: int) : uint64 <function-builtin_hash_int>` 
-  *  :ref:`hash (value: int16) : uint64 <function-builtin_hash_int16>` 
-  *  :ref:`hash (value: uint8) : uint64 <function-builtin_hash_uint8>` 
-  *  :ref:`hash (value: uint16) : uint64 <function-builtin_hash_uint16>` 
-  *  :ref:`hash (value: double) : uint64 <function-builtin_hash_double>` 
-  *  :ref:`hash (value: int64) : uint64 <function-builtin_hash_int64>` 
-  *  :ref:`hash (value: uint) : uint64 <function-builtin_hash_uint>` 
-  *  :ref:`hash (value: uint64) : uint64 <function-builtin_hash_uint64>` 
-  *  :ref:`hash (value: void? implicit) : uint64 <function-builtin_hash_void_q__implicit>` 
-  *  :ref:`hash (value: float) : uint64 <function-builtin_hash_float>` 
-  *  :ref:`hash (value: das_string implicit) : uint64 <function-builtin_hash_das_string_implicit>` 
-  *  :ref:`intptr (p: smart_ptr\<auto\>) : uint64 <function-builtin_intptr_smart_ptr_ls_auto_gr_>` 
-  *  :ref:`intptr (p: void?) : uint64 <function-builtin_intptr_void_q_>` 
-  *  :ref:`lock_data (a: array\<auto(TT)\> ==const|array\<auto(TT)\> const# ==const; blk: block\<(p:TT const?#;s:int):auto\>) : auto <function-builtin_lock_data_array_ls_autoTT_gr___eq__eq_constarray_ls_autoTT_gr__const_hh___eq__eq_const_block_ls_p_c_TT_const_q__hh_;s_c_int_c_auto_gr_>` 
-  *  :ref:`lock_data (var a: array\<auto(TT)\> ==const|array\<auto(TT)\># ==const; blk: block\<(var p:TT?#;s:int):auto\>) : auto <function-builtin_lock_data_array_ls_autoTT_gr___eq__eq_constarray_ls_autoTT_gr__hh___eq__eq_const_block_ls_var_p_c_TT_q__hh_;s_c_int_c_auto_gr_>` 
-  *  :ref:`map_to_array (data: void?; len: int; blk: block\<(var arg:array\<auto(TT)\>#):auto\>) : auto <function-builtin_map_to_array_void_q__int_block_ls_var_arg_c_array_ls_autoTT_gr__hh__c_auto_gr_>` 
-  *  :ref:`map_to_ro_array (data: void?; len: int; blk: block\<(arg:array\<auto(TT)\>#):auto\>) : auto <function-builtin_map_to_ro_array_void_q__int_block_ls_arg_c_array_ls_autoTT_gr__hh__c_auto_gr_>` 
-  *  :ref:`memcmp (left: void? implicit; right: void? implicit; size: int) : int <function-builtin_memcmp_void_q__implicit_void_q__implicit_int>` 
-  *  :ref:`memcpy (left: void? implicit; right: void? implicit; size: int) <function-builtin_memcpy_void_q__implicit_void_q__implicit_int>` 
-  *  :ref:`set_variant_index (variant: variant\<\> implicit; index: int) <function-builtin_set_variant_index_variant_ls__gr__implicit_int>` 
-  *  :ref:`variant_index (arg0: variant\<\> implicit) : int <function-builtin_variant_index_variant_ls__gr__implicit>` 
+  *  :ref:`hash (value: int8) : uint64 <function-builtin_hash_int8>`
+  *  :ref:`hash (data: any) : uint64 <function-builtin_hash_any>`
+  *  :ref:`hash (data: string implicit) : uint64 <function-builtin_hash_string_implicit>`
+  *  :ref:`hash (value: int) : uint64 <function-builtin_hash_int>`
+  *  :ref:`hash (value: int16) : uint64 <function-builtin_hash_int16>`
+  *  :ref:`hash (value: uint8) : uint64 <function-builtin_hash_uint8>`
+  *  :ref:`hash (value: uint16) : uint64 <function-builtin_hash_uint16>`
+  *  :ref:`hash (value: double) : uint64 <function-builtin_hash_double>`
+  *  :ref:`hash (value: int64) : uint64 <function-builtin_hash_int64>`
+  *  :ref:`hash (value: uint) : uint64 <function-builtin_hash_uint>`
+  *  :ref:`hash (value: uint64) : uint64 <function-builtin_hash_uint64>`
+  *  :ref:`hash (value: void? implicit) : uint64 <function-builtin_hash_void_q__implicit>`
+  *  :ref:`hash (value: float) : uint64 <function-builtin_hash_float>`
+  *  :ref:`hash (value: das_string implicit) : uint64 <function-builtin_hash_das_string_implicit>`
+  *  :ref:`intptr (p: smart_ptr\<auto\>) : uint64 <function-builtin_intptr_smart_ptr_ls_auto_gr_>`
+  *  :ref:`intptr (p: void?) : uint64 <function-builtin_intptr_void_q_>`
+  *  :ref:`lock_data (a: array\<auto(TT)\> ==const|array\<auto(TT)\> const# ==const; blk: block\<(p:TT const?#;s:int):auto\>) : auto <function-builtin_lock_data_array_ls_autoTT_gr___eq__eq_constarray_ls_autoTT_gr__const_hh___eq__eq_const_block_ls_p_c_TT_const_q__hh_;s_c_int_c_auto_gr_>`
+  *  :ref:`lock_data (var a: array\<auto(TT)\> ==const|array\<auto(TT)\># ==const; blk: block\<(var p:TT?#;s:int):auto\>) : auto <function-builtin_lock_data_array_ls_autoTT_gr___eq__eq_constarray_ls_autoTT_gr__hh___eq__eq_const_block_ls_var_p_c_TT_q__hh_;s_c_int_c_auto_gr_>`
+  *  :ref:`map_to_array (data: void?; len: int; blk: block\<(var arg:array\<auto(TT)\>#):auto\>) : auto <function-builtin_map_to_array_void_q__int_block_ls_var_arg_c_array_ls_autoTT_gr__hh__c_auto_gr_>`
+  *  :ref:`map_to_ro_array (data: void?; len: int; blk: block\<(arg:array\<auto(TT)\>#):auto\>) : auto <function-builtin_map_to_ro_array_void_q__int_block_ls_arg_c_array_ls_autoTT_gr__hh__c_auto_gr_>`
+  *  :ref:`memcmp (left: void? implicit; right: void? implicit; size: int) : int <function-builtin_memcmp_void_q__implicit_void_q__implicit_int>`
+  *  :ref:`memcpy (left: void? implicit; right: void? implicit; size: int) <function-builtin_memcpy_void_q__implicit_void_q__implicit_int>`
+  *  :ref:`set_variant_index (variant: variant\<\> implicit; index: int) <function-builtin_set_variant_index_variant_ls__gr__implicit_int>`
+  *  :ref:`variant_index (arg0: variant\<\> implicit) : int <function-builtin_variant_index_variant_ls__gr__implicit>`
 
 
 hash
@@ -2381,7 +2381,7 @@ Locks a constant array and invokes `blk` with a read-only pointer `p` to the arr
 
 .. das:function:: map_to_array(data: void?; len: int; blk: block<(var arg:array<auto(TT)>#):auto>) : auto
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Constructs a temporary mutable array of type `TT` over raw memory at `data` with `len` elements, and passes it to `blk` without copying the underlying data.
@@ -2396,7 +2396,7 @@ Constructs a temporary mutable array of type `TT` over raw memory at `data` with
 
 .. das:function:: map_to_ro_array(data: void?; len: int; blk: block<(arg:array<auto(TT)>#):auto>) : auto
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Constructs a temporary read-only array of type `TT` over raw memory at `data` with `len` elements, and passes it to `blk` without copying the underlying data.
@@ -2411,7 +2411,7 @@ Constructs a temporary read-only array of type `TT` over raw memory at `data` wi
 
 .. das:function:: memcmp(left: void? implicit; right: void? implicit; size: int) : int
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Compares `size` bytes of memory at `left` and `right`, returning -1 if `left` is less, 1 if `left` is greater, or 0 if both regions are identical.
@@ -2426,7 +2426,7 @@ Compares `size` bytes of memory at `left` and `right`, returning -1 if `left` is
 
 .. das:function:: memcpy(left: void? implicit; right: void? implicit; size: int)
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Copies `size` bytes of memory from the address pointed to by `right` into the address pointed to by `left`.
@@ -2441,7 +2441,7 @@ Copies `size` bytes of memory from the address pointed to by `right` into the ad
 
 .. das:function:: set_variant_index(variant: variant<> implicit; index: int)
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Overwrites the internal type discriminator of `variant` to `index`, changing which alternative the variant is considered to hold.
@@ -2462,8 +2462,8 @@ Returns the zero-based index indicating which alternative the variant currently 
 Binary serializer
 +++++++++++++++++
 
-  *  :ref:`binary_load (var obj: auto; data: array\<uint8\>) : auto <function-builtin_binary_load_auto_array_ls_uint8_gr__0x419>` 
-  *  :ref:`binary_save (obj: auto; subexpr: block\<(data:array\<uint8\>#):void\>) : auto <function-builtin_binary_save_auto_block_ls_data_c_array_ls_uint8_gr__hh__c_void_gr__0x414>` 
+  *  :ref:`binary_load (var obj: auto; data: array\<uint8\>) : auto <function-builtin_binary_load_auto_array_ls_uint8_gr__0x419>`
+  *  :ref:`binary_save (obj: auto; subexpr: block\<(data:array\<uint8\>#):void\>) : auto <function-builtin_binary_save_auto_block_ls_data_c_array_ls_uint8_gr__hh__c_void_gr__0x414>`
 
 .. _function-builtin_binary_load_auto_array_ls_uint8_gr__0x419:
 
@@ -2489,7 +2489,7 @@ Serializes `obj` into a binary representation and passes the resulting uint8 byt
 Path and command line
 +++++++++++++++++++++
 
-  *  :ref:`get_command_line_arguments () : array\<string\> <function-builtin_get_command_line_arguments>` 
+  *  :ref:`get_command_line_arguments () : array\<string\> <function-builtin_get_command_line_arguments>`
 
 .. _function-builtin_get_command_line_arguments:
 
@@ -2501,11 +2501,11 @@ Returns an array of strings containing the command-line arguments passed to the 
 Time and date
 +++++++++++++
 
-  *  :ref:`get_clock () : clock <function-builtin_get_clock>` 
-  *  :ref:`get_time_nsec (ref: int64) : int64 <function-builtin_get_time_nsec_int64>` 
-  *  :ref:`get_time_usec (ref: int64) : int <function-builtin_get_time_usec_int64>` 
-  *  :ref:`mktime (year: int; month: int; mday: int; hour: int; min: int; sec: int) : clock <function-builtin_mktime_int_int_int_int_int_int>` 
-  *  :ref:`ref_time_ticks () : int64 <function-builtin_ref_time_ticks>` 
+  *  :ref:`get_clock () : clock <function-builtin_get_clock>`
+  *  :ref:`get_time_nsec (ref: int64) : int64 <function-builtin_get_time_nsec_int64>`
+  *  :ref:`get_time_usec (ref: int64) : int <function-builtin_get_time_usec_int64>`
+  *  :ref:`mktime (year: int; month: int; mday: int; hour: int; min: int; sec: int) : clock <function-builtin_mktime_int_int_int_int_int_int>`
+  *  :ref:`ref_time_ticks () : int64 <function-builtin_ref_time_ticks>`
 
 .. _function-builtin_get_clock:
 
@@ -2557,10 +2557,10 @@ Captures the current high-resolution time in ticks, suitable for measuring elaps
 Platform queries
 ++++++++++++++++
 
-  *  :ref:`das_is_dll_build () : bool <function-builtin_das_is_dll_build>` 
-  *  :ref:`get_architecture_name () : string <function-builtin_get_architecture_name>` 
-  *  :ref:`get_context_share_counter () : uint64 <function-builtin_get_context_share_counter>` 
-  *  :ref:`get_platform_name () : string <function-builtin_get_platform_name>` 
+  *  :ref:`das_is_dll_build () : bool <function-builtin_das_is_dll_build>`
+  *  :ref:`get_architecture_name () : string <function-builtin_get_architecture_name>`
+  *  :ref:`get_context_share_counter () : uint64 <function-builtin_get_context_share_counter>`
+  *  :ref:`get_platform_name () : string <function-builtin_get_platform_name>`
 
 .. _function-builtin_das_is_dll_build:
 
@@ -2590,16 +2590,16 @@ Returns the name of the operating system the program is running on, such as `"wi
 String formatting
 +++++++++++++++++
 
-  *  :ref:`fmt (format: string implicit; value: uint8) : string <function-builtin_fmt_string_implicit_uint8>` 
-  *  :ref:`fmt (format: string implicit; value: int8) : string <function-builtin_fmt_string_implicit_int8>` 
-  *  :ref:`fmt (format: string implicit; value: uint16) : string <function-builtin_fmt_string_implicit_uint16>` 
-  *  :ref:`fmt (format: string implicit; value: int16) : string <function-builtin_fmt_string_implicit_int16>` 
-  *  :ref:`fmt (format: string implicit; value: int64) : string <function-builtin_fmt_string_implicit_int64>` 
-  *  :ref:`fmt (format: string implicit; value: uint) : string <function-builtin_fmt_string_implicit_uint>` 
-  *  :ref:`fmt (format: string implicit; value: uint64) : string <function-builtin_fmt_string_implicit_uint64>` 
-  *  :ref:`fmt (format: string implicit; value: int) : string <function-builtin_fmt_string_implicit_int>` 
-  *  :ref:`fmt (format: string implicit; value: double) : string <function-builtin_fmt_string_implicit_double>` 
-  *  :ref:`fmt (format: string implicit; value: float) : string <function-builtin_fmt_string_implicit_float>` 
+  *  :ref:`fmt (format: string implicit; value: uint8) : string <function-builtin_fmt_string_implicit_uint8>`
+  *  :ref:`fmt (format: string implicit; value: int8) : string <function-builtin_fmt_string_implicit_int8>`
+  *  :ref:`fmt (format: string implicit; value: uint16) : string <function-builtin_fmt_string_implicit_uint16>`
+  *  :ref:`fmt (format: string implicit; value: int16) : string <function-builtin_fmt_string_implicit_int16>`
+  *  :ref:`fmt (format: string implicit; value: int64) : string <function-builtin_fmt_string_implicit_int64>`
+  *  :ref:`fmt (format: string implicit; value: uint) : string <function-builtin_fmt_string_implicit_uint>`
+  *  :ref:`fmt (format: string implicit; value: uint64) : string <function-builtin_fmt_string_implicit_uint64>`
+  *  :ref:`fmt (format: string implicit; value: int) : string <function-builtin_fmt_string_implicit_int>`
+  *  :ref:`fmt (format: string implicit; value: double) : string <function-builtin_fmt_string_implicit_double>`
+  *  :ref:`fmt (format: string implicit; value: float) : string <function-builtin_fmt_string_implicit_float>`
 
 
 fmt
@@ -2657,7 +2657,7 @@ Formats a `uint8` value as a string using the given `format` specifier (followin
 Argument consumption
 ++++++++++++++++++++
 
-  *  :ref:`consume_argument (var a: auto(TT)&) : TT& <function-builtin_consume_argument_autoTT_0x843>` 
+  *  :ref:`consume_argument (var a: auto(TT)&) : TT& <function-builtin_consume_argument_autoTT_0x843>`
 
 .. _function-builtin_consume_argument_autoTT_0x843:
 
@@ -2671,9 +2671,9 @@ Marks argument `a` as consumed, signaling to the compiler that it will not be us
 Lock checking
 +++++++++++++
 
-  *  :ref:`lock_count (array: array\<anything\>) : int <function-builtin_lock_count_array_ls_anything_gr_>` 
-  *  :ref:`set_verify_array_locks (array: array\<anything\>; check: bool) : bool <function-builtin_set_verify_array_locks_array_ls_anything_gr__bool>` 
-  *  :ref:`set_verify_table_locks (table: table\<anything, anything\>; check: bool) : bool <function-builtin_set_verify_table_locks_table_ls_anything,_anything_gr__bool>` 
+  *  :ref:`lock_count (array: array\<anything\>) : int <function-builtin_lock_count_array_ls_anything_gr_>`
+  *  :ref:`set_verify_array_locks (array: array\<anything\>; check: bool) : bool <function-builtin_set_verify_array_locks_array_ls_anything_gr__bool>`
+  *  :ref:`set_verify_table_locks (table: table\<anything, anything\>; check: bool) : bool <function-builtin_set_verify_table_locks_table_ls_anything,_anything_gr__bool>`
 
 .. _function-builtin_lock_count_array_ls_anything_gr_:
 
@@ -2687,7 +2687,7 @@ Returns the current internal lock count for the given `array`, indicating how ma
 
 .. das:function:: set_verify_array_locks(array: array<anything>; check: bool) : bool
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Enables or disables runtime lock verification for the given `array`; when `check` is false, lock safety checks are skipped as a performance optimization.
@@ -2700,7 +2700,7 @@ Enables or disables runtime lock verification for the given `array`; when `check
 
 .. das:function:: set_verify_table_locks(table: table<anything, anything>; check: bool) : bool
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Enables or disables runtime lock verification for the given `table`; when `check` is false, lock safety checks are skipped as a performance optimization.
@@ -2713,10 +2713,10 @@ Enables or disables runtime lock verification for the given `table`; when `check
 Lock checking internals
 +++++++++++++++++++++++
 
-  *  :ref:`_at_with_lockcheck (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#) : valT& <function-builtin__at_with_lockcheck_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>` 
-  *  :ref:`_move_with_lockcheck (var a: auto(valA)&; var b: auto(valB)&) : auto <function-builtin__move_with_lockcheck_autovalA_autovalB_0x20>` 
-  *  :ref:`_return_with_lockcheck (var a: auto(valT)& ==const) : auto& <function-builtin__return_with_lockcheck__autovalT__eq__eq_const_0x32>` 
-  *  :ref:`_return_with_lockcheck (a: auto(valT) const& ==const) : auto& <function-builtin__return_with_lockcheck_autovalT_const__eq__eq_const_0x3b>` 
+  *  :ref:`_at_with_lockcheck (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#) : valT& <function-builtin__at_with_lockcheck_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>`
+  *  :ref:`_move_with_lockcheck (var a: auto(valA)&; var b: auto(valB)&) : auto <function-builtin__move_with_lockcheck_autovalA_autovalB_0x20>`
+  *  :ref:`_return_with_lockcheck (var a: auto(valT)& ==const) : auto& <function-builtin__return_with_lockcheck__autovalT__eq__eq_const_0x32>`
+  *  :ref:`_return_with_lockcheck (a: auto(valT) const& ==const) : auto& <function-builtin__return_with_lockcheck_autovalT_const__eq__eq_const_0x3b>`
 
 .. _function-builtin__at_with_lockcheck_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_:
 
@@ -2760,17 +2760,17 @@ Passes through and returns a mutable reference to `a`, verifying that `a` and al
 Bit operations
 ++++++++++++++
 
-  *  :ref:`__bit_set (value: bitfield& implicit; mask: bitfield; on: bool) <function-builtin___bit_set_bitfield_implicit_bitfield_bool>` 
-  *  :ref:`__bit_set (value: bitfield8:uint8\<\>& implicit; mask: bitfield8:uint8\<\>; on: bool) <function-builtin___bit_set_bitfield8_c_uint8_ls__gr__implicit_bitfield8_c_uint8_ls__gr__bool>` 
-  *  :ref:`__bit_set (value: bitfield64:uint64\<\>& implicit; mask: bitfield64:uint64\<\>; on: bool) <function-builtin___bit_set_bitfield64_c_uint64_ls__gr__implicit_bitfield64_c_uint64_ls__gr__bool>` 
-  *  :ref:`__bit_set (value: bitfield16:uint16\<\>& implicit; mask: bitfield16:uint16\<\>; on: bool) <function-builtin___bit_set_bitfield16_c_uint16_ls__gr__implicit_bitfield16_c_uint16_ls__gr__bool>` 
-  *  :ref:`clz (bits: uint64) : uint64 <function-builtin_clz_uint64>` 
-  *  :ref:`clz (bits: uint) : uint <function-builtin_clz_uint>` 
-  *  :ref:`ctz (bits: uint64) : uint64 <function-builtin_ctz_uint64>` 
-  *  :ref:`ctz (bits: uint) : uint <function-builtin_ctz_uint>` 
-  *  :ref:`mul128 (a: uint64; b: uint64) : urange64 <function-builtin_mul128_uint64_uint64>` 
-  *  :ref:`popcnt (bits: uint64) : uint64 <function-builtin_popcnt_uint64>` 
-  *  :ref:`popcnt (bits: uint) : uint <function-builtin_popcnt_uint>` 
+  *  :ref:`__bit_set (value: bitfield& implicit; mask: bitfield; on: bool) <function-builtin___bit_set_bitfield_implicit_bitfield_bool>`
+  *  :ref:`__bit_set (value: bitfield8:uint8\<\>& implicit; mask: bitfield8:uint8\<\>; on: bool) <function-builtin___bit_set_bitfield8_c_uint8_ls__gr__implicit_bitfield8_c_uint8_ls__gr__bool>`
+  *  :ref:`__bit_set (value: bitfield64:uint64\<\>& implicit; mask: bitfield64:uint64\<\>; on: bool) <function-builtin___bit_set_bitfield64_c_uint64_ls__gr__implicit_bitfield64_c_uint64_ls__gr__bool>`
+  *  :ref:`__bit_set (value: bitfield16:uint16\<\>& implicit; mask: bitfield16:uint16\<\>; on: bool) <function-builtin___bit_set_bitfield16_c_uint16_ls__gr__implicit_bitfield16_c_uint16_ls__gr__bool>`
+  *  :ref:`clz (bits: uint64) : uint64 <function-builtin_clz_uint64>`
+  *  :ref:`clz (bits: uint) : uint <function-builtin_clz_uint>`
+  *  :ref:`ctz (bits: uint64) : uint64 <function-builtin_ctz_uint64>`
+  *  :ref:`ctz (bits: uint) : uint <function-builtin_ctz_uint>`
+  *  :ref:`mul128 (a: uint64; b: uint64) : urange64 <function-builtin_mul128_uint64_uint64>`
+  *  :ref:`popcnt (bits: uint64) : uint64 <function-builtin_popcnt_uint64>`
+  *  :ref:`popcnt (bits: uint) : uint <function-builtin_popcnt_uint>`
 
 
 __bit_set
@@ -2870,10 +2870,10 @@ Counts and returns the number of set (1) bits in the 64-bit unsigned integer `bi
 Intervals
 +++++++++
 
-  *  :ref:`interval (arg0: uint; arg1: uint) : urange <function-builtin_interval_uint_uint>` 
-  *  :ref:`interval (arg0: int; arg1: int) : range <function-builtin_interval_int_int>` 
-  *  :ref:`interval (arg0: uint64; arg1: uint64) : urange64 <function-builtin_interval_uint64_uint64>` 
-  *  :ref:`interval (arg0: int64; arg1: int64) : range64 <function-builtin_interval_int64_int64>` 
+  *  :ref:`interval (arg0: uint; arg1: uint) : urange <function-builtin_interval_uint_uint>`
+  *  :ref:`interval (arg0: int; arg1: int) : range <function-builtin_interval_int_int>`
+  *  :ref:`interval (arg0: uint64; arg1: uint64) : urange64 <function-builtin_interval_uint64_uint64>`
+  *  :ref:`interval (arg0: int64; arg1: int64) : range64 <function-builtin_interval_int64_int64>`
 
 
 interval
@@ -2907,7 +2907,7 @@ Constructs a `urange` value from the two `uint` endpoints `arg0` (inclusive) and
 RTTI
 ++++
 
-  *  :ref:`class_rtti_size (ptr: void? implicit) : int <function-builtin_class_rtti_size_void_q__implicit>` 
+  *  :ref:`class_rtti_size (ptr: void? implicit) : int <function-builtin_class_rtti_size_void_q__implicit>`
 
 .. _function-builtin_class_rtti_size_void_q__implicit:
 
@@ -2921,13 +2921,13 @@ Examines the RTTI (runtime type information) associated with the class at `ptr` 
 Lock verification
 +++++++++++++++++
 
-  *  :ref:`set_verify_context_locks (check: bool) : bool <function-builtin_set_verify_context_locks_bool>` 
+  *  :ref:`set_verify_context_locks (check: bool) : bool <function-builtin_set_verify_context_locks_bool>`
 
 .. _function-builtin_set_verify_context_locks_bool:
 
 .. das:function:: set_verify_context_locks(check: bool) : bool
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Enables or disables runtime lock verification for all arrays and tables in the current context; returns the previous verification state.
@@ -2938,7 +2938,7 @@ Enables or disables runtime lock verification for all arrays and tables in the c
 Initialization and finalization
 +++++++++++++++++++++++++++++++
 
-  *  :ref:`using (arg0: block\<(das_string):void\>) <function-builtin_using_block_ls_das_string_c_void_gr_>` 
+  *  :ref:`using (arg0: block\<(das_string):void\>) <function-builtin_using_block_ls_das_string_c_void_gr_>`
 
 .. _function-builtin_using_block_ls_das_string_c_void_gr_:
 
@@ -2946,16 +2946,16 @@ Initialization and finalization
 
 Creates a temporary `das_string` and passes it to the block, automatically managing its lifetime for the duration of the call.
 
-:Arguments: * **arg0** : block<( :ref:`das_string <handle-builtin-das_string>` ):void> implicit
+:Arguments: * **arg0** : block<( :ref:`das_string <handle-builtin-das_string>`):void> implicit
 
 ++++++++++
 Algorithms
 ++++++++++
 
-  *  :ref:`count (start: int = 0; step: int = 1) : iterator\<int\> <function-builtin_count_int_int>` 
-  *  :ref:`iter_range (foo: auto) : auto <function-builtin_iter_range_auto_0x591>` 
-  *  :ref:`swap (var a: auto(TT)&; var b: auto(TT)&) : auto <function-builtin_swap_autoTT_autoTT_0x7a9>` 
-  *  :ref:`ucount (start: uint = 0x0; step: uint = 0x1) : iterator\<uint\> <function-builtin_ucount_uint_uint>` 
+  *  :ref:`count (start: int = 0; step: int = 1) : iterator\<int\> <function-builtin_count_int_int>`
+  *  :ref:`iter_range (foo: auto) : auto <function-builtin_iter_range_auto_0x591>`
+  *  :ref:`swap (var a: auto(TT)&; var b: auto(TT)&) : auto <function-builtin_swap_autoTT_autoTT_0x7a9>`
+  *  :ref:`ucount (start: uint = 0x0; step: uint = 0x1) : iterator\<uint\> <function-builtin_ucount_uint_uint>`
 
 .. _function-builtin_count_int_int:
 
@@ -2999,17 +2999,17 @@ Creates an infinite iterator over unsigned integers beginning at `start` and inc
 Memset
 ++++++
 
-  *  :ref:`memset128 (left: void? implicit; value: uint4; count: int) <function-builtin_memset128_void_q__implicit_uint4_int>` 
-  *  :ref:`memset16 (left: void? implicit; value: uint16; count: int) <function-builtin_memset16_void_q__implicit_uint16_int>` 
-  *  :ref:`memset32 (left: void? implicit; value: uint; count: int) <function-builtin_memset32_void_q__implicit_uint_int>` 
-  *  :ref:`memset64 (left: void? implicit; value: uint64; count: int) <function-builtin_memset64_void_q__implicit_uint64_int>` 
-  *  :ref:`memset8 (left: void? implicit; value: uint8; count: int) <function-builtin_memset8_void_q__implicit_uint8_int>` 
+  *  :ref:`memset128 (left: void? implicit; value: uint4; count: int) <function-builtin_memset128_void_q__implicit_uint4_int>`
+  *  :ref:`memset16 (left: void? implicit; value: uint16; count: int) <function-builtin_memset16_void_q__implicit_uint16_int>`
+  *  :ref:`memset32 (left: void? implicit; value: uint; count: int) <function-builtin_memset32_void_q__implicit_uint_int>`
+  *  :ref:`memset64 (left: void? implicit; value: uint64; count: int) <function-builtin_memset64_void_q__implicit_uint64_int>`
+  *  :ref:`memset8 (left: void? implicit; value: uint8; count: int) <function-builtin_memset8_void_q__implicit_uint8_int>`
 
 .. _function-builtin_memset128_void_q__implicit_uint4_int:
 
 .. das:function:: memset128(left: void? implicit; value: uint4; count: int)
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Fills memory at `left` with `count` copies of the 128-bit `uint4` vector `value`.
@@ -3024,7 +3024,7 @@ Fills memory at `left` with `count` copies of the 128-bit `uint4` vector `value`
 
 .. das:function:: memset16(left: void? implicit; value: uint16; count: int)
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Fills memory at `left` with `count` copies of the 16-bit `value`.
@@ -3039,7 +3039,7 @@ Fills memory at `left` with `count` copies of the 16-bit `value`.
 
 .. das:function:: memset32(left: void? implicit; value: uint; count: int)
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Fills memory at `left` with `count` copies of the 32-bit `value`.
@@ -3054,7 +3054,7 @@ Fills memory at `left` with `count` copies of the 32-bit `value`.
 
 .. das:function:: memset64(left: void? implicit; value: uint64; count: int)
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Fills memory at `left` with `count` copies of the 64-bit `value`.
@@ -3069,7 +3069,7 @@ Fills memory at `left` with `count` copies of the 64-bit `value`.
 
 .. das:function:: memset8(left: void? implicit; value: uint8; count: int)
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Fills memory at `left` with `count` copies of the 8-bit `value`, equivalent to the C `memset` function.
@@ -3084,15 +3084,15 @@ Fills memory at `left` with `count` copies of the 8-bit `value`, equivalent to t
 Malloc
 ++++++
 
-  *  :ref:`free (ptr: void? implicit) <function-builtin_free_void_q__implicit>` 
-  *  :ref:`malloc (size: uint64) : void? <function-builtin_malloc_uint64>` 
-  *  :ref:`malloc_usable_size (ptr: void? implicit) : uint64 <function-builtin_malloc_usable_size_void_q__implicit>` 
+  *  :ref:`free (ptr: void? implicit) <function-builtin_free_void_q__implicit>`
+  *  :ref:`malloc (size: uint64) : void? <function-builtin_malloc_uint64>`
+  *  :ref:`malloc_usable_size (ptr: void? implicit) : uint64 <function-builtin_malloc_usable_size_void_q__implicit>`
 
 .. _function-builtin_free_void_q__implicit:
 
 .. das:function:: free(ptr: void? implicit)
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Frees memory previously allocated with `malloc`, following C-style manual memory management semantics.
@@ -3103,7 +3103,7 @@ Frees memory previously allocated with `malloc`, following C-style manual memory
 
 .. das:function:: malloc(size: uint64) : void?
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Allocates a block of uninitialized memory of the specified `size` in bytes, C-style, and returns a raw pointer to it; must be freed with `free`.
@@ -3114,7 +3114,7 @@ Allocates a block of uninitialized memory of the specified `size` in bytes, C-st
 
 .. das:function:: malloc_usable_size(ptr: void? implicit) : uint64
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Returns the usable size in bytes of the memory block pointed to by `ptr`, as reported by the underlying allocator.
@@ -3125,10 +3125,10 @@ Returns the usable size in bytes of the memory block pointed to by `ptr`, as rep
 Compilation and AOT
 +++++++++++++++++++
 
-  *  :ref:`compiling_file_name () : string <function-builtin_compiling_file_name>` 
-  *  :ref:`compiling_module_name () : string <function-builtin_compiling_module_name>` 
-  *  :ref:`reset_aot () <function-builtin_reset_aot>` 
-  *  :ref:`set_aot () <function-builtin_set_aot>` 
+  *  :ref:`compiling_file_name () : string <function-builtin_compiling_file_name>`
+  *  :ref:`compiling_module_name () : string <function-builtin_compiling_module_name>`
+  *  :ref:`reset_aot () <function-builtin_reset_aot>`
+  *  :ref:`set_aot () <function-builtin_set_aot>`
 
 .. _function-builtin_compiling_file_name:
 

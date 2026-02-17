@@ -53,7 +53,7 @@ For example:::
 Unrolling
 +++++++++
 
-  *  :ref:`unroll (blk: block\<():void\>) <function-unroll_unroll_block_ls__c_void_gr_>` 
+  *  :ref:`unroll (blk: block\<():void\>) <function-unroll_unroll_block_ls__c_void_gr_>`
 
 .. _function-unroll_unroll_block_ls__c_void_gr_:
 

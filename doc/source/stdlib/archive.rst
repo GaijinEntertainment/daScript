@@ -60,7 +60,7 @@ Archive is a combination of serialization stream, and state (version, and readin
 
          * **reading** : bool - True if the archive is for reading, false for writing.
 
-         * **stream** :  :ref:`Serializer <struct-archive-Serializer>` ? - Serialization stream.
+         * **stream** :  :ref:`Serializer <struct-archive-Serializer>`? - Serialization stream.
 
 
 +++++++
@@ -154,22 +154,22 @@ Initialize the serializer for reading from the given data.
 Serialization
 +++++++++++++
 
-  *  :ref:`read_raw (var arch: Archive; var value: auto(TT)&) : auto <function-archive_read_raw_Archive_autoTT_0x6b>` 
-  *  :ref:`serialize (var arch: Archive; var value: float3x4) <function-archive_serialize_Archive_float3x4>` 
-  *  :ref:`serialize (var arch: Archive; var value: string&) <function-archive_serialize_Archive_string>` 
-  *  :ref:`serialize (var arch: Archive; var value: float3x3) <function-archive_serialize_Archive_float3x3>` 
-  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT_0x78>` 
-  *  :ref:`serialize (var arch: Archive; var value: float4x4) <function-archive_serialize_Archive_float4x4>` 
-  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT_0x7e>` 
-  *  :ref:`serialize (var arch: Archive; var value: table\<auto(KT), auto(VT)\>) : auto <function-archive_serialize_Archive_table_ls_autoKT,_autoVT_gr_>` 
-  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT_0xa9>` 
-  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT_0x9e>` 
-  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT_0xb4>` 
-  *  :ref:`serialize (var arch: Archive; var value: auto(TT)[]) : auto <function-archive_serialize_Archive_autoTT_0xc6>` 
-  *  :ref:`serialize (var arch: Archive; var value: array\<auto(TT)\>) : auto <function-archive_serialize_Archive_array_ls_autoTT_gr_>` 
-  *  :ref:`serialize (var arch: Archive; var value: auto(TT)?) : auto <function-archive_serialize_Archive_autoTT_q_>` 
-  *  :ref:`serialize_raw (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_raw_Archive_autoTT_0x62>` 
-  *  :ref:`write_raw (var arch: Archive; var value: auto(TT)&) : auto <function-archive_write_raw_Archive_autoTT_0x71>` 
+  *  :ref:`read_raw (var arch: Archive; var value: auto(TT)&) : auto <function-archive_read_raw_Archive_autoTT_0x6b>`
+  *  :ref:`serialize (var arch: Archive; var value: float3x4) <function-archive_serialize_Archive_float3x4>`
+  *  :ref:`serialize (var arch: Archive; var value: string&) <function-archive_serialize_Archive_string>`
+  *  :ref:`serialize (var arch: Archive; var value: float3x3) <function-archive_serialize_Archive_float3x3>`
+  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT_0x78>`
+  *  :ref:`serialize (var arch: Archive; var value: float4x4) <function-archive_serialize_Archive_float4x4>`
+  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT_0x7e>`
+  *  :ref:`serialize (var arch: Archive; var value: table\<auto(KT), auto(VT)\>) : auto <function-archive_serialize_Archive_table_ls_autoKT,_autoVT_gr_>`
+  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT_0xa9>`
+  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT_0x9e>`
+  *  :ref:`serialize (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_Archive_autoTT_0xb4>`
+  *  :ref:`serialize (var arch: Archive; var value: auto(TT)[]) : auto <function-archive_serialize_Archive_autoTT_0xc6>`
+  *  :ref:`serialize (var arch: Archive; var value: array\<auto(TT)\>) : auto <function-archive_serialize_Archive_array_ls_autoTT_gr_>`
+  *  :ref:`serialize (var arch: Archive; var value: auto(TT)?) : auto <function-archive_serialize_Archive_autoTT_q_>`
+  *  :ref:`serialize_raw (var arch: Archive; var value: auto(TT)&) : auto <function-archive_serialize_raw_Archive_autoTT_0x62>`
+  *  :ref:`write_raw (var arch: Archive; var value: auto(TT)&) : auto <function-archive_write_raw_Archive_autoTT_0x71>`
 
 .. _function-archive_read_raw_Archive_autoTT_0x6b:
 
@@ -177,7 +177,7 @@ Serialization
 
 Read raw data (straight up bytes for raw pod)
 
-:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
+:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>`
 
             * **value** : auto(TT)&
 
@@ -191,9 +191,9 @@ serialize
 
 Serializes float3x4 matrix
 
-:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
+:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>`
 
-            * **value** :  :ref:`float3x4 <handle-math-float3x4>` 
+            * **value** :  :ref:`float3x4 <handle-math-float3x4>`
 
 .. _function-archive_serialize_Archive_string:
 
@@ -251,7 +251,7 @@ Serializes float3x4 matrix
 
 Serialize raw data (straight up bytes for raw pod)
 
-:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
+:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>`
 
             * **value** : auto(TT)&
 
@@ -261,7 +261,7 @@ Serialize raw data (straight up bytes for raw pod)
 
 Write raw data (straight up bytes for raw pod)
 
-:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
+:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>`
 
             * **value** : auto(TT)&
 
@@ -269,8 +269,8 @@ Write raw data (straight up bytes for raw pod)
 Memory archive
 ++++++++++++++
 
-  *  :ref:`mem_archive_load (var data: array\<uint8\>; var t: auto&; canfail: bool = false) : bool <function-archive_mem_archive_load_array_ls_uint8_gr__auto_bool_0x121>` 
-  *  :ref:`mem_archive_save (var t: auto&) : auto <function-archive_mem_archive_save_auto_0x119>` 
+  *  :ref:`mem_archive_load (var data: array\<uint8\>; var t: auto&; canfail: bool = false) : bool <function-archive_mem_archive_load_array_ls_uint8_gr__auto_bool_0x121>`
+  *  :ref:`mem_archive_save (var t: auto&) : auto <function-archive_mem_archive_save_auto_0x119>`
 
 .. _function-archive_mem_archive_load_array_ls_uint8_gr__auto_bool_0x121:
 

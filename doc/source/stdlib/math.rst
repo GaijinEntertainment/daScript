@@ -116,36 +116,36 @@ floating point matrix with 3 rows and 3 columns
 all numerics (uint*, int*, float*, double)
 ++++++++++++++++++++++++++++++++++++++++++
 
-  *  :ref:`max (x: int; y: int) : int <function-math_max_int_int>` 
-  *  :ref:`max (x: uint64; y: uint64) : uint64 <function-math_max_uint64_uint64>` 
-  *  :ref:`max (x: int2; y: int2) : int2 <function-math_max_int2_int2>` 
-  *  :ref:`max (x: double; y: double) : double <function-math_max_double_double>` 
-  *  :ref:`max (x: int4; y: int4) : int4 <function-math_max_int4_int4>` 
-  *  :ref:`max (x: int3; y: int3) : int3 <function-math_max_int3_int3>` 
-  *  :ref:`max (x: float3; y: float3) : float3 <function-math_max_float3_float3>` 
-  *  :ref:`max (x: int64; y: int64) : int64 <function-math_max_int64_int64>` 
-  *  :ref:`max (x: uint2; y: uint2) : uint2 <function-math_max_uint2_uint2>` 
-  *  :ref:`max (x: uint; y: uint) : uint <function-math_max_uint_uint>` 
-  *  :ref:`max (x: uint3; y: uint3) : uint3 <function-math_max_uint3_uint3>` 
-  *  :ref:`max (x: float4; y: float4) : float4 <function-math_max_float4_float4>` 
-  *  :ref:`max (x: uint4; y: uint4) : uint4 <function-math_max_uint4_uint4>` 
-  *  :ref:`max (x: float2; y: float2) : float2 <function-math_max_float2_float2>` 
-  *  :ref:`max (x: float; y: float) : float <function-math_max_float_float>` 
-  *  :ref:`min (x: uint3; y: uint3) : uint3 <function-math_min_uint3_uint3>` 
-  *  :ref:`min (x: uint2; y: uint2) : uint2 <function-math_min_uint2_uint2>` 
-  *  :ref:`min (x: int4; y: int4) : int4 <function-math_min_int4_int4>` 
-  *  :ref:`min (x: int; y: int) : int <function-math_min_int_int>` 
-  *  :ref:`min (x: float3; y: float3) : float3 <function-math_min_float3_float3>` 
-  *  :ref:`min (x: float4; y: float4) : float4 <function-math_min_float4_float4>` 
-  *  :ref:`min (x: float2; y: float2) : float2 <function-math_min_float2_float2>` 
-  *  :ref:`min (x: float; y: float) : float <function-math_min_float_float>` 
-  *  :ref:`min (x: int2; y: int2) : int2 <function-math_min_int2_int2>` 
-  *  :ref:`min (x: int3; y: int3) : int3 <function-math_min_int3_int3>` 
-  *  :ref:`min (x: uint; y: uint) : uint <function-math_min_uint_uint>` 
-  *  :ref:`min (x: uint64; y: uint64) : uint64 <function-math_min_uint64_uint64>` 
-  *  :ref:`min (x: uint4; y: uint4) : uint4 <function-math_min_uint4_uint4>` 
-  *  :ref:`min (x: double; y: double) : double <function-math_min_double_double>` 
-  *  :ref:`min (x: int64; y: int64) : int64 <function-math_min_int64_int64>` 
+  *  :ref:`max (x: int; y: int) : int <function-math_max_int_int>`
+  *  :ref:`max (x: uint64; y: uint64) : uint64 <function-math_max_uint64_uint64>`
+  *  :ref:`max (x: int2; y: int2) : int2 <function-math_max_int2_int2>`
+  *  :ref:`max (x: double; y: double) : double <function-math_max_double_double>`
+  *  :ref:`max (x: int4; y: int4) : int4 <function-math_max_int4_int4>`
+  *  :ref:`max (x: int3; y: int3) : int3 <function-math_max_int3_int3>`
+  *  :ref:`max (x: float3; y: float3) : float3 <function-math_max_float3_float3>`
+  *  :ref:`max (x: int64; y: int64) : int64 <function-math_max_int64_int64>`
+  *  :ref:`max (x: uint2; y: uint2) : uint2 <function-math_max_uint2_uint2>`
+  *  :ref:`max (x: uint; y: uint) : uint <function-math_max_uint_uint>`
+  *  :ref:`max (x: uint3; y: uint3) : uint3 <function-math_max_uint3_uint3>`
+  *  :ref:`max (x: float4; y: float4) : float4 <function-math_max_float4_float4>`
+  *  :ref:`max (x: uint4; y: uint4) : uint4 <function-math_max_uint4_uint4>`
+  *  :ref:`max (x: float2; y: float2) : float2 <function-math_max_float2_float2>`
+  *  :ref:`max (x: float; y: float) : float <function-math_max_float_float>`
+  *  :ref:`min (x: uint3; y: uint3) : uint3 <function-math_min_uint3_uint3>`
+  *  :ref:`min (x: uint2; y: uint2) : uint2 <function-math_min_uint2_uint2>`
+  *  :ref:`min (x: int4; y: int4) : int4 <function-math_min_int4_int4>`
+  *  :ref:`min (x: int; y: int) : int <function-math_min_int_int>`
+  *  :ref:`min (x: float3; y: float3) : float3 <function-math_min_float3_float3>`
+  *  :ref:`min (x: float4; y: float4) : float4 <function-math_min_float4_float4>`
+  *  :ref:`min (x: float2; y: float2) : float2 <function-math_min_float2_float2>`
+  *  :ref:`min (x: float; y: float) : float <function-math_min_float_float>`
+  *  :ref:`min (x: int2; y: int2) : int2 <function-math_min_int2_int2>`
+  *  :ref:`min (x: int3; y: int3) : int3 <function-math_min_int3_int3>`
+  *  :ref:`min (x: uint; y: uint) : uint <function-math_min_uint_uint>`
+  *  :ref:`min (x: uint64; y: uint64) : uint64 <function-math_min_uint64_uint64>`
+  *  :ref:`min (x: uint4; y: uint4) : uint4 <function-math_min_uint4_uint4>`
+  *  :ref:`min (x: double; y: double) : double <function-math_min_double_double>`
+  *  :ref:`min (x: int64; y: int64) : int64 <function-math_min_int64_int64>`
 
 
 max
@@ -295,134 +295,134 @@ Returns the component-wise minimum of two values, supporting scalar double, floa
 float* and double
 +++++++++++++++++
 
-  *  :ref:`abs (x: float3) : float3 <function-math_abs_float3>` 
-  *  :ref:`abs (x: uint) : uint <function-math_abs_uint>` 
-  *  :ref:`abs (x: uint64) : uint64 <function-math_abs_uint64>` 
-  *  :ref:`abs (x: int2) : int2 <function-math_abs_int2>` 
-  *  :ref:`abs (x: int4) : int4 <function-math_abs_int4>` 
-  *  :ref:`abs (x: int3) : int3 <function-math_abs_int3>` 
-  *  :ref:`abs (x: int64) : int64 <function-math_abs_int64>` 
-  *  :ref:`abs (x: uint2) : uint2 <function-math_abs_uint2>` 
-  *  :ref:`abs (x: int) : int <function-math_abs_int>` 
-  *  :ref:`abs (x: uint4) : uint4 <function-math_abs_uint4>` 
-  *  :ref:`abs (x: uint3) : uint3 <function-math_abs_uint3>` 
-  *  :ref:`abs (x: double) : double <function-math_abs_double>` 
-  *  :ref:`abs (x: float) : float <function-math_abs_float>` 
-  *  :ref:`abs (x: float4) : float4 <function-math_abs_float4>` 
-  *  :ref:`abs (x: float2) : float2 <function-math_abs_float2>` 
-  *  :ref:`acos (x: float4) : float4 <function-math_acos_float4>` 
-  *  :ref:`acos (x: float2) : float2 <function-math_acos_float2>` 
-  *  :ref:`acos (x: float) : float <function-math_acos_float>` 
-  *  :ref:`acos (x: float3) : float3 <function-math_acos_float3>` 
-  *  :ref:`acos (x: double) : double <function-math_acos_double>` 
-  *  :ref:`asin (x: float) : float <function-math_asin_float>` 
-  *  :ref:`asin (x: double) : double <function-math_asin_double>` 
-  *  :ref:`asin (x: float3) : float3 <function-math_asin_float3>` 
-  *  :ref:`asin (x: float4) : float4 <function-math_asin_float4>` 
-  *  :ref:`asin (x: float2) : float2 <function-math_asin_float2>` 
-  *  :ref:`atan (x: float2) : float2 <function-math_atan_float2>` 
-  *  :ref:`atan (x: float4) : float4 <function-math_atan_float4>` 
-  *  :ref:`atan (x: double) : double <function-math_atan_double>` 
-  *  :ref:`atan (x: float3) : float3 <function-math_atan_float3>` 
-  *  :ref:`atan (x: float) : float <function-math_atan_float>` 
-  *  :ref:`atan2 (y: float3; x: float3) : float3 <function-math_atan2_float3_float3>` 
-  *  :ref:`atan2 (y: float2; x: float2) : float2 <function-math_atan2_float2_float2>` 
-  *  :ref:`atan2 (y: float; x: float) : float <function-math_atan2_float_float>` 
-  *  :ref:`atan2 (y: float4; x: float4) : float4 <function-math_atan2_float4_float4>` 
-  *  :ref:`atan2 (y: double; x: double) : double <function-math_atan2_double_double>` 
-  *  :ref:`ceil (x: float4) : float4 <function-math_ceil_float4>` 
-  *  :ref:`ceil (x: float3) : float3 <function-math_ceil_float3>` 
-  *  :ref:`ceil (x: float2) : float2 <function-math_ceil_float2>` 
-  *  :ref:`ceil (x: float) : float <function-math_ceil_float>` 
-  *  :ref:`cos (x: double) : double <function-math_cos_double>` 
-  *  :ref:`cos (x: float4) : float4 <function-math_cos_float4>` 
-  *  :ref:`cos (x: float3) : float3 <function-math_cos_float3>` 
-  *  :ref:`cos (x: float) : float <function-math_cos_float>` 
-  *  :ref:`cos (x: float2) : float2 <function-math_cos_float2>` 
-  *  :ref:`exp (x: float4) : float4 <function-math_exp_float4>` 
-  *  :ref:`exp (x: double) : double <function-math_exp_double>` 
-  *  :ref:`exp (x: float2) : float2 <function-math_exp_float2>` 
-  *  :ref:`exp (x: float) : float <function-math_exp_float>` 
-  *  :ref:`exp (x: float3) : float3 <function-math_exp_float3>` 
-  *  :ref:`exp2 (x: float4) : float4 <function-math_exp2_float4>` 
-  *  :ref:`exp2 (x: float3) : float3 <function-math_exp2_float3>` 
-  *  :ref:`exp2 (x: float2) : float2 <function-math_exp2_float2>` 
-  *  :ref:`exp2 (x: double) : double <function-math_exp2_double>` 
-  *  :ref:`exp2 (x: float) : float <function-math_exp2_float>` 
-  *  :ref:`floor (x: float) : float <function-math_floor_float>` 
-  *  :ref:`floor (x: float2) : float2 <function-math_floor_float2>` 
-  *  :ref:`floor (x: float4) : float4 <function-math_floor_float4>` 
-  *  :ref:`floor (x: float3) : float3 <function-math_floor_float3>` 
-  *  :ref:`is_finite (x: float) : bool <function-math_is_finite_float>` 
-  *  :ref:`is_finite (x: double) : bool <function-math_is_finite_double>` 
-  *  :ref:`is_nan (x: float) : bool <function-math_is_nan_float>` 
-  *  :ref:`is_nan (x: double) : bool <function-math_is_nan_double>` 
-  *  :ref:`log (x: float4) : float4 <function-math_log_float4>` 
-  *  :ref:`log (x: float3) : float3 <function-math_log_float3>` 
-  *  :ref:`log (x: float2) : float2 <function-math_log_float2>` 
-  *  :ref:`log (x: double) : double <function-math_log_double>` 
-  *  :ref:`log (x: float) : float <function-math_log_float>` 
-  *  :ref:`log2 (x: double) : double <function-math_log2_double>` 
-  *  :ref:`log2 (x: float4) : float4 <function-math_log2_float4>` 
-  *  :ref:`log2 (x: float3) : float3 <function-math_log2_float3>` 
-  *  :ref:`log2 (x: float2) : float2 <function-math_log2_float2>` 
-  *  :ref:`log2 (x: float) : float <function-math_log2_float>` 
-  *  :ref:`pow (x: double; y: double) : double <function-math_pow_double_double>` 
-  *  :ref:`pow (x: float4; y: float4) : float4 <function-math_pow_float4_float4>` 
-  *  :ref:`pow (x: float3; y: float3) : float3 <function-math_pow_float3_float3>` 
-  *  :ref:`pow (x: float; y: float) : float <function-math_pow_float_float>` 
-  *  :ref:`pow (x: float2; y: float2) : float2 <function-math_pow_float2_float2>` 
-  *  :ref:`rcp (x: double) : double <function-math_rcp_double>` 
-  *  :ref:`rcp (x: float4) : float4 <function-math_rcp_float4>` 
-  *  :ref:`rcp (x: float3) : float3 <function-math_rcp_float3>` 
-  *  :ref:`rcp (x: float2) : float2 <function-math_rcp_float2>` 
-  *  :ref:`rcp (x: float) : float <function-math_rcp_float>` 
-  *  :ref:`safe_acos (x: double) : double <function-math_safe_acos_double>` 
-  *  :ref:`safe_acos (x: float2) : float2 <function-math_safe_acos_float2>` 
-  *  :ref:`safe_acos (x: float3) : float3 <function-math_safe_acos_float3>` 
-  *  :ref:`safe_acos (x: float) : float <function-math_safe_acos_float>` 
-  *  :ref:`safe_acos (x: float4) : float4 <function-math_safe_acos_float4>` 
-  *  :ref:`safe_asin (x: float3) : float3 <function-math_safe_asin_float3>` 
-  *  :ref:`safe_asin (x: float4) : float4 <function-math_safe_asin_float4>` 
-  *  :ref:`safe_asin (x: double) : double <function-math_safe_asin_double>` 
-  *  :ref:`safe_asin (x: float2) : float2 <function-math_safe_asin_float2>` 
-  *  :ref:`safe_asin (x: float) : float <function-math_safe_asin_float>` 
-  *  :ref:`saturate (x: float4) : float4 <function-math_saturate_float4>` 
-  *  :ref:`saturate (x: float3) : float3 <function-math_saturate_float3>` 
-  *  :ref:`saturate (x: float2) : float2 <function-math_saturate_float2>` 
-  *  :ref:`saturate (x: float) : float <function-math_saturate_float>` 
-  *  :ref:`sign (x: uint) : uint <function-math_sign_uint>` 
-  *  :ref:`sign (x: uint2) : uint2 <function-math_sign_uint2>` 
-  *  :ref:`sign (x: int4) : int4 <function-math_sign_int4>` 
-  *  :ref:`sign (x: float4) : float4 <function-math_sign_float4>` 
-  *  :ref:`sign (x: int64) : int64 <function-math_sign_int64>` 
-  *  :ref:`sign (x: double) : double <function-math_sign_double>` 
-  *  :ref:`sign (x: float3) : float3 <function-math_sign_float3>` 
-  *  :ref:`sign (x: uint4) : uint4 <function-math_sign_uint4>` 
-  *  :ref:`sign (x: float) : float <function-math_sign_float>` 
-  *  :ref:`sign (x: float2) : float2 <function-math_sign_float2>` 
-  *  :ref:`sign (x: uint64) : uint64 <function-math_sign_uint64>` 
-  *  :ref:`sign (x: int3) : int3 <function-math_sign_int3>` 
-  *  :ref:`sign (x: int) : int <function-math_sign_int>` 
-  *  :ref:`sign (x: int2) : int2 <function-math_sign_int2>` 
-  *  :ref:`sign (x: uint3) : uint3 <function-math_sign_uint3>` 
-  *  :ref:`sin (x: double) : double <function-math_sin_double>` 
-  *  :ref:`sin (x: float4) : float4 <function-math_sin_float4>` 
-  *  :ref:`sin (x: float3) : float3 <function-math_sin_float3>` 
-  *  :ref:`sin (x: float2) : float2 <function-math_sin_float2>` 
-  *  :ref:`sin (x: float) : float <function-math_sin_float>` 
-  *  :ref:`sincos (x: float; s: float& implicit; c: float& implicit) <function-math_sincos_float_float_implicit_float_implicit>` 
-  *  :ref:`sincos (x: double; s: double& implicit; c: double& implicit) <function-math_sincos_double_double_implicit_double_implicit>` 
-  *  :ref:`sqrt (x: double) : double <function-math_sqrt_double>` 
-  *  :ref:`sqrt (x: float4) : float4 <function-math_sqrt_float4>` 
-  *  :ref:`sqrt (x: float3) : float3 <function-math_sqrt_float3>` 
-  *  :ref:`sqrt (x: float2) : float2 <function-math_sqrt_float2>` 
-  *  :ref:`sqrt (x: float) : float <function-math_sqrt_float>` 
-  *  :ref:`tan (x: double) : double <function-math_tan_double>` 
-  *  :ref:`tan (x: float4) : float4 <function-math_tan_float4>` 
-  *  :ref:`tan (x: float2) : float2 <function-math_tan_float2>` 
-  *  :ref:`tan (x: float) : float <function-math_tan_float>` 
-  *  :ref:`tan (x: float3) : float3 <function-math_tan_float3>` 
+  *  :ref:`abs (x: float3) : float3 <function-math_abs_float3>`
+  *  :ref:`abs (x: uint) : uint <function-math_abs_uint>`
+  *  :ref:`abs (x: uint64) : uint64 <function-math_abs_uint64>`
+  *  :ref:`abs (x: int2) : int2 <function-math_abs_int2>`
+  *  :ref:`abs (x: int4) : int4 <function-math_abs_int4>`
+  *  :ref:`abs (x: int3) : int3 <function-math_abs_int3>`
+  *  :ref:`abs (x: int64) : int64 <function-math_abs_int64>`
+  *  :ref:`abs (x: uint2) : uint2 <function-math_abs_uint2>`
+  *  :ref:`abs (x: int) : int <function-math_abs_int>`
+  *  :ref:`abs (x: uint4) : uint4 <function-math_abs_uint4>`
+  *  :ref:`abs (x: uint3) : uint3 <function-math_abs_uint3>`
+  *  :ref:`abs (x: double) : double <function-math_abs_double>`
+  *  :ref:`abs (x: float) : float <function-math_abs_float>`
+  *  :ref:`abs (x: float4) : float4 <function-math_abs_float4>`
+  *  :ref:`abs (x: float2) : float2 <function-math_abs_float2>`
+  *  :ref:`acos (x: float4) : float4 <function-math_acos_float4>`
+  *  :ref:`acos (x: float2) : float2 <function-math_acos_float2>`
+  *  :ref:`acos (x: float) : float <function-math_acos_float>`
+  *  :ref:`acos (x: float3) : float3 <function-math_acos_float3>`
+  *  :ref:`acos (x: double) : double <function-math_acos_double>`
+  *  :ref:`asin (x: float) : float <function-math_asin_float>`
+  *  :ref:`asin (x: double) : double <function-math_asin_double>`
+  *  :ref:`asin (x: float3) : float3 <function-math_asin_float3>`
+  *  :ref:`asin (x: float4) : float4 <function-math_asin_float4>`
+  *  :ref:`asin (x: float2) : float2 <function-math_asin_float2>`
+  *  :ref:`atan (x: float2) : float2 <function-math_atan_float2>`
+  *  :ref:`atan (x: float4) : float4 <function-math_atan_float4>`
+  *  :ref:`atan (x: double) : double <function-math_atan_double>`
+  *  :ref:`atan (x: float3) : float3 <function-math_atan_float3>`
+  *  :ref:`atan (x: float) : float <function-math_atan_float>`
+  *  :ref:`atan2 (y: float3; x: float3) : float3 <function-math_atan2_float3_float3>`
+  *  :ref:`atan2 (y: float2; x: float2) : float2 <function-math_atan2_float2_float2>`
+  *  :ref:`atan2 (y: float; x: float) : float <function-math_atan2_float_float>`
+  *  :ref:`atan2 (y: float4; x: float4) : float4 <function-math_atan2_float4_float4>`
+  *  :ref:`atan2 (y: double; x: double) : double <function-math_atan2_double_double>`
+  *  :ref:`ceil (x: float4) : float4 <function-math_ceil_float4>`
+  *  :ref:`ceil (x: float3) : float3 <function-math_ceil_float3>`
+  *  :ref:`ceil (x: float2) : float2 <function-math_ceil_float2>`
+  *  :ref:`ceil (x: float) : float <function-math_ceil_float>`
+  *  :ref:`cos (x: double) : double <function-math_cos_double>`
+  *  :ref:`cos (x: float4) : float4 <function-math_cos_float4>`
+  *  :ref:`cos (x: float3) : float3 <function-math_cos_float3>`
+  *  :ref:`cos (x: float) : float <function-math_cos_float>`
+  *  :ref:`cos (x: float2) : float2 <function-math_cos_float2>`
+  *  :ref:`exp (x: float4) : float4 <function-math_exp_float4>`
+  *  :ref:`exp (x: double) : double <function-math_exp_double>`
+  *  :ref:`exp (x: float2) : float2 <function-math_exp_float2>`
+  *  :ref:`exp (x: float) : float <function-math_exp_float>`
+  *  :ref:`exp (x: float3) : float3 <function-math_exp_float3>`
+  *  :ref:`exp2 (x: float4) : float4 <function-math_exp2_float4>`
+  *  :ref:`exp2 (x: float3) : float3 <function-math_exp2_float3>`
+  *  :ref:`exp2 (x: float2) : float2 <function-math_exp2_float2>`
+  *  :ref:`exp2 (x: double) : double <function-math_exp2_double>`
+  *  :ref:`exp2 (x: float) : float <function-math_exp2_float>`
+  *  :ref:`floor (x: float) : float <function-math_floor_float>`
+  *  :ref:`floor (x: float2) : float2 <function-math_floor_float2>`
+  *  :ref:`floor (x: float4) : float4 <function-math_floor_float4>`
+  *  :ref:`floor (x: float3) : float3 <function-math_floor_float3>`
+  *  :ref:`is_finite (x: float) : bool <function-math_is_finite_float>`
+  *  :ref:`is_finite (x: double) : bool <function-math_is_finite_double>`
+  *  :ref:`is_nan (x: float) : bool <function-math_is_nan_float>`
+  *  :ref:`is_nan (x: double) : bool <function-math_is_nan_double>`
+  *  :ref:`log (x: float4) : float4 <function-math_log_float4>`
+  *  :ref:`log (x: float3) : float3 <function-math_log_float3>`
+  *  :ref:`log (x: float2) : float2 <function-math_log_float2>`
+  *  :ref:`log (x: double) : double <function-math_log_double>`
+  *  :ref:`log (x: float) : float <function-math_log_float>`
+  *  :ref:`log2 (x: double) : double <function-math_log2_double>`
+  *  :ref:`log2 (x: float4) : float4 <function-math_log2_float4>`
+  *  :ref:`log2 (x: float3) : float3 <function-math_log2_float3>`
+  *  :ref:`log2 (x: float2) : float2 <function-math_log2_float2>`
+  *  :ref:`log2 (x: float) : float <function-math_log2_float>`
+  *  :ref:`pow (x: double; y: double) : double <function-math_pow_double_double>`
+  *  :ref:`pow (x: float4; y: float4) : float4 <function-math_pow_float4_float4>`
+  *  :ref:`pow (x: float3; y: float3) : float3 <function-math_pow_float3_float3>`
+  *  :ref:`pow (x: float; y: float) : float <function-math_pow_float_float>`
+  *  :ref:`pow (x: float2; y: float2) : float2 <function-math_pow_float2_float2>`
+  *  :ref:`rcp (x: double) : double <function-math_rcp_double>`
+  *  :ref:`rcp (x: float4) : float4 <function-math_rcp_float4>`
+  *  :ref:`rcp (x: float3) : float3 <function-math_rcp_float3>`
+  *  :ref:`rcp (x: float2) : float2 <function-math_rcp_float2>`
+  *  :ref:`rcp (x: float) : float <function-math_rcp_float>`
+  *  :ref:`safe_acos (x: double) : double <function-math_safe_acos_double>`
+  *  :ref:`safe_acos (x: float2) : float2 <function-math_safe_acos_float2>`
+  *  :ref:`safe_acos (x: float3) : float3 <function-math_safe_acos_float3>`
+  *  :ref:`safe_acos (x: float) : float <function-math_safe_acos_float>`
+  *  :ref:`safe_acos (x: float4) : float4 <function-math_safe_acos_float4>`
+  *  :ref:`safe_asin (x: float3) : float3 <function-math_safe_asin_float3>`
+  *  :ref:`safe_asin (x: float4) : float4 <function-math_safe_asin_float4>`
+  *  :ref:`safe_asin (x: double) : double <function-math_safe_asin_double>`
+  *  :ref:`safe_asin (x: float2) : float2 <function-math_safe_asin_float2>`
+  *  :ref:`safe_asin (x: float) : float <function-math_safe_asin_float>`
+  *  :ref:`saturate (x: float4) : float4 <function-math_saturate_float4>`
+  *  :ref:`saturate (x: float3) : float3 <function-math_saturate_float3>`
+  *  :ref:`saturate (x: float2) : float2 <function-math_saturate_float2>`
+  *  :ref:`saturate (x: float) : float <function-math_saturate_float>`
+  *  :ref:`sign (x: uint) : uint <function-math_sign_uint>`
+  *  :ref:`sign (x: uint2) : uint2 <function-math_sign_uint2>`
+  *  :ref:`sign (x: int4) : int4 <function-math_sign_int4>`
+  *  :ref:`sign (x: float4) : float4 <function-math_sign_float4>`
+  *  :ref:`sign (x: int64) : int64 <function-math_sign_int64>`
+  *  :ref:`sign (x: double) : double <function-math_sign_double>`
+  *  :ref:`sign (x: float3) : float3 <function-math_sign_float3>`
+  *  :ref:`sign (x: uint4) : uint4 <function-math_sign_uint4>`
+  *  :ref:`sign (x: float) : float <function-math_sign_float>`
+  *  :ref:`sign (x: float2) : float2 <function-math_sign_float2>`
+  *  :ref:`sign (x: uint64) : uint64 <function-math_sign_uint64>`
+  *  :ref:`sign (x: int3) : int3 <function-math_sign_int3>`
+  *  :ref:`sign (x: int) : int <function-math_sign_int>`
+  *  :ref:`sign (x: int2) : int2 <function-math_sign_int2>`
+  *  :ref:`sign (x: uint3) : uint3 <function-math_sign_uint3>`
+  *  :ref:`sin (x: double) : double <function-math_sin_double>`
+  *  :ref:`sin (x: float4) : float4 <function-math_sin_float4>`
+  *  :ref:`sin (x: float3) : float3 <function-math_sin_float3>`
+  *  :ref:`sin (x: float2) : float2 <function-math_sin_float2>`
+  *  :ref:`sin (x: float) : float <function-math_sin_float>`
+  *  :ref:`sincos (x: float; s: float& implicit; c: float& implicit) <function-math_sincos_float_float_implicit_float_implicit>`
+  *  :ref:`sincos (x: double; s: double& implicit; c: double& implicit) <function-math_sincos_double_double_implicit_double_implicit>`
+  *  :ref:`sqrt (x: double) : double <function-math_sqrt_double>`
+  *  :ref:`sqrt (x: float4) : float4 <function-math_sqrt_float4>`
+  *  :ref:`sqrt (x: float3) : float3 <function-math_sqrt_float3>`
+  *  :ref:`sqrt (x: float2) : float2 <function-math_sqrt_float2>`
+  *  :ref:`sqrt (x: float) : float <function-math_sqrt_float>`
+  *  :ref:`tan (x: double) : double <function-math_tan_double>`
+  *  :ref:`tan (x: float4) : float4 <function-math_tan_float4>`
+  *  :ref:`tan (x: float2) : float2 <function-math_tan_float2>`
+  *  :ref:`tan (x: float) : float <function-math_tan_float>`
+  *  :ref:`tan (x: float3) : float3 <function-math_tan_float3>`
 
 
 abs
@@ -1188,57 +1188,57 @@ Returns the tangent of the angle x given in radians for double or float; undefin
 float* only
 +++++++++++
 
-  *  :ref:`atan2_est (y: float; x: float) : float <function-math_atan2_est_float_float>` 
-  *  :ref:`atan2_est (y: float4; x: float4) : float4 <function-math_atan2_est_float4_float4>` 
-  *  :ref:`atan2_est (y: float3; x: float3) : float3 <function-math_atan2_est_float3_float3>` 
-  *  :ref:`atan2_est (y: float2; x: float2) : float2 <function-math_atan2_est_float2_float2>` 
-  *  :ref:`atan_est (x: float2) : float2 <function-math_atan_est_float2>` 
-  *  :ref:`atan_est (x: float4) : float4 <function-math_atan_est_float4>` 
-  *  :ref:`atan_est (x: float) : float <function-math_atan_est_float>` 
-  *  :ref:`atan_est (x: float3) : float3 <function-math_atan_est_float3>` 
-  *  :ref:`ceili (x: float4) : int4 <function-math_ceili_float4>` 
-  *  :ref:`ceili (x: float) : int <function-math_ceili_float>` 
-  *  :ref:`ceili (x: double) : int <function-math_ceili_double>` 
-  *  :ref:`ceili (x: float3) : int3 <function-math_ceili_float3>` 
-  *  :ref:`ceili (x: float2) : int2 <function-math_ceili_float2>` 
-  *  :ref:`float3x3 implicit- (x: float3x3 implicit) : float3x3 <function-math_-_float3x3_implicit>` 
-  *  :ref:`float3x4 implicit- (x: float3x4 implicit) : float3x4 <function-math_-_float3x4_implicit>` 
-  *  :ref:`float4x4 implicit- (x: float4x4 implicit) : float4x4 <function-math_-_float4x4_implicit>` 
-  *  :ref:`floori (x: float) : int <function-math_floori_float>` 
-  *  :ref:`floori (x: float2) : int2 <function-math_floori_float2>` 
-  *  :ref:`floori (x: float4) : int4 <function-math_floori_float4>` 
-  *  :ref:`floori (x: double) : int <function-math_floori_double>` 
-  *  :ref:`floori (x: float3) : int3 <function-math_floori_float3>` 
-  *  :ref:`fract (x: float3) : float3 <function-math_fract_float3>` 
-  *  :ref:`fract (x: float4) : float4 <function-math_fract_float4>` 
-  *  :ref:`fract (x: float2) : float2 <function-math_fract_float2>` 
-  *  :ref:`fract (x: float) : float <function-math_fract_float>` 
-  *  :ref:`rcp_est (x: float4) : float4 <function-math_rcp_est_float4>` 
-  *  :ref:`rcp_est (x: float2) : float2 <function-math_rcp_est_float2>` 
-  *  :ref:`rcp_est (x: float) : float <function-math_rcp_est_float>` 
-  *  :ref:`rcp_est (x: float3) : float3 <function-math_rcp_est_float3>` 
-  *  :ref:`round (x: float4) : float4 <function-math_round_float4>` 
-  *  :ref:`round (x: float3) : float3 <function-math_round_float3>` 
-  *  :ref:`round (x: float2) : float2 <function-math_round_float2>` 
-  *  :ref:`round (x: float) : float <function-math_round_float>` 
-  *  :ref:`roundi (x: float4) : int4 <function-math_roundi_float4>` 
-  *  :ref:`roundi (x: float2) : int2 <function-math_roundi_float2>` 
-  *  :ref:`roundi (x: float3) : int3 <function-math_roundi_float3>` 
-  *  :ref:`roundi (x: double) : int <function-math_roundi_double>` 
-  *  :ref:`roundi (x: float) : int <function-math_roundi_float>` 
-  *  :ref:`rsqrt (x: float4) : float4 <function-math_rsqrt_float4>` 
-  *  :ref:`rsqrt (x: float2) : float2 <function-math_rsqrt_float2>` 
-  *  :ref:`rsqrt (x: float) : float <function-math_rsqrt_float>` 
-  *  :ref:`rsqrt (x: float3) : float3 <function-math_rsqrt_float3>` 
-  *  :ref:`rsqrt_est (x: float3) : float3 <function-math_rsqrt_est_float3>` 
-  *  :ref:`rsqrt_est (x: float4) : float4 <function-math_rsqrt_est_float4>` 
-  *  :ref:`rsqrt_est (x: float2) : float2 <function-math_rsqrt_est_float2>` 
-  *  :ref:`rsqrt_est (x: float) : float <function-math_rsqrt_est_float>` 
-  *  :ref:`trunci (x: double) : int <function-math_trunci_double>` 
-  *  :ref:`trunci (x: float) : int <function-math_trunci_float>` 
-  *  :ref:`trunci (x: float2) : int2 <function-math_trunci_float2>` 
-  *  :ref:`trunci (x: float4) : int4 <function-math_trunci_float4>` 
-  *  :ref:`trunci (x: float3) : int3 <function-math_trunci_float3>` 
+  *  :ref:`atan2_est (y: float; x: float) : float <function-math_atan2_est_float_float>`
+  *  :ref:`atan2_est (y: float4; x: float4) : float4 <function-math_atan2_est_float4_float4>`
+  *  :ref:`atan2_est (y: float3; x: float3) : float3 <function-math_atan2_est_float3_float3>`
+  *  :ref:`atan2_est (y: float2; x: float2) : float2 <function-math_atan2_est_float2_float2>`
+  *  :ref:`atan_est (x: float2) : float2 <function-math_atan_est_float2>`
+  *  :ref:`atan_est (x: float4) : float4 <function-math_atan_est_float4>`
+  *  :ref:`atan_est (x: float) : float <function-math_atan_est_float>`
+  *  :ref:`atan_est (x: float3) : float3 <function-math_atan_est_float3>`
+  *  :ref:`ceili (x: float4) : int4 <function-math_ceili_float4>`
+  *  :ref:`ceili (x: float) : int <function-math_ceili_float>`
+  *  :ref:`ceili (x: double) : int <function-math_ceili_double>`
+  *  :ref:`ceili (x: float3) : int3 <function-math_ceili_float3>`
+  *  :ref:`ceili (x: float2) : int2 <function-math_ceili_float2>`
+  *  :ref:`float3x3 implicit- (x: float3x3 implicit) : float3x3 <function-math_-_float3x3_implicit>`
+  *  :ref:`float3x4 implicit- (x: float3x4 implicit) : float3x4 <function-math_-_float3x4_implicit>`
+  *  :ref:`float4x4 implicit- (x: float4x4 implicit) : float4x4 <function-math_-_float4x4_implicit>`
+  *  :ref:`floori (x: float) : int <function-math_floori_float>`
+  *  :ref:`floori (x: float2) : int2 <function-math_floori_float2>`
+  *  :ref:`floori (x: float4) : int4 <function-math_floori_float4>`
+  *  :ref:`floori (x: double) : int <function-math_floori_double>`
+  *  :ref:`floori (x: float3) : int3 <function-math_floori_float3>`
+  *  :ref:`fract (x: float3) : float3 <function-math_fract_float3>`
+  *  :ref:`fract (x: float4) : float4 <function-math_fract_float4>`
+  *  :ref:`fract (x: float2) : float2 <function-math_fract_float2>`
+  *  :ref:`fract (x: float) : float <function-math_fract_float>`
+  *  :ref:`rcp_est (x: float4) : float4 <function-math_rcp_est_float4>`
+  *  :ref:`rcp_est (x: float2) : float2 <function-math_rcp_est_float2>`
+  *  :ref:`rcp_est (x: float) : float <function-math_rcp_est_float>`
+  *  :ref:`rcp_est (x: float3) : float3 <function-math_rcp_est_float3>`
+  *  :ref:`round (x: float4) : float4 <function-math_round_float4>`
+  *  :ref:`round (x: float3) : float3 <function-math_round_float3>`
+  *  :ref:`round (x: float2) : float2 <function-math_round_float2>`
+  *  :ref:`round (x: float) : float <function-math_round_float>`
+  *  :ref:`roundi (x: float4) : int4 <function-math_roundi_float4>`
+  *  :ref:`roundi (x: float2) : int2 <function-math_roundi_float2>`
+  *  :ref:`roundi (x: float3) : int3 <function-math_roundi_float3>`
+  *  :ref:`roundi (x: double) : int <function-math_roundi_double>`
+  *  :ref:`roundi (x: float) : int <function-math_roundi_float>`
+  *  :ref:`rsqrt (x: float4) : float4 <function-math_rsqrt_float4>`
+  *  :ref:`rsqrt (x: float2) : float2 <function-math_rsqrt_float2>`
+  *  :ref:`rsqrt (x: float) : float <function-math_rsqrt_float>`
+  *  :ref:`rsqrt (x: float3) : float3 <function-math_rsqrt_float3>`
+  *  :ref:`rsqrt_est (x: float3) : float3 <function-math_rsqrt_est_float3>`
+  *  :ref:`rsqrt_est (x: float4) : float4 <function-math_rsqrt_est_float4>`
+  *  :ref:`rsqrt_est (x: float2) : float2 <function-math_rsqrt_est_float2>`
+  *  :ref:`rsqrt_est (x: float) : float <function-math_rsqrt_est_float>`
+  *  :ref:`trunci (x: double) : int <function-math_trunci_double>`
+  *  :ref:`trunci (x: float) : int <function-math_trunci_float>`
+  *  :ref:`trunci (x: float2) : int2 <function-math_trunci_float2>`
+  *  :ref:`trunci (x: float4) : int4 <function-math_trunci_float4>`
+  *  :ref:`trunci (x: float3) : int3 <function-math_trunci_float3>`
 
 
 atan2_est
@@ -1330,7 +1330,7 @@ Returns the smallest integer not less than x (rounds toward positive infinity), 
 
 Returns the component-wise arithmetic negation of a matrix, flipping the sign of every element; works with float3x3, float3x4, and float4x4 matrix types.
 
-:Arguments: * **x** :  :ref:`float3x3 <handle-math-float3x3>`  implicit
+:Arguments: * **x** :  :ref:`float3x3 <handle-math-float3x3>` implicit
 
 .. _function-math_-_float3x4_implicit:
 
@@ -1338,7 +1338,7 @@ Returns the component-wise arithmetic negation of a matrix, flipping the sign of
 
 Returns the component-wise arithmetic negation of a matrix, flipping the sign of every element; works with float3x3, float3x4, and float4x4 matrix types.
 
-:Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
+:Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>` implicit
 
 .. _function-math_-_float4x4_implicit:
 
@@ -1346,7 +1346,7 @@ Returns the component-wise arithmetic negation of a matrix, flipping the sign of
 
 Returns the component-wise arithmetic negation of a matrix, flipping the sign of every element; works with float3x3, float3x4, and float4x4 matrix types.
 
-:Arguments: * **x** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
+:Arguments: * **x** :  :ref:`float4x4 <handle-math-float4x4>` implicit
 
 
 floori
@@ -1572,23 +1572,23 @@ Truncates the float x toward zero to the nearest integer and returns the result 
 float3 only
 +++++++++++
 
-  *  :ref:`cross (x: float3; y: float3) : float3 <function-math_cross_float3_float3>` 
-  *  :ref:`distance (x: float2; y: float2) : float <function-math_distance_float2_float2>` 
-  *  :ref:`distance (x: float4; y: float4) : float <function-math_distance_float4_float4>` 
-  *  :ref:`distance (x: float3; y: float3) : float <function-math_distance_float3_float3>` 
-  *  :ref:`distance_sq (x: float3; y: float3) : float <function-math_distance_sq_float3_float3>` 
-  *  :ref:`distance_sq (x: float2; y: float2) : float <function-math_distance_sq_float2_float2>` 
-  *  :ref:`distance_sq (x: float4; y: float4) : float <function-math_distance_sq_float4_float4>` 
-  *  :ref:`inv_distance (x: float3; y: float3) : float <function-math_inv_distance_float3_float3>` 
-  *  :ref:`inv_distance (x: float2; y: float2) : float <function-math_inv_distance_float2_float2>` 
-  *  :ref:`inv_distance (x: float4; y: float4) : float <function-math_inv_distance_float4_float4>` 
-  *  :ref:`inv_distance_sq (x: float4; y: float4) : float <function-math_inv_distance_sq_float4_float4>` 
-  *  :ref:`inv_distance_sq (x: float2; y: float2) : float <function-math_inv_distance_sq_float2_float2>` 
-  *  :ref:`inv_distance_sq (x: float3; y: float3) : float <function-math_inv_distance_sq_float3_float3>` 
-  *  :ref:`reflect (v: float3; n: float3) : float3 <function-math_reflect_float3_float3>` 
-  *  :ref:`reflect (v: float2; n: float2) : float2 <function-math_reflect_float2_float2>` 
-  *  :ref:`refract (v: float2; n: float2; nint: float) : float2 <function-math_refract_float2_float2_float>` 
-  *  :ref:`refract (v: float3; n: float3; nint: float) : float3 <function-math_refract_float3_float3_float>` 
+  *  :ref:`cross (x: float3; y: float3) : float3 <function-math_cross_float3_float3>`
+  *  :ref:`distance (x: float2; y: float2) : float <function-math_distance_float2_float2>`
+  *  :ref:`distance (x: float4; y: float4) : float <function-math_distance_float4_float4>`
+  *  :ref:`distance (x: float3; y: float3) : float <function-math_distance_float3_float3>`
+  *  :ref:`distance_sq (x: float3; y: float3) : float <function-math_distance_sq_float3_float3>`
+  *  :ref:`distance_sq (x: float2; y: float2) : float <function-math_distance_sq_float2_float2>`
+  *  :ref:`distance_sq (x: float4; y: float4) : float <function-math_distance_sq_float4_float4>`
+  *  :ref:`inv_distance (x: float3; y: float3) : float <function-math_inv_distance_float3_float3>`
+  *  :ref:`inv_distance (x: float2; y: float2) : float <function-math_inv_distance_float2_float2>`
+  *  :ref:`inv_distance (x: float4; y: float4) : float <function-math_inv_distance_float4_float4>`
+  *  :ref:`inv_distance_sq (x: float4; y: float4) : float <function-math_inv_distance_sq_float4_float4>`
+  *  :ref:`inv_distance_sq (x: float2; y: float2) : float <function-math_inv_distance_sq_float2_float2>`
+  *  :ref:`inv_distance_sq (x: float3; y: float3) : float <function-math_inv_distance_sq_float3_float3>`
+  *  :ref:`reflect (v: float3; n: float3) : float3 <function-math_reflect_float3_float3>`
+  *  :ref:`reflect (v: float2; n: float2) : float2 <function-math_reflect_float2_float2>`
+  *  :ref:`refract (v: float2; n: float2; nint: float) : float2 <function-math_refract_float2_float2_float>`
+  *  :ref:`refract (v: float3; n: float3; nint: float) : float3 <function-math_refract_float3_float3_float>`
 
 .. _function-math_cross_float3_float3:
 
@@ -1742,27 +1742,27 @@ Computes the refraction direction of vector v through a surface with unit normal
 float2, float3, float4
 ++++++++++++++++++++++
 
-  *  :ref:`dot (x: float3; y: float3) : float <function-math_dot_float3_float3>` 
-  *  :ref:`dot (x: float2; y: float2) : float <function-math_dot_float2_float2>` 
-  *  :ref:`dot (x: float4; y: float4) : float <function-math_dot_float4_float4>` 
-  *  :ref:`fast_normalize (x: float2) : float2 <function-math_fast_normalize_float2>` 
-  *  :ref:`fast_normalize (x: float4) : float4 <function-math_fast_normalize_float4>` 
-  *  :ref:`fast_normalize (x: float3) : float3 <function-math_fast_normalize_float3>` 
-  *  :ref:`inv_length (x: float4) : float <function-math_inv_length_float4>` 
-  *  :ref:`inv_length (x: float3) : float <function-math_inv_length_float3>` 
-  *  :ref:`inv_length (x: float2) : float <function-math_inv_length_float2>` 
-  *  :ref:`inv_length_sq (x: float4) : float <function-math_inv_length_sq_float4>` 
-  *  :ref:`inv_length_sq (x: float2) : float <function-math_inv_length_sq_float2>` 
-  *  :ref:`inv_length_sq (x: float3) : float <function-math_inv_length_sq_float3>` 
-  *  :ref:`length (x: float3) : float <function-math_length_float3>` 
-  *  :ref:`length (x: float2) : float <function-math_length_float2>` 
-  *  :ref:`length (x: float4) : float <function-math_length_float4>` 
-  *  :ref:`length_sq (x: float3) : float <function-math_length_sq_float3>` 
-  *  :ref:`length_sq (x: float2) : float <function-math_length_sq_float2>` 
-  *  :ref:`length_sq (x: float4) : float <function-math_length_sq_float4>` 
-  *  :ref:`normalize (x: float2) : float2 <function-math_normalize_float2>` 
-  *  :ref:`normalize (x: float3) : float3 <function-math_normalize_float3>` 
-  *  :ref:`normalize (x: float4) : float4 <function-math_normalize_float4>` 
+  *  :ref:`dot (x: float3; y: float3) : float <function-math_dot_float3_float3>`
+  *  :ref:`dot (x: float2; y: float2) : float <function-math_dot_float2_float2>`
+  *  :ref:`dot (x: float4; y: float4) : float <function-math_dot_float4_float4>`
+  *  :ref:`fast_normalize (x: float2) : float2 <function-math_fast_normalize_float2>`
+  *  :ref:`fast_normalize (x: float4) : float4 <function-math_fast_normalize_float4>`
+  *  :ref:`fast_normalize (x: float3) : float3 <function-math_fast_normalize_float3>`
+  *  :ref:`inv_length (x: float4) : float <function-math_inv_length_float4>`
+  *  :ref:`inv_length (x: float3) : float <function-math_inv_length_float3>`
+  *  :ref:`inv_length (x: float2) : float <function-math_inv_length_float2>`
+  *  :ref:`inv_length_sq (x: float4) : float <function-math_inv_length_sq_float4>`
+  *  :ref:`inv_length_sq (x: float2) : float <function-math_inv_length_sq_float2>`
+  *  :ref:`inv_length_sq (x: float3) : float <function-math_inv_length_sq_float3>`
+  *  :ref:`length (x: float3) : float <function-math_length_float3>`
+  *  :ref:`length (x: float2) : float <function-math_length_float2>`
+  *  :ref:`length (x: float4) : float <function-math_length_float4>`
+  *  :ref:`length_sq (x: float3) : float <function-math_length_sq_float3>`
+  *  :ref:`length_sq (x: float2) : float <function-math_length_sq_float2>`
+  *  :ref:`length_sq (x: float4) : float <function-math_length_sq_float4>`
+  *  :ref:`normalize (x: float2) : float2 <function-math_normalize_float2>`
+  *  :ref:`normalize (x: float3) : float3 <function-math_normalize_float3>`
+  *  :ref:`normalize (x: float4) : float4 <function-math_normalize_float4>`
 
 
 dot
@@ -1924,10 +1924,10 @@ Returns a unit-length vector with the same direction as the input float2, float3
 Noise functions
 +++++++++++++++
 
-  *  :ref:`uint32_hash (seed: uint) : uint <function-math_uint32_hash_uint>` 
-  *  :ref:`uint_noise_1D (position: int; seed: uint) : uint <function-math_uint_noise_1D_int_uint>` 
-  *  :ref:`uint_noise_2D (position: int2; seed: uint) : uint <function-math_uint_noise_2D_int2_uint>` 
-  *  :ref:`uint_noise_3D (position: int3; seed: uint) : uint <function-math_uint_noise_3D_int3_uint>` 
+  *  :ref:`uint32_hash (seed: uint) : uint <function-math_uint32_hash_uint>`
+  *  :ref:`uint_noise_1D (position: int; seed: uint) : uint <function-math_uint_noise_1D_int_uint>`
+  *  :ref:`uint_noise_2D (position: int2; seed: uint) : uint <function-math_uint_noise_2D_int2_uint>`
+  *  :ref:`uint_noise_3D (position: int3; seed: uint) : uint <function-math_uint_noise_3D_int3_uint>`
 
 .. _function-math_uint32_hash_uint:
 
@@ -1971,51 +1971,51 @@ Generates a deterministic uint hash value from 3D integer coordinates (x, y, z) 
 lerp/mad/clamp
 ++++++++++++++
 
-  *  :ref:`clamp (t: float; a: float; b: float) : float <function-math_clamp_float_float_float>` 
-  *  :ref:`clamp (t: int64; a: int64; b: int64) : int64 <function-math_clamp_int64_int64_int64>` 
-  *  :ref:`clamp (t: int3; a: int3; b: int3) : int3 <function-math_clamp_int3_int3_int3>` 
-  *  :ref:`clamp (t: uint3; a: uint3; b: uint3) : uint3 <function-math_clamp_uint3_uint3_uint3>` 
-  *  :ref:`clamp (t: int; a: int; b: int) : int <function-math_clamp_int_int_int>` 
-  *  :ref:`clamp (t: uint64; a: uint64; b: uint64) : uint64 <function-math_clamp_uint64_uint64_uint64>` 
-  *  :ref:`clamp (t: int4; a: int4; b: int4) : int4 <function-math_clamp_int4_int4_int4>` 
-  *  :ref:`clamp (t: int2; a: int2; b: int2) : int2 <function-math_clamp_int2_int2_int2>` 
-  *  :ref:`clamp (t: float4; a: float4; b: float4) : float4 <function-math_clamp_float4_float4_float4>` 
-  *  :ref:`clamp (t: float2; a: float2; b: float2) : float2 <function-math_clamp_float2_float2_float2>` 
-  *  :ref:`clamp (t: uint4; a: uint4; b: uint4) : uint4 <function-math_clamp_uint4_uint4_uint4>` 
-  *  :ref:`clamp (t: float3; a: float3; b: float3) : float3 <function-math_clamp_float3_float3_float3>` 
-  *  :ref:`clamp (t: double; a: double; b: double) : double <function-math_clamp_double_double_double>` 
-  *  :ref:`clamp (t: uint; a: uint; b: uint) : uint <function-math_clamp_uint_uint_uint>` 
-  *  :ref:`clamp (t: uint2; a: uint2; b: uint2) : uint2 <function-math_clamp_uint2_uint2_uint2>` 
-  *  :ref:`lerp (a: double; b: double; t: double) : double <function-math_lerp_double_double_double>` 
-  *  :ref:`lerp (a: float4; b: float4; t: float4) : float4 <function-math_lerp_float4_float4_float4>` 
-  *  :ref:`lerp (a: float3; b: float3; t: float3) : float3 <function-math_lerp_float3_float3_float3>` 
-  *  :ref:`lerp (a: float2; b: float2; t: float2) : float2 <function-math_lerp_float2_float2_float2>` 
-  *  :ref:`lerp (a: float; b: float; t: float) : float <function-math_lerp_float_float_float>` 
-  *  :ref:`lerp (a: float3; b: float3; t: float) : float3 <function-math_lerp_float3_float3_float>` 
-  *  :ref:`lerp (a: float4; b: float4; t: float) : float4 <function-math_lerp_float4_float4_float>` 
-  *  :ref:`lerp (a: float2; b: float2; t: float) : float2 <function-math_lerp_float2_float2_float>` 
-  *  :ref:`mad (a: uint4; b: uint4; c: uint4) : uint4 <function-math_mad_uint4_uint4_uint4>` 
-  *  :ref:`mad (a: uint3; b: uint3; c: uint3) : uint3 <function-math_mad_uint3_uint3_uint3>` 
-  *  :ref:`mad (a: uint2; b: uint; c: uint2) : uint2 <function-math_mad_uint2_uint_uint2>` 
-  *  :ref:`mad (a: uint; b: uint; c: uint) : uint <function-math_mad_uint_uint_uint>` 
-  *  :ref:`mad (a: int3; b: int; c: int3) : int3 <function-math_mad_int3_int_int3>` 
-  *  :ref:`mad (a: int2; b: int; c: int2) : int2 <function-math_mad_int2_int_int2>` 
-  *  :ref:`mad (a: int4; b: int; c: int4) : int4 <function-math_mad_int4_int_int4>` 
-  *  :ref:`mad (a: uint2; b: uint2; c: uint2) : uint2 <function-math_mad_uint2_uint2_uint2>` 
-  *  :ref:`mad (a: uint3; b: uint; c: uint3) : uint3 <function-math_mad_uint3_uint_uint3>` 
-  *  :ref:`mad (a: int2; b: int2; c: int2) : int2 <function-math_mad_int2_int2_int2>` 
-  *  :ref:`mad (a: float4; b: float; c: float4) : float4 <function-math_mad_float4_float_float4>` 
-  *  :ref:`mad (a: float3; b: float; c: float3) : float3 <function-math_mad_float3_float_float3>` 
-  *  :ref:`mad (a: int; b: int; c: int) : int <function-math_mad_int_int_int>` 
-  *  :ref:`mad (a: int3; b: int3; c: int3) : int3 <function-math_mad_int3_int3_int3>` 
-  *  :ref:`mad (a: float4; b: float4; c: float4) : float4 <function-math_mad_float4_float4_float4>` 
-  *  :ref:`mad (a: double; b: double; c: double) : double <function-math_mad_double_double_double>` 
-  *  :ref:`mad (a: float; b: float; c: float) : float <function-math_mad_float_float_float>` 
-  *  :ref:`mad (a: float2; b: float2; c: float2) : float2 <function-math_mad_float2_float2_float2>` 
-  *  :ref:`mad (a: float3; b: float3; c: float3) : float3 <function-math_mad_float3_float3_float3>` 
-  *  :ref:`mad (a: float2; b: float; c: float2) : float2 <function-math_mad_float2_float_float2>` 
-  *  :ref:`mad (a: int4; b: int4; c: int4) : int4 <function-math_mad_int4_int4_int4>` 
-  *  :ref:`mad (a: uint4; b: uint; c: uint4) : uint4 <function-math_mad_uint4_uint_uint4>` 
+  *  :ref:`clamp (t: float; a: float; b: float) : float <function-math_clamp_float_float_float>`
+  *  :ref:`clamp (t: int64; a: int64; b: int64) : int64 <function-math_clamp_int64_int64_int64>`
+  *  :ref:`clamp (t: int3; a: int3; b: int3) : int3 <function-math_clamp_int3_int3_int3>`
+  *  :ref:`clamp (t: uint3; a: uint3; b: uint3) : uint3 <function-math_clamp_uint3_uint3_uint3>`
+  *  :ref:`clamp (t: int; a: int; b: int) : int <function-math_clamp_int_int_int>`
+  *  :ref:`clamp (t: uint64; a: uint64; b: uint64) : uint64 <function-math_clamp_uint64_uint64_uint64>`
+  *  :ref:`clamp (t: int4; a: int4; b: int4) : int4 <function-math_clamp_int4_int4_int4>`
+  *  :ref:`clamp (t: int2; a: int2; b: int2) : int2 <function-math_clamp_int2_int2_int2>`
+  *  :ref:`clamp (t: float4; a: float4; b: float4) : float4 <function-math_clamp_float4_float4_float4>`
+  *  :ref:`clamp (t: float2; a: float2; b: float2) : float2 <function-math_clamp_float2_float2_float2>`
+  *  :ref:`clamp (t: uint4; a: uint4; b: uint4) : uint4 <function-math_clamp_uint4_uint4_uint4>`
+  *  :ref:`clamp (t: float3; a: float3; b: float3) : float3 <function-math_clamp_float3_float3_float3>`
+  *  :ref:`clamp (t: double; a: double; b: double) : double <function-math_clamp_double_double_double>`
+  *  :ref:`clamp (t: uint; a: uint; b: uint) : uint <function-math_clamp_uint_uint_uint>`
+  *  :ref:`clamp (t: uint2; a: uint2; b: uint2) : uint2 <function-math_clamp_uint2_uint2_uint2>`
+  *  :ref:`lerp (a: double; b: double; t: double) : double <function-math_lerp_double_double_double>`
+  *  :ref:`lerp (a: float4; b: float4; t: float4) : float4 <function-math_lerp_float4_float4_float4>`
+  *  :ref:`lerp (a: float3; b: float3; t: float3) : float3 <function-math_lerp_float3_float3_float3>`
+  *  :ref:`lerp (a: float2; b: float2; t: float2) : float2 <function-math_lerp_float2_float2_float2>`
+  *  :ref:`lerp (a: float; b: float; t: float) : float <function-math_lerp_float_float_float>`
+  *  :ref:`lerp (a: float3; b: float3; t: float) : float3 <function-math_lerp_float3_float3_float>`
+  *  :ref:`lerp (a: float4; b: float4; t: float) : float4 <function-math_lerp_float4_float4_float>`
+  *  :ref:`lerp (a: float2; b: float2; t: float) : float2 <function-math_lerp_float2_float2_float>`
+  *  :ref:`mad (a: uint4; b: uint4; c: uint4) : uint4 <function-math_mad_uint4_uint4_uint4>`
+  *  :ref:`mad (a: uint3; b: uint3; c: uint3) : uint3 <function-math_mad_uint3_uint3_uint3>`
+  *  :ref:`mad (a: uint2; b: uint; c: uint2) : uint2 <function-math_mad_uint2_uint_uint2>`
+  *  :ref:`mad (a: uint; b: uint; c: uint) : uint <function-math_mad_uint_uint_uint>`
+  *  :ref:`mad (a: int3; b: int; c: int3) : int3 <function-math_mad_int3_int_int3>`
+  *  :ref:`mad (a: int2; b: int; c: int2) : int2 <function-math_mad_int2_int_int2>`
+  *  :ref:`mad (a: int4; b: int; c: int4) : int4 <function-math_mad_int4_int_int4>`
+  *  :ref:`mad (a: uint2; b: uint2; c: uint2) : uint2 <function-math_mad_uint2_uint2_uint2>`
+  *  :ref:`mad (a: uint3; b: uint; c: uint3) : uint3 <function-math_mad_uint3_uint_uint3>`
+  *  :ref:`mad (a: int2; b: int2; c: int2) : int2 <function-math_mad_int2_int2_int2>`
+  *  :ref:`mad (a: float4; b: float; c: float4) : float4 <function-math_mad_float4_float_float4>`
+  *  :ref:`mad (a: float3; b: float; c: float3) : float3 <function-math_mad_float3_float_float3>`
+  *  :ref:`mad (a: int; b: int; c: int) : int <function-math_mad_int_int_int>`
+  *  :ref:`mad (a: int3; b: int3; c: int3) : int3 <function-math_mad_int3_int3_int3>`
+  *  :ref:`mad (a: float4; b: float4; c: float4) : float4 <function-math_mad_float4_float4_float4>`
+  *  :ref:`mad (a: double; b: double; c: double) : double <function-math_mad_double_double_double>`
+  *  :ref:`mad (a: float; b: float; c: float) : float <function-math_mad_float_float_float>`
+  *  :ref:`mad (a: float2; b: float2; c: float2) : float2 <function-math_mad_float2_float2_float2>`
+  *  :ref:`mad (a: float3; b: float3; c: float3) : float3 <function-math_mad_float3_float3_float3>`
+  *  :ref:`mad (a: float2; b: float; c: float2) : float2 <function-math_mad_float2_float_float2>`
+  *  :ref:`mad (a: int4; b: int4; c: int4) : int4 <function-math_mad_int4_int4_int4>`
+  *  :ref:`mad (a: uint4; b: uint; c: uint4) : uint4 <function-math_mad_uint4_uint_uint4>`
 
 
 clamp
@@ -2244,18 +2244,18 @@ Computes the fused multiply-add operation `a * b + c`.
 Matrix element access
 +++++++++++++++++++++
 
-  *  :ref:`float3x3 const implicit ==const.[] (m: float3x3 const implicit ==const; i: int) : float3 <function-math__dot__float3x3_const_implicit__eq__eq_const_int>` 
-  *  :ref:`float3x3 const implicit ==const.[] (m: float3x3 const implicit ==const; i: uint) : float3 <function-math__dot__float3x3_const_implicit__eq__eq_const_uint>` 
-  *  :ref:`float3x3 implicit ==const.[] (m: float3x3 implicit ==const; i: int) : float3& <function-math__dot__float3x3_implicit__eq__eq_const_int>` 
-  *  :ref:`float3x3 implicit ==const.[] (m: float3x3 implicit ==const; i: uint) : float3& <function-math__dot__float3x3_implicit__eq__eq_const_uint>` 
-  *  :ref:`float3x4 const implicit ==const.[] (m: float3x4 const implicit ==const; i: uint) : float3 <function-math__dot__float3x4_const_implicit__eq__eq_const_uint>` 
-  *  :ref:`float3x4 const implicit ==const.[] (m: float3x4 const implicit ==const; i: int) : float3 <function-math__dot__float3x4_const_implicit__eq__eq_const_int>` 
-  *  :ref:`float3x4 implicit ==const.[] (m: float3x4 implicit ==const; i: uint) : float3& <function-math__dot__float3x4_implicit__eq__eq_const_uint>` 
-  *  :ref:`float3x4 implicit ==const.[] (m: float3x4 implicit ==const; i: int) : float3& <function-math__dot__float3x4_implicit__eq__eq_const_int>` 
-  *  :ref:`float4x4 const implicit ==const.[] (m: float4x4 const implicit ==const; i: uint) : float4 <function-math__dot__float4x4_const_implicit__eq__eq_const_uint>` 
-  *  :ref:`float4x4 const implicit ==const.[] (m: float4x4 const implicit ==const; i: int) : float4 <function-math__dot__float4x4_const_implicit__eq__eq_const_int>` 
-  *  :ref:`float4x4 implicit ==const.[] (m: float4x4 implicit ==const; i: int) : float4& <function-math__dot__float4x4_implicit__eq__eq_const_int>` 
-  *  :ref:`float4x4 implicit ==const.[] (m: float4x4 implicit ==const; i: uint) : float4& <function-math__dot__float4x4_implicit__eq__eq_const_uint>` 
+  *  :ref:`float3x3 const implicit ==const.[] (m: float3x3 const implicit ==const; i: int) : float3 <function-math__dot__float3x3_const_implicit__eq__eq_const_int>`
+  *  :ref:`float3x3 const implicit ==const.[] (m: float3x3 const implicit ==const; i: uint) : float3 <function-math__dot__float3x3_const_implicit__eq__eq_const_uint>`
+  *  :ref:`float3x3 implicit ==const.[] (m: float3x3 implicit ==const; i: int) : float3& <function-math__dot__float3x3_implicit__eq__eq_const_int>`
+  *  :ref:`float3x3 implicit ==const.[] (m: float3x3 implicit ==const; i: uint) : float3& <function-math__dot__float3x3_implicit__eq__eq_const_uint>`
+  *  :ref:`float3x4 const implicit ==const.[] (m: float3x4 const implicit ==const; i: uint) : float3 <function-math__dot__float3x4_const_implicit__eq__eq_const_uint>`
+  *  :ref:`float3x4 const implicit ==const.[] (m: float3x4 const implicit ==const; i: int) : float3 <function-math__dot__float3x4_const_implicit__eq__eq_const_int>`
+  *  :ref:`float3x4 implicit ==const.[] (m: float3x4 implicit ==const; i: uint) : float3& <function-math__dot__float3x4_implicit__eq__eq_const_uint>`
+  *  :ref:`float3x4 implicit ==const.[] (m: float3x4 implicit ==const; i: int) : float3& <function-math__dot__float3x4_implicit__eq__eq_const_int>`
+  *  :ref:`float4x4 const implicit ==const.[] (m: float4x4 const implicit ==const; i: uint) : float4 <function-math__dot__float4x4_const_implicit__eq__eq_const_uint>`
+  *  :ref:`float4x4 const implicit ==const.[] (m: float4x4 const implicit ==const; i: int) : float4 <function-math__dot__float4x4_const_implicit__eq__eq_const_int>`
+  *  :ref:`float4x4 implicit ==const.[] (m: float4x4 implicit ==const; i: int) : float4& <function-math__dot__float4x4_implicit__eq__eq_const_int>`
+  *  :ref:`float4x4 implicit ==const.[] (m: float4x4 implicit ==const; i: uint) : float4& <function-math__dot__float4x4_implicit__eq__eq_const_uint>`
 
 
 float3x3 const implicit ==const.[]
@@ -2267,7 +2267,7 @@ float3x3 const implicit ==const.[]
 
 Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
 
-:Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>`  implicit!
+:Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>` implicit!
 
             * **i** : int
 
@@ -2287,7 +2287,7 @@ float3x3 implicit ==const.[]
 
 Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
 
-:Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>`  implicit!
+:Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>` implicit!
 
             * **i** : int
 
@@ -2307,7 +2307,7 @@ float3x4 const implicit ==const.[]
 
 Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
 
-:Arguments: * **m** :  :ref:`float3x4 <handle-math-float3x4>`  implicit!
+:Arguments: * **m** :  :ref:`float3x4 <handle-math-float3x4>` implicit!
 
             * **i** : uint
 
@@ -2327,7 +2327,7 @@ float3x4 implicit ==const.[]
 
 Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
 
-:Arguments: * **m** :  :ref:`float3x4 <handle-math-float3x4>`  implicit!
+:Arguments: * **m** :  :ref:`float3x4 <handle-math-float3x4>` implicit!
 
             * **i** : uint
 
@@ -2347,7 +2347,7 @@ float4x4 const implicit ==const.[]
 
 Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
 
-:Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>`  implicit!
+:Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>` implicit!
 
             * **i** : uint
 
@@ -2367,7 +2367,7 @@ float4x4 implicit ==const.[]
 
 Returns a reference to the row vector at the specified index of a float3x3, float3x4, or float4x4 matrix; the index can be int or uint and must be within the row count of the matrix.
 
-:Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>`  implicit!
+:Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>` implicit!
 
             * **i** : int
 
@@ -2381,18 +2381,18 @@ Returns a reference to the row vector at the specified index of a float3x3, floa
 Matrix operations
 +++++++++++++++++
 
-  *  :ref:`float3x3 implicit\!= (x: float3x3 implicit; y: float3x3 implicit) : bool <function-math__ex__eq__float3x3_implicit_float3x3_implicit>` 
-  *  :ref:`float3x3 implicit* (x: float3x3 implicit; y: float3x3 implicit) : float3x3 <function-math__st__float3x3_implicit_float3x3_implicit>` 
-  *  :ref:`float3x3 implicit* (x: float3x3 implicit; y: float3) : float3 <function-math__st__float3x3_implicit_float3>` 
-  *  :ref:`float3x3 implicit== (x: float3x3 implicit; y: float3x3 implicit) : bool <function-math__eq__eq__float3x3_implicit_float3x3_implicit>` 
-  *  :ref:`float3x4 implicit\!= (x: float3x4 implicit; y: float3x4 implicit) : bool <function-math__ex__eq__float3x4_implicit_float3x4_implicit>` 
-  *  :ref:`float3x4 implicit* (x: float3x4 implicit; y: float3x4 implicit) : float3x4 <function-math__st__float3x4_implicit_float3x4_implicit>` 
-  *  :ref:`float3x4 implicit* (x: float3x4 implicit; y: float3) : float3 <function-math__st__float3x4_implicit_float3>` 
-  *  :ref:`float3x4 implicit== (x: float3x4 implicit; y: float3x4 implicit) : bool <function-math__eq__eq__float3x4_implicit_float3x4_implicit>` 
-  *  :ref:`float4x4 implicit\!= (x: float4x4 implicit; y: float4x4 implicit) : bool <function-math__ex__eq__float4x4_implicit_float4x4_implicit>` 
-  *  :ref:`float4x4 implicit* (x: float4x4 implicit; y: float4) : float4 <function-math__st__float4x4_implicit_float4>` 
-  *  :ref:`float4x4 implicit* (x: float4x4 implicit; y: float4x4 implicit) : float4x4 <function-math__st__float4x4_implicit_float4x4_implicit>` 
-  *  :ref:`float4x4 implicit== (x: float4x4 implicit; y: float4x4 implicit) : bool <function-math__eq__eq__float4x4_implicit_float4x4_implicit>` 
+  *  :ref:`float3x3 implicit\!= (x: float3x3 implicit; y: float3x3 implicit) : bool <function-math__ex__eq__float3x3_implicit_float3x3_implicit>`
+  *  :ref:`float3x3 implicit* (x: float3x3 implicit; y: float3x3 implicit) : float3x3 <function-math__st__float3x3_implicit_float3x3_implicit>`
+  *  :ref:`float3x3 implicit* (x: float3x3 implicit; y: float3) : float3 <function-math__st__float3x3_implicit_float3>`
+  *  :ref:`float3x3 implicit== (x: float3x3 implicit; y: float3x3 implicit) : bool <function-math__eq__eq__float3x3_implicit_float3x3_implicit>`
+  *  :ref:`float3x4 implicit\!= (x: float3x4 implicit; y: float3x4 implicit) : bool <function-math__ex__eq__float3x4_implicit_float3x4_implicit>`
+  *  :ref:`float3x4 implicit* (x: float3x4 implicit; y: float3x4 implicit) : float3x4 <function-math__st__float3x4_implicit_float3x4_implicit>`
+  *  :ref:`float3x4 implicit* (x: float3x4 implicit; y: float3) : float3 <function-math__st__float3x4_implicit_float3>`
+  *  :ref:`float3x4 implicit== (x: float3x4 implicit; y: float3x4 implicit) : bool <function-math__eq__eq__float3x4_implicit_float3x4_implicit>`
+  *  :ref:`float4x4 implicit\!= (x: float4x4 implicit; y: float4x4 implicit) : bool <function-math__ex__eq__float4x4_implicit_float4x4_implicit>`
+  *  :ref:`float4x4 implicit* (x: float4x4 implicit; y: float4) : float4 <function-math__st__float4x4_implicit_float4>`
+  *  :ref:`float4x4 implicit* (x: float4x4 implicit; y: float4x4 implicit) : float4x4 <function-math__st__float4x4_implicit_float4x4_implicit>`
+  *  :ref:`float4x4 implicit== (x: float4x4 implicit; y: float4x4 implicit) : bool <function-math__eq__eq__float4x4_implicit_float4x4_implicit>`
 
 .. _function-math__ex__eq__float3x3_implicit_float3x3_implicit:
 
@@ -2400,9 +2400,9 @@ Matrix operations
 
 Returns true if two float3x3 matrices are not equal, comparing all elements component-wise.
 
-:Arguments: * **x** :  :ref:`float3x3 <handle-math-float3x3>`  implicit
+:Arguments: * **x** :  :ref:`float3x3 <handle-math-float3x3>` implicit
 
-            * **y** :  :ref:`float3x3 <handle-math-float3x3>`  implicit
+            * **y** :  :ref:`float3x3 <handle-math-float3x3>` implicit
 
 
 float3x3 implicit*
@@ -2415,9 +2415,9 @@ float3x3 implicit*
 Multiplies two 3x3 matrices and returns the resulting 3x3 matrix.
 
 
-:Arguments: * **x** :  :ref:`float3x3 <handle-math-float3x3>`  implicit
+:Arguments: * **x** :  :ref:`float3x3 <handle-math-float3x3>` implicit
 
-            * **y** :  :ref:`float3x3 <handle-math-float3x3>`  implicit
+            * **y** :  :ref:`float3x3 <handle-math-float3x3>` implicit
 
 .. _function-math__st__float3x3_implicit_float3:
 
@@ -2431,9 +2431,9 @@ Multiplies two 3x3 matrices and returns the resulting 3x3 matrix.
 
 Returns true if two float3x3 matrices are exactly equal, comparing all elements component-wise.
 
-:Arguments: * **x** :  :ref:`float3x3 <handle-math-float3x3>`  implicit
+:Arguments: * **x** :  :ref:`float3x3 <handle-math-float3x3>` implicit
 
-            * **y** :  :ref:`float3x3 <handle-math-float3x3>`  implicit
+            * **y** :  :ref:`float3x3 <handle-math-float3x3>` implicit
 
 .. _function-math__ex__eq__float3x4_implicit_float3x4_implicit:
 
@@ -2441,9 +2441,9 @@ Returns true if two float3x3 matrices are exactly equal, comparing all elements 
 
 Returns true if two float3x4 matrices are not equal, comparing all elements component-wise.
 
-:Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
+:Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>` implicit
 
-            * **y** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
+            * **y** :  :ref:`float3x4 <handle-math-float3x4>` implicit
 
 
 float3x4 implicit*
@@ -2456,9 +2456,9 @@ float3x4 implicit*
 Multiplies two 3x4 matrices and returns the resulting 3x4 matrix.
 
 
-:Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
+:Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>` implicit
 
-            * **y** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
+            * **y** :  :ref:`float3x4 <handle-math-float3x4>` implicit
 
 .. _function-math__st__float3x4_implicit_float3:
 
@@ -2472,9 +2472,9 @@ Multiplies two 3x4 matrices and returns the resulting 3x4 matrix.
 
 Returns true if two float3x4 matrices are exactly equal, comparing all elements component-wise.
 
-:Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
+:Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>` implicit
 
-            * **y** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
+            * **y** :  :ref:`float3x4 <handle-math-float3x4>` implicit
 
 .. _function-math__ex__eq__float4x4_implicit_float4x4_implicit:
 
@@ -2482,9 +2482,9 @@ Returns true if two float3x4 matrices are exactly equal, comparing all elements 
 
 Returns true if two float4x4 matrices are not equal, comparing all elements component-wise.
 
-:Arguments: * **x** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
+:Arguments: * **x** :  :ref:`float4x4 <handle-math-float4x4>` implicit
 
-            * **y** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
+            * **y** :  :ref:`float4x4 <handle-math-float4x4>` implicit
 
 
 float4x4 implicit*
@@ -2497,7 +2497,7 @@ float4x4 implicit*
 Transforms a float4 vector by a 4x4 matrix.
 
 
-:Arguments: * **x** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
+:Arguments: * **x** :  :ref:`float4x4 <handle-math-float4x4>` implicit
 
             * **y** : float4
 
@@ -2513,24 +2513,24 @@ Transforms a float4 vector by a 4x4 matrix.
 
 Returns true if two float4x4 matrices are exactly equal, comparing all elements component-wise.
 
-:Arguments: * **x** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
+:Arguments: * **x** :  :ref:`float4x4 <handle-math-float4x4>` implicit
 
-            * **y** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
+            * **y** :  :ref:`float4x4 <handle-math-float4x4>` implicit
 
 +++++++++++++++++++
 Matrix initializers
 +++++++++++++++++++
 
-  *  :ref:`float3x3 (arg0: float3x4 implicit) : float3x3 <function-math_float3x3_float3x4_implicit>` 
-  *  :ref:`float3x3 () : float3x3 <function-math_float3x3>` 
-  *  :ref:`float3x3 (arg0: float4x4 implicit) : float3x3 <function-math_float3x3_float4x4_implicit>` 
-  *  :ref:`float3x4 (arg0: float4x4 implicit) : float3x4 <function-math_float3x4_float4x4_implicit>` 
-  *  :ref:`float3x4 () : float3x4 <function-math_float3x4>` 
-  *  :ref:`float4x4 (arg0: float3x4 implicit) : float4x4 <function-math_float4x4_float3x4_implicit>` 
-  *  :ref:`float4x4 () : float4x4 <function-math_float4x4>` 
-  *  :ref:`identity3x3 () : float3x3 <function-math_identity3x3>` 
-  *  :ref:`identity3x4 () : float3x4 <function-math_identity3x4>` 
-  *  :ref:`identity4x4 () : float4x4 <function-math_identity4x4>` 
+  *  :ref:`float3x3 (arg0: float3x4 implicit) : float3x3 <function-math_float3x3_float3x4_implicit>`
+  *  :ref:`float3x3 () : float3x3 <function-math_float3x3>`
+  *  :ref:`float3x3 (arg0: float4x4 implicit) : float3x3 <function-math_float3x3_float4x4_implicit>`
+  *  :ref:`float3x4 (arg0: float4x4 implicit) : float3x4 <function-math_float3x4_float4x4_implicit>`
+  *  :ref:`float3x4 () : float3x4 <function-math_float3x4>`
+  *  :ref:`float4x4 (arg0: float3x4 implicit) : float4x4 <function-math_float4x4_float3x4_implicit>`
+  *  :ref:`float4x4 () : float4x4 <function-math_float4x4>`
+  *  :ref:`identity3x3 () : float3x3 <function-math_identity3x3>`
+  *  :ref:`identity3x4 () : float3x4 <function-math_identity3x4>`
+  *  :ref:`identity4x4 () : float4x4 <function-math_identity4x4>`
 
 
 float3x3
@@ -2542,7 +2542,7 @@ float3x3
 
 Extracts the upper-left 3x3 rotation part from a float3x4 transformation matrix, returning it as a float3x3.
 
-:Arguments: * **arg0** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
+:Arguments: * **arg0** :  :ref:`float3x4 <handle-math-float3x4>` implicit
 
 .. _function-math_float3x3:
 
@@ -2564,7 +2564,7 @@ float3x4
 
 Constructs a float3x4 transformation matrix from a float3x3 rotation matrix, with the translation component set to zero.
 
-:Arguments: * **arg0** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
+:Arguments: * **arg0** :  :ref:`float4x4 <handle-math-float4x4>` implicit
 
 .. _function-math_float3x4:
 
@@ -2582,7 +2582,7 @@ float4x4
 
 Converts a float3x4 transformation matrix to a float4x4 matrix, filling the fourth row with [0, 0, 0, 1].
 
-:Arguments: * **arg0** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
+:Arguments: * **arg0** :  :ref:`float3x4 <handle-math-float3x4>` implicit
 
 .. _function-math_float4x4:
 
@@ -2612,24 +2612,24 @@ Returns a float4x4 identity matrix with ones on the diagonal and zeros elsewhere
 Matrix manipulation
 +++++++++++++++++++
 
-  *  :ref:`compose (pos: float3; rot: float4; scale: float3) : float4x4 <function-math_compose_float3_float4_float3>` 
-  *  :ref:`decompose (mat: float4x4 implicit; pos: float3& implicit; rot: float4& implicit; scale: float3& implicit) <function-math_decompose_float4x4_implicit_float3_implicit_float4_implicit_float3_implicit>` 
-  *  :ref:`determinant (x: float3x4 implicit) : float <function-math_determinant_float3x4_implicit>` 
-  *  :ref:`determinant (x: float4x4 implicit) : float <function-math_determinant_float4x4_implicit>` 
-  *  :ref:`determinant (x: float3x3 implicit) : float <function-math_determinant_float3x3_implicit>` 
-  *  :ref:`identity (x: float3x4 implicit) <function-math_identity_float3x4_implicit>` 
-  *  :ref:`identity (x: float4x4 implicit) <function-math_identity_float4x4_implicit>` 
-  *  :ref:`identity (x: float3x3 implicit) <function-math_identity_float3x3_implicit>` 
-  *  :ref:`inverse (x: float3x4 implicit) : float3x4 <function-math_inverse_float3x4_implicit>` 
-  *  :ref:`inverse (m: float4x4 implicit) : float4x4 <function-math_inverse_float4x4_implicit>` 
-  *  :ref:`look_at (eye: float3; at: float3; up: float3) : float4x4 <function-math_look_at_float3_float3_float3>` 
-  *  :ref:`orthonormal_inverse (m: float3x3 implicit) : float3x3 <function-math_orthonormal_inverse_float3x3_implicit>` 
-  *  :ref:`orthonormal_inverse (m: float3x4 implicit) : float3x4 <function-math_orthonormal_inverse_float3x4_implicit>` 
-  *  :ref:`persp_forward (wk: float; hk: float; zn: float; zf: float) : float4x4 <function-math_persp_forward_float_float_float_float>` 
-  *  :ref:`persp_reverse (wk: float; hk: float; zn: float; zf: float) : float4x4 <function-math_persp_reverse_float_float_float_float>` 
-  *  :ref:`rotate (x: float3x4 implicit; y: float3) : float3 <function-math_rotate_float3x4_implicit_float3>` 
-  *  :ref:`translation (xyz: float3) : float4x4 <function-math_translation_float3>` 
-  *  :ref:`transpose (x: float4x4 implicit) : float4x4 <function-math_transpose_float4x4_implicit>` 
+  *  :ref:`compose (pos: float3; rot: float4; scale: float3) : float4x4 <function-math_compose_float3_float4_float3>`
+  *  :ref:`decompose (mat: float4x4 implicit; pos: float3& implicit; rot: float4& implicit; scale: float3& implicit) <function-math_decompose_float4x4_implicit_float3_implicit_float4_implicit_float3_implicit>`
+  *  :ref:`determinant (x: float3x4 implicit) : float <function-math_determinant_float3x4_implicit>`
+  *  :ref:`determinant (x: float4x4 implicit) : float <function-math_determinant_float4x4_implicit>`
+  *  :ref:`determinant (x: float3x3 implicit) : float <function-math_determinant_float3x3_implicit>`
+  *  :ref:`identity (x: float3x4 implicit) <function-math_identity_float3x4_implicit>`
+  *  :ref:`identity (x: float4x4 implicit) <function-math_identity_float4x4_implicit>`
+  *  :ref:`identity (x: float3x3 implicit) <function-math_identity_float3x3_implicit>`
+  *  :ref:`inverse (x: float3x4 implicit) : float3x4 <function-math_inverse_float3x4_implicit>`
+  *  :ref:`inverse (m: float4x4 implicit) : float4x4 <function-math_inverse_float4x4_implicit>`
+  *  :ref:`look_at (eye: float3; at: float3; up: float3) : float4x4 <function-math_look_at_float3_float3_float3>`
+  *  :ref:`orthonormal_inverse (m: float3x3 implicit) : float3x3 <function-math_orthonormal_inverse_float3x3_implicit>`
+  *  :ref:`orthonormal_inverse (m: float3x4 implicit) : float3x4 <function-math_orthonormal_inverse_float3x4_implicit>`
+  *  :ref:`persp_forward (wk: float; hk: float; zn: float; zf: float) : float4x4 <function-math_persp_forward_float_float_float_float>`
+  *  :ref:`persp_reverse (wk: float; hk: float; zn: float; zf: float) : float4x4 <function-math_persp_reverse_float_float_float_float>`
+  *  :ref:`rotate (x: float3x4 implicit; y: float3) : float3 <function-math_rotate_float3x4_implicit_float3>`
+  *  :ref:`translation (xyz: float3) : float4x4 <function-math_translation_float3>`
+  *  :ref:`transpose (x: float4x4 implicit) : float4x4 <function-math_transpose_float4x4_implicit>`
 
 .. _function-math_compose_float3_float4_float3:
 
@@ -2649,7 +2649,7 @@ Constructs a float4x4 transformation matrix from a float3 translation position, 
 
 Decomposes a float4x4 transformation matrix into its float3 translation position, float4 quaternion rotation, and float3 scale components., writing the results into the output arguments rot and pos.
 
-:Arguments: * **mat** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
+:Arguments: * **mat** :  :ref:`float4x4 <handle-math-float4x4>` implicit
 
             * **pos** : float3& implicit
 
@@ -2667,7 +2667,7 @@ determinant
 
 Returns the determinant of a float3x4 matrix as a float scalar; a zero determinant indicates the matrix is singular and non-invertible.
 
-:Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
+:Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>` implicit
 
 .. _function-math_determinant_float4x4_implicit:
 
@@ -2689,7 +2689,7 @@ identity
 
 Sets the given float3x4 matrix to the identity transformation (rotation part is the identity matrix, translation is zero) and returns it.
 
-:Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
+:Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>` implicit
 
 .. _function-math_identity_float4x4_implicit:
 
@@ -2711,7 +2711,7 @@ inverse
 
 Returns the inverse of a matrix, such that multiplying the original by its inverse yields the identity; works with float3x4 and float4x4 matrix types.
 
-:Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
+:Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>` implicit
 
 .. _function-math_inverse_float4x4_implicit:
 
@@ -2741,7 +2741,7 @@ orthonormal_inverse
 
 Returns the inverse of a float3x3 orthonormal matrix (each axis is unit length and mutually perpendicular), computed more efficiently than a general matrix inverse.
 
-:Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>`  implicit
+:Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>` implicit
 
 .. _function-math_orthonormal_inverse_float3x4_implicit:
 
@@ -2783,7 +2783,7 @@ Returns a reverse-depth perspective projection float4x4 matrix constructed from 
 
 Rotates a float3 vector v by the 3x3 rotation part of the float3x4 matrix m, ignoring the translation component.
 
-:Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>`  implicit
+:Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>` implicit
 
             * **y** : float3
 
@@ -2801,24 +2801,24 @@ Constructs a float4x4 matrix representing a pure translation by the given float3
 
 Returns the transpose of a float3x3 or float4x4 matrix, swapping rows and columns.
 
-:Arguments: * **x** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
+:Arguments: * **x** :  :ref:`float4x4 <handle-math-float4x4>` implicit
 
 +++++++++++++++++++++
 Quaternion operations
 +++++++++++++++++++++
 
-  *  :ref:`euler_from_quat (angles: float4) : float3 <function-math_euler_from_quat_float4>` 
-  *  :ref:`quat (m: float4x4 implicit) : float4 <function-math_quat_float4x4_implicit>` 
-  *  :ref:`quat (m: float3x3 implicit) : float4 <function-math_quat_float3x3_implicit>` 
-  *  :ref:`quat (m: float3x4 implicit) : float4 <function-math_quat_float3x4_implicit>` 
-  *  :ref:`quat_conjugate (q: float4) : float4 <function-math_quat_conjugate_float4>` 
-  *  :ref:`quat_from_euler (x: float; y: float; z: float) : float4 <function-math_quat_from_euler_float_float_float>` 
-  *  :ref:`quat_from_euler (angles: float3) : float4 <function-math_quat_from_euler_float3>` 
-  *  :ref:`quat_from_unit_arc (v0: float3; v1: float3) : float4 <function-math_quat_from_unit_arc_float3_float3>` 
-  *  :ref:`quat_from_unit_vec_ang (v: float3; ang: float) : float4 <function-math_quat_from_unit_vec_ang_float3_float>` 
-  *  :ref:`quat_mul (q1: float4; q2: float4) : float4 <function-math_quat_mul_float4_float4>` 
-  *  :ref:`quat_mul_vec (q: float4; v: float3) : float3 <function-math_quat_mul_vec_float4_float3>` 
-  *  :ref:`quat_slerp (t: float; a: float4; b: float4) : float4 <function-math_quat_slerp_float_float4_float4>` 
+  *  :ref:`euler_from_quat (angles: float4) : float3 <function-math_euler_from_quat_float4>`
+  *  :ref:`quat (m: float4x4 implicit) : float4 <function-math_quat_float4x4_implicit>`
+  *  :ref:`quat (m: float3x3 implicit) : float4 <function-math_quat_float3x3_implicit>`
+  *  :ref:`quat (m: float3x4 implicit) : float4 <function-math_quat_float3x4_implicit>`
+  *  :ref:`quat_conjugate (q: float4) : float4 <function-math_quat_conjugate_float4>`
+  *  :ref:`quat_from_euler (x: float; y: float; z: float) : float4 <function-math_quat_from_euler_float_float_float>`
+  *  :ref:`quat_from_euler (angles: float3) : float4 <function-math_quat_from_euler_float3>`
+  *  :ref:`quat_from_unit_arc (v0: float3; v1: float3) : float4 <function-math_quat_from_unit_arc_float3_float3>`
+  *  :ref:`quat_from_unit_vec_ang (v: float3; ang: float) : float4 <function-math_quat_from_unit_vec_ang_float3_float>`
+  *  :ref:`quat_mul (q1: float4; q2: float4) : float4 <function-math_quat_mul_float4_float4>`
+  *  :ref:`quat_mul_vec (q: float4; v: float3) : float3 <function-math_quat_mul_vec_float4_float3>`
+  *  :ref:`quat_slerp (t: float; a: float4; b: float4) : float4 <function-math_quat_slerp_float_float4_float4>`
 
 .. _function-math_euler_from_quat_float4:
 
@@ -2838,7 +2838,7 @@ quat
 
 Extracts the rotation part of a float3x4 matrix and returns it as a float4 quaternion in (x, y, z, w) format.
 
-:Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>`  implicit
+:Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>` implicit
 
 .. _function-math_quat_float3x3_implicit:
 
@@ -2936,8 +2936,8 @@ Performs spherical linear interpolation between float4 quaternions a and b by fa
 Packing and unpacking
 +++++++++++++++++++++
 
-  *  :ref:`pack_float_to_byte (x: float4) : uint <function-math_pack_float_to_byte_float4>` 
-  *  :ref:`unpack_byte_to_float (x: uint) : float4 <function-math_unpack_byte_to_float_uint>` 
+  *  :ref:`pack_float_to_byte (x: float4) : uint <function-math_pack_float_to_byte_float4>`
+  *  :ref:`unpack_byte_to_float (x: uint) : float4 <function-math_unpack_byte_to_float_uint>`
 
 .. _function-math_pack_float_to_byte_float4:
 

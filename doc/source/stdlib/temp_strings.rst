@@ -28,7 +28,7 @@ Function annotation that enables temporary string optimization.
 Temporary string builders
 +++++++++++++++++++++++++
 
-  *  :ref:`build_temp_string (bldr: block\<(var writer:StringBuilderWriter):void\>; cb: block\<(res:string#):void\>) <function-temp_strings_build_temp_string_block_ls_var_writer_c_StringBuilderWriter_c_void_gr__block_ls_res_c_string_hh__c_void_gr_>` 
+  *  :ref:`build_temp_string (bldr: block\<(var writer:StringBuilderWriter):void\>; cb: block\<(res:string#):void\>) <function-temp_strings_build_temp_string_block_ls_var_writer_c_StringBuilderWriter_c_void_gr__block_ls_res_c_string_hh__c_void_gr_>`
 
 .. _function-temp_strings_build_temp_string_block_ls_var_writer_c_StringBuilderWriter_c_void_gr__block_ls_res_c_string_hh__c_void_gr_:
 
@@ -37,7 +37,7 @@ Temporary string builders
 Same as build_string, but delete the string after the callback is called.
 Intern strings are not deleted.
 
-:Arguments: * **bldr** : block<(writer: :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ):void>
+:Arguments: * **bldr** : block<(writer: :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`):void>
 
             * **cb** : block<(res:string#):void>
 
@@ -45,8 +45,8 @@ Intern strings are not deleted.
 Temporary string conversion
 +++++++++++++++++++++++++++
 
-  *  :ref:`temp_string (arr: array\<uint8\>; cb: block\<(res:string#):void\>) <function-temp_strings_temp_string_array_ls_uint8_gr__block_ls_res_c_string_hh__c_void_gr_>` 
-  *  :ref:`temp_string (str: string; cb: block\<(res:string#):void\>) <function-temp_strings_temp_string_string_block_ls_res_c_string_hh__c_void_gr_>` 
+  *  :ref:`temp_string (arr: array\<uint8\>; cb: block\<(res:string#):void\>) <function-temp_strings_temp_string_array_ls_uint8_gr__block_ls_res_c_string_hh__c_void_gr_>`
+  *  :ref:`temp_string (str: string; cb: block\<(res:string#):void\>) <function-temp_strings_temp_string_string_block_ls_res_c_string_hh__c_void_gr_>`
 
 
 temp_string

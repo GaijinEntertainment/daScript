@@ -42,10 +42,10 @@ This macro reports an error if temp_value is attempted outside of function argum
 Safe temporary address
 ++++++++++++++++++++++
 
-  *  :ref:`safe_addr (x: auto(T) const& ==const) : T?# <function-safe_addr_safe_addr_autoT_const__eq__eq_const_0x1e>` 
-  *  :ref:`safe_addr (var x: auto(T)& ==const) : T?# <function-safe_addr_safe_addr__autoT__eq__eq_const_0x16>` 
-  *  :ref:`shared_addr (val: auto(VALUE)) : auto <function-safe_addr_shared_addr_autoVALUE_0x48>` 
-  *  :ref:`shared_addr (tab: table\<auto(KEY), auto(VAL)\>; k: KEY) : auto <function-safe_addr_shared_addr_table_ls_autoKEY,_autoVAL_gr__KEY>` 
+  *  :ref:`safe_addr (x: auto(T) const& ==const) : T?# <function-safe_addr_safe_addr_autoT_const__eq__eq_const_0x1e>`
+  *  :ref:`safe_addr (var x: auto(T)& ==const) : T?# <function-safe_addr_safe_addr__autoT__eq__eq_const_0x16>`
+  *  :ref:`shared_addr (val: auto(VALUE)) : auto <function-safe_addr_shared_addr_autoVALUE_0x48>`
+  *  :ref:`shared_addr (tab: table\<auto(KEY), auto(VAL)\>; k: KEY) : auto <function-safe_addr_shared_addr_table_ls_autoKEY,_autoVAL_gr__KEY>`
 
 
 safe_addr
@@ -87,8 +87,8 @@ returns address of the given shared variable. it's safe because shared variables
 Temporary pointers
 ++++++++++++++++++
 
-  *  :ref:`temp_ptr (var x: auto(T)? implicit ==const) : T?# <function-safe_addr_temp_ptr__autoT_q__implicit__eq__eq_const>` 
-  *  :ref:`temp_ptr (x: auto(T)? const implicit ==const) : T?# <function-safe_addr_temp_ptr_autoT_q__const_implicit__eq__eq_const>` 
+  *  :ref:`temp_ptr (var x: auto(T)? implicit ==const) : T?# <function-safe_addr_temp_ptr__autoT_q__implicit__eq__eq_const>`
+  *  :ref:`temp_ptr (x: auto(T)? const implicit ==const) : T?# <function-safe_addr_temp_ptr_autoT_q__const_implicit__eq__eq_const>`
 
 
 temp_ptr
@@ -112,8 +112,8 @@ returns temporary pointer from a given pointer
 Temporary values
 ++++++++++++++++
 
-  *  :ref:`temp_value (var x: auto(T)& ==const) : T&# <function-safe_addr_temp_value__autoT__eq__eq_const_0x63>` 
-  *  :ref:`temp_value (x: auto(T) const& ==const) : T const&# <function-safe_addr_temp_value_autoT_const__eq__eq_const_0x5b>` 
+  *  :ref:`temp_value (var x: auto(T)& ==const) : T&# <function-safe_addr_temp_value__autoT__eq__eq_const_0x63>`
+  *  :ref:`temp_value (x: auto(T) const& ==const) : T const&# <function-safe_addr_temp_value_autoT_const__eq__eq_const_0x5b>`
 
 
 temp_value

@@ -894,17 +894,17 @@ Handled structures
 
 Any expression (base class).
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
 
 .. _handle-ast-TypeDecl:
@@ -1603,13 +1603,13 @@ Returns the mangled name hash of the given type.
 
              * **canBePlacedInContainer** : bool
 
-             * **vectorBaseType** :  :ref:`Type <enum-rtti-Type>` 
+             * **vectorBaseType** :  :ref:`Type <enum-rtti-Type>`
 
              * **vectorDim** : int
 
              * **canInitWithZero** : bool
 
-             * **rangeBaseType** :  :ref:`Type <enum-rtti-Type>` 
+             * **rangeBaseType** :  :ref:`Type <enum-rtti-Type>`
 
              * **unsafeInit** : bool
 
@@ -1617,17 +1617,17 @@ Returns the mangled name hash of the given type.
 
 Any type declaration.
 
-:Fields: * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Basic declaration type
+:Fields: * **baseType** :  :ref:`Type <enum-rtti-Type>` - Basic declaration type
 
-         * **structType** :  :ref:`Structure <handle-ast-Structure>` ? - Structure type if baseType is Type::tStructure
+         * **structType** :  :ref:`Structure <handle-ast-Structure>`? - Structure type if baseType is Type::tStructure
 
-         * **enumType** :  :ref:`Enumeration <handle-ast-Enumeration>` ? - Enumeration type if baseType is Type::tEnumeration
+         * **enumType** :  :ref:`Enumeration <handle-ast-Enumeration>`? - Enumeration type if baseType is Type::tEnumeration
 
-         * **annotation** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` ? - Handled type if baseType is Type::tHandle
+         * **annotation** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`? - Handled type if baseType is Type::tHandle
 
-         * **firstType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - First type for compound types (like array<firstType> or table<firstType, secondType>)
+         * **firstType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - First type for compound types (like array<firstType> or table<firstType, secondType>)
 
-         * **secondType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Second type for compound types (like table<firstType, secondType>)
+         * **secondType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Second type for compound types (like table<firstType, secondType>)
 
          * **argTypes** : vector<smart_ptr<TypeDecl>> - Argument types for function types, tuples, variants, etc
 
@@ -1637,13 +1637,13 @@ Any type declaration.
 
          * **dimExpr** : vector<smart_ptr<Expression>> - Dimension expressions for fixed array types, when dimension is specified by expression
 
-         * **flags** :  :ref:`TypeDeclFlags <alias-TypeDeclFlags>`  - Type declaration flags
+         * **flags** :  :ref:`TypeDeclFlags <alias-TypeDeclFlags>` - Type declaration flags
 
-         * **alias** :  :ref:`das_string <handle-builtin-das_string>`  - Alias name for typedefs, i.e. 'int aka MyInt' or 'MyInt'
+         * **alias** :  :ref:`das_string <handle-builtin-das_string>` - Alias name for typedefs, i.e. 'int aka MyInt' or 'MyInt'
 
-         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the type declaration in the source code
+         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the type declaration in the source code
 
-         * **_module** :  :ref:`Module <handle-rtti-Module>` ? - Module this type belongs to
+         * **_module** :  :ref:`Module <handle-rtti-Module>`? - Module this type belongs to
 
 
 .. _handle-ast-Structure:
@@ -1660,19 +1660,19 @@ Returns the size of the given type in bytes.
 
 Structure declaration.
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the structure
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the structure
 
          * **fields** : vector<FieldDeclaration> - Field declarations of the structure
 
-         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the structure declaration in the source code
+         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the structure declaration in the source code
 
-         * **_module** :  :ref:`Module <handle-rtti-Module>` ? - Module this structure belongs to
+         * **_module** :  :ref:`Module <handle-rtti-Module>`? - Module this structure belongs to
 
-         * **parent** :  :ref:`Structure <handle-ast-Structure>` ? - Parent structure, if any
+         * **parent** :  :ref:`Structure <handle-ast-Structure>`? - Parent structure, if any
 
-         * **annotations** :  :ref:`AnnotationList <handle-rtti-AnnotationList>`  - List of annotations attached to this structure
+         * **annotations** :  :ref:`AnnotationList <handle-rtti-AnnotationList>` - List of annotations attached to this structure
 
-         * **flags** :  :ref:`StructureFlags <alias-StructureFlags>`  - Structure flags
+         * **flags** :  :ref:`StructureFlags <alias-StructureFlags>` - Structure flags
 
 
 .. _handle-ast-FieldDeclaration:
@@ -1681,19 +1681,19 @@ Structure declaration.
 
 Structure field declaration.
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the field
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the field
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the field
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the field
 
-         * **init** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Expression for field initializer, if any
+         * **init** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Expression for field initializer, if any
 
-         * **annotation** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  - Annotations attached to this field
+         * **annotation** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` - Annotations attached to this field
 
-         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the field declaration in the source code
+         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the field declaration in the source code
 
          * **offset** : int - Offset of the field in the structure
 
-         * **flags** :  :ref:`FieldDeclarationFlags <alias-FieldDeclarationFlags>`  - Field flags
+         * **flags** :  :ref:`FieldDeclarationFlags <alias-FieldDeclarationFlags>` - Field flags
 
 
 .. _handle-ast-EnumEntry:
@@ -1702,13 +1702,13 @@ Structure field declaration.
 
 Entry in the enumeration.
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the enumeration entry
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the enumeration entry
 
-         * **cppName** :  :ref:`das_string <handle-builtin-das_string>`  - C++ name of the enumeration entry
+         * **cppName** :  :ref:`das_string <handle-builtin-das_string>` - C++ name of the enumeration entry
 
-         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the enumeration entry in the source code
+         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enumeration entry in the source code
 
-         * **value** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Value of the enumeration entry (typicall 'ExprConst' derivative)
+         * **value** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Value of the enumeration entry (typicall 'ExprConst' derivative)
 
 
 .. _handle-ast-Enumeration:
@@ -1717,21 +1717,21 @@ Entry in the enumeration.
 
 Enumeration declaration.
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the enumeration
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the enumeration
 
-         * **cppName** :  :ref:`das_string <handle-builtin-das_string>`  - C++ name of the enumeration
+         * **cppName** :  :ref:`das_string <handle-builtin-das_string>` - C++ name of the enumeration
 
-         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the enumeration declaration in the source code
+         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enumeration declaration in the source code
 
          * **list** : vector<EnumEntry> - List of entries in the enumeration
 
-         * **_module** :  :ref:`Module <handle-rtti-Module>` ? - Module this enumeration belongs to
+         * **_module** :  :ref:`Module <handle-rtti-Module>`? - Module this enumeration belongs to
 
          * **external** : bool - Whether this enumeration is external (defined on the C++ side)
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Enumeration underlying type (int8, int16, int, or int64)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Enumeration underlying type (int8, int16, int, or int64)
 
-         * **annotations** :  :ref:`AnnotationList <handle-rtti-AnnotationList>`  - Annotations attached to this enumeration
+         * **annotations** :  :ref:`AnnotationList <handle-rtti-AnnotationList>` - Annotations attached to this enumeration
 
          * **isPrivate** : bool - Is this enumeration private (not visible from outside the module)
 
@@ -1758,7 +1758,7 @@ Returns the mangled name hash of the given function.
 
 Returns whether the given function is a generic function.
 
-:Properties: * **origin** :  :ref:`Function <handle-ast-Function>` ?
+:Properties: * **origin** :  :ref:`Function <handle-ast-Function>`?
 
              * **getMangledNameHash** : uint64
 
@@ -1766,15 +1766,15 @@ Returns whether the given function is a generic function.
 
 Function declaration.
 
-:Fields: * **annotations** :  :ref:`AnnotationList <handle-rtti-AnnotationList>`  - Annotations attached to this function
+:Fields: * **annotations** :  :ref:`AnnotationList <handle-rtti-AnnotationList>` - Annotations attached to this function
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the function
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the function
 
          * **arguments** : vector<smart_ptr<Variable>> - Arguments of the function
 
-         * **result** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Result type of the function
+         * **result** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Result type of the function
 
-         * **body** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Body expression of the function (usually 'ExprBlock' but can be optimized out on later stages)
+         * **body** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Body expression of the function (usually 'ExprBlock' but can be optimized out on later stages)
 
          * **index** : int - Index of the function in the 'Context'
 
@@ -1782,23 +1782,23 @@ Function declaration.
 
          * **totalGenLabel** : int - Number of generated labels in the jump table (for the generator)
 
-         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the function in the source code
+         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the function in the source code
 
-         * **atDecl** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the function declaration in the source code
+         * **atDecl** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the function declaration in the source code
 
-         * **_module** :  :ref:`Module <handle-rtti-Module>` ? - Module this function belongs to
+         * **_module** :  :ref:`Module <handle-rtti-Module>`? - Module this function belongs to
 
-         * **classParent** :  :ref:`Structure <handle-ast-Structure>` ? - Parent structure if this is a method
+         * **classParent** :  :ref:`Structure <handle-ast-Structure>`? - Parent structure if this is a method
 
-         * **flags** :  :ref:`FunctionFlags <alias-FunctionFlags>`  - Function flags
+         * **flags** :  :ref:`FunctionFlags <alias-FunctionFlags>` - Function flags
 
-         * **moreFlags** :  :ref:`MoreFunctionFlags <alias-MoreFunctionFlags>`  - More function flags
+         * **moreFlags** :  :ref:`MoreFunctionFlags <alias-MoreFunctionFlags>` - More function flags
 
-         * **sideEffectFlags** :  :ref:`FunctionSideEffectFlags <alias-FunctionSideEffectFlags>`  - Function side effect flags
+         * **sideEffectFlags** :  :ref:`FunctionSideEffectFlags <alias-FunctionSideEffectFlags>` - Function side effect flags
 
          * **inferStack** : vector<InferHistory> - Inference history
 
-         * **fromGeneric** : smart_ptr< :ref:`Function <handle-ast-Function>` > - If this function was instantiated from a generic function, pointer to the generic function
+         * **fromGeneric** : smart_ptr< :ref:`Function <handle-ast-Function>`> - If this function was instantiated from a generic function, pointer to the generic function
 
          * **hash** : uint64 - Hash of the function signature
 
@@ -1811,15 +1811,15 @@ Function declaration.
 
 Bindings for the 'BuiltInFunction', which is used for the builtin (bound) functions in Daslang.
 
-:Fields: * **annotations** :  :ref:`AnnotationList <handle-rtti-AnnotationList>`  - Annotations attached to this function
+:Fields: * **annotations** :  :ref:`AnnotationList <handle-rtti-AnnotationList>` - Annotations attached to this function
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the function
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the function
 
          * **arguments** : vector<smart_ptr<Variable>> - Arguments of the function
 
-         * **result** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Result type of the function
+         * **result** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Result type of the function
 
-         * **body** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Body expression of the function (null just about every time for the builtins)
+         * **body** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Body expression of the function (null just about every time for the builtins)
 
          * **index** : int - Index of the function in the 'Context'
 
@@ -1827,29 +1827,29 @@ Bindings for the 'BuiltInFunction', which is used for the builtin (bound) functi
 
          * **totalGenLabel** : int - Number of generated labels in the jump table (for the generator)
 
-         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the function in the source code
+         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the function in the source code
 
-         * **atDecl** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the function declaration in the source code
+         * **atDecl** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the function declaration in the source code
 
-         * **_module** :  :ref:`Module <handle-rtti-Module>` ? - Module this function belongs to
+         * **_module** :  :ref:`Module <handle-rtti-Module>`? - Module this function belongs to
 
-         * **classParent** :  :ref:`Structure <handle-ast-Structure>` ? - Parent structure if this is a method
+         * **classParent** :  :ref:`Structure <handle-ast-Structure>`? - Parent structure if this is a method
 
-         * **flags** :  :ref:`FunctionFlags <alias-FunctionFlags>`  - Function flags
+         * **flags** :  :ref:`FunctionFlags <alias-FunctionFlags>` - Function flags
 
-         * **moreFlags** :  :ref:`MoreFunctionFlags <alias-MoreFunctionFlags>`  - More function flags
+         * **moreFlags** :  :ref:`MoreFunctionFlags <alias-MoreFunctionFlags>` - More function flags
 
-         * **sideEffectFlags** :  :ref:`FunctionSideEffectFlags <alias-FunctionSideEffectFlags>`  - Function side effect flags
+         * **sideEffectFlags** :  :ref:`FunctionSideEffectFlags <alias-FunctionSideEffectFlags>` - Function side effect flags
 
          * **inferStack** : vector<InferHistory> - Inference history
 
-         * **fromGeneric** : smart_ptr< :ref:`Function <handle-ast-Function>` > - If this function was instantiated from a generic function, pointer to the generic function
+         * **fromGeneric** : smart_ptr< :ref:`Function <handle-ast-Function>`> - If this function was instantiated from a generic function, pointer to the generic function
 
          * **hash** : uint64 - Hash of the function signature
 
          * **aotHash** : uint64 - Hash of the function signature for AOT purposes
 
-         * **cppName** :  :ref:`das_string <handle-builtin-das_string>`  - C++ function name.
+         * **cppName** :  :ref:`das_string <handle-builtin-das_string>` - C++ function name.
 
 
 .. _handle-ast-ExternalFnBase:
@@ -1859,15 +1859,15 @@ Bindings for the 'BuiltInFunction', which is used for the builtin (bound) functi
 Base class for external function bindings.
 Bindings for the 'BuiltInFunction', which is used for the builtin (bound) functions in Daslang.
 
-:Fields: * **annotations** :  :ref:`AnnotationList <handle-rtti-AnnotationList>`  - Annotations attached to this function
+:Fields: * **annotations** :  :ref:`AnnotationList <handle-rtti-AnnotationList>` - Annotations attached to this function
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the function
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the function
 
          * **arguments** : vector<smart_ptr<Variable>> - Arguments of the function
 
-         * **result** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Result type of the function
+         * **result** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Result type of the function
 
-         * **body** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Body expression of the function (null just about every time for the external functions)
+         * **body** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Body expression of the function (null just about every time for the external functions)
 
          * **index** : int - Index of the function in the 'Context'
 
@@ -1875,29 +1875,29 @@ Bindings for the 'BuiltInFunction', which is used for the builtin (bound) functi
 
          * **totalGenLabel** : int - Number of generated labels in the jump table (for the generator)
 
-         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the function in the source code
+         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the function in the source code
 
-         * **atDecl** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the function declaration in the source code
+         * **atDecl** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the function declaration in the source code
 
-         * **_module** :  :ref:`Module <handle-rtti-Module>` ? - Module this function belongs to
+         * **_module** :  :ref:`Module <handle-rtti-Module>`? - Module this function belongs to
 
-         * **classParent** :  :ref:`Structure <handle-ast-Structure>` ? - Parent structure if this is a method
+         * **classParent** :  :ref:`Structure <handle-ast-Structure>`? - Parent structure if this is a method
 
-         * **flags** :  :ref:`FunctionFlags <alias-FunctionFlags>`  - Function flags
+         * **flags** :  :ref:`FunctionFlags <alias-FunctionFlags>` - Function flags
 
-         * **moreFlags** :  :ref:`MoreFunctionFlags <alias-MoreFunctionFlags>`  - More function flags
+         * **moreFlags** :  :ref:`MoreFunctionFlags <alias-MoreFunctionFlags>` - More function flags
 
-         * **sideEffectFlags** :  :ref:`FunctionSideEffectFlags <alias-FunctionSideEffectFlags>`  - Function side effect flags
+         * **sideEffectFlags** :  :ref:`FunctionSideEffectFlags <alias-FunctionSideEffectFlags>` - Function side effect flags
 
          * **inferStack** : vector<InferHistory> - Inference history
 
-         * **fromGeneric** : smart_ptr< :ref:`Function <handle-ast-Function>` > - If this function was instantiated from a generic function, pointer to the generic function
+         * **fromGeneric** : smart_ptr< :ref:`Function <handle-ast-Function>`> - If this function was instantiated from a generic function, pointer to the generic function
 
          * **hash** : uint64 - Hash of the function signature
 
          * **aotHash** : uint64 - Hash of the function signature for AOT purposes
 
-         * **cppName** :  :ref:`das_string <handle-builtin-das_string>`  - C++ function name.
+         * **cppName** :  :ref:`das_string <handle-builtin-das_string>` - C++ function name.
 
 
 .. _handle-ast-InferHistory:
@@ -1906,9 +1906,9 @@ Bindings for the 'BuiltInFunction', which is used for the builtin (bound) functi
 
 Generic function infer history.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the function in the source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the function in the source code
 
-         * **func** :  :ref:`Function <handle-ast-Function>` ? - Function being inferred
+         * **func** :  :ref:`Function <handle-ast-Function>`? - Function being inferred
 
 
 .. _handle-ast-Variable:
@@ -1933,31 +1933,31 @@ Returns the mangled name hash of the given function.
 
 Variable declaration.
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the variable
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the variable
 
-         * **_aka** :  :ref:`das_string <handle-builtin-das_string>`  - Alternative name of the variable
+         * **_aka** :  :ref:`das_string <handle-builtin-das_string>` - Alternative name of the variable
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the variable
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the variable
 
-         * **init** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Initializer expression for the variable, if any
+         * **init** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Initializer expression for the variable, if any
 
-         * **source** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - If its an iterator variable for the for loop, source expression being iterated over
+         * **source** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - If its an iterator variable for the for loop, source expression being iterated over
 
-         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the variable declaration in the source code
+         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the variable declaration in the source code
 
          * **index** : int - Index of the variable in the global variable list (for global variables)
 
          * **stackTop** : uint - Stack top offset for local variables
 
-         * **_module** :  :ref:`Module <handle-rtti-Module>` ? - Module this variable belongs to
+         * **_module** :  :ref:`Module <handle-rtti-Module>`? - Module this variable belongs to
 
          * **initStackSize** : uint - Stack size required to evaluate the initializer expression (for global variables)
 
-         * **flags** :  :ref:`VariableFlags <alias-VariableFlags>`  - Variable flags
+         * **flags** :  :ref:`VariableFlags <alias-VariableFlags>` - Variable flags
 
-         * **access_flags** :  :ref:`VariableAccessFlags <alias-VariableAccessFlags>`  - Variable access flags
+         * **access_flags** :  :ref:`VariableAccessFlags <alias-VariableAccessFlags>` - Variable access flags
 
-         * **annotation** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  - Annotations attached to this variable
+         * **annotation** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` - Annotations attached to this variable
 
 
 .. _handle-ast-AstContext:
@@ -1966,7 +1966,7 @@ Variable declaration.
 
 Lexical context for the particular expression.
 
-:Fields: * **func** : smart_ptr< :ref:`Function <handle-ast-Function>` > - Function this expression belongs to
+:Fields: * **func** : smart_ptr< :ref:`Function <handle-ast-Function>`> - Function this expression belongs to
 
          * **_loop** : vector<smart_ptr<Expression>> - Loop stack
 
@@ -1983,23 +1983,23 @@ Lexical context for the particular expression.
 
 Any block expression, including regular blocks and all types of closures.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
          * **list** : vector<smart_ptr<Expression>> - List of expressions in the main body of the block
 
          * **finalList** : vector<smart_ptr<Expression>> - List of expressions in the 'finally' section of the block
 
-         * **returnType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Declared return type of the block, if any (for closures)
+         * **returnType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Declared return type of the block, if any (for closures)
 
          * **arguments** : vector<smart_ptr<Variable>> - List of arguments for the block (for closures)
 
@@ -2013,15 +2013,15 @@ Any block expression, including regular blocks and all types of closures.
 
          * **maxLabelIndex** : int - Maximum label index used in this block (for goto statements)
 
-         * **annotations** :  :ref:`AnnotationList <handle-rtti-AnnotationList>`  - AnnotationList - Annotations attached to this block
+         * **annotations** :  :ref:`AnnotationList <handle-rtti-AnnotationList>` - AnnotationList - Annotations attached to this block
 
          * **annotationData** : uint64 - Opaque data associated with block
 
          * **annotationDataSid** : uint64 - Opaque data source unique-ish id associated with block
 
-         * **blockFlags** :  :ref:`ExprBlockFlags <alias-ExprBlockFlags>`  - Block expression flags
+         * **blockFlags** :  :ref:`ExprBlockFlags <alias-ExprBlockFlags>` - Block expression flags
 
-         * **inFunction** :  :ref:`Function <handle-ast-Function>` ? - Which function this block belongs to
+         * **inFunction** :  :ref:`Function <handle-ast-Function>`? - Which function this block belongs to
 
 
 .. _handle-ast-ExprLet:
@@ -2030,23 +2030,23 @@ Any block expression, including regular blocks and all types of closures.
 
 Local variable declaration (`let v = expr;`).
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
          * **variables** : vector<smart_ptr<Variable>> - List of variables being declared in this `let` expression
 
-         * **atInit** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the initializer expression in source code
+         * **atInit** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the initializer expression in source code
 
-         * **letFlags** :  :ref:`ExprLetFlags <alias-ExprLetFlags>`  - Properties of the `ExprLet` object.
+         * **letFlags** :  :ref:`ExprLetFlags <alias-ExprLetFlags>` - Properties of the `ExprLet` object.
 
 
 .. _handle-ast-ExprStringBuilder:
@@ -2055,21 +2055,21 @@ Local variable declaration (`let v = expr;`).
 
 String builder expression ("blah{blah1}blah2").
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
          * **elements** : vector<smart_ptr<Expression>> - List of expressions that make up the string builder (literals and expressions)
 
-         * **stringBuilderFlags** :  :ref:`StringBuilderFlags <alias-StringBuilderFlags>`  - Flags specific to string builder expressions
+         * **stringBuilderFlags** :  :ref:`StringBuilderFlags <alias-StringBuilderFlags>` - Flags specific to string builder expressions
 
 
 .. _handle-ast-MakeFieldDecl:
@@ -2078,15 +2078,15 @@ String builder expression ("blah{blah1}blah2").
 
 Part of `ExprMakeStruct`, declares single field (`a = expr` or `a <- expr` etc)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the field being assigned
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the field being assigned
 
-         * **value** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Initializer expression for the field
+         * **value** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Initializer expression for the field
 
-         * **tag** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Tag associated with the field, if any
+         * **tag** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Tag associated with the field, if any
 
-         * **flags** :  :ref:`MakeFieldDeclFlags <alias-MakeFieldDeclFlags>`  - Flags specific to this field declaration
+         * **flags** :  :ref:`MakeFieldDeclFlags <alias-MakeFieldDeclFlags>` - Flags specific to this field declaration
 
 
 .. _handle-ast-ExprNamedCall:
@@ -2095,23 +2095,23 @@ Part of `ExprMakeStruct`, declares single field (`a = expr` or `a <- expr` etc)
 
 Named call (`call([argname1=expr1, argname2=expr2])`).
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the named call
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the named call
 
          * **nonNamedArguments** : vector<smart_ptr<Expression>> - Non-named arguments passed to the call
 
-         * **arguments** :  :ref:`MakeStruct <handle-ast-MakeStruct>`  - Named arguments passed to the call
+         * **arguments** :  :ref:`MakeStruct <handle-ast-MakeStruct>` - Named arguments passed to the call
 
          * **argumentsFailedToInfer** : bool - Whether any arguments failed to infer their types
 
@@ -2122,25 +2122,25 @@ Named call (`call([argname1=expr1, argname2=expr2])`).
 
 Anything which looks like call (`call(expr1,expr2)`).
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the call
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the call
 
          * **arguments** : vector<smart_ptr<Expression>> - List of arguments passed to the call
 
          * **argumentsFailedToInfer** : bool - Whether any arguments failed to infer their types
 
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
 
 .. _handle-ast-ExprCallFunc:
@@ -2149,27 +2149,27 @@ Anything which looks like call (`call(expr1,expr2)`).
 
 Actual function call (`func(expr1,...)`).
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the called function
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the called function
 
          * **arguments** : vector<smart_ptr<Expression>> - Arguments passed to the function
 
          * **argumentsFailedToInfer** : bool - Whether any arguments failed to infer their types
 
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **func** :  :ref:`Function <handle-ast-Function>` ? - Pointer to the function being called, if resolved
+         * **func** :  :ref:`Function <handle-ast-Function>`? - Pointer to the function being called, if resolved
 
          * **stackTop** : uint - Stack top at the point of call, if temporary variable allocation is needed
 
@@ -2180,31 +2180,31 @@ Actual function call (`func(expr1,...)`).
 
 New expression (`new Foo`, `new Bar(expr1..)`, but **NOT** `new [[Foo ...]]`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the new expression
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the new expression
 
          * **arguments** : vector<smart_ptr<Expression>> - List of arguments passed to the constructor
 
          * **argumentsFailedToInfer** : bool - Whether any arguments failed to infer their types
 
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **func** :  :ref:`Function <handle-ast-Function>` ? - Pointer to the constructor function being called, if resolved
+         * **func** :  :ref:`Function <handle-ast-Function>`? - Pointer to the constructor function being called, if resolved
 
          * **stackTop** : uint - Stack top at the point of call, if temporary variable allocation is needed
 
-         * **typeexpr** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type expression for the type being constructed
+         * **typeexpr** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type expression for the type being constructed
 
          * **initializer** : bool - Whether there is an initializer for the new expression, or it's just default construction
 
@@ -2215,27 +2215,27 @@ New expression (`new Foo`, `new Bar(expr1..)`, but **NOT** `new [[Foo ...]]`)
 
 Anything which looks like call (`call(expr1,expr2)`).
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the call
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the call
 
          * **arguments** : vector<smart_ptr<Expression>> - List of arguments passed to the function
 
          * **argumentsFailedToInfer** : bool - Whether any arguments failed to infer their types
 
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **func** :  :ref:`Function <handle-ast-Function>` ? - Pointer to the function being called, if resolved
+         * **func** :  :ref:`Function <handle-ast-Function>`? - Pointer to the function being called, if resolved
 
          * **stackTop** : uint - Stack top at the point of call, if temporary variable allocation is needed
 
@@ -2252,19 +2252,19 @@ Anything which looks like call (`call(expr1,expr2)`).
 
 Pointer dereference (`*expr` or `deref(expr)`).
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Expression being dereferenced
+         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Expression being dereferenced
 
          * **unsafeDeref** : bool - If true, skip runtime null-pointer check
 
@@ -2277,25 +2277,25 @@ Pointer dereference (`*expr` or `deref(expr)`).
 
 Null coalescing (`expr1 ?? default_value`).
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Expression being coalesced
+         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Expression being coalesced
 
          * **unsafeDeref** : bool - If true, skip runtime null-pointer check
 
          * **assumeNoAlias** : bool - Assume no aliasing occurs
 
-         * **defaultValue** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Default value expression
+         * **defaultValue** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Default value expression
 
 
 .. _handle-ast-ExprAt:
@@ -2304,23 +2304,23 @@ Null coalescing (`expr1 ?? default_value`).
 
 Index lookup (`expr[expr1]`).
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Subexpression being indexed
+         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Subexpression being indexed
 
-         * **index** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Index expression
+         * **index** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Index expression
 
-         * **atFlags** :  :ref:`ExprAtFlags <alias-ExprAtFlags>`  - Flags specific to `ExprAt` expressions
+         * **atFlags** :  :ref:`ExprAtFlags <alias-ExprAtFlags>` - Flags specific to `ExprAt` expressions
 
 
 .. _handle-ast-ExprSafeAt:
@@ -2329,23 +2329,23 @@ Index lookup (`expr[expr1]`).
 
 Safe index lookup (`expr?[expr1]`).
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Subexpression being indexed
+         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Subexpression being indexed
 
-         * **index** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Index expression
+         * **index** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Index expression
 
-         * **atFlags** :  :ref:`ExprAtFlags <alias-ExprAtFlags>`  - Flags specific to `ExprAt` expressions
+         * **atFlags** :  :ref:`ExprAtFlags <alias-ExprAtFlags>` - Flags specific to `ExprAt` expressions
 
 
 .. _handle-ast-ExprIs:
@@ -2354,21 +2354,21 @@ Safe index lookup (`expr?[expr1]`).
 
 Is expression for variants and such (`expr is Foo`).
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Subexpression being checked
+         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Subexpression being checked
 
-         * **typeexpr** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type being checked against
+         * **typeexpr** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type being checked against
 
 
 .. _handle-ast-ExprOp:
@@ -2384,35 +2384,35 @@ Is expression for variants and such (`expr is Foo`).
 
 Two operand operator (`expr1 + expr2`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the call (unused)
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the call (unused)
 
          * **arguments** : vector<smart_ptr<Expression>> - Arguments (unused)
 
          * **argumentsFailedToInfer** : bool - If arguments failed to infer their types
 
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **func** :  :ref:`Function <handle-ast-Function>` ? - Function being called, if resolved
+         * **func** :  :ref:`Function <handle-ast-Function>`? - Function being called, if resolved
 
          * **stackTop** : uint - Stack top at the point of call, if temporary variable allocation is needed
 
-         * **op** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the operator
+         * **op** :  :ref:`das_string <handle-builtin-das_string>` - Name of the operator
 
-         * **left** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Left operand expression
+         * **left** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Left operand expression
 
-         * **right** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Right operand expression
+         * **right** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Right operand expression
 
 
 .. _handle-ast-ExprOp3:
@@ -2421,37 +2421,37 @@ Two operand operator (`expr1 + expr2`)
 
 Three operand operator (`cond ? expr1 : expr2`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the call (unused)
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the call (unused)
 
          * **arguments** : vector<smart_ptr<Expression>> - Arguments (unused)
 
          * **argumentsFailedToInfer** : bool - If arguments failed to infer their types
 
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **func** :  :ref:`Function <handle-ast-Function>` ? - Function being called, if resolved
+         * **func** :  :ref:`Function <handle-ast-Function>`? - Function being called, if resolved
 
          * **stackTop** : uint - Stack top at the point of call, if temporary variable allocation is needed
 
-         * **op** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the operator
+         * **op** :  :ref:`das_string <handle-builtin-das_string>` - Name of the operator
 
-         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Condition expression
+         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Condition expression
 
-         * **left** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Left operand expression
+         * **left** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Left operand expression
 
-         * **right** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Right operand expression
+         * **right** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Right operand expression
 
 
 .. _handle-ast-ExprCopy:
@@ -2460,37 +2460,37 @@ Three operand operator (`cond ? expr1 : expr2`)
 
 Copy operator (`expr1 = expr2`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the call (unused)
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the call (unused)
 
          * **arguments** : vector<smart_ptr<Expression>> - Arguments (unused)
 
          * **argumentsFailedToInfer** : bool - If arguments failed to infer their types
 
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **func** :  :ref:`Function <handle-ast-Function>` ? - Function being called, if resolved
+         * **func** :  :ref:`Function <handle-ast-Function>`? - Function being called, if resolved
 
          * **stackTop** : uint - Stack top at the point of call, if temporary variable allocation is needed
 
-         * **op** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the operator
+         * **op** :  :ref:`das_string <handle-builtin-das_string>` - Name of the operator
 
-         * **left** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Left operand expression
+         * **left** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Left operand expression
 
-         * **right** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Right operand expression
+         * **right** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Right operand expression
 
-         * **copy_flags** :  :ref:`CopyFlags <alias-CopyFlags>`  - Flags specific to copy operation
+         * **copy_flags** :  :ref:`CopyFlags <alias-CopyFlags>` - Flags specific to copy operation
 
 
 .. _handle-ast-ExprMove:
@@ -2499,37 +2499,37 @@ Copy operator (`expr1 = expr2`)
 
 Move operator (`expr1 <- expr2`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the call (unused)
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the call (unused)
 
          * **arguments** : vector<smart_ptr<Expression>> - Arguments (unused)
 
          * **argumentsFailedToInfer** : bool - If arguments failed to infer their types
 
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **func** :  :ref:`Function <handle-ast-Function>` ? - Function being called, if resolved
+         * **func** :  :ref:`Function <handle-ast-Function>`? - Function being called, if resolved
 
          * **stackTop** : uint - Stack top at the point of call, if temporary variable allocation is needed
 
-         * **op** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the operator
+         * **op** :  :ref:`das_string <handle-builtin-das_string>` - Name of the operator
 
-         * **left** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Left operand expression
+         * **left** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Left operand expression
 
-         * **right** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Right operand expression
+         * **right** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Right operand expression
 
-         * **move_flags** :  :ref:`MoveFlags <alias-MoveFlags>`  - Flags specific to move operation
+         * **move_flags** :  :ref:`MoveFlags <alias-MoveFlags>` - Flags specific to move operation
 
 
 .. _handle-ast-ExprClone:
@@ -2538,35 +2538,35 @@ Move operator (`expr1 <- expr2`)
 
 Clone operator (`expr1 := expr2`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the call (unused)
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the call (unused)
 
          * **arguments** : vector<smart_ptr<Expression>> - Arguments (unused)
 
          * **argumentsFailedToInfer** : bool - If arguments failed to infer their types
 
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **func** :  :ref:`Function <handle-ast-Function>` ? - Function being called, if resolved
+         * **func** :  :ref:`Function <handle-ast-Function>`? - Function being called, if resolved
 
          * **stackTop** : uint - Stack top at the point of call, if temporary variable allocation is needed
 
-         * **op** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the operator
+         * **op** :  :ref:`das_string <handle-builtin-das_string>` - Name of the operator
 
-         * **left** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Left operand expression
+         * **left** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Left operand expression
 
-         * **right** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Right operand expression
+         * **right** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Right operand expression
 
 
 .. _handle-ast-ExprWith:
@@ -2575,21 +2575,21 @@ Clone operator (`expr1 := expr2`)
 
 With section (`with expr {your; block; here}`).
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **_with** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - The expression to be used as the context for the with block
+         * **_with** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - The expression to be used as the context for the with block
 
-         * **body** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - The body of the with block
+         * **body** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - The body of the with block
 
 
 .. _handle-ast-ExprAssume:
@@ -2598,23 +2598,23 @@ With section (`with expr {your; block; here}`).
 
 Assume expression (`assume name = expr`) or (`typedef name = type`).
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **alias** :  :ref:`das_string <handle-builtin-das_string>`  - The alias name for the assume expression
+         * **alias** :  :ref:`das_string <handle-builtin-das_string>` - The alias name for the assume expression
 
-         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - The expression being aliased, if specified
+         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - The expression being aliased, if specified
 
-         * **assumeType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - The type being assumed, if specified
+         * **assumeType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - The type being assumed, if specified
 
 
 .. _handle-ast-ExprWhile:
@@ -2623,21 +2623,21 @@ Assume expression (`assume name = expr`) or (`typedef name = type`).
 
 While loop (`while expr {your; block; here;}`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **cond** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - The condition expression
+         * **cond** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - The condition expression
 
-         * **body** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - The body of the while loop
+         * **body** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - The body of the while loop
 
 
 .. _handle-ast-ExprTryCatch:
@@ -2646,21 +2646,21 @@ While loop (`while expr {your; block; here;}`)
 
 Try-recover expression (`try {your; block; here;} recover {your; recover; here;}`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **try_block** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - The try block
+         * **try_block** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - The try block
 
-         * **catch_block** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - The recover block
+         * **catch_block** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - The recover block
 
 
 .. _handle-ast-ExprIfThenElse:
@@ -2669,25 +2669,25 @@ Try-recover expression (`try {your; block; here;} recover {your; recover; here;}
 
 If-then-else expression (`if expr1 {your; block; here;} else {your; block; here;}`) including `static_if`'s.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **cond** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - The condition expression
+         * **cond** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - The condition expression
 
-         * **if_true** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - The 'then' block expression
+         * **if_true** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - The 'then' block expression
 
-         * **if_false** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - The 'else' block expression
+         * **if_false** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - The 'else' block expression
 
-         * **if_flags** :  :ref:`IfFlags <alias-IfFlags>`  - Flags specific to if-then-else expressions
+         * **if_flags** :  :ref:`IfFlags <alias-IfFlags>` - Flags specific to if-then-else expressions
 
 
 .. _handle-ast-ExprFor:
@@ -2696,17 +2696,17 @@ If-then-else expression (`if expr1 {your; block; here;} else {your; block; here;
 
 For loop (`for expr1 in expr2 {your; block; here;}`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
          * **iterators** : vector<das_string> - Names of the iterator variables
 
@@ -2722,9 +2722,9 @@ For loop (`for expr1 in expr2 {your; block; here;}`)
 
          * **sources** : vector<smart_ptr<Expression>> - Source expressions to iterate over
 
-         * **body** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - The body of the for loop
+         * **body** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - The body of the for loop
 
-         * **visibility** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Line information for visibility of the iterators
+         * **visibility** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Line information for visibility of the iterators
 
          * **allowIteratorOptimization** : bool - Whether iterator optimization is allowed
 
@@ -2737,25 +2737,25 @@ For loop (`for expr1 in expr2 {your; block; here;}`)
 
 Any make expression (`ExprMakeBlock`, `ExprMakeTuple`, `ExprMakeVariant`, `ExprMakeStruct`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **makeType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type being made
+         * **makeType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type being made
 
          * **stackTop** : uint - Stack top offset for the data, if applicable
 
          * **extraOffset** : uint - Extra offset for the data, if applicable. If part of the larger initialization, extra offset is that
 
-         * **makeFlags** :  :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>`  - Flags specific to make-local expressions
+         * **makeFlags** :  :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>` - Flags specific to make-local expressions
 
 
 .. _handle-ast-ExprMakeStruct:
@@ -2764,33 +2764,33 @@ Any make expression (`ExprMakeBlock`, `ExprMakeTuple`, `ExprMakeVariant`, `ExprM
 
 Make structure expression (`[[YourStruct v1=expr1elem1, v2=expr2elem1, ...; v1=expr1elem2, ...  ]]`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  -  Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` -  Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **makeType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type being made
+         * **makeType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type being made
 
          * **stackTop** : uint - Stack top offset for the data, if applicable
 
          * **extraOffset** : uint - Extra offset for the data, if applicable. If part of the larger initialization, extra offset is that
 
-         * **makeFlags** :  :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>`  - Flags specific to make-local expressions
+         * **makeFlags** :  :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>` - Flags specific to make-local expressions
 
          * **structs** : vector<smart_ptr<MakeStruct>> - Array of structures being made
 
-         * **_block** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Optional block expression to run after the struct is made
+         * **_block** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Optional block expression to run after the struct is made
 
-         * **constructor** :  :ref:`Function <handle-ast-Function>` ? - Constructor function to call, if any
+         * **constructor** :  :ref:`Function <handle-ast-Function>`? - Constructor function to call, if any
 
-         * **makeStructFlags** :  :ref:`ExprMakeStructFlags <alias-ExprMakeStructFlags>`  - Flags specific to make-struct expressions
+         * **makeStructFlags** :  :ref:`ExprMakeStructFlags <alias-ExprMakeStructFlags>` - Flags specific to make-struct expressions
 
 
 .. _handle-ast-ExprMakeVariant:
@@ -2799,25 +2799,25 @@ Make structure expression (`[[YourStruct v1=expr1elem1, v2=expr2elem1, ...; v1=e
 
 Make variant expression (`[YourVariant variantName=expr1]`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **makeType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type being made
+         * **makeType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type being made
 
          * **stackTop** : uint - Stack top offset for the data, if applicable
 
          * **extraOffset** : uint - Extra offset for the data, if applicable. If part of the larger initialization, extra offset is that
 
-         * **makeFlags** :  :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>`  - Flags specific to make-local expressions
+         * **makeFlags** :  :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>` - Flags specific to make-local expressions
 
          * **variants** : vector<smart_ptr<MakeFieldDecl>> - Array of variants being made
 
@@ -2828,27 +2828,27 @@ Make variant expression (`[YourVariant variantName=expr1]`)
 
 Make array expression (`[[auto 1;2;3]]` or `[{auto "foo";"bar"}]` for static and dynamic arrays accordingly).
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **makeType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type being made
+         * **makeType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type being made
 
          * **stackTop** : uint - Stack top offset for the data, if applicable
 
          * **extraOffset** : uint - Extra offset for the data, if applicable. If part of the larger initialization, extra offset is that
 
-         * **makeFlags** :  :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>`  - Flags specific to make-local expressions
+         * **makeFlags** :  :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>` - Flags specific to make-local expressions
 
-         * **recordType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the array elements
+         * **recordType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the array elements
 
          * **values** : vector<smart_ptr<Expression>> - Array of expressions for the elements
 
@@ -2861,27 +2861,27 @@ Make array expression (`[[auto 1;2;3]]` or `[{auto "foo";"bar"}]` for static and
 
 Make tuple expression (`[[auto f1,f2,f3]]`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **makeType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type being made
+         * **makeType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type being made
 
          * **stackTop** : uint - Stack top offset for the data, if applicable
 
          * **extraOffset** : uint - Extra offset for the data, if applicable. If part of the larger initialization, extra offset is that
 
-         * **makeFlags** :  :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>`  - Flags specific to make-local expressions
+         * **makeFlags** :  :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>` - Flags specific to make-local expressions
 
-         * **recordType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the array elements
+         * **recordType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the array elements
 
          * **values** : vector<smart_ptr<Expression>> - Array of expressions for the elements
 
@@ -2896,23 +2896,23 @@ Make tuple expression (`[[auto f1,f2,f3]]`)
 
 Array comprehension (`[for (x in 0..3); x]`, `[iterator for (y in range(100)); x*2; where (x!=13)]]` for arrays or generators accordingly).
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **exprFor** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - The 'for' expression
+         * **exprFor** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - The 'for' expression
 
-         * **exprWhere** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - The 'where' expression
+         * **exprWhere** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - The 'where' expression
 
-         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - The subexpression
+         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - The subexpression
 
          * **generatorSyntax** : bool - If generator syntax is used (i.e. `[iterator for ...]` instead of `[for]`)
 
@@ -2925,9 +2925,9 @@ Array comprehension (`[for (x in 0..3); x]`, `[iterator for (y in range(100)); x
 
 Compilation time only structure which holds live information about typeinfo expression for the specific macro.
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  - The name of the macro
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - The name of the macro
 
-         * **_module** :  :ref:`Module <handle-rtti-Module>` ? - The module where the macro is defined
+         * **_module** :  :ref:`Module <handle-rtti-Module>`? - The module where the macro is defined
 
 
 .. _handle-ast-ExprTypeInfo:
@@ -2936,29 +2936,29 @@ Compilation time only structure which holds live information about typeinfo expr
 
 typeinfo() expression (`typeinfo dim(a)`, `typeinfois_ref_type<int&>()`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **trait** :  :ref:`das_string <handle-builtin-das_string>`  - The trait name
+         * **trait** :  :ref:`das_string <handle-builtin-das_string>` - The trait name
 
-         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - The expression being queried for type information
+         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - The expression being queried for type information
 
-         * **typeexpr** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - The type expression being queried for type information
+         * **typeexpr** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - The type expression being queried for type information
 
-         * **subtrait** :  :ref:`das_string <handle-builtin-das_string>`  - The sub-trait name
+         * **subtrait** :  :ref:`das_string <handle-builtin-das_string>` - The sub-trait name
 
-         * **extratrait** :  :ref:`das_string <handle-builtin-das_string>`  - The extra trait name
+         * **extratrait** :  :ref:`das_string <handle-builtin-das_string>` - The extra trait name
 
-         * **macro** :  :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>` ? - The macro associated with the typeinfo expression
+         * **macro** :  :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>`? - The macro associated with the typeinfo expression
 
 
 .. _handle-ast-ExprTypeDecl:
@@ -2967,19 +2967,19 @@ typeinfo() expression (`typeinfo dim(a)`, `typeinfois_ref_type<int&>()`)
 
 typedecl() expression (`typedecl(1+2)`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **typeexpr** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - The type expression being queried for type information
+         * **typeexpr** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - The type expression being queried for type information
 
 
 .. _handle-ast-ExprLabel:
@@ -2988,21 +2988,21 @@ typedecl() expression (`typedecl(1+2)`)
 
 Label (`label 13:`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
          * **labelName** : int - The label name
 
-         * **comment** :  :ref:`das_string <handle-builtin-das_string>`  - The label comment
+         * **comment** :  :ref:`das_string <handle-builtin-das_string>` - The label comment
 
 
 .. _handle-ast-ExprGoto:
@@ -3011,21 +3011,21 @@ Label (`label 13:`)
 
 Goto expression (`goto label 13`, `goto x`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
          * **labelName** : int - Label to go to, if specified
 
-         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Expression evaluating to label to go to, if specified
+         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Expression evaluating to label to go to, if specified
 
 
 .. _handle-ast-ExprRef2Value:
@@ -3034,19 +3034,19 @@ Goto expression (`goto label 13`, `goto x`)
 
 Compilation time only structure which holds reference to value conversion for the value types, i.e. goes from int& to int and such.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - The sub-expression being converted from reference to value
+         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - The sub-expression being converted from reference to value
 
 
 .. _handle-ast-ExprRef2Ptr:
@@ -3055,19 +3055,19 @@ Compilation time only structure which holds reference to value conversion for th
 
 Addr expresion (`addr(expr)`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - The sub-expression being converted from pointer to reference
+         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - The sub-expression being converted from pointer to reference
 
 
 .. _handle-ast-ExprAddr:
@@ -3076,23 +3076,23 @@ Addr expresion (`addr(expr)`)
 
 Function address (`@@foobarfunc` or `@@foobarfunc<(int;int):bool>`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **target** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the function being referenced
+         * **target** :  :ref:`das_string <handle-builtin-das_string>` - Name of the function being referenced
 
-         * **funcType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the function being referenced
+         * **funcType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the function being referenced
 
-         * **func** :  :ref:`Function <handle-ast-Function>` ? - Function being referenced (if resolved)
+         * **func** :  :ref:`Function <handle-ast-Function>`? - Function being referenced (if resolved)
 
 
 .. _handle-ast-ExprAssert:
@@ -3101,25 +3101,25 @@ Function address (`@@foobarfunc` or `@@foobarfunc<(int;int):bool>`)
 
 Assert expression (`assert(x<13)`, or `assert(x<13, "x is too big")`, or `verify(foo()!=0)`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the asserted expression
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the asserted expression
 
          * **arguments** : vector<smart_ptr<Expression>> - Arguments of the assert expression
 
          * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
 
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the enclosure where the assert is used
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the assert is used
 
          * **isVerify** : bool - Whether the assert is a verify expression (verify expressions have to have sideeffects, assert expressions cant)
 
@@ -3130,25 +3130,25 @@ Assert expression (`assert(x<13)`, or `assert(x<13, "x is too big")`, or `verify
 
 Compilation time expression which holds its subexpressions but does not infer them (`quote() <| x+5`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the query expression
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the query expression
 
          * **arguments** : vector<smart_ptr<Expression>> - Arguments of the query expression
 
          * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
 
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the enclosure where the query is used
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the query is used
 
 
 .. _handle-ast-ExprStaticAssert:
@@ -3157,25 +3157,25 @@ Compilation time expression which holds its subexpressions but does not infer th
 
 Static assert expression (`static_assert(x<13)` or `static_assert(x<13, "x is too big")`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the static_assert expression
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the static_assert expression
 
          * **arguments** : vector<smart_ptr<Expression>> - Arguments of the static_assert expression
 
          * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
 
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the enclosure where the static_assert is used
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the static_assert is used
 
 
 .. _handle-ast-ExprDebug:
@@ -3184,25 +3184,25 @@ Static assert expression (`static_assert(x<13)` or `static_assert(x<13, "x is to
 
 Debug expression (`debug(x)` or `debug(x,"x=")`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the debug expression
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the debug expression
 
          * **arguments** : vector<smart_ptr<Expression>> - Arguments of the debug expression
 
          * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
 
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the enclosure where the debug is used
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the debug is used
 
 
 .. _handle-ast-ExprInvoke:
@@ -3219,25 +3219,25 @@ Returns whether the given invoke expression requires a copy or move of a referen
 
 Invoke expression (`invoke(fn)` or `invoke(lamb, arg1, arg2, ...)`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the invoke expression
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the invoke expression
 
          * **arguments** : vector<smart_ptr<Expression>> - Arguments of the invoke expression
 
          * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
 
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the enclosure where the invoke is used
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the invoke is used
 
          * **stackTop** : uint - Stack top for invoke, if applicable
 
@@ -3254,25 +3254,25 @@ Invoke expression (`invoke(fn)` or `invoke(lamb, arg1, arg2, ...)`)
 
 Erase expression (`erase(tab,key)`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the erase expression
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the erase expression
 
          * **arguments** : vector<smart_ptr<Expression>> - Arguments of the erase expression
 
          * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
 
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the enclosure where the erase is used
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the erase is used
 
 
 .. _handle-ast-ExprSetInsert:
@@ -3281,25 +3281,25 @@ Erase expression (`erase(tab,key)`)
 
 Set insert expression, i.e. tab |> insert(key).
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the set-insert expression
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the set-insert expression
 
          * **arguments** : vector<smart_ptr<Expression>> - Arguments of the set-insert expression
 
          * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
 
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the enclosure where the set-insert is used
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the set-insert is used
 
 
 .. _handle-ast-ExprFind:
@@ -3308,25 +3308,25 @@ Set insert expression, i.e. tab |> insert(key).
 
 Find expression (`find(tab,key) <| { your; block; here; }`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the find expression
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the find expression
 
          * **arguments** : vector<smart_ptr<Expression>> - Arguments of the find expression
 
          * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
 
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the enclosure where the find is used
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the find is used
 
 
 .. _handle-ast-ExprKeyExists:
@@ -3335,25 +3335,25 @@ Find expression (`find(tab,key) <| { your; block; here; }`)
 
 Key exists expression (`key_exists(tab,key)`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the key-exists expression
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the key-exists expression
 
          * **arguments** : vector<smart_ptr<Expression>> - Arguments of the key-exists expression
 
          * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
 
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the enclosure where the key-exists is used
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the key-exists is used
 
 
 .. _handle-ast-ExprAscend:
@@ -3362,25 +3362,25 @@ Key exists expression (`key_exists(tab,key)`)
 
 New expression for ExprMakeLocal (`new [[Foo fld=val,...]]` or `new [[Foo() fld=...]]`, but **NOT** `new Foo()`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Subexpression being ascended (newed)
+         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Subexpression being ascended (newed)
 
-         * **ascType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type being made
+         * **ascType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type being made
 
          * **stackTop** : uint - Location on the stack where the temp object is created, if necessary
 
-         * **ascendFlags** :  :ref:`ExprAscendFlags <alias-ExprAscendFlags>`  - Flags specific to `ExprAscend` expressions
+         * **ascendFlags** :  :ref:`ExprAscendFlags <alias-ExprAscendFlags>` - Flags specific to `ExprAscend` expressions
 
 
 .. _handle-ast-ExprCast:
@@ -3389,23 +3389,23 @@ New expression for ExprMakeLocal (`new [[Foo fld=val,...]]` or `new [[Foo() fld=
 
 Any cast expression (`cast<int> a`, `upcast<Foo> b` or `reinterpret<Bar?> c`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Subexpression being cast
+         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Subexpression being cast
 
-         * **castType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type to which the expression is being cast
+         * **castType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type to which the expression is being cast
 
-         * **castFlags** :  :ref:`ExprCastFlags <alias-ExprCastFlags>`  - Flags specific to `ExprCast` expressions
+         * **castFlags** :  :ref:`ExprCastFlags <alias-ExprCastFlags>` - Flags specific to `ExprCast` expressions
 
 
 .. _handle-ast-ExprDelete:
@@ -3414,21 +3414,21 @@ Any cast expression (`cast<int> a`, `upcast<Foo> b` or `reinterpret<Bar?> c`)
 
 Delete expression (`delete blah`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - The expression being deleted
+         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - The expression being deleted
 
-         * **sizeexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - The size expression for deleting classes. This one determines how big instance is to be deleted.
+         * **sizeexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - The size expression for deleting classes. This one determines how big instance is to be deleted.
 
          * **native** : bool - True if the delete is native, and not to be expanded at compilation time.
 
@@ -3439,27 +3439,27 @@ Delete expression (`delete blah`)
 
 Variable access (`foo`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - The name of the variable
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - The name of the variable
 
-         * **variable** : smart_ptr< :ref:`Variable <handle-ast-Variable>` > - The variable being accessed
+         * **variable** : smart_ptr< :ref:`Variable <handle-ast-Variable>`> - The variable being accessed
 
-         * **pBlock** :  :ref:`ExprBlock <handle-ast-ExprBlock>` ? - The block in which the variable is accessed (if any)
+         * **pBlock** :  :ref:`ExprBlock <handle-ast-ExprBlock>`? - The block in which the variable is accessed (if any)
 
          * **argumentIndex** : int - The argument index of the variable (if variable is an argument of a function or a block)
 
-         * **varFlags** :  :ref:`ExprVarFlags <alias-ExprVarFlags>`  - The flags of the variable
+         * **varFlags** :  :ref:`ExprVarFlags <alias-ExprVarFlags>` - The flags of the variable
 
 
 .. _handle-ast-ExprTag:
@@ -3468,23 +3468,23 @@ Variable access (`foo`)
 
 Compilation time only tag expression, used for reification. For example $c(....).
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - The subexpression of the tag
+         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - The subexpression of the tag
 
-         * **value** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Value of the tag
+         * **value** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Value of the tag
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the tag
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the tag
 
 
 .. _handle-ast-ExprSwizzle:
@@ -3493,25 +3493,25 @@ Compilation time only tag expression, used for reification. For example $c(....)
 
 Vector swizzle operation (`vec.xxy` or `vec.y`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **value** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Value being swizzled
+         * **value** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Value being swizzled
 
-         * **mask** :  :ref:`das_string <handle-builtin-das_string>`  - Swizzle mask
+         * **mask** :  :ref:`das_string <handle-builtin-das_string>` - Swizzle mask
 
          * **fields** : vector<uint8> - Swizzle fields
 
-         * **fieldFlags** :  :ref:`ExprSwizzleFieldFlags <alias-ExprSwizzleFieldFlags>`  - Flags specific to `ExprSwizzle` expressions
+         * **fieldFlags** :  :ref:`ExprSwizzleFieldFlags <alias-ExprSwizzleFieldFlags>` - Flags specific to `ExprSwizzle` expressions
 
 
 .. _handle-ast-ExprField:
@@ -3524,35 +3524,35 @@ Vector swizzle operation (`vec.xxy` or `vec.y`)
 
 Returns a pointer to the named field of a structure, or null if the field does not exist or the type is not a structure.
 
-:Properties: * **field** :  :ref:`FieldDeclaration <handle-ast-FieldDeclaration>` ?
+:Properties: * **field** :  :ref:`FieldDeclaration <handle-ast-FieldDeclaration>`?
 
 Field lookup (`foo.bar`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **value** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Subexpression whose field is being accessed
+         * **value** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Subexpression whose field is being accessed
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the field being accessed
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the field being accessed
 
-         * **atField** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the field access in source code
+         * **atField** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the field access in source code
 
          * **fieldIndex** : int - Index of the field in the type's field list
 
-         * **annotation** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` > - Type annotation for the field
+         * **annotation** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`> - Type annotation for the field
 
-         * **derefFlags** :  :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>`  - Flags for dereferencing operations
+         * **derefFlags** :  :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>` - Flags for dereferencing operations
 
-         * **fieldFlags** :  :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>`  - Flags specific to field access expressions
+         * **fieldFlags** :  :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>` - Flags specific to field access expressions
 
 
 .. _handle-ast-ExprSafeField:
@@ -3561,31 +3561,31 @@ Field lookup (`foo.bar`)
 
 Safe field lookup (`foo?.bar`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **value** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Subexpression whose field is being accessed
+         * **value** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Subexpression whose field is being accessed
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the field being accessed
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the field being accessed
 
-         * **atField** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the field access in source code
+         * **atField** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the field access in source code
 
          * **fieldIndex** : int - Index of the field in the type's field list
 
-         * **annotation** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` > - Type annotation for the field
+         * **annotation** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`> - Type annotation for the field
 
-         * **derefFlags** :  :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>`  - Flags for dereferencing operations
+         * **derefFlags** :  :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>` - Flags for dereferencing operations
 
-         * **fieldFlags** :  :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>`  - Flags specific to field access expressions
+         * **fieldFlags** :  :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>` - Flags specific to field access expressions
 
          * **skipQQ** : bool - If true the subexpression is already a pointer and no additional dereference is needed
 
@@ -3596,31 +3596,31 @@ Safe field lookup (`foo?.bar`)
 
 Is expression (`foo is bar`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **value** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Subexpression whose field is being accessed
+         * **value** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Subexpression whose field is being accessed
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the field being accessed
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the field being accessed
 
-         * **atField** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the field access in source code
+         * **atField** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the field access in source code
 
          * **fieldIndex** : int - Index of the field in the type's field list
 
-         * **annotation** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` > - Type annotation for the field
+         * **annotation** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`> - Type annotation for the field
 
-         * **derefFlags** :  :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>`  - Flags for dereferencing operations
+         * **derefFlags** :  :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>` - Flags for dereferencing operations
 
-         * **fieldFlags** :  :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>`  - Flags specific to field access expressions
+         * **fieldFlags** :  :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>` - Flags specific to field access expressions
 
 
 .. _handle-ast-ExprAsVariant:
@@ -3629,31 +3629,31 @@ Is expression (`foo is bar`)
 
 As expression (`foo as bar`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **value** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Subexpression whose field is being accessed
+         * **value** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Subexpression whose field is being accessed
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the field being accessed
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the field being accessed
 
-         * **atField** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the field access in source code
+         * **atField** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the field access in source code
 
          * **fieldIndex** : int - Index of the field in the type's field list
 
-         * **annotation** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` > - Type annotation for the field
+         * **annotation** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`> - Type annotation for the field
 
-         * **derefFlags** :  :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>`  - Flags for dereferencing operations
+         * **derefFlags** :  :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>` - Flags for dereferencing operations
 
-         * **fieldFlags** :  :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>`  - Flags specific to field access expressions
+         * **fieldFlags** :  :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>` - Flags specific to field access expressions
 
 
 .. _handle-ast-ExprSafeAsVariant:
@@ -3662,31 +3662,31 @@ As expression (`foo as bar`)
 
 Safe as expression (`foo? as bar`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **value** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Subexpression whose field is being accessed
+         * **value** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Subexpression whose field is being accessed
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the field being accessed
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the field being accessed
 
-         * **atField** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the field access in source code
+         * **atField** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the field access in source code
 
          * **fieldIndex** : int - Index of the field in the type's field list
 
-         * **annotation** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` > - Type annotation for the field
+         * **annotation** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`> - Type annotation for the field
 
-         * **derefFlags** :  :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>`  - Flags for dereferencing operations
+         * **derefFlags** :  :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>` - Flags for dereferencing operations
 
-         * **fieldFlags** :  :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>`  - Flags specific to field access expressions
+         * **fieldFlags** :  :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>` - Flags specific to field access expressions
 
          * **skipQQ** : bool - If true the subexpression is already a pointer and no additional dereference is needed
 
@@ -3697,33 +3697,33 @@ Safe as expression (`foo? as bar`)
 
 Single operator expression (`+a` or `-a` or `!a` or `~a`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the operator (unused)
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the operator (unused)
 
          * **arguments** : vector<smart_ptr<Expression>> - Arguments of the operator (unused)
 
          * **argumentsFailedToInfer** : bool - Whether arguments failed to infer
 
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **func** :  :ref:`Function <handle-ast-Function>` ? - Function associated with the expression
+         * **func** :  :ref:`Function <handle-ast-Function>`? - Function associated with the expression
 
          * **stackTop** : uint - Stack top position if temporary variable allocation is needed
 
-         * **op** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the operator
+         * **op** :  :ref:`das_string <handle-builtin-das_string>` - Name of the operator
 
-         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - That one argument of the operator
+         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - That one argument of the operator
 
 
 .. _handle-ast-ExprReturn:
@@ -3732,29 +3732,29 @@ Single operator expression (`+a` or `-a` or `!a` or `~a`)
 
 Return expression (`return` or `return foo`, or `return <- foo`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - The expression being returned (if any)
+         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - The expression being returned (if any)
 
-         * **returnFlags** :  :ref:`ExprReturnFlags <alias-ExprReturnFlags>`  - Return flags
+         * **returnFlags** :  :ref:`ExprReturnFlags <alias-ExprReturnFlags>` - Return flags
 
          * **stackTop** : uint - Stack top position if temporary variable allocation is needed
 
          * **refStackTop** : uint - Reference stack top position if temporary variable allocation is needed
 
-         * **returnFunc** :  :ref:`Function <handle-ast-Function>` ? - Function associated with the return expression
+         * **returnFunc** :  :ref:`Function <handle-ast-Function>`? - Function associated with the return expression
 
-         * **_block** :  :ref:`ExprBlock <handle-ast-ExprBlock>` ? - Block associated with the return expression
+         * **_block** :  :ref:`ExprBlock <handle-ast-ExprBlock>`? - Block associated with the return expression
 
 
 .. _handle-ast-ExprYield:
@@ -3763,21 +3763,21 @@ Return expression (`return` or `return foo`, or `return <- foo`)
 
 Yield expression (`yield foo` or `yield <- bar`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - The expression being yielded (never empty)
+         * **subexpr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - The expression being yielded (never empty)
 
-         * **returnFlags** :  :ref:`ExprYieldFlags <alias-ExprYieldFlags>`  - Yield flags
+         * **returnFlags** :  :ref:`ExprYieldFlags <alias-ExprYieldFlags>` - Yield flags
 
 
 .. _handle-ast-ExprBreak:
@@ -3786,17 +3786,17 @@ Yield expression (`yield foo` or `yield <- bar`)
 
 Break expression (`break`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
 
 .. _handle-ast-ExprContinue:
@@ -3805,17 +3805,17 @@ Break expression (`break`)
 
 Continue expression (`continue`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
 
 .. _handle-ast-ExprConst:
@@ -3824,19 +3824,19 @@ Continue expression (`continue`)
 
 Compilation time constant expression base class
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression
 
 
 .. _handle-ast-ExprFakeContext:
@@ -3845,19 +3845,19 @@ Compilation time constant expression base class
 
 Compilation time only fake context expression. Will simulate as current evaluation `Context`.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::fakeContext)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::fakeContext)
 
 
 .. _handle-ast-ExprFakeLineInfo:
@@ -3874,19 +3874,19 @@ Returns the constant value stored in this expression node.
 
 Compilation time only fake lineinfo expression. Will simulate as current file and line `LineInfo`.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::fakeLineInfo)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::fakeLineInfo)
 
          * **value** : void? - Pointer to the LineInfo, as void?
 
@@ -3905,19 +3905,19 @@ Returns the constant value stored in this expression node.
 
 Null (`null`). Technically can be any other pointer, but it is used for nullptr.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression
 
          * **value** : void? - Pointer value. Typically this is 'null' constant, so the value is zero.
 
@@ -3936,19 +3936,19 @@ Returns the constant value stored in this expression node.
 
 Holds int8 constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tInt8)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tInt8)
 
          * **value** : int8 - Value of the constant expression
 
@@ -3967,19 +3967,19 @@ Returns the constant value stored in this expression node.
 
 Holds int16 constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tInt16)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tInt16)
 
          * **value** : int16 - Value of the constant expression
 
@@ -3998,19 +3998,19 @@ Returns the constant value stored in this expression node.
 
 Holds int64 constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tInt64)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tInt64)
 
          * **value** : int64 - Value of the constant expression
 
@@ -4029,19 +4029,19 @@ Returns the constant value stored in this expression node.
 
 Holds int constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tInt)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tInt)
 
          * **value** : int - Value of the constant expression
 
@@ -4060,19 +4060,19 @@ Returns the constant value stored in this expression node.
 
 Holds int2 constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tInt2)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tInt2)
 
          * **value** : int2 - Value of the constant expression
 
@@ -4091,19 +4091,19 @@ Returns the constant value stored in this expression node.
 
 Holds int3 constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tInt3)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tInt3)
 
          * **value** : int3 - Value of the constant expression
 
@@ -4122,19 +4122,19 @@ Returns the constant value stored in this expression node.
 
 Holds int4 constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tInt4)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tInt4)
 
          * **value** : int4 - Value of the constant expression
 
@@ -4153,19 +4153,19 @@ Returns the constant value stored in this expression node.
 
 Holds uint8 constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tUInt8)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tUInt8)
 
          * **value** : uint8 - Value of the constant expression
 
@@ -4184,19 +4184,19 @@ Returns the constant value stored in this expression node.
 
 Holds uint16 constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tUInt16)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tUInt16)
 
          * **value** : uint16 - Value of the constant expression
 
@@ -4215,19 +4215,19 @@ Returns the constant value stored in this expression node.
 
 Holds uint64 constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tUInt64)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tUInt64)
 
          * **value** : uint64 - Value of the constant expression
 
@@ -4246,19 +4246,19 @@ Returns the constant value stored in this expression node.
 
 Holds uint constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tUInt)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tUInt)
 
          * **value** : uint - Value of the constant expression
 
@@ -4277,19 +4277,19 @@ Returns the constant value stored in this expression node.
 
 Holds uint2 constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tUInt2)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tUInt2)
 
          * **value** : uint2 - Value of the constant expression
 
@@ -4308,19 +4308,19 @@ Returns the constant value stored in this expression node.
 
 Holds uint3 constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tUInt3)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tUInt3)
 
          * **value** : uint3 - Value of the constant expression
 
@@ -4339,19 +4339,19 @@ Returns the constant value stored in this expression node.
 
 Holds uint4 constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tUInt4)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tUInt4)
 
          * **value** : uint4 - Value of the constant expression
 
@@ -4370,19 +4370,19 @@ Returns the constant value stored in this expression node.
 
 Holds range constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tRange)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tRange)
 
          * **value** : range - Value of the constant expression
 
@@ -4401,19 +4401,19 @@ Returns the constant value stored in this expression node.
 
 Holds urange constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tURange)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tURange)
 
          * **value** : urange - Value of the constant expression
 
@@ -4432,19 +4432,19 @@ Returns the constant value stored in this expression node.
 
 Holds range64 constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tRange64)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tRange64)
 
          * **value** : range64 - Value of the constant expression
 
@@ -4463,19 +4463,19 @@ Returns the constant value stored in this expression node.
 
 Holds urange64 constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tURange64)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tURange64)
 
          * **value** : urange64 - Value of the constant expression
 
@@ -4494,19 +4494,19 @@ Returns the constant value stored in this expression node.
 
 Holds float constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tFloat)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tFloat)
 
          * **value** : float - Value of the constant expression
 
@@ -4525,19 +4525,19 @@ Returns the constant value stored in this expression node.
 
 Holds float2 constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tFloat2)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tFloat2)
 
          * **value** : float2 - Value of the constant expression
 
@@ -4556,19 +4556,19 @@ Returns the constant value stored in this expression node.
 
 Holds float3 constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tFloat3)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tFloat3)
 
          * **value** : float3 - Value of the constant expression
 
@@ -4587,19 +4587,19 @@ Returns the constant value stored in this expression node.
 
 Holds float4 constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tFloat4)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tFloat4)
 
          * **value** : float4 - Value of the constant expression
 
@@ -4618,19 +4618,19 @@ Returns the constant value stored in this expression node.
 
 Holds double constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tDouble)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tDouble)
 
          * **value** : double - Value of the constant expression
 
@@ -4649,19 +4649,19 @@ Returns the constant value stored in this expression node.
 
 Holds bool constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tBool)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tBool)
 
          * **value** : bool - Value of the constant expression
 
@@ -4672,9 +4672,9 @@ Holds bool constant.
 
 Single entry in lambda capture.
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the captured variable
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the captured variable
 
-         * **mode** :  :ref:`CaptureMode <enum-ast-CaptureMode>`  - How the variable is captured (by value, by reference, etc.)
+         * **mode** :  :ref:`CaptureMode <enum-ast-CaptureMode>` - How the variable is captured (by value, by reference, etc.)
 
 
 .. _handle-ast-ExprMakeBlock:
@@ -4683,27 +4683,27 @@ Single entry in lambda capture.
 
 Any closure. Holds block as well as capture information in `CaptureEntry`.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
          * **_capture** : vector<CaptureEntry> - List of captured variables
 
-         * **_block** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - The block expression
+         * **_block** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - The block expression
 
          * **stackTop** : uint - Stack top for the block
 
-         * **mmFlags** :  :ref:`ExprMakeBlockFlags <alias-ExprMakeBlockFlags>`  - Expression generation flags
+         * **mmFlags** :  :ref:`ExprMakeBlockFlags <alias-ExprMakeBlockFlags>` - Expression generation flags
 
-         * **aotFunctorName** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the AOT functor (if applicable)
+         * **aotFunctorName** :  :ref:`das_string <handle-builtin-das_string>` - Name of the AOT functor (if applicable)
 
 
 .. _handle-ast-ExprMakeGenerator:
@@ -4712,27 +4712,27 @@ Any closure. Holds block as well as capture information in `CaptureEntry`.
 
 Generator closure (`generator<int>` or `generator<Foo&>`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the AOT functor (if applicable)
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the AOT functor (if applicable)
 
          * **arguments** : vector<smart_ptr<Expression>> - Arguments passed to the generator
 
          * **argumentsFailedToInfer** : bool - Whether arguments failed to infer
 
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the enclosure
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure
 
-         * **iterType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Iterator type, i.e. type of values produced by the generated iterator
+         * **iterType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Iterator type, i.e. type of values produced by the generated iterator
 
          * **_capture** : vector<CaptureEntry> - List of captured variables
 
@@ -4743,25 +4743,25 @@ Generator closure (`generator<int>` or `generator<Foo&>`)
 
 Memzero (`memzero(expr)`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the memzero call
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the memzero call
 
          * **arguments** : vector<smart_ptr<Expression>> - Arguments of the memzero call
 
          * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
 
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the enclosure where the memzero is used
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the memzero is used
 
 
 .. _handle-ast-ExprConstEnumeration:
@@ -4770,23 +4770,23 @@ Memzero (`memzero(expr)`)
 
 Holds enumeration constant, both type and entry (`Foo bar`).
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tEnumeration, Type::tEnumeration8, Type::tEnumeration16, or Type::tEnumeration64)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tEnumeration, Type::tEnumeration8, Type::tEnumeration16, or Type::tEnumeration64)
 
-         * **enumType** : smart_ptr< :ref:`Enumeration <handle-ast-Enumeration>` > - Enumeration type declaration
+         * **enumType** : smart_ptr< :ref:`Enumeration <handle-ast-Enumeration>`> - Enumeration type declaration
 
-         * **value** :  :ref:`das_string <handle-builtin-das_string>`  - Value of the constant expression
+         * **value** :  :ref:`das_string <handle-builtin-das_string>` - Value of the constant expression
 
 
 .. _handle-ast-ExprConstBitfield:
@@ -4803,23 +4803,23 @@ Returns the constant value stored in this expression node.
 
 Holds bitfield constant (`Foo bar`).
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tBitfield, Type::tBitfield8, Type::tBitfield16, or Type::tBitfield64)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tBitfield, Type::tBitfield8, Type::tBitfield16, or Type::tBitfield64)
 
          * **value** : bitfield<> - Value of the constant expression
 
-         * **bitfieldType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type declaration of the bitfield
+         * **bitfieldType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type declaration of the bitfield
 
 
 .. _handle-ast-ExprConstString:
@@ -4828,21 +4828,21 @@ Holds bitfield constant (`Foo bar`).
 
 Holds string constant.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>`  - Base type of the constant expression (Type::tString)
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tString)
 
-         * **value** :  :ref:`das_string <handle-builtin-das_string>`  - Value of the constant expression
+         * **value** :  :ref:`das_string <handle-builtin-das_string>` - Value of the constant expression
 
 
 .. _handle-ast-ExprUnsafe:
@@ -4851,19 +4851,19 @@ Holds string constant.
 
 Unsafe expression (`unsafe(addr(x))`)
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **body** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > - Body expression that is marked as unsafe
+         * **body** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> - Body expression that is marked as unsafe
 
 
 .. _handle-ast-VisitorAdapter:
@@ -4900,7 +4900,7 @@ Adapter for the `AstEnumerationAnnotation`.
 
 Adapter for the `AstPassMacro`.
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the macro
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro
 
 
 .. _handle-ast-ReaderMacro:
@@ -4909,9 +4909,9 @@ Adapter for the `AstPassMacro`.
 
 Adapter for the `AstReaderMacro`.
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the macro
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro
 
-         * **_module** :  :ref:`Module <handle-rtti-Module>` ? - Module where the macro is defined
+         * **_module** :  :ref:`Module <handle-rtti-Module>`? - Module where the macro is defined
 
 
 .. _handle-ast-CommentReader:
@@ -4927,9 +4927,9 @@ Adapter for the `AstReaderMacro`.
 
 Adapter for the `AstCallMacro`.
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the macro
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro
 
-         * **_module** :  :ref:`Module <handle-rtti-Module>` ? - Module where the macro is defined
+         * **_module** :  :ref:`Module <handle-rtti-Module>`? - Module where the macro is defined
 
 
 .. _handle-ast-VariantMacro:
@@ -4938,7 +4938,7 @@ Adapter for the `AstCallMacro`.
 
 Adapter for the `AstVariantMacro`.
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the macro
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro
 
 
 .. _handle-ast-ForLoopMacro:
@@ -4947,7 +4947,7 @@ Adapter for the `AstVariantMacro`.
 
 Adapter for the 'AstForLoopMacro'.
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the macro
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro
 
 
 .. _handle-ast-CaptureMacro:
@@ -4956,7 +4956,7 @@ Adapter for the 'AstForLoopMacro'.
 
 Adapter for the `AstCaptureMacro`.
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the macro
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro
 
 
 .. _handle-ast-TypeMacro:
@@ -4965,7 +4965,7 @@ Adapter for the `AstCaptureMacro`.
 
 Compilation time only structure which holds live information about type macro.
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the macro
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro
 
 
 .. _handle-ast-SimulateMacro:
@@ -4974,7 +4974,7 @@ Compilation time only structure which holds live information about type macro.
 
 Adapter for the `AstSimulateMacro`.
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the macro.
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro.
 
 
 .. _handle-ast-ExprReader:
@@ -4983,21 +4983,21 @@ Adapter for the `AstSimulateMacro`.
 
 Compilation time only expression which holds temporary information for the `AstReaderMacro`.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **macro** : smart_ptr< :ref:`ReaderMacro <handle-ast-ReaderMacro>` > - Macro which is attached to the context parser.
+         * **macro** : smart_ptr< :ref:`ReaderMacro <handle-ast-ReaderMacro>`> - Macro which is attached to the context parser.
 
-         * **sequence** :  :ref:`das_string <handle-builtin-das_string>`  - Sequence of characters being read.
+         * **sequence** :  :ref:`das_string <handle-builtin-das_string>` - Sequence of characters being read.
 
 
 .. _handle-ast-ExprCallMacro:
@@ -5006,27 +5006,27 @@ Compilation time only expression which holds temporary information for the `AstR
 
 Compilation time only expression which holds temporary information for the `AstCallMacro`.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > - Type of the expression
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
 
          * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>`  - Expression generation flags
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>`  - Expression flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>`  - Expression print flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the macro being called
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro being called
 
          * **arguments** : vector<smart_ptr<Expression>> - List of argument expressions
 
          * **argumentsFailedToInfer** : bool - If the arguments failed to infer their types
 
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Location of the expression in source code
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **macro** :  :ref:`CallMacro <handle-ast-CallMacro>` ? - Call macro, if resolved
+         * **macro** :  :ref:`CallMacro <handle-ast-CallMacro>`? - Call macro, if resolved
 
 
 +++++++++++
@@ -5174,7 +5174,7 @@ Implements the `Visitor` interface for traversing and transforming the AST tree.
 Call generation
 +++++++++++++++
 
-  *  :ref:`make_call (at: LineInfo implicit; name: string implicit) : smart_ptr\<Expression\> <function-ast_make_call_LineInfo_implicit_string_implicit>` 
+  *  :ref:`make_call (at: LineInfo implicit; name: string implicit) : smart_ptr\<Expression\> <function-ast_make_call_LineInfo_implicit_string_implicit>`
 
 .. _function-ast_make_call_LineInfo_implicit_string_implicit:
 
@@ -5182,7 +5182,7 @@ Call generation
 
 Creates the appropriate call expression for a given function name in the program.
 
-:Arguments: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  implicit
+:Arguments: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` implicit
 
             * **name** : string implicit
 
@@ -5190,15 +5190,15 @@ Creates the appropriate call expression for a given function name in the program
 Visitor pattern
 +++++++++++++++
 
-  *  :ref:`visit (expression: smart_ptr\<TypeDecl\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit) : smart_ptr\<TypeDecl\> <function-ast_visit_smart_ptr_ls_TypeDecl_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit>` 
-  *  :ref:`visit (program: smart_ptr\<Program\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit) <function-ast_visit_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit>` 
-  *  :ref:`visit (function: smart_ptr\<Function\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit) <function-ast_visit_smart_ptr_ls_Function_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit>` 
-  *  :ref:`visit (expression: smart_ptr\<Expression\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit) : smart_ptr\<Expression\> <function-ast_visit_smart_ptr_ls_Expression_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit>` 
-  *  :ref:`visit_enumeration (program: smart_ptr\<Program\> implicit; enumeration: smart_ptr\<Enumeration\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit) <function-ast_visit_enumeration_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_Enumeration_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit>` 
-  *  :ref:`visit_finally (expression: smart_ptr\<ExprBlock\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit) <function-ast_visit_finally_smart_ptr_ls_ExprBlock_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit>` 
-  *  :ref:`visit_module (program: smart_ptr\<Program\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit; module: Module? implicit) <function-ast_visit_module_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit_Module_q__implicit>` 
-  *  :ref:`visit_modules (program: smart_ptr\<Program\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit) <function-ast_visit_modules_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit>` 
-  *  :ref:`visit_structure (program: smart_ptr\<Program\> implicit; structure: smart_ptr\<Structure\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit) <function-ast_visit_structure_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_Structure_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit>` 
+  *  :ref:`visit (expression: smart_ptr\<TypeDecl\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit) : smart_ptr\<TypeDecl\> <function-ast_visit_smart_ptr_ls_TypeDecl_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit>`
+  *  :ref:`visit (program: smart_ptr\<Program\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit) <function-ast_visit_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit>`
+  *  :ref:`visit (function: smart_ptr\<Function\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit) <function-ast_visit_smart_ptr_ls_Function_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit>`
+  *  :ref:`visit (expression: smart_ptr\<Expression\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit) : smart_ptr\<Expression\> <function-ast_visit_smart_ptr_ls_Expression_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit>`
+  *  :ref:`visit_enumeration (program: smart_ptr\<Program\> implicit; enumeration: smart_ptr\<Enumeration\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit) <function-ast_visit_enumeration_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_Enumeration_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit>`
+  *  :ref:`visit_finally (expression: smart_ptr\<ExprBlock\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit) <function-ast_visit_finally_smart_ptr_ls_ExprBlock_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit>`
+  *  :ref:`visit_module (program: smart_ptr\<Program\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit; module: Module? implicit) <function-ast_visit_module_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit_Module_q__implicit>`
+  *  :ref:`visit_modules (program: smart_ptr\<Program\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit) <function-ast_visit_modules_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit>`
+  *  :ref:`visit_structure (program: smart_ptr\<Program\> implicit; structure: smart_ptr\<Structure\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit) <function-ast_visit_structure_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_Structure_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit>`
 
 
 visit
@@ -5210,9 +5210,9 @@ visit
 
 Invokes an AST visitor on the given object.
 
-:Arguments: * **expression** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
+:Arguments: * **expression** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
 
-            * **adapter** : smart_ptr< :ref:`VisitorAdapter <handle-ast-VisitorAdapter>` > implicit
+            * **adapter** : smart_ptr< :ref:`VisitorAdapter <handle-ast-VisitorAdapter>`> implicit
 
 .. _function-ast_visit_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit:
 
@@ -5234,11 +5234,11 @@ Invokes an AST visitor on the given object.
 
 Invokes an AST visitor on the given enumeration.
 
-:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
+:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>`> implicit
 
-            * **enumeration** : smart_ptr< :ref:`Enumeration <handle-ast-Enumeration>` > implicit
+            * **enumeration** : smart_ptr< :ref:`Enumeration <handle-ast-Enumeration>`> implicit
 
-            * **adapter** : smart_ptr< :ref:`VisitorAdapter <handle-ast-VisitorAdapter>` > implicit
+            * **adapter** : smart_ptr< :ref:`VisitorAdapter <handle-ast-VisitorAdapter>`> implicit
 
 .. _function-ast_visit_finally_smart_ptr_ls_ExprBlock_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit:
 
@@ -5246,9 +5246,9 @@ Invokes an AST visitor on the given enumeration.
 
 Invokes the visitor on the finally section of a block.
 
-:Arguments: * **expression** : smart_ptr< :ref:`ExprBlock <handle-ast-ExprBlock>` > implicit
+:Arguments: * **expression** : smart_ptr< :ref:`ExprBlock <handle-ast-ExprBlock>`> implicit
 
-            * **adapter** : smart_ptr< :ref:`VisitorAdapter <handle-ast-VisitorAdapter>` > implicit
+            * **adapter** : smart_ptr< :ref:`VisitorAdapter <handle-ast-VisitorAdapter>`> implicit
 
 .. _function-ast_visit_module_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit_Module_q__implicit:
 
@@ -5256,11 +5256,11 @@ Invokes the visitor on the finally section of a block.
 
 Invokes an AST visitor on the given module.
 
-:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
+:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>`> implicit
 
-            * **adapter** : smart_ptr< :ref:`VisitorAdapter <handle-ast-VisitorAdapter>` > implicit
+            * **adapter** : smart_ptr< :ref:`VisitorAdapter <handle-ast-VisitorAdapter>`> implicit
 
-            * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+            * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
 .. _function-ast_visit_modules_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit:
 
@@ -5268,9 +5268,9 @@ Invokes an AST visitor on the given module.
 
 Invokes an AST visitor on all modules in the specified program.
 
-:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
+:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>`> implicit
 
-            * **adapter** : smart_ptr< :ref:`VisitorAdapter <handle-ast-VisitorAdapter>` > implicit
+            * **adapter** : smart_ptr< :ref:`VisitorAdapter <handle-ast-VisitorAdapter>`> implicit
 
 .. _function-ast_visit_structure_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_Structure_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit:
 
@@ -5278,20 +5278,20 @@ Invokes an AST visitor on all modules in the specified program.
 
 Invokes an AST visitor on the given structure.
 
-:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
+:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>`> implicit
 
-            * **structure** : smart_ptr< :ref:`Structure <handle-ast-Structure>` > implicit
+            * **structure** : smart_ptr< :ref:`Structure <handle-ast-Structure>`> implicit
 
-            * **adapter** : smart_ptr< :ref:`VisitorAdapter <handle-ast-VisitorAdapter>` > implicit
+            * **adapter** : smart_ptr< :ref:`VisitorAdapter <handle-ast-VisitorAdapter>`> implicit
 
 +++++++++++++++++++++
 Expression generation
 +++++++++++++++++++++
 
-  *  :ref:`force_generated (function: smart_ptr\<Function\> const& implicit; value: bool) <function-ast_force_generated_smart_ptr_ls_Function_gr__const_implicit_bool>` 
-  *  :ref:`force_generated (expression: smart_ptr\<Expression\> const& implicit; value: bool) <function-ast_force_generated_smart_ptr_ls_Expression_gr__const_implicit_bool>` 
-  *  :ref:`get_expression_annotation (expr: Expression? implicit) : Annotation? <function-ast_get_expression_annotation_Expression_q__implicit>` 
-  *  :ref:`make_type_info_structure (ctx: Context implicit; type: smart_ptr\<TypeDecl\> implicit) : TypeInfo? <function-ast_make_type_info_structure_Context_implicit_smart_ptr_ls_TypeDecl_gr__implicit>` 
+  *  :ref:`force_generated (function: smart_ptr\<Function\> const& implicit; value: bool) <function-ast_force_generated_smart_ptr_ls_Function_gr__const_implicit_bool>`
+  *  :ref:`force_generated (expression: smart_ptr\<Expression\> const& implicit; value: bool) <function-ast_force_generated_smart_ptr_ls_Expression_gr__const_implicit_bool>`
+  *  :ref:`get_expression_annotation (expr: Expression? implicit) : Annotation? <function-ast_get_expression_annotation_Expression_q__implicit>`
+  *  :ref:`make_type_info_structure (ctx: Context implicit; type: smart_ptr\<TypeDecl\> implicit) : TypeInfo? <function-ast_make_type_info_structure_Context_implicit_smart_ptr_ls_TypeDecl_gr__implicit>`
 
 
 force_generated
@@ -5303,7 +5303,7 @@ force_generated
 
 Sets the generated flag on an expression and its subexpressions.
 
-:Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` >& implicit
+:Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>`>& implicit
 
             * **value** : bool
 
@@ -5319,7 +5319,7 @@ Sets the generated flag on an expression and its subexpressions.
 
 Returns the Annotation associated with an Expression or its inherited types.
 
-:Arguments: * **expr** :  :ref:`Expression <handle-ast-Expression>` ? implicit
+:Arguments: * **expr** :  :ref:`Expression <handle-ast-Expression>`? implicit
 
 .. _function-ast_make_type_info_structure_Context_implicit_smart_ptr_ls_TypeDecl_gr__implicit:
 
@@ -5327,53 +5327,53 @@ Returns the Annotation associated with an Expression or its inherited types.
 
 Returns a new TypeInfo corresponding to the specified type.
 
-:Arguments: * **ctx** :  :ref:`Context <handle-rtti-Context>`  implicit
+:Arguments: * **ctx** :  :ref:`Context <handle-rtti-Context>` implicit
 
-            * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
+            * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
 
 ++++++++++++++++++
 Adapter generation
 ++++++++++++++++++
 
-  *  :ref:`make_block_annotation (name: string; var someClassPtr: auto) : FunctionAnnotationPtr <function-ast_make_block_annotation_string_auto_0x287>` 
-  *  :ref:`make_block_annotation (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<FunctionAnnotation\> <function-ast_make_block_annotation_string_implicit_void_q__implicit_StructInfo_const_q__implicit>` 
-  *  :ref:`make_block_type (blk: ExprBlock? implicit) : smart_ptr\<TypeDecl\> <function-ast_make_block_type_ExprBlock_q__implicit>` 
-  *  :ref:`make_call_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<CallMacro\> <function-ast_make_call_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>` 
-  *  :ref:`make_call_macro (name: string; var someClassPtr: auto) : CallMacroPtr <function-ast_make_call_macro_string_auto_0x2da>` 
-  *  :ref:`make_capture_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<CaptureMacro\> <function-ast_make_capture_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>` 
-  *  :ref:`make_capture_macro (name: string; var someClassPtr: auto) : CaptureMacroPtr <function-ast_make_capture_macro_string_auto_0x320>` 
-  *  :ref:`make_clone_structure (structure: Structure? implicit) : smart_ptr\<Function\> <function-ast_make_clone_structure_Structure_q__implicit>` 
-  *  :ref:`make_comment_reader (class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<CommentReader\> <function-ast_make_comment_reader_void_q__implicit_StructInfo_const_q__implicit>` 
-  *  :ref:`make_comment_reader (name: string; var someClassPtr: auto) : CommentReaderPtr <function-ast_make_comment_reader_string_auto_0x2cc>` 
-  *  :ref:`make_enum_debug_info (helper: smart_ptr\<DebugInfoHelper\> implicit; en: Enumeration const? implicit) : EnumInfo? <function-ast_make_enum_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_Enumeration_const_q__implicit>` 
-  *  :ref:`make_enumeration_annotation (name: string; var someClassPtr: auto) : EnumerationAnnotationPtr <function-ast_make_enumeration_annotation_string_auto_0x2a3>` 
-  *  :ref:`make_enumeration_annotation (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<EnumerationAnnotation\> <function-ast_make_enumeration_annotation_string_implicit_void_q__implicit_StructInfo_const_q__implicit>` 
-  *  :ref:`make_for_loop_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<ForLoopMacro\> <function-ast_make_for_loop_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>` 
-  *  :ref:`make_for_loop_macro (name: string; var someClassPtr: auto) : ForLoopMacroPtr <function-ast_make_for_loop_macro_string_auto_0x312>` 
-  *  :ref:`make_function_annotation (name: string; var someClassPtr: auto) : FunctionAnnotationPtr <function-ast_make_function_annotation_string_auto_0x279>` 
-  *  :ref:`make_function_annotation (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<FunctionAnnotation\> <function-ast_make_function_annotation_string_implicit_void_q__implicit_StructInfo_const_q__implicit>` 
-  *  :ref:`make_function_debug_info (helper: smart_ptr\<DebugInfoHelper\> implicit; fn: Function const? implicit) : FuncInfo? <function-ast_make_function_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_Function_const_q__implicit>` 
-  *  :ref:`make_invokable_type_debug_info (helper: smart_ptr\<DebugInfoHelper\> implicit; blk: smart_ptr\<TypeDecl\> implicit; at: LineInfo implicit) : FuncInfo? <function-ast_make_invokable_type_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit_LineInfo_implicit>` 
-  *  :ref:`make_pass_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<PassMacro\> <function-ast_make_pass_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>` 
-  *  :ref:`make_pass_macro (name: string; var someClassPtr: auto) : PassMacroPtr <function-ast_make_pass_macro_string_auto_0x2f6>` 
-  *  :ref:`make_reader_macro (name: string; var someClassPtr: auto) : ReaderMacroPtr <function-ast_make_reader_macro_string_auto_0x2be>` 
-  *  :ref:`make_reader_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<ReaderMacro\> <function-ast_make_reader_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>` 
-  *  :ref:`make_simulate_macro (name: string; var someClassPtr: auto) : SimulateMacroPtr <function-ast_make_simulate_macro_string_auto_0x339>` 
-  *  :ref:`make_simulate_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<SimulateMacro\> <function-ast_make_simulate_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>` 
-  *  :ref:`make_struct_debug_info (helper: smart_ptr\<DebugInfoHelper\> implicit; st: Structure const? implicit) : StructInfo? <function-ast_make_struct_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_Structure_const_q__implicit>` 
-  *  :ref:`make_struct_variable_debug_info (helper: smart_ptr\<DebugInfoHelper\> implicit; st: Structure const? implicit; var: FieldDeclaration const? implicit) : VarInfo? <function-ast_make_struct_variable_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_Structure_const_q__implicit_FieldDeclaration_const_q__implicit>` 
-  *  :ref:`make_structure_annotation (name: string; var someClassPtr: auto) : StructureAnnotationPtr <function-ast_make_structure_annotation_string_auto_0x295>` 
-  *  :ref:`make_structure_annotation (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<StructureAnnotation\> <function-ast_make_structure_annotation_string_implicit_void_q__implicit_StructInfo_const_q__implicit>` 
-  *  :ref:`make_type_info (helper: smart_ptr\<DebugInfoHelper\> implicit; info: TypeInfo? implicit; type: smart_ptr\<TypeDecl\> const& implicit) : TypeInfo? <function-ast_make_type_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_TypeInfo_q__implicit_smart_ptr_ls_TypeDecl_gr__const_implicit>` 
-  *  :ref:`make_type_macro (name: string; var someClassPtr: auto) : TypeMacroPtr <function-ast_make_type_macro_string_auto_0x32c>` 
-  *  :ref:`make_type_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<TypeMacro\> <function-ast_make_type_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>` 
-  *  :ref:`make_typeinfo_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<TypeInfoMacro\> <function-ast_make_typeinfo_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>` 
-  *  :ref:`make_typeinfo_macro (name: string; var someClassPtr: auto) : TypeInfoMacroPtr <function-ast_make_typeinfo_macro_string_auto_0x2e8>` 
-  *  :ref:`make_variable_debug_info (helper: smart_ptr\<DebugInfoHelper\> implicit; var: Variable? implicit) : VarInfo? <function-ast_make_variable_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_Variable_q__implicit>` 
-  *  :ref:`make_variant_macro (name: string; var someClassPtr: auto) : VariantMacroPtr <function-ast_make_variant_macro_string_auto_0x304>` 
-  *  :ref:`make_variant_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<VariantMacro\> <function-ast_make_variant_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>` 
-  *  :ref:`make_visitor (someClass: auto) : smart_ptr\<VisitorAdapter\> <function-ast_make_visitor_auto_0x2ae>` 
-  *  :ref:`make_visitor (class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<VisitorAdapter\> <function-ast_make_visitor_void_q__implicit_StructInfo_const_q__implicit>` 
+  *  :ref:`make_block_annotation (name: string; var someClassPtr: auto) : FunctionAnnotationPtr <function-ast_make_block_annotation_string_auto_0x287>`
+  *  :ref:`make_block_annotation (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<FunctionAnnotation\> <function-ast_make_block_annotation_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`make_block_type (blk: ExprBlock? implicit) : smart_ptr\<TypeDecl\> <function-ast_make_block_type_ExprBlock_q__implicit>`
+  *  :ref:`make_call_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<CallMacro\> <function-ast_make_call_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`make_call_macro (name: string; var someClassPtr: auto) : CallMacroPtr <function-ast_make_call_macro_string_auto_0x2da>`
+  *  :ref:`make_capture_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<CaptureMacro\> <function-ast_make_capture_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`make_capture_macro (name: string; var someClassPtr: auto) : CaptureMacroPtr <function-ast_make_capture_macro_string_auto_0x320>`
+  *  :ref:`make_clone_structure (structure: Structure? implicit) : smart_ptr\<Function\> <function-ast_make_clone_structure_Structure_q__implicit>`
+  *  :ref:`make_comment_reader (class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<CommentReader\> <function-ast_make_comment_reader_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`make_comment_reader (name: string; var someClassPtr: auto) : CommentReaderPtr <function-ast_make_comment_reader_string_auto_0x2cc>`
+  *  :ref:`make_enum_debug_info (helper: smart_ptr\<DebugInfoHelper\> implicit; en: Enumeration const? implicit) : EnumInfo? <function-ast_make_enum_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_Enumeration_const_q__implicit>`
+  *  :ref:`make_enumeration_annotation (name: string; var someClassPtr: auto) : EnumerationAnnotationPtr <function-ast_make_enumeration_annotation_string_auto_0x2a3>`
+  *  :ref:`make_enumeration_annotation (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<EnumerationAnnotation\> <function-ast_make_enumeration_annotation_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`make_for_loop_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<ForLoopMacro\> <function-ast_make_for_loop_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`make_for_loop_macro (name: string; var someClassPtr: auto) : ForLoopMacroPtr <function-ast_make_for_loop_macro_string_auto_0x312>`
+  *  :ref:`make_function_annotation (name: string; var someClassPtr: auto) : FunctionAnnotationPtr <function-ast_make_function_annotation_string_auto_0x279>`
+  *  :ref:`make_function_annotation (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<FunctionAnnotation\> <function-ast_make_function_annotation_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`make_function_debug_info (helper: smart_ptr\<DebugInfoHelper\> implicit; fn: Function const? implicit) : FuncInfo? <function-ast_make_function_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_Function_const_q__implicit>`
+  *  :ref:`make_invokable_type_debug_info (helper: smart_ptr\<DebugInfoHelper\> implicit; blk: smart_ptr\<TypeDecl\> implicit; at: LineInfo implicit) : FuncInfo? <function-ast_make_invokable_type_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit_LineInfo_implicit>`
+  *  :ref:`make_pass_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<PassMacro\> <function-ast_make_pass_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`make_pass_macro (name: string; var someClassPtr: auto) : PassMacroPtr <function-ast_make_pass_macro_string_auto_0x2f6>`
+  *  :ref:`make_reader_macro (name: string; var someClassPtr: auto) : ReaderMacroPtr <function-ast_make_reader_macro_string_auto_0x2be>`
+  *  :ref:`make_reader_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<ReaderMacro\> <function-ast_make_reader_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`make_simulate_macro (name: string; var someClassPtr: auto) : SimulateMacroPtr <function-ast_make_simulate_macro_string_auto_0x339>`
+  *  :ref:`make_simulate_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<SimulateMacro\> <function-ast_make_simulate_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`make_struct_debug_info (helper: smart_ptr\<DebugInfoHelper\> implicit; st: Structure const? implicit) : StructInfo? <function-ast_make_struct_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_Structure_const_q__implicit>`
+  *  :ref:`make_struct_variable_debug_info (helper: smart_ptr\<DebugInfoHelper\> implicit; st: Structure const? implicit; var: FieldDeclaration const? implicit) : VarInfo? <function-ast_make_struct_variable_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_Structure_const_q__implicit_FieldDeclaration_const_q__implicit>`
+  *  :ref:`make_structure_annotation (name: string; var someClassPtr: auto) : StructureAnnotationPtr <function-ast_make_structure_annotation_string_auto_0x295>`
+  *  :ref:`make_structure_annotation (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<StructureAnnotation\> <function-ast_make_structure_annotation_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`make_type_info (helper: smart_ptr\<DebugInfoHelper\> implicit; info: TypeInfo? implicit; type: smart_ptr\<TypeDecl\> const& implicit) : TypeInfo? <function-ast_make_type_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_TypeInfo_q__implicit_smart_ptr_ls_TypeDecl_gr__const_implicit>`
+  *  :ref:`make_type_macro (name: string; var someClassPtr: auto) : TypeMacroPtr <function-ast_make_type_macro_string_auto_0x32c>`
+  *  :ref:`make_type_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<TypeMacro\> <function-ast_make_type_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`make_typeinfo_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<TypeInfoMacro\> <function-ast_make_typeinfo_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`make_typeinfo_macro (name: string; var someClassPtr: auto) : TypeInfoMacroPtr <function-ast_make_typeinfo_macro_string_auto_0x2e8>`
+  *  :ref:`make_variable_debug_info (helper: smart_ptr\<DebugInfoHelper\> implicit; var: Variable? implicit) : VarInfo? <function-ast_make_variable_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_Variable_q__implicit>`
+  *  :ref:`make_variant_macro (name: string; var someClassPtr: auto) : VariantMacroPtr <function-ast_make_variant_macro_string_auto_0x304>`
+  *  :ref:`make_variant_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<VariantMacro\> <function-ast_make_variant_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`make_visitor (someClass: auto) : smart_ptr\<VisitorAdapter\> <function-ast_make_visitor_auto_0x2ae>`
+  *  :ref:`make_visitor (class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<VisitorAdapter\> <function-ast_make_visitor_void_q__implicit_StructInfo_const_q__implicit>`
 
 
 make_block_annotation
@@ -5401,7 +5401,7 @@ Creates an adapter for the AstBlockAnnotation interface.
 
 Generates a TypeDeclPtr for a specified block or lambda type.
 
-:Arguments: * **blk** :  :ref:`ExprBlock <handle-ast-ExprBlock>` ? implicit
+:Arguments: * **blk** :  :ref:`ExprBlock <handle-ast-ExprBlock>`? implicit
 
 
 make_call_macro
@@ -5417,7 +5417,7 @@ Creates an adapter for the AstCallMacro interface.
 
             * **class** : void? implicit
 
-            * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>` ? implicit
+            * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>`? implicit
 
 .. _function-ast_make_call_macro_string_auto_0x2da:
 
@@ -5439,7 +5439,7 @@ Creates an adapter for the AstCaptureMacro interface.
 
             * **class** : void? implicit
 
-            * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>` ? implicit
+            * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>`? implicit
 
 .. _function-ast_make_capture_macro_string_auto_0x320:
 
@@ -5453,7 +5453,7 @@ Creates an adapter for the AstCaptureMacro interface.
 
 Generates a clone function for the given structure.
 
-:Arguments: * **structure** :  :ref:`Structure <handle-ast-Structure>` ? implicit
+:Arguments: * **structure** :  :ref:`Structure <handle-ast-Structure>`? implicit
 
 
 make_comment_reader
@@ -5467,7 +5467,7 @@ Creates an adapter for the AstCommentReader interface.
 
 :Arguments: * **class** : void? implicit
 
-            * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>` ? implicit
+            * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>`? implicit
 
 .. _function-ast_make_comment_reader_string_auto_0x2cc:
 
@@ -5481,9 +5481,9 @@ Creates an adapter for the AstCommentReader interface.
 
 Generates an EnumInfo for the specified enumeration using the given DebugInfoHelper.
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` > implicit
+:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`> implicit
 
-            * **en** :  :ref:`Enumeration <handle-ast-Enumeration>` ? implicit
+            * **en** :  :ref:`Enumeration <handle-ast-Enumeration>`? implicit
 
 
 make_enumeration_annotation
@@ -5519,7 +5519,7 @@ Creates an adapter for the AstForLoopMacro interface.
 
             * **class** : void? implicit
 
-            * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>` ? implicit
+            * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>`? implicit
 
 .. _function-ast_make_for_loop_macro_string_auto_0x312:
 
@@ -5553,9 +5553,9 @@ Creates an adapter for the AstFunctionAnnotation interface.
 
 Generates a FuncInfo for the specified function using the given DebugInfoHelper.
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` > implicit
+:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`> implicit
 
-            * **fn** :  :ref:`Function <handle-ast-Function>` ? implicit
+            * **fn** :  :ref:`Function <handle-ast-Function>`? implicit
 
 .. _function-ast_make_invokable_type_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit_LineInfo_implicit:
 
@@ -5563,11 +5563,11 @@ Generates a FuncInfo for the specified function using the given DebugInfoHelper.
 
 Generates a FuncInfo for an invokable type such as a lambda or block using the given DebugInfoHelper.
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` > implicit
+:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`> implicit
 
-            * **blk** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
+            * **blk** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
 
-            * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  implicit
+            * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` implicit
 
 
 make_pass_macro
@@ -5583,7 +5583,7 @@ Creates an adapter for the AstPassMacro interface.
 
             * **class** : void? implicit
 
-            * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>` ? implicit
+            * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>`? implicit
 
 .. _function-ast_make_pass_macro_string_auto_0x2f6:
 
@@ -5637,9 +5637,9 @@ Creates an adapter for the AstSimulateMacro interface.
 
 Generates a StructInfo for the specified structure using the given DebugInfoHelper.
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` > implicit
+:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`> implicit
 
-            * **st** :  :ref:`Structure <handle-ast-Structure>` ? implicit
+            * **st** :  :ref:`Structure <handle-ast-Structure>`? implicit
 
 .. _function-ast_make_struct_variable_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_Structure_const_q__implicit_FieldDeclaration_const_q__implicit:
 
@@ -5647,11 +5647,11 @@ Generates a StructInfo for the specified structure using the given DebugInfoHelp
 
 Generates a VariableInfo for a structure field using the given DebugInfoHelper.
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` > implicit
+:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`> implicit
 
-            * **st** :  :ref:`Structure <handle-ast-Structure>` ? implicit
+            * **st** :  :ref:`Structure <handle-ast-Structure>`? implicit
 
-            * **var** :  :ref:`FieldDeclaration <handle-ast-FieldDeclaration>` ? implicit
+            * **var** :  :ref:`FieldDeclaration <handle-ast-FieldDeclaration>`? implicit
 
 
 make_structure_annotation
@@ -5679,11 +5679,11 @@ Creates an adapter for the AstStructureAnnotation interface.
 
 Generates a TypeInfo for the specified type using the given DebugInfoHelper.
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` > implicit
+:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`> implicit
 
-            * **info** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? implicit
+            * **info** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`? implicit
 
-            * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` >& implicit
+            * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`>& implicit
 
 
 make_type_macro
@@ -5719,7 +5719,7 @@ Creates an adapter for the AstTypeInfoMacro interface.
 
             * **class** : void? implicit
 
-            * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>` ? implicit
+            * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>`? implicit
 
 .. _function-ast_make_typeinfo_macro_string_auto_0x2e8:
 
@@ -5733,9 +5733,9 @@ Creates an adapter for the AstTypeInfoMacro interface.
 
 Generates a VariableInfo for the specified variable using the given DebugInfoHelper.
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` > implicit
+:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`> implicit
 
-            * **var** :  :ref:`Variable <handle-ast-Variable>` ? implicit
+            * **var** :  :ref:`Variable <handle-ast-Variable>`? implicit
 
 
 make_variant_macro
@@ -5779,49 +5779,49 @@ Creates an adapter for the AstVisitor interface.
 Adapter application
 +++++++++++++++++++
 
-  *  :ref:`add_block_annotation (block: smart_ptr\<ExprBlock\> implicit; annotation: smart_ptr\<FunctionAnnotation\>& implicit) <function-ast_add_block_annotation_smart_ptr_ls_ExprBlock_gr__implicit_smart_ptr_ls_FunctionAnnotation_gr__implicit>` 
-  *  :ref:`add_block_annotation (block: smart_ptr\<ExprBlock\> implicit; annotation: smart_ptr\<AnnotationDeclaration\>& implicit) <function-ast_add_block_annotation_smart_ptr_ls_ExprBlock_gr__implicit_smart_ptr_ls_AnnotationDeclaration_gr__implicit>` 
-  *  :ref:`add_call_macro (module: Module? implicit; annotation: smart_ptr\<CallMacro\>& implicit) <function-ast_add_call_macro_Module_q__implicit_smart_ptr_ls_CallMacro_gr__implicit>` 
-  *  :ref:`add_capture_macro (module: Module? implicit; annotation: smart_ptr\<CaptureMacro\>& implicit) <function-ast_add_capture_macro_Module_q__implicit_smart_ptr_ls_CaptureMacro_gr__implicit>` 
-  *  :ref:`add_comment_reader (module: Module? implicit; reader: smart_ptr\<CommentReader\>& implicit) <function-ast_add_comment_reader_Module_q__implicit_smart_ptr_ls_CommentReader_gr__implicit>` 
-  *  :ref:`add_dirty_infer_macro (module: Module? implicit; annotation: smart_ptr\<PassMacro\>& implicit) <function-ast_add_dirty_infer_macro_Module_q__implicit_smart_ptr_ls_PassMacro_gr__implicit>` 
-  *  :ref:`add_enumeration_annotation (module: Module? implicit; annotation: smart_ptr\<EnumerationAnnotation\>& implicit) <function-ast_add_enumeration_annotation_Module_q__implicit_smart_ptr_ls_EnumerationAnnotation_gr__implicit>` 
-  *  :ref:`add_for_loop_macro (module: Module? implicit; annotation: smart_ptr\<ForLoopMacro\>& implicit) <function-ast_add_for_loop_macro_Module_q__implicit_smart_ptr_ls_ForLoopMacro_gr__implicit>` 
-  *  :ref:`add_function_annotation (function: smart_ptr\<Function\> implicit; annotation: smart_ptr\<FunctionAnnotation\>& implicit) <function-ast_add_function_annotation_smart_ptr_ls_Function_gr__implicit_smart_ptr_ls_FunctionAnnotation_gr__implicit>` 
-  *  :ref:`add_function_annotation (module: Module? implicit; annotation: smart_ptr\<FunctionAnnotation\>& implicit) <function-ast_add_function_annotation_Module_q__implicit_smart_ptr_ls_FunctionAnnotation_gr__implicit>` 
-  *  :ref:`add_function_annotation (function: smart_ptr\<Function\> implicit; annotation: smart_ptr\<AnnotationDeclaration\>& implicit) <function-ast_add_function_annotation_smart_ptr_ls_Function_gr__implicit_smart_ptr_ls_AnnotationDeclaration_gr__implicit>` 
-  *  :ref:`add_global_lint_macro (module: Module? implicit; annotation: smart_ptr\<PassMacro\>& implicit) <function-ast_add_global_lint_macro_Module_q__implicit_smart_ptr_ls_PassMacro_gr__implicit>` 
-  *  :ref:`add_infer_macro (module: Module? implicit; annotation: smart_ptr\<PassMacro\>& implicit) <function-ast_add_infer_macro_Module_q__implicit_smart_ptr_ls_PassMacro_gr__implicit>` 
-  *  :ref:`add_lint_macro (module: Module? implicit; annotation: smart_ptr\<PassMacro\>& implicit) <function-ast_add_lint_macro_Module_q__implicit_smart_ptr_ls_PassMacro_gr__implicit>` 
-  *  :ref:`add_module_option (module: Module? implicit; option: string implicit; type: Type) <function-ast_add_module_option_Module_q__implicit_string_implicit_Type>` 
-  *  :ref:`add_new_block_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_block_annotation_string_auto_0x345>` 
-  *  :ref:`add_new_call_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_call_macro_string_auto_0x38c>` 
-  *  :ref:`add_new_capture_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_capture_macro_string_auto_0x36f>` 
-  *  :ref:`add_new_comment_reader (name: string; var someClassPtr: auto) : auto <function-ast_add_new_comment_reader_string_auto_0x386>` 
-  *  :ref:`add_new_contract_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_contract_annotation_string_auto_0x351>` 
-  *  :ref:`add_new_dirty_infer_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_dirty_infer_macro_string_auto_0x39e>` 
-  *  :ref:`add_new_enumeration_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_enumeration_annotation_string_auto_0x35d>` 
-  *  :ref:`add_new_for_loop_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_for_loop_macro_string_auto_0x369>` 
-  *  :ref:`add_new_function_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_function_annotation_string_auto_0x34b>` 
-  *  :ref:`add_new_global_lint_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_global_lint_macro_string_auto_0x3aa>` 
-  *  :ref:`add_new_infer_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_infer_macro_string_auto_0x398>` 
-  *  :ref:`add_new_lint_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_lint_macro_string_auto_0x3a4>` 
-  *  :ref:`add_new_optimization_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_optimization_macro_string_auto_0x3b0>` 
-  *  :ref:`add_new_reader_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_reader_macro_string_auto_0x381>` 
-  *  :ref:`add_new_simulate_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_simulate_macro_string_auto_0x37b>` 
-  *  :ref:`add_new_structure_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_structure_annotation_string_auto_0x357>` 
-  *  :ref:`add_new_type_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_type_macro_string_auto_0x375>` 
-  *  :ref:`add_new_typeinfo_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_typeinfo_macro_string_auto_0x392>` 
-  *  :ref:`add_new_variant_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_variant_macro_string_auto_0x363>` 
-  *  :ref:`add_optimization_macro (module: Module? implicit; annotation: smart_ptr\<PassMacro\>& implicit) <function-ast_add_optimization_macro_Module_q__implicit_smart_ptr_ls_PassMacro_gr__implicit>` 
-  *  :ref:`add_reader_macro (module: Module? implicit; annotation: smart_ptr\<ReaderMacro\>& implicit) <function-ast_add_reader_macro_Module_q__implicit_smart_ptr_ls_ReaderMacro_gr__implicit>` 
-  *  :ref:`add_simulate_macro (module: Module? implicit; annotation: smart_ptr\<SimulateMacro\>& implicit) <function-ast_add_simulate_macro_Module_q__implicit_smart_ptr_ls_SimulateMacro_gr__implicit>` 
-  *  :ref:`add_structure_annotation (structure: smart_ptr\<Structure\> implicit; annotation: smart_ptr\<StructureAnnotation\>& implicit) <function-ast_add_structure_annotation_smart_ptr_ls_Structure_gr__implicit_smart_ptr_ls_StructureAnnotation_gr__implicit>` 
-  *  :ref:`add_structure_annotation (module: Module? implicit; annotation: smart_ptr\<StructureAnnotation\>& implicit) <function-ast_add_structure_annotation_Module_q__implicit_smart_ptr_ls_StructureAnnotation_gr__implicit>` 
-  *  :ref:`add_structure_annotation (structure: smart_ptr\<Structure\> implicit; annotation: smart_ptr\<AnnotationDeclaration\>& implicit) <function-ast_add_structure_annotation_smart_ptr_ls_Structure_gr__implicit_smart_ptr_ls_AnnotationDeclaration_gr__implicit>` 
-  *  :ref:`add_type_macro (module: Module? implicit; annotation: smart_ptr\<TypeMacro\>& implicit) <function-ast_add_type_macro_Module_q__implicit_smart_ptr_ls_TypeMacro_gr__implicit>` 
-  *  :ref:`add_typeinfo_macro (module: Module? implicit; annotation: smart_ptr\<TypeInfoMacro\>& implicit) <function-ast_add_typeinfo_macro_Module_q__implicit_smart_ptr_ls_TypeInfoMacro_gr__implicit>` 
-  *  :ref:`add_variant_macro (module: Module? implicit; annotation: smart_ptr\<VariantMacro\>& implicit) <function-ast_add_variant_macro_Module_q__implicit_smart_ptr_ls_VariantMacro_gr__implicit>` 
+  *  :ref:`add_block_annotation (block: smart_ptr\<ExprBlock\> implicit; annotation: smart_ptr\<FunctionAnnotation\>& implicit) <function-ast_add_block_annotation_smart_ptr_ls_ExprBlock_gr__implicit_smart_ptr_ls_FunctionAnnotation_gr__implicit>`
+  *  :ref:`add_block_annotation (block: smart_ptr\<ExprBlock\> implicit; annotation: smart_ptr\<AnnotationDeclaration\>& implicit) <function-ast_add_block_annotation_smart_ptr_ls_ExprBlock_gr__implicit_smart_ptr_ls_AnnotationDeclaration_gr__implicit>`
+  *  :ref:`add_call_macro (module: Module? implicit; annotation: smart_ptr\<CallMacro\>& implicit) <function-ast_add_call_macro_Module_q__implicit_smart_ptr_ls_CallMacro_gr__implicit>`
+  *  :ref:`add_capture_macro (module: Module? implicit; annotation: smart_ptr\<CaptureMacro\>& implicit) <function-ast_add_capture_macro_Module_q__implicit_smart_ptr_ls_CaptureMacro_gr__implicit>`
+  *  :ref:`add_comment_reader (module: Module? implicit; reader: smart_ptr\<CommentReader\>& implicit) <function-ast_add_comment_reader_Module_q__implicit_smart_ptr_ls_CommentReader_gr__implicit>`
+  *  :ref:`add_dirty_infer_macro (module: Module? implicit; annotation: smart_ptr\<PassMacro\>& implicit) <function-ast_add_dirty_infer_macro_Module_q__implicit_smart_ptr_ls_PassMacro_gr__implicit>`
+  *  :ref:`add_enumeration_annotation (module: Module? implicit; annotation: smart_ptr\<EnumerationAnnotation\>& implicit) <function-ast_add_enumeration_annotation_Module_q__implicit_smart_ptr_ls_EnumerationAnnotation_gr__implicit>`
+  *  :ref:`add_for_loop_macro (module: Module? implicit; annotation: smart_ptr\<ForLoopMacro\>& implicit) <function-ast_add_for_loop_macro_Module_q__implicit_smart_ptr_ls_ForLoopMacro_gr__implicit>`
+  *  :ref:`add_function_annotation (function: smart_ptr\<Function\> implicit; annotation: smart_ptr\<FunctionAnnotation\>& implicit) <function-ast_add_function_annotation_smart_ptr_ls_Function_gr__implicit_smart_ptr_ls_FunctionAnnotation_gr__implicit>`
+  *  :ref:`add_function_annotation (module: Module? implicit; annotation: smart_ptr\<FunctionAnnotation\>& implicit) <function-ast_add_function_annotation_Module_q__implicit_smart_ptr_ls_FunctionAnnotation_gr__implicit>`
+  *  :ref:`add_function_annotation (function: smart_ptr\<Function\> implicit; annotation: smart_ptr\<AnnotationDeclaration\>& implicit) <function-ast_add_function_annotation_smart_ptr_ls_Function_gr__implicit_smart_ptr_ls_AnnotationDeclaration_gr__implicit>`
+  *  :ref:`add_global_lint_macro (module: Module? implicit; annotation: smart_ptr\<PassMacro\>& implicit) <function-ast_add_global_lint_macro_Module_q__implicit_smart_ptr_ls_PassMacro_gr__implicit>`
+  *  :ref:`add_infer_macro (module: Module? implicit; annotation: smart_ptr\<PassMacro\>& implicit) <function-ast_add_infer_macro_Module_q__implicit_smart_ptr_ls_PassMacro_gr__implicit>`
+  *  :ref:`add_lint_macro (module: Module? implicit; annotation: smart_ptr\<PassMacro\>& implicit) <function-ast_add_lint_macro_Module_q__implicit_smart_ptr_ls_PassMacro_gr__implicit>`
+  *  :ref:`add_module_option (module: Module? implicit; option: string implicit; type: Type) <function-ast_add_module_option_Module_q__implicit_string_implicit_Type>`
+  *  :ref:`add_new_block_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_block_annotation_string_auto_0x345>`
+  *  :ref:`add_new_call_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_call_macro_string_auto_0x38c>`
+  *  :ref:`add_new_capture_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_capture_macro_string_auto_0x36f>`
+  *  :ref:`add_new_comment_reader (name: string; var someClassPtr: auto) : auto <function-ast_add_new_comment_reader_string_auto_0x386>`
+  *  :ref:`add_new_contract_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_contract_annotation_string_auto_0x351>`
+  *  :ref:`add_new_dirty_infer_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_dirty_infer_macro_string_auto_0x39e>`
+  *  :ref:`add_new_enumeration_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_enumeration_annotation_string_auto_0x35d>`
+  *  :ref:`add_new_for_loop_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_for_loop_macro_string_auto_0x369>`
+  *  :ref:`add_new_function_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_function_annotation_string_auto_0x34b>`
+  *  :ref:`add_new_global_lint_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_global_lint_macro_string_auto_0x3aa>`
+  *  :ref:`add_new_infer_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_infer_macro_string_auto_0x398>`
+  *  :ref:`add_new_lint_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_lint_macro_string_auto_0x3a4>`
+  *  :ref:`add_new_optimization_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_optimization_macro_string_auto_0x3b0>`
+  *  :ref:`add_new_reader_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_reader_macro_string_auto_0x381>`
+  *  :ref:`add_new_simulate_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_simulate_macro_string_auto_0x37b>`
+  *  :ref:`add_new_structure_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_structure_annotation_string_auto_0x357>`
+  *  :ref:`add_new_type_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_type_macro_string_auto_0x375>`
+  *  :ref:`add_new_typeinfo_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_typeinfo_macro_string_auto_0x392>`
+  *  :ref:`add_new_variant_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_variant_macro_string_auto_0x363>`
+  *  :ref:`add_optimization_macro (module: Module? implicit; annotation: smart_ptr\<PassMacro\>& implicit) <function-ast_add_optimization_macro_Module_q__implicit_smart_ptr_ls_PassMacro_gr__implicit>`
+  *  :ref:`add_reader_macro (module: Module? implicit; annotation: smart_ptr\<ReaderMacro\>& implicit) <function-ast_add_reader_macro_Module_q__implicit_smart_ptr_ls_ReaderMacro_gr__implicit>`
+  *  :ref:`add_simulate_macro (module: Module? implicit; annotation: smart_ptr\<SimulateMacro\>& implicit) <function-ast_add_simulate_macro_Module_q__implicit_smart_ptr_ls_SimulateMacro_gr__implicit>`
+  *  :ref:`add_structure_annotation (structure: smart_ptr\<Structure\> implicit; annotation: smart_ptr\<StructureAnnotation\>& implicit) <function-ast_add_structure_annotation_smart_ptr_ls_Structure_gr__implicit_smart_ptr_ls_StructureAnnotation_gr__implicit>`
+  *  :ref:`add_structure_annotation (module: Module? implicit; annotation: smart_ptr\<StructureAnnotation\>& implicit) <function-ast_add_structure_annotation_Module_q__implicit_smart_ptr_ls_StructureAnnotation_gr__implicit>`
+  *  :ref:`add_structure_annotation (structure: smart_ptr\<Structure\> implicit; annotation: smart_ptr\<AnnotationDeclaration\>& implicit) <function-ast_add_structure_annotation_smart_ptr_ls_Structure_gr__implicit_smart_ptr_ls_AnnotationDeclaration_gr__implicit>`
+  *  :ref:`add_type_macro (module: Module? implicit; annotation: smart_ptr\<TypeMacro\>& implicit) <function-ast_add_type_macro_Module_q__implicit_smart_ptr_ls_TypeMacro_gr__implicit>`
+  *  :ref:`add_typeinfo_macro (module: Module? implicit; annotation: smart_ptr\<TypeInfoMacro\>& implicit) <function-ast_add_typeinfo_macro_Module_q__implicit_smart_ptr_ls_TypeInfoMacro_gr__implicit>`
+  *  :ref:`add_variant_macro (module: Module? implicit; annotation: smart_ptr\<VariantMacro\>& implicit) <function-ast_add_variant_macro_Module_q__implicit_smart_ptr_ls_VariantMacro_gr__implicit>`
 
 
 add_block_annotation
@@ -5833,9 +5833,9 @@ add_block_annotation
 
 Adds an annotation declaration to a block.
 
-:Arguments: * **block** : smart_ptr< :ref:`ExprBlock <handle-ast-ExprBlock>` > implicit
+:Arguments: * **block** : smart_ptr< :ref:`ExprBlock <handle-ast-ExprBlock>`> implicit
 
-            * **annotation** : smart_ptr< :ref:`FunctionAnnotation <handle-ast-FunctionAnnotation>` >& implicit
+            * **annotation** : smart_ptr< :ref:`FunctionAnnotation <handle-ast-FunctionAnnotation>`>& implicit
 
 .. _function-ast_add_block_annotation_smart_ptr_ls_ExprBlock_gr__implicit_smart_ptr_ls_AnnotationDeclaration_gr__implicit:
 
@@ -5849,9 +5849,9 @@ Adds an annotation declaration to a block.
 
 Adds an AstCallMacro adapter to the specified module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`CallMacro <handle-ast-CallMacro>` >& implicit
+            * **annotation** : smart_ptr< :ref:`CallMacro <handle-ast-CallMacro>`>& implicit
 
 .. _function-ast_add_capture_macro_Module_q__implicit_smart_ptr_ls_CaptureMacro_gr__implicit:
 
@@ -5859,9 +5859,9 @@ Adds an AstCallMacro adapter to the specified module.
 
 Adds an AstCaptureMacro to the specified module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`CaptureMacro <handle-ast-CaptureMacro>` >& implicit
+            * **annotation** : smart_ptr< :ref:`CaptureMacro <handle-ast-CaptureMacro>`>& implicit
 
 .. _function-ast_add_comment_reader_Module_q__implicit_smart_ptr_ls_CommentReader_gr__implicit:
 
@@ -5869,9 +5869,9 @@ Adds an AstCaptureMacro to the specified module.
 
 Adds an AstCommentReader adapter to the specified module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **reader** : smart_ptr< :ref:`CommentReader <handle-ast-CommentReader>` >& implicit
+            * **reader** : smart_ptr< :ref:`CommentReader <handle-ast-CommentReader>`>& implicit
 
 .. _function-ast_add_dirty_infer_macro_Module_q__implicit_smart_ptr_ls_PassMacro_gr__implicit:
 
@@ -5879,9 +5879,9 @@ Adds an AstCommentReader adapter to the specified module.
 
 Adds an AstPassMacro adapter to the dirty inference pass.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`PassMacro <handle-ast-PassMacro>` >& implicit
+            * **annotation** : smart_ptr< :ref:`PassMacro <handle-ast-PassMacro>`>& implicit
 
 .. _function-ast_add_enumeration_annotation_Module_q__implicit_smart_ptr_ls_EnumerationAnnotation_gr__implicit:
 
@@ -5889,9 +5889,9 @@ Adds an AstPassMacro adapter to the dirty inference pass.
 
 Adds an annotation to an enumeration and calls apply if applicable.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`EnumerationAnnotation <handle-ast-EnumerationAnnotation>` >& implicit
+            * **annotation** : smart_ptr< :ref:`EnumerationAnnotation <handle-ast-EnumerationAnnotation>`>& implicit
 
 .. _function-ast_add_for_loop_macro_Module_q__implicit_smart_ptr_ls_ForLoopMacro_gr__implicit:
 
@@ -5899,9 +5899,9 @@ Adds an annotation to an enumeration and calls apply if applicable.
 
 Adds an AstForLoopMacro to the specified module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`ForLoopMacro <handle-ast-ForLoopMacro>` >& implicit
+            * **annotation** : smart_ptr< :ref:`ForLoopMacro <handle-ast-ForLoopMacro>`>& implicit
 
 
 add_function_annotation
@@ -5913,9 +5913,9 @@ add_function_annotation
 
 Adds an annotation to a function and calls apply if applicable.
 
-:Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
+:Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>`> implicit
 
-            * **annotation** : smart_ptr< :ref:`FunctionAnnotation <handle-ast-FunctionAnnotation>` >& implicit
+            * **annotation** : smart_ptr< :ref:`FunctionAnnotation <handle-ast-FunctionAnnotation>`>& implicit
 
 .. _function-ast_add_function_annotation_Module_q__implicit_smart_ptr_ls_FunctionAnnotation_gr__implicit:
 
@@ -5933,9 +5933,9 @@ Adds an annotation to a function and calls apply if applicable.
 
 Adds an AstPassMacro adapter to the global lint pass.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`PassMacro <handle-ast-PassMacro>` >& implicit
+            * **annotation** : smart_ptr< :ref:`PassMacro <handle-ast-PassMacro>`>& implicit
 
 .. _function-ast_add_infer_macro_Module_q__implicit_smart_ptr_ls_PassMacro_gr__implicit:
 
@@ -5943,9 +5943,9 @@ Adds an AstPassMacro adapter to the global lint pass.
 
 Adds an AstPassMacro adapter to the type inference pass.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`PassMacro <handle-ast-PassMacro>` >& implicit
+            * **annotation** : smart_ptr< :ref:`PassMacro <handle-ast-PassMacro>`>& implicit
 
 .. _function-ast_add_lint_macro_Module_q__implicit_smart_ptr_ls_PassMacro_gr__implicit:
 
@@ -5953,9 +5953,9 @@ Adds an AstPassMacro adapter to the type inference pass.
 
 Adds an AstPassMacro adapter to the lint pass of the current module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`PassMacro <handle-ast-PassMacro>` >& implicit
+            * **annotation** : smart_ptr< :ref:`PassMacro <handle-ast-PassMacro>`>& implicit
 
 .. _function-ast_add_module_option_Module_q__implicit_string_implicit_Type:
 
@@ -5963,11 +5963,11 @@ Adds an AstPassMacro adapter to the lint pass of the current module.
 
 Adds a module-specific option accessible via the `options` keyword.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
             * **option** : string implicit
 
-            * **type** :  :ref:`Type <enum-rtti-Type>` 
+            * **type** :  :ref:`Type <enum-rtti-Type>`
 
 .. _function-ast_add_new_block_annotation_string_auto_0x345:
 
@@ -6165,9 +6165,9 @@ Creates an AstVariantMacro adapter and adds it to the current module.
 
 Adds an AstPassMacro adapter to the optimization pass of a specific module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`PassMacro <handle-ast-PassMacro>` >& implicit
+            * **annotation** : smart_ptr< :ref:`PassMacro <handle-ast-PassMacro>`>& implicit
 
 .. _function-ast_add_reader_macro_Module_q__implicit_smart_ptr_ls_ReaderMacro_gr__implicit:
 
@@ -6175,9 +6175,9 @@ Adds an AstPassMacro adapter to the optimization pass of a specific module.
 
 Adds an AstReaderMacro adapter to the specified module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`ReaderMacro <handle-ast-ReaderMacro>` >& implicit
+            * **annotation** : smart_ptr< :ref:`ReaderMacro <handle-ast-ReaderMacro>`>& implicit
 
 .. _function-ast_add_simulate_macro_Module_q__implicit_smart_ptr_ls_SimulateMacro_gr__implicit:
 
@@ -6185,9 +6185,9 @@ Adds an AstReaderMacro adapter to the specified module.
 
 Adds an AstSimulateMacro adapter to the specified module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`SimulateMacro <handle-ast-SimulateMacro>` >& implicit
+            * **annotation** : smart_ptr< :ref:`SimulateMacro <handle-ast-SimulateMacro>`>& implicit
 
 
 add_structure_annotation
@@ -6199,9 +6199,9 @@ add_structure_annotation
 
 Adds a structure annotation to the given object, calling apply if applicable.
 
-:Arguments: * **structure** : smart_ptr< :ref:`Structure <handle-ast-Structure>` > implicit
+:Arguments: * **structure** : smart_ptr< :ref:`Structure <handle-ast-Structure>`> implicit
 
-            * **annotation** : smart_ptr< :ref:`StructureAnnotation <handle-ast-StructureAnnotation>` >& implicit
+            * **annotation** : smart_ptr< :ref:`StructureAnnotation <handle-ast-StructureAnnotation>`>& implicit
 
 .. _function-ast_add_structure_annotation_Module_q__implicit_smart_ptr_ls_StructureAnnotation_gr__implicit:
 
@@ -6219,9 +6219,9 @@ Adds a structure annotation to the given object, calling apply if applicable.
 
 Adds an AstTypeMacro adapter to the specified module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`TypeMacro <handle-ast-TypeMacro>` >& implicit
+            * **annotation** : smart_ptr< :ref:`TypeMacro <handle-ast-TypeMacro>`>& implicit
 
 .. _function-ast_add_typeinfo_macro_Module_q__implicit_smart_ptr_ls_TypeInfoMacro_gr__implicit:
 
@@ -6229,9 +6229,9 @@ Adds an AstTypeMacro adapter to the specified module.
 
 Adds an AstTypeInfoMacro adapter to the specified module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>` >& implicit
+            * **annotation** : smart_ptr< :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>`>& implicit
 
 .. _function-ast_add_variant_macro_Module_q__implicit_smart_ptr_ls_VariantMacro_gr__implicit:
 
@@ -6239,24 +6239,24 @@ Adds an AstTypeInfoMacro adapter to the specified module.
 
 Adds an AstVariantMacro adapter to the specified module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`VariantMacro <handle-ast-VariantMacro>` >& implicit
+            * **annotation** : smart_ptr< :ref:`VariantMacro <handle-ast-VariantMacro>`>& implicit
 
 +++++++++++++++++++++++++
 Adding objects to objects
 +++++++++++++++++++++++++
 
-  *  :ref:`add_alias (module: Module? implicit; structure: smart_ptr\<TypeDecl\>& implicit) : bool <function-ast_add_alias_Module_q__implicit_smart_ptr_ls_TypeDecl_gr__implicit>` 
-  *  :ref:`add_enumeration_entry (enum: smart_ptr\<Enumeration\> implicit; name: string implicit) : int <function-ast_add_enumeration_entry_smart_ptr_ls_Enumeration_gr__implicit_string_implicit>` 
-  *  :ref:`add_function (module: Module? implicit; function: smart_ptr\<Function\>& implicit) : bool <function-ast_add_function_Module_q__implicit_smart_ptr_ls_Function_gr__implicit>` 
-  *  :ref:`add_generic (module: Module? implicit; function: smart_ptr\<Function\>& implicit) : bool <function-ast_add_generic_Module_q__implicit_smart_ptr_ls_Function_gr__implicit>` 
-  *  :ref:`add_keyword (module: Module? implicit; keyword: string implicit; needOxfordComma: bool) : bool <function-ast_add_keyword_Module_q__implicit_string_implicit_bool>` 
-  *  :ref:`add_module_require (module: Module? implicit; publicModule: Module? implicit; pub: bool) : bool <function-ast_add_module_require_Module_q__implicit_Module_q__implicit_bool>` 
-  *  :ref:`add_structure (module: Module? implicit; structure: smart_ptr\<Structure\>& implicit) : bool <function-ast_add_structure_Module_q__implicit_smart_ptr_ls_Structure_gr__implicit>` 
-  *  :ref:`add_structure_alias (structure: Structure? implicit; aliasName: string implicit; alias: smart_ptr\<TypeDecl\> const& implicit) : bool <function-ast_add_structure_alias_Structure_q__implicit_string_implicit_smart_ptr_ls_TypeDecl_gr__const_implicit>` 
-  *  :ref:`add_type_function (module: Module? implicit; keyword: string implicit) : bool <function-ast_add_type_function_Module_q__implicit_string_implicit>` 
-  *  :ref:`add_variable (module: Module? implicit; variable: smart_ptr\<Variable\>& implicit) : bool <function-ast_add_variable_Module_q__implicit_smart_ptr_ls_Variable_gr__implicit>` 
+  *  :ref:`add_alias (module: Module? implicit; structure: smart_ptr\<TypeDecl\>& implicit) : bool <function-ast_add_alias_Module_q__implicit_smart_ptr_ls_TypeDecl_gr__implicit>`
+  *  :ref:`add_enumeration_entry (enum: smart_ptr\<Enumeration\> implicit; name: string implicit) : int <function-ast_add_enumeration_entry_smart_ptr_ls_Enumeration_gr__implicit_string_implicit>`
+  *  :ref:`add_function (module: Module? implicit; function: smart_ptr\<Function\>& implicit) : bool <function-ast_add_function_Module_q__implicit_smart_ptr_ls_Function_gr__implicit>`
+  *  :ref:`add_generic (module: Module? implicit; function: smart_ptr\<Function\>& implicit) : bool <function-ast_add_generic_Module_q__implicit_smart_ptr_ls_Function_gr__implicit>`
+  *  :ref:`add_keyword (module: Module? implicit; keyword: string implicit; needOxfordComma: bool) : bool <function-ast_add_keyword_Module_q__implicit_string_implicit_bool>`
+  *  :ref:`add_module_require (module: Module? implicit; publicModule: Module? implicit; pub: bool) : bool <function-ast_add_module_require_Module_q__implicit_Module_q__implicit_bool>`
+  *  :ref:`add_structure (module: Module? implicit; structure: smart_ptr\<Structure\>& implicit) : bool <function-ast_add_structure_Module_q__implicit_smart_ptr_ls_Structure_gr__implicit>`
+  *  :ref:`add_structure_alias (structure: Structure? implicit; aliasName: string implicit; alias: smart_ptr\<TypeDecl\> const& implicit) : bool <function-ast_add_structure_alias_Structure_q__implicit_string_implicit_smart_ptr_ls_TypeDecl_gr__const_implicit>`
+  *  :ref:`add_type_function (module: Module? implicit; keyword: string implicit) : bool <function-ast_add_type_function_Module_q__implicit_string_implicit>`
+  *  :ref:`add_variable (module: Module? implicit; variable: smart_ptr\<Variable\>& implicit) : bool <function-ast_add_variable_Module_q__implicit_smart_ptr_ls_Variable_gr__implicit>`
 
 .. _function-ast_add_alias_Module_q__implicit_smart_ptr_ls_TypeDecl_gr__implicit:
 
@@ -6264,9 +6264,9 @@ Adding objects to objects
 
 Adds a type alias to the specified module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **structure** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` >& implicit
+            * **structure** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`>& implicit
 
 .. _function-ast_add_enumeration_entry_smart_ptr_ls_Enumeration_gr__implicit_string_implicit:
 
@@ -6274,7 +6274,7 @@ Adds a type alias to the specified module.
 
 Adds a new entry to an enumeration annotation.
 
-:Arguments: * **enum** : smart_ptr< :ref:`Enumeration <handle-ast-Enumeration>` > implicit
+:Arguments: * **enum** : smart_ptr< :ref:`Enumeration <handle-ast-Enumeration>`> implicit
 
             * **name** : string implicit
 
@@ -6284,9 +6284,9 @@ Adds a new entry to an enumeration annotation.
 
 Adds a function to a module, returning false if a duplicate already exists.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` >& implicit
+            * **function** : smart_ptr< :ref:`Function <handle-ast-Function>`>& implicit
 
 .. _function-ast_add_generic_Module_q__implicit_smart_ptr_ls_Function_gr__implicit:
 
@@ -6294,9 +6294,9 @@ Adds a function to a module, returning false if a duplicate already exists.
 
 Adds a generic function to a module, returning false if a duplicate already exists.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` >& implicit
+            * **function** : smart_ptr< :ref:`Function <handle-ast-Function>`>& implicit
 
 .. _function-ast_add_keyword_Module_q__implicit_string_implicit_bool:
 
@@ -6305,7 +6305,7 @@ Adds a generic function to a module, returning false if a duplicate already exis
 Registers a new keyword in the specified module, making it available to the parser.
 
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
             * **keyword** : string implicit
 
@@ -6317,9 +6317,9 @@ Registers a new keyword in the specified module, making it available to the pars
 
 Adds module dependencies, similar to the `require` keyword.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **publicModule** :  :ref:`Module <handle-rtti-Module>` ? implicit
+            * **publicModule** :  :ref:`Module <handle-rtti-Module>`? implicit
 
             * **pub** : bool
 
@@ -6329,9 +6329,9 @@ Adds module dependencies, similar to the `require` keyword.
 
 Adds a structure to a module, returning false if a duplicate already exists.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **structure** : smart_ptr< :ref:`Structure <handle-ast-Structure>` >& implicit
+            * **structure** : smart_ptr< :ref:`Structure <handle-ast-Structure>`>& implicit
 
 .. _function-ast_add_structure_alias_Structure_q__implicit_string_implicit_smart_ptr_ls_TypeDecl_gr__const_implicit:
 
@@ -6339,11 +6339,11 @@ Adds a structure to a module, returning false if a duplicate already exists.
 
 Adds a typedef alias to a structure type in the AST, equivalent to a typedef in the structure body.
 
-:Arguments: * **structure** :  :ref:`Structure <handle-ast-Structure>` ? implicit
+:Arguments: * **structure** :  :ref:`Structure <handle-ast-Structure>`? implicit
 
             * **aliasName** : string implicit
 
-            * **alias** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` >& implicit
+            * **alias** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`>& implicit
 
 .. _function-ast_add_type_function_Module_q__implicit_string_implicit:
 
@@ -6351,7 +6351,7 @@ Adds a typedef alias to a structure type in the AST, equivalent to a typedef in 
 
 Adds a type function keyword, allowing function calls to accept type arguments before regular arguments via the `some_call<type_args>(regular_args)` syntax.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
             * **keyword** : string implicit
 
@@ -6361,18 +6361,18 @@ Adds a type function keyword, allowing function calls to accept type arguments b
 
 Adds a variable to a module, returning false if a duplicate already exists.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **variable** : smart_ptr< :ref:`Variable <handle-ast-Variable>` >& implicit
+            * **variable** : smart_ptr< :ref:`Variable <handle-ast-Variable>`>& implicit
 
 +++++++++++++++++++++++++
 Program and module access
 +++++++++++++++++++++++++
 
-  *  :ref:`compiling_module () : Module? <function-ast_compiling_module>` 
-  *  :ref:`compiling_program () : smart_ptr\<Program\> <function-ast_compiling_program>` 
-  *  :ref:`this_module () : Module? <function-ast_this_module>` 
-  *  :ref:`this_program () : smart_ptr\<Program\> <function-ast_this_program>` 
+  *  :ref:`compiling_module () : Module? <function-ast_compiling_module>`
+  *  :ref:`compiling_program () : smart_ptr\<Program\> <function-ast_compiling_program>`
+  *  :ref:`this_module () : Module? <function-ast_this_module>`
+  *  :ref:`this_program () : smart_ptr\<Program\> <function-ast_this_program>`
 
 .. _function-ast_compiling_module:
 
@@ -6402,15 +6402,15 @@ Returns the program attached to the current context, or null if RTTI is disabled
 Textual descriptions of the objects
 +++++++++++++++++++++++++++++++++++
 
-  *  :ref:`das_to_string (type: Type) : string <function-ast_das_to_string_Type>` 
-  *  :ref:`describe (expr: smart_ptr\<Function\>) : auto <function-ast_describe_smart_ptr_ls_Function_gr_>` 
-  *  :ref:`describe (expr: smart_ptr\<Expression\>) : auto <function-ast_describe_smart_ptr_ls_Expression_gr_>` 
-  *  :ref:`describe (decl: smart_ptr\<TypeDecl\>; extra: bool = true; contracts: bool = true; modules: bool = true) : auto <function-ast_describe_smart_ptr_ls_TypeDecl_gr__bool_bool_bool>` 
-  *  :ref:`describe_cpp (decl: smart_ptr\<TypeDecl\>; substitureRef: bool = false; skipRef: bool = false; skipConst: bool = false; redundantConst: bool = true; chooseSmartPtr: bool = true) : auto <function-ast_describe_cpp_smart_ptr_ls_TypeDecl_gr__bool_bool_bool_bool_bool>` 
-  *  :ref:`describe_expression (expression: smart_ptr\<Expression\> implicit) : string <function-ast_describe_expression_smart_ptr_ls_Expression_gr__implicit>` 
-  *  :ref:`describe_function (function: smart_ptr\<Function\> implicit) : string <function-ast_describe_function_smart_ptr_ls_Function_gr__implicit>` 
-  *  :ref:`describe_typedecl (type: smart_ptr\<TypeDecl\> implicit; extra: bool; contracts: bool; module: bool) : string <function-ast_describe_typedecl_smart_ptr_ls_TypeDecl_gr__implicit_bool_bool_bool>` 
-  *  :ref:`describe_typedecl_cpp (type: smart_ptr\<TypeDecl\> implicit; substitueRef: bool; skipRef: bool; skipConst: bool; redundantConst: bool; choose_smart_ptr: bool) : string <function-ast_describe_typedecl_cpp_smart_ptr_ls_TypeDecl_gr__implicit_bool_bool_bool_bool_bool>` 
+  *  :ref:`das_to_string (type: Type) : string <function-ast_das_to_string_Type>`
+  *  :ref:`describe (expr: smart_ptr\<Function\>) : auto <function-ast_describe_smart_ptr_ls_Function_gr_>`
+  *  :ref:`describe (expr: smart_ptr\<Expression\>) : auto <function-ast_describe_smart_ptr_ls_Expression_gr_>`
+  *  :ref:`describe (decl: smart_ptr\<TypeDecl\>; extra: bool = true; contracts: bool = true; modules: bool = true) : auto <function-ast_describe_smart_ptr_ls_TypeDecl_gr__bool_bool_bool>`
+  *  :ref:`describe_cpp (decl: smart_ptr\<TypeDecl\>; substitureRef: bool = false; skipRef: bool = false; skipConst: bool = false; redundantConst: bool = true; chooseSmartPtr: bool = true) : auto <function-ast_describe_cpp_smart_ptr_ls_TypeDecl_gr__bool_bool_bool_bool_bool>`
+  *  :ref:`describe_expression (expression: smart_ptr\<Expression\> implicit) : string <function-ast_describe_expression_smart_ptr_ls_Expression_gr__implicit>`
+  *  :ref:`describe_function (function: smart_ptr\<Function\> implicit) : string <function-ast_describe_function_smart_ptr_ls_Function_gr__implicit>`
+  *  :ref:`describe_typedecl (type: smart_ptr\<TypeDecl\> implicit; extra: bool; contracts: bool; module: bool) : string <function-ast_describe_typedecl_smart_ptr_ls_TypeDecl_gr__implicit_bool_bool_bool>`
+  *  :ref:`describe_typedecl_cpp (type: smart_ptr\<TypeDecl\> implicit; substitueRef: bool; skipRef: bool; skipConst: bool; redundantConst: bool; choose_smart_ptr: bool) : string <function-ast_describe_typedecl_cpp_smart_ptr_ls_TypeDecl_gr__implicit_bool_bool_bool_bool_bool>`
 
 .. _function-ast_das_to_string_Type:
 
@@ -6418,7 +6418,7 @@ Textual descriptions of the objects
 
 Returns the name of the corresponding daslang base type as a string.
 
-:Arguments: * **type** :  :ref:`Type <enum-rtti-Type>` 
+:Arguments: * **type** :  :ref:`Type <enum-rtti-Type>`
 
 
 describe
@@ -6430,7 +6430,7 @@ describe
 
 Produces a daslang source code string representation of the given AST object.
 
-:Arguments: * **expr** : smart_ptr< :ref:`Function <handle-ast-Function>` >
+:Arguments: * **expr** : smart_ptr< :ref:`Function <handle-ast-Function>`>
 
 .. _function-ast_describe_smart_ptr_ls_Expression_gr_:
 
@@ -6448,7 +6448,7 @@ Produces a daslang source code string representation of the given AST object.
 
 Produces a C++ source code string representation of the given TypeDecl.
 
-:Arguments: * **decl** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` >
+:Arguments: * **decl** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`>
 
             * **substitureRef** : bool
 
@@ -6466,7 +6466,7 @@ Produces a C++ source code string representation of the given TypeDecl.
 
 Returns a string description of the Expression matching the corresponding daslang source code.
 
-:Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > implicit
+:Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> implicit
 
 .. _function-ast_describe_function_smart_ptr_ls_Function_gr__implicit:
 
@@ -6474,7 +6474,7 @@ Returns a string description of the Expression matching the corresponding daslan
 
 Returns a string description of the Function matching the corresponding daslang function declaration.
 
-:Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
+:Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>`> implicit
 
 .. _function-ast_describe_typedecl_smart_ptr_ls_TypeDecl_gr__implicit_bool_bool_bool:
 
@@ -6482,7 +6482,7 @@ Returns a string description of the Function matching the corresponding daslang 
 
 Returns a string description of the TypeDecl matching the corresponding daslang type declaration.
 
-:Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
+:Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
 
             * **extra** : bool
 
@@ -6496,7 +6496,7 @@ Returns a string description of the TypeDecl matching the corresponding daslang 
 
 Returns a string description of the TypeDecl matching the corresponding C++ type declaration.
 
-:Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
+:Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
 
             * **substitueRef** : bool
 
@@ -6512,22 +6512,22 @@ Returns a string description of the TypeDecl matching the corresponding C++ type
 Searching
 +++++++++
 
-  *  :ref:`find_bitfield_name (bit: smart_ptr\<TypeDecl\> implicit; value: bitfield) : string <function-ast_find_bitfield_name_smart_ptr_ls_TypeDecl_gr__implicit_bitfield>` 
-  *  :ref:`find_call_macro (module: Module? implicit; name: string implicit) : CallMacro? <function-ast_find_call_macro_Module_q__implicit_string_implicit>` 
-  *  :ref:`find_compiling_function_by_mangled_name_hash (moduleName: string implicit; mangledNameHash: uint64) : smart_ptr\<Function\> <function-ast_find_compiling_function_by_mangled_name_hash_string_implicit_uint64>` 
-  *  :ref:`find_compiling_module (name: string) : Module? <function-ast_find_compiling_module_string>` 
-  *  :ref:`find_enum_name (enum: Enumeration? implicit; value: int64) : string <function-ast_find_enum_name_Enumeration_q__implicit_int64>` 
-  *  :ref:`find_enum_value (enum: Enumeration? implicit; value: string implicit) : int64 <function-ast_find_enum_value_Enumeration_q__implicit_string_implicit>` 
-  *  :ref:`find_enum_value (enum: smart_ptr\<Enumeration\> implicit; value: string implicit) : int64 <function-ast_find_enum_value_smart_ptr_ls_Enumeration_gr__implicit_string_implicit>` 
-  *  :ref:`find_matching_variable (program: Program? implicit; function: Function? implicit; name: string implicit; seePrivate: bool; block: block\<(array\<smart_ptr\<Variable\>\>#):void\>) <function-ast_find_matching_variable_Program_q__implicit_Function_q__implicit_string_implicit_bool_block_ls_array_ls_smart_ptr_ls_Variable_gr__gr__hh__c_void_gr_>` 
-  *  :ref:`find_module (name: string) : Module? <function-ast_find_module_string>` 
-  *  :ref:`find_module (prog: smart_ptr\<Program\>; name: string) : Module? <function-ast_find_module_smart_ptr_ls_Program_gr__string>` 
-  *  :ref:`find_module_function_via_rtti (module: Module? implicit; function: function\<():void\>) : smart_ptr\<Function\> <function-ast_find_module_function_via_rtti_Module_q__implicit_function_ls__c_void_gr_>` 
-  *  :ref:`find_module_via_rtti (program: smart_ptr\<Program\> implicit; name: string implicit) : Module? <function-ast_find_module_via_rtti_smart_ptr_ls_Program_gr__implicit_string_implicit>` 
-  *  :ref:`find_struct_field_parent (structure: smart_ptr\<Structure\> implicit; name: string implicit) : Structure const? <function-ast_find_struct_field_parent_smart_ptr_ls_Structure_gr__implicit_string_implicit>` 
-  *  :ref:`find_structure_field (structPtr: Structure? implicit; field: string implicit) : FieldDeclaration? <function-ast_find_structure_field_Structure_q__implicit_string_implicit>` 
-  *  :ref:`find_unique_structure (program: smart_ptr\<Program\> implicit; name: string implicit) : Structure? <function-ast_find_unique_structure_smart_ptr_ls_Program_gr__implicit_string_implicit>` 
-  *  :ref:`find_variable (module: Module? implicit; variable: string implicit) : smart_ptr\<Variable\> <function-ast_find_variable_Module_q__implicit_string_implicit>` 
+  *  :ref:`find_bitfield_name (bit: smart_ptr\<TypeDecl\> implicit; value: bitfield) : string <function-ast_find_bitfield_name_smart_ptr_ls_TypeDecl_gr__implicit_bitfield>`
+  *  :ref:`find_call_macro (module: Module? implicit; name: string implicit) : CallMacro? <function-ast_find_call_macro_Module_q__implicit_string_implicit>`
+  *  :ref:`find_compiling_function_by_mangled_name_hash (moduleName: string implicit; mangledNameHash: uint64) : smart_ptr\<Function\> <function-ast_find_compiling_function_by_mangled_name_hash_string_implicit_uint64>`
+  *  :ref:`find_compiling_module (name: string) : Module? <function-ast_find_compiling_module_string>`
+  *  :ref:`find_enum_name (enum: Enumeration? implicit; value: int64) : string <function-ast_find_enum_name_Enumeration_q__implicit_int64>`
+  *  :ref:`find_enum_value (enum: Enumeration? implicit; value: string implicit) : int64 <function-ast_find_enum_value_Enumeration_q__implicit_string_implicit>`
+  *  :ref:`find_enum_value (enum: smart_ptr\<Enumeration\> implicit; value: string implicit) : int64 <function-ast_find_enum_value_smart_ptr_ls_Enumeration_gr__implicit_string_implicit>`
+  *  :ref:`find_matching_variable (program: Program? implicit; function: Function? implicit; name: string implicit; seePrivate: bool; block: block\<(array\<smart_ptr\<Variable\>\>#):void\>) <function-ast_find_matching_variable_Program_q__implicit_Function_q__implicit_string_implicit_bool_block_ls_array_ls_smart_ptr_ls_Variable_gr__gr__hh__c_void_gr_>`
+  *  :ref:`find_module (name: string) : Module? <function-ast_find_module_string>`
+  *  :ref:`find_module (prog: smart_ptr\<Program\>; name: string) : Module? <function-ast_find_module_smart_ptr_ls_Program_gr__string>`
+  *  :ref:`find_module_function_via_rtti (module: Module? implicit; function: function\<():void\>) : smart_ptr\<Function\> <function-ast_find_module_function_via_rtti_Module_q__implicit_function_ls__c_void_gr_>`
+  *  :ref:`find_module_via_rtti (program: smart_ptr\<Program\> implicit; name: string implicit) : Module? <function-ast_find_module_via_rtti_smart_ptr_ls_Program_gr__implicit_string_implicit>`
+  *  :ref:`find_struct_field_parent (structure: smart_ptr\<Structure\> implicit; name: string implicit) : Structure const? <function-ast_find_struct_field_parent_smart_ptr_ls_Structure_gr__implicit_string_implicit>`
+  *  :ref:`find_structure_field (structPtr: Structure? implicit; field: string implicit) : FieldDeclaration? <function-ast_find_structure_field_Structure_q__implicit_string_implicit>`
+  *  :ref:`find_unique_structure (program: smart_ptr\<Program\> implicit; name: string implicit) : Structure? <function-ast_find_unique_structure_smart_ptr_ls_Program_gr__implicit_string_implicit>`
+  *  :ref:`find_variable (module: Module? implicit; variable: string implicit) : smart_ptr\<Variable\> <function-ast_find_variable_Module_q__implicit_string_implicit>`
 
 .. _function-ast_find_bitfield_name_smart_ptr_ls_TypeDecl_gr__implicit_bitfield:
 
@@ -6535,7 +6535,7 @@ Searching
 
 Finds the name of a bitfield value in the specified type.
 
-:Arguments: * **bit** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
+:Arguments: * **bit** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
 
             * **value** : bitfield<>
 
@@ -6545,7 +6545,7 @@ Finds the name of a bitfield value in the specified type.
 
 Finds a CallMacro by name in the specified module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
             * **name** : string implicit
 
@@ -6573,7 +6573,7 @@ Finds a module by name in the currently compiling program.
 
 Finds the name corresponding to an enumeration value in the specified type.
 
-:Arguments: * **enum** :  :ref:`Enumeration <handle-ast-Enumeration>` ? implicit
+:Arguments: * **enum** :  :ref:`Enumeration <handle-ast-Enumeration>`? implicit
 
             * **value** : int64
 
@@ -6587,7 +6587,7 @@ find_enum_value
 
 Finds the integer value corresponding to an enumeration name in the specified type.
 
-:Arguments: * **enum** :  :ref:`Enumeration <handle-ast-Enumeration>` ? implicit
+:Arguments: * **enum** :  :ref:`Enumeration <handle-ast-Enumeration>`? implicit
 
             * **value** : string implicit
 
@@ -6603,15 +6603,15 @@ Finds the integer value corresponding to an enumeration name in the specified ty
 
 Finds a global or shared variable accessible from the given function, according to visibility and privacy rules.
 
-:Arguments: * **program** :  :ref:`Program <handle-rtti-Program>` ? implicit
+:Arguments: * **program** :  :ref:`Program <handle-rtti-Program>`? implicit
 
-            * **function** :  :ref:`Function <handle-ast-Function>` ? implicit
+            * **function** :  :ref:`Function <handle-ast-Function>`? implicit
 
             * **name** : string implicit
 
             * **seePrivate** : bool
 
-            * **block** : block<(array<smart_ptr< :ref:`Variable <handle-ast-Variable>` >>#):void> implicit
+            * **block** : block<(array<smart_ptr< :ref:`Variable <handle-ast-Variable>`>>#):void> implicit
 
 
 find_module
@@ -6637,7 +6637,7 @@ Finds a module by name in the specified program.
 
 Finds a function by name in the specified module using RTTI.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
             * **function** : function<void>
 
@@ -6647,7 +6647,7 @@ Finds a function by name in the specified module using RTTI.
 
 Finds a module by name in the specified program using RTTI.
 
-:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
+:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>`> implicit
 
             * **name** : string implicit
 
@@ -6657,7 +6657,7 @@ Finds a module by name in the specified program using RTTI.
 
 Finds the parent structure that declares the specified field.
 
-:Arguments: * **structure** : smart_ptr< :ref:`Structure <handle-ast-Structure>` > implicit
+:Arguments: * **structure** : smart_ptr< :ref:`Structure <handle-ast-Structure>`> implicit
 
             * **name** : string implicit
 
@@ -6667,7 +6667,7 @@ Finds the parent structure that declares the specified field.
 
 Returns the FieldDeclaration for a specific field of a structure type, or null if not found.
 
-:Arguments: * **structPtr** :  :ref:`Structure <handle-ast-Structure>` ? implicit
+:Arguments: * **structPtr** :  :ref:`Structure <handle-ast-Structure>`? implicit
 
             * **field** : string implicit
 
@@ -6677,7 +6677,7 @@ Returns the FieldDeclaration for a specific field of a structure type, or null i
 
 Finds a uniquely named structure in the program, returning it if unique or null if ambiguous.
 
-:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
+:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>`> implicit
 
             * **name** : string implicit
 
@@ -6687,7 +6687,7 @@ Finds a uniquely named structure in the program, returning it if unique or null 
 
 Finds a variable by name in the specified module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
             * **variable** : string implicit
 
@@ -6695,27 +6695,27 @@ Finds a variable by name in the specified module.
 Iterating
 +++++++++
 
-  *  :ref:`any_array_foreach (array: void? implicit; stride: int; block: block\<(void?):void\>) <function-ast_any_array_foreach_void_q__implicit_int_block_ls_void_q__c_void_gr_>` 
-  *  :ref:`any_table_foreach (table: void? implicit; keyStride: int; valueStride: int; block: block\<(void?;void?):void\>) <function-ast_any_table_foreach_void_q__implicit_int_int_block_ls_void_q_;void_q__c_void_gr_>` 
-  *  :ref:`for_each_annotation_ordered (module: Module? implicit; block: block\<(uint64;uint64):void\>) <function-ast_for_each_annotation_ordered_Module_q__implicit_block_ls_uint64;uint64_c_void_gr_>` 
-  *  :ref:`for_each_call_macro (module: Module? implicit; block: block\<(string#):void\>) <function-ast_for_each_call_macro_Module_q__implicit_block_ls_string_hh__c_void_gr_>` 
-  *  :ref:`for_each_enumeration (module: Module? implicit; block: block\<(smart_ptr\<Enumeration\>):void\>) <function-ast_for_each_enumeration_Module_q__implicit_block_ls_smart_ptr_ls_Enumeration_gr__c_void_gr_>` 
-  *  :ref:`for_each_field (annotation: BasicStructureAnnotation implicit; block: block\<(string;string;smart_ptr\<TypeDecl\>;uint):void\>) <function-ast_for_each_field_BasicStructureAnnotation_implicit_block_ls_string;string;smart_ptr_ls_TypeDecl_gr_;uint_c_void_gr_>` 
-  *  :ref:`for_each_for_loop_macro (module: Module? implicit; block: block\<(smart_ptr\<ForLoopMacro\>):void\>) <function-ast_for_each_for_loop_macro_Module_q__implicit_block_ls_smart_ptr_ls_ForLoopMacro_gr__c_void_gr_>` 
-  *  :ref:`for_each_function (module: Module? implicit; name: string implicit; block: block\<(smart_ptr\<Function\>):void\>) <function-ast_for_each_function_Module_q__implicit_string_implicit_block_ls_smart_ptr_ls_Function_gr__c_void_gr_>` 
-  *  :ref:`for_each_generic (module: Module? implicit; name: string implicit; block: block\<(smart_ptr\<Function\>):void\>) <function-ast_for_each_generic_Module_q__implicit_string_implicit_block_ls_smart_ptr_ls_Function_gr__c_void_gr_>` 
-  *  :ref:`for_each_generic (module: Module? implicit; block: block\<(smart_ptr\<Function\>):void\>) <function-ast_for_each_generic_Module_q__implicit_block_ls_smart_ptr_ls_Function_gr__c_void_gr_>` 
-  *  :ref:`for_each_global (module: Module? implicit; block: block\<(smart_ptr\<Variable\>):void\>) <function-ast_for_each_global_Module_q__implicit_block_ls_smart_ptr_ls_Variable_gr__c_void_gr_>` 
-  *  :ref:`for_each_module (program: Program? implicit; block: block\<(Module?):void\>) <function-ast_for_each_module_Program_q__implicit_block_ls_Module_q__c_void_gr_>` 
-  *  :ref:`for_each_module_function (module: Module? implicit; blk: block\<(smart_ptr\<Function\>):void\>) <function-ast_for_each_module_function_Module_q__implicit_block_ls_smart_ptr_ls_Function_gr__c_void_gr_>` 
-  *  :ref:`for_each_module_no_order (program: Program? implicit; block: block\<(Module?):void\>) <function-ast_for_each_module_no_order_Program_q__implicit_block_ls_Module_q__c_void_gr_>` 
-  *  :ref:`for_each_reader_macro (module: Module? implicit; block: block\<(string#):void\>) <function-ast_for_each_reader_macro_Module_q__implicit_block_ls_string_hh__c_void_gr_>` 
-  *  :ref:`for_each_structure (module: Module? implicit; block: block\<(smart_ptr\<Structure\>):void\>) <function-ast_for_each_structure_Module_q__implicit_block_ls_smart_ptr_ls_Structure_gr__c_void_gr_>` 
-  *  :ref:`for_each_structure_alias (structure: Structure? implicit; block: block\<(smart_ptr\<TypeDecl\>):void\>) <function-ast_for_each_structure_alias_Structure_q__implicit_block_ls_smart_ptr_ls_TypeDecl_gr__c_void_gr_>` 
-  *  :ref:`for_each_typedef (module: Module? implicit; block: block\<(string#;smart_ptr\<TypeDecl\>):void\>) <function-ast_for_each_typedef_Module_q__implicit_block_ls_string_hh_;smart_ptr_ls_TypeDecl_gr__c_void_gr_>` 
-  *  :ref:`for_each_typeinfo_macro (module: Module? implicit; block: block\<(smart_ptr\<TypeInfoMacro\>):void\>) <function-ast_for_each_typeinfo_macro_Module_q__implicit_block_ls_smart_ptr_ls_TypeInfoMacro_gr__c_void_gr_>` 
-  *  :ref:`for_each_typemacro (module: Module? implicit; block: block\<(smart_ptr\<TypeMacro\>):void\>) <function-ast_for_each_typemacro_Module_q__implicit_block_ls_smart_ptr_ls_TypeMacro_gr__c_void_gr_>` 
-  *  :ref:`for_each_variant_macro (module: Module? implicit; block: block\<(smart_ptr\<VariantMacro\>):void\>) <function-ast_for_each_variant_macro_Module_q__implicit_block_ls_smart_ptr_ls_VariantMacro_gr__c_void_gr_>` 
+  *  :ref:`any_array_foreach (array: void? implicit; stride: int; block: block\<(void?):void\>) <function-ast_any_array_foreach_void_q__implicit_int_block_ls_void_q__c_void_gr_>`
+  *  :ref:`any_table_foreach (table: void? implicit; keyStride: int; valueStride: int; block: block\<(void?;void?):void\>) <function-ast_any_table_foreach_void_q__implicit_int_int_block_ls_void_q_;void_q__c_void_gr_>`
+  *  :ref:`for_each_annotation_ordered (module: Module? implicit; block: block\<(uint64;uint64):void\>) <function-ast_for_each_annotation_ordered_Module_q__implicit_block_ls_uint64;uint64_c_void_gr_>`
+  *  :ref:`for_each_call_macro (module: Module? implicit; block: block\<(string#):void\>) <function-ast_for_each_call_macro_Module_q__implicit_block_ls_string_hh__c_void_gr_>`
+  *  :ref:`for_each_enumeration (module: Module? implicit; block: block\<(smart_ptr\<Enumeration\>):void\>) <function-ast_for_each_enumeration_Module_q__implicit_block_ls_smart_ptr_ls_Enumeration_gr__c_void_gr_>`
+  *  :ref:`for_each_field (annotation: BasicStructureAnnotation implicit; block: block\<(string;string;smart_ptr\<TypeDecl\>;uint):void\>) <function-ast_for_each_field_BasicStructureAnnotation_implicit_block_ls_string;string;smart_ptr_ls_TypeDecl_gr_;uint_c_void_gr_>`
+  *  :ref:`for_each_for_loop_macro (module: Module? implicit; block: block\<(smart_ptr\<ForLoopMacro\>):void\>) <function-ast_for_each_for_loop_macro_Module_q__implicit_block_ls_smart_ptr_ls_ForLoopMacro_gr__c_void_gr_>`
+  *  :ref:`for_each_function (module: Module? implicit; name: string implicit; block: block\<(smart_ptr\<Function\>):void\>) <function-ast_for_each_function_Module_q__implicit_string_implicit_block_ls_smart_ptr_ls_Function_gr__c_void_gr_>`
+  *  :ref:`for_each_generic (module: Module? implicit; name: string implicit; block: block\<(smart_ptr\<Function\>):void\>) <function-ast_for_each_generic_Module_q__implicit_string_implicit_block_ls_smart_ptr_ls_Function_gr__c_void_gr_>`
+  *  :ref:`for_each_generic (module: Module? implicit; block: block\<(smart_ptr\<Function\>):void\>) <function-ast_for_each_generic_Module_q__implicit_block_ls_smart_ptr_ls_Function_gr__c_void_gr_>`
+  *  :ref:`for_each_global (module: Module? implicit; block: block\<(smart_ptr\<Variable\>):void\>) <function-ast_for_each_global_Module_q__implicit_block_ls_smart_ptr_ls_Variable_gr__c_void_gr_>`
+  *  :ref:`for_each_module (program: Program? implicit; block: block\<(Module?):void\>) <function-ast_for_each_module_Program_q__implicit_block_ls_Module_q__c_void_gr_>`
+  *  :ref:`for_each_module_function (module: Module? implicit; blk: block\<(smart_ptr\<Function\>):void\>) <function-ast_for_each_module_function_Module_q__implicit_block_ls_smart_ptr_ls_Function_gr__c_void_gr_>`
+  *  :ref:`for_each_module_no_order (program: Program? implicit; block: block\<(Module?):void\>) <function-ast_for_each_module_no_order_Program_q__implicit_block_ls_Module_q__c_void_gr_>`
+  *  :ref:`for_each_reader_macro (module: Module? implicit; block: block\<(string#):void\>) <function-ast_for_each_reader_macro_Module_q__implicit_block_ls_string_hh__c_void_gr_>`
+  *  :ref:`for_each_structure (module: Module? implicit; block: block\<(smart_ptr\<Structure\>):void\>) <function-ast_for_each_structure_Module_q__implicit_block_ls_smart_ptr_ls_Structure_gr__c_void_gr_>`
+  *  :ref:`for_each_structure_alias (structure: Structure? implicit; block: block\<(smart_ptr\<TypeDecl\>):void\>) <function-ast_for_each_structure_alias_Structure_q__implicit_block_ls_smart_ptr_ls_TypeDecl_gr__c_void_gr_>`
+  *  :ref:`for_each_typedef (module: Module? implicit; block: block\<(string#;smart_ptr\<TypeDecl\>):void\>) <function-ast_for_each_typedef_Module_q__implicit_block_ls_string_hh_;smart_ptr_ls_TypeDecl_gr__c_void_gr_>`
+  *  :ref:`for_each_typeinfo_macro (module: Module? implicit; block: block\<(smart_ptr\<TypeInfoMacro\>):void\>) <function-ast_for_each_typeinfo_macro_Module_q__implicit_block_ls_smart_ptr_ls_TypeInfoMacro_gr__c_void_gr_>`
+  *  :ref:`for_each_typemacro (module: Module? implicit; block: block\<(smart_ptr\<TypeMacro\>):void\>) <function-ast_for_each_typemacro_Module_q__implicit_block_ls_smart_ptr_ls_TypeMacro_gr__c_void_gr_>`
+  *  :ref:`for_each_variant_macro (module: Module? implicit; block: block\<(smart_ptr\<VariantMacro\>):void\>) <function-ast_for_each_variant_macro_Module_q__implicit_block_ls_smart_ptr_ls_VariantMacro_gr__c_void_gr_>`
 
 .. _function-ast_any_array_foreach_void_q__implicit_int_block_ls_void_q__c_void_gr_:
 
@@ -6749,7 +6749,7 @@ Iterates through any `table<>` type in a typeless fashion using `void?` pointers
 
 Iterates through each annotation in the given module in the order they were added.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
             * **block** : block<(uint64;uint64):void> implicit
 
@@ -6759,7 +6759,7 @@ Iterates through each annotation in the given module in the order they were adde
 
 Iterates through every CallMacro adapter in the specified module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
             * **block** : block<(string#):void> implicit
 
@@ -6769,9 +6769,9 @@ Iterates through every CallMacro adapter in the specified module.
 
 Iterates through every enumeration in the specified module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **block** : block<(smart_ptr< :ref:`Enumeration <handle-ast-Enumeration>` >):void> implicit
+            * **block** : block<(smart_ptr< :ref:`Enumeration <handle-ast-Enumeration>`>):void> implicit
 
 .. _function-ast_for_each_field_BasicStructureAnnotation_implicit_block_ls_string;string;smart_ptr_ls_TypeDecl_gr_;uint_c_void_gr_:
 
@@ -6779,9 +6779,9 @@ Iterates through every enumeration in the specified module.
 
 Iterates through every field in a BuiltinStructure handled type.
 
-:Arguments: * **annotation** :  :ref:`BasicStructureAnnotation <handle-rtti-BasicStructureAnnotation>`  implicit
+:Arguments: * **annotation** :  :ref:`BasicStructureAnnotation <handle-rtti-BasicStructureAnnotation>` implicit
 
-            * **block** : block<(string;string;smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` >;uint):void> implicit
+            * **block** : block<(string;string;smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`>;uint):void> implicit
 
 .. _function-ast_for_each_for_loop_macro_Module_q__implicit_block_ls_smart_ptr_ls_ForLoopMacro_gr__c_void_gr_:
 
@@ -6789,9 +6789,9 @@ Iterates through every field in a BuiltinStructure handled type.
 
 Iterates through every for-loop macro in the specified module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **block** : block<(smart_ptr< :ref:`ForLoopMacro <handle-ast-ForLoopMacro>` >):void> implicit
+            * **block** : block<(smart_ptr< :ref:`ForLoopMacro <handle-ast-ForLoopMacro>`>):void> implicit
 
 .. _function-ast_for_each_function_Module_q__implicit_string_implicit_block_ls_smart_ptr_ls_Function_gr__c_void_gr_:
 
@@ -6799,11 +6799,11 @@ Iterates through every for-loop macro in the specified module.
 
 Iterates through each function in the given module, matching all functions if the name is empty.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
             * **name** : string implicit
 
-            * **block** : block<(smart_ptr< :ref:`Function <handle-ast-Function>` >):void> implicit
+            * **block** : block<(smart_ptr< :ref:`Function <handle-ast-Function>`>):void> implicit
 
 
 for_each_generic
@@ -6815,11 +6815,11 @@ for_each_generic
 
 Iterates through each generic function in the given module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
             * **name** : string implicit
 
-            * **block** : block<(smart_ptr< :ref:`Function <handle-ast-Function>` >):void> implicit
+            * **block** : block<(smart_ptr< :ref:`Function <handle-ast-Function>`>):void> implicit
 
 .. _function-ast_for_each_generic_Module_q__implicit_block_ls_smart_ptr_ls_Function_gr__c_void_gr_:
 
@@ -6833,9 +6833,9 @@ Iterates through each generic function in the given module.
 
 Iterates through every global variable in the specified module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **block** : block<(smart_ptr< :ref:`Variable <handle-ast-Variable>` >):void> implicit
+            * **block** : block<(smart_ptr< :ref:`Variable <handle-ast-Variable>`>):void> implicit
 
 .. _function-ast_for_each_module_Program_q__implicit_block_ls_Module_q__c_void_gr_:
 
@@ -6843,9 +6843,9 @@ Iterates through every global variable in the specified module.
 
 Iterates through each module in the program in dependency order.
 
-:Arguments: * **program** :  :ref:`Program <handle-rtti-Program>` ? implicit
+:Arguments: * **program** :  :ref:`Program <handle-rtti-Program>`? implicit
 
-            * **block** : block<( :ref:`Module <handle-rtti-Module>` ?):void> implicit
+            * **block** : block<( :ref:`Module <handle-rtti-Module>`?):void> implicit
 
 .. _function-ast_for_each_module_function_Module_q__implicit_block_ls_smart_ptr_ls_Function_gr__c_void_gr_:
 
@@ -6853,9 +6853,9 @@ Iterates through each module in the program in dependency order.
 
 Iterates through each function in the given module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **blk** : block<(smart_ptr< :ref:`Function <handle-ast-Function>` >):void> implicit
+            * **blk** : block<(smart_ptr< :ref:`Function <handle-ast-Function>`>):void> implicit
 
 .. _function-ast_for_each_module_no_order_Program_q__implicit_block_ls_Module_q__c_void_gr_:
 
@@ -6863,9 +6863,9 @@ Iterates through each function in the given module.
 
 Iterates through each module in the program in no particular order, as they appear in the library group.
 
-:Arguments: * **program** :  :ref:`Program <handle-rtti-Program>` ? implicit
+:Arguments: * **program** :  :ref:`Program <handle-rtti-Program>`? implicit
 
-            * **block** : block<( :ref:`Module <handle-rtti-Module>` ?):void> implicit
+            * **block** : block<( :ref:`Module <handle-rtti-Module>`?):void> implicit
 
 .. _function-ast_for_each_reader_macro_Module_q__implicit_block_ls_string_hh__c_void_gr_:
 
@@ -6873,7 +6873,7 @@ Iterates through each module in the program in no particular order, as they appe
 
 Iterates through each reader macro in the given module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
             * **block** : block<(string#):void> implicit
 
@@ -6883,9 +6883,9 @@ Iterates through each reader macro in the given module.
 
 Iterates through every structure in the specified module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **block** : block<(smart_ptr< :ref:`Structure <handle-ast-Structure>` >):void> implicit
+            * **block** : block<(smart_ptr< :ref:`Structure <handle-ast-Structure>`>):void> implicit
 
 .. _function-ast_for_each_structure_alias_Structure_q__implicit_block_ls_smart_ptr_ls_TypeDecl_gr__c_void_gr_:
 
@@ -6893,9 +6893,9 @@ Iterates through every structure in the specified module.
 
 Iterates over all structure aliases defined in the given structure type, invoking the provided block for each alias.
 
-:Arguments: * **structure** :  :ref:`Structure <handle-ast-Structure>` ? implicit
+:Arguments: * **structure** :  :ref:`Structure <handle-ast-Structure>`? implicit
 
-            * **block** : block<(smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` >):void> implicit
+            * **block** : block<(smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`>):void> implicit
 
 .. _function-ast_for_each_typedef_Module_q__implicit_block_ls_string_hh_;smart_ptr_ls_TypeDecl_gr__c_void_gr_:
 
@@ -6903,9 +6903,9 @@ Iterates over all structure aliases defined in the given structure type, invokin
 
 Iterates through every typedef in the specified module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **block** : block<(string#;smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` >):void> implicit
+            * **block** : block<(string#;smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`>):void> implicit
 
 .. _function-ast_for_each_typeinfo_macro_Module_q__implicit_block_ls_smart_ptr_ls_TypeInfoMacro_gr__c_void_gr_:
 
@@ -6913,9 +6913,9 @@ Iterates through every typedef in the specified module.
 
 Iterates through each typeinfo macro in the given module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **block** : block<(smart_ptr< :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>` >):void> implicit
+            * **block** : block<(smart_ptr< :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>`>):void> implicit
 
 .. _function-ast_for_each_typemacro_Module_q__implicit_block_ls_smart_ptr_ls_TypeMacro_gr__c_void_gr_:
 
@@ -6923,9 +6923,9 @@ Iterates through each typeinfo macro in the given module.
 
 Iterates over all type macros registered in the given module, invoking the provided block for each one.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **block** : block<(smart_ptr< :ref:`TypeMacro <handle-ast-TypeMacro>` >):void> implicit
+            * **block** : block<(smart_ptr< :ref:`TypeMacro <handle-ast-TypeMacro>`>):void> implicit
 
 .. _function-ast_for_each_variant_macro_Module_q__implicit_block_ls_smart_ptr_ls_VariantMacro_gr__c_void_gr_:
 
@@ -6933,21 +6933,21 @@ Iterates over all type macros registered in the given module, invoking the provi
 
 Iterates through each variant macro in the given module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **block** : block<(smart_ptr< :ref:`VariantMacro <handle-ast-VariantMacro>` >):void> implicit
+            * **block** : block<(smart_ptr< :ref:`VariantMacro <handle-ast-VariantMacro>`>):void> implicit
 
 +++++++
 Cloning
 +++++++
 
-  *  :ref:`clone_expression (expression: smart_ptr\<Expression\> implicit) : smart_ptr\<Expression\> <function-ast_clone_expression_smart_ptr_ls_Expression_gr__implicit>` 
-  *  :ref:`clone_file_info (name: string implicit; tab_size: int) : FileInfo? <function-ast_clone_file_info_string_implicit_int>` 
-  *  :ref:`clone_function (function: smart_ptr\<Function\> implicit) : smart_ptr\<Function\> <function-ast_clone_function_smart_ptr_ls_Function_gr__implicit>` 
-  *  :ref:`clone_function (fn: Function?) : FunctionPtr <function-ast_clone_function_Function_q_>` 
-  *  :ref:`clone_structure (structure: Structure const? implicit) : smart_ptr\<Structure\> <function-ast_clone_structure_Structure_const_q__implicit>` 
-  *  :ref:`clone_type (type: smart_ptr\<TypeDecl\> implicit) : smart_ptr\<TypeDecl\> <function-ast_clone_type_smart_ptr_ls_TypeDecl_gr__implicit>` 
-  *  :ref:`clone_variable (variable: smart_ptr\<Variable\> implicit) : smart_ptr\<Variable\> <function-ast_clone_variable_smart_ptr_ls_Variable_gr__implicit>` 
+  *  :ref:`clone_expression (expression: smart_ptr\<Expression\> implicit) : smart_ptr\<Expression\> <function-ast_clone_expression_smart_ptr_ls_Expression_gr__implicit>`
+  *  :ref:`clone_file_info (name: string implicit; tab_size: int) : FileInfo? <function-ast_clone_file_info_string_implicit_int>`
+  *  :ref:`clone_function (function: smart_ptr\<Function\> implicit) : smart_ptr\<Function\> <function-ast_clone_function_smart_ptr_ls_Function_gr__implicit>`
+  *  :ref:`clone_function (fn: Function?) : FunctionPtr <function-ast_clone_function_Function_q_>`
+  *  :ref:`clone_structure (structure: Structure const? implicit) : smart_ptr\<Structure\> <function-ast_clone_structure_Structure_const_q__implicit>`
+  *  :ref:`clone_type (type: smart_ptr\<TypeDecl\> implicit) : smart_ptr\<TypeDecl\> <function-ast_clone_type_smart_ptr_ls_TypeDecl_gr__implicit>`
+  *  :ref:`clone_variable (variable: smart_ptr\<Variable\> implicit) : smart_ptr\<Variable\> <function-ast_clone_variable_smart_ptr_ls_Variable_gr__implicit>`
 
 .. _function-ast_clone_expression_smart_ptr_ls_Expression_gr__implicit:
 
@@ -6955,7 +6955,7 @@ Cloning
 
 Clones an Expression along with all its subexpressions and corresponding type information.
 
-:Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > implicit
+:Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> implicit
 
 .. _function-ast_clone_file_info_string_implicit_int:
 
@@ -6977,7 +6977,7 @@ clone_function
 
 Clones a Function and all of its contents.
 
-:Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
+:Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>`> implicit
 
 .. _function-ast_clone_function_Function_q_:
 
@@ -6991,7 +6991,7 @@ Clones a Function and all of its contents.
 
 Returns a deep clone of the specified Structure.
 
-:Arguments: * **structure** :  :ref:`Structure <handle-ast-Structure>` ? implicit
+:Arguments: * **structure** :  :ref:`Structure <handle-ast-Structure>`? implicit
 
 .. _function-ast_clone_type_smart_ptr_ls_TypeDecl_gr__implicit:
 
@@ -6999,7 +6999,7 @@ Returns a deep clone of the specified Structure.
 
 Clones a TypeDecl along with all its subtypes.
 
-:Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
+:Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
 
 .. _function-ast_clone_variable_smart_ptr_ls_Variable_gr__implicit:
 
@@ -7007,21 +7007,21 @@ Clones a TypeDecl along with all its subtypes.
 
 Clones a Variable and all of its contents.
 
-:Arguments: * **variable** : smart_ptr< :ref:`Variable <handle-ast-Variable>` > implicit
+:Arguments: * **variable** : smart_ptr< :ref:`Variable <handle-ast-Variable>`> implicit
 
 ++++++++++++
 Mangled name
 ++++++++++++
 
-  *  :ref:`get_mangled_name (function: smart_ptr\<Function\> implicit) : string <function-ast_get_mangled_name_smart_ptr_ls_Function_gr__implicit>` 
-  *  :ref:`get_mangled_name (type: smart_ptr\<TypeDecl\> implicit) : string <function-ast_get_mangled_name_smart_ptr_ls_TypeDecl_gr__implicit>` 
-  *  :ref:`get_mangled_name (variable: smart_ptr\<Variable\> implicit) : string <function-ast_get_mangled_name_smart_ptr_ls_Variable_gr__implicit>` 
-  *  :ref:`get_mangled_name (variable: smart_ptr\<ExprBlock\> implicit) : string <function-ast_get_mangled_name_smart_ptr_ls_ExprBlock_gr__implicit>` 
-  *  :ref:`get_mangled_name (decl: TypeDecl?) : auto <function-ast_get_mangled_name_TypeDecl_q_>` 
-  *  :ref:`get_mangled_name (fn: Function?) : auto <function-ast_get_mangled_name_Function_q_>` 
-  *  :ref:`get_mangled_name (decl: Variable?) : auto <function-ast_get_mangled_name_Variable_q_>` 
-  *  :ref:`get_mangled_name (decl: ExprBlock?) : auto <function-ast_get_mangled_name_ExprBlock_q_>` 
-  *  :ref:`parse_mangled_name (txt: string implicit; lib: ModuleGroup implicit; thisModule: Module? implicit) : smart_ptr\<TypeDecl\> <function-ast_parse_mangled_name_string_implicit_ModuleGroup_implicit_Module_q__implicit>` 
+  *  :ref:`get_mangled_name (function: smart_ptr\<Function\> implicit) : string <function-ast_get_mangled_name_smart_ptr_ls_Function_gr__implicit>`
+  *  :ref:`get_mangled_name (type: smart_ptr\<TypeDecl\> implicit) : string <function-ast_get_mangled_name_smart_ptr_ls_TypeDecl_gr__implicit>`
+  *  :ref:`get_mangled_name (variable: smart_ptr\<Variable\> implicit) : string <function-ast_get_mangled_name_smart_ptr_ls_Variable_gr__implicit>`
+  *  :ref:`get_mangled_name (variable: smart_ptr\<ExprBlock\> implicit) : string <function-ast_get_mangled_name_smart_ptr_ls_ExprBlock_gr__implicit>`
+  *  :ref:`get_mangled_name (decl: TypeDecl?) : auto <function-ast_get_mangled_name_TypeDecl_q_>`
+  *  :ref:`get_mangled_name (fn: Function?) : auto <function-ast_get_mangled_name_Function_q_>`
+  *  :ref:`get_mangled_name (decl: Variable?) : auto <function-ast_get_mangled_name_Variable_q_>`
+  *  :ref:`get_mangled_name (decl: ExprBlock?) : auto <function-ast_get_mangled_name_ExprBlock_q_>`
+  *  :ref:`parse_mangled_name (txt: string implicit; lib: ModuleGroup implicit; thisModule: Module? implicit) : smart_ptr\<TypeDecl\> <function-ast_parse_mangled_name_string_implicit_ModuleGroup_implicit_Module_q__implicit>`
 
 
 get_mangled_name
@@ -7033,7 +7033,7 @@ get_mangled_name
 
 Returns the mangled name of the specified object.
 
-:Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
+:Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>`> implicit
 
 .. _function-ast_get_mangled_name_smart_ptr_ls_TypeDecl_gr__implicit:
 
@@ -7073,19 +7073,19 @@ Parses a mangled name string and creates the corresponding TypeDecl.
 
 :Arguments: * **txt** : string implicit
 
-            * **lib** :  :ref:`ModuleGroup <handle-rtti-ModuleGroup>`  implicit
+            * **lib** :  :ref:`ModuleGroup <handle-rtti-ModuleGroup>` implicit
 
-            * **thisModule** :  :ref:`Module <handle-rtti-Module>` ? implicit
+            * **thisModule** :  :ref:`Module <handle-rtti-Module>`? implicit
 
 +++++++++++++++
 Size and offset
 +++++++++++++++
 
-  *  :ref:`any_array_size (array: void? implicit) : int <function-ast_any_array_size_void_q__implicit>` 
-  *  :ref:`any_table_size (table: void? implicit) : int <function-ast_any_table_size_void_q__implicit>` 
-  *  :ref:`get_handled_type_field_offset (type: smart_ptr\<TypeAnnotation\> implicit; field: string implicit) : uint <function-ast_get_handled_type_field_offset_smart_ptr_ls_TypeAnnotation_gr__implicit_string_implicit>` 
-  *  :ref:`get_tuple_field_offset (typle: smart_ptr\<TypeDecl\> implicit; index: int) : int <function-ast_get_tuple_field_offset_smart_ptr_ls_TypeDecl_gr__implicit_int>` 
-  *  :ref:`get_variant_field_offset (variant: smart_ptr\<TypeDecl\> implicit; index: int) : int <function-ast_get_variant_field_offset_smart_ptr_ls_TypeDecl_gr__implicit_int>` 
+  *  :ref:`any_array_size (array: void? implicit) : int <function-ast_any_array_size_void_q__implicit>`
+  *  :ref:`any_table_size (table: void? implicit) : int <function-ast_any_table_size_void_q__implicit>`
+  *  :ref:`get_handled_type_field_offset (type: smart_ptr\<TypeAnnotation\> implicit; field: string implicit) : uint <function-ast_get_handled_type_field_offset_smart_ptr_ls_TypeAnnotation_gr__implicit_string_implicit>`
+  *  :ref:`get_tuple_field_offset (typle: smart_ptr\<TypeDecl\> implicit; index: int) : int <function-ast_get_tuple_field_offset_smart_ptr_ls_TypeDecl_gr__implicit_int>`
+  *  :ref:`get_variant_field_offset (variant: smart_ptr\<TypeDecl\> implicit; index: int) : int <function-ast_get_variant_field_offset_smart_ptr_ls_TypeDecl_gr__implicit_int>`
 
 .. _function-ast_any_array_size_void_q__implicit:
 
@@ -7109,7 +7109,7 @@ Returns the size of a table from a pointer to a `table<>` object.
 
 Returns the byte offset of a field in a ManagedStructure handled type.
 
-:Arguments: * **type** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` > implicit
+:Arguments: * **type** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`> implicit
 
             * **field** : string implicit
 
@@ -7119,7 +7119,7 @@ Returns the byte offset of a field in a ManagedStructure handled type.
 
 Returns the byte offset of a tuple field.
 
-:Arguments: * **typle** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
+:Arguments: * **typle** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
 
             * **index** : int
 
@@ -7129,7 +7129,7 @@ Returns the byte offset of a tuple field.
 
 Returns the byte offset of a variant field.
 
-:Arguments: * **variant** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
+:Arguments: * **variant** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
 
             * **index** : int
 
@@ -7137,18 +7137,18 @@ Returns the byte offset of a variant field.
 Evaluations
 +++++++++++
 
-  *  :ref:`eval_single_expression (expr: smart_ptr\<Expression\> const& implicit; ok: bool& implicit) : float4 <function-ast_eval_single_expression_smart_ptr_ls_Expression_gr__const_implicit_bool_implicit>` 
+  *  :ref:`eval_single_expression (expr: smart_ptr\<Expression\> const& implicit; ok: bool& implicit) : float4 <function-ast_eval_single_expression_smart_ptr_ls_Expression_gr__const_implicit_bool_implicit>`
 
 .. _function-ast_eval_single_expression_smart_ptr_ls_Expression_gr__const_implicit_bool_implicit:
 
 .. das:function:: eval_single_expression(expr: smart_ptr<Expression> const& implicit; ok: bool& implicit) : float4
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Simulates and evaluates a single expression on a separate context.
 
-:Arguments: * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` >& implicit
+:Arguments: * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`>& implicit
 
             * **ok** : bool& implicit
 
@@ -7156,7 +7156,7 @@ Simulates and evaluates a single expression on a separate context.
 Error reporting
 +++++++++++++++
 
-  *  :ref:`macro_error (porogram: smart_ptr\<Program\> implicit; at: LineInfo implicit; message: string implicit) <function-ast_macro_error_smart_ptr_ls_Program_gr__implicit_LineInfo_implicit_string_implicit>` 
+  *  :ref:`macro_error (porogram: smart_ptr\<Program\> implicit; at: LineInfo implicit; message: string implicit) <function-ast_macro_error_smart_ptr_ls_Program_gr__implicit_LineInfo_implicit_string_implicit>`
 
 .. _function-ast_macro_error_smart_ptr_ls_Program_gr__implicit_LineInfo_implicit_string_implicit:
 
@@ -7164,9 +7164,9 @@ Error reporting
 
 Reports an error to the currently compiling program during the active compilation pass.
 
-:Arguments: * **porogram** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
+:Arguments: * **porogram** : smart_ptr< :ref:`Program <handle-rtti-Program>`> implicit
 
-            * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  implicit
+            * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` implicit
 
             * **message** : string implicit
 
@@ -7174,10 +7174,10 @@ Reports an error to the currently compiling program during the active compilatio
 Location and context
 ++++++++++++++++++++
 
-  *  :ref:`collect_dependencies (function: smart_ptr\<Function\> implicit; block: block\<(array\<Function?\>;array\<Variable?\>):void\>) <function-ast_collect_dependencies_smart_ptr_ls_Function_gr__implicit_block_ls_array_ls_Function_q__gr_;array_ls_Variable_q__gr__c_void_gr_>` 
-  *  :ref:`force_at (function: smart_ptr\<Function\> const& implicit; at: LineInfo implicit) <function-ast_force_at_smart_ptr_ls_Function_gr__const_implicit_LineInfo_implicit>` 
-  *  :ref:`force_at (expression: smart_ptr\<Expression\> const& implicit; at: LineInfo implicit) <function-ast_force_at_smart_ptr_ls_Expression_gr__const_implicit_LineInfo_implicit>` 
-  *  :ref:`get_ast_context (program: smart_ptr\<Program\> implicit; expression: smart_ptr\<Expression\> implicit; block: block\<(bool;AstContext):void\>) <function-ast_get_ast_context_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_Expression_gr__implicit_block_ls_bool;AstContext_c_void_gr_>` 
+  *  :ref:`collect_dependencies (function: smart_ptr\<Function\> implicit; block: block\<(array\<Function?\>;array\<Variable?\>):void\>) <function-ast_collect_dependencies_smart_ptr_ls_Function_gr__implicit_block_ls_array_ls_Function_q__gr_;array_ls_Variable_q__gr__c_void_gr_>`
+  *  :ref:`force_at (function: smart_ptr\<Function\> const& implicit; at: LineInfo implicit) <function-ast_force_at_smart_ptr_ls_Function_gr__const_implicit_LineInfo_implicit>`
+  *  :ref:`force_at (expression: smart_ptr\<Expression\> const& implicit; at: LineInfo implicit) <function-ast_force_at_smart_ptr_ls_Expression_gr__const_implicit_LineInfo_implicit>`
+  *  :ref:`get_ast_context (program: smart_ptr\<Program\> implicit; expression: smart_ptr\<Expression\> implicit; block: block\<(bool;AstContext):void\>) <function-ast_get_ast_context_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_Expression_gr__implicit_block_ls_bool;AstContext_c_void_gr_>`
 
 .. _function-ast_collect_dependencies_smart_ptr_ls_Function_gr__implicit_block_ls_array_ls_Function_q__gr_;array_ls_Variable_q__gr__c_void_gr_:
 
@@ -7185,9 +7185,9 @@ Location and context
 
 Collects dependencies of a given function, including other functions it calls and global variables it accesses.
 
-:Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
+:Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>`> implicit
 
-            * **block** : block<(array< :ref:`Function <handle-ast-Function>` ?>;array< :ref:`Variable <handle-ast-Variable>` ?>):void> implicit
+            * **block** : block<(array< :ref:`Function <handle-ast-Function>`?>;array< :ref:`Variable <handle-ast-Variable>`?>):void> implicit
 
 
 force_at
@@ -7199,9 +7199,9 @@ force_at
 
 Replaces line info in an expression, its subexpressions, and their types.
 
-:Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` >& implicit
+:Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>`>& implicit
 
-            * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  implicit
+            * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` implicit
 
 .. _function-ast_force_at_smart_ptr_ls_Expression_gr__const_implicit_LineInfo_implicit:
 
@@ -7215,18 +7215,18 @@ Replaces line info in an expression, its subexpressions, and their types.
 
 Returns the AstContext for a given expression, including the current function, loops, blocks, scopes, and with sections.
 
-:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
+:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>`> implicit
 
-            * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > implicit
+            * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> implicit
 
-            * **block** : block<(bool; :ref:`AstContext <handle-ast-AstContext>` ):void> implicit
+            * **block** : block<(bool; :ref:`AstContext <handle-ast-AstContext>`):void> implicit
 
 +++++++++++
 Use queries
 +++++++++++
 
-  *  :ref:`get_use_functions (func: smart_ptr\<Function\> implicit; block: block\<(smart_ptr\<Function\>):void\>) <function-ast_get_use_functions_smart_ptr_ls_Function_gr__implicit_block_ls_smart_ptr_ls_Function_gr__c_void_gr_>` 
-  *  :ref:`get_use_global_variables (func: smart_ptr\<Function\> implicit; block: block\<(smart_ptr\<Variable\>):void\>) <function-ast_get_use_global_variables_smart_ptr_ls_Function_gr__implicit_block_ls_smart_ptr_ls_Variable_gr__c_void_gr_>` 
+  *  :ref:`get_use_functions (func: smart_ptr\<Function\> implicit; block: block\<(smart_ptr\<Function\>):void\>) <function-ast_get_use_functions_smart_ptr_ls_Function_gr__implicit_block_ls_smart_ptr_ls_Function_gr__c_void_gr_>`
+  *  :ref:`get_use_global_variables (func: smart_ptr\<Function\> implicit; block: block\<(smart_ptr\<Variable\>):void\>) <function-ast_get_use_global_variables_smart_ptr_ls_Function_gr__implicit_block_ls_smart_ptr_ls_Variable_gr__c_void_gr_>`
 
 .. _function-ast_get_use_functions_smart_ptr_ls_Function_gr__implicit_block_ls_smart_ptr_ls_Function_gr__c_void_gr_:
 
@@ -7234,9 +7234,9 @@ Use queries
 
 Invokes a block with the list of all functions called by the specified function.
 
-:Arguments: * **func** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
+:Arguments: * **func** : smart_ptr< :ref:`Function <handle-ast-Function>`> implicit
 
-            * **block** : block<(smart_ptr< :ref:`Function <handle-ast-Function>` >):void> implicit
+            * **block** : block<(smart_ptr< :ref:`Function <handle-ast-Function>`>):void> implicit
 
 .. _function-ast_get_use_global_variables_smart_ptr_ls_Function_gr__implicit_block_ls_smart_ptr_ls_Variable_gr__c_void_gr_:
 
@@ -7244,15 +7244,15 @@ Invokes a block with the list of all functions called by the specified function.
 
 Invokes a block with the list of all global variables accessed by the specified function.
 
-:Arguments: * **func** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
+:Arguments: * **func** : smart_ptr< :ref:`Function <handle-ast-Function>`> implicit
 
-            * **block** : block<(smart_ptr< :ref:`Variable <handle-ast-Variable>` >):void> implicit
+            * **block** : block<(smart_ptr< :ref:`Variable <handle-ast-Variable>`>):void> implicit
 
 +++
 Log
 +++
 
-  *  :ref:`to_compilation_log (text: string implicit) <function-ast_to_compilation_log_string_implicit>` 
+  *  :ref:`to_compilation_log (text: string implicit) <function-ast_to_compilation_log_string_implicit>`
 
 .. _function-ast_to_compilation_log_string_implicit:
 
@@ -7266,7 +7266,7 @@ Writes a message to the compilation log from a macro during compilation.
 Removal
 +++++++
 
-  *  :ref:`remove_structure (module: Module? implicit; structure: smart_ptr\<Structure\>& implicit) : bool <function-ast_remove_structure_Module_q__implicit_smart_ptr_ls_Structure_gr__implicit>` 
+  *  :ref:`remove_structure (module: Module? implicit; structure: smart_ptr\<Structure\>& implicit) : bool <function-ast_remove_structure_Module_q__implicit_smart_ptr_ls_Structure_gr__implicit>`
 
 .. _function-ast_remove_structure_Module_q__implicit_smart_ptr_ls_Structure_gr__implicit:
 
@@ -7274,38 +7274,38 @@ Removal
 
 Removes a structure declaration from the specified module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **structure** : smart_ptr< :ref:`Structure <handle-ast-Structure>` >& implicit
+            * **structure** : smart_ptr< :ref:`Structure <handle-ast-Structure>`>& implicit
 
 ++++++++++
 Properties
 ++++++++++
 
-  *  :ref:`can_access_global_variable (variable: smart_ptr\<Variable\> const& implicit; module: Module? implicit; thisModule: Module? implicit) : bool <function-ast_can_access_global_variable_smart_ptr_ls_Variable_gr__const_implicit_Module_q__implicit_Module_q__implicit>` 
-  *  :ref:`get_aot_arg_prefix (func: Function? implicit; call: ExprCallFunc? implicit; argIndex: int) : string <function-ast_get_aot_arg_prefix_Function_q__implicit_ExprCallFunc_q__implicit_int>` 
-  *  :ref:`get_aot_arg_suffix (func: Function? implicit; call: ExprCallFunc? implicit; argIndex: int) : string <function-ast_get_aot_arg_suffix_Function_q__implicit_ExprCallFunc_q__implicit_int>` 
-  *  :ref:`get_aot_name (func: Function? implicit; call: ExprCallFunc? implicit) : string <function-ast_get_aot_name_Function_q__implicit_ExprCallFunc_q__implicit>` 
-  *  :ref:`get_current_search_module (program: Program? implicit; function: Function? implicit; moduleName: string implicit) : Module? <function-ast_get_current_search_module_Program_q__implicit_Function_q__implicit_string_implicit>` 
-  *  :ref:`get_field_type (type: smart_ptr\<TypeDecl\> implicit; fieldName: string implicit; constant: bool) : smart_ptr\<TypeDecl\> <function-ast_get_field_type_smart_ptr_ls_TypeDecl_gr__implicit_string_implicit_bool>` 
-  *  :ref:`get_func_aot_prefix (ann: FunctionAnnotation? implicit; stg: StringBuilderWriter? implicit; call: ExprCallFunc? implicit) <function-ast_get_func_aot_prefix_FunctionAnnotation_q__implicit_StringBuilderWriter_q__implicit_ExprCallFunc_q__implicit>` 
-  *  :ref:`get_function_aot_hash (fun: Function const? implicit) : uint64 <function-ast_get_function_aot_hash_Function_const_q__implicit>` 
-  *  :ref:`get_function_hash_by_id (fun: Function? implicit; id: int; pctx: void? implicit) : uint64 <function-ast_get_function_hash_by_id_Function_q__implicit_int_void_q__implicit>` 
-  *  :ref:`get_handled_type_field_type (type: smart_ptr\<TypeAnnotation\> implicit; field: string implicit) : TypeInfo? <function-ast_get_handled_type_field_type_smart_ptr_ls_TypeAnnotation_gr__implicit_string_implicit>` 
-  *  :ref:`get_handled_type_field_type_declaration (type: smart_ptr\<TypeAnnotation\> implicit; field: string implicit; isConst: bool) : smart_ptr\<TypeDecl\> <function-ast_get_handled_type_field_type_declaration_smart_ptr_ls_TypeAnnotation_gr__implicit_string_implicit_bool>` 
-  *  :ref:`get_handled_type_index_type_declaration (type: TypeAnnotation? implicit; src: Expression? implicit; idx: Expression? implicit) : smart_ptr\<TypeDecl\> <function-ast_get_handled_type_index_type_declaration_TypeAnnotation_q__implicit_Expression_q__implicit_Expression_q__implicit>` 
-  *  :ref:`get_struct_aot_prefix (ann: StructureAnnotation? implicit; structure: Structure? implicit; args: AnnotationArgumentList implicit; stg: StringBuilderWriter? implicit) <function-ast_get_struct_aot_prefix_StructureAnnotation_q__implicit_Structure_q__implicit_AnnotationArgumentList_implicit_StringBuilderWriter_q__implicit>` 
-  *  :ref:`get_structure_alias (structure: Structure? implicit; aliasName: string implicit) : smart_ptr\<TypeDecl\> <function-ast_get_structure_alias_Structure_q__implicit_string_implicit>` 
-  *  :ref:`get_underlying_value_type (type: smart_ptr\<TypeDecl\> implicit) : smart_ptr\<TypeDecl\> <function-ast_get_underlying_value_type_smart_ptr_ls_TypeDecl_gr__implicit>` 
-  *  :ref:`get_vector_length (vec: void? implicit; type: smart_ptr\<TypeDecl\> implicit) : int <function-ast_get_vector_length_void_q__implicit_smart_ptr_ls_TypeDecl_gr__implicit>` 
-  *  :ref:`get_vector_ptr_at_index (vec: void? implicit; type: TypeDecl? implicit; idx: int) : void? <function-ast_get_vector_ptr_at_index_void_q__implicit_TypeDecl_q__implicit_int>` 
-  *  :ref:`has_field (type: smart_ptr\<TypeDecl\> implicit; fieldName: string implicit; constant: bool) : bool <function-ast_has_field_smart_ptr_ls_TypeDecl_gr__implicit_string_implicit_bool>` 
-  *  :ref:`is_expr_const (expression: smart_ptr\<Expression\> const& implicit) : bool <function-ast_is_expr_const_smart_ptr_ls_Expression_gr__const_implicit>` 
-  *  :ref:`is_expr_like_call (expression: smart_ptr\<Expression\> const& implicit) : bool <function-ast_is_expr_like_call_smart_ptr_ls_Expression_gr__const_implicit>` 
-  *  :ref:`is_same_type (leftType: smart_ptr\<TypeDecl\> implicit; rightType: smart_ptr\<TypeDecl\> implicit; refMatters: RefMatters; constMatters: ConstMatters; tempMatters: TemporaryMatters) : bool <function-ast_is_same_type_smart_ptr_ls_TypeDecl_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit_RefMatters_ConstMatters_TemporaryMatters>` 
-  *  :ref:`is_same_type (argType: smart_ptr\<TypeDecl\> implicit; passType: smart_ptr\<TypeDecl\> implicit; refMatters: bool; constMatters: bool; temporaryMatters: bool; allowSubstitute: bool) : bool <function-ast_is_same_type_smart_ptr_ls_TypeDecl_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit_bool_bool_bool_bool>` 
-  *  :ref:`is_temp_type (type: smart_ptr\<TypeDecl\> implicit; refMatters: bool) : bool <function-ast_is_temp_type_smart_ptr_ls_TypeDecl_gr__implicit_bool>` 
-  *  :ref:`is_visible_directly (from_module: Module? implicit; which_module: Module? implicit) : bool <function-ast_is_visible_directly_Module_q__implicit_Module_q__implicit>` 
+  *  :ref:`can_access_global_variable (variable: smart_ptr\<Variable\> const& implicit; module: Module? implicit; thisModule: Module? implicit) : bool <function-ast_can_access_global_variable_smart_ptr_ls_Variable_gr__const_implicit_Module_q__implicit_Module_q__implicit>`
+  *  :ref:`get_aot_arg_prefix (func: Function? implicit; call: ExprCallFunc? implicit; argIndex: int) : string <function-ast_get_aot_arg_prefix_Function_q__implicit_ExprCallFunc_q__implicit_int>`
+  *  :ref:`get_aot_arg_suffix (func: Function? implicit; call: ExprCallFunc? implicit; argIndex: int) : string <function-ast_get_aot_arg_suffix_Function_q__implicit_ExprCallFunc_q__implicit_int>`
+  *  :ref:`get_aot_name (func: Function? implicit; call: ExprCallFunc? implicit) : string <function-ast_get_aot_name_Function_q__implicit_ExprCallFunc_q__implicit>`
+  *  :ref:`get_current_search_module (program: Program? implicit; function: Function? implicit; moduleName: string implicit) : Module? <function-ast_get_current_search_module_Program_q__implicit_Function_q__implicit_string_implicit>`
+  *  :ref:`get_field_type (type: smart_ptr\<TypeDecl\> implicit; fieldName: string implicit; constant: bool) : smart_ptr\<TypeDecl\> <function-ast_get_field_type_smart_ptr_ls_TypeDecl_gr__implicit_string_implicit_bool>`
+  *  :ref:`get_func_aot_prefix (ann: FunctionAnnotation? implicit; stg: StringBuilderWriter? implicit; call: ExprCallFunc? implicit) <function-ast_get_func_aot_prefix_FunctionAnnotation_q__implicit_StringBuilderWriter_q__implicit_ExprCallFunc_q__implicit>`
+  *  :ref:`get_function_aot_hash (fun: Function const? implicit) : uint64 <function-ast_get_function_aot_hash_Function_const_q__implicit>`
+  *  :ref:`get_function_hash_by_id (fun: Function? implicit; id: int; pctx: void? implicit) : uint64 <function-ast_get_function_hash_by_id_Function_q__implicit_int_void_q__implicit>`
+  *  :ref:`get_handled_type_field_type (type: smart_ptr\<TypeAnnotation\> implicit; field: string implicit) : TypeInfo? <function-ast_get_handled_type_field_type_smart_ptr_ls_TypeAnnotation_gr__implicit_string_implicit>`
+  *  :ref:`get_handled_type_field_type_declaration (type: smart_ptr\<TypeAnnotation\> implicit; field: string implicit; isConst: bool) : smart_ptr\<TypeDecl\> <function-ast_get_handled_type_field_type_declaration_smart_ptr_ls_TypeAnnotation_gr__implicit_string_implicit_bool>`
+  *  :ref:`get_handled_type_index_type_declaration (type: TypeAnnotation? implicit; src: Expression? implicit; idx: Expression? implicit) : smart_ptr\<TypeDecl\> <function-ast_get_handled_type_index_type_declaration_TypeAnnotation_q__implicit_Expression_q__implicit_Expression_q__implicit>`
+  *  :ref:`get_struct_aot_prefix (ann: StructureAnnotation? implicit; structure: Structure? implicit; args: AnnotationArgumentList implicit; stg: StringBuilderWriter? implicit) <function-ast_get_struct_aot_prefix_StructureAnnotation_q__implicit_Structure_q__implicit_AnnotationArgumentList_implicit_StringBuilderWriter_q__implicit>`
+  *  :ref:`get_structure_alias (structure: Structure? implicit; aliasName: string implicit) : smart_ptr\<TypeDecl\> <function-ast_get_structure_alias_Structure_q__implicit_string_implicit>`
+  *  :ref:`get_underlying_value_type (type: smart_ptr\<TypeDecl\> implicit) : smart_ptr\<TypeDecl\> <function-ast_get_underlying_value_type_smart_ptr_ls_TypeDecl_gr__implicit>`
+  *  :ref:`get_vector_length (vec: void? implicit; type: smart_ptr\<TypeDecl\> implicit) : int <function-ast_get_vector_length_void_q__implicit_smart_ptr_ls_TypeDecl_gr__implicit>`
+  *  :ref:`get_vector_ptr_at_index (vec: void? implicit; type: TypeDecl? implicit; idx: int) : void? <function-ast_get_vector_ptr_at_index_void_q__implicit_TypeDecl_q__implicit_int>`
+  *  :ref:`has_field (type: smart_ptr\<TypeDecl\> implicit; fieldName: string implicit; constant: bool) : bool <function-ast_has_field_smart_ptr_ls_TypeDecl_gr__implicit_string_implicit_bool>`
+  *  :ref:`is_expr_const (expression: smart_ptr\<Expression\> const& implicit) : bool <function-ast_is_expr_const_smart_ptr_ls_Expression_gr__const_implicit>`
+  *  :ref:`is_expr_like_call (expression: smart_ptr\<Expression\> const& implicit) : bool <function-ast_is_expr_like_call_smart_ptr_ls_Expression_gr__const_implicit>`
+  *  :ref:`is_same_type (leftType: smart_ptr\<TypeDecl\> implicit; rightType: smart_ptr\<TypeDecl\> implicit; refMatters: RefMatters; constMatters: ConstMatters; tempMatters: TemporaryMatters) : bool <function-ast_is_same_type_smart_ptr_ls_TypeDecl_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit_RefMatters_ConstMatters_TemporaryMatters>`
+  *  :ref:`is_same_type (argType: smart_ptr\<TypeDecl\> implicit; passType: smart_ptr\<TypeDecl\> implicit; refMatters: bool; constMatters: bool; temporaryMatters: bool; allowSubstitute: bool) : bool <function-ast_is_same_type_smart_ptr_ls_TypeDecl_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit_bool_bool_bool_bool>`
+  *  :ref:`is_temp_type (type: smart_ptr\<TypeDecl\> implicit; refMatters: bool) : bool <function-ast_is_temp_type_smart_ptr_ls_TypeDecl_gr__implicit_bool>`
+  *  :ref:`is_visible_directly (from_module: Module? implicit; which_module: Module? implicit) : bool <function-ast_is_visible_directly_Module_q__implicit_Module_q__implicit>`
 
 .. _function-ast_can_access_global_variable_smart_ptr_ls_Variable_gr__const_implicit_Module_q__implicit_Module_q__implicit:
 
@@ -7313,11 +7313,11 @@ Properties
 
 Returns true if a global variable is accessible from the specified module.
 
-:Arguments: * **variable** : smart_ptr< :ref:`Variable <handle-ast-Variable>` >& implicit
+:Arguments: * **variable** : smart_ptr< :ref:`Variable <handle-ast-Variable>`>& implicit
 
-            * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+            * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **thisModule** :  :ref:`Module <handle-rtti-Module>` ? implicit
+            * **thisModule** :  :ref:`Module <handle-rtti-Module>`? implicit
 
 .. _function-ast_get_aot_arg_prefix_Function_q__implicit_ExprCallFunc_q__implicit_int:
 
@@ -7325,9 +7325,9 @@ Returns true if a global variable is accessible from the specified module.
 
 Returns the AOT argument prefix string for the specified function.
 
-:Arguments: * **func** :  :ref:`Function <handle-ast-Function>` ? implicit
+:Arguments: * **func** :  :ref:`Function <handle-ast-Function>`? implicit
 
-            * **call** :  :ref:`ExprCallFunc <handle-ast-ExprCallFunc>` ? implicit
+            * **call** :  :ref:`ExprCallFunc <handle-ast-ExprCallFunc>`? implicit
 
             * **argIndex** : int
 
@@ -7337,9 +7337,9 @@ Returns the AOT argument prefix string for the specified function.
 
 Returns the AOT argument suffix string for the specified function.
 
-:Arguments: * **func** :  :ref:`Function <handle-ast-Function>` ? implicit
+:Arguments: * **func** :  :ref:`Function <handle-ast-Function>`? implicit
 
-            * **call** :  :ref:`ExprCallFunc <handle-ast-ExprCallFunc>` ? implicit
+            * **call** :  :ref:`ExprCallFunc <handle-ast-ExprCallFunc>`? implicit
 
             * **argIndex** : int
 
@@ -7349,9 +7349,9 @@ Returns the AOT argument suffix string for the specified function.
 
 Returns the AOT-generated name for the specified function.
 
-:Arguments: * **func** :  :ref:`Function <handle-ast-Function>` ? implicit
+:Arguments: * **func** :  :ref:`Function <handle-ast-Function>`? implicit
 
-            * **call** :  :ref:`ExprCallFunc <handle-ast-ExprCallFunc>` ? implicit
+            * **call** :  :ref:`ExprCallFunc <handle-ast-ExprCallFunc>`? implicit
 
 .. _function-ast_get_current_search_module_Program_q__implicit_Function_q__implicit_string_implicit:
 
@@ -7359,9 +7359,9 @@ Returns the AOT-generated name for the specified function.
 
 Returns the module currently being searched for a function by name, correctly resolving special names like `""`, `"_"`, `"*"`, and `"__"`.
 
-:Arguments: * **program** :  :ref:`Program <handle-rtti-Program>` ? implicit
+:Arguments: * **program** :  :ref:`Program <handle-rtti-Program>`? implicit
 
-            * **function** :  :ref:`Function <handle-ast-Function>` ? implicit
+            * **function** :  :ref:`Function <handle-ast-Function>`? implicit
 
             * **moduleName** : string implicit
 
@@ -7371,7 +7371,7 @@ Returns the module currently being searched for a function by name, correctly re
 
 Returns the type of a field if the target is a structure, variant, tuple, handled type, or pointer to any of those, or null otherwise.
 
-:Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
+:Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
 
             * **fieldName** : string implicit
 
@@ -7383,11 +7383,11 @@ Returns the type of a field if the target is a structure, variant, tuple, handle
 
 Returns the AOT function prefix string for the specified function.
 
-:Arguments: * **ann** :  :ref:`FunctionAnnotation <handle-ast-FunctionAnnotation>` ? implicit
+:Arguments: * **ann** :  :ref:`FunctionAnnotation <handle-ast-FunctionAnnotation>`? implicit
 
-            * **stg** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ? implicit
+            * **stg** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`? implicit
 
-            * **call** :  :ref:`ExprCallFunc <handle-ast-ExprCallFunc>` ? implicit
+            * **call** :  :ref:`ExprCallFunc <handle-ast-ExprCallFunc>`? implicit
 
 .. _function-ast_get_function_aot_hash_Function_const_q__implicit:
 
@@ -7395,7 +7395,7 @@ Returns the AOT function prefix string for the specified function.
 
 Returns the hash of a function used for AOT matching.
 
-:Arguments: * **fun** :  :ref:`Function <handle-ast-Function>` ? implicit
+:Arguments: * **fun** :  :ref:`Function <handle-ast-Function>`? implicit
 
 .. _function-ast_get_function_hash_by_id_Function_q__implicit_int_void_q__implicit:
 
@@ -7403,7 +7403,7 @@ Returns the hash of a function used for AOT matching.
 
 Returns the hash of a function given its unique identifier.
 
-:Arguments: * **fun** :  :ref:`Function <handle-ast-Function>` ? implicit
+:Arguments: * **fun** :  :ref:`Function <handle-ast-Function>`? implicit
 
             * **id** : int
 
@@ -7415,7 +7415,7 @@ Returns the hash of a function given its unique identifier.
 
 Returns the type of a field in a ManagedStructure handled type.
 
-:Arguments: * **type** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` > implicit
+:Arguments: * **type** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`> implicit
 
             * **field** : string implicit
 
@@ -7425,7 +7425,7 @@ Returns the type of a field in a ManagedStructure handled type.
 
 Returns the type declaration of a field in a ManagedStructure handled type.
 
-:Arguments: * **type** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` > implicit
+:Arguments: * **type** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`> implicit
 
             * **field** : string implicit
 
@@ -7437,11 +7437,11 @@ Returns the type declaration of a field in a ManagedStructure handled type.
 
 Returns the type declaration of the index operator for a handled type.
 
-:Arguments: * **type** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` ? implicit
+:Arguments: * **type** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`? implicit
 
-            * **src** :  :ref:`Expression <handle-ast-Expression>` ? implicit
+            * **src** :  :ref:`Expression <handle-ast-Expression>`? implicit
 
-            * **idx** :  :ref:`Expression <handle-ast-Expression>` ? implicit
+            * **idx** :  :ref:`Expression <handle-ast-Expression>`? implicit
 
 .. _function-ast_get_struct_aot_prefix_StructureAnnotation_q__implicit_Structure_q__implicit_AnnotationArgumentList_implicit_StringBuilderWriter_q__implicit:
 
@@ -7449,13 +7449,13 @@ Returns the type declaration of the index operator for a handled type.
 
 Returns the AOT prefix string for the specified structure.
 
-:Arguments: * **ann** :  :ref:`StructureAnnotation <handle-ast-StructureAnnotation>` ? implicit
+:Arguments: * **ann** :  :ref:`StructureAnnotation <handle-ast-StructureAnnotation>`? implicit
 
-            * **structure** :  :ref:`Structure <handle-ast-Structure>` ? implicit
+            * **structure** :  :ref:`Structure <handle-ast-Structure>`? implicit
 
-            * **args** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  implicit
+            * **args** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` implicit
 
-            * **stg** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ? implicit
+            * **stg** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`? implicit
 
 .. _function-ast_get_structure_alias_Structure_q__implicit_string_implicit:
 
@@ -7463,7 +7463,7 @@ Returns the AOT prefix string for the specified structure.
 
 Finds and returns a structure alias type by its alias name.
 
-:Arguments: * **structure** :  :ref:`Structure <handle-ast-Structure>` ? implicit
+:Arguments: * **structure** :  :ref:`Structure <handle-ast-Structure>`? implicit
 
             * **aliasName** : string implicit
 
@@ -7473,7 +7473,7 @@ Finds and returns a structure alias type by its alias name.
 
 Returns the daslang type aliased by a ManagedValue handled type.
 
-:Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
+:Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
 
 .. _function-ast_get_vector_length_void_q__implicit_smart_ptr_ls_TypeDecl_gr__implicit:
 
@@ -7483,7 +7483,7 @@ Returns the length of a vector given a pointer to the vector object and its Type
 
 :Arguments: * **vec** : void? implicit
 
-            * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
+            * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
 
 .. _function-ast_get_vector_ptr_at_index_void_q__implicit_TypeDecl_q__implicit_int:
 
@@ -7493,7 +7493,7 @@ Returns a pointer to the vector element at the specified index given a pointer t
 
 :Arguments: * **vec** : void? implicit
 
-            * **type** :  :ref:`TypeDecl <handle-ast-TypeDecl>` ? implicit
+            * **type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? implicit
 
             * **idx** : int
 
@@ -7503,7 +7503,7 @@ Returns a pointer to the vector element at the specified index given a pointer t
 
 Returns true if a structure, variant, tuple, handled type, or pointer to any of those has the specified field.
 
-:Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
+:Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
 
             * **fieldName** : string implicit
 
@@ -7515,7 +7515,7 @@ Returns true if a structure, variant, tuple, handled type, or pointer to any of 
 
 Returns true if the expression is or inherits from ExprConst.
 
-:Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>` >& implicit
+:Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>`>& implicit
 
 .. _function-ast_is_expr_like_call_smart_ptr_ls_Expression_gr__const_implicit:
 
@@ -7523,7 +7523,7 @@ Returns true if the expression is or inherits from ExprConst.
 
 Returns true if the expression is or inherits from ExprLooksLikeCall.
 
-:Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>` >& implicit
+:Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>`>& implicit
 
 
 is_same_type
@@ -7535,15 +7535,15 @@ is_same_type
 
 Compares two types using the given comparison parameters and returns true if they match.
 
-:Arguments: * **leftType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
+:Arguments: * **leftType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
 
-            * **rightType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
+            * **rightType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
 
-            * **refMatters** :  :ref:`RefMatters <enum-rtti-RefMatters>` 
+            * **refMatters** :  :ref:`RefMatters <enum-rtti-RefMatters>`
 
-            * **constMatters** :  :ref:`ConstMatters <enum-rtti-ConstMatters>` 
+            * **constMatters** :  :ref:`ConstMatters <enum-rtti-ConstMatters>`
 
-            * **tempMatters** :  :ref:`TemporaryMatters <enum-rtti-TemporaryMatters>` 
+            * **tempMatters** :  :ref:`TemporaryMatters <enum-rtti-TemporaryMatters>`
 
 .. _function-ast_is_same_type_smart_ptr_ls_TypeDecl_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit_bool_bool_bool_bool:
 
@@ -7557,7 +7557,7 @@ Compares two types using the given comparison parameters and returns true if the
 
 Returns true if the specified type can be temporary.
 
-:Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
+:Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
 
             * **refMatters** : bool
 
@@ -7567,16 +7567,16 @@ Returns true if the specified type can be temporary.
 
 Returns true if one module is directly visible from another module.
 
-:Arguments: * **from_module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **from_module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **which_module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+            * **which_module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
 +++++
 Infer
 +++++
 
-  *  :ref:`infer_generic_type (type: smart_ptr\<TypeDecl\> implicit; passType: smart_ptr\<TypeDecl\> implicit; topLevel: bool; isPassType: bool) : smart_ptr\<TypeDecl\> <function-ast_infer_generic_type_smart_ptr_ls_TypeDecl_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit_bool_bool>` 
-  *  :ref:`update_alias_map (program: smart_ptr\<Program\> implicit; argType: smart_ptr\<TypeDecl\> implicit; passType: smart_ptr\<TypeDecl\> implicit) <function-ast_update_alias_map_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit>` 
+  *  :ref:`infer_generic_type (type: smart_ptr\<TypeDecl\> implicit; passType: smart_ptr\<TypeDecl\> implicit; topLevel: bool; isPassType: bool) : smart_ptr\<TypeDecl\> <function-ast_infer_generic_type_smart_ptr_ls_TypeDecl_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit_bool_bool>`
+  *  :ref:`update_alias_map (program: smart_ptr\<Program\> implicit; argType: smart_ptr\<TypeDecl\> implicit; passType: smart_ptr\<TypeDecl\> implicit) <function-ast_update_alias_map_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit>`
 
 .. _function-ast_infer_generic_type_smart_ptr_ls_TypeDecl_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit_bool_bool:
 
@@ -7584,9 +7584,9 @@ Infer
 
 Infers a concrete type from a generic type declaration and a pass type.
 
-:Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
+:Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
 
-            * **passType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
+            * **passType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
 
             * **topLevel** : bool
 
@@ -7598,20 +7598,20 @@ Infers a concrete type from a generic type declaration and a pass type.
 
 Updates the alias map for the specified type during inference.
 
-:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
+:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>`> implicit
 
-            * **argType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
+            * **argType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
 
-            * **passType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
+            * **passType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
 
 ++++++++++++++
 Module queries
 ++++++++++++++
 
-  *  :ref:`module_find_annotation (module: Module const? implicit; name: string implicit) : smart_ptr\<Annotation\> <function-ast_module_find_annotation_Module_const_q__implicit_string_implicit>` 
-  *  :ref:`module_find_structure (program: Module const? implicit; name: string implicit) : Structure? <function-ast_module_find_structure_Module_const_q__implicit_string_implicit>` 
-  *  :ref:`module_find_type_annotation (module: Module const? implicit; name: string implicit) : TypeAnnotation? <function-ast_module_find_type_annotation_Module_const_q__implicit_string_implicit>` 
-  *  :ref:`not_inferred (function: Function? implicit) <function-ast_not_inferred_Function_q__implicit>` 
+  *  :ref:`module_find_annotation (module: Module const? implicit; name: string implicit) : smart_ptr\<Annotation\> <function-ast_module_find_annotation_Module_const_q__implicit_string_implicit>`
+  *  :ref:`module_find_structure (program: Module const? implicit; name: string implicit) : Structure? <function-ast_module_find_structure_Module_const_q__implicit_string_implicit>`
+  *  :ref:`module_find_type_annotation (module: Module const? implicit; name: string implicit) : TypeAnnotation? <function-ast_module_find_type_annotation_Module_const_q__implicit_string_implicit>`
+  *  :ref:`not_inferred (function: Function? implicit) <function-ast_not_inferred_Function_q__implicit>`
 
 .. _function-ast_module_find_annotation_Module_const_q__implicit_string_implicit:
 
@@ -7619,7 +7619,7 @@ Module queries
 
 Finds an annotation by name in the specified module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
             * **name** : string implicit
 
@@ -7629,7 +7629,7 @@ Finds an annotation by name in the specified module.
 
 Finds a structure by name in the specified module.
 
-:Arguments: * **program** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **program** :  :ref:`Module <handle-rtti-Module>`? implicit
 
             * **name** : string implicit
 
@@ -7639,7 +7639,7 @@ Finds a structure by name in the specified module.
 
 Finds a type annotation by name in the specified module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
             * **name** : string implicit
 
@@ -7649,19 +7649,19 @@ Finds a type annotation by name in the specified module.
 
 Marks a function as modified by a macro so that it will be inferred again.
 
-:Arguments: * **function** :  :ref:`Function <handle-ast-Function>` ? implicit
+:Arguments: * **function** :  :ref:`Function <handle-ast-Function>`? implicit
 
 ++++++++++++++++++
 Debug info helpers
 ++++++++++++++++++
 
-  *  :ref:`debug_helper_find_struct_cppname (helper: smart_ptr\<DebugInfoHelper\> const& implicit; struct_info: StructInfo? implicit) : string <function-ast_debug_helper_find_struct_cppname_smart_ptr_ls_DebugInfoHelper_gr__const_implicit_StructInfo_q__implicit>` 
-  *  :ref:`debug_helper_find_type_cppname (helper: smart_ptr\<DebugInfoHelper\> const& implicit; type_info: TypeInfo? implicit) : string <function-ast_debug_helper_find_type_cppname_smart_ptr_ls_DebugInfoHelper_gr__const_implicit_TypeInfo_q__implicit>` 
-  *  :ref:`debug_helper_iter_enums (helper: smart_ptr\<DebugInfoHelper\> implicit; blk: block\<(string;EnumInfo?):void\>) <function-ast_debug_helper_iter_enums_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;EnumInfo_q__c_void_gr_>` 
-  *  :ref:`debug_helper_iter_funcs (helper: smart_ptr\<DebugInfoHelper\> implicit; blk: block\<(string;FuncInfo?):void\>) <function-ast_debug_helper_iter_funcs_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;FuncInfo_q__c_void_gr_>` 
-  *  :ref:`debug_helper_iter_structs (helper: smart_ptr\<DebugInfoHelper\> implicit; blk: block\<(string;StructInfo?):void\>) <function-ast_debug_helper_iter_structs_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;StructInfo_q__c_void_gr_>` 
-  *  :ref:`debug_helper_iter_types (helper: smart_ptr\<DebugInfoHelper\> implicit; blk: block\<(string;TypeInfo?):void\>) <function-ast_debug_helper_iter_types_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;TypeInfo_q__c_void_gr_>` 
-  *  :ref:`debug_helper_iter_vars (helper: smart_ptr\<DebugInfoHelper\> implicit; blk: block\<(string;VarInfo?):void\>) <function-ast_debug_helper_iter_vars_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;VarInfo_q__c_void_gr_>` 
+  *  :ref:`debug_helper_find_struct_cppname (helper: smart_ptr\<DebugInfoHelper\> const& implicit; struct_info: StructInfo? implicit) : string <function-ast_debug_helper_find_struct_cppname_smart_ptr_ls_DebugInfoHelper_gr__const_implicit_StructInfo_q__implicit>`
+  *  :ref:`debug_helper_find_type_cppname (helper: smart_ptr\<DebugInfoHelper\> const& implicit; type_info: TypeInfo? implicit) : string <function-ast_debug_helper_find_type_cppname_smart_ptr_ls_DebugInfoHelper_gr__const_implicit_TypeInfo_q__implicit>`
+  *  :ref:`debug_helper_iter_enums (helper: smart_ptr\<DebugInfoHelper\> implicit; blk: block\<(string;EnumInfo?):void\>) <function-ast_debug_helper_iter_enums_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;EnumInfo_q__c_void_gr_>`
+  *  :ref:`debug_helper_iter_funcs (helper: smart_ptr\<DebugInfoHelper\> implicit; blk: block\<(string;FuncInfo?):void\>) <function-ast_debug_helper_iter_funcs_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;FuncInfo_q__c_void_gr_>`
+  *  :ref:`debug_helper_iter_structs (helper: smart_ptr\<DebugInfoHelper\> implicit; blk: block\<(string;StructInfo?):void\>) <function-ast_debug_helper_iter_structs_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;StructInfo_q__c_void_gr_>`
+  *  :ref:`debug_helper_iter_types (helper: smart_ptr\<DebugInfoHelper\> implicit; blk: block\<(string;TypeInfo?):void\>) <function-ast_debug_helper_iter_types_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;TypeInfo_q__c_void_gr_>`
+  *  :ref:`debug_helper_iter_vars (helper: smart_ptr\<DebugInfoHelper\> implicit; blk: block\<(string;VarInfo?):void\>) <function-ast_debug_helper_iter_vars_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;VarInfo_q__c_void_gr_>`
 
 .. _function-ast_debug_helper_find_struct_cppname_smart_ptr_ls_DebugInfoHelper_gr__const_implicit_StructInfo_q__implicit:
 
@@ -7669,9 +7669,9 @@ Debug info helpers
 
 Finds a structure in the DebugInfoHelper and returns its C++ name.
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` >& implicit
+:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`>& implicit
 
-            * **struct_info** :  :ref:`StructInfo <handle-rtti-StructInfo>` ? implicit
+            * **struct_info** :  :ref:`StructInfo <handle-rtti-StructInfo>`? implicit
 
 .. _function-ast_debug_helper_find_type_cppname_smart_ptr_ls_DebugInfoHelper_gr__const_implicit_TypeInfo_q__implicit:
 
@@ -7679,9 +7679,9 @@ Finds a structure in the DebugInfoHelper and returns its C++ name.
 
 Finds a type in the DebugInfoHelper and returns its C++ name.
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` >& implicit
+:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`>& implicit
 
-            * **type_info** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? implicit
+            * **type_info** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`? implicit
 
 .. _function-ast_debug_helper_iter_enums_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;EnumInfo_q__c_void_gr_:
 
@@ -7689,9 +7689,9 @@ Finds a type in the DebugInfoHelper and returns its C++ name.
 
 Iterates through all enumerations in the DebugInfoHelper, invoking the provided block for each one.
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` > implicit
+:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`> implicit
 
-            * **blk** : block<(string; :ref:`EnumInfo <handle-rtti-EnumInfo>` ?):void> implicit
+            * **blk** : block<(string; :ref:`EnumInfo <handle-rtti-EnumInfo>`?):void> implicit
 
 .. _function-ast_debug_helper_iter_funcs_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;FuncInfo_q__c_void_gr_:
 
@@ -7699,9 +7699,9 @@ Iterates through all enumerations in the DebugInfoHelper, invoking the provided 
 
 Iterates through all functions in the DebugInfoHelper, invoking the provided block for each one.
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` > implicit
+:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`> implicit
 
-            * **blk** : block<(string; :ref:`FuncInfo <handle-rtti-FuncInfo>` ?):void> implicit
+            * **blk** : block<(string; :ref:`FuncInfo <handle-rtti-FuncInfo>`?):void> implicit
 
 .. _function-ast_debug_helper_iter_structs_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;StructInfo_q__c_void_gr_:
 
@@ -7709,9 +7709,9 @@ Iterates through all functions in the DebugInfoHelper, invoking the provided blo
 
 Iterates through all structures in the DebugInfoHelper, invoking the provided block for each one.
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` > implicit
+:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`> implicit
 
-            * **blk** : block<(string; :ref:`StructInfo <handle-rtti-StructInfo>` ?):void> implicit
+            * **blk** : block<(string; :ref:`StructInfo <handle-rtti-StructInfo>`?):void> implicit
 
 .. _function-ast_debug_helper_iter_types_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;TypeInfo_q__c_void_gr_:
 
@@ -7719,9 +7719,9 @@ Iterates through all structures in the DebugInfoHelper, invoking the provided bl
 
 Iterates through all types in the DebugInfoHelper, invoking the provided block for each one.
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` > implicit
+:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`> implicit
 
-            * **blk** : block<(string; :ref:`TypeInfo <handle-rtti-TypeInfo>` ?):void> implicit
+            * **blk** : block<(string; :ref:`TypeInfo <handle-rtti-TypeInfo>`?):void> implicit
 
 .. _function-ast_debug_helper_iter_vars_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;VarInfo_q__c_void_gr_:
 
@@ -7729,26 +7729,26 @@ Iterates through all types in the DebugInfoHelper, invoking the provided block f
 
 Iterates through all variables in the DebugInfoHelper, invoking the provided block for each one.
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>` > implicit
+:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`> implicit
 
-            * **blk** : block<(string; :ref:`VarInfo <handle-rtti-VarInfo>` ?):void> implicit
+            * **blk** : block<(string; :ref:`VarInfo <handle-rtti-VarInfo>`?):void> implicit
 
 +++++++++++
 AOT support
 +++++++++++
 
-  *  :ref:`aot_need_type_info (macro: TypeInfoMacro const? implicit; expr: smart_ptr\<Expression\> implicit) : bool <function-ast_aot_need_type_info_TypeInfoMacro_const_q__implicit_smart_ptr_ls_Expression_gr__implicit>` 
-  *  :ref:`aot_previsit_get_field (ann: TypeAnnotation? implicit; ss: StringBuilderWriter? implicit; name: string implicit) <function-ast_aot_previsit_get_field_TypeAnnotation_q__implicit_StringBuilderWriter_q__implicit_string_implicit>` 
-  *  :ref:`aot_previsit_get_field_ptr (ann: TypeAnnotation? implicit; ss: StringBuilderWriter? implicit; name: string implicit) <function-ast_aot_previsit_get_field_ptr_TypeAnnotation_q__implicit_StringBuilderWriter_q__implicit_string_implicit>` 
-  *  :ref:`aot_require (mod: Module? implicit; ss: StringBuilderWriter? implicit) : bool <function-ast_aot_require_Module_q__implicit_StringBuilderWriter_q__implicit>` 
-  *  :ref:`aot_type_ann_get_field_ptr (ann: TypeAnnotation? implicit; ss: StringBuilderWriter? implicit; name: string implicit) <function-ast_aot_type_ann_get_field_ptr_TypeAnnotation_q__implicit_StringBuilderWriter_q__implicit_string_implicit>` 
-  *  :ref:`aot_visit_get_field (ann: TypeAnnotation? implicit; ss: StringBuilderWriter? implicit; name: string implicit) <function-ast_aot_visit_get_field_TypeAnnotation_q__implicit_StringBuilderWriter_q__implicit_string_implicit>` 
-  *  :ref:`getInitSemanticHashWithDep (program: smart_ptr\<Program\> implicit; init: uint64) : uint64 <function-ast_getInitSemanticHashWithDep_smart_ptr_ls_Program_gr__implicit_uint64>` 
-  *  :ref:`macro_aot_infix (macro: TypeInfoMacro? implicit; ss: StringBuilderWriter? implicit; expr: smart_ptr\<Expression\> implicit) : bool <function-ast_macro_aot_infix_TypeInfoMacro_q__implicit_StringBuilderWriter_q__implicit_smart_ptr_ls_Expression_gr__implicit>` 
-  *  :ref:`write_aot_body (structure: StructureAnnotation? implicit; st: smart_ptr\<Structure\> implicit; args: AnnotationArgumentList implicit; writer: StringBuilderWriter? implicit) <function-ast_write_aot_body_StructureAnnotation_q__implicit_smart_ptr_ls_Structure_gr__implicit_AnnotationArgumentList_implicit_StringBuilderWriter_q__implicit>` 
-  *  :ref:`write_aot_macro_prefix (macro: TypeInfoMacro? implicit; ss: StringBuilderWriter? implicit; expr: smart_ptr\<Expression\> implicit) <function-ast_write_aot_macro_prefix_TypeInfoMacro_q__implicit_StringBuilderWriter_q__implicit_smart_ptr_ls_Expression_gr__implicit>` 
-  *  :ref:`write_aot_macro_suffix (macro: TypeInfoMacro? implicit; ss: StringBuilderWriter? implicit; expr: smart_ptr\<Expression\> implicit) <function-ast_write_aot_macro_suffix_TypeInfoMacro_q__implicit_StringBuilderWriter_q__implicit_smart_ptr_ls_Expression_gr__implicit>` 
-  *  :ref:`write_aot_suffix (structure: StructureAnnotation? implicit; st: smart_ptr\<Structure\> implicit; args: AnnotationArgumentList implicit; writer: StringBuilderWriter? implicit) <function-ast_write_aot_suffix_StructureAnnotation_q__implicit_smart_ptr_ls_Structure_gr__implicit_AnnotationArgumentList_implicit_StringBuilderWriter_q__implicit>` 
+  *  :ref:`aot_need_type_info (macro: TypeInfoMacro const? implicit; expr: smart_ptr\<Expression\> implicit) : bool <function-ast_aot_need_type_info_TypeInfoMacro_const_q__implicit_smart_ptr_ls_Expression_gr__implicit>`
+  *  :ref:`aot_previsit_get_field (ann: TypeAnnotation? implicit; ss: StringBuilderWriter? implicit; name: string implicit) <function-ast_aot_previsit_get_field_TypeAnnotation_q__implicit_StringBuilderWriter_q__implicit_string_implicit>`
+  *  :ref:`aot_previsit_get_field_ptr (ann: TypeAnnotation? implicit; ss: StringBuilderWriter? implicit; name: string implicit) <function-ast_aot_previsit_get_field_ptr_TypeAnnotation_q__implicit_StringBuilderWriter_q__implicit_string_implicit>`
+  *  :ref:`aot_require (mod: Module? implicit; ss: StringBuilderWriter? implicit) : bool <function-ast_aot_require_Module_q__implicit_StringBuilderWriter_q__implicit>`
+  *  :ref:`aot_type_ann_get_field_ptr (ann: TypeAnnotation? implicit; ss: StringBuilderWriter? implicit; name: string implicit) <function-ast_aot_type_ann_get_field_ptr_TypeAnnotation_q__implicit_StringBuilderWriter_q__implicit_string_implicit>`
+  *  :ref:`aot_visit_get_field (ann: TypeAnnotation? implicit; ss: StringBuilderWriter? implicit; name: string implicit) <function-ast_aot_visit_get_field_TypeAnnotation_q__implicit_StringBuilderWriter_q__implicit_string_implicit>`
+  *  :ref:`getInitSemanticHashWithDep (program: smart_ptr\<Program\> implicit; init: uint64) : uint64 <function-ast_getInitSemanticHashWithDep_smart_ptr_ls_Program_gr__implicit_uint64>`
+  *  :ref:`macro_aot_infix (macro: TypeInfoMacro? implicit; ss: StringBuilderWriter? implicit; expr: smart_ptr\<Expression\> implicit) : bool <function-ast_macro_aot_infix_TypeInfoMacro_q__implicit_StringBuilderWriter_q__implicit_smart_ptr_ls_Expression_gr__implicit>`
+  *  :ref:`write_aot_body (structure: StructureAnnotation? implicit; st: smart_ptr\<Structure\> implicit; args: AnnotationArgumentList implicit; writer: StringBuilderWriter? implicit) <function-ast_write_aot_body_StructureAnnotation_q__implicit_smart_ptr_ls_Structure_gr__implicit_AnnotationArgumentList_implicit_StringBuilderWriter_q__implicit>`
+  *  :ref:`write_aot_macro_prefix (macro: TypeInfoMacro? implicit; ss: StringBuilderWriter? implicit; expr: smart_ptr\<Expression\> implicit) <function-ast_write_aot_macro_prefix_TypeInfoMacro_q__implicit_StringBuilderWriter_q__implicit_smart_ptr_ls_Expression_gr__implicit>`
+  *  :ref:`write_aot_macro_suffix (macro: TypeInfoMacro? implicit; ss: StringBuilderWriter? implicit; expr: smart_ptr\<Expression\> implicit) <function-ast_write_aot_macro_suffix_TypeInfoMacro_q__implicit_StringBuilderWriter_q__implicit_smart_ptr_ls_Expression_gr__implicit>`
+  *  :ref:`write_aot_suffix (structure: StructureAnnotation? implicit; st: smart_ptr\<Structure\> implicit; args: AnnotationArgumentList implicit; writer: StringBuilderWriter? implicit) <function-ast_write_aot_suffix_StructureAnnotation_q__implicit_smart_ptr_ls_Structure_gr__implicit_AnnotationArgumentList_implicit_StringBuilderWriter_q__implicit>`
 
 .. _function-ast_aot_need_type_info_TypeInfoMacro_const_q__implicit_smart_ptr_ls_Expression_gr__implicit:
 
@@ -7756,9 +7756,9 @@ AOT support
 
 Returns true if a `TypeInfo?` is needed for the specified type in a typeinfo expression.
 
-:Arguments: * **macro** :  :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>` ? implicit
+:Arguments: * **macro** :  :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>`? implicit
 
-            * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > implicit
+            * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> implicit
 
 .. _function-ast_aot_previsit_get_field_TypeAnnotation_q__implicit_StringBuilderWriter_q__implicit_string_implicit:
 
@@ -7766,9 +7766,9 @@ Returns true if a `TypeInfo?` is needed for the specified type in a typeinfo exp
 
 Performs the pre-visit step for field access during AOT code generation.
 
-:Arguments: * **ann** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` ? implicit
+:Arguments: * **ann** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`? implicit
 
-            * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ? implicit
+            * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`? implicit
 
             * **name** : string implicit
 
@@ -7778,9 +7778,9 @@ Performs the pre-visit step for field access during AOT code generation.
 
 Performs the pre-visit step for field pointer access during AOT code generation.
 
-:Arguments: * **ann** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` ? implicit
+:Arguments: * **ann** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`? implicit
 
-            * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ? implicit
+            * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`? implicit
 
             * **name** : string implicit
 
@@ -7790,9 +7790,9 @@ Performs the pre-visit step for field pointer access during AOT code generation.
 
 Writes data to the require section of an AOT module.
 
-:Arguments: * **mod** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **mod** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ? implicit
+            * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`? implicit
 
 .. _function-ast_aot_type_ann_get_field_ptr_TypeAnnotation_q__implicit_StringBuilderWriter_q__implicit_string_implicit:
 
@@ -7800,9 +7800,9 @@ Writes data to the require section of an AOT module.
 
 Returns the access symbol string for a field, such as `->` for pointer types or `.` for value types.
 
-:Arguments: * **ann** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` ? implicit
+:Arguments: * **ann** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`? implicit
 
-            * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ? implicit
+            * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`? implicit
 
             * **name** : string implicit
 
@@ -7812,9 +7812,9 @@ Returns the access symbol string for a field, such as `->` for pointer types or 
 
 Performs the visit step for field access during AOT code generation.
 
-:Arguments: * **ann** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` ? implicit
+:Arguments: * **ann** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`? implicit
 
-            * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ? implicit
+            * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`? implicit
 
             * **name** : string implicit
 
@@ -7824,7 +7824,7 @@ Performs the visit step for field access during AOT code generation.
 
 Returns the initialization semantic hash including dependencies for the entire program.
 
-:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
+:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>`> implicit
 
             * **init** : uint64
 
@@ -7834,11 +7834,11 @@ Returns the initialization semantic hash including dependencies for the entire p
 
 Returns true if the macro requires an AOT infix operator for the specified handled type.
 
-:Arguments: * **macro** :  :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>` ? implicit
+:Arguments: * **macro** :  :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>`? implicit
 
-            * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ? implicit
+            * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`? implicit
 
-            * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > implicit
+            * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> implicit
 
 .. _function-ast_write_aot_body_StructureAnnotation_q__implicit_smart_ptr_ls_Structure_gr__implicit_AnnotationArgumentList_implicit_StringBuilderWriter_q__implicit:
 
@@ -7846,13 +7846,13 @@ Returns true if the macro requires an AOT infix operator for the specified handl
 
 Writes the AOT body code for the specified StructureAnnotation.
 
-:Arguments: * **structure** :  :ref:`StructureAnnotation <handle-ast-StructureAnnotation>` ? implicit
+:Arguments: * **structure** :  :ref:`StructureAnnotation <handle-ast-StructureAnnotation>`? implicit
 
-            * **st** : smart_ptr< :ref:`Structure <handle-ast-Structure>` > implicit
+            * **st** : smart_ptr< :ref:`Structure <handle-ast-Structure>`> implicit
 
-            * **args** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  implicit
+            * **args** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` implicit
 
-            * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ? implicit
+            * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`? implicit
 
 .. _function-ast_write_aot_macro_prefix_TypeInfoMacro_q__implicit_StringBuilderWriter_q__implicit_smart_ptr_ls_Expression_gr__implicit:
 
@@ -7860,11 +7860,11 @@ Writes the AOT body code for the specified StructureAnnotation.
 
 Writes the AOT macro prefix code for the specified TypeInfoMacro.
 
-:Arguments: * **macro** :  :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>` ? implicit
+:Arguments: * **macro** :  :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>`? implicit
 
-            * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ? implicit
+            * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`? implicit
 
-            * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > implicit
+            * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> implicit
 
 .. _function-ast_write_aot_macro_suffix_TypeInfoMacro_q__implicit_StringBuilderWriter_q__implicit_smart_ptr_ls_Expression_gr__implicit:
 
@@ -7872,11 +7872,11 @@ Writes the AOT macro prefix code for the specified TypeInfoMacro.
 
 Writes the AOT macro suffix code for the specified TypeInfoMacro.
 
-:Arguments: * **macro** :  :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>` ? implicit
+:Arguments: * **macro** :  :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>`? implicit
 
-            * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ? implicit
+            * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`? implicit
 
-            * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > implicit
+            * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> implicit
 
 .. _function-ast_write_aot_suffix_StructureAnnotation_q__implicit_smart_ptr_ls_Structure_gr__implicit_AnnotationArgumentList_implicit_StringBuilderWriter_q__implicit:
 
@@ -7884,20 +7884,20 @@ Writes the AOT macro suffix code for the specified TypeInfoMacro.
 
 Writes the AOT suffix code for the specified StructureAnnotation.
 
-:Arguments: * **structure** :  :ref:`StructureAnnotation <handle-ast-StructureAnnotation>` ? implicit
+:Arguments: * **structure** :  :ref:`StructureAnnotation <handle-ast-StructureAnnotation>`? implicit
 
-            * **st** : smart_ptr< :ref:`Structure <handle-ast-Structure>` > implicit
+            * **st** : smart_ptr< :ref:`Structure <handle-ast-Structure>`> implicit
 
-            * **args** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  implicit
+            * **args** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` implicit
 
-            * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ? implicit
+            * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`? implicit
 
 +++++++++++++++++++++
 String builder writer
 +++++++++++++++++++++
 
-  *  :ref:`string_builder_clear (ss: StringBuilderWriter? implicit) <function-ast_string_builder_clear_StringBuilderWriter_q__implicit>` 
-  *  :ref:`string_builder_str (ss: StringBuilderWriter? implicit) : string <function-ast_string_builder_str_StringBuilderWriter_q__implicit>` 
+  *  :ref:`string_builder_clear (ss: StringBuilderWriter? implicit) <function-ast_string_builder_clear_StringBuilderWriter_q__implicit>`
+  *  :ref:`string_builder_str (ss: StringBuilderWriter? implicit) : string <function-ast_string_builder_str_StringBuilderWriter_q__implicit>`
 
 .. _function-ast_string_builder_clear_StringBuilderWriter_q__implicit:
 
@@ -7905,7 +7905,7 @@ String builder writer
 
 Clears a StringBuilder object given a pointer to it.
 
-:Arguments: * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ? implicit
+:Arguments: * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`? implicit
 
 .. _function-ast_string_builder_str_StringBuilderWriter_q__implicit:
 
@@ -7913,6 +7913,6 @@ Clears a StringBuilder object given a pointer to it.
 
 Returns the accumulated string from a StringBuilder object given a pointer to it.
 
-:Arguments: * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ? implicit
+:Arguments: * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`? implicit
 
 

@@ -34,15 +34,15 @@ Example: ::
 Split and join
 ++++++++++++++
 
-  *  :ref:`join (it: auto; separator: string implicit) : auto <function-strings_boost_join_auto_string_implicit_0x1d>` 
-  *  :ref:`join (iterable: array\<auto(TT)\>; separator: string; blk: block\<(var writer:StringBuilderWriter;elem:TT):void\>) : string <function-strings_boost_join_array_ls_autoTT_gr__string_block_ls_var_writer_c_StringBuilderWriter;elem_c_TT_c_void_gr_>` 
-  *  :ref:`join (var it: iterator\<auto(TT)\>; separator: string implicit) : auto <function-strings_boost_join_iterator_ls_autoTT_gr__string_implicit>` 
-  *  :ref:`join (var iterable: iterator\<auto(TT)\>; separator: string; blk: block\<(var writer:StringBuilderWriter;elem:TT):void\>) : string <function-strings_boost_join_iterator_ls_autoTT_gr__string_block_ls_var_writer_c_StringBuilderWriter;elem_c_TT_c_void_gr_>` 
-  *  :ref:`join (iterable: auto(TT)[]; separator: string; blk: block\<(var writer:StringBuilderWriter;elem:TT):void\>) : string <function-strings_boost_join_autoTT_string_block_ls_var_writer_c_StringBuilderWriter;elem_c_TT_c_void_gr__0x64>` 
-  *  :ref:`split (text: string implicit; delim: string implicit) : array\<string\> <function-strings_boost_split_string_implicit_string_implicit>` 
-  *  :ref:`split (text: string implicit; delim: string implicit; blk: block\<(arg:array\<string\>#):auto\>) : auto <function-strings_boost_split_string_implicit_string_implicit_block_ls_arg_c_array_ls_string_gr__hh__c_auto_gr_>` 
-  *  :ref:`split_by_chars (text: string implicit; delim: string implicit) : array\<string\> <function-strings_boost_split_by_chars_string_implicit_string_implicit>` 
-  *  :ref:`split_by_chars (text: string implicit; delim: string implicit; blk: block\<(arg:array\<string\>#):auto\>) : auto <function-strings_boost_split_by_chars_string_implicit_string_implicit_block_ls_arg_c_array_ls_string_gr__hh__c_auto_gr_>` 
+  *  :ref:`join (it: auto; separator: string implicit) : auto <function-strings_boost_join_auto_string_implicit_0x1d>`
+  *  :ref:`join (iterable: array\<auto(TT)\>; separator: string; blk: block\<(var writer:StringBuilderWriter;elem:TT):void\>) : string <function-strings_boost_join_array_ls_autoTT_gr__string_block_ls_var_writer_c_StringBuilderWriter;elem_c_TT_c_void_gr_>`
+  *  :ref:`join (var it: iterator\<auto(TT)\>; separator: string implicit) : auto <function-strings_boost_join_iterator_ls_autoTT_gr__string_implicit>`
+  *  :ref:`join (var iterable: iterator\<auto(TT)\>; separator: string; blk: block\<(var writer:StringBuilderWriter;elem:TT):void\>) : string <function-strings_boost_join_iterator_ls_autoTT_gr__string_block_ls_var_writer_c_StringBuilderWriter;elem_c_TT_c_void_gr_>`
+  *  :ref:`join (iterable: auto(TT)[]; separator: string; blk: block\<(var writer:StringBuilderWriter;elem:TT):void\>) : string <function-strings_boost_join_autoTT_string_block_ls_var_writer_c_StringBuilderWriter;elem_c_TT_c_void_gr__0x64>`
+  *  :ref:`split (text: string implicit; delim: string implicit) : array\<string\> <function-strings_boost_split_string_implicit_string_implicit>`
+  *  :ref:`split (text: string implicit; delim: string implicit; blk: block\<(arg:array\<string\>#):auto\>) : auto <function-strings_boost_split_string_implicit_string_implicit_block_ls_arg_c_array_ls_string_gr__hh__c_auto_gr_>`
+  *  :ref:`split_by_chars (text: string implicit; delim: string implicit) : array\<string\> <function-strings_boost_split_by_chars_string_implicit_string_implicit>`
+  *  :ref:`split_by_chars (text: string implicit; delim: string implicit; blk: block\<(arg:array\<string\>#):auto\>) : auto <function-strings_boost_split_by_chars_string_implicit_string_implicit_block_ls_arg_c_array_ls_string_gr__hh__c_auto_gr_>`
 
 
 join
@@ -120,10 +120,10 @@ Splits a string by the specified delimiter characters and returns an array of su
 Formatting
 ++++++++++
 
-  *  :ref:`capitalize (str: string) : string <function-strings_boost_capitalize_string>` 
-  *  :ref:`pad_left (str: string; width: int; ch: int = 32) : string <function-strings_boost_pad_left_string_int_int>` 
-  *  :ref:`pad_right (str: string; width: int; ch: int = 32) : string <function-strings_boost_pad_right_string_int_int>` 
-  *  :ref:`wide (text: string implicit; width: int) : string <function-strings_boost_wide_string_implicit_int>` 
+  *  :ref:`capitalize (str: string) : string <function-strings_boost_capitalize_string>`
+  *  :ref:`pad_left (str: string; width: int; ch: int = 32) : string <function-strings_boost_pad_left_string_int_int>`
+  *  :ref:`pad_right (str: string; width: int; ch: int = 32) : string <function-strings_boost_pad_right_string_int_int>`
+  *  :ref:`wide (text: string implicit; width: int) : string <function-strings_boost_wide_string_implicit_int>`
 
 .. _function-strings_boost_capitalize_string:
 
@@ -174,12 +174,12 @@ Pads the string with trailing spaces to reach the specified minimum width.
 Queries and comparisons
 +++++++++++++++++++++++
 
-  *  :ref:`contains (str: string; sub: string) : bool <function-strings_boost_contains_string_string>` 
-  *  :ref:`count (str: string; sub: string) : int <function-strings_boost_count_string_string>` 
-  *  :ref:`eq (b: das_string; a: string implicit) : auto <function-strings_boost_eq_das_string_string_implicit>` 
-  *  :ref:`eq (a: string implicit; b: das_string) : auto <function-strings_boost_eq_string_implicit_das_string>` 
-  *  :ref:`is_character_at (foo: array\<uint8\>; idx: int; ch: int) : auto <function-strings_boost_is_character_at_array_ls_uint8_gr__int_int>` 
-  *  :ref:`is_null_or_whitespace (str: string) : bool <function-strings_boost_is_null_or_whitespace_string>` 
+  *  :ref:`contains (str: string; sub: string) : bool <function-strings_boost_contains_string_string>`
+  *  :ref:`count (str: string; sub: string) : int <function-strings_boost_count_string_string>`
+  *  :ref:`eq (b: das_string; a: string implicit) : auto <function-strings_boost_eq_das_string_string_implicit>`
+  *  :ref:`eq (a: string implicit; b: das_string) : auto <function-strings_boost_eq_string_implicit_das_string>`
+  *  :ref:`is_character_at (foo: array\<uint8\>; idx: int; ch: int) : auto <function-strings_boost_is_character_at_array_ls_uint8_gr__int_int>`
+  *  :ref:`is_null_or_whitespace (str: string) : bool <function-strings_boost_is_null_or_whitespace_string>`
 
 .. _function-strings_boost_contains_string_string:
 
@@ -213,7 +213,7 @@ eq
 
 Compares a ``string`` with a ``das_string`` for equality, returning ``true`` if they match.
 
-:Arguments: * **b** :  :ref:`das_string <handle-builtin-das_string>` 
+:Arguments: * **b** :  :ref:`das_string <handle-builtin-das_string>`
 
             * **a** : string implicit
 
@@ -248,8 +248,8 @@ def is_null_or_whitespace (str: string) : bool
 Search
 ++++++
 
-  *  :ref:`last_index_of (str: string; sub: string; start: int) : int <function-strings_boost_last_index_of_string_string_int>` 
-  *  :ref:`last_index_of (str: string; sub: string) : int <function-strings_boost_last_index_of_string_string>` 
+  *  :ref:`last_index_of (str: string; sub: string; start: int) : int <function-strings_boost_last_index_of_string_string_int>`
+  *  :ref:`last_index_of (str: string; sub: string) : int <function-strings_boost_last_index_of_string_string>`
 
 
 last_index_of
@@ -278,7 +278,7 @@ def last_index_of (str: string; sub: string; start: int) : int
 Replace
 +++++++
 
-  *  :ref:`replace_multiple (source: string; replaces: array\<tuple\<text:string;replacement:string\>\>) : string <function-strings_boost_replace_multiple_string_array_ls_tuple_ls_text_c_string;replacement_c_string_gr__gr_>` 
+  *  :ref:`replace_multiple (source: string; replaces: array\<tuple\<text:string;replacement:string\>\>) : string <function-strings_boost_replace_multiple_string_array_ls_tuple_ls_text_c_string;replacement_c_string_gr__gr_>`
 
 .. _function-strings_boost_replace_multiple_string_array_ls_tuple_ls_text_c_string;replacement_c_string_gr__gr_:
 
@@ -294,8 +294,8 @@ Applies multiple find-and-replace substitutions to a string in a single pass.
 Prefix and suffix
 +++++++++++++++++
 
-  *  :ref:`trim_prefix (str: string; prefix: string) : string <function-strings_boost_trim_prefix_string_string>` 
-  *  :ref:`trim_suffix (str: string; suffix: string) : string <function-strings_boost_trim_suffix_string_string>` 
+  *  :ref:`trim_prefix (str: string; prefix: string) : string <function-strings_boost_trim_prefix_string_string>`
+  *  :ref:`trim_suffix (str: string; suffix: string) : string <function-strings_boost_trim_suffix_string_string>`
 
 .. _function-strings_boost_trim_prefix_string_string:
 
@@ -323,8 +323,8 @@ def trim_suffix (str: string; suffix: string) : string
 Levenshtein distance
 ++++++++++++++++++++
 
-  *  :ref:`levenshtein_distance (s: string implicit; t: string implicit) : int <function-strings_boost_levenshtein_distance_string_implicit_string_implicit>` 
-  *  :ref:`levenshtein_distance_fast (s: string implicit; t: string implicit) : int <function-strings_boost_levenshtein_distance_fast_string_implicit_string_implicit>` 
+  *  :ref:`levenshtein_distance (s: string implicit; t: string implicit) : int <function-strings_boost_levenshtein_distance_string_implicit_string_implicit>`
+  *  :ref:`levenshtein_distance_fast (s: string implicit; t: string implicit) : int <function-strings_boost_levenshtein_distance_fast_string_implicit_string_implicit>`
 
 .. _function-strings_boost_levenshtein_distance_string_implicit_string_implicit:
 

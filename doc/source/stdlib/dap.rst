@@ -85,7 +85,7 @@ A data breakpoint that triggers on memory access.
 
 Arguments for the setDataBreakpoints request.
 
-:Fields: * **breakpoints** : array< :ref:`DataBreakpoint <struct-dap-DataBreakpoint>` > - Array of data breakpoints to set.
+:Fields: * **breakpoints** : array< :ref:`DataBreakpoint <struct-dap-DataBreakpoint>`> - Array of data breakpoints to set.
 
 
 .. _struct-dap-DataBreakpointInfoArguments:
@@ -136,9 +136,9 @@ A source file descriptor with name and path.
 
 Arguments for the setBreakpoints request.
 
-:Fields: * **source** :  :ref:`Source <struct-dap-Source>`  - Source file for which breakpoints are set.
+:Fields: * **source** :  :ref:`Source <struct-dap-Source>` - Source file for which breakpoints are set.
 
-         * **breakpoints** : array< :ref:`SourceBreakpoint <struct-dap-SourceBreakpoint>` > - Array of source breakpoints to set.
+         * **breakpoints** : array< :ref:`SourceBreakpoint <struct-dap-SourceBreakpoint>`> - Array of source breakpoints to set.
 
          * **sourceModified** : bool - Whether the source has been modified since last build.
 
@@ -153,7 +153,7 @@ A breakpoint with verification status and location.
 
          * **verified** : bool - Whether the breakpoint has been verified by the debugger.
 
-         * **source** :  :ref:`Source <struct-dap-Source>`  - Source file containing the breakpoint.
+         * **source** :  :ref:`Source <struct-dap-Source>` - Source file containing the breakpoint.
 
          * **line** : double - Actual line number of the breakpoint.
 
@@ -166,7 +166,7 @@ A breakpoint with verification status and location.
 
 Response body for the setBreakpoints request.
 
-:Fields: * **breakpoints** : array< :ref:`Breakpoint <struct-dap-Breakpoint>` > - Array of breakpoints with their verification status.
+:Fields: * **breakpoints** : array< :ref:`Breakpoint <struct-dap-Breakpoint>`> - Array of breakpoints with their verification status.
 
 
 .. _struct-dap-Thread:
@@ -186,7 +186,7 @@ A thread with an identifier and name.
 
 Response body for the threads request.
 
-:Fields: * **threads** : array< :ref:`Thread <struct-dap-Thread>` > - Array of threads.
+:Fields: * **threads** : array< :ref:`Thread <struct-dap-Thread>`> - Array of threads.
 
 
 .. _struct-dap-StackTraceArguments:
@@ -212,7 +212,7 @@ A stack frame with source location and identifier.
 
          * **name** : string - Name of the frame, typically the function name.
 
-         * **source** :  :ref:`Source <struct-dap-Source>`  - Source file of the frame.
+         * **source** :  :ref:`Source <struct-dap-Source>` - Source file of the frame.
 
          * **line** : double - Line number in the source file.
 
@@ -225,7 +225,7 @@ A stack frame with source location and identifier.
 
 Response body for the stackTrace request.
 
-:Fields: * **stackFrames** : array< :ref:`StackFrame <struct-dap-StackFrame>` > - Array of stack frames.
+:Fields: * **stackFrames** : array< :ref:`StackFrame <struct-dap-StackFrame>`> - Array of stack frames.
 
          * **totalFrames** : double - Total number of frames available.
 
@@ -256,7 +256,7 @@ A named variable scope with a variables reference.
 
 Response body for the scopes request.
 
-:Fields: * **scopes** : array< :ref:`Scope <struct-dap-Scope>` > - Array of scopes for the given frame.
+:Fields: * **scopes** : array< :ref:`Scope <struct-dap-Scope>`> - Array of scopes for the given frame.
 
 
 .. _struct-dap-VariablesArguments:
@@ -295,7 +295,7 @@ A variable with name, value, and type information.
 
 Response body for the variables request.
 
-:Fields: * **variables** : array< :ref:`Variable <struct-dap-Variable>` > - Array of variables.
+:Fields: * **variables** : array< :ref:`Variable <struct-dap-Variable>`> - Array of variables.
 
 
 .. _struct-dap-OutputEventBody:
@@ -390,7 +390,7 @@ Event body indicating a breakpoint status change.
 
 :Fields: * **reason** : string - Reason for the event: changed, new, or removed.
 
-         * **breakpoint** :  :ref:`Breakpoint <struct-dap-Breakpoint>`  - The breakpoint whose status changed.
+         * **breakpoint** :  :ref:`Breakpoint <struct-dap-Breakpoint>` - The breakpoint whose status changed.
 
 
 .. _struct-dap-ThreadEvent:
@@ -408,23 +408,23 @@ Event body indicating a thread started or exited.
 JSON deserialization
 ++++++++++++++++++++
 
-  *  :ref:`ContinueArguments (data: JsonValue?) : ContinueArguments <function-dap_ContinueArguments_JsonValue_q_>` 
-  *  :ref:`DataBreakpoint (data: JsonValue?) : DataBreakpoint <function-dap_DataBreakpoint_JsonValue_q_>` 
-  *  :ref:`DataBreakpointInfoArguments (data: JsonValue?) : DataBreakpointInfoArguments <function-dap_DataBreakpointInfoArguments_JsonValue_q_>` 
-  *  :ref:`DisconnectArguments (data: JsonValue?) : DisconnectArguments <function-dap_DisconnectArguments_JsonValue_q_>` 
-  *  :ref:`EvaluateArguments (data: JsonValue?) : EvaluateArguments <function-dap_EvaluateArguments_JsonValue_q_>` 
-  *  :ref:`InitializeRequestArguments (data: JsonValue?) : InitializeRequestArguments <function-dap_InitializeRequestArguments_JsonValue_q_>` 
-  *  :ref:`NextArguments (data: JsonValue?) : NextArguments <function-dap_NextArguments_JsonValue_q_>` 
-  *  :ref:`PauseArguments (data: JsonValue?) : PauseArguments <function-dap_PauseArguments_JsonValue_q_>` 
-  *  :ref:`ScopesArguments (data: JsonValue?) : ScopesArguments <function-dap_ScopesArguments_JsonValue_q_>` 
-  *  :ref:`SetBreakpointsArguments (data: JsonValue?) : SetBreakpointsArguments <function-dap_SetBreakpointsArguments_JsonValue_q_>` 
-  *  :ref:`SetDataBreakpointsArguments (data: JsonValue?) : SetDataBreakpointsArguments <function-dap_SetDataBreakpointsArguments_JsonValue_q_>` 
-  *  :ref:`Source (data: JsonValue?) : Source <function-dap_Source_JsonValue_q_>` 
-  *  :ref:`SourceBreakpoint (data: JsonValue?) : SourceBreakpoint <function-dap_SourceBreakpoint_JsonValue_q_>` 
-  *  :ref:`StackTraceArguments (data: JsonValue?) : StackTraceArguments <function-dap_StackTraceArguments_JsonValue_q_>` 
-  *  :ref:`StepInArguments (data: JsonValue?) : StepInArguments <function-dap_StepInArguments_JsonValue_q_>` 
-  *  :ref:`StepOutArguments (data: JsonValue?) : StepOutArguments <function-dap_StepOutArguments_JsonValue_q_>` 
-  *  :ref:`VariablesArguments (data: JsonValue?) : VariablesArguments <function-dap_VariablesArguments_JsonValue_q_>` 
+  *  :ref:`ContinueArguments (data: JsonValue?) : ContinueArguments <function-dap_ContinueArguments_JsonValue_q_>`
+  *  :ref:`DataBreakpoint (data: JsonValue?) : DataBreakpoint <function-dap_DataBreakpoint_JsonValue_q_>`
+  *  :ref:`DataBreakpointInfoArguments (data: JsonValue?) : DataBreakpointInfoArguments <function-dap_DataBreakpointInfoArguments_JsonValue_q_>`
+  *  :ref:`DisconnectArguments (data: JsonValue?) : DisconnectArguments <function-dap_DisconnectArguments_JsonValue_q_>`
+  *  :ref:`EvaluateArguments (data: JsonValue?) : EvaluateArguments <function-dap_EvaluateArguments_JsonValue_q_>`
+  *  :ref:`InitializeRequestArguments (data: JsonValue?) : InitializeRequestArguments <function-dap_InitializeRequestArguments_JsonValue_q_>`
+  *  :ref:`NextArguments (data: JsonValue?) : NextArguments <function-dap_NextArguments_JsonValue_q_>`
+  *  :ref:`PauseArguments (data: JsonValue?) : PauseArguments <function-dap_PauseArguments_JsonValue_q_>`
+  *  :ref:`ScopesArguments (data: JsonValue?) : ScopesArguments <function-dap_ScopesArguments_JsonValue_q_>`
+  *  :ref:`SetBreakpointsArguments (data: JsonValue?) : SetBreakpointsArguments <function-dap_SetBreakpointsArguments_JsonValue_q_>`
+  *  :ref:`SetDataBreakpointsArguments (data: JsonValue?) : SetDataBreakpointsArguments <function-dap_SetDataBreakpointsArguments_JsonValue_q_>`
+  *  :ref:`Source (data: JsonValue?) : Source <function-dap_Source_JsonValue_q_>`
+  *  :ref:`SourceBreakpoint (data: JsonValue?) : SourceBreakpoint <function-dap_SourceBreakpoint_JsonValue_q_>`
+  *  :ref:`StackTraceArguments (data: JsonValue?) : StackTraceArguments <function-dap_StackTraceArguments_JsonValue_q_>`
+  *  :ref:`StepInArguments (data: JsonValue?) : StepInArguments <function-dap_StepInArguments_JsonValue_q_>`
+  *  :ref:`StepOutArguments (data: JsonValue?) : StepOutArguments <function-dap_StepOutArguments_JsonValue_q_>`
+  *  :ref:`VariablesArguments (data: JsonValue?) : VariablesArguments <function-dap_VariablesArguments_JsonValue_q_>`
 
 .. _function-dap_ContinueArguments_JsonValue_q_:
 
@@ -432,7 +432,7 @@ JSON deserialization
 
 Constructs a ContinueArguments from a JSON value.
 
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 .. _function-dap_DataBreakpoint_JsonValue_q_:
 
@@ -440,7 +440,7 @@ Constructs a ContinueArguments from a JSON value.
 
 Constructs a DataBreakpoint from a JSON value.
 
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 .. _function-dap_DataBreakpointInfoArguments_JsonValue_q_:
 
@@ -448,7 +448,7 @@ Constructs a DataBreakpoint from a JSON value.
 
 Constructs a DataBreakpointInfoArguments from a JSON value.
 
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 .. _function-dap_DisconnectArguments_JsonValue_q_:
 
@@ -456,7 +456,7 @@ Constructs a DataBreakpointInfoArguments from a JSON value.
 
 Constructs a DisconnectArguments from a JSON value.
 
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 .. _function-dap_EvaluateArguments_JsonValue_q_:
 
@@ -464,7 +464,7 @@ Constructs a DisconnectArguments from a JSON value.
 
 Constructs an EvaluateArguments from a JSON value.
 
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 .. _function-dap_InitializeRequestArguments_JsonValue_q_:
 
@@ -472,7 +472,7 @@ Constructs an EvaluateArguments from a JSON value.
 
 Constructs an InitializeRequestArguments from a JSON value.
 
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 .. _function-dap_NextArguments_JsonValue_q_:
 
@@ -480,7 +480,7 @@ Constructs an InitializeRequestArguments from a JSON value.
 
 Constructs a NextArguments from a JSON value.
 
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 .. _function-dap_PauseArguments_JsonValue_q_:
 
@@ -488,7 +488,7 @@ Constructs a NextArguments from a JSON value.
 
 Constructs a PauseArguments from a JSON value.
 
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 .. _function-dap_ScopesArguments_JsonValue_q_:
 
@@ -496,7 +496,7 @@ Constructs a PauseArguments from a JSON value.
 
 Constructs a ScopesArguments from a JSON value.
 
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 .. _function-dap_SetBreakpointsArguments_JsonValue_q_:
 
@@ -504,7 +504,7 @@ Constructs a ScopesArguments from a JSON value.
 
 Constructs a SetBreakpointsArguments from a JSON value, parsing source and breakpoints.
 
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 .. _function-dap_SetDataBreakpointsArguments_JsonValue_q_:
 
@@ -512,7 +512,7 @@ Constructs a SetBreakpointsArguments from a JSON value, parsing source and break
 
 Constructs a SetDataBreakpointsArguments from a JSON value, parsing the breakpoints array.
 
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 .. _function-dap_Source_JsonValue_q_:
 
@@ -520,7 +520,7 @@ Constructs a SetDataBreakpointsArguments from a JSON value, parsing the breakpoi
 
 Constructs a Source from a JSON value.
 
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 .. _function-dap_SourceBreakpoint_JsonValue_q_:
 
@@ -528,7 +528,7 @@ Constructs a Source from a JSON value.
 
 Constructs a SourceBreakpoint from a JSON value.
 
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 .. _function-dap_StackTraceArguments_JsonValue_q_:
 
@@ -536,7 +536,7 @@ Constructs a SourceBreakpoint from a JSON value.
 
 Constructs a StackTraceArguments from a JSON value.
 
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 .. _function-dap_StepInArguments_JsonValue_q_:
 
@@ -544,7 +544,7 @@ Constructs a StackTraceArguments from a JSON value.
 
 Constructs a StepInArguments from a JSON value.
 
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 .. _function-dap_StepOutArguments_JsonValue_q_:
 
@@ -552,7 +552,7 @@ Constructs a StepInArguments from a JSON value.
 
 Constructs a StepOutArguments from a JSON value.
 
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 .. _function-dap_VariablesArguments_JsonValue_q_:
 
@@ -560,14 +560,14 @@ Constructs a StepOutArguments from a JSON value.
 
 Constructs a VariablesArguments from a JSON value.
 
-:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+:Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 ++++++++++++++++++
 JSON serialization
 ++++++++++++++++++
 
-  *  :ref:`JV (data: EvaluateResponse) : JsonValue? <function-dap_JV_EvaluateResponse>` 
-  *  :ref:`JV (data: Variable) : JsonValue? <function-dap_JV_Variable>` 
+  *  :ref:`JV (data: EvaluateResponse) : JsonValue? <function-dap_JV_EvaluateResponse>`
+  *  :ref:`JV (data: Variable) : JsonValue? <function-dap_JV_Variable>`
 
 
 JV
@@ -579,7 +579,7 @@ JV
 
 Converts an EvaluateResponse struct to its DAP JSON representation.
 
-:Arguments: * **data** :  :ref:`EvaluateResponse <struct-dap-EvaluateResponse>` 
+:Arguments: * **data** :  :ref:`EvaluateResponse <struct-dap-EvaluateResponse>`
 
 .. _function-dap_JV_Variable:
 
@@ -591,11 +591,11 @@ Converts an EvaluateResponse struct to its DAP JSON representation.
 JSON field accessors
 ++++++++++++++++++++
 
-  *  :ref:`j_s (val: JsonValue?; defVal: string = "") : string <function-dap_j_s_JsonValue_q__string>` 
-  *  :ref:`job (val: JsonValue?; id: string; defVal: bool = false) : bool <function-dap_job_JsonValue_q__string_bool>` 
-  *  :ref:`joj (val: JsonValue?; id: string) : JsonValue? <function-dap_joj_JsonValue_q__string>` 
-  *  :ref:`jon (val: JsonValue?; id: string; defVal: double = 0lf) : double <function-dap_jon_JsonValue_q__string_double>` 
-  *  :ref:`jos (val: JsonValue?; id: string; defVal: string = "") : string <function-dap_jos_JsonValue_q__string_string>` 
+  *  :ref:`j_s (val: JsonValue?; defVal: string = "") : string <function-dap_j_s_JsonValue_q__string>`
+  *  :ref:`job (val: JsonValue?; id: string; defVal: bool = false) : bool <function-dap_job_JsonValue_q__string_bool>`
+  *  :ref:`joj (val: JsonValue?; id: string) : JsonValue? <function-dap_joj_JsonValue_q__string>`
+  *  :ref:`jon (val: JsonValue?; id: string; defVal: double = 0lf) : double <function-dap_jon_JsonValue_q__string_double>`
+  *  :ref:`jos (val: JsonValue?; id: string; defVal: string = "") : string <function-dap_jos_JsonValue_q__string_string>`
 
 .. _function-dap_j_s_JsonValue_q__string:
 
@@ -603,7 +603,7 @@ JSON field accessors
 
 Returns the string value of a JSON value, or `defVal` if not a string.
 
-:Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+:Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
             * **defVal** : string
 
@@ -613,7 +613,7 @@ Returns the string value of a JSON value, or `defVal` if not a string.
 
 Returns a boolean JSON field by name, or `defVal` if not found.
 
-:Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+:Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
             * **id** : string
 
@@ -625,7 +625,7 @@ Returns a boolean JSON field by name, or `defVal` if not found.
 
 Returns a nested JSON object field by name, or null if not found.
 
-:Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+:Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
             * **id** : string
 
@@ -635,7 +635,7 @@ Returns a nested JSON object field by name, or null if not found.
 
 Returns a numeric JSON field by name, or `defVal` if not found.
 
-:Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+:Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
             * **id** : string
 
@@ -647,7 +647,7 @@ Returns a numeric JSON field by name, or `defVal` if not found.
 
 Returns a string JSON field by name, or `defVal` if not found.
 
-:Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>` ?
+:Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
             * **id** : string
 

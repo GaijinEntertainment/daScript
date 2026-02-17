@@ -33,7 +33,7 @@ This macro convert assert_once(expr,message) to the following code::
 Assertion
 +++++++++
 
-  *  :ref:`assert_once (expr: bool; message: string = "") <function-assert_once_assert_once_bool_string>` 
+  *  :ref:`assert_once (expr: bool; message: string = "") <function-assert_once_assert_once_bool_string>`
 
 .. _function-assert_once_assert_once_bool_string:
 

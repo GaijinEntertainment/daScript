@@ -31,8 +31,8 @@ Type macros
 Hash functions
 ++++++++++++++
 
-  *  :ref:`hash0 (data: auto) : auto <function-cuckoo_hash_table_hash0_auto_0x17>` 
-  *  :ref:`hash_extra (data: auto) : auto <function-cuckoo_hash_table_hash_extra_auto_0x1d>` 
+  *  :ref:`hash0 (data: auto) : auto <function-cuckoo_hash_table_hash0_auto_0x17>`
+  *  :ref:`hash_extra (data: auto) : auto <function-cuckoo_hash_table_hash_extra_auto_0x1d>`
 
 .. _function-cuckoo_hash_table_hash0_auto_0x17:
 

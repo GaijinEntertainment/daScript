@@ -67,7 +67,7 @@ Enumeration annotation which implements string constructor for enumeration.
 Enumeration iteration
 +++++++++++++++++++++
 
-  *  :ref:`each (tt: auto(TT)) : iterator\<TT\> <function-enum_trait_each_autoTT_0x16>` 
+  *  :ref:`each (tt: auto(TT)) : iterator\<TT\> <function-enum_trait_each_autoTT_0x16>`
 
 .. _function-enum_trait_each_autoTT_0x16:
 
@@ -81,10 +81,10 @@ Returns an iterator over all values of the given enumeration type.
 Enumeration conversion
 ++++++++++++++++++++++
 
-  *  :ref:`enum_to_table (ent: auto(EnumT)) : table\<string, EnumT\> <function-enum_trait_enum_to_table_autoEnumT_0x41>` 
-  *  :ref:`string (arg: auto) : auto <function-enum_trait_string_auto_0x21>` 
-  *  :ref:`to_enum (ent: auto(EnumT); name: string) : EnumT <function-enum_trait_to_enum_autoEnumT_string_0x28>` 
-  *  :ref:`to_enum (ent: auto(EnumT); name: string; defaultValue: EnumT) : EnumT <function-enum_trait_to_enum_autoEnumT_string_EnumT_0x35>` 
+  *  :ref:`enum_to_table (ent: auto(EnumT)) : table\<string, EnumT\> <function-enum_trait_enum_to_table_autoEnumT_0x41>`
+  *  :ref:`string (arg: auto) : auto <function-enum_trait_string_auto_0x21>`
+  *  :ref:`to_enum (ent: auto(EnumT); name: string) : EnumT <function-enum_trait_to_enum_autoEnumT_string_0x28>`
+  *  :ref:`to_enum (ent: auto(EnumT); name: string; defaultValue: EnumT) : EnumT <function-enum_trait_to_enum_autoEnumT_string_EnumT_0x35>`
 
 .. _function-enum_trait_enum_to_table_autoEnumT_0x41:
 

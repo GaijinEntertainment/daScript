@@ -33,14 +33,14 @@ Example: ::
 float in int,uint
 +++++++++++++++++
 
-  *  :ref:`int_bits_to_float (x: int2) : float2 <function-math_bits_int_bits_to_float_int2>` 
-  *  :ref:`int_bits_to_float (x: int) : float <function-math_bits_int_bits_to_float_int>` 
-  *  :ref:`int_bits_to_float (x: int4) : float4 <function-math_bits_int_bits_to_float_int4>` 
-  *  :ref:`int_bits_to_float (x: int3) : float3 <function-math_bits_int_bits_to_float_int3>` 
-  *  :ref:`uint_bits_to_float (x: uint3) : float3 <function-math_bits_uint_bits_to_float_uint3>` 
-  *  :ref:`uint_bits_to_float (x: uint2) : float2 <function-math_bits_uint_bits_to_float_uint2>` 
-  *  :ref:`uint_bits_to_float (x: uint) : float <function-math_bits_uint_bits_to_float_uint>` 
-  *  :ref:`uint_bits_to_float (x: uint4) : float4 <function-math_bits_uint_bits_to_float_uint4>` 
+  *  :ref:`int_bits_to_float (x: int2) : float2 <function-math_bits_int_bits_to_float_int2>`
+  *  :ref:`int_bits_to_float (x: int) : float <function-math_bits_int_bits_to_float_int>`
+  *  :ref:`int_bits_to_float (x: int4) : float4 <function-math_bits_int_bits_to_float_int4>`
+  *  :ref:`int_bits_to_float (x: int3) : float3 <function-math_bits_int_bits_to_float_int3>`
+  *  :ref:`uint_bits_to_float (x: uint3) : float3 <function-math_bits_uint_bits_to_float_uint3>`
+  *  :ref:`uint_bits_to_float (x: uint2) : float2 <function-math_bits_uint_bits_to_float_uint2>`
+  *  :ref:`uint_bits_to_float (x: uint) : float <function-math_bits_uint_bits_to_float_uint>`
+  *  :ref:`uint_bits_to_float (x: uint4) : float4 <function-math_bits_uint_bits_to_float_uint4>`
 
 
 int_bits_to_float
@@ -98,14 +98,14 @@ bit representation of x is interpreted as a float3
 int,uint in float
 +++++++++++++++++
 
-  *  :ref:`float_bits_to_int (x: float2) : int2 <function-math_bits_float_bits_to_int_float2>` 
-  *  :ref:`float_bits_to_int (x: float) : int <function-math_bits_float_bits_to_int_float>` 
-  *  :ref:`float_bits_to_int (x: float4) : int4 <function-math_bits_float_bits_to_int_float4>` 
-  *  :ref:`float_bits_to_int (x: float3) : int3 <function-math_bits_float_bits_to_int_float3>` 
-  *  :ref:`float_bits_to_uint (x: float3) : uint3 <function-math_bits_float_bits_to_uint_float3>` 
-  *  :ref:`float_bits_to_uint (x: float2) : uint2 <function-math_bits_float_bits_to_uint_float2>` 
-  *  :ref:`float_bits_to_uint (x: float) : uint <function-math_bits_float_bits_to_uint_float>` 
-  *  :ref:`float_bits_to_uint (x: float4) : uint4 <function-math_bits_float_bits_to_uint_float4>` 
+  *  :ref:`float_bits_to_int (x: float2) : int2 <function-math_bits_float_bits_to_int_float2>`
+  *  :ref:`float_bits_to_int (x: float) : int <function-math_bits_float_bits_to_int_float>`
+  *  :ref:`float_bits_to_int (x: float4) : int4 <function-math_bits_float_bits_to_int_float4>`
+  *  :ref:`float_bits_to_int (x: float3) : int3 <function-math_bits_float_bits_to_int_float3>`
+  *  :ref:`float_bits_to_uint (x: float3) : uint3 <function-math_bits_float_bits_to_uint_float3>`
+  *  :ref:`float_bits_to_uint (x: float2) : uint2 <function-math_bits_float_bits_to_uint_float2>`
+  *  :ref:`float_bits_to_uint (x: float) : uint <function-math_bits_float_bits_to_uint_float>`
+  *  :ref:`float_bits_to_uint (x: float4) : uint4 <function-math_bits_float_bits_to_uint_float4>`
 
 
 float_bits_to_int
@@ -163,10 +163,10 @@ bit representation of x is interpreted as a uint3
 int64,uint64 in double
 ++++++++++++++++++++++
 
-  *  :ref:`double_bits_to_int64 (x: double) : int64 <function-math_bits_double_bits_to_int64_double>` 
-  *  :ref:`double_bits_to_uint64 (x: double) : uint64 <function-math_bits_double_bits_to_uint64_double>` 
-  *  :ref:`int64_bits_to_double (x: int64) : double <function-math_bits_int64_bits_to_double_int64>` 
-  *  :ref:`uint64_bits_to_double (x: uint64) : double <function-math_bits_uint64_bits_to_double_uint64>` 
+  *  :ref:`double_bits_to_int64 (x: double) : int64 <function-math_bits_double_bits_to_int64_double>`
+  *  :ref:`double_bits_to_uint64 (x: double) : uint64 <function-math_bits_double_bits_to_uint64_double>`
+  *  :ref:`int64_bits_to_double (x: int64) : double <function-math_bits_int64_bits_to_double_int64>`
+  *  :ref:`uint64_bits_to_double (x: uint64) : double <function-math_bits_uint64_bits_to_double_uint64>`
 
 .. _function-math_bits_double_bits_to_int64_double:
 
@@ -204,14 +204,14 @@ bit representation of x is interpreted as a double
 bit-cast vec4f
 ++++++++++++++
 
-  *  :ref:`cast_to_int16 (data: float4) : int16 <function-math_bits_cast_to_int16_float4>` 
-  *  :ref:`cast_to_int32 (data: float4) : int <function-math_bits_cast_to_int32_float4>` 
-  *  :ref:`cast_to_int64 (data: float4) : int64 <function-math_bits_cast_to_int64_float4>` 
-  *  :ref:`cast_to_int8 (data: float4) : int8 <function-math_bits_cast_to_int8_float4>` 
-  *  :ref:`cast_to_pointer (data: float4) : void? <function-math_bits_cast_to_pointer_float4>` 
-  *  :ref:`cast_to_string (data: float4) : string <function-math_bits_cast_to_string_float4>` 
-  *  :ref:`cast_to_vec4f (x: int64) : float4 <function-math_bits_cast_to_vec4f_int64>` 
-  *  :ref:`cast_to_vec4f (x: bool) : float4 <function-math_bits_cast_to_vec4f_bool>` 
+  *  :ref:`cast_to_int16 (data: float4) : int16 <function-math_bits_cast_to_int16_float4>`
+  *  :ref:`cast_to_int32 (data: float4) : int <function-math_bits_cast_to_int32_float4>`
+  *  :ref:`cast_to_int64 (data: float4) : int64 <function-math_bits_cast_to_int64_float4>`
+  *  :ref:`cast_to_int8 (data: float4) : int8 <function-math_bits_cast_to_int8_float4>`
+  *  :ref:`cast_to_pointer (data: float4) : void? <function-math_bits_cast_to_pointer_float4>`
+  *  :ref:`cast_to_string (data: float4) : string <function-math_bits_cast_to_string_float4>`
+  *  :ref:`cast_to_vec4f (x: int64) : float4 <function-math_bits_cast_to_vec4f_int64>`
+  *  :ref:`cast_to_vec4f (x: bool) : float4 <function-math_bits_cast_to_vec4f_bool>`
 
 .. _function-math_bits_cast_to_int16_float4:
 

@@ -52,7 +52,7 @@ For example::
 Macro helpers
 +++++++++++++
 
-  *  :ref:`isConstantExpression (expr: ExpressionPtr) : bool <function-constant_expression_isConstantExpression_ExpressionPtr>` 
+  *  :ref:`isConstantExpression (expr: ExpressionPtr) : bool <function-constant_expression_isConstantExpression_ExpressionPtr>`
 
 .. _function-constant_expression_isConstantExpression_ExpressionPtr:
 
@@ -60,6 +60,6 @@ Macro helpers
 
 This macro function returns true if the expression is a constant expression
 
-:Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+:Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 

@@ -23,16 +23,16 @@ Structures
 
 Collection of all structure and enumeration types that are used in the AST.
 
-:Fields: * **st** : table< :ref:`Structure <handle-ast-Structure>` ?;void> - all structure types used
+:Fields: * **st** : table< :ref:`Structure <handle-ast-Structure>`?;void> - all structure types used
 
-         * **en** : table< :ref:`Enumeration <handle-ast-Enumeration>` ?;void> - all enumeration types used
+         * **en** : table< :ref:`Enumeration <handle-ast-Enumeration>`?;void> - all enumeration types used
 
 
 +++++++++++++++++++++++++++
 Collecting type information
 +++++++++++++++++++++++++++
 
-  *  :ref:`collect_used_types (vfun: array\<Function?\>; vvar: array\<Variable?\>; blk: block\<(usedTypes:OnlyUsedTypes):void\>) <function-ast_used_collect_used_types_array_ls_Function_q__gr__array_ls_Variable_q__gr__block_ls_usedTypes_c_OnlyUsedTypes_c_void_gr_>` 
+  *  :ref:`collect_used_types (vfun: array\<Function?\>; vvar: array\<Variable?\>; blk: block\<(usedTypes:OnlyUsedTypes):void\>) <function-ast_used_collect_used_types_array_ls_Function_q__gr__array_ls_Variable_q__gr__block_ls_usedTypes_c_OnlyUsedTypes_c_void_gr_>`
 
 .. _function-ast_used_collect_used_types_array_ls_Function_q__gr__array_ls_Variable_q__gr__block_ls_usedTypes_c_OnlyUsedTypes_c_void_gr_:
 
@@ -41,10 +41,10 @@ Collecting type information
 Goes through list of functions `vfun` and variables `vvar` and collects list of which enumeration and structure types are used in them.
 Calls `blk` with said list.
 
-:Arguments: * **vfun** : array< :ref:`Function <handle-ast-Function>` ?>
+:Arguments: * **vfun** : array< :ref:`Function <handle-ast-Function>`?>
 
-            * **vvar** : array< :ref:`Variable <handle-ast-Variable>` ?>
+            * **vvar** : array< :ref:`Variable <handle-ast-Variable>`?>
 
-            * **blk** : block<(usedTypes: :ref:`OnlyUsedTypes <struct-ast_used-OnlyUsedTypes>` ):void>
+            * **blk** : block<(usedTypes: :ref:`OnlyUsedTypes <struct-ast_used-OnlyUsedTypes>`):void>
 
 

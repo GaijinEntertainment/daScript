@@ -158,7 +158,7 @@ Convert the BoolArray to a string representation.
 
 .. das:function:: BoolArray.data_pointer() : uint?
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Get the data pointer of the BoolArray.
@@ -167,7 +167,7 @@ Get the data pointer of the BoolArray.
 
 .. das:function:: BoolArray.data_pointer() : uint const?
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Get the data pointer of the BoolArray.
@@ -176,7 +176,7 @@ Get the data pointer of the BoolArray.
 Iteration
 +++++++++
 
-  *  :ref:`each (self: BoolArray) : iterator\<bool\> <function-bool_array_each_BoolArray>` 
+  *  :ref:`each (self: BoolArray) : iterator\<bool\> <function-bool_array_each_BoolArray>`
 
 .. _function-bool_array_each_BoolArray:
 
@@ -184,6 +184,6 @@ Iteration
 
 Returns an iterator over all boolean values in the BoolArray.
 
-:Arguments: * **self** :  :ref:`BoolArray <struct-bool_array-BoolArray>` 
+:Arguments: * **self** :  :ref:`BoolArray <struct-bool_array-BoolArray>`
 
 
