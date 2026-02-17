@@ -217,8 +217,9 @@ namespace das {
     }
 
     void channelRemove( Channel * & ch, Context * context, LineInfoArg * at ) {
+        if ( !ch ) context->throw_error_at(at, "channelRemove: channel is null");
         if (!ch->isValid()) context->throw_error_at(at, "channel is invalid (already deleted?)");
-        if (ch->releaseRef()) context->throw_error_at(at, "channel beeing deleted while being used");
+        if (ch->releaseRef()) context->throw_error_at(at, "channel being deleted while being used");
         delete ch;
         ch = nullptr;
     }
@@ -266,8 +267,9 @@ namespace das {
     }
 
     void lockBoxRemove( LockBox * & ch, Context * context, LineInfoArg * at ) {
+        if ( !ch ) context->throw_error_at(at, "lockBoxRemove: lock box is null");
         if (!ch->isValid()) context->throw_error_at(at, "lock box is invalid (already deleted?)");
-        if (ch->releaseRef()) context->throw_error_at(at, "lock box beeing deleted while being used");
+        if (ch->releaseRef()) context->throw_error_at(at, "lock box being deleted while being used");
         delete ch;
         ch = nullptr;
     }
@@ -463,8 +465,9 @@ namespace das {
     }
 
     void jobStatusRemove( JobStatus * & ch, Context * context, LineInfoArg * at ) {
+        if ( !ch ) context->throw_error_at(at, "jobStatusRemove: job status is null");
         if (!ch->isValid()) context->throw_error_at(at, "job status is invalid (already deleted?)");
-        if (ch->releaseRef()) context->throw_error_at(at, "job status beeing deleted while being used");
+        if (ch->releaseRef()) context->throw_error_at(at, "job status being deleted while being used");
         delete ch;
         ch = nullptr;
     }

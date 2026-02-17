@@ -214,7 +214,7 @@ def push_batch_clone(channel : Channel?; data : array<auto(TT)>) {
         *tt := d
         heap_data |> push(tt)
     }
-    _builtin_channel_push(channel, heap_data)
+    _builtin_channel_push_batch(channel, heap_data)
     heap_data |> resize(0)
     unsafe {
         delete heap_data
@@ -371,7 +371,7 @@ def public release_capture_jobque_job_status(js : JobStatus?) {
 def public release_capture_jobque_lock_box(js : LockBox?) {
     //! this function is used to release a lock box that is used by the jobque.
     if (js != null) {
-        panic("LockBox has not been released. missing status|>release or status|>notify_and_release")
+        panic("LockBox has not been released. missing box|>release or box|>notify_and_release")
     }
 }
 
@@ -430,6 +430,10 @@ class private ChannelAndStatusCapture : AstCaptureMacro {
     }
     def override captureFunction(prog : Program?; mod : Module?; var lcs : Structure?; var fun : FunctionPtr) : void {
         //! Implementation details for the capture macro.
+        //! Note: generators are skipped because their ``finally`` section is called on every
+        //! iteration, not just once at destruction. This means ``Channel``, ``JobStatus``, and
+        //! ``LockBox`` captures inside generators do NOT get automatic release checks.
+        //! Users must manually call ``release`` on captured jobque objects inside generators.
         if (fun.flags._generator) {// generator gets finally section called every single time. nothing we can do
             return
         }

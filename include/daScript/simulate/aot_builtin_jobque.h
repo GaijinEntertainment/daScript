@@ -157,8 +157,9 @@ namespace das {
 
     template <typename TT>
     void atomicRemove( AtomicTT<TT> * & ch, Context * context, LineInfoArg * at ) {
+        if ( !ch ) context->throw_error_at(at, "atomicRemove: atomic is null");
         if (!ch->isValid()) context->throw_error_at(at, "atomic is invalid (already deleted?)");
-        if (ch->releaseRef()) context->throw_error_at(at, "atomic beeing deleted while being used");
+        if (ch->releaseRef()) context->throw_error_at(at, "atomic being deleted while being used");
         delete ch;
         ch = nullptr;
     }
@@ -170,7 +171,7 @@ namespace das {
         ch.addRef();
         das::das_invoke<void>::invoke<TAtomic *>(context, at, blk, &ch);
         if ( ch.releaseRef() ) {
-            context->throw_error_at(at, "atomic box beeing deleted while being used");
+            context->throw_error_at(at, "atomic box being deleted while being used");
         }
     }
 
