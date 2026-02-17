@@ -49,6 +49,7 @@ introduced in earlier tutorials.
    tutorials/32_operator_overloading.rst
    tutorials/33_algorithm.rst
    tutorials/34_decs.rst
+   tutorials/35_jobque.rst
 
 C Integration Tutorials
 -----------------------

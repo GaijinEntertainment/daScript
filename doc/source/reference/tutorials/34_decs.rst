@@ -313,6 +313,8 @@ or the component is not present, the default is returned:
 
    Previous tutorial: :ref:`tutorial_algorithm`
 
+   Next tutorial: :ref:`tutorial_jobque`
+
    :ref:`Structures <structs>` — struct language reference.
 
    :ref:`Iterators <iterators>` — iterator language reference.
