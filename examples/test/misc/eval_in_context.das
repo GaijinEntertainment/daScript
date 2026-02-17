@@ -16,6 +16,9 @@ class EvalDataWalker : DapiStackWalker {
     def override onCallAOT(pp : Prologue; fileName : string#) : void {
         *W |> write("// AOT {fileName}\n")
     }
+    def override onCallJIT(pp : Prologue; fileName : string#) : void {
+        *W |> write("// JIT {fileName}\n")
+    }
     def override onCallAt(pp : Prologue; info : FuncInfo; at : LineInfo) : void {
         *W |> write("// {info.name} at {describe(at)}\n")
     }

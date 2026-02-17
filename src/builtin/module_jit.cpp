@@ -174,16 +174,19 @@ extern "C" {
         char * SP;
     };
 
-    DAS_API void jit_prologue ( void * funcLineInfo, int32_t stackSize, JitStackState * stackState, Context * context, LineInfoArg * at ) {
+    DAS_API void jit_prologue ( const char *funcName, void * funcLineInfo,
+            int32_t stackSize, JitStackState * stackState,
+            Context * context, LineInfoArg * at ) {
         if (!context->stack.push(stackSize, stackState->EP, stackState->SP)) {
             context->throw_error_at(at, "stack overflow");
         }
 #if DAS_ENABLE_STACK_WALK
         Prologue * pp = (Prologue *)context->stack.sp();
         pp->info = nullptr;
-        pp->fileName = "`jit`";
+        pp->fileName = funcName;
         pp->functionLine = (LineInfo *) funcLineInfo;
         pp->stackSize = stackSize;
+        pp->is_jit = true;
 #endif
     }
 

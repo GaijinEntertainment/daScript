@@ -1561,6 +1561,9 @@ namespace das
         virtual void onCallAOT ( Prologue *, const char * fileName ) override {
             ssw << fileName << ", AOT";
         }
+        virtual void onCallJIT ( Prologue *, const char * fileName ) override {
+            ssw << fileName << ", JIT";
+        }
         virtual void onCallAt ( Prologue *, FuncInfo * info, LineInfo * at ) override {
             ssw << info->name << " from " << at->describe();
         }

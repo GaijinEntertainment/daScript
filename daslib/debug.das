@@ -778,6 +778,17 @@ class private DAStackWalker : DapiStackWalker {
         }
     }
 
+    def override onCallJIT(pp : Prologue; fileName : string#) : void {
+        //! Handles a JIT function call event, updating the current stack frame with JIT call info.
+        let n = length(ctx.stack)
+        if (n > 0) {
+            ctx.stack[n - 1].name = pp.info != null ? "def {pp.info.name} [JIT]" : "def [JIT]"
+            ctx.stack[n - 1].path = "{fileName}"
+
+            self->collectGlobals()
+        }
+    }
+
     def override onCallAt(pp : Prologue; info : FuncInfo; at : LineInfo) : void {
         //! Handles a function call event with source location, updating the stack frame name, path, and line.
         // print("def {info.name} at {at}\n")

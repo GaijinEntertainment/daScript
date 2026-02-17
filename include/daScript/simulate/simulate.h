@@ -149,6 +149,13 @@ namespace das
                 const char * fileName;
                 LineInfo *   functionLine;
                 int32_t      stackSize;
+                union {
+                    uint32_t flags;
+                    // By default it's AOT Prologue.
+                    struct {
+                        bool is_jit : 1;
+                    };
+                };
             };
             struct {
                 vec4f *     arguments;
@@ -280,6 +287,7 @@ namespace das
         virtual bool canWalkOutOfScopeVariables() { return true; }
         virtual void onBeforeCall ( Prologue *, char * ) { }
         virtual void onCallAOT ( Prologue *, const char * ) { }
+        virtual void onCallJIT ( Prologue *, const char * ) { }
         virtual void onCallAt ( Prologue *, FuncInfo *, LineInfo * ) { }
         virtual void onCall ( Prologue *, FuncInfo * ) { }
         virtual void onAfterPrologue ( Prologue *, char * ) { }
