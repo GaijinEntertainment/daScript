@@ -10,6 +10,7 @@ Optional flags can be appended after a second ``~`` separator:
 - ``%regex~pattern~is%%`` — both flags combined
 
 See :doc:`regex` for the full list of supported syntax.
+See :ref:`tutorial_regex` for a hands-on tutorial.
 
 All functions and symbols are in "regex_boost" module, use require to get access to it. ::
 

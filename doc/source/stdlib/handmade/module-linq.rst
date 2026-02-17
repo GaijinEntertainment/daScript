@@ -4,6 +4,7 @@ deduplication (``distinct``), pagination (``skip``, ``take``), aggregation
 (``sum``, ``average``, ``aggregate``), and element access (``first``, ``last``).
 
 See also :doc:`linq_boost` for pipe-syntax macros with underscore shorthand.
+See :ref:`tutorial_linq` for a hands-on tutorial.
 
 All functions and symbols are in "linq" module, use require to get access to it. ::
 

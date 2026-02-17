@@ -155,6 +155,7 @@ namespace das {
     template <typename TT>
     AtomicTT<TT> * atomicCreate( Context *, LineInfoArg * ) {
         auto ch = new AtomicTT<TT>();
+        ch->set(0);
         ch->addRef();
         return ch;
     }

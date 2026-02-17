@@ -10,6 +10,7 @@ the DECS entity component system, including simplified component registration,
 entity creation, and system definition patterns.
 
 See also :doc:`decs` for the core ECS runtime and :doc:`decs_state` for entity state machines.
+See :ref:`tutorial_decs` for a hands-on tutorial.
 
 All functions and symbols are in "decs_boost" module, use require to get access to it. ::
 

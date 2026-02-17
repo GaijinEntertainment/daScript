@@ -5,6 +5,8 @@ function utilities including ``filter``, ``map``, ``reduce``, ``fold``,
 ``any``, ``all``, ``tap``, ``for_each``, ``find``, ``find_index``, and
 ``partition``.
 
+See :ref:`tutorial_functional` for a hands-on tutorial.
+
 All functions and symbols are in "functional" module, use require to get access to it. ::
 
     require daslib/functional

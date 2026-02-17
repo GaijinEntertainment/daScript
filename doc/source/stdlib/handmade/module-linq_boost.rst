@@ -3,6 +3,7 @@ syntax for inline predicates and selectors. Expressions like
 ``arr |> _where(_ > 3) |> _select(_ * 2)`` provide concise functional pipelines.
 
 See also :doc:`linq` for the full set of query operations.
+See :ref:`tutorial_linq` for a hands-on tutorial.
 
 All functions and symbols are in "linq_boost" module, use require to get access to it. ::
 

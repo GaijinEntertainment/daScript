@@ -3,6 +3,7 @@ the low-level ``jobque`` primitives. It includes ``with_job``, ``with_job_status
 and channel-based patterns for simplified concurrent programming.
 
 See also :doc:`jobque` for the low-level job queue primitives.
+See :ref:`tutorial_jobque` for a hands-on tutorial.
 
 All functions and symbols are in "jobque_boost" module, use require to get access to it. ::
 

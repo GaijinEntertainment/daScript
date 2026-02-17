@@ -4,6 +4,8 @@ sub-coroutines, and ``co_await`` for composing asynchronous generators.
 Coroutines produce values lazily via ``yield`` and can be iterated with
 ``for``.
 
+See :ref:`tutorial_iterators_and_generators` for a hands-on tutorial.
+
 All functions and symbols are in "coroutines" module, use require to get access to it. ::
 
     require daslib/coroutines

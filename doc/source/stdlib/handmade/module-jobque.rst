@@ -3,6 +3,8 @@ It includes thread-safe channels for inter-thread communication, lock boxes
 for shared data access, job status tracking, and fine-grained thread
 management. For higher-level job abstractions, see ``jobque_boost``.
 
+See :ref:`tutorial_jobque` for a hands-on tutorial.
+
 All functions and symbols are in "jobque" module, use require to get access to it. ::
 
     require jobque
