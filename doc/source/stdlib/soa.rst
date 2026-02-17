@@ -56,7 +56,7 @@ For a struct ``Foo`` with fields ``x : float`` and ``y : float``, generates:
 SOA field access
 ++++++++++++++++
 
-  *  :ref:`SOA_INDEX. (src: SOA_INDEX; field: string) <function-soa__dot__SOA_INDEX_string>` 
+  *  :ref:`SOA_INDEX. (src: SOA_INDEX; field: string) <function-soa__dot__SOA_INDEX_string>`
 
 .. _function-soa__dot__SOA_INDEX_string:
 
@@ -64,7 +64,7 @@ SOA field access
 
 Field access operator for SOA_INDEX; rewritten by SoaCallMacro to convert soa[index].field into soa.field[index].
 
-:Arguments: * **src** :  :ref:`SOA_INDEX <struct-soa-SOA_INDEX>` 
+:Arguments: * **src** :  :ref:`SOA_INDEX <struct-soa-SOA_INDEX>`
 
             * **field** : string
 

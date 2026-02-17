@@ -135,11 +135,11 @@ Returns true if the file status indicates a directory.
 
 :Properties: * **size** : uint64
 
-             * **atime** :  :ref:`clock <handle-builtin-clock>` 
+             * **atime** :  :ref:`clock <handle-builtin-clock>`
 
-             * **ctime** :  :ref:`clock <handle-builtin-clock>` 
+             * **ctime** :  :ref:`clock <handle-builtin-clock>`
 
-             * **mtime** :  :ref:`clock <handle-builtin-clock>` 
+             * **mtime** :  :ref:`clock <handle-builtin-clock>`
 
              * **is_reg** : bool
 
@@ -161,36 +161,36 @@ Opaque handle wrapping the platform-specific C FILE type used by all low-level f
 File manipulation
 +++++++++++++++++
 
-  *  :ref:`fclose (file: FILE const? implicit) <function-fio_fclose_FILE_const_q__implicit>` 
-  *  :ref:`feof (file: FILE const? implicit) : bool <function-fio_feof_FILE_const_q__implicit>` 
-  *  :ref:`fflush (file: FILE const? implicit) <function-fio_fflush_FILE_const_q__implicit>` 
-  *  :ref:`fgets (file: FILE const? implicit) : string <function-fio_fgets_FILE_const_q__implicit>` 
-  *  :ref:`fload (file: file; size: int; blk: block\<(data:array\<uint8\>):void\>) <function-fio_fload_file_int_block_ls_data_c_array_ls_uint8_gr__c_void_gr_>` 
-  *  :ref:`fload (f: file; var buf: auto(BufType)) : auto <function-fio_fload_file_autoBufType_0x40>` 
-  *  :ref:`fmap (file: FILE const? implicit; block: block\<(array\<uint8\>#):void\>) <function-fio_fmap_FILE_const_q__implicit_block_ls_array_ls_uint8_gr__hh__c_void_gr_>` 
-  *  :ref:`fopen (name: string; mode: string; blk: block\<(f:file):void\>) : auto <function-fio_fopen_string_string_block_ls_f_c_file_c_void_gr_>` 
-  *  :ref:`fopen (name: string implicit; mode: string implicit) : FILE const? <function-fio_fopen_string_implicit_string_implicit>` 
-  *  :ref:`fprint (file: FILE const? implicit; text: string implicit) <function-fio_fprint_FILE_const_q__implicit_string_implicit>` 
-  *  :ref:`fread (f: file; buf: auto(BufType) implicit) : auto <function-fio_fread_file_autoBufType_implicit_0x66>` 
-  *  :ref:`fread (file: FILE const? implicit) : string <function-fio_fread_FILE_const_q__implicit>` 
-  *  :ref:`fread (f: file; buf: array\<auto(BufType)\>) : auto <function-fio_fread_file_array_ls_autoBufType_gr_>` 
-  *  :ref:`fread (f: file; blk: block\<(data:string#):auto\>) : auto <function-fio_fread_file_block_ls_data_c_string_hh__c_auto_gr_>` 
-  *  :ref:`fsave (f: file; buf: auto(BufType)) : auto <function-fio_fsave_file_autoBufType_0x53>` 
-  *  :ref:`fseek (file: FILE const? implicit; offset: int64; mode: int) : int64 <function-fio_fseek_FILE_const_q__implicit_int64_int>` 
-  *  :ref:`fstat (file: FILE const? implicit; stat: FStat implicit) : bool <function-fio_fstat_FILE_const_q__implicit_FStat_implicit>` 
-  *  :ref:`fstat (f: file) : FStat <function-fio_fstat_file>` 
-  *  :ref:`fstderr () : FILE const? <function-fio_fstderr>` 
-  *  :ref:`fstdin () : FILE const? <function-fio_fstdin>` 
-  *  :ref:`fstdout () : FILE const? <function-fio_fstdout>` 
-  *  :ref:`ftell (file: FILE const? implicit) : int64 <function-fio_ftell_FILE_const_q__implicit>` 
-  *  :ref:`fwrite (f: file; buf: array\<auto(BufType)\>) : auto <function-fio_fwrite_file_array_ls_autoBufType_gr_>` 
-  *  :ref:`fwrite (file: FILE const? implicit; text: string implicit) <function-fio_fwrite_FILE_const_q__implicit_string_implicit>` 
-  *  :ref:`fwrite (f: file; buf: auto(BufType) implicit) : auto <function-fio_fwrite_file_autoBufType_implicit_0x74>` 
-  *  :ref:`getchar () : int <function-fio_getchar>` 
-  *  :ref:`remove (name: string implicit) : bool <function-fio_remove_string_implicit>` 
-  *  :ref:`rename (old_name: string implicit; new_name: string implicit) : bool <function-fio_rename_string_implicit_string_implicit>` 
-  *  :ref:`stat (path: string) : FStat <function-fio_stat_string>` 
-  *  :ref:`stat (file: string implicit; stat: FStat implicit) : bool <function-fio_stat_string_implicit_FStat_implicit>` 
+  *  :ref:`fclose (file: FILE const? implicit) <function-fio_fclose_FILE_const_q__implicit>`
+  *  :ref:`feof (file: FILE const? implicit) : bool <function-fio_feof_FILE_const_q__implicit>`
+  *  :ref:`fflush (file: FILE const? implicit) <function-fio_fflush_FILE_const_q__implicit>`
+  *  :ref:`fgets (file: FILE const? implicit) : string <function-fio_fgets_FILE_const_q__implicit>`
+  *  :ref:`fload (file: file; size: int; blk: block\<(data:array\<uint8\>):void\>) <function-fio_fload_file_int_block_ls_data_c_array_ls_uint8_gr__c_void_gr_>`
+  *  :ref:`fload (f: file; var buf: auto(BufType)) : auto <function-fio_fload_file_autoBufType_0x40>`
+  *  :ref:`fmap (file: FILE const? implicit; block: block\<(array\<uint8\>#):void\>) <function-fio_fmap_FILE_const_q__implicit_block_ls_array_ls_uint8_gr__hh__c_void_gr_>`
+  *  :ref:`fopen (name: string; mode: string; blk: block\<(f:file):void\>) : auto <function-fio_fopen_string_string_block_ls_f_c_file_c_void_gr_>`
+  *  :ref:`fopen (name: string implicit; mode: string implicit) : FILE const? <function-fio_fopen_string_implicit_string_implicit>`
+  *  :ref:`fprint (file: FILE const? implicit; text: string implicit) <function-fio_fprint_FILE_const_q__implicit_string_implicit>`
+  *  :ref:`fread (f: file; buf: auto(BufType) implicit) : auto <function-fio_fread_file_autoBufType_implicit_0x66>`
+  *  :ref:`fread (file: FILE const? implicit) : string <function-fio_fread_FILE_const_q__implicit>`
+  *  :ref:`fread (f: file; buf: array\<auto(BufType)\>) : auto <function-fio_fread_file_array_ls_autoBufType_gr_>`
+  *  :ref:`fread (f: file; blk: block\<(data:string#):auto\>) : auto <function-fio_fread_file_block_ls_data_c_string_hh__c_auto_gr_>`
+  *  :ref:`fsave (f: file; buf: auto(BufType)) : auto <function-fio_fsave_file_autoBufType_0x53>`
+  *  :ref:`fseek (file: FILE const? implicit; offset: int64; mode: int) : int64 <function-fio_fseek_FILE_const_q__implicit_int64_int>`
+  *  :ref:`fstat (file: FILE const? implicit; stat: FStat implicit) : bool <function-fio_fstat_FILE_const_q__implicit_FStat_implicit>`
+  *  :ref:`fstat (f: file) : FStat <function-fio_fstat_file>`
+  *  :ref:`fstderr () : FILE const? <function-fio_fstderr>`
+  *  :ref:`fstdin () : FILE const? <function-fio_fstdin>`
+  *  :ref:`fstdout () : FILE const? <function-fio_fstdout>`
+  *  :ref:`ftell (file: FILE const? implicit) : int64 <function-fio_ftell_FILE_const_q__implicit>`
+  *  :ref:`fwrite (f: file; buf: array\<auto(BufType)\>) : auto <function-fio_fwrite_file_array_ls_autoBufType_gr_>`
+  *  :ref:`fwrite (file: FILE const? implicit; text: string implicit) <function-fio_fwrite_FILE_const_q__implicit_string_implicit>`
+  *  :ref:`fwrite (f: file; buf: auto(BufType) implicit) : auto <function-fio_fwrite_file_autoBufType_implicit_0x74>`
+  *  :ref:`getchar () : int <function-fio_getchar>`
+  *  :ref:`remove (name: string implicit) : bool <function-fio_remove_string_implicit>`
+  *  :ref:`rename (old_name: string implicit; new_name: string implicit) : bool <function-fio_rename_string_implicit_string_implicit>`
+  *  :ref:`stat (path: string) : FStat <function-fio_stat_string>`
+  *  :ref:`stat (file: string implicit; stat: FStat implicit) : bool <function-fio_stat_string_implicit_FStat_implicit>`
 
 .. _function-fio_fclose_FILE_const_q__implicit:
 
@@ -198,7 +198,7 @@ File manipulation
 
 Closes the given FILE pointer and releases its associated resources, equivalent to C fclose.
 
-:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
+:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>`? implicit
 
 .. _function-fio_feof_FILE_const_q__implicit:
 
@@ -206,7 +206,7 @@ Closes the given FILE pointer and releases its associated resources, equivalent 
 
 Returns true if the end-of-file indicator has been set on the given FILE pointer, equivalent to C feof.
 
-:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
+:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>`? implicit
 
 .. _function-fio_fflush_FILE_const_q__implicit:
 
@@ -214,7 +214,7 @@ Returns true if the end-of-file indicator has been set on the given FILE pointer
 
 Flushes any buffered output data for the given FILE pointer to the underlying file, equivalent to C fflush.
 
-:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
+:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>`? implicit
 
 .. _function-fio_fgets_FILE_const_q__implicit:
 
@@ -222,7 +222,7 @@ Flushes any buffered output data for the given FILE pointer to the underlying fi
 
 Reads and returns the next line as a string from the given FILE pointer, equivalent to C fgets.
 
-:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
+:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>`? implicit
 
 
 fload
@@ -234,7 +234,7 @@ fload
 
 Obsolete; loads binary data from a file into the provided buffer or passes it as an array of uint8 to a block.
 
-:Arguments: * **file** :  :ref:`file <alias-file>` 
+:Arguments: * **file** :  :ref:`file <alias-file>`
 
             * **size** : int
 
@@ -252,7 +252,7 @@ Obsolete; loads binary data from a file into the provided buffer or passes it as
 
 Memory-maps the contents of the given FILE pointer and provides the data as an array of uint8 inside the block.
 
-:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
+:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>`? implicit
 
             * **block** : block<(array<uint8>#):void> implicit
 
@@ -270,7 +270,7 @@ Opens the file at the given path with the specified mode string, returning a FIL
 
             * **mode** : string
 
-            * **blk** : block<(f: :ref:`file <alias-file>` ):void>
+            * **blk** : block<(f: :ref:`file <alias-file>`):void>
 
 .. _function-fio_fopen_string_implicit_string_implicit:
 
@@ -284,7 +284,7 @@ Opens the file at the given path with the specified mode string, returning a FIL
 
 Writes the given text string to the specified FILE pointer, equivalent to print but targeting a file.
 
-:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
+:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>`? implicit
 
             * **text** : string implicit
 
@@ -298,7 +298,7 @@ fread
 
 Reads data from a file into a buffer, an array, or returns the full contents as a string, with block-based overloads available.
 
-:Arguments: * **f** :  :ref:`file <alias-file>` 
+:Arguments: * **f** :  :ref:`file <alias-file>`
 
             * **buf** : auto(BufType) implicit
 
@@ -322,7 +322,7 @@ Reads data from a file into a buffer, an array, or returns the full contents as 
 
 Obsolete; saves the provided buffer data to a file in binary format.
 
-:Arguments: * **f** :  :ref:`file <alias-file>` 
+:Arguments: * **f** :  :ref:`file <alias-file>`
 
             * **buf** : auto(BufType)
 
@@ -332,7 +332,7 @@ Obsolete; saves the provided buffer data to a file in binary format.
 
 Repositions the file pointer of the given FILE to the specified offset relative to the mode (seek_set, seek_cur, or seek_end) and returns the new position.
 
-:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
+:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>`? implicit
 
             * **offset** : int64
 
@@ -348,9 +348,9 @@ fstat
 
 Retrieves file metadata such as size and timestamps into an FStat structure from a file handle, equivalent to C fstat.
 
-:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
+:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>`? implicit
 
-            * **stat** :  :ref:`FStat <handle-fio-FStat>`  implicit
+            * **stat** :  :ref:`FStat <handle-fio-FStat>` implicit
 
 .. _function-fio_fstat_file:
 
@@ -382,7 +382,7 @@ Returns the FILE pointer corresponding to the standard output stream.
 
 Returns the current byte offset of the file pointer for the given FILE, equivalent to C ftell.
 
-:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
+:Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>`? implicit
 
 
 fwrite
@@ -394,7 +394,7 @@ fwrite
 
 Writes a string, typed buffer, or array of data to the specified file handle.
 
-:Arguments: * **f** :  :ref:`file <alias-file>` 
+:Arguments: * **f** :  :ref:`file <alias-file>`
 
             * **buf** : array<auto(BufType)> implicit
 
@@ -454,9 +454,9 @@ Retrieves file metadata such as size and timestamps for the file at the given pa
 Path manipulation
 +++++++++++++++++
 
-  *  :ref:`base_name (name: string implicit) : string <function-fio_base_name_string_implicit>` 
-  *  :ref:`dir_name (name: string implicit) : string <function-fio_dir_name_string_implicit>` 
-  *  :ref:`get_full_file_name (path: string implicit) : string <function-fio_get_full_file_name_string_implicit>` 
+  *  :ref:`base_name (name: string implicit) : string <function-fio_base_name_string_implicit>`
+  *  :ref:`dir_name (name: string implicit) : string <function-fio_dir_name_string_implicit>`
+  *  :ref:`get_full_file_name (path: string implicit) : string <function-fio_get_full_file_name_string_implicit>`
 
 .. _function-fio_base_name_string_implicit:
 
@@ -486,11 +486,11 @@ Returns the fully resolved and normalized absolute path for the given file path 
 Directory manipulation
 ++++++++++++++++++++++
 
-  *  :ref:`chdir (path: string implicit) : bool <function-fio_chdir_string_implicit>` 
-  *  :ref:`dir (path: string; blk: block\<(filename:string):void\>) : auto <function-fio_dir_string_block_ls_filename_c_string_c_void_gr_>` 
-  *  :ref:`getcwd () : string <function-fio_getcwd>` 
-  *  :ref:`mkdir (path: string implicit) : bool <function-fio_mkdir_string_implicit>` 
-  *  :ref:`mkdir_rec (path: string) : bool <function-fio_mkdir_rec_string>` 
+  *  :ref:`chdir (path: string implicit) : bool <function-fio_chdir_string_implicit>`
+  *  :ref:`dir (path: string; blk: block\<(filename:string):void\>) : auto <function-fio_dir_string_block_ls_filename_c_string_c_void_gr_>`
+  *  :ref:`getcwd () : string <function-fio_getcwd>`
+  *  :ref:`mkdir (path: string implicit) : bool <function-fio_mkdir_string_implicit>`
+  *  :ref:`mkdir_rec (path: string) : bool <function-fio_mkdir_rec_string>`
 
 .. _function-fio_chdir_string_implicit:
 
@@ -536,19 +536,19 @@ Recursively creates the directory at the specified path along with any missing p
 OS specific routines
 ++++++++++++++++++++
 
-  *  :ref:`exit (exitCode: int) <function-fio_exit_int>` 
-  *  :ref:`get_env_variable (var: string implicit) : string <function-fio_get_env_variable_string_implicit>` 
-  *  :ref:`has_env_variable (var: string implicit) : bool <function-fio_has_env_variable_string_implicit>` 
-  *  :ref:`popen (command: string implicit; scope: block\<(FILE const?):void\>) : int <function-fio_popen_string_implicit_block_ls_FILE_const_q__c_void_gr_>` 
-  *  :ref:`popen_binary (command: string implicit; scope: block\<(FILE const?):void\>) : int <function-fio_popen_binary_string_implicit_block_ls_FILE_const_q__c_void_gr_>` 
-  *  :ref:`sanitize_command_line (var: string implicit) : string <function-fio_sanitize_command_line_string_implicit>` 
-  *  :ref:`sleep (msec: uint) <function-fio_sleep_uint>` 
+  *  :ref:`exit (exitCode: int) <function-fio_exit_int>`
+  *  :ref:`get_env_variable (var: string implicit) : string <function-fio_get_env_variable_string_implicit>`
+  *  :ref:`has_env_variable (var: string implicit) : bool <function-fio_has_env_variable_string_implicit>`
+  *  :ref:`popen (command: string implicit; scope: block\<(FILE const?):void\>) : int <function-fio_popen_string_implicit_block_ls_FILE_const_q__c_void_gr_>`
+  *  :ref:`popen_binary (command: string implicit; scope: block\<(FILE const?):void\>) : int <function-fio_popen_binary_string_implicit_block_ls_FILE_const_q__c_void_gr_>`
+  *  :ref:`sanitize_command_line (var: string implicit) : string <function-fio_sanitize_command_line_string_implicit>`
+  *  :ref:`sleep (msec: uint) <function-fio_sleep_uint>`
 
 .. _function-fio_exit_int:
 
 .. das:function:: exit(exitCode: int)
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Terminates the program immediately with the specified integer exit code, equivalent to C exit.
@@ -575,27 +575,27 @@ Returns true if an environment variable with the given name is defined in the cu
 
 .. das:function:: popen(command: string implicit; scope: block<(FILE const?):void>) : int
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Opens a pipe to the given shell command, provides the resulting FILE pointer to the block, and returns the process exit code.
 
 :Arguments: * **command** : string implicit
 
-            * **scope** : block<( :ref:`FILE <handle-fio-FILE>` ?):void> implicit
+            * **scope** : block<( :ref:`FILE <handle-fio-FILE>`?):void> implicit
 
 .. _function-fio_popen_binary_string_implicit_block_ls_FILE_const_q__c_void_gr_:
 
 .. das:function:: popen_binary(command: string implicit; scope: block<(FILE const?):void>) : int
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Opens a pipe to the given shell command in binary mode, provides the resulting FILE pointer to the block, and returns the process exit code.
 
 :Arguments: * **command** : string implicit
 
-            * **scope** : block<( :ref:`FILE <handle-fio-FILE>` ?):void> implicit
+            * **scope** : block<( :ref:`FILE <handle-fio-FILE>`?):void> implicit
 
 .. _function-fio_sanitize_command_line_string_implicit:
 
@@ -617,9 +617,9 @@ Suspends execution of the current thread for the specified number of millisecond
 Dynamic modules
 +++++++++++++++
 
-  *  :ref:`register_dynamic_module (path: string implicit; name: string implicit) : void? <function-fio_register_dynamic_module_string_implicit_string_implicit>` 
-  *  :ref:`register_dynamic_module (path: string implicit; name: string implicit; on_error: int) : void? <function-fio_register_dynamic_module_string_implicit_string_implicit_int>` 
-  *  :ref:`register_native_path (mod_name: string implicit; src: string implicit; dst: string implicit) <function-fio_register_native_path_string_implicit_string_implicit_string_implicit>` 
+  *  :ref:`register_dynamic_module (path: string implicit; name: string implicit) : void? <function-fio_register_dynamic_module_string_implicit_string_implicit>`
+  *  :ref:`register_dynamic_module (path: string implicit; name: string implicit; on_error: int) : void? <function-fio_register_dynamic_module_string_implicit_string_implicit_int>`
+  *  :ref:`register_native_path (mod_name: string implicit; src: string implicit; dst: string implicit) <function-fio_register_native_path_string_implicit_string_implicit_string_implicit>`
 
 
 register_dynamic_module

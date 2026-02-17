@@ -33,16 +33,16 @@ DFA accept state indicating a valid UTF-8 sequence.
 Encoding and decoding
 +++++++++++++++++++++
 
-  *  :ref:`decode_unicode_escape (str: string) : string <function-utf8_utils_decode_unicode_escape_string>` 
-  *  :ref:`utf16_to_utf32 (high: uint; low: uint) : uint <function-utf8_utils_utf16_to_utf32_uint_uint>` 
-  *  :ref:`utf8_decode (source_utf8_string: string) : array\<uint\> <function-utf8_utils_utf8_decode_string>` 
-  *  :ref:`utf8_decode (var dest_utf32_string: array\<uint\>; source_utf8_string: string) <function-utf8_utils_utf8_decode_array_ls_uint_gr__string>` 
-  *  :ref:`utf8_decode (source_utf8_string: array\<uint8\>) : array\<uint\> <function-utf8_utils_utf8_decode_array_ls_uint8_gr_>` 
-  *  :ref:`utf8_decode (var dest_utf32_string: array\<uint\>; source_utf8_string: array\<uint8\>) <function-utf8_utils_utf8_decode_array_ls_uint_gr__array_ls_uint8_gr_>` 
-  *  :ref:`utf8_encode (var dest_array: array\<uint8\>; source_utf32_string: array\<uint\>) <function-utf8_utils_utf8_encode_array_ls_uint8_gr__array_ls_uint_gr_>` 
-  *  :ref:`utf8_encode (var dest_array: array\<uint8\>; ch: uint) <function-utf8_utils_utf8_encode_array_ls_uint8_gr__uint>` 
-  *  :ref:`utf8_encode (ch: uint) : array\<uint8\> <function-utf8_utils_utf8_encode_uint>` 
-  *  :ref:`utf8_encode (source_utf32_string: array\<uint\>) : array\<uint8\> <function-utf8_utils_utf8_encode_array_ls_uint_gr_>` 
+  *  :ref:`decode_unicode_escape (str: string) : string <function-utf8_utils_decode_unicode_escape_string>`
+  *  :ref:`utf16_to_utf32 (high: uint; low: uint) : uint <function-utf8_utils_utf16_to_utf32_uint_uint>`
+  *  :ref:`utf8_decode (source_utf8_string: string) : array\<uint\> <function-utf8_utils_utf8_decode_string>`
+  *  :ref:`utf8_decode (var dest_utf32_string: array\<uint\>; source_utf8_string: string) <function-utf8_utils_utf8_decode_array_ls_uint_gr__string>`
+  *  :ref:`utf8_decode (source_utf8_string: array\<uint8\>) : array\<uint\> <function-utf8_utils_utf8_decode_array_ls_uint8_gr_>`
+  *  :ref:`utf8_decode (var dest_utf32_string: array\<uint\>; source_utf8_string: array\<uint8\>) <function-utf8_utils_utf8_decode_array_ls_uint_gr__array_ls_uint8_gr_>`
+  *  :ref:`utf8_encode (var dest_array: array\<uint8\>; source_utf32_string: array\<uint\>) <function-utf8_utils_utf8_encode_array_ls_uint8_gr__array_ls_uint_gr_>`
+  *  :ref:`utf8_encode (var dest_array: array\<uint8\>; ch: uint) <function-utf8_utils_utf8_encode_array_ls_uint8_gr__uint>`
+  *  :ref:`utf8_encode (ch: uint) : array\<uint8\> <function-utf8_utils_utf8_encode_uint>`
+  *  :ref:`utf8_encode (source_utf32_string: array\<uint\>) : array\<uint8\> <function-utf8_utils_utf8_encode_array_ls_uint_gr_>`
 
 .. _function-utf8_utils_decode_unicode_escape_string:
 
@@ -120,8 +120,8 @@ Converts UTF-32 string to UTF-8 and appends it to the UTF-8 byte array
 Length and measurement
 ++++++++++++++++++++++
 
-  *  :ref:`utf8_length (utf8_string: string) : int <function-utf8_utils_utf8_length_string>` 
-  *  :ref:`utf8_length (utf8_string: array\<uint8\>) : int <function-utf8_utils_utf8_length_array_ls_uint8_gr_>` 
+  *  :ref:`utf8_length (utf8_string: string) : int <function-utf8_utils_utf8_length_string>`
+  *  :ref:`utf8_length (utf8_string: array\<uint8\>) : int <function-utf8_utils_utf8_length_array_ls_uint8_gr_>`
 
 
 utf8_length
@@ -145,11 +145,11 @@ Returns the number of characters in the UTF-8 string
 Validation
 ++++++++++
 
-  *  :ref:`contains_utf8_bom (utf8_string: array\<uint8\>) : bool <function-utf8_utils_contains_utf8_bom_array_ls_uint8_gr_>` 
-  *  :ref:`contains_utf8_bom (utf8_string: string) : bool <function-utf8_utils_contains_utf8_bom_string>` 
-  *  :ref:`is_first_byte_of_utf8_char (ch: uint8) : bool <function-utf8_utils_is_first_byte_of_utf8_char_uint8>` 
-  *  :ref:`is_utf8_string_valid (utf8_string: array\<uint8\>) : bool <function-utf8_utils_is_utf8_string_valid_array_ls_uint8_gr_>` 
-  *  :ref:`is_utf8_string_valid (utf8_string: string) : bool <function-utf8_utils_is_utf8_string_valid_string>` 
+  *  :ref:`contains_utf8_bom (utf8_string: array\<uint8\>) : bool <function-utf8_utils_contains_utf8_bom_array_ls_uint8_gr_>`
+  *  :ref:`contains_utf8_bom (utf8_string: string) : bool <function-utf8_utils_contains_utf8_bom_string>`
+  *  :ref:`is_first_byte_of_utf8_char (ch: uint8) : bool <function-utf8_utils_is_first_byte_of_utf8_char_uint8>`
+  *  :ref:`is_utf8_string_valid (utf8_string: array\<uint8\>) : bool <function-utf8_utils_is_utf8_string_valid_array_ls_uint8_gr_>`
+  *  :ref:`is_utf8_string_valid (utf8_string: string) : bool <function-utf8_utils_is_utf8_string_valid_string>`
 
 
 contains_utf8_bom

@@ -50,14 +50,14 @@ maximum possible output of random_big_int
 Seed and basic generators
 +++++++++++++++++++++++++
 
-  *  :ref:`random_big_int (var seed: int4&) : auto <function-random_random_big_int_int4>` 
-  *  :ref:`random_float (var seed: int4&) : auto <function-random_random_float_int4>` 
-  *  :ref:`random_float4 (var seed: int4&) : auto <function-random_random_float4_int4>` 
-  *  :ref:`random_int (var seed: int4&) : auto <function-random_random_int_int4>` 
-  *  :ref:`random_int4 (var seed: int4&) : auto <function-random_random_int4_int4>` 
-  *  :ref:`random_seed (seed: int) : auto <function-random_random_seed_int>` 
-  *  :ref:`random_seed2D (var seed: int4&; co: int2; cf: int = 0) : auto <function-random_random_seed2D_int4_int2_int>` 
-  *  :ref:`random_uint (var seed: int4&) : auto <function-random_random_uint_int4>` 
+  *  :ref:`random_big_int (var seed: int4&) : auto <function-random_random_big_int_int4>`
+  *  :ref:`random_float (var seed: int4&) : auto <function-random_random_float_int4>`
+  *  :ref:`random_float4 (var seed: int4&) : auto <function-random_random_float4_int4>`
+  *  :ref:`random_int (var seed: int4&) : auto <function-random_random_int_int4>`
+  *  :ref:`random_int4 (var seed: int4&) : auto <function-random_random_int4_int4>`
+  *  :ref:`random_seed (seed: int) : auto <function-random_random_seed_int>`
+  *  :ref:`random_seed2D (var seed: int4&; co: int2; cf: int = 0) : auto <function-random_random_seed2D_int4_int2_int>`
+  *  :ref:`random_uint (var seed: int4&) : auto <function-random_random_uint_int4>`
 
 .. _function-random_random_big_int_int4:
 
@@ -131,7 +131,7 @@ random unsigned integer using 3-component LCG, covering full uint range
 Random iterators
 ++++++++++++++++
 
-  *  :ref:`each_random_uint (rnd_seed: int = 13) : iterator\<uint\> <function-random_each_random_uint_int>` 
+  *  :ref:`each_random_uint (rnd_seed: int = 13) : iterator\<uint\> <function-random_each_random_uint_int>`
 
 .. _function-random_each_random_uint_int:
 
@@ -145,9 +145,9 @@ infinite generator of random uints initialized with `rnd_seed`
 Specific distributions
 ++++++++++++++++++++++
 
-  *  :ref:`random_in_unit_disk (var seed: int4&) : auto <function-random_random_in_unit_disk_int4>` 
-  *  :ref:`random_in_unit_sphere (var seed: int4&) : auto <function-random_random_in_unit_sphere_int4>` 
-  *  :ref:`random_unit_vector (var seed: int4&) : auto <function-random_random_unit_vector_int4>` 
+  *  :ref:`random_in_unit_disk (var seed: int4&) : auto <function-random_random_in_unit_disk_int4>`
+  *  :ref:`random_in_unit_sphere (var seed: int4&) : auto <function-random_random_in_unit_sphere_int4>`
+  *  :ref:`random_unit_vector (var seed: int4&) : auto <function-random_random_unit_vector_int4>`
 
 .. _function-random_random_in_unit_disk_int4:
 

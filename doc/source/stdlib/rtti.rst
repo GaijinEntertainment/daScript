@@ -620,7 +620,7 @@ Handled structures
 
          * **cross_platform** : bool - Whether cross-platform AOT is enabled (if not, we generate code for the current platform).
 
-         * **aot_result** :  :ref:`das_string <handle-builtin-das_string>`  - File name for AOT output (if not set, we generate a temporary file).
+         * **aot_result** :  :ref:`das_string <handle-builtin-das_string>` - File name for AOT output (if not set, we generate a temporary file).
 
          * **completion** : bool - If we are in code completion mode.
 
@@ -742,17 +742,17 @@ Handled structures
 
          * **debug_infer_flag** : bool - Enables debug inference flag.
 
-         * **debug_module** :  :ref:`das_string <handle-builtin-das_string>`  - Sets debug module (module which will be loaded when IDE connects).
+         * **debug_module** :  :ref:`das_string <handle-builtin-das_string>` - Sets debug module (module which will be loaded when IDE connects).
 
          * **profiler** : bool - Enables profiler support.
 
-         * **profile_module** :  :ref:`das_string <handle-builtin-das_string>`  - Sets profile module (module which will be loaded when profiler connects).
+         * **profile_module** :  :ref:`das_string <handle-builtin-das_string>` - Sets profile module (module which will be loaded when profiler connects).
 
          * **threadlock_context** : bool - Enables threadlock context.
 
          * **jit_enabled** : bool - JIT enabled - if enabled, JIT will be used to compile code at runtime.
 
-         * **jit_module** :  :ref:`das_string <handle-builtin-das_string>`  - JIT module - module loaded when -jit is specified.
+         * **jit_module** :  :ref:`das_string <handle-builtin-das_string>` - JIT module - module loaded when -jit is specified.
 
          * **jit_jit_all_functions** : bool - JIT all functions - if enabled, JIT will compile all functions in the module.
 
@@ -760,15 +760,15 @@ Handled structures
 
          * **jit_use_dll_mode** : bool - JIT dll mode - if enabled, JIT will generate DLL's into JIT output folder and load them from there.
 
-         * **jit_output_folder** :  :ref:`das_string <handle-builtin-das_string>`  - JIT output folder (where JIT compiled code will be stored).
+         * **jit_output_folder** :  :ref:`das_string <handle-builtin-das_string>` - JIT output folder (where JIT compiled code will be stored).
 
          * **jit_opt_level** : int - JIT optimization level for compiled code (0-3).
 
          * **jit_size_level** : int - JIT size optimization level for compiled code (0-3).
 
-         * **jit_path_to_shared_lib** :  :ref:`das_string <handle-builtin-das_string>`  - Path to shared library, which is used in JIT.
+         * **jit_path_to_shared_lib** :  :ref:`das_string <handle-builtin-das_string>` - Path to shared library, which is used in JIT.
 
-         * **jit_path_to_linker** :  :ref:`das_string <handle-builtin-das_string>`  - Path to linker, which is used in JIT.
+         * **jit_path_to_linker** :  :ref:`das_string <handle-builtin-das_string>` - Path to linker, which is used in JIT.
 
 
 .. _handle-rtti-FileInfo:
@@ -777,7 +777,7 @@ Handled structures
 
 Information about a single file stored in the `FileAccess` object.
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  - File name.
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - File name.
 
          * **tabSize** : int - Tab size for this file.
 
@@ -788,7 +788,7 @@ Information about a single file stored in the `FileAccess` object.
 
 Information about a section of the file stored in the `FileAccess` object.
 
-:Fields: * **fileInfo** :  :ref:`FileInfo <handle-rtti-FileInfo>` ? - File information object.
+:Fields: * **fileInfo** :  :ref:`FileInfo <handle-rtti-FileInfo>`? - File information object.
 
          * **column** : uint - Column number (1-based).
 
@@ -843,17 +843,17 @@ Object which holds single Daslang Context. Context is the result of the simulati
 
          * **alwaysStackWalkOnException** : bool - Always stack walk on exception.
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Context name.
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Context name.
 
-         * **category** :  :ref:`context_category_flags <alias-context_category_flags>`  - Context category flags.
+         * **category** :  :ref:`context_category_flags <alias-context_category_flags>` - Context category flags.
 
-         * **exceptionAt** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Exception at line info.
+         * **exceptionAt** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Exception at line info.
 
          * **exception** : string - Exception message.
 
          * **last_exception** : string - Last exception message.
 
-         * **contextMutex** :  :ref:`recursive_mutex <handle-rtti-recursive_mutex>` ? - Context mutex.
+         * **contextMutex** :  :ref:`recursive_mutex <handle-rtti-recursive_mutex>`? - Context mutex.
 
 
 .. _handle-rtti-Error:
@@ -862,15 +862,15 @@ Object which holds single Daslang Context. Context is the result of the simulati
 
 Object which holds information about compilation error or exception.
 
-:Fields: * **what** :  :ref:`das_string <handle-builtin-das_string>`  - What error is about.
+:Fields: * **what** :  :ref:`das_string <handle-builtin-das_string>` - What error is about.
 
-         * **extra** :  :ref:`das_string <handle-builtin-das_string>`  - Extra information about error.
+         * **extra** :  :ref:`das_string <handle-builtin-das_string>` - Extra information about error.
 
-         * **fixme** :  :ref:`das_string <handle-builtin-das_string>`  - Fixme information about error.
+         * **fixme** :  :ref:`das_string <handle-builtin-das_string>` - Fixme information about error.
 
-         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - Line info where error occurred.
+         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Line info where error occurred.
 
-         * **cerr** :  :ref:`CompilationError <enum-rtti-CompilationError>`  - Compilation error.
+         * **cerr** :  :ref:`CompilationError <enum-rtti-CompilationError>` - Compilation error.
 
 
 .. _handle-rtti-FileAccess:
@@ -886,11 +886,11 @@ Object which holds information about compilation error or exception.
 
  Collection of types, aliases, functions, classes, macros etc under a single namespace.
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Module name.
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Module name.
 
-         * **fileName** :  :ref:`das_string <handle-builtin-das_string>`  - Module file name.
+         * **fileName** :  :ref:`das_string <handle-builtin-das_string>` - Module file name.
 
-         * **moduleFlags** :  :ref:`ModuleFlags <alias-ModuleFlags>`  - Module flags.
+         * **moduleFlags** :  :ref:`ModuleFlags <alias-ModuleFlags>` - Module flags.
 
 
 .. _handle-rtti-ModuleGroup:
@@ -906,11 +906,11 @@ Object which holds information about compilation error or exception.
 
 Single argument of the annotation, typically part of the `AnnotationArgumentList`.
 
-:Fields: * **basicType** :  :ref:`Type <enum-rtti-Type>`  - type of the argument value
+:Fields: * **basicType** :  :ref:`Type <enum-rtti-Type>` - type of the argument value
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>`  - argument name
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - argument name
 
-         * **sValue** :  :ref:`das_string <handle-builtin-das_string>`  - string value
+         * **sValue** :  :ref:`das_string <handle-builtin-das_string>` - string value
 
          * **iValue** : int - integer value
 
@@ -918,7 +918,7 @@ Single argument of the annotation, typically part of the `AnnotationArgumentList
 
          * **bValue** : bool - boolean value
 
-         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - line info where the argument is defined
+         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - line info where the argument is defined
 
 
 .. _handle-rtti-Program:
@@ -937,15 +937,15 @@ Property-like accessor that returns the ``Module`` pointer for the module curren
 
 Property-like accessor that returns ``true`` if the debugger is attached and enabled for the given ``Program``.
 
-:Properties: * **getThisModule** :  :ref:`Module <handle-rtti-Module>` ?
+:Properties: * **getThisModule** :  :ref:`Module <handle-rtti-Module>`?
 
              * **getDebugger** : bool
 
 Object representing full information about Daslang program during and after compilation (but not the simulated result of the program).
 
-:Fields: * **thisNamespace** :  :ref:`das_string <handle-builtin-das_string>`  - namespace of the program
+:Fields: * **thisNamespace** :  :ref:`das_string <handle-builtin-das_string>` - namespace of the program
 
-         * **thisModuleName** :  :ref:`das_string <handle-builtin-das_string>`  - module name
+         * **thisModuleName** :  :ref:`das_string <handle-builtin-das_string>` - module name
 
          * **totalFunctions** : int - total number of functions in the program
 
@@ -957,11 +957,11 @@ Object representing full information about Daslang program during and after comp
 
          * **initSemanticHashWithDep** : uint64 - initial semantic hash with dependencies
 
-         * **flags** :  :ref:`ProgramFlags <alias-ProgramFlags>`  - program flags
+         * **flags** :  :ref:`ProgramFlags <alias-ProgramFlags>` - program flags
 
-         * **_options** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  - program options
+         * **_options** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` - program options
 
-         * **policies** :  :ref:`CodeOfPolicies <handle-rtti-CodeOfPolicies>`  - code of policies
+         * **policies** :  :ref:`CodeOfPolicies <handle-rtti-CodeOfPolicies>` - code of policies
 
 
 .. _handle-rtti-Annotation:
@@ -1018,11 +1018,11 @@ Property-like accessor that returns ``true`` if the given ``Annotation`` is an `
 
 Handled type or macro.
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  - name of the annotation
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - name of the annotation
 
-         * **cppName** :  :ref:`das_string <handle-builtin-das_string>`  - name of the associated C++ type or macro
+         * **cppName** :  :ref:`das_string <handle-builtin-das_string>` - name of the associated C++ type or macro
 
-         * **_module** :  :ref:`Module <handle-rtti-Module>` ? - module where the annotation is defined
+         * **_module** :  :ref:`Module <handle-rtti-Module>`? - module where the annotation is defined
 
 
 .. _handle-rtti-AnnotationDeclaration:
@@ -1031,13 +1031,13 @@ Handled type or macro.
 
 Annotation declaration, its location, and arguments.
 
-:Fields: * **annotation** : smart_ptr< :ref:`Annotation <handle-rtti-Annotation>` > - pointer to the handled annotation object.
+:Fields: * **annotation** : smart_ptr< :ref:`Annotation <handle-rtti-Annotation>`> - pointer to the handled annotation object.
 
-         * **arguments** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  - list of annotation arguments.
+         * **arguments** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` - list of annotation arguments.
 
-         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - line information where the annotation is defined.
+         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - line information where the annotation is defined.
 
-         * **flags** :  :ref:`AnnotationDeclarationFlags <alias-AnnotationDeclarationFlags>`  - flags associated with the annotation.
+         * **flags** :  :ref:`AnnotationDeclarationFlags <alias-AnnotationDeclarationFlags>` - flags associated with the annotation.
 
 
 .. _handle-rtti-TypeAnnotation:
@@ -1222,11 +1222,11 @@ Property-like accessor that returns the memory alignment requirement (in bytes) 
 
 Handled type.
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  - name of the type annotation
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - name of the type annotation
 
-         * **cppName** :  :ref:`das_string <handle-builtin-das_string>`  - name of the associated C++ type
+         * **cppName** :  :ref:`das_string <handle-builtin-das_string>` - name of the associated C++ type
 
-         * **_module** :  :ref:`Module <handle-rtti-Module>` ? - module where the annotation is defined
+         * **_module** :  :ref:`Module <handle-rtti-Module>`? - module where the annotation is defined
 
 
 .. _handle-rtti-BasicStructureAnnotation:
@@ -1243,9 +1243,9 @@ Property-like accessor that returns the number of fields declared in the given `
 
 Handled type which represents a structure-like annotation for exposing C++ types to daslang.
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>`  - Name of the annotation
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the annotation
 
-         * **cppName** :  :ref:`das_string <handle-builtin-das_string>`  - C++ class name used in AOT code generation
+         * **cppName** :  :ref:`das_string <handle-builtin-das_string>` - C++ class name used in AOT code generation
 
 
 .. _handle-rtti-EnumValueInfo:
@@ -1269,7 +1269,7 @@ Type object which represents enumeration.
 
          * **module_name** : string - module where the enumeration is defined
 
-         * **fields** :  :ref:`EnumValueInfo <handle-rtti-EnumValueInfo>` ?? - fields in the enumeration
+         * **fields** :  :ref:`EnumValueInfo <handle-rtti-EnumValueInfo>`?? - fields in the enumeration
 
          * **count** : uint - number of fields in the enumeration
 
@@ -1286,13 +1286,13 @@ Type object which represents structure or class.
 
          * **module_name** : string - module where the structure is defined
 
-         * **fields** :  :ref:`VarInfo <handle-rtti-VarInfo>` ?? - fields in the structure
+         * **fields** :  :ref:`VarInfo <handle-rtti-VarInfo>`?? - fields in the structure
 
          * **hash** : uint64 - hash of the structure
 
          * **init_mnh** : uint64 - hash of the structure initializer
 
-         * **flags** :  :ref:`StructInfoFlags <alias-StructInfoFlags>`  - flags associated with the structure
+         * **flags** :  :ref:`StructInfoFlags <alias-StructInfoFlags>` - flags associated with the structure
 
          * **count** : uint - number of fields in the structure
 
@@ -1383,7 +1383,7 @@ Property-like accessor that returns the annotation name if one exists, otherwise
 
 Property-like accessor that returns the ``StructInfo`` pointer for the struct described by the given ``TypeInfo``, or null if not a struct type.
 
-:Properties: * **enumType** :  :ref:`EnumInfo <handle-rtti-EnumInfo>` ?
+:Properties: * **enumType** :  :ref:`EnumInfo <handle-rtti-EnumInfo>`?
 
              * **isRef** : bool
 
@@ -1403,19 +1403,19 @@ Property-like accessor that returns the ``StructInfo`` pointer for the struct de
 
              * **isImplicit** : bool
 
-             * **annotation** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` ?
+             * **annotation** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`?
 
-             * **annotation_or_name** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` ?
+             * **annotation_or_name** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`?
 
-             * **structType** :  :ref:`StructInfo <handle-rtti-StructInfo>` ?
+             * **structType** :  :ref:`StructInfo <handle-rtti-StructInfo>`?
 
 Object which represents any Daslang type.
 
-:Fields: * **firstType** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? - first type parameter
+:Fields: * **firstType** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`? - first type parameter
 
-         * **secondType** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? - second type parameter
+         * **secondType** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`? - second type parameter
 
-         * **argTypes** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ?? - argument types list
+         * **argTypes** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`?? - argument types list
 
          * **argNames** : string? - argument names list
 
@@ -1423,11 +1423,11 @@ Object which represents any Daslang type.
 
          * **hash** : uint64 - hash of the type
 
-         * **_type** :  :ref:`Type <enum-rtti-Type>`  - kind of the type
+         * **_type** :  :ref:`Type <enum-rtti-Type>` - kind of the type
 
-         * **basicType** :  :ref:`Type <enum-rtti-Type>`  - basic type category
+         * **basicType** :  :ref:`Type <enum-rtti-Type>` - basic type category
 
-         * **flags** :  :ref:`TypeInfoFlags <alias-TypeInfoFlags>`  - flags associated with the type
+         * **flags** :  :ref:`TypeInfoFlags <alias-TypeInfoFlags>` - flags associated with the type
 
          * **size** : uint - size of the type in bytes
 
@@ -1442,19 +1442,19 @@ Object which represents any Daslang type.
 
 Object which represents variable declaration.
 
-:Fields: * **firstType** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? - first type parameter
+:Fields: * **firstType** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`? - first type parameter
 
-         * **secondType** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? - second type parameter
+         * **secondType** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`? - second type parameter
 
-         * **argTypes** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ?? - argument types list
+         * **argTypes** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`?? - argument types list
 
          * **argNames** : string? - argument names list
 
          * **hash** : uint64 - hash of the type
 
-         * **basicType** :  :ref:`Type <enum-rtti-Type>`  - basic type category
+         * **basicType** :  :ref:`Type <enum-rtti-Type>` - basic type category
 
-         * **flags** :  :ref:`TypeInfoFlags <alias-TypeInfoFlags>`  - flags associated with the type
+         * **flags** :  :ref:`TypeInfoFlags <alias-TypeInfoFlags>` - flags associated with the type
 
          * **size** : uint - size of the type in bytes
 
@@ -1468,7 +1468,7 @@ Object which represents variable declaration.
 
          * **name** : string - name of the variable
 
-         * **annotation_arguments** :  :ref:`AnnotationArguments <handle-rtti-AnnotationArguments>` ? - annotation arguments
+         * **annotation_arguments** :  :ref:`AnnotationArguments <handle-rtti-AnnotationArguments>`? - annotation arguments
 
          * **offset** : uint - offset of the variable in the structure
 
@@ -1481,19 +1481,19 @@ Object which represents variable declaration.
 
 Object which represents local variable declaration.
 
-:Fields: * **firstType** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? - first type parameter
+:Fields: * **firstType** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`? - first type parameter
 
-         * **secondType** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? - second type parameter
+         * **secondType** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`? - second type parameter
 
-         * **argTypes** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ?? - argument types list
+         * **argTypes** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`?? - argument types list
 
          * **argNames** : string? - argument names list
 
          * **hash** : uint64 - hash of the type
 
-         * **basicType** :  :ref:`Type <enum-rtti-Type>`  - basic type category
+         * **basicType** :  :ref:`Type <enum-rtti-Type>` - basic type category
 
-         * **flags** :  :ref:`TypeInfoFlags <alias-TypeInfoFlags>`  - flags associated with the type
+         * **flags** :  :ref:`TypeInfoFlags <alias-TypeInfoFlags>` - flags associated with the type
 
          * **size** : uint - size of the type in bytes
 
@@ -1501,13 +1501,13 @@ Object which represents local variable declaration.
 
          * **dimSize** : uint - number of dimensions in the type
 
-         * **visibility** :  :ref:`LineInfo <handle-rtti-LineInfo>`  - visibility information
+         * **visibility** :  :ref:`LineInfo <handle-rtti-LineInfo>` - visibility information
 
          * **name** : string - name of the variable
 
          * **stackTop** : uint - stack top offset
 
-         * **localFlags** :  :ref:`LocalVariableInfoFlags <alias-LocalVariableInfoFlags>`  - local variable flags
+         * **localFlags** :  :ref:`LocalVariableInfoFlags <alias-LocalVariableInfoFlags>` - local variable flags
 
 
 .. _handle-rtti-FuncInfo:
@@ -1520,13 +1520,13 @@ Object which represents function declaration.
 
          * **cppName** : string - C++ name (for the builtin functions)
 
-         * **fields** :  :ref:`VarInfo <handle-rtti-VarInfo>` ?? - function parameters
+         * **fields** :  :ref:`VarInfo <handle-rtti-VarInfo>`?? - function parameters
 
-         * **result** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? - function result type
+         * **result** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`? - function result type
 
-         * **locals** :  :ref:`LocalVariableInfo <handle-rtti-LocalVariableInfo>` ?? - local variables (with visibility info)
+         * **locals** :  :ref:`LocalVariableInfo <handle-rtti-LocalVariableInfo>`?? - local variables (with visibility info)
 
-         * **globals** :  :ref:`VarInfo <handle-rtti-VarInfo>` ?? - accessed global variables
+         * **globals** :  :ref:`VarInfo <handle-rtti-VarInfo>`?? - accessed global variables
 
          * **hash** : uint64 - hash of the function
 
@@ -1551,7 +1551,7 @@ Object which represents function declaration.
 
 Property-like accessor that returns the ``LineInfo`` (source location) associated with the given function's ``FuncInfo``.
 
-:Properties: * **lineInfo** :  :ref:`LineInfo <handle-rtti-LineInfo>` ?
+:Properties: * **lineInfo** :  :ref:`LineInfo <handle-rtti-LineInfo>`?
 
 Object which represents simulated function in the `Context`.
 
@@ -1559,13 +1559,13 @@ Object which represents simulated function in the `Context`.
 
          * **mangledName** : string - mangled function name (with arguments and types encoded)
 
-         * **debugInfo** :  :ref:`FuncInfo <handle-rtti-FuncInfo>` ? - pointer to the function debug info, if available
+         * **debugInfo** :  :ref:`FuncInfo <handle-rtti-FuncInfo>`? - pointer to the function debug info, if available
 
          * **mangledNameHash** : uint64 - hash of the mangled function name
 
          * **stackSize** : uint - stack size in bytes
 
-         * **flags** :  :ref:`SimFunctionFlags <alias-SimFunctionFlags>`  - flags associated with the function
+         * **flags** :  :ref:`SimFunctionFlags <alias-SimFunctionFlags>` - flags associated with the function
 
 
 .. _handle-rtti-DebugInfoHelper:
@@ -1616,13 +1616,13 @@ Handled type representing all annotations attached to a single object (function,
 Initialization and finalization
 +++++++++++++++++++++++++++++++
 
-  *  :ref:`CodeOfPolicies () : CodeOfPolicies <function-rtti_CodeOfPolicies>` 
-  *  :ref:`LineInfo () : LineInfo <function-rtti_LineInfo>` 
-  *  :ref:`LineInfo (arg0: FileInfo? implicit; arg1: int; arg2: int; arg3: int; arg4: int) : LineInfo <function-rtti_LineInfo_FileInfo_q__implicit_int_int_int_int>` 
-  *  :ref:`RttiValue_nothing () : auto <function-rtti_RttiValue_nothing>` 
-  *  :ref:`using (arg0: block\<(CodeOfPolicies):void\>) <function-rtti_using_block_ls_CodeOfPolicies_c_void_gr_>` 
-  *  :ref:`using (arg0: block\<(ModuleGroup):void\>) <function-rtti_using_block_ls_ModuleGroup_c_void_gr_>` 
-  *  :ref:`using (arg0: block\<(recursive_mutex):void\>) <function-rtti_using_block_ls_recursive_mutex_c_void_gr_>` 
+  *  :ref:`CodeOfPolicies () : CodeOfPolicies <function-rtti_CodeOfPolicies>`
+  *  :ref:`LineInfo () : LineInfo <function-rtti_LineInfo>`
+  *  :ref:`LineInfo (arg0: FileInfo? implicit; arg1: int; arg2: int; arg3: int; arg4: int) : LineInfo <function-rtti_LineInfo_FileInfo_q__implicit_int_int_int_int>`
+  *  :ref:`RttiValue_nothing () : auto <function-rtti_RttiValue_nothing>`
+  *  :ref:`using (arg0: block\<(CodeOfPolicies):void\>) <function-rtti_using_block_ls_CodeOfPolicies_c_void_gr_>`
+  *  :ref:`using (arg0: block\<(ModuleGroup):void\>) <function-rtti_using_block_ls_ModuleGroup_c_void_gr_>`
+  *  :ref:`using (arg0: block\<(recursive_mutex):void\>) <function-rtti_using_block_ls_recursive_mutex_c_void_gr_>`
 
 .. _function-rtti_CodeOfPolicies:
 
@@ -1662,7 +1662,7 @@ using
 
 Creates a temporary RTTI helper object (e.g., ``Program``, ``DebugInfoHelper``) scoped to the given block, automatically finalized on block exit.
 
-:Arguments: * **arg0** : block<( :ref:`CodeOfPolicies <handle-rtti-CodeOfPolicies>` ):void> implicit
+:Arguments: * **arg0** : block<( :ref:`CodeOfPolicies <handle-rtti-CodeOfPolicies>`):void> implicit
 
 .. _function-rtti_using_block_ls_ModuleGroup_c_void_gr_:
 
@@ -1678,21 +1678,21 @@ Creates a temporary RTTI helper object (e.g., ``Program``, ``DebugInfoHelper``) 
 Type access
 +++++++++++
 
-  *  :ref:`arg_names (info: TypeInfo) : auto <function-rtti_arg_names_TypeInfo>` 
-  *  :ref:`arg_names (info: VarInfo) : auto <function-rtti_arg_names_VarInfo>` 
-  *  :ref:`arg_types (info: VarInfo) : auto <function-rtti_arg_types_VarInfo>` 
-  *  :ref:`arg_types (info: TypeInfo) : auto <function-rtti_arg_types_TypeInfo>` 
-  *  :ref:`builtin_is_same_type (a: TypeInfo const? implicit; b: TypeInfo const? implicit; refMatters: RefMatters; cosntMatters: ConstMatters; tempMatters: TemporaryMatters; topLevel: bool) : bool <function-rtti_builtin_is_same_type_TypeInfo_const_q__implicit_TypeInfo_const_q__implicit_RefMatters_ConstMatters_TemporaryMatters_bool>` 
-  *  :ref:`each_dim (info: TypeInfo) : auto <function-rtti_each_dim_TypeInfo>` 
-  *  :ref:`each_dim (info: VarInfo) : auto <function-rtti_each_dim_VarInfo>` 
-  *  :ref:`get_das_type_name (type: Type) : string <function-rtti_get_das_type_name_Type>` 
-  *  :ref:`get_dim (typeinfo: VarInfo implicit; index: int) : int <function-rtti_get_dim_VarInfo_implicit_int>` 
-  *  :ref:`get_dim (typeinfo: TypeInfo implicit; index: int) : int <function-rtti_get_dim_TypeInfo_implicit_int>` 
-  *  :ref:`get_type_align (type: TypeInfo? implicit) : int <function-rtti_get_type_align_TypeInfo_q__implicit>` 
-  *  :ref:`get_type_size (type: TypeInfo? implicit) : int <function-rtti_get_type_size_TypeInfo_q__implicit>` 
-  *  :ref:`is_compatible_cast (from: StructInfo const? implicit; to: StructInfo const? implicit) : bool <function-rtti_is_compatible_cast_StructInfo_const_q__implicit_StructInfo_const_q__implicit>` 
-  *  :ref:`is_compatible_cast (a: StructInfo; b: StructInfo) : auto <function-rtti_is_compatible_cast_StructInfo_StructInfo>` 
-  *  :ref:`is_same_type (a: TypeInfo; b: TypeInfo; refMatters: RefMatters = RefMatters.yes; constMatters: ConstMatters = ConstMatters.yes; temporaryMatters: TemporaryMatters = TemporaryMatters.yes; topLevel: bool = true) : auto <function-rtti_is_same_type_TypeInfo_TypeInfo_RefMatters_ConstMatters_TemporaryMatters_bool>` 
+  *  :ref:`arg_names (info: TypeInfo) : auto <function-rtti_arg_names_TypeInfo>`
+  *  :ref:`arg_names (info: VarInfo) : auto <function-rtti_arg_names_VarInfo>`
+  *  :ref:`arg_types (info: VarInfo) : auto <function-rtti_arg_types_VarInfo>`
+  *  :ref:`arg_types (info: TypeInfo) : auto <function-rtti_arg_types_TypeInfo>`
+  *  :ref:`builtin_is_same_type (a: TypeInfo const? implicit; b: TypeInfo const? implicit; refMatters: RefMatters; cosntMatters: ConstMatters; tempMatters: TemporaryMatters; topLevel: bool) : bool <function-rtti_builtin_is_same_type_TypeInfo_const_q__implicit_TypeInfo_const_q__implicit_RefMatters_ConstMatters_TemporaryMatters_bool>`
+  *  :ref:`each_dim (info: TypeInfo) : auto <function-rtti_each_dim_TypeInfo>`
+  *  :ref:`each_dim (info: VarInfo) : auto <function-rtti_each_dim_VarInfo>`
+  *  :ref:`get_das_type_name (type: Type) : string <function-rtti_get_das_type_name_Type>`
+  *  :ref:`get_dim (typeinfo: VarInfo implicit; index: int) : int <function-rtti_get_dim_VarInfo_implicit_int>`
+  *  :ref:`get_dim (typeinfo: TypeInfo implicit; index: int) : int <function-rtti_get_dim_TypeInfo_implicit_int>`
+  *  :ref:`get_type_align (type: TypeInfo? implicit) : int <function-rtti_get_type_align_TypeInfo_q__implicit>`
+  *  :ref:`get_type_size (type: TypeInfo? implicit) : int <function-rtti_get_type_size_TypeInfo_q__implicit>`
+  *  :ref:`is_compatible_cast (from: StructInfo const? implicit; to: StructInfo const? implicit) : bool <function-rtti_is_compatible_cast_StructInfo_const_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`is_compatible_cast (a: StructInfo; b: StructInfo) : auto <function-rtti_is_compatible_cast_StructInfo_StructInfo>`
+  *  :ref:`is_same_type (a: TypeInfo; b: TypeInfo; refMatters: RefMatters = RefMatters.yes; constMatters: ConstMatters = ConstMatters.yes; temporaryMatters: TemporaryMatters = TemporaryMatters.yes; topLevel: bool = true) : auto <function-rtti_is_same_type_TypeInfo_TypeInfo_RefMatters_ConstMatters_TemporaryMatters_bool>`
 
 
 arg_names
@@ -1704,7 +1704,7 @@ arg_names
 
 Iterates through the argument names of an RTTI type, yielding each name as a ``string`` — used for inspecting function or call-site parameter names.
 
-:Arguments: * **info** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` 
+:Arguments: * **info** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`
 
 .. _function-rtti_arg_names_VarInfo:
 
@@ -1722,7 +1722,7 @@ arg_types
 
 Iterates through the argument types of an RTTI type, yielding each element as a ``TypeInfo`` pointer — used for inspecting function or call-site parameter types.
 
-:Arguments: * **info** :  :ref:`VarInfo <handle-rtti-VarInfo>` 
+:Arguments: * **info** :  :ref:`VarInfo <handle-rtti-VarInfo>`
 
 .. _function-rtti_arg_types_TypeInfo:
 
@@ -1736,15 +1736,15 @@ Iterates through the argument types of an RTTI type, yielding each element as a 
 
 Returns ``true`` if two ``TypeInfo`` pointers describe the same type, with flags controlling whether ref, const, temp, and other qualifiers are included in the comparison.
 
-:Arguments: * **a** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? implicit
+:Arguments: * **a** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`? implicit
 
-            * **b** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? implicit
+            * **b** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`? implicit
 
-            * **refMatters** :  :ref:`RefMatters <enum-rtti-RefMatters>` 
+            * **refMatters** :  :ref:`RefMatters <enum-rtti-RefMatters>`
 
-            * **cosntMatters** :  :ref:`ConstMatters <enum-rtti-ConstMatters>` 
+            * **cosntMatters** :  :ref:`ConstMatters <enum-rtti-ConstMatters>`
 
-            * **tempMatters** :  :ref:`TemporaryMatters <enum-rtti-TemporaryMatters>` 
+            * **tempMatters** :  :ref:`TemporaryMatters <enum-rtti-TemporaryMatters>`
 
             * **topLevel** : bool
 
@@ -1758,7 +1758,7 @@ each_dim
 
 Iterates through the dimension sizes of a fixed-size array ``TypeInfo``, yielding each ``int`` dimension value (e.g., ``int[3][4]`` yields 3 then 4).
 
-:Arguments: * **info** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` 
+:Arguments: * **info** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`
 
 .. _function-rtti_each_dim_VarInfo:
 
@@ -1772,7 +1772,7 @@ Iterates through the dimension sizes of a fixed-size array ``TypeInfo``, yieldin
 
 Returns the canonical ``string`` name of the given ``Type`` enumeration value (e.g., ``tInt`` → ``"int"``).
 
-:Arguments: * **type** :  :ref:`Type <enum-rtti-Type>` 
+:Arguments: * **type** :  :ref:`Type <enum-rtti-Type>`
 
 
 get_dim
@@ -1784,7 +1784,7 @@ get_dim
 
 Returns the dimension size (``int``) at the specified index for a fixed-size array type described by ``TypeInfo``.
 
-:Arguments: * **typeinfo** :  :ref:`VarInfo <handle-rtti-VarInfo>`  implicit
+:Arguments: * **typeinfo** :  :ref:`VarInfo <handle-rtti-VarInfo>` implicit
 
             * **index** : int
 
@@ -1800,7 +1800,7 @@ Returns the dimension size (``int``) at the specified index for a fixed-size arr
 
 Returns the memory alignment (``int``, in bytes) of the type described by the given ``TypeInfo``.
 
-:Arguments: * **type** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? implicit
+:Arguments: * **type** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`? implicit
 
 .. _function-rtti_get_type_size_TypeInfo_q__implicit:
 
@@ -1808,7 +1808,7 @@ Returns the memory alignment (``int``, in bytes) of the type described by the gi
 
 Returns the size (``int``, in bytes) of the type described by the given ``TypeInfo``.
 
-:Arguments: * **type** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? implicit
+:Arguments: * **type** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`? implicit
 
 
 is_compatible_cast
@@ -1820,9 +1820,9 @@ is_compatible_cast
 
 Returns ``true`` if an object of type ``from`` (``StructInfo``) can be safely cast to type ``to`` (``StructInfo``), following the class hierarchy.
 
-:Arguments: * **from** :  :ref:`StructInfo <handle-rtti-StructInfo>` ? implicit
+:Arguments: * **from** :  :ref:`StructInfo <handle-rtti-StructInfo>`? implicit
 
-            * **to** :  :ref:`StructInfo <handle-rtti-StructInfo>` ? implicit
+            * **to** :  :ref:`StructInfo <handle-rtti-StructInfo>`? implicit
 
 .. _function-rtti_is_compatible_cast_StructInfo_StructInfo:
 
@@ -1836,15 +1836,15 @@ Returns ``true`` if an object of type ``from`` (``StructInfo``) can be safely ca
 
 Returns ``true`` if two ``TypeInfo`` objects describe the same type, with flags controlling comparison of qualifiers (ref, const, temp, etc.).
 
-:Arguments: * **a** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` 
+:Arguments: * **a** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`
 
-            * **b** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` 
+            * **b** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`
 
-            * **refMatters** :  :ref:`RefMatters <enum-rtti-RefMatters>` 
+            * **refMatters** :  :ref:`RefMatters <enum-rtti-RefMatters>`
 
-            * **constMatters** :  :ref:`ConstMatters <enum-rtti-ConstMatters>` 
+            * **constMatters** :  :ref:`ConstMatters <enum-rtti-ConstMatters>`
 
-            * **temporaryMatters** :  :ref:`TemporaryMatters <enum-rtti-TemporaryMatters>` 
+            * **temporaryMatters** :  :ref:`TemporaryMatters <enum-rtti-TemporaryMatters>`
 
             * **topLevel** : bool
 
@@ -1852,22 +1852,22 @@ Returns ``true`` if two ``TypeInfo`` objects describe the same type, with flags 
 Rtti context access
 +++++++++++++++++++
 
-  *  :ref:`class_info (cl: auto) : StructInfo const? <function-rtti_class_info_auto_0x74>` 
-  *  :ref:`context_for_each_function (blk: block\<(info:FuncInfo):void\>) : auto <function-rtti_context_for_each_function_block_ls_info_c_FuncInfo_c_void_gr_>` 
-  *  :ref:`context_for_each_variable (blk: block\<(info:VarInfo):void\>) : auto <function-rtti_context_for_each_variable_block_ls_info_c_VarInfo_c_void_gr_>` 
-  *  :ref:`get_function_by_mnh (context: Context implicit; MNH: uint64) : function\<():void\> <function-rtti_get_function_by_mnh_Context_implicit_uint64>` 
-  *  :ref:`get_function_info (context: any; index: int) : FuncInfo <function-rtti_get_function_info_any_int>` 
-  *  :ref:`get_function_info (context: Context implicit; function: function\<():void\>) : FuncInfo const? <function-rtti_get_function_info_Context_implicit_function_ls__c_void_gr_>` 
-  *  :ref:`get_line_info () : LineInfo <function-rtti_get_line_info>` 
-  *  :ref:`get_line_info (depth: int) : LineInfo <function-rtti_get_line_info_int>` 
-  *  :ref:`get_total_functions (context: Context implicit) : int <function-rtti_get_total_functions_Context_implicit>` 
-  *  :ref:`get_total_variables (context: Context implicit) : int <function-rtti_get_total_variables_Context_implicit>` 
-  *  :ref:`get_variable_info (context: any; index: int) : VarInfo <function-rtti_get_variable_info_any_int>` 
-  *  :ref:`get_variable_value (varInfo: VarInfo implicit) : RttiValue <function-rtti_get_variable_value_VarInfo_implicit>` 
-  *  :ref:`this_context () : Context& <function-rtti_this_context>` 
-  *  :ref:`type_info (cl: auto) : TypeInfo const? <function-rtti_type_info_auto_0x94>` 
-  *  :ref:`type_info (vinfo: VarInfo) : TypeInfo const? <function-rtti_type_info_VarInfo>` 
-  *  :ref:`type_info (vinfo: LocalVariableInfo) : TypeInfo const? <function-rtti_type_info_LocalVariableInfo>` 
+  *  :ref:`class_info (cl: auto) : StructInfo const? <function-rtti_class_info_auto_0x74>`
+  *  :ref:`context_for_each_function (blk: block\<(info:FuncInfo):void\>) : auto <function-rtti_context_for_each_function_block_ls_info_c_FuncInfo_c_void_gr_>`
+  *  :ref:`context_for_each_variable (blk: block\<(info:VarInfo):void\>) : auto <function-rtti_context_for_each_variable_block_ls_info_c_VarInfo_c_void_gr_>`
+  *  :ref:`get_function_by_mnh (context: Context implicit; MNH: uint64) : function\<():void\> <function-rtti_get_function_by_mnh_Context_implicit_uint64>`
+  *  :ref:`get_function_info (context: any; index: int) : FuncInfo <function-rtti_get_function_info_any_int>`
+  *  :ref:`get_function_info (context: Context implicit; function: function\<():void\>) : FuncInfo const? <function-rtti_get_function_info_Context_implicit_function_ls__c_void_gr_>`
+  *  :ref:`get_line_info () : LineInfo <function-rtti_get_line_info>`
+  *  :ref:`get_line_info (depth: int) : LineInfo <function-rtti_get_line_info_int>`
+  *  :ref:`get_total_functions (context: Context implicit) : int <function-rtti_get_total_functions_Context_implicit>`
+  *  :ref:`get_total_variables (context: Context implicit) : int <function-rtti_get_total_variables_Context_implicit>`
+  *  :ref:`get_variable_info (context: any; index: int) : VarInfo <function-rtti_get_variable_info_any_int>`
+  *  :ref:`get_variable_value (varInfo: VarInfo implicit) : RttiValue <function-rtti_get_variable_value_VarInfo_implicit>`
+  *  :ref:`this_context () : Context& <function-rtti_this_context>`
+  *  :ref:`type_info (cl: auto) : TypeInfo const? <function-rtti_type_info_auto_0x94>`
+  *  :ref:`type_info (vinfo: VarInfo) : TypeInfo const? <function-rtti_type_info_VarInfo>`
+  *  :ref:`type_info (vinfo: LocalVariableInfo) : TypeInfo const? <function-rtti_type_info_LocalVariableInfo>`
 
 .. _function-rtti_class_info_auto_0x74:
 
@@ -1883,7 +1883,7 @@ Returns a ``StructInfo`` pointer for the given class instance, enabling runtime 
 
 Iterates through all functions in the given ``Context``, yielding a ``FuncInfo`` pointer for each registered function.
 
-:Arguments: * **blk** : block<(info: :ref:`FuncInfo <handle-rtti-FuncInfo>` ):void>
+:Arguments: * **blk** : block<(info: :ref:`FuncInfo <handle-rtti-FuncInfo>`):void>
 
 .. _function-rtti_context_for_each_variable_block_ls_info_c_VarInfo_c_void_gr_:
 
@@ -1891,7 +1891,7 @@ Iterates through all functions in the given ``Context``, yielding a ``FuncInfo``
 
 Iterates through all global variables in the given ``Context``, yielding a ``VarInfo`` pointer for each registered variable.
 
-:Arguments: * **blk** : block<(info: :ref:`VarInfo <handle-rtti-VarInfo>` ):void>
+:Arguments: * **blk** : block<(info: :ref:`VarInfo <handle-rtti-VarInfo>`):void>
 
 .. _function-rtti_get_function_by_mnh_Context_implicit_uint64:
 
@@ -1899,7 +1899,7 @@ Iterates through all global variables in the given ``Context``, yielding a ``Var
 
 Returns a ``SimFunction`` pointer looked up by mangled name hash — an alternative form of ``get_function_address``.
 
-:Arguments: * **context** :  :ref:`Context <handle-rtti-Context>`  implicit
+:Arguments: * **context** :  :ref:`Context <handle-rtti-Context>` implicit
 
             * **MNH** : uint64
 
@@ -1945,7 +1945,7 @@ Returns a ``LineInfo`` structure representing the source location (file, line, c
 
 Returns the total number of registered functions (``int``) in the given ``Context``.
 
-:Arguments: * **context** :  :ref:`Context <handle-rtti-Context>`  implicit
+:Arguments: * **context** :  :ref:`Context <handle-rtti-Context>` implicit
 
 .. _function-rtti_get_total_variables_Context_implicit:
 
@@ -1953,7 +1953,7 @@ Returns the total number of registered functions (``int``) in the given ``Contex
 
 Returns the total number of global variables (``int``) in the given ``Context``.
 
-:Arguments: * **context** :  :ref:`Context <handle-rtti-Context>`  implicit
+:Arguments: * **context** :  :ref:`Context <handle-rtti-Context>` implicit
 
 .. _function-rtti_get_variable_info_any_int:
 
@@ -1971,7 +1971,7 @@ Returns the ``VarInfo`` pointer for a global variable at the given index in the 
 
 Returns an ``RttiValue`` variant representing the current value of a global variable, looked up by ``VarInfo`` in the given ``Context``.
 
-:Arguments: * **varInfo** :  :ref:`VarInfo <handle-rtti-VarInfo>`  implicit
+:Arguments: * **varInfo** :  :ref:`VarInfo <handle-rtti-VarInfo>` implicit
 
 .. _function-rtti_this_context:
 
@@ -2005,10 +2005,10 @@ Returns the ``TypeInfo`` object for the specified local variable or expression, 
 Program access
 ++++++++++++++
 
-  *  :ref:`get_module (name: string implicit) : Module? <function-rtti_get_module_string_implicit>` 
-  *  :ref:`get_this_module (program: smart_ptr\<Program\> implicit) : Module? <function-rtti_get_this_module_smart_ptr_ls_Program_gr__implicit>` 
-  *  :ref:`program_for_each_module (program: smart_ptr\<Program\> implicit; block: block\<(Module?):void\>) <function-rtti_program_for_each_module_smart_ptr_ls_Program_gr__implicit_block_ls_Module_q__c_void_gr_>` 
-  *  :ref:`program_for_each_registered_module (block: block\<(Module?):void\>) <function-rtti_program_for_each_registered_module_block_ls_Module_q__c_void_gr_>` 
+  *  :ref:`get_module (name: string implicit) : Module? <function-rtti_get_module_string_implicit>`
+  *  :ref:`get_this_module (program: smart_ptr\<Program\> implicit) : Module? <function-rtti_get_this_module_smart_ptr_ls_Program_gr__implicit>`
+  *  :ref:`program_for_each_module (program: smart_ptr\<Program\> implicit; block: block\<(Module?):void\>) <function-rtti_program_for_each_module_smart_ptr_ls_Program_gr__implicit_block_ls_Module_q__c_void_gr_>`
+  *  :ref:`program_for_each_registered_module (block: block\<(Module?):void\>) <function-rtti_program_for_each_registered_module_block_ls_Module_q__c_void_gr_>`
 
 .. _function-rtti_get_module_string_implicit:
 
@@ -2024,7 +2024,7 @@ Returns a ``Module`` pointer looked up by module name ``string``, or null if no 
 
 Returns the ``Module`` pointer for the module currently being compiled or inferred, retrieved from the ``Program``.
 
-:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
+:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>`> implicit
 
 .. _function-rtti_program_for_each_module_smart_ptr_ls_Program_gr__implicit_block_ls_Module_q__c_void_gr_:
 
@@ -2032,9 +2032,9 @@ Returns the ``Module`` pointer for the module currently being compiled or inferr
 
 Iterates through all modules referenced by the given ``Program`` (including transitive dependencies), yielding a ``Module`` pointer for each.
 
-:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
+:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>`> implicit
 
-            * **block** : block<( :ref:`Module <handle-rtti-Module>` ?):void> implicit
+            * **block** : block<( :ref:`Module <handle-rtti-Module>`?):void> implicit
 
 .. _function-rtti_program_for_each_registered_module_block_ls_Module_q__c_void_gr_:
 
@@ -2042,19 +2042,19 @@ Iterates through all modules referenced by the given ``Program`` (including tran
 
 Iterates through all modules registered in the daslang runtime (globally, not per-program), yielding a ``Module`` pointer for each.
 
-:Arguments: * **block** : block<( :ref:`Module <handle-rtti-Module>` ?):void> implicit
+:Arguments: * **block** : block<( :ref:`Module <handle-rtti-Module>`?):void> implicit
 
 +++++++++++++
 Module access
 +++++++++++++
 
-  *  :ref:`module_for_each_annotation (module: Module? implicit; block: block\<(Annotation):void\>) <function-rtti_module_for_each_annotation_Module_q__implicit_block_ls_Annotation_c_void_gr_>` 
-  *  :ref:`module_for_each_dependency (module: Module? implicit; block: block\<(Module?;bool):void\>) <function-rtti_module_for_each_dependency_Module_q__implicit_block_ls_Module_q_;bool_c_void_gr_>` 
-  *  :ref:`module_for_each_enumeration (module: Module? implicit; block: block\<(EnumInfo):void\>) <function-rtti_module_for_each_enumeration_Module_q__implicit_block_ls_EnumInfo_c_void_gr_>` 
-  *  :ref:`module_for_each_function (module: Module? implicit; block: block\<(FuncInfo):void\>) <function-rtti_module_for_each_function_Module_q__implicit_block_ls_FuncInfo_c_void_gr_>` 
-  *  :ref:`module_for_each_generic (module: Module? implicit; block: block\<(FuncInfo):void\>) <function-rtti_module_for_each_generic_Module_q__implicit_block_ls_FuncInfo_c_void_gr_>` 
-  *  :ref:`module_for_each_global (module: Module? implicit; block: block\<(VarInfo):void\>) <function-rtti_module_for_each_global_Module_q__implicit_block_ls_VarInfo_c_void_gr_>` 
-  *  :ref:`module_for_each_structure (module: Module? implicit; block: block\<(StructInfo):void\>) <function-rtti_module_for_each_structure_Module_q__implicit_block_ls_StructInfo_c_void_gr_>` 
+  *  :ref:`module_for_each_annotation (module: Module? implicit; block: block\<(Annotation):void\>) <function-rtti_module_for_each_annotation_Module_q__implicit_block_ls_Annotation_c_void_gr_>`
+  *  :ref:`module_for_each_dependency (module: Module? implicit; block: block\<(Module?;bool):void\>) <function-rtti_module_for_each_dependency_Module_q__implicit_block_ls_Module_q_;bool_c_void_gr_>`
+  *  :ref:`module_for_each_enumeration (module: Module? implicit; block: block\<(EnumInfo):void\>) <function-rtti_module_for_each_enumeration_Module_q__implicit_block_ls_EnumInfo_c_void_gr_>`
+  *  :ref:`module_for_each_function (module: Module? implicit; block: block\<(FuncInfo):void\>) <function-rtti_module_for_each_function_Module_q__implicit_block_ls_FuncInfo_c_void_gr_>`
+  *  :ref:`module_for_each_generic (module: Module? implicit; block: block\<(FuncInfo):void\>) <function-rtti_module_for_each_generic_Module_q__implicit_block_ls_FuncInfo_c_void_gr_>`
+  *  :ref:`module_for_each_global (module: Module? implicit; block: block\<(VarInfo):void\>) <function-rtti_module_for_each_global_Module_q__implicit_block_ls_VarInfo_c_void_gr_>`
+  *  :ref:`module_for_each_structure (module: Module? implicit; block: block\<(StructInfo):void\>) <function-rtti_module_for_each_structure_Module_q__implicit_block_ls_StructInfo_c_void_gr_>`
 
 .. _function-rtti_module_for_each_annotation_Module_q__implicit_block_ls_Annotation_c_void_gr_:
 
@@ -2062,9 +2062,9 @@ Module access
 
 Iterates through each annotation (handled type) in the given ``Module``, yielding an ``Annotation`` pointer for each registered annotation.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **block** : block<( :ref:`Annotation <handle-rtti-Annotation>` ):void> implicit
+            * **block** : block<( :ref:`Annotation <handle-rtti-Annotation>`):void> implicit
 
 .. _function-rtti_module_for_each_dependency_Module_q__implicit_block_ls_Module_q_;bool_c_void_gr_:
 
@@ -2072,9 +2072,9 @@ Iterates through each annotation (handled type) in the given ``Module``, yieldin
 
 Iterates through each module dependency of the given ``Module``, yielding the dependent ``Module`` pointer for each required module.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **block** : block<( :ref:`Module <handle-rtti-Module>` ?;bool):void> implicit
+            * **block** : block<( :ref:`Module <handle-rtti-Module>`?;bool):void> implicit
 
 .. _function-rtti_module_for_each_enumeration_Module_q__implicit_block_ls_EnumInfo_c_void_gr_:
 
@@ -2082,9 +2082,9 @@ Iterates through each module dependency of the given ``Module``, yielding the de
 
 Iterates through each enumeration declared in the given ``Module``, yielding an ``EnumInfo`` pointer for each enum.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **block** : block<( :ref:`EnumInfo <handle-rtti-EnumInfo>` ):void> implicit
+            * **block** : block<( :ref:`EnumInfo <handle-rtti-EnumInfo>`):void> implicit
 
 .. _function-rtti_module_for_each_function_Module_q__implicit_block_ls_FuncInfo_c_void_gr_:
 
@@ -2092,9 +2092,9 @@ Iterates through each enumeration declared in the given ``Module``, yielding an 
 
 Iterates through each function declared in the given ``Module``, yielding a ``FuncInfo`` pointer for each function.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **block** : block<( :ref:`FuncInfo <handle-rtti-FuncInfo>` ):void> implicit
+            * **block** : block<( :ref:`FuncInfo <handle-rtti-FuncInfo>`):void> implicit
 
 .. _function-rtti_module_for_each_generic_Module_q__implicit_block_ls_FuncInfo_c_void_gr_:
 
@@ -2102,9 +2102,9 @@ Iterates through each function declared in the given ``Module``, yielding a ``Fu
 
 Iterates through each generic (template) function declared in the given ``Module``, yielding a ``FuncInfo`` pointer for each generic.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **block** : block<( :ref:`FuncInfo <handle-rtti-FuncInfo>` ):void> implicit
+            * **block** : block<( :ref:`FuncInfo <handle-rtti-FuncInfo>`):void> implicit
 
 .. _function-rtti_module_for_each_global_Module_q__implicit_block_ls_VarInfo_c_void_gr_:
 
@@ -2112,9 +2112,9 @@ Iterates through each generic (template) function declared in the given ``Module
 
 Iterates through each global variable declared in the given ``Module``, yielding a ``VarInfo`` pointer for each variable.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **block** : block<( :ref:`VarInfo <handle-rtti-VarInfo>` ):void> implicit
+            * **block** : block<( :ref:`VarInfo <handle-rtti-VarInfo>`):void> implicit
 
 .. _function-rtti_module_for_each_structure_Module_q__implicit_block_ls_StructInfo_c_void_gr_:
 
@@ -2122,16 +2122,16 @@ Iterates through each global variable declared in the given ``Module``, yielding
 
 Iterates through each structure declaration in the given ``Module``, yielding a ``StructInfo`` pointer for each struct.
 
-:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
+:Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **block** : block<( :ref:`StructInfo <handle-rtti-StructInfo>` ):void> implicit
+            * **block** : block<( :ref:`StructInfo <handle-rtti-StructInfo>`):void> implicit
 
 +++++++++++++++++
 Annotation access
 +++++++++++++++++
 
-  *  :ref:`add_annotation_argument (annotation: AnnotationArgumentList implicit; name: string implicit) : int <function-rtti_add_annotation_argument_AnnotationArgumentList_implicit_string_implicit>` 
-  *  :ref:`get_annotation_argument_value (info: AnnotationArgument implicit) : RttiValue <function-rtti_get_annotation_argument_value_AnnotationArgument_implicit>` 
+  *  :ref:`add_annotation_argument (annotation: AnnotationArgumentList implicit; name: string implicit) : int <function-rtti_add_annotation_argument_AnnotationArgumentList_implicit_string_implicit>`
+  *  :ref:`get_annotation_argument_value (info: AnnotationArgument implicit) : RttiValue <function-rtti_get_annotation_argument_value_AnnotationArgument_implicit>`
 
 .. _function-rtti_add_annotation_argument_AnnotationArgumentList_implicit_string_implicit:
 
@@ -2139,7 +2139,7 @@ Annotation access
 
 Appends an annotation argument (name-value pair) to the given ``AnnotationArgumentList``, used when constructing annotations programmatically.
 
-:Arguments: * **annotation** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  implicit
+:Arguments: * **annotation** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` implicit
 
             * **name** : string implicit
 
@@ -2149,18 +2149,18 @@ Appends an annotation argument (name-value pair) to the given ``AnnotationArgume
 
 Returns an ``RttiValue`` variant representing the value of a specific named argument from an ``AnnotationArgumentList``.
 
-:Arguments: * **info** :  :ref:`AnnotationArgument <handle-rtti-AnnotationArgument>`  implicit
+:Arguments: * **info** :  :ref:`AnnotationArgument <handle-rtti-AnnotationArgument>` implicit
 
 ++++++++++++++++++++++++++
 Compilation and simulation
 ++++++++++++++++++++++++++
 
-  *  :ref:`compile (module_name: string implicit; codeText: string implicit; codeOfPolicies: CodeOfPolicies implicit; exportAll: bool; block: block\<(bool;smart_ptr\<Program\>;das_string):void\>) <function-rtti_compile_string_implicit_string_implicit_CodeOfPolicies_implicit_bool_block_ls_bool;smart_ptr_ls_Program_gr_;das_string_c_void_gr_>` 
-  *  :ref:`compile (module_name: string implicit; codeText: string implicit; codeOfPolicies: CodeOfPolicies implicit; block: block\<(bool;smart_ptr\<Program\>;das_string):void\>) <function-rtti_compile_string_implicit_string_implicit_CodeOfPolicies_implicit_block_ls_bool;smart_ptr_ls_Program_gr_;das_string_c_void_gr_>` 
-  *  :ref:`compile_file (module_name: string implicit; fileAccess: smart_ptr\<FileAccess\> implicit; moduleGroup: ModuleGroup? implicit; codeOfPolicies: CodeOfPolicies implicit; block: block\<(bool;smart_ptr\<Program\>;das_string):void\>) <function-rtti_compile_file_string_implicit_smart_ptr_ls_FileAccess_gr__implicit_ModuleGroup_q__implicit_CodeOfPolicies_implicit_block_ls_bool;smart_ptr_ls_Program_gr_;das_string_c_void_gr_>` 
-  *  :ref:`for_each_expected_error (program: smart_ptr\<Program\> implicit; block: block\<(CompilationError;int):void\>) <function-rtti_for_each_expected_error_smart_ptr_ls_Program_gr__implicit_block_ls_CompilationError;int_c_void_gr_>` 
-  *  :ref:`for_each_require_declaration (program: smart_ptr\<Program\> implicit; block: block\<(Module?;string#;string#;bool;LineInfo):void\>) <function-rtti_for_each_require_declaration_smart_ptr_ls_Program_gr__implicit_block_ls_Module_q_;string_hh_;string_hh_;bool;LineInfo_c_void_gr_>` 
-  *  :ref:`simulate (program: smart_ptr\<Program\> const& implicit; block: block\<(bool;smart_ptr\<Context\>;das_string):void\>) <function-rtti_simulate_smart_ptr_ls_Program_gr__const_implicit_block_ls_bool;smart_ptr_ls_Context_gr_;das_string_c_void_gr_>` 
+  *  :ref:`compile (module_name: string implicit; codeText: string implicit; codeOfPolicies: CodeOfPolicies implicit; exportAll: bool; block: block\<(bool;smart_ptr\<Program\>;das_string):void\>) <function-rtti_compile_string_implicit_string_implicit_CodeOfPolicies_implicit_bool_block_ls_bool;smart_ptr_ls_Program_gr_;das_string_c_void_gr_>`
+  *  :ref:`compile (module_name: string implicit; codeText: string implicit; codeOfPolicies: CodeOfPolicies implicit; block: block\<(bool;smart_ptr\<Program\>;das_string):void\>) <function-rtti_compile_string_implicit_string_implicit_CodeOfPolicies_implicit_block_ls_bool;smart_ptr_ls_Program_gr_;das_string_c_void_gr_>`
+  *  :ref:`compile_file (module_name: string implicit; fileAccess: smart_ptr\<FileAccess\> implicit; moduleGroup: ModuleGroup? implicit; codeOfPolicies: CodeOfPolicies implicit; block: block\<(bool;smart_ptr\<Program\>;das_string):void\>) <function-rtti_compile_file_string_implicit_smart_ptr_ls_FileAccess_gr__implicit_ModuleGroup_q__implicit_CodeOfPolicies_implicit_block_ls_bool;smart_ptr_ls_Program_gr_;das_string_c_void_gr_>`
+  *  :ref:`for_each_expected_error (program: smart_ptr\<Program\> implicit; block: block\<(CompilationError;int):void\>) <function-rtti_for_each_expected_error_smart_ptr_ls_Program_gr__implicit_block_ls_CompilationError;int_c_void_gr_>`
+  *  :ref:`for_each_require_declaration (program: smart_ptr\<Program\> implicit; block: block\<(Module?;string#;string#;bool;LineInfo):void\>) <function-rtti_for_each_require_declaration_smart_ptr_ls_Program_gr__implicit_block_ls_Module_q_;string_hh_;string_hh_;bool;LineInfo_c_void_gr_>`
+  *  :ref:`simulate (program: smart_ptr\<Program\> const& implicit; block: block\<(bool;smart_ptr\<Context\>;das_string):void\>) <function-rtti_simulate_smart_ptr_ls_Program_gr__const_implicit_block_ls_bool;smart_ptr_ls_Context_gr_;das_string_c_void_gr_>`
 
 
 compile
@@ -2176,11 +2176,11 @@ Compiles a daslang program from a source code string using the provided ``FileAc
 
             * **codeText** : string implicit
 
-            * **codeOfPolicies** :  :ref:`CodeOfPolicies <handle-rtti-CodeOfPolicies>`  implicit
+            * **codeOfPolicies** :  :ref:`CodeOfPolicies <handle-rtti-CodeOfPolicies>` implicit
 
             * **exportAll** : bool
 
-            * **block** : block<(bool;smart_ptr< :ref:`Program <handle-rtti-Program>` >; :ref:`das_string <handle-builtin-das_string>` ):void> implicit
+            * **block** : block<(bool;smart_ptr< :ref:`Program <handle-rtti-Program>`>; :ref:`das_string <handle-builtin-das_string>`):void> implicit
 
 .. _function-rtti_compile_string_implicit_string_implicit_CodeOfPolicies_implicit_block_ls_bool;smart_ptr_ls_Program_gr_;das_string_c_void_gr_:
 
@@ -2196,13 +2196,13 @@ Compiles a daslang program from a file registered in the given ``FileAccess`` ob
 
 :Arguments: * **module_name** : string implicit
 
-            * **fileAccess** : smart_ptr< :ref:`FileAccess <handle-rtti-FileAccess>` > implicit
+            * **fileAccess** : smart_ptr< :ref:`FileAccess <handle-rtti-FileAccess>`> implicit
 
-            * **moduleGroup** :  :ref:`ModuleGroup <handle-rtti-ModuleGroup>` ? implicit
+            * **moduleGroup** :  :ref:`ModuleGroup <handle-rtti-ModuleGroup>`? implicit
 
-            * **codeOfPolicies** :  :ref:`CodeOfPolicies <handle-rtti-CodeOfPolicies>`  implicit
+            * **codeOfPolicies** :  :ref:`CodeOfPolicies <handle-rtti-CodeOfPolicies>` implicit
 
-            * **block** : block<(bool;smart_ptr< :ref:`Program <handle-rtti-Program>` >; :ref:`das_string <handle-builtin-das_string>` ):void> implicit
+            * **block** : block<(bool;smart_ptr< :ref:`Program <handle-rtti-Program>`>; :ref:`das_string <handle-builtin-das_string>`):void> implicit
 
 .. _function-rtti_for_each_expected_error_smart_ptr_ls_Program_gr__implicit_block_ls_CompilationError;int_c_void_gr_:
 
@@ -2210,9 +2210,9 @@ Compiles a daslang program from a file registered in the given ``FileAccess`` ob
 
 Iterates through each expected compilation error declared in the ``Program`` (via ``expect``), yielding the error code for each.
 
-:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
+:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>`> implicit
 
-            * **block** : block<( :ref:`CompilationError <enum-rtti-CompilationError>` ;int):void> implicit
+            * **block** : block<( :ref:`CompilationError <enum-rtti-CompilationError>`;int):void> implicit
 
 .. _function-rtti_for_each_require_declaration_smart_ptr_ls_Program_gr__implicit_block_ls_Module_q_;string_hh_;string_hh_;bool;LineInfo_c_void_gr_:
 
@@ -2220,9 +2220,9 @@ Iterates through each expected compilation error declared in the ``Program`` (vi
 
 Iterates through each ``require`` declaration of the compiled ``Program``, yielding the module name, public/private flag, and source ``LineInfo``.
 
-:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
+:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>`> implicit
 
-            * **block** : block<( :ref:`Module <handle-rtti-Module>` ?;string#;string#;bool; :ref:`LineInfo <handle-rtti-LineInfo>` &):void> implicit
+            * **block** : block<( :ref:`Module <handle-rtti-Module>`?;string#;string#;bool; :ref:`LineInfo <handle-rtti-LineInfo>`&):void> implicit
 
 .. _function-rtti_simulate_smart_ptr_ls_Program_gr__const_implicit_block_ls_bool;smart_ptr_ls_Context_gr_;das_string_c_void_gr_:
 
@@ -2230,17 +2230,17 @@ Iterates through each ``require`` declaration of the compiled ``Program``, yield
 
 Simulates (links and initializes) a compiled ``Program``, returning a ``Context`` pointer ready for function execution, or null on failure.
 
-:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` >& implicit
+:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>`>& implicit
 
-            * **block** : block<(bool;smart_ptr< :ref:`Context <handle-rtti-Context>` >; :ref:`das_string <handle-builtin-das_string>` ):void> implicit
+            * **block** : block<(bool;smart_ptr< :ref:`Context <handle-rtti-Context>`>; :ref:`das_string <handle-builtin-das_string>`):void> implicit
 
 +++++++++++
 File access
 +++++++++++
 
-  *  :ref:`add_file_access_root (access: smart_ptr\<FileAccess\> implicit; mod: string implicit; path: string implicit) : bool <function-rtti_add_file_access_root_smart_ptr_ls_FileAccess_gr__implicit_string_implicit_string_implicit>` 
-  *  :ref:`make_file_access (project: string implicit) : smart_ptr\<FileAccess\> <function-rtti_make_file_access_string_implicit>` 
-  *  :ref:`set_file_source (access: smart_ptr\<FileAccess\> implicit; fileName: string implicit; text: string implicit) : bool <function-rtti_set_file_source_smart_ptr_ls_FileAccess_gr__implicit_string_implicit_string_implicit>` 
+  *  :ref:`add_file_access_root (access: smart_ptr\<FileAccess\> implicit; mod: string implicit; path: string implicit) : bool <function-rtti_add_file_access_root_smart_ptr_ls_FileAccess_gr__implicit_string_implicit_string_implicit>`
+  *  :ref:`make_file_access (project: string implicit) : smart_ptr\<FileAccess\> <function-rtti_make_file_access_string_implicit>`
+  *  :ref:`set_file_source (access: smart_ptr\<FileAccess\> implicit; fileName: string implicit; text: string implicit) : bool <function-rtti_set_file_source_smart_ptr_ls_FileAccess_gr__implicit_string_implicit_string_implicit>`
 
 .. _function-rtti_add_file_access_root_smart_ptr_ls_FileAccess_gr__implicit_string_implicit_string_implicit:
 
@@ -2248,7 +2248,7 @@ File access
 
 Adds an extra root directory (search path) to the given ``FileAccess`` object, expanding where ``require`` resolves files from.
 
-:Arguments: * **access** : smart_ptr< :ref:`FileAccess <handle-rtti-FileAccess>` > implicit
+:Arguments: * **access** : smart_ptr< :ref:`FileAccess <handle-rtti-FileAccess>`> implicit
 
             * **mod** : string implicit
 
@@ -2268,7 +2268,7 @@ Creates and returns a new ``FileAccessPtr`` (``smart_ptr<FileAccess>``) initiali
 
 Registers a source code ``string`` for the given file name inside the ``FileAccess`` object, allowing in-memory compilation without disk files.
 
-:Arguments: * **access** : smart_ptr< :ref:`FileAccess <handle-rtti-FileAccess>` > implicit
+:Arguments: * **access** : smart_ptr< :ref:`FileAccess <handle-rtti-FileAccess>`> implicit
 
             * **fileName** : string implicit
 
@@ -2278,10 +2278,10 @@ Registers a source code ``string`` for the given file name inside the ``FileAcce
 Structure access
 ++++++++++++++++
 
-  *  :ref:`basic_struct_for_each_field (annotation: BasicStructureAnnotation implicit; block: block\<(string;string;TypeInfo;uint):void\>) <function-rtti_basic_struct_for_each_field_BasicStructureAnnotation_implicit_block_ls_string;string;TypeInfo;uint_c_void_gr_>` 
-  *  :ref:`basic_struct_for_each_parent (annotation: BasicStructureAnnotation implicit; block: block\<(Annotation?):void\>) <function-rtti_basic_struct_for_each_parent_BasicStructureAnnotation_implicit_block_ls_Annotation_q__c_void_gr_>` 
-  *  :ref:`rtti_builtin_structure_for_each_annotation (struct: StructInfo implicit; block: block\<():void\>) <function-rtti_rtti_builtin_structure_for_each_annotation_StructInfo_implicit_block_ls__c_void_gr_>` 
-  *  :ref:`structure_for_each_annotation (st: StructInfo; subexpr: block\<(ann:Annotation;args:AnnotationArguments):void\>) : auto <function-rtti_structure_for_each_annotation_StructInfo_block_ls_ann_c_Annotation;args_c_AnnotationArguments_c_void_gr_>` 
+  *  :ref:`basic_struct_for_each_field (annotation: BasicStructureAnnotation implicit; block: block\<(string;string;TypeInfo;uint):void\>) <function-rtti_basic_struct_for_each_field_BasicStructureAnnotation_implicit_block_ls_string;string;TypeInfo;uint_c_void_gr_>`
+  *  :ref:`basic_struct_for_each_parent (annotation: BasicStructureAnnotation implicit; block: block\<(Annotation?):void\>) <function-rtti_basic_struct_for_each_parent_BasicStructureAnnotation_implicit_block_ls_Annotation_q__c_void_gr_>`
+  *  :ref:`rtti_builtin_structure_for_each_annotation (struct: StructInfo implicit; block: block\<():void\>) <function-rtti_rtti_builtin_structure_for_each_annotation_StructInfo_implicit_block_ls__c_void_gr_>`
+  *  :ref:`structure_for_each_annotation (st: StructInfo; subexpr: block\<(ann:Annotation;args:AnnotationArguments):void\>) : auto <function-rtti_structure_for_each_annotation_StructInfo_block_ls_ann_c_Annotation;args_c_AnnotationArguments_c_void_gr_>`
 
 .. _function-rtti_basic_struct_for_each_field_BasicStructureAnnotation_implicit_block_ls_string;string;TypeInfo;uint_c_void_gr_:
 
@@ -2289,9 +2289,9 @@ Structure access
 
 Iterates through each field of a ``BasicStructureAnnotation``, yielding the field name, C++ name, ``TypeInfo``, and byte offset for each field.
 
-:Arguments: * **annotation** :  :ref:`BasicStructureAnnotation <handle-rtti-BasicStructureAnnotation>`  implicit
+:Arguments: * **annotation** :  :ref:`BasicStructureAnnotation <handle-rtti-BasicStructureAnnotation>` implicit
 
-            * **block** : block<(string;string; :ref:`TypeInfo <handle-rtti-TypeInfo>` ;uint):void> implicit
+            * **block** : block<(string;string; :ref:`TypeInfo <handle-rtti-TypeInfo>`;uint):void> implicit
 
 .. _function-rtti_basic_struct_for_each_parent_BasicStructureAnnotation_implicit_block_ls_Annotation_q__c_void_gr_:
 
@@ -2299,9 +2299,9 @@ Iterates through each field of a ``BasicStructureAnnotation``, yielding the fiel
 
 Iterates through each parent (base class) of a ``BasicStructureAnnotation``, yielding the parent ``TypeInfo`` for each ancestor.
 
-:Arguments: * **annotation** :  :ref:`BasicStructureAnnotation <handle-rtti-BasicStructureAnnotation>`  implicit
+:Arguments: * **annotation** :  :ref:`BasicStructureAnnotation <handle-rtti-BasicStructureAnnotation>` implicit
 
-            * **block** : block<( :ref:`Annotation <handle-rtti-Annotation>` ?):void> implicit
+            * **block** : block<( :ref:`Annotation <handle-rtti-Annotation>`?):void> implicit
 
 .. _function-rtti_rtti_builtin_structure_for_each_annotation_StructInfo_implicit_block_ls__c_void_gr_:
 
@@ -2309,7 +2309,7 @@ Iterates through each parent (base class) of a ``BasicStructureAnnotation``, yie
 
 Iterates through each annotation attached to a ``StructInfo``, yielding the annotation name and its ``AnnotationArgumentList`` for each.
 
-:Arguments: * **struct** :  :ref:`StructInfo <handle-rtti-StructInfo>`  implicit
+:Arguments: * **struct** :  :ref:`StructInfo <handle-rtti-StructInfo>` implicit
 
             * **block** : block<void> implicit
 
@@ -2319,19 +2319,19 @@ Iterates through each annotation attached to a ``StructInfo``, yielding the anno
 
 Iterates through each annotation attached to a ``StructInfo``, yielding the annotation name and ``AnnotationArgumentList`` — an alias of ``rtti_builtin_structure_for_each_annotation``.
 
-:Arguments: * **st** :  :ref:`StructInfo <handle-rtti-StructInfo>` 
+:Arguments: * **st** :  :ref:`StructInfo <handle-rtti-StructInfo>`
 
-            * **subexpr** : block<(ann: :ref:`Annotation <handle-rtti-Annotation>` ;args: :ref:`AnnotationArguments <handle-rtti-AnnotationArguments>` ):void>
+            * **subexpr** : block<(ann: :ref:`Annotation <handle-rtti-Annotation>`;args: :ref:`AnnotationArguments <handle-rtti-AnnotationArguments>`):void>
 
 +++++++++++++++++++++++++
 Data walking and printing
 +++++++++++++++++++++++++
 
-  *  :ref:`describe (lineinfo: LineInfo implicit; fully: bool = false) : string <function-rtti_describe_LineInfo_implicit_bool>` 
-  *  :ref:`describe (type: TypeInfo const? implicit) : string <function-rtti_describe_TypeInfo_const_q__implicit>` 
-  *  :ref:`get_mangled_name (type: TypeInfo const? implicit) : string <function-rtti_get_mangled_name_TypeInfo_const_q__implicit>` 
-  *  :ref:`sprint_data (data: float4; type: TypeInfo const? implicit; flags: bitfield) : string <function-rtti_sprint_data_float4_TypeInfo_const_q__implicit_bitfield>` 
-  *  :ref:`sprint_data (data: void? implicit; type: TypeInfo const? implicit; flags: bitfield) : string <function-rtti_sprint_data_void_q__implicit_TypeInfo_const_q__implicit_bitfield>` 
+  *  :ref:`describe (lineinfo: LineInfo implicit; fully: bool = false) : string <function-rtti_describe_LineInfo_implicit_bool>`
+  *  :ref:`describe (type: TypeInfo const? implicit) : string <function-rtti_describe_TypeInfo_const_q__implicit>`
+  *  :ref:`get_mangled_name (type: TypeInfo const? implicit) : string <function-rtti_get_mangled_name_TypeInfo_const_q__implicit>`
+  *  :ref:`sprint_data (data: float4; type: TypeInfo const? implicit; flags: bitfield) : string <function-rtti_sprint_data_float4_TypeInfo_const_q__implicit_bitfield>`
+  *  :ref:`sprint_data (data: void? implicit; type: TypeInfo const? implicit; flags: bitfield) : string <function-rtti_sprint_data_void_q__implicit_TypeInfo_const_q__implicit_bitfield>`
 
 
 describe
@@ -2343,7 +2343,7 @@ describe
 
 Returns a human-readable ``string`` description of an RTTI object (``TypeInfo``, ``VarInfo``, ``FuncInfo``, etc.), useful for logging and debug output.
 
-:Arguments: * **lineinfo** :  :ref:`LineInfo <handle-rtti-LineInfo>`  implicit
+:Arguments: * **lineinfo** :  :ref:`LineInfo <handle-rtti-LineInfo>` implicit
 
             * **fully** : bool
 
@@ -2359,7 +2359,7 @@ Returns a human-readable ``string`` description of an RTTI object (``TypeInfo``,
 
 Returns the full mangled name ``string`` for the given ``FuncInfo``, encoding its module, name, and argument types.
 
-:Arguments: * **type** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? implicit
+:Arguments: * **type** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`? implicit
 
 
 sprint_data
@@ -2373,7 +2373,7 @@ Returns a ``string`` representation of a value given its data pointer and ``Type
 
 :Arguments: * **data** : float4
 
-            * **type** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? implicit
+            * **type** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`? implicit
 
             * **flags** : bitfield<>
 
@@ -2387,10 +2387,10 @@ Returns a ``string`` representation of a value given its data pointer and ``Type
 Function and mangled name hash
 ++++++++++++++++++++++++++++++
 
-  *  :ref:`get_function_address (MNH: uint64; at: Context implicit) : uint64 <function-rtti_get_function_address_uint64_Context_implicit>` 
-  *  :ref:`get_function_by_mangled_name_hash (src: uint64; context: Context implicit) : function\<():void\> <function-rtti_get_function_by_mangled_name_hash_uint64_Context_implicit>` 
-  *  :ref:`get_function_by_mangled_name_hash (src: uint64) : function\<():void\> <function-rtti_get_function_by_mangled_name_hash_uint64>` 
-  *  :ref:`get_function_mangled_name_hash (src: function\<():void\>) : uint64 <function-rtti_get_function_mangled_name_hash_function_ls__c_void_gr_>` 
+  *  :ref:`get_function_address (MNH: uint64; at: Context implicit) : uint64 <function-rtti_get_function_address_uint64_Context_implicit>`
+  *  :ref:`get_function_by_mangled_name_hash (src: uint64; context: Context implicit) : function\<():void\> <function-rtti_get_function_by_mangled_name_hash_uint64_Context_implicit>`
+  *  :ref:`get_function_by_mangled_name_hash (src: uint64) : function\<():void\> <function-rtti_get_function_by_mangled_name_hash_uint64>`
+  *  :ref:`get_function_mangled_name_hash (src: function\<():void\>) : uint64 <function-rtti_get_function_mangled_name_hash_function_ls__c_void_gr_>`
 
 .. _function-rtti_get_function_address_uint64_Context_implicit:
 
@@ -2400,7 +2400,7 @@ Returns a ``SimFunction`` pointer looked up by mangled name hash in the given ``
 
 :Arguments: * **MNH** : uint64
 
-            * **at** :  :ref:`Context <handle-rtti-Context>`  implicit
+            * **at** :  :ref:`Context <handle-rtti-Context>` implicit
 
 
 get_function_by_mangled_name_hash
@@ -2414,7 +2414,7 @@ Returns a ``function<>`` lambda value looked up by its mangled name hash in the 
 
 :Arguments: * **src** : uint64
 
-            * **context** :  :ref:`Context <handle-rtti-Context>`  implicit
+            * **context** :  :ref:`Context <handle-rtti-Context>` implicit
 
 .. _function-rtti_get_function_by_mangled_name_hash_uint64:
 
@@ -2434,9 +2434,9 @@ Returns the ``uint64`` mangled name hash for the given ``function<>`` value, whi
 Context and mutex locking
 +++++++++++++++++++++++++
 
-  *  :ref:`lock_context (lock_context: Context implicit; block: block\<():void\>) <function-rtti_lock_context_Context_implicit_block_ls__c_void_gr_>` 
-  *  :ref:`lock_mutex (mutex: recursive_mutex implicit; block: block\<():void\>) <function-rtti_lock_mutex_recursive_mutex_implicit_block_ls__c_void_gr_>` 
-  *  :ref:`lock_this_context (block: block\<():void\>) <function-rtti_lock_this_context_block_ls__c_void_gr_>` 
+  *  :ref:`lock_context (lock_context: Context implicit; block: block\<():void\>) <function-rtti_lock_context_Context_implicit_block_ls__c_void_gr_>`
+  *  :ref:`lock_mutex (mutex: recursive_mutex implicit; block: block\<():void\>) <function-rtti_lock_mutex_recursive_mutex_implicit_block_ls__c_void_gr_>`
+  *  :ref:`lock_this_context (block: block\<():void\>) <function-rtti_lock_this_context_block_ls__c_void_gr_>`
 
 .. _function-rtti_lock_context_Context_implicit_block_ls__c_void_gr_:
 
@@ -2444,7 +2444,7 @@ Context and mutex locking
 
 Acquires a recursive lock on the given ``Context`` and executes a block, ensuring thread-safe access to context data within the scope.
 
-:Arguments: * **lock_context** :  :ref:`Context <handle-rtti-Context>`  implicit
+:Arguments: * **lock_context** :  :ref:`Context <handle-rtti-Context>` implicit
 
             * **block** : block<void> implicit
 
@@ -2454,7 +2454,7 @@ Acquires a recursive lock on the given ``Context`` and executes a block, ensurin
 
 Acquires a recursive lock on the given ``recursive_mutex`` and executes a block, releasing the lock when the block exits.
 
-:Arguments: * **mutex** :  :ref:`recursive_mutex <handle-rtti-recursive_mutex>`  implicit
+:Arguments: * **mutex** :  :ref:`recursive_mutex <handle-rtti-recursive_mutex>` implicit
 
             * **block** : block<void> implicit
 
@@ -2470,7 +2470,7 @@ Acquires a recursive lock on the current ``Context`` and executes a block, ensur
 Runtime data access
 +++++++++++++++++++
 
-  *  :ref:`get_table_key_index (table: void? implicit; key: any; baseType: Type; valueTypeSize: int) : int <function-rtti_get_table_key_index_void_q__implicit_any_Type_int>` 
+  *  :ref:`get_table_key_index (table: void? implicit; key: any; baseType: Type; valueTypeSize: int) : int <function-rtti_get_table_key_index_void_q__implicit_any_Type_int>`
 
 .. _function-rtti_get_table_key_index_void_q__implicit_any_Type_int:
 
@@ -2482,7 +2482,7 @@ Returns the internal slot index (``int``) for the given key within a ``table`` v
 
             * **key** : any
 
-            * **baseType** :  :ref:`Type <enum-rtti-Type>` 
+            * **baseType** :  :ref:`Type <enum-rtti-Type>`
 
             * **valueTypeSize** : int
 
@@ -2490,8 +2490,8 @@ Returns the internal slot index (``int``) for the given key within a ``table`` v
 Tuple and variant access
 ++++++++++++++++++++++++
 
-  *  :ref:`get_tuple_field_offset (type: TypeInfo? implicit; index: int) : int <function-rtti_get_tuple_field_offset_TypeInfo_q__implicit_int>` 
-  *  :ref:`get_variant_field_offset (type: TypeInfo? implicit; index: int) : int <function-rtti_get_variant_field_offset_TypeInfo_q__implicit_int>` 
+  *  :ref:`get_tuple_field_offset (type: TypeInfo? implicit; index: int) : int <function-rtti_get_tuple_field_offset_TypeInfo_q__implicit_int>`
+  *  :ref:`get_variant_field_offset (type: TypeInfo? implicit; index: int) : int <function-rtti_get_variant_field_offset_TypeInfo_q__implicit_int>`
 
 .. _function-rtti_get_tuple_field_offset_TypeInfo_q__implicit_int:
 
@@ -2499,7 +2499,7 @@ Tuple and variant access
 
 Returns the byte offset (``int``) of a field at the given index within a tuple type described by ``TypeInfo``.
 
-:Arguments: * **type** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? implicit
+:Arguments: * **type** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`? implicit
 
             * **index** : int
 
@@ -2509,7 +2509,7 @@ Returns the byte offset (``int``) of a field at the given index within a tuple t
 
 Returns the byte offset (``int``) of a field at the given index within a variant type described by ``TypeInfo``.
 
-:Arguments: * **type** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? implicit
+:Arguments: * **type** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`? implicit
 
             * **index** : int
 
@@ -2517,12 +2517,12 @@ Returns the byte offset (``int``) of a field at the given index within a variant
 Iteration
 +++++++++
 
-  *  :ref:`each (info: FuncInfo const implicit ==const) : iterator\<VarInfo const&\> <function-rtti_each_FuncInfo_const_implicit__eq__eq_const>` 
-  *  :ref:`each (info: FuncInfo implicit ==const) : iterator\<VarInfo&\> <function-rtti_each_FuncInfo_implicit__eq__eq_const>` 
-  *  :ref:`each (info: StructInfo const implicit ==const) : iterator\<VarInfo const&\> <function-rtti_each_StructInfo_const_implicit__eq__eq_const>` 
-  *  :ref:`each (info: StructInfo implicit ==const) : iterator\<VarInfo&\> <function-rtti_each_StructInfo_implicit__eq__eq_const>` 
-  *  :ref:`each (info: EnumInfo const implicit ==const) : iterator\<EnumValueInfo const&\> <function-rtti_each_EnumInfo_const_implicit__eq__eq_const>` 
-  *  :ref:`each (info: EnumInfo implicit ==const) : iterator\<EnumValueInfo&\> <function-rtti_each_EnumInfo_implicit__eq__eq_const>` 
+  *  :ref:`each (info: FuncInfo const implicit ==const) : iterator\<VarInfo const&\> <function-rtti_each_FuncInfo_const_implicit__eq__eq_const>`
+  *  :ref:`each (info: FuncInfo implicit ==const) : iterator\<VarInfo&\> <function-rtti_each_FuncInfo_implicit__eq__eq_const>`
+  *  :ref:`each (info: StructInfo const implicit ==const) : iterator\<VarInfo const&\> <function-rtti_each_StructInfo_const_implicit__eq__eq_const>`
+  *  :ref:`each (info: StructInfo implicit ==const) : iterator\<VarInfo&\> <function-rtti_each_StructInfo_implicit__eq__eq_const>`
+  *  :ref:`each (info: EnumInfo const implicit ==const) : iterator\<EnumValueInfo const&\> <function-rtti_each_EnumInfo_const_implicit__eq__eq_const>`
+  *  :ref:`each (info: EnumInfo implicit ==const) : iterator\<EnumValueInfo&\> <function-rtti_each_EnumInfo_implicit__eq__eq_const>`
 
 
 each
@@ -2534,7 +2534,7 @@ each
 
 Iterates through each element of an RTTI container (e.g., ``AnnotationArguments``, ``AnnotationArgumentList``, ``AnnotationList``), yielding individual entries.
 
-:Arguments: * **info** :  :ref:`FuncInfo <handle-rtti-FuncInfo>`  implicit!
+:Arguments: * **info** :  :ref:`FuncInfo <handle-rtti-FuncInfo>` implicit!
 
 .. _function-rtti_each_FuncInfo_implicit__eq__eq_const:
 

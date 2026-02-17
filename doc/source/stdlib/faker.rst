@@ -38,7 +38,7 @@ Instance of the faker with all the settings inside.
 Constructor
 +++++++++++
 
-  *  :ref:`Faker (var rng: iterator\<uint\>) : Faker <function-faker_Faker_iterator_ls_uint_gr_>` 
+  *  :ref:`Faker (var rng: iterator\<uint\>) : Faker <function-faker_Faker_iterator_ls_uint_gr_>`
 
 .. _function-faker_Faker_iterator_ls_uint_gr_:
 
@@ -52,32 +52,32 @@ Constructs a Faker instance with the given random number generator.
 Random values
 +++++++++++++
 
-  *  :ref:`random_double (var faker: Faker) : double <function-faker_random_double_Faker>` 
-  *  :ref:`random_float (var faker: Faker) : float <function-faker_random_float_Faker>` 
-  *  :ref:`random_float2 (var faker: Faker) : float2 <function-faker_random_float2_Faker>` 
-  *  :ref:`random_float3 (var faker: Faker) : float3 <function-faker_random_float3_Faker>` 
-  *  :ref:`random_float3x3 (var faker: Faker) : float3x3 <function-faker_random_float3x3_Faker>` 
-  *  :ref:`random_float3x4 (var faker: Faker) : float3x4 <function-faker_random_float3x4_Faker>` 
-  *  :ref:`random_float4 (var faker: Faker) : float4 <function-faker_random_float4_Faker>` 
-  *  :ref:`random_float4x4 (var faker: Faker) : float4x4 <function-faker_random_float4x4_Faker>` 
-  *  :ref:`random_int (var faker: Faker) : int <function-faker_random_int_Faker>` 
-  *  :ref:`random_int16 (var faker: Faker) : int16 <function-faker_random_int16_Faker>` 
-  *  :ref:`random_int2 (var faker: Faker) : int2 <function-faker_random_int2_Faker>` 
-  *  :ref:`random_int3 (var faker: Faker) : int3 <function-faker_random_int3_Faker>` 
-  *  :ref:`random_int4 (var faker: Faker) : int4 <function-faker_random_int4_Faker>` 
-  *  :ref:`random_int64 (var faker: Faker) : int64 <function-faker_random_int64_Faker>` 
-  *  :ref:`random_int8 (var faker: Faker) : int8 <function-faker_random_int8_Faker>` 
-  *  :ref:`random_range (var faker: Faker) : range <function-faker_random_range_Faker>` 
-  *  :ref:`random_range64 (var faker: Faker) : range64 <function-faker_random_range64_Faker>` 
-  *  :ref:`random_uint (var faker: Faker) : uint <function-faker_random_uint_Faker>` 
-  *  :ref:`random_uint16 (var faker: Faker) : uint16 <function-faker_random_uint16_Faker>` 
-  *  :ref:`random_uint2 (var faker: Faker) : uint2 <function-faker_random_uint2_Faker>` 
-  *  :ref:`random_uint3 (var faker: Faker) : uint3 <function-faker_random_uint3_Faker>` 
-  *  :ref:`random_uint4 (var faker: Faker) : uint4 <function-faker_random_uint4_Faker>` 
-  *  :ref:`random_uint64 (var faker: Faker) : uint64 <function-faker_random_uint64_Faker>` 
-  *  :ref:`random_uint8 (var faker: Faker) : uint8 <function-faker_random_uint8_Faker>` 
-  *  :ref:`random_urange (var faker: Faker) : urange <function-faker_random_urange_Faker>` 
-  *  :ref:`random_urange64 (var faker: Faker) : urange64 <function-faker_random_urange64_Faker>` 
+  *  :ref:`random_double (var faker: Faker) : double <function-faker_random_double_Faker>`
+  *  :ref:`random_float (var faker: Faker) : float <function-faker_random_float_Faker>`
+  *  :ref:`random_float2 (var faker: Faker) : float2 <function-faker_random_float2_Faker>`
+  *  :ref:`random_float3 (var faker: Faker) : float3 <function-faker_random_float3_Faker>`
+  *  :ref:`random_float3x3 (var faker: Faker) : float3x3 <function-faker_random_float3x3_Faker>`
+  *  :ref:`random_float3x4 (var faker: Faker) : float3x4 <function-faker_random_float3x4_Faker>`
+  *  :ref:`random_float4 (var faker: Faker) : float4 <function-faker_random_float4_Faker>`
+  *  :ref:`random_float4x4 (var faker: Faker) : float4x4 <function-faker_random_float4x4_Faker>`
+  *  :ref:`random_int (var faker: Faker) : int <function-faker_random_int_Faker>`
+  *  :ref:`random_int16 (var faker: Faker) : int16 <function-faker_random_int16_Faker>`
+  *  :ref:`random_int2 (var faker: Faker) : int2 <function-faker_random_int2_Faker>`
+  *  :ref:`random_int3 (var faker: Faker) : int3 <function-faker_random_int3_Faker>`
+  *  :ref:`random_int4 (var faker: Faker) : int4 <function-faker_random_int4_Faker>`
+  *  :ref:`random_int64 (var faker: Faker) : int64 <function-faker_random_int64_Faker>`
+  *  :ref:`random_int8 (var faker: Faker) : int8 <function-faker_random_int8_Faker>`
+  *  :ref:`random_range (var faker: Faker) : range <function-faker_random_range_Faker>`
+  *  :ref:`random_range64 (var faker: Faker) : range64 <function-faker_random_range64_Faker>`
+  *  :ref:`random_uint (var faker: Faker) : uint <function-faker_random_uint_Faker>`
+  *  :ref:`random_uint16 (var faker: Faker) : uint16 <function-faker_random_uint16_Faker>`
+  *  :ref:`random_uint2 (var faker: Faker) : uint2 <function-faker_random_uint2_Faker>`
+  *  :ref:`random_uint3 (var faker: Faker) : uint3 <function-faker_random_uint3_Faker>`
+  *  :ref:`random_uint4 (var faker: Faker) : uint4 <function-faker_random_uint4_Faker>`
+  *  :ref:`random_uint64 (var faker: Faker) : uint64 <function-faker_random_uint64_Faker>`
+  *  :ref:`random_uint8 (var faker: Faker) : uint8 <function-faker_random_uint8_Faker>`
+  *  :ref:`random_urange (var faker: Faker) : urange <function-faker_random_urange_Faker>`
+  *  :ref:`random_urange64 (var faker: Faker) : urange64 <function-faker_random_urange64_Faker>`
 
 .. _function-faker_random_double_Faker:
 
@@ -85,7 +85,7 @@ Random values
 
 Generates random double.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_float_Faker:
 
@@ -93,7 +93,7 @@ Generates random double.
 
 Generates random float.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_float2_Faker:
 
@@ -101,7 +101,7 @@ Generates random float.
 
 Generates random float2.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_float3_Faker:
 
@@ -109,7 +109,7 @@ Generates random float2.
 
 Generates random float3.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_float3x3_Faker:
 
@@ -117,7 +117,7 @@ Generates random float3.
 
 Generates random float3x3.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_float3x4_Faker:
 
@@ -125,7 +125,7 @@ Generates random float3x3.
 
 Generates random float3x4.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_float4_Faker:
 
@@ -133,7 +133,7 @@ Generates random float3x4.
 
 Generates random float4.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_float4x4_Faker:
 
@@ -141,7 +141,7 @@ Generates random float4.
 
 Generates random float4x4.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_int_Faker:
 
@@ -149,7 +149,7 @@ Generates random float4x4.
 
 Generates random integer.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_int16_Faker:
 
@@ -157,7 +157,7 @@ Generates random integer.
 
 Generates random int16.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_int2_Faker:
 
@@ -165,7 +165,7 @@ Generates random int16.
 
 Generates random int2.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_int3_Faker:
 
@@ -173,7 +173,7 @@ Generates random int2.
 
 Generates random int3.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_int4_Faker:
 
@@ -181,7 +181,7 @@ Generates random int3.
 
 Generates random int4.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_int64_Faker:
 
@@ -189,7 +189,7 @@ Generates random int4.
 
 Generates random int64
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_int8_Faker:
 
@@ -197,7 +197,7 @@ Generates random int64
 
 Generates random int8.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_range_Faker:
 
@@ -205,7 +205,7 @@ Generates random int8.
 
 Generates random range.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_range64_Faker:
 
@@ -213,7 +213,7 @@ Generates random range.
 
 Generates random range64.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_uint_Faker:
 
@@ -221,7 +221,7 @@ Generates random range64.
 
 Generates random unsigned integer.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_uint16_Faker:
 
@@ -229,7 +229,7 @@ Generates random unsigned integer.
 
 Generates random uint16.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_uint2_Faker:
 
@@ -237,7 +237,7 @@ Generates random uint16.
 
 Generates random uint2.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_uint3_Faker:
 
@@ -245,7 +245,7 @@ Generates random uint2.
 
 Generates random uint3.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_uint4_Faker:
 
@@ -253,7 +253,7 @@ Generates random uint3.
 
 Generates random uint4.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_uint64_Faker:
 
@@ -261,7 +261,7 @@ Generates random uint4.
 
 Generates random uint64
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_uint8_Faker:
 
@@ -269,7 +269,7 @@ Generates random uint64
 
 Generates random uint8.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_urange_Faker:
 
@@ -277,7 +277,7 @@ Generates random uint8.
 
 Generates random urange.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_urange64_Faker:
 
@@ -285,24 +285,24 @@ Generates random urange.
 
 Generates random urange64.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 ++++++++++++++
 Random strings
 ++++++++++++++
 
-  *  :ref:`any_char (var faker: Faker) : int <function-faker_any_char_Faker>` 
-  *  :ref:`any_enum (var faker: Faker; enum_value: auto(TT)) : TT <function-faker_any_enum_Faker_autoTT_0x13e>` 
-  *  :ref:`any_file_name (var faker: Faker) : string <function-faker_any_file_name_Faker>` 
-  *  :ref:`any_float (var faker: Faker) : string <function-faker_any_float_Faker>` 
-  *  :ref:`any_hex (var faker: Faker) : string <function-faker_any_hex_Faker>` 
-  *  :ref:`any_int (var faker: Faker) : string <function-faker_any_int_Faker>` 
-  *  :ref:`any_set (var faker: Faker) : uint[8] <function-faker_any_set_Faker>` 
-  *  :ref:`any_string (var faker: Faker) : string <function-faker_any_string_Faker>` 
-  *  :ref:`any_uint (var faker: Faker) : string <function-faker_any_uint_Faker>` 
-  *  :ref:`long_string (var faker: Faker) : string <function-faker_long_string_Faker>` 
-  *  :ref:`number (var faker: Faker) : string <function-faker_number_Faker>` 
-  *  :ref:`positive_int (var faker: Faker) : string <function-faker_positive_int_Faker>` 
+  *  :ref:`any_char (var faker: Faker) : int <function-faker_any_char_Faker>`
+  *  :ref:`any_enum (var faker: Faker; enum_value: auto(TT)) : TT <function-faker_any_enum_Faker_autoTT_0x13e>`
+  *  :ref:`any_file_name (var faker: Faker) : string <function-faker_any_file_name_Faker>`
+  *  :ref:`any_float (var faker: Faker) : string <function-faker_any_float_Faker>`
+  *  :ref:`any_hex (var faker: Faker) : string <function-faker_any_hex_Faker>`
+  *  :ref:`any_int (var faker: Faker) : string <function-faker_any_int_Faker>`
+  *  :ref:`any_set (var faker: Faker) : uint[8] <function-faker_any_set_Faker>`
+  *  :ref:`any_string (var faker: Faker) : string <function-faker_any_string_Faker>`
+  *  :ref:`any_uint (var faker: Faker) : string <function-faker_any_uint_Faker>`
+  *  :ref:`long_string (var faker: Faker) : string <function-faker_long_string_Faker>`
+  *  :ref:`number (var faker: Faker) : string <function-faker_number_Faker>`
+  *  :ref:`positive_int (var faker: Faker) : string <function-faker_positive_int_Faker>`
 
 .. _function-faker_any_char_Faker:
 
@@ -310,7 +310,7 @@ Random strings
 
 Generates random char. (1 to 255 range)
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_any_enum_Faker_autoTT_0x13e:
 
@@ -318,7 +318,7 @@ Generates random char. (1 to 255 range)
 
 Generates random enumeration value.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
             * **enum_value** : auto(TT)
 
@@ -328,7 +328,7 @@ Generates random enumeration value.
 
 Generates random file name.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_any_float_Faker:
 
@@ -336,7 +336,7 @@ Generates random file name.
 
 Generates random float string.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_any_hex_Faker:
 
@@ -344,7 +344,7 @@ Generates random float string.
 
 Generates random integer hex string.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_any_int_Faker:
 
@@ -352,7 +352,7 @@ Generates random integer hex string.
 
 Generates random integer string.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_any_set_Faker:
 
@@ -360,7 +360,7 @@ Generates random integer string.
 
 Generates random set (uint[8])
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_any_string_Faker:
 
@@ -368,7 +368,7 @@ Generates random set (uint[8])
 
 Generates a string of random characters. The string is anywhere between 0 and regex::re_gen_get_rep_limit() characters long.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_any_uint_Faker:
 
@@ -376,7 +376,7 @@ Generates a string of random characters. The string is anywhere between 0 and re
 
 Generates random unsigned integer string.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_long_string_Faker:
 
@@ -384,7 +384,7 @@ Generates random unsigned integer string.
 
 Generates a long string of random characters. The string is anywhere between 0 and faker.max_long_string characters long.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_number_Faker:
 
@@ -392,7 +392,7 @@ Generates a long string of random characters. The string is anywhere between 0 a
 
 Generates random number string.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_positive_int_Faker:
 
@@ -400,18 +400,18 @@ Generates random number string.
 
 Generates random positive integer string.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 +++++++++++++
 Date and time
 +++++++++++++
 
-  *  :ref:`date (var faker: Faker) : string <function-faker_date_Faker>` 
-  *  :ref:`day (var faker: Faker) : string <function-faker_day_Faker>` 
-  *  :ref:`is_leap_year (year: uint) : bool <function-faker_is_leap_year_uint>` 
-  *  :ref:`month (var faker: Faker) : string <function-faker_month_Faker>` 
-  *  :ref:`week_day (year: uint; month: uint; day: uint) : int <function-faker_week_day_uint_uint_uint>` 
-  *  :ref:`week_day (year: int; month: int; day: int) : int <function-faker_week_day_int_int_int>` 
+  *  :ref:`date (var faker: Faker) : string <function-faker_date_Faker>`
+  *  :ref:`day (var faker: Faker) : string <function-faker_day_Faker>`
+  *  :ref:`is_leap_year (year: uint) : bool <function-faker_is_leap_year_uint>`
+  *  :ref:`month (var faker: Faker) : string <function-faker_month_Faker>`
+  *  :ref:`week_day (year: uint; month: uint; day: uint) : int <function-faker_week_day_uint_uint_uint>`
+  *  :ref:`week_day (year: int; month: int; day: int) : int <function-faker_week_day_int_int_int>`
 
 .. _function-faker_date_Faker:
 
@@ -419,7 +419,7 @@ Date and time
 
 Generates random date string.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_day_Faker:
 
@@ -427,7 +427,7 @@ Generates random date string.
 
 Generates random day string.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_is_leap_year_uint:
 
@@ -443,7 +443,7 @@ Returns true if year is leap year.
 
 Generates random month string.
 
-:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>` 
+:Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 
 week_day

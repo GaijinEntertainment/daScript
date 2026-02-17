@@ -46,9 +46,9 @@ Handled structures
 Character set
 +++++++++++++
 
-  *  :ref:`is_char_in_set (Character: int; Charset: uint const[8] implicit) : bool <function-strings_is_char_in_set_int_uint_const8_implicit>` 
-  *  :ref:`set_element (Character: int; Charset: uint const[8] implicit) : int <function-strings_set_element_int_uint_const8_implicit>` 
-  *  :ref:`set_total (Charset: uint const[8] implicit) : uint <function-strings_set_total_uint_const8_implicit>` 
+  *  :ref:`is_char_in_set (Character: int; Charset: uint const[8] implicit) : bool <function-strings_is_char_in_set_int_uint_const8_implicit>`
+  *  :ref:`set_element (Character: int; Charset: uint const[8] implicit) : int <function-strings_set_element_int_uint_const8_implicit>`
+  *  :ref:`set_total (Charset: uint const[8] implicit) : uint <function-strings_set_total_uint_const8_implicit>`
 
 .. _function-strings_is_char_in_set_int_uint_const8_implicit:
 
@@ -82,13 +82,13 @@ Returns the total number of characters present (bits set) in the 256-bit charact
 Character groups
 ++++++++++++++++
 
-  *  :ref:`is_alnum (Character: int) : bool <function-strings_is_alnum_int>` 
-  *  :ref:`is_alpha (Character: int) : bool <function-strings_is_alpha_int>` 
-  *  :ref:`is_hex (Character: int) : bool <function-strings_is_hex_int>` 
-  *  :ref:`is_new_line (Character: int) : bool <function-strings_is_new_line_int>` 
-  *  :ref:`is_number (Character: int) : bool <function-strings_is_number_int>` 
-  *  :ref:`is_tab_or_space (Character: int) : bool <function-strings_is_tab_or_space_int>` 
-  *  :ref:`is_white_space (Character: int) : bool <function-strings_is_white_space_int>` 
+  *  :ref:`is_alnum (Character: int) : bool <function-strings_is_alnum_int>`
+  *  :ref:`is_alpha (Character: int) : bool <function-strings_is_alpha_int>`
+  *  :ref:`is_hex (Character: int) : bool <function-strings_is_hex_int>`
+  *  :ref:`is_new_line (Character: int) : bool <function-strings_is_new_line_int>`
+  *  :ref:`is_number (Character: int) : bool <function-strings_is_number_int>`
+  *  :ref:`is_tab_or_space (Character: int) : bool <function-strings_is_tab_or_space_int>`
+  *  :ref:`is_white_space (Character: int) : bool <function-strings_is_white_space_int>`
 
 .. _function-strings_is_alnum_int:
 
@@ -150,8 +150,8 @@ Returns true if the integer character code is a whitespace character (space, tab
 Character by index
 ++++++++++++++++++
 
-  *  :ref:`character_at (str: string implicit; idx: int) : int <function-strings_character_at_string_implicit_int>` 
-  *  :ref:`character_uat (str: string implicit; idx: int) : int <function-strings_character_uat_string_implicit_int>` 
+  *  :ref:`character_at (str: string implicit; idx: int) : int <function-strings_character_at_string_implicit_int>`
+  *  :ref:`character_uat (str: string implicit; idx: int) : int <function-strings_character_uat_string_implicit_int>`
 
 .. _function-strings_character_at_string_implicit_int:
 
@@ -167,7 +167,7 @@ Returns the integer character code of string `str` at the given index `idx`, wit
 
 .. das:function:: character_uat(str: string implicit; idx: int) : int
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Returns the integer character code of string `str` at the given index `idx` without performing bounds checking (unsafe).
@@ -180,14 +180,14 @@ Returns the integer character code of string `str` at the given index `idx` with
 String properties
 +++++++++++++++++
 
-  *  :ref:`ends_with (str: das_string implicit; cmp: string implicit) : bool <function-strings_ends_with_das_string_implicit_string_implicit>` 
-  *  :ref:`ends_with (str: string implicit; cmp: string implicit) : bool <function-strings_ends_with_string_implicit_string_implicit>` 
-  *  :ref:`length (str: string implicit) : int <function-strings_length_string_implicit>` 
-  *  :ref:`length (str: das_string implicit) : int <function-strings_length_das_string_implicit>` 
-  *  :ref:`starts_with (str: string implicit; cmp: string implicit; cmpLen: uint) : bool <function-strings_starts_with_string_implicit_string_implicit_uint>` 
-  *  :ref:`starts_with (str: string implicit; cmp: string implicit) : bool <function-strings_starts_with_string_implicit_string_implicit>` 
-  *  :ref:`starts_with (str: string implicit; offset: int; cmp: string implicit) : bool <function-strings_starts_with_string_implicit_int_string_implicit>` 
-  *  :ref:`starts_with (str: string implicit; offset: int; cmp: string implicit; cmpLen: uint) : bool <function-strings_starts_with_string_implicit_int_string_implicit_uint>` 
+  *  :ref:`ends_with (str: das_string implicit; cmp: string implicit) : bool <function-strings_ends_with_das_string_implicit_string_implicit>`
+  *  :ref:`ends_with (str: string implicit; cmp: string implicit) : bool <function-strings_ends_with_string_implicit_string_implicit>`
+  *  :ref:`length (str: string implicit) : int <function-strings_length_string_implicit>`
+  *  :ref:`length (str: das_string implicit) : int <function-strings_length_das_string_implicit>`
+  *  :ref:`starts_with (str: string implicit; cmp: string implicit; cmpLen: uint) : bool <function-strings_starts_with_string_implicit_string_implicit_uint>`
+  *  :ref:`starts_with (str: string implicit; cmp: string implicit) : bool <function-strings_starts_with_string_implicit_string_implicit>`
+  *  :ref:`starts_with (str: string implicit; offset: int; cmp: string implicit) : bool <function-strings_starts_with_string_implicit_int_string_implicit>`
+  *  :ref:`starts_with (str: string implicit; offset: int; cmp: string implicit; cmpLen: uint) : bool <function-strings_starts_with_string_implicit_int_string_implicit_uint>`
 
 
 ends_with
@@ -199,7 +199,7 @@ ends_with
 
 Returns true if the string `str` ends with the substring `cmp`, false otherwise.
 
-:Arguments: * **str** :  :ref:`das_string <handle-builtin-das_string>`  implicit
+:Arguments: * **str** :  :ref:`das_string <handle-builtin-das_string>` implicit
 
             * **cmp** : string implicit
 
@@ -261,24 +261,24 @@ Returns true if the beginning of string `str` matches the string `cmp`, with opt
 String builder
 ++++++++++++++
 
-  *  :ref:`build_hash (block: block\<(StringBuilderWriter):void\>) : uint64 <function-strings_build_hash_block_ls_StringBuilderWriter_c_void_gr_>` 
-  *  :ref:`build_string (block: block\<(StringBuilderWriter):void\>) : string <function-strings_build_string_block_ls_StringBuilderWriter_c_void_gr_>` 
-  *  :ref:`format (format: string implicit; value: int64) : string <function-strings_format_string_implicit_int64>` 
-  *  :ref:`format (format: string implicit; value: double) : string <function-strings_format_string_implicit_double>` 
-  *  :ref:`format (writer: StringBuilderWriter implicit; format: string implicit; value: int) : StringBuilderWriter& <function-strings_format_StringBuilderWriter_implicit_string_implicit_int>` 
-  *  :ref:`format (writer: StringBuilderWriter implicit; format: string implicit; value: uint) : StringBuilderWriter& <function-strings_format_StringBuilderWriter_implicit_string_implicit_uint>` 
-  *  :ref:`format (writer: StringBuilderWriter implicit; format: string implicit; value: int64) : StringBuilderWriter& <function-strings_format_StringBuilderWriter_implicit_string_implicit_int64>` 
-  *  :ref:`format (format: string implicit; value: uint64) : string <function-strings_format_string_implicit_uint64>` 
-  *  :ref:`format (writer: StringBuilderWriter implicit; format: string implicit; value: float) : StringBuilderWriter& <function-strings_format_StringBuilderWriter_implicit_string_implicit_float>` 
-  *  :ref:`format (writer: StringBuilderWriter implicit; format: string implicit; value: uint64) : StringBuilderWriter& <function-strings_format_StringBuilderWriter_implicit_string_implicit_uint64>` 
-  *  :ref:`format (writer: StringBuilderWriter implicit; format: string implicit; value: double) : StringBuilderWriter& <function-strings_format_StringBuilderWriter_implicit_string_implicit_double>` 
-  *  :ref:`format (format: string implicit; value: int) : string <function-strings_format_string_implicit_int>` 
-  *  :ref:`format (format: string implicit; value: uint) : string <function-strings_format_string_implicit_uint>` 
-  *  :ref:`format (format: string implicit; value: float) : string <function-strings_format_string_implicit_float>` 
-  *  :ref:`write (writer: StringBuilderWriter; anything: any) : StringBuilderWriter& <function-strings_write_StringBuilderWriter_any>` 
-  *  :ref:`write_char (writer: StringBuilderWriter implicit; ch: int) : StringBuilderWriter& <function-strings_write_char_StringBuilderWriter_implicit_int>` 
-  *  :ref:`write_chars (writer: StringBuilderWriter implicit; ch: int; count: int) : StringBuilderWriter& <function-strings_write_chars_StringBuilderWriter_implicit_int_int>` 
-  *  :ref:`write_escape_string (writer: StringBuilderWriter implicit; str: string implicit) : StringBuilderWriter& <function-strings_write_escape_string_StringBuilderWriter_implicit_string_implicit>` 
+  *  :ref:`build_hash (block: block\<(StringBuilderWriter):void\>) : uint64 <function-strings_build_hash_block_ls_StringBuilderWriter_c_void_gr_>`
+  *  :ref:`build_string (block: block\<(StringBuilderWriter):void\>) : string <function-strings_build_string_block_ls_StringBuilderWriter_c_void_gr_>`
+  *  :ref:`format (format: string implicit; value: int64) : string <function-strings_format_string_implicit_int64>`
+  *  :ref:`format (format: string implicit; value: double) : string <function-strings_format_string_implicit_double>`
+  *  :ref:`format (writer: StringBuilderWriter implicit; format: string implicit; value: int) : StringBuilderWriter& <function-strings_format_StringBuilderWriter_implicit_string_implicit_int>`
+  *  :ref:`format (writer: StringBuilderWriter implicit; format: string implicit; value: uint) : StringBuilderWriter& <function-strings_format_StringBuilderWriter_implicit_string_implicit_uint>`
+  *  :ref:`format (writer: StringBuilderWriter implicit; format: string implicit; value: int64) : StringBuilderWriter& <function-strings_format_StringBuilderWriter_implicit_string_implicit_int64>`
+  *  :ref:`format (format: string implicit; value: uint64) : string <function-strings_format_string_implicit_uint64>`
+  *  :ref:`format (writer: StringBuilderWriter implicit; format: string implicit; value: float) : StringBuilderWriter& <function-strings_format_StringBuilderWriter_implicit_string_implicit_float>`
+  *  :ref:`format (writer: StringBuilderWriter implicit; format: string implicit; value: uint64) : StringBuilderWriter& <function-strings_format_StringBuilderWriter_implicit_string_implicit_uint64>`
+  *  :ref:`format (writer: StringBuilderWriter implicit; format: string implicit; value: double) : StringBuilderWriter& <function-strings_format_StringBuilderWriter_implicit_string_implicit_double>`
+  *  :ref:`format (format: string implicit; value: int) : string <function-strings_format_string_implicit_int>`
+  *  :ref:`format (format: string implicit; value: uint) : string <function-strings_format_string_implicit_uint>`
+  *  :ref:`format (format: string implicit; value: float) : string <function-strings_format_string_implicit_float>`
+  *  :ref:`write (writer: StringBuilderWriter; anything: any) : StringBuilderWriter& <function-strings_write_StringBuilderWriter_any>`
+  *  :ref:`write_char (writer: StringBuilderWriter implicit; ch: int) : StringBuilderWriter& <function-strings_write_char_StringBuilderWriter_implicit_int>`
+  *  :ref:`write_chars (writer: StringBuilderWriter implicit; ch: int; count: int) : StringBuilderWriter& <function-strings_write_chars_StringBuilderWriter_implicit_int_int>`
+  *  :ref:`write_escape_string (writer: StringBuilderWriter implicit; str: string implicit) : StringBuilderWriter& <function-strings_write_escape_string_StringBuilderWriter_implicit_string_implicit>`
 
 .. _function-strings_build_hash_block_ls_StringBuilderWriter_c_void_gr_:
 
@@ -286,7 +286,7 @@ String builder
 
 Computes a uint64 hash by streaming writes through a StringBuilderWriter passed to `block`, without allocating the full concatenated string.
 
-:Arguments: * **block** : block<( :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ):void> implicit
+:Arguments: * **block** : block<( :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`):void> implicit
 
 .. _function-strings_build_string_block_ls_StringBuilderWriter_c_void_gr_:
 
@@ -294,7 +294,7 @@ Computes a uint64 hash by streaming writes through a StringBuilderWriter passed 
 
 Creates a StringBuilderWriter, passes it to `block` for writing, and returns the accumulated output as a string.
 
-:Arguments: * **block** : block<( :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ):void> implicit
+:Arguments: * **block** : block<( :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`):void> implicit
 
 
 format
@@ -304,7 +304,7 @@ format
 
 .. das:function:: format(format: string implicit; value: int64) : string
 
-.. warning:: 
+.. warning::
   This function is deprecated.
 
 Formats a numeric value of type T using a C printf-style format string, either appending to a StringBuilderWriter and returning a reference to it, or returning the formatted result as a new string.
@@ -365,7 +365,7 @@ Formats a numeric value of type T using a C printf-style format string, either a
 
 Writes the textual representation of any value into the StringBuilderWriter and returns a reference to the writer for chaining.
 
-:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` 
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`
 
             * **anything** : any
 
@@ -375,7 +375,7 @@ Writes the textual representation of any value into the StringBuilderWriter and 
 
 Writes a single character specified by its integer code `ch` into the StringBuilderWriter and returns a reference to the writer.
 
-:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` implicit
 
             * **ch** : int
 
@@ -385,7 +385,7 @@ Writes a single character specified by its integer code `ch` into the StringBuil
 
 Writes the character specified by integer code `ch` repeated `count` times into the StringBuilderWriter and returns a reference to the writer.
 
-:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` implicit
 
             * **ch** : int
 
@@ -397,7 +397,7 @@ Writes the character specified by integer code `ch` repeated `count` times into 
 
 Writes the escaped form of string `str` (with special characters converted to escape sequences) into the StringBuilderWriter and returns a reference to the writer.
 
-:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` implicit
 
             * **str** : string implicit
 
@@ -405,8 +405,8 @@ Writes the escaped form of string `str` (with special characters converted to es
 das::string manipulation
 ++++++++++++++++++++++++
 
-  *  :ref:`append (str: das_string implicit; ch: int) <function-strings_append_das_string_implicit_int>` 
-  *  :ref:`resize (str: das_string implicit; new_length: int) <function-strings_resize_das_string_implicit_int>` 
+  *  :ref:`append (str: das_string implicit; ch: int) <function-strings_append_das_string_implicit_int>`
+  *  :ref:`resize (str: das_string implicit; new_length: int) <function-strings_resize_das_string_implicit_int>`
 
 .. _function-strings_append_das_string_implicit_int:
 
@@ -414,7 +414,7 @@ das::string manipulation
 
 Appends a single character specified by its integer code `ch` to the mutable das_string `str`.
 
-:Arguments: * **str** :  :ref:`das_string <handle-builtin-das_string>`  implicit
+:Arguments: * **str** :  :ref:`das_string <handle-builtin-das_string>` implicit
 
             * **ch** : int
 
@@ -424,7 +424,7 @@ Appends a single character specified by its integer code `ch` to the mutable das
 
 Resizes the mutable das_string `str` in place to `new_length` characters.
 
-:Arguments: * **str** :  :ref:`das_string <handle-builtin-das_string>`  implicit
+:Arguments: * **str** :  :ref:`das_string <handle-builtin-das_string>` implicit
 
             * **new_length** : int
 
@@ -432,26 +432,26 @@ Resizes the mutable das_string `str` in place to `new_length` characters.
 String modifications
 ++++++++++++++++++++
 
-  *  :ref:`chop (str: string implicit; start: int; length: int) : string <function-strings_chop_string_implicit_int_int>` 
-  *  :ref:`escape (str: string implicit) : string <function-strings_escape_string_implicit>` 
-  *  :ref:`ltrim (str: string implicit) : string <function-strings_ltrim_string_implicit>` 
-  *  :ref:`repeat (str: string implicit; count: int) : string <function-strings_repeat_string_implicit_int>` 
-  *  :ref:`replace (str: string implicit; toSearch: string implicit; replace: string implicit) : string <function-strings_replace_string_implicit_string_implicit_string_implicit>` 
-  *  :ref:`reverse (str: string implicit) : string <function-strings_reverse_string_implicit>` 
-  *  :ref:`rtrim (str: string implicit; chars: string implicit) : string <function-strings_rtrim_string_implicit_string_implicit>` 
-  *  :ref:`rtrim (str: string implicit) : string <function-strings_rtrim_string_implicit>` 
-  *  :ref:`safe_unescape (str: string implicit) : string <function-strings_safe_unescape_string_implicit>` 
-  *  :ref:`slice (str: string implicit; start: int) : string <function-strings_slice_string_implicit_int>` 
-  *  :ref:`slice (str: string implicit; start: int; end: int) : string <function-strings_slice_string_implicit_int_int>` 
-  *  :ref:`strip (str: string implicit) : string <function-strings_strip_string_implicit>` 
-  *  :ref:`strip_left (str: string implicit) : string <function-strings_strip_left_string_implicit>` 
-  *  :ref:`strip_right (str: string implicit) : string <function-strings_strip_right_string_implicit>` 
-  *  :ref:`to_lower (str: string implicit) : string <function-strings_to_lower_string_implicit>` 
-  *  :ref:`to_lower_in_place (str: string implicit) : string <function-strings_to_lower_in_place_string_implicit>` 
-  *  :ref:`to_upper (str: string implicit) : string <function-strings_to_upper_string_implicit>` 
-  *  :ref:`to_upper_in_place (str: string implicit) : string <function-strings_to_upper_in_place_string_implicit>` 
-  *  :ref:`trim (str: string implicit) : string <function-strings_trim_string_implicit>` 
-  *  :ref:`unescape (str: string implicit) : string <function-strings_unescape_string_implicit>` 
+  *  :ref:`chop (str: string implicit; start: int; length: int) : string <function-strings_chop_string_implicit_int_int>`
+  *  :ref:`escape (str: string implicit) : string <function-strings_escape_string_implicit>`
+  *  :ref:`ltrim (str: string implicit) : string <function-strings_ltrim_string_implicit>`
+  *  :ref:`repeat (str: string implicit; count: int) : string <function-strings_repeat_string_implicit_int>`
+  *  :ref:`replace (str: string implicit; toSearch: string implicit; replace: string implicit) : string <function-strings_replace_string_implicit_string_implicit_string_implicit>`
+  *  :ref:`reverse (str: string implicit) : string <function-strings_reverse_string_implicit>`
+  *  :ref:`rtrim (str: string implicit; chars: string implicit) : string <function-strings_rtrim_string_implicit_string_implicit>`
+  *  :ref:`rtrim (str: string implicit) : string <function-strings_rtrim_string_implicit>`
+  *  :ref:`safe_unescape (str: string implicit) : string <function-strings_safe_unescape_string_implicit>`
+  *  :ref:`slice (str: string implicit; start: int) : string <function-strings_slice_string_implicit_int>`
+  *  :ref:`slice (str: string implicit; start: int; end: int) : string <function-strings_slice_string_implicit_int_int>`
+  *  :ref:`strip (str: string implicit) : string <function-strings_strip_string_implicit>`
+  *  :ref:`strip_left (str: string implicit) : string <function-strings_strip_left_string_implicit>`
+  *  :ref:`strip_right (str: string implicit) : string <function-strings_strip_right_string_implicit>`
+  *  :ref:`to_lower (str: string implicit) : string <function-strings_to_lower_string_implicit>`
+  *  :ref:`to_lower_in_place (str: string implicit) : string <function-strings_to_lower_in_place_string_implicit>`
+  *  :ref:`to_upper (str: string implicit) : string <function-strings_to_upper_string_implicit>`
+  *  :ref:`to_upper_in_place (str: string implicit) : string <function-strings_to_upper_in_place_string_implicit>`
+  *  :ref:`trim (str: string implicit) : string <function-strings_trim_string_implicit>`
+  *  :ref:`unescape (str: string implicit) : string <function-strings_unescape_string_implicit>`
 
 .. _function-strings_chop_string_implicit_int_int:
 
@@ -595,7 +595,7 @@ Returns a new string with all characters of `str` converted to lower case.
 
 .. das:function:: to_lower_in_place(str: string implicit) : string
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Converts all characters of `str` to lower case in place and returns the modified string.
@@ -614,7 +614,7 @@ Returns a new string with all characters of `str` converted to upper case.
 
 .. das:function:: to_upper_in_place(str: string implicit) : string
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Converts all characters of `str` to upper case in place and returns the modified string.
@@ -641,10 +641,10 @@ Returns a new string with printable escape sequences converted back to their ori
 Search substrings
 +++++++++++++++++
 
-  *  :ref:`find (str: string implicit; substr: string implicit) : int <function-strings_find_string_implicit_string_implicit>` 
-  *  :ref:`find (str: string implicit; substr: string implicit; start: int) : int <function-strings_find_string_implicit_string_implicit_int>` 
-  *  :ref:`find (str: string implicit; substr: int; start: int) : int <function-strings_find_string_implicit_int_int>` 
-  *  :ref:`find (str: string implicit; substr: int) : int <function-strings_find_string_implicit_int>` 
+  *  :ref:`find (str: string implicit; substr: string implicit) : int <function-strings_find_string_implicit_string_implicit>`
+  *  :ref:`find (str: string implicit; substr: string implicit; start: int) : int <function-strings_find_string_implicit_string_implicit_int>`
+  *  :ref:`find (str: string implicit; substr: int; start: int) : int <function-strings_find_string_implicit_int_int>`
+  *  :ref:`find (str: string implicit; substr: int) : int <function-strings_find_string_implicit_int>`
 
 
 find
@@ -678,7 +678,7 @@ Returns the first index at which `substr` (string or character code) occurs in `
 String comparison
 +++++++++++++++++
 
-  *  :ref:`compare_ignore_case (a: string implicit; b: string implicit) : int <function-strings_compare_ignore_case_string_implicit_string_implicit>` 
+  *  :ref:`compare_ignore_case (a: string implicit; b: string implicit) : int <function-strings_compare_ignore_case_string_implicit_string_implicit>`
 
 .. _function-strings_compare_ignore_case_string_implicit_string_implicit:
 
@@ -695,49 +695,49 @@ def compare_ignore_case (a: string implicit; b: string implicit) : int
 String conversion routines
 ++++++++++++++++++++++++++
 
-  *  :ref:`double (str: string implicit; result: ConversionResult& implicit; offset: int& implicit) : double <function-strings_double_string_implicit_ConversionResult_implicit_int_implicit>` 
-  *  :ref:`double (str: string implicit) : double <function-strings_double_string_implicit>` 
-  *  :ref:`float (str: string implicit) : float <function-strings_float_string_implicit>` 
-  *  :ref:`float (str: string implicit; result: ConversionResult& implicit; offset: int& implicit) : float <function-strings_float_string_implicit_ConversionResult_implicit_int_implicit>` 
-  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: int64) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_int64>` 
-  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: uint) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_uint>` 
-  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: uint64) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_uint64>` 
-  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: uint16) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_uint16>` 
-  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: uint8) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_uint8>` 
-  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: int8) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_int8>` 
-  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: int16) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_int16>` 
-  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: int) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_int>` 
-  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: double) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_double>` 
-  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: float) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_float>` 
-  *  :ref:`int (str: string implicit) : int <function-strings_int_string_implicit>` 
-  *  :ref:`int (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int <function-strings_int_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
-  *  :ref:`int16 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int16 <function-strings_int16_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
-  *  :ref:`int16 (str: string implicit) : int16 <function-strings_int16_string_implicit>` 
-  *  :ref:`int64 (str: string implicit) : int64 <function-strings_int64_string_implicit>` 
-  *  :ref:`int64 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int64 <function-strings_int64_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
-  *  :ref:`int8 (str: string implicit) : int8 <function-strings_int8_string_implicit>` 
-  *  :ref:`int8 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int8 <function-strings_int8_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
-  *  :ref:`string (bytes: array\<uint8\>) : string <function-strings_string_array_ls_uint8_gr_>` 
-  *  :ref:`to_char (char: int) : string <function-strings_to_char_int>` 
-  *  :ref:`to_cpp_float (value: float) : string <function-strings_to_cpp_float_float>` 
-  *  :ref:`to_double (value: string implicit) : double <function-strings_to_double_string_implicit>` 
-  *  :ref:`to_float (value: string implicit) : float <function-strings_to_float_string_implicit>` 
-  *  :ref:`to_int (value: string implicit; hex: bool = false) : int <function-strings_to_int_string_implicit_bool>` 
-  *  :ref:`to_int16 (value: string implicit; hex: bool = false) : int16 <function-strings_to_int16_string_implicit_bool>` 
-  *  :ref:`to_int64 (value: string implicit; hex: bool = false) : int64 <function-strings_to_int64_string_implicit_bool>` 
-  *  :ref:`to_int8 (value: string implicit; hex: bool = false) : int8 <function-strings_to_int8_string_implicit_bool>` 
-  *  :ref:`to_uint (value: string implicit; hex: bool = false) : uint <function-strings_to_uint_string_implicit_bool>` 
-  *  :ref:`to_uint16 (value: string implicit; hex: bool = false) : uint16 <function-strings_to_uint16_string_implicit_bool>` 
-  *  :ref:`to_uint64 (value: string implicit; hex: bool = false) : uint64 <function-strings_to_uint64_string_implicit_bool>` 
-  *  :ref:`to_uint8 (value: string implicit; hex: bool = false) : uint8 <function-strings_to_uint8_string_implicit_bool>` 
-  *  :ref:`uint (str: string implicit) : uint <function-strings_uint_string_implicit>` 
-  *  :ref:`uint (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint <function-strings_uint_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
-  *  :ref:`uint16 (str: string implicit) : uint16 <function-strings_uint16_string_implicit>` 
-  *  :ref:`uint16 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint16 <function-strings_uint16_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
-  *  :ref:`uint64 (str: string implicit) : uint64 <function-strings_uint64_string_implicit>` 
-  *  :ref:`uint64 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint64 <function-strings_uint64_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
-  *  :ref:`uint8 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint8 <function-strings_uint8_string_implicit_ConversionResult_implicit_int_implicit_bool>` 
-  *  :ref:`uint8 (str: string implicit) : uint8 <function-strings_uint8_string_implicit>` 
+  *  :ref:`double (str: string implicit; result: ConversionResult& implicit; offset: int& implicit) : double <function-strings_double_string_implicit_ConversionResult_implicit_int_implicit>`
+  *  :ref:`double (str: string implicit) : double <function-strings_double_string_implicit>`
+  *  :ref:`float (str: string implicit) : float <function-strings_float_string_implicit>`
+  *  :ref:`float (str: string implicit; result: ConversionResult& implicit; offset: int& implicit) : float <function-strings_float_string_implicit_ConversionResult_implicit_int_implicit>`
+  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: int64) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_int64>`
+  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: uint) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_uint>`
+  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: uint64) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_uint64>`
+  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: uint16) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_uint16>`
+  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: uint8) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_uint8>`
+  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: int8) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_int8>`
+  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: int16) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_int16>`
+  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: int) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_int>`
+  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: double) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_double>`
+  *  :ref:`fmt (writer: StringBuilderWriter implicit; format: string implicit; value: float) : StringBuilderWriter& <function-strings_fmt_StringBuilderWriter_implicit_string_implicit_float>`
+  *  :ref:`int (str: string implicit) : int <function-strings_int_string_implicit>`
+  *  :ref:`int (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int <function-strings_int_string_implicit_ConversionResult_implicit_int_implicit_bool>`
+  *  :ref:`int16 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int16 <function-strings_int16_string_implicit_ConversionResult_implicit_int_implicit_bool>`
+  *  :ref:`int16 (str: string implicit) : int16 <function-strings_int16_string_implicit>`
+  *  :ref:`int64 (str: string implicit) : int64 <function-strings_int64_string_implicit>`
+  *  :ref:`int64 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int64 <function-strings_int64_string_implicit_ConversionResult_implicit_int_implicit_bool>`
+  *  :ref:`int8 (str: string implicit) : int8 <function-strings_int8_string_implicit>`
+  *  :ref:`int8 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int8 <function-strings_int8_string_implicit_ConversionResult_implicit_int_implicit_bool>`
+  *  :ref:`string (bytes: array\<uint8\>) : string <function-strings_string_array_ls_uint8_gr_>`
+  *  :ref:`to_char (char: int) : string <function-strings_to_char_int>`
+  *  :ref:`to_cpp_float (value: float) : string <function-strings_to_cpp_float_float>`
+  *  :ref:`to_double (value: string implicit) : double <function-strings_to_double_string_implicit>`
+  *  :ref:`to_float (value: string implicit) : float <function-strings_to_float_string_implicit>`
+  *  :ref:`to_int (value: string implicit; hex: bool = false) : int <function-strings_to_int_string_implicit_bool>`
+  *  :ref:`to_int16 (value: string implicit; hex: bool = false) : int16 <function-strings_to_int16_string_implicit_bool>`
+  *  :ref:`to_int64 (value: string implicit; hex: bool = false) : int64 <function-strings_to_int64_string_implicit_bool>`
+  *  :ref:`to_int8 (value: string implicit; hex: bool = false) : int8 <function-strings_to_int8_string_implicit_bool>`
+  *  :ref:`to_uint (value: string implicit; hex: bool = false) : uint <function-strings_to_uint_string_implicit_bool>`
+  *  :ref:`to_uint16 (value: string implicit; hex: bool = false) : uint16 <function-strings_to_uint16_string_implicit_bool>`
+  *  :ref:`to_uint64 (value: string implicit; hex: bool = false) : uint64 <function-strings_to_uint64_string_implicit_bool>`
+  *  :ref:`to_uint8 (value: string implicit; hex: bool = false) : uint8 <function-strings_to_uint8_string_implicit_bool>`
+  *  :ref:`uint (str: string implicit) : uint <function-strings_uint_string_implicit>`
+  *  :ref:`uint (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint <function-strings_uint_string_implicit_ConversionResult_implicit_int_implicit_bool>`
+  *  :ref:`uint16 (str: string implicit) : uint16 <function-strings_uint16_string_implicit>`
+  *  :ref:`uint16 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint16 <function-strings_uint16_string_implicit_ConversionResult_implicit_int_implicit_bool>`
+  *  :ref:`uint64 (str: string implicit) : uint64 <function-strings_uint64_string_implicit>`
+  *  :ref:`uint64 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint64 <function-strings_uint64_string_implicit_ConversionResult_implicit_int_implicit_bool>`
+  *  :ref:`uint8 (str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : uint8 <function-strings_uint8_string_implicit_ConversionResult_implicit_int_implicit_bool>`
+  *  :ref:`uint8 (str: string implicit) : uint8 <function-strings_uint8_string_implicit>`
 
 
 double
@@ -751,7 +751,7 @@ Converts a string to a double value, panicking on failure; an overload accepts `
 
 :Arguments: * **str** : string implicit
 
-            * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>` & implicit
+            * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>`& implicit
 
             * **offset** : int& implicit
 
@@ -789,7 +789,7 @@ fmt
 
 Formats a numeric value of type T into the StringBuilderWriter using a libfmt/C++20 std::format format string and returns a reference to the writer.
 
-:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
+:Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` implicit
 
             * **format** : string implicit
 
@@ -863,7 +863,7 @@ Converts a string to an int16, panicking on failure; an overload accepts `result
 
 :Arguments: * **str** : string implicit
 
-            * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>` & implicit
+            * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>`& implicit
 
             * **offset** : int& implicit
 
@@ -1098,7 +1098,7 @@ Converts a string to a uint8, panicking on failure; an overload accepts `result`
 
 :Arguments: * **str** : string implicit
 
-            * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>` & implicit
+            * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>`& implicit
 
             * **offset** : int& implicit
 
@@ -1114,8 +1114,8 @@ Converts a string to a uint8, panicking on failure; an overload accepts `result`
 String as array
 +++++++++++++++
 
-  *  :ref:`modify_data (str: string implicit; block: block\<(array\<uint8\>#):void\>) : string <function-strings_modify_data_string_implicit_block_ls_array_ls_uint8_gr__hh__c_void_gr_>` 
-  *  :ref:`peek_data (str: string implicit; block: block\<(array\<uint8\>#):void\>) <function-strings_peek_data_string_implicit_block_ls_array_ls_uint8_gr__hh__c_void_gr_>` 
+  *  :ref:`modify_data (str: string implicit; block: block\<(array\<uint8\>#):void\>) : string <function-strings_modify_data_string_implicit_block_ls_array_ls_uint8_gr__hh__c_void_gr_>`
+  *  :ref:`peek_data (str: string implicit; block: block\<(array\<uint8\>#):void\>) <function-strings_peek_data_string_implicit_block_ls_array_ls_uint8_gr__hh__c_void_gr_>`
 
 .. _function-strings_modify_data_string_implicit_block_ls_array_ls_uint8_gr__hh__c_void_gr_:
 
@@ -1141,14 +1141,14 @@ Maps the raw bytes of string `str` into a temporary read-only uint8 array and pa
 Low level memory allocation
 +++++++++++++++++++++++++++
 
-  *  :ref:`delete_string (str: string& implicit) : bool <function-strings_delete_string_string_implicit>` 
-  *  :ref:`reserve_string_buffer (str: string implicit; length: int) : string <function-strings_reserve_string_buffer_string_implicit_int>` 
+  *  :ref:`delete_string (str: string& implicit) : bool <function-strings_delete_string_string_implicit>`
+  *  :ref:`reserve_string_buffer (str: string implicit; length: int) : string <function-strings_reserve_string_buffer_string_implicit_int>`
 
 .. _function-strings_delete_string_string_implicit:
 
 .. das:function:: delete_string(str: string& implicit) : bool
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Frees the string `str` from the heap and clears the reference, returning true on success; unsafe because existing aliases become dangling pointers.

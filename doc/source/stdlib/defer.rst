@@ -56,7 +56,7 @@ into {}, and add delete expression to the finally section of the current block
 Defer
 +++++
 
-  *  :ref:`defer (blk: block\<():void\>) <function-defer_defer_block_ls__c_void_gr_>` 
+  *  :ref:`defer (blk: block\<():void\>) <function-defer_defer_block_ls__c_void_gr_>`
 
 .. _function-defer_defer_block_ls__c_void_gr_:
 
@@ -76,7 +76,7 @@ Will close the file when 'a' is out of scope.
 Stub
 ++++
 
-  *  :ref:`nada () <function-defer_nada>` 
+  *  :ref:`nada () <function-defer_nada>`
 
 .. _function-defer_nada:
 

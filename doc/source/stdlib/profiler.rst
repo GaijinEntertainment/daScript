@@ -19,7 +19,7 @@ All functions and symbols are in "profiler" module, use require to get access to
 Profiler control
 ++++++++++++++++
 
-  *  :ref:`set_enable_profiler (var ctxId: uint64; enabled: bool) <function-profiler_set_enable_profiler_uint64_bool>` 
+  *  :ref:`set_enable_profiler (var ctxId: uint64; enabled: bool) <function-profiler_set_enable_profiler_uint64_bool>`
 
 .. _function-profiler_set_enable_profiler_uint64_bool:
 

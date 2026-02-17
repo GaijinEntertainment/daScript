@@ -17,11 +17,11 @@ All functions and symbols are in "is_local" module, use require to get access to
 Scope checks
 ++++++++++++
 
-  *  :ref:`is_local_expr (expr: ExpressionPtr) : bool <function-is_local_is_local_expr_ExpressionPtr>` 
-  *  :ref:`is_local_or_global_expr (expr: ExpressionPtr) : bool <function-is_local_is_local_or_global_expr_ExpressionPtr>` 
-  *  :ref:`is_scope_expr (expr: ExpressionPtr) : bool <function-is_local_is_scope_expr_ExpressionPtr>` 
-  *  :ref:`is_shared_expr (expr: ExpressionPtr) : bool <function-is_local_is_shared_expr_ExpressionPtr>` 
-  *  :ref:`is_temp_safe (expr: ExpressionPtr) : bool <function-is_local_is_temp_safe_ExpressionPtr>` 
+  *  :ref:`is_local_expr (expr: ExpressionPtr) : bool <function-is_local_is_local_expr_ExpressionPtr>`
+  *  :ref:`is_local_or_global_expr (expr: ExpressionPtr) : bool <function-is_local_is_local_or_global_expr_ExpressionPtr>`
+  *  :ref:`is_scope_expr (expr: ExpressionPtr) : bool <function-is_local_is_scope_expr_ExpressionPtr>`
+  *  :ref:`is_shared_expr (expr: ExpressionPtr) : bool <function-is_local_is_shared_expr_ExpressionPtr>`
+  *  :ref:`is_temp_safe (expr: ExpressionPtr) : bool <function-is_local_is_temp_safe_ExpressionPtr>`
 
 .. _function-is_local_is_local_expr_ExpressionPtr:
 
@@ -29,7 +29,7 @@ Scope checks
 
 Returns true if the expression is local to the current scope.
 
-:Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+:Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. _function-is_local_is_local_or_global_expr_ExpressionPtr:
 
@@ -37,7 +37,7 @@ Returns true if the expression is local to the current scope.
 
 Returns true if expression is local to the current scope or global scope.
 
-:Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+:Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. _function-is_local_is_scope_expr_ExpressionPtr:
 
@@ -45,7 +45,7 @@ Returns true if expression is local to the current scope or global scope.
 
 Returns true if the expression is a scoped expression, i.e. eventually points to a variable.
 
-:Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+:Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. _function-is_local_is_shared_expr_ExpressionPtr:
 
@@ -53,7 +53,7 @@ Returns true if the expression is a scoped expression, i.e. eventually points to
 
 Returns true if the expression refers to a global shared variable.
 
-:Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+:Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. _function-is_local_is_temp_safe_ExpressionPtr:
 
@@ -62,6 +62,6 @@ Returns true if the expression refers to a global shared variable.
 Returns true if the expression had no calls, [] or table [] operators of any kind.
 This is used to check expression can be safely casted to temp type.
 
-:Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+:Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 

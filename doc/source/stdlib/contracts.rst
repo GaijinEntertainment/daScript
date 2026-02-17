@@ -145,7 +145,7 @@ Workhorse types are: bool,int*,uint*,float*,double,range and urange, range64 and
 Type queries
 ++++++++++++
 
-  *  :ref:`isYetAnotherVectorTemplate (td: TypeDeclPtr) : bool <function-contracts_isYetAnotherVectorTemplate_TypeDeclPtr>` 
+  *  :ref:`isYetAnotherVectorTemplate (td: TypeDeclPtr) : bool <function-contracts_isYetAnotherVectorTemplate_TypeDeclPtr>`
 
 .. _function-contracts_isYetAnotherVectorTemplate_TypeDeclPtr:
 
@@ -153,6 +153,6 @@ Type queries
 
 returns true if the given type declaration is a das::vector template bound on C++ side
 
-:Arguments: * **td** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
+:Arguments: * **td** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>`
 
 

@@ -71,8 +71,8 @@ ray (direction and origin)
 Angle conversions
 +++++++++++++++++
 
-  *  :ref:`degrees (f: float) : float <function-math_boost_degrees_float>` 
-  *  :ref:`radians (f: float) : float <function-math_boost_radians_float>` 
+  *  :ref:`degrees (f: float) : float <function-math_boost_degrees_float>`
+  *  :ref:`radians (f: float) : float <function-math_boost_radians_float>`
 
 .. _function-math_boost_degrees_float:
 
@@ -94,9 +94,9 @@ convert degrees to radians
 Intersections
 +++++++++++++
 
-  *  :ref:`is_intersecting (a: AABB; b: AABB) : bool <function-math_boost_is_intersecting_AABB_AABB>` 
-  *  :ref:`is_intersecting (a: AABR; b: AABR) : bool <function-math_boost_is_intersecting_AABR_AABR>` 
-  *  :ref:`is_intersecting (ray: Ray; aabb: AABB; Tmin: float = 0f; Tmax: float = FLT_MAX) : bool <function-math_boost_is_intersecting_Ray_AABB_float_float>` 
+  *  :ref:`is_intersecting (a: AABB; b: AABB) : bool <function-math_boost_is_intersecting_AABB_AABB>`
+  *  :ref:`is_intersecting (a: AABR; b: AABR) : bool <function-math_boost_is_intersecting_AABR_AABR>`
+  *  :ref:`is_intersecting (ray: Ray; aabb: AABB; Tmin: float = 0f; Tmax: float = FLT_MAX) : bool <function-math_boost_is_intersecting_Ray_AABB_float_float>`
 
 
 is_intersecting
@@ -108,9 +108,9 @@ is_intersecting
 
 returns true if inputs intersect
 
-:Arguments: * **a** :  :ref:`AABB <struct-math_boost-AABB>` 
+:Arguments: * **a** :  :ref:`AABB <struct-math_boost-AABB>`
 
-            * **b** :  :ref:`AABB <struct-math_boost-AABB>` 
+            * **b** :  :ref:`AABB <struct-math_boost-AABB>`
 
 .. _function-math_boost_is_intersecting_AABR_AABR:
 
@@ -126,13 +126,13 @@ returns true if inputs intersect
 Matrices
 ++++++++
 
-  *  :ref:`look_at_lh (Eye: float3; At: float3; Up: float3) : float4x4 <function-math_boost_look_at_lh_float3_float3_float3>` 
-  *  :ref:`look_at_rh (Eye: float3; At: float3; Up: float3) : float4x4 <function-math_boost_look_at_rh_float3_float3_float3>` 
-  *  :ref:`ortho_rh (left: float; right: float; bottom: float; top: float; zNear: float; zFar: float) : float4x4 <function-math_boost_ortho_rh_float_float_float_float_float_float>` 
-  *  :ref:`perspective_lh (fovy: float; aspect: float; zn: float; zf: float) : float4x4 <function-math_boost_perspective_lh_float_float_float_float>` 
-  *  :ref:`perspective_rh (fovy: float; aspect: float; zn: float; zf: float) : float4x4 <function-math_boost_perspective_rh_float_float_float_float>` 
-  *  :ref:`perspective_rh_opengl (fovy: float; aspect: float; zn: float; zf: float) : float4x4 <function-math_boost_perspective_rh_opengl_float_float_float_float>` 
-  *  :ref:`planar_shadow (Light: float4; Plane: float4) : float4x4 <function-math_boost_planar_shadow_float4_float4>` 
+  *  :ref:`look_at_lh (Eye: float3; At: float3; Up: float3) : float4x4 <function-math_boost_look_at_lh_float3_float3_float3>`
+  *  :ref:`look_at_rh (Eye: float3; At: float3; Up: float3) : float4x4 <function-math_boost_look_at_rh_float3_float3_float3>`
+  *  :ref:`ortho_rh (left: float; right: float; bottom: float; top: float; zNear: float; zFar: float) : float4x4 <function-math_boost_ortho_rh_float_float_float_float_float_float>`
+  *  :ref:`perspective_lh (fovy: float; aspect: float; zn: float; zf: float) : float4x4 <function-math_boost_perspective_lh_float_float_float_float>`
+  *  :ref:`perspective_rh (fovy: float; aspect: float; zn: float; zf: float) : float4x4 <function-math_boost_perspective_rh_float_float_float_float>`
+  *  :ref:`perspective_rh_opengl (fovy: float; aspect: float; zn: float; zf: float) : float4x4 <function-math_boost_perspective_rh_opengl_float_float_float_float>`
+  *  :ref:`planar_shadow (Light: float4; Plane: float4) : float4x4 <function-math_boost_planar_shadow_float4_float4>`
 
 .. _function-math_boost_look_at_lh_float3_float3_float3:
 
@@ -232,9 +232,9 @@ planar shadow projection matrix, i.e. all light shadows to be projected on a pla
 Plane
 +++++
 
-  *  :ref:`plane_dot (Plane: float4; Vec: float4) : float <function-math_boost_plane_dot_float4_float4>` 
-  *  :ref:`plane_from_point_normal (p: float3; n: float3) : float4 <function-math_boost_plane_from_point_normal_float3_float3>` 
-  *  :ref:`plane_normalize (Plane: float4) : float4 <function-math_boost_plane_normalize_float4>` 
+  *  :ref:`plane_dot (Plane: float4; Vec: float4) : float <function-math_boost_plane_dot_float4_float4>`
+  *  :ref:`plane_from_point_normal (p: float3; n: float3) : float4 <function-math_boost_plane_from_point_normal_float3_float3>`
+  *  :ref:`plane_normalize (Plane: float4) : float4 <function-math_boost_plane_normalize_float4>`
 
 .. _function-math_boost_plane_dot_float4_float4:
 
@@ -268,9 +268,9 @@ normalize `Plane', length xyz will be 1.0 (or 0.0 for no plane)
 Color conversions
 +++++++++++++++++
 
-  *  :ref:`linear_to_SRGB (c: float3) : float3 <function-math_boost_linear_to_SRGB_float3>` 
-  *  :ref:`linear_to_SRGB (x: float) : float <function-math_boost_linear_to_SRGB_float>` 
-  *  :ref:`linear_to_SRGB (c: float4) : float4 <function-math_boost_linear_to_SRGB_float4>` 
+  *  :ref:`linear_to_SRGB (c: float3) : float3 <function-math_boost_linear_to_SRGB_float3>`
+  *  :ref:`linear_to_SRGB (x: float) : float <function-math_boost_linear_to_SRGB_float>`
+  *  :ref:`linear_to_SRGB (c: float4) : float4 <function-math_boost_linear_to_SRGB_float4>`
 
 
 linear_to_SRGB
@@ -298,10 +298,10 @@ convert value from linear space to sRGB curve space
 Color packing and unpacking
 +++++++++++++++++++++++++++
 
-  *  :ref:`RGBA_TO_UCOLOR (xyzw: float4) : uint <function-math_boost_RGBA_TO_UCOLOR_float4>` 
-  *  :ref:`RGBA_TO_UCOLOR (x: float; y: float; z: float; w: float) : uint <function-math_boost_RGBA_TO_UCOLOR_float_float_float_float>` 
-  *  :ref:`UCOLOR_TO_RGB (x: uint) : float3 <function-math_boost_UCOLOR_TO_RGB_uint>` 
-  *  :ref:`UCOLOR_TO_RGBA (x: uint) : float4 <function-math_boost_UCOLOR_TO_RGBA_uint>` 
+  *  :ref:`RGBA_TO_UCOLOR (xyzw: float4) : uint <function-math_boost_RGBA_TO_UCOLOR_float4>`
+  *  :ref:`RGBA_TO_UCOLOR (x: float; y: float; z: float; w: float) : uint <function-math_boost_RGBA_TO_UCOLOR_float_float_float_float>`
+  *  :ref:`UCOLOR_TO_RGB (x: uint) : float3 <function-math_boost_UCOLOR_TO_RGB_uint>`
+  *  :ref:`UCOLOR_TO_RGBA (x: uint) : float4 <function-math_boost_UCOLOR_TO_RGBA_uint>`
 
 
 RGBA_TO_UCOLOR

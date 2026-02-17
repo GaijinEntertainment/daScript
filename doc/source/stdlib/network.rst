@@ -32,7 +32,7 @@ Classes
 
 .. das:attribute:: Server
 
-:Fields: * **_server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > - Single-socket listener that manages one client connection at a time.
+:Fields: * **_server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>`> - Single-socket listener that manages one client connection at a time.
 
 
 .. _function-network_Server_rq_make_server_adapter_Server_0xe:
@@ -56,7 +56,7 @@ Initializes the server on the specified port; returns ``true`` on success.
 Restores the server with the given shared orphan network server pointer.
 This is necessary to re-establish the server state after reload of a script.
 
-:Arguments: * **shared_orphan** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` >&
+:Arguments: * **shared_orphan** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>`>&
 
 .. _function-network_Server_rq_save_Server_smart_ptr_ls_NetworkServer_gr__0x20:
 
@@ -65,7 +65,7 @@ This is necessary to re-establish the server state after reload of a script.
 Saves the server state to a shared orphan network server pointer.
 This is necessary to re-establish the server state after reload of a script.
 
-:Arguments: * **shared_orphan** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` >&
+:Arguments: * **shared_orphan** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>`>&
 
 .. _function-network_Server_rq_has_session_Server_0x23:
 
@@ -111,13 +111,13 @@ Constructs a new ``Server`` instance with default settings.
 Low level NetworkServer IO
 ++++++++++++++++++++++++++
 
-  *  :ref:`make_server (class: void? implicit; info: StructInfo const? implicit) : bool <function-network_make_server_void_q__implicit_StructInfo_const_q__implicit>` 
-  *  :ref:`server_init (server: smart_ptr\<NetworkServer\> implicit; port: int) : bool <function-network_server_init_smart_ptr_ls_NetworkServer_gr__implicit_int>` 
-  *  :ref:`server_is_connected (server: smart_ptr\<NetworkServer\> implicit) : bool <function-network_server_is_connected_smart_ptr_ls_NetworkServer_gr__implicit>` 
-  *  :ref:`server_is_open (server: smart_ptr\<NetworkServer\> implicit) : bool <function-network_server_is_open_smart_ptr_ls_NetworkServer_gr__implicit>` 
-  *  :ref:`server_restore (server: smart_ptr\<NetworkServer\> implicit; class: void? implicit; info: StructInfo const? implicit) <function-network_server_restore_smart_ptr_ls_NetworkServer_gr__implicit_void_q__implicit_StructInfo_const_q__implicit>` 
-  *  :ref:`server_send (server: smart_ptr\<NetworkServer\> implicit; data: uint8? implicit; size: int) : bool <function-network_server_send_smart_ptr_ls_NetworkServer_gr__implicit_uint8_q__implicit_int>` 
-  *  :ref:`server_tick (server: smart_ptr\<NetworkServer\> implicit) <function-network_server_tick_smart_ptr_ls_NetworkServer_gr__implicit>` 
+  *  :ref:`make_server (class: void? implicit; info: StructInfo const? implicit) : bool <function-network_make_server_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`server_init (server: smart_ptr\<NetworkServer\> implicit; port: int) : bool <function-network_server_init_smart_ptr_ls_NetworkServer_gr__implicit_int>`
+  *  :ref:`server_is_connected (server: smart_ptr\<NetworkServer\> implicit) : bool <function-network_server_is_connected_smart_ptr_ls_NetworkServer_gr__implicit>`
+  *  :ref:`server_is_open (server: smart_ptr\<NetworkServer\> implicit) : bool <function-network_server_is_open_smart_ptr_ls_NetworkServer_gr__implicit>`
+  *  :ref:`server_restore (server: smart_ptr\<NetworkServer\> implicit; class: void? implicit; info: StructInfo const? implicit) <function-network_server_restore_smart_ptr_ls_NetworkServer_gr__implicit_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`server_send (server: smart_ptr\<NetworkServer\> implicit; data: uint8? implicit; size: int) : bool <function-network_server_send_smart_ptr_ls_NetworkServer_gr__implicit_uint8_q__implicit_int>`
+  *  :ref:`server_tick (server: smart_ptr\<NetworkServer\> implicit) <function-network_server_tick_smart_ptr_ls_NetworkServer_gr__implicit>`
 
 .. _function-network_make_server_void_q__implicit_StructInfo_const_q__implicit:
 
@@ -127,7 +127,7 @@ Creates a new ``Server`` instance.
 
 :Arguments: * **class** : void? implicit
 
-            * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>` ? implicit
+            * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>`? implicit
 
 .. _function-network_server_init_smart_ptr_ls_NetworkServer_gr__implicit_int:
 
@@ -135,7 +135,7 @@ Creates a new ``Server`` instance.
 
 Initializes the server to listen on the specified port.
 
-:Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
+:Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>`> implicit
 
             * **port** : int
 
@@ -145,7 +145,7 @@ Initializes the server to listen on the specified port.
 
 Returns ``true`` if the server has an active client connection.
 
-:Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
+:Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>`> implicit
 
 .. _function-network_server_is_open_smart_ptr_ls_NetworkServer_gr__implicit:
 
@@ -153,7 +153,7 @@ Returns ``true`` if the server has an active client connection.
 
 Returns ``true`` if the server is listening on its bound port.
 
-:Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
+:Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>`> implicit
 
 .. _function-network_server_restore_smart_ptr_ls_NetworkServer_gr__implicit_void_q__implicit_StructInfo_const_q__implicit:
 
@@ -161,11 +161,11 @@ Returns ``true`` if the server is listening on its bound port.
 
 Restores a server from an orphaned or interrupted state.
 
-:Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
+:Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>`> implicit
 
             * **class** : void? implicit
 
-            * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>` ? implicit
+            * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>`? implicit
 
 .. _function-network_server_send_smart_ptr_ls_NetworkServer_gr__implicit_uint8_q__implicit_int:
 
@@ -173,7 +173,7 @@ Restores a server from an orphaned or interrupted state.
 
 Sends data from the server to the connected client.
 
-:Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
+:Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>`> implicit
 
             * **data** : uint8? implicit
 
@@ -185,6 +185,6 @@ Sends data from the server to the connected client.
 
 Processes pending network I/O; must be called periodically for the server to function.
 
-:Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
+:Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>`> implicit
 
 

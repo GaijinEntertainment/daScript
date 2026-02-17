@@ -37,37 +37,37 @@ Example: ::
 Sorting data
 ++++++++++++
 
-  *  :ref:`order (var a: iterator\<auto(TT)\>) : iterator\<TT\> <function-linq_order_iterator_ls_autoTT_gr_>` 
-  *  :ref:`order (var a: iterator\<auto(TT)\>; fun: block\<(v1:TT;v2:TT):bool\>) : iterator\<TT\> <function-linq_order_iterator_ls_autoTT_gr__block_ls_v1_c_TT;v2_c_TT_c_bool_gr_>` 
-  *  :ref:`order (a: array\<auto(TT)\>; fun: block\<(v1:TT;v2:TT):bool\>) : array\<TT\> <function-linq_order_array_ls_autoTT_gr__block_ls_v1_c_TT;v2_c_TT_c_bool_gr_>` 
-  *  :ref:`order (arr: array\<auto(TT)\>) : array\<TT\> <function-linq_order_array_ls_autoTT_gr_>` 
-  *  :ref:`order_by (a: array\<auto(TT)\>; key: auto) : array\<TT\> <function-linq_order_by_array_ls_autoTT_gr__auto_0x1d1>` 
-  *  :ref:`order_by (var a: iterator\<auto(TT)\>; key: auto) : iterator\<TT\> <function-linq_order_by_iterator_ls_autoTT_gr__auto_0x1c9>` 
-  *  :ref:`order_by_descending (var a: iterator\<auto(TT)\>; key: auto) : iterator\<TT\> <function-linq_order_by_descending_iterator_ls_autoTT_gr__auto_0x1e7>` 
-  *  :ref:`order_by_descending (a: array\<auto(TT)\>; key: auto) : array\<TT\> <function-linq_order_by_descending_array_ls_autoTT_gr__auto_0x1ef>` 
-  *  :ref:`order_by_descending_inplace (var buffer: array\<auto(TT)\>; key: auto) : auto <function-linq_order_by_descending_inplace_array_ls_autoTT_gr__auto_0x1e1>` 
-  *  :ref:`order_by_descending_to_array (var a: iterator\<auto(TT)\>; key: auto) : array\<TT\> <function-linq_order_by_descending_to_array_iterator_ls_autoTT_gr__auto_0x1f7>` 
-  *  :ref:`order_by_inplace (var buffer: array\<auto(TT)\>; key: auto) : auto <function-linq_order_by_inplace_array_ls_autoTT_gr__auto_0x1c3>` 
-  *  :ref:`order_by_to_array (var a: iterator\<auto(TT)\>; key: auto) : array\<TT\> <function-linq_order_by_to_array_iterator_ls_autoTT_gr__auto_0x1d9>` 
-  *  :ref:`order_descending (var a: iterator\<auto(TT)\>) : iterator\<TT\> <function-linq_order_descending_iterator_ls_autoTT_gr_>` 
-  *  :ref:`order_descending (a: array\<auto(TT)\>; fun: block\<(v1:TT;v2:TT):bool\>) : array\<TT\> <function-linq_order_descending_array_ls_autoTT_gr__block_ls_v1_c_TT;v2_c_TT_c_bool_gr_>` 
-  *  :ref:`order_descending (arr: array\<auto(TT)\>) : array\<TT\> <function-linq_order_descending_array_ls_autoTT_gr_>` 
-  *  :ref:`order_descending (var a: iterator\<auto(TT)\>; fun: block\<(v1:TT;v2:TT):bool\>) : iterator\<TT\> <function-linq_order_descending_iterator_ls_autoTT_gr__block_ls_v1_c_TT;v2_c_TT_c_bool_gr_>` 
-  *  :ref:`order_descending_inplace (var buffer: array\<auto(TT)\>) : auto <function-linq_order_descending_inplace_array_ls_autoTT_gr_>` 
-  *  :ref:`order_descending_inplace (var buffer: array\<auto(TT)\>; fun: block\<(v1:TT;v2:TT):bool\>) : auto <function-linq_order_descending_inplace_array_ls_autoTT_gr__block_ls_v1_c_TT;v2_c_TT_c_bool_gr_>` 
-  *  :ref:`order_descending_to_array (var a: iterator\<auto(TT)\>; fun: block\<(v1:TT;v2:TT):bool\>) : array\<TT\> <function-linq_order_descending_to_array_iterator_ls_autoTT_gr__block_ls_v1_c_TT;v2_c_TT_c_bool_gr_>` 
-  *  :ref:`order_descending_to_array (var a: iterator\<auto(TT)\>) : array\<TT\> <function-linq_order_descending_to_array_iterator_ls_autoTT_gr_>` 
-  *  :ref:`order_inplace (var buffer: array\<auto(TT)\>) : auto <function-linq_order_inplace_array_ls_autoTT_gr_>` 
-  *  :ref:`order_inplace (var buffer: array\<auto(TT)\>; fun: block\<(v1:TT;v2:TT):bool\>) : auto <function-linq_order_inplace_array_ls_autoTT_gr__block_ls_v1_c_TT;v2_c_TT_c_bool_gr_>` 
-  *  :ref:`order_to_array (var a: iterator\<auto(TT)\>; fun: block\<(v1:TT;v2:TT):bool\>) : array\<TT\> <function-linq_order_to_array_iterator_ls_autoTT_gr__block_ls_v1_c_TT;v2_c_TT_c_bool_gr_>` 
-  *  :ref:`order_to_array (var a: iterator\<auto(TT)\>) : array\<TT\> <function-linq_order_to_array_iterator_ls_autoTT_gr_>` 
-  *  :ref:`order_unique_folded (var a: iterator\<auto(TT)\>) : array\<TT\> <function-linq_order_unique_folded_iterator_ls_autoTT_gr_>` 
-  *  :ref:`order_unique_folded (var a: array\<auto(TT)\>) : array\<TT\> <function-linq_order_unique_folded_array_ls_autoTT_gr_>` 
-  *  :ref:`order_unique_folded_inplace (var a: array\<auto(TT)\>) : auto <function-linq_order_unique_folded_inplace_array_ls_autoTT_gr_>` 
-  *  :ref:`reverse (a: array\<auto(TT)\>) : array\<TT\> <function-linq_reverse_array_ls_autoTT_gr_>` 
-  *  :ref:`reverse (var a: iterator\<auto(TT)\>) : iterator\<TT\> <function-linq_reverse_iterator_ls_autoTT_gr_>` 
-  *  :ref:`reverse_inplace (var buffer: array\<auto(TT)\>) : auto <function-linq_reverse_inplace_array_ls_autoTT_gr_>` 
-  *  :ref:`reverse_to_array (var a: iterator\<auto(TT)\>) : array\<TT\> <function-linq_reverse_to_array_iterator_ls_autoTT_gr_>` 
+  *  :ref:`order (var a: iterator\<auto(TT)\>) : iterator\<TT\> <function-linq_order_iterator_ls_autoTT_gr_>`
+  *  :ref:`order (var a: iterator\<auto(TT)\>; fun: block\<(v1:TT;v2:TT):bool\>) : iterator\<TT\> <function-linq_order_iterator_ls_autoTT_gr__block_ls_v1_c_TT;v2_c_TT_c_bool_gr_>`
+  *  :ref:`order (a: array\<auto(TT)\>; fun: block\<(v1:TT;v2:TT):bool\>) : array\<TT\> <function-linq_order_array_ls_autoTT_gr__block_ls_v1_c_TT;v2_c_TT_c_bool_gr_>`
+  *  :ref:`order (arr: array\<auto(TT)\>) : array\<TT\> <function-linq_order_array_ls_autoTT_gr_>`
+  *  :ref:`order_by (a: array\<auto(TT)\>; key: auto) : array\<TT\> <function-linq_order_by_array_ls_autoTT_gr__auto_0x1d1>`
+  *  :ref:`order_by (var a: iterator\<auto(TT)\>; key: auto) : iterator\<TT\> <function-linq_order_by_iterator_ls_autoTT_gr__auto_0x1c9>`
+  *  :ref:`order_by_descending (var a: iterator\<auto(TT)\>; key: auto) : iterator\<TT\> <function-linq_order_by_descending_iterator_ls_autoTT_gr__auto_0x1e7>`
+  *  :ref:`order_by_descending (a: array\<auto(TT)\>; key: auto) : array\<TT\> <function-linq_order_by_descending_array_ls_autoTT_gr__auto_0x1ef>`
+  *  :ref:`order_by_descending_inplace (var buffer: array\<auto(TT)\>; key: auto) : auto <function-linq_order_by_descending_inplace_array_ls_autoTT_gr__auto_0x1e1>`
+  *  :ref:`order_by_descending_to_array (var a: iterator\<auto(TT)\>; key: auto) : array\<TT\> <function-linq_order_by_descending_to_array_iterator_ls_autoTT_gr__auto_0x1f7>`
+  *  :ref:`order_by_inplace (var buffer: array\<auto(TT)\>; key: auto) : auto <function-linq_order_by_inplace_array_ls_autoTT_gr__auto_0x1c3>`
+  *  :ref:`order_by_to_array (var a: iterator\<auto(TT)\>; key: auto) : array\<TT\> <function-linq_order_by_to_array_iterator_ls_autoTT_gr__auto_0x1d9>`
+  *  :ref:`order_descending (var a: iterator\<auto(TT)\>) : iterator\<TT\> <function-linq_order_descending_iterator_ls_autoTT_gr_>`
+  *  :ref:`order_descending (a: array\<auto(TT)\>; fun: block\<(v1:TT;v2:TT):bool\>) : array\<TT\> <function-linq_order_descending_array_ls_autoTT_gr__block_ls_v1_c_TT;v2_c_TT_c_bool_gr_>`
+  *  :ref:`order_descending (arr: array\<auto(TT)\>) : array\<TT\> <function-linq_order_descending_array_ls_autoTT_gr_>`
+  *  :ref:`order_descending (var a: iterator\<auto(TT)\>; fun: block\<(v1:TT;v2:TT):bool\>) : iterator\<TT\> <function-linq_order_descending_iterator_ls_autoTT_gr__block_ls_v1_c_TT;v2_c_TT_c_bool_gr_>`
+  *  :ref:`order_descending_inplace (var buffer: array\<auto(TT)\>) : auto <function-linq_order_descending_inplace_array_ls_autoTT_gr_>`
+  *  :ref:`order_descending_inplace (var buffer: array\<auto(TT)\>; fun: block\<(v1:TT;v2:TT):bool\>) : auto <function-linq_order_descending_inplace_array_ls_autoTT_gr__block_ls_v1_c_TT;v2_c_TT_c_bool_gr_>`
+  *  :ref:`order_descending_to_array (var a: iterator\<auto(TT)\>; fun: block\<(v1:TT;v2:TT):bool\>) : array\<TT\> <function-linq_order_descending_to_array_iterator_ls_autoTT_gr__block_ls_v1_c_TT;v2_c_TT_c_bool_gr_>`
+  *  :ref:`order_descending_to_array (var a: iterator\<auto(TT)\>) : array\<TT\> <function-linq_order_descending_to_array_iterator_ls_autoTT_gr_>`
+  *  :ref:`order_inplace (var buffer: array\<auto(TT)\>) : auto <function-linq_order_inplace_array_ls_autoTT_gr_>`
+  *  :ref:`order_inplace (var buffer: array\<auto(TT)\>; fun: block\<(v1:TT;v2:TT):bool\>) : auto <function-linq_order_inplace_array_ls_autoTT_gr__block_ls_v1_c_TT;v2_c_TT_c_bool_gr_>`
+  *  :ref:`order_to_array (var a: iterator\<auto(TT)\>; fun: block\<(v1:TT;v2:TT):bool\>) : array\<TT\> <function-linq_order_to_array_iterator_ls_autoTT_gr__block_ls_v1_c_TT;v2_c_TT_c_bool_gr_>`
+  *  :ref:`order_to_array (var a: iterator\<auto(TT)\>) : array\<TT\> <function-linq_order_to_array_iterator_ls_autoTT_gr_>`
+  *  :ref:`order_unique_folded (var a: iterator\<auto(TT)\>) : array\<TT\> <function-linq_order_unique_folded_iterator_ls_autoTT_gr_>`
+  *  :ref:`order_unique_folded (var a: array\<auto(TT)\>) : array\<TT\> <function-linq_order_unique_folded_array_ls_autoTT_gr_>`
+  *  :ref:`order_unique_folded_inplace (var a: array\<auto(TT)\>) : auto <function-linq_order_unique_folded_inplace_array_ls_autoTT_gr_>`
+  *  :ref:`reverse (a: array\<auto(TT)\>) : array\<TT\> <function-linq_reverse_array_ls_autoTT_gr_>`
+  *  :ref:`reverse (var a: iterator\<auto(TT)\>) : iterator\<TT\> <function-linq_reverse_iterator_ls_autoTT_gr_>`
+  *  :ref:`reverse_inplace (var buffer: array\<auto(TT)\>) : auto <function-linq_reverse_inplace_array_ls_autoTT_gr_>`
+  *  :ref:`reverse_to_array (var a: iterator\<auto(TT)\>) : array\<TT\> <function-linq_reverse_to_array_iterator_ls_autoTT_gr_>`
 
 
 order
@@ -341,41 +341,41 @@ Reverses an iterator and returns an array
 Set operations
 ++++++++++++++
 
-  *  :ref:`distinct (a: array\<auto(TT)\>) : array\<TT\> <function-linq_distinct_array_ls_autoTT_gr_>` 
-  *  :ref:`distinct (var a: iterator\<auto(TT)\>) : iterator\<TT\> <function-linq_distinct_iterator_ls_autoTT_gr_>` 
-  *  :ref:`distinct_by (a: array\<auto(TT)\>; key: block\<(arg:TT):auto\>) : array\<TT\> <function-linq_distinct_by_array_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>` 
-  *  :ref:`distinct_by (var a: iterator\<auto(TT)\>; key: block\<(arg:TT):auto\>) : iterator\<TT\> <function-linq_distinct_by_iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>` 
-  *  :ref:`distinct_by_inplace (var a: array\<auto(TT)\>; key: block\<(arg:TT):auto\>) : auto <function-linq_distinct_by_inplace_array_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>` 
-  *  :ref:`distinct_by_to_array (var a: iterator\<auto(TT)\>; key: block\<(arg:TT):auto\>) : array\<TT\> <function-linq_distinct_by_to_array_iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>` 
-  *  :ref:`distinct_inplace (var a: array\<auto(TT)\>) : auto <function-linq_distinct_inplace_array_ls_autoTT_gr_>` 
-  *  :ref:`distinct_to_array (var a: iterator\<auto(TT)\>) : array\<TT\> <function-linq_distinct_to_array_iterator_ls_autoTT_gr_>` 
-  *  :ref:`except (var src: iterator\<auto(TT)\>; var exclude: iterator\<auto(TT)\>) : iterator\<TT\> <function-linq_except_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr_>` 
-  *  :ref:`except (src: array\<auto(TT)\>; exclude: array\<auto(TT)\>) : array\<TT\> <function-linq_except_array_ls_autoTT_gr__array_ls_autoTT_gr_>` 
-  *  :ref:`except_by (src: array\<auto(TT)\>; exclude: array\<auto(TT)\>; key: block\<(arg:TT):auto\>) : array\<TT\> <function-linq_except_by_array_ls_autoTT_gr__array_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>` 
-  *  :ref:`except_by (var src: iterator\<auto(TT)\>; var exclude: iterator\<auto(TT)\>; key: block\<(arg:TT):auto\>) : iterator\<TT\> <function-linq_except_by_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>` 
-  *  :ref:`except_by_to_array (var src: iterator\<auto(TT)\>; var exclude: iterator\<auto(TT)\>; key: block\<(arg:TT):auto\>) : array\<TT\> <function-linq_except_by_to_array_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>` 
-  *  :ref:`except_to_array (var src: iterator\<auto(TT)\>; var exclude: iterator\<auto(TT)\>) : array\<TT\> <function-linq_except_to_array_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr_>` 
-  *  :ref:`intersect (srca: array\<auto(TT)\>; srcb: array\<auto(TT)\>) : array\<TT\> <function-linq_intersect_array_ls_autoTT_gr__array_ls_autoTT_gr_>` 
-  *  :ref:`intersect (var srca: iterator\<auto(TT)\>; var srcb: iterator\<auto(TT)\>) : iterator\<TT\> <function-linq_intersect_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr_>` 
-  *  :ref:`intersect_by (srca: array\<auto(TT)\>; srcb: array\<auto(TT)\>; key: block\<(arg:TT):auto\>) : array\<TT\> <function-linq_intersect_by_array_ls_autoTT_gr__array_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>` 
-  *  :ref:`intersect_by (var srca: iterator\<auto(TT)\>; var srcb: iterator\<auto(TT)\>; key: block\<(arg:TT):auto\>) : iterator\<TT\> <function-linq_intersect_by_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>` 
-  *  :ref:`intersect_by_to_array (var srca: iterator\<auto(TT)\>; var srcb: iterator\<auto(TT)\>; key: block\<(arg:TT):auto\>) : array\<TT\> <function-linq_intersect_by_to_array_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>` 
-  *  :ref:`intersect_to_array (var srca: iterator\<auto(TT)\>; var srcb: iterator\<auto(TT)\>) : array\<TT\> <function-linq_intersect_to_array_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr_>` 
-  *  :ref:`union (var srca: iterator\<auto(TT)\>; var srcb: iterator\<auto(TT)\>) : iterator\<TT\> <function-linq_union_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr_>` 
-  *  :ref:`union (var srca: array\<auto(TT)\>; var srcb: array\<auto(TT)\>) : array\<TT\> <function-linq_union_array_ls_autoTT_gr__array_ls_autoTT_gr_>` 
-  *  :ref:`union_by (srca: array\<auto(TT)\>; srcb: array\<auto(TT)\>; key: block\<(arg:TT):auto\>) : array\<TT\> <function-linq_union_by_array_ls_autoTT_gr__array_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>` 
-  *  :ref:`union_by (var srca: iterator\<auto(TT)\>; var srcb: iterator\<auto(TT)\>; key: block\<(arg:TT):auto\>) : iterator\<TT\> <function-linq_union_by_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>` 
-  *  :ref:`union_by_to_array (var srca: iterator\<auto(TT)\>; var srcb: iterator\<auto(TT)\>; key: block\<(arg:TT):auto\>) : array\<TT\> <function-linq_union_by_to_array_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>` 
-  *  :ref:`union_to_array (var srca: iterator\<auto(TT)\>; var srcb: iterator\<auto(TT)\>) : array\<TT\> <function-linq_union_to_array_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr_>` 
-  *  :ref:`unique (a: array\<auto(TT)\>) : array\<TT\> <function-linq_unique_array_ls_autoTT_gr_>` 
-  *  :ref:`unique (a: iterator\<auto(TT)\>) : iterator\<TT\> <function-linq_unique_iterator_ls_autoTT_gr_>` 
-  *  :ref:`unique_by (a: array\<auto(TT)\>; key: block\<(arg:TT):auto\>) : array\<TT\> <function-linq_unique_by_array_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>` 
-  *  :ref:`unique_by (a: iterator\<auto(TT)\>; key: block\<(arg:TT):auto\>) : iterator\<TT\> <function-linq_unique_by_iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>` 
-  *  :ref:`unique_by_inplace (var a: array\<auto(TT)\>; key: block\<(arg:TT):auto\>) : auto <function-linq_unique_by_inplace_array_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>` 
-  *  :ref:`unique_by_to_array (a: iterator\<auto(TT)\>; key: block\<(arg:TT):auto\>) : array\<TT\> <function-linq_unique_by_to_array_iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>` 
-  *  :ref:`unique_inplace (var a: array\<auto(TT)\>) : auto <function-linq_unique_inplace_array_ls_autoTT_gr_>` 
-  *  :ref:`unique_key (a: auto) : auto <function-linq_unique_key_auto_0x1fe>` 
-  *  :ref:`unique_to_array (a: iterator\<auto(TT)\>) : array\<TT\> <function-linq_unique_to_array_iterator_ls_autoTT_gr_>` 
+  *  :ref:`distinct (a: array\<auto(TT)\>) : array\<TT\> <function-linq_distinct_array_ls_autoTT_gr_>`
+  *  :ref:`distinct (var a: iterator\<auto(TT)\>) : iterator\<TT\> <function-linq_distinct_iterator_ls_autoTT_gr_>`
+  *  :ref:`distinct_by (a: array\<auto(TT)\>; key: block\<(arg:TT):auto\>) : array\<TT\> <function-linq_distinct_by_array_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>`
+  *  :ref:`distinct_by (var a: iterator\<auto(TT)\>; key: block\<(arg:TT):auto\>) : iterator\<TT\> <function-linq_distinct_by_iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>`
+  *  :ref:`distinct_by_inplace (var a: array\<auto(TT)\>; key: block\<(arg:TT):auto\>) : auto <function-linq_distinct_by_inplace_array_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>`
+  *  :ref:`distinct_by_to_array (var a: iterator\<auto(TT)\>; key: block\<(arg:TT):auto\>) : array\<TT\> <function-linq_distinct_by_to_array_iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>`
+  *  :ref:`distinct_inplace (var a: array\<auto(TT)\>) : auto <function-linq_distinct_inplace_array_ls_autoTT_gr_>`
+  *  :ref:`distinct_to_array (var a: iterator\<auto(TT)\>) : array\<TT\> <function-linq_distinct_to_array_iterator_ls_autoTT_gr_>`
+  *  :ref:`except (var src: iterator\<auto(TT)\>; var exclude: iterator\<auto(TT)\>) : iterator\<TT\> <function-linq_except_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr_>`
+  *  :ref:`except (src: array\<auto(TT)\>; exclude: array\<auto(TT)\>) : array\<TT\> <function-linq_except_array_ls_autoTT_gr__array_ls_autoTT_gr_>`
+  *  :ref:`except_by (src: array\<auto(TT)\>; exclude: array\<auto(TT)\>; key: block\<(arg:TT):auto\>) : array\<TT\> <function-linq_except_by_array_ls_autoTT_gr__array_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>`
+  *  :ref:`except_by (var src: iterator\<auto(TT)\>; var exclude: iterator\<auto(TT)\>; key: block\<(arg:TT):auto\>) : iterator\<TT\> <function-linq_except_by_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>`
+  *  :ref:`except_by_to_array (var src: iterator\<auto(TT)\>; var exclude: iterator\<auto(TT)\>; key: block\<(arg:TT):auto\>) : array\<TT\> <function-linq_except_by_to_array_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>`
+  *  :ref:`except_to_array (var src: iterator\<auto(TT)\>; var exclude: iterator\<auto(TT)\>) : array\<TT\> <function-linq_except_to_array_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr_>`
+  *  :ref:`intersect (srca: array\<auto(TT)\>; srcb: array\<auto(TT)\>) : array\<TT\> <function-linq_intersect_array_ls_autoTT_gr__array_ls_autoTT_gr_>`
+  *  :ref:`intersect (var srca: iterator\<auto(TT)\>; var srcb: iterator\<auto(TT)\>) : iterator\<TT\> <function-linq_intersect_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr_>`
+  *  :ref:`intersect_by (srca: array\<auto(TT)\>; srcb: array\<auto(TT)\>; key: block\<(arg:TT):auto\>) : array\<TT\> <function-linq_intersect_by_array_ls_autoTT_gr__array_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>`
+  *  :ref:`intersect_by (var srca: iterator\<auto(TT)\>; var srcb: iterator\<auto(TT)\>; key: block\<(arg:TT):auto\>) : iterator\<TT\> <function-linq_intersect_by_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>`
+  *  :ref:`intersect_by_to_array (var srca: iterator\<auto(TT)\>; var srcb: iterator\<auto(TT)\>; key: block\<(arg:TT):auto\>) : array\<TT\> <function-linq_intersect_by_to_array_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>`
+  *  :ref:`intersect_to_array (var srca: iterator\<auto(TT)\>; var srcb: iterator\<auto(TT)\>) : array\<TT\> <function-linq_intersect_to_array_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr_>`
+  *  :ref:`union (var srca: iterator\<auto(TT)\>; var srcb: iterator\<auto(TT)\>) : iterator\<TT\> <function-linq_union_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr_>`
+  *  :ref:`union (var srca: array\<auto(TT)\>; var srcb: array\<auto(TT)\>) : array\<TT\> <function-linq_union_array_ls_autoTT_gr__array_ls_autoTT_gr_>`
+  *  :ref:`union_by (srca: array\<auto(TT)\>; srcb: array\<auto(TT)\>; key: block\<(arg:TT):auto\>) : array\<TT\> <function-linq_union_by_array_ls_autoTT_gr__array_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>`
+  *  :ref:`union_by (var srca: iterator\<auto(TT)\>; var srcb: iterator\<auto(TT)\>; key: block\<(arg:TT):auto\>) : iterator\<TT\> <function-linq_union_by_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>`
+  *  :ref:`union_by_to_array (var srca: iterator\<auto(TT)\>; var srcb: iterator\<auto(TT)\>; key: block\<(arg:TT):auto\>) : array\<TT\> <function-linq_union_by_to_array_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>`
+  *  :ref:`union_to_array (var srca: iterator\<auto(TT)\>; var srcb: iterator\<auto(TT)\>) : array\<TT\> <function-linq_union_to_array_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr_>`
+  *  :ref:`unique (a: array\<auto(TT)\>) : array\<TT\> <function-linq_unique_array_ls_autoTT_gr_>`
+  *  :ref:`unique (a: iterator\<auto(TT)\>) : iterator\<TT\> <function-linq_unique_iterator_ls_autoTT_gr_>`
+  *  :ref:`unique_by (a: array\<auto(TT)\>; key: block\<(arg:TT):auto\>) : array\<TT\> <function-linq_unique_by_array_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>`
+  *  :ref:`unique_by (a: iterator\<auto(TT)\>; key: block\<(arg:TT):auto\>) : iterator\<TT\> <function-linq_unique_by_iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>`
+  *  :ref:`unique_by_inplace (var a: array\<auto(TT)\>; key: block\<(arg:TT):auto\>) : auto <function-linq_unique_by_inplace_array_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>`
+  *  :ref:`unique_by_to_array (a: iterator\<auto(TT)\>; key: block\<(arg:TT):auto\>) : array\<TT\> <function-linq_unique_by_to_array_iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>`
+  *  :ref:`unique_inplace (var a: array\<auto(TT)\>) : auto <function-linq_unique_inplace_array_ls_autoTT_gr_>`
+  *  :ref:`unique_key (a: auto) : auto <function-linq_unique_key_auto_0x1fe>`
+  *  :ref:`unique_to_array (a: iterator\<auto(TT)\>) : array\<TT\> <function-linq_unique_to_array_iterator_ls_autoTT_gr_>`
 
 
 distinct
@@ -729,18 +729,18 @@ sort and remove duplicate elements from an iterator and returns an array
 Concatenation operations
 ++++++++++++++++++++++++
 
-  *  :ref:`append (arr: array\<auto(TT)\>; value: TT) : array\<TT\> <function-linq_append_array_ls_autoTT_gr__TT>` 
-  *  :ref:`append (var it: iterator\<auto(TT)\>; value: TT) : iterator\<TT\> <function-linq_append_iterator_ls_autoTT_gr__TT>` 
-  *  :ref:`append_inplace (var arr: array\<auto(TT)\>; value: TT) : auto <function-linq_append_inplace_array_ls_autoTT_gr__TT>` 
-  *  :ref:`append_to_array (var it: iterator\<auto(TT)\>; value: TT) : array\<TT\> <function-linq_append_to_array_iterator_ls_autoTT_gr__TT>` 
-  *  :ref:`concat (var a: iterator\<auto(TT)\>; var b: iterator\<auto(TT)\>) : iterator\<TT\> <function-linq_concat_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr_>` 
-  *  :ref:`concat (a: array\<auto(TT)\>; b: array\<auto(TT)\>) : array\<TT\> <function-linq_concat_array_ls_autoTT_gr__array_ls_autoTT_gr_>` 
-  *  :ref:`concat_inplace (var a: array\<auto(TT)\>; b: array\<auto(TT)\>) : auto <function-linq_concat_inplace_array_ls_autoTT_gr__array_ls_autoTT_gr_>` 
-  *  :ref:`concat_to_array (var a: iterator\<auto(TT)\>; var b: iterator\<auto(TT)\>) : array\<TT\> <function-linq_concat_to_array_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr_>` 
-  *  :ref:`prepend (var it: iterator\<auto(TT)\>; value: TT) : iterator\<TT\> <function-linq_prepend_iterator_ls_autoTT_gr__TT>` 
-  *  :ref:`prepend (arr: array\<auto(TT)\>; value: TT) : array\<TT\> <function-linq_prepend_array_ls_autoTT_gr__TT>` 
-  *  :ref:`prepend_inplace (var arr: array\<auto(TT)\>; value: TT) : auto <function-linq_prepend_inplace_array_ls_autoTT_gr__TT>` 
-  *  :ref:`prepend_to_array (var it: iterator\<auto(TT)\>; value: TT) : array\<TT\> <function-linq_prepend_to_array_iterator_ls_autoTT_gr__TT>` 
+  *  :ref:`append (arr: array\<auto(TT)\>; value: TT) : array\<TT\> <function-linq_append_array_ls_autoTT_gr__TT>`
+  *  :ref:`append (var it: iterator\<auto(TT)\>; value: TT) : iterator\<TT\> <function-linq_append_iterator_ls_autoTT_gr__TT>`
+  *  :ref:`append_inplace (var arr: array\<auto(TT)\>; value: TT) : auto <function-linq_append_inplace_array_ls_autoTT_gr__TT>`
+  *  :ref:`append_to_array (var it: iterator\<auto(TT)\>; value: TT) : array\<TT\> <function-linq_append_to_array_iterator_ls_autoTT_gr__TT>`
+  *  :ref:`concat (var a: iterator\<auto(TT)\>; var b: iterator\<auto(TT)\>) : iterator\<TT\> <function-linq_concat_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr_>`
+  *  :ref:`concat (a: array\<auto(TT)\>; b: array\<auto(TT)\>) : array\<TT\> <function-linq_concat_array_ls_autoTT_gr__array_ls_autoTT_gr_>`
+  *  :ref:`concat_inplace (var a: array\<auto(TT)\>; b: array\<auto(TT)\>) : auto <function-linq_concat_inplace_array_ls_autoTT_gr__array_ls_autoTT_gr_>`
+  *  :ref:`concat_to_array (var a: iterator\<auto(TT)\>; var b: iterator\<auto(TT)\>) : array\<TT\> <function-linq_concat_to_array_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr_>`
+  *  :ref:`prepend (var it: iterator\<auto(TT)\>; value: TT) : iterator\<TT\> <function-linq_prepend_iterator_ls_autoTT_gr__TT>`
+  *  :ref:`prepend (arr: array\<auto(TT)\>; value: TT) : array\<TT\> <function-linq_prepend_array_ls_autoTT_gr__TT>`
+  *  :ref:`prepend_inplace (var arr: array\<auto(TT)\>; value: TT) : auto <function-linq_prepend_inplace_array_ls_autoTT_gr__TT>`
+  *  :ref:`prepend_to_array (var it: iterator\<auto(TT)\>; value: TT) : array\<TT\> <function-linq_prepend_to_array_iterator_ls_autoTT_gr__TT>`
 
 
 append
@@ -866,10 +866,10 @@ Prepends a value to the beginning of an iterator and returns an array
 Generation operations
 +++++++++++++++++++++
 
-  *  :ref:`default_empty (var src: iterator\<auto(TT)\>) : iterator\<TT\> <function-linq_default_empty_iterator_ls_autoTT_gr_>` 
-  *  :ref:`empty (var typ: auto(TT)) : iterator\<TT\> <function-linq_empty_autoTT_0x8d5>` 
-  *  :ref:`range_sequence (start: int; count: int) : iterator\<int\> <function-linq_range_sequence_int_int>` 
-  *  :ref:`repeat (element: auto(TT); count: int) : iterator\<TT\> <function-linq_repeat_autoTT_int_0x8fc>` 
+  *  :ref:`default_empty (var src: iterator\<auto(TT)\>) : iterator\<TT\> <function-linq_default_empty_iterator_ls_autoTT_gr_>`
+  *  :ref:`empty (var typ: auto(TT)) : iterator\<TT\> <function-linq_empty_autoTT_0x8d5>`
+  *  :ref:`range_sequence (start: int; count: int) : iterator\<int\> <function-linq_range_sequence_int_int>`
+  *  :ref:`repeat (element: auto(TT); count: int) : iterator\<TT\> <function-linq_repeat_autoTT_int_0x8fc>`
 
 .. _function-linq_default_empty_iterator_ls_autoTT_gr_:
 
@@ -911,34 +911,34 @@ Generates a sequence that contains one repeated value
 Aggregation operations
 ++++++++++++++++++++++
 
-  *  :ref:`aggregate (var src: iterator\<auto(TT)\>; seed: auto(AGG); func: block\<(acc:AGG;x:TT):AGG\>) : AGG <function-linq_aggregate_iterator_ls_autoTT_gr__autoAGG_block_ls_acc_c_AGG;x_c_TT_c_AGG_gr__0x5f6>` 
-  *  :ref:`aggregate (src: array\<auto(TT)\>; seed: auto(AGG); func: block\<(acc:AGG;x:TT):AGG\>) : AGG <function-linq_aggregate_array_ls_autoTT_gr__autoAGG_block_ls_acc_c_AGG;x_c_TT_c_AGG_gr__0x600>` 
-  *  :ref:`average (src: array\<auto(TT)\>) : TT <function-linq_average_array_ls_autoTT_gr_>` 
-  *  :ref:`average (var src: iterator\<auto(TT)\>) : TT <function-linq_average_iterator_ls_autoTT_gr_>` 
-  *  :ref:`count (a: array\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : int <function-linq_count_array_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>` 
-  *  :ref:`count (a: array\<auto(TT)\>) : int <function-linq_count_array_ls_autoTT_gr_>` 
-  *  :ref:`count (var a: iterator\<auto(TT)\>) : int <function-linq_count_iterator_ls_autoTT_gr_>` 
-  *  :ref:`count (var a: iterator\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : int <function-linq_count_iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>` 
-  *  :ref:`long_count (a: array\<auto(TT)\>) : int64 <function-linq_long_count_array_ls_autoTT_gr_>` 
-  *  :ref:`long_count (var a: iterator\<auto(TT)\>) : int64 <function-linq_long_count_iterator_ls_autoTT_gr_>` 
-  *  :ref:`max (var src: iterator\<auto(TT)\>) : TT <function-linq_max_iterator_ls_autoTT_gr_>` 
-  *  :ref:`max (src: array\<auto(TT)\>) : TT <function-linq_max_array_ls_autoTT_gr_>` 
-  *  :ref:`max_by (var src: iterator\<auto(TT)\>; key: auto) : TT <function-linq_max_by_iterator_ls_autoTT_gr__auto_0x57c>` 
-  *  :ref:`max_by (src: array\<auto(TT)\>; key: auto) : TT <function-linq_max_by_array_ls_autoTT_gr__auto_0x586>` 
-  *  :ref:`min (var src: iterator\<auto(TT)\>) : TT <function-linq_min_iterator_ls_autoTT_gr_>` 
-  *  :ref:`min (src: array\<auto(TT)\>) : TT <function-linq_min_array_ls_autoTT_gr_>` 
-  *  :ref:`min_by (src: array\<auto(TT)\>; key: auto) : TT <function-linq_min_by_array_ls_autoTT_gr__auto_0x52e>` 
-  *  :ref:`min_by (var src: iterator\<auto(TT)\>; key: auto) : TT <function-linq_min_by_iterator_ls_autoTT_gr__auto_0x524>` 
-  *  :ref:`min_max (var src: iterator\<auto(TT)\>) : tuple\<TT;TT\> <function-linq_min_max_iterator_ls_autoTT_gr_>` 
-  *  :ref:`min_max (src: array\<auto(TT)\>) : tuple\<TT;TT\> <function-linq_min_max_array_ls_autoTT_gr_>` 
-  *  :ref:`min_max_average (src: array\<auto(TT)\>) : tuple\<TT;TT;TT\> <function-linq_min_max_average_array_ls_autoTT_gr_>` 
-  *  :ref:`min_max_average (var src: iterator\<auto(TT)\>) : tuple\<TT;TT;TT\> <function-linq_min_max_average_iterator_ls_autoTT_gr_>` 
-  *  :ref:`min_max_average_by (src: array\<auto(TT)\>; key: auto) : tuple\<TT;TT;TT\> <function-linq_min_max_average_by_array_ls_autoTT_gr__auto_0x6bd>` 
-  *  :ref:`min_max_average_by (var src: iterator\<auto(TT)\>; key: auto) : tuple\<TT;TT;TT\> <function-linq_min_max_average_by_iterator_ls_autoTT_gr__auto_0x6b7>` 
-  *  :ref:`min_max_by (var src: iterator\<auto(TT)\>; key: auto) : tuple\<TT;TT\> <function-linq_min_max_by_iterator_ls_autoTT_gr__auto_0x5d4>` 
-  *  :ref:`min_max_by (src: array\<auto(TT)\>; key: auto) : tuple\<TT;TT\> <function-linq_min_max_by_array_ls_autoTT_gr__auto_0x5da>` 
-  *  :ref:`sum (src: array\<auto(TT)\>) : TT <function-linq_sum_array_ls_autoTT_gr_>` 
-  *  :ref:`sum (var src: iterator\<auto(TT)\>) : TT <function-linq_sum_iterator_ls_autoTT_gr_>` 
+  *  :ref:`aggregate (var src: iterator\<auto(TT)\>; seed: auto(AGG); func: block\<(acc:AGG;x:TT):AGG\>) : AGG <function-linq_aggregate_iterator_ls_autoTT_gr__autoAGG_block_ls_acc_c_AGG;x_c_TT_c_AGG_gr__0x5f6>`
+  *  :ref:`aggregate (src: array\<auto(TT)\>; seed: auto(AGG); func: block\<(acc:AGG;x:TT):AGG\>) : AGG <function-linq_aggregate_array_ls_autoTT_gr__autoAGG_block_ls_acc_c_AGG;x_c_TT_c_AGG_gr__0x600>`
+  *  :ref:`average (src: array\<auto(TT)\>) : TT <function-linq_average_array_ls_autoTT_gr_>`
+  *  :ref:`average (var src: iterator\<auto(TT)\>) : TT <function-linq_average_iterator_ls_autoTT_gr_>`
+  *  :ref:`count (a: array\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : int <function-linq_count_array_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>`
+  *  :ref:`count (a: array\<auto(TT)\>) : int <function-linq_count_array_ls_autoTT_gr_>`
+  *  :ref:`count (var a: iterator\<auto(TT)\>) : int <function-linq_count_iterator_ls_autoTT_gr_>`
+  *  :ref:`count (var a: iterator\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : int <function-linq_count_iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>`
+  *  :ref:`long_count (a: array\<auto(TT)\>) : int64 <function-linq_long_count_array_ls_autoTT_gr_>`
+  *  :ref:`long_count (var a: iterator\<auto(TT)\>) : int64 <function-linq_long_count_iterator_ls_autoTT_gr_>`
+  *  :ref:`max (var src: iterator\<auto(TT)\>) : TT <function-linq_max_iterator_ls_autoTT_gr_>`
+  *  :ref:`max (src: array\<auto(TT)\>) : TT <function-linq_max_array_ls_autoTT_gr_>`
+  *  :ref:`max_by (var src: iterator\<auto(TT)\>; key: auto) : TT <function-linq_max_by_iterator_ls_autoTT_gr__auto_0x57c>`
+  *  :ref:`max_by (src: array\<auto(TT)\>; key: auto) : TT <function-linq_max_by_array_ls_autoTT_gr__auto_0x586>`
+  *  :ref:`min (var src: iterator\<auto(TT)\>) : TT <function-linq_min_iterator_ls_autoTT_gr_>`
+  *  :ref:`min (src: array\<auto(TT)\>) : TT <function-linq_min_array_ls_autoTT_gr_>`
+  *  :ref:`min_by (src: array\<auto(TT)\>; key: auto) : TT <function-linq_min_by_array_ls_autoTT_gr__auto_0x52e>`
+  *  :ref:`min_by (var src: iterator\<auto(TT)\>; key: auto) : TT <function-linq_min_by_iterator_ls_autoTT_gr__auto_0x524>`
+  *  :ref:`min_max (var src: iterator\<auto(TT)\>) : tuple\<TT;TT\> <function-linq_min_max_iterator_ls_autoTT_gr_>`
+  *  :ref:`min_max (src: array\<auto(TT)\>) : tuple\<TT;TT\> <function-linq_min_max_array_ls_autoTT_gr_>`
+  *  :ref:`min_max_average (src: array\<auto(TT)\>) : tuple\<TT;TT;TT\> <function-linq_min_max_average_array_ls_autoTT_gr_>`
+  *  :ref:`min_max_average (var src: iterator\<auto(TT)\>) : tuple\<TT;TT;TT\> <function-linq_min_max_average_iterator_ls_autoTT_gr_>`
+  *  :ref:`min_max_average_by (src: array\<auto(TT)\>; key: auto) : tuple\<TT;TT;TT\> <function-linq_min_max_average_by_array_ls_autoTT_gr__auto_0x6bd>`
+  *  :ref:`min_max_average_by (var src: iterator\<auto(TT)\>; key: auto) : tuple\<TT;TT;TT\> <function-linq_min_max_average_by_iterator_ls_autoTT_gr__auto_0x6b7>`
+  *  :ref:`min_max_by (var src: iterator\<auto(TT)\>; key: auto) : tuple\<TT;TT\> <function-linq_min_max_by_iterator_ls_autoTT_gr__auto_0x5d4>`
+  *  :ref:`min_max_by (src: array\<auto(TT)\>; key: auto) : tuple\<TT;TT\> <function-linq_min_max_by_array_ls_autoTT_gr__auto_0x5da>`
+  *  :ref:`sum (src: array\<auto(TT)\>) : TT <function-linq_sum_array_ls_autoTT_gr_>`
+  *  :ref:`sum (var src: iterator\<auto(TT)\>) : TT <function-linq_sum_iterator_ls_autoTT_gr_>`
 
 
 aggregate
@@ -1200,9 +1200,9 @@ Sums elements in an array
 Filtering data
 ++++++++++++++
 
-  *  :ref:`where_ (src: array\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : array\<TT\> <function-linq_where__array_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>` 
-  *  :ref:`where_ (var src: iterator\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : iterator\<TT\> <function-linq_where__iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>` 
-  *  :ref:`where_to_array (var src: iterator\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : array\<TT\> <function-linq_where_to_array_iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>` 
+  *  :ref:`where_ (src: array\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : array\<TT\> <function-linq_where__array_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>`
+  *  :ref:`where_ (var src: iterator\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : iterator\<TT\> <function-linq_where__iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>`
+  *  :ref:`where_to_array (var src: iterator\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : array\<TT\> <function-linq_where_to_array_iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>`
 
 
 where_
@@ -1238,35 +1238,35 @@ Filters elements in an iterator based on a predicate and returns an array
 Partitioning data
 +++++++++++++++++
 
-  *  :ref:`chunk (src: array\<auto(TT)\>; size: int) : array\<array\<TT\>\> <function-linq_chunk_array_ls_autoTT_gr__int>` 
-  *  :ref:`chunk (var src: iterator\<auto(TT)\>; size: int) : iterator\<array\<TT\>\> <function-linq_chunk_iterator_ls_autoTT_gr__int>` 
-  *  :ref:`chunk_to_array (var src: iterator\<auto(TT)\>; size: int) : array\<array\<TT\>\> <function-linq_chunk_to_array_iterator_ls_autoTT_gr__int>` 
-  *  :ref:`skip (var src: iterator\<auto(TT)\>; var total: int) : iterator\<TT\> <function-linq_skip_iterator_ls_autoTT_gr__int>` 
-  *  :ref:`skip (arr: array\<auto(TT)\>; var total: int) : array\<TT\> <function-linq_skip_array_ls_autoTT_gr__int>` 
-  *  :ref:`skip_inplace (var arr: array\<auto(TT)\>; var total: int) : auto <function-linq_skip_inplace_array_ls_autoTT_gr__int>` 
-  *  :ref:`skip_last (var src: iterator\<auto(TT)\>; var total: int) : iterator\<TT\> <function-linq_skip_last_iterator_ls_autoTT_gr__int>` 
-  *  :ref:`skip_last (arr: array\<auto(TT)\>; var total: int) : array\<TT\> <function-linq_skip_last_array_ls_autoTT_gr__int>` 
-  *  :ref:`skip_last_inplace (var arr: array\<auto(TT)\>; var total: int) : auto <function-linq_skip_last_inplace_array_ls_autoTT_gr__int>` 
-  *  :ref:`skip_last_to_array (var src: iterator\<auto(TT)\>; var total: int) : array\<TT\> <function-linq_skip_last_to_array_iterator_ls_autoTT_gr__int>` 
-  *  :ref:`skip_to_array (var src: iterator\<auto(TT)\>; var total: int) : array\<TT\> <function-linq_skip_to_array_iterator_ls_autoTT_gr__int>` 
-  *  :ref:`skip_while (src: array\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : array\<TT\> <function-linq_skip_while_array_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>` 
-  *  :ref:`skip_while (var src: iterator\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : iterator\<TT\> <function-linq_skip_while_iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>` 
-  *  :ref:`skip_while_to_array (var src: iterator\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : array\<TT\> <function-linq_skip_while_to_array_iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>` 
-  *  :ref:`take (src: array\<auto(TT)\>; from: range) : array\<TT\> <function-linq_take_array_ls_autoTT_gr__range>` 
-  *  :ref:`take (var src: iterator\<auto(TT)\>; from: range) : iterator\<TT\> <function-linq_take_iterator_ls_autoTT_gr__range>` 
-  *  :ref:`take (var src: iterator\<auto(TT)\>; var total: int) : iterator\<TT\> <function-linq_take_iterator_ls_autoTT_gr__int>` 
-  *  :ref:`take (arr: array\<auto(TT)\>; var total: int) : array\<TT\> <function-linq_take_array_ls_autoTT_gr__int>` 
-  *  :ref:`take_inplace (var arr: array\<auto(TT)\>; from: range) : auto <function-linq_take_inplace_array_ls_autoTT_gr__range>` 
-  *  :ref:`take_inplace (var arr: array\<auto(TT)\>; var total: int) : auto <function-linq_take_inplace_array_ls_autoTT_gr__int>` 
-  *  :ref:`take_last (var src: iterator\<auto(TT)\>; var total: int) : iterator\<TT\> <function-linq_take_last_iterator_ls_autoTT_gr__int>` 
-  *  :ref:`take_last (arr: array\<auto(TT)\>; var total: int) : array\<TT\> <function-linq_take_last_array_ls_autoTT_gr__int>` 
-  *  :ref:`take_last_inplace (var arr: array\<auto(TT)\>; var total: int) : auto <function-linq_take_last_inplace_array_ls_autoTT_gr__int>` 
-  *  :ref:`take_last_to_array (var src: iterator\<auto(TT)\>; var total: int) : array\<TT\> <function-linq_take_last_to_array_iterator_ls_autoTT_gr__int>` 
-  *  :ref:`take_to_array (var src: iterator\<auto(TT)\>; var total: int) : array\<TT\> <function-linq_take_to_array_iterator_ls_autoTT_gr__int>` 
-  *  :ref:`take_to_array (var src: iterator\<auto(TT)\>; from: range) : array\<TT\> <function-linq_take_to_array_iterator_ls_autoTT_gr__range>` 
-  *  :ref:`take_while (var src: iterator\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : iterator\<TT\> <function-linq_take_while_iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>` 
-  *  :ref:`take_while (src: array\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : array\<TT\> <function-linq_take_while_array_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>` 
-  *  :ref:`take_while_to_array (var src: iterator\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : array\<TT\> <function-linq_take_while_to_array_iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>` 
+  *  :ref:`chunk (src: array\<auto(TT)\>; size: int) : array\<array\<TT\>\> <function-linq_chunk_array_ls_autoTT_gr__int>`
+  *  :ref:`chunk (var src: iterator\<auto(TT)\>; size: int) : iterator\<array\<TT\>\> <function-linq_chunk_iterator_ls_autoTT_gr__int>`
+  *  :ref:`chunk_to_array (var src: iterator\<auto(TT)\>; size: int) : array\<array\<TT\>\> <function-linq_chunk_to_array_iterator_ls_autoTT_gr__int>`
+  *  :ref:`skip (var src: iterator\<auto(TT)\>; var total: int) : iterator\<TT\> <function-linq_skip_iterator_ls_autoTT_gr__int>`
+  *  :ref:`skip (arr: array\<auto(TT)\>; var total: int) : array\<TT\> <function-linq_skip_array_ls_autoTT_gr__int>`
+  *  :ref:`skip_inplace (var arr: array\<auto(TT)\>; var total: int) : auto <function-linq_skip_inplace_array_ls_autoTT_gr__int>`
+  *  :ref:`skip_last (var src: iterator\<auto(TT)\>; var total: int) : iterator\<TT\> <function-linq_skip_last_iterator_ls_autoTT_gr__int>`
+  *  :ref:`skip_last (arr: array\<auto(TT)\>; var total: int) : array\<TT\> <function-linq_skip_last_array_ls_autoTT_gr__int>`
+  *  :ref:`skip_last_inplace (var arr: array\<auto(TT)\>; var total: int) : auto <function-linq_skip_last_inplace_array_ls_autoTT_gr__int>`
+  *  :ref:`skip_last_to_array (var src: iterator\<auto(TT)\>; var total: int) : array\<TT\> <function-linq_skip_last_to_array_iterator_ls_autoTT_gr__int>`
+  *  :ref:`skip_to_array (var src: iterator\<auto(TT)\>; var total: int) : array\<TT\> <function-linq_skip_to_array_iterator_ls_autoTT_gr__int>`
+  *  :ref:`skip_while (src: array\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : array\<TT\> <function-linq_skip_while_array_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>`
+  *  :ref:`skip_while (var src: iterator\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : iterator\<TT\> <function-linq_skip_while_iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>`
+  *  :ref:`skip_while_to_array (var src: iterator\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : array\<TT\> <function-linq_skip_while_to_array_iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>`
+  *  :ref:`take (src: array\<auto(TT)\>; from: range) : array\<TT\> <function-linq_take_array_ls_autoTT_gr__range>`
+  *  :ref:`take (var src: iterator\<auto(TT)\>; from: range) : iterator\<TT\> <function-linq_take_iterator_ls_autoTT_gr__range>`
+  *  :ref:`take (var src: iterator\<auto(TT)\>; var total: int) : iterator\<TT\> <function-linq_take_iterator_ls_autoTT_gr__int>`
+  *  :ref:`take (arr: array\<auto(TT)\>; var total: int) : array\<TT\> <function-linq_take_array_ls_autoTT_gr__int>`
+  *  :ref:`take_inplace (var arr: array\<auto(TT)\>; from: range) : auto <function-linq_take_inplace_array_ls_autoTT_gr__range>`
+  *  :ref:`take_inplace (var arr: array\<auto(TT)\>; var total: int) : auto <function-linq_take_inplace_array_ls_autoTT_gr__int>`
+  *  :ref:`take_last (var src: iterator\<auto(TT)\>; var total: int) : iterator\<TT\> <function-linq_take_last_iterator_ls_autoTT_gr__int>`
+  *  :ref:`take_last (arr: array\<auto(TT)\>; var total: int) : array\<TT\> <function-linq_take_last_array_ls_autoTT_gr__int>`
+  *  :ref:`take_last_inplace (var arr: array\<auto(TT)\>; var total: int) : auto <function-linq_take_last_inplace_array_ls_autoTT_gr__int>`
+  *  :ref:`take_last_to_array (var src: iterator\<auto(TT)\>; var total: int) : array\<TT\> <function-linq_take_last_to_array_iterator_ls_autoTT_gr__int>`
+  *  :ref:`take_to_array (var src: iterator\<auto(TT)\>; var total: int) : array\<TT\> <function-linq_take_to_array_iterator_ls_autoTT_gr__int>`
+  *  :ref:`take_to_array (var src: iterator\<auto(TT)\>; from: range) : array\<TT\> <function-linq_take_to_array_iterator_ls_autoTT_gr__range>`
+  *  :ref:`take_while (var src: iterator\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : iterator\<TT\> <function-linq_take_while_iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>`
+  *  :ref:`take_while (src: array\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : array\<TT\> <function-linq_take_while_array_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>`
+  *  :ref:`take_while_to_array (var src: iterator\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : array\<TT\> <function-linq_take_while_to_array_iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>`
 
 
 chunk
@@ -1550,15 +1550,15 @@ Yields only the elements of an iterator while the predicate is true and returns 
 Join and group operations
 +++++++++++++++++++++++++
 
-  *  :ref:`group_by (var source: iterator\<auto(TT)\>; key: auto; element_selector: auto; result_selector: auto) : auto <function-linq_group_by_iterator_ls_autoTT_gr__auto_auto_auto_0x741>` 
-  *  :ref:`group_by (source: array\<auto(TT)\>; key: auto; element_selector: auto; result_selector: auto) : auto <function-linq_group_by_array_ls_autoTT_gr__auto_auto_auto_0x747>` 
-  *  :ref:`group_by_to_array (var source: iterator\<auto(TT)\>; key: auto; element_selector: auto; result_selector: auto) : auto <function-linq_group_by_to_array_iterator_ls_autoTT_gr__auto_auto_auto_0x74d>` 
-  *  :ref:`group_join (var srca: iterator\<auto(TA)\>; var srcb: iterator\<auto(TB)\>; keya: auto; keyb: auto; result: auto) : iterator\<typedecl(result(type\<TA\>,type\<array\<TB -const -&\>\>))\> <function-linq_group_join_iterator_ls_autoTA_gr__iterator_ls_autoTB_gr__auto_auto_auto_0x711>` 
-  *  :ref:`group_join (srca: array\<auto(TA)\>; srcb: array\<auto(TB)\>; keya: auto; keyb: auto; result: auto) : array\<typedecl(result(type\<TA\>,type\<array\<TB -const -&\>\>))\> <function-linq_group_join_array_ls_autoTA_gr__array_ls_autoTB_gr__auto_auto_auto_0x717>` 
-  *  :ref:`group_join_to_array (var srca: iterator\<auto(TA)\>; var srcb: iterator\<auto(TB)\>; keya: auto; keyb: auto; result: auto) : array\<typedecl(result(type\<TA\>,type\<array\<TB -const -&\>\>))\> <function-linq_group_join_to_array_iterator_ls_autoTA_gr__iterator_ls_autoTB_gr__auto_auto_auto_0x71d>` 
-  *  :ref:`join (srca: array\<auto(TA)\>; srcb: array\<auto(TB)\>; keya: auto; keyb: auto; result: auto) : array\<typedecl(result(type\<TA\>,type\<TB\>))\> <function-linq_join_array_ls_autoTA_gr__array_ls_autoTB_gr__auto_auto_auto_0x6e8>` 
-  *  :ref:`join (var srca: iterator\<auto(TA)\>; var srcb: iterator\<auto(TB)\>; keya: auto; keyb: auto; result: auto) : iterator\<typedecl(result(type\<TA\>,type\<TB\>))\> <function-linq_join_iterator_ls_autoTA_gr__iterator_ls_autoTB_gr__auto_auto_auto_0x6e2>` 
-  *  :ref:`join_to_array (var srca: iterator\<auto(TA)\>; var srcb: iterator\<auto(TB)\>; keya: auto; keyb: auto; result: auto) : array\<typedecl(result(type\<TA\>,type\<TB\>))\> <function-linq_join_to_array_iterator_ls_autoTA_gr__iterator_ls_autoTB_gr__auto_auto_auto_0x6ee>` 
+  *  :ref:`group_by (var source: iterator\<auto(TT)\>; key: auto; element_selector: auto; result_selector: auto) : auto <function-linq_group_by_iterator_ls_autoTT_gr__auto_auto_auto_0x741>`
+  *  :ref:`group_by (source: array\<auto(TT)\>; key: auto; element_selector: auto; result_selector: auto) : auto <function-linq_group_by_array_ls_autoTT_gr__auto_auto_auto_0x747>`
+  *  :ref:`group_by_to_array (var source: iterator\<auto(TT)\>; key: auto; element_selector: auto; result_selector: auto) : auto <function-linq_group_by_to_array_iterator_ls_autoTT_gr__auto_auto_auto_0x74d>`
+  *  :ref:`group_join (var srca: iterator\<auto(TA)\>; var srcb: iterator\<auto(TB)\>; keya: auto; keyb: auto; result: auto) : iterator\<typedecl(result(type\<TA\>,type\<array\<TB -const -&\>\>))\> <function-linq_group_join_iterator_ls_autoTA_gr__iterator_ls_autoTB_gr__auto_auto_auto_0x711>`
+  *  :ref:`group_join (srca: array\<auto(TA)\>; srcb: array\<auto(TB)\>; keya: auto; keyb: auto; result: auto) : array\<typedecl(result(type\<TA\>,type\<array\<TB -const -&\>\>))\> <function-linq_group_join_array_ls_autoTA_gr__array_ls_autoTB_gr__auto_auto_auto_0x717>`
+  *  :ref:`group_join_to_array (var srca: iterator\<auto(TA)\>; var srcb: iterator\<auto(TB)\>; keya: auto; keyb: auto; result: auto) : array\<typedecl(result(type\<TA\>,type\<array\<TB -const -&\>\>))\> <function-linq_group_join_to_array_iterator_ls_autoTA_gr__iterator_ls_autoTB_gr__auto_auto_auto_0x71d>`
+  *  :ref:`join (srca: array\<auto(TA)\>; srcb: array\<auto(TB)\>; keya: auto; keyb: auto; result: auto) : array\<typedecl(result(type\<TA\>,type\<TB\>))\> <function-linq_join_array_ls_autoTA_gr__array_ls_autoTB_gr__auto_auto_auto_0x6e8>`
+  *  :ref:`join (var srca: iterator\<auto(TA)\>; var srcb: iterator\<auto(TB)\>; keya: auto; keyb: auto; result: auto) : iterator\<typedecl(result(type\<TA\>,type\<TB\>))\> <function-linq_join_iterator_ls_autoTA_gr__iterator_ls_autoTB_gr__auto_auto_auto_0x6e2>`
+  *  :ref:`join_to_array (var srca: iterator\<auto(TA)\>; var srcb: iterator\<auto(TB)\>; keya: auto; keyb: auto; result: auto) : array\<typedecl(result(type\<TA\>,type\<TB\>))\> <function-linq_join_to_array_iterator_ls_autoTA_gr__iterator_ls_autoTB_gr__auto_auto_auto_0x6ee>`
 
 
 group_by
@@ -1686,14 +1686,14 @@ Joins two iterators based on matching keys (inner join) and returns an array
 Querying data
 +++++++++++++
 
-  *  :ref:`all (src: array\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : bool <function-linq_all_array_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>` 
-  *  :ref:`all (var src: iterator\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : bool <function-linq_all_iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>` 
-  *  :ref:`any (src: array\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : bool <function-linq_any_array_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>` 
-  *  :ref:`any (var src: iterator\<auto(TT)\>) : bool <function-linq_any_iterator_ls_autoTT_gr_>` 
-  *  :ref:`any (src: array\<auto(TT)\>) : bool <function-linq_any_array_ls_autoTT_gr_>` 
-  *  :ref:`any (var src: iterator\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : bool <function-linq_any_iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>` 
-  *  :ref:`contains (var src: iterator\<auto(TT)\>; element: TT) : bool <function-linq_contains_iterator_ls_autoTT_gr__TT>` 
-  *  :ref:`contains (src: array\<auto(TT)\>; element: TT) : bool <function-linq_contains_array_ls_autoTT_gr__TT>` 
+  *  :ref:`all (src: array\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : bool <function-linq_all_array_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>`
+  *  :ref:`all (var src: iterator\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : bool <function-linq_all_iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>`
+  *  :ref:`any (src: array\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : bool <function-linq_any_array_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>`
+  *  :ref:`any (var src: iterator\<auto(TT)\>) : bool <function-linq_any_iterator_ls_autoTT_gr_>`
+  *  :ref:`any (src: array\<auto(TT)\>) : bool <function-linq_any_array_ls_autoTT_gr_>`
+  *  :ref:`any (var src: iterator\<auto(TT)\>; predicate: block\<(arg:TT):bool\>) : bool <function-linq_any_iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_bool_gr_>`
+  *  :ref:`contains (var src: iterator\<auto(TT)\>; element: TT) : bool <function-linq_contains_iterator_ls_autoTT_gr__TT>`
+  *  :ref:`contains (src: array\<auto(TT)\>; element: TT) : bool <function-linq_contains_array_ls_autoTT_gr__TT>`
 
 
 all
@@ -1767,22 +1767,22 @@ Returns true if the element is present in the iterator
 Element operations
 ++++++++++++++++++
 
-  *  :ref:`element_at (var src: iterator\<auto(TT)\>; index: int) : TT <function-linq_element_at_iterator_ls_autoTT_gr__int>` 
-  *  :ref:`element_at (src: array\<auto(TT)\>; index: int) : TT <function-linq_element_at_array_ls_autoTT_gr__int>` 
-  *  :ref:`element_at_or_default (var src: iterator\<auto(TT)\>; index: int) : TT <function-linq_element_at_or_default_iterator_ls_autoTT_gr__int>` 
-  *  :ref:`element_at_or_default (src: array\<auto(TT)\>; index: int) : TT <function-linq_element_at_or_default_array_ls_autoTT_gr__int>` 
-  *  :ref:`first (var src: iterator\<auto(TT)\>) : TT <function-linq_first_iterator_ls_autoTT_gr_>` 
-  *  :ref:`first (src: array\<auto(TT)\>) : TT <function-linq_first_array_ls_autoTT_gr_>` 
-  *  :ref:`first_or_default (src: array\<auto(TT)\>; defaultValue: TT) : TT <function-linq_first_or_default_array_ls_autoTT_gr__TT>` 
-  *  :ref:`first_or_default (var src: iterator\<auto(TT)\>; defaultValue: TT) : TT <function-linq_first_or_default_iterator_ls_autoTT_gr__TT>` 
-  *  :ref:`last (var src: iterator\<auto(TT)\>) : TT <function-linq_last_iterator_ls_autoTT_gr_>` 
-  *  :ref:`last (src: array\<auto(TT)\>) : TT <function-linq_last_array_ls_autoTT_gr_>` 
-  *  :ref:`last_or_default (src: array\<auto(TT)\>; defaultValue: TT) : TT <function-linq_last_or_default_array_ls_autoTT_gr__TT>` 
-  *  :ref:`last_or_default (var src: iterator\<auto(TT)\>; defaultValue: TT) : TT <function-linq_last_or_default_iterator_ls_autoTT_gr__TT>` 
-  *  :ref:`single (src: array\<auto(TT)\>) : TT <function-linq_single_array_ls_autoTT_gr_>` 
-  *  :ref:`single (var src: iterator\<auto(TT)\>) : TT <function-linq_single_iterator_ls_autoTT_gr_>` 
-  *  :ref:`single_or_default (var src: iterator\<auto(TT)\>; defaultValue: TT) : TT <function-linq_single_or_default_iterator_ls_autoTT_gr__TT>` 
-  *  :ref:`single_or_default (src: array\<auto(TT)\>; defaultValue: TT) : TT <function-linq_single_or_default_array_ls_autoTT_gr__TT>` 
+  *  :ref:`element_at (var src: iterator\<auto(TT)\>; index: int) : TT <function-linq_element_at_iterator_ls_autoTT_gr__int>`
+  *  :ref:`element_at (src: array\<auto(TT)\>; index: int) : TT <function-linq_element_at_array_ls_autoTT_gr__int>`
+  *  :ref:`element_at_or_default (var src: iterator\<auto(TT)\>; index: int) : TT <function-linq_element_at_or_default_iterator_ls_autoTT_gr__int>`
+  *  :ref:`element_at_or_default (src: array\<auto(TT)\>; index: int) : TT <function-linq_element_at_or_default_array_ls_autoTT_gr__int>`
+  *  :ref:`first (var src: iterator\<auto(TT)\>) : TT <function-linq_first_iterator_ls_autoTT_gr_>`
+  *  :ref:`first (src: array\<auto(TT)\>) : TT <function-linq_first_array_ls_autoTT_gr_>`
+  *  :ref:`first_or_default (src: array\<auto(TT)\>; defaultValue: TT) : TT <function-linq_first_or_default_array_ls_autoTT_gr__TT>`
+  *  :ref:`first_or_default (var src: iterator\<auto(TT)\>; defaultValue: TT) : TT <function-linq_first_or_default_iterator_ls_autoTT_gr__TT>`
+  *  :ref:`last (var src: iterator\<auto(TT)\>) : TT <function-linq_last_iterator_ls_autoTT_gr_>`
+  *  :ref:`last (src: array\<auto(TT)\>) : TT <function-linq_last_array_ls_autoTT_gr_>`
+  *  :ref:`last_or_default (src: array\<auto(TT)\>; defaultValue: TT) : TT <function-linq_last_or_default_array_ls_autoTT_gr__TT>`
+  *  :ref:`last_or_default (var src: iterator\<auto(TT)\>; defaultValue: TT) : TT <function-linq_last_or_default_iterator_ls_autoTT_gr__TT>`
+  *  :ref:`single (src: array\<auto(TT)\>) : TT <function-linq_single_array_ls_autoTT_gr_>`
+  *  :ref:`single (var src: iterator\<auto(TT)\>) : TT <function-linq_single_iterator_ls_autoTT_gr_>`
+  *  :ref:`single_or_default (var src: iterator\<auto(TT)\>; defaultValue: TT) : TT <function-linq_single_or_default_iterator_ls_autoTT_gr__TT>`
+  *  :ref:`single_or_default (src: array\<auto(TT)\>; defaultValue: TT) : TT <function-linq_single_or_default_array_ls_autoTT_gr__TT>`
 
 
 element_at
@@ -1942,27 +1942,27 @@ Returns the only element of an iterator, or a default value if there is not exac
 Transform operations
 ++++++++++++++++++++
 
-  *  :ref:`select (src: array\<auto(TT)\>) : array\<tuple\<int;TT\>\> <function-linq_select_array_ls_autoTT_gr_>` 
-  *  :ref:`select (var src: iterator\<auto(TT)\>) : iterator\<tuple\<int;TT\>\> <function-linq_select_iterator_ls_autoTT_gr_>` 
-  *  :ref:`select (var src: iterator\<auto(TT)\>; result_selector: auto) : iterator\<typedecl(result_selector(type\<TT\>))\> <function-linq_select_iterator_ls_autoTT_gr__auto_0xb51>` 
-  *  :ref:`select (src: array\<auto(TT)\>; result_selector: auto) : array\<typedecl(result_selector(type\<TT\>))\> <function-linq_select_array_ls_autoTT_gr__auto_0xb57>` 
-  *  :ref:`select_many (var src: iterator\<auto(TT)\>; result_selector: auto) : iterator\<typedecl(result_selector(iter_type(type\<TT\>)))\> <function-linq_select_many_iterator_ls_autoTT_gr__auto_0xbba>` 
-  *  :ref:`select_many (src: array\<auto(TT)\>; result_selector: auto) : array\<typedecl(result_selector(iter_type(type\<TT\>)))\> <function-linq_select_many_array_ls_autoTT_gr__auto_0xbc0>` 
-  *  :ref:`select_many (src: array\<auto(TT)\>; collection_selector: auto; result_selector: auto) : array\<typedecl(result_selector(iter_type(collection_selector(type\<TT\>))))\> <function-linq_select_many_array_ls_autoTT_gr__auto_auto_0xbe9>` 
-  *  :ref:`select_many (var src: iterator\<auto(TT)\>; collection_selector: auto; result_selector: auto) : iterator\<typedecl(result_selector(iter_type(collection_selector(type\<TT\>))))\> <function-linq_select_many_iterator_ls_autoTT_gr__auto_auto_0xbe3>` 
-  *  :ref:`select_many_to_array (var src: iterator\<auto(TT)\>; collection_selector: auto; result_selector: auto) : array\<typedecl(result_selector(iter_type(collection_selector(type\<TT\>))))\> <function-linq_select_many_to_array_iterator_ls_autoTT_gr__auto_auto_0xbef>` 
-  *  :ref:`select_many_to_array (var src: iterator\<auto(TT)\>; result_selector: auto) : array\<typedecl(result_selector(iter_type(type\<TT\>)))\> <function-linq_select_many_to_array_iterator_ls_autoTT_gr__auto_0xbc6>` 
-  *  :ref:`select_to_array (var src: iterator\<auto(TT)\>; result_selector: auto) : array\<typedecl(result_selector(type\<TT\>))\> <function-linq_select_to_array_iterator_ls_autoTT_gr__auto_0xb5d>` 
-  *  :ref:`select_to_array (var src: iterator\<auto(TT)\>) : array\<tuple\<int;TT\>\> <function-linq_select_to_array_iterator_ls_autoTT_gr_>` 
-  *  :ref:`zip (var a: iterator\<auto(TT)\>; var b: iterator\<auto(UU)\>) : iterator\<tuple\<TT;UU\>\> <function-linq_zip_iterator_ls_autoTT_gr__iterator_ls_autoUU_gr_>` 
-  *  :ref:`zip (a: array\<auto(TT)\>; b: array\<auto(UU)\>) : array\<tuple\<TT;UU\>\> <function-linq_zip_array_ls_autoTT_gr__array_ls_autoUU_gr_>` 
-  *  :ref:`zip (a: array\<auto(TT)\>; b: array\<auto(UU)\>; result_selector: block\<(l:TT;r:UU):auto\>) : array\<typedecl(result_selector(type\<TT\>,type\<UU\>))\> <function-linq_zip_array_ls_autoTT_gr__array_ls_autoUU_gr__block_ls_l_c_TT;r_c_UU_c_auto_gr_>` 
-  *  :ref:`zip (var a: iterator\<auto(TT)\>; var b: iterator\<auto(UU)\>; result_selector: block\<(l:TT;r:UU):auto\>) : iterator\<typedecl(result_selector(type\<TT\>,type\<UU\>))\> <function-linq_zip_iterator_ls_autoTT_gr__iterator_ls_autoUU_gr__block_ls_l_c_TT;r_c_UU_c_auto_gr_>` 
-  *  :ref:`zip (a: array\<auto(TT)\>; b: array\<auto(UU)\>; c: array\<auto(WW)\>) : array\<tuple\<TT;UU;WW\>\> <function-linq_zip_array_ls_autoTT_gr__array_ls_autoUU_gr__array_ls_autoWW_gr_>` 
-  *  :ref:`zip (var a: iterator\<auto(TT)\>; var b: iterator\<auto(UU)\>; var c: iterator\<auto(WW)\>) : iterator\<tuple\<TT;UU;WW\>\> <function-linq_zip_iterator_ls_autoTT_gr__iterator_ls_autoUU_gr__iterator_ls_autoWW_gr_>` 
-  *  :ref:`zip_to_array (var a: iterator\<auto(TT)\>; var b: iterator\<auto(UU)\>; var c: iterator\<auto(WW)\>) : array\<tuple\<TT;UU;WW\>\> <function-linq_zip_to_array_iterator_ls_autoTT_gr__iterator_ls_autoUU_gr__iterator_ls_autoWW_gr_>` 
-  *  :ref:`zip_to_array (var a: iterator\<auto(TT)\>; var b: iterator\<auto(UU)\>) : array\<tuple\<TT;UU\>\> <function-linq_zip_to_array_iterator_ls_autoTT_gr__iterator_ls_autoUU_gr_>` 
-  *  :ref:`zip_to_array (var a: iterator\<auto(TT)\>; var b: iterator\<auto(UU)\>; result_selector: block\<(l:TT;r:UU):auto\>) : array\<typedecl(result_selector(type\<TT\>,type\<UU\>))\> <function-linq_zip_to_array_iterator_ls_autoTT_gr__iterator_ls_autoUU_gr__block_ls_l_c_TT;r_c_UU_c_auto_gr_>` 
+  *  :ref:`select (src: array\<auto(TT)\>) : array\<tuple\<int;TT\>\> <function-linq_select_array_ls_autoTT_gr_>`
+  *  :ref:`select (var src: iterator\<auto(TT)\>) : iterator\<tuple\<int;TT\>\> <function-linq_select_iterator_ls_autoTT_gr_>`
+  *  :ref:`select (var src: iterator\<auto(TT)\>; result_selector: auto) : iterator\<typedecl(result_selector(type\<TT\>))\> <function-linq_select_iterator_ls_autoTT_gr__auto_0xb51>`
+  *  :ref:`select (src: array\<auto(TT)\>; result_selector: auto) : array\<typedecl(result_selector(type\<TT\>))\> <function-linq_select_array_ls_autoTT_gr__auto_0xb57>`
+  *  :ref:`select_many (var src: iterator\<auto(TT)\>; result_selector: auto) : iterator\<typedecl(result_selector(iter_type(type\<TT\>)))\> <function-linq_select_many_iterator_ls_autoTT_gr__auto_0xbba>`
+  *  :ref:`select_many (src: array\<auto(TT)\>; result_selector: auto) : array\<typedecl(result_selector(iter_type(type\<TT\>)))\> <function-linq_select_many_array_ls_autoTT_gr__auto_0xbc0>`
+  *  :ref:`select_many (src: array\<auto(TT)\>; collection_selector: auto; result_selector: auto) : array\<typedecl(result_selector(iter_type(collection_selector(type\<TT\>))))\> <function-linq_select_many_array_ls_autoTT_gr__auto_auto_0xbe9>`
+  *  :ref:`select_many (var src: iterator\<auto(TT)\>; collection_selector: auto; result_selector: auto) : iterator\<typedecl(result_selector(iter_type(collection_selector(type\<TT\>))))\> <function-linq_select_many_iterator_ls_autoTT_gr__auto_auto_0xbe3>`
+  *  :ref:`select_many_to_array (var src: iterator\<auto(TT)\>; collection_selector: auto; result_selector: auto) : array\<typedecl(result_selector(iter_type(collection_selector(type\<TT\>))))\> <function-linq_select_many_to_array_iterator_ls_autoTT_gr__auto_auto_0xbef>`
+  *  :ref:`select_many_to_array (var src: iterator\<auto(TT)\>; result_selector: auto) : array\<typedecl(result_selector(iter_type(type\<TT\>)))\> <function-linq_select_many_to_array_iterator_ls_autoTT_gr__auto_0xbc6>`
+  *  :ref:`select_to_array (var src: iterator\<auto(TT)\>; result_selector: auto) : array\<typedecl(result_selector(type\<TT\>))\> <function-linq_select_to_array_iterator_ls_autoTT_gr__auto_0xb5d>`
+  *  :ref:`select_to_array (var src: iterator\<auto(TT)\>) : array\<tuple\<int;TT\>\> <function-linq_select_to_array_iterator_ls_autoTT_gr_>`
+  *  :ref:`zip (var a: iterator\<auto(TT)\>; var b: iterator\<auto(UU)\>) : iterator\<tuple\<TT;UU\>\> <function-linq_zip_iterator_ls_autoTT_gr__iterator_ls_autoUU_gr_>`
+  *  :ref:`zip (a: array\<auto(TT)\>; b: array\<auto(UU)\>) : array\<tuple\<TT;UU\>\> <function-linq_zip_array_ls_autoTT_gr__array_ls_autoUU_gr_>`
+  *  :ref:`zip (a: array\<auto(TT)\>; b: array\<auto(UU)\>; result_selector: block\<(l:TT;r:UU):auto\>) : array\<typedecl(result_selector(type\<TT\>,type\<UU\>))\> <function-linq_zip_array_ls_autoTT_gr__array_ls_autoUU_gr__block_ls_l_c_TT;r_c_UU_c_auto_gr_>`
+  *  :ref:`zip (var a: iterator\<auto(TT)\>; var b: iterator\<auto(UU)\>; result_selector: block\<(l:TT;r:UU):auto\>) : iterator\<typedecl(result_selector(type\<TT\>,type\<UU\>))\> <function-linq_zip_iterator_ls_autoTT_gr__iterator_ls_autoUU_gr__block_ls_l_c_TT;r_c_UU_c_auto_gr_>`
+  *  :ref:`zip (a: array\<auto(TT)\>; b: array\<auto(UU)\>; c: array\<auto(WW)\>) : array\<tuple\<TT;UU;WW\>\> <function-linq_zip_array_ls_autoTT_gr__array_ls_autoUU_gr__array_ls_autoWW_gr_>`
+  *  :ref:`zip (var a: iterator\<auto(TT)\>; var b: iterator\<auto(UU)\>; var c: iterator\<auto(WW)\>) : iterator\<tuple\<TT;UU;WW\>\> <function-linq_zip_iterator_ls_autoTT_gr__iterator_ls_autoUU_gr__iterator_ls_autoWW_gr_>`
+  *  :ref:`zip_to_array (var a: iterator\<auto(TT)\>; var b: iterator\<auto(UU)\>; var c: iterator\<auto(WW)\>) : array\<tuple\<TT;UU;WW\>\> <function-linq_zip_to_array_iterator_ls_autoTT_gr__iterator_ls_autoUU_gr__iterator_ls_autoWW_gr_>`
+  *  :ref:`zip_to_array (var a: iterator\<auto(TT)\>; var b: iterator\<auto(UU)\>) : array\<tuple\<TT;UU\>\> <function-linq_zip_to_array_iterator_ls_autoTT_gr__iterator_ls_autoUU_gr_>`
+  *  :ref:`zip_to_array (var a: iterator\<auto(TT)\>; var b: iterator\<auto(UU)\>; result_selector: block\<(l:TT;r:UU):auto\>) : array\<typedecl(result_selector(type\<TT\>,type\<UU\>))\> <function-linq_zip_to_array_iterator_ls_autoTT_gr__iterator_ls_autoUU_gr__block_ls_l_c_TT;r_c_UU_c_auto_gr_>`
 
 
 select
@@ -2126,10 +2126,10 @@ Merges three iterators into an array of tuples
 Conversion operations
 +++++++++++++++++++++
 
-  *  :ref:`to_sequence (a: array\<auto(TT)\>) : iterator\<TT\> <function-linq_to_sequence_array_ls_autoTT_gr_>` 
-  *  :ref:`to_sequence_move (var a: array\<auto(TT)\>) : iterator\<TT\> <function-linq_to_sequence_move_array_ls_autoTT_gr_>` 
-  *  :ref:`to_table (a: array\<auto(TT)\>; key: block\<(v:TT):auto\>; elementSelector: block\<(v:TT):auto\>) : table\<typedecl(_::unique_key(type\<TT\>)), typedecl(elementSelector(type\<TT\>))\> <function-linq_to_table_array_ls_autoTT_gr__block_ls_v_c_TT_c_auto_gr__block_ls_v_c_TT_c_auto_gr_>` 
-  *  :ref:`to_table (var a: iterator\<auto(TT)\>; key: block\<(v:TT):auto\>; elementSelector: block\<(v:TT):auto\>) : table\<typedecl(_::unique_key(type\<TT\>)), typedecl(elementSelector(type\<TT\>))\> <function-linq_to_table_iterator_ls_autoTT_gr__block_ls_v_c_TT_c_auto_gr__block_ls_v_c_TT_c_auto_gr_>` 
+  *  :ref:`to_sequence (a: array\<auto(TT)\>) : iterator\<TT\> <function-linq_to_sequence_array_ls_autoTT_gr_>`
+  *  :ref:`to_sequence_move (var a: array\<auto(TT)\>) : iterator\<TT\> <function-linq_to_sequence_move_array_ls_autoTT_gr_>`
+  *  :ref:`to_table (a: array\<auto(TT)\>; key: block\<(v:TT):auto\>; elementSelector: block\<(v:TT):auto\>) : table\<typedecl(_::unique_key(type\<TT\>)), typedecl(elementSelector(type\<TT\>))\> <function-linq_to_table_array_ls_autoTT_gr__block_ls_v_c_TT_c_auto_gr__block_ls_v_c_TT_c_auto_gr_>`
+  *  :ref:`to_table (var a: iterator\<auto(TT)\>; key: block\<(v:TT):auto\>; elementSelector: block\<(v:TT):auto\>) : table\<typedecl(_::unique_key(type\<TT\>)), typedecl(elementSelector(type\<TT\>))\> <function-linq_to_table_iterator_ls_autoTT_gr__block_ls_v_c_TT_c_auto_gr__block_ls_v_c_TT_c_auto_gr_>`
 
 .. _function-linq_to_sequence_array_ls_autoTT_gr_:
 
@@ -2173,15 +2173,15 @@ Converts an array to a table
 Comparators and keys
 ++++++++++++++++++++
 
-  *  :ref:`less (a: tuple\<auto(TT)\>; b: tuple\<auto(TT)\>) : bool <function-linq_less_tuple_ls_autoTT_gr__tuple_ls_autoTT_gr_>` 
-  *  :ref:`less (a: auto; b: auto) : bool <function-linq_less_auto_auto_0x19d>` 
-  *  :ref:`less (a: tuple\<auto(TT);auto(UU);auto(VV)\>; b: tuple\<auto(TT);auto(UU);auto(VV)\>) : bool <function-linq_less_tuple_ls_autoTT;autoUU;autoVV_gr__tuple_ls_autoTT;autoUU;autoVV_gr_>` 
-  *  :ref:`less (a: tuple\<auto(TT);auto(UU)\>; b: tuple\<auto(TT);auto(UU)\>) : bool <function-linq_less_tuple_ls_autoTT;autoUU_gr__tuple_ls_autoTT;autoUU_gr_>` 
-  *  :ref:`less (a: tuple\<auto(TT);auto(UU);auto(VV);auto(WW)\>; b: tuple\<auto(TT);auto(UU);auto(VV);auto(WW)\>) : bool <function-linq_less_tuple_ls_autoTT;autoUU;autoVV;autoWW_gr__tuple_ls_autoTT;autoUU;autoVV;autoWW_gr_>` 
-  *  :ref:`sequence_equal (var first: iterator\<auto(TT)\>; var second: iterator\<auto(TT)\>) : bool <function-linq_sequence_equal_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr_>` 
-  *  :ref:`sequence_equal (first: array\<auto(TT)\>; second: array\<auto(TT)\>) : bool <function-linq_sequence_equal_array_ls_autoTT_gr__array_ls_autoTT_gr_>` 
-  *  :ref:`sequence_equal_by (var first: iterator\<auto(TT)\>; var second: iterator\<auto(TT)\>; key: block\<(arg:TT):auto\>) : bool <function-linq_sequence_equal_by_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>` 
-  *  :ref:`sequence_equal_by (first: array\<auto(TT)\>; second: array\<auto(TT)\>; key: block\<(arg:TT):auto\>) : bool <function-linq_sequence_equal_by_array_ls_autoTT_gr__array_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>` 
+  *  :ref:`less (a: tuple\<auto(TT)\>; b: tuple\<auto(TT)\>) : bool <function-linq_less_tuple_ls_autoTT_gr__tuple_ls_autoTT_gr_>`
+  *  :ref:`less (a: auto; b: auto) : bool <function-linq_less_auto_auto_0x19d>`
+  *  :ref:`less (a: tuple\<auto(TT);auto(UU);auto(VV)\>; b: tuple\<auto(TT);auto(UU);auto(VV)\>) : bool <function-linq_less_tuple_ls_autoTT;autoUU;autoVV_gr__tuple_ls_autoTT;autoUU;autoVV_gr_>`
+  *  :ref:`less (a: tuple\<auto(TT);auto(UU)\>; b: tuple\<auto(TT);auto(UU)\>) : bool <function-linq_less_tuple_ls_autoTT;autoUU_gr__tuple_ls_autoTT;autoUU_gr_>`
+  *  :ref:`less (a: tuple\<auto(TT);auto(UU);auto(VV);auto(WW)\>; b: tuple\<auto(TT);auto(UU);auto(VV);auto(WW)\>) : bool <function-linq_less_tuple_ls_autoTT;autoUU;autoVV;autoWW_gr__tuple_ls_autoTT;autoUU;autoVV;autoWW_gr_>`
+  *  :ref:`sequence_equal (var first: iterator\<auto(TT)\>; var second: iterator\<auto(TT)\>) : bool <function-linq_sequence_equal_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr_>`
+  *  :ref:`sequence_equal (first: array\<auto(TT)\>; second: array\<auto(TT)\>) : bool <function-linq_sequence_equal_array_ls_autoTT_gr__array_ls_autoTT_gr_>`
+  *  :ref:`sequence_equal_by (var first: iterator\<auto(TT)\>; var second: iterator\<auto(TT)\>; key: block\<(arg:TT):auto\>) : bool <function-linq_sequence_equal_by_iterator_ls_autoTT_gr__iterator_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>`
+  *  :ref:`sequence_equal_by (first: array\<auto(TT)\>; second: array\<auto(TT)\>; key: block\<(arg:TT):auto\>) : bool <function-linq_sequence_equal_by_array_ls_autoTT_gr__array_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_>`
 
 
 less

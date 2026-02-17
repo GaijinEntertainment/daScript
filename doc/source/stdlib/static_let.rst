@@ -51,9 +51,9 @@ This macro implements the `static_let` and `static_let_finalize` functions.
 Static variable declarations
 ++++++++++++++++++++++++++++
 
-  *  :ref:`static_let (name: string; blk: block\<():void\>) <function-static_let_static_let_string_block_ls__c_void_gr_>` 
-  *  :ref:`static_let (blk: block\<():void\>) <function-static_let_static_let_block_ls__c_void_gr_>` 
-  *  :ref:`static_let_finalize (blk: block\<():void\>) <function-static_let_static_let_finalize_block_ls__c_void_gr_>` 
+  *  :ref:`static_let (name: string; blk: block\<():void\>) <function-static_let_static_let_string_block_ls__c_void_gr_>`
+  *  :ref:`static_let (blk: block\<():void\>) <function-static_let_static_let_block_ls__c_void_gr_>`
+  *  :ref:`static_let_finalize (blk: block\<():void\>) <function-static_let_static_let_finalize_block_ls__c_void_gr_>`
 
 
 static_let

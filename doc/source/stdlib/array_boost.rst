@@ -17,10 +17,10 @@ All functions and symbols are in "array_boost" module, use require to get access
 Temporary arrays
 ++++++++++++++++
 
-  *  :ref:`temp_array (arr: auto const implicit ==const) : auto <function-array_boost_temp_array_auto_const_implicit__eq__eq_const_0x3a>` 
-  *  :ref:`temp_array (var arr: auto implicit ==const) : auto <function-array_boost_temp_array__auto_implicit__eq__eq_const_0x2e>` 
-  *  :ref:`temp_array (data: auto? ==const; lenA: int; a: auto(TT)) : array\<TT\> <function-array_boost_temp_array_auto_q___eq__eq_const_int_autoTT_0x5c>` 
-  *  :ref:`temp_array (var data: auto? ==const; lenA: int; a: auto(TT)) : array\<TT\> <function-array_boost_temp_array__auto_q___eq__eq_const_int_autoTT_0x4c>` 
+  *  :ref:`temp_array (arr: auto const implicit ==const) : auto <function-array_boost_temp_array_auto_const_implicit__eq__eq_const_0x3a>`
+  *  :ref:`temp_array (var arr: auto implicit ==const) : auto <function-array_boost_temp_array__auto_implicit__eq__eq_const_0x2e>`
+  *  :ref:`temp_array (data: auto? ==const; lenA: int; a: auto(TT)) : array\<TT\> <function-array_boost_temp_array_auto_q___eq__eq_const_int_autoTT_0x5c>`
+  *  :ref:`temp_array (var data: auto? ==const; lenA: int; a: auto(TT)) : array\<TT\> <function-array_boost_temp_array__auto_q___eq__eq_const_int_autoTT_0x4c>`
 
 
 temp_array
@@ -30,7 +30,7 @@ temp_array
 
 .. das:function:: temp_array(arr: auto const implicit ==const) : auto
 
-.. warning:: 
+.. warning::
   This is unsafe operation.
 
 Creates temporary array from the given object.
@@ -59,7 +59,7 @@ Important requirements are:
 Empty check
 +++++++++++
 
-  *  :ref:`empty (v: auto(VecT)) : auto <function-array_boost_empty_autoVecT_0x46>` 
+  *  :ref:`empty (v: auto(VecT)) : auto <function-array_boost_empty_autoVecT_0x46>`
 
 .. _function-array_boost_empty_autoVecT_0x46:
 
@@ -73,8 +73,8 @@ returns true if 'v' has 0 elements. this also implies that `length(v)` is define
 Sub-array view
 ++++++++++++++
 
-  *  :ref:`array_view (var bytes: array\<auto(TT)\>; offset: int; length: int; blk: block\<(var view:array\<TT\>#):void\>) : auto <function-array_boost_array_view__array_ls_autoTT_gr__int_int_block_ls_var_view_c_array_ls_TT_gr__hh__c_void_gr_>` 
-  *  :ref:`array_view (bytes: array\<auto(TT)\>; offset: int; length: int; blk: block\<(view:array\<TT\>#):void\>) : auto <function-array_boost_array_view_array_ls_autoTT_gr__int_int_block_ls_view_c_array_ls_TT_gr__hh__c_void_gr_>` 
+  *  :ref:`array_view (var bytes: array\<auto(TT)\>; offset: int; length: int; blk: block\<(var view:array\<TT\>#):void\>) : auto <function-array_boost_array_view__array_ls_autoTT_gr__int_int_block_ls_var_view_c_array_ls_TT_gr__hh__c_void_gr_>`
+  *  :ref:`array_view (bytes: array\<auto(TT)\>; offset: int; length: int; blk: block\<(view:array\<TT\>#):void\>) : auto <function-array_boost_array_view_array_ls_autoTT_gr__int_int_block_ls_view_c_array_ls_TT_gr__hh__c_void_gr_>`
 
 
 array_view

@@ -48,9 +48,9 @@ use 'return false' to immediately return from the generator.
 Awaiting
 ++++++++
 
-  *  :ref:`await (var a: iterator\<bool\>) : bool <function-async_boost_await_iterator_ls_bool_gr_>` 
-  *  :ref:`await (var a: iterator\<variant\<res:auto(T);wait:bool\>\>) : T <function-async_boost_await_iterator_ls_variant_ls_res_c_autoT;wait_c_bool_gr__gr_>` 
-  *  :ref:`await_next_frame () <function-async_boost_await_next_frame>` 
+  *  :ref:`await (var a: iterator\<bool\>) : bool <function-async_boost_await_iterator_ls_bool_gr_>`
+  *  :ref:`await (var a: iterator\<variant\<res:auto(T);wait:bool\>\>) : T <function-async_boost_await_iterator_ls_variant_ls_res_c_autoT;wait_c_bool_gr__gr_>`
+  *  :ref:`await_next_frame () <function-async_boost_await_next_frame>`
 
 
 await
@@ -80,8 +80,8 @@ This function is used to suspend coroutine until next frame.
 Running async tasks
 +++++++++++++++++++
 
-  *  :ref:`async_run (var a: iterator\<auto\>) : auto <function-async_boost_async_run_iterator_ls_auto_gr_>` 
-  *  :ref:`async_run_all (var a: array\<iterator\<auto\>\>) : auto <function-async_boost_async_run_all_array_ls_iterator_ls_auto_gr__gr_>` 
+  *  :ref:`async_run (var a: iterator\<auto\>) : auto <function-async_boost_async_run_iterator_ls_auto_gr_>`
+  *  :ref:`async_run_all (var a: array\<iterator\<auto\>\>) : auto <function-async_boost_async_run_all_array_ls_iterator_ls_auto_gr__gr_>`
 
 .. _function-async_boost_async_run_iterator_ls_auto_gr_:
 

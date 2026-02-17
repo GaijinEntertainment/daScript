@@ -19,8 +19,8 @@ All functions and symbols are in "profiler_boost" module, use require to get acc
 Context profiler control
 ++++++++++++++++++++++++
 
-  *  :ref:`disable_profiler (var ctx: Context) <function-profiler_boost_disable_profiler_Context>` 
-  *  :ref:`enable_profiler (var ctx: Context) <function-profiler_boost_enable_profiler_Context>` 
+  *  :ref:`disable_profiler (var ctx: Context) <function-profiler_boost_disable_profiler_Context>`
+  *  :ref:`enable_profiler (var ctx: Context) <function-profiler_boost_enable_profiler_Context>`
 
 .. _function-profiler_boost_disable_profiler_Context:
 
@@ -28,7 +28,7 @@ Context profiler control
 
 Disables the profiler for the given context.
 
-:Arguments: * **ctx** :  :ref:`Context <handle-rtti-Context>` 
+:Arguments: * **ctx** :  :ref:`Context <handle-rtti-Context>`
 
 .. _function-profiler_boost_enable_profiler_Context:
 
@@ -36,6 +36,6 @@ Disables the profiler for the given context.
 
 Enables the profiler for the given context.
 
-:Arguments: * **ctx** :  :ref:`Context <handle-rtti-Context>` 
+:Arguments: * **ctx** :  :ref:`Context <handle-rtti-Context>`
 
 

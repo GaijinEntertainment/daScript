@@ -43,8 +43,8 @@ This macro converts each(bitfield) to the following code::
 Iteration
 +++++++++
 
-  *  :ref:`each (argT: auto) : auto <function-bitfield_trait_each_auto_0x16>` 
-  *  :ref:`each_bit_name (argT: auto) : auto <function-bitfield_trait_each_bit_name_auto_0x39>` 
+  *  :ref:`each (argT: auto) : auto <function-bitfield_trait_each_auto_0x16>`
+  *  :ref:`each_bit_name (argT: auto) : auto <function-bitfield_trait_each_bit_name_auto_0x39>`
 
 .. _function-bitfield_trait_each_auto_0x16:
 

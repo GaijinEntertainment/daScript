@@ -589,7 +589,7 @@ def make_ref(name, text : string) {
         (">", "\\>"),
         ("!", "\\!"
     )]))
-    return " :ref:`{t} <{name}>` "
+    return " :ref:`{t} <{name}>`"
 }
 
 def public make_group(name : string; plus : string = "+") {
@@ -1945,7 +1945,7 @@ def function_needs_documenting(func : FunctionPtr | Function?) {
 }
 
 def document_warning(doc_file : file; issue : string) {
-    fwrite(doc_file, make_domain("warning"))
+    fwrite(doc_file, ".. warning::")
     fwrite(doc_file, "\n  {issue}\n\n")
 }
 
