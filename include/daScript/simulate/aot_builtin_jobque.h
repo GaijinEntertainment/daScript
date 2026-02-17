@@ -173,6 +173,7 @@ namespace das {
     void withAtomic ( const TBlock<void,AtomicTT<TT> *> & blk, Context * context, LineInfoArg * at ) {
         using TAtomic = AtomicTT<TT>;
         TAtomic ch;
+        ch.set(0);
         ch.addRef();
         das::das_invoke<void>::invoke<TAtomic *>(context, at, blk, &ch);
         if ( ch.releaseRef() ) {
