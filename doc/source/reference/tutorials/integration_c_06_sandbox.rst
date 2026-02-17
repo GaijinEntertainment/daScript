@@ -56,15 +56,15 @@ owned and freed by the file access.
 
 Available ``introduce`` functions:
 
-================================  =============================================
-Function                          Purpose
-================================  =============================================
-``das_fileaccess_introduce_file`` Register a virtual file from a string
-``das_fileaccess_introduce_file_from_disk``  Read a disk file into cache
-``das_fileaccess_introduce_daslib``          Cache all ``daslib/*.das`` files
-``das_fileaccess_introduce_native_modules``  Cache all native plugin modules
-``das_fileaccess_introduce_native_module``   Cache a single native module
-================================  =============================================
+============================================  =================================
+Function                                      Purpose
+============================================  =================================
+``das_fileaccess_introduce_file``              Register a virtual file from a string
+``das_fileaccess_introduce_file_from_disk``    Read a disk file into cache
+``das_fileaccess_introduce_daslib``            Cache all ``daslib/*.das`` files
+``das_fileaccess_introduce_native_modules``    Cache all native plugin modules
+``das_fileaccess_introduce_native_module``     Cache a single native module
+============================================  =================================
 
 
 The .das_project file

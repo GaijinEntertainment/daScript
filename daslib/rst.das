@@ -902,7 +902,10 @@ def document_topic(doc_file : file; topic, content : string implicit; cb : block
             }
         }
     } elif (add_empty_topic) {
-        fwrite(doc_file, "{topic}\n\n")
+        // write content directly when topic file is missing, instead of raw substitution reference
+        if (content != "") {
+            fwrite(doc_file, "{content}\n\n")
+        }
     }
 }
 
@@ -2061,9 +2064,6 @@ def document_functions(doc_file : file; mods : array<Module?>; var groups : arra
                     }
                     document_function(doc_file, func.mod, func.fn, 0, "", "das:function", is_overload)
                     prev_func_name = cur_name
-                }
-                if (prev_was_overload_group) {
-                    fwrite(doc_file, "----\n\n")
                 }
             }
         }

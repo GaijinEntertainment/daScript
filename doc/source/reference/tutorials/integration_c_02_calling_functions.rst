@@ -20,7 +20,7 @@ Every value crossing the C ↔ daslang boundary is carried in a ``vec4f`` —
 a 128-bit SSE register.  The API provides symmetric helper pairs:
 
 =============================  ==============================
-Packing (C → daslang)        Unpacking (daslang → C)
+Packing (C → daslang)          Unpacking (daslang → C)
 =============================  ==============================
 ``das_result_int(value)``      ``das_argument_int(vec4f)``
 ``das_result_float(value)``    ``das_argument_float(vec4f)``

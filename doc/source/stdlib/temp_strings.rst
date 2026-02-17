@@ -76,6 +76,4 @@ Delete the string after the callback is called. Intern strings are not deleted.
 
 .. das:function:: temp_string(str: string; cb: block<(res:string#):void>)
 
-----
-
 

@@ -125,8 +125,6 @@ Converts UTF-32 string to UTF-8 and appends it to the UTF-8 byte array
 
 .. das:function:: utf8_encode(source_utf32_string: array<uint>) : array<uint8>
 
-----
-
 
 ++++++++++++++++++++++
 Length and measurement
@@ -151,8 +149,6 @@ Returns the number of characters in the UTF-8 string
 .. _function-utf8_utils_utf8_length_array_ls_uint8_gr_:
 
 .. das:function:: utf8_length(utf8_string: array<uint8>) : int
-
-----
 
 
 ++++++++++
@@ -209,7 +205,5 @@ Returns true if the byte array contains a valid UTF-8 encoded string.
 .. _function-utf8_utils_is_utf8_string_valid_string:
 
 .. das:function:: is_utf8_string_valid(utf8_string: string) : bool
-
-----
 
 

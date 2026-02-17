@@ -583,8 +583,6 @@ Moves a newly created ``smart_ptr`` (``Expression``, ``TypeDecl``, ``Variable``,
 
 .. das:function:: emplace_new(vec: dasvector`smart_ptr`Variable; ptr: smart_ptr<Variable>)
 
-----
-
 
 +++++++++++++++++++++++++++++++++++
 Textual descriptions of the objects
@@ -1021,8 +1019,6 @@ Creates an ``AnnotationDeclaration`` for the named annotation (with optional typ
 .. _function-ast_boost_append_annotation_smart_ptr_ls_Structure_gr__string_string:
 
 .. das:function:: append_annotation(st: smart_ptr<Structure>; mod_name: string; ann_name: string)
-
-----
 
 
 +++++++++++++++++++++

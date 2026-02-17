@@ -4,7 +4,7 @@
   Daslang 0.6 Reference Manual
 #################################
 
-Copyright (c) 2018-2024 Gaijin Entertainment
+Copyright (c) 2018-2026 Gaijin Entertainment
 
 The above copyright notice and this permission notice shall be included in
 all copies or substantial portions of the Software.

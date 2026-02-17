@@ -279,8 +279,6 @@ Overload accepting temporary type
 
 .. das:function:: write_json(val: JsonValue?) : string
 
-----
-
 
 +++++++++++++++
 JSON properties

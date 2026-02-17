@@ -83,7 +83,7 @@ Key policy flags:
 +-----------------------------------+------------------------------------------+
 | ``max_string_heap_allocated``     | Caps string heap memory                  |
 +-----------------------------------+------------------------------------------+
-| ``stack``                         | Context stack size in bytes               |
+| ``stack``                         | Context stack size in bytes              |
 +-----------------------------------+------------------------------------------+
 | ``threadlock_context``            | Adds context mutex for thread safety     |
 +-----------------------------------+------------------------------------------+
@@ -221,7 +221,7 @@ Available callbacks:
 +-------------------------------+-----------------------------------------------+
 | ``module_allowed_unsafe``     | Control ``unsafe`` per module                 |
 +-------------------------------+-----------------------------------------------+
-| ``option_allowed``            | Whitelist ``options`` directives               |
+| ``option_allowed``            | Whitelist ``options`` directives              |
 +-------------------------------+-----------------------------------------------+
 | ``annotation_allowed``        | Whitelist annotations                         |
 +-------------------------------+-----------------------------------------------+

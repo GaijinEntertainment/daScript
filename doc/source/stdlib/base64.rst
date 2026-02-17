@@ -66,8 +66,6 @@ Encodes a string to its Base64 text representation.
 
 .. das:function:: base64_encode(inp: array<uint8>|array<uint8>#) : auto
 
-----
-
 
 ++++++++
 Decoding
@@ -102,7 +100,5 @@ Decodes a Base64-encoded string. Returns a tuple of the decoded text and its byt
 .. _function-base64_base64_decode_string_array_ls_uint8_gr_:
 
 .. das:function:: base64_decode(_in: string; out: array<uint8>) : int
-
-----
 
 

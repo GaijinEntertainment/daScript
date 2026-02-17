@@ -281,8 +281,6 @@ Returns true if the beginning of string `str` matches the string `cmp`, with opt
 
 .. das:function:: starts_with(str: string implicit; offset: int; cmp: string implicit; cmpLen: uint) : bool
 
-----
-
 
 ++++++++++++++
 String builder
@@ -729,8 +727,6 @@ Returns the first index at which `substr` (string or character code) occurs in `
 .. _function-strings_find_string_implicit_int:
 
 .. das:function:: find(str: string implicit; substr: int) : int
-
-----
 
 
 +++++++++++++++++
@@ -1192,8 +1188,6 @@ Converts a string to a uint8, panicking on failure; an overload accepts `result`
 .. _function-strings_uint8_string_implicit:
 
 .. das:function:: uint8(str: string implicit) : uint8
-
-----
 
 
 +++++++++++++++

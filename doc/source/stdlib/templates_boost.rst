@@ -367,8 +367,6 @@ Adds a rule to the template to replace a variable with an expression list.
 
 .. das:function:: replaceVariableWithList(self: Template; name: string; expr: array<ExpressionPtr>)
 
-----
-
 
 ++++++++++++++++++++
 Template application
@@ -414,8 +412,6 @@ Applies the template to the given expression. If `forceAt` is set, the resulting
 .. _function-templates_boost_apply_template_smart_ptr_ls_Expression_gr__ref__block_ls_var_rules_c_Template_c_void_gr_:
 
 .. das:function:: apply_template(expr: smart_ptr<Expression>&; blk: block<(var rules:Template):void>) : ExpressionPtr
-
-----
 
 
 ++++++++++++++++++
@@ -484,8 +480,6 @@ Create ExprBlock and move all expressions from expr to the list of the block.
 .. _function-templates_boost_make_expression_block_array_ls_ExpressionPtr_gr_:
 
 .. das:function:: make_expression_block(exprs: array<ExpressionPtr>) : smart_ptr<ExprBlock>
-
-----
 
 
 +++++++++++++
@@ -604,8 +598,6 @@ Add global variable to the module, given name and type.
 .. _function-templates_boost_add_global_var_Module_q__string_TypeDeclPtr_LineInfo_bool:
 
 .. das:function:: add_global_var(mod: Module?; vname: string; typ: TypeDeclPtr; vat: LineInfo; priv: bool) : bool
-
-----
 
 
 ++++++++++++++
@@ -822,8 +814,6 @@ Implementation details for the reification. Creates a type declaration from a st
 .. _function-templates_boost_add_type_ptr_ref_Enumeration_q__TypeDeclFlags:
 
 .. das:function:: add_type_ptr_ref(st: Enumeration?; flags: TypeDeclFlags) : TypeDeclPtr
-
-----
 
 
 +++++++++++++++++

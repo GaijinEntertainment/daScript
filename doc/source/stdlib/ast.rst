@@ -6146,8 +6146,6 @@ Creates an adapter for the AstVisitor interface.
 
 .. das:function:: make_visitor(class: void? implicit; info: StructInfo const? implicit) : smart_ptr<VisitorAdapter>
 
-----
-
 
 +++++++++++++++++++
 Adapter application

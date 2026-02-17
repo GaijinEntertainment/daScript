@@ -88,15 +88,15 @@ Enum value                            CodeOfPolicies field
 Available integer policies
 ==========================
 
-=======================================  ===============================================
-Enum value                               CodeOfPolicies field
-=======================================  ===============================================
-``DAS_POLICY_STACK``                     ``stack`` — context stack size (bytes)
-``DAS_POLICY_MAX_HEAP_ALLOCATED``        ``max_heap_allocated`` — max heap (0 = unlimited)
-``DAS_POLICY_MAX_STRING_HEAP_ALLOCATED`` ``max_string_heap_allocated``
-``DAS_POLICY_HEAP_SIZE_HINT``            ``heap_size_hint`` — initial heap size
-``DAS_POLICY_STRING_HEAP_SIZE_HINT``     ``string_heap_size_hint``
-=======================================  ===============================================
+========================================  ===============================================
+Enum value                                CodeOfPolicies field
+========================================  ===============================================
+``DAS_POLICY_STACK``                      ``stack`` — context stack size (bytes)
+``DAS_POLICY_MAX_HEAP_ALLOCATED``         ``max_heap_allocated`` — max heap (0 = unlimited)
+``DAS_POLICY_MAX_STRING_HEAP_ALLOCATED``  ``max_string_heap_allocated``
+``DAS_POLICY_HEAP_SIZE_HINT``             ``heap_size_hint`` — initial heap size
+``DAS_POLICY_STRING_HEAP_SIZE_HINT``      ``string_heap_size_hint``
+========================================  ===============================================
 
 
 Build & run

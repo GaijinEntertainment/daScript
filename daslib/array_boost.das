@@ -46,6 +46,7 @@ def private array_helper(arr : auto implicit ==const; a : auto(TT)) : array<TT -
 def public temp_array(var arr : auto implicit ==const) {
     //! Creates temporary array from the given object.
     //! Important requirements are:
+    //!
     //!     * object memory is linear
     //!     * each element follows the next one directly, with the stride equal to size of the element
     //!     * object memory does not change within the lifetime of the returned array
@@ -58,6 +59,7 @@ def public temp_array(var arr : auto implicit ==const) {
 def public temp_array(arr : auto implicit ==const) {
     //! Creates temporary array from the given object.
     //! Important requirements are:
+    //!
     //!     * object memory is linear
     //!     * each element follows the next one directly, with the stride equal to size of the element
     //!     * object memory does not change within the lifetime of the returned array
@@ -76,6 +78,7 @@ def empty(v : auto(VecT)) {
 def public temp_array(var data : auto? ==const; lenA : int; a : auto(TT)) : array<TT -const -#> {
     //! creates a temporary array from the given data pointer and length
     //! Important requirements are:
+    //!
     //!     * data pointer is valid and points to a memory block of at least lenA elements
     //!     * each element follows the next one directly, with the stride equal to size of the element
     //!     * data memory does not change within the lifetime of the returned array
@@ -92,6 +95,7 @@ def public temp_array(var data : auto? ==const; lenA : int; a : auto(TT)) : arra
 def public temp_array(data : auto? ==const; lenA : int; a : auto(TT)) : array<TT -const -#> const {
     //! creates a temporary array from the given data pointer and length
     //! Important requirements are:
+    //!
     //!     * data pointer is valid and points to a memory block of at least lenA elements
     //!     * each element follows the next one directly, with the stride equal to size of the element
     //!     * data memory does not change within the lifetime of the returned array

@@ -1872,8 +1872,6 @@ Returns a mutable iterator over all fixed-size array values in a mutable `table<
 
 .. das:function:: values(a: table<auto(keyT);auto(valT)> ==const|table<auto(keyT);auto(valT)># ==const) : iterator<valT&>
 
-----
-
 
 ++++++++++++++++++++++++
 das::string manipulation
@@ -2873,8 +2871,6 @@ Formats a `uint8` value as a string using the given `format` specifier (followin
 
 .. das:function:: fmt(format: string implicit; value: float) : string
 
-----
-
 
 ++++++++++++++++++++
 Argument consumption
@@ -2985,8 +2981,6 @@ Passes through and returns a mutable reference to `a`, verifying that `a` and al
 .. _function-builtin__return_with_lockcheck_autovalT_const_ref___eq__eq_const_0x3b:
 
 .. das:function:: _return_with_lockcheck(a: auto(valT) const& ==const) : auto&
-
-----
 
 
 ++++++++++++++
@@ -3102,8 +3096,6 @@ Counts and returns the number of set (1) bits in the 64-bit unsigned integer `bi
 
 .. das:function:: popcnt(bits: uint) : uint
 
-----
-
 
 +++++++++
 Intervals
@@ -3140,8 +3132,6 @@ Constructs a `urange` value from the two `uint` endpoints `arg0` (inclusive) and
 .. _function-builtin_interval_int64_int64:
 
 .. das:function:: interval(arg0: int64; arg1: int64) : range64
-
-----
 
 
 ++++

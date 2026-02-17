@@ -284,6 +284,4 @@ Extracts a string constant or function address argument at the given index from 
 
 .. das:function:: typemacro_argument(dimExpr: auto; index: int; constType: auto(ExprConstType); defaultValue: auto(ValueT)) : ValueT
 
-----
-
 

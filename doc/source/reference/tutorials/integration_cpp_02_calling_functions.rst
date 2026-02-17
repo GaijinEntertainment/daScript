@@ -256,17 +256,17 @@ handle.  For functions called repeatedly, cache the ``Func`` instead.
 Part A vs Part B comparison
 ============================
 
-==============================  ============================  ==============================
-Aspect                          Part A (cast + evalWithCatch) Part B (das_invoke_function)
-==============================  ============================  ==============================
-Header                          ``daScript.h``                ``simulate/aot.h``
-Argument marshalling            Manual ``vec4f[]``            Automatic (variadic templates)
-Return value extraction         Manual ``cast<T>::to``        Automatic (template parameter)
-Struct returns                  ``evalWithCatch(f, a, &buf)`` ``invoke_cmres(...)``
-AOT dispatch                    No                            Yes
-Exception handling               ``getException()`` after call Throws C++ exception
-Best for                        Learning / edge cases         Production code
-==============================  ============================  ==============================
+==============================  ==============================  ==============================
+Aspect                          Part A (cast + evalWithCatch)   Part B (das_invoke_function)
+==============================  ==============================  ==============================
+Header                          ``daScript.h``                  ``simulate/aot.h``
+Argument marshalling            Manual ``vec4f[]``              Automatic (variadic templates)
+Return value extraction         Manual ``cast<T>::to``          Automatic (template parameter)
+Struct returns                  ``evalWithCatch(f, a, &buf)``   ``invoke_cmres(...)``
+AOT dispatch                    No                              Yes
+Exception handling              ``getException()`` after call   Throws C++ exception
+Best for                        Learning / edge cases           Production code
+==============================  ==============================  ==============================
 
 
 Building and running

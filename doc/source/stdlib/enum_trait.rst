@@ -137,6 +137,4 @@ converts string to enum value, panics if not found
 
 .. das:function:: to_enum(ent: auto(EnumT); name: string; defaultValue: EnumT) : EnumT
 
-----
-
 

@@ -166,8 +166,6 @@ iterates over input and returns it sorted version
 
 .. das:function:: sorted(arr: array<auto>) : auto
 
-----
-
 
 +++++++++++
 Aggregation
@@ -406,8 +404,6 @@ splits elements into `(matching, non_matching)` arrays
 
 .. das:function:: partition(src: iterator<auto(TT)>; blk: block<(what:TT):bool>) : tuple<array<TT>;array<TT>>
 
-----
-
 
 +++++++++
 Iteration
@@ -485,8 +481,6 @@ yields every element unchanged, calling `blk` on each as a side-effect
 .. _function-functional_tap_iterator_ls_autoTT_gr__lambda_ls_what_c_TT_c_void_gr_:
 
 .. das:function:: tap(src: iterator<auto(TT)>; blk: lambda<(what:TT):void>) : auto
-
-----
 
 
 ++++++++++

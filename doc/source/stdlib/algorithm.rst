@@ -247,8 +247,6 @@ Returns the index of the first element in the range [f, l) for which less(val, e
 
 .. das:function:: upper_bound(a: auto; f: int; l: int; val: auto(TT); less: block<(a:TT;b:TT):bool>) : auto
 
-----
-
 
 ++++++++++++++++++
 Array manipulation

@@ -91,8 +91,6 @@ returns address of the given shared variable. it's safe because shared variables
 
 .. das:function:: shared_addr(tab: table<auto(KEY), auto(VAL)>; k: KEY) : auto
 
-----
-
 
 ++++++++++++++++++
 Temporary pointers
@@ -118,8 +116,6 @@ returns temporary pointer from a given pointer
 
 .. das:function:: temp_ptr(x: auto(T)? const implicit ==const) : T?#
 
-----
-
 
 ++++++++++++++++
 Temporary values
@@ -144,7 +140,5 @@ returns temporary reference to the given expression
 .. _function-safe_addr_temp_value_autoT_const_ref___eq__eq_const_0x5b:
 
 .. das:function:: temp_value(x: auto(T) const& ==const) : T const&#
-
-----
 
 

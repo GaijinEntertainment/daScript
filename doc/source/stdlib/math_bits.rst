@@ -98,8 +98,6 @@ bit representation of x is interpreted as a float3
 
 .. das:function:: uint_bits_to_float(x: uint4) : float4
 
-----
-
 
 +++++++++++++++++
 int,uint in float
@@ -165,8 +163,6 @@ bit representation of x is interpreted as a uint3
 .. _function-math_bits_float_bits_to_uint_float4:
 
 .. das:function:: float_bits_to_uint(x: float4) : uint4
-
-----
 
 
 ++++++++++++++++++++++
@@ -298,7 +294,5 @@ return a float4 which stores bit-cast version of x
 .. _function-math_bits_cast_to_vec4f_bool:
 
 .. das:function:: cast_to_vec4f(x: bool) : float4
-
-----
 
 

@@ -492,8 +492,6 @@ Retrieves file metadata such as size and timestamps for the file at the given pa
 
 .. das:function:: stat(file: string implicit; stat: FStat implicit) : bool
 
-----
-
 
 +++++++++++++++++
 Path manipulation

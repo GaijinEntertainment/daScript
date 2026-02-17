@@ -15,15 +15,15 @@ global variables from a C host using the ``daScriptC.h`` API.
 After a program is compiled and simulated, its global variables live in
 the context.  The C API provides five functions to access them:
 
-========================================  ==========================================
-Function                                  Purpose
-========================================  ==========================================
-``das_context_find_variable(ctx, name)``  Look up a global by name; returns an index
-``das_context_get_variable(ctx, idx)``    Get a raw ``void*`` to the variable storage
-``das_context_get_total_variables(ctx)``  Total number of globals
-``das_context_get_variable_name(ctx, i)`` Name of the i-th global
-``das_context_get_variable_size(ctx, i)`` Size (in bytes) of the i-th global
-========================================  ==========================================
+=========================================  =========================================
+Function                                   Purpose
+=========================================  =========================================
+``das_context_find_variable(ctx, name)``   Look up a global by name; returns an index
+``das_context_get_variable(ctx, idx)``     Get a raw ``void*`` to the variable storage
+``das_context_get_total_variables(ctx)``   Total number of globals
+``das_context_get_variable_name(ctx, i)``  Name of the i-th global
+``das_context_get_variable_size(ctx, i)``  Size (in bytes) of the i-th global
+=========================================  =========================================
 
 
 The daslang script

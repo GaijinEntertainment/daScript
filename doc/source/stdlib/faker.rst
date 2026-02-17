@@ -518,6 +518,4 @@ Returns week day for given date.
 
 .. das:function:: week_day(year: int; month: int; day: int) : int
 
-----
-
 

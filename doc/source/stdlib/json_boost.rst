@@ -298,8 +298,6 @@ Parse a JSON value and return the corresponding native value.
 
 .. das:function:: from_JV(v: JsonValue const?; ent: bitfield8:uint8<>; defV: bitfield8 = bitfield8()) : auto
 
-----
-
 
 ++++++++++++++++++++++++
 Element access operators
@@ -373,8 +371,6 @@ Returns the value of the index in the JSON array, if it exists.
 .. _function-json_boost__q__lb__rb___JsonValue_q___eq__eq_const_string:
 
 .. das:function:: JsonValue? ==const?[](a: JsonValue? ==const; key: string) : JsonValue?
-
-----
 
 
 +++++++++++++++++++++++++
@@ -452,8 +448,6 @@ Returns the value of the JSON object, if it exists, otherwise returns the defaul
 .. _function-json_boost__q__q__JsonValue_const_q__string:
 
 .. das:function:: JsonValue const???(a: JsonValue const?; val: string) : string
-
-----
 
 
 ++++++++++++++++

@@ -642,8 +642,6 @@ Converts an EvaluateResponse struct to its DAP JSON representation.
 
 .. das:function:: JV(data: Variable) : JsonValue?
 
-----
-
 
 ++++++++++++++++++++
 JSON field accessors

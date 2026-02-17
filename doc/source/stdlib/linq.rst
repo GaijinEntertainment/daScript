@@ -1270,8 +1270,6 @@ Sums elements in an array
 
 .. das:function:: sum(src: iterator<auto(TT)>) : TT
 
-----
-
 
 ++++++++++++++
 Filtering data
@@ -1870,8 +1868,6 @@ Returns true if the element is present in the iterator
 
 .. das:function:: contains(src: array<auto(TT)>; element: TT) : bool
 
-----
-
 
 ++++++++++++++++++
 Element operations
@@ -2053,8 +2049,6 @@ Returns the only element of an iterator, or a default value if there is not exac
 .. _function-linq_single_or_default_array_ls_autoTT_gr__TT:
 
 .. das:function:: single_or_default(src: array<auto(TT)>; defaultValue: TT) : TT
-
-----
 
 
 ++++++++++++++++++++
@@ -2245,8 +2239,6 @@ Merges three iterators into an array of tuples
 
 .. das:function:: zip_to_array(a: iterator<auto(TT)>; b: iterator<auto(UU)>; result_selector: block<(l:TT;r:UU):auto>) : array<typedecl(result_selector(type<TT>,type<UU>))>
 
-----
-
 
 +++++++++++++++++++++
 Conversion operations
@@ -2295,8 +2287,6 @@ Converts an array to a table
 .. _function-linq_to_table_iterator_ls_autoTT_gr__block_ls_v_c_TT_c_auto_gr__block_ls_v_c_TT_c_auto_gr_:
 
 .. das:function:: to_table(a: iterator<auto(TT)>; key: block<(v:TT):auto>; elementSelector: block<(v:TT):auto>) : table<typedecl(_::unique_key(type<TT>)), typedecl(elementSelector(type<TT>))>
-
-----
 
 
 ++++++++++++++++++++
@@ -2387,7 +2377,5 @@ Checks if two sequences are equal by key
 .. _function-linq_sequence_equal_by_array_ls_autoTT_gr__array_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_:
 
 .. das:function:: sequence_equal_by(first: array<auto(TT)>; second: array<auto(TT)>; key: block<(arg:TT):auto>) : bool
-
-----
 
 

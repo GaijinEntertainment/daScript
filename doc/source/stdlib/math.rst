@@ -304,8 +304,6 @@ Returns the component-wise minimum of two values, supporting scalar double, floa
 
 .. das:function:: min(x: int64; y: int64) : int64
 
-----
-
 
 +++++++++++++++++
 float* and double
@@ -1222,8 +1220,6 @@ Returns the tangent of the angle x given in radians for double or float; undefin
 
 .. das:function:: tan(x: float3) : float3
 
-----
-
 
 +++++++++++
 float* only
@@ -1621,8 +1617,6 @@ Truncates the float x toward zero to the nearest integer and returns the result 
 
 .. das:function:: trunci(x: float3) : int3
 
-----
-
 
 +++++++++++
 float3 only
@@ -1798,8 +1792,6 @@ Computes the refraction direction of vector v through a surface with unit normal
 .. _function-math_refract_float3_float3_float:
 
 .. das:function:: refract(v: float3; n: float3; nint: float) : float3
-
-----
 
 
 ++++++++++++++++++++++
@@ -1988,8 +1980,6 @@ Returns a unit-length vector with the same direction as the input float2, float3
 .. _function-math_normalize_float4:
 
 .. das:function:: normalize(x: float4) : float4
-
-----
 
 
 +++++++++++++++
@@ -2318,8 +2308,6 @@ Computes the fused multiply-add operation `a * b + c`.
 
 .. das:function:: mad(a: uint4; b: uint; c: uint4) : uint4
 
-----
-
 
 +++++++++++++++++++++
 Matrix element access
@@ -2467,8 +2455,6 @@ def float4x4 implicit ==const.[] (m: float4x4 implicit ==const; i: int) : float4
 .. _function-math__dot__lb__rb__float4x4_implicit__eq__eq_const_uint:
 
 .. das:function:: float4x4 implicit ==const.[](m: float4x4 implicit ==const; i: uint) : float4&
-
-----
 
 
 +++++++++++++++++

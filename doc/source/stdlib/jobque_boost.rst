@@ -414,8 +414,6 @@ The block returns only after all notifications have been received.
 
 .. das:function:: with_wait_group(count: int; blk: block<(var status:JobStatus?):void>)
 
-----
-
 
 ++++++++++++++++++
 Parallel execution

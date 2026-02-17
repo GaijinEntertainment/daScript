@@ -550,8 +550,6 @@ If value already exists, it is overwritten. If already existing value type is no
 
 .. das:function:: set(cv: ComponentValue; val: auto) : auto
 
-----
-
 
 +++++++++++++
 Entity status
@@ -864,8 +862,6 @@ Returns const temporary array of component given specific name and type of compo
 .. _function-decs_get_ro_Archetype_string_autoTT_lb__rb__0x2fb:
 
 .. das:function:: get_ro(arch: Archetype; name: string; value: auto(TT)[]) : array<TT[-2]>
-
-----
 
 
 +++++++

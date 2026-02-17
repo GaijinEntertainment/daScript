@@ -121,8 +121,6 @@ Splits a string by the specified delimiter characters and returns an array of su
 
 .. das:function:: split_by_chars(text: string implicit; delim: string implicit; blk: block<(arg:array<string>#):auto>) : auto
 
-----
-
 
 ++++++++++
 Formatting
@@ -291,8 +289,6 @@ def last_index_of (str: string; sub: string; start: int) : int
 .. _function-strings_boost_last_index_of_string_string:
 
 .. das:function:: last_index_of(str: string; sub: string) : int
-
-----
 
 
 +++++++

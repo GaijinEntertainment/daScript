@@ -48,13 +48,15 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - **Braces** on all blocks — no indentation-based blocks: `def foo() { ... }`, `if (x) { ... }`
 - **Construction:** `new Type(field=val)` — NOT `new [[Type() field=val]]`
 - **Enum access:** `EnumName.EnumValue` with dot — NOT `EnumName EnumValue` without
-- **Array literals:** `[1, 2, 3]` (commas, square brackets) — NOT `[[int 1; 2; 3]]`
+- **Array literals:** `[1, 2, 3]` (commas, square brackets) — NOT `[[int 1; 2; 3]]`. Note: this creates a **dynamic** `array<int>` — use `fixed_array(1, 2, 3)` for fixed-size arrays
 - **Struct init:** `Foo(a=1, b=2)` — NOT `[[Foo() a=1, b=2]]`
 - **No `[[ ]]` for `new`** — `new` always uses parentheses: `new Foo(x=1)`
 - **Table literals:** `{ "k" => v, "k2" => v2 }` (single braces, commas) — NOT `{{ "k" => v; "k2" => v2 }}`
 - **Named arguments:** `foo([name = value])` with square brackets — NOT `foo(name=value)`
 - **Block arguments with `<|`:** use `$()` or `@()` prefix: `defer() <| $() { ... }` — NOT `defer <| { ... }` (bare `{ }` creates a table literal)
 - **Lambda:** `@(args) { body }` or `@@(args) { body }` (no-capture)
+- **Generator:** `$() { yield value; }` or `$ { yield value; }` — both are valid gen2 syntax
+- **Tuple `=>` operator:** `a => b` creates a `tuple<auto;auto>` — useful in LINQ, table construction, and ad-hoc pairs
 - **Bitfield variables** need explicit type for `.field` access and printing: `var f : MyBitfield`
 - **Bitfield dot access:** read with `f.flag` (returns bool), write with `f.flag = true/false`
 - **`typeinfo`** special syntax: `typeinfo enum_length(type<MyEnum>)` — NOT `typeinfo(enum_length type<MyEnum>)`
@@ -110,6 +112,10 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - When calling `apply_template`, always capture the return value: `unsafe { expr <- apply_template(expr) <| ... }` — discarding the return loses the expression data
 - Iterator comprehension: `[iterator for(x in src); expression]` — semicolon separates generator from body
 - `to_array` (from `daslib/builtin`) converts any iterator to an array
+- Lambdas CAN be stored in arrays: `var fns : array<lambda<(x:int):int>>` + `fns |> emplace() <| @(x : int) : int { return x * 2; }` — move semantics, not copy
+- Blocks CANNOT be stored in containers, returned from functions, or captured — use lambdas or function pointers for those use cases
+- `match`, `multi_match`, `static_match` macros (from `daslib/match.das`) handle side effects automatically — do NOT add `[sideeffects]` annotations to functions that only use match
+- `[export] def main()` returns `void` — do NOT `return true` or return other values from main
 
 ## Key Directories
 
@@ -174,6 +180,45 @@ When editing RST files in `doc/source/reference/language/`:
 - Add `require` statements when examples need imports
 - Use `:ref:` cross-references to link between pages (labels: `_structs`, `_classes`, `_functions`, `_statements`, `_expressions`, `_arrays`, `_tables`, `_iterators`, `_generators`, `_lambdas`, `_blocks`, `_tuples`, `_variants`, `_bitfields`, `_aliases`, `_modules`, `_options`, `_unsafe`, `_enumerations`, `_generic_programming`, `_pattern-matching`, `_comprehensions`, `_string_builder`, `_macros`, `_reification`, `_finalizers`, `_clone`, `_temporary`, `_move_copy_clone`, `_annotations`, `_program_structure`, `_type_conversions`, `_contexts`, `_locks`, `_datatypes_and_values`)
 - Verify examples compile: `bin/Release/daslang.exe example.das`
+
+### RST table rules
+
+RST uses two table formats — **grid tables** and **simple tables**. Both are fragile:
+
+- **Grid tables** (`+---+---+`): Every row line must be exactly the same width as every separator line. Off-by-one spaces cause Sphinx errors.
+- **Simple tables** (`===  ===`): The `=` separator defines column widths. Content in non-last columns must NOT extend past its column's `=` boundary. Headers must start at or after the column's start position (not in the gap). The gap between columns must be at least 2 spaces.
+- After creating or editing any RST table, verify the file with a Sphinx build (see below).
+
+### Documentation workflow (REQUIRED)
+
+After creating or modifying any RST files, stdlib documentation, or `daslib/*.das` module doc-comments:
+
+1. **Regenerate stdlib docs** (if `daslib/*.das` files or `doc/reflections/das2rst.das` were changed):
+   ```
+   bin/Release/daslang.exe doc/reflections/das2rst.das
+   ```
+
+2. **Clean Sphinx build** — MUST delete cache; cached builds hide errors:
+   ```
+   cd doc
+   Remove-Item -Recurse -Force sphinx-build    # delete doctree cache
+   Remove-Item -Recurse -Force ../site/doc     # delete HTML output
+   sphinx-build -b html -d sphinx-build source ../site/doc
+   ```
+   On Linux/Mac:
+   ```
+   cd doc
+   rm -rf sphinx-build ../site/doc
+   sphinx-build -b html -d sphinx-build source ../site/doc
+   ```
+
+3. **Verify no new errors or warnings**: Check the build output for `ERROR` and `WARNING`. The build must introduce **no new** Sphinx errors or warnings compared to the baseline.
+
+**When to run the workflow:**
+- New or modified RST files (language docs, tutorials, stdlib docs)
+- New or modified `//!` doc-comments in `daslib/*.das` files
+- Changes to `doc/reflections/das2rst.das` or `doc/reflections/rst.das`
+- New public functions added to any `daslib/*.das` module (also update `group_by_regex` in `das2rst.das`)
 
 ### Tutorial RST conventions
 

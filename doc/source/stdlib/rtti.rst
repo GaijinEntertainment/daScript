@@ -1781,8 +1781,6 @@ Creates a temporary RTTI helper object (e.g., ``Program``, ``DebugInfoHelper``) 
 
 .. das:function:: using(arg0: block<(recursive_mutex):void>)
 
-----
-
 
 +++++++++++
 Type access
@@ -2131,8 +2129,6 @@ Returns the ``TypeInfo`` object for the specified local variable or expression, 
 .. _function-rtti_type_info_LocalVariableInfo:
 
 .. das:function:: type_info(vinfo: LocalVariableInfo) : TypeInfo const?
-
-----
 
 
 ++++++++++++++
@@ -2549,8 +2545,6 @@ Returns a ``string`` representation of a value given its data pointer and ``Type
 
 .. das:function:: sprint_data(data: void? implicit; type: TypeInfo const? implicit; flags: bitfield) : string
 
-----
-
 
 ++++++++++++++++++++++++++++++
 Function and mangled name hash
@@ -2738,7 +2732,5 @@ Iterates through each element of an RTTI container (e.g., ``AnnotationArguments`
 .. _function-rtti_each_EnumInfo_implicit__eq__eq_const:
 
 .. das:function:: each(info: EnumInfo implicit ==const) : iterator<EnumValueInfo&>
-
-----
 
 

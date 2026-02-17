@@ -55,7 +55,7 @@ Document writers
 ++++++++++++++++
 
   *  :ref:`document (name: string; var mod: Module?; fname: string; var groups: array\<DocGroup\>; hook: DocsHook = DocsHook()) <function-rst_document_string_Module_q__string_array_ls_DocGroup_gr__DocsHook>`
-  *  :ref:`document_enumeration (doc_file: file; mod: Module?; value: auto) : auto <function-rst_document_enumeration_file_Module_q__auto_0x41f>`
+  *  :ref:`document_enumeration (doc_file: file; mod: Module?; value: auto) : auto <function-rst_document_enumeration_file_Module_q__auto_0x422>`
   *  :ref:`document_enumerations (doc_file: file; mods: array\<Module?\>) : bool <function-rst_document_enumerations_file_array_ls_Module_q__gr_>`
   *  :ref:`documents (name: string; mods: array\<Module?\>; fname: string; var groups: array\<DocGroup\>; var hook: DocsHook = DocsHook()) <function-rst_documents_string_array_ls_Module_q__gr__string_array_ls_DocGroup_gr__DocsHook>`
 
@@ -76,7 +76,7 @@ Generates RST documentation for a single module and writes it to a file.
 
             * **hook** :  :ref:`DocsHook <struct-rst-DocsHook>`
 
-.. _function-rst_document_enumeration_file_Module_q__auto_0x41f:
+.. _function-rst_document_enumeration_file_Module_q__auto_0x422:
 
 .. das:function:: document_enumeration(doc_file: file; mod: Module?; value: auto) : auto
 
@@ -161,8 +161,6 @@ Creates a unique, file-name-safe label string for a function.
 .. _function-rst_function_label_file_smart_ptr_ls_Function_gr_Function_q__int:
 
 .. das:function:: function_label_file(value: smart_ptr<Function>|Function?; drop_args: int = 0) : auto
-
-----
 
 
 ++++++++++++++++++

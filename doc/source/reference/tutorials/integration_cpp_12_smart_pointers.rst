@@ -85,9 +85,9 @@ that control what scripts can do:
 ``is_base_of<ptr_ref_count, Entity>`` at compile time.
 
 +---------------+--------------------------------------------------+
-| ``canNew``    | ``new Entity`` allocates + ``addRef()``           |
+| ``canNew``    | ``new Entity`` allocates + ``addRef()``          |
 +---------------+--------------------------------------------------+
-| ``canDelete`` | ``delete ptr`` calls ``delRef()``                 |
+| ``canDelete`` | ``delete ptr`` calls ``delRef()``                |
 +---------------+--------------------------------------------------+
 
 

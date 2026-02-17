@@ -305,7 +305,7 @@ class DecsQueryMacro : AstCallMacro {
     //!
     //! In the example above structure q : Particle does not exist as a variable. Instead it is expanded into accessing individual components of the entity.
     //! REQURE section of the query is automatically filled with all components of the template.
-    //! If template prefix is not specified, prefix is taken from the name of the template (would be "Particle_").
+    //! If template prefix is not specified, prefix is taken from the name of the template (would be ``Particle_``).
     //! Specifying empty prefix `[decs_template(prefix)]` will result in no prefix being added.
     //!
     //! Note: apart from tagging structure as a template, the macro also generates `apply_decs_template` and `remove_decs_template` functions.

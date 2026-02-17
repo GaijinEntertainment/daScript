@@ -132,8 +132,6 @@ returns true if inputs intersect
 
 .. das:function:: is_intersecting(ray: Ray; aabb: AABB; Tmin: float = 0f; Tmax: float = FLT_MAX) : bool
 
-----
-
 
 ++++++++
 Matrices
@@ -317,8 +315,6 @@ convert value from linear space to sRGB curve space
 .. _function-math_boost_linear_to_SRGB_float4:
 
 .. das:function:: linear_to_SRGB(c: float4) : float4
-
-----
 
 
 +++++++++++++++++++++++++++

@@ -396,15 +396,15 @@ Template-string replace
 ``regex_replace`` also accepts a replacement template string instead of a
 block. The template supports group references:
 
-============  ====================================
-Reference     Meaning
-============  ====================================
-``$0``        Whole match
-``$&``        Whole match (alternative syntax)
-``$1``–``$9`` Numbered capturing groups
-``${name}``   Named capturing group
-``$$``        Literal ``$`` character
-============  ====================================
+=============  ====================================
+Reference      Meaning
+=============  ====================================
+``$0``         Whole match
+``$&``         Whole match (alternative syntax)
+``$1``–``$9``  Numbered capturing groups
+``${name}``    Named capturing group
+``$$``         Literal ``$`` character
+=============  ====================================
 
 ::
 

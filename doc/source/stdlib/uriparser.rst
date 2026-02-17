@@ -210,8 +210,6 @@ Creates a scoped ``Uri`` variable that is automatically finalized at end of bloc
 
 .. das:function:: using(arg0: block<(Uri#):void>)
 
-----
-
 
 +++++++++++++++++++
 Escape and unescape
