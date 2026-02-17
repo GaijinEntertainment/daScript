@@ -113,7 +113,7 @@ Notable operators unique to Daslang:
 * ``<<<`` and ``>>>`` — bit rotation
 * ``^^`` — logical exclusive or
 * ``..`` — interval (range creation)
-* ``=>`` — key-value mapping (used in table literals)
+* ``=>`` — tuple construction (``a => b`` creates ``tuple<auto,auto>(a, b)``; also used in table literals)
 
 ------------
 Other Tokens

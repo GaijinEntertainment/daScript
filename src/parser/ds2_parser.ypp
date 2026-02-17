@@ -510,7 +510,6 @@
 %type <pExpression>         optional_make_struct_dim_decl
 %type <pExpression>         make_struct_dim_list
 %type <pExpression>         make_variant_dim
-%type <pExpression>         make_map_tuple
 %type <pExpression>         make_dim_decl
 %type <pExpression>         make_tuple_call
 %type <pExpression>         make_table_decl
@@ -2190,6 +2189,12 @@ expr
             $subexpr->userSaidItsSafe = true;
             $$ = $subexpr;
         }
+    |   expr[kval] MAPTO[mkt] expr[vval] {
+        ExprMakeTuple * mt = new ExprMakeTuple(tokAt(scanner,@mkt));
+        mt->values.push_back($kval);
+        mt->values.push_back($vval);
+        $$ = mt;
+    }
     ;
 
 expr_generator
@@ -3683,18 +3688,6 @@ make_struct_decl
     }
     ;
 
-make_map_tuple
-    :   expr[kval] MAPTO[mkt] expr[vval] {
-        ExprMakeTuple * mt = new ExprMakeTuple(tokAt(scanner,@mkt));
-        mt->values.push_back($kval);
-        mt->values.push_back($vval);
-        $$ = mt;
-    }
-    | expr[kval] {
-        $$ = $kval;
-    }
-    ;
-
 make_tuple_call
     :   DAS_TTUPLE[loc] '(' expr_list[arguments] optional_comma ')' {
         auto mkt = new ExprMakeTuple(tokAt(scanner,@loc));
@@ -3819,10 +3812,10 @@ make_dim_decl
     ;
 
 expr_map_tuple_list
-    :   make_map_tuple[subexpr] {
+    :   expr[subexpr] {
         $$ = $subexpr;
     }
-    |   expr_map_tuple_list[left] ',' make_map_tuple[right]     {
+    |   expr_map_tuple_list[left] ',' expr[right]     {
             $$ = new ExprSequence(tokAt(scanner,@left),$left,$right);
     }
     ;
@@ -3919,7 +3912,7 @@ array_comprehension
     |   '[' DAS_ITERATOR DAS_FOR[loc] '(' for_variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ')' ';' expr[subexpr] array_comprehension_where[where] ']' [forend] {
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),true,false);
     }
-    |   '{' DAS_FOR[loc] '(' for_variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ')' ';' make_map_tuple[subexpr] array_comprehension_where[where] '}' [forend] {
+    |   '{' DAS_FOR[loc] '(' for_variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ')' ';' expr[subexpr] array_comprehension_where[where] '}' [forend] {
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false,true);
     }
     ;
