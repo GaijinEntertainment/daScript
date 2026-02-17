@@ -504,6 +504,7 @@ include/vecmath/dag_vecMath_common.h
 include/vecmath/dag_vecMath_const.h
 include/vecmath/dag_vecMath_neon.h
 include/vecmath/dag_vecMath_pc_sse.h
+include/vecmath/dag_vecMath_trig.h
 )
 list(SORT VECMATH_SRC)
 SOURCE_GROUP_FILES("vecmath" VECMATH_SRC)
@@ -952,7 +953,13 @@ if (NOT ${DAS_TOOLS_DISABLED})
     ENDMACRO()
 
     SETUP_COMPILER_BINARY(daslang libDaScript DAS_MODULES_LIBS "")
-    INSTALL(TARGETS daslang RUNTIME DESTINATION ${DAS_INSTALL_BINDIR})
+    # Export dasland target, so it can be found
+    # as a target (for example in aot).
+    INSTALL(
+        TARGETS daslang
+        EXPORT DASTargets
+        RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
+    )
 
     # Add daslang-dyn target.
     SETUP_COMPILER_BINARY(daslang_dyn libDaScriptDyn "" DAS_DYN_MODULES_LIBS)
@@ -967,7 +974,13 @@ if (NOT ${DAS_TOOLS_DISABLED})
             INSTALL_RPATH "\$ORIGIN/../lib"
         )
     endif()
-    INSTALL(TARGETS daslang_dyn RUNTIME DESTINATION ${DAS_INSTALL_BINDIR})
+    # Export dasland_dyn target, so it can be found
+    # as a target (for example in aot).
+    INSTALL(
+        TARGETS daslang_dyn
+        EXPORT DASTargets
+        RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
+    )
 
     file(GLOB DASLIB_SOURCES
         ${PROJECT_SOURCE_DIR}/daslib/*.das
@@ -1003,14 +1016,24 @@ endif()
 
 # This list should be significantly reduced, most of the files, except aot related should be private.
 SET(DAS_RELEASE_AST_INCLUDE
+    include/daScript/ast/aot_templates.h
     include/daScript/ast/ast_aot_cpp.h
     include/daScript/ast/ast_expressions.h
     include/daScript/ast/ast_generate.h
     include/daScript/ast/ast.h
     include/daScript/ast/ast_handle.h
+    include/daScript/ast/ast_infer_type.h
     include/daScript/ast/ast_interop.h
+    include/daScript/ast/ast_match.h
+    include/daScript/ast/ast_policy_types.h
+    include/daScript/ast/ast_serialize_macro.h
     include/daScript/ast/ast_serializer.h
     include/daScript/ast/ast_typedecl.h
+    include/daScript/ast/ast_typefactory_bind.h
+    include/daScript/ast/ast_typefactory.h
+    include/daScript/ast/ast_visitor.h
+    include/daScript/ast/compilation_errors.h
+    include/daScript/ast/dyn_modules.h
 )
 
 SET(DAS_RELEASE_C_API
@@ -1019,21 +1042,39 @@ SET(DAS_RELEASE_C_API
 
 SET(DAS_RELEASE_INCLUDE
     include/daScript/daScript.h
+    include/daScript/daScriptModule.h
     include/daScript/das_config.h
     include/daScript/das_project_specific.h
 )
 
 SET(DAS_RELEASE_MISC_INCLUDE
+    include/daScript/misc/anyhash.h
     include/daScript/misc/arraytype.h
+    include/daScript/misc/callable.h
+    include/daScript/misc/copy_bytes.h
     include/daScript/misc/debug_break.h
+    include/daScript/misc/enums.h
+    include/daScript/misc/fpe.h
     include/daScript/misc/free_list.h
+    include/daScript/misc/hal.h
+    include/daScript/misc/hash.h
+    include/daScript/misc/instance_debugger.h
     include/daScript/misc/job_que.h
+    include/daScript/misc/macro.h
     include/daScript/misc/memory_model.h
+    include/daScript/misc/network.h
     include/daScript/misc/performance_time.h
     include/daScript/misc/platform.h
+    include/daScript/misc/rangetype.h
+    include/daScript/misc/runtime_table_utils.h
+    include/daScript/misc/safebox.h
     include/daScript/misc/smart_ptr.h
     include/daScript/misc/string_writer.h
     include/daScript/misc/sysos.h
+    include/daScript/misc/type_name.h
+    include/daScript/misc/uric.h
+    include/daScript/misc/vectypes.h
+    include/daScript/misc/wyhash.h
 )
 
 SET(DAS_SIMULATE_INCLUDES
@@ -1042,32 +1083,93 @@ SET(DAS_SIMULATE_INCLUDES
     include/daScript/simulate/aot_builtin_debugger.h
     include/daScript/simulate/aot_builtin_fio.h
     include/daScript/simulate/aot_builtin.h
+    include/daScript/simulate/aot_builtin_jit.h
     include/daScript/simulate/aot_builtin_jobque.h
+    include/daScript/simulate/aot_builtin_math.h
     include/daScript/simulate/aot_builtin_matrix.h
+    include/daScript/simulate/aot_builtin_network.h
+    include/daScript/simulate/aot_builtin_raster.h
     include/daScript/simulate/aot_builtin_rtti.h
     include/daScript/simulate/aot_builtin_string.h
     include/daScript/simulate/aot_builtin_time.h
     include/daScript/simulate/aot_builtin_uriparser.h
     include/daScript/simulate/aot.h
     include/daScript/simulate/aot_library.h
+    include/daScript/simulate/bind_enum.h
     include/daScript/simulate/bin_serializer.h
+    include/daScript/simulate/cast.h
     include/daScript/simulate/data_walker.h
     include/daScript/simulate/debug_info.h
     include/daScript/simulate/debug_print.h
+    include/daScript/simulate/for_each.h
     include/daScript/simulate/fs_file_info.h
+    include/daScript/simulate/hash.h
     include/daScript/simulate/heap.h
+    include/daScript/simulate/interop.h
+    include/daScript/simulate/jit_abi.h
+    include/daScript/simulate/runtime_array.h
+    include/daScript/simulate/runtime_matrices.h
     include/daScript/simulate/runtime_profile.h
+    include/daScript/simulate/runtime_range.h
+    include/daScript/simulate/runtime_string_delete.h
     include/daScript/simulate/runtime_string.h
     include/daScript/simulate/runtime_table.h
+    include/daScript/simulate/runtime_table_nodes.h
     include/daScript/simulate/sim_policy.h
+    include/daScript/simulate/simulate_fusion.h
+    include/daScript/simulate/simulate_fusion_op1.h
+    include/daScript/simulate/simulate_fusion_op1_impl.h
+    include/daScript/simulate/simulate_fusion_op1_perm.h
+    include/daScript/simulate/simulate_fusion_op1_reg.h
+    include/daScript/simulate/simulate_fusion_op1_set_impl.h
+    include/daScript/simulate/simulate_fusion_op1_set_perm.h
+    include/daScript/simulate/simulate_fusion_op2.h
+    include/daScript/simulate/simulate_fusion_op2_impl.h
+    include/daScript/simulate/simulate_fusion_op2_perm.h
+    include/daScript/simulate/simulate_fusion_op2_set_impl.h
+    include/daScript/simulate/simulate_fusion_op2_set_perm.h
+    include/daScript/simulate/simulate_fusion_op2_vec_settings.h
     include/daScript/simulate/simulate.h
     include/daScript/simulate/simulate_nodes.h
+    include/daScript/simulate/simulate_visit.h
+    include/daScript/simulate/simulate_visit_op.h
+    include/daScript/simulate/simulate_visit_op_undef.h
     include/daScript/simulate/standalone_ctx_utils.h
+)
+
+install(FILES
+    ${DAS_RELEASE_AST_INCLUDE}
+    DESTINATION include/daScript/ast
 )
 
 install(FILES
     ${DAS_RELEASE_C_API}
     DESTINATION include/daScript
+)
+
+install(FILES
+    ${DAS_RELEASE_INCLUDE}
+    DESTINATION include/daScript
+)
+
+install(FILES
+    ${DAS_RELEASE_MISC_INCLUDE}
+    DESTINATION include/daScript/misc
+)
+
+install(FILES
+    ${DAS_SIMULATE_INCLUDES}
+    DESTINATION include/daScript/simulate
+)
+
+install(FILES
+    ${FLAT_HASH_MAP_SRC}
+    DESTINATION include/ska
+)
+
+install(FILES
+    ${VECMATH_SRC}
+    DESTINATION include/vecmath
 )
 
 # Install all modules and main library.

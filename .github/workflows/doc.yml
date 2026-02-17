@@ -4,6 +4,12 @@ name: Build doc
 on:
   release:
     types: prereleased
+  push:
+    paths:
+      - 'doc/**'
+  pull_request:
+    paths:
+      - 'doc/**'
 
 jobs:
   build:
@@ -40,6 +46,7 @@ jobs:
       run: |
         find . -name "*.pdf"
     - name: "Create release"
+      if: github.event_name == 'release' && (github.event.action == 'published' || github.event.action == 'prereleased')
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -50,6 +57,7 @@ jobs:
         asset_content_type: application/pdf
 
     - name: "Create release"
+      if: github.event_name == 'release' && (github.event.action == 'published' || github.event.action == 'prereleased')
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
