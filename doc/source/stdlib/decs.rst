@@ -217,9 +217,9 @@ Contains pass name and list of all pass callbacks.
 Comparison and access
 +++++++++++++++++++++
 
-  *  :ref:`ComponentMap. (var cmp: ComponentMap; name: string) : ComponentValue& <function-decs__dot__ComponentMap_string>`
-  *  :ref:`EntityId implicit\!= (a: EntityId implicit; b: EntityId implicit) : bool <function-decs__ex__eq__EntityId_implicit_EntityId_implicit>`
-  *  :ref:`EntityId implicit== (a: EntityId implicit; b: EntityId implicit) : bool <function-decs__eq__eq__EntityId_implicit_EntityId_implicit>`
+  *  :ref:`ComponentMap. (var cmp: ComponentMap; name: string) : ComponentValue& <function-decs__dot__ComponentMap_string>` 
+  *  :ref:`EntityId implicit\!= (a: EntityId implicit; b: EntityId implicit) : bool <function-decs__ex__eq__EntityId_implicit_EntityId_implicit>` 
+  *  :ref:`EntityId implicit== (a: EntityId implicit; b: EntityId implicit) : bool <function-decs__eq__eq__EntityId_implicit_EntityId_implicit>` 
 
 .. _function-decs__dot__ComponentMap_string:
 
@@ -230,7 +230,7 @@ Access to component value by name. For example::
     create_entity <| @ ( eid, cmp )
         cmp.pos := float3(i)    // same as cmp |> set("pos",float3(i))
 
-:Arguments: * **cmp** :  :ref:`ComponentMap <alias-ComponentMap>`
+:Arguments: * **cmp** :  :ref:`ComponentMap <alias-ComponentMap>` 
 
             * **name** : string
 
@@ -258,44 +258,44 @@ Equality operator for entity IDs.
 Access (get/set/clone)
 ++++++++++++++++++++++
 
-  *  :ref:`clone (var cv: ComponentValue; val: bool) <function-decs_clone_ComponentValue_bool>`
-  *  :ref:`clone (var cv: ComponentValue; val: EntityId) <function-decs_clone_ComponentValue_EntityId>`
-  *  :ref:`clone (var cv: ComponentValue; val: urange) <function-decs_clone_ComponentValue_urange>`
-  *  :ref:`clone (var cv: ComponentValue; val: range) <function-decs_clone_ComponentValue_range>`
-  *  :ref:`clone (var cv: ComponentValue; val: string) <function-decs_clone_ComponentValue_string>`
-  *  :ref:`clone (var cv: ComponentValue; val: urange64) <function-decs_clone_ComponentValue_urange64>`
-  *  :ref:`clone (var cv: ComponentValue; val: int) <function-decs_clone_ComponentValue_int>`
-  *  :ref:`clone (var cv: ComponentValue; val: range64) <function-decs_clone_ComponentValue_range64>`
-  *  :ref:`clone (var cv: ComponentValue; val: int64) <function-decs_clone_ComponentValue_int64>`
-  *  :ref:`clone (var cv: ComponentValue; val: int16) <function-decs_clone_ComponentValue_int16>`
-  *  :ref:`clone (var cv: ComponentValue; val: int2) <function-decs_clone_ComponentValue_int2>`
-  *  :ref:`clone (var cv: ComponentValue; val: int3) <function-decs_clone_ComponentValue_int3>`
-  *  :ref:`clone (var cv: ComponentValue; val: int4) <function-decs_clone_ComponentValue_int4>`
-  *  :ref:`clone (var cv: ComponentValue; val: int8) <function-decs_clone_ComponentValue_int8>`
-  *  :ref:`clone (var cv: ComponentValue; val: uint16) <function-decs_clone_ComponentValue_uint16>`
-  *  :ref:`clone (var cv: ComponentValue; val: uint8) <function-decs_clone_ComponentValue_uint8>`
-  *  :ref:`clone (var cv: ComponentValue; val: uint64) <function-decs_clone_ComponentValue_uint64>`
-  *  :ref:`clone (var cv: ComponentValue; val: uint2) <function-decs_clone_ComponentValue_uint2>`
-  *  :ref:`clone (var cv: ComponentValue; val: uint3) <function-decs_clone_ComponentValue_uint3>`
-  *  :ref:`clone (var cv: ComponentValue; val: float) <function-decs_clone_ComponentValue_float>`
-  *  :ref:`clone (var cv: ComponentValue; val: uint4) <function-decs_clone_ComponentValue_uint4>`
-  *  :ref:`clone (var cv: ComponentValue; val: float2) <function-decs_clone_ComponentValue_float2>`
-  *  :ref:`clone (var cv: ComponentValue; val: float3) <function-decs_clone_ComponentValue_float3>`
-  *  :ref:`clone (var cv: ComponentValue; val: uint) <function-decs_clone_ComponentValue_uint>`
-  *  :ref:`clone (var cv: ComponentValue; val: float3x4) <function-decs_clone_ComponentValue_float3x4>`
-  *  :ref:`clone (var cv: ComponentValue; val: float3x3) <function-decs_clone_ComponentValue_float3x3>`
-  *  :ref:`clone (var cv: ComponentValue; val: float4x4) <function-decs_clone_ComponentValue_float4x4>`
-  *  :ref:`clone (var cv: ComponentValue; val: double) <function-decs_clone_ComponentValue_double>`
-  *  :ref:`clone (var dst: Component; src: Component) <function-decs_clone_Component_Component>`
-  *  :ref:`clone (var cv: ComponentValue; val: float4) <function-decs_clone_ComponentValue_float4>`
-  *  :ref:`get (arch: Archetype; name: string; value: auto(TT)) : auto <function-decs_get_Archetype_string_autoTT_0x2d7>`
-  *  :ref:`get (var cmp: ComponentMap; name: string; var value: auto(TT)) : auto <function-decs_get_ComponentMap_string_autoTT_0x3e3>`
-  *  :ref:`get_component (eid: EntityId; name: string; defval: auto(TT)) : TT <function-decs_get_component_EntityId_string_autoTT_0x3c1>`
-  *  :ref:`has (var cmp: ComponentMap; name: string) : bool <function-decs_has_ComponentMap_string>`
-  *  :ref:`has (arch: Archetype; name: string) : bool <function-decs_has_Archetype_string>`
-  *  :ref:`remove (var cmp: ComponentMap; name: string) <function-decs_remove_ComponentMap_string>`
-  *  :ref:`set (var cmp: ComponentMap; name: string; value: auto(TT)) : auto <function-decs_set_ComponentMap_string_autoTT_0x4ba>`
-  *  :ref:`set (var cv: ComponentValue; val: auto) : auto <function-decs_set_ComponentValue_auto_0xa7>`
+  *  :ref:`clone (var cv: ComponentValue; val: bool) <function-decs_clone_ComponentValue_bool>` 
+  *  :ref:`clone (var cv: ComponentValue; val: EntityId) <function-decs_clone_ComponentValue_EntityId>` 
+  *  :ref:`clone (var cv: ComponentValue; val: urange) <function-decs_clone_ComponentValue_urange>` 
+  *  :ref:`clone (var cv: ComponentValue; val: range) <function-decs_clone_ComponentValue_range>` 
+  *  :ref:`clone (var cv: ComponentValue; val: string) <function-decs_clone_ComponentValue_string>` 
+  *  :ref:`clone (var cv: ComponentValue; val: urange64) <function-decs_clone_ComponentValue_urange64>` 
+  *  :ref:`clone (var cv: ComponentValue; val: int) <function-decs_clone_ComponentValue_int>` 
+  *  :ref:`clone (var cv: ComponentValue; val: range64) <function-decs_clone_ComponentValue_range64>` 
+  *  :ref:`clone (var cv: ComponentValue; val: int64) <function-decs_clone_ComponentValue_int64>` 
+  *  :ref:`clone (var cv: ComponentValue; val: int16) <function-decs_clone_ComponentValue_int16>` 
+  *  :ref:`clone (var cv: ComponentValue; val: int2) <function-decs_clone_ComponentValue_int2>` 
+  *  :ref:`clone (var cv: ComponentValue; val: int3) <function-decs_clone_ComponentValue_int3>` 
+  *  :ref:`clone (var cv: ComponentValue; val: int4) <function-decs_clone_ComponentValue_int4>` 
+  *  :ref:`clone (var cv: ComponentValue; val: int8) <function-decs_clone_ComponentValue_int8>` 
+  *  :ref:`clone (var cv: ComponentValue; val: uint16) <function-decs_clone_ComponentValue_uint16>` 
+  *  :ref:`clone (var cv: ComponentValue; val: uint8) <function-decs_clone_ComponentValue_uint8>` 
+  *  :ref:`clone (var cv: ComponentValue; val: uint64) <function-decs_clone_ComponentValue_uint64>` 
+  *  :ref:`clone (var cv: ComponentValue; val: uint2) <function-decs_clone_ComponentValue_uint2>` 
+  *  :ref:`clone (var cv: ComponentValue; val: uint3) <function-decs_clone_ComponentValue_uint3>` 
+  *  :ref:`clone (var cv: ComponentValue; val: float) <function-decs_clone_ComponentValue_float>` 
+  *  :ref:`clone (var cv: ComponentValue; val: uint4) <function-decs_clone_ComponentValue_uint4>` 
+  *  :ref:`clone (var cv: ComponentValue; val: float2) <function-decs_clone_ComponentValue_float2>` 
+  *  :ref:`clone (var cv: ComponentValue; val: float3) <function-decs_clone_ComponentValue_float3>` 
+  *  :ref:`clone (var cv: ComponentValue; val: uint) <function-decs_clone_ComponentValue_uint>` 
+  *  :ref:`clone (var cv: ComponentValue; val: float3x4) <function-decs_clone_ComponentValue_float3x4>` 
+  *  :ref:`clone (var cv: ComponentValue; val: float3x3) <function-decs_clone_ComponentValue_float3x3>` 
+  *  :ref:`clone (var cv: ComponentValue; val: float4x4) <function-decs_clone_ComponentValue_float4x4>` 
+  *  :ref:`clone (var cv: ComponentValue; val: double) <function-decs_clone_ComponentValue_double>` 
+  *  :ref:`clone (var dst: Component; src: Component) <function-decs_clone_Component_Component>` 
+  *  :ref:`clone (var cv: ComponentValue; val: float4) <function-decs_clone_ComponentValue_float4>` 
+  *  :ref:`get (arch: Archetype; name: string; value: auto(TT)) : auto <function-decs_get_Archetype_string_autoTT_0x2d7>` 
+  *  :ref:`get (var cmp: ComponentMap; name: string; var value: auto(TT)) : auto <function-decs_get_ComponentMap_string_autoTT_0x3e3>` 
+  *  :ref:`get_component (eid: EntityId; name: string; defval: auto(TT)) : TT <function-decs_get_component_EntityId_string_autoTT_0x3c1>` 
+  *  :ref:`has (var cmp: ComponentMap; name: string) : bool <function-decs_has_ComponentMap_string>` 
+  *  :ref:`has (arch: Archetype; name: string) : bool <function-decs_has_Archetype_string>` 
+  *  :ref:`remove (var cmp: ComponentMap; name: string) <function-decs_remove_ComponentMap_string>` 
+  *  :ref:`set (var cmp: ComponentMap; name: string; value: auto(TT)) : auto <function-decs_set_ComponentMap_string_autoTT_0x4ba>` 
+  *  :ref:`set (var cv: ComponentValue; val: auto) : auto <function-decs_set_ComponentValue_auto_0xa7>` 
 
 
 clone
@@ -307,7 +307,7 @@ clone
 
 Sets individual component value. Verifies that the value is of the correct type.
 
-:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>`
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
             * **val** : bool
 
@@ -440,7 +440,7 @@ get
 Creates temporary array of component given specific name and type of component.
 If component is not found - panic.
 
-:Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>`
+:Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>` 
 
             * **name** : string
 
@@ -461,7 +461,7 @@ If the entity is dead or the component is not found, returns ``defval``.
 The type of the component is inferred from the type of ``defval``.
 Panics if the component exists but its type does not match.
 
-:Arguments: * **eid** :  :ref:`EntityId <struct-decs-EntityId>`
+:Arguments: * **eid** :  :ref:`EntityId <struct-decs-EntityId>` 
 
             * **name** : string
 
@@ -477,7 +477,7 @@ has
 
 Returns true if component map has specified component.
 
-:Arguments: * **cmp** :  :ref:`ComponentMap <alias-ComponentMap>`
+:Arguments: * **cmp** :  :ref:`ComponentMap <alias-ComponentMap>` 
 
             * **name** : string
 
@@ -493,7 +493,7 @@ Returns true if component map has specified component.
 
 Removes specified value from the component map.
 
-:Arguments: * **cmp** :  :ref:`ComponentMap <alias-ComponentMap>`
+:Arguments: * **cmp** :  :ref:`ComponentMap <alias-ComponentMap>` 
 
             * **name** : string
 
@@ -508,7 +508,7 @@ set
 Set component value specified by name and type.
 If value already exists, it is overwritten. If already existing value type is not the same - panic.
 
-:Arguments: * **cmp** :  :ref:`ComponentMap <alias-ComponentMap>`
+:Arguments: * **cmp** :  :ref:`ComponentMap <alias-ComponentMap>` 
 
             * **name** : string
 
@@ -524,8 +524,8 @@ If value already exists, it is overwritten. If already existing value type is no
 Entity status
 +++++++++++++
 
-  *  :ref:`entity_count () : int <function-decs_entity_count>`
-  *  :ref:`is_alive (eid: EntityId) : bool <function-decs_is_alive_EntityId>`
+  *  :ref:`entity_count () : int <function-decs_entity_count>` 
+  *  :ref:`is_alive (eid: EntityId) : bool <function-decs_is_alive_EntityId>` 
 
 .. _function-decs_entity_count:
 
@@ -540,16 +540,16 @@ Returns the total number of alive entities across all archetypes.
 Returns true if the entity is alive (exists and has not been deleted).
 An entity is alive when its id is within bounds and its generation matches the lookup table.
 
-:Arguments: * **eid** :  :ref:`EntityId <struct-decs-EntityId>`
+:Arguments: * **eid** :  :ref:`EntityId <struct-decs-EntityId>` 
 
 +++++++++++++++++++++++
 Debug and serialization
 +++++++++++++++++++++++
 
-  *  :ref:`debug_dump () <function-decs_debug_dump>`
-  *  :ref:`describe (info: CTypeInfo) : string <function-decs_describe_CTypeInfo>`
-  *  :ref:`finalize (var cmp: Component) <function-decs_finalize_Component>`
-  *  :ref:`serialize (var arch: Archive; var src: Component) <function-decs_serialize_Archive_Component>`
+  *  :ref:`debug_dump () <function-decs_debug_dump>` 
+  *  :ref:`describe (info: CTypeInfo) : string <function-decs_describe_CTypeInfo>` 
+  *  :ref:`finalize (var cmp: Component) <function-decs_finalize_Component>` 
+  *  :ref:`serialize (var arch: Archive; var src: Component) <function-decs_serialize_Archive_Component>` 
 
 .. _function-decs_debug_dump:
 
@@ -563,7 +563,7 @@ Prints out state of the ECS system.
 
 Returns textual description of the type.
 
-:Arguments: * **info** :  :ref:`CTypeInfo <struct-decs-CTypeInfo>`
+:Arguments: * **info** :  :ref:`CTypeInfo <struct-decs-CTypeInfo>` 
 
 .. _function-decs_finalize_Component:
 
@@ -571,7 +571,7 @@ Returns textual description of the type.
 
 Deletes component.
 
-:Arguments: * **cmp** :  :ref:`Component <struct-decs-Component>`
+:Arguments: * **cmp** :  :ref:`Component <struct-decs-Component>` 
 
 .. _function-decs_serialize_Archive_Component:
 
@@ -579,17 +579,17 @@ Deletes component.
 
 Serializes component value.
 
-:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>`
+:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
-            * **src** :  :ref:`Component <struct-decs-Component>`
+            * **src** :  :ref:`Component <struct-decs-Component>` 
 
 ++++++
 Stages
 ++++++
 
-  *  :ref:`commit () <function-decs_commit>`
-  *  :ref:`decs_stage (name: string) <function-decs_decs_stage_string>`
-  *  :ref:`register_decs_stage_call (name: string; pcall: PassFunction) <function-decs_register_decs_stage_call_string_PassFunction>`
+  *  :ref:`commit () <function-decs_commit>` 
+  *  :ref:`decs_stage (name: string) <function-decs_decs_stage_string>` 
+  *  :ref:`register_decs_stage_call (name: string; pcall: PassFunction) <function-decs_register_decs_stage_call_string_PassFunction>` 
 
 .. _function-decs_commit:
 
@@ -614,15 +614,15 @@ Registration of a single pass callback. This is a low-level function, used by de
 
 :Arguments: * **name** : string
 
-            * **pcall** :  :ref:`PassFunction <alias-PassFunction>`
+            * **pcall** :  :ref:`PassFunction <alias-PassFunction>` 
 
 ++++++++++++++++
 Deferred actions
 ++++++++++++++++
 
-  *  :ref:`create_entity (var blk: lambda\<(eid:EntityId;var cmp:ComponentMap):void\>) : EntityId <function-decs_create_entity_lambda_ls_eid_c_EntityId;var_cmp_c_ComponentMap_c_void_gr_>`
-  *  :ref:`delete_entity (entityid: EntityId implicit) <function-decs_delete_entity_EntityId_implicit>`
-  *  :ref:`update_entity (entityid: EntityId implicit; var blk: lambda\<(eid:EntityId;var cmp:ComponentMap):void\>) <function-decs_update_entity_EntityId_implicit_lambda_ls_eid_c_EntityId;var_cmp_c_ComponentMap_c_void_gr_>`
+  *  :ref:`create_entity (var blk: lambda\<(eid:EntityId;var cmp:ComponentMap):void\>) : EntityId <function-decs_create_entity_lambda_ls_eid_c_EntityId;var_cmp_c_ComponentMap_c_void_gr_>` 
+  *  :ref:`delete_entity (entityid: EntityId implicit) <function-decs_delete_entity_EntityId_implicit>` 
+  *  :ref:`update_entity (entityid: EntityId implicit; var blk: lambda\<(eid:EntityId;var cmp:ComponentMap):void\>) <function-decs_update_entity_EntityId_implicit_lambda_ls_eid_c_EntityId;var_cmp_c_ComponentMap_c_void_gr_>` 
 
 .. _function-decs_create_entity_lambda_ls_eid_c_EntityId;var_cmp_c_ComponentMap_c_void_gr_:
 
@@ -654,9 +654,9 @@ Creates deferred action to update entity specified by id.
 GC and reset
 ++++++++++++
 
-  *  :ref:`after_gc () <function-decs_after_gc>`
-  *  :ref:`before_gc () <function-decs_before_gc>`
-  *  :ref:`restart () <function-decs_restart>`
+  *  :ref:`after_gc () <function-decs_after_gc>` 
+  *  :ref:`before_gc () <function-decs_before_gc>` 
+  *  :ref:`restart () <function-decs_restart>` 
 
 .. _function-decs_after_gc:
 
@@ -682,21 +682,21 @@ Restarts ECS by erasing all deferred actions and entire state.
 Iteration
 +++++++++
 
-  *  :ref:`decs_array (atype: auto(TT); src: array\<uint8\>; capacity: int) : auto <function-decs_decs_array_autoTT_array_ls_uint8_gr__int_0x2c4>`
-  *  :ref:`for_each_archetype (hash: ComponentHash; var erq: function\<():void\>; blk: block\<(arch:Archetype):void\>) <function-decs_for_each_archetype_ComponentHash_function_ls__c_void_gr__block_ls_arch_c_Archetype_c_void_gr_>`
-  *  :ref:`for_each_archetype (var erq: EcsRequest; blk: block\<(arch:Archetype):void\>) <function-decs_for_each_archetype_EcsRequest_block_ls_arch_c_Archetype_c_void_gr_>`
-  *  :ref:`for_each_archetype_find (hash: ComponentHash; var erq: function\<():void\>; blk: block\<(arch:Archetype):bool\>) : bool <function-decs_for_each_archetype_find_ComponentHash_function_ls__c_void_gr__block_ls_arch_c_Archetype_c_bool_gr_>`
-  *  :ref:`for_eid_archetype (eid: EntityId implicit; hash: ComponentHash; var erq: function\<():void\>; blk: block\<(arch:Archetype;index:int):void\>) : bool <function-decs_for_eid_archetype_EntityId_implicit_ComponentHash_function_ls__c_void_gr__block_ls_arch_c_Archetype;index_c_int_c_void_gr_>`
-  *  :ref:`get_default_ro (arch: Archetype; name: string; value: auto(TT)) : iterator\<TT const&\> <function-decs_get_default_ro_Archetype_string_autoTT_0x30a>`
-  *  :ref:`get_optional (arch: Archetype; name: string; value: auto(TT)?) : iterator\<TT?\> <function-decs_get_optional_Archetype_string_autoTT_q_>`
-  *  :ref:`get_ro (arch: Archetype; name: string; value: auto(TT)) : array\<TT\> <function-decs_get_ro_Archetype_string_autoTT_0x303>`
-  *  :ref:`get_ro (arch: Archetype; name: string; value: auto(TT)[]) : array\<TT[-2]\> <function-decs_get_ro_Archetype_string_autoTT_0x2fb>`
+  *  :ref:`decs_array (atype: auto(TT); src: array\<uint8\>; capacity: int) : auto <function-decs_decs_array_autoTT_array_ls_uint8_gr__int_0x2c4>` 
+  *  :ref:`for_each_archetype (hash: ComponentHash; var erq: function\<():void\>; blk: block\<(arch:Archetype):void\>) <function-decs_for_each_archetype_ComponentHash_function_ls__c_void_gr__block_ls_arch_c_Archetype_c_void_gr_>` 
+  *  :ref:`for_each_archetype (var erq: EcsRequest; blk: block\<(arch:Archetype):void\>) <function-decs_for_each_archetype_EcsRequest_block_ls_arch_c_Archetype_c_void_gr_>` 
+  *  :ref:`for_each_archetype_find (hash: ComponentHash; var erq: function\<():void\>; blk: block\<(arch:Archetype):bool\>) : bool <function-decs_for_each_archetype_find_ComponentHash_function_ls__c_void_gr__block_ls_arch_c_Archetype_c_bool_gr_>` 
+  *  :ref:`for_eid_archetype (eid: EntityId implicit; hash: ComponentHash; var erq: function\<():void\>; blk: block\<(arch:Archetype;index:int):void\>) : bool <function-decs_for_eid_archetype_EntityId_implicit_ComponentHash_function_ls__c_void_gr__block_ls_arch_c_Archetype;index_c_int_c_void_gr_>` 
+  *  :ref:`get_default_ro (arch: Archetype; name: string; value: auto(TT)) : iterator\<TT const&\> <function-decs_get_default_ro_Archetype_string_autoTT_0x30a>` 
+  *  :ref:`get_optional (arch: Archetype; name: string; value: auto(TT)?) : iterator\<TT?\> <function-decs_get_optional_Archetype_string_autoTT_q_>` 
+  *  :ref:`get_ro (arch: Archetype; name: string; value: auto(TT)) : array\<TT\> <function-decs_get_ro_Archetype_string_autoTT_0x303>` 
+  *  :ref:`get_ro (arch: Archetype; name: string; value: auto(TT)[]) : array\<TT[-2]\> <function-decs_get_ro_Archetype_string_autoTT_0x2fb>` 
 
 .. _function-decs_decs_array_autoTT_array_ls_uint8_gr__int_0x2c4:
 
 .. das:function:: decs_array(atype: auto(TT); src: array<uint8>; capacity: int) : auto
 
-.. warning::
+.. warning:: 
   This is unsafe operation.
 
 Low level function returns temporary array of component given specific type of component.
@@ -718,7 +718,7 @@ for_each_archetype
 Invokes block for each entity of each archetype that can be processed by the request.
 Request is returned by a specified function.
 
-:Arguments: * **hash** :  :ref:`ComponentHash <alias-ComponentHash>`
+:Arguments: * **hash** :  :ref:`ComponentHash <alias-ComponentHash>` 
 
             * **erq** : function<void>
 
@@ -738,7 +738,7 @@ Invokes block for each entity of each archetype that can be processed by the req
 Request is returned by a specified function.
 If block returns true, iteration is stopped.
 
-:Arguments: * **hash** :  :ref:`ComponentHash <alias-ComponentHash>`
+:Arguments: * **hash** :  :ref:`ComponentHash <alias-ComponentHash>` 
 
             * **erq** : function<void>
 
@@ -753,7 +753,7 @@ Request is returned by a specified function.
 
 :Arguments: * **eid** :  :ref:`EntityId <struct-decs-EntityId>`  implicit
 
-            * **hash** :  :ref:`ComponentHash <alias-ComponentHash>`
+            * **hash** :  :ref:`ComponentHash <alias-ComponentHash>` 
 
             * **erq** : function<void>
 
@@ -766,7 +766,7 @@ Request is returned by a specified function.
 Returns const iterator of component given specific name and type of component.
 If component is not found - iterator will keep returning the specified value.
 
-:Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>`
+:Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>` 
 
             * **name** : string
 
@@ -779,7 +779,7 @@ If component is not found - iterator will keep returning the specified value.
 Returns const iterator of component given specific name and type of component.
 If component is not found - iterator will keep returning default value for the component type.
 
-:Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>`
+:Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>` 
 
             * **name** : string
 
@@ -795,7 +795,7 @@ get_ro
 
 Returns const temporary array of component given specific name and type of component for regular components.
 
-:Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>`
+:Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>` 
 
             * **name** : string
 
@@ -811,10 +811,10 @@ Returns const temporary array of component given specific name and type of compo
 Request
 +++++++
 
-  *  :ref:`EcsRequestPos (at: LineInfo) : EcsRequestPos <function-decs_EcsRequestPos_LineInfo>`
-  *  :ref:`compile_request (var erq: EcsRequest) <function-decs_compile_request_EcsRequest>`
-  *  :ref:`lookup_request (var erq: EcsRequest) : int <function-decs_lookup_request_EcsRequest>`
-  *  :ref:`verify_request (var erq: EcsRequest) : tuple\<ok:bool;error:string\> <function-decs_verify_request_EcsRequest>`
+  *  :ref:`EcsRequestPos (at: LineInfo) : EcsRequestPos <function-decs_EcsRequestPos_LineInfo>` 
+  *  :ref:`compile_request (var erq: EcsRequest) <function-decs_compile_request_EcsRequest>` 
+  *  :ref:`lookup_request (var erq: EcsRequest) : int <function-decs_lookup_request_EcsRequest>` 
+  *  :ref:`verify_request (var erq: EcsRequest) : tuple\<ok:bool;error:string\> <function-decs_verify_request_EcsRequest>` 
 
 .. _function-decs_EcsRequestPos_LineInfo:
 
@@ -822,7 +822,7 @@ Request
 
 Constructs EcsRequestPos from rtti::LineInfo.
 
-:Arguments: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`
+:Arguments: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
 
 .. _function-decs_compile_request_EcsRequest:
 
@@ -830,7 +830,7 @@ Constructs EcsRequestPos from rtti::LineInfo.
 
 Compiles ECS request, by creating request hash.
 
-:Arguments: * **erq** :  :ref:`EcsRequest <struct-decs-EcsRequest>`
+:Arguments: * **erq** :  :ref:`EcsRequest <struct-decs-EcsRequest>` 
 
 .. _function-decs_lookup_request_EcsRequest:
 
@@ -838,7 +838,7 @@ Compiles ECS request, by creating request hash.
 
 Looks up ECS request in the request cache.
 
-:Arguments: * **erq** :  :ref:`EcsRequest <struct-decs-EcsRequest>`
+:Arguments: * **erq** :  :ref:`EcsRequest <struct-decs-EcsRequest>` 
 
 .. _function-decs_verify_request_EcsRequest:
 
@@ -846,6 +846,6 @@ Looks up ECS request in the request cache.
 
 Verifies ECS request. Returns pair of boolean (true for OK) and error message.
 
-:Arguments: * **erq** :  :ref:`EcsRequest <struct-decs-EcsRequest>`
+:Arguments: * **erq** :  :ref:`EcsRequest <struct-decs-EcsRequest>` 
 
 

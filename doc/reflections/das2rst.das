@@ -811,7 +811,7 @@ def document_module_bitfield_boost(root : string) {
     var mod = find_module("bitfield_boost")
     var groups <- array<DocGroup>(
         group_by_regex("Bitfield element access", mod, %regex~(\[\]|\[\]\=|\[\]\&\&\=|\[\]\|\|\=|\[\]\^\^\=)$%%),
-        group_by_regex("Iteration", mod, %regex~(each)$%%)
+        group_by_regex("Iteration", mod, %regex~(each_bit)$%%)
     )
     document("Bitfield operator overloads", mod, "bitfield_boost.rst", groups)
 }
@@ -819,7 +819,7 @@ def document_module_bitfield_boost(root : string) {
 def document_module_bitfield_trait(root : string) {
     var mod = find_module("bitfield_trait")
     var groups <- array<DocGroup>(
-        group_by_regex("Iteration", mod, %regex~(each)$%%)
+        group_by_regex("Iteration", mod, %regex~(each|each_bit_name)$%%)
     )
     document("Bitfield name traits", mod, "bitfield_trait.rst", groups)
 }

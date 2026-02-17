@@ -227,13 +227,13 @@ Regular expression structure.
 Compilation and validation
 ++++++++++++++++++++++++++
 
-  *  :ref:`debug_set (cset: CharSet) <function-regex_debug_set_CharSet>`
-  *  :ref:`is_valid (var re: Regex) : bool <function-regex_is_valid_Regex>`
-  *  :ref:`regex_compile (expr: string; case_insensitive: bool = false; dot_all: bool = false) : Regex <function-regex_regex_compile_string_bool_bool>`
-  *  :ref:`regex_compile (var re: Regex; expr: string; case_insensitive: bool = false; dot_all: bool = false) : bool <function-regex_regex_compile_Regex_string_bool_bool>`
-  *  :ref:`regex_compile (var re: Regex) : Regex <function-regex_regex_compile_Regex>`
-  *  :ref:`regex_debug (regex: Regex) <function-regex_regex_debug_Regex>`
-  *  :ref:`visit_top_down (var node: ReNode?; blk: block\<(var n:ReNode?):void\>) <function-regex_visit_top_down_ReNode_q__block_ls_var_n_c_ReNode_q__c_void_gr_>`
+  *  :ref:`debug_set (cset: CharSet) <function-regex_debug_set_CharSet>` 
+  *  :ref:`is_valid (var re: Regex) : bool <function-regex_is_valid_Regex>` 
+  *  :ref:`regex_compile (expr: string; case_insensitive: bool = false; dot_all: bool = false) : Regex <function-regex_regex_compile_string_bool_bool>` 
+  *  :ref:`regex_compile (var re: Regex; expr: string; case_insensitive: bool = false; dot_all: bool = false) : bool <function-regex_regex_compile_Regex_string_bool_bool>` 
+  *  :ref:`regex_compile (var re: Regex) : Regex <function-regex_regex_compile_Regex>` 
+  *  :ref:`regex_debug (regex: Regex) <function-regex_regex_debug_Regex>` 
+  *  :ref:`visit_top_down (var node: ReNode?; blk: block\<(var n:ReNode?):void\>) <function-regex_visit_top_down_ReNode_q__block_ls_var_n_c_ReNode_q__c_void_gr_>` 
 
 .. _function-regex_debug_set_CharSet:
 
@@ -241,7 +241,7 @@ Compilation and validation
 
 Prints all characters contained in a ``CharSet`` for debugging purposes.
 
-:Arguments: * **cset** :  :ref:`CharSet <alias-CharSet>`
+:Arguments: * **cset** :  :ref:`CharSet <alias-CharSet>` 
 
 .. _function-regex_is_valid_Regex:
 
@@ -249,7 +249,7 @@ Prints all characters contained in a ``CharSet`` for debugging purposes.
 
 Returns ``true`` if the compiled regex is valid and ready for matching.
 
-:Arguments: * **re** :  :ref:`Regex <struct-regex-Regex>`
+:Arguments: * **re** :  :ref:`Regex <struct-regex-Regex>` 
 
 
 regex_compile
@@ -283,7 +283,7 @@ Compiles a regular expression pattern string into a ``Regex`` object. Panics if 
 
 Prints the internal structure of a compiled regex for debugging purposes.
 
-:Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>`
+:Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
 .. _function-regex_visit_top_down_ReNode_q__block_ls_var_n_c_ReNode_q__c_void_gr_:
 
@@ -299,11 +299,11 @@ Visits all nodes of a compiled regex tree in top-down order, invoking a callback
 Access
 ++++++
 
-  *  :ref:`Regex[] (regex: Regex; index: int) : range <function-regex__Regex_int>`
-  *  :ref:`Regex[] (regex: Regex; name: string) : range <function-regex__Regex_string>`
-  *  :ref:`regex_foreach (var regex: Regex; str: string; blk: block\<(at:range):bool\>) <function-regex_regex_foreach_Regex_string_block_ls_at_c_range_c_bool_gr_>`
-  *  :ref:`regex_group (regex: Regex; index: int; match: string) : string <function-regex_regex_group_Regex_int_string>`
-  *  :ref:`regex_group_by_name (regex: Regex; name: string; str: string) : string <function-regex_regex_group_by_name_Regex_string_string>`
+  *  :ref:`Regex[] (regex: Regex; index: int) : range <function-regex__Regex_int>` 
+  *  :ref:`Regex[] (regex: Regex; name: string) : range <function-regex__Regex_string>` 
+  *  :ref:`regex_foreach (var regex: Regex; str: string; blk: block\<(at:range):bool\>) <function-regex_regex_foreach_Regex_string_block_ls_at_c_range_c_bool_gr_>` 
+  *  :ref:`regex_group (regex: Regex; index: int; match: string) : string <function-regex_regex_group_Regex_int_string>` 
+  *  :ref:`regex_group_by_name (regex: Regex; name: string; str: string) : string <function-regex_regex_group_by_name_Regex_string_string>` 
 
 
 Regex[]
@@ -315,7 +315,7 @@ Regex[]
 
 Returns the match ``range`` for the capturing group at the given integer index (1-based). An overload accepting a string name for named capturing groups ``(?P<name>...)`` is also available (returns ``range(0,0)`` if not found). Use with ``slice`` to extract the matched substring.
 
-:Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>`
+:Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
             * **index** : int
 
@@ -331,7 +331,7 @@ Returns the match ``range`` for the capturing group at the given integer index (
 
 Iterates over all non-overlapping matches of a regex in a string, invoking a block for each match.
 
-:Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>`
+:Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
             * **str** : string
 
@@ -343,7 +343,7 @@ Iterates over all non-overlapping matches of a regex in a string, invoking a blo
 
 Returns the substring captured by the specified group index after a successful match.
 
-:Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>`
+:Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
             * **index** : int
 
@@ -355,7 +355,7 @@ Returns the substring captured by the specified group index after a successful m
 
 Returns the matched substring for the named capturing group ``(?P<name>...)``. Returns empty string if the group name is not found.
 
-:Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>`
+:Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
             * **name** : string
 
@@ -365,12 +365,12 @@ Returns the matched substring for the named capturing group ``(?P<name>...)``. R
 Match & replace
 +++++++++++++++
 
-  *  :ref:`regex_match (var regex: Regex; str: string; offset: int = 0) : int <function-regex_regex_match_Regex_string_int>`
-  *  :ref:`regex_match_all (var regex: Regex; str: string) : array\<range\> <function-regex_regex_match_all_Regex_string>`
-  *  :ref:`regex_replace (var regex: Regex; str: string; blk: block\<(at:string):string\>) : string <function-regex_regex_replace_Regex_string_block_ls_at_c_string_c_string_gr_>`
-  *  :ref:`regex_replace (var regex: Regex; str: string; replacement: string) : string <function-regex_regex_replace_Regex_string_string>`
-  *  :ref:`regex_search (var regex: Regex; str: string; offset: int = 0) : int2 <function-regex_regex_search_Regex_string_int>`
-  *  :ref:`regex_split (var regex: Regex; str: string) : array\<string\> <function-regex_regex_split_Regex_string>`
+  *  :ref:`regex_match (var regex: Regex; str: string; offset: int = 0) : int <function-regex_regex_match_Regex_string_int>` 
+  *  :ref:`regex_match_all (var regex: Regex; str: string) : array\<range\> <function-regex_regex_match_all_Regex_string>` 
+  *  :ref:`regex_replace (var regex: Regex; str: string; blk: block\<(at:string):string\>) : string <function-regex_regex_replace_Regex_string_block_ls_at_c_string_c_string_gr_>` 
+  *  :ref:`regex_replace (var regex: Regex; str: string; replacement: string) : string <function-regex_regex_replace_Regex_string_string>` 
+  *  :ref:`regex_search (var regex: Regex; str: string; offset: int = 0) : int2 <function-regex_regex_search_Regex_string_int>` 
+  *  :ref:`regex_split (var regex: Regex; str: string) : array\<string\> <function-regex_regex_split_Regex_string>` 
 
 .. _function-regex_regex_match_Regex_string_int:
 
@@ -378,7 +378,7 @@ Match & replace
 
 Matches a compiled regex against a string and returns the end position of the match, or ``-1`` on failure.
 
-:Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>`
+:Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
             * **str** : string
 
@@ -390,7 +390,7 @@ Matches a compiled regex against a string and returns the end position of the ma
 
 Returns an array of all non-overlapping match ranges for the regular expression in ``str``.
 
-:Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>`
+:Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
             * **str** : string
 
@@ -404,7 +404,7 @@ regex_replace
 
 Replaces each substring matched by the regex with the result returned by the provided block. An overload accepting a template string is also available, supporting ``$0``/``$&`` for the whole match, ``$1``–``$9`` for numbered groups, ``${name}`` for named groups, and ``$$`` for a literal ``$``.
 
-:Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>`
+:Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
             * **str** : string
 
@@ -422,7 +422,7 @@ Replaces each substring matched by the regex with the result returned by the pro
 
 Searches for the first occurrence of the regular expression anywhere in ``str``, starting from ``offset``. Returns ``int2(start, end)`` on success, or ``int2(-1, -1)`` if not found. Unlike ``regex_match``, this function scans the entire string.
 
-:Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>`
+:Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
             * **str** : string
 
@@ -434,7 +434,7 @@ Searches for the first occurrence of the regular expression anywhere in ``str``,
 
 Splits ``str`` by all non-overlapping matches of the regular expression. Returns an array of substrings between matches.
 
-:Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>`
+:Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
             * **str** : string
 
@@ -442,8 +442,8 @@ Splits ``str`` by all non-overlapping matches of the regular expression. Returns
 Generation
 ++++++++++
 
-  *  :ref:`re_gen (var re: Regex; var rnd: ReGenRandom) : string <function-regex_re_gen_Regex_ReGenRandom>`
-  *  :ref:`re_gen_get_rep_limit () : uint <function-regex_re_gen_get_rep_limit>`
+  *  :ref:`re_gen (var re: Regex; var rnd: ReGenRandom) : string <function-regex_re_gen_Regex_ReGenRandom>` 
+  *  :ref:`re_gen_get_rep_limit () : uint <function-regex_re_gen_get_rep_limit>` 
 
 .. _function-regex_re_gen_Regex_ReGenRandom:
 
@@ -451,9 +451,9 @@ Generation
 
 Generates a random string that matches the given compiled regex.
 
-:Arguments: * **re** :  :ref:`Regex <struct-regex-Regex>`
+:Arguments: * **re** :  :ref:`Regex <struct-regex-Regex>` 
 
-            * **rnd** :  :ref:`ReGenRandom <alias-ReGenRandom>`
+            * **rnd** :  :ref:`ReGenRandom <alias-ReGenRandom>` 
 
 .. _function-regex_re_gen_get_rep_limit:
 
