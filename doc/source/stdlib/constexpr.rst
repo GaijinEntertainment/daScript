@@ -5,6 +5,8 @@
 Constant expression checker and substitution
 ============================================
 
+.. das:module:: constant_expression
+
 The CONSTANT_EXPRESSION module provides the ``[constant_expression]`` function
 annotation. Functions marked with this annotation are evaluated at compile
 time when all arguments are constants, replacing the call with the computed
@@ -13,6 +15,8 @@ result.
 All functions and symbols are in "constant_expression" module, use require to get access to it. ::
 
     require daslib/constant_expression
+
+
 
 ++++++++++++++++++++
 Function annotations
@@ -33,6 +37,7 @@ This macro implements a constexpr function argument checker. Given list of argum
         foo("blah", 1)
         foo("ouch", BOO)    // compilation error: `a is not a constexpr, BOO`
 
+
 .. _handle-constant_expression-constant_expression:
 
 .. das:attribute:: constant_expression
@@ -48,6 +53,8 @@ For example::
         print("constant string is = {constString}\n")   // note - constString here is not an argument
 
 
+
+
 +++++++++++++
 Macro helpers
 +++++++++++++
@@ -59,6 +66,7 @@ Macro helpers
 .. das:function:: isConstantExpression(expr: ExpressionPtr) : bool
 
 This macro function returns true if the expression is a constant expression
+
 
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 

@@ -5,6 +5,8 @@
 Cuckoo hash table
 =================
 
+.. das:module:: cuckoo_hash_table
+
 The CUCKOO_HASH_TABLE module implements a cuckoo hash table data structure.
 Cuckoo hashing provides worst-case O(1) lookup time by using multiple hash
 functions and displacing existing entries on collision.
@@ -12,6 +14,8 @@ functions and displacing existing entries on collision.
 All functions and symbols are in "cuckoo_hash_table" module, use require to get access to it. ::
 
     require daslib/cuckoo_hash_table
+
+
 
 +++++++++++
 Type macros
@@ -27,6 +31,7 @@ Type macros
 
             * **hashFunction1Name** (String = "hash_extra")
 
+
 ++++++++++++++
 Hash functions
 ++++++++++++++
@@ -40,6 +45,7 @@ Hash functions
 
 this hash function converts and workhorse key to a 64 bit hash
 
+
 :Arguments: * **data** : auto
 
 .. _function-cuckoo_hash_table_hash_extra_auto_0x1d:
@@ -47,6 +53,7 @@ this hash function converts and workhorse key to a 64 bit hash
 .. das:function:: hash_extra(data: auto) : auto
 
 Returns a secondary hash derived from the upper 32 bits of the primary hash, used for cuckoo hashing.
+
 
 :Arguments: * **data** : auto
 

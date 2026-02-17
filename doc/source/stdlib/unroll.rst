@@ -5,6 +5,8 @@
 Loop unrolling
 ==============
 
+.. das:module:: unroll
+
 The UNROLL module implements compile-time loop unrolling. The ``unroll``
 macro replaces a ``for`` loop with a constant ``range`` bound by stamping
 out each iteration as separate inlined code, eliminating loop overhead.
@@ -31,6 +33,8 @@ Example: ::
         // step 2
         // step 3
 
+
+
 ++++++++++++++++++++
 Function annotations
 ++++++++++++++++++++
@@ -49,6 +53,8 @@ For example:::
         for i in range(9)
             n[i] = imageLoad(c_bloom_htex, xy + int2(0,i-4))
 
+
+
 +++++++++
 Unrolling
 +++++++++
@@ -60,6 +66,7 @@ Unrolling
 .. das:function:: unroll(blk: block<():void>)
 
 Unrolls the for loop (with fixed range)
+
 
 :Arguments: * **blk** : block<void>
 

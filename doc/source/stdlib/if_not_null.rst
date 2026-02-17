@@ -5,6 +5,8 @@
 if_not_null macro
 =================
 
+.. das:module:: if_not_null
+
 The IF_NOT_NULL module provides a null-safe call macro. The expression
 ``ptr |> if_not_null <| call(args)`` expands to a null check followed by
 a dereferenced call: ``if (ptr != null) { call(*ptr, args) }``.
@@ -12,6 +14,8 @@ a dereferenced call: ``if (ptr != null) { call(*ptr, args) }``.
 All functions and symbols are in "if_not_null" module, use require to get access to it. ::
 
     require daslib/if_not_null
+
+
 
 +++++++++++
 Call macros
@@ -30,6 +34,7 @@ to::
     var _ptr_var = ptr
     if _ptr_var
         call(*_ptr_var,...)
+
 
 
 

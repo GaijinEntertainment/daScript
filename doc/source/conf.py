@@ -36,7 +36,6 @@ extensions = [
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
-exclude_patterns = ['index/detail/*', 'index/handmade/*']
 
 suppress_warnings = ['toctree.not_included']
 
@@ -70,7 +69,7 @@ release = u'0.6.0'
 #
 # This is also used if you do content translation via gettext catalogs.
 # Usually you set "language" from the command line for these cases.
-language = None
+language = 'en'
 
 # There are two options for replacing |today|: either, you set today to some
 # non-false value, then it is used:
@@ -80,7 +79,9 @@ language = None
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
-exclude_patterns = []
+# Exclude detail/ and handmade/ under stdlib/ — these are intermediate files
+# used by das2rst generation, not standalone documentation pages.
+exclude_patterns = ['stdlib/detail', 'stdlib/handmade']
 
 # The reST default role (used for this markup: `text`) to use for all
 # documents.
@@ -146,7 +147,7 @@ html_favicon = 'daslang.ico'
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+html_static_path = []
 
 # Add any extra paths that contain custom files (such as robots.txt or
 # .htaccess) here, relative to this directory. These files are copied

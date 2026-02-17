@@ -267,9 +267,11 @@ enum private DecsQueryType {
 
 [call_macro(name="query")]
 class DecsQueryMacro : AstCallMacro {
-    //! This macro implements 'query` functionality. There are 2 types of queries:
-    //!     * query(...) - returns a list of entities matching the query
-    //!     * query(eid) - returns a single entity matching the eid
+    //! This macro implements `query` functionality. There are 2 types of queries:
+    //!
+    //! * query(...) - returns a list of entities matching the query
+    //! * query(eid) - returns a single entity matching the eid
+    //!
     //! For example::
     //!
     //!     query() <| $ ( eid:EntityId; pos, vel : float3 )
@@ -280,6 +282,7 @@ class DecsQueryMacro : AstCallMacro {
     //!
     //!     query(kaboom) <| $ ( var pos:float3&; vel:float3; col:uint=13u )
     //!         pos += vel
+    //!
     //! The query above will add the velocity to the position of an entity with eid kaboom.
     //!
     //! Query can have `REQUIRE` and `REQUIRE_NOT` clauses::
@@ -477,10 +480,12 @@ class DecsQueryMacro : AstCallMacro {
 
 [call_macro(name="find_query")]
 class DecsFindQueryMacro : DecsQueryMacro {
-    //! This macro implements 'find_query` functionality.
+    //! This macro implements `find_query` functionality.
     //! It is similar to `query` in most ways, with the main differences being:
-    //!     * there is no eid-based find query
-    //!     * the find_query stops once the first match is found
+    //!
+    //! * there is no eid-based find query
+    //! * the find_query stops once the first match is found
+    //!
     //! For example::
     //!
     //!     let found = find_query <| $ ( pos,dim:float3; obstacle:Obstacle )
@@ -500,7 +505,7 @@ class DecsFindQueryMacro : DecsQueryMacro {
 
 [function_macro(name="decs")]
 class DecsEcsMacro : AstFunctionAnnotation {
-    //! This macro converts a function into a DECS pass stage query. Possible arguments are `stage`, 'REQUIRE', and `REQUIRE_NOT`.
+    //! This macro converts a function into a DECS pass stage query. Possible arguments are `stage`, `REQUIRE`, and `REQUIRE_NOT`.
     //! It has all other properties of a `query` (like ability to operate on templates). For example::
     //!
     //!     [decs(stage=update_ai, REQUIRE=ai_turret)]
@@ -587,12 +592,15 @@ class DecsEcsMacro : AstFunctionAnnotation {
 [call_macro(name="from_decs")]
 class FromDecsMacro : AstCallMacro {
     //! This macro converts a DECS query into an iterator<tuple<...>>. For example::
+    //!
     //!     let it = from_decs($(index:int; text:string){})
     //!     for (item in it) {
     //!         // process item
     //!         print("Entity {item.index}: {item.text}\n")
     //!     }
+    //!
     //! Internally it generates the following code::
+    //!
     //!     let it = invoke($() {
     //!         var res : array<tuple<int,string>>
     //!         query($(index:int; text:string) {

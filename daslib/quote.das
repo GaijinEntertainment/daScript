@@ -40,13 +40,13 @@ def public clone(var a : dasvector`CaptureEntry; b : array<CaptureEntryInitData>
     }
 }
 
-struct LineInfoInitData {
+struct public LineInfoInitData {
     //! Initialization data for source line info reconstruction.
-    fileInfo : FileInfo?
-    column : uint
-    line : uint
-    last_column : uint
-    last_line : uint
+    fileInfo : FileInfo?  //! Pointer to the source file info.
+    column : uint         //! Column number (1-based).
+    line : uint           //! Line number (1-based).
+    last_column : uint    //! Last column number of the range.
+    last_line : uint      //! Last line number of the range.
 }
 
 
@@ -140,10 +140,10 @@ def public cvt_to_mks(var args) : smart_ptr<MakeStruct> {
     return <- res;
 }
 
-struct FileInfoInitData {
+struct public FileInfoInitData {
     //! Initialization data for reconstructing file info.
-    name : string
-    tabSize : int
+    name : string   //! File name string.
+    tabSize : int   //! Tab size for the file.
 }
 
 def public clone_file_info(b : FileInfoInitData) : FileInfo? {

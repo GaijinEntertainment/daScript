@@ -5,6 +5,8 @@
 Type macro and template structure support
 =========================================
 
+.. das:module:: typemacro_boost
+
 The TYPEMACRO_BOOST module provides infrastructure for defining type macros —
 custom compile-time type transformations. Type macros allow introducing new
 type syntax that expands into standard daslang types during compilation.
@@ -12,6 +14,8 @@ type syntax that expands into standard daslang types during compilation.
 All functions and symbols are in "typemacro_boost" module, use require to get access to it. ::
 
     require daslib/typemacro_boost
+
+
 
 ++++++++++
 Structures
@@ -30,6 +34,8 @@ Holds a type macro template argument with its name and inferred type.
          * **inferred_type** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` - Inferred concrete type after template instantiation.
 
 
+
+
 ++++++++++++++++++++
 Function annotations
 ++++++++++++++++++++
@@ -40,6 +46,7 @@ Function annotations
 
 This macro converts function into a type macro.
 
+
 .. _handle-typemacro_boost-typemacro_template_function:
 
 .. das:attribute:: typemacro_template_function
@@ -47,6 +54,8 @@ This macro converts function into a type macro.
 This one converts function into a type macro that uses template arguments.
 For example [typemacro_template(TFlatHashTable)] def makeFlatHashTable ( macroArgument, passArgument : TypeDeclPtr; KeyType, ValueType : TypeDeclPtr; hashFunctionName : string) : TypeDeclPtr { ... }
 We generate the body that handles template argument inference and instantiation.
+
+
 
 ++++++++++++++++
 Structure macros
@@ -58,11 +67,13 @@ Structure macros
 
 Structure annotation that stores type macro documentation metadata.
 
+
 .. _handle-typemacro_boost-typemacro_template:
 
 .. das:attribute:: typemacro_template
 
 Structure annotation that marks a struct as a type macro template instance.
+
 
 .. _handle-typemacro_boost-template_structure:
 
@@ -70,15 +81,18 @@ Structure annotation that marks a struct as a type macro template instance.
 
 This macro creates typemacro function and associates it with the structure.
 It also creates the typemacro_template_function to associate with it.
-For example:
-[template_structure(KeyType,ValueType)] struct template TFlatHashTable { ... }
-creates:
-1) [typemacro_function] def TFlatHashTable (macroArgument, passArgument : TypeDeclPtr; KeyType, ValueType : TypeDeclPtr) : TypeDeclPtr {
-    return <- make`template`TFlatHashTable(macroArgument, passArgument, KeyType, ValueType)
- }
-2) [typemacro_template_function(TFlatHashTable)] def make`template`TFlatHashTable (macroArgument, passArgument : TypeDeclPtr; KeyType, ValueType : TypeDeclPtr) : TypeDeclPtr {
-    return <- default<TypeDeclPtr>
- }
+For example::
+
+    [template_structure(KeyType,ValueType)] struct template TFlatHashTable { ... }
+    creates:
+    1) [typemacro_function] def TFlatHashTable (macroArgument, passArgument : TypeDeclPtr; KeyType, ValueType : TypeDeclPtr) : TypeDeclPtr {
+        return <- make`template`TFlatHashTable(macroArgument, passArgument, KeyType, ValueType)
+     }
+    2) [typemacro_template_function(TFlatHashTable)] def make`template`TFlatHashTable (macroArgument, passArgument : TypeDeclPtr; KeyType, ValueType : TypeDeclPtr) : TypeDeclPtr {
+        return <- default<TypeDeclPtr>
+     }
+
+
 
 ++++++++++++
 Enum helpers
@@ -92,9 +106,11 @@ Enum helpers
 
 Converts an int64 value to the specified enum type via reinterpret cast.
 
+
 :Arguments: * **_enu** : auto(ET)
 
             * **value** : int64
+
 
 ++++++++++++++++++++++++++++++++
 Template structure instantiation
@@ -110,6 +126,7 @@ Template structure instantiation
 
 template instance is determined by having parent == template.parent
 
+
 :Arguments: * **passArgument** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>`
 
             * **templateType** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>`
@@ -121,6 +138,7 @@ template instance is determined by having parent == template.parent
 .. das:function:: make_typemacro_template_instance(instance_type: Structure?; template_type: Structure?; ex: array<tuple<string;string>> = array<tuple<string;string>>())
 
 Annotates a structure as a typemacro template instance of the given template type.
+
 
 :Arguments: * **instance_type** :  :ref:`Structure <handle-ast-Structure>`?
 
@@ -134,11 +152,13 @@ Annotates a structure as a typemacro template instance of the given template typ
 
 Builds a mangled template structure name from its base name and argument types.
 
+
 :Arguments: * **base** :  :ref:`Structure <handle-ast-Structure>`?
 
             * **arguments** : array< :ref:`TypeMacroTemplateArgument <struct-typemacro_boost-TypeMacroTemplateArgument>`>
 
             * **extra** : array<tuple<string;string>>
+
 
 ++++++++++++++++++++++
 Type inference helpers
@@ -155,6 +175,7 @@ Type inference helpers
 
 Adds all template argument type aliases to a structure.
 
+
 :Arguments: * **structType** :  :ref:`Structure <handle-ast-Structure>`?
 
             * **args** : array< :ref:`TypeMacroTemplateArgument <struct-typemacro_boost-TypeMacroTemplateArgument>`>
@@ -164,6 +185,7 @@ Adds all template argument type aliases to a structure.
 .. das:function:: infer_struct_aliases(structType: Structure?; args: array<TypeMacroTemplateArgument>) : bool
 
 Infers structure alias types for all template arguments from a structure definition.
+
 
 :Arguments: * **structType** :  :ref:`Structure <handle-ast-Structure>`?
 
@@ -175,6 +197,7 @@ Infers structure alias types for all template arguments from a structure definit
 
 Infers and validates template argument types against a pass argument, returning the resolved type.
 
+
 :Arguments: * **passArgument** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>`
 
             * **args** : array< :ref:`TypeMacroTemplateArgument <struct-typemacro_boost-TypeMacroTemplateArgument>`>
@@ -185,7 +208,9 @@ Infers and validates template argument types against a pass argument, returning 
 
 Verifies that all template arguments have been fully inferred (no remaining auto or alias types).
 
+
 :Arguments: * **args** : array< :ref:`TypeMacroTemplateArgument <struct-typemacro_boost-TypeMacroTemplateArgument>`>
+
 
 ++++++++++++++++++++++
 String constant access
@@ -199,7 +224,9 @@ String constant access
 
 Extracts a string constant value or function address name from an expression.
 
+
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+
 
 +++++++++++++
 Work tracking
@@ -214,6 +241,7 @@ Work tracking
 
 Returns true if custom work has already been performed on the template structure.
 
+
 :Arguments: * **structType** :  :ref:`Structure <handle-ast-Structure>`?
 
 .. _function-typemacro_boost_mark_custom_work_done_Structure_q_:
@@ -222,7 +250,9 @@ Returns true if custom work has already been performed on the template structure
 
 Marks the template structure's custom work as complete in its annotation.
 
+
 :Arguments: * **structType** :  :ref:`Structure <handle-ast-Structure>`?
+
 
 ++++++++++++++++++++
 Type macro arguments
@@ -240,6 +270,7 @@ typemacro_argument
 .. das:function:: typemacro_argument(dimExpr: auto; index: int; constType: ExprConstString; defaultValue: auto(ValueT)) : ValueT
 
 Extracts a string constant or function address argument at the given index from a type macro's dimension expressions.
+
 
 :Arguments: * **dimExpr** : auto
 

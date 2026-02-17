@@ -5,6 +5,8 @@
 Boost package for DECS
 ======================
 
+.. das:module:: decs_boost
+
 The DECS_BOOST module provides convenience macros and syntactic sugar for
 the DECS entity component system, including simplified component registration,
 entity creation, and system definition patterns.
@@ -36,6 +38,8 @@ Example: ::
         // output:
         // hero at 1,2,3
 
+
+
 ++++++++++++++++++++
 Function annotations
 ++++++++++++++++++++
@@ -46,17 +50,19 @@ Function annotations
 
 This annotation provides list of required components for entity.
 
+
 .. _handle-decs_boost-REQUIRE_NOT:
 
 .. das:attribute:: REQUIRE_NOT
 
 This annotation provides list of components, which are required to not be part of the entity.
 
+
 .. _handle-decs_boost-decs:
 
 .. das:attribute:: decs
 
-This macro converts a function into a DECS pass stage query. Possible arguments are `stage`, 'REQUIRE', and `REQUIRE_NOT`.
+This macro converts a function into a DECS pass stage query. Possible arguments are `stage`, `REQUIRE`, and `REQUIRE_NOT`.
 It has all other properties of a `query` (like ability to operate on templates). For example::
 
     [decs(stage=update_ai, REQUIRE=ai_turret)]
@@ -64,6 +70,8 @@ It has all other properties of a `query` (like ability to operate on templates).
             ...
 
 In the example above a query is added to the `update_ai` stage. The query also requires that each entity passed to it has an `ai_turret` property.
+
+
 
 +++++++++++
 Call macros
@@ -73,9 +81,11 @@ Call macros
 
 .. das:attribute:: query
 
-This macro implements 'query` functionality. There are 2 types of queries:
-    * query(...) - returns a list of entities matching the query
-    * query(eid) - returns a single entity matching the eid
+This macro implements `query` functionality. There are 2 types of queries:
+
+* query(...) - returns a list of entities matching the query
+* query(eid) - returns a single entity matching the eid
+
 For example::
 
     query() <| $ ( eid:EntityId; pos, vel : float3 )
@@ -86,6 +96,7 @@ Here is another example::
 
     query(kaboom) <| $ ( var pos:float3&; vel:float3; col:uint=13u )
         pos += vel
+
 The query above will add the velocity to the position of an entity with eid kaboom.
 
 Query can have `REQUIRE` and `REQUIRE_NOT` clauses::
@@ -118,14 +129,17 @@ Note: apart from tagging structure as a template, the macro also generates `appl
         create_entity <| @ ( eid, cmp )
             apply_decs_template(cmp, [[Particle pos=float3(i), vel=float3(i+1)]])
 
+
 .. _call-macro-decs_boost-find_query:
 
 .. das:attribute:: find_query
 
-This macro implements 'find_query` functionality.
+This macro implements `find_query` functionality.
 It is similar to `query` in most ways, with the main differences being:
-    * there is no eid-based find query
-    * the find_query stops once the first match is found
+
+* there is no eid-based find query
+* the find_query stops once the first match is found
+
 For example::
 
     let found = find_query <| $ ( pos,dim:float3; obstacle:Obstacle )
@@ -138,23 +152,29 @@ For example::
 In the example above the find_query will return `true` once the first intersection is found.
 Note: if return is missing, or end of find_query block is reached - its assumed that find_query did not find anything, and will return false.
 
+
 .. _call-macro-decs_boost-from_decs:
 
 .. das:attribute:: from_decs
 
 This macro converts a DECS query into an iterator<tuple<...>>. For example::
+
     let it = from_decs($(index:int; text:string){})
     for (item in it) {
         // process item
         print("Entity {item.index}: {item.text}\n")
     }
+
 Internally it generates the following code::
+
     let it = invoke($() {
         var res : array<tuple<int,string>>
         query($(index:int; text:string) {
             res |> push((index, text))
         })
         return res.to_sequence()
+
+
 
 ++++++++++++++++
 Structure macros
@@ -166,5 +186,6 @@ Structure macros
 
 This macro creates a template for the given structure.
 `apply_decs_template` and `remove_decs_template` functions are generated for the structure type.
+
 
 

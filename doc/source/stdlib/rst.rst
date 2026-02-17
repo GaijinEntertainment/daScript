@@ -5,6 +5,8 @@
 Documentation generator
 =======================
 
+.. das:module:: rst
+
 The RST module implements the documentation generation pipeline for daslang.
 It uses RTTI to introspect modules, types, and functions, then produces
 reStructuredText output suitable for Sphinx documentation builds.
@@ -12,6 +14,8 @@ reStructuredText output suitable for Sphinx documentation builds.
 All functions and symbols are in "rst" module, use require to get access to it. ::
 
     require daslib/rst
+
+
 
 ++++++++++
 Structures
@@ -32,6 +36,7 @@ Group of documentation items.
          * **_module** :  :ref:`Module <handle-rtti-Module>`? - Module, to which this group belongs.
 
 
+
 .. _struct-rst-DocsHook:
 
 .. das:attribute:: DocsHook
@@ -41,6 +46,8 @@ Hook for RST documentation generation.
 :Fields: * **annotationFilter** : lambda<(ann: :ref:`Annotation <handle-rtti-Annotation>`):bool> - Filter for the supported annotations.
 
          * **afterEnums** : lambda<(f: :ref:`FILE <handle-fio-FILE>`?;was_enums:bool):void> - Additional generation hook after the enumerations.
+
+
 
 
 ++++++++++++++++
@@ -58,6 +65,7 @@ Document writers
 
 Generates RST documentation for a single module and writes it to a file.
 
+
 :Arguments: * **name** : string
 
             * **mod** :  :ref:`Module <handle-rtti-Module>`?
@@ -74,6 +82,7 @@ Generates RST documentation for a single module and writes it to a file.
 
 Generates RST documentation for a single enumeration type.
 
+
 :Arguments: * **doc_file** :  :ref:`file <alias-file>`
 
             * **mod** :  :ref:`Module <handle-rtti-Module>`?
@@ -86,6 +95,7 @@ Generates RST documentation for a single enumeration type.
 
 Generates RST documentation for all enumerations in the given modules.
 
+
 :Arguments: * **doc_file** :  :ref:`file <alias-file>`
 
             * **mods** : array< :ref:`Module <handle-rtti-Module>`?>
@@ -96,6 +106,7 @@ Generates RST documentation for all enumerations in the given modules.
 
 Generates RST documentation for multiple modules and writes them to files.
 
+
 :Arguments: * **name** : string
 
             * **mods** : array< :ref:`Module <handle-rtti-Module>`?>
@@ -105,6 +116,7 @@ Generates RST documentation for multiple modules and writes them to files.
             * **groups** : array< :ref:`DocGroup <struct-rst-DocGroup>`>
 
             * **hook** :  :ref:`DocsHook <struct-rst-DocsHook>`
+
 
 ++++++++++++
 Descriptions
@@ -118,7 +130,9 @@ Descriptions
 
 Returns a concise one-line description of an expression or type.
 
-:Arguments: * **expr** : option< :ref:`Expression <handle-ast-Expression>`?|smart_ptr< :ref:`Expression <handle-ast-Expression>`>&>
+
+:Arguments: * **expr** : option< :ref:`Expression <handle-ast-Expression>`?\ | smart_ptr< :ref:`Expression <handle-ast-Expression>`>\ &>
+
 
 ++++++++++++
 Label makers
@@ -137,9 +151,10 @@ function_label_file
 
 Creates a unique, file-name-safe label string for a function.
 
+
 :Arguments: * **name** : auto
 
-            * **value** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`>&
+            * **value** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`>\ &
 
             * **drop_args** : int
 
@@ -148,6 +163,7 @@ Creates a unique, file-name-safe label string for a function.
 .. das:function:: function_label_file(value: smart_ptr<Function>|Function?; drop_args: int = 0) : auto
 
 ----
+
 
 ++++++++++++++++++
 RST section makers
@@ -161,9 +177,11 @@ RST section makers
 
 Creates a named documentation group with a decorative RST section header.
 
+
 :Arguments: * **name** : string
 
             * **plus** : string
+
 
 ++++++++++++++++
 Group operations
@@ -180,6 +198,7 @@ Group operations
 
 Appends functions whose names match a regex to an existing documentation group.
 
+
 :Arguments: * **group** :  :ref:`DocGroup <struct-rst-DocGroup>`
 
             * **mod** :  :ref:`Module <handle-rtti-Module>`?
@@ -195,6 +214,7 @@ group_by_regex
 .. das:function:: group_by_regex(name: string; mod: Module?; reg: Regex) : DocGroup
 
 Groups module items whose names match the provided regular expression under a documentation section.
+
 
 :Arguments: * **name** : string
 
@@ -214,7 +234,9 @@ Groups module items whose names match the provided regular expression under a do
 
 Marks the specified documentation group as hidden so it is excluded from output.
 
+
 :Arguments: * **group** :  :ref:`DocGroup <struct-rst-DocGroup>`
+
 
 ++++++++++++++
 Naming helpers
@@ -227,6 +249,7 @@ Naming helpers
 .. das:function:: safe_function_name(name: string) : string
 
 Escapes special characters in a function name to produce a safe identifier for RST output.
+
 
 :Arguments: * **name** : string
 

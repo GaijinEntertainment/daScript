@@ -306,4 +306,4 @@ mangled strings match the daslang-side expectations.
 
    :ref:`tutorial_integration_c_unaligned_advanced` — unaligned ABI interop functions
 
-   :ref:`_contexts` — runtime context lookups by mangled name hash
+   :ref:`contexts` — runtime context lookups by mangled name hash

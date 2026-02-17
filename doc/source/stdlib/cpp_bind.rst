@@ -5,6 +5,8 @@
 C++ bindings generator
 ======================
 
+.. das:module:: cpp_bind
+
 The CPP_BIND module provides utilities for generating daslang bindings
 to C++ code. It helps generate module registration code, type annotations,
 and function wrappers for exposing C++ APIs to daslang programs.
@@ -12,6 +14,8 @@ and function wrappers for exposing C++ APIs to daslang programs.
 All functions and symbols are in "cpp_bind" module, use require to get access to it. ::
 
     require daslib/cpp_bind
+
+
 
 ++++++++++++++++++++++
 Generation of bindings
@@ -27,6 +31,7 @@ Generates C++ class adapter for the Daslang class.
 Intended use::
 
     log_cpp_class_adapter(cppFileNameDotInc, "daslangClassName", typeinfo(ast_typedecl type<daslangClassName>))
+
 
 :Arguments: * **cpp_file** :  :ref:`file <alias-file>`
 

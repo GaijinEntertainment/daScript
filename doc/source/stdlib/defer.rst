@@ -5,6 +5,8 @@
 defer and defer_delete macros
 =============================
 
+.. das:module:: defer
+
 The DEFER module implements the ``defer`` pattern — the ability to schedule cleanup
 code to run at scope exit, similar to Go's ``defer``. The deferred block is moved
 to the ``finally`` section of the enclosing scope at compile time.
@@ -30,6 +32,8 @@ Example: ::
         // middle
         // cleanup runs last
 
+
+
 ++++++++++++++++++++
 Function annotations
 ++++++++++++++++++++
@@ -41,6 +45,8 @@ Function annotations
 This macro converts defer() <| block expression
 into {}, and move block to the finally section of the current block
 
+
+
 +++++++++++
 Call macros
 +++++++++++
@@ -51,6 +57,8 @@ Call macros
 
 This macro converts defer_delete() expression
 into {}, and add delete expression to the finally section of the current block
+
+
 
 +++++
 Defer
@@ -70,7 +78,9 @@ defer a block of code. For example::
 
 Will close the file when 'a' is out of scope.
 
+
 :Arguments: * **blk** : block<void>
+
 
 ++++
 Stub
@@ -83,5 +93,6 @@ Stub
 .. das:function:: nada()
 
 helper function which does nothing and will be optimized out
+
 
 

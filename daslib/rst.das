@@ -99,11 +99,11 @@ def public safe_function_name(name : string) : string {
         ("*", "_st_"),
         (".", "_dot_"),
         ("?", "_q_"),
-        ("&", ""),
+        ("&", "_ref_"),
         ("(", ""),
         (")", ""),
-        ("[", ""),
-        ("]", ""),
+        ("[", "_lb_"),
+        ("]", "_rb_"),
         ("|", "")])
 }
 
@@ -501,7 +501,7 @@ def describe_type(td : TypeDeclPtr) {
             }
             write(writer, ">")
         } elif (baseType == Type.tTuple || baseType == Type.tVariant || baseType == Type.option) {
-            let delim = baseType == Type.option ? "|" : ";"
+            let delim = baseType == Type.option ? "\\ | " : ";"
             write(writer, das_to_string(baseType))
             write(writer, "<")
             if (td.argTypes |> length != 0) {
@@ -561,10 +561,10 @@ def describe_type(td : TypeDeclPtr) {
             write(writer, "]")
         }
         if (td.flags.ref) {
-            write(writer, "&")
+            write(writer, "\\ &")
         }
         if (td.flags.temporary) {
-            write(writer, "#")
+            write(writer, "\\ #")
         }
         if (td.flags._implicit) {
             write(writer, " implicit")
@@ -595,7 +595,7 @@ def make_ref(name, text : string) {
 def public make_group(name : string; plus : string = "+") {
     //! Creates an RST group header with the given name surrounded by separator lines.
     let len = length(name)
-    return "{strings::repeat(plus,len)}\n{name}\n{strings::repeat(plus,len)}\n\n"
+    return "\n{strings::repeat(plus,len)}\n{name}\n{strings::repeat(plus,len)}\n\n"
 }
 
 def make_header(name, lab : string) {
@@ -896,7 +896,7 @@ def document_topic(doc_file : file; topic, content : string implicit; cb : block
             if (topic_file != null) {
                 let instxt = cb |> invoke(fread(topic_file))
                 fwrite(doc_file, instxt)
-                fwrite(doc_file, "\n")
+                fwrite(doc_file, "\n\n")
             } else {
                 PANIC("can't open {topic_file_name}")
             }
@@ -2268,6 +2268,7 @@ def public documents(name : string; mods : array<Module?>; fname : string; var g
         mod_name = "_builtin"
     }
     fwrite(doc_file, make_header(name, mod_name))
+    fwrite(doc_file, ".. das:module:: {mod_name}\n\n")
     // if length(header)!=0
     //     fwrite(doc_file,".. include:: {header}\n\n")
     for (mod in mods) {

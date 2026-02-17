@@ -5,6 +5,8 @@
 Pattern matching
 ================
 
+.. das:module:: match
+
 The MATCH module implements pattern matching on variants, structs, tuples,
 arrays, and scalar values. Supports variable capture, wildcards, guard
 expressions, and alternation. ``static_match`` enforces exhaustive matching
@@ -47,6 +49,8 @@ Example: ::
         // green
         // other
 
+
+
 +++++++++++
 Call macros
 +++++++++++
@@ -57,11 +61,13 @@ Call macros
 
 Implements `match` macro.
 
+
 .. _call-macro-match-static_match:
 
 .. das:attribute:: static_match
 
 Implements `static_match` macro.
+
 
 .. _call-macro-match-multi_match:
 
@@ -69,11 +75,14 @@ Implements `static_match` macro.
 
 Implements `multi_match` macro.
 
+
 .. _call-macro-match-static_multi_match:
 
 .. das:attribute:: static_multi_match
 
 Implements `static_multi_match` macro.
+
+
 
 ++++++++++++++++
 Structure macros
@@ -86,11 +95,13 @@ Structure macros
 Implements `match_as_is` annotation.
 This annotation is used to mark that structure can be matched with different type via is and as machinery.
 
+
 .. _handle-match-match_copy:
 
 .. das:attribute:: match_copy
 
 Implements `match_copy` annotation.
 This annotation is used to mark that structure can be matched with different type via match_copy machinery.
+
 
 

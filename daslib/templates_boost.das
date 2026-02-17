@@ -537,8 +537,9 @@ def make_unique_private_name(prefix : string; vat : LineInfo) {
     //! Generates unique private name for the variable, given prefix and line info.
     //!
     //! .. warning::
-    //! The assumption is that line info is unique for the context of the unique name generation.
-    //! If it is not, additional measures must be taken to ensure uniqueness of prefix.
+    //!
+    //!    The assumption is that line info is unique for the context of the unique name generation.
+    //!    If it is not, additional measures must be taken to ensure uniqueness of prefix.
     return "{prefix}_{vat.line}_{vat.column}"
 }
 

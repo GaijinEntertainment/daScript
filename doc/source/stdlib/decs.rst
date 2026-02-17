@@ -5,6 +5,8 @@
 DECS, Daslang entity component system
 =====================================
 
+.. das:module:: decs
+
 The DECS module implements a Data-oriented Entity Component System.
 Entities are identified by integer IDs and store components as typed data.
 Systems query and process entities by their component signatures,
@@ -16,6 +18,8 @@ All functions and symbols are in "decs" module, use require to get access to it.
 
     require daslib/decs
 
+
+
 ++++++++++++
 Type aliases
 ++++++++++++
@@ -26,11 +30,13 @@ Type aliases
 
 Hash value of the ECS component type
 
+
 .. _alias-TypeHash:
 
 .. das:attribute:: TypeHash = uint64
 
 Hash value of the individual type
+
 
 .. _alias-DeferEval:
 
@@ -38,17 +44,21 @@ Hash value of the individual type
 
 Lambda which holds deferred action. Typically creation of destruction of an entity.
 
+
 .. _alias-ComponentMap:
 
 .. das:attribute:: ComponentMap = array<ComponentValue>
 
 Table of component values for individual entity.
 
+
 .. _alias-PassFunction:
 
 .. das:attribute:: PassFunction = function<void>
 
 One of the callbacks which form individual pass.
+
+
 
 +++++++++
 Constants
@@ -59,6 +69,8 @@ Constants
 .. das:attribute:: INVALID_ENTITY_ID = struct<decs::EntityId>(uninitialized )
 
 Entity ID which represents invalid entity.
+
+
 
 ++++++++++
 Structures
@@ -94,6 +106,7 @@ Consists of type name and collection of type-specific routines to control type v
          * **gc** : function<(src:array<uint8>):lambda<void>> - function to perform GC marking on the component value
 
 
+
 .. _struct-decs-Component:
 
 .. das:attribute:: Component
@@ -113,6 +126,7 @@ Single ECS component. Contains component name, data, and data layout.
          * **gc_dummy** : lambda<void> - this is here so that GC can find real representation of data
 
 
+
 .. _struct-decs-EntityId:
 
 .. das:attribute:: EntityId
@@ -120,6 +134,7 @@ Single ECS component. Contains component name, data, and data layout.
 :Fields: * **id** : uint - Unique identifier of the entity. Consists of id (index in the data array) and generation.
 
          * **generation** : int - index of the entity
+
 
 
 .. _struct-decs-Archetype:
@@ -137,6 +152,7 @@ ECS archetype. Archetype is unique combination of components.
          * **eidIndex** : int - index of the 'eid' component in the components array
 
 
+
 .. _struct-decs-ComponentValue:
 
 .. das:attribute:: ComponentValue
@@ -150,6 +166,7 @@ Value of the component during creation or transformation.
          * **data** : float4[4] - raw data of the component
 
 
+
 .. _struct-decs-EcsRequestPos:
 
 .. das:attribute:: EcsRequestPos
@@ -159,6 +176,7 @@ Location of the ECS request in the code (source file and line number).
 :Fields: * **file** : string - source file
 
          * **line** : uint - line number
+
 
 
 .. _struct-decs-EcsRequest:
@@ -177,6 +195,7 @@ Caches list of archetypes, which match the request.
          * **archetypes** : array<int> - sorted list of matching archetypes
 
          * **at** :  :ref:`EcsRequestPos <struct-decs-EcsRequestPos>` - location of the request in the code
+
 
 
 .. _struct-decs-DecsState:
@@ -201,6 +220,7 @@ Contains archetypes, entities and entity free-list, entity lookup table, all arc
          * **queryLookup** : table< :ref:`ComponentHash <alias-ComponentHash>`;int> - lookup of ECS request by its hash
 
 
+
 .. _struct-decs-DecsPass:
 
 .. das:attribute:: DecsPass
@@ -211,6 +231,8 @@ Contains pass name and list of all pass callbacks.
 :Fields: * **name** : string - name of the pass
 
          * **calls** : array< :ref:`PassFunction <alias-PassFunction>`> - list of all pass callbacks
+
+
 
 
 +++++++++++++++++++++
@@ -230,6 +252,7 @@ Access to component value by name. For example::
     create_entity <| @ ( eid, cmp )
         cmp.pos := float3(i)    // same as cmp |> set("pos",float3(i))
 
+
 :Arguments: * **cmp** :  :ref:`ComponentMap <alias-ComponentMap>`
 
             * **name** : string
@@ -239,6 +262,7 @@ Access to component value by name. For example::
 .. das:function:: EntityId implicit!=(a: EntityId implicit; b: EntityId implicit) : bool
 
 Inequality operator for entity IDs.
+
 
 :Arguments: * **a** :  :ref:`EntityId <struct-decs-EntityId>` implicit
 
@@ -250,9 +274,11 @@ Inequality operator for entity IDs.
 
 Equality operator for entity IDs.
 
+
 :Arguments: * **a** :  :ref:`EntityId <struct-decs-EntityId>` implicit
 
             * **b** :  :ref:`EntityId <struct-decs-EntityId>` implicit
+
 
 ++++++++++++++++++++++
 Access (get/set/clone)
@@ -306,6 +332,7 @@ clone
 .. das:function:: clone(cv: ComponentValue; val: bool)
 
 Sets individual component value. Verifies that the value is of the correct type.
+
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>`
 
@@ -440,6 +467,7 @@ get
 Creates temporary array of component given specific name and type of component.
 If component is not found - panic.
 
+
 :Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>`
 
             * **name** : string
@@ -461,6 +489,7 @@ If the entity is dead or the component is not found, returns ``defval``.
 The type of the component is inferred from the type of ``defval``.
 Panics if the component exists but its type does not match.
 
+
 :Arguments: * **eid** :  :ref:`EntityId <struct-decs-EntityId>`
 
             * **name** : string
@@ -476,6 +505,7 @@ has
 .. das:function:: has(cmp: ComponentMap; name: string) : bool
 
 Returns true if component map has specified component.
+
 
 :Arguments: * **cmp** :  :ref:`ComponentMap <alias-ComponentMap>`
 
@@ -493,6 +523,7 @@ Returns true if component map has specified component.
 
 Removes specified value from the component map.
 
+
 :Arguments: * **cmp** :  :ref:`ComponentMap <alias-ComponentMap>`
 
             * **name** : string
@@ -508,6 +539,7 @@ set
 Set component value specified by name and type.
 If value already exists, it is overwritten. If already existing value type is not the same - panic.
 
+
 :Arguments: * **cmp** :  :ref:`ComponentMap <alias-ComponentMap>`
 
             * **name** : string
@@ -519,6 +551,7 @@ If value already exists, it is overwritten. If already existing value type is no
 .. das:function:: set(cv: ComponentValue; val: auto) : auto
 
 ----
+
 
 +++++++++++++
 Entity status
@@ -533,6 +566,7 @@ Entity status
 
 Returns the total number of alive entities across all archetypes.
 
+
 .. _function-decs_is_alive_EntityId:
 
 .. das:function:: is_alive(eid: EntityId) : bool
@@ -540,7 +574,9 @@ Returns the total number of alive entities across all archetypes.
 Returns true if the entity is alive (exists and has not been deleted).
 An entity is alive when its id is within bounds and its generation matches the lookup table.
 
+
 :Arguments: * **eid** :  :ref:`EntityId <struct-decs-EntityId>`
+
 
 +++++++++++++++++++++++
 Debug and serialization
@@ -557,11 +593,13 @@ Debug and serialization
 
 Prints out state of the ECS system.
 
+
 .. _function-decs_describe_CTypeInfo:
 
 .. das:function:: describe(info: CTypeInfo) : string
 
 Returns textual description of the type.
+
 
 :Arguments: * **info** :  :ref:`CTypeInfo <struct-decs-CTypeInfo>`
 
@@ -571,6 +609,7 @@ Returns textual description of the type.
 
 Deletes component.
 
+
 :Arguments: * **cmp** :  :ref:`Component <struct-decs-Component>`
 
 .. _function-decs_serialize_Archive_Component:
@@ -579,9 +618,11 @@ Deletes component.
 
 Serializes component value.
 
+
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>`
 
             * **src** :  :ref:`Component <struct-decs-Component>`
+
 
 ++++++
 Stages
@@ -597,12 +638,14 @@ Stages
 
 Finishes all deferred actions.
 
+
 .. _function-decs_decs_stage_string:
 
 .. das:function:: decs_stage(name: string)
 
 Invokes specific ECS pass.
 `commit` is called before and after the invocation.
+
 
 :Arguments: * **name** : string
 
@@ -612,9 +655,11 @@ Invokes specific ECS pass.
 
 Registration of a single pass callback. This is a low-level function, used by decs_boost macros.
 
+
 :Arguments: * **name** : string
 
             * **pcall** :  :ref:`PassFunction <alias-PassFunction>`
+
 
 ++++++++++++++++
 Deferred actions
@@ -630,6 +675,7 @@ Deferred actions
 
 Creates deferred action to create entity.
 
+
 :Arguments: * **blk** : lambda<(eid: :ref:`EntityId <struct-decs-EntityId>`;cmp: :ref:`ComponentMap <alias-ComponentMap>`):void>
 
 .. _function-decs_delete_entity_EntityId_implicit:
@@ -637,6 +683,7 @@ Creates deferred action to create entity.
 .. das:function:: delete_entity(entityid: EntityId implicit)
 
 Creates deferred action to delete entity specified by id.
+
 
 :Arguments: * **entityid** :  :ref:`EntityId <struct-decs-EntityId>` implicit
 
@@ -646,9 +693,11 @@ Creates deferred action to delete entity specified by id.
 
 Creates deferred action to update entity specified by id.
 
+
 :Arguments: * **entityid** :  :ref:`EntityId <struct-decs-EntityId>` implicit
 
             * **blk** : lambda<(eid: :ref:`EntityId <struct-decs-EntityId>`;cmp: :ref:`ComponentMap <alias-ComponentMap>`):void>
+
 
 ++++++++++++
 GC and reset
@@ -665,6 +714,7 @@ GC and reset
 Low level callback to be called after the garbage collection.
 This is a low-level function typically used by `live`.
 
+
 .. _function-decs_before_gc:
 
 .. das:function:: before_gc()
@@ -672,11 +722,14 @@ This is a low-level function typically used by `live`.
 Low level callback to be called before the garbage collection.
 This is a low-level function typically used by `live`.
 
+
 .. _function-decs_restart:
 
 .. das:function:: restart()
 
 Restarts ECS by erasing all deferred actions and entire state.
+
+
 
 +++++++++
 Iteration
@@ -690,7 +743,7 @@ Iteration
   *  :ref:`get_default_ro (arch: Archetype; name: string; value: auto(TT)) : iterator\<TT const&\> <function-decs_get_default_ro_Archetype_string_autoTT_0x30a>`
   *  :ref:`get_optional (arch: Archetype; name: string; value: auto(TT)?) : iterator\<TT?\> <function-decs_get_optional_Archetype_string_autoTT_q_>`
   *  :ref:`get_ro (arch: Archetype; name: string; value: auto(TT)) : array\<TT\> <function-decs_get_ro_Archetype_string_autoTT_0x303>`
-  *  :ref:`get_ro (arch: Archetype; name: string; value: auto(TT)[]) : array\<TT[-2]\> <function-decs_get_ro_Archetype_string_autoTT_0x2fb>`
+  *  :ref:`get_ro (arch: Archetype; name: string; value: auto(TT)[]) : array\<TT[-2]\> <function-decs_get_ro_Archetype_string_autoTT_lb__rb__0x2fb>`
 
 .. _function-decs_decs_array_autoTT_array_ls_uint8_gr__int_0x2c4:
 
@@ -700,6 +753,7 @@ Iteration
   This is unsafe operation.
 
 Low level function returns temporary array of component given specific type of component.
+
 
 :Arguments: * **atype** : auto(TT)
 
@@ -717,6 +771,7 @@ for_each_archetype
 
 Invokes block for each entity of each archetype that can be processed by the request.
 Request is returned by a specified function.
+
 
 :Arguments: * **hash** :  :ref:`ComponentHash <alias-ComponentHash>`
 
@@ -738,6 +793,7 @@ Invokes block for each entity of each archetype that can be processed by the req
 Request is returned by a specified function.
 If block returns true, iteration is stopped.
 
+
 :Arguments: * **hash** :  :ref:`ComponentHash <alias-ComponentHash>`
 
             * **erq** : function<void>
@@ -750,6 +806,7 @@ If block returns true, iteration is stopped.
 
 Invokes block for the specific entity id, given request.
 Request is returned by a specified function.
+
 
 :Arguments: * **eid** :  :ref:`EntityId <struct-decs-EntityId>` implicit
 
@@ -766,6 +823,7 @@ Request is returned by a specified function.
 Returns const iterator of component given specific name and type of component.
 If component is not found - iterator will keep returning the specified value.
 
+
 :Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>`
 
             * **name** : string
@@ -778,6 +836,7 @@ If component is not found - iterator will keep returning the specified value.
 
 Returns const iterator of component given specific name and type of component.
 If component is not found - iterator will keep returning default value for the component type.
+
 
 :Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>`
 
@@ -795,17 +854,19 @@ get_ro
 
 Returns const temporary array of component given specific name and type of component for regular components.
 
+
 :Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>`
 
             * **name** : string
 
             * **value** : auto(TT)
 
-.. _function-decs_get_ro_Archetype_string_autoTT_0x2fb:
+.. _function-decs_get_ro_Archetype_string_autoTT_lb__rb__0x2fb:
 
 .. das:function:: get_ro(arch: Archetype; name: string; value: auto(TT)[]) : array<TT[-2]>
 
 ----
+
 
 +++++++
 Request
@@ -822,6 +883,7 @@ Request
 
 Constructs EcsRequestPos from rtti::LineInfo.
 
+
 :Arguments: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`
 
 .. _function-decs_compile_request_EcsRequest:
@@ -829,6 +891,7 @@ Constructs EcsRequestPos from rtti::LineInfo.
 .. das:function:: compile_request(erq: EcsRequest)
 
 Compiles ECS request, by creating request hash.
+
 
 :Arguments: * **erq** :  :ref:`EcsRequest <struct-decs-EcsRequest>`
 
@@ -838,6 +901,7 @@ Compiles ECS request, by creating request hash.
 
 Looks up ECS request in the request cache.
 
+
 :Arguments: * **erq** :  :ref:`EcsRequest <struct-decs-EcsRequest>`
 
 .. _function-decs_verify_request_EcsRequest:
@@ -845,6 +909,7 @@ Looks up ECS request in the request cache.
 .. das:function:: verify_request(erq: EcsRequest) : tuple<ok:bool;error:string>
 
 Verifies ECS request. Returns pair of boolean (true for OK) and error message.
+
 
 :Arguments: * **erq** :  :ref:`EcsRequest <struct-decs-EcsRequest>`
 

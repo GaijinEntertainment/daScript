@@ -5,6 +5,8 @@
 Profiler cross-context helpers
 ==============================
 
+.. das:module:: profiler_boost
+
 The PROFILER_BOOST module extends profiling with high-level macros for
 scoped timing (``profile_block``), function-level profiling annotations,
 and formatted output of profiling results.
@@ -14,6 +16,8 @@ See also :doc:`profiler` for the core profiling infrastructure.
 All functions and symbols are in "profiler_boost" module, use require to get access to it. ::
 
     require daslib/profiler_boost
+
+
 
 ++++++++++++++++++++++++
 Context profiler control
@@ -28,6 +32,7 @@ Context profiler control
 
 Disables the profiler for the given context.
 
+
 :Arguments: * **ctx** :  :ref:`Context <handle-rtti-Context>`
 
 .. _function-profiler_boost_enable_profiler_Context:
@@ -35,6 +40,7 @@ Disables the profiler for the given context.
 .. das:function:: enable_profiler(ctx: Context)
 
 Enables the profiler for the given context.
+
 
 :Arguments: * **ctx** :  :ref:`Context <handle-rtti-Context>`
 

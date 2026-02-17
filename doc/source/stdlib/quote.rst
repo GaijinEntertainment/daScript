@@ -5,6 +5,8 @@
 AST quasiquoting infrastructure
 ===============================
 
+.. das:module:: quote
+
 The QUOTE module provides quasiquotation support for AST construction.
 It allows building AST nodes using daslang syntax with ``$``-prefixed
 splice points for inserting computed values, making macro writing more
@@ -13,6 +15,43 @@ readable and less error-prone than manual AST construction.
 All functions and symbols are in "quote" module, use require to get access to it. ::
 
     require daslib/quote
+
+
+
+++++++++++
+Structures
+++++++++++
+
+.. _struct-quote-LineInfoInitData:
+
+.. das:attribute:: LineInfoInitData
+
+Initialization data for source line info reconstruction.
+
+:Fields: * **fileInfo** :  :ref:`FileInfo <handle-rtti-FileInfo>`? - Pointer to the source file info.
+
+         * **column** : uint - Column number (1-based).
+
+         * **line** : uint - Line number (1-based).
+
+         * **last_column** : uint - Last column number of the range.
+
+         * **last_line** : uint - Last line number of the range.
+
+
+
+.. _struct-quote-FileInfoInitData:
+
+.. das:attribute:: FileInfoInitData
+
+Initialization data for reconstructing file info.
+
+:Fields: * **name** : string - File name string.
+
+         * **tabSize** : int - Tab size for the file.
+
+
+
 
 ++++++++++++++++
 Clone operations
@@ -35,6 +74,7 @@ clone
 .. das:function:: clone(a: dasvector`LineInfo; b: array<LineInfoInitData>)
 
 Clones an array of LineInfoInitData into a dasvector of LineInfo.
+
 
 :Arguments: * **a** : vector<LineInfo>
 
@@ -64,6 +104,7 @@ Clones an array of LineInfoInitData into a dasvector of LineInfo.
 
 Creates a FileInfo from a FileInfoInitData struct.
 
+
 :Arguments: * **b** :  :ref:`FileInfoInitData <struct-quote-FileInfoInitData>`
 
 .. _function-quote_clone_line_info_LineInfoInitData:
@@ -72,7 +113,9 @@ Creates a FileInfo from a FileInfoInitData struct.
 
 Creates a LineInfo from a LineInfoInitData struct.
 
+
 :Arguments: * **b** :  :ref:`LineInfoInitData <struct-quote-LineInfoInitData>`
+
 
 ++++++++++
 Conversion
@@ -85,6 +128,7 @@ Conversion
 .. das:function:: cvt_to_mks(args: auto) : smart_ptr<MakeStruct>
 
 Converts an array of arguments into a MakeStruct smart pointer.
+
 
 :Arguments: * **args** : auto
 

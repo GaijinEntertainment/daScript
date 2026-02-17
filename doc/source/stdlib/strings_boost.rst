@@ -5,6 +5,8 @@
 Boost package for string manipulation library
 =============================================
 
+.. das:module:: strings_boost
+
 The STRINGS_BOOST module extends string handling with splitting, joining,
 padding, character replacement, and edit distance computation.
 
@@ -30,6 +32,8 @@ Example: ::
         // [hello     ]
         // distance: 3
 
+
+
 ++++++++++++++
 Split and join
 ++++++++++++++
@@ -38,7 +42,7 @@ Split and join
   *  :ref:`join (iterable: array\<auto(TT)\>; separator: string; blk: block\<(var writer:StringBuilderWriter;elem:TT):void\>) : string <function-strings_boost_join_array_ls_autoTT_gr__string_block_ls_var_writer_c_StringBuilderWriter;elem_c_TT_c_void_gr_>`
   *  :ref:`join (var it: iterator\<auto(TT)\>; separator: string implicit) : auto <function-strings_boost_join_iterator_ls_autoTT_gr__string_implicit>`
   *  :ref:`join (var iterable: iterator\<auto(TT)\>; separator: string; blk: block\<(var writer:StringBuilderWriter;elem:TT):void\>) : string <function-strings_boost_join_iterator_ls_autoTT_gr__string_block_ls_var_writer_c_StringBuilderWriter;elem_c_TT_c_void_gr_>`
-  *  :ref:`join (iterable: auto(TT)[]; separator: string; blk: block\<(var writer:StringBuilderWriter;elem:TT):void\>) : string <function-strings_boost_join_autoTT_string_block_ls_var_writer_c_StringBuilderWriter;elem_c_TT_c_void_gr__0x64>`
+  *  :ref:`join (iterable: auto(TT)[]; separator: string; blk: block\<(var writer:StringBuilderWriter;elem:TT):void\>) : string <function-strings_boost_join_autoTT_lb__rb__string_block_ls_var_writer_c_StringBuilderWriter;elem_c_TT_c_void_gr__0x64>`
   *  :ref:`split (text: string implicit; delim: string implicit) : array\<string\> <function-strings_boost_split_string_implicit_string_implicit>`
   *  :ref:`split (text: string implicit; delim: string implicit; blk: block\<(arg:array\<string\>#):auto\>) : auto <function-strings_boost_split_string_implicit_string_implicit_block_ls_arg_c_array_ls_string_gr__hh__c_auto_gr_>`
   *  :ref:`split_by_chars (text: string implicit; delim: string implicit) : array\<string\> <function-strings_boost_split_by_chars_string_implicit_string_implicit>`
@@ -53,6 +57,7 @@ join
 .. das:function:: join(it: auto; separator: string implicit) : auto
 
 Joins the elements of an iterable into a single string using the specified separator.
+
 
 :Arguments: * **it** : auto
 
@@ -70,7 +75,7 @@ Joins the elements of an iterable into a single string using the specified separ
 
 .. das:function:: join(iterable: iterator<auto(TT)>; separator: string; blk: block<(var writer:StringBuilderWriter;elem:TT):void>) : string
 
-.. _function-strings_boost_join_autoTT_string_block_ls_var_writer_c_StringBuilderWriter;elem_c_TT_c_void_gr__0x64:
+.. _function-strings_boost_join_autoTT_lb__rb__string_block_ls_var_writer_c_StringBuilderWriter;elem_c_TT_c_void_gr__0x64:
 
 .. das:function:: join(iterable: auto(TT)[]; separator: string; blk: block<(var writer:StringBuilderWriter;elem:TT):void>) : string
 
@@ -85,6 +90,7 @@ split
 .. das:function:: split(text: string implicit; delim: string implicit) : array<string>
 
 Splits a string by the specified delimiter characters, invoking a block for each resulting substring.
+
 
 :Arguments: * **text** : string implicit
 
@@ -106,6 +112,7 @@ split_by_chars
 
 Splits a string by the specified delimiter characters and returns an array of substrings.
 
+
 :Arguments: * **text** : string implicit
 
             * **delim** : string implicit
@@ -115,6 +122,7 @@ Splits a string by the specified delimiter characters and returns an array of su
 .. das:function:: split_by_chars(text: string implicit; delim: string implicit; blk: block<(arg:array<string>#):auto>) : auto
 
 ----
+
 
 ++++++++++
 Formatting
@@ -132,6 +140,7 @@ Formatting
 // stub
 def capitalize (str: string) : string
 
+
 :Arguments: * **str** : string
 
 .. _function-strings_boost_pad_left_string_int_int:
@@ -140,6 +149,7 @@ def capitalize (str: string) : string
 
 // stub
 def pad_left (str: string; width: int; ch: int = 32) : string
+
 
 :Arguments: * **str** : string
 
@@ -154,6 +164,7 @@ def pad_left (str: string; width: int; ch: int = 32) : string
 // stub
 def pad_right (str: string; width: int; ch: int = 32) : string
 
+
 :Arguments: * **str** : string
 
             * **width** : int
@@ -166,9 +177,11 @@ def pad_right (str: string; width: int; ch: int = 32) : string
 
 Pads the string with trailing spaces to reach the specified minimum width.
 
+
 :Arguments: * **text** : string implicit
 
             * **width** : int
+
 
 +++++++++++++++++++++++
 Queries and comparisons
@@ -188,6 +201,7 @@ Queries and comparisons
 // stub
 def contains (str: string; sub: string) : bool
 
+
 :Arguments: * **str** : string
 
             * **sub** : string
@@ -198,6 +212,7 @@ def contains (str: string; sub: string) : bool
 
 // stub
 def count (str: string; sub: string) : int
+
 
 :Arguments: * **str** : string
 
@@ -212,6 +227,7 @@ eq
 .. das:function:: eq(b: das_string; a: string implicit) : auto
 
 Compares a ``string`` with a ``das_string`` for equality, returning ``true`` if they match.
+
 
 :Arguments: * **b** :  :ref:`das_string <handle-builtin-das_string>`
 
@@ -229,6 +245,7 @@ Compares a ``string`` with a ``das_string`` for equality, returning ``true`` if 
 
 Returns ``true`` if the byte at the specified index in the array equals the given character code.
 
+
 :Arguments: * **foo** : array<uint8> implicit
 
             * **idx** : int
@@ -242,7 +259,9 @@ Returns ``true`` if the byte at the specified index in the array equals the give
 // stub
 def is_null_or_whitespace (str: string) : bool
 
+
 :Arguments: * **str** : string
+
 
 ++++++
 Search
@@ -262,6 +281,7 @@ last_index_of
 // stub
 def last_index_of (str: string; sub: string; start: int) : int
 
+
 :Arguments: * **str** : string
 
             * **sub** : string
@@ -273,6 +293,7 @@ def last_index_of (str: string; sub: string; start: int) : int
 .. das:function:: last_index_of(str: string; sub: string) : int
 
 ----
+
 
 +++++++
 Replace
@@ -286,9 +307,11 @@ Replace
 
 Applies multiple find-and-replace substitutions to a string in a single pass.
 
+
 :Arguments: * **source** : string
 
             * **replaces** : array<tuple<text:string;replacement:string>>
+
 
 +++++++++++++++++
 Prefix and suffix
@@ -304,6 +327,7 @@ Prefix and suffix
 // stub
 def trim_prefix (str: string; prefix: string) : string
 
+
 :Arguments: * **str** : string
 
             * **prefix** : string
@@ -315,9 +339,11 @@ def trim_prefix (str: string; prefix: string) : string
 // stub
 def trim_suffix (str: string; suffix: string) : string
 
+
 :Arguments: * **str** : string
 
             * **suffix** : string
+
 
 ++++++++++++++++++++
 Levenshtein distance
@@ -332,6 +358,7 @@ Levenshtein distance
 
 Computes the Levenshtein edit distance between two strings.
 
+
 :Arguments: * **s** : string implicit
 
             * **t** : string implicit
@@ -341,6 +368,7 @@ Computes the Levenshtein edit distance between two strings.
 .. das:function:: levenshtein_distance_fast(s: string implicit; t: string implicit) : int
 
 Computes the Levenshtein edit distance between two strings using an optimized algorithm.
+
 
 :Arguments: * **s** : string implicit
 

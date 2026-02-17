@@ -5,6 +5,8 @@
 Interfaces
 ==========
 
+.. das:module:: interfaces
+
 The INTERFACES module implements interface-based polymorphism for daslang.
 It provides the ``[interface]`` annotation for defining abstract interfaces
 with virtual method tables, supporting multiple implementations and dynamic
@@ -40,6 +42,8 @@ Example: ::
         // output:
         // Hello, world!
 
+
+
 ++++++++++++++++
 Structure macros
 ++++++++++++++++
@@ -51,6 +55,7 @@ Structure macros
 Verifies that the annotated class is a valid interface — it may only contain
 function-typed fields (no data members). Applied via ``[interface]`` annotation.
 
+
 .. _handle-interfaces-implements:
 
 .. das:attribute:: implements
@@ -58,5 +63,6 @@ function-typed fields (no data members). Applied via ``[interface]`` annotation.
 Generates interface bindings for a struct. Creates a proxy class that delegates
 interface method calls to the struct's own methods, and adds a ``get`InterfaceName``
 method that lazily constructs the proxy. Applied via ``[implements(InterfaceName)]``.
+
 
 

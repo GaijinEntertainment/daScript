@@ -5,6 +5,8 @@
 Dynamic RTTI type casts
 =======================
 
+.. das:module:: dynamic_cast_rtti
+
 The DYNAMIC_CAST_RTTI module implements runtime dynamic casting between class
 types using RTTI information. It provides safe downcasting with null results
 on type mismatch, similar to C++ ``dynamic_cast``.
@@ -12,6 +14,8 @@ on type mismatch, similar to C++ ``dynamic_cast``.
 All functions and symbols are in "dynamic_cast_rtti" module, use require to get access to it. ::
 
     require daslib/dynamic_cast_rtti
+
+
 
 ++++++++++++++
 Variant macros
@@ -22,6 +26,8 @@ Variant macros
 .. das:attribute:: ClassAsIs
 
 Variant macro that implements class dynamic casting via `is` and `as`.
+
+
 
 +++++++++++++
 Dynamic casts
@@ -37,6 +43,7 @@ Dynamic casts
 
 Casts a class instance to the target type using RTTI, returns null if the cast fails.
 
+
 :Arguments: * **instance** : auto
 
             * **otherclass** : auto(TT)
@@ -47,6 +54,7 @@ Casts a class instance to the target type using RTTI, returns null if the cast f
 
 Casts a class instance to the target type using RTTI, panics if the cast fails.
 
+
 :Arguments: * **instance** : auto
 
             * **otherclass** : auto(TT)
@@ -56,6 +64,7 @@ Casts a class instance to the target type using RTTI, panics if the cast fails.
 .. das:function:: is_instance_of(instance: auto(TCLS)?; otherclass: auto(TT)) : auto
 
 Returns true if the class instance is an instance of the specified class using RTTI.
+
 
 :Arguments: * **instance** : auto(TCLS)?
 

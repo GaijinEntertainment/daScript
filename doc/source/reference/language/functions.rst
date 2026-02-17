@@ -387,8 +387,8 @@ To overload an operator, you need to define a special function with the name of 
     def operator <operator>(<arguments>) : <return_type>
         # Implementation here
 
-In this syntax, <operator> is the name of the operator you want to overload (e.g. +, -, *, /, ==, etc.),
-<arguments> are the parameters that the operator function takes, and <return_type> is the return type of the operator function.
+In this syntax, ``<operator>`` is the name of the operator you want to overload (e.g. ``+``, ``-``, ``*``, ``/``, ``==``, etc.),
+``<arguments>`` are the parameters that the operator function takes, and ``<return_type>`` is the return type of the operator function.
 
 For example, here's how you could overload the == operator for a custom struct called iVec2::
 

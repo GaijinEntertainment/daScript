@@ -5,6 +5,8 @@
 Enumeration traits
 ==================
 
+.. das:module:: enum_trait
+
 The ENUM_TRAIT module provides reflection utilities for enumerations: iterating
 over all values, converting between enum values and strings, and building
 lookup tables. The ``[string_to_enum]`` annotation generates a string constructor
@@ -37,6 +39,8 @@ Example: ::
         // blue
         // fallback = red
 
+
+
 +++++++++++++++
 Typeinfo macros
 +++++++++++++++
@@ -47,11 +51,14 @@ Typeinfo macros
 
 Implements typeinfo(enum_names EnumOrEnumType) which returns array of strings with enumValue names.
 
+
 .. _call-macro-enum_trait-enum_length:
 
 .. das:attribute:: enum_length
 
 Implements typeinfo(enum_length EnumOrEnumType) which returns total number of elements in enumeration.
+
+
 
 ++++++++++++++++++++
 Handled enumerations
@@ -62,6 +69,8 @@ Handled enumerations
 .. das:attribute:: string_to_enum
 
 Enumeration annotation which implements string constructor for enumeration.
+
+
 
 +++++++++++++++++++++
 Enumeration iteration
@@ -75,7 +84,9 @@ Enumeration iteration
 
 Returns an iterator over all values of the given enumeration type.
 
+
 :Arguments: * **tt** : auto(TT)
+
 
 ++++++++++++++++++++++
 Enumeration conversion
@@ -93,6 +104,7 @@ Enumeration conversion
 converts enum type to a table of name => value pairs
  usage: let t = enum_to_table(type<EnumType>)
 
+
 :Arguments: * **ent** : auto(EnumT)
 
 .. _function-enum_trait_string_auto_0x21:
@@ -101,6 +113,7 @@ converts enum type to a table of name => value pairs
 
 converts enum value to string
  usage: let s = string(EnumValue)
+
 
 :Arguments: * **arg** : auto
 
@@ -114,6 +127,7 @@ to_enum
 
 converts string to enum value, panics if not found
  usage: let e = to_enum(type<EnumType>,"EnumValueName")
+
 
 :Arguments: * **ent** : auto(EnumT)
 

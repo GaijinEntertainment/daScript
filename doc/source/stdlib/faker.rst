@@ -5,6 +5,8 @@
 Faker
 =====
 
+.. das:module:: faker
+
 Random test-data generator.
 
 The ``Faker`` struct produces random values for every built-in type
@@ -14,6 +16,8 @@ configurable ranges. Used by ``fuzzer`` for fuzz testing.
 All functions and symbols are in "faker" module, use require to get access to it. ::
 
     require daslib/faker
+
+
 
 ++++++++++
 Structures
@@ -34,6 +38,8 @@ Instance of the faker with all the settings inside.
          * **max_long_string** : uint = 0x1000 - maximal length of generated string
 
 
+
+
 +++++++++++
 Constructor
 +++++++++++
@@ -46,7 +52,9 @@ Constructor
 
 Constructs a Faker instance with the given random number generator.
 
+
 :Arguments: * **rng** : iterator<uint>
+
 
 +++++++++++++
 Random values
@@ -85,6 +93,7 @@ Random values
 
 Generates random double.
 
+
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_float_Faker:
@@ -92,6 +101,7 @@ Generates random double.
 .. das:function:: random_float(faker: Faker) : float
 
 Generates random float.
+
 
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
@@ -101,6 +111,7 @@ Generates random float.
 
 Generates random float2.
 
+
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_float3_Faker:
@@ -108,6 +119,7 @@ Generates random float2.
 .. das:function:: random_float3(faker: Faker) : float3
 
 Generates random float3.
+
 
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
@@ -117,6 +129,7 @@ Generates random float3.
 
 Generates random float3x3.
 
+
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_float3x4_Faker:
@@ -124,6 +137,7 @@ Generates random float3x3.
 .. das:function:: random_float3x4(faker: Faker) : float3x4
 
 Generates random float3x4.
+
 
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
@@ -133,6 +147,7 @@ Generates random float3x4.
 
 Generates random float4.
 
+
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_float4x4_Faker:
@@ -140,6 +155,7 @@ Generates random float4.
 .. das:function:: random_float4x4(faker: Faker) : float4x4
 
 Generates random float4x4.
+
 
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
@@ -149,6 +165,7 @@ Generates random float4x4.
 
 Generates random integer.
 
+
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_int16_Faker:
@@ -156,6 +173,7 @@ Generates random integer.
 .. das:function:: random_int16(faker: Faker) : int16
 
 Generates random int16.
+
 
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
@@ -165,6 +183,7 @@ Generates random int16.
 
 Generates random int2.
 
+
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_int3_Faker:
@@ -172,6 +191,7 @@ Generates random int2.
 .. das:function:: random_int3(faker: Faker) : int3
 
 Generates random int3.
+
 
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
@@ -181,6 +201,7 @@ Generates random int3.
 
 Generates random int4.
 
+
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_int64_Faker:
@@ -188,6 +209,7 @@ Generates random int4.
 .. das:function:: random_int64(faker: Faker) : int64
 
 Generates random int64
+
 
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
@@ -197,6 +219,7 @@ Generates random int64
 
 Generates random int8.
 
+
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_range_Faker:
@@ -204,6 +227,7 @@ Generates random int8.
 .. das:function:: random_range(faker: Faker) : range
 
 Generates random range.
+
 
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
@@ -213,6 +237,7 @@ Generates random range.
 
 Generates random range64.
 
+
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_uint_Faker:
@@ -220,6 +245,7 @@ Generates random range64.
 .. das:function:: random_uint(faker: Faker) : uint
 
 Generates random unsigned integer.
+
 
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
@@ -229,6 +255,7 @@ Generates random unsigned integer.
 
 Generates random uint16.
 
+
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_uint2_Faker:
@@ -236,6 +263,7 @@ Generates random uint16.
 .. das:function:: random_uint2(faker: Faker) : uint2
 
 Generates random uint2.
+
 
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
@@ -245,6 +273,7 @@ Generates random uint2.
 
 Generates random uint3.
 
+
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_uint4_Faker:
@@ -252,6 +281,7 @@ Generates random uint3.
 .. das:function:: random_uint4(faker: Faker) : uint4
 
 Generates random uint4.
+
 
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
@@ -261,6 +291,7 @@ Generates random uint4.
 
 Generates random uint64
 
+
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_uint8_Faker:
@@ -268,6 +299,7 @@ Generates random uint64
 .. das:function:: random_uint8(faker: Faker) : uint8
 
 Generates random uint8.
+
 
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
@@ -277,6 +309,7 @@ Generates random uint8.
 
 Generates random urange.
 
+
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_random_urange64_Faker:
@@ -285,7 +318,9 @@ Generates random urange.
 
 Generates random urange64.
 
+
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
+
 
 ++++++++++++++
 Random strings
@@ -310,6 +345,7 @@ Random strings
 
 Generates random char. (1 to 255 range)
 
+
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_any_enum_Faker_autoTT_0x13e:
@@ -317,6 +353,7 @@ Generates random char. (1 to 255 range)
 .. das:function:: any_enum(faker: Faker; enum_value: auto(TT)) : TT
 
 Generates random enumeration value.
+
 
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
@@ -328,6 +365,7 @@ Generates random enumeration value.
 
 Generates random file name.
 
+
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_any_float_Faker:
@@ -335,6 +373,7 @@ Generates random file name.
 .. das:function:: any_float(faker: Faker) : string
 
 Generates random float string.
+
 
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
@@ -344,6 +383,7 @@ Generates random float string.
 
 Generates random integer hex string.
 
+
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_any_int_Faker:
@@ -351,6 +391,7 @@ Generates random integer hex string.
 .. das:function:: any_int(faker: Faker) : string
 
 Generates random integer string.
+
 
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
@@ -360,6 +401,7 @@ Generates random integer string.
 
 Generates random set (uint[8])
 
+
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_any_string_Faker:
@@ -367,6 +409,7 @@ Generates random set (uint[8])
 .. das:function:: any_string(faker: Faker) : string
 
 Generates a string of random characters. The string is anywhere between 0 and regex::re_gen_get_rep_limit() characters long.
+
 
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
@@ -376,6 +419,7 @@ Generates a string of random characters. The string is anywhere between 0 and re
 
 Generates random unsigned integer string.
 
+
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_long_string_Faker:
@@ -383,6 +427,7 @@ Generates random unsigned integer string.
 .. das:function:: long_string(faker: Faker) : string
 
 Generates a long string of random characters. The string is anywhere between 0 and faker.max_long_string characters long.
+
 
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
@@ -392,6 +437,7 @@ Generates a long string of random characters. The string is anywhere between 0 a
 
 Generates random number string.
 
+
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_positive_int_Faker:
@@ -400,7 +446,9 @@ Generates random number string.
 
 Generates random positive integer string.
 
+
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
+
 
 +++++++++++++
 Date and time
@@ -419,6 +467,7 @@ Date and time
 
 Generates random date string.
 
+
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
 .. _function-faker_day_Faker:
@@ -426,6 +475,7 @@ Generates random date string.
 .. das:function:: day(faker: Faker) : string
 
 Generates random day string.
+
 
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
@@ -435,6 +485,7 @@ Generates random day string.
 
 Returns true if year is leap year.
 
+
 :Arguments: * **year** : uint
 
 .. _function-faker_month_Faker:
@@ -442,6 +493,7 @@ Returns true if year is leap year.
 .. das:function:: month(faker: Faker) : string
 
 Generates random month string.
+
 
 :Arguments: * **faker** :  :ref:`Faker <struct-faker-Faker>`
 
@@ -454,6 +506,7 @@ week_day
 .. das:function:: week_day(year: uint; month: uint; day: uint) : int
 
 Returns week day for given date.
+
 
 :Arguments: * **year** : uint
 

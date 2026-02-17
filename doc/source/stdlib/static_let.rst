@@ -5,6 +5,8 @@
 static_let macro
 ================
 
+.. das:module:: static_let
+
 The STATIC_LET module implements the ``static_let`` pattern — local variables
 that persist across function calls, similar to C ``static`` variables. The
 variable is initialized once on first call and retains its value in subsequent
@@ -37,6 +39,8 @@ Example: ::
         // 2
         // 3
 
+
+
 ++++++++++++++++++++
 Function annotations
 ++++++++++++++++++++
@@ -46,6 +50,8 @@ Function annotations
 .. das:attribute:: StaticLetMacro
 
 This macro implements the `static_let` and `static_let_finalize` functions.
+
+
 
 ++++++++++++++++++++++++++++
 Static variable declarations
@@ -66,6 +72,7 @@ static_let
 Given a scope with the variable declarations, this function will make those variables global.
 Variable will be renamed under the hood, and all local access to it will be renamed as well.
 
+
 :Arguments: * **name** : string
 
             * **blk** : block<void>
@@ -81,6 +88,7 @@ Variable will be renamed under the hood, and all local access to it will be rena
 .. das:function:: static_let_finalize(blk: block<():void>)
 
 This is very similar to regular static_let, but additionally the variable will be deleted on the context shutdown.
+
 
 :Arguments: * **blk** : block<void>
 

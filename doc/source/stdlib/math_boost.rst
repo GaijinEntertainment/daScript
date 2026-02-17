@@ -5,6 +5,8 @@
 Boost package for math
 ======================
 
+.. das:module:: math_boost
+
 The MATH_BOOST module adds geometric types (``AABB``, ``AABR``, ``Ray``),
 angle conversion (``degrees``, ``radians``), intersection tests, color space
 conversion (``linear_to_SRGB``, ``RGBA_TO_UCOLOR``), and view/projection
@@ -30,6 +32,8 @@ Example: ::
         // radians(180) = 3.1415927
         // box = (0,0,0) - (10,10,10)
 
+
+
 ++++++++++
 Structures
 ++++++++++
@@ -45,6 +49,7 @@ axis aligned bounding rectangle
          * **max** : float2 - max coordinates
 
 
+
 .. _struct-math_boost-AABB:
 
 .. das:attribute:: AABB
@@ -56,6 +61,7 @@ axis aligned bounding box
          * **max** : float3 - max coordinates
 
 
+
 .. _struct-math_boost-Ray:
 
 .. das:attribute:: Ray
@@ -65,6 +71,8 @@ ray (direction and origin)
 :Fields: * **dir** : float3 - direction
 
          * **origin** : float3 - origin
+
+
 
 
 +++++++++++++++++
@@ -80,6 +88,7 @@ Angle conversions
 
 convert radians to degrees
 
+
 :Arguments: * **f** : float
 
 .. _function-math_boost_radians_float:
@@ -88,7 +97,9 @@ convert radians to degrees
 
 convert degrees to radians
 
+
 :Arguments: * **f** : float
+
 
 +++++++++++++
 Intersections
@@ -108,6 +119,7 @@ is_intersecting
 
 returns true if inputs intersect
 
+
 :Arguments: * **a** :  :ref:`AABB <struct-math_boost-AABB>`
 
             * **b** :  :ref:`AABB <struct-math_boost-AABB>`
@@ -121,6 +133,7 @@ returns true if inputs intersect
 .. das:function:: is_intersecting(ray: Ray; aabb: AABB; Tmin: float = 0f; Tmax: float = FLT_MAX) : bool
 
 ----
+
 
 ++++++++
 Matrices
@@ -140,6 +153,7 @@ Matrices
 
 left-handed (z forward) look at matrix with origin at `Eye` and target at `At`, and up vector `Up`.
 
+
 :Arguments: * **Eye** : float3
 
             * **At** : float3
@@ -152,6 +166,7 @@ left-handed (z forward) look at matrix with origin at `Eye` and target at `At`, 
 
 right-handed (z towards viewer) look at matrix with origin at `Eye` and target at `At`, and up vector `Up`.
 
+
 :Arguments: * **Eye** : float3
 
             * **At** : float3
@@ -163,6 +178,7 @@ right-handed (z towards viewer) look at matrix with origin at `Eye` and target a
 .. das:function:: ortho_rh(left: float; right: float; bottom: float; top: float; zNear: float; zFar: float) : float4x4
 
 right handed (z towards viewer) orthographic (parallel) projection matrix
+
 
 :Arguments: * **left** : float
 
@@ -182,6 +198,7 @@ right handed (z towards viewer) orthographic (parallel) projection matrix
 
 left-handed (z forward) perspective matrix
 
+
 :Arguments: * **fovy** : float
 
             * **aspect** : float
@@ -195,6 +212,7 @@ left-handed (z forward) perspective matrix
 .. das:function:: perspective_rh(fovy: float; aspect: float; zn: float; zf: float) : float4x4
 
 right-handed (z toward viewer) perspective matrix
+
 
 :Arguments: * **fovy** : float
 
@@ -210,6 +228,7 @@ right-handed (z toward viewer) perspective matrix
 
 right-handed (z toward viewer) opengl (z in [-1..1]) perspective matrix
 
+
 :Arguments: * **fovy** : float
 
             * **aspect** : float
@@ -224,9 +243,11 @@ right-handed (z toward viewer) opengl (z in [-1..1]) perspective matrix
 
 planar shadow projection matrix, i.e. all light shadows to be projected on a plane
 
+
 :Arguments: * **Light** : float4
 
             * **Plane** : float4
+
 
 +++++
 Plane
@@ -242,6 +263,7 @@ Plane
 
 dot product of `Plane` and 'Vec'
 
+
 :Arguments: * **Plane** : float4
 
             * **Vec** : float4
@@ -252,6 +274,7 @@ dot product of `Plane` and 'Vec'
 
 construct plane from point `p` and normal `n`
 
+
 :Arguments: * **p** : float3
 
             * **n** : float3
@@ -260,9 +283,11 @@ construct plane from point `p` and normal `n`
 
 .. das:function:: plane_normalize(Plane: float4) : float4
 
-normalize `Plane', length xyz will be 1.0 (or 0.0 for no plane)
+normalize ``Plane``, length xyz will be 1.0 (or 0.0 for no plane)
+
 
 :Arguments: * **Plane** : float4
+
 
 +++++++++++++++++
 Color conversions
@@ -282,6 +307,7 @@ linear_to_SRGB
 
 convert value from linear space to sRGB curve space
 
+
 :Arguments: * **c** : float3
 
 .. _function-math_boost_linear_to_SRGB_float:
@@ -293,6 +319,7 @@ convert value from linear space to sRGB curve space
 .. das:function:: linear_to_SRGB(c: float4) : float4
 
 ----
+
 
 +++++++++++++++++++++++++++
 Color packing and unpacking
@@ -313,6 +340,7 @@ RGBA_TO_UCOLOR
 
 conversion from RGBA to ucolor. xyzw components are in [0,1] range
 
+
 :Arguments: * **xyzw** : float4
 
 .. _function-math_boost_RGBA_TO_UCOLOR_float_float_float_float:
@@ -327,6 +355,7 @@ conversion from RGBA to ucolor. xyzw components are in [0,1] range
 
 conversion from ucolor to RGB. x components are in [0,255] range. result is float3(x,y,z)
 
+
 :Arguments: * **x** : uint
 
 .. _function-math_boost_UCOLOR_TO_RGBA_uint:
@@ -334,6 +363,7 @@ conversion from ucolor to RGB. x components are in [0,255] range. result is floa
 .. das:function:: UCOLOR_TO_RGBA(x: uint) : float4
 
 conversion from ucolor to RGBA. x components are in [0,255] range
+
 
 :Arguments: * **x** : uint
 

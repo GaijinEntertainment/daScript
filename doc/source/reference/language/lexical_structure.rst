@@ -145,9 +145,9 @@ Literals
 Daslang accepts integer numbers, unsigned integers, floating-point and double-precision numbers,
 and string literals.
 
-^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^
 Numeric Literals
-^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^
 
 +-------------------------------+------------------------------------------+
 | ``34``                        | Integer (base 10)                        |

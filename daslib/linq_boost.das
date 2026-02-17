@@ -790,7 +790,9 @@ def private fold_linq_default(var expr : ExpressionPtr) : ExpressionPtr {
 class private LinqFold : AstCallMacro {
     //! implements _fold(expression) that folds LINQ expressions into optimized sequnences
     //! for example::
-    //!   _fold(each(foo)._where(_ > 5)._select(_ * 2))
+    //!
+    //!     _fold(each(foo)._where(_ > 5)._select(_ * 2))
+    //!
     //! expands into a single comprehension that does all operations in one pass
     def override visit(prog : ProgramPtr; mod : Module?; var call : smart_ptr<ExprCallMacro>) : ExpressionPtr {
         //! Visits the _fold macro call and folds LINQ expressions into optimized sequences.

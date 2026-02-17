@@ -5,6 +5,8 @@
 Source code formatter
 =====================
 
+.. das:module:: das_source_formatter
+
 The DAS_SOURCE_FORMATTER module implements source code formatting for daslang.
 It can parse and re-emit daslang source code with consistent indentation,
 spacing, and line breaking rules. Used by editor integrations and code
@@ -14,12 +16,14 @@ All functions and symbols are in "das_source_formatter" module, use require to g
 
     require daslib/das_source_formatter
 
+
+
 ++++++++++
 Formatting
 ++++++++++
 
   *  :ref:`format_source (file_data: array\<uint8\>) : string <function-das_source_formatter_format_source_array_ls_uint8_gr_>`
-  *  :ref:`format_source_string (file_data: string const& implicit) : string <function-das_source_formatter_format_source_string_string_const_implicit>`
+  *  :ref:`format_source_string (file_data: string const& implicit) : string <function-das_source_formatter_format_source_string_string_const_ref__implicit>`
 
 .. _function-das_source_formatter_format_source_array_ls_uint8_gr_:
 
@@ -27,14 +31,16 @@ Formatting
 
 Formats daslang source code given as a byte array and returns the formatted result.
 
+
 :Arguments: * **file_data** : array<uint8> implicit
 
-.. _function-das_source_formatter_format_source_string_string_const_implicit:
+.. _function-das_source_formatter_format_source_string_string_const_ref__implicit:
 
 .. das:function:: format_source_string(file_data: string const& implicit) : string
 
 Formats a daslang source code string and returns the formatted result.
 
-:Arguments: * **file_data** : string& implicit
+
+:Arguments: * **file_data** : string\ & implicit
 
 

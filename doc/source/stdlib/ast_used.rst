@@ -5,6 +5,8 @@
 AST type usage collection
 =========================
 
+.. das:module:: ast_used
+
 The AST_USED module implements analysis passes that determine which AST nodes
 are actually used in the program. This information is used for dead code
 elimination, tree shaking, and optimizing generated output.
@@ -12,6 +14,8 @@ elimination, tree shaking, and optimizing generated output.
 All functions and symbols are in "ast_used" module, use require to get access to it. ::
 
     require daslib/ast_used
+
+
 
 ++++++++++
 Structures
@@ -28,6 +32,8 @@ Collection of all structure and enumeration types that are used in the AST.
          * **en** : table< :ref:`Enumeration <handle-ast-Enumeration>`?;void> - all enumeration types used
 
 
+
+
 +++++++++++++++++++++++++++
 Collecting type information
 +++++++++++++++++++++++++++
@@ -40,6 +46,7 @@ Collecting type information
 
 Goes through list of functions `vfun` and variables `vvar` and collects list of which enumeration and structure types are used in them.
 Calls `blk` with said list.
+
 
 :Arguments: * **vfun** : array< :ref:`Function <handle-ast-Function>`?>
 

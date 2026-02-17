@@ -538,9 +538,9 @@ Trigger a runtime panic with an optional message::
 The panic message is available in the runtime log. A panic can be caught by
 a ``try``/``recover`` block.
 
-------
+--------------
 label and goto
-------
+--------------
 
 .. index::
     pair: label; statement

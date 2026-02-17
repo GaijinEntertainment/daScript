@@ -5,6 +5,8 @@
 Coroutines and additional generator support
 ===========================================
 
+.. das:module:: coroutines
+
 The COROUTINES module provides coroutine infrastructure including the
 ``[coroutine]`` function annotation, ``yield_from`` for delegating to
 sub-coroutines, and ``co_await`` for composing asynchronous generators.
@@ -48,6 +50,8 @@ Example: ::
         // output:
         // 0 1 1 2 3 5 8 13 21 34
 
+
+
 ++++++++++++
 Type aliases
 ++++++++++++
@@ -58,11 +62,14 @@ Type aliases
 
 A coroutine is a generator that yields bool to indicate if it is still running.
 
+
 .. _alias-Coroutines:
 
 .. das:attribute:: Coroutines = array<iterator<bool>>
 
 An array of coroutines.
+
+
 
 ++++++++++++++++++++
 Function annotations
@@ -78,6 +85,8 @@ which can be resumed and suspended. The function is converted into a generator.
 Generator yields bool if its a void coroutine, and yields the return type otherwise.
 If return type is specified coroutine can serve as an advanced form of a generator.
 
+
+
 +++++++++++
 Call macros
 +++++++++++
@@ -90,6 +99,7 @@ This macro converts co_continue to yield true.
 The idea is that coroutine without specified type is underneath a coroutine which yields bool.
 That way co_continue() does not distract from the fact that it is a generator<bool>.
 
+
 .. _call-macro-coroutines-co_await:
 
 .. das:attribute:: co_await
@@ -101,6 +111,7 @@ This macro converts co_await(sub_coroutine) into::
 
 The idea is that coroutine or generator can wait for a sub-coroutine to finish.
 
+
 .. _call-macro-coroutines-yeild_from:
 
 .. das:attribute:: yeild_from
@@ -111,6 +122,8 @@ This macro converts yield_from(THAT) expression into::
         yield t
 
 The idea is that coroutine or generator can continuously yield from another sub-coroutine or generator.
+
+
 
 ++++++++++++++++++++++++++++++
 Top level coroutine evaluation
@@ -125,6 +138,7 @@ Top level coroutine evaluation
 
 This function runs coroutine until it is finished.
 
+
 :Arguments: * **a** :  :ref:`Coroutine <alias-Coroutine>`
 
 .. _function-coroutines_cr_run_all_Coroutines:
@@ -132,6 +146,7 @@ This function runs coroutine until it is finished.
 .. das:function:: cr_run_all(a: Coroutines)
 
 This function runs all coroutines until they are finished.
+
 
 :Arguments: * **a** :  :ref:`Coroutines <alias-Coroutines>`
 

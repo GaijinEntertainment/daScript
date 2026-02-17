@@ -5,6 +5,8 @@
 Debug expression evaluator
 ==========================
 
+.. das:module:: debug_eval
+
 The DEBUG_EVAL module provides runtime expression evaluation for debugging
 purposes. It can evaluate daslang expressions in the context of a running
 program, supporting variable inspection and interactive debugging.
@@ -12,6 +14,8 @@ program, supporting variable inspection and interactive debugging.
 All functions and symbols are in "debug_eval" module, use require to get access to it. ::
 
     require daslib/debug_eval
+
+
 
 ++++++++++
 Structures
@@ -32,6 +36,8 @@ Result of evaluating a debug expression.
          * **error** : string - Error message, empty if evaluation succeeded.
 
 
+
+
 ++++++++++
 Evaluation
 ++++++++++
@@ -43,6 +49,7 @@ Evaluation
 .. das:function:: debug_eval(context: table<string, Result>; expr: string) : Result
 
 Evaluates a debug expression string with the given variable context and returns the result.
+
 
 :Arguments: * **context** : table<string; :ref:`Result <struct-debug_eval-Result>`>
 

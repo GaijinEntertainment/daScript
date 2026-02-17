@@ -214,12 +214,13 @@ class private BetterJsonMacro : AstVariantMacro {
 [reader_macro(name="json")]
 class private JsonReader : AstReaderMacro {
     //! This macro implements embedding of the JSON object into the program::
-    //!   var jsv = %json~
-    //!   {
-    //!     "name": "main_window",
-    //!     "value": 500,
-    //!     "size": [1,2,3]
-    //!   } %%
+    //!
+    //!     var jsv = %json~
+    //!     {
+    //!       "name": "main_window",
+    //!       "value": 500,
+    //!       "size": [1,2,3]
+    //!     } %%
     def override accept(prog : ProgramPtr; mod : Module?; var expr : ExprReader?; ch : int; info : LineInfo) : bool {
         //! Implement the accept method to read until '%%' is found.
         append(expr.sequence, ch)

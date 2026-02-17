@@ -5,6 +5,8 @@
 Boost package for array manipulation
 ====================================
 
+.. das:module:: array_boost
+
 The ARRAY_BOOST module extends array operations with temporary array views
 over fixed-size arrays and C++ handled vectors, emptiness checks, sub-array
 views, and arithmetic operators on fixed-size arrays.
@@ -12,6 +14,8 @@ views, and arithmetic operators on fixed-size arrays.
 All functions and symbols are in "array_boost" module, use require to get access to it. ::
 
     require daslib/array_boost
+
+
 
 ++++++++++++++++
 Temporary arrays
@@ -39,6 +43,7 @@ Important requirements are:
     * each element follows the next one directly, with the stride equal to size of the element
     * object memory does not change within the lifetime of the returned array
 
+
 :Arguments: * **arr** : auto implicit!
 
 .. _function-array_boost_temp_array__auto_implicit__eq__eq_const_0x2e:
@@ -55,6 +60,7 @@ Important requirements are:
 
 ----
 
+
 +++++++++++
 Empty check
 +++++++++++
@@ -67,7 +73,9 @@ Empty check
 
 returns true if 'v' has 0 elements. this also implies that `length(v)` is defined.
 
+
 :Arguments: * **v** : auto(VecT)
+
 
 ++++++++++++++
 Sub-array view
@@ -86,13 +94,14 @@ array_view
 
 creates a view of the array, which is a temporary array that is valid only within the block
 
+
 :Arguments: * **bytes** : array<auto(TT)>!
 
             * **offset** : int
 
             * **length** : int
 
-            * **blk** : block<(view:array<TT>#):void>
+            * **blk** : block<(view:array<TT>\ #):void>
 
 .. _function-array_boost_array_view_array_ls_autoTT_gr__int_int_block_ls_view_c_array_ls_TT_gr__hh__c_void_gr_:
 

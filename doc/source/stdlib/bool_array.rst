@@ -5,6 +5,8 @@
 Packed boolean array
 ====================
 
+.. das:module:: bool_array
+
 The BOOL_ARRAY module provides a compact boolean array implementation using
 bit-packing. Each boolean value uses a single bit instead of a byte,
 providing an 8x memory reduction compared to ``array<bool>``.
@@ -12,6 +14,8 @@ providing an 8x memory reduction compared to ``array<bool>``.
 All functions and symbols are in "bool_array" module, use require to get access to it. ::
 
     require daslib/bool_array
+
+
 
 ++++++++++
 Structures
@@ -24,55 +28,62 @@ Structures
 A dynamic array of booleans, stored as bits.
 
 
+
 .. _function-bool_array_finalize_BoolArray_0x16:
 
 .. das:function:: BoolArray.finalize()
 
 Releases the memory used by the BoolArray.
 
-.. _function-bool_array__BoolArray_int_0x1a:
+
+.. _function-bool_array__lb__rb__BoolArray_int_0x1a:
 
 .. das:function:: BoolArray.[](index: int) : bool
 
 Get the boolean value at the given index.
 
+
 :Arguments: * **index** : int
 
-.. _function-bool_array__eq__BoolArray_int_bool_0x23:
+.. _function-bool_array__lb__rb__eq__BoolArray_int_bool_0x23:
 
 .. das:function:: BoolArray.[]=(index: int; value: bool)
 
 Set the boolean value at the given index.
 
+
 :Arguments: * **index** : int
 
             * **value** : bool
 
-.. _function-bool_array_^^_eq__BoolArray_int_bool_0x30:
+.. _function-bool_array__lb__rb_^^_eq__BoolArray_int_bool_0x30:
 
 .. das:function:: BoolArray.[]^^=(index: int; value: bool)
 
 Perform XOR operation on the boolean value at the given index.
 
+
 :Arguments: * **index** : int
 
             * **value** : bool
 
-.. _function-bool_array__eq__BoolArray_int_bool_0x3b:
+.. _function-bool_array__lb__rb__ref__ref__eq__BoolArray_int_bool_0x3b:
 
 .. das:function:: BoolArray.[]&&=(index: int; value: bool)
 
 Perform AND operation on the boolean value at the given index.
 
+
 :Arguments: * **index** : int
 
             * **value** : bool
 
-.. _function-bool_array__eq__BoolArray_int_bool_0x46:
+.. _function-bool_array__lb__rb__eq__BoolArray_int_bool_0x46:
 
 .. das:function:: BoolArray.[]||=(index: int; value: bool)
 
 Perform OR operation on the boolean value at the given index.
+
 
 :Arguments: * **index** : int
 
@@ -84,11 +95,13 @@ Perform OR operation on the boolean value at the given index.
 
 Clear the BoolArray.
 
+
 .. _function-bool_array_BoolArray_rq_reserve_BoolArray_int_0x57:
 
 .. das:function:: BoolArray.reserve(capacity: int)
 
 Reserve capacity for the BoolArray.
+
 
 :Arguments: * **capacity** : int
 
@@ -98,6 +111,7 @@ Reserve capacity for the BoolArray.
 
 Resize the BoolArray to the new size.
 
+
 :Arguments: * **newSize** : int
 
 .. _function-bool_array_BoolArray_rq_push_BoolArray_bool_0x71:
@@ -106,6 +120,7 @@ Resize the BoolArray to the new size.
 
 Push a new boolean value to the end of the BoolArray.
 
+
 :Arguments: * **value** : bool
 
 .. _function-bool_array_BoolArray_rq_push_BoolArray_bool_int_0x83:
@@ -113,6 +128,7 @@ Push a new boolean value to the end of the BoolArray.
 .. das:function:: BoolArray.push(value: bool; at: int)
 
 Push a new boolean value at the given index in the BoolArray.
+
 
 :Arguments: * **value** : bool
 
@@ -124,17 +140,20 @@ Push a new boolean value at the given index in the BoolArray.
 
 Pop the last boolean value from the BoolArray and return it.
 
+
 .. _function-bool_array_BoolArray_rq_length_BoolArray_0x96:
 
 .. das:function:: BoolArray.length() : int
 
 Get the length of the BoolArray.
 
+
 .. _function-bool_array_BoolArray_rq_erase_BoolArray_int_0x9b:
 
 .. das:function:: BoolArray.erase(index: int)
 
 Erase the boolean value at the given index from the BoolArray.
+
 
 :Arguments: * **index** : int
 
@@ -143,6 +162,7 @@ Erase the boolean value at the given index from the BoolArray.
 .. das:function:: BoolArray.insert(index: int; value: bool)
 
 Insert a boolean value at the given index in the BoolArray.
+
 
 :Arguments: * **index** : int
 
@@ -154,6 +174,7 @@ Insert a boolean value at the given index in the BoolArray.
 
 Convert the BoolArray to a string representation.
 
+
 .. _function-bool_array_BoolArray_rq_data_pointer_BoolArray_0xe4:
 
 .. das:function:: BoolArray.data_pointer() : uint?
@@ -163,6 +184,7 @@ Convert the BoolArray to a string representation.
 
 Get the data pointer of the BoolArray.
 
+
 .. _function-bool_array_BoolArray_rq_data_pointer_BoolArray_0xea:
 
 .. das:function:: BoolArray.data_pointer() : uint const?
@@ -171,6 +193,8 @@ Get the data pointer of the BoolArray.
   This is unsafe operation.
 
 Get the data pointer of the BoolArray.
+
+
 
 +++++++++
 Iteration
@@ -183,6 +207,7 @@ Iteration
 .. das:function:: each(self: BoolArray) : iterator<bool>
 
 Returns an iterator over all boolean values in the BoolArray.
+
 
 :Arguments: * **self** :  :ref:`BoolArray <struct-bool_array-BoolArray>`
 

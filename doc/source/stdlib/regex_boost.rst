@@ -5,6 +5,8 @@
 Boost package for REGEX
 =======================
 
+.. das:module:: regex_boost
+
 The REGEX_BOOST module extends regular expressions with the ``%regex~`` reader
 macro for compile-time regex construction. Inside the reader macro, backslashes are
 literal — no double-escaping is needed (e.g. ``%regex~\d{3}%%`` instead of
@@ -44,6 +46,8 @@ Example: ::
         // found: 25
         // found: 180
 
+
+
 +++++++++++++
 Reader macros
 +++++++++++++
@@ -53,4 +57,5 @@ Reader macros
 .. das:attribute:: regex
 
 Reader macro that converts ``%regex~`` literals into precompiled ``regex::Regex`` objects at compilation time. Optional flags can follow a second ``~``: ``%regex~pattern~i%%`` for case-insensitive, ``%regex~pattern~s%%`` for dot-all, ``%regex~pattern~is%%`` for both.
+
 

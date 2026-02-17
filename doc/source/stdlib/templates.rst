@@ -5,6 +5,8 @@
 decltype macro and template function annotation
 ===============================================
 
+.. das:module:: templates
+
 The TEMPLATES module implements template instantiation utilities for daslang
 code generation. It supports stamping out parameterized code patterns with
 type and value substitution.
@@ -14,6 +16,8 @@ See also :doc:`templates_boost` for template substitution and code generation.
 All functions and symbols are in "templates" module, use require to get access to it. ::
 
     require daslib/templates
+
+
 
 ++++++++++++++++++++
 Function annotations
@@ -35,6 +39,8 @@ For example::
     boo(1,type<int>) // will be replaced with boo(1). instace will print "1_int"
 
 
+
+
 +++++++++++
 Call macros
 +++++++++++
@@ -49,10 +55,12 @@ This macro returns ast::TypeDecl for the corresponding expression. For example::
     let y <- decltype(x) // [[TypeDecl() baseType==Type tInt, flags=TypeDeclFlags constant | TypeDeclFlags ref]]
 
 
+
 .. _call-macro-templates-decltype_noref:
 
 .. das:attribute:: decltype_noref
 
 This macro returns TypeDecl for the corresponding expression, minus the ref (&) portion.
+
 
 

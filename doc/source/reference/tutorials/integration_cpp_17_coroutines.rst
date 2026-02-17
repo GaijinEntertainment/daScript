@@ -140,4 +140,4 @@ The output is interleaved: each ``yield`` in daslang produces a
 
    Next tutorial: :ref:`tutorial_integration_cpp_dynamic_scripts`
 
-   Related: :ref:`_generators`
+   Related: :ref:`generators`

@@ -5,6 +5,8 @@
 Instrumenting profiler
 ======================
 
+.. das:module:: profiler
+
 The PROFILER module provides CPU profiling infrastructure for measuring
 function execution times. It includes instrumentation-based profiling with
 hierarchical call tracking and timing statistics.
@@ -14,6 +16,8 @@ See also :doc:`profiler_boost` for cross-context profiler control and scoped tim
 All functions and symbols are in "profiler" module, use require to get access to it. ::
 
     require daslib/profiler
+
+
 
 ++++++++++++++++
 Profiler control
@@ -26,6 +30,7 @@ Profiler control
 .. das:function:: set_enable_profiler(ctxId: uint64; enabled: bool)
 
 Enables or disables the profiler for the given context ID.
+
 
 :Arguments: * **ctxId** : uint64
 
