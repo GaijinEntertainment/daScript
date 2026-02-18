@@ -295,5 +295,6 @@ namespace das {
         addAlias(makeExprCopyFlags());
         addAlias(makeExprMoveFlags());
         addAlias(makeExprIfFlags());
+        addAlias(makeExprStringBuilderFlags());
     }
 }
