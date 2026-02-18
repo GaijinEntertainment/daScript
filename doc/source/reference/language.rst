@@ -8,6 +8,7 @@
    language/program_structure.rst
    language/lexical_structure.rst
    language/datatypes.rst
+   language/pointers.rst
    language/constants_and_enumerations.rst
    language/statements.rst
    language/expressions.rst
@@ -41,8 +42,8 @@
    language/builtin_functions.rst
 
 *****************************
- The Runtime
- *****************************
+The Runtime
+*****************************
 
 .. toctree::
    language/contexts.rst

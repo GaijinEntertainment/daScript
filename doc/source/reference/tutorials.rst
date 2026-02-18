@@ -50,6 +50,7 @@ introduced in earlier tutorials.
    tutorials/33_algorithm.rst
    tutorials/34_decs.rst
    tutorials/35_jobque.rst
+   tutorials/36_pointers.rst
 
 C Integration Tutorials
 -----------------------

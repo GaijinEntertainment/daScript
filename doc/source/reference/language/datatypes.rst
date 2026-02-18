@@ -293,7 +293,8 @@ All structs are always passed to functions arguments as references.
 Pointers
 --------------
 
-Pointers are types that 'reference' (point to) some other data, but can be null (point to nothing).
+Pointers are types that 'reference' (point to) some other data, but can be null (point to nothing)
+(see :ref:`Pointers <pointers>`).
 In order to work with actual value, one need to dereference it using the dereference or safe navigation operators.
 Dereferencing will panic if a null pointer is passed to it.
 Pointers can be created using the new operator, or with the C++ environment.

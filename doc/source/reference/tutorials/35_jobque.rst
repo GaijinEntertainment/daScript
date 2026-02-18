@@ -305,6 +305,8 @@ for long-lived work that should not block the job queue:
 
    Previous tutorial: :ref:`tutorial_decs`
 
+   Next tutorial: :ref:`tutorial_pointers`
+
    :ref:`Lambda <lambdas>` — lambda language reference.
 
    :ref:`Blocks <blocks>` — block language reference.
