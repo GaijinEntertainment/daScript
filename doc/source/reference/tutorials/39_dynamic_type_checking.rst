@@ -189,16 +189,16 @@ Combine ``is`` and ``as`` to process a heterogeneous collection of shapes:
 Summary
 =======
 
-==================================  ================================================
-Function / Syntax                   Description
-==================================  ================================================
-``is_instance_of(ptr, type<T>)``    ``true`` if ptr is instance of T via RTTI
-``dynamic_type_cast(ptr, T)``       Returns ``T?`` or ``null`` on failure
-``force_dynamic_type_cast(ptr, T)`` Returns ``T?`` or panics on failure
-``ptr is ClassName``                Syntactic sugar for ``is_instance_of``
-``ptr as ClassName``                Syntactic sugar for force cast
-``ptr ?as ClassName``               Syntactic sugar for safe cast
-==================================  ================================================
+======================================  ================================================
+Function / Syntax                       Description
+======================================  ================================================
+``is_instance_of(ptr, type<T>)``        ``true`` if ptr is instance of T via RTTI
+``dynamic_type_cast(ptr, T)``           Returns ``T?`` or ``null`` on failure
+``force_dynamic_type_cast(ptr, T)``     Returns ``T?`` or panics on failure
+``ptr is ClassName``                    Syntactic sugar for ``is_instance_of``
+``ptr as ClassName``                    Syntactic sugar for force cast
+``ptr ?as ClassName``                   Syntactic sugar for safe cast
+======================================  ================================================
 
 .. seealso::
 
