@@ -147,8 +147,9 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - `doc/source/reference/language/` — RST language documentation (36 files)
 - `doc/source/stdlib/` — RST standard library documentation (auto-generated + handmade)
 - `doc/reflections/` — Documentation generation tools (das2rst.das, rst.das, gen_module_examples.py)
-- `tutorials/language/` — Language tutorial `.das` files (32 progressive tutorials)
+- `tutorials/language/` — Language tutorial `.das` files (42 progressive tutorials)
 - `tutorials/integration/cpp/` — C++ integration tutorials (embedding daslang in C++ host applications)
+- `tutorials/macros/` — Macro tutorials (call macros, reader macros, etc.)
 - `doc/source/reference/tutorials/` — RST companion pages for each tutorial
 - `tests/linq/` — LINQ module tests (15 test files, ~500 tests)
 - `tests/functional/` — Functional module tests
