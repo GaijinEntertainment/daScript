@@ -4,9 +4,20 @@
   Tutorials
 *****************************
 
-This section provides a series of hands-on tutorials that introduce daslang's
-core features step by step. Each tutorial comes with a companion ``.das`` file
-in the ``tutorials/language/`` directory that you can run directly::
+This section provides hands-on tutorials organized into three groups:
+
+* **Language Tutorials** — learn daslang syntax and standard library features
+* **C Integration Tutorials** — embed daslang in a C host using the ``daScriptC.h`` API
+* **C++ Integration Tutorials** — embed daslang in a C++ host using the native ``daScript.h`` API
+
+.. _tutorials_language:
+
+Language Tutorials
+==================
+
+These tutorials introduce daslang's core features step by step.
+Each comes with a companion ``.das`` file in ``tutorials/language/`` that you
+can run directly::
 
   daslang.exe tutorials/language/01_hello_world.das
 
@@ -14,6 +25,7 @@ The tutorials are designed to be followed in order. Each one builds on concepts
 introduced in earlier tutorials.
 
 .. toctree::
+   :maxdepth: 1
 
    tutorials/01_hello_world.rst
    tutorials/02_variables.rst
@@ -51,9 +63,17 @@ introduced in earlier tutorials.
    tutorials/34_decs.rst
    tutorials/35_jobque.rst
    tutorials/36_pointers.rst
+   tutorials/37_utility_patterns.rst
+   tutorials/38_random.rst
+   tutorials/39_dynamic_type_checking.rst
+   tutorials/40_coroutines.rst
+   tutorials/41_serialization.rst
+   tutorials/42_testing_tools.rst
+
+.. _tutorials_integration_c:
 
 C Integration Tutorials
------------------------
+=======================
 
 These tutorials show how to embed daslang in a C application using the
 ``daScriptC.h`` API.  Each tutorial comes with a ``.c`` source file and a
@@ -72,8 +92,10 @@ companion ``.das`` script in ``tutorials/integration/c/``.
    tutorials/integration_c_08_serialization.rst
    tutorials/integration_c_09_aot.rst
 
+.. _tutorials_integration_cpp:
+
 C++ Integration Tutorials
---------------------------
+=========================
 
 These tutorials show how to embed daslang in a C++ application using the
 native ``daScript.h`` API.  Each tutorial comes with a ``.cpp`` source file
