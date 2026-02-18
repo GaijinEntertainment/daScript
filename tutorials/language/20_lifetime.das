@@ -39,6 +39,10 @@ def make_data() : array<int> {
     return <- result
 }
 
+class MyClass {
+    dummy : int
+}
+
 [export]
 def main {
 
@@ -111,9 +115,9 @@ def main {
     //   unsafe { delete p }
     //
     // Or use 'var inscope' for automatic cleanup:
-    //   unsafe { // needs 'unsafe', because deleting classes is unsafe
-    //       var inscope p = new MyClass()
-    //   }
+    unsafe { // needs 'unsafe', because deleting classes is unsafe
+        var inscope p = new MyClass()
+    }
     //   // deleted automatically at end of scope
 
     // === When to use what ===
