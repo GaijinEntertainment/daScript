@@ -230,3 +230,5 @@ Requires ``unsafe``::
    Full source: :download:`tutorials/language/36_pointers.das <../../../../tutorials/language/36_pointers.das>`
 
    Previous tutorial: :ref:`tutorial_jobque`
+
+   Next tutorial: :ref:`tutorial_utility_patterns`

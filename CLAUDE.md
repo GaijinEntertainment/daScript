@@ -96,6 +96,25 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - `assert(condition)` / `assert(condition, "message")` — debug assertion
 - `verify(condition)` — assertion that remains in release builds
 
+### Class method modifiers
+
+- **`def const`** — const method: `self` is `const`, cannot modify fields. Use for read-only methods.
+- **`def abstract const`** / **`def override const`** — abstract/override const methods in class hierarchies
+- **`def static`** — static method: no implicit `self`; called as `ClassName.method()` or `ClassName\`method()`
+- **`def static const`** — static method with const `self` parameter (used in template structures like `flat_hash_table.das`). The first explicit argument becomes const `self`.
+- **`[class_method]`** annotation (from `daslib/class_boost`) — transforms a `def static` into a proper class method by injecting `self` and wrapping body in `with (self) { ... }`. Const-ness follows `def static const`.
+- Method call syntax: `obj.method()` for value types, `obj->method()` for pointer types, `obj |> method()` pipe syntax
+
+### Generic function dispatch (`_::`, `__::`, unqualified)
+
+- Generic functions are instanced as private functions in the **calling** module
+- **Unqualified call** `foo(x)`: resolves in the module where the generic is **defined** — caller's overloads are NOT visible
+- **`_::foo(x)`**: resolves as if called implicitly in the **current** (calling) module — caller's overloads ARE visible
+- **`__::foo(x)`**: resolves strictly in the **defining** module only — nothing imported
+- This is why `:=` and `delete` emit `_::clone` / `_::finalize` — so user overloads are picked up in generics
+- When writing a library generic that should dispatch to user-provided overloads, use `_::` prefix
+- `mem_archive_save` does NOT use `_::serialize` — so user serialize overloads are invisible; use manual `Archive` + `MemSerializer` pattern instead
+
 ### Common gotchas
 
 - Lambda params can shadow function params — use distinct names (e.g., `$(lhs, rhs)` not `$(a, b)` when `a` is already in scope)
@@ -247,7 +266,7 @@ C++ integration tutorial RST files live in `doc/source/reference/tutorials/` wit
 - Each tutorial is one self-contained `.cpp` file with embedded `main()` — no separate build infrastructure needed beyond CMake target
 - Tutorial CMake targets: `integration_cpp_01` through `integration_cpp_NN` (defined in `tutorials/integration/cpp/CMakeLists.txt`)
 
-- Tutorial labels for cross-references: `tutorial_hello_world`, `tutorial_variables`, `tutorial_operators`, `tutorial_control_flow`, `tutorial_functions`, `tutorial_arrays`, `tutorial_strings`, `tutorial_structs`, `tutorial_enumerations`, `tutorial_tables`, `tutorial_tuples_and_variants`, `tutorial_function_pointers`, `tutorial_blocks`, `tutorial_lambdas`, `tutorial_iterators_and_generators`, `tutorial_modules`, `tutorial_move_copy_clone`, `tutorial_classes`, `tutorial_generics`, `tutorial_lifetime`, `tutorial_error_handling`, `tutorial_unsafe`, `tutorial_string_format`, `tutorial_pattern_matching`, `tutorial_annotations`, `tutorial_contracts`, `tutorial_testing`, `tutorial_linq`, `tutorial_functional`, `tutorial_json`, `tutorial_regex`, `tutorial_operator_overloading`, `tutorial_pointers`
+- Tutorial labels for cross-references: `tutorial_hello_world`, `tutorial_variables`, `tutorial_operators`, `tutorial_control_flow`, `tutorial_functions`, `tutorial_arrays`, `tutorial_strings`, `tutorial_structs`, `tutorial_enumerations`, `tutorial_tables`, `tutorial_tuples_and_variants`, `tutorial_function_pointers`, `tutorial_blocks`, `tutorial_lambdas`, `tutorial_iterators_and_generators`, `tutorial_modules`, `tutorial_move_copy_clone`, `tutorial_classes`, `tutorial_generics`, `tutorial_lifetime`, `tutorial_error_handling`, `tutorial_unsafe`, `tutorial_string_format`, `tutorial_pattern_matching`, `tutorial_annotations`, `tutorial_contracts`, `tutorial_testing`, `tutorial_linq`, `tutorial_functional`, `tutorial_json`, `tutorial_regex`, `tutorial_operator_overloading`, `tutorial_pointers`, `tutorial_utility_patterns`, `tutorial_random`, `tutorial_dynamic_type_checking`, `tutorial_coroutines`, `tutorial_serialization`, `tutorial_testing_tools`
 - C++ integration tutorial labels: `tutorial_integration_cpp_hello_world`, `tutorial_integration_cpp_calling_functions`, `tutorial_integration_cpp_binding_functions`, `tutorial_integration_cpp_binding_types`, `tutorial_integration_cpp_binding_enums`, `tutorial_integration_cpp_interop`, `tutorial_integration_cpp_callbacks`, `tutorial_integration_cpp_methods`, `tutorial_integration_cpp_operators_and_properties`
 - C++ integration tutorial plan (remaining): 10 Custom Modules, 11 Context Variables, 12 Smart Pointers & GC, 13 AOT, 14 Serialization, 15 Custom Annotations, 16 Sandbox
 

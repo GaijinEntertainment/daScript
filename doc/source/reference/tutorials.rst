@@ -51,6 +51,12 @@ introduced in earlier tutorials.
    tutorials/34_decs.rst
    tutorials/35_jobque.rst
    tutorials/36_pointers.rst
+   tutorials/37_utility_patterns.rst
+   tutorials/38_random.rst
+   tutorials/39_dynamic_type_checking.rst
+   tutorials/40_coroutines.rst
+   tutorials/41_serialization.rst
+   tutorials/42_testing_tools.rst
 
 C Integration Tutorials
 -----------------------

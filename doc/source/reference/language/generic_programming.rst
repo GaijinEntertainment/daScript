@@ -358,8 +358,67 @@ Generic function take_handle takes any Handle type, but only Handle type tuple.
 
 This carries some similarity to the C++ template system, but is a bit more limited due to tuples being weak types.
 
+.. _generic_module_prefixes:
+
+Module prefixes in generics
+===========================
+
+Generic functions are always instanced as private functions in the *calling* module.
+This means that unqualified function calls inside a generic resolve using the
+defining module's visible symbols — **not** the caller's.
+
+Three prefixes control how names are resolved inside a generic:
+
+===========  ===================================================================
+Prefix       Resolution
+===========  ===================================================================
+*(none)*     Resolved in the module where the generic is **defined** — the
+             caller's overloads are **not** visible.
+``_::``      Resolved as if the call were made implicitly in the **current
+             module** (the one that instances the generic) — the caller's
+             overloads **are** visible.
+``__::``     Resolved strictly in the module where the generic is **defined**
+             — only that module's own symbols, nothing imported.
+===========  ===================================================================
+
+This distinction matters whenever a library generic should dispatch to
+user-provided overloads.  For example:
+
+.. code-block:: das
+
+    // --- module "serializer" ---
+    module serializer
+
+    [generic]
+    def save(val) {
+        _::write(val)       // resolves in the caller's module
+    }
+
+    // --- user code ---
+    require serializer
+
+    struct Color { r : float; g : float; b : float }
+
+    def write(c : Color) {       // user overload
+        print("{c.r},{c.g},{c.b}")
+    }
+
+    [export]
+    def main() {
+        save(Color(r=1.0))     // calls user's `write(Color)` via _::
+    }
+
+If ``save`` called plain ``write(val)`` instead of ``_::write(val)``, the
+user's overload would not be found — the call would resolve in the
+``serializer`` module's scope, where no ``write(Color)`` exists.
+
+This is why the built-in ``:=`` and ``delete`` operators are always emitted as
+``_::clone`` and ``_::finalize`` — so that user-defined ``clone`` and
+``finalize`` overloads are picked up when generics are instanced in user code.
+
 .. seealso::
 
+    :ref:`Modules <modules>` for full details on ``_::`` and ``__::`` prefixes,
     :ref:`Functions <functions>` for regular (non-generic) function declarations,
     :ref:`Datatypes <datatypes_and_values>` for type traits and built-in types,
     :ref:`Temporary types <temporary>` for ``#``/``-#`` temporary qualifiers,
