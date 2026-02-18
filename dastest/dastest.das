@@ -28,7 +28,7 @@ def private collect_input_paths(args : array<string>; var paths : array<string>)
 
 
 def private collect_files(input_paths : array<string>; var files : array<string>) : bool {
-    var cache : table<string; void?>
+    var inscope cache : table<string; void?>
     for (path in input_paths) {
         if (path |> ends_with(".das")) {
             if (!cache |> key_exists(path)) {
@@ -42,7 +42,6 @@ def private collect_files(input_paths : array<string>; var files : array<string>
             }
         }
     }
-    delete cache
     return true
 }
 
