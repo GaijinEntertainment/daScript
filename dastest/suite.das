@@ -95,9 +95,8 @@ def private match_test_name(name : string; ctx : SuiteCtx) {
 
 
 def test_file(file_name : string; ctx : SuiteCtx) : SuiteResult {
-    var fileCtx <- internalFileCtx(ctx)
+    var inscope fileCtx <- internalFileCtx(ctx)
     var res = test_file(file_name, ctx, fileCtx)
-    delete fileCtx
     return res
 }
 
@@ -207,9 +206,8 @@ def test_file(file_name : string; ctx : SuiteCtx; file_ctx : FileCtx) : SuiteRes
 
 
 def test_module(var mod : rtti::Module; var context : rtti::Context; suite_ctx : SuiteCtx) : SuiteResult {
-    var fileCtx <- internalFileCtx(suite_ctx)
+    var inscope fileCtx <- internalFileCtx(suite_ctx)
     var res = test_module(mod, context, suite_ctx, fileCtx)
-    delete fileCtx
     return res
 }
 
@@ -219,7 +217,7 @@ def test_module(var mod : rtti::Module; var context : rtti::Context; suite_ctx :
         return default<SuiteResult>
     }
     var res : SuiteResult
-    var fileCtx := file_ctx
+    var inscope fileCtx := file_ctx
     var modPtr : Module?
     unsafe {
         fileCtx.context = addr(context)
@@ -249,7 +247,6 @@ def test_module(var mod : rtti::Module; var context : rtti::Context; suite_ctx :
             }
         }
     }
-    delete fileCtx
     return res
 }
 
@@ -296,19 +293,17 @@ def private test_any_lambda(name : string; func : lambda; args_num : int; var co
 
 [export]
 def private sub_test_any_func(name : string; func : function; args_num : int; var context : FileCtx; var res : SuiteResult&) {
-    var subContext := context
+    var inscope subContext := context
     subContext.indenting = "\t" + subContext.indenting
     test_any(name, func, args_num, subContext, res)
-    delete subContext
 }
 
 
 [export]
 def private sub_test_any_lambda(name : string; func : lambda; args_num : int; var context : FileCtx; var res : SuiteResult&) {
-    var subContext := context
+    var inscope subContext := context
     subContext.indenting = "\t" + subContext.indenting
     test_any(name, func, args_num, subContext, res)
-    delete subContext
 }
 
 
