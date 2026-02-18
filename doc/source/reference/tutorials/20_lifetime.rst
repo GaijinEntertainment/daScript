@@ -96,7 +96,9 @@ For class instances created with ``new``, ``delete`` requires ``unsafe``::
 
 Or use ``var inscope`` for automatic cleanup::
 
-  var inscope p = new MyClass()
+  unsafe { // needs 'unsafe', because deleting classes is unsafe
+    var inscope p = new MyClass()
+  }
   // deleted automatically at end of scope
 
 When to use what
