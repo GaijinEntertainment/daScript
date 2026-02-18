@@ -47,7 +47,6 @@ variant Value {
 
 // === Basic integer matching ===
 
-[sideeffects]
 def describe_number(n : int) : string {
     match (n) {
         if (0) {
@@ -68,7 +67,6 @@ def describe_number(n : int) : string {
 
 // === Enum matching ===
 
-[sideeffects]
 def color_code(c : Color) : int {
     match (c) {
         if (Color.red) {        // gen2 dot syntax for enum values
@@ -89,7 +87,6 @@ def color_code(c : Color) : int {
 
 // === Struct matching + variable binding ===
 
-[sideeffects]
 def describe_point(p : Point) : string {
     match (p) {
         if (Point(x = 0, y = 0)) {                 // exact values
@@ -110,7 +107,6 @@ def describe_point(p : Point) : string {
 
 // === Guards ===
 
-[sideeffects]
 def classify_shape(s : Shape) : string {
     match (s) {
         if (Shape(kind = "circle", size = $v(sz)) && sz > 100) {
@@ -128,7 +124,6 @@ def classify_shape(s : Shape) : string {
 
 // === OR patterns ===
 
-[sideeffects]
 def is_primary(c : Color) : bool {
     match (c) {
         if (Color.red || Color.green || Color.blue) {
@@ -143,7 +138,6 @@ def is_primary(c : Color) : bool {
 
 // === Tuple matching ===
 
-[sideeffects]
 def classify_pair(t : tuple<int; string>) : string {
     match (t) {
         if ((0, "zero")) {                  // exact match
@@ -164,7 +158,6 @@ def classify_pair(t : tuple<int; string>) : string {
 
 // === Variant matching ===
 
-[sideeffects]
 def describe_value(v : Value) : string {
     match (v) {
         if ($v(i) as i) {                   // match variant alternative by name
@@ -182,7 +175,6 @@ def describe_value(v : Value) : string {
 
 // === Null / pointer matching ===
 
-[sideeffects]
 def describe_point_ptr(p : Point?) : string {
     match (p) {
         if (null) {                         // null check
@@ -200,7 +192,6 @@ def describe_point_ptr(p : Point?) : string {
 
 // === multi_match — all matching arms execute ===
 
-[sideeffects]
 def tag_number(n : int) : string {
     var tags = "{n}:"
     multi_match(n) {
@@ -227,7 +218,6 @@ def tag_number(n : int) : string {
 // Arms with type mismatches are silently dropped,
 // so this function works regardless of argument type.
 
-[sideeffects]
 def static_type_name(what) : string {
     static_match(what) {
         if (match_type(type<int>, $v(v))) {
@@ -250,7 +240,6 @@ def static_type_name(what) : string {
 // Static arrays match element-by-element.
 // Dynamic arrays match head elements; tail is ignored.
 
-[sideeffects]
 def classify_static_arr(a : int[3]) : string {
     match (a) {
         if (fixed_array<int>(0, 0, 0)) {        // all zeros
@@ -266,7 +255,6 @@ def classify_static_arr(a : int[3]) : string {
     return "unreachable"
 }
 
-[sideeffects]
 def classify_dynamic_arr(a : array<int>) : string {
     match (a) {
         if (array<int>(0, 0, ...)) {             // starts with 0, 0
@@ -286,7 +274,6 @@ def classify_dynamic_arr(a : array<int>) : string {
 // match_expr(expression) evaluates at runtime instead of matching literally.
 // Useful when the expected value depends on captured variables.
 
-[sideeffects]
 def is_consecutive_triple(t : tuple<int; int; int>) : bool {
     match (t) {
         if (($v(a), match_expr(a + 1), match_expr(a + 2))) {
@@ -301,7 +288,6 @@ def is_consecutive_triple(t : tuple<int; int; int>) : bool {
 
 // === Bool matching ===
 
-[sideeffects]
 def describe_bool(b : bool) : string {
     match (b) {
         if (true) {
@@ -423,7 +409,7 @@ def main {
     // === Summary ===
     // - require daslib/match
     // - match(expr) { if (pattern) { body } }
-    // - [sideeffects] annotation required on functions using match
+    // - match works on functions that return values
     // - $v(name) — bind matched value to a variable
     // - _ — wildcard, matches anything
     // - Guards: if (pattern && condition) { ... }

@@ -19,7 +19,6 @@ Basic match
 
   require daslib/match
 
-  [sideeffects]
   def describe(n : int) : string {
       match (n) {
           if (0) { return "zero" }
@@ -31,7 +30,7 @@ Basic match
 
 .. note::
 
-   Functions using ``match`` need the ``[sideeffects]`` annotation.
+   ``match`` works on functions that return values.
 
 Wildcards and binding
 =====================
@@ -39,10 +38,10 @@ Wildcards and binding
 - ``_`` — wildcard, matches anything
 - ``$v(name)`` — bind matched value to a variable::
 
-  match (point) {
-      if (Point(x = 0, y = 0)) { return "origin" }
-      if (Point(x = $v(x), y = $v(y))) { return "({x}, {y})" }
-  }
+    match (point) {
+        if (Point(x = 0, y = 0)) { return "origin" }
+        if (Point(x = $v(x), y = $v(y))) { return "({x}, {y})" }
+    }
 
 Guards
 ======

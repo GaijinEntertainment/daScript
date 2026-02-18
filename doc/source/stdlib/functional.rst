@@ -5,6 +5,8 @@
 Functional programming library
 ==============================
 
+.. das:module:: functional
+
 The FUNCTIONAL module implements lazy iterator adapters and higher-order
 function utilities including ``filter``, ``map``, ``reduce``, ``fold``,
 ``scan``, ``flatten``, ``flat_map``, ``enumerate``, ``chain``, ``pairwise``,
@@ -34,6 +36,8 @@ Example: ::
         // output:
         // 0 2 4
 
+
+
 +++++++++++++++
 Transformations
 +++++++++++++++
@@ -60,6 +64,7 @@ filter
 
 iterates over `src` and yields only those elements for which `blk` returns true
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
             * **blk** : function<(what:TT):bool>
@@ -80,6 +85,7 @@ flat_map
 
 maps each element to an iterator, then flattens the results one level
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
             * **blk** : lambda<(what:TT):auto(QQ)>
@@ -96,6 +102,7 @@ maps each element to an iterator, then flattens the results one level
 
 iterates over `it`, then iterates over each element of each element of `it` and yields it
 
+
 :Arguments: * **it** : iterator<auto(TT)>
 
 
@@ -107,6 +114,7 @@ map
 .. das:function:: map(src: iterator<auto(TT)>; blk: function<(what:TT):auto(QQ)>) : auto
 
 iterates over `src` and yields the result of `blk` for each element
+
 
 :Arguments: * **src** : iterator<auto(TT)>
 
@@ -127,6 +135,7 @@ scan
 .. das:function:: scan(src: iterator<auto(TT)>; seed: auto(AGG); blk: function<(acc:AGG;x:TT):AGG>) : auto
 
 yields every intermediate accumulator value, starting from `seed`
+
 
 :Arguments: * **src** : iterator<auto(TT)>
 
@@ -150,13 +159,13 @@ sorted
 
 iterates over input and returns it sorted version
 
+
 :Arguments: * **it** : iterator<auto(TT)>
 
 .. _function-functional_sorted_array_ls_auto_gr_:
 
 .. das:function:: sorted(arr: array<auto>) : auto
 
-----
 
 +++++++++++
 Aggregation
@@ -187,6 +196,7 @@ all
 
 iterates over `it` and yields true if all elements are true
 
+
 :Arguments: * **it** : iterator<auto(TT)>
 
 .. _function-functional_all_auto_0xb5:
@@ -205,6 +215,7 @@ any
 
 iterates over `it` and yields true if any element is true
 
+
 :Arguments: * **it** : auto
 
 .. _function-functional_any_iterator_ls_autoTT_gr_:
@@ -222,6 +233,7 @@ fold
 .. das:function:: fold(it: iterator<auto(TT)>; seed: auto(AGG); blk: lambda<(acc:AGG;x:TT):AGG>) : auto
 
 combines elements left-to-right starting from `seed`
+
 
 :Arguments: * **it** : iterator<auto(TT)>
 
@@ -250,6 +262,7 @@ reduce
 iterates over `it` and yields the reduced (combined) result of `blk` for each element
 and previous reduction result
 
+
 :Arguments: * **it** : iterator<auto(TT)>
 
             * **blk** : function<(left:TT;right:TT):TT>
@@ -274,6 +287,7 @@ reduce_or_default
 
 like reduce, but returns `default_value` on empty input
 
+
 :Arguments: * **it** : iterator<auto(TT)>
 
             * **blk** : function<(left:TT;right:TT):TT>
@@ -297,7 +311,9 @@ like reduce, but returns `default_value` on empty input
 iterates over `it` and yields the sum of all elements
 same as reduce(it, @(a,b) => a + b)
 
+
 :Arguments: * **it** : iterator<auto(TT)>
+
 
 ++++++++++++++++
 Search and split
@@ -322,6 +338,7 @@ find
 .. das:function:: find(src: iterator<auto(TT)>; blk: function<(what:TT):bool>; default_value: TT) : auto
 
 returns the first element for which `blk` returns true, or `default_value`
+
 
 :Arguments: * **src** : iterator<auto(TT)>
 
@@ -349,6 +366,7 @@ find_index
 
 returns the index of the first element for which `blk` returns true, or -1
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
             * **blk** : lambda<(what:TT):bool>
@@ -373,6 +391,7 @@ partition
 
 splits elements into `(matching, non_matching)` arrays
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
             * **blk** : lambda<(what:TT):bool>
@@ -385,7 +404,6 @@ splits elements into `(matching, non_matching)` arrays
 
 .. das:function:: partition(src: iterator<auto(TT)>; blk: block<(what:TT):bool>) : tuple<array<TT>;array<TT>>
 
-----
 
 +++++++++
 Iteration
@@ -406,6 +424,7 @@ Iteration
 prints `x` to the output with `extra` appended, then returns `x` unchanged.
 Non-destructive — safe to use in expression chains.
 
+
 :Arguments: * **x** : auto
 
             * **extra** : string
@@ -415,6 +434,7 @@ Non-destructive — safe to use in expression chains.
 .. das:function:: enumerate(src: iterator<auto(TT)>) : auto
 
 yields tuples of `(index, element)` for each element in `src`
+
 
 :Arguments: * **src** : iterator<auto(TT)>
 
@@ -427,6 +447,7 @@ for_each
 .. das:function:: for_each(src: iterator<auto(TT)>; blk: function<(what:TT):void>) : auto
 
 invokes `blk` on every element of `src`
+
 
 :Arguments: * **src** : iterator<auto(TT)>
 
@@ -452,6 +473,7 @@ tap
 
 yields every element unchanged, calling `blk` on each as a side-effect
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
             * **blk** : function<(what:TT):void>
@@ -460,7 +482,6 @@ yields every element unchanged, calling `blk` on each as a side-effect
 
 .. das:function:: tap(src: iterator<auto(TT)>; blk: lambda<(what:TT):void>) : auto
 
-----
 
 ++++++++++
 Generators
@@ -481,6 +502,7 @@ Generators
 
 yields all elements of `a`, then all elements of `b`
 
+
 :Arguments: * **a** : iterator<auto(TT)>
 
             * **b** : iterator<auto(TT)>
@@ -491,6 +513,7 @@ yields all elements of `a`, then all elements of `b`
 
 endlessly iterates over `src`
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
 .. _function-functional_islice_iterator_ls_autoTT_gr__int_int:
@@ -498,6 +521,7 @@ endlessly iterates over `src`
 .. das:function:: islice(src: iterator<auto(TT)>; start: int; stop: int) : auto
 
 iterates over `src` and yields only the elements in the range [start,stop)
+
 
 :Arguments: * **src** : iterator<auto(TT)>
 
@@ -515,6 +539,7 @@ iterate
 
 yields `seed`, `f(seed)`, `f(f(seed))`, ... infinitely.
 
+
 :Arguments: * **seed** : auto(TT)
 
             * **blk** : function<(what:TT):TT>
@@ -531,6 +556,7 @@ yields `seed`, `f(seed)`, `f(f(seed))`, ... infinitely.
 
 yields consecutive pairs: `(a,b)`, `(b,c)`, `(c,d)`, ...
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
 .. _function-functional_repeat_autoTT_int_0x113:
@@ -538,6 +564,7 @@ yields consecutive pairs: `(a,b)`, `(b,c)`, `(c,d)`, ...
 .. das:function:: repeat(value: auto(TT); count: int = -(1)) : auto
 
 yields `value` `count` times. If `count` is negative, repeats forever.
+
 
 :Arguments: * **value** : auto(TT)
 
@@ -549,9 +576,11 @@ yields `value` `count` times. If `count` is negative, repeats forever.
 
 yields `value` by reference `count` times
 
+
 :Arguments: * **value** : auto(TT)
 
             * **total** : int
+
 
 ++++++++++
 Predicates
@@ -567,6 +596,7 @@ Predicates
 
 yields true if `a` and `b` are equal
 
+
 :Arguments: * **a** : auto
 
             * **b** : auto
@@ -577,6 +607,7 @@ yields true if `a` and `b` are equal
 
 yields true if `a` and `b` are not equal
 
+
 :Arguments: * **a** : auto
 
             * **b** : auto
@@ -586,6 +617,7 @@ yields true if `a` and `b` are not equal
 .. das:function:: not(x: auto) : auto
 
 yields !x
+
 
 :Arguments: * **x** : auto
 

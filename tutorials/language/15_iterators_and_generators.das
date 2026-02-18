@@ -60,7 +60,7 @@ def main {
 
     // A generator creates an iterator using yield.
     // generator<ElementType>() <| $ { ... yield value ... return false }
-    // Note: generators use $ { } (no parentheses), not $ () { }.
+    // Note: generators use either $ { } or $() { } (both are valid).
 
     // --- Simple generator: count up ---
     var counter <- generator<int>() <| $ {

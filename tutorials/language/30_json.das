@@ -371,5 +371,4 @@ def main() {
     broken_json_demo()
     tuples_and_variants()
     vectors_demo()
-    return true
 }

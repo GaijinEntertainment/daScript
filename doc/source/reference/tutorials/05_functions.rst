@@ -46,15 +46,15 @@ Default arguments
 
 Parameters can have default values.  Callers may omit them::
 
-  def formatNumber(value : int; width : int = 6; prefix : string = "#") : string {
+  def formatNumber(value : int; prefix : string = "#") : string {
       return "{prefix}{value}"
   }
 
-  formatNumber(42)                     // uses defaults: "#42"
+  formatNumber(42)                     // uses default: "#42"
   formatNumber(42, [prefix = ">"])     // named argument: ">42"
 
-To skip over defaults and specify a later parameter, use named argument
-syntax: ``[name = value]``.
+To specify a parameter by name, use named argument syntax:
+``[name = value]``.
 
 Function overloading
 ====================

@@ -5,6 +5,8 @@
 Boost module for LINQ
 =====================
 
+.. das:module:: linq_boost
+
 The LINQ_BOOST module extends LINQ with pipe-friendly macros using underscore
 syntax for inline predicates and selectors. Expressions like
 ``arr |> _where(_ > 3) |> _select(_ * 2)`` provide concise functional pipelines.
@@ -33,6 +35,8 @@ Example: ::
         // output:
         // 0 2 4 6 8
 
+
+
 +++++++++++
 Call macros
 +++++++++++
@@ -44,7 +48,9 @@ Call macros
 implements _order_by(iterator, expression) shorthand notation
 that expands into order_by(iterator, $(_) => expression)
 for example::
+
   each(foo)._order_by(_.id)
+
 
 .. _call-macro-linq_boost-_union_by:
 
@@ -53,7 +59,9 @@ for example::
 implements _union_by(iterator1, iterator2, expression) shorthand notation
 that expands into union_by(iterator1, iterator2, $(_) => expression)
 for example::
+
   each(foo1)._union_by(each(foo2), _.id)
+
 
 .. _call-macro-linq_boost-_take_while:
 
@@ -62,7 +70,9 @@ for example::
 implements _take_while(iterator, expression) shorthand notation
 that expands into take_while(iterator, $(_) => expression)
 for example::
+
   each(foo)._take_while(_ < 5)
+
 
 .. _call-macro-linq_boost-_all:
 
@@ -71,7 +81,9 @@ for example::
 implements _all(iterator, expression) shorthand notation
 that expands into all(iterator, $(_) => expression)
 for example::
+
   each(foo)._all(_ < 5)
+
 
 .. _call-macro-linq_boost-_distinct_by_to_array:
 
@@ -80,7 +92,9 @@ for example::
 implements _distinct_by_to_array(iterator, expression) shorthand notation
 that expands into distinct_by_to_array(iterator, $(_) => expression)
 for example::
+
   each(foo)._distinct_by_to_array(_.id)
+
 
 .. _call-macro-linq_boost-_order_by_to_array:
 
@@ -89,7 +103,9 @@ for example::
 implements _order_by_to_array(iterator, expression) shorthand notation
 that expands into order_by_to_array(iterator, $(_) => expression)
 for example::
+
   each(foo)._order_by_to_array(_.id)
+
 
 .. _call-macro-linq_boost-_except_by:
 
@@ -98,7 +114,9 @@ for example::
 implements _except_by(iterator1, iterator2, expression) shorthand notation
 that expands into except_by(iterator1, iterator2, $(_) => expression)
 for example::
+
   each(foo1)._except_by(each(foo2), _.id)
+
 
 .. _call-macro-linq_boost-_min_max_average_by:
 
@@ -107,7 +125,9 @@ for example::
 implements _min_max_average_by(iterator, expression) shorthand notation
 that expands into min_max_average_by(iterator, $(_) => expression)
 for example::
+
   each(foo)._min_max_average_by(_.value)
+
 
 .. _call-macro-linq_boost-_min_by:
 
@@ -116,7 +136,9 @@ for example::
 implements _min_by(iterator, expression) shorthand notation
 that expands into min_by(iterator, $(_) => expression)
 for example::
+
   each(foo)._min_by(_.value)
+
 
 .. _call-macro-linq_boost-_select_to_array:
 
@@ -125,7 +147,9 @@ for example::
 implements _select_to_array(iterator, expression) shorthand notation
 that expands into select_to_array(iterator, $(_) => expression)
 for example::
+
   each(foo)._select_to_array(_ * 2)
+
 
 .. _call-macro-linq_boost-_union_by_to_array:
 
@@ -134,7 +158,9 @@ for example::
 implements _union_by_to_array(iterator1, iterator2, expression) shorthand notation
 that expands into union_by_to_array(iterator1, iterator2, $(_) => expression)
 for example::
+
   each(foo1)._union_by_to_array(each(foo2), _.id)
+
 
 .. _call-macro-linq_boost-_unique_by_to_array:
 
@@ -143,7 +169,9 @@ for example::
 implements _unique_by_to_array(iterator, expression) shorthand notation
 that expands into unique_by_to_array(iterator, $(_) => expression)
 for example::
+
   each(foo)._unique_by_to_array(_.id)
+
 
 .. _call-macro-linq_boost-_count:
 
@@ -152,7 +180,9 @@ for example::
 implements _count(iterator, expression) shorthand notation
 that expands into count(iterator, $(_) => expression)
 for example::
+
   each(foo)._count(_ > 3)
+
 
 .. _call-macro-linq_boost-_max_by:
 
@@ -161,7 +191,9 @@ for example::
 implements _max_by(iterator, expression) shorthand notation
 that expands into max_by(iterator, $(_) => expression)
 for example::
+
   each(foo)._max_by(_.value)
+
 
 .. _call-macro-linq_boost-_any:
 
@@ -170,7 +202,9 @@ for example::
 implements _any(iterator, expression) shorthand notation
 that expands into any(iterator, $(_) => expression)
 for example::
+
   each(foo)._any(_ < 5)
+
 
 .. _call-macro-linq_boost-_except_by_to_array:
 
@@ -179,7 +213,9 @@ for example::
 implements _except_by_to_array(iterator1, iterator2, expression) shorthand notation
 that expands into except_by_to_array(iterator1, iterator2, $(_) => expression)
 for example::
+
   each(foo1)._except_by_to_array(each(foo2), _.id)
+
 
 .. _call-macro-linq_boost-_order_by_descending:
 
@@ -188,7 +224,9 @@ for example::
 implements _order_by_descending(iterator, expression) shorthand notation
 that expands into order_by_descending(iterator, $(_) => expression)
 for example::
+
   each(foo)._order_by_descending(_.id)
+
 
 .. _call-macro-linq_boost-_order_by_descending_to_array:
 
@@ -197,7 +235,9 @@ for example::
 implements _order_by_descending_to_array(iterator, expression) shorthand notation
 that expands into order_by_descending_to_array(iterator, $(_) => expression)
 for example::
+
   each(foo)._order_by_descending_to_array(_.id)
+
 
 .. _call-macro-linq_boost-_distinct_by:
 
@@ -206,7 +246,9 @@ for example::
 implements _distinct_by(iterator, expression) shorthand notation
 that expands into distinct_by(iterator, $(_) => expression)
 for example::
+
   each(foo)._distinct_by(_.id)
+
 
 .. _call-macro-linq_boost-_select:
 
@@ -215,7 +257,9 @@ for example::
 implements _select(iterator, expression) shorthand notation
 that expands into select(iterator, $(_) => expression)
 for example::
+
   each(foo)._select(_ * 2)
+
 
 .. _call-macro-linq_boost-_intersect_by_to_array:
 
@@ -224,7 +268,9 @@ for example::
 implements _intersect_by_to_array(iterator1, iterator2, expression) shorthand notation
 that expands into intersect_by_to_array(iterator1, iterator2, $(_) => expression)
 for example::
+
   each(foo1)._intersect_by_to_array(each(foo2), _.id)
+
 
 .. _call-macro-linq_boost-_min_max_by:
 
@@ -233,7 +279,9 @@ for example::
 implements _min_max_by(iterator, expression) shorthand notation
 that expands into min_max_by(iterator, $(_) => expression)
 for example::
+
   each(foo)._min_max_by(_.value)
+
 
 .. _call-macro-linq_boost-_intersect_by:
 
@@ -242,7 +290,9 @@ for example::
 implements _intersect_by(iterator1, iterator2, expression) shorthand notation
 that expands into intersect_by(iterator1, iterator2, $(_) => expression)
 for example::
+
   each(foo1)._intersect_by(each(foo2), _.id)
+
 
 .. _call-macro-linq_boost-_where_to_array:
 
@@ -251,7 +301,9 @@ for example::
 implements _where_to_array(iterator, expression) shorthand notation
 that expands into where_to_array(iterator, $(_) => expression)
 for example::
+
   each(foo)._where_to_array(_ < 5)
+
 
 .. _call-macro-linq_boost-_skip_while:
 
@@ -260,7 +312,9 @@ for example::
 implements _skip_while(iterator, expression) shorthand notation
 that expands into skip_while(iterator, $(_) => expression)
 for example::
+
   each(foo)._skip_while(_ < 5)
+
 
 .. _call-macro-linq_boost-_where:
 
@@ -269,7 +323,9 @@ for example::
 implements _where(iterator, expression) shorthand notation
 that expands into where_(iterator, $(_) => expression)
 for example::
+
   each(foo)._where(_ < 5)
+
 
 .. _call-macro-linq_boost-_unique_by:
 
@@ -278,7 +334,9 @@ for example::
 implements _unique_by(iterator, expression) shorthand notation
 that expands into unique_by(iterator, $(_) => expression)
 for example::
+
   each(foo)._unique_by(_.id)
+
 
 .. _call-macro-linq_boost-_fold:
 
@@ -286,8 +344,11 @@ for example::
 
 implements _fold(expression) that folds LINQ expressions into optimized sequnences
 for example::
-  _fold(each(foo)._where(_ > 5)._select(_ * 2))
+
+    _fold(each(foo)._where(_ > 5)._select(_ * 2))
+
 expands into a single comprehension that does all operations in one pass
+
 
 .. _call-macro-linq_boost-_sequence_equal_by:
 
@@ -296,6 +357,8 @@ expands into a single comprehension that does all operations in one pass
 implements _sequence_equal_by(iterator1, iterator2, expression) shorthand notation
 that expands into sequence_equal_by(iterator1, iterator2, $(_) => expression)
 for example::
+
   each(foo1)._sequence_equal_by(each(foo2), _.id)
+
 
 

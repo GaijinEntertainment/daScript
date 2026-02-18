@@ -181,9 +181,9 @@ Lint Control
     Declares that the function has side effects, even if the compiler cannot detect any.
     Prevents the optimizer from removing calls to this function.
 
-^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^
 Generics and Contracts
-^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^
 
 ``[generic]``
     Marks a function as generic (a template that is instantiated for each unique set of
@@ -293,9 +293,9 @@ Markers and Hints
 ``[marker]``
     A generic function marker annotation. Does not change behavior.
 
----------------------
+-------------------------------
 Structure and Class Annotations
----------------------
+-------------------------------
 
 ``[cpp_layout]``
     Uses C++ memory layout (matching C++ struct alignment rules)::

@@ -5,6 +5,8 @@
 Template application helpers
 ============================
 
+.. das:module:: templates_boost
+
 The TEMPLATES_BOOST module extends template utilities with high-level macros
 for common code generation patterns, including template function generation,
 type-parameterized struct creation, and compile-time code expansion.
@@ -14,6 +16,8 @@ See also :doc:`templates` for ``decltype`` and ``[template]`` annotations.
 All functions and symbols are in "templates_boost" module, use require to get access to it. ::
 
     require daslib/templates_boost
+
+
 
 ++++++++++
 Structures
@@ -52,6 +56,8 @@ This structure contains collection of substitution rules for a template.
          * **tag2expr** : table<string;smart_ptr< :ref:`Expression <handle-ast-Expression>`>> - tag expression replacement rules
 
 
+
+
 +++++++++++
 Call macros
 +++++++++++
@@ -62,11 +68,13 @@ Call macros
 
 This macro implements expression reification for variables.
 
+
 .. _call-macro-templates_boost-qmacro_expr:
 
 .. das:attribute:: qmacro_expr
 
 This macro implements first line of the expression block reification 'qmacro_expr'
+
 
 .. _call-macro-templates_boost-qmacro_function:
 
@@ -74,11 +82,13 @@ This macro implements first line of the expression block reification 'qmacro_exp
 
 This macro implements expression reification for functions.
 
+
 .. _call-macro-templates_boost-qmacro_block_to_array:
 
 .. das:attribute:: qmacro_block_to_array
 
 This macro implements expression block to array reification 'qmacro_block_to_array'
+
 
 .. _call-macro-templates_boost-qmacro_template_class:
 
@@ -87,11 +97,13 @@ This macro implements expression block to array reification 'qmacro_block_to_arr
 Call macro for quoting named template class methods.
 This macro implements expression reification for the named expressions (function, variable, etc.)
 
+
 .. _call-macro-templates_boost-qmacro_method:
 
 .. das:attribute:: qmacro_method
 
 This macro implements expression reification for class methods.
+
 
 .. _call-macro-templates_boost-qmacro_template_function:
 
@@ -100,11 +112,13 @@ This macro implements expression reification for class methods.
 Call macro for quoting named template functions.
 This macro implements expression reification for the named expressions (function, variable, etc.)
 
+
 .. _call-macro-templates_boost-qmacro:
 
 .. das:attribute:: qmacro
 
 This macro implements expression reification 'qmacro'
+
 
 .. _call-macro-templates_boost-qmacro_block:
 
@@ -112,11 +126,14 @@ This macro implements expression reification 'qmacro'
 
 This macro implements expression block reification 'qmacro_block'
 
+
 .. _call-macro-templates_boost-qmacro_type:
 
 .. das:attribute:: qmacro_type
 
 This macro implements type declaration reification 'qmacro_type'
+
+
 
 ++++++++++++++
 Template rules
@@ -147,6 +164,7 @@ Template rules
 Adds a rule to to the template to replace a variable field access with a prefix and suffix.
 I.e. foo.bar into prefix + bar + suffix
 
+
 :Arguments: * **self** :  :ref:`Template <struct-templates_boost-Template>`
 
             * **name** : string
@@ -164,6 +182,7 @@ renameCall
 .. das:function:: renameCall(self: Template; name: string; newName: string)
 
 Adds a rule to the template to rename a call.
+
 
 :Arguments: * **self** :  :ref:`Template <struct-templates_boost-Template>`
 
@@ -187,6 +206,7 @@ renameField
 
 Adds a rule to the template to rename any field lookup (., ?., as, is, etc)
 
+
 :Arguments: * **self** :  :ref:`Template <struct-templates_boost-Template>`
 
             * **name** : string
@@ -209,6 +229,7 @@ renameVariable
 
 Adds a rule to the template to rename a variable.
 
+
 :Arguments: * **self** :  :ref:`Template <struct-templates_boost-Template>`
 
             * **name** : string
@@ -227,6 +248,7 @@ Adds a rule to the template to rename a variable.
 
 Adds a rule to the template to replace an annotation argument with the result of a callback.
 
+
 :Arguments: * **self** :  :ref:`Template <struct-templates_boost-Template>`
 
             * **name** : string
@@ -238,6 +260,7 @@ Adds a rule to the template to replace an annotation argument with the result of
 .. das:function:: replaceArgumentWithList(self: Template; name: string; blka: array<VariablePtr>)
 
 Adds a rule to the template to replace a block argument with a list of variables.
+
 
 :Arguments: * **self** :  :ref:`Template <struct-templates_boost-Template>`
 
@@ -251,6 +274,7 @@ Adds a rule to the template to replace a block argument with a list of variables
 
 Adds a rule to the template to rename a block argument.
 
+
 :Arguments: * **self** :  :ref:`Template <struct-templates_boost-Template>`
 
             * **name** : string
@@ -262,6 +286,7 @@ Adds a rule to the template to rename a block argument.
 .. das:function:: replaceStructWithTypeDecl(self: Template; pstruct: Structure?; expr: TypeDeclPtr)
 
 Adds a rule to the template to replace a type alias with another type alias, specified by type declaration.
+
 
 :Arguments: * **self** :  :ref:`Template <struct-templates_boost-Template>`
 
@@ -275,6 +300,7 @@ Adds a rule to the template to replace a type alias with another type alias, spe
 
 Adds a rule to the template to replace a type alias with another type alias, specified by name.
 
+
 :Arguments: * **self** :  :ref:`Template <struct-templates_boost-Template>`
 
             * **name** : string
@@ -286,6 +312,7 @@ Adds a rule to the template to replace a type alias with another type alias, spe
 .. das:function:: replaceTypeWithTypeDecl(self: Template; name: string; expr: TypeDeclPtr)
 
 Adds a rule to the template to replace a type alias with another type alias, specified by type declaration.
+
 
 :Arguments: * **self** :  :ref:`Template <struct-templates_boost-Template>`
 
@@ -299,6 +326,7 @@ Adds a rule to the template to replace a type alias with another type alias, spe
 
 Adds a rule to the template to replace a variable tag with an expression.
 
+
 :Arguments: * **self** :  :ref:`Template <struct-templates_boost-Template>`
 
             * **name** : string
@@ -310,6 +338,7 @@ Adds a rule to the template to replace a variable tag with an expression.
 .. das:function:: replaceVariable(self: Template; name: string; expr: smart_ptr<Expression>)
 
 Adds a rule to the template to replace a variable with an expression.
+
 
 :Arguments: * **self** :  :ref:`Template <struct-templates_boost-Template>`
 
@@ -327,6 +356,7 @@ replaceVariableWithList
 
 Adds a rule to the template to replace a variable with an expression list.
 
+
 :Arguments: * **self** :  :ref:`Template <struct-templates_boost-Template>`
 
             * **name** : string
@@ -337,7 +367,6 @@ Adds a rule to the template to replace a variable with an expression list.
 
 .. das:function:: replaceVariableWithList(self: Template; name: string; expr: array<ExpressionPtr>)
 
-----
 
 ++++++++++++++++++++
 Template application
@@ -345,9 +374,9 @@ Template application
 
   *  :ref:`apply_template (var rules: Template; at: LineInfo; var typ: smart_ptr\<TypeDecl\>; forceAt: bool = true) : TypeDeclPtr <function-templates_boost_apply_template_Template_LineInfo_smart_ptr_ls_TypeDecl_gr__bool>`
   *  :ref:`apply_template (var rules: Template; at: LineInfo; var expr: smart_ptr\<Expression\>; forceAt: bool = true) : ExpressionPtr <function-templates_boost_apply_template_Template_LineInfo_smart_ptr_ls_Expression_gr__bool>`
-  *  :ref:`apply_template (at: LineInfo; var expr: smart_ptr\<Expression\>&; blk: block\<(var rules:Template):void\>) : ExpressionPtr <function-templates_boost_apply_template_LineInfo_smart_ptr_ls_Expression_gr__block_ls_var_rules_c_Template_c_void_gr_>`
-  *  :ref:`apply_template (at: LineInfo; var typ: smart_ptr\<TypeDecl\>&; blk: block\<(var rules:Template):void\>) : TypeDeclPtr <function-templates_boost_apply_template_LineInfo_smart_ptr_ls_TypeDecl_gr__block_ls_var_rules_c_Template_c_void_gr_>`
-  *  :ref:`apply_template (var expr: smart_ptr\<Expression\>&; blk: block\<(var rules:Template):void\>) : ExpressionPtr <function-templates_boost_apply_template_smart_ptr_ls_Expression_gr__block_ls_var_rules_c_Template_c_void_gr_>`
+  *  :ref:`apply_template (at: LineInfo; var expr: smart_ptr\<Expression\>&; blk: block\<(var rules:Template):void\>) : ExpressionPtr <function-templates_boost_apply_template_LineInfo_smart_ptr_ls_Expression_gr__ref__block_ls_var_rules_c_Template_c_void_gr_>`
+  *  :ref:`apply_template (at: LineInfo; var typ: smart_ptr\<TypeDecl\>&; blk: block\<(var rules:Template):void\>) : TypeDeclPtr <function-templates_boost_apply_template_LineInfo_smart_ptr_ls_TypeDecl_gr__ref__block_ls_var_rules_c_Template_c_void_gr_>`
+  *  :ref:`apply_template (var expr: smart_ptr\<Expression\>&; blk: block\<(var rules:Template):void\>) : ExpressionPtr <function-templates_boost_apply_template_smart_ptr_ls_Expression_gr__ref__block_ls_var_rules_c_Template_c_void_gr_>`
 
 
 apply_template
@@ -358,6 +387,7 @@ apply_template
 .. das:function:: apply_template(rules: Template; at: LineInfo; typ: smart_ptr<TypeDecl>; forceAt: bool = true) : TypeDeclPtr
 
 Applies the template to the given expression. If `forceAt` is set, the resulting expression will have the same line info as 'at'.
+
 
 :Arguments: * **rules** :  :ref:`Template <struct-templates_boost-Template>`
 
@@ -371,19 +401,18 @@ Applies the template to the given expression. If `forceAt` is set, the resulting
 
 .. das:function:: apply_template(rules: Template; at: LineInfo; expr: smart_ptr<Expression>; forceAt: bool = true) : ExpressionPtr
 
-.. _function-templates_boost_apply_template_LineInfo_smart_ptr_ls_Expression_gr__block_ls_var_rules_c_Template_c_void_gr_:
+.. _function-templates_boost_apply_template_LineInfo_smart_ptr_ls_Expression_gr__ref__block_ls_var_rules_c_Template_c_void_gr_:
 
 .. das:function:: apply_template(at: LineInfo; expr: smart_ptr<Expression>&; blk: block<(var rules:Template):void>) : ExpressionPtr
 
-.. _function-templates_boost_apply_template_LineInfo_smart_ptr_ls_TypeDecl_gr__block_ls_var_rules_c_Template_c_void_gr_:
+.. _function-templates_boost_apply_template_LineInfo_smart_ptr_ls_TypeDecl_gr__ref__block_ls_var_rules_c_Template_c_void_gr_:
 
 .. das:function:: apply_template(at: LineInfo; typ: smart_ptr<TypeDecl>&; blk: block<(var rules:Template):void>) : TypeDeclPtr
 
-.. _function-templates_boost_apply_template_smart_ptr_ls_Expression_gr__block_ls_var_rules_c_Template_c_void_gr_:
+.. _function-templates_boost_apply_template_smart_ptr_ls_Expression_gr__ref__block_ls_var_rules_c_Template_c_void_gr_:
 
 .. das:function:: apply_template(expr: smart_ptr<Expression>&; blk: block<(var rules:Template):void>) : ExpressionPtr
 
-----
 
 ++++++++++++++++++
 Expression helpers
@@ -399,6 +428,7 @@ Expression helpers
 
 Force expression location, then return it.
 
+
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
             * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`
@@ -410,6 +440,7 @@ Force expression location, then return it.
 Removes dereferences of the variable `varname` from the expression.
 This is typically used when replacing 'workhorse' variable with constant.
 
+
 :Arguments: * **varname** : string
 
             * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`>
@@ -420,9 +451,11 @@ This is typically used when replacing 'workhorse' variable with constant.
 
 Visits the expression with the given visitor adapter.
 
+
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
             * **adapter** : smart_ptr< :ref:`VisitorAdapter <handle-ast-VisitorAdapter>`>
+
 
 +++++++++++++++++++++
 Expression generation
@@ -441,13 +474,13 @@ make_expression_block
 
 Create ExprBlock and move all expressions from expr to the list of the block.
 
+
 :Arguments: * **exprs** : vector<smart_ptr<Expression>>
 
 .. _function-templates_boost_make_expression_block_array_ls_ExpressionPtr_gr_:
 
 .. das:function:: make_expression_block(exprs: array<ExpressionPtr>) : smart_ptr<ExprBlock>
 
-----
 
 +++++++++++++
 Block helpers
@@ -462,6 +495,7 @@ Block helpers
 
 Moves the corresponding block subexpression expression from the ExprMakeBlock.
 
+
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. _function-templates_boost_unquote_block_ExpressionPtr:
@@ -470,7 +504,9 @@ Moves the corresponding block subexpression expression from the ExprMakeBlock.
 
 Returns the corresponding block subexpression expression from the ExprMakeBlock.
 
+
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+
 
 +++++++++++++++++++++++
 Global variable helpers
@@ -490,6 +526,7 @@ Global variable helpers
 Add global variable to the module, given name and initial value.
 Variable type will be constant.
 
+
 :Arguments: * **mod** :  :ref:`Module <handle-rtti-Module>`?
 
             * **vname** : string
@@ -505,6 +542,7 @@ Variable type will be constant.
 Add global variable to the module, given name and initial value.
 It will be private, and type will be constant.
 
+
 :Arguments: * **mod** :  :ref:`Module <handle-rtti-Module>`?
 
             * **vname** : string
@@ -519,6 +557,7 @@ It will be private, and type will be constant.
 
 Add global variable to the module, given name and initial value.
 It will be private.
+
 
 :Arguments: * **mod** :  :ref:`Module <handle-rtti-Module>`?
 
@@ -538,6 +577,7 @@ add_global_var
 
 Add global variable to the module, given name and type.
 `priv` specifies if the variable is private to the block.
+
 
 :Arguments: * **mod** :  :ref:`Module <handle-rtti-Module>`?
 
@@ -559,7 +599,6 @@ Add global variable to the module, given name and type.
 
 .. das:function:: add_global_var(mod: Module?; vname: string; typ: TypeDeclPtr; vat: LineInfo; priv: bool) : bool
 
-----
 
 ++++++++++++++
 Hygienic names
@@ -574,12 +613,15 @@ Hygienic names
 Generates unique private name for the variable, given prefix and line info.
 
 .. warning::
-The assumption is that line info is unique for the context of the unique name generation.
-If it is not, additional measures must be taken to ensure uniqueness of prefix.
+
+   The assumption is that line info is unique for the context of the unique name generation.
+   If it is not, additional measures must be taken to ensure uniqueness of prefix.
+
 
 :Arguments: * **prefix** : string
 
             * **vat** :  :ref:`LineInfo <handle-rtti-LineInfo>`
+
 
 ++++++++++++++
 Quoting macros
@@ -602,6 +644,7 @@ Quoting macros
 
 Implementation details for the expression reification. This is a block reification.
 
+
 :Arguments: * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`>
 
             * **blk** : block<(rules: :ref:`Template <struct-templates_boost-Template>`):void>
@@ -611,6 +654,7 @@ Implementation details for the expression reification. This is a block reificati
 .. das:function:: apply_qblock_expr(expr: smart_ptr<Expression>; blk: block<(var rules:Template):void>) : ExpressionPtr
 
 Implementation details for the expression reification. This is a first line of the block as expression reification.
+
 
 :Arguments: * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`>
 
@@ -622,6 +666,7 @@ Implementation details for the expression reification. This is a first line of t
 
 Implementation details for the expression reification. This is a block reification.
 
+
 :Arguments: * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`>
 
             * **blk** : block<(rules: :ref:`Template <struct-templates_boost-Template>`):void>
@@ -632,6 +677,7 @@ Implementation details for the expression reification. This is a block reificati
 
 Implementation details for the expression reification.
 
+
 :Arguments: * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`>
 
             * **blk** : block<(rules: :ref:`Template <struct-templates_boost-Template>`):void>
@@ -641,6 +687,7 @@ Implementation details for the expression reification.
 .. das:function:: apply_qmacro_function(fname: string; expr: smart_ptr<Expression>; blk: block<(var rules:Template):void>) : FunctionPtr
 
 Implementation details for reification. This is a function generation reification.
+
 
 :Arguments: * **fname** : string
 
@@ -653,6 +700,7 @@ Implementation details for reification. This is a function generation reificatio
 .. das:function:: apply_qmacro_method(fname: string; parent: StructurePtr; expr: smart_ptr<Expression>; blk: block<(var rules:Template):void>) : FunctionPtr
 
 Implementation details for reification. This is a class method function generation reification.
+
 
 :Arguments: * **fname** : string
 
@@ -668,6 +716,7 @@ Implementation details for reification. This is a class method function generati
 
 Implementation details for the expression reification. This is a template class instantiation reification.
 
+
 :Arguments: * **instance_name** : string
 
             * **template_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`>
@@ -680,6 +729,7 @@ Implementation details for the expression reification. This is a template class 
 
 Applies template rules to a function, cloning it with substituted types.
 
+
 :Arguments: * **func** :  :ref:`FunctionPtr <alias-FunctionPtr>`
 
             * **blk** : block<(rules: :ref:`Template <struct-templates_boost-Template>`):void>
@@ -689,6 +739,7 @@ Applies template rules to a function, cloning it with substituted types.
 .. das:function:: apply_qmacro_variable(vname: string; expr: smart_ptr<Expression>; blk: block<(var rules:Template):void>) : VariablePtr
 
 Implementation details for reification. This is a variable generation reification.
+
 
 :Arguments: * **vname** : string
 
@@ -702,9 +753,11 @@ Implementation details for reification. This is a variable generation reificatio
 
 Implementation details for the expression reification. This is a type declaration reification.
 
+
 :Arguments: * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`>
 
             * **blk** : block<(rules: :ref:`Template <struct-templates_boost-Template>`):void>
+
 
 ++++++++++++++++++++
 Type pointer helpers
@@ -714,7 +767,7 @@ Type pointer helpers
   *  :ref:`add_type_ptr_ref (var st: StructurePtr; flags: TypeDeclFlags) : TypeDeclPtr <function-templates_boost_add_type_ptr_ref_StructurePtr_TypeDeclFlags>`
   *  :ref:`add_type_ptr_ref (var st: EnumerationPtr; flags: TypeDeclFlags) : TypeDeclPtr <function-templates_boost_add_type_ptr_ref_EnumerationPtr_TypeDeclFlags>`
   *  :ref:`add_type_ptr_ref (a: TypeDeclPtr; flags: TypeDeclFlags) : TypeDeclPtr <function-templates_boost_add_type_ptr_ref_TypeDeclPtr_TypeDeclFlags>`
-  *  :ref:`add_type_ptr_ref (anything: auto(TT); flags: TypeDeclFlags) : TypeDeclPtr <function-templates_boost_add_type_ptr_ref_autoTT_TypeDeclFlags_0x298>`
+  *  :ref:`add_type_ptr_ref (anything: auto(TT); flags: TypeDeclFlags) : TypeDeclPtr <function-templates_boost_add_type_ptr_ref_autoTT_TypeDeclFlags_0x299>`
   *  :ref:`add_type_ptr_ref (var st: Structure?; flags: TypeDeclFlags) : TypeDeclPtr <function-templates_boost_add_type_ptr_ref_Structure_q__TypeDeclFlags>`
   *  :ref:`add_type_ptr_ref (var st: Enumeration?; flags: TypeDeclFlags) : TypeDeclPtr <function-templates_boost_add_type_ptr_ref_Enumeration_q__TypeDeclFlags>`
 
@@ -723,6 +776,7 @@ Type pointer helpers
 .. das:function:: add_array_ptr_ref(a: array<smart_ptr<auto(TT)>>) : array<smart_ptr<TT>>
 
 Implementation details for the reification. This adds any array to the rules.
+
 
 :Arguments: * **a** : array<smart_ptr<auto(TT)>>
 
@@ -736,6 +790,7 @@ add_type_ptr_ref
 
 Implementation details for the reification. Creates a type declaration from a structure smart pointer.
 
+
 :Arguments: * **st** :  :ref:`StructurePtr <alias-StructurePtr>`
 
             * **flags** :  :ref:`TypeDeclFlags <alias-TypeDeclFlags>`
@@ -748,7 +803,7 @@ Implementation details for the reification. Creates a type declaration from a st
 
 .. das:function:: add_type_ptr_ref(a: TypeDeclPtr; flags: TypeDeclFlags) : TypeDeclPtr
 
-.. _function-templates_boost_add_type_ptr_ref_autoTT_TypeDeclFlags_0x298:
+.. _function-templates_boost_add_type_ptr_ref_autoTT_TypeDeclFlags_0x299:
 
 .. das:function:: add_type_ptr_ref(anything: auto(TT); flags: TypeDeclFlags) : TypeDeclPtr
 
@@ -760,7 +815,6 @@ Implementation details for the reification. Creates a type declaration from a st
 
 .. das:function:: add_type_ptr_ref(st: Enumeration?; flags: TypeDeclFlags) : TypeDeclPtr
 
-----
 
 +++++++++++++++++
 Structure helpers
@@ -774,6 +828,7 @@ Structure helpers
 
 Adds a field to the structure.
 
+
 :Arguments: * **cls** :  :ref:`StructurePtr <alias-StructurePtr>`
 
             * **name** : string
@@ -782,22 +837,24 @@ Adds a field to the structure.
 
             * **init** :  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
+
 ++++++++++++++++
 Class generation
 ++++++++++++++++
 
-  *  :ref:`enum_class_type (st: auto) : auto <function-templates_boost_enum_class_type_auto_0x276>`
+  *  :ref:`enum_class_type (st: auto) : auto <function-templates_boost_enum_class_type_auto_0x277>`
   *  :ref:`make_class (name: string; var baseClass: StructurePtr; mod: Module?) : smart_ptr\<Structure\> <function-templates_boost_make_class_string_StructurePtr_Module_q_>`
   *  :ref:`make_class (name: string; mod: Module?) : smart_ptr\<Structure\> <function-templates_boost_make_class_string_Module_q_>`
   *  :ref:`make_class (name: string; var baseClass: Structure?; mod: Module?) : smart_ptr\<Structure\> <function-templates_boost_make_class_string_Structure_q__Module_q_>`
   *  :ref:`make_class_constructor (cls: StructurePtr; ctor: FunctionPtr) : smart_ptr\<Function\> <function-templates_boost_make_class_constructor_StructurePtr_FunctionPtr>`
   *  :ref:`modify_to_class_member (cls: StructurePtr; fun: FunctionPtr; isExplicit: bool; Constant: bool) <function-templates_boost_modify_to_class_member_StructurePtr_FunctionPtr_bool_bool>`
 
-.. _function-templates_boost_enum_class_type_auto_0x276:
+.. _function-templates_boost_enum_class_type_auto_0x277:
 
 .. das:function:: enum_class_type(st: auto) : auto
 
 return underlying type for the enumeration
+
 
 :Arguments: * **st** : auto
 
@@ -810,6 +867,7 @@ make_class
 .. das:function:: make_class(name: string; baseClass: StructurePtr; mod: Module?) : smart_ptr<Structure>
 
 Creates a class structure derived from baseClass. Adds __rtti, __finalize fields.
+
 
 :Arguments: * **name** : string
 
@@ -833,6 +891,7 @@ Creates a class structure derived from baseClass. Adds __rtti, __finalize fields
 
 Adds a class constructor from a constructor function.
 
+
 :Arguments: * **cls** :  :ref:`StructurePtr <alias-StructurePtr>`
 
             * **ctor** :  :ref:`FunctionPtr <alias-FunctionPtr>`
@@ -842,6 +901,7 @@ Adds a class constructor from a constructor function.
 .. das:function:: modify_to_class_member(cls: StructurePtr; fun: FunctionPtr; isExplicit: bool; Constant: bool)
 
 Modifies function to be a member of a particular class.
+
 
 :Arguments: * **cls** :  :ref:`StructurePtr <alias-StructurePtr>`
 

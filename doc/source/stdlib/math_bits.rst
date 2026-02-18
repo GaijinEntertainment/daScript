@@ -5,6 +5,8 @@
 Math bit helpers
 ================
 
+.. das:module:: math_bits
+
 The MATH_BITS module provides bit manipulation functions for floating point
 numbers, including type punning between integer and float representations,
 and efficient integer math operations like ``int_bits_to_float`` and
@@ -29,6 +31,8 @@ Example: ::
         // uint_bits_to_float(0x3F800000) = 1
         // float_bits_to_uint(1.0) = 0x3f800000
 
+
+
 +++++++++++++++++
 float in int,uint
 +++++++++++++++++
@@ -51,6 +55,7 @@ int_bits_to_float
 .. das:function:: int_bits_to_float(x: int2) : float2
 
 bit representation of x is interpreted as a float
+
 
 :Arguments: * **x** : int2
 
@@ -78,6 +83,7 @@ uint_bits_to_float
 
 bit representation of x is interpreted as a float3
 
+
 :Arguments: * **x** : uint3
 
 .. _function-math_bits_uint_bits_to_float_uint2:
@@ -92,7 +98,6 @@ bit representation of x is interpreted as a float3
 
 .. das:function:: uint_bits_to_float(x: uint4) : float4
 
-----
 
 +++++++++++++++++
 int,uint in float
@@ -116,6 +121,7 @@ float_bits_to_int
 .. das:function:: float_bits_to_int(x: float2) : int2
 
 bit representation of x is interpreted as an int2
+
 
 :Arguments: * **x** : float2
 
@@ -143,6 +149,7 @@ float_bits_to_uint
 
 bit representation of x is interpreted as a uint3
 
+
 :Arguments: * **x** : float3
 
 .. _function-math_bits_float_bits_to_uint_float2:
@@ -157,7 +164,6 @@ bit representation of x is interpreted as a uint3
 
 .. das:function:: float_bits_to_uint(x: float4) : uint4
 
-----
 
 ++++++++++++++++++++++
 int64,uint64 in double
@@ -174,6 +180,7 @@ int64,uint64 in double
 
 bit representation of x is interpreted as a int64
 
+
 :Arguments: * **x** : double
 
 .. _function-math_bits_double_bits_to_uint64_double:
@@ -181,6 +188,7 @@ bit representation of x is interpreted as a int64
 .. das:function:: double_bits_to_uint64(x: double) : uint64
 
 bit representation of x is interpreted as a uint64
+
 
 :Arguments: * **x** : double
 
@@ -190,6 +198,7 @@ bit representation of x is interpreted as a uint64
 
 bit representation of x is interpreted as a double
 
+
 :Arguments: * **x** : int64
 
 .. _function-math_bits_uint64_bits_to_double_uint64:
@@ -198,7 +207,9 @@ bit representation of x is interpreted as a double
 
 bit representation of x is interpreted as a double
 
+
 :Arguments: * **x** : uint64
+
 
 ++++++++++++++
 bit-cast vec4f
@@ -219,6 +230,7 @@ bit-cast vec4f
 
 return an int16 which was bit-cast from x
 
+
 :Arguments: * **data** : float4
 
 .. _function-math_bits_cast_to_int32_float4:
@@ -226,6 +238,7 @@ return an int16 which was bit-cast from x
 .. das:function:: cast_to_int32(data: float4) : int
 
 return an int32 which was bit-cast from x
+
 
 :Arguments: * **data** : float4
 
@@ -235,6 +248,7 @@ return an int32 which was bit-cast from x
 
 return an int64 which was bit-cast from x
 
+
 :Arguments: * **data** : float4
 
 .. _function-math_bits_cast_to_int8_float4:
@@ -242,6 +256,7 @@ return an int64 which was bit-cast from x
 .. das:function:: cast_to_int8(data: float4) : int8
 
 return an int8 which was bit-cast from x
+
 
 :Arguments: * **data** : float4
 
@@ -251,6 +266,7 @@ return an int8 which was bit-cast from x
 
 return a pointer which was bit-cast from x
 
+
 :Arguments: * **data** : float4
 
 .. _function-math_bits_cast_to_string_float4:
@@ -258,6 +274,7 @@ return a pointer which was bit-cast from x
 .. das:function:: cast_to_string(data: float4) : string
 
 return a string which pointer was bit-cast from x
+
 
 :Arguments: * **data** : float4
 
@@ -271,12 +288,11 @@ cast_to_vec4f
 
 return a float4 which stores bit-cast version of x
 
+
 :Arguments: * **x** : int64
 
 .. _function-math_bits_cast_to_vec4f_bool:
 
 .. das:function:: cast_to_vec4f(x: bool) : float4
-
-----
 
 

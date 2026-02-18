@@ -91,6 +91,7 @@ def main {
 
     // === Blocks cannot be stored or returned ===
     // Blocks live on the stack — they can only be passed DOWN as arguments.
+    // They cannot be stored in arrays, tables, or other containers.
     // This makes them very fast (no heap allocation).
     // If you need to store or return a callable, use a lambda (tutorial 14).
 

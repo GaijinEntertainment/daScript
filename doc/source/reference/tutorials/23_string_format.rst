@@ -63,7 +63,7 @@ Writer functions:
 
 .. seealso::
 
-   :ref:`String builder <string_builder>`, :ref:`Strings <strings>` in
+   :ref:`String builder <string_builder>` in
    the language reference.
 
    Full source: :download:`tutorials/language/23_string_format.das <../../../../tutorials/language/23_string_format.das>`

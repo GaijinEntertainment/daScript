@@ -5,6 +5,8 @@
 safe_addr macro
 ===============
 
+.. das:module:: safe_addr
+
 The SAFE_ADDR module provides compile-time checked pointer operations.
 ``safe_addr`` returns a temporary pointer to a variable only if the compiler
 can verify the pointer will not outlive its target. This prevents dangling
@@ -13,6 +15,8 @@ pointer bugs without runtime overhead.
 All functions and symbols are in "safe_addr" module, use require to get access to it. ::
 
     require daslib/safe_addr
+
+
 
 ++++++++++++++++++++
 Function annotations
@@ -25,6 +29,7 @@ Function annotations
 This macro reports an error if safe_addr is attempted on the object, which is not local to the scope.
 I.e. if the object can `expire` while in scope, with delete, garbage collection, or on the C++ side.
 
+
 .. _handle-safe_addr-SharedAddrMacro:
 
 .. das:attribute:: SharedAddrMacro
@@ -32,18 +37,21 @@ I.e. if the object can `expire` while in scope, with delete, garbage collection,
 This macro reports an error if shared_addr is attempted on anything other that shared global variables.
 I.e. only global variables are safe to use with shared_addr.
 
+
 .. _handle-safe_addr-TempValueMacro:
 
 .. das:attribute:: TempValueMacro
 
 This macro reports an error if temp_value is attempted outside of function arguments.
 
+
+
 ++++++++++++++++++++++
 Safe temporary address
 ++++++++++++++++++++++
 
-  *  :ref:`safe_addr (x: auto(T) const& ==const) : T?# <function-safe_addr_safe_addr_autoT_const__eq__eq_const_0x1e>`
-  *  :ref:`safe_addr (var x: auto(T)& ==const) : T?# <function-safe_addr_safe_addr__autoT__eq__eq_const_0x16>`
+  *  :ref:`safe_addr (x: auto(T) const& ==const) : T?# <function-safe_addr_safe_addr_autoT_const_ref___eq__eq_const_0x1e>`
+  *  :ref:`safe_addr (var x: auto(T)& ==const) : T?# <function-safe_addr_safe_addr__autoT_ref___eq__eq_const_0x16>`
   *  :ref:`shared_addr (val: auto(VALUE)) : auto <function-safe_addr_shared_addr_autoVALUE_0x48>`
   *  :ref:`shared_addr (tab: table\<auto(KEY), auto(VAL)\>; k: KEY) : auto <function-safe_addr_shared_addr_table_ls_autoKEY,_autoVAL_gr__KEY>`
 
@@ -51,15 +59,16 @@ Safe temporary address
 safe_addr
 ^^^^^^^^^
 
-.. _function-safe_addr_safe_addr_autoT_const__eq__eq_const_0x1e:
+.. _function-safe_addr_safe_addr_autoT_const_ref___eq__eq_const_0x1e:
 
 .. das:function:: safe_addr(x: auto(T) const& ==const) : T?#
 
 returns temporary pointer to the given expression
 
-:Arguments: * **x** : auto(T)&!
 
-.. _function-safe_addr_safe_addr__autoT__eq__eq_const_0x16:
+:Arguments: * **x** : auto(T)\ &!
+
+.. _function-safe_addr_safe_addr__autoT_ref___eq__eq_const_0x16:
 
 .. das:function:: safe_addr(x: auto(T)& ==const) : T?#
 
@@ -75,13 +84,13 @@ shared_addr
 
 returns address of the given shared variable. it's safe because shared variables never go out of scope
 
-:Arguments: * **val** : auto(VALUE)&
+
+:Arguments: * **val** : auto(VALUE)\ &
 
 .. _function-safe_addr_shared_addr_table_ls_autoKEY,_autoVAL_gr__KEY:
 
 .. das:function:: shared_addr(tab: table<auto(KEY), auto(VAL)>; k: KEY) : auto
 
-----
 
 ++++++++++++++++++
 Temporary pointers
@@ -100,37 +109,36 @@ temp_ptr
 
 returns temporary pointer from a given pointer
 
+
 :Arguments: * **x** : auto(T)? implicit!
 
 .. _function-safe_addr_temp_ptr_autoT_q__const_implicit__eq__eq_const:
 
 .. das:function:: temp_ptr(x: auto(T)? const implicit ==const) : T?#
 
-----
 
 ++++++++++++++++
 Temporary values
 ++++++++++++++++
 
-  *  :ref:`temp_value (var x: auto(T)& ==const) : T&# <function-safe_addr_temp_value__autoT__eq__eq_const_0x63>`
-  *  :ref:`temp_value (x: auto(T) const& ==const) : T const&# <function-safe_addr_temp_value_autoT_const__eq__eq_const_0x5b>`
+  *  :ref:`temp_value (var x: auto(T)& ==const) : T&# <function-safe_addr_temp_value__autoT_ref___eq__eq_const_0x63>`
+  *  :ref:`temp_value (x: auto(T) const& ==const) : T const&# <function-safe_addr_temp_value_autoT_const_ref___eq__eq_const_0x5b>`
 
 
 temp_value
 ^^^^^^^^^^
 
-.. _function-safe_addr_temp_value__autoT__eq__eq_const_0x63:
+.. _function-safe_addr_temp_value__autoT_ref___eq__eq_const_0x63:
 
 .. das:function:: temp_value(x: auto(T)& ==const) : T&#
 
 returns temporary reference to the given expression
 
-:Arguments: * **x** : auto(T)&!
 
-.. _function-safe_addr_temp_value_autoT_const__eq__eq_const_0x5b:
+:Arguments: * **x** : auto(T)\ &!
+
+.. _function-safe_addr_temp_value_autoT_const_ref___eq__eq_const_0x5b:
 
 .. das:function:: temp_value(x: auto(T) const& ==const) : T const&#
-
-----
 
 

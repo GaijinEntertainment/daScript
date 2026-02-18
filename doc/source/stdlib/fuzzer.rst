@@ -5,6 +5,8 @@
 Fuzzer
 ======
 
+.. das:module:: fuzzer
+
 The FUZZER module implements fuzz testing infrastructure for daslang programs.
 It generates random inputs for functions and verifies they do not crash or
 produce unexpected errors, helping discover edge cases and robustness issues.
@@ -12,6 +14,8 @@ produce unexpected errors, helping discover edge cases and robustness issues.
 All functions and symbols are in "fuzzer" module, use require to get access to it. ::
 
     require daslib/fuzzer
+
+
 
 ++++++++++++
 Fuzzer tests
@@ -58,6 +62,7 @@ fuzz
 run block however many times
 ignore panic, so that we can see that runtime crashes
 
+
 :Arguments: * **fuzz_count** : int
 
             * **blk** : block<void>
@@ -75,6 +80,7 @@ ignore panic, so that we can see that runtime crashes
 fuzzes generic function that takes single numeric or vector argument.
 arguments are: int, uint, int64, uint64
 
+
 :Arguments: * **t** : auto
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>`
@@ -88,6 +94,7 @@ arguments are: int, uint, int64, uint64
 fuzzes generic function that takes single numeric or vector argument.
 arguments are: uint, uint64
 
+
 :Arguments: * **t** : auto
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>`
@@ -100,6 +107,7 @@ arguments are: uint, uint64
 
 fuzzes generic function that takes two numeric or vector arguments.
 arguments are: int, uint, float, double, int64, uint64, string
+
 
 :Arguments: * **t** : auto
 
@@ -119,6 +127,7 @@ run block however many times
 do not ignore panic, so that we can see where the runtime fails
 this is here so that `fuzz` can be easily replaced with `fuzz_debug` for the purpose of debugging
 
+
 :Arguments: * **fuzz_count** : int
 
             * **blk** : block<void>
@@ -136,6 +145,7 @@ this is here so that `fuzz` can be easily replaced with `fuzz_debug` for the pur
 fuzzes generic function that takes two numeric or vector arguments.
 arguments are: int, uint, int64, uint64, float, double, string, int2, int3, int4, uint2, uint3, uint4, float2, float3, float4
 
+
 :Arguments: * **t** : auto
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>`
@@ -148,6 +158,7 @@ arguments are: int, uint, int64, uint64, float, double, string, int2, int3, int4
 
 fuzzes generic function that takes single numeric or vector argument.
 arguments are: float, double, float2, float3, float4
+
 
 :Arguments: * **t** : auto
 
@@ -162,6 +173,7 @@ arguments are: float, double, float2, float3, float4
 fuzzes generic function that takes two numeric or vector arguments.
 arguments are: float, double, float2, float3, float4
 
+
 :Arguments: * **t** : auto
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>`
@@ -174,6 +186,7 @@ arguments are: float, double, float2, float3, float4
 
 fuzzes generic function that takes three numeric or vector arguments.
 arguments are: float, double, float2, float3, float4
+
 
 :Arguments: * **t** : auto
 
@@ -188,6 +201,7 @@ arguments are: float, double, float2, float3, float4
 fuzzes generic function that takes single numeric or vector argument.
 arguments are: float, float2, float3, float4
 
+
 :Arguments: * **t** : auto
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>`
@@ -200,6 +214,7 @@ arguments are: float, float2, float3, float4
 
 fuzzes generic function that takes two numeric or vector arguments.
 arguments are: float, float2, float3, float4
+
 
 :Arguments: * **t** : auto
 
@@ -214,6 +229,7 @@ arguments are: float, float2, float3, float4
 fuzzes generic function that takes two numeric or vector arguments.
 arguments are: int, uint, int2, int3, int4, uint2, uint3, uint4
 
+
 :Arguments: * **t** : auto
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>`
@@ -226,6 +242,7 @@ arguments are: int, uint, int2, int3, int4, uint2, uint3, uint4
 
 fuzzes generic function that takes single numeric or vector argument.
 arguments are: int, uint, int8, uint8, int16, uint16, int64, uint64, float, double
+
 
 :Arguments: * **t** : auto
 
@@ -240,6 +257,7 @@ arguments are: int, uint, int8, uint8, int16, uint16, int64, uint64, float, doub
 fuzzes generic function that takes single numeric or vector argument.
 arguments are: int, uint, float, double, string, int2, int3, int4, uint2, uint3, uint4, float2, float3, float4
 
+
 :Arguments: * **t** : auto
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>`
@@ -252,6 +270,7 @@ arguments are: int, uint, float, double, string, int2, int3, int4, uint2, uint3,
 
 fuzzes generic function that takes two numeric or vector arguments.
 arguments are: int, uint, float, double, int2, int3, int4, uint2, uint3, uint4, float2, float3, float4
+
 
 :Arguments: * **t** : auto
 
@@ -266,6 +285,7 @@ arguments are: int, uint, float, double, int2, int3, int4, uint2, uint3, uint4, 
 fuzzes generic function that takes two numeric or vector arguments.
 arguments are: int, uint, float, double, int2, int3, int4, float2, float3, float4
 
+
 :Arguments: * **t** : auto
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>`
@@ -278,6 +298,7 @@ arguments are: int, uint, float, double, int2, int3, int4, float2, float3, float
 
 fuzzes generic function that takes single numeric or vector argument.
 arguments are: int, uint, float, double, string, int2, int3, int4, uint2, uint3, uint4, float2, float3, float4
+
 
 :Arguments: * **t** : auto
 
@@ -292,6 +313,7 @@ arguments are: int, uint, float, double, string, int2, int3, int4, uint2, uint3,
 fuzzes generic function that takes single numeric or vector argument.
 arguments are: int, uint, float, double
 
+
 :Arguments: * **t** : auto
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>`
@@ -304,6 +326,7 @@ arguments are: int, uint, float, double
 
 fuzzes generic function that takes two numeric or vector arguments.
 arguments are: int, uint, float, double
+
 
 :Arguments: * **t** : auto
 
@@ -318,6 +341,7 @@ arguments are: int, uint, float, double
 fuzzes generic function that takes three numeric or vector arguments.
 arguments are: int, uint, float, double
 
+
 :Arguments: * **t** : auto
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>`
@@ -330,6 +354,7 @@ arguments are: int, uint, float, double
 
 fuzzes generic function that takes four numeric or vector arguments.
 arguments are: int, uint, float, double
+
 
 :Arguments: * **t** : auto
 
@@ -344,6 +369,7 @@ arguments are: int, uint, float, double
 fuzzes generic function that takes vector and matching scalar on the left
 arguments pairs are: int2,int; int3,int; uint2,uint; uint3,uint; uint4,uint; int4,int; float2,float; float3,float; float4,float
 
+
 :Arguments: * **t** : auto
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>`
@@ -356,6 +382,7 @@ arguments pairs are: int2,int; int3,int; uint2,uint; uint3,uint; uint4,uint; int
 
 fuzzes generic function that takes vector and matching scalar on the right
 arguments pairs are: int2,int; int3,int; uint2,uint; uint3,uint; uint4,uint; int4,int; float2,float; float3,float; float4,float
+
 
 :Arguments: * **t** : auto
 
@@ -370,6 +397,7 @@ arguments pairs are: int2,int; int3,int; uint2,uint; uint3,uint; uint4,uint; int
 fuzzes generic function that takes numeric or vector argument, with matching rotate type on the right.
 arguments are: int, uint
 
+
 :Arguments: * **t** : auto
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>`
@@ -382,6 +410,7 @@ arguments are: int, uint
 
 fuzzes generic function that takes numeric or vector argument, with matching shift type on the right.
 arguments are: int, uint, int2, int3, int4, uint2, uint3, uint4
+
 
 :Arguments: * **t** : auto
 
@@ -396,6 +425,7 @@ arguments are: int, uint, int2, int3, int4, uint2, uint3, uint4
 fuzzes generic function that takes three numeric or vector arguments.
 arguments are: float2, float3, float4, int2, int3, int4, uint2, uint3, uint4 second argument is float, int, uint accordingly
 
+
 :Arguments: * **t** : auto
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>`
@@ -408,6 +438,7 @@ arguments are: float2, float3, float4, int2, int3, int4, uint2, uint3, uint4 sec
 
 fuzzes generic function that takes three numeric or vector arguments.
 arguments are: float2, float3, float4, int2, int3, int4, uint2, uint3, uint4
+
 
 :Arguments: * **t** : auto
 

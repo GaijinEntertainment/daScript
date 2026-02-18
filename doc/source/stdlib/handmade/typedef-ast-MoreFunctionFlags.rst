@@ -1,6 +1,6 @@
 additional properties of the `Function` object.
 Function is a macro function.
-Converts das string arguments to C++ char *. Empty string, which is null in das, is converted to "".
+Converts das string arguments to C++ ``char *``. Empty string, which is null in das, is converted to "".
 Function hash depends on arguments.
 Function is late initialized.
 Function is requested to be JIT compiled.

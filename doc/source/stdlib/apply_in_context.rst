@@ -5,6 +5,8 @@
 Cross-context evaluation helpers
 ================================
 
+.. das:module:: apply_in_context
+
 The APPLY_IN_CONTEXT module extends apply operations to work across
 different execution contexts, enabling cross-context function invocation
 with packed arguments.
@@ -12,6 +14,8 @@ with packed arguments.
 All functions and symbols are in "apply_in_context" module, use require to get access to it. ::
 
     require daslib/apply_in_context
+
+
 
 ++++++++++++++++++++
 Function annotations
@@ -26,10 +30,12 @@ Function is modified, so that it is called in the debug agent context, specified
 If specified context is not installed, panic is called.
 
 For example::
- [apply_in_context(opengl_cache)]
- def public cache_font(name:string implicit) : Font?
-     ...
- ...
- let font = cache_font("Arial") // call invoked in the "opengl_cache" debug agent context
+
+    [apply_in_context(opengl_cache)]
+    def public cache_font(name:string implicit) : Font?
+        ...
+    ...
+    let font = cache_font("Arial") // call invoked in the "opengl_cache" debug agent context
+
 
 

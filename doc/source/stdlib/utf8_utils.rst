@@ -5,6 +5,8 @@
 UTF-8 utilities
 ===============
 
+.. das:module:: utf8_utils
+
 The UTF8_UTILS module provides Unicode UTF-8 string utilities including
 character iteration, codepoint extraction, byte length calculation, and
 validation of UTF-8 encoded text.
@@ -12,6 +14,8 @@ validation of UTF-8 encoded text.
 All functions and symbols are in "utf8_utils" module, use require to get access to it. ::
 
     require daslib/utf8_utils
+
+
 
 +++++++++
 Constants
@@ -23,11 +27,14 @@ Constants
 
 Byte-class and state-transition table for the UTF-8 DFA decoder.
 
+
 .. _global-utf8_utils-UTF8_ACCEPT:
 
 .. das:attribute:: UTF8_ACCEPT = 0x0
 
 DFA accept state indicating a valid UTF-8 sequence.
+
+
 
 +++++++++++++++++++++
 Encoding and decoding
@@ -50,6 +57,7 @@ Encoding and decoding
 
 Decodes Unicode escape sequences (backslash followed by hex digits) in a string to UTF-8.
 
+
 :Arguments: * **str** : string
 
 .. _function-utf8_utils_utf16_to_utf32_uint_uint:
@@ -57,6 +65,7 @@ Decodes Unicode escape sequences (backslash followed by hex digits) in a string 
 .. das:function:: utf16_to_utf32(high: uint; low: uint) : uint
 
 Converts a UTF-16 surrogate pair to a single UTF-32 codepoint.
+
 
 :Arguments: * **high** : uint
 
@@ -71,6 +80,7 @@ utf8_decode
 .. das:function:: utf8_decode(source_utf8_string: string) : array<uint>
 
 Converts UTF-8 string to UTF-32 and returns it as an array of codepoints (UTF-32 string)
+
 
 :Arguments: * **source_utf8_string** : string
 
@@ -98,6 +108,7 @@ utf8_encode
 
 Converts UTF-32 string to UTF-8 and appends it to the UTF-8 byte array
 
+
 :Arguments: * **dest_array** : array<uint8>
 
             * **source_utf32_string** : array<uint> implicit
@@ -114,7 +125,6 @@ Converts UTF-32 string to UTF-8 and appends it to the UTF-8 byte array
 
 .. das:function:: utf8_encode(source_utf32_string: array<uint>) : array<uint8>
 
-----
 
 ++++++++++++++++++++++
 Length and measurement
@@ -133,13 +143,13 @@ utf8_length
 
 Returns the number of characters in the UTF-8 string
 
+
 :Arguments: * **utf8_string** : string
 
 .. _function-utf8_utils_utf8_length_array_ls_uint8_gr_:
 
 .. das:function:: utf8_length(utf8_string: array<uint8>) : int
 
-----
 
 ++++++++++
 Validation
@@ -161,6 +171,7 @@ contains_utf8_bom
 
 Returns true if the byte array starts with a UTF-8 BOM (byte order mark).
 
+
 :Arguments: * **utf8_string** : array<uint8> implicit
 
 .. _function-utf8_utils_contains_utf8_bom_string:
@@ -175,6 +186,7 @@ Returns true if the byte array starts with a UTF-8 BOM (byte order mark).
 
 Returns true if the given byte is the first byte of a UTF-8 character.
 
+
 :Arguments: * **ch** : uint8
 
 
@@ -187,12 +199,11 @@ is_utf8_string_valid
 
 Returns true if the byte array contains a valid UTF-8 encoded string.
 
+
 :Arguments: * **utf8_string** : array<uint8> implicit
 
 .. _function-utf8_utils_is_utf8_string_valid_string:
 
 .. das:function:: is_utf8_string_valid(utf8_string: string) : bool
-
-----
 
 

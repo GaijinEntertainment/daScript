@@ -5,6 +5,8 @@
 Bitfield name traits
 ====================
 
+.. das:module:: bitfield_trait
+
 The BITFIELD_TRAIT module implements reflection utilities for bitfield types:
 converting bitfield values to and from human-readable strings, iterating
 over individual set bits, and constructing bitfield values from string names.
@@ -12,6 +14,8 @@ over individual set bits, and constructing bitfield values from string names.
 All functions and symbols are in "bitfield_trait" module, use require to get access to it. ::
 
     require daslib/bitfield_trait
+
+
 
 ++++++++++++++++++++
 Function annotations
@@ -28,6 +32,7 @@ This macro converts each(bitfield) to the following code::
         ...
         return false
 
+
 .. _handle-bitfield_trait-EachBitNameBitfieldMacro:
 
 .. das:attribute:: EachBitNameBitfieldMacro
@@ -38,6 +43,8 @@ This macro converts each(bitfield) to the following code::
         yield "field2"
         ...
         return false
+
+
 
 +++++++++
 Iteration
@@ -52,6 +59,7 @@ Iteration
 
 Iterates over the names of a bitfield type, yielding each bit as a bitfield value (1ul << bitIndex).
 
+
 :Arguments: * **argT** : auto
 
 .. _function-bitfield_trait_each_bit_name_auto_0x39:
@@ -59,6 +67,7 @@ Iterates over the names of a bitfield type, yielding each bit as a bitfield valu
 .. das:function:: each_bit_name(argT: auto) : auto
 
 Iterates over the names of a bitfield type, yielding each bit name as a string.
+
 
 :Arguments: * **argT** : auto
 

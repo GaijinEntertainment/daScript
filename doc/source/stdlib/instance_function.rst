@@ -5,6 +5,8 @@
 instance_function function annotation
 =====================================
 
+.. das:module:: instance_function
+
 The INSTANCE_FUNCTION module provides the ``[instance_function]`` annotation
 for creating bound method-like functions. It captures the ``self`` reference
 at call time, enabling object-oriented dispatch patterns in daslang.
@@ -12,6 +14,8 @@ at call time, enabling object-oriented dispatch patterns in daslang.
 All functions and symbols are in "instance_function" module, use require to get access to it. ::
 
     require daslib/instance_function
+
+
 
 ++++++++++++++++++++
 Function annotations
@@ -28,5 +32,6 @@ In the followin example body of the function inst will be replaced with body of 
         print("{[[TT]]}\n")
     [export, instance_function(print_zero,TT="int")]
     def inst {}
+
 
 

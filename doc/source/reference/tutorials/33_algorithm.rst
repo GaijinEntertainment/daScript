@@ -153,7 +153,7 @@ Most functions (``reverse``, ``fill``, ``lower_bound``, ``binary_search``,
 
 .. code-block:: das
 
-    var a = [5, 3, 1, 4, 2]
+    var a = fixed_array<int>(5, 3, 1, 4, 2)
     print("min: {min_element(a)}\n")    // 2 (value 1)
     reverse(a)                          // [2, 4, 1, 3, 5]
 

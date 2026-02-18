@@ -93,9 +93,9 @@ Examples::
     print("{-7:+d}\n")             // "-7"        — with sign
     print("{255:#x}\n")            // "0xff"      — with 0x prefix
 
----------------------
+-----------------------
 Escaping Curly Brackets
----------------------
+-----------------------
 
 To include a literal ``{`` or ``}`` in a string, escape them with a backslash::
 

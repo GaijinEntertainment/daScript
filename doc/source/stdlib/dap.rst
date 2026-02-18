@@ -5,6 +5,8 @@
 Debug Adapter Protocol data structures
 ======================================
 
+.. das:module:: dap
+
 The DAP module implements the Debug Adapter Protocol (DAP) for integrating
 daslang with external debuggers. It provides the message types, serialization,
 and communication infrastructure needed for IDE debugging support.
@@ -12,6 +14,8 @@ and communication infrastructure needed for IDE debugging support.
 All functions and symbols are in "dap" module, use require to get access to it. ::
 
     require daslib/dap
+
+
 
 ++++++++++
 Structures
@@ -22,6 +26,7 @@ Structures
 .. das:attribute:: InitializeRequestArguments
 
 Arguments for the DAP initialize request.
+
 
 
 .. _struct-dap-DisconnectArguments:
@@ -35,6 +40,7 @@ Arguments for the DAP disconnect request.
          * **terminateDebuggee** : bool - Whether to terminate the debuggee when disconnecting.
 
          * **suspendDebuggee** : bool - Whether to suspend the debuggee when disconnecting.
+
 
 
 .. _struct-dap-Capabilities:
@@ -60,6 +66,7 @@ Debugger capabilities reported in the initialize response.
          * **supportsDataBreakpoints** : bool - Whether the adapter supports data breakpoints.
 
 
+
 .. _struct-dap-DataBreakpoint:
 
 .. das:attribute:: DataBreakpoint
@@ -79,6 +86,7 @@ A data breakpoint that triggers on memory access.
          * **enabled** : bool - Whether the breakpoint is enabled.
 
 
+
 .. _struct-dap-SetDataBreakpointsArguments:
 
 .. das:attribute:: SetDataBreakpointsArguments
@@ -86,6 +94,7 @@ A data breakpoint that triggers on memory access.
 Arguments for the setDataBreakpoints request.
 
 :Fields: * **breakpoints** : array< :ref:`DataBreakpoint <struct-dap-DataBreakpoint>`> - Array of data breakpoints to set.
+
 
 
 .. _struct-dap-DataBreakpointInfoArguments:
@@ -99,6 +108,7 @@ Arguments for the dataBreakpointInfo request.
          * **name** : string - Name of the variable.
 
 
+
 .. _struct-dap-DataBreakpointInfoResponse:
 
 .. das:attribute:: DataBreakpointInfoResponse
@@ -110,6 +120,7 @@ Response body for the dataBreakpointInfo request.
          * **description** : string - Human-readable description of the data.
 
 
+
 .. _struct-dap-SourceBreakpoint:
 
 .. das:attribute:: SourceBreakpoint
@@ -117,6 +128,7 @@ Response body for the dataBreakpointInfo request.
 A breakpoint specified by source location line number.
 
 :Fields: * **line** : double - Line number of the breakpoint.
+
 
 
 .. _struct-dap-Source:
@@ -130,6 +142,7 @@ A source file descriptor with name and path.
          * **path** : string - Full file-system path of the source.
 
 
+
 .. _struct-dap-SetBreakpointsArguments:
 
 .. das:attribute:: SetBreakpointsArguments
@@ -141,6 +154,7 @@ Arguments for the setBreakpoints request.
          * **breakpoints** : array< :ref:`SourceBreakpoint <struct-dap-SourceBreakpoint>`> - Array of source breakpoints to set.
 
          * **sourceModified** : bool - Whether the source has been modified since last build.
+
 
 
 .. _struct-dap-Breakpoint:
@@ -160,6 +174,7 @@ A breakpoint with verification status and location.
          * **message** : string - Optional message about the breakpoint state.
 
 
+
 .. _struct-dap-SetBreakpointsResponse:
 
 .. das:attribute:: SetBreakpointsResponse
@@ -167,6 +182,7 @@ A breakpoint with verification status and location.
 Response body for the setBreakpoints request.
 
 :Fields: * **breakpoints** : array< :ref:`Breakpoint <struct-dap-Breakpoint>`> - Array of breakpoints with their verification status.
+
 
 
 .. _struct-dap-Thread:
@@ -180,6 +196,7 @@ A thread with an identifier and name.
          * **name** : string - Human-readable name of the thread.
 
 
+
 .. _struct-dap-ThreadsResponseBody:
 
 .. das:attribute:: ThreadsResponseBody
@@ -187,6 +204,7 @@ A thread with an identifier and name.
 Response body for the threads request.
 
 :Fields: * **threads** : array< :ref:`Thread <struct-dap-Thread>`> - Array of threads.
+
 
 
 .. _struct-dap-StackTraceArguments:
@@ -200,6 +218,7 @@ Arguments for the stackTrace request.
          * **startFrame** : double - Index of the first frame to return.
 
          * **levels** : double - Maximum number of frames to return.
+
 
 
 .. _struct-dap-StackFrame:
@@ -219,6 +238,7 @@ A stack frame with source location and identifier.
          * **column** : double - Column number in the source file.
 
 
+
 .. _struct-dap-StackTraceResponseBody:
 
 .. das:attribute:: StackTraceResponseBody
@@ -230,6 +250,7 @@ Response body for the stackTrace request.
          * **totalFrames** : double - Total number of frames available.
 
 
+
 .. _struct-dap-ScopesArguments:
 
 .. das:attribute:: ScopesArguments
@@ -237,6 +258,7 @@ Response body for the stackTrace request.
 Arguments for the scopes request.
 
 :Fields: * **frameId** : double - Stack frame for which to retrieve scopes.
+
 
 
 .. _struct-dap-Scope:
@@ -250,6 +272,7 @@ A named variable scope with a variables reference.
          * **variablesReference** : double - Reference used to retrieve the variables of this scope.
 
 
+
 .. _struct-dap-ScopesResponseBody:
 
 .. das:attribute:: ScopesResponseBody
@@ -257,6 +280,7 @@ A named variable scope with a variables reference.
 Response body for the scopes request.
 
 :Fields: * **scopes** : array< :ref:`Scope <struct-dap-Scope>`> - Array of scopes for the given frame.
+
 
 
 .. _struct-dap-VariablesArguments:
@@ -270,6 +294,7 @@ Arguments for the variables request.
          * **start** : double - Start index of variables to return (for paging).
 
          * **count** : double - Number of variables to return (for paging).
+
 
 
 .. _struct-dap-Variable:
@@ -289,6 +314,7 @@ A variable with name, value, and type information.
          * **indexedVariables** : double - Number of indexed child variables.
 
 
+
 .. _struct-dap-VariablesResponseBody:
 
 .. das:attribute:: VariablesResponseBody
@@ -296,6 +322,7 @@ A variable with name, value, and type information.
 Response body for the variables request.
 
 :Fields: * **variables** : array< :ref:`Variable <struct-dap-Variable>`> - Array of variables.
+
 
 
 .. _struct-dap-OutputEventBody:
@@ -309,6 +336,7 @@ Body of the output event for debugger console messages.
          * **output** : string - The output text.
 
 
+
 .. _struct-dap-ContinueArguments:
 
 .. das:attribute:: ContinueArguments
@@ -316,6 +344,7 @@ Body of the output event for debugger console messages.
 Arguments for the continue request.
 
 :Fields: * **threadId** : double - Thread to continue.
+
 
 
 .. _struct-dap-PauseArguments:
@@ -327,6 +356,7 @@ Arguments for the pause request.
 :Fields: * **threadId** : double - Thread to pause.
 
 
+
 .. _struct-dap-StepInArguments:
 
 .. das:attribute:: StepInArguments
@@ -334,6 +364,7 @@ Arguments for the pause request.
 Arguments for the stepIn request.
 
 :Fields: * **threadId** : double - Thread to step into.
+
 
 
 .. _struct-dap-NextArguments:
@@ -345,6 +376,7 @@ Arguments for the next (step over) request.
 :Fields: * **threadId** : double - Thread to step over.
 
 
+
 .. _struct-dap-StepOutArguments:
 
 .. das:attribute:: StepOutArguments
@@ -352,6 +384,7 @@ Arguments for the next (step over) request.
 Arguments for the stepOut request.
 
 :Fields: * **threadId** : double - Thread to step out of.
+
 
 
 .. _struct-dap-EvaluateArguments:
@@ -365,6 +398,7 @@ Arguments for the evaluate request.
          * **frameId** : double - Stack frame in which to evaluate the expression.
 
          * **context** : string - Context in which the expression is evaluated (e.g. watch, repl, hover).
+
 
 
 .. _struct-dap-EvaluateResponse:
@@ -382,6 +416,7 @@ Response body for the evaluate request.
          * **indexedVariables** : double - Number of indexed child variables in the result.
 
 
+
 .. _struct-dap-BreakpointEvent:
 
 .. das:attribute:: BreakpointEvent
@@ -393,6 +428,7 @@ Event body indicating a breakpoint status change.
          * **breakpoint** :  :ref:`Breakpoint <struct-dap-Breakpoint>` - The breakpoint whose status changed.
 
 
+
 .. _struct-dap-ThreadEvent:
 
 .. das:attribute:: ThreadEvent
@@ -402,6 +438,8 @@ Event body indicating a thread started or exited.
 :Fields: * **reason** : string - Reason for the event: started or exited.
 
          * **threadId** : double - Thread identifier.
+
+
 
 
 ++++++++++++++++++++
@@ -432,6 +470,7 @@ JSON deserialization
 
 Constructs a ContinueArguments from a JSON value.
 
+
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 .. _function-dap_DataBreakpoint_JsonValue_q_:
@@ -439,6 +478,7 @@ Constructs a ContinueArguments from a JSON value.
 .. das:function:: DataBreakpoint(data: JsonValue?) : DataBreakpoint
 
 Constructs a DataBreakpoint from a JSON value.
+
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
@@ -448,6 +488,7 @@ Constructs a DataBreakpoint from a JSON value.
 
 Constructs a DataBreakpointInfoArguments from a JSON value.
 
+
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 .. _function-dap_DisconnectArguments_JsonValue_q_:
@@ -455,6 +496,7 @@ Constructs a DataBreakpointInfoArguments from a JSON value.
 .. das:function:: DisconnectArguments(data: JsonValue?) : DisconnectArguments
 
 Constructs a DisconnectArguments from a JSON value.
+
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
@@ -464,6 +506,7 @@ Constructs a DisconnectArguments from a JSON value.
 
 Constructs an EvaluateArguments from a JSON value.
 
+
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 .. _function-dap_InitializeRequestArguments_JsonValue_q_:
@@ -471,6 +514,7 @@ Constructs an EvaluateArguments from a JSON value.
 .. das:function:: InitializeRequestArguments(data: JsonValue?) : InitializeRequestArguments
 
 Constructs an InitializeRequestArguments from a JSON value.
+
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
@@ -480,6 +524,7 @@ Constructs an InitializeRequestArguments from a JSON value.
 
 Constructs a NextArguments from a JSON value.
 
+
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 .. _function-dap_PauseArguments_JsonValue_q_:
@@ -487,6 +532,7 @@ Constructs a NextArguments from a JSON value.
 .. das:function:: PauseArguments(data: JsonValue?) : PauseArguments
 
 Constructs a PauseArguments from a JSON value.
+
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
@@ -496,6 +542,7 @@ Constructs a PauseArguments from a JSON value.
 
 Constructs a ScopesArguments from a JSON value.
 
+
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 .. _function-dap_SetBreakpointsArguments_JsonValue_q_:
@@ -503,6 +550,7 @@ Constructs a ScopesArguments from a JSON value.
 .. das:function:: SetBreakpointsArguments(data: JsonValue?) : SetBreakpointsArguments
 
 Constructs a SetBreakpointsArguments from a JSON value, parsing source and breakpoints.
+
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
@@ -512,6 +560,7 @@ Constructs a SetBreakpointsArguments from a JSON value, parsing source and break
 
 Constructs a SetDataBreakpointsArguments from a JSON value, parsing the breakpoints array.
 
+
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 .. _function-dap_Source_JsonValue_q_:
@@ -519,6 +568,7 @@ Constructs a SetDataBreakpointsArguments from a JSON value, parsing the breakpoi
 .. das:function:: Source(data: JsonValue?) : Source
 
 Constructs a Source from a JSON value.
+
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
@@ -528,6 +578,7 @@ Constructs a Source from a JSON value.
 
 Constructs a SourceBreakpoint from a JSON value.
 
+
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 .. _function-dap_StackTraceArguments_JsonValue_q_:
@@ -535,6 +586,7 @@ Constructs a SourceBreakpoint from a JSON value.
 .. das:function:: StackTraceArguments(data: JsonValue?) : StackTraceArguments
 
 Constructs a StackTraceArguments from a JSON value.
+
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
@@ -544,6 +596,7 @@ Constructs a StackTraceArguments from a JSON value.
 
 Constructs a StepInArguments from a JSON value.
 
+
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
 .. _function-dap_StepOutArguments_JsonValue_q_:
@@ -551,6 +604,7 @@ Constructs a StepInArguments from a JSON value.
 .. das:function:: StepOutArguments(data: JsonValue?) : StepOutArguments
 
 Constructs a StepOutArguments from a JSON value.
+
 
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
@@ -560,7 +614,9 @@ Constructs a StepOutArguments from a JSON value.
 
 Constructs a VariablesArguments from a JSON value.
 
+
 :Arguments: * **data** :  :ref:`JsonValue <struct-json-JsonValue>`?
+
 
 ++++++++++++++++++
 JSON serialization
@@ -579,13 +635,13 @@ JV
 
 Converts an EvaluateResponse struct to its DAP JSON representation.
 
+
 :Arguments: * **data** :  :ref:`EvaluateResponse <struct-dap-EvaluateResponse>`
 
 .. _function-dap_JV_Variable:
 
 .. das:function:: JV(data: Variable) : JsonValue?
 
-----
 
 ++++++++++++++++++++
 JSON field accessors
@@ -603,6 +659,7 @@ JSON field accessors
 
 Returns the string value of a JSON value, or `defVal` if not a string.
 
+
 :Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
             * **defVal** : string
@@ -612,6 +669,7 @@ Returns the string value of a JSON value, or `defVal` if not a string.
 .. das:function:: job(val: JsonValue?; id: string; defVal: bool = false) : bool
 
 Returns a boolean JSON field by name, or `defVal` if not found.
+
 
 :Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
@@ -625,6 +683,7 @@ Returns a boolean JSON field by name, or `defVal` if not found.
 
 Returns a nested JSON object field by name, or null if not found.
 
+
 :Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
             * **id** : string
@@ -634,6 +693,7 @@ Returns a nested JSON object field by name, or null if not found.
 .. das:function:: jon(val: JsonValue?; id: string; defVal: double = 0lf) : double
 
 Returns a numeric JSON field by name, or `defVal` if not found.
+
 
 :Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>`?
 
@@ -646,6 +706,7 @@ Returns a numeric JSON field by name, or `defVal` if not found.
 .. das:function:: jos(val: JsonValue?; id: string; defVal: string = "") : string
 
 Returns a string JSON field by name, or `defVal` if not found.
+
 
 :Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>`?
 

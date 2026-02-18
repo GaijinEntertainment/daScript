@@ -5,6 +5,8 @@
 Flat hash table
 ===============
 
+.. das:module:: flat_hash_table
+
 The FLAT_HASH_TABLE module implements a flat (open addressing) hash table.
 It stores all entries in a single contiguous array, providing cache-friendly
 access patterns and good performance for small to medium-sized tables.
@@ -34,6 +36,8 @@ Example: ::
         // length = 3
         // m[2] = two
         // after clear: 0
+
+
 
 +++++++++++
 Type macros

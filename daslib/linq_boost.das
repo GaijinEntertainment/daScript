@@ -1,4 +1,4 @@
-options gen2
+﻿options gen2
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
@@ -53,6 +53,7 @@ class private LinqWhere : AstCallMacro_LinqPred2 {
     //! implements _where(iterator, expression) shorthand notation
     //! that expands into where_(iterator, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo)._where(_ < 5)
     override predName = "where_"
 }
@@ -62,6 +63,7 @@ class private LinqWhereToArray : AstCallMacro_LinqPred2 {
     //! implements _where_to_array(iterator, expression) shorthand notation
     //! that expands into where_to_array(iterator, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo)._where_to_array(_ < 5)
     override predName = "where_to_array"
 }
@@ -71,6 +73,7 @@ class private LinqSelect : AstCallMacro_LinqPred2 {
     //! implements _select(iterator, expression) shorthand notation
     //! that expands into select(iterator, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo)._select(_ * 2)
     override predName = "select"
 }
@@ -80,6 +83,7 @@ class private LinqSelectToArray : AstCallMacro_LinqPred2 {
     //! implements _select_to_array(iterator, expression) shorthand notation
     //! that expands into select_to_array(iterator, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo)._select_to_array(_ * 2)
     override predName = "select_to_array"
 }
@@ -89,6 +93,7 @@ class private LinqMinBy : AstCallMacro_LinqPred2 {
     //! implements _min_by(iterator, expression) shorthand notation
     //! that expands into min_by(iterator, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo)._min_by(_.value)
     override predName = "min_by"
 }
@@ -98,6 +103,7 @@ class private LinqMaxBy : AstCallMacro_LinqPred2 {
     //! implements _max_by(iterator, expression) shorthand notation
     //! that expands into max_by(iterator, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo)._max_by(_.value)
     override predName = "max_by"
 }
@@ -107,6 +113,7 @@ class private LinqMinMaxBy : AstCallMacro_LinqPred2 {
     //! implements _min_max_by(iterator, expression) shorthand notation
     //! that expands into min_max_by(iterator, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo)._min_max_by(_.value)
     override predName = "min_max_by"
 }
@@ -116,6 +123,7 @@ class private LinqMinMaxAverageBy : AstCallMacro_LinqPred2 {
     //! implements _min_max_average_by(iterator, expression) shorthand notation
     //! that expands into min_max_average_by(iterator, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo)._min_max_average_by(_.value)
     override predName = "min_max_average_by"
 }
@@ -125,6 +133,7 @@ class private LinqSkipWhile : AstCallMacro_LinqPred2 {
     //! implements _skip_while(iterator, expression) shorthand notation
     //! that expands into skip_while(iterator, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo)._skip_while(_ < 5)
     override predName = "skip_while"
 }
@@ -134,6 +143,7 @@ class private LinqTakeWhile : AstCallMacro_LinqPred2 {
     //! implements _take_while(iterator, expression) shorthand notation
     //! that expands into take_while(iterator, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo)._take_while(_ < 5)
     override predName = "take_while"
 }
@@ -143,6 +153,7 @@ class private LinqAll : AstCallMacro_LinqPred2 {
     //! implements _all(iterator, expression) shorthand notation
     //! that expands into all(iterator, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo)._all(_ < 5)
     override predName = "all"
 }
@@ -152,6 +163,7 @@ class private LinqAny : AstCallMacro_LinqPred2 {
     //! implements _any(iterator, expression) shorthand notation
     //! that expands into any(iterator, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo)._any(_ < 5)
     override predName = "any"
 }
@@ -161,6 +173,7 @@ class private LinqCount : AstCallMacro_LinqPred2 {
     //! implements _count(iterator, expression) shorthand notation
     //! that expands into count(iterator, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo)._count(_ > 3)
     override predName = "count"
 }
@@ -170,6 +183,7 @@ class private LinqUnique : AstCallMacro_LinqPred2 {
     //! implements _unique_by(iterator, expression) shorthand notation
     //! that expands into unique_by(iterator, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo)._unique_by(_.id)
     override predName = "unique_by"
 }
@@ -179,6 +193,7 @@ class private LinqUniqueToArray : AstCallMacro_LinqPred2 {
     //! implements _unique_by_to_array(iterator, expression) shorthand notation
     //! that expands into unique_by_to_array(iterator, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo)._unique_by_to_array(_.id)
     override predName = "unique_by_to_array"
 }
@@ -188,6 +203,7 @@ class private LinqDistinctBy : AstCallMacro_LinqPred2 {
     //! implements _distinct_by(iterator, expression) shorthand notation
     //! that expands into distinct_by(iterator, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo)._distinct_by(_.id)
     override predName = "distinct_by"
 }
@@ -197,6 +213,7 @@ class private LinqDistinctByToArray : AstCallMacro_LinqPred2 {
     //! implements _distinct_by_to_array(iterator, expression) shorthand notation
     //! that expands into distinct_by_to_array(iterator, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo)._distinct_by_to_array(_.id)
     override predName = "distinct_by_to_array"
 }
@@ -206,6 +223,7 @@ class private LinqOrderBy : AstCallMacro_LinqPred2 {
     //! implements _order_by(iterator, expression) shorthand notation
     //! that expands into order_by(iterator, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo)._order_by(_.id)
     override predName = "order_by"
 }
@@ -215,6 +233,7 @@ class private LinqOrderByToArray : AstCallMacro_LinqPred2 {
     //! implements _order_by_to_array(iterator, expression) shorthand notation
     //! that expands into order_by_to_array(iterator, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo)._order_by_to_array(_.id)
     override predName = "order_by_to_array"
 }
@@ -224,6 +243,7 @@ class private LinqOrderByDescending : AstCallMacro_LinqPred2 {
     //! implements _order_by_descending(iterator, expression) shorthand notation
     //! that expands into order_by_descending(iterator, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo)._order_by_descending(_.id)
     override predName = "order_by_descending"
 }
@@ -233,6 +253,7 @@ class private LinqOrderByDescendingToArray : AstCallMacro_LinqPred2 {
     //! implements _order_by_descending_to_array(iterator, expression) shorthand notation
     //! that expands into order_by_descending_to_array(iterator, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo)._order_by_descending_to_array(_.id)
     override predName = "order_by_descending_to_array"
 }
@@ -243,6 +264,7 @@ class private AstCallMacro_LinqPredII2 : AstCallMacro {
     //! implements sequence_equal_by(i1, i2, expresion) shorthand notation
     //! that expands into sequence_equal_by(i1, i2, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo1)._sequence_equal_by(each(foo2), _.id)
     def override visit(prog : ProgramPtr; mod : Module?; var call : smart_ptr<ExprCallMacro>) : ExpressionPtr {
         //! Visits the LINQ two-iterator predicate macro call and rewrites it with a lambda argument.
@@ -266,6 +288,7 @@ class private LinqPred3 : AstCallMacro_LinqPredII2 {
     //! implements _sequence_equal_by(iterator1, iterator2, expression) shorthand notation
     //! that expands into sequence_equal_by(iterator1, iterator2, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo1)._sequence_equal_by(each(foo2), _.id)
     override predName = "sequence_equal_by"
 }
@@ -275,6 +298,7 @@ class private LinqExceptBy : AstCallMacro_LinqPredII2 {
     //! implements _except_by(iterator1, iterator2, expression) shorthand notation
     //! that expands into except_by(iterator1, iterator2, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo1)._except_by(each(foo2), _.id)
     override predName = "except_by"
 }
@@ -284,6 +308,7 @@ class private LinqExceptByToArray : AstCallMacro_LinqPredII2 {
     //! implements _except_by_to_array(iterator1, iterator2, expression) shorthand notation
     //! that expands into except_by_to_array(iterator1, iterator2, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo1)._except_by_to_array(each(foo2), _.id)
     override predName = "except_by_to_array"
 }
@@ -293,6 +318,7 @@ class private LinqIntersectBy : AstCallMacro_LinqPredII2 {
     //! implements _intersect_by(iterator1, iterator2, expression) shorthand notation
     //! that expands into intersect_by(iterator1, iterator2, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo1)._intersect_by(each(foo2), _.id)
     override predName = "intersect_by"
 }
@@ -302,6 +328,7 @@ class private LinqIntersectByToArray : AstCallMacro_LinqPredII2 {
     //! implements _intersect_by_to_array(iterator1, iterator2, expression) shorthand notation
     //! that expands into intersect_by_to_array(iterator1, iterator2, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo1)._intersect_by_to_array(each(foo2), _.id)
     override predName = "intersect_by_to_array"
 }
@@ -311,6 +338,7 @@ class private LinqUnionBy : AstCallMacro_LinqPredII2 {
     //! implements _union_by(iterator1, iterator2, expression) shorthand notation
     //! that expands into union_by(iterator1, iterator2, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo1)._union_by(each(foo2), _.id)
     override predName = "union_by"
 }
@@ -320,6 +348,7 @@ class private LinqUnionByToArray : AstCallMacro_LinqPredII2 {
     //! implements _union_by_to_array(iterator1, iterator2, expression) shorthand notation
     //! that expands into union_by_to_array(iterator1, iterator2, $(_) => expression)
     //! for example::
+    //!
     //!   each(foo1)._union_by_to_array(each(foo2), _.id)
     override predName = "union_by_to_array"
 }
@@ -790,7 +819,9 @@ def private fold_linq_default(var expr : ExpressionPtr) : ExpressionPtr {
 class private LinqFold : AstCallMacro {
     //! implements _fold(expression) that folds LINQ expressions into optimized sequnences
     //! for example::
-    //!   _fold(each(foo)._where(_ > 5)._select(_ * 2))
+    //!
+    //!     _fold(each(foo)._where(_ > 5)._select(_ * 2))
+    //!
     //! expands into a single comprehension that does all operations in one pass
     def override visit(prog : ProgramPtr; mod : Module?; var call : smart_ptr<ExprCallMacro>) : ExpressionPtr {
         //! Visits the _fold macro call and folds LINQ expressions into optimized sequences.

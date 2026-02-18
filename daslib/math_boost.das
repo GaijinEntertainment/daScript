@@ -209,7 +209,7 @@ def plane_dot(Plane, Vec : float4) {
 }
 
 def plane_normalize(Plane : float4) {
-    //! normalize `Plane', length xyz will be 1.0 (or 0.0 for no plane)
+    //! normalize ``Plane``, length xyz will be 1.0 (or 0.0 for no plane)
     let len = length(Plane.xyz)
     return len != 0.0 ? Plane / len : float4(0)
 }

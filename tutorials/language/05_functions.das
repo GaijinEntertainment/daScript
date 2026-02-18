@@ -49,7 +49,7 @@ def increment(var x : int&) {
 
 // === Default arguments ===
 
-def formatNumber(value : int; width : int = 6; prefix : string = "#") : string {
+def formatNumber(value : int; prefix : string = "#") : string {
     return "{prefix}{value}"
 }
 
@@ -111,7 +111,7 @@ def main {
 
     // Default arguments — omit the ones with defaults
     print("formatNumber(42) = {formatNumber(42)}\n")
-    // To specify a non-adjacent default, use named arguments: [name = value]
+    // To specify a specific default, use named arguments: [name = value]
     let formatted = formatNumber(42, [prefix = ">"])
     print("formatNumber(42, prefix=\">\") = {formatted}\n")
 

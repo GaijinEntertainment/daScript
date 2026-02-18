@@ -14,6 +14,11 @@
 from docutils import nodes
 from docutils.parsers.rst import directives
 
+from pygments.lexer import RegexLexer, bygroups, words, include
+from pygments.token import (
+    Comment, Keyword, Name, Number, Operator, Punctuation, String, Text, Token
+)
+
 from sphinx import version_info
 
 from sphinx import addnodes
@@ -415,9 +420,100 @@ class DaslangDomain(Domain):
             return '.'.join(filter(None, [modname, prefix, target]))
 
 
+class DaslangLexer(RegexLexer):
+    """Simple Pygments lexer for the daslang (daScript) language."""
+
+    name = 'daslang'
+    aliases = ['das', 'daslang', 'dascript']
+    filenames = ['*.das']
+
+    tokens = {
+        'root': [
+            # Line comments
+            (r'//.*$', Comment.Single),
+            # Block comments
+            (r'/\*', Comment.Multiline, 'block_comment'),
+            # Strings
+            (r'"', String.Double, 'string'),
+            # Character literals
+            (r"'[^']*'", String.Char),
+            # Numbers (hex, float, int)
+            (r'0[xX][0-9a-fA-F_]+[uU]?[lL]?', Number.Hex),
+            (r'[0-9][0-9_]*\.[0-9_]*([eE][+-]?[0-9_]+)?[fFlL]?', Number.Float),
+            (r'[0-9][0-9_]*[uU]?[lL]?', Number.Integer),
+            # Keywords
+            (words((
+                'struct', 'class', 'let', 'var', 'def', 'while', 'if', 'static_if',
+                'else', 'elif', 'for', 'finally', 'in', 'is', 'as',
+                'where', 'return', 'yield', 'break', 'continue',
+                'pass', 'try', 'recover', 'delete', 'deref',
+                'new', 'typeinfo', 'type', 'array', 'table',
+                'block', 'function', 'lambda', 'generator',
+                'expect', 'override', 'abstract', 'sealed',
+                'require', 'module', 'public', 'private',
+                'options', 'operator', 'enum', 'typedef', 'variant', 'tuple',
+                'with', 'cast', 'upcast', 'reinterpret', 'aka',
+                'assume', 'unsafe', 'addr', 'label', 'goto',
+                'implicit', 'explicit', 'shared', 'smart_ptr', 'inscope',
+                'static', 'fixed_array', 'iterator', 'bitfield',
+                'move_new', 'move',
+            ), prefix=r'\b', suffix=r'\b'), Keyword),
+            # Boolean / null
+            (words(('true', 'false', 'null', 'nothing'), prefix=r'\b', suffix=r'\b'), Keyword.Constant),
+            # Built-in types
+            (words((
+                'void', 'bool', 'string', 'auto',
+                'int', 'int2', 'int3', 'int4', 'int8', 'int16', 'int64',
+                'uint', 'uint2', 'uint3', 'uint4', 'uint8', 'uint16', 'uint64',
+                'float', 'float2', 'float3', 'float4',
+                'double', 'range', 'urange', 'range64', 'urange64',
+            ), prefix=r'\b', suffix=r'\b'), Keyword.Type),
+            # Annotations
+            (r'\[[\w]+\]', Name.Decorator),
+            # Lambda/block/function pointer sigils
+            (r'@@?', Operator),
+            (r'\$', Operator),
+            # Identifiers
+            (r'[a-zA-Z_]\w*', Name),
+            # Operators
+            (r'[+\-*/%&|^~<>=!?:#]+', Operator),
+            # Punctuation
+            (r'[{}()\[\];,.]', Punctuation),
+            # Pipe operator
+            (r'\|>', Operator),
+            # Arrow / move
+            (r'<-', Operator),
+            (r'->', Operator),
+            (r'<\|', Operator),
+            (r'=>', Operator),
+            # Whitespace
+            (r'\s+', Text),
+            # Catch-all for any other character (Unicode, etc.)
+            (r'.', Text),
+        ],
+        'block_comment': [
+            (r'/\*', Comment.Multiline, '#push'),
+            (r'\*/', Comment.Multiline, '#pop'),
+            (r'[^/*]+', Comment.Multiline),
+            (r'[/*]', Comment.Multiline),
+        ],
+        'string': [
+            (r'\\[\\nrt"\'{]', String.Escape),
+            (r'\{', String.Interpol, 'interpolation'),
+            (r'[^"\\{]+', String.Double),
+            (r'"', String.Double, '#pop'),
+        ],
+        'interpolation': [
+            (r'\}', String.Interpol, '#pop'),
+            include('root'),
+        ],
+    }
+
+
 def setup(app):
     # type: (Sphinx) -> Dict[unicode, Any]
     app.add_domain(DaslangDomain)
+    app.add_lexer('das', DaslangLexer)
 
     return {
         'version': 'builtin',

@@ -5,6 +5,8 @@
 Miscellaneous algorithms
 ========================
 
+.. das:module:: algorithm
+
 The ALGORITHM module provides array and collection manipulation algorithms including
 sorting, searching, set operations, element removal, and more.
 
@@ -40,6 +42,8 @@ Example: ::
             print("min index: {min_element(arr)}\n")
             print("is_sorted: {is_sorted(arr)}\n")
         }
+
+
 
 ++++++
 Search
@@ -81,6 +85,7 @@ binary_search
 .. das:function:: binary_search(a: auto; f: int; last: int; val: auto) : auto
 
 Returns true if val appears within the range [f, last).
+
 
 :Arguments: * **a** : auto
 
@@ -131,6 +136,7 @@ equal_range
 Returns a pair of indices [lower, upper) bounding the range of elements equal to val within [f, l).
 The array must be sorted.
 
+
 :Arguments: * **a** : array<auto(TT)>
 
             * **f** : int
@@ -154,6 +160,7 @@ lower_bound
 .. das:function:: lower_bound(a: array<auto(TT)>; value: auto(QQ); less: block<(a:TT;b:QQ):bool>) : auto
 
 Returns the index of the first element in the array for which less returns false, or length(a) if no such element is found.
+
 
 :Arguments: * **a** : array<auto(TT)>
 
@@ -201,6 +208,7 @@ upper_bound
 
 Returns the index of the first element in the range [f, l) for which less(val, element) returns true, or l if no such element is found.
 
+
 :Arguments: * **a** : array<auto(TT)>
 
             * **f** : int
@@ -239,7 +247,6 @@ Returns the index of the first element in the range [f, l) for which less(val, e
 
 .. das:function:: upper_bound(a: auto; f: int; l: int; val: auto(TT); less: block<(a:TT;b:TT):bool>) : auto
 
-----
 
 ++++++++++++++++++
 Array manipulation
@@ -277,6 +284,7 @@ combine
 
 Returns a new array containing elements from a followed by b.
 
+
 :Arguments: * **a** : array<auto(TT)>
 
             * **b** : array<auto(TT)>
@@ -295,6 +303,7 @@ Erases all elements equal to value from arr in O(n) time.
 Uses swap to support non-copyable types. Removed elements are swapped to the tail
 and properly finalized by resize.
 
+
 :Arguments: * **arr** : auto
 
             * **value** : auto
@@ -308,6 +317,7 @@ fill
 .. das:function:: fill(a: array<auto(TT)>; value: TT) : auto
 
 Sets all elements of the array to the given value using clone.
+
 
 :Arguments: * **a** : array<auto(TT)>
 
@@ -328,6 +338,7 @@ is_sorted
 .. das:function:: is_sorted(a: auto) : bool
 
 Returns true if the array is sorted in non-descending order.
+
 
 :Arguments: * **a** : auto
 
@@ -351,6 +362,7 @@ max_element
 
 Returns the index of the maximum element in the array, or -1 if the array is empty.
 
+
 :Arguments: * **a** : auto
 
 .. _function-algorithm_max_element_array_ls_autoTT_gr__block_ls_a_c_TT;b_c_TT_c_bool_gr_:
@@ -372,6 +384,7 @@ min_element
 .. das:function:: min_element(a: array<auto(TT)>; less: block<(a:TT;b:TT):bool>) : int
 
 Returns the index of the minimum element according to the provided less function, or -1 if the array is empty.
+
 
 :Arguments: * **a** : array<auto(TT)>
 
@@ -397,6 +410,7 @@ reverse
 
 Reverses the elements of array a in place.
 
+
 :Arguments: * **a** : auto
 
 .. _function-algorithm_reverse_array_ls_auto_gr_:
@@ -416,6 +430,7 @@ rotate
 Rotates the array so that the element at index mid becomes the first element.
 Elements before mid are moved to the end.
 
+
 :Arguments: * **a** : array<auto>
 
             * **mid** : int
@@ -434,6 +449,7 @@ Returns an array of elements from a, sorted and with duplicates removed.
 The elements are sorted in ascending order.
 The resulting array has only unique elements.
 
+
 :Arguments: * **a** : array<auto(TT)>
 
 .. _function-algorithm_topological_sort_array_ls_autoNode_gr_:
@@ -445,6 +461,7 @@ Each node has an id, and set (table with no values) of dependencies.
 Dependency `before` represents a link from a node, which should appear in the sorted list before the node.
 Returns a sorted list of nodes.
 
+
 :Arguments: * **nodes** : array<auto(Node)>
 
 .. _function-algorithm_unique_array_ls_autoTT_gr_:
@@ -454,7 +471,9 @@ Returns a sorted list of nodes.
 Returns an array with adjacent duplicate elements removed.
 The array should be sorted first if all duplicates need to be removed.
 
+
 :Arguments: * **a** : array<auto(TT)>
+
 
 ++++++++++++++++++
 Table manipulation
@@ -473,6 +492,7 @@ Table manipulation
 
 Returns the difference of two sets.
 
+
 :Arguments: * **a** : table<auto(TT);void>
 
             * **b** : table<auto(TT);void>
@@ -482,6 +502,7 @@ Returns the difference of two sets.
 .. das:function:: identical(a: table<auto(TT), void>; b: table<auto(TT), void>) : bool
 
 Returns true if the two sets are identical.
+
 
 :Arguments: * **a** : table<auto(TT);void>
 
@@ -493,6 +514,7 @@ Returns true if the two sets are identical.
 
 Returns the intersection of two sets.
 
+
 :Arguments: * **a** : table<auto(TT);void>
 
             * **b** : table<auto(TT);void>
@@ -502,6 +524,7 @@ Returns the intersection of two sets.
 .. das:function:: is_subset(a: table<auto(TT), void>; b: table<auto(TT), void>) : bool
 
 Returns true if all elements of a are contained in b.
+
 
 :Arguments: * **a** : table<auto(TT);void>
 
@@ -513,6 +536,7 @@ Returns true if all elements of a are contained in b.
 
 Returns the symmetric difference of two sets (elements in either set but not both).
 
+
 :Arguments: * **a** : table<auto(TT);void>
 
             * **b** : table<auto(TT);void>
@@ -522,6 +546,7 @@ Returns the symmetric difference of two sets (elements in either set but not bot
 .. das:function:: union(a: table<auto(TT), void>; b: table<auto(TT), void>) : table<TT, void>
 
 Returns the union of two sets.
+
 
 :Arguments: * **a** : table<auto(TT);void>
 

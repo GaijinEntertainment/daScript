@@ -182,9 +182,9 @@ By default, ``interval(a, b : int)`` returns ``range(a, b)`` and
 ``interval(a, b : uint)`` returns ``urange(a, b)``.
 Custom ``interval`` functions or generics can be defined for other types.
 
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Null-Coalescing Operator (??)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. index::
     pair: ?? Operator; Operators
@@ -307,9 +307,9 @@ This is useful in generic functions to branch on the actual type of a parameter:
         }
     }
 
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Cast, Upcast, and Reinterpret
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. index::
     pair: Cast Operators; Operators

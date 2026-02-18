@@ -1,8 +1,8 @@
 .. _tutorial_modules:
 
-========================
+=============================
 Modules and Program Structure
-========================
+=============================
 
 .. index::
     single: Tutorial; Modules

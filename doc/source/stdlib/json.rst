@@ -5,6 +5,8 @@
 JSON manipulation library
 =========================
 
+.. das:module:: json
+
 The JSON module implements JSON parsing and serialization.
 It provides ``read_json`` for parsing JSON text into a ``JsonValue`` tree,
 ``write_json`` for serializing back to text, and ``JV`` helpers for constructing
@@ -34,6 +36,8 @@ Example: ::
         // output:
         // json: [1,2,3]
 
+
+
 ++++++++++++
 Type aliases
 ++++++++++++
@@ -59,6 +63,7 @@ Single JSON element.
            * **_null** : void? - JSON null
 
 
+
 .. _alias-Token:
 
 .. das:attribute:: variant Token
@@ -80,6 +85,8 @@ JSON input stream token.
            * **_error** : string - error token
 
 
+
+
 ++++++++++
 Structures
 ++++++++++
@@ -93,6 +100,7 @@ JSON value, wraps any JSON element.
 :Fields: * **value** :  :ref:`JsValue <alias-JsValue>` - value of the JSON element
 
 
+
 .. _struct-json-TokenAt:
 
 .. das:attribute:: TokenAt
@@ -104,6 +112,8 @@ JSON parsing token. Contains token and its position.
          * **line** : int - token position in the input stream
 
          * **row** : int - token position in the input stream
+
+
 
 
 ++++++++++++++++
@@ -139,6 +149,7 @@ JV
 .. das:function:: JV(v: string) : JsonValue?
 
 Creates `JsonValue` out of string value.
+
 
 :Arguments: * **v** : string
 
@@ -218,12 +229,14 @@ Creates `JsonValue` out of string value.
 
 Creates `JsonValue` representing `null`.
 
+
+
 ++++++++++++++
 Read and write
 ++++++++++++++
 
-  *  :ref:`read_json (text: array\<uint8\>; var error: string&) : JsonValue? <function-json_read_json_array_ls_uint8_gr__string>`
-  *  :ref:`read_json (text: string implicit; var error: string&) : JsonValue? <function-json_read_json_string_implicit_string>`
+  *  :ref:`read_json (text: array\<uint8\>; var error: string&) : JsonValue? <function-json_read_json_array_ls_uint8_gr__string_ref_>`
+  *  :ref:`read_json (text: string implicit; var error: string&) : JsonValue? <function-json_read_json_string_implicit_string_ref_>`
   *  :ref:`write_json (val: JsonValue?#) : string <function-json_write_json_JsonValue_q__hh_>`
   *  :ref:`write_json (val: JsonValue?) : string <function-json_write_json_JsonValue_q_>`
 
@@ -231,18 +244,19 @@ Read and write
 read_json
 ^^^^^^^^^
 
-.. _function-json_read_json_array_ls_uint8_gr__string:
+.. _function-json_read_json_array_ls_uint8_gr__string_ref_:
 
 .. das:function:: read_json(text: array<uint8>; error: string&) : JsonValue?
 
 reads JSON from the `text` array of uint8.
 if `error` is not empty, it contains the parsing error message.
 
+
 :Arguments: * **text** : array<uint8>
 
-            * **error** : string&
+            * **error** : string\ &
 
-.. _function-json_read_json_string_implicit_string:
+.. _function-json_read_json_string_implicit_string_ref_:
 
 .. das:function:: read_json(text: string implicit; error: string&) : JsonValue?
 
@@ -258,13 +272,13 @@ write_json
 
 Overload accepting temporary type
 
-:Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>`?#
+
+:Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>`?\ #
 
 .. _function-json_write_json_JsonValue_q_:
 
 .. das:function:: write_json(val: JsonValue?) : string
 
-----
 
 +++++++++++++++
 JSON properties
@@ -280,6 +294,7 @@ JSON properties
 
 if `value` is true, then duplicate keys are allowed in objects. the later key overwrites the earlier one.
 
+
 :Arguments: * **value** : bool
 
 .. _function-json_set_no_empty_arrays_bool:
@@ -287,6 +302,7 @@ if `value` is true, then duplicate keys are allowed in objects. the later key ov
 .. das:function:: set_no_empty_arrays(value: bool) : bool
 
 if `value` is true, then empty arrays are not written at all
+
 
 :Arguments: * **value** : bool
 
@@ -296,7 +312,9 @@ if `value` is true, then empty arrays are not written at all
 
 if `value` is true, then numbers are written without trailing zeros.
 
+
 :Arguments: * **value** : bool
+
 
 +++++++++++
 Broken JSON
@@ -313,6 +331,7 @@ fixes broken json. so far supported
 2. "text "nested text" text" nested quotes
 3. extra , at the end of object or array
 4. /uXXXXXX sequences in the middle of white space
+
 
 :Arguments: * **bad** : string
 

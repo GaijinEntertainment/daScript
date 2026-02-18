@@ -120,9 +120,9 @@ Panic
             print("recovered from panic\n")
         }
 
----------------------
+-----------------------
 Memory & Type Utilities
----------------------
+-----------------------
 
 .. das:function:: addr(x)
 

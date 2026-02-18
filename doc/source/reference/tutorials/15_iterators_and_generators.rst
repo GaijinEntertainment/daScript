@@ -26,7 +26,7 @@ Generators
 ==========
 
 A generator lazily produces values one at a time using ``yield``.
-Generators use ``$`` with no parentheses::
+Generators use ``$`` (either ``$ { }`` or ``$() { }``)::
 
   var counter <- generator<int>() <| $ {
       for (i in range(5)) {

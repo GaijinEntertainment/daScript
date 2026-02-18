@@ -5,6 +5,8 @@
 LINQ
 ====
 
+.. das:module:: linq
+
 The LINQ module provides query-style operations on sequences: filtering
 (``where_``), projection (``select``), sorting (``order``, ``order_by``),
 deduplication (``distinct``), pagination (``skip``, ``take``), aggregation
@@ -32,6 +34,8 @@ Example: ::
         }
         // output:
         // 0 2 4 6 8
+
+
 
 ++++++++++++
 Sorting data
@@ -79,6 +83,7 @@ order
 
 Sorts an iterator
 
+
 :Arguments: * **a** : iterator<auto(TT)>
 
 .. _function-linq_order_iterator_ls_autoTT_gr__block_ls_v1_c_TT;v2_c_TT_c_bool_gr_:
@@ -105,6 +110,7 @@ order_by
 
 Sorts an array
 
+
 :Arguments: * **a** : array<auto(TT)>
 
             * **key** : auto
@@ -125,6 +131,7 @@ order_by_descending
 
 Sorts an iterator in descending order
 
+
 :Arguments: * **a** : iterator<auto(TT)>
 
             * **key** : auto
@@ -141,6 +148,7 @@ Sorts an iterator in descending order
 
 Sorts an array in descending order in place
 
+
 :Arguments: * **buffer** : array<auto(TT)>
 
             * **key** : auto
@@ -150,6 +158,7 @@ Sorts an array in descending order in place
 .. das:function:: order_by_descending_to_array(a: iterator<auto(TT)>; key: auto) : array<TT>
 
 Sorts an iterator in descending order and returns an array
+
 
 :Arguments: * **a** : iterator<auto(TT)>
 
@@ -161,6 +170,7 @@ Sorts an iterator in descending order and returns an array
 
 Sorts an array in place
 
+
 :Arguments: * **buffer** : array<auto(TT)>
 
             * **key** : auto
@@ -170,6 +180,7 @@ Sorts an array in place
 .. das:function:: order_by_to_array(a: iterator<auto(TT)>; key: auto) : array<TT>
 
 Sorts an iterator and returns an array
+
 
 :Arguments: * **a** : iterator<auto(TT)>
 
@@ -184,6 +195,7 @@ order_descending
 .. das:function:: order_descending(a: iterator<auto(TT)>) : iterator<TT>
 
 Sorts an iterator in descending order
+
 
 :Arguments: * **a** : iterator<auto(TT)>
 
@@ -211,6 +223,7 @@ order_descending_inplace
 
 Sorts an array in descending order in place
 
+
 :Arguments: * **buffer** : array<auto(TT)>
 
 .. _function-linq_order_descending_inplace_array_ls_autoTT_gr__block_ls_v1_c_TT;v2_c_TT_c_bool_gr_:
@@ -228,6 +241,7 @@ order_descending_to_array
 .. das:function:: order_descending_to_array(a: iterator<auto(TT)>; fun: block<(v1:TT;v2:TT):bool>) : array<TT>
 
 Sorts an iterator in descending order and returns an array
+
 
 :Arguments: * **a** : iterator<auto(TT)>
 
@@ -249,6 +263,7 @@ order_inplace
 
 Sorts an array in place
 
+
 :Arguments: * **buffer** : array<auto(TT)>
 
 .. _function-linq_order_inplace_array_ls_autoTT_gr__block_ls_v1_c_TT;v2_c_TT_c_bool_gr_:
@@ -266,6 +281,7 @@ order_to_array
 .. das:function:: order_to_array(a: iterator<auto(TT)>; fun: block<(v1:TT;v2:TT):bool>) : array<TT>
 
 Sorts an iterator and returns an array
+
 
 :Arguments: * **a** : iterator<auto(TT)>
 
@@ -287,6 +303,7 @@ order_unique_folded
 
 sort and remove duplicate elements from an iterator
 
+
 :Arguments: * **a** : iterator<auto(TT)>
 
 .. _function-linq_order_unique_folded_array_ls_autoTT_gr_:
@@ -301,6 +318,7 @@ sort and remove duplicate elements from an iterator
 
 sort and remove duplicate elements from an array
 
+
 :Arguments: * **a** : array<auto(TT)>
 
 
@@ -312,6 +330,7 @@ reverse
 .. das:function:: reverse(a: array<auto(TT)>) : array<TT>
 
 Reverses an array
+
 
 :Arguments: * **a** : array<auto(TT)>
 
@@ -327,6 +346,7 @@ Reverses an array
 
 Reverses an array in place
 
+
 :Arguments: * **buffer** : array<auto(TT)>
 
 .. _function-linq_reverse_to_array_iterator_ls_autoTT_gr_:
@@ -335,7 +355,9 @@ Reverses an array in place
 
 Reverses an iterator and returns an array
 
+
 :Arguments: * **a** : iterator<auto(TT)>
+
 
 ++++++++++++++
 Set operations
@@ -387,6 +409,7 @@ distinct
 
 Returns distinct elements from an array
 
+
 :Arguments: * **a** : array<auto(TT)>
 
 .. _function-linq_distinct_iterator_ls_autoTT_gr_:
@@ -405,6 +428,7 @@ distinct_by
 
 Returns distinct elements from an array based on a key
 
+
 :Arguments: * **a** : array<auto(TT)>
 
             * **key** : block<(arg:TT):auto>
@@ -421,6 +445,7 @@ Returns distinct elements from an array based on a key
 
 Returns distinct elements from an array based on a key in place
 
+
 :Arguments: * **a** : array<auto(TT)>
 
             * **key** : block<(arg:TT):auto>
@@ -430,6 +455,7 @@ Returns distinct elements from an array based on a key in place
 .. das:function:: distinct_by_to_array(a: iterator<auto(TT)>; key: block<(arg:TT):auto>) : array<TT>
 
 Returns distinct elements from an iterator based on a key and returns an array
+
 
 :Arguments: * **a** : iterator<auto(TT)>
 
@@ -441,6 +467,7 @@ Returns distinct elements from an iterator based on a key and returns an array
 
 Returns distinct elements from an array in place
 
+
 :Arguments: * **a** : array<auto(TT)>
 
 .. _function-linq_distinct_to_array_iterator_ls_autoTT_gr_:
@@ -448,6 +475,7 @@ Returns distinct elements from an array in place
 .. das:function:: distinct_to_array(a: iterator<auto(TT)>) : array<TT>
 
 Returns distinct elements from an iterator and returns an array
+
 
 :Arguments: * **a** : iterator<auto(TT)>
 
@@ -460,6 +488,7 @@ except
 .. das:function:: except(src: iterator<auto(TT)>; exclude: iterator<auto(TT)>) : iterator<TT>
 
 Returns elements from the first iterator that are not in the second iterator
+
 
 :Arguments: * **src** : iterator<auto(TT)>
 
@@ -481,6 +510,7 @@ except_by
 
 Returns elements from the first array that are not in the second array by key
 
+
 :Arguments: * **src** : array<auto(TT)>
 
             * **exclude** : array<auto(TT)>
@@ -499,6 +529,7 @@ Returns elements from the first array that are not in the second array by key
 
 Returns elements from the first iterator that are not in the second iterator by key and returns an array
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
             * **exclude** : iterator<auto(TT)>
@@ -510,6 +541,7 @@ Returns elements from the first iterator that are not in the second iterator by 
 .. das:function:: except_to_array(src: iterator<auto(TT)>; exclude: iterator<auto(TT)>) : array<TT>
 
 Returns elements from the first iterator that are not in the second iterator and returns an array
+
 
 :Arguments: * **src** : iterator<auto(TT)>
 
@@ -524,6 +556,7 @@ intersect
 .. das:function:: intersect(srca: array<auto(TT)>; srcb: array<auto(TT)>) : array<TT>
 
 Returns elements that are present in both arrays
+
 
 :Arguments: * **srca** : array<auto(TT)>
 
@@ -545,6 +578,7 @@ intersect_by
 
 Returns elements that are present in both arrays by key
 
+
 :Arguments: * **srca** : array<auto(TT)>
 
             * **srcb** : array<auto(TT)>
@@ -563,6 +597,7 @@ Returns elements that are present in both arrays by key
 
 Returns elements that are present in both iterators by key and returns an array
 
+
 :Arguments: * **srca** : iterator<auto(TT)>
 
             * **srcb** : iterator<auto(TT)>
@@ -574,6 +609,7 @@ Returns elements that are present in both iterators by key and returns an array
 .. das:function:: intersect_to_array(srca: iterator<auto(TT)>; srcb: iterator<auto(TT)>) : array<TT>
 
 Returns elements that are present in both iterators and returns an array
+
 
 :Arguments: * **srca** : iterator<auto(TT)>
 
@@ -588,6 +624,7 @@ union
 .. das:function:: union(srca: iterator<auto(TT)>; srcb: iterator<auto(TT)>) : iterator<TT>
 
 Returns distinct elements from the concatenation of two iterators
+
 
 :Arguments: * **srca** : iterator<auto(TT)>
 
@@ -609,6 +646,7 @@ union_by
 
 Returns distinct elements from the concatenation of two arrays by key
 
+
 :Arguments: * **srca** : array<auto(TT)>
 
             * **srcb** : array<auto(TT)>
@@ -627,6 +665,7 @@ Returns distinct elements from the concatenation of two arrays by key
 
 Returns distinct elements from the concatenation of two iterators by key and returns an array
 
+
 :Arguments: * **srca** : iterator<auto(TT)>
 
             * **srcb** : iterator<auto(TT)>
@@ -638,6 +677,7 @@ Returns distinct elements from the concatenation of two iterators by key and ret
 .. das:function:: union_to_array(srca: iterator<auto(TT)>; srcb: iterator<auto(TT)>) : array<TT>
 
 Returns distinct elements from the concatenation of two iterators and returns an array
+
 
 :Arguments: * **srca** : iterator<auto(TT)>
 
@@ -652,6 +692,7 @@ unique
 .. das:function:: unique(a: array<auto(TT)>) : array<TT>
 
 sort and remove duplicate elements from an array
+
 
 :Arguments: * **a** : array<auto(TT)>
 
@@ -671,6 +712,7 @@ unique_by
 
 sort and remove duplicate elements from an array based on a key
 
+
 :Arguments: * **a** : array<auto(TT)>
 
             * **key** : block<(arg:TT):auto>
@@ -687,6 +729,7 @@ sort and remove duplicate elements from an array based on a key
 
 remove duplicate elements from an array based on a key in place
 
+
 :Arguments: * **a** : array<auto(TT)>
 
             * **key** : block<(arg:TT):auto>
@@ -696,6 +739,7 @@ remove duplicate elements from an array based on a key in place
 .. das:function:: unique_by_to_array(a: iterator<auto(TT)>; key: block<(arg:TT):auto>) : array<TT>
 
 sort and remove duplicate elements from an iterator based on a key and returns an array
+
 
 :Arguments: * **a** : iterator<auto(TT)>
 
@@ -707,6 +751,7 @@ sort and remove duplicate elements from an iterator based on a key and returns a
 
 remove duplicate elements from sorted array in place
 
+
 :Arguments: * **a** : array<auto(TT)>
 
 .. _function-linq_unique_key_auto_0x1fe:
@@ -714,6 +759,7 @@ remove duplicate elements from sorted array in place
 .. das:function:: unique_key(a: auto) : auto
 
 generates unique key of workhorse type for the value
+
 
 :Arguments: * **a** : auto
 
@@ -723,7 +769,9 @@ generates unique key of workhorse type for the value
 
 sort and remove duplicate elements from an iterator and returns an array
 
+
 :Arguments: * **a** : iterator<auto(TT)>
+
 
 ++++++++++++++++++++++++
 Concatenation operations
@@ -752,6 +800,7 @@ append
 
 Appends a value to the end of an array
 
+
 :Arguments: * **arr** : array<auto(TT)>
 
             * **value** : TT
@@ -768,6 +817,7 @@ Appends a value to the end of an array
 
 Appends a value to the end of an array in place
 
+
 :Arguments: * **arr** : array<auto(TT)>
 
             * **value** : TT
@@ -777,6 +827,7 @@ Appends a value to the end of an array in place
 .. das:function:: append_to_array(it: iterator<auto(TT)>; value: TT) : array<TT>
 
 Appends a value to the end of an iterator and returns an array
+
 
 :Arguments: * **it** : iterator<auto(TT)>
 
@@ -791,6 +842,7 @@ concat
 .. das:function:: concat(a: iterator<auto(TT)>; b: iterator<auto(TT)>) : iterator<TT>
 
 Concatenates two iterators
+
 
 :Arguments: * **a** : iterator<auto(TT)>
 
@@ -808,6 +860,7 @@ Concatenates two iterators
 
 Concatenates two arrays in place
 
+
 :Arguments: * **a** : array<auto(TT)>
 
             * **b** : array<auto(TT)>
@@ -817,6 +870,7 @@ Concatenates two arrays in place
 .. das:function:: concat_to_array(a: iterator<auto(TT)>; b: iterator<auto(TT)>) : array<TT>
 
 Concatenates two iterators and returns an array
+
 
 :Arguments: * **a** : iterator<auto(TT)>
 
@@ -831,6 +885,7 @@ prepend
 .. das:function:: prepend(it: iterator<auto(TT)>; value: TT) : iterator<TT>
 
 Prepends a value to the beginning of an iterator
+
 
 :Arguments: * **it** : iterator<auto(TT)>
 
@@ -848,6 +903,7 @@ Prepends a value to the beginning of an iterator
 
 Prepends a value to the beginning of an array in place
 
+
 :Arguments: * **arr** : array<auto(TT)>
 
             * **value** : TT
@@ -858,9 +914,11 @@ Prepends a value to the beginning of an array in place
 
 Prepends a value to the beginning of an iterator and returns an array
 
+
 :Arguments: * **it** : iterator<auto(TT)>
 
             * **value** : TT
+
 
 +++++++++++++++++++++
 Generation operations
@@ -877,6 +935,7 @@ Generation operations
 
 Returns the elements of the iterator, or a default value if the iterator is empty
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
 .. _function-linq_empty_autoTT_0x8d5:
@@ -885,6 +944,7 @@ Returns the elements of the iterator, or a default value if the iterator is empt
 
 Returns an empty iterator of the specified type
 
+
 :Arguments: * **typ** : auto(TT)
 
 .. _function-linq_range_sequence_int_int:
@@ -892,6 +952,7 @@ Returns an empty iterator of the specified type
 .. das:function:: range_sequence(start: int; count: int) : iterator<int>
 
 Generates a sequence of integers within a specified range
+
 
 :Arguments: * **start** : int
 
@@ -903,9 +964,11 @@ Generates a sequence of integers within a specified range
 
 Generates a sequence that contains one repeated value
 
+
 :Arguments: * **element** : auto(TT)
 
             * **count** : int
+
 
 ++++++++++++++++++++++
 Aggregation operations
@@ -950,6 +1013,7 @@ aggregate
 
 Aggregates elements in an iterator using a seed and a function
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
             * **seed** : auto(AGG)
@@ -972,6 +1036,7 @@ average
 
 Averages elements in an array
 
+
 :Arguments: * **src** : array<auto(TT)>
 
 .. _function-linq_average_iterator_ls_autoTT_gr_:
@@ -989,6 +1054,7 @@ count
 .. das:function:: count(a: array<auto(TT)>; predicate: block<(arg:TT):bool>) : int
 
 Counts elements in an array that satisfy a predicate
+
 
 :Arguments: * **a** : array<auto(TT)>
 
@@ -1018,6 +1084,7 @@ long_count
 
 Counts elements in an array, using a long integer
 
+
 :Arguments: * **a** : array<auto(TT)>
 
 .. _function-linq_long_count_iterator_ls_autoTT_gr_:
@@ -1036,6 +1103,7 @@ max
 
 Finds the maximum element in an iterator
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
 .. _function-linq_max_array_ls_autoTT_gr_:
@@ -1053,6 +1121,7 @@ max_by
 .. das:function:: max_by(src: iterator<auto(TT)>; key: auto) : TT
 
 Finds the maximum element in an iterator by key
+
 
 :Arguments: * **src** : iterator<auto(TT)>
 
@@ -1074,6 +1143,7 @@ min
 
 Finds the minimum element in an iterator
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
 .. _function-linq_min_array_ls_autoTT_gr_:
@@ -1091,6 +1161,7 @@ min_by
 .. das:function:: min_by(src: array<auto(TT)>; key: auto) : TT
 
 Finds the minimum element in an array by key
+
 
 :Arguments: * **src** : array<auto(TT)>
 
@@ -1112,6 +1183,7 @@ min_max
 
 Finds the minimum and maximum elements in an iterator
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
 .. _function-linq_min_max_array_ls_autoTT_gr_:
@@ -1130,6 +1202,7 @@ min_max_average
 
 Finds the minimum, maximum, and average elements in an array
 
+
 :Arguments: * **src** : array<auto(TT)>
 
 .. _function-linq_min_max_average_iterator_ls_autoTT_gr_:
@@ -1147,6 +1220,7 @@ min_max_average_by
 .. das:function:: min_max_average_by(src: array<auto(TT)>; key: auto) : tuple<TT;TT;TT>
 
 Finds the minimum, maximum, and average elements in an array by key
+
 
 :Arguments: * **src** : array<auto(TT)>
 
@@ -1168,6 +1242,7 @@ min_max_by
 
 Finds the minimum and maximum elements in an iterator by key
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
             * **key** : auto
@@ -1188,13 +1263,13 @@ sum
 
 Sums elements in an array
 
+
 :Arguments: * **src** : array<auto(TT)>
 
 .. _function-linq_sum_iterator_ls_autoTT_gr_:
 
 .. das:function:: sum(src: iterator<auto(TT)>) : TT
 
-----
 
 ++++++++++++++
 Filtering data
@@ -1214,6 +1289,7 @@ where_
 
 Filters elements in an array based on a predicate
 
+
 :Arguments: * **src** : array<auto(TT)>
 
             * **predicate** : block<(arg:TT):bool>
@@ -1230,9 +1306,11 @@ Filters elements in an array based on a predicate
 
 Filters elements in an iterator based on a predicate and returns an array
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
             * **predicate** : block<(arg:TT):bool>
+
 
 +++++++++++++++++
 Partitioning data
@@ -1278,6 +1356,7 @@ chunk
 
 Splits an array into chunks of a specified size
 
+
 :Arguments: * **src** : array<auto(TT)>
 
             * **size** : int
@@ -1294,6 +1373,7 @@ Splits an array into chunks of a specified size
 
 Splits an iterator into chunks of a specified size and returns an array
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
             * **size** : int
@@ -1307,6 +1387,7 @@ skip
 .. das:function:: skip(src: iterator<auto(TT)>; total: int) : iterator<TT>
 
 Yields all but the first `total` elements
+
 
 :Arguments: * **src** : iterator<auto(TT)>
 
@@ -1324,6 +1405,7 @@ Yields all but the first `total` elements
 
 Removes the first `total` elements from an array in place
 
+
 :Arguments: * **arr** : array<auto(TT)>
 
             * **total** : int
@@ -1337,6 +1419,7 @@ skip_last
 .. das:function:: skip_last(src: iterator<auto(TT)>; total: int) : iterator<TT>
 
 Yields all but the last `total` elements from an iterator
+
 
 :Arguments: * **src** : iterator<auto(TT)>
 
@@ -1354,6 +1437,7 @@ Yields all but the last `total` elements from an iterator
 
 Removes the last `total` elements from an array in place
 
+
 :Arguments: * **arr** : array<auto(TT)>
 
             * **total** : int
@@ -1364,6 +1448,7 @@ Removes the last `total` elements from an array in place
 
 Yields all but the last `total` elements from an iterator and returns an array
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
             * **total** : int
@@ -1373,6 +1458,7 @@ Yields all but the last `total` elements from an iterator and returns an array
 .. das:function:: skip_to_array(src: iterator<auto(TT)>; total: int) : array<TT>
 
 Yields all but the first `total` elements and returns an array
+
 
 :Arguments: * **src** : iterator<auto(TT)>
 
@@ -1387,6 +1473,7 @@ skip_while
 .. das:function:: skip_while(src: array<auto(TT)>; predicate: block<(arg:TT):bool>) : array<TT>
 
 Skips all elements of an array while the predicate is true
+
 
 :Arguments: * **src** : array<auto(TT)>
 
@@ -1404,6 +1491,7 @@ Skips all elements of an array while the predicate is true
 
 Skips all elements of an iterator while the predicate is true and returns an array
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
             * **predicate** : block<(arg:TT):bool>
@@ -1417,6 +1505,7 @@ take
 .. das:function:: take(src: array<auto(TT)>; from: range) : array<TT>
 
 Yields a range of elements from an array
+
 
 :Arguments: * **src** : array<auto(TT)>
 
@@ -1446,6 +1535,7 @@ take_inplace
 
 Keeps only a range of elements in an array in place
 
+
 :Arguments: * **arr** : array<auto(TT)>
 
             * **from** : range
@@ -1466,6 +1556,7 @@ take_last
 
 Yields only the last `total` elements from an iterator
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
             * **total** : int
@@ -1482,6 +1573,7 @@ Yields only the last `total` elements from an iterator
 
 Keeps only the last `total` elements in an array in place
 
+
 :Arguments: * **arr** : array<auto(TT)>
 
             * **total** : int
@@ -1491,6 +1583,7 @@ Keeps only the last `total` elements in an array in place
 .. das:function:: take_last_to_array(src: iterator<auto(TT)>; total: int) : array<TT>
 
 Yields only the last `total` elements from an iterator and returns an array
+
 
 :Arguments: * **src** : iterator<auto(TT)>
 
@@ -1505,6 +1598,7 @@ take_to_array
 .. das:function:: take_to_array(src: iterator<auto(TT)>; total: int) : array<TT>
 
 Yields only the first `total` elements and returns an array
+
 
 :Arguments: * **src** : iterator<auto(TT)>
 
@@ -1526,6 +1620,7 @@ take_while
 
 Yields only the elements of an iterator while the predicate is true
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
             * **predicate** : block<(arg:TT):bool>
@@ -1542,9 +1637,11 @@ Yields only the elements of an iterator while the predicate is true
 
 Yields only the elements of an iterator while the predicate is true and returns an array
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
             * **predicate** : block<(arg:TT):bool>
+
 
 +++++++++++++++++++++++++
 Join and group operations
@@ -1570,6 +1667,7 @@ group_by
 
 Groups the elements of an iterator according to a specified key selector function
 
+
 :Arguments: * **source** : iterator<auto(TT)>
 
             * **key** : auto
@@ -1590,6 +1688,7 @@ Groups the elements of an iterator according to a specified key selector functio
 
 Groups the elements of an iterator according to a specified key selector function and returns an array
 
+
 :Arguments: * **source** : iterator<auto(TT)>
 
             * **key** : auto
@@ -1607,6 +1706,7 @@ group_join
 .. das:function:: group_join(srca: iterator<auto(TA)>; srcb: iterator<auto(TB)>; keya: auto; keyb: auto; result: auto) : iterator<typedecl(result(type<TA>,type<array<TB -const -&>>))>
 
 we pass TA, and sequence of TB to 'result'
+
 
 :Arguments: * **srca** : iterator<auto(TA)>
 
@@ -1630,6 +1730,7 @@ we pass TA, and sequence of TB to 'result'
 
 we pass TA, and sequence of TB to 'result'
 
+
 :Arguments: * **srca** : iterator<auto(TA)>
 
             * **srcb** : iterator<auto(TB)>
@@ -1649,6 +1750,7 @@ join
 .. das:function:: join(srca: array<auto(TA)>; srcb: array<auto(TB)>; keya: auto; keyb: auto; result: auto) : array<typedecl(result(type<TA>,type<TB>))>
 
 Joins two arrays based on matching keys (inner join)
+
 
 :Arguments: * **srca** : array<auto(TA)>
 
@@ -1672,6 +1774,7 @@ Joins two arrays based on matching keys (inner join)
 
 Joins two iterators based on matching keys (inner join) and returns an array
 
+
 :Arguments: * **srca** : iterator<auto(TA)>
 
             * **srcb** : iterator<auto(TB)>
@@ -1681,6 +1784,7 @@ Joins two iterators based on matching keys (inner join) and returns an array
             * **keyb** : auto
 
             * **result** : auto
+
 
 +++++++++++++
 Querying data
@@ -1705,6 +1809,7 @@ all
 
 Returns true if all elements in the array satisfy the predicate
 
+
 :Arguments: * **src** : array<auto(TT)>
 
             * **predicate** : block<(arg:TT):bool>
@@ -1724,6 +1829,7 @@ any
 .. das:function:: any(src: array<auto(TT)>; predicate: block<(arg:TT):bool>) : bool
 
 Returns true if any element in the array satisfies the predicate
+
 
 :Arguments: * **src** : array<auto(TT)>
 
@@ -1753,6 +1859,7 @@ contains
 
 Returns true if the element is present in the iterator
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
             * **element** : TT
@@ -1761,7 +1868,6 @@ Returns true if the element is present in the iterator
 
 .. das:function:: contains(src: array<auto(TT)>; element: TT) : bool
 
-----
 
 ++++++++++++++++++
 Element operations
@@ -1794,6 +1900,7 @@ element_at
 
 Returns the element at the specified index
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
             * **index** : int
@@ -1813,6 +1920,7 @@ element_at_or_default
 .. das:function:: element_at_or_default(src: iterator<auto(TT)>; index: int) : TT
 
 Returns the element at the specified index, or a default value if the index is out of range
+
 
 :Arguments: * **src** : iterator<auto(TT)>
 
@@ -1834,6 +1942,7 @@ first
 
 Returns the first element of an iterator
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
 .. _function-linq_first_array_ls_autoTT_gr_:
@@ -1851,6 +1960,7 @@ first_or_default
 .. das:function:: first_or_default(src: array<auto(TT)>; defaultValue: TT) : TT
 
 Returns the first element of an array, or a default value if the array is empty
+
 
 :Arguments: * **src** : array<auto(TT)>
 
@@ -1872,6 +1982,7 @@ last
 
 Returns the last element of an iterator
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
 .. _function-linq_last_array_ls_autoTT_gr_:
@@ -1889,6 +2000,7 @@ last_or_default
 .. das:function:: last_or_default(src: array<auto(TT)>; defaultValue: TT) : TT
 
 Returns the last element of an array, or a default value if the array is empty
+
 
 :Arguments: * **src** : array<auto(TT)>
 
@@ -1910,6 +2022,7 @@ single
 
 Returns the only element of an array, and throws if there is not exactly one element
 
+
 :Arguments: * **src** : array<auto(TT)>
 
 .. _function-linq_single_iterator_ls_autoTT_gr_:
@@ -1928,6 +2041,7 @@ single_or_default
 
 Returns the only element of an iterator, or a default value if there is not exactly one element
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
             * **defaultValue** : TT
@@ -1936,7 +2050,6 @@ Returns the only element of an iterator, or a default value if there is not exac
 
 .. das:function:: single_or_default(src: array<auto(TT)>; defaultValue: TT) : TT
 
-----
 
 ++++++++++++++++++++
 Transform operations
@@ -1974,6 +2087,7 @@ select
 
 Projects each element of an array into a new form
 
+
 :Arguments: * **src** : array<auto(TT)>
 
 .. _function-linq_select_iterator_ls_autoTT_gr_:
@@ -1999,6 +2113,7 @@ select_many
 .. das:function:: select_many(src: iterator<auto(TT)>; result_selector: auto) : iterator<typedecl(result_selector(iter_type(type<TT>)))>
 
 Projects each element of an iterator to an iterator and flattens the resulting iterators into one iterator
+
 
 :Arguments: * **src** : iterator<auto(TT)>
 
@@ -2028,6 +2143,7 @@ select_many_to_array
 
 Projects each element of an iterator to an iterator and flattens the resulting iterators into one array
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
             * **collection_selector** : auto
@@ -2050,6 +2166,7 @@ select_to_array
 
 Projects each element of an iterator into a new form using a selector function and returns an array
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
             * **result_selector** : auto
@@ -2069,6 +2186,7 @@ zip
 .. das:function:: zip(a: iterator<auto(TT)>; b: iterator<auto(UU)>) : iterator<tuple<TT;UU>>
 
 Merges two iterators into an iterator of tuples
+
 
 :Arguments: * **a** : iterator<auto(TT)>
 
@@ -2106,6 +2224,7 @@ zip_to_array
 
 Merges three iterators into an array of tuples
 
+
 :Arguments: * **a** : iterator<auto(TT)>
 
             * **b** : iterator<auto(UU)>
@@ -2120,7 +2239,6 @@ Merges three iterators into an array of tuples
 
 .. das:function:: zip_to_array(a: iterator<auto(TT)>; b: iterator<auto(UU)>; result_selector: block<(l:TT;r:UU):auto>) : array<typedecl(result_selector(type<TT>,type<UU>))>
 
-----
 
 +++++++++++++++++++++
 Conversion operations
@@ -2137,6 +2255,7 @@ Conversion operations
 
 Converts an array to an iterator
 
+
 :Arguments: * **a** : array<auto(TT)>
 
 .. _function-linq_to_sequence_move_array_ls_autoTT_gr_:
@@ -2144,6 +2263,7 @@ Converts an array to an iterator
 .. das:function:: to_sequence_move(a: array<auto(TT)>) : iterator<TT>
 
 Converts an array to an iterator, captures input
+
 
 :Arguments: * **a** : array<auto(TT)>
 
@@ -2157,6 +2277,7 @@ to_table
 
 Converts an array to a table
 
+
 :Arguments: * **a** : array<auto(TT)>
 
             * **key** : block<(v:TT):auto>
@@ -2167,7 +2288,6 @@ Converts an array to a table
 
 .. das:function:: to_table(a: iterator<auto(TT)>; key: block<(v:TT):auto>; elementSelector: block<(v:TT):auto>) : table<typedecl(_::unique_key(type<TT>)), typedecl(elementSelector(type<TT>))>
 
-----
 
 ++++++++++++++++++++
 Comparators and keys
@@ -2192,6 +2312,7 @@ less
 .. das:function:: less(a: tuple<auto(TT)>; b: tuple<auto(TT)>) : bool
 
 Compares two tuples, returns true if first is less than second
+
 
 :Arguments: * **a** : tuple<auto(TT)>
 
@@ -2225,6 +2346,7 @@ sequence_equal
 
 Checks if two sequences are equal
 
+
 :Arguments: * **first** : iterator<auto(TT)>
 
             * **second** : iterator<auto(TT)>
@@ -2245,6 +2367,7 @@ sequence_equal_by
 
 Checks if two sequences are equal by key
 
+
 :Arguments: * **first** : iterator<auto(TT)>
 
             * **second** : iterator<auto(TT)>
@@ -2254,7 +2377,5 @@ Checks if two sequences are equal by key
 .. _function-linq_sequence_equal_by_array_ls_autoTT_gr__array_ls_autoTT_gr__block_ls_arg_c_TT_c_auto_gr_:
 
 .. das:function:: sequence_equal_by(first: array<auto(TT)>; second: array<auto(TT)>; key: block<(arg:TT):auto>) : bool
-
-----
 
 

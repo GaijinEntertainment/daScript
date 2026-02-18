@@ -42,7 +42,7 @@ def private helper() : string {
 // === [sideeffects] ===
 // Tells the compiler this function has side effects.
 // Without it, calls whose return values are unused may be eliminated.
-// Required for functions using match, or that only do I/O.
+// Required for functions that only do I/O (e.g. print).
 
 [sideeffects]
 def log_message(msg : string) {

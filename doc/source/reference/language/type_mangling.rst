@@ -24,36 +24,36 @@ Primitive types
 
 Each primitive type has a short mnemonic:
 
-===========  ========  ============================
-daslang     Mangled   Notes
-===========  ========  ============================
-``void``     ``v``
-``bool``     ``b``
-``int``      ``i``
-``int2``     ``i2``    SIMD 2-component vector
-``int3``     ``i3``
-``int4``     ``i4``
-``int8``     ``i8``    8-bit signed integer
-``int16``    ``i16``   16-bit signed integer
-``int64``    ``i64``   64-bit signed integer
-``uint``     ``u``
-``uint2``    ``u2``
-``uint3``    ``u3``
-``uint4``    ``u4``
-``uint8``    ``u8``
-``uint16``   ``u16``
-``uint64``   ``u64``
-``float``    ``f``
-``float2``   ``f2``
-``float3``   ``f3``
-``float4``   ``f4``
-``double``   ``d``
-``string``   ``s``
-``range``    ``r``
-``urange``   ``z``
-``range64``  ``r64``
-``urange64`` ``z64``
-===========  ========  ============================
+============  ========  ============================
+daslang       Mangled   Notes
+============  ========  ============================
+``void``      ``v``
+``bool``      ``b``
+``int``       ``i``
+``int2``      ``i2``    SIMD 2-component vector
+``int3``      ``i3``
+``int4``      ``i4``
+``int8``      ``i8``    8-bit signed integer
+``int16``     ``i16``   16-bit signed integer
+``int64``     ``i64``   64-bit signed integer
+``uint``      ``u``
+``uint2``     ``u2``
+``uint3``     ``u3``
+``uint4``     ``u4``
+``uint8``     ``u8``
+``uint16``    ``u16``
+``uint64``    ``u64``
+``float``     ``f``
+``float2``    ``f2``
+``float3``    ``f3``
+``float4``    ``f4``
+``double``    ``d``
+``string``    ``s``
+``range``     ``r``
+``urange``    ``z``
+``range64``   ``r64``
+``urange64``  ``z64``
+============  ========  ============================
 
 
 Qualifiers and modifiers
@@ -62,15 +62,15 @@ Qualifiers and modifiers
 Qualifiers are **prepended** before the base type they modify.  For
 example, ``const int`` is ``Ci`` and ``const string&`` is ``C&s``.
 
-=========  ========  ============================
-Qualifier  Mangled   Meaning
-=========  ========  ============================
-const      ``C``     Constant
-ref (``&``) ``&``    Reference
-temporary  ``#``     Temporary value
-implicit   ``I``     Implicit type
-explicit   ``X``     Explicit type match
-=========  ========  ============================
+============  ========  ============================
+Qualifier     Mangled   Meaning
+============  ========  ============================
+const         ``C``     Constant
+ref (``&``)   ``&``     Reference
+temporary     ``#``     Temporary value
+implicit      ``I``     Implicit type
+explicit      ``X``     Explicit type match
+============  ========  ============================
 
 
 Pointers
@@ -79,7 +79,7 @@ Pointers
 A raw pointer is ``?``, followed by an optional smart-pointer marker:
 
 ====================  ========
-daslang              Mangled
+daslang               Mangled
 ====================  ========
 ``Foo?``              ``?``
 ``smart_ptr<Foo>``    ``?M``
@@ -95,19 +95,19 @@ Composite prefixes
 
 Some types carry sub-types.  These use numbered prefix wrappers:
 
-========  ======================================  ==================================
-Prefix    Meaning                                 Example
-========  ======================================  ==================================
-``1<T>``  First sub-type (element type)           ``array<int>`` → ``1<i>A``
-``2<T>``  Second sub-type (value type for tables) ``table<string;int>`` → ``1<s>2<i>T``
-========  ======================================  ==================================
+========  =======================================  ==================================
+Prefix    Meaning                                  Example
+========  =======================================  ==================================
+``1<T>``  First sub-type (element type)            ``array<int>`` → ``1<i>A``
+``2<T>``  Second sub-type (value type for tables)  ``table<string;int>`` → ``1<s>2<i>T``
+========  =======================================  ==================================
 
 
 Container types
 ===============
 
 =============  ========  ===============================
-daslang       Mangled   Encoding pattern
+daslang        Mangled   Encoding pattern
 =============  ========  ===============================
 ``array``      ``A``     ``1<element>A``
 ``table``      ``T``     ``1<key>2<value>T``
@@ -139,11 +139,11 @@ Callable types
 daslang has three callable types, each with its own suffix:
 
 ================  ========  ============================
-daslang          Mangled   Characteristics
+daslang           Mangled   Characteristics
 ================  ========  ============================
-function pointer  ``@@``    No capture, cheapest call
-lambda            ``@``     Heap-allocated, captures variables
-block             ``$``     Stack-allocated, cannot outlive scope
+function pointer  ``@@``      No capture, cheapest call
+lambda            ``@``       Heap-allocated, captures variables
+block             ``$``       Stack-allocated, cannot outlive scope
 ================  ========  ============================
 
 The argument list uses the ``0<args...>`` prefix with arguments separated
@@ -200,14 +200,14 @@ Named arguments in callable types use the ``N<names...>`` prefix:
 Bitfields
 =========
 
-=========  ========
-daslang   Mangled
-=========  ========
-bitfield   ``t``
-bitfield8  ``t8``
-bitfield16 ``t16``
-bitfield64 ``t64``
-=========  ========
+==========  ========
+daslang     Mangled
+==========  ========
+bitfield    ``t``
+bitfield8   ``t8``
+bitfield16  ``t16``
+bitfield64  ``t64``
+==========  ========
 
 
 Special / internal types
@@ -235,14 +235,14 @@ Remove-qualifiers (generics)
 
 In generic function signatures, qualifiers can be explicitly removed:
 
-=========  ========  ============================
-Trait      Mangled   Meaning
-=========  ========  ============================
-remove ref ``-&``    Strip reference
-remove const ``-C``  Strip const
-remove temp ``-#``   Strip temporary
-remove dim ``-[]``   Strip fixed dimensions
-=========  ========  ============================
+============  ========  ============================
+Trait         Mangled   Meaning
+============  ========  ============================
+remove ref    ``-&``    Strip reference
+remove const  ``-C``    Strip const
+remove temp   ``-#``    Strip temporary
+remove dim    ``-[]``   Strip fixed dimensions
+============  ========  ============================
 
 
 Interop function signatures
@@ -306,4 +306,4 @@ mangled strings match the daslang-side expectations.
 
    :ref:`tutorial_integration_c_unaligned_advanced` — unaligned ABI interop functions
 
-   :ref:`_contexts` — runtime context lookups by mangled name hash
+   :ref:`contexts` — runtime context lookups by mangled name hash

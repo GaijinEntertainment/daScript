@@ -73,8 +73,20 @@ Lambdas must be **moved** with ``<-``, not copied::
   var b <- a          // a is now empty
   b()
 
-Lambdas **cannot** be stored in arrays or copied — each must live in its
-own variable and be moved individually.
+Lambdas cannot be copied, but they **can** be stored in arrays using
+``emplace``, which moves the lambda into the container::
+
+  var callbacks : array<lambda<():void>>
+  var greet <- @() { print("hello from callback\n") }
+  callbacks |> emplace(greet)    // greet is now empty
+  var farewell <- @() { print("goodbye from callback\n") }
+  callbacks |> emplace(farewell)
+  for (cb in callbacks) {
+      invoke(cb)
+  }
+
+Blocks **cannot** be stored in arrays or variables — they live on the
+stack and are only valid as function arguments.
 
 Stateful lambda factory
 ========================

@@ -237,4 +237,4 @@ Running the tutorial
 
     Next tutorial: :ref:`tutorial_structs`
 
-    :ref:`_strings` in the language reference
+    :ref:`string_builder` in the language reference

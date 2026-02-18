@@ -158,14 +158,14 @@ the function runs through the interpreter.  With it linked in,
 Key policies
 ============
 
-+---------------------------+------------------------------------------+
-| ``policies.aot``          | Enable AOT linking during simulate       |
-+---------------------------+------------------------------------------+
-| ``policies.fail_on_no_aot``| Error if a function lacks AOT (default  |
-|                           | ``true``)                                |
-+---------------------------+------------------------------------------+
-| ``policies.aot_module``   | This is a module AOT (not entry point)   |
-+---------------------------+------------------------------------------+
++-----------------------------+------------------------------------------+
+| ``policies.aot``            | Enable AOT linking during simulate       |
++-----------------------------+------------------------------------------+
+| ``policies.fail_on_no_aot`` | Error if a function lacks AOT (default   |
+|                             | ``true``)                                |
++-----------------------------+------------------------------------------+
+| ``policies.aot_module``     | This is a module AOT (not entry point)   |
++-----------------------------+------------------------------------------+
 
 
 Building and running

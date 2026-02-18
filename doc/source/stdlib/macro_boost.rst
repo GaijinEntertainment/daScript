@@ -5,6 +5,8 @@
 Boost package for macro manipulations
 =====================================
 
+.. das:module:: macro_boost
+
 The MACRO_BOOST module provides utility macros for macro authors, including
 pattern matching on AST nodes, code generation helpers, and common
 transformation patterns used when writing compile-time code.
@@ -12,6 +14,8 @@ transformation patterns used when writing compile-time code.
 All functions and symbols are in "macro_boost" module, use require to get access to it. ::
 
     require daslib/macro_boost
+
+
 
 ++++++++++
 Structures
@@ -30,6 +34,8 @@ Stored captured variable together with the `ExprVar` which uses it
          * **eref** : bool - this one indicates if its used by reference and does not come from argument. its only used in JIT
 
 
+
+
 ++++++++++++++++++++
 Function annotations
 ++++++++++++++++++++
@@ -43,6 +49,8 @@ This macro convert macro_verify(expr,message,prog,at) to the following code::
        macro_error(prog,at,message)
        return [[ExpressionPtr]]
 
+
+
 +++++++++++
 Call macros
 +++++++++++
@@ -52,6 +60,8 @@ Call macros
 .. das:attribute:: return_skip_lockcheck
 
 this is similar to regular return <-, but it does not check for locks
+
+
 
 ++++++++++++++++++++++
 Implementation details
@@ -65,6 +75,7 @@ Implementation details
 
 Same as verify, only the check will produce macro error, followed by return [[ExpressionPtr]]
 
+
 :Arguments: * **expr** : bool
 
             * **prog** :  :ref:`ProgramPtr <alias-ProgramPtr>`
@@ -72,6 +83,7 @@ Same as verify, only the check will produce macro error, followed by return [[Ex
             * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`
 
             * **message** : string
+
 
 ++++++++++++++
 Block analysis
@@ -87,6 +99,7 @@ Block analysis
 
 Collect all captured variables in the expression.
 
+
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. _function-macro_boost_collect_finally_ExpressionPtr_bool:
@@ -96,6 +109,7 @@ Collect all captured variables in the expression.
 Collect all finally blocks in the expression.
 Returns array of ExprBlock? with all the blocks which have `finally` section
 Does not go into 'make_block' expression, such as `lambda`, or 'block' expressions
+
 
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
@@ -107,6 +121,7 @@ Does not go into 'make_block' expression, such as `lambda`, or 'block' expressio
 
 Collect all labels in the expression. Returns array of integer with label indices
 Does not go into 'make_block' expression, such as `lambda`, or 'block' expressions
+
 
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 

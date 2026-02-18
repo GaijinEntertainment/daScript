@@ -5,6 +5,8 @@
 Apply reflection pattern
 ========================
 
+.. das:module:: apply
+
 The APPLY module provides the ``apply`` macro for iterating over struct, tuple,
 and variant fields at compile time. Each field is visited with its name and
 a reference to its value, enabling generic per-field operations like
@@ -36,6 +38,8 @@ Example: ::
         // b = 3.14
         // c = hello
 
+
+
 +++++++++++
 Call macros
 +++++++++++
@@ -54,5 +58,6 @@ For example
         print("{name} = {field} ")
 
 Would print x = 1.0 y = 2.0
+
 
 

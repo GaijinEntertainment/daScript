@@ -4,7 +4,7 @@
   Daslang Standard Library 0.6
 #################################
 
-Copyright (c) 2018-2024 Gaijin Entertainment
+Copyright (c) 2018-2026 Gaijin Entertainment
 Authors: Anton Yudintsev, Boris Batkin
 
 The above copyright notice and this permission notice shall be included in
