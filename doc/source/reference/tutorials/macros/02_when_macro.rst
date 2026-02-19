@@ -282,5 +282,7 @@ Expected output::
 
    Previous tutorial: :ref:`tutorial_macro_call_macro`
 
+   Next tutorial: :ref:`tutorial_macro_function_macro`
+
    Language reference: :ref:`Macros <macros>` — full macro system documentation
 
