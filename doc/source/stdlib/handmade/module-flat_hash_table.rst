@@ -2,11 +2,15 @@ The FLAT_HASH_TABLE module implements a flat (open addressing) hash table.
 It stores all entries in a single contiguous array, providing cache-friendly
 access patterns and good performance for small to medium-sized tables.
 
-All functions and symbols are in "flat_hash_table" module, use require to get access to it. ::
+All functions and symbols are in "flat_hash_table" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/flat_hash_table
 
-Example: ::
+Example:
+
+.. code-block:: das
 
     require daslib/flat_hash_table public
 

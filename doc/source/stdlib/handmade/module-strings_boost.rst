@@ -1,11 +1,15 @@
 The STRINGS_BOOST module extends string handling with splitting, joining,
 padding, character replacement, and edit distance computation.
 
-All functions and symbols are in "strings_boost" module, use require to get access to it. ::
+All functions and symbols are in "strings_boost" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/strings_boost
 
-Example: ::
+Example:
+
+.. code-block:: das
 
     require daslib/strings_boost
 

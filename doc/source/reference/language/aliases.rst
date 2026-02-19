@@ -17,19 +17,25 @@ types they refer to — they do not create new types.
 typedef Declaration
 -------------------
 
-A type alias is declared with the ``typedef`` keyword::
+A type alias is declared with the ``typedef`` keyword:
+
+.. code-block:: das
 
     typedef Vec3 = float3
     typedef StringArray = array<string>
     typedef Callback = function<(x:int; y:int):bool>
 
-Once defined, the alias can be used anywhere a type is expected::
+Once defined, the alias can be used anywhere a type is expected:
+
+.. code-block:: das
 
     var position : Vec3
     var names : StringArray
     var cb : Callback
 
-Aliases can refer to complex types, including tables, arrays, tuples, variants, blocks, and lambdas::
+Aliases can refer to complex types, including tables, arrays, tuples, variants, blocks, and lambdas:
+
+.. code-block:: das
 
     typedef IntPair = tuple<int; int>
     typedef Registry = table<string; array<int>>
@@ -39,7 +45,9 @@ Aliases can refer to complex types, including tables, arrays, tuples, variants, 
 Publicity
 -------------------
 
-Type aliases can be ``public`` or ``private``::
+Type aliases can be ``public`` or ``private``:
+
+.. code-block:: das
 
     typedef public  Vec3 = float3       // visible to other modules
     typedef private Internal = int      // only visible within this module
@@ -57,7 +65,9 @@ Several composite types support a shorthand declaration syntax that creates a na
 Tuple Aliases
 ^^^^^^^^^^^^^^^^^
 
-Instead of writing a ``typedef`` for a tuple, you can use the ``tuple`` keyword directly::
+Instead of writing a ``typedef`` for a tuple, you can use the ``tuple`` keyword directly:
+
+.. code-block:: das
 
     tuple Vertex {
         position : float3
@@ -65,7 +75,9 @@ Instead of writing a ``typedef`` for a tuple, you can use the ``tuple`` keyword 
         uv       : float2
     }
 
-This is equivalent to::
+This is equivalent to:
+
+.. code-block:: das
 
     typedef Vertex = tuple<position:float3; normal:float3; uv:float2>
 
@@ -75,7 +87,9 @@ This is equivalent to::
 Variant Aliases
 ^^^^^^^^^^^^^^^^^^^
 
-Variants support a similar shorthand::
+Variants support a similar shorthand:
+
+.. code-block:: das
 
     variant Value {
         i : int
@@ -83,7 +97,9 @@ Variants support a similar shorthand::
         s : string
     }
 
-This is equivalent to::
+This is equivalent to:
+
+.. code-block:: das
 
     typedef Value = variant<i:int; f:float; s:string>
 
@@ -93,7 +109,9 @@ This is equivalent to::
 Bitfield Aliases
 ^^^^^^^^^^^^^^^^^^^
 
-Bitfields also support the shorthand syntax::
+Bitfields also support the shorthand syntax:
+
+.. code-block:: das
 
     bitfield Permissions {
         read
@@ -101,11 +119,15 @@ Bitfields also support the shorthand syntax::
         execute
     }
 
-This is equivalent to::
+This is equivalent to:
+
+.. code-block:: das
 
     typedef Permissions = bitfield<read; write; execute>
 
-Bitfield aliases can specify a storage type::
+Bitfield aliases can specify a storage type:
+
+.. code-block:: das
 
     bitfield SmallFlags : uint8 {
         active
@@ -118,7 +140,9 @@ Bitfield aliases can specify a storage type::
 Local Type Aliases
 --------------------------
 
-Type aliases can be declared inside function bodies::
+Type aliases can be declared inside function bodies:
+
+.. code-block:: das
 
     def process {
         typedef Entry = tuple<string; int>
@@ -128,7 +152,9 @@ Type aliases can be declared inside function bodies::
 
 Local type aliases are scoped to the enclosing block and are not visible outside it.
 
-Type aliases can also be declared inside structure or class bodies::
+Type aliases can also be declared inside structure or class bodies:
+
+.. code-block:: das
 
     struct Container {
         typedef Element = int
@@ -140,7 +166,9 @@ Generic Type Aliases (auto)
 -------------------------------------
 
 In generic functions, the ``auto(Name)`` syntax creates inferred type aliases.
-These are resolved during function instantiation based on the actual argument types::
+These are resolved during function instantiation based on the actual argument types:
+
+.. code-block:: das
 
     def first_element(a : array<auto(ElementType)>) : ElementType {
         return a[0]
@@ -148,7 +176,9 @@ These are resolved during function instantiation based on the actual argument ty
 
     let x = first_element([1, 2, 3])    // ElementType is inferred as int, returns int
 
-Named auto aliases can be reused across multiple arguments to enforce type relationships::
+Named auto aliases can be reused across multiple arguments to enforce type relationships:
+
+.. code-block:: das
 
     def add_to_array(var arr : array<auto(T)>; value : T) {
         arr |> push(value)
@@ -161,7 +191,9 @@ Type Aliases with typedecl
 ---------------------------------------------
 
 The ``typedecl`` expression can be used inside generic functions to create types based on the
-type of an expression::
+type of an expression:
+
+.. code-block:: das
 
     def make_table(key : auto(K)) {
         var result : table<typedecl(key); string>

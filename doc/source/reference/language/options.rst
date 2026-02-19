@@ -10,7 +10,9 @@ Options
 The ``options`` statement sets compilation options for the current file. Options control
 compiler behavior — linting, optimization, logging, memory limits, and language features.
 
-Syntax::
+Syntax:
+
+.. code-block:: das
 
     options name = value
     options name                    // shorthand for name = true
@@ -19,7 +21,9 @@ Syntax::
 Option values can be ``bool``, ``int``, or ``string``, depending on the option.
 
 Multiple ``options`` statements are allowed per file. They can appear before or after
-``module`` and ``require`` declarations. By convention they are placed at the top of the file::
+``module`` and ``require`` declarations. By convention they are placed at the top of the file:
+
+.. code-block:: das
 
     options gen2
     options no_unused_block_arguments = false
@@ -511,11 +515,15 @@ These are validated during lint alongside the built-in options.
 If a module defines its own option, any file that requires that module can use it.
 
 If you set an option that is not recognized by either the built-in list, the policy list, or any
-loaded module, the compiler reports::
+loaded module, the compiler reports:
+
+.. code-block:: text
 
     invalid option 'unknown_name'
 
-If the option exists but you provide the wrong value type, the compiler reports::
+If the option exists but you provide the wrong value type, the compiler reports:
+
+.. code-block:: text
 
     invalid option type for 'name', unexpected 'float', expecting 'bool'
 

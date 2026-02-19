@@ -3,11 +3,15 @@ over all values, converting between enum values and strings, and building
 lookup tables. The ``[string_to_enum]`` annotation generates a string constructor
 for the annotated enum type.
 
-All functions and symbols are in "enum_trait" module, use require to get access to it. ::
+All functions and symbols are in "enum_trait" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/enum_trait
 
-Example: ::
+Example:
+
+.. code-block:: das
 
     require daslib/enum_trait
 

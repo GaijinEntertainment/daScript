@@ -12,11 +12,15 @@ congruential generator with vectorized state (``int4``). It provides integer,
 float, and vector random values, as well as geometric sampling (unit vectors,
 points in spheres and disks).
 
-All functions and symbols are in "random" module, use require to get access to it. ::
+All functions and symbols are in "random" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/random
 
-Example: ::
+Example:
+
+.. code-block:: das
 
     require daslib/random
 

@@ -27,7 +27,9 @@ Type           Description
 ``void?``      Untyped pointer — must ``reinterpret`` to use
 =============  =====================================================
 
-Pointer types are declared by appending ``?`` to any type::
+Pointer types are declared by appending ``?`` to any type:
+
+.. code-block:: das
 
     var p : int?               // pointer to int — null by default
     var ps : Point?            // pointer to struct
@@ -44,13 +46,17 @@ Creating pointers
 new
 ^^^
 
-``new`` allocates on the heap and returns ``T?``::
+``new`` allocates on the heap and returns ``T?``:
+
+.. code-block:: das
 
     var p = new Point(x = 3.0, y = 4.0)   // p is Point?
     var q = new Point()                    // default field values
 
 Heap pointers must be released with ``delete`` (see :ref:`pointer_delete`)
-or declared with ``var inscope`` for automatic cleanup::
+or declared with ``var inscope`` for automatic cleanup:
+
+.. code-block:: das
 
     var inscope pt = new Point(x = 1.0, y = 2.0)
     // pt is automatically deleted at scope exit
@@ -76,7 +82,9 @@ safe_addr
 
 ``safe_addr`` from ``daslib/safe_addr`` returns a temporary pointer (``T?#``)
 without requiring ``unsafe``.  The compiler validates that the argument is a
-local or global variable (not a field of a temporary)::
+local or global variable (not a field of a temporary):
+
+.. code-block:: das
 
     require daslib/safe_addr
     var a = 13
@@ -92,12 +100,16 @@ Dereferencing
 --------------
 
 ``*p`` or ``deref(p)`` follows the pointer to the value.  Both panic if the
-pointer is null::
+pointer is null:
+
+.. code-block:: das
 
     *p         // dereference
     deref(p)   // same thing
 
-For struct pointers, ``.`` auto-dereferences — no ``->`` operator is needed::
+For struct pointers, ``.`` auto-dereferences — no ``->`` operator is needed:
+
+.. code-block:: das
 
     var inscope pt = new Point(x = 5.0, y = 6.0)
     print("{pt.x}\n")     // 5 — same as (*pt).x
@@ -112,13 +124,17 @@ Null safety
 Null checks
 ^^^^^^^^^^^
 
-Pointers can be compared to ``null``::
+Pointers can be compared to ``null``:
+
+.. code-block:: das
 
     if (p != null) {
         print("{*p}\n")      // safe — we checked
     }
 
-Null dereference panics at runtime and can be caught with ``try``/``recover``::
+Null dereference panics at runtime and can be caught with ``try``/``recover``:
+
+.. code-block:: das
 
     try {
         var np : int?
@@ -130,24 +146,32 @@ Null dereference panics at runtime and can be caught with ``try``/``recover``::
 Safe navigation ``?.``
 ^^^^^^^^^^^^^^^^^^^^^^
 
-``?.`` returns ``null`` instead of panicking when the pointer is null::
+``?.`` returns ``null`` instead of panicking when the pointer is null:
+
+.. code-block:: das
 
     p?.x         // returns x if p is non-null, null otherwise
     a?.b?.c      // chains — short-circuits on first null
 
 Safe navigation results are themselves nullable, so combine with ``??``
-for a concrete fallback::
+for a concrete fallback:
+
+.. code-block:: das
 
     let val = p?.x ?? -1     // -1 if p is null
 
 Null coalescing ``??``
 ^^^^^^^^^^^^^^^^^^^^^^
 
-``??`` provides a default value when the left side is null::
+``??`` provides a default value when the left side is null:
+
+.. code-block:: das
 
     let x = p ?? default_value
 
-For pointer dereference::
+For pointer dereference:
+
+.. code-block:: das
 
     let x = *p ?? 0    // 0 if p is null
 
@@ -167,7 +191,9 @@ Deletion
     }
 
 Prefer ``var inscope`` for automatic cleanup — it adds a ``finally`` block
-that deletes the pointer when the scope exits::
+that deletes the pointer when the scope exits:
+
+.. code-block:: das
 
     var inscope p = new Point()
     // p is automatically deleted at end of scope
@@ -183,7 +209,9 @@ All pointer arithmetic **requires unsafe**.  No bounds checking is performed.
 Indexing
 ^^^^^^^^
 
-``p[i]`` accesses the ``i``-th element at the pointer's address::
+``p[i]`` accesses the ``i``-th element at the pointer's address:
+
+.. code-block:: das
 
     var arr <- [10, 20, 30, 40, 50]
     unsafe {
@@ -214,7 +242,9 @@ Void pointers
 
 ``void?`` is an untyped pointer — equivalent to ``void*`` in C/C++.  It is
 used for opaque handles and C/C++ interop.  You must ``reinterpret`` it back
-to a typed pointer before dereferencing::
+to a typed pointer before dereferencing:
+
+.. code-block:: das
 
     unsafe {
         var x = 123
@@ -231,7 +261,9 @@ intptr
 ------
 
 ``intptr(p)`` converts any pointer (raw or smart) to a ``uint64`` integer
-representing its memory address::
+representing its memory address:
+
+.. code-block:: das
 
     let address = intptr(p)   // uint64
 
@@ -244,7 +276,9 @@ reinterpret
 -----------
 
 ``reinterpret<T>`` performs a raw bit cast between types of the same size.
-**Requires unsafe.**  It does not convert values — it reinterprets the raw bits::
+**Requires unsafe.**  It does not convert values — it reinterprets the raw bits:
+
+.. code-block:: das
 
     unsafe {
         let f = 1.0
@@ -252,7 +286,9 @@ reinterpret
         let back = reinterpret<float> bits // 1.0
     }
 
-Can also cast between pointer types::
+Can also cast between pointer types:
+
+.. code-block:: das
 
     unsafe {
         var p : int? = addr(x)
@@ -266,7 +302,9 @@ Can also cast between pointer types::
 Type info
 ---------
 
-Several ``typeinfo`` queries test pointer properties at compile time::
+Several ``typeinfo`` queries test pointer properties at compile time:
+
+.. code-block:: das
 
     typeinfo(is_pointer p)       // true if p is a pointer type
     typeinfo(is_smart_ptr p)     // true if p is a smart_ptr<T>

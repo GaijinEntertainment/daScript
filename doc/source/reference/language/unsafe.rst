@@ -8,13 +8,17 @@ Unsafe
 .. index::
     single: Unsafe
 
-The ``unsafe`` keyword denotes unsafe contents, which is required for operations, but could potentially crash the application::
+The ``unsafe`` keyword denotes unsafe contents, which is required for operations, but could potentially crash the application:
+
+.. code-block:: das
 
     unsafe {
         let px = addr(x)
     }
 
-Expressions (and subexpressions) can also be unsafe::
+Expressions (and subexpressions) can also be unsafe:
+
+.. code-block:: das
 
     let px = unsafe(addr(x))
 
@@ -22,7 +26,9 @@ The ``unsafe`` keyword is followed by a block that can include such operations. 
 
 Individual expressions can cause a ``CompilationError::unsafe`` error, unless they are part of the unsafe section. Additionally, macros can explicitly set the ``ExprGenFlags::alwaysSafe`` flag.
 
-The address of expression is unsafe::
+The address of expression is unsafe:
+
+.. code-block:: das
 
     unsafe {
         let a : int
@@ -30,7 +36,9 @@ The address of expression is unsafe::
         return pa                               // accessing *pa can potentially corrupt stack
     }
 
-Lambdas or generators require unsafe sections for the implicit capture by move or by reference::
+Lambdas or generators require unsafe sections for the implicit capture by move or by reference:
+
+.. code-block:: das
 
     var a : array<int>
     unsafe {
@@ -39,7 +47,9 @@ Lambdas or generators require unsafe sections for the implicit capture by move o
         }
     }
 
-Deleting any pointer requires an unsafe section::
+Deleting any pointer requires an unsafe section:
+
+.. code-block:: das
 
     var p = new Foo()
     var q = p
@@ -47,20 +57,26 @@ Deleting any pointer requires an unsafe section::
         delete p                                // accessing q can potentially corrupt memory
     }
 
-Upcast and reinterpret cast require an unsafe section::
+Upcast and reinterpret cast require an unsafe section:
+
+.. code-block:: das
 
     unsafe {
         return reinterpret<void?> 13            // reinterpret can create unsafe pointers
     }
 
-Indexing into a pointer is unsafe::
+Indexing into a pointer is unsafe:
+
+.. code-block:: das
 
     unsafe {
         var p = new Foo()
         return p[13]                            // accessing out of bounds pointer can potentially corrupt memory
     }
 
-A safe index is unsafe when not followed by the null coalescing operator::
+A safe index is unsafe when not followed by the null coalescing operator:
+
+.. code-block:: das
 
     var a = { 13 => 12 }
     unsafe {
@@ -69,26 +85,34 @@ A safe index is unsafe when not followed by the null coalescing operator::
                                                 // it can create pointers to temporary objects
     }
 
-Variant ``?as`` on local variables is unsafe when not followed by the null coalescing operator::
+Variant ``?as`` on local variables is unsafe when not followed by the null coalescing operator:
+
+.. code-block:: das
 
     unsafe {
         return a ?as Bar                        // safe as is a form of 'addr' operation
     }
 
-Variant ``.?field`` is unsafe when not followed by the null coalescing operator::
+Variant ``.?field`` is unsafe when not followed by the null coalescing operator:
+
+.. code-block:: das
 
     unsafe {
         return a?.Bar                           // safe navigation of a variant is a form of 'addr' operation
     }
 
 
-Variant ``.field`` is unsafe::
+Variant ``.field`` is unsafe:
+
+.. code-block:: das
 
     unsafe {
         return a.Bar                            // this is potentially a reinterpret cast
     }
 
-Certain functions and operators are inherently unsafe or marked unsafe via the [unsafe_operation] annotation::
+Certain functions and operators are inherently unsafe or marked unsafe via the [unsafe_operation] annotation:
+
+.. code-block:: das
 
     unsafe {
         var a : int?
@@ -97,7 +121,9 @@ Certain functions and operators are inherently unsafe or marked unsafe via the [
         var it = each(boo)                      // each() of array is unsafe, for it does not capture
     }
 
-Moving from a smart pointer value requires unsafe, unless that value is the 'new' operator::
+Moving from a smart pointer value requires unsafe, unless that value is the 'new' operator:
+
+.. code-block:: das
 
     unsafe {
         var a <- new TestObjectSmart()          // safe, its explicitly new
@@ -105,7 +131,9 @@ Moving from a smart pointer value requires unsafe, unless that value is the 'new
         b <- a                                  // safe, values are not lost
     }
 
-Moving or copying classes is unsafe::
+Moving or copying classes is unsafe:
+
+.. code-block:: das
 
     def foo ( var b : TestClass ) {
         unsafe {
@@ -114,7 +142,9 @@ Moving or copying classes is unsafe::
         }
     }
 
-Local class variables are unsafe::
+Local class variables are unsafe:
+
+.. code-block:: das
 
     unsafe {
         var g = Goo()                           // potential lifetime issues
@@ -124,7 +154,9 @@ implicit
 --------
 
 ``implicit`` keyword is used to specify that type can be either temporary or regular type, and will be treated as defined.
-For example::
+For example:
+
+.. code-block:: das
 
     def foo ( a : Foo implicit )    // a will be treated as Foo, but will also accept Foo# as argument
     def foo ( a : Foo# implicit )   // a will be treated as Foo#, but will also accept Foo as argument
@@ -135,7 +167,9 @@ other cases
 -----------
 
 There are several other cases where ``unsafe`` is required, but not explicitly mentioned in the documentation.
-They are typically controlled via CodeOfPolicies or appropriate option::
+They are typically controlled via CodeOfPolicies or appropriate option:
+
+.. code-block:: das
 
     options unsafe_table_lookup = false // makes table indexing safe. refers to CodeOfPolicies::unsafe_table_lookup
 

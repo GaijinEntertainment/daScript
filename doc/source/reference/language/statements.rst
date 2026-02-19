@@ -23,7 +23,9 @@ Visibility Block
     pair: block; statement
 
 A sequence of statements delimited by curly brackets is called a *visibility block*.
-Variables declared inside a visibility block are only visible within that block::
+Variables declared inside a visibility block are only visible within that block:
+
+.. code-block:: das
 
     def foo {
         var x = 1           // x is visible here
@@ -48,7 +50,9 @@ if/elif/else
 .. index::
     pair: if/else; statement
 
-Conditionally execute a block depending on the result of a boolean expression::
+Conditionally execute a block depending on the result of a boolean expression:
+
+.. code-block:: das
 
     if ( a > b ) {
         a = b
@@ -62,19 +66,25 @@ Daslang has a strong boolean type. Only expressions of type ``bool`` can be used
 
 **One-liner if syntax:**
 
-A single-expression if statement can be written on one line::
+A single-expression if statement can be written on one line:
+
+.. code-block:: das
 
     if ( a > b ) { a = b }
 
 **Postfix if syntax:**
 
-The condition can be written after the statement::
+The condition can be written after the statement:
+
+.. code-block:: das
 
     a = b if ( a < b )
 
 **Ternary-style if:**
 
-A full ternary expression can use if/else inline::
+A full ternary expression can use if/else inline:
+
+.. code-block:: das
 
     return 13 if ( a == 42 ) else return 7
 
@@ -90,7 +100,9 @@ static_if / static_elif
 
 ``static_if`` evaluates its condition at compile time. It is used in generic functions
 to select code paths based on type properties. Branches that do not match are removed
-from the compiled output, and do not need to be valid for the given types::
+from the compiled output, and do not need to be valid for the given types:
+
+.. code-block:: das
 
     def describe(a) {
         static_if ( typeinfo(is_pointer type<a>) ) {
@@ -115,7 +127,9 @@ while
 .. index::
     pair: while; statement
 
-Execute a block repeatedly while a boolean condition is true::
+Execute a block repeatedly while a boolean condition is true:
+
+.. code-block:: das
 
     var i = 0
     while ( i < 10 ) {
@@ -145,13 +159,17 @@ for
 .. index::
     pair: for; statement
 
-Execute a block once for each element of one or more iterable sources::
+Execute a block once for each element of one or more iterable sources:
+
+.. code-block:: das
 
     for ( i in range(0, 10) ) {
         print("{i}\n")          // prints 0 through 9
     }
 
-Multiple iterables can be traversed in parallel. Iteration stops when the shortest source is exhausted::
+Multiple iterables can be traversed in parallel. Iteration stops when the shortest source is exhausted:
+
+.. code-block:: das
 
     var a : array<int>
     var b : int[10]
@@ -160,7 +178,9 @@ Multiple iterables can be traversed in parallel. Iteration stops when the shorte
         print("{l} == {r}\n")   // iterates over 4 elements (length of a)
     }
 
-Table keys and values can be iterated using the ``keys`` and ``values`` functions::
+Table keys and values can be iterated using the ``keys`` and ``values`` functions:
+
+.. code-block:: das
 
     var tab <- { "one"=>1, "two"=>2 }
     for ( k, v in keys(tab), values(tab) ) {
@@ -173,7 +193,9 @@ enumerations (via ``each_enum``), and custom iterators
 
 Any type can be made directly iterable by defining an ``each`` function that accepts the type
 and returns an ``iterator``. When such a function exists, ``for (x in y)`` is equivalent to
-``for (x in each(y))``::
+``for (x in each(y))``:
+
+.. code-block:: das
 
     struct Foo {
         data : array<int>
@@ -190,7 +212,9 @@ and returns an ``iterator``. When such a function exists, ``for (x in y)`` is eq
 
 **Tuple expansion in for loops:**
 
-When iterating over containers of tuples, elements can be unpacked directly::
+When iterating over containers of tuples, elements can be unpacked directly:
+
+.. code-block:: das
 
     var data <- [(1, 2.0, "three"), (4, 5.0, "six")]
     for ( (a, b, c) in data ) {
@@ -204,7 +228,9 @@ break
 .. index::
     pair: break; statement
 
-Terminate the enclosing ``for`` or ``while`` loop immediately::
+Terminate the enclosing ``for`` or ``while`` loop immediately:
+
+.. code-block:: das
 
     for ( x in arr ) {
         if ( x == target ) {
@@ -222,7 +248,9 @@ continue
 .. index::
     pair: continue; statement
 
-Skip the rest of the current loop iteration and proceed to the next one::
+Skip the rest of the current loop iteration and proceed to the next one:
+
+.. code-block:: das
 
     for ( x in range(0, 10) ) {
         if ( x % 2 == 0 ) {
@@ -238,21 +266,27 @@ return
 .. index::
     pair: return; statement
 
-Terminate the current function, block, or lambda and optionally return a value::
+Terminate the current function, block, or lambda and optionally return a value:
+
+.. code-block:: das
 
     def add(a, b : int) : int {
         return a + b
     }
 
 All return statements in a function must return the same type.
-If no expression is given, the function is assumed to return ``void``::
+If no expression is given, the function is assumed to return ``void``:
+
+.. code-block:: das
 
     def greet(name : string) {
         print("Hello, {name}!\n")
         return
     }
 
-**Move-on-return** transfers ownership of a value using the ``<-`` operator::
+**Move-on-return** transfers ownership of a value using the ``<-`` operator:
+
+.. code-block:: das
 
     def make_array : array<int> {
         var result : array<int>
@@ -272,7 +306,9 @@ yield
     pair: yield; statement
 
 Output a value from a generator and suspend its execution until the next iteration.
-``yield`` can only be used inside ``generator`` blocks::
+``yield`` can only be used inside ``generator`` blocks:
+
+.. code-block:: das
 
     var gen <- generator<int>() <| $ {
         yield 0
@@ -280,7 +316,9 @@ Output a value from a generator and suspend its execution until the next iterati
         return false    // end of generation
     }
 
-Move semantics are also supported::
+Move semantics are also supported:
+
+.. code-block:: das
 
     yield <- some_array
 
@@ -294,7 +332,9 @@ pass
     pair: pass; statement
 
 An explicit no-operation statement. ``pass`` does nothing and can be used as a placeholder
-in blocks that are intentionally empty::
+in blocks that are intentionally empty:
+
+.. code-block:: das
 
     def todo_later {
         pass
@@ -308,7 +348,9 @@ finally
     pair: finally; statement
 
 Declare a block of code that executes when the enclosing scope exits, regardless of
-how it exits (normal flow, ``break``, ``continue``, or ``return``)::
+how it exits (normal flow, ``break``, ``continue``, or ``return``):
+
+.. code-block:: das
 
     def test(a : array<int>; target : int) : int {
         for ( x in a ) {
@@ -321,7 +363,9 @@ how it exits (normal flow, ``break``, ``continue``, or ``return``)::
         print("search complete\n")
     }
 
-``finally`` can be attached to any block, including loops::
+``finally`` can be attached to any block, including loops:
+
+.. code-block:: das
 
     for ( x in data ) {
         if ( x < 0 ) {
@@ -334,7 +378,9 @@ how it exits (normal flow, ``break``, ``continue``, or ``return``)::
 A ``finally`` block cannot contain ``break``, ``continue``, or ``return`` statements.
 
 The ``defer`` macro from ``daslib/defer`` provides a convenient way to add cleanup code
-to the current scope's ``finally`` block::
+to the current scope's ``finally`` block:
+
+.. code-block:: das
 
     require daslib/defer
 
@@ -360,20 +406,26 @@ Local Variable Declarations
 Local variables can be declared at any point inside a function. They exist from the
 point of declaration until the end of their enclosing visibility block.
 
-``let`` declares a read-only (constant) variable, and ``var`` declares a mutable variable::
+``let`` declares a read-only (constant) variable, and ``var`` declares a mutable variable:
+
+.. code-block:: das
 
     let pi = 3.14159        // constant, cannot be modified
     var counter = 0         // mutable, can be modified
     counter++
 
-Variables can be initialized with copy (``=``), move (``<-``), or clone (``:=``) semantics::
+Variables can be initialized with copy (``=``), move (``<-``), or clone (``:=``) semantics:
+
+.. code-block:: das
 
     var a <- [1, 2, 3]      // move: a now owns the array
     var b : array<int>
     b := a                  // clone: b is a deep copy of a
 
 If a type is specified, the variable is typed explicitly. Otherwise, the type is inferred
-from the initializer::
+from the initializer:
+
+.. code-block:: das
 
     var x : int = 42        // explicit type
     var y = 42              // inferred as int
@@ -382,7 +434,9 @@ from the initializer::
 **inscope variables:**
 
 When ``inscope`` is specified, a ``delete`` statement is automatically added to the ``finally``
-section of the enclosing block::
+section of the enclosing block:
+
+.. code-block:: das
 
     var inscope resource <- acquire()
     // ... use resource ...
@@ -394,7 +448,9 @@ executes only once.
 **Variable name aliases (aka):**
 
 The ``aka`` keyword creates an alternative name (alias) for a variable. Both names
-refer to the same value. This works in ``let``, ``var``, and ``for`` declarations::
+refer to the same value. This works in ``let``, ``var``, and ``for`` declarations:
+
+.. code-block:: das
 
     var a aka alpha = 42
     print("{alpha}\n")           // prints 42 — alpha is the same variable as a
@@ -405,7 +461,9 @@ refer to the same value. This works in ``let``, ``var``, and ``for`` declaration
 
 **Tuple expansion:**
 
-Variables can be unpacked from tuples::
+Variables can be unpacked from tuples:
+
+.. code-block:: das
 
     var (x, y, z) = (1, 2.0, "three")
     // x is int, y is float, z is string
@@ -418,13 +476,17 @@ assume
     pair: assume; statement
 
 The ``assume`` statement creates a named alias for an expression without creating a new variable.
-Every use of the alias substitutes the original expression::
+Every use of the alias substitutes the original expression:
+
+.. code-block:: das
 
     var data : array<array<int>>
     assume inner = data[0]
     inner |> push(42)       // equivalent to data[0] |> push(42)
 
-``assume`` is particularly useful for simplifying repeated access to nested data::
+``assume`` is particularly useful for simplifying repeated access to nested data:
+
+.. code-block:: das
 
     assume cfg = settings.graphics.resolution
     print("width={cfg.width}, height={cfg.height}\n")
@@ -441,7 +503,9 @@ with
     pair: with; statement
 
 The ``with`` statement brings the fields of a structure, class, or handled type into the
-current scope, allowing them to be accessed without a prefix::
+current scope, allowing them to be accessed without a prefix:
+
+.. code-block:: das
 
     struct Player {
         x, y : float
@@ -468,13 +532,17 @@ delete
     pair: delete; statement
 
 The ``delete`` statement invokes the finalizer for a value, releasing any resources it holds.
-After deletion, the value is zeroed::
+After deletion, the value is zeroed:
+
+.. code-block:: das
 
     var arr <- [1, 2, 3]
     delete arr              // arr is now empty
 
 Deleting pointers is an unsafe operation because other references to the same data
-may still exist::
+may still exist:
+
+.. code-block:: das
 
     var p = new Foo()
     unsafe {
@@ -490,7 +558,9 @@ Function Declaration
 .. index::
     pair: Function declaration; statement
 
-Functions are declared with the ``def`` keyword::
+Functions are declared with the ``def`` keyword:
+
+.. code-block:: das
 
     def add(a, b : int) : int {
         return a + b
@@ -510,7 +580,9 @@ try/recover
     pair: try/recover; statement
 
 Enclose a block of code that may trigger a runtime panic, such as null pointer
-dereference or out-of-bounds array access::
+dereference or out-of-bounds array access:
+
+.. code-block:: das
 
     try {
         var p : Foo?
@@ -531,7 +603,9 @@ panic
 .. index::
     pair: panic; statement
 
-Trigger a runtime panic with an optional message::
+Trigger a runtime panic with an optional message:
+
+.. code-block:: das
 
     panic("something went very wrong")
 
@@ -546,7 +620,9 @@ label and goto
     pair: label; statement
     pair: goto; statement
 
-Daslang supports numeric labels and goto for low-level control flow::
+Daslang supports numeric labels and goto for low-level control flow:
+
+.. code-block:: das
 
     label 0:
         print("start\n")
@@ -554,7 +630,9 @@ Daslang supports numeric labels and goto for low-level control flow::
     label 1:
         print("end\n")
 
-Labels use integer identifiers. Computed goto is also supported::
+Labels use integer identifiers. Computed goto is also supported:
+
+.. code-block:: das
 
     goto label_expression
 
@@ -569,7 +647,9 @@ Expression Statement
 .. index::
     pair: Expression statement; statement
 
-Any expression is also valid as a statement. The result of the expression is discarded::
+Any expression is also valid as a statement. The result of the expression is discarded:
+
+.. code-block:: das
 
     foo()               // function call as statement
     a + b               // valid but result is unused
@@ -582,7 +662,9 @@ Global Variables
 .. index::
     pair: global variables; statement
 
-Global variables are declared at module scope with ``let`` (constant) or ``var`` (mutable)::
+Global variables are declared at module scope with ``let`` (constant) or ``var`` (mutable):
+
+.. code-block:: das
 
     let MAX_SIZE = 1024
     var counter = 0
@@ -591,11 +673,15 @@ Global variables are initialized once during script initialization (or each time
 ``init`` is manually called on the context).
 
 ``shared`` indicates that the variable's memory is shared between multiple Context instances
-and initialized only once::
+and initialized only once:
+
+.. code-block:: das
 
     let shared lookup_table <- generate_table()
 
-``private`` indicates the variable is not visible outside its module::
+``private`` indicates the variable is not visible outside its module:
+
+.. code-block:: das
 
     var private internal_state = 0
 
@@ -608,7 +694,9 @@ enum
 .. index::
     pair: enum; statement
 
-Declare an enumeration — a set of named integer constants::
+Declare an enumeration — a set of named integer constants:
+
+.. code-block:: das
 
     enum Color {
         Red
@@ -625,7 +713,9 @@ typedef
 .. index::
     pair: typedef; statement
 
-Declare a type alias::
+Declare a type alias:
+
+.. code-block:: das
 
     typedef Vec3 = float3
     typedef IntPair = tuple<int; int>

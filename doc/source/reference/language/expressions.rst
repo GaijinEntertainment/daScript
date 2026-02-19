@@ -19,14 +19,18 @@ Assignment
 
 Daslang provides three kinds of assignment:
 
-**Copy assignment** (``=``) performs a bitwise copy of the value::
+**Copy assignment** (``=``) performs a bitwise copy of the value:
+
+.. code-block:: das
 
     a = 10
 
 Copy assignment is only available for POD types and types that support copying.
 Arrays, tables, and other container types cannot be copied — use move or clone instead.
 
-**Move assignment** (``<-``) transfers ownership of a value, zeroing the source::
+**Move assignment** (``<-``) transfers ownership of a value, zeroing the source:
+
+.. code-block:: das
 
     var b = new Foo()
     var a : Foo?
@@ -35,7 +39,9 @@ Arrays, tables, and other container types cannot be copied — use move or clone
 Move is the primary mechanism for transferring ownership of heavy types such as arrays and tables.
 Some handled types may be movable but not copyable.
 
-**Clone assignment** (``:=``) creates a deep copy of the value::
+**Clone assignment** (``:=``) creates a deep copy of the value:
+
+.. code-block:: das
 
     var a : array<int>
     a := b              // a is now a deep copy of b
@@ -62,7 +68,9 @@ Arithmetic
 
 Daslang supports the standard arithmetic operators ``+``, ``-``, ``*``, ``/``, and ``%``
 (modulo). Compound assignment operators ``+=``, ``-=``, ``*=``, ``/=``, ``%=`` and
-increment/decrement operators ``++`` and ``--`` are also available::
+increment/decrement operators ``++`` and ``--`` are also available:
+
+.. code-block:: das
 
     a += 2          // equivalent to a = a + 2
     x++             // equivalent to x = x + 1
@@ -79,7 +87,9 @@ Relational
     pair: Relational Operators; Operators
 
 Relational operators compare two values and return a ``bool`` result:
-``==``, ``!=``, ``<``, ``<=``, ``>``, ``>=``::
+``==``, ``!=``, ``<``, ``<=``, ``>``, ``>=``:
+
+.. code-block:: das
 
     if ( a == b ) { print("equal\n") }
     if ( x < 0 ) { print("negative\n") }
@@ -123,7 +133,9 @@ Daslang supports C-like bitwise operators for integer types:
 * ``<<<`` — rotate left
 * ``>>>`` — rotate right
 
-Compound assignment forms: ``&=``, ``|=``, ``^=``, ``<<=``, ``>>=``, ``<<<=``, ``>>>=``::
+Compound assignment forms: ``&=``, ``|=``, ``^=``, ``<<=``, ``>>=``, ``<<<=``, ``>>>=``:
+
+.. code-block:: das
 
     let flags = 0xFF & 0x0F     // 0x0F
     let rotated = value <<< 3   // rotate left by 3 bits
@@ -148,7 +160,9 @@ Pipe operators pass a value as the first (right pipe) or last (left pipe) argume
 
     let t = 12 |> addX(2) |> addX(3)   // addX(addX(12, 2), 3) = 17
 
-Left pipe is commonly used to pass blocks to functions::
+Left pipe is commonly used to pass blocks to functions:
+
+.. code-block:: das
 
     def doSomething(blk : block) {
         invoke(blk)
@@ -158,7 +172,9 @@ Left pipe is commonly used to pass blocks to functions::
         print("hello\n")
     }
 
-The ``lpipe`` macro from ``daslib/lpipe`` allows piping to the expression on the previous line::
+The ``lpipe`` macro from ``daslib/lpipe`` allows piping to the expression on the previous line:
+
+.. code-block:: das
 
     require daslib/lpipe
 
@@ -174,7 +190,9 @@ Interval Operator
 .. index::
     pair: Interval Operator; Operators
 
-The ``..`` operator creates a range from two values::
+The ``..`` operator creates a range from two values:
+
+.. code-block:: das
 
     let r = 1 .. 10     // equivalent to interval(1, 10)
 
@@ -190,12 +208,16 @@ Null-Coalescing Operator (??)
     pair: ?? Operator; Operators
 
 The ``??`` operator returns the dereferenced value of the left operand if it is not ``null``,
-otherwise returns the right operand::
+otherwise returns the right operand:
+
+.. code-block:: das
 
     var p : int?
     let value = p ?? 42     // value is 42 because p is null
 
-This is equivalent to::
+This is equivalent to:
+
+.. code-block:: das
 
     let value = (p != null) ? *p : 42
 
@@ -211,7 +233,9 @@ Ternary Operator (? :)
 .. index::
     pair: ?: Operator; Operators
 
-The ternary operator conditionally evaluates one of two expressions::
+The ternary operator conditionally evaluates one of two expressions:
+
+.. code-block:: das
 
     let result = (a > b) ? a : b    // returns the larger value
 
@@ -226,7 +250,9 @@ Null-Safe Navigation (?. and ?[)
     pair: ?[ Operator; Operators
 
 The ``?.`` operator accesses a field of a pointer only if the pointer is not null.
-If the pointer is null, the result is null::
+If the pointer is null, the result is null:
+
+.. code-block:: das
 
     struct Foo {
         x : int
@@ -240,12 +266,16 @@ If the pointer is null, the result is null::
         return bar?.fooPtr?.x ?? -1     // returns -1 if bar or fooPtr is null
     }
 
-The ``?[`` operator provides null-safe indexing into tables::
+The ``?[`` operator provides null-safe indexing into tables:
+
+.. code-block:: das
 
     var tab <- { "one"=>1, "two"=>2 }
     let i = tab?["three"] ?? 3      // returns 3 because "three" is not in the table
 
-Both operators can be used on the left side of an assignment with ``??``::
+Both operators can be used on the left side of an assignment with ``??``:
+
+.. code-block:: das
 
     var dummy = 0
     bar?.fooPtr?.x ?? dummy = 42    // writes to dummy if navigation fails
@@ -259,7 +289,9 @@ Type Operators (is, as, ?as)
     pair: as Operator; Operators
     pair: ?as Operator; Operators
 
-The ``is`` operator checks the active variant case::
+The ``is`` operator checks the active variant case:
+
+.. code-block:: das
 
     variant Value {
         i : int
@@ -268,11 +300,15 @@ The ``is`` operator checks the active variant case::
     var v = Value(i = 42)
     if ( v is i ) { print("it's an int\n") }
 
-The ``as`` operator accesses the value of a variant case. It panics if the wrong case is active::
+The ``as`` operator accesses the value of a variant case. It panics if the wrong case is active:
+
+.. code-block:: das
 
     let x = v as i      // returns 42
 
-The ``?as`` operator is a safe version of ``as`` that returns null if the case does not match::
+The ``?as`` operator is a safe version of ``as`` that returns null if the case does not match:
+
+.. code-block:: das
 
     let x = v ?as f ?? 0.0     // returns 0.0 because v is not f
 
@@ -287,7 +323,9 @@ is type<T>
     pair: is type; Operators
 
 The ``is type<T>`` expression performs a compile-time type check. It returns ``true`` if the
-expression's type matches the specified type, and ``false`` otherwise::
+expression's type matches the specified type, and ``false`` otherwise:
+
+.. code-block:: das
 
     let a = 42
     let b = 3.14
@@ -295,7 +333,9 @@ expression's type matches the specified type, and ``false`` otherwise::
     print("{b is type<float>}\n")   // true
     print("{b is type<int>}\n")     // false
 
-This is useful in generic functions to branch on the actual type of a parameter::
+This is useful in generic functions to branch on the actual type of a parameter:
+
+.. code-block:: das
 
     def describe(x) {
         static_if (x is type<int>) {
@@ -314,20 +354,26 @@ Cast, Upcast, and Reinterpret
 .. index::
     pair: Cast Operators; Operators
 
-**cast** performs a safe downcast from a parent structure type to a derived type::
+**cast** performs a safe downcast from a parent structure type to a derived type:
+
+.. code-block:: das
 
     var derived : Derived = Derived()
     var base : Base = cast<Base> derived
 
 **upcast** performs an unsafe upcast from a base type to a derived type.
-This requires ``unsafe`` because the actual runtime type may not match::
+This requires ``unsafe`` because the actual runtime type may not match:
+
+.. code-block:: das
 
     unsafe {
         var d = upcast<Derived> base_ref
     }
 
 **reinterpret** reinterprets the raw bits of a value as a different type.
-This is unsafe and should be used with extreme caution::
+This is unsafe and should be used with extreme caution:
+
+.. code-block:: das
 
     unsafe {
         let p = reinterpret<void?> 13
@@ -341,12 +387,16 @@ Dereference
     pair: Dereference; Operators
 
 The ``*`` prefix operator dereferences a pointer, converting it to a reference.
-Dereferencing a null pointer causes a panic::
+Dereferencing a null pointer causes a panic:
+
+.. code-block:: das
 
     var p = new Foo()
     var ref = *p        // ref is Foo&
 
-The ``deref`` keyword can be used as an alternative::
+The ``deref`` keyword can be used as an alternative:
+
+.. code-block:: das
 
     var ref = deref(p)
 
@@ -358,7 +408,9 @@ Address-of
     pair: addr; Operators
 
 The ``addr`` function takes the address of a value, creating a pointer.
-This is an unsafe operation::
+This is an unsafe operation:
+
+.. code-block:: das
 
     unsafe {
         var x = 42
@@ -377,7 +429,9 @@ using ``.`` for field access and ``?.`` for null-safe field access.
 
 The ``..`` operator bypasses any ``.`` operator overloading and accesses the
 underlying field directly.  This is useful when a handled type defines a custom
-``.`` operator but you need to reach the actual field::
+``.`` operator but you need to reach the actual field:
+
+.. code-block:: das
 
     sp..x = 42      // accesses field x directly, skipping any . overload
 
@@ -389,7 +443,9 @@ Safe Index (?[)
     pair: ?[ Operator; Operators
 
 The ``?[`` operator provides null-safe indexing.  If the pointer or table key
-is null or missing, the result is ``null`` instead of a panic::
+is null or missing, the result is ``null`` instead of a panic:
+
+.. code-block:: das
 
     var tab <- { "one"=>1, "two"=>2 }
     let i = tab?["three"] ?? 3      // returns 3 because "three" is not in the table
@@ -401,7 +457,9 @@ Unsafe Expression
 .. index::
     pair: unsafe; Expression
 
-Individual expressions can be marked as unsafe without wrapping an entire block::
+Individual expressions can be marked as unsafe without wrapping an entire block:
+
+.. code-block:: das
 
     let p = unsafe(addr(x))
 
@@ -466,7 +524,9 @@ Array Initializer
 .. index::
     single: Fixed Array Initializer
 
-Fixed-size arrays can be created with the ``fixed_array`` keyword::
+Fixed-size arrays can be created with the ``fixed_array`` keyword:
+
+.. code-block:: das
 
     let a = fixed_array<int>(1, 2)      // int[2]
     let b = fixed_array(1, 2, 3)        // inferred as int[3]
@@ -474,7 +534,9 @@ Fixed-size arrays can be created with the ``fixed_array`` keyword::
 .. index::
     single: Dynamic Array Initializer
 
-Dynamic arrays can be created with several syntaxes::
+Dynamic arrays can be created with several syntaxes:
+
+.. code-block:: das
 
     let a <- [1, 2, 3]                  // array<int>
     let b <- array(1, 2, 3)             // array<int>
@@ -492,7 +554,9 @@ Struct, Class, and Handled Type Initializer
 .. index::
     single: Struct, Class, and Handled type Initializer
 
-Structures can be initialized by specifying field values::
+Structures can be initialized by specifying field values:
+
+.. code-block:: das
 
     struct Foo {
         x : int = 1
@@ -503,7 +567,9 @@ Structures can be initialized by specifying field values::
     let b = Foo(x = 13)                             // x = 13, y = 2 (default)
     let c = Foo(uninitialized x = 13)                // x = 13, y = 0 (no default init)
 
-Arrays of structures can be constructed inline::
+Arrays of structures can be constructed inline:
+
+.. code-block:: das
 
     var arr <- array struct<Foo>((x=11, y=22), (x=33), (y=44))
 
@@ -521,7 +587,9 @@ Tuple Initializer
 .. index::
     single: Tuple Initializer
 
-Tuples can be created with several syntaxes::
+Tuples can be created with several syntaxes:
+
+.. code-block:: das
 
     let a = (1, 2.0, "3")                                  // inferred tuple type
     let b = tuple(1, 2.0, "3")                              // same as above
@@ -536,7 +604,9 @@ Variant Initializer
 .. index::
     single: Variant Initializer
 
-Variants are created by specifying exactly one field::
+Variants are created by specifying exactly one field:
+
+.. code-block:: das
 
     variant Foo {
         i : int
@@ -546,7 +616,9 @@ Variants are created by specifying exactly one field::
     let x = Foo(i = 3)
     let y = Foo(f = 4.0)
 
-Variants can also be declared as type aliases::
+Variants can also be declared as type aliases:
+
+.. code-block:: das
 
     typedef Foo = variant<i:int; f:float>
 
@@ -559,7 +631,9 @@ Table Initializer
 .. index::
     single: Table Initializer
 
-Tables are created by specifying key-value pairs separated by ``=>``::
+Tables are created by specifying key-value pairs separated by ``=>``:
+
+.. code-block:: das
 
     var a <- { 1=>"one", 2=>"two" }
     var b <- table("one"=>1, "two"=>2)      // alternative syntax
@@ -577,17 +651,23 @@ default and new
     single: default
     single: new
 
-The ``default`` expression creates a default-initialized value of a given type::
+The ``default`` expression creates a default-initialized value of a given type:
+
+.. code-block:: das
 
     var a = default<Foo>            // all fields zeroed, then default initializer called
     var b = default<Foo> uninitialized  // all fields zeroed, no initializer
 
-The ``new`` operator allocates a value on the heap and returns a pointer::
+The ``new`` operator allocates a value on the heap and returns a pointer:
+
+.. code-block:: das
 
     var p = new Foo()               // Foo? pointer, default initialized
     var q = new Foo(x = 13)         // with field initialization
 
-``new`` can also be combined with array and table literals to allocate them on the heap::
+``new`` can also be combined with array and table literals to allocate them on the heap:
+
+.. code-block:: das
 
     var p <- new [1, 2, 3]          // heap-allocated array<int>
 
@@ -599,7 +679,9 @@ typeinfo
     single: typeinfo
 
 The ``typeinfo`` expression provides compile-time type information. It is primarily
-used in generic functions to inspect argument types::
+used in generic functions to inspect argument types:
+
+.. code-block:: das
 
     typeinfo(typename type<int>)        // returns "int" at compile time
     typeinfo(sizeof type<float3>)       // returns 12
@@ -615,18 +697,24 @@ String Interpolation
 .. index::
     single: string interpolation
 
-Expressions inside curly brackets within a string are evaluated and converted to text::
+Expressions inside curly brackets within a string are evaluated and converted to text:
+
+.. code-block:: das
 
     let name = "world"
     print("Hello, {name}!")             // Hello, world!
     print("1 + 2 = {1 + 2}")           // 1 + 2 = 3
 
-Format specifiers can be added after a colon::
+Format specifiers can be added after a colon:
+
+.. code-block:: das
 
     let pi = 3.14159
     print("pi = {pi:5.2f}")            // formatted output
 
-To include literal curly brackets, escape them with backslashes::
+To include literal curly brackets, escape them with backslashes:
+
+.. code-block:: das
 
     print("Use \{curly\} brackets")     // Use {curly} brackets
 

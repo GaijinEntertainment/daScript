@@ -12,11 +12,15 @@ numbers, including type punning between integer and float representations,
 and efficient integer math operations like ``int_bits_to_float`` and
 ``float_bits_to_int``.
 
-All functions and symbols are in "math_bits" module, use require to get access to it. ::
+All functions and symbols are in "math_bits" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/math_bits
 
-Example: ::
+Example:
+
+.. code-block:: das
 
     require daslib/math_bits
 

@@ -12,11 +12,15 @@ angle conversion (``degrees``, ``radians``), intersection tests, color space
 conversion (``linear_to_SRGB``, ``RGBA_TO_UCOLOR``), and view/projection
 matrix construction (``look_at_lh``, ``perspective_rh``).
 
-All functions and symbols are in "math_boost" module, use require to get access to it. ::
+All functions and symbols are in "math_boost" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/math_boost
 
-Example: ::
+Example:
+
+.. code-block:: das
 
     require daslib/math_boost
 

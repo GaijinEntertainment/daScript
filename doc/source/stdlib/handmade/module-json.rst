@@ -6,11 +6,15 @@ JSON values from daslang types.
 See also :doc:`json_boost` for automatic struct-to-JSON conversion and the ``%json~`` reader macro.
 See :ref:`tutorial_json` for a hands-on tutorial.
 
-All functions and symbols are in "json" module, use require to get access to it. ::
+All functions and symbols are in "json" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/json
 
-Example: ::
+Example:
+
+.. code-block:: das
 
     require daslib/json
 

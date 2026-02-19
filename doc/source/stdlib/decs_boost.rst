@@ -14,11 +14,15 @@ entity creation, and system definition patterns.
 See also :doc:`decs` for the core ECS runtime and :doc:`decs_state` for entity state machines.
 See :ref:`tutorial_decs` for a hands-on tutorial.
 
-All functions and symbols are in "decs_boost" module, use require to get access to it. ::
+All functions and symbols are in "decs_boost" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/decs_boost
 
-Example: ::
+Example:
+
+.. code-block:: das
 
     options persistent_heap = true
         require daslib/decs_boost

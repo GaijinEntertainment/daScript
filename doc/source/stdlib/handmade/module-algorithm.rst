@@ -11,11 +11,15 @@ Most functions also support fixed-size arrays via `[expect_any_array]` overloads
 
 See :ref:`tutorial_algorithm` for a hands-on tutorial.
 
-All functions and symbols are in "algorithm" module, use require to get access to it. ::
+All functions and symbols are in "algorithm" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/algorithm
 
-Example: ::
+Example:
+
+.. code-block:: das
 
     require daslib/algorithm
 

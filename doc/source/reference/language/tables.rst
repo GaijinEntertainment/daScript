@@ -8,7 +8,9 @@ Table
 .. index::
     single: Tables
 
-Tables are associative containers implemented as a set of key/value pairs::
+Tables are associative containers implemented as a set of key/value pairs:
+
+.. code-block:: das
 
     var tab: table<string,int>
     unsafe {
@@ -19,23 +21,31 @@ Tables are associative containers implemented as a set of key/value pairs::
     }
 
 Accessing a table element via the index operator is unsafe, because Daslang containers store unboxed values.
-Consider the following example::
+Consider the following example:
+
+.. code-block:: das
 
     tab["1"] = tab["2"]               // this potentially breaks the table
 
 What happens is table may get resized either after tab["1"] or tab["2"] if either key is missing (similar to C++ STL hash_map).
 
-It is possible to suppress this unsafe error via ``CodeOfPolicies``, or by using the following option::
+It is possible to suppress this unsafe error via ``CodeOfPolicies``, or by using the following option:
+
+.. code-block:: das
 
     options unsafe_table_lookup = false
 
-Safe navigation of the table is safe, since it does not create missing keys::
+Safe navigation of the table is safe, since it does not create missing keys:
+
+.. code-block:: das
 
     var tab <- { "one"=>1, "two"=>2 }
     let t = tab?["one"] ?? -1             // this is safe, since it does not create missing keys
     assert(t==1)
 
-It can also be written to::
+It can also be written to:
+
+.. code-block:: das
 
     var tab <- { "one"=>1, "two"=>2 }
     var dummy = 0
@@ -44,7 +54,9 @@ It can also be written to::
 A collection of safe functions is available for working with tables, even if the table is empty or gets resized.
 
 There are several relevant builtin functions: ``clear``, ``key_exists``, ``get``, and ``erase``.
-``get`` works with block as last argument, and returns if value has been found. It can be used with the rbpipe operator::
+``get`` works with block as last argument, and returns if value has been found. It can be used with the rbpipe operator:
+
+.. code-block:: das
 
     let tab <- { "one"=>1, "two"=>2 }
     let found = get(tab,"one") <| $(val) {
@@ -52,7 +64,9 @@ There are several relevant builtin functions: ``clear``, ``key_exists``, ``get``
     }
     assert(found)
 
-A non-constant version is available as well::
+A non-constant version is available as well:
+
+.. code-block:: das
 
     var tab <- { "one"=>1, "two"=>2 }
     let found = get(tab,"one") <| $(var val) {
@@ -61,7 +75,9 @@ A non-constant version is available as well::
     let t = tab |> get_value("one")
     assert(t==123)
 
-``insert``, ``insert_clone``, and ``emplace`` are safe ways to add elements to a table::
+``insert``, ``insert_clone``, and ``emplace`` are safe ways to add elements to a table:
+
+.. code-block:: das
 
     var tab <- { "one"=>1, "two"=>2 }
     tab |> insert("three",3)         // insert new key/value pair
@@ -71,7 +87,9 @@ A non-constant version is available as well::
 
 Tables (as well as arrays, structs, and handled types) are passed to functions by reference only.
 
-Tables cannot be assigned, only cloned or moved. ::
+Tables cannot be assigned, only cloned or moved.
+
+.. code-block:: das
 
     def clone_table(var a, b: table<string, int>) {
         a := b      // a is now a deep copy of b
@@ -85,25 +103,35 @@ Tables cannot be assigned, only cloned or moved. ::
 
 Table keys can be not only strings, but any other 'workhorse' type as well.
 
-Tables can be constructed inline::
+Tables can be constructed inline:
+
+.. code-block:: das
 
     let tab <- { "one"=>1, "two"=>2 }
 
-This is syntax sugar for::
+This is syntax sugar for:
+
+.. code-block:: das
 
     let tab : table<string,int> <- to_table_move(fixed_array<tuple<string,int>>(("one",1),("two",2)))
 
-Alternative syntax is::
+Alternative syntax is:
+
+.. code-block:: das
 
     let tab <- table("one"=>1, "two"=>2)
     let tab <- table<string,int>("one"=>1, "two"=>2)
 
-A table that holds no associative data can also be declared::
+A table that holds no associative data can also be declared:
+
+.. code-block:: das
 
     var tab : table<int>
     tab |> insert(1)        // this is how we insert a key into such table
 
-A table can be iterated over with the ``for`` loop::
+A table can be iterated over with the ``for`` loop:
+
+.. code-block:: das
 
     var tab <- { "one"=>1, "two"=>2 }
     for ( key, value in keys(tab), values(tab) ) {

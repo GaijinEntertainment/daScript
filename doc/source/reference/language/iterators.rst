@@ -6,7 +6,9 @@ Iterator
 
 Iterators are objects that traverse a sequence without exposing the details of the sequence's implementation.
 
-The iterator type is written as ``iterator`` followed by the element type in angle brackets::
+The iterator type is written as ``iterator`` followed by the element type in angle brackets:
+
+.. code-block:: das
 
     iterator<int>           // iterates over integers
     iterator<const Foo&>    // iterates over Foo by const reference
@@ -14,19 +16,25 @@ The iterator type is written as ``iterator`` followed by the element type in ang
 Iterators can be moved, but not copied or cloned.
 
 Iterators can be created via the ``each`` function from a range, static array, or dynamic array.
-``each`` functions are unsafe because the iterator does not capture its arguments::
+``each`` functions are unsafe because the iterator does not capture its arguments:
+
+.. code-block:: das
 
     unsafe {
         var it <- each ( [1,2,3,4] )
     }
 
-The most straightforward way to traverse an iterator is with a ``for`` loop::
+The most straightforward way to traverse an iterator is with a ``for`` loop:
+
+.. code-block:: das
 
     for ( x in it ) {             // iterates over contents of 'it'
         print("x = {x}\n")
     }
 
-For the reference iterator, the ``for`` loop will provide a reference variable::
+For the reference iterator, the ``for`` loop will provide a reference variable:
+
+.. code-block:: das
 
     var t = fixed_array(1,2,3,4)
     for ( x in t ) {        // x is int&
@@ -41,7 +49,9 @@ Making types iterable
 
 Any type can be made directly iterable in a ``for`` loop by defining an ``each`` function for it.
 When an ``each`` function exists that takes a value of type ``T`` and returns an ``iterator``,
-you can iterate over ``T`` directly — the compiler calls ``each`` automatically::
+you can iterate over ``T`` directly — the compiler calls ``each`` automatically:
+
+.. code-block:: das
 
     struct Foo {
         data : array<int>
@@ -59,7 +69,9 @@ you can iterate over ``T`` directly — the compiler calls ``each`` automaticall
 This is how built-in types like ranges, arrays, and strings become iterable — each has a corresponding
 ``each`` function defined in the standard library.
 
-Calling ``delete`` on an iterator will make it sequence out and free its memory::
+Calling ``delete`` on an iterator will make it sequence out and free its memory:
+
+.. code-block:: das
 
     var it <- each_enum(Numbers.one)
     delete it                           // safe to delete
@@ -76,14 +88,18 @@ Loops and iteration functions call the finalizer automatically.
 builtin iterators
 -----------------
 
-Table keys and values iterators can be obtained via the ``keys`` and ``values`` functions::
+Table keys and values iterators can be obtained via the ``keys`` and ``values`` functions:
+
+.. code-block:: das
 
     var tab <- { "one"=>1, "two"=>2 }
     for ( k,v in keys(tab),values(tab) ) {  // keys(tab) is iterator<string>
         print("{k} => {v}\n")               // values(tab) is iterator<int&>
     }
 
-It is possible to iterate over each character of the string via the ``each`` function::
+It is possible to iterate over each character of the string via the ``each`` function:
+
+.. code-block:: das
 
     unsafe {
         for ( ch in each("hello,world!") ) {   // string iterator is iterator<int>
@@ -91,7 +107,9 @@ It is possible to iterate over each character of the string via the ``each`` fun
         }
     }
 
-It is possible to iterate over each element of an enumeration via the ``each_enum`` function::
+It is possible to iterate over each element of an enumeration via the ``each_enum`` function:
+
+.. code-block:: das
 
     enum Numbers {
         one
@@ -107,7 +125,9 @@ It is possible to iterate over each element of an enumeration via the ``each_enu
 builtin iteration functions
 -------------------------------------
 
-The ``empty`` function checks if an iterator is null or already sequenced out::
+The ``empty`` function checks if an iterator is null or already sequenced out:
+
+.. code-block:: das
 
     unsafe {
         var it <- each ( fixed_array(1,2,3,4) )
@@ -117,7 +137,9 @@ The ``empty`` function checks if an iterator is null or already sequenced out::
         verify(empty(it))           // iterator is sequenced out
     }
 
-More complicated iteration patterns may require the ``next`` function::
+More complicated iteration patterns may require the ``next`` function:
+
+.. code-block:: das
 
     var x : int
     while ( next(it,x) ) {       // this is semantically equivalent to the `for x in it`
@@ -131,7 +153,9 @@ low level builtin iteration functions
 -------------------------------------
 
 ``_builtin_iterator_first``, ``_builtin_iterator_next``, and ``_builtin_iterator_close`` address the regular lifecycle of the iterator.
-A semantic equivalent of the for loop can be explicitly written using these operations::
+A semantic equivalent of the for loop can be explicitly written using these operations:
+
+.. code-block:: das
 
     var it <- each(range(0,10))
     var i : int
@@ -150,7 +174,9 @@ A semantic equivalent of the for loop can be explicitly written using these oper
 ``_builtin_iterator_iterate`` is one function to rule them all. It acts like all 3 functions above.
 On a non-empty iterator it starts with 'first',
 then proceeds to call ``next`` until the sequence is exhausted.
-Once the iterator is sequenced out, it calls ``close``::
+Once the iterator is sequenced out, it calls ``close``:
+
+.. code-block:: das
 
     var it <- each(range(0,10))
     var i : int
@@ -166,7 +192,9 @@ Once the iterator is sequenced out, it calls ``close``::
 next implementation details
 ---------------------------
 
-The function ``next`` is implemented as follows::
+The function ``next`` is implemented as follows:
+
+.. code-block:: das
 
     def next ( it:iterator<auto(TT)>; var value : TT& ) : bool {
         static_if (!typeinfo can_copy(type<TT>)) {

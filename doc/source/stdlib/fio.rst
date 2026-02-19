@@ -12,11 +12,15 @@ It provides functions for reading and writing files (``fopen``, ``fread``, ``fwr
 directory management (``mkdir``, ``dir``), path manipulation (``join_path``,
 ``basename``, ``dirname``), and file metadata queries (``stat``, ``file_time``).
 
-All functions and symbols are in "fio" module, use require to get access to it. ::
+All functions and symbols are in "fio" module, use require to get access to it.
+
+.. code-block:: das
 
     require fio
 
-Example: ::
+Example:
+
+.. code-block:: das
 
     require fio
 

@@ -3,11 +3,15 @@ and variant fields at compile time. Each field is visited with its name and
 a reference to its value, enabling generic per-field operations like
 serialization, printing, and validation.
 
-All functions and symbols are in "apply" module, use require to get access to it. ::
+All functions and symbols are in "apply" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/apply
 
-Example: ::
+Example:
+
+.. code-block:: das
 
     require daslib/apply
 

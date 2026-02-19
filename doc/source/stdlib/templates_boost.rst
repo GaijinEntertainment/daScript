@@ -13,7 +13,9 @@ type-parameterized struct creation, and compile-time code expansion.
 
 See also :doc:`templates` for ``decltype`` and ``[template]`` annotations.
 
-All functions and symbols are in "templates_boost" module, use require to get access to it. ::
+All functions and symbols are in "templates_boost" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/templates_boost
 

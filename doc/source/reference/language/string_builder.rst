@@ -20,13 +20,17 @@ formatting.
 Basic Usage
 ---------------------
 
-Embed any expression inside ``{`` and ``}`` within a string literal::
+Embed any expression inside ``{`` and ``}`` within a string literal:
+
+.. code-block:: das
 
     let name = "world"
     let greeting = "Hello, {name}!"          // "Hello, world!"
     let result = "1 + 2 = {1 + 2}"          // "1 + 2 = 3"
 
-The expression inside ``{}`` can be arbitrarily complex::
+The expression inside ``{}`` can be arbitrarily complex:
+
+.. code-block:: das
 
     let items : array<string>
     push(items, "apple")
@@ -57,13 +61,17 @@ Format Specifiers
 ---------------------
 
 A format specifier can be added after a colon ``:`` to control the output
-representation of the interpolated value::
+representation of the interpolated value:
+
+.. code-block:: das
 
     let pi = 3.14159
     print("pi = {pi:5.2f}\n")          // fixed-point, 5 wide, 2 decimals
 
 Format specifiers follow a syntax similar to C ``printf`` format strings.
-The general form is::
+The general form is:
+
+.. code-block:: das
 
     {expression:flags width.precision type}
 
@@ -85,7 +93,9 @@ Where:
     * ``g`` — general (shortest of ``f`` or ``e``)
     * ``G`` — general (shortest of ``f`` or ``E``)
 
-Examples::
+Examples:
+
+.. code-block:: das
 
     print("{42:08x}\n")            // "0000002a"  — 8-digit zero-padded hex
     print("{42:08X}\n")            // "0000002A"  — uppercase hex
@@ -97,7 +107,9 @@ Examples::
 Escaping Curly Brackets
 -----------------------
 
-To include a literal ``{`` or ``}`` in a string, escape them with a backslash::
+To include a literal ``{`` or ``}`` in a string, escape them with a backslash:
+
+.. code-block:: das
 
     print("Use \{curly\} brackets\n")   // prints: Use {curly} brackets
 
@@ -105,7 +117,9 @@ To include a literal ``{`` or ``}`` in a string, escape them with a backslash::
 Multi-line Strings
 ---------------------
 
-String interpolation works in multi-line (heredoc) strings as well::
+String interpolation works in multi-line (heredoc) strings as well:
+
+.. code-block:: das
 
     let msg = "Line 1: {value1}
     Line 2: {value2}
@@ -127,7 +141,9 @@ internal string buffer.  This means:
 Relationship to print
 ---------------------
 
-The ``print`` function accepts string builder strings directly::
+The ``print`` function accepts string builder strings directly:
+
+.. code-block:: das
 
     print("x = {x}, y = {y}\n")
 

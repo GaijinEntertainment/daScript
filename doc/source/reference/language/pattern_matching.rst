@@ -12,7 +12,9 @@ Enumeration Matching
 --------------------
 
 You can match on enumeration values using the ``match`` keyword. Each ``if`` clause represents a pattern to test.
-The ``_`` pattern is a catch-all that matches anything not covered by previous cases::
+The ``_`` pattern is a catch-all that matches anything not covered by previous cases:
+
+.. code-block:: das
 
     enum Color {
         Black
@@ -38,7 +40,9 @@ The ``_`` pattern is a catch-all that matches anything not covered by previous c
 Matching Variants
 -----------------
 
-Variants can be matched using the ``as`` keyword to test and bind to a specific case::
+Variants can be matched using the ``as`` keyword to test and bind to a specific case:
+
+.. code-block:: das
 
     variant IF {
         i : int
@@ -59,7 +63,9 @@ Variants can be matched using the ``as`` keyword to test and bind to a specific 
         }
     }
 
-Variants can also be matched using constructor syntax::
+Variants can also be matched using constructor syntax:
+
+.. code-block:: das
 
     def variant_match (v : IF) {
         match ( v ) {
@@ -81,7 +87,9 @@ Declaring Variables in Patterns
 -------------------------------
 
 The ``$v(name)`` syntax declares a new variable and binds it to the matched value.
-This works in any pattern, not just variant matching::
+This works in any pattern, not just variant matching:
+
+.. code-block:: das
 
     variant IF {
         i : int
@@ -105,7 +113,9 @@ This works in any pattern, not just variant matching::
 Matching Structs
 ----------------
 
-Structs can be matched by specifying field values or binding fields to variables::
+Structs can be matched by specifying field values or binding fields to variables:
+
+.. code-block:: das
 
     struct Foo {
         a : int
@@ -128,7 +138,9 @@ Using Guards
 ------------
 
 Guards are additional conditions that must be satisfied for a match to succeed.
-They are specified with ``&&`` after the pattern::
+They are specified with ``&&`` after the pattern:
+
+.. code-block:: das
 
     struct AB {
         a, b : int
@@ -148,7 +160,9 @@ They are specified with ``&&`` after the pattern::
 Tuple Matching
 --------------
 
-Tuples are matched using value or wildcard patterns. The ``...`` pattern matches any number of elements::
+Tuples are matched using value or wildcard patterns. The ``...`` pattern matches any number of elements:
+
+.. code-block:: das
 
     def tuple_match ( A : tuple<int;float;string> ) {
         match ( A ) {
@@ -175,7 +189,9 @@ The ``_`` matches any single element; ``...`` matches zero or more elements.
 Matching Static Arrays
 ----------------------
 
-Static arrays use the ``fixed_array`` keyword and support the same wildcard and guard patterns::
+Static arrays use the ``fixed_array`` keyword and support the same wildcard and guard patterns:
+
+.. code-block:: das
 
     def static_array_match ( A : int[3] ) {
         match ( A ) {
@@ -201,7 +217,9 @@ Dynamic Array Matching
 ----------------------
 
 Dynamic arrays use bracket syntax and support the same patterns as tuples and static arrays.
-The number of explicit elements in the pattern is checked against the array length::
+The number of explicit elements in the pattern is checked against the array length:
+
+.. code-block:: das
 
     def dynamic_array_match ( A : array<int> ) {
         match ( A ) {
@@ -227,7 +245,9 @@ Match Expressions
 -----------------
 
 The ``match_expr`` pattern matches when an expression involving previously declared variables equals the value.
-This is useful for expressing relationships between elements::
+This is useful for expressing relationships between elements:
+
+.. code-block:: das
 
     def ascending_array_match ( A : int[3] ) {
         match ( A ) {
@@ -245,7 +265,9 @@ Here the first element is bound to ``x``, and the second and third elements must
 Matching with ``||``
 --------------------
 
-The ``||`` operator matches either of the provided patterns. Both sides must declare the same variables::
+The ``||`` operator matches either of the provided patterns. Both sides must declare the same variables:
+
+.. code-block:: das
 
     struct Bar {
         a : int
@@ -267,7 +289,9 @@ The ``||`` operator matches either of the provided patterns. Both sides must dec
 -----------------------------------
 
 The ``[match_as_is]`` annotation enables pattern matching for structures of different types,
-provided the necessary ``is`` and ``as`` operators have been implemented::
+provided the necessary ``is`` and ``as`` operators have been implemented:
+
+.. code-block:: das
 
     [match_as_is]
     struct CmdMove : Cmd {
@@ -276,7 +300,9 @@ provided the necessary ``is`` and ``as`` operators have been implemented::
         y : float
     }
 
-The required ``is`` and ``as`` operators::
+The required ``is`` and ``as`` operators:
+
+.. code-block:: das
 
     def operator is CmdMove ( cmd:Cmd ) {
         return cmd.rtti=="CmdMove"
@@ -305,7 +331,9 @@ The required ``is`` and ``as`` operators::
         return default<CmdMove>
     }
 
-With these operators in place, you can match against ``CmdMove`` in a ``match`` expression::
+With these operators in place, you can match against ``CmdMove`` in a ``match`` expression:
+
+.. code-block:: das
 
     def matching_as_and_is (cmd:Cmd) {
         match ( cmd ) {
@@ -322,7 +350,9 @@ With these operators in place, you can match against ``CmdMove`` in a ``match`` 
 ----------------------------------
 
 The ``[match_copy]`` annotation provides an alternative to ``[match_as_is]`` by using a ``match_copy`` function
-instead of ``is``/``as`` operators::
+instead of ``is``/``as`` operators:
+
+.. code-block:: das
 
     [match_copy]
     struct CmdLocate : Cmd {
@@ -332,7 +362,9 @@ instead of ``is``/``as`` operators::
         z : float
     }
 
-The ``match_copy`` function attempts to copy the source into the target type, returning ``true`` on success::
+The ``match_copy`` function attempts to copy the source into the target type, returning ``true`` on success:
+
+.. code-block:: das
 
     def match_copy ( var cmdm:CmdLocate; cmd:Cmd ) {
         if ( cmd.rtti != "CmdLocate" ) {
@@ -344,7 +376,9 @@ The ``match_copy`` function attempts to copy the source into the target type, re
         return true
     }
 
-Usage is identical to regular struct matching::
+Usage is identical to regular struct matching:
+
+.. code-block:: das
 
     def matching_copy ( cmd:Cmd ) {
         match ( cmd ) {
@@ -361,7 +395,9 @@ Static Matching
 ---------------
 
 ``static_match`` works like ``match``, but ignores patterns with type mismatches at compile time instead
-of reporting errors. This makes it suitable for generic functions::
+of reporting errors. This makes it suitable for generic functions:
+
+.. code-block:: das
 
     static_match ( match_expression ) {
         if ( pattern_1 ) {
@@ -376,7 +412,9 @@ of reporting errors. This makes it suitable for generic functions::
         }
     }
 
-Example::
+Example:
+
+.. code-block:: das
 
     enum Color {
         red
@@ -404,13 +442,17 @@ The function always compiles regardless of the argument types.
 match_type
 ----------
 
-The ``match_type`` subexpression matches based on the type of an expression::
+The ``match_type`` subexpression matches based on the type of an expression:
+
+.. code-block:: das
 
     if ( match_type(type<Type>, expr) ) {
         // code to run if match is successful
     }
 
-Example::
+Example:
+
+.. code-block:: das
 
     def static_match_by_type (what) {
         static_match ( what ) {
@@ -428,7 +470,9 @@ If ``what`` is of type ``int``, it is bound to ``expr`` and returned. Otherwise 
 Multi-Match
 -----------
 
-``multi_match`` evaluates all matching cases instead of stopping at the first match::
+``multi_match`` evaluates all matching cases instead of stopping at the first match:
+
+.. code-block:: das
 
     def multi_match_test ( a:int ) {
         var text = "{a}"

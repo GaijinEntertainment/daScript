@@ -17,22 +17,30 @@ style of brackets used:
 
 An optional ``where`` clause can filter elements.
 
-Examples::
+Examples:
+
+.. code-block:: das
 
     var a1 <- [iterator for(x in range(0,10)); x]   // iterator<int>
     var a2 <- [for(x in range(0,10)); x]            // array<int>
     var at1 <- {for(x in range(0,10)); x}           // table<int>
     var at2 <- {for(x in range(0,10)); x=>"{x}"}    // table<int;string>
 
-A ``where`` clause acts as a filter::
+A ``where`` clause acts as a filter:
+
+.. code-block:: das
 
     var a3 <- [for(x in range(0,10)); x; where (x & 1) == 1]   // only odd numbers
 
-Just like a for loop, comprehension can iterate over multiple sources::
+Just like a for loop, comprehension can iterate over multiple sources:
+
+.. code-block:: das
 
     var a4 <- [for(x,y in range(0,10),a1); x + y; where x==y] // multiple variables
 
-Iterator comprehension may produce a referenced iterator::
+Iterator comprehension may produce a referenced iterator:
+
+.. code-block:: das
 
     var a = [1,2,3,4]
     var b <- [iterator for(x in a); a]  // iterator<int&> and will point to captured copy of the elements of a

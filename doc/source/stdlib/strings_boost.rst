@@ -10,11 +10,15 @@ Boost package for string manipulation library
 The STRINGS_BOOST module extends string handling with splitting, joining,
 padding, character replacement, and edit distance computation.
 
-All functions and symbols are in "strings_boost" module, use require to get access to it. ::
+All functions and symbols are in "strings_boost" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/strings_boost
 
-Example: ::
+Example:
+
+.. code-block:: das
 
     require daslib/strings_boost
 
@@ -135,8 +139,7 @@ Formatting
 
 .. das:function:: capitalize(str: string) : string
 
-// stub
-def capitalize (str: string) : string
+Returns a copy of the string with the first character converted to uppercase. The rest of the string is unchanged.
 
 
 :Arguments: * **str** : string
@@ -145,8 +148,7 @@ def capitalize (str: string) : string
 
 .. das:function:: pad_left(str: string; width: int; ch: int = 32) : string
 
-// stub
-def pad_left (str: string; width: int; ch: int = 32) : string
+Pads the string with the character `ch` on the left to reach the specified minimum `width`. If the string is already at least `width` characters, it is returned unchanged.
 
 
 :Arguments: * **str** : string
@@ -159,8 +161,7 @@ def pad_left (str: string; width: int; ch: int = 32) : string
 
 .. das:function:: pad_right(str: string; width: int; ch: int = 32) : string
 
-// stub
-def pad_right (str: string; width: int; ch: int = 32) : string
+Pads the string with the character `ch` on the right to reach the specified minimum `width`. If the string is already at least `width` characters, it is returned unchanged.
 
 
 :Arguments: * **str** : string
@@ -196,8 +197,7 @@ Queries and comparisons
 
 .. das:function:: contains(str: string; sub: string) : bool
 
-// stub
-def contains (str: string; sub: string) : bool
+Returns true if `sub` is found anywhere within `str`.
 
 
 :Arguments: * **str** : string
@@ -208,8 +208,7 @@ def contains (str: string; sub: string) : bool
 
 .. das:function:: count(str: string; sub: string) : int
 
-// stub
-def count (str: string; sub: string) : int
+Counts non-overlapping occurrences of `sub` in `str`. Returns 0 if `sub` is empty or not found.
 
 
 :Arguments: * **str** : string
@@ -254,8 +253,7 @@ Returns ``true`` if the byte at the specified index in the array equals the give
 
 .. das:function:: is_null_or_whitespace(str: string) : bool
 
-// stub
-def is_null_or_whitespace (str: string) : bool
+Returns true if the string is null, empty, or contains only whitespace characters (space, tab, CR, LF).
 
 
 :Arguments: * **str** : string
@@ -276,8 +274,7 @@ last_index_of
 
 .. das:function:: last_index_of(str: string; sub: string; start: int) : int
 
-// stub
-def last_index_of (str: string; sub: string; start: int) : int
+Returns the index of the last occurrence of `sub` in `str` searching only up to position `start` (exclusive), or -1 if not found.
 
 
 :Arguments: * **str** : string
@@ -320,8 +317,7 @@ Prefix and suffix
 
 .. das:function:: trim_prefix(str: string; prefix: string) : string
 
-// stub
-def trim_prefix (str: string; prefix: string) : string
+Removes `prefix` from the beginning of `str` if present. Returns the string unchanged if it does not start with `prefix`.
 
 
 :Arguments: * **str** : string
@@ -332,8 +328,7 @@ def trim_prefix (str: string; prefix: string) : string
 
 .. das:function:: trim_suffix(str: string; suffix: string) : string
 
-// stub
-def trim_suffix (str: string; suffix: string) : string
+Removes `suffix` from the end of `str` if present. Returns the string unchanged if it does not end with `suffix`.
 
 
 :Arguments: * **str** : string

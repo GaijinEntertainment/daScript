@@ -12,7 +12,9 @@ routines. It provides functions for building strings (``build_string``), parsing
 (``to_int``, ``to_float``), character classification (``is_alpha``, ``is_number``),
 and low-level string manipulation.
 
-All functions and symbols are in "strings" module, use require to get access to it. ::
+All functions and symbols are in "strings" module, use require to get access to it.
+
+.. code-block:: das
 
     require strings
 
@@ -739,8 +741,7 @@ String comparison
 
 .. das:function:: compare_ignore_case(a: string implicit; b: string implicit) : int
 
-// stub
-def compare_ignore_case (a: string implicit; b: string implicit) : int
+Performs case-insensitive string comparison. Returns 0 if strings are equal, a negative value if `a` is less than `b`, or a positive value if `a` is greater than `b`.
 
 
 :Arguments: * **a** : string implicit
@@ -1079,8 +1080,7 @@ Converts a string to a uint value with optional hexadecimal parsing when `hex` i
 
 .. das:function:: to_uint16(value: string implicit; hex: bool = false) : uint16
 
-// stub
-def to_uint16 (value: string implicit; hex: bool = false) : uint16
+Converts a string to a uint16 value. Returns 0 if conversion fails. When `hex` is true, parses the string as hexadecimal.
 
 
 :Arguments: * **value** : string implicit

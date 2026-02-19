@@ -64,11 +64,15 @@ occurrence, or ``regex_foreach`` / ``regex_match_all`` to find all occurrences.
 
 See also :doc:`regex_boost` for compile-time regex construction via the ``%regex~`` reader macro.
 
-All functions and symbols are in "regex" module, use require to get access to it. ::
+All functions and symbols are in "regex" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/regex
 
-Example: ::
+Example:
+
+.. code-block:: das
 
     require daslib/regex
         require strings
@@ -332,8 +336,7 @@ Regex[]
 
 .. das:function:: Regex[](regex: Regex; index: int) : range
 
-// stub
-def Regex[] (regex: Regex; index: int) : range
+Returns the match range for the given group index.
 
 
 :Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>`

@@ -5,6 +5,8 @@ enabling cache-friendly batch processing of game objects.
 
 See :ref:`tutorial_decs` for a hands-on tutorial.
 
-All functions and symbols are in "decs" module, use require to get access to it. ::
+All functions and symbols are in "decs" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/decs

@@ -14,11 +14,15 @@ conversion macros (``from_JsValue``, ``to_JsValue``).
 See also :doc:`json` for core JSON parsing and writing.
 See :ref:`tutorial_json` for a hands-on tutorial.
 
-All functions and symbols are in "json_boost" module, use require to get access to it. ::
+All functions and symbols are in "json_boost" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/json_boost
 
-Example: ::
+Example:
+
+.. code-block:: das
 
     require daslib/json_boost
 

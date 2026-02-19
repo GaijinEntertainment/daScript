@@ -8,11 +8,15 @@ Lambdas are nameless functions which capture the local context by clone, copy, o
 Lambdas are slower than blocks, but allow for more flexibility in lifetime and capture modes  (see :ref:`Blocks <blocks>`).
 
 The lambda type can be declared with a function-like syntax.
-The type is written as ``lambda`` followed by an optional type signature in angle brackets::
+The type is written as ``lambda`` followed by an optional type signature in angle brackets:
+
+.. code-block:: das
 
     lambda < (arg1:int; arg2:float&) : bool >
 
-The ``->`` operator can be used instead of ``:`` for the return type::
+The ``->`` operator can be used instead of ``:`` for the return type:
+
+.. code-block:: das
 
     lambda < (arg1:int; arg2:float&) -> bool >   // equivalent
 
@@ -20,7 +24,9 @@ If no type signature is specified, ``lambda`` alone represents a lambda that tak
 arguments and returns nothing.
 
 Lambdas can be local or global variables, and can be passed as an argument by reference.
-Lambdas can be moved, but can't be copied or cloned::
+Lambdas can be moved, but can't be copied or cloned:
+
+.. code-block:: das
 
     def foo ( x : lambda < (arg1:int;arg2:float&):bool > ) {
         ...
@@ -28,7 +34,9 @@ Lambdas can be moved, but can't be copied or cloned::
         ...
     }
 
-Lambdas can be invoked via ``invoke`` or call-like syntax::
+Lambdas can be invoked via ``invoke`` or call-like syntax:
+
+.. code-block:: das
 
     def inv13 ( x : lambda < (arg1:int):int > ) {
         return invoke(x,13)
@@ -38,7 +46,9 @@ Lambdas can be invoked via ``invoke`` or call-like syntax::
         return x(14)
     }
 
-Lambdas are typically declared via move syntax::
+Lambdas are typically declared via move syntax:
+
+.. code-block:: das
 
     var CNT = 0
     let counter <- @ (extra:int) : int {
@@ -66,7 +76,9 @@ Unlike blocks, lambdas can specify their capture types explicitly. There are sev
 
 Capturing by reference requires unsafe.
 
-By default, capture by copy is used. If copy is not available, the ``unsafe`` keyword is required for the default capture by move::
+By default, capture by copy is used. If copy is not available, the ``unsafe`` keyword is required for the default capture by move:
+
+.. code-block:: das
 
 	var a1 <- [1,2]
 	var a2 <- [1,2]
@@ -82,11 +94,15 @@ By default, capture by copy is used. If copy is not available, the ``unsafe`` ke
 
 .. _lambdas_finalizer:
 
-Lambdas can be deleted, which causes finalizers to be called on all captured data  (see :ref:`Finalizers <finalizers>`)::
+Lambdas can be deleted, which causes finalizers to be called on all captured data  (see :ref:`Finalizers <finalizers>`):
+
+.. code-block:: das
 
     delete lam
 
-Lambdas can specify a custom finalizer which is invoked before the default finalizer::
+Lambdas can specify a custom finalizer which is invoked before the default finalizer:
+
+.. code-block:: das
 
     var CNT = 0
     var counter <- @ (extra:int) : int {
@@ -105,7 +121,9 @@ Iterators
 
 Lambdas are the main building blocks for implementing custom iterators (see :ref:`Iterators <iterators>`).
 
-Lambdas can be converted to iterators via the ``each`` or ``each_ref`` functions::
+Lambdas can be converted to iterators via the ``each`` or ``each_ref`` functions:
+
+.. code-block:: das
 
     var count = 0
     let lam <- @ (var a:int &) : bool {
@@ -133,7 +151,9 @@ Implementation details
 
 Lambdas are implemented by creating a nameless structure for the capture, as well as a function for the body of the lambda.
 
-Let's review an example with a singled captured variable::
+Let's review an example with a singled captured variable:
+
+.. code-block:: das
 
     var CNT = 0
     let counter <- @ (extra:int) : int {
@@ -142,7 +162,9 @@ Let's review an example with a singled captured variable::
 
 Daslang will generated the following code:
 
-Capture structure::
+Capture structure:
+
+.. code-block:: das
 
     struct _lambda_thismodule_7_8_1 {
         __lambda : function<(__this:_lambda_thismodule_7_8_1;extra:int const):int> = @@_lambda_thismodule_7_8_1`function
@@ -150,7 +172,9 @@ Capture structure::
         CNT : int
     }
 
-Body function::
+Body function:
+
+.. code-block:: das
 
     def _lambda_thismodule_7_8_1`function ( var __this:_lambda_thismodule_7_8_1; extra:int const ) : int {
         with ( __this ) {
@@ -158,18 +182,24 @@ Body function::
         }
     }
 
-Finalizer function::
+Finalizer function:
+
+.. code-block:: das
 
     def _lambda_thismodule_7_8_1`finalizer ( var __this:_lambda_thismodule_7_8_1? explicit ) {
         delete *this
         delete __this
     }
 
-Lambda creation is replaced with the ascend of the capture structure::
+Lambda creation is replaced with the ascend of the capture structure:
+
+.. code-block:: das
 
     let counter:lambda<(extra:int const):int> const <- new<lambda<(extra:int const):int>> (CNT = CNT)
 
-The C++ Lambda class contains single void pointer for the capture data::
+The C++ Lambda class contains single void pointer for the capture data:
+
+.. code-block:: das
 
     struct Lambda {
         ...

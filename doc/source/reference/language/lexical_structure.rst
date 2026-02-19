@@ -19,7 +19,9 @@ Daslang is a case-sensitive language, meaning that ``foo``, ``Foo``, and ``fOo``
 three distinct identifiers.
 
 Backticks are used in system-generated identifiers (such as mangled names) and are
-generally not used in user code::
+generally not used in user code:
+
+.. code-block:: das
 
     my_variable     // valid
     _temp           // valid
@@ -196,7 +198,9 @@ String Literals
 ^^^^^^^^^^^^^^^
 
 Strings are delimited by double quotation marks (``"``). They support escape sequences
-and string interpolation::
+and string interpolation:
+
+.. code-block:: das
 
     "I'm a string\n"
 
@@ -234,7 +238,9 @@ and string interpolation::
 
 **Multiline strings:**
 
-Strings can span multiple lines. The content includes all characters between the quotes::
+Strings can span multiple lines. The content includes all characters between the quotes:
+
+.. code-block:: das
 
     let msg = "This is
         a multi-line
@@ -243,19 +249,25 @@ Strings can span multiple lines. The content includes all characters between the
 **String interpolation:**
 
 Expressions enclosed in curly brackets ``{}`` inside a string are evaluated and their
-results are inserted into the string::
+results are inserted into the string:
+
+.. code-block:: das
 
     let name = "world"
     let greeting = "Hello, {name}!"         // "Hello, world!"
     let result = "2 + 2 = {2 + 2}"         // "2 + 2 = 4"
 
-To include literal curly brackets in a string, escape them with a backslash::
+To include literal curly brackets in a string, escape them with a backslash:
+
+.. code-block:: das
 
     print("Use \{braces\} for interpolation")   // prints: Use {braces} for interpolation
 
 **Format specifiers:**
 
-String interpolation supports optional format specifiers after a colon::
+String interpolation supports optional format specifiers after a colon:
+
+.. code-block:: das
 
     let pi = 3.14159
     print("{pi:5.2f}")         // formatted output
@@ -271,7 +283,9 @@ Comments
 A comment is text that the compiler ignores but is useful for programmers.
 
 **Block comments** start with ``/*`` and end with ``*/``. Block comments can span multiple
-lines and can be nested::
+lines and can be nested:
+
+.. code-block:: das
 
     /*
     This is a multiline comment.
@@ -279,7 +293,9 @@ lines and can be nested::
     These lines are all ignored by the compiler.
     */
 
-**Line comments** start with ``//`` and extend to the end of the line::
+**Line comments** start with ``//`` and extend to the end of the line:
+
+.. code-block:: das
 
     // This is a single-line comment.
     var x = 42  // This is also a comment.
@@ -291,7 +307,9 @@ Automatic Semicolons
 .. index:: single: automatic semicolons
 
 Daslang automatically inserts semicolons at the end of lines when the code is enclosed
-in curly braces, unless the line is also inside parentheses or brackets::
+in curly braces, unless the line is also inside parentheses or brackets:
+
+.. code-block:: das
 
     def foo {
         var a = 0       // semicolon inserted automatically
@@ -301,7 +319,9 @@ in curly braces, unless the line is also inside parentheses or brackets::
     }
 
 This means that expressions can be split across multiple lines when parentheses or brackets
-keep them together::
+keep them together:
+
+.. code-block:: das
 
     let result = (
         some_long_function_name(arg1, arg2)

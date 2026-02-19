@@ -13,11 +13,15 @@ Floating point math in general is not bit-precise: the compiler may optimize
 permutations, replace divisions with multiplications, and some functions are
 not bit-exact. Use ``double`` precision types when exact results are required.
 
-All functions and symbols are in "math" module, use require to get access to it. ::
+All functions and symbols are in "math" module, use require to get access to it.
+
+.. code-block:: das
 
     require math
 
-Example: ::
+Example:
+
+.. code-block:: das
 
     require math
 
@@ -2334,8 +2338,7 @@ float3x3 const implicit ==const.[]
 
 .. das:function:: float3x3 const implicit ==const.[](m: float3x3 const implicit ==const; i: int) : float3
 
-// stub
-def float3x3 const implicit ==const.[] (m: float3x3 const implicit ==const; i: int) : float3
+Returns a copy of the row vector at index `i` from a constant float3x3 matrix.
 
 
 :Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>` implicit!
@@ -2356,8 +2359,7 @@ float3x3 implicit ==const.[]
 
 .. das:function:: float3x3 implicit ==const.[](m: float3x3 implicit ==const; i: int) : float3&
 
-// stub
-def float3x3 implicit ==const.[] (m: float3x3 implicit ==const; i: int) : float3&
+Returns a reference to the row vector at index `i` from a float3x3 matrix.
 
 
 :Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>` implicit!
@@ -2378,8 +2380,7 @@ float3x4 const implicit ==const.[]
 
 .. das:function:: float3x4 const implicit ==const.[](m: float3x4 const implicit ==const; i: uint) : float3
 
-// stub
-def float3x4 const implicit ==const.[] (m: float3x4 const implicit ==const; i: uint) : float3
+Returns a copy of the row vector at index `i` from a constant float3x4 matrix.
 
 
 :Arguments: * **m** :  :ref:`float3x4 <handle-math-float3x4>` implicit!
@@ -2400,8 +2401,7 @@ float3x4 implicit ==const.[]
 
 .. das:function:: float3x4 implicit ==const.[](m: float3x4 implicit ==const; i: uint) : float3&
 
-// stub
-def float3x4 implicit ==const.[] (m: float3x4 implicit ==const; i: uint) : float3&
+Returns a reference to the row vector at index `i` from a float3x4 matrix.
 
 
 :Arguments: * **m** :  :ref:`float3x4 <handle-math-float3x4>` implicit!
@@ -2422,8 +2422,7 @@ float4x4 const implicit ==const.[]
 
 .. das:function:: float4x4 const implicit ==const.[](m: float4x4 const implicit ==const; i: uint) : float4
 
-// stub
-def float4x4 const implicit ==const.[] (m: float4x4 const implicit ==const; i: uint) : float4
+Returns a copy of the row vector at index `i` from a constant float4x4 matrix.
 
 
 :Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>` implicit!
@@ -2444,8 +2443,7 @@ float4x4 implicit ==const.[]
 
 .. das:function:: float4x4 implicit ==const.[](m: float4x4 implicit ==const; i: int) : float4&
 
-// stub
-def float4x4 implicit ==const.[] (m: float4x4 implicit ==const; i: int) : float4&
+Returns a reference to the row vector at index `i` from a float4x4 matrix.
 
 
 :Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>` implicit!
