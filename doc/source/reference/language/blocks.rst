@@ -97,11 +97,11 @@ Nested blocks are allowed:
         invoke(blk,a)
     }
 
-    passthrough(1) <| $ ( a ) {
+    passthrough(1) $(a) {
         assert(a==1)
-        passthrough(2) <| $ ( b ) {
+        passthrough(2) $(b) {
             assert(a==1 && b==2)
-            passthrough(3) <| $ ( c ) {
+            passthrough(3) $(c) {
                 assert(a==1 && b==2 && c==3)
             }
         }
@@ -122,7 +122,7 @@ Blocks can have annotations:
 .. code-block:: das
 
     def queryOne(dt:float=1.0f) {
-        testProfile::queryEs() <| $ [es] (var pos:float3&;vel:float3 const) { // [es] is annotation
+        testProfile::queryEs() $ [es] (var pos:float3&;vel:float3 const) { // [es] is annotation
             pos += vel * dt
         }
     }

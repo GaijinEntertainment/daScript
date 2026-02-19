@@ -160,7 +160,7 @@ Pipe operators pass a value as the first (right pipe) or last (left pipe) argume
 
     let t = 12 |> addX(2) |> addX(3)   // addX(addX(12, 2), 3) = 17
 
-Left pipe is commonly used to pass blocks to functions:
+Left pipe is commonly used to pass blocks and lambdas to functions:
 
 .. code-block:: das
 
@@ -171,6 +171,26 @@ Left pipe is commonly used to pass blocks to functions:
     doSomething() <| $ {
         print("hello\n")
     }
+
+In gen2 syntax a block or lambda that immediately follows a function call is
+automatically piped as the last argument, so the explicit ``<|`` can be omitted.
+Parameterless blocks also do not need the ``$`` prefix:
+
+.. code-block:: das
+
+    doSomething() {                      // same as doSomething() <| $ { ... }
+        print("hello\n")
+    }
+
+    build_string() $(var writer) {       // block with parameters — $ is still required
+        write(writer, "hello")
+    }
+
+    sort(arr) @(a, b) => a < b           // lambda — @ is still required
+
+This shorthand works with lambdas (``@``) and no-capture lambdas (``@@``) as well.
+The explicit ``<|`` is still needed when a block is passed to an expression
+(e.g. ``<| new ...``) or for generator bodies (``generator<T>() <| $() { ... }``).
 
 The ``lpipe`` macro from ``daslib/lpipe`` allows piping to the expression on the previous line:
 
