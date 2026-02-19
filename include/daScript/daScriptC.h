@@ -342,7 +342,7 @@ DAS_API void das_module_bind_enumeration ( das_module * mod, das_enumeration * e
 // Allocate a copy of 'str' on the daslang string heap.
 // Use this to return strings from interop functions; the returned pointer
 // is managed by the context and must not be freed by the caller.
-char * das_allocate_string ( das_context * context, char * str );
+DAS_API char * das_allocate_string ( das_context * context, char * str );
 
 // --- Argument getters (aligned) ---
 // Extract a C value from a vec4f argument inside an interop function.
