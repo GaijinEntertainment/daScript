@@ -65,7 +65,7 @@ struct Player {
     name : string
     health : int
     score : float
-    on_hit : function<(damage:int):void>
+    on_hit : function<(damage : int) : void>
 }
 
 // ── Using the generated describe functions ──
