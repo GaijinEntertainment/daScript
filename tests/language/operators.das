@@ -78,7 +78,7 @@ def operator ?. length(t : Goo) {
 
 [test]
 def test_operators(t : T?) {
-    t |> run("as, ?as, is") <| @(t : T?) {
+    t |> run("as, ?as, is") @(t : T?) {
         var f = Foo(a = 13)
         var b = f as Bar
         t |> equal(13., b.a)
@@ -91,7 +91,7 @@ def test_operators(t : T?) {
         var nb = nf ?as Bar ?? Bar(a = 1.0)
         t |> equal(1., nb.a)
     }
-    t |> run("[], ?[], ., ?.") <| @(t : T?) {
+    t |> run("[], ?[], ., ?.") @(t : T?) {
         var T = Goo(a = "hello")
         var z = T["blah"]
         var w = T?["blah"] ?? "not_blah"
@@ -136,7 +136,7 @@ struct BitArray {
 
 [test]
 def test_index_operators(t : T?) {
-    t |> run("[], []=") <| @(t : T?) {
+    t |> run("[], []=") @(t : T?) {
         var a : BitArray
         t |> equal(a.bits, 0ul)
         a[1] = true
@@ -175,7 +175,7 @@ def test_index_operators(t : T?) {
         }
         a.clear()
     }
-    t |> run("compound operators") <| @(t : T?) {
+    t |> run("compound operators") @(t : T?) {
         var a : BitArray
         a.clear()
         a[0] ||= true

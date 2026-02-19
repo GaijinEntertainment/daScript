@@ -87,9 +87,9 @@ enclosing scope exits. Multiple defers run in LIFO order::
   require daslib/defer
 
   def example {
-      defer() <| $() { print("third\n") }
-      defer() <| $() { print("second\n") }
-      defer() <| $() { print("first\n") }
+      defer() { print("third\n") }
+      defer() { print("second\n") }
+      defer() { print("first\n") }
   }
   // prints: first, second, third (reverse order)
 

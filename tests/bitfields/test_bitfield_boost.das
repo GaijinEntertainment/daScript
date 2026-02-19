@@ -50,16 +50,16 @@ def test_any_bitfield(t : T?; bf : auto(BitFieldType)) {
 
 [test]
 def test_bitfield_boost(t : T?) {
-    t |> run("bitfield") <| @@(t : T?) {
+    t |> run("bitfield") @@(t : T?) {
         test_any_bitfield(t, type<bitfield>)
     }
-    t |> run("bitfield8") <| @@(t : T?) {
+    t |> run("bitfield8") @@(t : T?) {
         test_any_bitfield(t, type<bitfield8>)
     }
-    t |> run("bitfield16") <| @@(t : T?) {
+    t |> run("bitfield16") @@(t : T?) {
         test_any_bitfield(t, type<bitfield16>)
     }
-    t |> run("bitfield64") <| @@(t : T?) {
+    t |> run("bitfield64") @@(t : T?) {
         test_any_bitfield(t, type<bitfield64>)
     }
 }

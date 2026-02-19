@@ -37,7 +37,7 @@ def ptrAdd(var a : int?; count : int) {
 
 [test]
 def test_ref(t : T?) {
-    t |> run("ptr2ref") <| @(t : T?) {
+    t |> run("ptr2ref") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@make13))
         var x = -21
         var px = unsafe(addr(x))
@@ -46,7 +46,7 @@ def test_ref(t : T?) {
         t |> equal(px, ppx)
         t |> equal(*px, 13)
     }
-    t |> run("ptr []") <| @(t : T?) {
+    t |> run("ptr []") @(t : T?) {
         var x : int[10]
         var px = unsafe(addr(x[0]))
         t |> success(!jit_enabled() || is_jit_function(@@makeAll13))
@@ -57,7 +57,7 @@ def test_ref(t : T?) {
         }
         t |> equal(addAll(px, 10), 130)
     }
-    t |> run("ptr ++") <| @(t : T?) {
+    t |> run("ptr ++") @(t : T?) {
         var x : int[10]
         var px = unsafe(addr(x[0]))
         for (i, j in x, range(10)) {

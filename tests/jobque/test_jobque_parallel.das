@@ -17,11 +17,11 @@ struct IndexedResult {
 
 [test]
 def test_parallel_for_basic(t : T?) {
-    t |> run("distributes range across jobs and waits") <| @(t : T?) {
-        with_job_que() <| $() {
+    t |> run("distributes range across jobs and waits") @(t : T?) {
+        with_job_que() {
             let num_jobs = 3
-            with_channel(num_jobs) <| $(ch) {
-                parallel_for(0, 10, num_jobs) <| $(job_begin, job_end, wg) {
+            with_channel(num_jobs) $(ch) {
+                parallel_for(0, 10, num_jobs) $(job_begin, job_end, wg) {
                     for (i in range(job_begin, job_end)) {
                         ch |> push_clone(IntVal(v = i))
                     }
@@ -29,7 +29,7 @@ def test_parallel_for_basic(t : T?) {
                     wg |> notify_and_release
                 }
                 var results : array<int>
-                ch |> for_each_clone() <| $(val : IntVal#) {
+                ch |> for_each_clone() $(val : IntVal#) {
                     results |> push(val.v)
                 }
                 sort(results)
@@ -44,10 +44,10 @@ def test_parallel_for_basic(t : T?) {
 
 [test]
 def test_parallel_for_single_job(t : T?) {
-    t |> run("1 job gives full range") <| @(t : T?) {
-        with_job_que() <| $() {
-            with_channel(1) <| $(ch) {
-                parallel_for(0, 5, 1) <| $(job_begin, job_end, wg) {
+    t |> run("1 job gives full range") @(t : T?) {
+        with_job_que() {
+            with_channel(1) $(ch) {
+                parallel_for(0, 5, 1) $(job_begin, job_end, wg) {
                     for (i in range(job_begin, job_end)) {
                         ch |> push_clone(IntVal(v = i))
                     }
@@ -55,7 +55,7 @@ def test_parallel_for_single_job(t : T?) {
                     wg |> notify_and_release
                 }
                 var results : array<int>
-                ch |> for_each_clone() <| $(val : IntVal#) {
+                ch |> for_each_clone() $(val : IntVal#) {
                     results |> push(val.v)
                 }
                 sort(results)
@@ -69,11 +69,11 @@ def test_parallel_for_single_job(t : T?) {
 
 [test]
 def test_parallel_for_more_jobs_than_items(t : T?) {
-    t |> run("clamps jobs to range size") <| @(t : T?) {
-        with_job_que() <| $() {
+    t |> run("clamps jobs to range size") @(t : T?) {
+        with_job_que() {
             // 100 requested but only 3 items, so actual_jobs = 3
-            with_channel(3) <| $(ch) {
-                parallel_for(0, 3, 100) <| $(job_begin, job_end, wg) {
+            with_channel(3) $(ch) {
+                parallel_for(0, 3, 100) $(job_begin, job_end, wg) {
                     for (i in range(job_begin, job_end)) {
                         ch |> push_clone(IntVal(v = i))
                     }
@@ -81,7 +81,7 @@ def test_parallel_for_more_jobs_than_items(t : T?) {
                     wg |> notify_and_release
                 }
                 var results : array<int>
-                ch |> for_each_clone() <| $(val : IntVal#) {
+                ch |> for_each_clone() $(val : IntVal#) {
                     results |> push(val.v)
                 }
                 sort(results)
@@ -95,10 +95,10 @@ def test_parallel_for_more_jobs_than_items(t : T?) {
 
 [test]
 def test_parallel_for_empty_range(t : T?) {
-    t |> run("empty range does nothing") <| @(t : T?) {
-        with_job_que() <| $() {
+    t |> run("empty range does nothing") @(t : T?) {
+        with_job_que() {
             var called = false
-            parallel_for(5, 5, 4) <| $(job_begin, job_end, wg) {
+            parallel_for(5, 5, 4) $(job_begin, job_end, wg) {
                 called = true
             }
             t |> equal(false, called)
@@ -108,10 +108,10 @@ def test_parallel_for_empty_range(t : T?) {
 
 [test]
 def test_parallel_for_negative_range(t : T?) {
-    t |> run("inverted range does nothing") <| @(t : T?) {
-        with_job_que() <| $() {
+    t |> run("inverted range does nothing") @(t : T?) {
+        with_job_que() {
             var called = false
-            parallel_for(10, 5, 4) <| $(job_begin, job_end, wg) {
+            parallel_for(10, 5, 4) $(job_begin, job_end, wg) {
                 called = true
             }
             t |> equal(false, called)
@@ -121,11 +121,11 @@ def test_parallel_for_negative_range(t : T?) {
 
 [test]
 def test_parallel_for_offset_range(t : T?) {
-    t |> run("non-zero start range") <| @(t : T?) {
-        with_job_que() <| $() {
+    t |> run("non-zero start range") @(t : T?) {
+        with_job_que() {
             let num_jobs = 2
-            with_channel(num_jobs) <| $(ch) {
-                parallel_for(100, 105, num_jobs) <| $(job_begin, job_end, wg) {
+            with_channel(num_jobs) $(ch) {
+                parallel_for(100, 105, num_jobs) $(job_begin, job_end, wg) {
                     for (i in range(job_begin, job_end)) {
                         ch |> push_clone(IntVal(v = i))
                     }
@@ -133,7 +133,7 @@ def test_parallel_for_offset_range(t : T?) {
                     wg |> notify_and_release
                 }
                 var results : array<int>
-                ch |> for_each_clone() <| $(val : IntVal#) {
+                ch |> for_each_clone() $(val : IntVal#) {
                     results |> push(val.v)
                 }
                 sort(results)
@@ -147,11 +147,11 @@ def test_parallel_for_offset_range(t : T?) {
 
 [test]
 def test_parallel_for_large(t : T?) {
-    t |> run("100 items across 8 jobs") <| @(t : T?) {
-        with_job_que() <| $() {
+    t |> run("100 items across 8 jobs") @(t : T?) {
+        with_job_que() {
             let num_jobs = 8
-            with_channel(num_jobs) <| $(ch) {
-                parallel_for(0, 100, num_jobs) <| $(job_begin, job_end, wg) {
+            with_channel(num_jobs) $(ch) {
+                parallel_for(0, 100, num_jobs) $(job_begin, job_end, wg) {
                     for (i in range(job_begin, job_end)) {
                         ch |> push_clone(IntVal(v = i + 1000))
                     }
@@ -159,7 +159,7 @@ def test_parallel_for_large(t : T?) {
                     wg |> notify_and_release
                 }
                 var results : array<int>
-                ch |> for_each_clone() <| $(val : IntVal#) {
+                ch |> for_each_clone() $(val : IntVal#) {
                     results |> push(val.v)
                 }
                 sort(results)
@@ -173,11 +173,11 @@ def test_parallel_for_large(t : T?) {
 
 [test]
 def test_parallel_for_done(t : T?) {
-    t |> run("works with done alias") <| @(t : T?) {
-        with_job_que() <| $() {
+    t |> run("works with done alias") @(t : T?) {
+        with_job_que() {
             let num_jobs = 2
-            with_channel(num_jobs) <| $(ch) {
-                parallel_for(0, 6, num_jobs) <| $(job_begin, job_end, wg) {
+            with_channel(num_jobs) $(ch) {
+                parallel_for(0, 6, num_jobs) $(job_begin, job_end, wg) {
                     for (i in range(job_begin, job_end)) {
                         ch |> push_clone(IntVal(v = i))
                     }
@@ -185,7 +185,7 @@ def test_parallel_for_done(t : T?) {
                     wg |> done
                 }
                 var results : array<int>
-                ch |> for_each_clone() <| $(val : IntVal#) {
+                ch |> for_each_clone() $(val : IntVal#) {
                     results |> push(val.v)
                 }
                 sort(results)
@@ -202,15 +202,15 @@ def test_parallel_for_done(t : T?) {
 
 [test]
 def test_parallel_for_each_basic(t : T?) {
-    t |> run("partitions array indices into chunks") <| @(t : T?) {
-        with_job_que() <| $() {
+    t |> run("partitions array indices into chunks") @(t : T?) {
+        with_job_que() {
             var input : array<int>
             for (i in range(8)) {
                 input |> push(i)
             }
             let num_jobs = 3
-            with_channel(num_jobs) <| $(ch) {
-                parallel_for_each(input, num_jobs) <| $(job_begin, job_end, wg) {
+            with_channel(num_jobs) $(ch) {
+                parallel_for_each(input, num_jobs) $(job_begin, job_end, wg) {
                     for (i in range(job_begin, job_end)) {
                         ch |> push_clone(IntVal(v = i * 10))
                     }
@@ -218,7 +218,7 @@ def test_parallel_for_each_basic(t : T?) {
                     wg |> notify_and_release
                 }
                 var results : array<int>
-                ch |> for_each_clone() <| $(val : IntVal#) {
+                ch |> for_each_clone() $(val : IntVal#) {
                     results |> push(val.v)
                 }
                 sort(results)
@@ -233,11 +233,11 @@ def test_parallel_for_each_basic(t : T?) {
 
 [test]
 def test_parallel_for_each_empty(t : T?) {
-    t |> run("empty array does nothing") <| @(t : T?) {
-        with_job_que() <| $() {
+    t |> run("empty array does nothing") @(t : T?) {
+        with_job_que() {
             var input : array<int>
             var called = false
-            parallel_for_each(input, 4) <| $(job_begin, job_end, wg) {
+            parallel_for_each(input, 4) $(job_begin, job_end, wg) {
                 called = true
             }
             t |> equal(false, called)
@@ -249,15 +249,15 @@ def test_parallel_for_each_empty(t : T?) {
 
 [test]
 def test_parallel_map_basic(t : T?) {
-    t |> run("collects indexed results via channel") <| @(t : T?) {
-        with_job_que() <| $() {
+    t |> run("collects indexed results via channel") @(t : T?) {
+        with_job_que() {
             var input : array<int>
             for (i in range(10)) {
                 input |> push(i)
             }
             let num_jobs = 3
-            with_channel(num_jobs) <| $(results_ch) {
-                parallel_map(input, num_jobs, results_ch) <| $(job_begin, job_end, ch, wg) {
+            with_channel(num_jobs) $(results_ch) {
+                parallel_map(input, num_jobs, results_ch) $(job_begin, job_end, ch, wg) {
                     for (i in range(job_begin, job_end)) {
                         ch |> push_clone(IndexedResult(idx = i, val = i * i))
                     }
@@ -266,7 +266,7 @@ def test_parallel_map_basic(t : T?) {
                 }
                 var results : array<int>
                 results |> resize(10)
-                results_ch |> for_each_clone() <| $(r : IndexedResult#) {
+                results_ch |> for_each_clone() $(r : IndexedResult#) {
                     results[r.idx] = r.val
                 }
                 for (i in range(10)) {
@@ -279,12 +279,12 @@ def test_parallel_map_basic(t : T?) {
 
 [test]
 def test_parallel_map_empty(t : T?) {
-    t |> run("empty array does nothing") <| @(t : T?) {
-        with_job_que() <| $() {
+    t |> run("empty array does nothing") @(t : T?) {
+        with_job_que() {
             var input : array<int>
-            with_channel(0) <| $(ch) {
+            with_channel(0) $(ch) {
                 var called = false
-                parallel_map(input, 4, ch) <| $(job_begin, job_end, results_ch, wg) {
+                parallel_map(input, 4, ch) $(job_begin, job_end, results_ch, wg) {
                     called = true
                 }
                 t |> equal(false, called)
@@ -295,15 +295,15 @@ def test_parallel_map_empty(t : T?) {
 
 [test]
 def test_parallel_map_order(t : T?) {
-    t |> run("results reordered by index") <| @(t : T?) {
-        with_job_que() <| $() {
+    t |> run("results reordered by index") @(t : T?) {
+        with_job_que() {
             var input : array<int>
             for (i in range(5)) {
                 input |> push(i)
             }
             let num_jobs = 3
-            with_channel(num_jobs) <| $(results_ch) {
-                parallel_map(input, num_jobs, results_ch) <| $(job_begin, job_end, ch, wg) {
+            with_channel(num_jobs) $(results_ch) {
+                parallel_map(input, num_jobs, results_ch) $(job_begin, job_end, ch, wg) {
                     for (i in range(job_begin, job_end)) {
                         ch |> push_clone(IndexedResult(idx = i, val = (i + 1) * 100))
                     }
@@ -312,7 +312,7 @@ def test_parallel_map_order(t : T?) {
                 }
                 var results : array<int>
                 results |> resize(5)
-                results_ch |> for_each_clone() <| $(r : IndexedResult#) {
+                results_ch |> for_each_clone() $(r : IndexedResult#) {
                     results[r.idx] = r.val
                 }
                 t |> equal(100, results[0])

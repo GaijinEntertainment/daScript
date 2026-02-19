@@ -42,9 +42,9 @@ def test() {
     // Two ways to work around this:
 
     // Way 1: `using` pattern — safe, no `unsafe` needed
-    // using() <| $(var c : Color) { ... } constructs on the stack, passes to block
+    // using() $(var c : Color) { ... } constructs on the stack, passes to block
     print("Color (non-POD, using pattern):\n")
-    using() <| $(var c : Color#) {
+    using() $(var c : Color#) {
         c.r = 1.0
         c.g = 0.5
         c.b = 0.0

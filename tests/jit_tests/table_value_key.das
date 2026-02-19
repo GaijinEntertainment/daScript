@@ -8,7 +8,7 @@ require UnitTest
 
 [test]
 def test_table(t : T?) {
-    t |> run("table") <| @(in_t : T?) {
+    t |> run("table") @(in_t : T?) {
 
         in_t |> success(!jit_enabled() || is_jit_function(@@test_table))
 
@@ -20,11 +20,11 @@ def test_table(t : T?) {
         tab |> erase(EntityId(3))
         in_t |> equal(2, length(tab))
 
-        tab |> get(EntityId(2)) <| $(val) {
+        tab |> get(EntityId(2)) $(val) {
             in_t |> success(val == "world")
         }
 
-        tab |> get(EntityId(1)) <| $(val) {
+        tab |> get(EntityId(1)) $(val) {
             in_t |> equal(val, "hello")
         }
 
@@ -54,7 +54,7 @@ def test_table(t : T?) {
         assert(count == 2)
     }
 
-    t |> run("set") <| @(t : T?) {
+    t |> run("set") @(t : T?) {
         var set : table<EntityId>
         set |> insert(EntityId(1))
         set |> insert(EntityId(2))

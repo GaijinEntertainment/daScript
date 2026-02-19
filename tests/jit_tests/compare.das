@@ -60,9 +60,9 @@ def test_geq(t : T?; a, b : auto(TT)) {
 
 [test]
 def test_arithmetics_op2(t : T?) {
-    t |> run("== != >= <= > <") <| @(t : T?) {
+    t |> run("== != >= <= > <") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             fuzz_eq_neq_op2(t, fake, "test_eq")
             fuzz_eq_neq_op2(t, fake, "test_neq")
             fuzz_compareable_op2(t, fake, "test_less")

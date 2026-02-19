@@ -135,7 +135,7 @@ class SoaStructMacro : AstStructureAnnotation {
         var inscope idx_op <- new Function(at = st.at, atDecl = st.at, name := "[]")
         idx_op.flags |= FunctionFlags.generated
         move_new(idx_op.result) <| new TypeDecl(baseType = Type.autoinfer, at = st.at)
-        var inscope idx_body <- quote() <| $() {
+        var inscope idx_body <- quote() {
             return SOA_INDEX()
         }
         var inscope qres <- move_unquote_block(idx_body)
@@ -267,7 +267,7 @@ class SoaForLoop : AstForLoopMacro {
         for (index, its in count(), expr.sources) {
             if (its._type != null && its._type.isStructure) {
                 var is_soa = false
-                peek(its._type.structType.name) <| $(sn) {
+                peek(its._type.structType.name) $(sn) {
                     if (sn |> ends_with("`SOA")) {
                         is_soa = true
                     }

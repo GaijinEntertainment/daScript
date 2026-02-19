@@ -21,10 +21,10 @@ Example:
 
         [export]
         def main() {
-            take2() <| $() {
+            take2() {
                 print("first\n")
             }
-            lpipe <| $() {
+            lpipe() {
                 print("second\n")
             }
         }

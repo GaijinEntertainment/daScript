@@ -65,7 +65,7 @@ class ExtractMethodMacro : AstFunctionAnnotation {
         var captured <- capture_block(call.arguments[1])
         sort(captured) <| $(a, b) => string(a.variable.name) < string(b.variable.name)
         var call_name = string((call.arguments[0] as ExprConstString).value)
-        let function_declaration = build_string <| $(writer) {
+        let function_declaration = build_string() $(writer) {
             writer |> write("def ")
             writer |> write(call_name)
             if (length(captured) != 0) {
@@ -91,7 +91,7 @@ class ExtractMethodMacro : AstFunctionAnnotation {
             }
         }
 
-        let call_expression = build_string <| $(writer) {
+        let call_expression = build_string() $(writer) {
             writer |> write(call_name)
             writer |> write("(")
             if (length(captured) != 0) {

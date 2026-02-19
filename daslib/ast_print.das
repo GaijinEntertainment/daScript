@@ -1042,7 +1042,7 @@ class PrintVisitor : AstVisitor {
 // string
     def override preVisitExprConstString(expr : smart_ptr<ExprConstString>) : void {
         //! Prints a string constant with proper escaping.
-        peek(expr.value) <| $(str) {
+        peek(expr.value) $(str) {
             write(*writer, "\"{escape(str)}\"");
         }
     }
@@ -1224,7 +1224,7 @@ def allExpr(arg : int) {
     var tab <- { 1 => "one", 2 => "two" };
     erase(tab, 1);
     // ExprFind
-    get(tab, 2) <| $(argX) {
+    get(tab, 2) $(argX) {
         print("{argX}");
     }
     // ExprKeyExists

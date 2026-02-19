@@ -28,7 +28,7 @@ class TemplateMacro : AstFunctionAnnotation {
         if (!resType.flags.ref) {
             resType.flags &= ~TypeDeclFlags.constant
         }
-        var inscope qblk <- qmacro_block <| $() {
+        var inscope qblk <- qmacro_block() {
             panic("stub function called")
             unsafe {
                 var dummy : $t(resType)

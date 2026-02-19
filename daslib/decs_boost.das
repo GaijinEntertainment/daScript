@@ -61,13 +61,13 @@ class DecsTemplate : AstStructureAnnotation {
             blkApply |> emplace_new <| qmacro(decs::set(cmp, $v("{prefix}{fld.name}"), src.$f(fld.name)))
             blkErase |> emplace_new <| qmacro(decs::remove(cmp, $v("{prefix}{fld.name}")))
         }
-        var inscope fnApply <- qmacro_function("apply_decs_template") <| $(var cmp : ComponentMap; var src : $t(st)) : void {
+        var inscope fnApply <- qmacro_function("apply_decs_template") $(var cmp : ComponentMap; var src : $t(st)) : void {
             $b(blkApply)
         }
         if (!(compiling_module() |> add_function(fnApply))) {
             panic("failed to add apply_decs_template, can't add function {fnApply.name}")
         }
-        var inscope  fnErase <- qmacro_function("remove_decs_template`{st.name}") <| $(var cmp : ComponentMap; var src : $t(st)) : void {
+        var inscope  fnErase <- qmacro_function("remove_decs_template`{st.name}") $(var cmp : ComponentMap; var src : $t(st)) : void {
             $b(blkErase)
         }
         if (!(compiling_module() |> add_function(fnErase))) {
@@ -421,13 +421,13 @@ class DecsQueryMacro : AstCallMacro {
             move(qloop.body) <| qlbody
             move(qtop) <| qloop
         }
-        apply_template(qtop) <| $(rules) {
+        apply_template(qtop) $(rules) {
             for (kb in kaboom) {
                 rules |> kaboomVarField(kb._0, kb._1, kb._2)
             }
         }
         if (length(kaboom) > 0) {
-            apply_template(qtop) <| $(rules) {
+            apply_template(qtop) $(rules) {
                 for (kb in kaboom) {
                     rules |> replaceVariable(kb._0) <| make_static_assert_false("decs_template variables can only be accessed by fields", expr.at)
                 }
@@ -436,21 +436,21 @@ class DecsQueryMacro : AstCallMacro {
         var inscope qblock : ExpressionPtr
         unsafe {
             if (qt == DecsQueryType.eid_query) {
-                qblock <- quote() <| $() {
-                    for_eid_archetype(tag_eid, tag_req, tag_erq) <| $(tag_arch, entity_index) {
+                qblock <- quote() {
+                    for_eid_archetype(tag_eid, tag_req, tag_erq) $(tag_arch, entity_index) {
                         tag_loop
                     }
                 }
             } elif (qt == DecsQueryType.find_query) {
-                qblock <- quote() <| $() {
-                    for_each_archetype_find(tag_req, tag_erq) <| $(tag_arch) {
+                qblock <- quote() {
+                    for_each_archetype_find(tag_req, tag_erq) $(tag_arch) {
                         tag_loop
                         return false
                     }
                 }
             } elif (qt == DecsQueryType.query) {
-                qblock <- quote() <| $() {
-                    for_each_archetype(tag_req, tag_erq) <| $(tag_arch) {
+                qblock <- quote() {
+                    for_each_archetype(tag_req, tag_erq) $(tag_arch) {
                         tag_loop
                     }
                 }
@@ -460,7 +460,7 @@ class DecsQueryMacro : AstCallMacro {
             }
         }
         qblock |> force_at(expr.at)
-        apply_template(qblock) <| $(rules) {
+        apply_template(qblock) $(rules) {
             if (qt == DecsQueryType.eid_query) {
                 rules |> replaceVariable("tag_eid") <| clone_expression(expr.arguments[0])
             }

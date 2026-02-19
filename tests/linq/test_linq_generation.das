@@ -9,7 +9,7 @@ require _common
 
 [test]
 def test_defaultempty(t : T?) {
-    t |> run("basic default empty") <| @(t : T?) {
+    t |> run("basic default empty") @(t : T?) {
         var query = default_empty(
             [iterator for(x in 0..5); x]
         )
@@ -18,7 +18,7 @@ def test_defaultempty(t : T?) {
             t |> equal(c, e)
         }
     }
-    t |> run("empty default") <| @(t : T?) {
+    t |> run("empty default") @(t : T?) {
         var q2 = default_empty(
             [iterator for(x in 0..0); x]
         )
@@ -27,7 +27,7 @@ def test_defaultempty(t : T?) {
             t |> equal(c, e)
         }
     }
-    t |> run("complex default") <| @(t : T?) {
+    t |> run("complex default") @(t : T?) {
         var qcomplex = default_empty(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
         )
@@ -48,7 +48,7 @@ def test_defaultempty(t : T?) {
 
 [test]
 def test_empty(t : T?) {
-    t |> run("basic empty") <| @(t : T?) {
+    t |> run("basic empty") @(t : T?) {
         var query = empty(type<int>)
         var found = false
         for (it in query) {
@@ -56,7 +56,7 @@ def test_empty(t : T?) {
         }
         t |> success(!found)
     }
-    t |> run("complex empty") <| @(t : T?) {
+    t |> run("complex empty") @(t : T?) {
         var qcomplex = empty(type<ComplexType>)
         var found_complex = false
         for (it in qcomplex) {
@@ -68,7 +68,7 @@ def test_empty(t : T?) {
 
 [test]
 def test_range(t : T?) {
-    t |> run("basic range_sequence") <| @(t : T?) {
+    t |> run("basic range_sequence") @(t : T?) {
         var query = range_sequence(0, 5)
         var expected = [0, 1, 2, 3, 4, 5]
         for (c, e in query, expected) {
@@ -79,14 +79,14 @@ def test_range(t : T?) {
 
 [test]
 def test_repeat(t : T?) {
-    t |> run("basic repeat") <| @(t : T?) {
+    t |> run("basic repeat") @(t : T?) {
         var query = repeat(42, 5)
         var expected = [42, 42, 42, 42, 42]
         for (c, e in query, expected) {
             t |> equal(c, e)
         }
     }
-    t |> run("complex repeat") <| @(t : T?) {
+    t |> run("complex repeat") @(t : T?) {
         var qcomplex = repeat(ComplexType(a = [1, 2]), 3)
         var expected_complex = [
             (1, 2),

@@ -89,7 +89,7 @@ class private NewJobMacro : AstFunctionAnnotation {
 def gather(ch : Channel?; blk : block<(arg : auto(TT)#) : void>) {
     //! reads input from the channel (in order it was pushed) and invokes the block on each input.
     //! afterwards input is consumed
-    _builtin_channel_gather(ch) <| $(var data : void?) {
+    _builtin_channel_gather(ch) $(var data : void?) {
         invoke(blk, *(unsafe(reinterpret<TT?#> data)))
     }
 }
@@ -97,7 +97,7 @@ def gather(ch : Channel?; blk : block<(arg : auto(TT)#) : void>) {
 def gather_ex(ch : Channel?; blk : block<(arg : auto(TT)#; info : TypeInfo const?; var ctx : Context) : void>) {
     //! reads input from the channel (in order it was pushed) and invokes the block on each input.
     //! afterwards input is consumed
-    _builtin_channel_gather_ex(ch) <| $(var data : void?; info : TypeInfo const?; var ctx : Context) {
+    _builtin_channel_gather_ex(ch) $(var data : void?; info : TypeInfo const?; var ctx : Context) {
         invoke(blk, *(unsafe(reinterpret<TT?#> data)), info, ctx)
     }
 }
@@ -105,7 +105,7 @@ def gather_ex(ch : Channel?; blk : block<(arg : auto(TT)#; info : TypeInfo const
 def gather_and_forward(ch, toCh : Channel?; blk : block<(arg : auto(TT)#) : void>) {
     //! reads input from the channel (in order it was pushed) and invokes the block on each input.
     //! afterwards input is consumed
-    _builtin_channel_gather_and_forward(ch, toCh) <| $(var data : void?) {
+    _builtin_channel_gather_and_forward(ch, toCh) $(var data : void?) {
         invoke(blk, *(unsafe(reinterpret<TT?#> data)))
     }
 }
@@ -113,7 +113,7 @@ def gather_and_forward(ch, toCh : Channel?; blk : block<(arg : auto(TT)#) : void
 def peek(ch : Channel?; blk : block<(arg : auto(TT)#) : void>) {
     //! reads input from the channel (in order it was pushed) and invokes the block on each input.
     //! afterwards input is not consumed
-    _builtin_channel_peek(ch) <| $(var data : void?) {
+    _builtin_channel_peek(ch) $(var data : void?) {
         invoke(blk, *(unsafe(reinterpret<TT?#> data)))
     }
 }
@@ -126,7 +126,7 @@ def for_each(channel : Channel?; blk : block<(res : auto(TT)#) : void>) {
     //! this can happen on multiple threads or jobs at the same time.
     while (true) {
         var void_data : void?
-        _builtin_channel_pop(channel) <| $(vd) {
+        _builtin_channel_pop(channel) $(vd) {
             void_data = vd
         }
         if (void_data == null) {
@@ -146,7 +146,7 @@ def for_each_clone(channel : Channel?; blk : block<(res : auto(TT)#) : void>) {
     while (true) {
         var temp : TT -# -& -const
         var any = false
-        _builtin_channel_pop(channel) <| $(vd) {
+        _builtin_channel_pop(channel) $(vd) {
             if (vd != null) {
                 any = true
                 temp := *(unsafe(reinterpret<TT -# -& -const?#> vd))
@@ -164,7 +164,7 @@ def for_each_clone(channel : Channel?; blk : block<(res : auto(TT)#) : void>) {
 def pop_one(channel : Channel?; blk : block<(res : auto(TT)#) : void>) {
     //! reads one command from channel
     var void_data : void?
-    _builtin_channel_pop(channel) <| $(vd) {
+    _builtin_channel_pop(channel) $(vd) {
         void_data = vd
     }
     if (void_data == null) {
@@ -181,7 +181,7 @@ def pop_and_clone_one(channel : Channel?; blk : block<(res : auto(TT)#) : void>)
     //! reads one command from channel
     var any = false
     var temp : TT -# -& -const
-    _builtin_channel_pop(channel) <| $(vd) {
+    _builtin_channel_pop(channel) $(vd) {
         if (vd != null) {
             any = true
             temp := *(unsafe(reinterpret<TT -# -& -const?#> vd))
@@ -199,7 +199,7 @@ def try_pop(channel : Channel?; blk : block<(res : auto(TT)#) : void>) : bool {
     //! Non-blocking pop from channel. Returns true if an item was available, false if channel was empty.
     //! Does not wait for data — returns immediately.
     var result = false
-    result = _builtin_channel_try_pop(channel) <| $(data) {
+    result = _builtin_channel_try_pop(channel) $(data) {
         invoke(blk, *(unsafe(reinterpret<TT?#> data)))
     }
     return result
@@ -210,7 +210,7 @@ def try_pop_clone(channel : Channel?; blk : block<(res : auto(TT)#) : void>) : b
     //! The popped value is cloned to the current context before invoking the block.
     var temp : TT -# -& -const
     var any = false
-    any = _builtin_channel_try_pop(channel) <| $(data) {
+    any = _builtin_channel_try_pop(channel) $(data) {
         temp := *(unsafe(reinterpret<TT -# -& -const?#> data))
     }
     if (!any) {
@@ -225,7 +225,7 @@ def pop_with_timeout(channel : Channel?; timeout_ms : int; blk : block<(res : au
     //! Pop from channel with timeout in milliseconds.
     //! Returns true if an item was available within the timeout, false if timed out or channel exhausted.
     var result = false
-    result = _builtin_channel_pop_with_timeout(channel, timeout_ms) <| $(data) {
+    result = _builtin_channel_pop_with_timeout(channel, timeout_ms) $(data) {
         invoke(blk, *(unsafe(reinterpret<TT?#> data)))
     }
     return result
@@ -236,7 +236,7 @@ def pop_with_timeout_clone(channel : Channel?; timeout_ms : int; blk : block<(re
     //! The popped value is cloned to the current context before invoking the block.
     var temp : TT -# -& -const
     var any = false
-    any = _builtin_channel_pop_with_timeout(channel, timeout_ms) <| $(data) {
+    any = _builtin_channel_pop_with_timeout(channel, timeout_ms) $(data) {
         temp := *(unsafe(reinterpret<TT -# -& -const?#> data))
     }
     if (!any) {
@@ -294,7 +294,7 @@ def set(box : LockBox?; data : auto?) {
 def get(box : LockBox?; blk : block<(res : auto(TT)#) : void>) {
     //! reads value from the lock box and invokes the block on it
     var res = false
-    _builtin_lockbox_get(box) <| $(void_data) {
+    _builtin_lockbox_get(box) $(void_data) {
         if (void_data != null) {
             let typed_data = unsafe(reinterpret<TT?#> void_data)
             invoke(blk, *typed_data)
@@ -306,7 +306,7 @@ def get(box : LockBox?; blk : block<(res : auto(TT)#) : void>) {
 
 def update(box : LockBox?; blk : block<(var res : auto(TT)#) : void>) {
     //! update value in the lock box and invokes the block on it
-    _builtin_lockbox_update(box, unsafe(reinterpret<TypeInfo?>(typeinfo rtti_typeinfo(type<TT? -#>)))) <| $(var void_data : void?) {
+    _builtin_lockbox_update(box, unsafe(reinterpret<TypeInfo?>(typeinfo rtti_typeinfo(type<TT? -#>)))) $(var void_data : void?) {
         if (void_data != null) {
             var typed_data = unsafe(reinterpret<TT?#> void_data)
             invoke(blk, *typed_data)
@@ -322,7 +322,7 @@ def update(box : LockBox?; blk : block<(var res : auto(TT)#) : void>) {
 [template(type_)]
 def clear(box : LockBox?; type_ : auto(TT)) {
     //! clear value from the lock box
-    _builtin_lockbox_update(box, unsafe(reinterpret<TypeInfo?>(typeinfo rtti_typeinfo(type<TT? -#>)))) <| $(var void_data : void?) : void? {
+    _builtin_lockbox_update(box, unsafe(reinterpret<TypeInfo?>(typeinfo rtti_typeinfo(type<TT? -#>)))) $(var void_data : void?) : void? {
         if (void_data != null) {
             var typed_data = unsafe(reinterpret<TT -const?> void_data)
             unsafe {
@@ -343,7 +343,7 @@ def each(var channel : Channel?; tinfo : auto(TT)) {
         return <- generator<TT&#>() <| $() {
             while (true) {
                 var void_data : void?
-                _builtin_channel_pop(channel) <| $(vd) {
+                _builtin_channel_pop(channel) $(vd) {
                     void_data = vd
                 }
                 if (void_data == null) {
@@ -370,7 +370,7 @@ def each_clone(var channel : Channel?; tinfo : auto(TT)) {
             while (true) {
                 var temp : TT -# -& -const
                 var any = false
-                _builtin_channel_pop(channel) <| $(vd) {
+                _builtin_channel_pop(channel) $(vd) {
                     if (vd != null) {
                         any = true
                         temp := *(unsafe(reinterpret<TT -# -& -const?#> vd))
@@ -393,7 +393,7 @@ def with_wait_group(count : int; blk : block<(var status : JobStatus?) : void>) 
     //! Creates a wait group with the given notification count and auto-joins after the block.
     //! Each unit of work should call ``notify_and_release`` (or ``done``) when complete.
     //! The block returns only after all notifications have been received.
-    with_job_status(count) <| $(status) {
+    with_job_status(count) $(status) {
         invoke(blk, status)
         status |> join
     }
@@ -403,7 +403,7 @@ def with_wait_group(blk : block<(var status : JobStatus?) : void>) {
     //! Creates a wait group starting at count 0 with auto-join.
     //! Use ``append`` to dynamically add expected notifications before dispatching work.
     //! The block returns only after all notifications have been received.
-    with_job_status(0) <| $(status) {
+    with_job_status(0) $(status) {
         invoke(blk, status)
         status |> join
     }
@@ -429,7 +429,7 @@ def _parallel_for(range_begin, range_end : int; num_jobs : int; blk : block<(job
     let actual_jobs = num_jobs < total ? num_jobs : total
     let chunk = total / actual_jobs
     let remainder = total % actual_jobs
-    with_wait_group(actual_jobs) <| $(wg) {
+    with_wait_group(actual_jobs) $(wg) {
         var offset = range_begin
         for (i in range(actual_jobs)) {
             let this_chunk = chunk + (i < remainder ? 1 : 0)
@@ -497,7 +497,7 @@ def _parallel_map(arr : array<auto(TT)>; num_jobs : int; var results_channel : C
     //! on the calling thread with ``(chunk_begin_idx, chunk_end_idx, results_channel, wg)``.
     //! Blocks until all jobs finish. Results are available in ``results_channel`` after this call returns.
     //! Requires ``with_job_que`` context.
-    _parallel_for(0, length(arr), num_jobs) <| $(job_begin, job_end, wg) {
+    _parallel_for(0, length(arr), num_jobs) $(job_begin, job_end, wg) {
         invoke(blk, job_begin, job_end, results_channel, wg)
     }
 }

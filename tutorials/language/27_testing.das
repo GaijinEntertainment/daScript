@@ -60,14 +60,14 @@ def test_assertions(t : T?) {
 
 [test]
 def test_string_operations(t : T?) {
-    t |> run("concatenation") <| @@(t : T?) {
+    t |> run("concatenation") @@(t : T?) {
         t |> equal("ab" + "cd", "abcd")
     }
-    t |> run("length") <| @@(t : T?) {
+    t |> run("length") @@(t : T?) {
         t |> equal(length("hello"), 5)
         t |> equal(length(""), 0)
     }
-    t |> run("slice") <| @@(t : T?) {
+    t |> run("slice") @@(t : T?) {
         t |> equal(slice("hello", 1, 3), "el")
     }
 }
@@ -111,11 +111,11 @@ def is_palindrome(s : string) : bool {
 
 [test]
 def test_factorial(t : T?) {
-    t |> run("base cases") <| @@(t : T?) {
+    t |> run("base cases") @@(t : T?) {
         t |> equal(factorial(0), 1)
         t |> equal(factorial(1), 1)
     }
-    t |> run("typical values") <| @@(t : T?) {
+    t |> run("typical values") @@(t : T?) {
         t |> equal(factorial(5), 120)
         t |> equal(factorial(10), 3628800)
     }
@@ -146,7 +146,7 @@ def test_palindrome(t : T?) {
 //   t |> accept(value)       — suppress unused warnings
 //
 // Sub-tests:
-//   t |> run("name") <| @@(t : T?) { ... }
+//   t |> run("name") @@(t : T?) { ... }
 //
 // Running:
 //   daslang.exe dastest/dastest.das -- --test path/to/test.das

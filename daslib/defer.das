@@ -41,7 +41,7 @@ class DeferMacro : AstFunctionAnnotation {
     //! into {}, and move block to the finally section of the current block
     def override transform(var call : smart_ptr<ExprCallFunc>; var errors : das_string) : ExpressionPtr {
         var success = true
-        compiling_program() |> get_ast_context(call) <| $(valid, astc) {
+        compiling_program() |> get_ast_context(call) $(valid, astc) {
             if (!valid) {
                 compiling_program() |> macro_error(call.at, "can't get valid program context")
                 success = false
@@ -73,7 +73,7 @@ class DeferDeleteMacro : AstCallMacro {
         macro_verify(call.arguments |> length == 1, prog, call.at, "expecting defer_delete(expr)")
         to_compiler_log("{describe(call.at)}: *warning* defer_delete is deprecated. use var inscope instead\n")
         var success = true
-        prog |> get_ast_context(call) <| $(valid, astc) {
+        prog |> get_ast_context(call) $(valid, astc) {
             if (!valid) {
                 compiling_program() |> macro_error(call.at, "can't get valid program context")
                 success = false

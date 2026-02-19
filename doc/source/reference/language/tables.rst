@@ -59,7 +59,7 @@ There are several relevant builtin functions: ``clear``, ``key_exists``, ``get``
 .. code-block:: das
 
     let tab <- { "one"=>1, "two"=>2 }
-    let found = get(tab,"one") <| $(val) {
+    let found = get(tab,"one") $(val) {
         assert(val==1)
     }
     assert(found)
@@ -69,7 +69,7 @@ A non-constant version is available as well:
 .. code-block:: das
 
     var tab <- { "one"=>1, "two"=>2 }
-    let found = get(tab,"one") <| $(var val) {
+    let found = get(tab,"one") $(var val) {
         val = 123
     }
     let t = tab |> get_value("one")

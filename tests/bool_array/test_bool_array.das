@@ -15,7 +15,7 @@ def verify_match(t : T?; a : BoolArray; b : array<bool>; context_msg : string) {
 
 [test]
 def test_basic(t : T?) {
-    t |> run("clear_and_length") <| @@(t : T?) {
+    t |> run("clear_and_length") @@(t : T?) {
         var a : BoolArray
         t |> equal(a.length(), 0)
         a.push(true)
@@ -24,7 +24,7 @@ def test_basic(t : T?) {
         a.clear()
         t |> equal(a.length(), 0)
     }
-    t |> run("push_and_index") <| @@(t : T?) {
+    t |> run("push_and_index") @@(t : T?) {
         var a : BoolArray
         for (i in range(100)) {
             a.push(i % 3 == 0)
@@ -34,7 +34,7 @@ def test_basic(t : T?) {
             t |> equal(a[i], i % 3 == 0)
         }
     }
-    t |> run("set_index") <| @@(t : T?) {
+    t |> run("set_index") @@(t : T?) {
         var a : BoolArray
         a.resize(64)
         for (i in range(64)) {
@@ -53,7 +53,7 @@ def test_basic(t : T?) {
             t |> equal(a[i], !(i % 3 == 0))
         }
     }
-    t |> run("xor_assign") <| @@(t : T?) {
+    t |> run("xor_assign") @@(t : T?) {
         var a : BoolArray
         a.resize(10)
         for (i in range(10)) {
@@ -68,7 +68,7 @@ def test_basic(t : T?) {
         t |> equal(a[1], true)
         t |> equal(a[6], false)
     }
-    t |> run("and_assign") <| @@(t : T?) {
+    t |> run("and_assign") @@(t : T?) {
         var a : BoolArray
         a.resize(4)
         a[0] = true;  a[1] = true;  a[2] = false; a[3] = false
@@ -81,7 +81,7 @@ def test_basic(t : T?) {
         t |> equal(a[2], false)
         t |> equal(a[3], false)
     }
-    t |> run("or_assign") <| @@(t : T?) {
+    t |> run("or_assign") @@(t : T?) {
         var a : BoolArray
         a.resize(4)
         a[0] = true;  a[1] = true;  a[2] = false; a[3] = false
@@ -94,7 +94,7 @@ def test_basic(t : T?) {
         t |> equal(a[2], true)
         t |> equal(a[3], false)
     }
-    t |> run("pop") <| @@(t : T?) {
+    t |> run("pop") @@(t : T?) {
         var a : BoolArray
         a.push(true)
         a.push(false)
@@ -106,7 +106,7 @@ def test_basic(t : T?) {
         t |> equal(a.pop(), true)
         t |> equal(a.length(), 0)
     }
-    t |> run("to_string") <| @@(t : T?) {
+    t |> run("to_string") @@(t : T?) {
         var a : BoolArray
         t |> equal(a.to_string(), "[]")
         a.push(true)
@@ -118,7 +118,7 @@ def test_basic(t : T?) {
 
 [test]
 def test_resize(t : T?) {
-    t |> run("resize_grow_zeros") <| @@(t : T?) {
+    t |> run("resize_grow_zeros") @@(t : T?) {
         var a : BoolArray
         for (size in range(0, 130)) {
             a.clear()
@@ -132,7 +132,7 @@ def test_resize(t : T?) {
             }
         }
     }
-    t |> run("resize_preserves_data") <| @@(t : T?) {
+    t |> run("resize_preserves_data") @@(t : T?) {
         var a : BoolArray
         for (initial_size in range(1, 66)) {
             a.clear()
@@ -157,7 +157,7 @@ def test_resize(t : T?) {
             }
         }
     }
-    t |> run("resize_shrink_and_grow") <| @@(t : T?) {
+    t |> run("resize_shrink_and_grow") @@(t : T?) {
         var a : BoolArray
         for (size in range(1, 130)) {
             a.clear()
@@ -183,7 +183,7 @@ def test_resize(t : T?) {
             }
         }
     }
-    t |> run("resize_boundary_31_32_33") <| @@(t : T?) {
+    t |> run("resize_boundary_31_32_33") @@(t : T?) {
         var a : BoolArray
         var boundaries : array<int>
         boundaries |> push(31); boundaries |> push(32); boundaries |> push(33)
@@ -209,7 +209,7 @@ def test_resize(t : T?) {
 
 [test]
 def test_erase(t : T?) {
-    t |> run("erase_vs_reference") <| @@(t : T?) {
+    t |> run("erase_vs_reference") @@(t : T?) {
         var a : BoolArray
         var b : array<bool>
         for (len in range(1, 100)) {
@@ -226,7 +226,7 @@ def test_erase(t : T?) {
             }
         }
     }
-    t |> run("erase_all_true") <| @@(t : T?) {
+    t |> run("erase_all_true") @@(t : T?) {
         var a : BoolArray
         var b : array<bool>
         var lens : array<int>
@@ -247,7 +247,7 @@ def test_erase(t : T?) {
             }
         }
     }
-    t |> run("erase_all_false") <| @@(t : T?) {
+    t |> run("erase_all_false") @@(t : T?) {
         var a : BoolArray
         var b : array<bool>
         var lens : array<int>
@@ -268,7 +268,7 @@ def test_erase(t : T?) {
             }
         }
     }
-    t |> run("erase_single_true_bit") <| @@(t : T?) {
+    t |> run("erase_single_true_bit") @@(t : T?) {
         var a : BoolArray
         var b : array<bool>
         var lens : array<int>
@@ -291,7 +291,7 @@ def test_erase(t : T?) {
             }
         }
     }
-    t |> run("erase_repeated_to_empty") <| @@(t : T?) {
+    t |> run("erase_repeated_to_empty") @@(t : T?) {
         var a : BoolArray
         var b : array<bool>
         let len = 67
@@ -306,7 +306,7 @@ def test_erase(t : T?) {
         }
         t |> equal(a.length(), 0)
     }
-    t |> run("erase_from_back_repeatedly") <| @@(t : T?) {
+    t |> run("erase_from_back_repeatedly") @@(t : T?) {
         var a : BoolArray
         var b : array<bool>
         let len = 67
@@ -322,7 +322,7 @@ def test_erase(t : T?) {
         }
         t |> equal(a.length(), 0)
     }
-    t |> run("erase_at_dword_boundary") <| @@(t : T?) {
+    t |> run("erase_at_dword_boundary") @@(t : T?) {
         var a : BoolArray
         var b : array<bool>
         let len = 96
@@ -347,7 +347,7 @@ def test_erase(t : T?) {
 
 [test]
 def test_insert(t : T?) {
-    t |> run("insert_vs_reference") <| @@(t : T?) {
+    t |> run("insert_vs_reference") @@(t : T?) {
         var a : BoolArray
         var b : array<bool>
         for (len in range(1, 100)) {
@@ -375,7 +375,7 @@ def test_insert(t : T?) {
             }
         }
     }
-    t |> run("insert_all_true") <| @@(t : T?) {
+    t |> run("insert_all_true") @@(t : T?) {
         var a : BoolArray
         var b : array<bool>
         var lens : array<int>
@@ -396,7 +396,7 @@ def test_insert(t : T?) {
             }
         }
     }
-    t |> run("insert_at_zero_repeatedly") <| @@(t : T?) {
+    t |> run("insert_at_zero_repeatedly") @@(t : T?) {
         var a : BoolArray
         var b : array<bool>
         a.push(false)
@@ -408,7 +408,7 @@ def test_insert(t : T?) {
             verify_match(t, a, b, "insert_at_zero step={i}")
         }
     }
-    t |> run("insert_at_dword_boundary") <| @@(t : T?) {
+    t |> run("insert_at_dword_boundary") @@(t : T?) {
         var a : BoolArray
         var b : array<bool>
         let len = 96
@@ -440,7 +440,7 @@ def test_insert(t : T?) {
             verify_match(t, a, b, "insert_boundary at={insert_at} val=false")
         }
     }
-    t |> run("insert_carry_propagation") <| @@(t : T?) {
+    t |> run("insert_carry_propagation") @@(t : T?) {
         var a : BoolArray
         var b : array<bool>
         let len = 96
@@ -452,7 +452,7 @@ def test_insert(t : T?) {
         b |> push(false, 0)
         verify_match(t, a, b, "insert_carry_all_true")
     }
-    t |> run("insert_then_erase_roundtrip") <| @@(t : T?) {
+    t |> run("insert_then_erase_roundtrip") @@(t : T?) {
         var a : BoolArray
         var b : array<bool>
         var lens : array<int>
@@ -473,7 +473,7 @@ def test_insert(t : T?) {
             }
         }
     }
-    t |> run("erase_then_insert_roundtrip") <| @@(t : T?) {
+    t |> run("erase_then_insert_roundtrip") @@(t : T?) {
         var a : BoolArray
         var b : array<bool>
         var lens : array<int>
@@ -499,7 +499,7 @@ def test_insert(t : T?) {
 
 [test]
 def test_push(t : T?) {
-    t |> run("push_at_position") <| @@(t : T?) {
+    t |> run("push_at_position") @@(t : T?) {
         var a : BoolArray
         var b : array<bool>
         for (len in range(1, 70)) {
@@ -527,7 +527,7 @@ def test_push(t : T?) {
             }
         }
     }
-    t |> run("push_at_end") <| @@(t : T?) {
+    t |> run("push_at_end") @@(t : T?) {
         var a : BoolArray
         var b : array<bool>
         for (i in range(67)) {
@@ -537,7 +537,7 @@ def test_push(t : T?) {
             verify_match(t, a, b, "push_at_end step={i}")
         }
     }
-    t |> run("push_pop_cycle") <| @@(t : T?) {
+    t |> run("push_pop_cycle") @@(t : T?) {
         var a : BoolArray
         for (cycle in range(3)) {
             for (i in range(100)) {
@@ -555,7 +555,7 @@ def test_push(t : T?) {
 
 [test]
 def test_iterator(t : T?) {
-    t |> run("iterator_empty") <| @@(t : T?) {
+    t |> run("iterator_empty") @@(t : T?) {
         var a : BoolArray
         var count = 0
         for (b in a) {
@@ -563,7 +563,7 @@ def test_iterator(t : T?) {
         }
         t |> equal(count, 0)
     }
-    t |> run("iterator_various_sizes") <| @@(t : T?) {
+    t |> run("iterator_various_sizes") @@(t : T?) {
         var a : BoolArray
         var sizes : array<int>
         sizes |> push(1); sizes |> push(2); sizes |> push(31); sizes |> push(32)
@@ -583,7 +583,7 @@ def test_iterator(t : T?) {
             t |> equal(idx, size)
         }
     }
-    t |> run("iterator_all_true") <| @@(t : T?) {
+    t |> run("iterator_all_true") @@(t : T?) {
         var a : BoolArray
         for (i in range(65)) {
             a.push(true)
@@ -595,7 +595,7 @@ def test_iterator(t : T?) {
         }
         t |> equal(count, 65)
     }
-    t |> run("iterator_all_false") <| @@(t : T?) {
+    t |> run("iterator_all_false") @@(t : T?) {
         var a : BoolArray
         for (i in range(65)) {
             a.push(false)
@@ -611,7 +611,7 @@ def test_iterator(t : T?) {
 
 [test]
 def test_stress(t : T?) {
-    t |> run("build_with_insert_only") <| @@(t : T?) {
+    t |> run("build_with_insert_only") @@(t : T?) {
         var a : BoolArray
         var b : array<bool>
         a.push(false)
@@ -623,7 +623,7 @@ def test_stress(t : T?) {
         }
         verify_match(t, a, b, "build_with_insert_only")
     }
-    t |> run("alternating_insert_erase") <| @@(t : T?) {
+    t |> run("alternating_insert_erase") @@(t : T?) {
         var a : BoolArray
         var b : array<bool>
         for (i in range(50)) {
@@ -647,7 +647,7 @@ def test_stress(t : T?) {
             verify_match(t, a, b, "alt_insert_erase step={step}")
         }
     }
-    t |> run("random_pattern") <| @@(t : T?) {
+    t |> run("random_pattern") @@(t : T?) {
         var a : BoolArray
         var b : array<bool>
         var seed = 12345u

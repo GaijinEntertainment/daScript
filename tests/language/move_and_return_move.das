@@ -7,7 +7,7 @@ def iliketomoveitmoveit(var a) {
 
 [test]
 def test_moves(t : T?) {
-    t |> run("basic move it") <| @@(t : T?) {
+    t |> run("basic move it") @@(t : T?) {
         var a <- [for (x in range(10)); x]
         a <- a
         if (t |> equal(length(a), 10)) {
@@ -16,7 +16,7 @@ def test_moves(t : T?) {
             }
         }
     }
-    t |> run("function move it") <| @@(t : T?) {
+    t |> run("function move it") @@(t : T?) {
         var a <- [for (x in range(10)); x]
         a <- iliketomoveitmoveit(a)
         if (t |> equal(length(a), 10)) {
@@ -33,7 +33,7 @@ def consume(var a) {
 
 [test]
 def test_failed_moves(t : T?) {
-    t |> run("basic move it") <| @@(t : T?) {
+    t |> run("basic move it") @@(t : T?) {
         var a : array<array<int>>
         var b : array<array<int>>
         resize(a, 10)
@@ -48,7 +48,7 @@ def test_failed_moves(t : T?) {
         }
         t |> success(failed)
     }
-    t |> run("function move it") <| @@(t : T?) {
+    t |> run("function move it") @@(t : T?) {
         var a : array<array<int>>
         var b : array<array<int>>
         resize(a, 10)
@@ -64,7 +64,7 @@ def test_failed_moves(t : T?) {
         t |> success(failed)
     }
 
-    t |> run("consume it") <| @@(t : T?) {
+    t |> run("consume it") @@(t : T?) {
         var a : array<array<int>>
         resize(a, 10)
         a[0] |> push(1)

@@ -18,7 +18,7 @@ def test_ascend_ctor(t : T?) {
 
 [test]
 def test_a_ctor(t : T?) {
-    t |> run("ascend constructor") <| @(t : T?) {
+    t |> run("ascend constructor") @(t : T?) {
         test_ascend_ctor(t)
     }
 }

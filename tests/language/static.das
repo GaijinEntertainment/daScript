@@ -19,7 +19,7 @@ class StaticCounter {
 
 [test]
 def test_static_members(t : T?) {
-    t |> run("variables") <| @(t : T?) {
+    t |> run("variables") @(t : T?) {
         var c1 = new StaticCounter()
         t |> equal(1, c1->get())
         StaticCounter`count = 13
@@ -32,7 +32,7 @@ def test_static_members(t : T?) {
         t |> equal(16, c1->get())
         t |> equal(4, length(StaticCounter`mount))
     }
-    t |> run("functions") <| @(t : T?) {
+    t |> run("functions") @(t : T?) {
         StaticCounter`count = 13
         t |> equal(13, StaticCounter`next_func())
         t |> equal(14, StaticCounter`next_func())

@@ -87,7 +87,7 @@ def main {
     // More efficient than concatenating strings in a loop.
 
     print("build_string:\n")
-    var csv = build_string() <| $(var writer : StringBuilderWriter) {
+    var csv = build_string() $(var writer : StringBuilderWriter) {
         writer |> write("name,score\n")
         writer |> write("Alice,")
         writer |> write(95)
@@ -99,7 +99,7 @@ def main {
     print(csv)
 
     // build_string with loop — efficient string construction
-    var list = build_string() <| $(var writer : StringBuilderWriter) {
+    var list = build_string() $(var writer : StringBuilderWriter) {
         for (i in range(5)) {
             if (i > 0) {
                 writer |> write(", ")
@@ -110,7 +110,7 @@ def main {
     print("  squares: {list}\n")
 
     // === write_char and write_chars ===
-    var decorated = build_string() <| $(var writer : StringBuilderWriter) {
+    var decorated = build_string() $(var writer : StringBuilderWriter) {
         writer |> write_chars(' ', 2)
         writer |> write("hello")
         writer |> write_char('!')
@@ -118,14 +118,14 @@ def main {
     print("  decorated: [{decorated}]\n")
 
     // === write_escape_string ===
-    var escaped = build_string() <| $(var writer : StringBuilderWriter) {
+    var escaped = build_string() $(var writer : StringBuilderWriter) {
         writer |> write_escape_string("line1\nline2\ttab")
     }
     print("  escaped: {escaped}\n")
 
     // === Practical example: table formatting ===
     print("table:\n")
-    var tbl = build_string() <| $(var writer : StringBuilderWriter) {
+    var tbl = build_string() $(var writer : StringBuilderWriter) {
         writer |> write("  ")
         writer |> write("Name")
         writer |> write("  ")
@@ -145,7 +145,7 @@ def main {
     // - Flags: 0 (zero-pad), + (force sign)
     // - Types: d/i, u, x/X, o, f, e/E, g/G
     // - \{ and \} for literal braces
-    // - build_string() <| $(var writer : StringBuilderWriter) { ... }
+    // - build_string() $(var writer : StringBuilderWriter) { ... }
     // - write, write_char, write_chars, write_escape_string
 
     print("done\n")

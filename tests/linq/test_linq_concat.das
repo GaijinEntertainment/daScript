@@ -10,7 +10,7 @@ require _common
 
 [test]
 def test_append(t : T?) {
-    t |> run("basic append") <| @(t : T?) {
+    t |> run("basic append") @(t : T?) {
         var query = append(
             [iterator for(x in 0..5); x],
             5
@@ -19,7 +19,7 @@ def test_append(t : T?) {
             t |> equal(c, i)
         }
     }
-    t |> run("complex type append") <| @(t : T?) {
+    t |> run("complex type append") @(t : T?) {
         var qcomplex = append(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             ComplexType(a = [5, 50])
@@ -28,14 +28,14 @@ def test_append(t : T?) {
             t |> success(c.a.Equal([i, i * 10]))
         }
     }
-    t |> run("append to array") <| @(t : T?) {
+    t |> run("append to array") @(t : T?) {
         var qarray = append_to_array(
             [iterator for(x in 0..5); x],
             5
         )
         t |> success(qarray.Equal([0, 1, 2, 3, 4, 5]))
     }
-    t |> run("append inplace") <| @(t : T?) {
+    t |> run("append inplace") @(t : T?) {
         var a = [for (x in 0..5); x]
         append_inplace(a, 5)
         t |> success(a.Equal([0, 1, 2, 3, 4, 5]))
@@ -44,7 +44,7 @@ def test_append(t : T?) {
 
 [test]
 def test_prepend(t : T?) {
-    t |> run("basic prepend") <| @(t : T?) {
+    t |> run("basic prepend") @(t : T?) {
         var query = prepend(
             [iterator for(x in 0..5); x],
             -1
@@ -53,7 +53,7 @@ def test_prepend(t : T?) {
             t |> equal(c, i)
         }
     }
-    t |> run("complex type prepend") <| @(t : T?) {
+    t |> run("complex type prepend") @(t : T?) {
         var qcomplex = prepend(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             ComplexType(a = [-1, -10])
@@ -62,14 +62,14 @@ def test_prepend(t : T?) {
             t |> success(c.a.Equal([i, i * 10]))
         }
     }
-    t |> run("prepend to array") <| @(t : T?) {
+    t |> run("prepend to array") @(t : T?) {
         var qarray = prepend_to_array(
             [iterator for(x in 0..5); x],
             -1
         )
         t |> success(qarray.Equal([-1, 0, 1, 2, 3, 4]))
     }
-    t |> run("prepend inplace") <| @(t : T?) {
+    t |> run("prepend inplace") @(t : T?) {
         var a = [for (x in 0..5); x]
         prepend_inplace(a, -1)
         t |> success(a.Equal([-1, 0, 1, 2, 3, 4]))
@@ -78,7 +78,7 @@ def test_prepend(t : T?) {
 
 [test]
 def test_concat(t : T?) {
-    t |> run("basic concat") <| @(t : T?) {
+    t |> run("basic concat") @(t : T?) {
         var query = concat(
             [iterator for(x in 0..5); x],
             [iterator for(x in 5..10); x]
@@ -87,7 +87,7 @@ def test_concat(t : T?) {
             t |> equal(c, i)
         }
     }
-    t |> run("complex type concat") <| @(t : T?) {
+    t |> run("complex type concat") @(t : T?) {
         var qcomplex = concat(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             [iterator for(x in 5..10); ComplexType(a = [x, x * 10])]
@@ -96,14 +96,14 @@ def test_concat(t : T?) {
             assert(c.a.Equal([i, i * 10]))
         }
     }
-    t |> run("concat to array") <| @(t : T?) {
+    t |> run("concat to array") @(t : T?) {
         var qarray = concat_to_array(
             [iterator for(x in 0..5); x],
             [iterator for(x in 5..10); x]
         )
         t |> success(qarray.Equal([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]))
     }
-    t |> run("concat inplace") <| @(t : T?) {
+    t |> run("concat inplace") @(t : T?) {
         var a = [for (x in 0..5); x]
         concat_inplace(a, [for (x in 5..10); x])
         t |> success(a.Equal([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]))

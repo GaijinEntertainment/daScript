@@ -11,7 +11,7 @@ struct Foo {
 
 [test]
 def test_resize_array(t : T?) {
-    t |> run("emplace") <| @(t : T?) {
+    t |> run("emplace") @(t : T?) {
         if (true) {
             var inscope a : array<ExpressionPtr>
             var inscope b <- new ExprOp2(op := "==")
@@ -20,7 +20,7 @@ def test_resize_array(t : T?) {
             t |> equal(null, b)
         }
     }
-    t |> run("array init") <| @(t : T?) {
+    t |> run("array init") @(t : T?) {
         if (true) {
             var inscope b <- new ExprOp2(op := "==")
             var inscope a <- array<ExpressionPtr>(b)
@@ -41,7 +41,7 @@ def test_resize_array(t : T?) {
             t |> equal(1, length(a))
             t |> equal(null, b)
         */
-    t |> run("struct init") <| @(t : T?) {
+    t |> run("struct init") @(t : T?) {
         if (true) {
             var inscope b <- new ExprOp2(op := "==")
             var inscope a <- Foo(a <- b)

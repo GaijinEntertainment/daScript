@@ -122,12 +122,12 @@ def jit_set_oror_false_false {
 
 [test]
 def test_bool_arithmetics(t : T?) {
-    t |> run("!") <| @(t : T?) {
+    t |> run("!") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@jit_not))
         t |> equal(true, jit_not(false))
         t |> equal(false, jit_not(true))
     }
-    t |> run("^^ ^^=") <| @(t : T?) {
+    t |> run("^^ ^^=") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@jit_xorxor))
         t |> equal(false, jit_xorxor(false, false))
         t |> equal(true,  jit_xorxor(true, false))
@@ -139,7 +139,7 @@ def test_bool_arithmetics(t : T?) {
         t |> equal(true,  jit_set_xorxor(false, true))
         t |> equal(false, jit_set_xorxor(true, true))
     }
-    t |> run("&&") <| @(t : T?) {
+    t |> run("&&") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@jit_andand_true_true))
         monad_test = 0
         var tt = jit_andand_true_true()
@@ -161,7 +161,7 @@ def test_bool_arithmetics(t : T?) {
         t |> success(ff == false)
         t |> success(monad_test == 0)
     }
-    t |> run("&&=") <| @(t : T?) {
+    t |> run("&&=") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@jit_set_andand_true_true))
         monad_test = 0
         var tt = jit_set_andand_true_true()
@@ -183,7 +183,7 @@ def test_bool_arithmetics(t : T?) {
         t |> success(ff == false)
         t |> success(monad_test == 0)
     }
-    t |> run("||") <| @(t : T?) {
+    t |> run("||") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@jit_oror_true_true))
         monad_test = 0
         var tt = jit_oror_true_true()
@@ -205,7 +205,7 @@ def test_bool_arithmetics(t : T?) {
         t |> success(ff == false)
         t |> success(monad_test == 4)
     }
-    t |> run("||=") <| @(t : T?) {
+    t |> run("||=") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@jit_set_oror_true_true))
         monad_test = 0
         var tt = jit_set_oror_true_true()

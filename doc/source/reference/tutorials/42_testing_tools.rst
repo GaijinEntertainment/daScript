@@ -120,7 +120,7 @@ Use it to test that your code handles arbitrary input gracefully:
     }
 
     var fake <- Faker()
-    fuzz(100) <| $() {
+    fuzz(100) {
         let a = fake |> random_int
         let b = fake |> random_int
         safe_divide(a, b)
@@ -139,7 +139,7 @@ and stack trace:
 .. code-block:: das
 
     var fake <- Faker()
-    fuzz_debug(50) <| $() {
+    fuzz_debug(50) {
         let a = fake |> random_int
         let b = fake |> random_int
         safe_divide(a, b)
@@ -166,7 +166,7 @@ and verify that invariants always hold:
 
     var fake <- Faker()
     var violations = 0
-    fuzz(1000) <| $() {
+    fuzz(1000) {
         let x = fake |> random_int
         let result = clamp_value(x, -100, 100)
         if (result < -100 || result > 100) {
@@ -185,7 +185,7 @@ Faker's ``any_string`` is useful for testing string-processing functions:
 
     var fake <- Faker()
     var failures = 0
-    fuzz(100) <| $() {
+    fuzz(100) {
         let s = fake |> any_string()
         let reversed = reverse_string(s)
         let double_rev = reverse_string(reversed)

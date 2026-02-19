@@ -25,9 +25,9 @@ struct PairVal {
 
 [test]
 def test_channel_basics(t : T?) {
-    t |> run("with_channel creates and destroys") <| @(t : T?) {
+    t |> run("with_channel creates and destroys") @(t : T?) {
         var entered = false
-        with_channel() <| $(ch) {
+        with_channel() $(ch) {
             entered = true
             t |> equal(true, ch.isEmpty)
             t |> equal(true, ch.isReady)
@@ -35,8 +35,8 @@ def test_channel_basics(t : T?) {
         }
         t |> equal(true, entered)
     }
-    t |> run("with_channel with count") <| @(t : T?) {
-        with_channel(3) <| $(ch) {
+    t |> run("with_channel with count") @(t : T?) {
+        with_channel(3) $(ch) {
             t |> equal(true, ch.isEmpty)
             t |> equal(false, ch.isReady)
             t |> equal(3, ch.size)
@@ -51,20 +51,20 @@ def test_channel_basics(t : T?) {
 
 [test]
 def test_channel_push_pop(t : T?) {
-    t |> run("push_clone and pop_and_clone_one") <| @(t : T?) {
-        with_channel() <| $(ch) {
+    t |> run("push_clone and pop_and_clone_one") @(t : T?) {
+        with_channel() $(ch) {
             ch |> push_clone(IntVal(v = 42))
             ch |> push_clone(IntVal(v = 99))
             t |> equal(false, ch.isEmpty)
             t |> equal(2, ch.total)
             var got_first = false
-            ch |> pop_and_clone_one() <| $(val : IntVal#) {
+            ch |> pop_and_clone_one() $(val : IntVal#) {
                 t |> equal(42, val.v)
                 got_first = true
             }
             t |> equal(true, got_first)
             var got_second = false
-            ch |> pop_and_clone_one() <| $(val : IntVal#) {
+            ch |> pop_and_clone_one() $(val : IntVal#) {
                 t |> equal(99, val.v)
                 got_second = true
             }
@@ -73,18 +73,18 @@ def test_channel_push_pop(t : T?) {
             t |> equal(true, ch.isEmpty)
             // pop from empty should return false
             var got_empty = false
-            ch |> pop_and_clone_one() <| $(val : IntVal#) {
+            ch |> pop_and_clone_one() $(val : IntVal#) {
                 got_empty = true
             }
             t |> equal(false, got_empty)
         }
     }
-    t |> run("push_clone with pair data") <| @(t : T?) {
-        with_channel() <| $(ch) {
+    t |> run("push_clone with pair data") @(t : T?) {
+        with_channel() $(ch) {
             ch |> push_clone(PairVal(x = 10, y = 20))
             ch |> push_clone(PairVal(x = 30, y = 40))
             var results : array<PairVal>
-            ch |> for_each_clone() <| $(val : PairVal#) {
+            ch |> for_each_clone() $(val : PairVal#) {
                 results |> push(PairVal(x = val.x, y = val.y))
             }
             t |> equal(2, length(results))
@@ -98,14 +98,14 @@ def test_channel_push_pop(t : T?) {
 
 [test]
 def test_channel_for_each_clone(t : T?) {
-    t |> run("for_each_clone reads all pushed values") <| @(t : T?) {
-        with_channel() <| $(ch) {
+    t |> run("for_each_clone reads all pushed values") @(t : T?) {
+        with_channel() $(ch) {
             for (i in range(5)) {
                 ch |> push_clone(IntVal(v = i))
             }
             t |> equal(5, ch.total)
             var results : array<int>
-            ch |> for_each_clone() <| $(val : IntVal#) {
+            ch |> for_each_clone() $(val : IntVal#) {
                 results |> push(val.v)
             }
             t |> equal(5, length(results))
@@ -114,10 +114,10 @@ def test_channel_for_each_clone(t : T?) {
             }
         }
     }
-    t |> run("for_each_clone on empty channel") <| @(t : T?) {
-        with_channel() <| $(ch) {
+    t |> run("for_each_clone on empty channel") @(t : T?) {
+        with_channel() $(ch) {
             var count = 0
-            ch |> for_each_clone() <| $(val : IntVal#) {
+            ch |> for_each_clone() $(val : IntVal#) {
                 count += 1
             }
             t |> equal(0, count)
@@ -127,13 +127,13 @@ def test_channel_for_each_clone(t : T?) {
 
 [test]
 def test_channel_gather(t : T?) {
-    t |> run("gather reads all pushed values") <| @(t : T?) {
-        with_channel() <| $(ch) {
+    t |> run("gather reads all pushed values") @(t : T?) {
+        with_channel() $(ch) {
             ch |> push_clone(IntVal(v = 10))
             ch |> push_clone(IntVal(v = 20))
             ch |> push_clone(IntVal(v = 30))
             var sum = 0
-            ch |> gather() <| $(val : IntVal#) {
+            ch |> gather() $(val : IntVal#) {
                 sum += val.v
             }
             t |> equal(60, sum)
@@ -143,12 +143,12 @@ def test_channel_gather(t : T?) {
 
 [test]
 def test_channel_peek(t : T?) {
-    t |> run("peek reads without consuming") <| @(t : T?) {
-        with_channel() <| $(ch) {
+    t |> run("peek reads without consuming") @(t : T?) {
+        with_channel() $(ch) {
             ch |> push_clone(IntVal(v = 42))
             ch |> push_clone(IntVal(v = 99))
             var peeked : array<int>
-            ch |> peek() <| $(val : IntVal#) {
+            ch |> peek() $(val : IntVal#) {
                 peeked |> push(val.v)
             }
             t |> equal(2, length(peeked))
@@ -162,8 +162,8 @@ def test_channel_peek(t : T?) {
 
 [test]
 def test_channel_each_clone_iterator(t : T?) {
-    t |> run("each_clone iterator") <| @(t : T?) {
-        with_channel() <| $(ch) {
+    t |> run("each_clone iterator") @(t : T?) {
+        with_channel() $(ch) {
             ch |> push_clone(IntVal(v = 100))
             ch |> push_clone(IntVal(v = 200))
             ch |> push_clone(IntVal(v = 300))
@@ -181,13 +181,13 @@ def test_channel_each_clone_iterator(t : T?) {
 
 [test]
 def test_channel_push_batch_clone(t : T?) {
-    t |> run("push_batch_clone pushes all items") <| @(t : T?) {
-        with_channel() <| $(ch) {
+    t |> run("push_batch_clone pushes all items") @(t : T?) {
+        with_channel() $(ch) {
             var items <- [IntVal(v=10), IntVal(v=20), IntVal(v=30)]
             ch |> push_batch_clone(items)
             t |> equal(3, ch.total)
             var results : array<int>
-            ch |> for_each_clone() <| $(val : IntVal#) {
+            ch |> for_each_clone() $(val : IntVal#) {
                 results |> push(val.v)
             }
             t |> equal(3, length(results))
@@ -200,13 +200,13 @@ def test_channel_push_batch_clone(t : T?) {
 
 [test]
 def test_channel_ordering(t : T?) {
-    t |> run("FIFO ordering preserved") <| @(t : T?) {
-        with_channel() <| $(ch) {
+    t |> run("FIFO ordering preserved") @(t : T?) {
+        with_channel() $(ch) {
             for (i in range(10)) {
                 ch |> push_clone(IntVal(v = i * 10))
             }
             var results : array<int>
-            ch |> for_each_clone() <| $(val : IntVal#) {
+            ch |> for_each_clone() $(val : IntVal#) {
                 results |> push(val.v)
             }
             for (i in range(10)) {

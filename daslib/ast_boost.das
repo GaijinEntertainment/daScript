@@ -212,7 +212,7 @@ class TagStructureAnnotation : AstStructureAnnotation {
 }
 
 def private for_each_tag_function(mod : Module?; tag : string; blk : block<(var func : FunctionPtr) : void>) {
-    for_each_function(mod, "") <| $(func) {
+    for_each_function(mod, "") $(func) {
         for (ann in func.annotations) {
             if (ann != null && ann.annotation.name == "tag_function") {
                 for (t in ann.arguments) {
@@ -223,7 +223,7 @@ def private for_each_tag_function(mod : Module?; tag : string; blk : block<(var 
             }
         }
     }
-    for_each_generic(mod, "") <| $(func) {
+    for_each_generic(mod, "") $(func) {
         for (ann in func.annotations) {
             if (ann != null && ann.annotation.name == "tag_function") {
                 for (t in ann.arguments) {
@@ -259,7 +259,7 @@ def find_arg(args : AnnotationArgumentList; argn : string) : RttiValue {
 
 def private apply_tag_annotation(tag : string; var ann : FunctionAnnotationPtr) {
     var inscope funcs : array<FunctionPtr>
-    for_each_tag_function(this_module(), tag) <| $(func) {
+    for_each_tag_function(this_module(), tag) $(func) {
         funcs |> push_clone(func)
     }
     for (func in funcs) {
@@ -281,7 +281,7 @@ def find_unique_function(mod : Module?; name : string; canfail : bool = false) {
     //! Finds a unique non-generic function by name in a module; panics if more than one found.
     var inscope res : FunctionPtr
     var count = 0
-    for_each_function(mod, name) <| $(func) {
+    for_each_function(mod, name) $(func) {
         res := func
         count ++
     }
@@ -298,7 +298,7 @@ def find_unique_generic(mod : Module?; name : string; canfail : bool = false) {
     //! Finds a unique generic function by name in a module; panics if more than one found.
     var inscope res : FunctionPtr
     var count = 0
-    for_each_generic(mod, name) <| $(func) {
+    for_each_generic(mod, name) $(func) {
         res := func
         count ++
     }
@@ -335,7 +335,7 @@ def setup_call_list(name : string; at : LineInfo; subblock : block<(var fn : Fun
 
 def setup_call_list(name : string; at : LineInfo; isInit : bool = false; isPrivate : bool = true; isLateInit : bool = false) : ExprBlock? {
     //! Creates or retrieves a shared init/private function for collecting call expressions.
-    return setup_call_list(name, at) <| $(fn) {
+    return setup_call_list(name, at) $(fn) {
         if (isInit) {
             fn.flags |= FunctionFlags.init
             if (isLateInit) {
@@ -707,7 +707,7 @@ def private walk_and_convert_array(data : uint8 const?; info : TypeDeclPtr; at :
     if (total != 0) {
         let stride = info.firstType.sizeOf
         var inscope mkArr <- new ExprMakeArray(at = at, makeType <- clone_type(info.firstType))
-        any_array_foreach(data, stride) <| $(value) {
+        any_array_foreach(data, stride) $(value) {
             emplace_new(mkArr.values) <| walk_and_convert(value, info.firstType, at)
         }
         push(mkArr.makeType.dim, total)
@@ -800,7 +800,7 @@ def private walk_and_convert_table(data : uint8 const?; info : TypeDeclPtr; at :
         var inscope mkArr <- new ExprMakeArray(at = at, makeType <- clone_type(tupT))
         let key_stride = info.firstType.sizeOf
         let value_stride = info.secondType.sizeOf
-        any_table_foreach(data, key_stride, value_stride) <| $(pkey, pvalue) {
+        any_table_foreach(data, key_stride, value_stride) $(pkey, pvalue) {
             var inscope key <- walk_and_convert(pkey, info.firstType, at)
             var inscope value <- walk_and_convert(pvalue, info.secondType, at)
             var inscope mkTup <- new ExprMakeTuple(at = at, recordType <- clone_type(tupT), isKeyValue = true)
@@ -947,7 +947,7 @@ def find_annotation(mod_name, ann_name : string) : Annotation const? {
         return null
     }
     var ann : Annotation const?
-    module_for_each_annotation(mod) <| $(value) {
+    module_for_each_annotation(mod) $(value) {
         if (value.name == ann_name) {
             unsafe {
                 ann = addr(value)
@@ -1255,7 +1255,7 @@ def private debug_expression_impl(var writer : StringBuilderWriter; expr : Expre
         writer |> write(")")
         return
     }
-    for_each_field(*ann) <| $(name, cppName, xtype, offset) {
+    for_each_field(*ann) $(name, cppName, xtype, offset) {
         if (offset != -1u) {
             let tstr = describe(xtype)
             var p8 : int8?
@@ -1294,7 +1294,7 @@ def private debug_expression_impl(var writer : StringBuilderWriter; expr : Expre
         }
     }
                 // writer |> write(" {name}={describe(xtype)}")
-    for_each_field(*ann) <| $(name, cppName, xtype, offset) {
+    for_each_field(*ann) $(name, cppName, xtype, offset) {
         if (offset != -1u) {
             let tstr = describe(xtype)
             var p8 : int8?
@@ -1341,7 +1341,7 @@ def private debug_expression_impl(var writer : StringBuilderWriter; expr : Expre
 
 def public debug_expression(expr : ExpressionPtr; deFlags : DebugExpressionFlags = bitfield(0)) {
     //! Returns a debug S-expression string representation of an AST expression.
-    return build_string <| $(writer) {
+    return build_string() $(writer) {
         debug_expression_impl(writer, expr, deFlags, 0)
     }
 }

@@ -290,7 +290,7 @@ class private TemplateVisitor : AstVisitor {
             }
         }
         for (ann in blk.annotations) {
-            rules.annArg |> get("{ann.annotation.name}") <| $(cb) {
+            rules.annArg |> get("{ann.annotation.name}") $(cb) {
                 cb |> invoke(*ann)
             }
         }

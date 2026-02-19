@@ -116,12 +116,12 @@ class StaticLetMacro : AstFunctionAnnotation {
             }
         }
         var success = true
-        compiling_program() |> get_ast_context(call) <| $(valid, astc) {
+        compiling_program() |> get_ast_context(call) $(valid, astc) {
             if (!valid) {
                 errors := "can't get valid program context"
                 success = false
             } else {
-                apply_template(astc.scopes[astc.scopes |> length - 1]) <| $(rules) {
+                apply_template(astc.scopes[astc.scopes |> length - 1]) $(rules) {
                     for (r in renames) {
                         rules |> renameVariable(r.old_name) <| "_::{r.new_name}"
                     }
@@ -131,7 +131,7 @@ class StaticLetMacro : AstFunctionAnnotation {
         if (!success) {
             return <- default<ExpressionPtr>
         }
-        return <- quote <| $() {
+        return <- quote() {
             pass
         }
     }

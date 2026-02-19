@@ -4,7 +4,7 @@ require daslib/json_boost
 
 [test]
 def safe_operators(t : T?) {
-    t |> run("safe object") <| @(t) {
+    t |> run("safe object") @(t) {
         let data = "\{ \"a\": 1, \"b\": true, \"c\": null, \"d\": \"str\" \}"
         var err = ""
         var js = read_json(data, err)
@@ -19,7 +19,7 @@ def safe_operators(t : T?) {
         t |> equal(js?.xx?.xy is _null, true) // invalid value
     }
 
-    t |> run("safe array") <| @(t) {
+    t |> run("safe array") @(t) {
         let data = "[ 1, true, null, \"str\" ]"
         var err = ""
         var js = read_json(data, err)
@@ -33,7 +33,7 @@ def safe_operators(t : T?) {
         t |> equal(js?[42]?[0] is _null, true) // invalid value
     }
 
-    t |> run("null object") <| @(t) {
+    t |> run("null object") @(t) {
         var js : JsonValue?
         t |> equal(js?.a ?? -1, -1)
         t |> equal(js?[0] ?? -1, -1)

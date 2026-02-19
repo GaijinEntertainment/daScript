@@ -24,7 +24,7 @@ Example:
         [export]
         def main() {
             var foo = Foo(a = 42, b = 3.14, c = "hello")
-            apply(foo) <| $(name, field) {
+            apply(foo) $(name, field) {
                 print("{name} = {field}\n")
             }
         }

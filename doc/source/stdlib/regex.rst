@@ -83,7 +83,7 @@ Example:
             let m = regex_match(re, "123abc")
             print("match length = {m}\n")
             let text = "age 25, height 180"
-            regex_foreach(re, text) <| $(r) {
+            regex_foreach(re, text) $(r) {
                 print("found: {slice(text, r.x, r.y)}\n")
                 return true
             }

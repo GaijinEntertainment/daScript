@@ -175,7 +175,7 @@ def main {
 
     // === Building Strings ===
     // build_string is used to construct strings efficiently
-    let result = build_string() <| $(var writer) {
+    let result = build_string() $(var writer) {
         write(writer, "Name: ")
         write(writer, "Alice")
         write(writer, ", Score: ")

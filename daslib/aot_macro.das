@@ -22,7 +22,7 @@ class AstAot : AstSimulateMacro {
         if (is_ok) {
             let fileName = "{prog.policies.aot_result}"
             print("Aot to {fileName}\n")
-            fopen(fileName, "wb") <| $(fw) {
+            fopen(fileName, "wb") $(fw) {
                 if (fw != null) {
                     fwrite(fw, res)
                 } else {

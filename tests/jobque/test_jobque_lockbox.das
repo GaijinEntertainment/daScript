@@ -21,16 +21,16 @@ struct IntVal {
 
 [test]
 def test_lockbox_basics(t : T?) {
-    t |> run("with_lock_box creates and destroys") <| @(t : T?) {
+    t |> run("with_lock_box creates and destroys") @(t : T?) {
         var entered = false
-        with_lock_box() <| $(box) {
+        with_lock_box() $(box) {
             entered = true
             t |> equal(true, box.isValid)
         }
         t |> equal(true, entered)
     }
-    t |> run("lockbox initially ready") <| @(t : T?) {
-        with_lock_box() <| $(box) {
+    t |> run("lockbox initially ready") @(t : T?) {
+        with_lock_box() $(box) {
             t |> equal(true, box.isValid)
             t |> equal(true, box.isReady)
         }
@@ -41,12 +41,12 @@ def test_lockbox_basics(t : T?) {
 
 [test]
 def test_lockbox_set_get(t : T?) {
-    t |> run("set and get via job") <| @(t : T?) {
-        with_job_que() <| $() {
-            with_lock_box() <| $(box) {
-                with_channel(1) <| $(ch) {
+    t |> run("set and get via job") @(t : T?) {
+        with_job_que() {
+            with_lock_box() $(box) {
+                with_channel(1) $(ch) {
                     // Set the value in a job (where context has proper shared_ptr)
-                    new_job() <| @() {
+                    new_job() @() {
                         box |> set(BoxedInt(value = 42))
                         ch |> push_clone(IntVal(v = 1))
                         box |> release
@@ -54,7 +54,7 @@ def test_lockbox_set_get(t : T?) {
                     }
                     // Wait for result
                     var done = false
-                    ch |> for_each_clone() <| $(val : IntVal#) {
+                    ch |> for_each_clone() $(val : IntVal#) {
                         done = true
                     }
                     t |> equal(true, done)
@@ -66,21 +66,21 @@ def test_lockbox_set_get(t : T?) {
 
 [test]
 def test_lockbox_producer_consumer(t : T?) {
-    t |> run("producer sets, consumer reads via lockbox") <| @(t : T?) {
-        with_job_que() <| $() {
-            with_lock_box() <| $(box) {
-                with_channel(2) <| $(ch) {
+    t |> run("producer sets, consumer reads via lockbox") @(t : T?) {
+        with_job_que() {
+            with_lock_box() $(box) {
+                with_channel(2) $(ch) {
                     // Producer: set value in lockbox
-                    new_job() <| @() {
+                    new_job() @() {
                         box |> set(BoxedInt(value = 99))
                         box |> release
                         ch |> notify_and_release
                     }
                     // Consumer: busy-wait until value is available, then read it
-                    new_job() <| @() {
+                    new_job() @() {
                         var found = false
                         while (!found) {
-                            found = box |> get() <| $(val : BoxedInt#) {
+                            found = box |> get() $(val : BoxedInt#) {
                                 ch |> push_clone(IntVal(v = val.value))
                             }
                         }
@@ -89,7 +89,7 @@ def test_lockbox_producer_consumer(t : T?) {
                     }
                     // Collect results
                     var result = 0
-                    ch |> for_each_clone() <| $(val : IntVal#) {
+                    ch |> for_each_clone() $(val : IntVal#) {
                         result = val.v
                     }
                     t |> equal(99, result)

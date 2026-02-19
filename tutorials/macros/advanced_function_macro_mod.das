@@ -142,7 +142,7 @@ class MemoizeMacro : AstFunctionAnnotation {
         originalCopy.name := originalCopyName
         originalCopy.flags |= FunctionFlags.generated | FunctionFlags.privateFunction
         // Remove [memoize] from the clone to prevent infinite transform loop
-        let memoizeIdx = find_index_if(each(originalCopy.annotations)) <| $(ann) {
+        let memoizeIdx = find_index_if(each(originalCopy.annotations)) $(ann) {
             return ann.annotation.name == "memoize"
         }
         if (memoizeIdx >= 0) {
@@ -207,7 +207,7 @@ class MemoizeMacro : AstFunctionAnnotation {
         bodyExprs |> emplace_new <| qmacro_expr(${ return result; })
 
         // Step 7: Create the wrapper function
-        var inscope wrapperFn <- qmacro_function(wrapperName) <| $($a(wrapperArgs)) : $t(wrapperRetType) {
+        var inscope wrapperFn <- qmacro_function(wrapperName) $($a(wrapperArgs)) : $t(wrapperRetType) {
             $b(bodyExprs)
         }
         wrapperFn.flags |= FunctionFlags.generated | FunctionFlags.privateFunction

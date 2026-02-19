@@ -5,10 +5,10 @@ require UnitTest
 
 [sideeffects]
 def test_using(t : T?) {
-    using() <| $(var f : FancyClass) {
+    using() $(var f : FancyClass) {
         t |> equal(13, f.value)
     }
-    using(1, 3) <| $(var f : FancyClass) {
+    using(1, 3) $(var f : FancyClass) {
         t |> equal(4, f.value)
     }
 }
@@ -38,15 +38,15 @@ def test_ascend_ctor(t : T?) {
 
 [test]
 def test_ref(t : T?) {
-    t |> run("using") <| @(t : T?) {
+    t |> run("using") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@test_using))
         test_using(t)
     }
-    t |> run("placement new") <| @(t : T?) {
+    t |> run("placement new") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@test_placement_new))
         test_placement_new(t)
     }
-    t |> run("ascend constructor") <| @(t : T?) {
+    t |> run("ascend constructor") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@test_ascend_ctor))
         test_ascend_ctor(t)
     }

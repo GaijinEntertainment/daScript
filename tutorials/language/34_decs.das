@@ -40,12 +40,12 @@ def creating_entities() {
 
     // create_entity takes a block that receives the entity ID and a ComponentMap.
     // The `:=` operator sets a component by name and value.
-    let player = create_entity <| @(eid, cmp) {
+    let player = create_entity() @(eid, cmp) {
         cmp.name := "hero"
         cmp.hp   := 100
         cmp.pos  := float3(0, 0, 0)
     }
-    let enemy = create_entity <| @(eid, cmp) {
+    let enemy = create_entity() @(eid, cmp) {
         cmp.name  := "goblin"
         cmp.hp    := 30
         cmp.pos   := float3(10, 0, 5)
@@ -67,7 +67,7 @@ def querying_entities() {
     // A global query iterates ALL entities that have the listed components.
     // Component names in the block arguments match component names of entities.
     print("All entities with hp and name:\n")
-    query <| $(name : string; hp : int; pos : float3) {
+    query() $(name : string; hp : int; pos : float3) {
         print("  {name}: hp={hp} pos={pos}\n")
     }
     // output:
@@ -81,14 +81,14 @@ def query_by_eid() {
     print("\n=== Query by EntityId ===\n")
 
     restart()
-    let eid = create_entity <| @(eid, cmp) {
+    let eid = create_entity() @(eid, cmp) {
         cmp.tag := "target"
         cmp.val := 42
     }
     commit()
 
     // Query a specific entity by passing its EntityId
-    query(eid) <| $(tag : string; val : int) {
+    query(eid) $(tag : string; val : int) {
         print("Found entity: tag={tag} val={val}\n")
     }
     // output: Found entity: tag=target val=42
@@ -101,7 +101,7 @@ def mutable_queries() {
 
     restart()
     for (i in range(3)) {
-        create_entity <| @(eid, cmp) {
+        create_entity() @(eid, cmp) {
             cmp.pos := float3(float(i), 0, 0)
             cmp.vel := float3(1, 0, 0)
         }
@@ -109,12 +109,12 @@ def mutable_queries() {
     commit()
 
     // Use `var` and `&` to mutate components in-place.
-    query <| $(var pos : float3&; vel : float3) {
+    query() $(var pos : float3&; vel : float3) {
         pos += vel
     }
 
     print("After moving:\n")
-    query <| $(pos : float3) {
+    query() $(pos : float3) {
         print("  pos={pos}\n")
     }
     // output:
@@ -129,16 +129,16 @@ def require_filters() {
     print("\n=== REQUIRE / REQUIRE_NOT ===\n")
 
     restart()
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         cmp.name := "warrior"
         cmp.hp   := 100
         cmp.weapon := "sword"
     }
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         cmp.name := "mage"
         cmp.hp   := 60
     }
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         cmp.name := "paladin"
         cmp.hp   := 120
         cmp.weapon := "mace"
@@ -172,14 +172,14 @@ def find_query_demo() {
 
     restart()
     for (i in range(10)) {
-        create_entity <| @(eid, cmp) {
+        create_entity() @(eid, cmp) {
             cmp.idx := i
         }
     }
     commit()
 
     // find_query stops iteration as soon as the block returns true.
-    let found = find_query <| $(idx : int) {
+    let found = find_query() $(idx : int) {
         if (idx == 7) {
             print("Found idx=7!\n")
             return true
@@ -200,7 +200,7 @@ def deleting_entities() {
     restart()
     var eids : array<EntityId>
     for (i in range(5)) {
-        let eid = create_entity <| @(eid, cmp) {
+        let eid = create_entity() @(eid, cmp) {
             cmp.idx := i
         }
         eids |> push(eid)
@@ -213,7 +213,7 @@ def deleting_entities() {
     commit()
 
     print("Remaining entities:\n")
-    query <| $(idx : int) {
+    query() $(idx : int) {
         print("  idx={idx}\n")
     }
     // output:
@@ -228,7 +228,7 @@ def updating_entities() {
     print("\n=== Updating entities ===\n")
 
     restart()
-    let eid = create_entity <| @(eid, cmp) {
+    let eid = create_entity() @(eid, cmp) {
         cmp.hp := 100
         cmp.name := "boss"
     }
@@ -236,7 +236,7 @@ def updating_entities() {
 
     // update_entity lets you modify, add, or remove components.
     // If components change, the entity moves to a new archetype.
-    update_entity(eid) <| @(eid, cmp) {
+    update_entity(eid) @(eid, cmp) {
         // Modify existing component
         var hp = 0
         hp = get(cmp, "hp", hp)
@@ -246,19 +246,19 @@ def updating_entities() {
     }
     commit()
 
-    query(eid) <| $(hp : int; name : string; enraged : bool) {
+    query(eid) $(hp : int; name : string; enraged : bool) {
         print("{name}: hp={hp} enraged={enraged}\n")
     }
     // output: boss: hp=75 enraged=true
 
     // Remove a component via update
-    update_entity(eid) <| @(eid, cmp) {
+    update_entity(eid) @(eid, cmp) {
         cmp |> remove("enraged")
     }
     commit()
 
     var stillEnraged = false
-    query(eid) <| $(enraged : bool) {
+    query(eid) $(enraged : bool) {
         stillEnraged = true
     }
     print("Still enraged: {stillEnraged}\n")
@@ -271,18 +271,18 @@ def default_value_queries() {
     print("\n=== Default values ===\n")
 
     restart()
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         cmp.name := "visible"
         cmp.alpha := 1.0
     }
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         cmp.name := "default"
     }
     commit()
 
     // If an entity lacks a queried component, it uses the default value.
     // Default-valued parameters must be `const` (no `var`, no `&`).
-    query <| $(name : string; alpha : float = 0.5) {
+    query() $(name : string; alpha : float = 0.5) {
         print("  {name}: alpha={alpha}\n")
     }
     // output:
@@ -306,7 +306,7 @@ def template_demo() {
     // apply_decs_template adds all struct fields as components
     // with a "StructName_" prefix by default.
     for (i in range(3)) {
-        create_entity <| @(eid, cmp) {
+        create_entity() @(eid, cmp) {
             apply_decs_template(cmp, Particle(
                 pos  = float3(float(i), 0, 0),
                 vel  = float3(1, 0, 0),
@@ -317,13 +317,13 @@ def template_demo() {
     commit()
 
     // Query using the struct type — compiler expands to individual components
-    query <| $(var p : Particle) {
+    query() $(var p : Particle) {
         p.pos += p.vel
         p.life -= 1
     }
 
     print("After update:\n")
-    query <| $(p : Particle) {
+    query() $(p : Particle) {
         print("  pos={p.pos} life={p.life}\n")
     }
     // output:
@@ -348,7 +348,7 @@ def stage_demo() {
     print("\n=== Stages ===\n")
 
     restart()
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         apply_decs_template(cmp, Particle(
             pos  = float3(0, 0, 0),
             vel  = float3(0, 1, 0),
@@ -362,7 +362,7 @@ def stage_demo() {
         decs_stage("simulate")
     }
 
-    query <| $(p : Particle) {
+    query() $(p : Particle) {
         print("After 3 steps: pos={p.pos} life={p.life}\n")
     }
     // output: After 3 steps: pos=0,3,0 life=7
@@ -374,20 +374,20 @@ def nested_query_demo() {
     print("\n=== Nested queries ===\n")
 
     restart()
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         cmp.name := "A"
         cmp.val  := 10
     }
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         cmp.name := "B"
         cmp.val  := 20
     }
     commit()
 
     // Queries can be nested — inner query sees all matching entities
-    query <| $(name : string) {
+    query() $(name : string) {
         var sum = 0
-        query <| $(val : int) {
+        query() $(val : int) {
             sum += val
         }
         print("  {name} sees total val={sum}\n")
@@ -403,7 +403,7 @@ def serialization_demo() {
     print("\n=== Serialization ===\n")
 
     restart()
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         cmp.score := 42
         cmp.tag   := "saved"
     }
@@ -419,7 +419,7 @@ def serialization_demo() {
     mem_archive_load(data, decsState)
 
     // Verify
-    query <| $(score : int; tag : string) {
+    query() $(score : int; tag : string) {
         print("Restored: score={score} tag={tag}\n")
     }
     // output:
@@ -433,7 +433,7 @@ def entity_recycling_demo() {
     print("\n=== Entity ID recycling ===\n")
 
     restart()
-    let eid1 = create_entity <| @(eid, cmp) {
+    let eid1 = create_entity() @(eid, cmp) {
         cmp.val := 1
     }
     commit()
@@ -444,7 +444,7 @@ def entity_recycling_demo() {
     delete_entity(eid1)
     commit()
 
-    let eid2 = create_entity <| @(eid, cmp) {
+    let eid2 = create_entity() @(eid, cmp) {
         cmp.val := 2
     }
     commit()
@@ -465,10 +465,10 @@ def archetype_inspection() {
 
     restart()
     // Entities with different component sets go to different archetypes
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         cmp.x := 1
     }
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         cmp.x := 2
         cmp.y := 3
     }
@@ -501,12 +501,12 @@ def utility_functions_demo() {
     // output: INVALID alive? false
 
     // Create some entities
-    let hero = create_entity <| @(eid, cmp) {
+    let hero = create_entity() @(eid, cmp) {
         cmp.name := "hero"
         cmp.hp   := 100
         cmp.pos  := float3(1, 2, 3)
     }
-    let goblin = create_entity <| @(eid, cmp) {
+    let goblin = create_entity() @(eid, cmp) {
         cmp.name := "goblin"
         cmp.hp   := 30
     }

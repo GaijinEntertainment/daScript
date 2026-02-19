@@ -16,7 +16,7 @@ struct Particle {}
 def test_create_from_templates(t : T?) {
     restart()
     for (i in range(3)) {
-        create_entity <| @(eid, cmp) {
+        create_entity() @(eid, cmp) {
             apply_decs_template(cmp, Particle())
         }
     }

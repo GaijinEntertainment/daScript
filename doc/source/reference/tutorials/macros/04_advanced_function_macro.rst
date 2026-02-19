@@ -176,7 +176,7 @@ Step 1 — clone the original function
        originalCopy.name := originalCopyName
        originalCopy.flags |= FunctionFlags.generated | FunctionFlags.privateFunction
        // Remove [memoize] from the clone to prevent infinite transform loop
-       let memoizeIdx = find_index_if(each(originalCopy.annotations)) <| $(ann) {
+       let memoizeIdx = find_index_if(each(originalCopy.annotations)) $(ann) {
            return ann.annotation.name == "memoize"
        }
        if (memoizeIdx >= 0) {
@@ -262,7 +262,7 @@ Step 7–8 — create and add the wrapper function
 
 .. code-block:: das
 
-       var inscope wrapperFn <- qmacro_function(wrapperName) <| $($a(wrapperArgs)) : $t(wrapperRetType) {
+       var inscope wrapperFn <- qmacro_function(wrapperName) $($a(wrapperArgs)) : $t(wrapperRetType) {
            $b(bodyExprs)
        }
        wrapperFn.flags |= FunctionFlags.generated | FunctionFlags.privateFunction
@@ -430,5 +430,7 @@ Key techniques summary
    :download:`04_advanced_function_macro.das <../../../../../tutorials/macros/04_advanced_function_macro.das>`
 
    Previous tutorial: :ref:`tutorial_macro_function_macro`
+
+   Next tutorial: :ref:`tutorial_macro_tag_function_macro`
 
    Language reference: :ref:`Macros <macros>` — full macro system documentation

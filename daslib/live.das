@@ -188,7 +188,7 @@ def public watch_files {
     }
     watchTime = clk
     var any = false
-    dir(appDir) <| $(fname) {
+    dir(appDir) $(fname) {
         if (!(ends_with(fname, ".das") || ends_with(fname, ".das_project"))) {
             return
         }
@@ -267,12 +267,12 @@ def public recompile(full_restart : bool = false) {
     //! Recompiles the live application file and hot-swaps the running context.
     to_log(LOG_TRACE, "LIVE: recompile full_restart={full_restart}\n")
     var inscope access <- make_file_access("")
-    using <| $(var mg : ModuleGroup) {
-        using <| $(var cop : CodeOfPolicies) {
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
             cop.threadlock_context = true
-            compile_file("{appDir}/{appFile}", access, unsafe(addr(mg)), cop) <| $(ok, program, issues) {
+            compile_file("{appDir}/{appFile}", access, unsafe(addr(mg)), cop) $(ok, program, issues) {
                 if (ok) {
-                    simulate(program) <| $(sok; context; serrors) {
+                    simulate(program) $(sok; context; serrors) {
                         if (sok) {
                             // TODO: beep print("reloaded...\n")
                             to_log(LOG_TRACE, "LIVE: reloaded\n")
@@ -328,7 +328,7 @@ def public live_mousescroll(x, y : double) {
 
 def public live_update(appTime : double) {
     //! Computes delta time and invokes the live context's `act` function each frame.
-    static_let <| $() {
+    static_let() {
         var t = 0.0lf
     }
     let dt = float(appTime - t)

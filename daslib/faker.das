@@ -355,7 +355,7 @@ def public week_day(year, month, day : uint) {
 
 def public week_day(year, month, day : int) {
     //! Returns week day for given date.
-    static_let <| $() {
+    static_let() {
         let offset <- [ 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
     }
     var afterFeb = 1

@@ -74,7 +74,7 @@ def main {
     // --- reduce ---
     print("reduce:\n")
     var r1 <- [iterator for(x in range(1, 6)); x]
-    var total = reduce(r1) <| $(a, b : int) : int {
+    var total = reduce(r1) $(a, b : int) : int {
         return a + b
     }
     print("  sum 1..5 = {total}\n")
@@ -92,14 +92,14 @@ def main {
     // --- fold ---
     print("fold:\n")
     var f1 <- [iterator for(x in range(1, 5)); x]
-    var product = fold(f1, 1) <| $(acc, x : int) : int {
+    var product = fold(f1, 1) $(acc, x : int) : int {
         return acc * x
     }
     print("  product 1..4 = {product}\n")
 
     // fold with different accumulator type
     var f2 <- [iterator for(x in range(1, 4)); x]
-    var csv = fold(f2, "items:") <| $(acc : string; x : int) : string {
+    var csv = fold(f2, "items:") $(acc : string; x : int) : string {
         return "{acc} {x}"
     }
     print("  string fold: {csv}\n")
@@ -239,7 +239,7 @@ def main {
     print("for_each:\n")
     var total2 = 0
     var fe <- [iterator for(x in range(1, 5)); x]
-    for_each(fe) <| $(x : int) {
+    for_each(fe) $(x : int) {
         total2 += x
     }
     print("  sum via for_each: {total2}\n")
@@ -273,7 +273,7 @@ def main {
     var pipe <- [iterator for(x in range(10)); x]
     var big <- filter(pipe, @(x : int) : bool { return x >= 5; })
     var doubled <- map(big, @(x : int) : int { return x * 2; })
-    var result = fold(doubled, 0) <| $(acc, x : int) : int {
+    var result = fold(doubled, 0) $(acc, x : int) : int {
         return acc + x
     }
     print("  sum of doubled >=5: {result}\n") // (5+6+7+8+9)*2 = 70

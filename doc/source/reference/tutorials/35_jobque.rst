@@ -53,7 +53,7 @@ job-queue operations must happen inside this scope:
 
 .. code-block:: das
 
-    with_job_que() <| $() {
+    with_job_que() {
         print("Job queue is active\n")
     }
     // output: Job queue is active
@@ -66,13 +66,13 @@ context.  Use channels to communicate results back:
 
 .. code-block:: das
 
-    with_job_que() <| $() {
-        with_channel(1) <| $(ch) {
-            new_job() <| @() {
+    with_job_que() {
+        with_channel(1) $(ch) {
+            new_job() @() {
                 ch |> push_clone(IntVal(v = 42))
                 ch |> notify_and_release
             }
-            ch |> for_each_clone() <| $(val : IntVal#) {
+            ch |> for_each_clone() $(val : IntVal#) {
                 print("Received from job: {val.v}\n")
             }
         }
@@ -89,18 +89,18 @@ and ``for_each_clone`` receives it, blocking until the channel is drained:
 
 .. code-block:: das
 
-    with_job_que() <| $() {
-        with_channel(2) <| $(ch) {
-            new_job() <| @() {
+    with_job_que() {
+        with_channel(2) $(ch) {
+            new_job() @() {
                 ch |> push_clone(StringVal(s = "hello"))
                 ch |> notify_and_release
             }
-            new_job() <| @() {
+            new_job() @() {
                 ch |> push_clone(StringVal(s = "world"))
                 ch |> notify_and_release
             }
             var messages : array<string>
-            ch |> for_each_clone() <| $(msg : StringVal#) {
+            ch |> for_each_clone() $(msg : StringVal#) {
                 messages |> push(clone_string(msg.s))
             }
             sort(messages)
@@ -122,14 +122,14 @@ Channels work with any struct type — not just simple wrappers:
         value : int
     }
 
-    with_channel(1) <| $(ch) {
-        new_job() <| @() {
+    with_channel(1) $(ch) {
+        new_job() @() {
             for (i in range(3)) {
                 ch |> push_clone(WorkResult(index = i, value = i * i))
             }
             ch |> notify_and_release
         }
-        ch |> for_each_clone() <| $(r : WorkResult#) {
+        ch |> for_each_clone() $(r : WorkResult#) {
             print("  [{r.index}] = {r.value}\n")
         }
     }
@@ -148,15 +148,15 @@ number of producers.  ``for_each_clone`` blocks until all have called
 .. code-block:: das
 
     let num_producers = 3
-    with_channel(num_producers) <| $(ch) {
+    with_channel(num_producers) $(ch) {
         for (p in range(num_producers)) {
-            new_job() <| @() {
+            new_job() @() {
                 ch |> push_clone(IntVal(v = p * 100))
                 ch |> notify_and_release
             }
         }
         var results : array<int>
-        ch |> for_each_clone() <| $(val : IntVal#) {
+        ch |> for_each_clone() $(val : IntVal#) {
             results |> push(val.v)
         }
         sort(results)
@@ -174,10 +174,10 @@ until all notifications arrive:
 
 .. code-block:: das
 
-    with_job_que() <| $() {
-        with_job_status(3) <| $(status) {
+    with_job_que() {
+        with_job_status(3) $(status) {
             for (i in range(3)) {
-                new_job() <| @() {
+                new_job() @() {
                     status |> notify_and_release
                 }
             }
@@ -196,10 +196,10 @@ Wait groups
 
 .. code-block:: das
 
-    with_job_que() <| $() {
-        with_wait_group(3) <| $(wg) {
+    with_job_que() {
+        with_wait_group(3) $(wg) {
             for (i in range(3)) {
-                new_job() <| @() {
+                new_job() @() {
                     wg |> done
                 }
             }
@@ -221,18 +221,18 @@ run inside a job context (``new_job`` or ``new_thread``):
         value : int
     }
 
-    with_job_que() <| $() {
-        with_lock_box() <| $(box) {
-            with_channel(1) <| $(ch) {
-                new_job() <| @() {
+    with_job_que() {
+        with_lock_box() $(box) {
+            with_channel(1) $(ch) {
+                new_job() @() {
                     box |> set(BoxCounter(value = 42))
-                    box |> get() <| $(c : BoxCounter#) {
+                    box |> get() $(c : BoxCounter#) {
                         ch |> push_clone(IntVal(v = c.value))
                     }
                     box |> release
                     ch |> notify_and_release
                 }
-                ch |> for_each_clone() <| $(val : IntVal#) {
+                ch |> for_each_clone() $(val : IntVal#) {
                     print("lockbox value: {val.v}\n")
                 }
             }
@@ -249,10 +249,10 @@ write sequential code inside:
 
 .. code-block:: das
 
-    with_job_que() <| $() {
+    with_job_que() {
         let num_jobs = 3
-        with_channel(num_jobs) <| $(ch) {
-            parallel_for(0, 10, num_jobs) <| $(job_begin, job_end, wg) {
+        with_channel(num_jobs) $(ch) {
+            parallel_for(0, 10, num_jobs) $(job_begin, job_end, wg) {
                 for (i in range(job_begin, job_end)) {
                     ch |> push_clone(IntVal(v = i * i))
                 }
@@ -260,7 +260,7 @@ write sequential code inside:
                 wg |> done
             }
             var results : array<int>
-            ch |> for_each_clone() <| $(val : IntVal#) {
+            ch |> for_each_clone() $(val : IntVal#) {
                 results |> push(val.v)
             }
             sort(results)
@@ -286,13 +286,13 @@ for long-lived work that should not block the job queue:
 
 .. code-block:: das
 
-    with_job_que() <| $() {
-        with_channel(1) <| $(ch) {
-            new_thread() <| @() {
+    with_job_que() {
+        with_channel(1) $(ch) {
+            new_thread() @() {
                 ch |> push_clone(StringVal(s = "from thread"))
                 ch |> notify_and_release
             }
-            ch |> for_each_clone() <| $(msg : StringVal#) {
+            ch |> for_each_clone() $(msg : StringVal#) {
                 print("{msg.s}\n")
             }
         }

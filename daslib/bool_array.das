@@ -215,7 +215,7 @@ struct BoolArray {
     }
     def static to_string(self : BoolArray) {
         //! Convert the BoolArray to a string representation.
-        return build_string() <| $(wr) {
+        return build_string() $(wr) {
             wr.write("[")
             for (bit in 0 .. int(self.real_size)) {
                 if (bit != 0) wr.write(", ")

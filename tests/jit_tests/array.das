@@ -41,7 +41,7 @@ def check_dim_float3(t : T?; a : float3[3]) {
 
 [test]
 def test_array(t : T?) {
-    t |> run("array float3") <| @(t : T?) {
+    t |> run("array float3") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@check_array_float3))
         var a <- array<float3>(
             float3(1, 2, 3),
@@ -50,7 +50,7 @@ def test_array(t : T?) {
         )
         check_array_float3(t, a)
     }
-    t |> run("dim float3") <| @(t : T?) {
+    t |> run("dim float3") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@check_dim_float3))
         var a <- fixed_array<float3>(
             float3(1, 2, 3),
@@ -59,7 +59,7 @@ def test_array(t : T?) {
         )
         check_dim_float3(t, a)
     }
-    t |> run("array []") <| @(t : T?) {
+    t |> run("array []") @(t : T?) {
         var x : array<int>
         resize(x, 10)
         t |> success(!jit_enabled() || is_jit_function(@@makeAll13))
@@ -70,7 +70,7 @@ def test_array(t : T?) {
         }
         t |> equal(addAll(x), 130)
     }
-    t |> run("out of range") <| @(t : T?) {
+    t |> run("out of range") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@outOfRange))
         var x : array<int>
         resize(x, 10)
@@ -83,7 +83,7 @@ def test_array(t : T?) {
         }
         t |> success(failed, "out of range caused panic")
     }
-    t |> run("resize locked") <| @(t : T?) {
+    t |> run("resize locked") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@resizeLocked))
         var x : array<int>
         resize(x, 10)

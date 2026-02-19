@@ -854,7 +854,7 @@ def public visit_top_down(var node : ReNode?; blk : block<(var n : ReNode?) : vo
 
 def private re_assign_next(var re : Regex) {
     var id = 0
-    visit_top_down(re.root) <| $(var node) {
+    visit_top_down(re.root) $(var node) {
         node.id = id ++
         if (node.op == ReOp.Concat) {
             node.left.next = node.right
@@ -873,7 +873,7 @@ def private re_assign_next(var re : Regex) {
 
 def private re_assign_groups(var re : Regex) {
     push(re.groups, (range(0), ""))
-    visit_top_down(re.root) <| $(var node) {
+    visit_top_down(re.root) $(var node) {
         if (node.op == ReOp.Group) {
             if (node.index == -1) {
                 return  // non-capturing group, skip
@@ -894,7 +894,7 @@ def private re_assign_groups(var re : Regex) {
 */
 
 def private re_assign_match_functions(var re : Regex) {
-    visit_top_down(re.root) <| $(var node) {
+    visit_top_down(re.root) $(var node) {
         if (node.op == ReOp.Char) {
             if (re.caseInsensitive) {
                 if (node.textLen == 1) {
@@ -1895,7 +1895,7 @@ def regex_replace(var regex : Regex; str : string; blk : block<(at : string) : s
         return ""
     }
     unsafe {
-        return build_string <| $(writer) {
+        return build_string() $(writer) {
             regex.match = reinterpret<uint8 const?> str
             var root = regex.root
             var pstr = reinterpret<uint8 const?> str
@@ -1952,7 +1952,7 @@ def regex_replace(var regex : Regex; str : string; blk : block<(at : string) : s
 def private expand_replacement(var regex : Regex; str : string; replacement : string; match_start, match_end : int) : string {
     //! Expands replacement template with group references: $0 or $& for whole match,
     //! $1-$9 for numbered groups, ${name} for named groups, $$ for literal $.
-    return build_string <| $(writer) {
+    return build_string() $(writer) {
         var i = 0
         let rlen = length(replacement)
         while (i < rlen) {
@@ -2026,7 +2026,7 @@ def regex_replace(var regex : Regex; str : string; replacement : string) : strin
         return ""
     }
     unsafe {
-        return build_string <| $(writer) {
+        return build_string() $(writer) {
             regex.match = reinterpret<uint8 const?> str
             var root = regex.root
             var pstr = reinterpret<uint8 const?> str
@@ -2130,7 +2130,7 @@ def regex_split(var regex : Regex; str : string) : array<string> {
         return <- result
     }
     var last_end = 0
-    regex_foreach(regex, str) <| $(at : range) {
+    regex_foreach(regex, str) $(at : range) {
         push(result, slice(str, last_end, at.x))
         last_end = at.y
         return true
@@ -2142,7 +2142,7 @@ def regex_split(var regex : Regex; str : string) : array<string> {
 def regex_match_all(var regex : Regex; str : string) : array<range> {
     //! Returns an array of all match ranges for the regular expression in `str`.
     var result : array<range>
-    regex_foreach(regex, str) <| $(at : range) {
+    regex_foreach(regex, str) $(at : range) {
         push(result, at)
         return true
     }
@@ -2535,7 +2535,7 @@ def private re_gen2_negative_lookahead(var node : ReNode?; var rnd : ReGenRandom
 
 def public re_gen(var re : Regex; var rnd : ReGenRandom) : string {
     //! Generates a random string that matches the compiled regular expression.
-    return build_string <| $(writer) {
+    return build_string() $(writer) {
         invoke(re.root.gen2, re.root, rnd, writer)
     }
 }

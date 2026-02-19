@@ -11,7 +11,7 @@ require daslib/module_under_test
 
 [test]
 def test_something(t : T?) {
-    t |> run("description") <| @(t : T?) {
+    t |> run("description") @(t : T?) {
         t |> equal(actual, expected)
         t |> success()
     }
@@ -22,7 +22,7 @@ def test_something(t : T?) {
 
 - `t |> equal(actual, expected)` — value equality assertion
 - `t |> success()` — mark subtest as passed
-- `t |> run("name") <| @(t : T?) { ... }` — named subtest
+- `t |> run("name") @(t : T?) { ... }` — named subtest
 - `t |> equal(actual, true)` / `t |> equal(actual, false)` — boolean assertions (there is no `expect_true`/`expect_false`)
 - `t |> strictEqual(actual, expected)` — strict equality assertion
 

@@ -47,23 +47,23 @@ variant Foo {
 
 [test]
 def test_logical_ops(t : T?) {
-    t |> run("!") <| @(t : T?) {
+    t |> run("!") @(t : T?) {
         var a : int[3]
         t |> equal(1, take_not(a))
         t |> equal(2, take_not(13))
     }
-    t |> run("||") <| @(t : T?) {
+    t |> run("||") @(t : T?) {
         t |> equal(2, take_or(13))
         t |> equal(1, take_or((1, "2", 3.)))
         t |> equal(1, take_or(Foo(i = 1)))
     }
-    t |> run("&&") <| @(t : T?) {
+    t |> run("&&") @(t : T?) {
         t |> equal(2, take_and(13, 13))
         t |> equal(2, take_and(13, Foo(i = 1)))
         t |> equal(2, take_and((1, "2", 3.), 13))
         t |> equal(1, take_and((1, "2", 3.), Foo(i = 1)))
     }
-    t |> run("^^") <| @(t : T?) {
+    t |> run("^^") @(t : T?) {
         t |> equal(2, take_xor(13, 13))
         t |> equal(1, take_xor(13, Foo(i = 1)))
         t |> equal(1, take_xor((1, "2", 3.), 13))
@@ -97,7 +97,7 @@ def tam(var a : auto(TT) ==&) : array<TT -const -&> {
 
 [test]
 def test_builtin_contracts(t : T?) {
-    t |> run("==&") <| @(t : T?) {
+    t |> run("==&") @(t : T?) {
         var a = 1
         t |> equal(true, take_i(a))
         t |> equal(false, take_i(1))

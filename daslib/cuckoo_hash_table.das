@@ -287,7 +287,7 @@ struct template TCuckooHashTable {
 
     [explicit_const_class_method]
     def static const describe() {
-        return build_string <| $(writer) {
+        return build_string() $(writer) {
             writer |> write("\{\{\n")
             for (t, index in khv, count()) {
                 if (t.hash != 0ul) {

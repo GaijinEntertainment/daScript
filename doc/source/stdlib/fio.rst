@@ -27,10 +27,10 @@ Example:
         [export]
         def main() {
             let fname = "_test_fio_tmp.txt"
-            fopen(fname, "wb") <| $(f) {
+            fopen(fname, "wb") $(f) {
                 fwrite(f, "hello, daslang!")
             }
-            fopen(fname, "rb") <| $(f) {
+            fopen(fname, "rb") $(f) {
                 let content = fread(f)
                 print("{content}\n")
             }

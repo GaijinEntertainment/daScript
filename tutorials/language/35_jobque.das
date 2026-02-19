@@ -51,7 +51,7 @@ def starting_the_job_queue() {
 
     // with_job_que initializes the thread pool and runs the block.
     // All job-queue operations must happen inside this scope.
-    with_job_que() <| $() {
+    with_job_que() {
         print("Job queue is active\n")
     }
     // output: Job queue is active
@@ -65,13 +65,13 @@ def spawning_jobs() {
     // new_job spawns work on the thread pool.
     // Each job runs in a cloned context — it does not share memory
     // with the calling thread.  Use channels or lock boxes to communicate.
-    with_job_que() <| $() {
-        with_channel(1) <| $(ch) {
-            new_job() <| @() {
+    with_job_que() {
+        with_channel(1) $(ch) {
+            new_job() @() {
                 ch |> push_clone(IntVal(v = 42))
                 ch |> notify_and_release
             }
-            ch |> for_each_clone() <| $(val : IntVal#) {
+            ch |> for_each_clone() $(val : IntVal#) {
                 print("Received from job: {val.v}\n")
             }
         }
@@ -89,21 +89,21 @@ def channels_demo() {
     // number of notify_and_release calls expected before the channel closes.
     // Use push_clone to send data and for_each_clone to receive.
 
-    with_job_que() <| $() {
-        with_channel(2) <| $(ch) {
+    with_job_que() {
+        with_channel(2) $(ch) {
             // Spawn two jobs, each pushing a value
-            new_job() <| @() {
+            new_job() @() {
                 ch |> push_clone(StringVal(s = "hello"))
                 ch |> notify_and_release
             }
-            new_job() <| @() {
+            new_job() @() {
                 ch |> push_clone(StringVal(s = "world"))
                 ch |> notify_and_release
             }
             // Collect all values — for_each_clone blocks until the channel is
             // depleted (both jobs have called notify_and_release)
             var messages : array<string>
-            ch |> for_each_clone() <| $(msg : StringVal#) {
+            ch |> for_each_clone() $(msg : StringVal#) {
                 messages |> push(clone_string(msg.s))
             }
             sort(messages)
@@ -123,15 +123,15 @@ def structs_through_channels() {
     print("\n=== Structs through channels ===\n")
 
     // Channels work with any struct type — here we send WorkResult values.
-    with_job_que() <| $() {
-        with_channel(1) <| $(ch) {
-            new_job() <| @() {
+    with_job_que() {
+        with_channel(1) $(ch) {
+            new_job() @() {
                 for (i in range(3)) {
                     ch |> push_clone(WorkResult(index = i, value = i * i))
                 }
                 ch |> notify_and_release
             }
-            ch |> for_each_clone() <| $(r : WorkResult#) {
+            ch |> for_each_clone() $(r : WorkResult#) {
                 print("  [{r.index}] = {r.value}\n")
             }
         }
@@ -150,17 +150,17 @@ def multiple_producers() {
     // When multiple jobs push to the same channel, set the channel count
     // to the number of producers.  for_each_clone blocks until all have
     // called notify_and_release.
-    with_job_que() <| $() {
+    with_job_que() {
         let num_producers = 3
-        with_channel(num_producers) <| $(ch) {
+        with_channel(num_producers) $(ch) {
             for (p in range(num_producers)) {
-                new_job() <| @() {
+                new_job() @() {
                     ch |> push_clone(IntVal(v = p * 100))
                     ch |> notify_and_release
                 }
             }
             var results : array<int>
-            ch |> for_each_clone() <| $(val : IntVal#) {
+            ch |> for_each_clone() $(val : IntVal#) {
                 results |> push(val.v)
             }
             sort(results)
@@ -180,10 +180,10 @@ def job_status_demo() {
     // Each call to `notify_and_release` decrements the counter.
     // `join` blocks until all notifications arrive.
 
-    with_job_que() <| $() {
-        with_job_status(3) <| $(status) {
+    with_job_que() {
+        with_job_status(3) $(status) {
             for (i in range(3)) {
-                new_job() <| @() {
+                new_job() @() {
                     // each job completes
                     status |> notify_and_release
                 }
@@ -203,10 +203,10 @@ def wait_group_demo() {
     // with_wait_group is a convenience wrapper around with_job_status + join.
     // `done(wg)` is an alias for `notify_and_release`.
 
-    with_job_que() <| $() {
-        with_wait_group(3) <| $(wg) {
+    with_job_que() {
+        with_wait_group(3) $(wg) {
             for (i in range(3)) {
-                new_job() <| @() {
+                new_job() @() {
                     print("  job {i} done\n")
                     wg |> done
                 }
@@ -237,19 +237,19 @@ def lockbox_demo() {
     // Note: set/get must run inside a job context (new_job or new_thread)
     // because the underlying API requires a shared_ptr-managed context.
 
-    with_job_que() <| $() {
-        with_lock_box() <| $(box) {
-            with_channel(1) <| $(ch) {
-                new_job() <| @() {
+    with_job_que() {
+        with_lock_box() $(box) {
+            with_channel(1) $(ch) {
+                new_job() @() {
                     // Set and read inside a job context
                     box |> set(BoxCounter(value = 42))
-                    box |> get() <| $(c : BoxCounter#) {
+                    box |> get() $(c : BoxCounter#) {
                         ch |> push_clone(IntVal(v = c.value))
                     }
                     box |> release
                     ch |> notify_and_release
                 }
-                ch |> for_each_clone() <| $(val : IntVal#) {
+                ch |> for_each_clone() $(val : IntVal#) {
                     print("lockbox value: {val.v}\n")
                 }
             }
@@ -271,10 +271,10 @@ def parallel_for_demo() {
     //   job_begin, job_end — the index sub-range for this chunk
     //   wg — a JobStatus to call done(wg) when finished
 
-    with_job_que() <| $() {
+    with_job_que() {
         let num_jobs = 3
-        with_channel(num_jobs) <| $(ch) {
-            parallel_for(0, 10, num_jobs) <| $(job_begin, job_end, wg) {
+        with_channel(num_jobs) $(ch) {
+            parallel_for(0, 10, num_jobs) $(job_begin, job_end, wg) {
                 for (i in range(job_begin, job_end)) {
                     ch |> push_clone(IntVal(v = i * i))
                 }
@@ -282,7 +282,7 @@ def parallel_for_demo() {
                 wg |> done
             }
             var results : array<int>
-            ch |> for_each_clone() <| $(val : IntVal#) {
+            ch |> for_each_clone() $(val : IntVal#) {
                 results |> push(val.v)
             }
             sort(results)
@@ -300,13 +300,13 @@ def new_thread_demo() {
     // new_thread creates a dedicated OS thread (not from the thread pool).
     // Use it for long-lived work that should not block the job queue.
 
-    with_job_que() <| $() {
-        with_channel(1) <| $(ch) {
-            new_thread() <| @() {
+    with_job_que() {
+        with_channel(1) $(ch) {
+            new_thread() @() {
                 ch |> push_clone(StringVal(s = "from thread"))
                 ch |> notify_and_release
             }
-            ch |> for_each_clone() <| $(msg : StringVal#) {
+            ch |> for_each_clone() $(msg : StringVal#) {
                 print("{msg.s}\n")
             }
         }

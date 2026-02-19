@@ -137,12 +137,12 @@ class TypeMacroMacro : AstFunctionAnnotation {
         cls.flags &= ~StructureFlags.genCtor
         cls.flags.privateStructure = true
         let cvtFnName = "{func.name}`cvt`arguments"
-        var inscope cvtFn <- qmacro_function(cvtFnName) <| $(prog : ProgramPtr; mod : Module?; td, passT : TypeDeclPtr) : TypeDeclPtr {
+        var inscope cvtFn <- qmacro_function(cvtFnName) $(prog : ProgramPtr; mod : Module?; td, passT : TypeDeclPtr) : TypeDeclPtr {
             return <- default<TypeDeclPtr>
         }
         compiling_module() |> add_function(cvtFn)
         let visitName = className + "`visit"
-        var inscope visitFn <- qmacro_method(visitName, cls) <| $(var slf : $t(cls); prog : ProgramPtr; mod : Module?; td, passT : TypeDeclPtr) : TypeDeclPtr {
+        var inscope visitFn <- qmacro_method(visitName, cls) $(var slf : $t(cls); prog : ProgramPtr; mod : Module?; td, passT : TypeDeclPtr) : TypeDeclPtr {
             return <- $c(cvtFnName)(prog, mod, td, passT)
         }
         compiling_module() |> add_function(visitFn)
@@ -193,7 +193,7 @@ class TypeMacroMacro : AstFunctionAnnotation {
                 return false
             }
             if (argDefaultValue == null) {
-                var inscope checkE <- qmacro_block() <| $() {
+                var inscope checkE <- qmacro_block() {
                     if ($v(macroArgIndex) >= length(td.dimExpr)) {
                         macro_error(compiling_program(), td.at, "expecting {$v(string(func.arguments[ai].name))} argument")
                         return <- TypeDeclPtr()
@@ -222,7 +222,7 @@ class TypeMacroMacro : AstFunctionAnnotation {
                 return false
             }
         }
-        var inscope retExpr <- qmacro_block() <| $() {
+        var inscope retExpr <- qmacro_block() {
             return <- $e(retCall)
         }
         append_expressions(body, retExpr)
@@ -343,7 +343,7 @@ def public verify_arguments(var args : array<TypeMacroTemplateArgument>) : bool 
 [macro_function]
 def public template_structure_name(base : Structure?; arguments : array<TypeMacroTemplateArgument>; extra : array<tuple<string, string>> = array<tuple<string, string>>()) : string {
     //! Builds a mangled template structure name from its base name and argument types.
-    return build_string() <| $(builder) {
+    return build_string() $(builder) {
         builder.write(base.name)
         builder.write("<")
         for (i in range(length(arguments))) {
@@ -530,7 +530,7 @@ class TemplateStructure : AstStructureAnnotation {
                 ctxFnArguments.emplace(argVar)
             }
         }
-        var inscope makeFunction <- qmacro_function(makeFuncName) <| $(macroArgument, passArgument : TypeDeclPtr; $a(ctxFnArguments)) : TypeDeclPtr {
+        var inscope makeFunction <- qmacro_function(makeFuncName) $(macroArgument, passArgument : TypeDeclPtr; $a(ctxFnArguments)) : TypeDeclPtr {
             return <- default<TypeDeclPtr>
         }
         append_annotation(makeFunction, "typemacro_boost", "typemacro_template_function", [
@@ -544,7 +544,7 @@ class TemplateStructure : AstStructureAnnotation {
         for (arg in args) {
             (callMacroFunction as ExprCall).arguments |> emplace_new <| qmacro($i(string(arg.name)))
         }
-        var inscope typeMacroFunction <- qmacro_function(typeMacroFunctionName) <| $(macroArgument, passArgument : TypeDeclPtr; $a(ctxFnArguments)) : TypeDeclPtr {
+        var inscope typeMacroFunction <- qmacro_function(typeMacroFunctionName) $(macroArgument, passArgument : TypeDeclPtr; $a(ctxFnArguments)) : TypeDeclPtr {
             return <- $e(callMacroFunction)
         }
         append_annotation(typeMacroFunction, "typemacro_boost", "typemacro_function", [])

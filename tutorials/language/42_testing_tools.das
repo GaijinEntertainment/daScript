@@ -153,7 +153,7 @@ def demo_fuzz_basic() {
 
     // Run 100 iterations with random data
     var errors = 0
-    fuzz(100) <| $() {
+    fuzz(100) {
         let a = fake |> random_int
         let b = fake |> random_int
         let result = safe_divide(a, b)
@@ -181,7 +181,7 @@ def demo_fuzz_debug() {
     var fake <- Faker()
 
     // fuzz_debug: panics are NOT swallowed
-    fuzz_debug(50) <| $() {
+    fuzz_debug(50) {
         let a = fake |> random_int
         let b = fake |> random_int
         // safe_divide handles b==0, so this won't panic
@@ -214,7 +214,7 @@ def demo_property_testing() {
     var fake <- Faker()
     var violations = 0
 
-    fuzz(1000) <| $() {
+    fuzz(1000) {
         let x = fake |> random_int
         let lo = -100
         let hi = 100
@@ -250,7 +250,7 @@ def demo_string_testing() {
     var fake <- Faker()
     var failures = 0
 
-    fuzz(100) <| $() {
+    fuzz(100) {
         let s = fake |> any_string()
         let reversed = reverse_string(s)
 

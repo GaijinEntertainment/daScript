@@ -5,7 +5,7 @@ require daslib/faker
 
 [test]
 def test_bit_counting_everything(t : T?) {
-    t |> run("clz,ctz 32") <| @(t : T?) {
+    t |> run("clz,ctz 32") @(t : T?) {
         for (i in urange(32)) {
             let bits = 1u << i
             let lz = clz(bits)
@@ -16,7 +16,7 @@ def test_bit_counting_everything(t : T?) {
             t |> equal(1u, popcnt(bits))
         }
     }
-    t |> run("clz,ctz 64") <| @(t : T?) {
+    t |> run("clz,ctz 64") @(t : T?) {
         for (i in urange(64)) {
             let bits = 1ul << uint64(i)
             let lz = clz(bits)
@@ -27,9 +27,9 @@ def test_bit_counting_everything(t : T?) {
             t |> equal(1ul, popcnt(bits))
         }
     }
-    t |> run("popcnt") <| @(t : T?) {
+    t |> run("popcnt") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             var x = fake |> random_uint()
             var bits = x
             var count = 0u
@@ -40,9 +40,9 @@ def test_bit_counting_everything(t : T?) {
             t |> equal(count, popcnt(x))
         }
     }
-    t |> run("popcnt64") <| @(t : T?) {
+    t |> run("popcnt64") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             var x = fake |> random_uint64()
             var bits = x
             var count = 0ul

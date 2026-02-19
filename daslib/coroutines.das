@@ -40,7 +40,7 @@ class private YieldFrom : AstCallMacro {
         macro_verify(call.arguments[0]._type != null, prog, call.at, "expecting iterator")
         macro_verify(call.arguments[0]._type.isIterator, prog, call.at, "expecting iterator")
         let iname = make_unique_private_name("_yield_from_iterator", call.at)
-        return <- qmacro_block <| $() {
+        return <- qmacro_block() {
             for ($i(iname) in $e(call.arguments[0])) {
                 yield $i(iname)
             }
@@ -58,7 +58,7 @@ class private CoContinue : AstCallMacro {
         // TODO: verify if we are in coroutine
         // TODO: verify if we are in coroutine which returns bool
         macro_verify(call.arguments |> length == 0, prog, call.at, "expecting co_continue()")
-        return <- qmacro_expr <| $() {
+        return <- qmacro_expr() {
             yield true
         }
     }
@@ -77,7 +77,7 @@ class private CoAwait : AstCallMacro {
         // TODO: verify if we are calling co_await on a coroutine.
         macro_verify(call.arguments |> length == 1, prog, call.at, "expecting co_await(subroutine)")
         let iname = make_unique_private_name("_co_await_iterator", call.at)
-        return <- qmacro_block <| $() {
+        return <- qmacro_block() {
             for ($i(iname) in $e(call.arguments[0])) {
                 yield $i(iname)
             }
@@ -100,7 +100,7 @@ class private CoroutineMacro : AstFunctionAnnotation {
         } else {
             move_new(retT) <| clone_type(func.result)
         }
-        var inscope blk <- qmacro_block <| $() {
+        var inscope blk <- qmacro_block() {
             return <- generator<$t(retT)>() <| $() {
                 $e(func.body)
                 return false

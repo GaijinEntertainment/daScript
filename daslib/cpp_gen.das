@@ -215,13 +215,13 @@ def is_valid_loc(var loc) {
 
 def onInner(var root) {
     //! Recursively processes all inner declarations of a Clang AST node.
-    root |> with_array("inner") <| $(inner) {
+    root |> with_array("inner") $(inner) {
         for (idecl in inner) {
             assert(idecl is _object)
             var decl & = unsafe(idecl as _object)
             var skip = false
             if (decl |> key_exists("loc")) {
-                decl |> with_object("loc") <| $(loc) {
+                decl |> with_object("loc") $(loc) {
                     skip = !loc |> is_valid_loc
                 }
             }
@@ -322,7 +322,7 @@ def onEnum(var root) {
             eclass = false
         )
     }
-    root |> with_array("inner") <| $(inner) {
+    root |> with_array("inner") $(inner) {
         for (edo in inner) {
             assert(edo is _object)
             var ed & = unsafe(edo as _object)
@@ -374,7 +374,7 @@ def onInitArg(var root) {
     var value = ""
     var valueType = ""
     if (root |> key_exists("inner")) {
-        root |> with_array("inner") <| $(inner) {
+        root |> with_array("inner") $(inner) {
             var inner_obj & = unsafe(inner[0] as _object)
             let kind = inner_obj["kind"] as _string
             if (kind == "ImplicitCastExpr") {
@@ -386,7 +386,7 @@ def onInitArg(var root) {
                     valueType = getQualType(inner_obj)
                     if (valueCategory == "rvalue") {
                         if (valueType == "const char *") {
-                            inner_obj |> with_array("inner") <| $(iarr) {
+                            inner_obj |> with_array("inner") $(iarr) {
                                 var iobj & = unsafe(iarr[0] as _object)
                                 value = iobj["value"] as _string
                             }
@@ -403,7 +403,7 @@ def onInitArg(var root) {
                 valueType = literal._1
             } elif (kind == "UnaryOperator") {
                 let opCode = inner_obj["opcode"] as _string
-                inner_obj |> with_array("inner") <| $(iinner) {
+                inner_obj |> with_array("inner") $(iinner) {
                     var iinner_obj & = unsafe(iinner[0] as _object)
                     let ikind = iinner_obj["kind"] as _string
                     if (ikind == "IntegerLiteral" || ikind == "FloatingLiteral") {
@@ -451,7 +451,7 @@ def onFunctionBody(var root; isMethod : bool; ofClass : string = "") : ClangFunc
         ofClass = ofClass
     )
     if (root |> key_exists("inner")) {
-        root |> with_array("inner") <| $(inner) {
+        root |> with_array("inner") $(inner) {
             for (fad in inner) {
                 assert(fad is _object)
                 var ad & = unsafe(fad as _object)
@@ -627,7 +627,7 @@ def genEnums(hf, mf, df : FILE const?) {
         var enName = en.name
         var removePrefix = false
         var isFlags = false
-        get(ex_enums, en.name) <| $(val) {
+        get(ex_enums, en.name) $(val) {
             enName = val.name
             removePrefix = val.removePrefix
             isFlags = val.isFlags
@@ -779,7 +779,7 @@ def genStructs(hf, mf, df : FILE const?) {
                 continue
             }
             var substType = ""
-            substitute_field_types |> get("{st.cppName}::{fld.cppName}") <| $(val) {
+            substitute_field_types |> get("{st.cppName}::{fld.cppName}") $(val) {
                 substType = val
             }
             if (substType |> empty()) {
@@ -1095,7 +1095,7 @@ def genFunction(fn : ClangFunc; castbind : bool; df : FILE const?) {
         revArgs = false
     }
     if (revArgs) {
-        get(rev_enums, rtype) <| $(rt) {
+        get(rev_enums, rtype) $(rt) {
             fprint(df, "\t\t->res_type(makeType<{rt}>(lib))\n")
         }
     }
@@ -1103,7 +1103,7 @@ def genFunction(fn : ClangFunc; castbind : bool; df : FILE const?) {
         let argi = fn.isMethod ? _argi + 1 : _argi
         var thisArgEnum = ""
         if (revArgs) {
-            get(rev_enums, qargs[_argi]) <| $(en) {
+            get(rev_enums, qargs[_argi]) $(en) {
                 thisArgEnum = en
                 fprint(df, "\t\t->arg_type({argi},makeType<{thisArgEnum}>(lib))\n")
             }
@@ -1160,11 +1160,11 @@ def bindHeaders(fname, outprefix : string) {
     for (be in blocked_enumerations) {
         blocked_enumerations_table[be] = true
     }
-    fopen(fname, "rb") <| $(f) {
+    fopen(fname, "rb") $(f) {
         if (f == null) {
             print("can't open {fname}")
         } else {
-            fread(f) <| $(data) {
+            fread(f) $(data) {
                 print("\n{fname}\n")
                 var error = ""
                 var json = read_json(data, error)
@@ -1176,14 +1176,14 @@ def bindHeaders(fname, outprefix : string) {
                     verify(root["kind"] |> is_str <| "TranslationUnitDecl")
                     onInner(root)
                     // debug(ast,"AST =")
-                    fopen("{outprefix}.h", "wb") <| $(hf) {
+                    fopen("{outprefix}.h", "wb") $(hf) {
                         fwrite(hf, "#pragma once\n\n")
-                        fopen("{outprefix}.inc", "wb") <| $(df) {
-                            fopen("{outprefix}.enum.cpp_inc", "wb") <| $(mf_enum) {
-                                fopen("{outprefix}.enum.inc", "wb") <| $(df_enum) {
-                                    fopen("{outprefix}.ann.cpp_inc", "wb") <| $(mf_ann) {
-                                        fopen("{outprefix}.ann.inc", "wb") <| $(df_ann) {
-                                            fopen("{outprefix}.method.inc", "wb") <| $(df_method) {
+                        fopen("{outprefix}.inc", "wb") $(df) {
+                            fopen("{outprefix}.enum.cpp_inc", "wb") $(mf_enum) {
+                                fopen("{outprefix}.enum.inc", "wb") $(df_enum) {
+                                    fopen("{outprefix}.ann.cpp_inc", "wb") $(mf_ann) {
+                                        fopen("{outprefix}.ann.inc", "wb") $(df_ann) {
+                                            fopen("{outprefix}.method.inc", "wb") $(df_method) {
                                                 genBindings(hf, df, mf_enum, df_enum, mf_ann, df_ann, df_method)
                                             }
                                         }
@@ -1202,7 +1202,7 @@ def bindHeaders(fname, outprefix : string) {
 def genDefineConstants(fname, prefix : string) {
     //! Generates constant bindings from a single header file.
     var fnames <-  [ fname ]
-    defer <| $() { delete fnames; }
+    defer() { delete fnames; }
     fnames |> genDefineConstants <| prefix
 }
 
@@ -1213,7 +1213,7 @@ def getGenConstType(name, default_name : string) {
 
 def searchAndGenConst(var regex_def : Regex; defTName, suffix : string; var ofs : table<int; bool>; data : string; var dup : table<string; bool>; hf : FILE const?) {
     //! Searches for #define constants matching a regex and generates binding code.
-    regex_foreach(regex_def, data) <| $(r) {
+    regex_foreach(regex_def, data) $(r) {
         if (!ofs |> key_exists(r.x)) {
             let DEF = regex_group(regex_def, 1, data)
             let VAL = regex_group(regex_def, 2, data)
@@ -1245,12 +1245,12 @@ def genDefineConstants(fnames : array<string>; prefix : string) {
     var reg_def_UINT16 <- %regex~#define\s+(\w+)\s+UINT16_C\s*\((0x[0-9A-Za-z]+)\)%%
     var reg_def_UINT32 <- %regex~#define\s+(\w+)\s+UINT32_C\s*\((0x[0-9A-Za-z]+)\)%%
     var reg_def_UINT64 <- %regex~#define\s+(\w+)\s+UINT64_C\s*\((0x[0-9A-Za-z]+)\)%%
-    fopen("{prefix}.const_inc", "wb") <| $(hf) {
+    fopen("{prefix}.const_inc", "wb") $(hf) {
         if (hf == null) {
             panic("can't write {prefix}.const_inc")
         }
         for (fname in fnames) {
-            fopen(fname, "rb") <| $(f) {
+            fopen(fname, "rb") $(f) {
                 if (f == null) {
                     panic("can't open {fname}")
                 }

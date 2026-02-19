@@ -14,7 +14,7 @@ struct Bar {
 
 [test]
 def test_resize_array(t : T?) {
-    t |> run("basic locked array") <| @(t : T?) {
+    t |> run("basic locked array") @(t : T?) {
         var a : array<int>
         resize(a, 10)
         var failed = false
@@ -27,7 +27,7 @@ def test_resize_array(t : T?) {
         }
         t |> success(failed)
     }
-    t |> run("nested locked array") <| @(t : T?) {
+    t |> run("nested locked array") @(t : T?) {
         var a : array< array<int> >
         resize(a, 10)
         resize(a[0], 10)
@@ -41,7 +41,7 @@ def test_resize_array(t : T?) {
         }
         t |> success(failed)
     }
-    t |> run("nested complicated array") <| @(t : T?) {
+    t |> run("nested complicated array") @(t : T?) {
         var a : array< Bar >
         resize(a, 10)
         resize(a[0].foo.a, 10)
@@ -67,7 +67,7 @@ struct Bag {
 
 [test]
 def test_resize_table(t : T?) {
-    t |> run("basic locked table") <| @(t : T?) {
+    t |> run("basic locked table") @(t : T?) {
         var a : table<int; int>
         for (tt in range(10)) {
             a |> insert(tt, tt)
@@ -82,7 +82,7 @@ def test_resize_table(t : T?) {
         }
         t |> success(failed)
     }
-    t |> run("nested locked table") <| @(t_ : T?) {
+    t |> run("nested locked table") @(t_ : T?) {
         var a : table<int; array<int>>
         for (tt in range(10)) {
             a[tt] <- [for (x in range(tt + 1)); x]
@@ -97,7 +97,7 @@ def test_resize_table(t : T?) {
             t_ |> success(failed)
         }
     }
-    t |> run("nested complicated table") <| @(t : T?) {
+    t |> run("nested complicated table") @(t : T?) {
         var a : table< int; Bag >
         a[10] <- Bag(
             foo <- Goo(

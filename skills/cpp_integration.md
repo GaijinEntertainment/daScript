@@ -79,7 +79,7 @@ addExtern<DAS_BIND_FUN(with_values)>(*this, lib, "with_values",
 
 Use `SideEffects::invoke` for any function that invokes script callbacks.
 
-In daslang: blocks use `<|` with `$()` prefix, function pointers use `@@func_name`, lambdas use `@(args) { body }`.
+In daslang: blocks follow function calls directly (parameterless: `defer() { ... }`, with params: `build_string() $(var writer) { ... }`), function pointers use `@@func_name`, lambdas use `@(args) { body }`.
 
 ## Calling daslang functions from C++ — `das_invoke_function`
 

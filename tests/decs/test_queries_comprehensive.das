@@ -14,13 +14,13 @@ def test_query_spans_archetypes(t : T?) {
     restart()
     // {hp} archetype
     for (i in range(3)) {
-        create_entity <| @(eid, cmp) {
+        create_entity() @(eid, cmp) {
             cmp.hp := 100 + i
         }
     }
     // {hp, armor} archetype
     for (i in range(2)) {
-        create_entity <| @(eid, cmp) {
+        create_entity() @(eid, cmp) {
             cmp.hp := 200 + i
             cmp.armor := 50
         }
@@ -29,7 +29,7 @@ def test_query_spans_archetypes(t : T?) {
     // query for hp should span both archetypes
     var total = 0
     var hpSum = 0
-    query <| $(hp : int) {
+    query() $(hp : int) {
         total++
         hpSum += hp
     }
@@ -43,18 +43,18 @@ def test_query_spans_archetypes(t : T?) {
 def test_mutable_query(t : T?) {
     restart()
     for (i in range(5)) {
-        create_entity <| @(eid, cmp) {
+        create_entity() @(eid, cmp) {
             cmp.val := i
         }
     }
     commit()
     // mutate all values
-    query <| $(var val : int&) {
+    query() $(var val : int&) {
         val *= 10
     }
     // verify
     var sum = 0
-    query <| $(val : int) {
+    query() $(val : int) {
         sum += val
     }
     t |> equal(sum, 0 + 10 + 20 + 30 + 40)
@@ -65,16 +65,16 @@ def test_mutable_query(t : T?) {
 [test]
 def test_require_filters(t : T?) {
     restart()
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         cmp.name := "soldier"
         cmp.hp := 100
         cmp.weapon := "rifle"
     }
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         cmp.name := "medic"
         cmp.hp := 80
     }
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         cmp.name := "tank"
         cmp.hp := 500
         cmp.weapon := "cannon"
@@ -117,12 +117,12 @@ def test_require_filters(t : T?) {
 def test_find_query_result(t : T?) {
     restart()
     for (i in range(10)) {
-        create_entity <| @(eid, cmp) {
+        create_entity() @(eid, cmp) {
             cmp.idx := i
         }
     }
     commit()
-    let found = find_query <| $(idx : int) {
+    let found = find_query() $(idx : int) {
         if (idx == 5) {
             return true
         }
@@ -130,7 +130,7 @@ def test_find_query_result(t : T?) {
     }
     t |> success(found)
 
-    let notFound = find_query <| $(idx : int) {
+    let notFound = find_query() $(idx : int) {
         if (idx == 99) {
             return true
         }
@@ -146,7 +146,7 @@ def test_query_by_eid_returns_correct_entity(t : T?) {
     restart()
     var eids : array<EntityId>
     for (i in range(5)) {
-        let eid = create_entity <| @(eid, cmp) {
+        let eid = create_entity() @(eid, cmp) {
             cmp.idx := i
         }
         eids |> push(eid)
@@ -155,7 +155,7 @@ def test_query_by_eid_returns_correct_entity(t : T?) {
     // query specific eid should return its value
     for (i in range(5)) {
         var foundIdx = -1
-        query(eids[i]) <| $(idx : int) {
+        query(eids[i]) $(idx : int) {
             foundIdx = idx
         }
         t |> equal(foundIdx, i)
@@ -167,16 +167,16 @@ def test_query_by_eid_returns_correct_entity(t : T?) {
 [test]
 def test_query_default_value(t : T?) {
     restart()
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         cmp.x := 10
         cmp.y := 20
     }
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         cmp.x := 30
     }
     commit()
     var results : array<int2>
-    query <| $(x : int; y : int = -1) {
+    query() $(x : int; y : int = -1) {
         results |> push(int2(x, y))
     }
     sort(results) <| $(a, b : int2) => a.x < b.x
@@ -191,14 +191,14 @@ def test_query_default_value(t : T?) {
 def test_large_entity_count(t : T?) {
     restart()
     for (i in range(1000)) {
-        create_entity <| @(eid, cmp) {
+        create_entity() @(eid, cmp) {
             cmp.idx := i
         }
     }
     commit()
     var count = 0
     var sum = 0
-    query <| $(idx : int) {
+    query() $(idx : int) {
         count++
         sum += idx
     }
@@ -211,18 +211,18 @@ def test_large_entity_count(t : T?) {
 [test]
 def test_nested_query(t : T?) {
     restart()
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         cmp.a := 1
         cmp.b := 10
     }
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         cmp.a := 2
         cmp.b := 20
     }
     commit()
     var pairSum = 0
-    query <| $(a : int) {
-        query <| $(b : int) {
+    query() $(a : int) {
+        query() $(b : int) {
             pairSum += a * b
         }
     }
@@ -235,20 +235,20 @@ def test_nested_query(t : T?) {
 [test]
 def test_query_after_delete(t : T?) {
     restart()
-    let e1 = create_entity <| @(eid, cmp) {
+    let e1 = create_entity() @(eid, cmp) {
         cmp.val := 1
     }
-    let e2 = create_entity <| @(eid, cmp) {
+    let e2 = create_entity() @(eid, cmp) {
         cmp.val := 2
     }
-    let e3 = create_entity <| @(eid, cmp) {
+    let e3 = create_entity() @(eid, cmp) {
         cmp.val := 3
     }
     commit()
     delete_entity(e2)
     commit()
     var vals : array<int>
-    query <| $(val : int) {
+    query() $(val : int) {
         vals |> push(val)
     }
     sort(vals)

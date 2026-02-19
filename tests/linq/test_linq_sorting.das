@@ -9,7 +9,7 @@ require _common
 
 [test]
 def test_reverse(t : T?) {
-    t |> run("basic reverse") <| @(t : T?) {
+    t |> run("basic reverse") @(t : T?) {
         var query = reverse(
             [iterator for(x in 0..5); x]
         )
@@ -17,7 +17,7 @@ def test_reverse(t : T?) {
             t |> equal(c, 4 - i)
         }
     }
-    t |> run("complex type reverse") <| @(t : T?) {
+    t |> run("complex type reverse") @(t : T?) {
         var qcomplex = reverse(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
         )
@@ -29,7 +29,7 @@ def test_reverse(t : T?) {
 
 [test]
 def test_orderby(t : T?) {
-    t |> run("basic orderby") <| @(t : T?) {
+    t |> run("basic orderby") @(t : T?) {
         var numbers = [
             5, 3, 8, 1, 4
         ]
@@ -42,7 +42,7 @@ def test_orderby(t : T?) {
             t |> equal(n, sorted_n[i])
         }
     }
-    t |> run("complex orderby") <| @(t : T?) {
+    t |> run("complex orderby") @(t : T?) {
         var query = _order_by(
             people.to_sequence(),
             (_.name, _.age)
@@ -52,7 +52,7 @@ def test_orderby(t : T?) {
             t |> equal(p.age, sorted[i].age)
         }
     }
-    t |> run("reverse orderby") <| @(t : T?) {
+    t |> run("reverse orderby") @(t : T?) {
         var rquery = _order_by_descending(
             people.to_sequence(),
             (_.name, _.age)
@@ -62,7 +62,7 @@ def test_orderby(t : T?) {
             t |> equal(p.age, sorted_r[i].age)
         }
     }
-    t |> run("complex orderby") <| @(t : T?) {
+    t |> run("complex orderby") @(t : T?) {
         var qcomplex = _order_by(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             (_.a[0], _.a[1])
@@ -71,7 +71,7 @@ def test_orderby(t : T?) {
             t |> success(c.a.Equal([i, i * 10]))
         }
     }
-    t |> run("reverse complex orderby") <| @(t : T?) {
+    t |> run("reverse complex orderby") @(t : T?) {
         var qcomplex_r = _order_by_descending(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             (_.a[0], _.a[1])
@@ -80,7 +80,7 @@ def test_orderby(t : T?) {
             t |> success(c.a.Equal([4 - i, (4 - i) * 10]))
         }
     }
-    t |> run("orderby to array") <| @(t : T?) {
+    t |> run("orderby to array") @(t : T?) {
         var numbers = [
             5, 3, 8, 1, 4
         ]
@@ -93,7 +93,7 @@ def test_orderby(t : T?) {
             t |> equal(n, sorted_n[i])
         }
     }
-    t |> run("orderby in place") <| @(t : T?) {
+    t |> run("orderby in place") @(t : T?) {
         var numbers = [
             5, 3, 8, 1, 4
         ]
@@ -110,7 +110,7 @@ def test_orderby(t : T?) {
 
 [test]
 def test_order(t : T?) {
-    t |> run("basic order") <| @(t : T?) {
+    t |> run("basic order") @(t : T?) {
         var numbers = [
             5, 3, 8, 1, 4
         ]
@@ -123,7 +123,7 @@ def test_order(t : T?) {
             t |> equal(n, sorted_n[i])
         }
     }
-    t |> run("complex order") <| @(t : T?) {
+    t |> run("complex order") @(t : T?) {
         var query = order(
             people.to_sequence(),
             $(a, b) => less((a.name, a.age), (b.name, b.age))
@@ -133,7 +133,7 @@ def test_order(t : T?) {
             t |> equal(p.age, sorted[i].age)
         }
     }
-    t |> run("reverse order") <| @(t : T?) {
+    t |> run("reverse order") @(t : T?) {
         var rquery = order_descending(
             people.to_sequence(),
             $(a, b) => less((a.name, a.age), (b.name, b.age))
@@ -143,7 +143,7 @@ def test_order(t : T?) {
             t |> equal(p.age, sorted_r[i].age)
         }
     }
-    t |> run("complex order") <| @(t : T?) {
+    t |> run("complex order") @(t : T?) {
         var qcomplex = order(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             $(a, b) => less((a.a[0], a.a[1]), (b.a[0], b.a[1]))
@@ -152,7 +152,7 @@ def test_order(t : T?) {
             t |> success(c.a.Equal([i, i * 10]))
         }
     }
-    t |> run("reverse complex order") <| @(t : T?) {
+    t |> run("reverse complex order") @(t : T?) {
         var qcomplex_r = order_descending(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             $(a, b) => less((a.a[0], a.a[1]), (b.a[0], b.a[1]))
@@ -161,7 +161,7 @@ def test_order(t : T?) {
             t |> success(c.a.Equal([4 - i, (4 - i) * 10]))
         }
     }
-    t |> run("order to array") <| @(t : T?) {
+    t |> run("order to array") @(t : T?) {
         var numbers = [
             5, 3, 8, 1, 4
         ]
@@ -174,7 +174,7 @@ def test_order(t : T?) {
             t |> equal(n, sorted_n[i])
         }
     }
-    t |> run("order in place") <| @(t : T?) {
+    t |> run("order in place") @(t : T?) {
         var numbers = [
             5, 3, 8, 1, 4
         ]
@@ -191,7 +191,7 @@ def test_order(t : T?) {
 
 [test]
 def test_order_descending_default(t : T?) {
-    t |> run("order descending default key") <| @(t : T?) {
+    t |> run("order descending default key") @(t : T?) {
         var numbers = [5, 3, 8, 1, 4]
         var query = order_descending(numbers)
         var expected = [8, 5, 4, 3, 1]
@@ -199,7 +199,7 @@ def test_order_descending_default(t : T?) {
             t |> equal(n, e)
         }
     }
-    t |> run("order descending default to array") <| @(t : T?) {
+    t |> run("order descending default to array") @(t : T?) {
         var result = order_descending_to_array(
             [iterator for(x in range(5)); [5, 3, 8, 1, 4][x]]
         )
@@ -209,7 +209,7 @@ def test_order_descending_default(t : T?) {
             t |> equal(n, e)
         }
     }
-    t |> run("order descending default inplace") <| @(t : T?) {
+    t |> run("order descending default inplace") @(t : T?) {
         var numbers = [5, 3, 8, 1, 4]
         order_descending_inplace(numbers)
         var expected = [8, 5, 4, 3, 1]
@@ -217,7 +217,7 @@ def test_order_descending_default(t : T?) {
             t |> equal(n, e)
         }
     }
-    t |> run("order descending default with _fold") <| @(t : T?) {
+    t |> run("order descending default with _fold") @(t : T?) {
         var result = (
             [5, 3, 8, 1, 4]
             .order_descending()
@@ -233,7 +233,7 @@ def test_order_descending_default(t : T?) {
 
 [test]
 def test_unique(t : T?) {
-    t |> run("basic unique") <| @(t : T?) {
+    t |> run("basic unique") @(t : T?) {
         var numbers = [
             1, 1, 1, 2, 2, 3, 4, 5, 1, 4
         ]
@@ -244,7 +244,7 @@ def test_unique(t : T?) {
             t |> equal(q, e)
         }
     }
-    t |> run("complex unique") <| @(t : T?) {
+    t |> run("complex unique") @(t : T?) {
         var complex_numbers = [
             ComplexType(a = [1, 10]),
             ComplexType(a = [1, 10]),
@@ -269,7 +269,7 @@ def test_unique(t : T?) {
 
 [test]
 def test_unique_by(t : T?) {
-    t |> run("basic unique by") <| @(t : T?) {
+    t |> run("basic unique by") @(t : T?) {
         var numbers = [
             1, 1, 1, 2, 2, 3, 4, 5, 1, 4
         ]
@@ -283,7 +283,7 @@ def test_unique_by(t : T?) {
             t |> equal(q, e)
         }
     }
-    t |> run("complex unique by") <| @(t : T?) {
+    t |> run("complex unique by") @(t : T?) {
         var complex_numbers = [
             ComplexType(a = [1, 10]),
             ComplexType(a = [1, 10]),

@@ -24,7 +24,7 @@ class ExportConstructor : AstStructureAnnotation {
             errors := "expecting [export_constructor] to have no arguments"
             return false
         }
-        var inscope qfn <- qmacro_function("make`{st.name}") <| $() {
+        var inscope qfn <- qmacro_function("make`{st.name}") {
             return new <$t(st)>()
         }
         qfn.flags |= FunctionFlags.exports

@@ -13,7 +13,7 @@ def try_recover(a : array<int>) {
 
 [test]
 def test_try_recover(t : T?) {
-    t |> run("try recover") <| @(t : T?) {
+    t |> run("try recover") @(t : T?) {
         var a : array<int>
         t |> equal(-1, try_recover(a))
         a |> resize(2)

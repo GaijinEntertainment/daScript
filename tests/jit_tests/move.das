@@ -12,7 +12,7 @@ def move_jit(var a, b) {
 
 [test]
 def test_move(t : T?) {
-    t |> run("move") <| @(t : T?) {
+    t |> run("move") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@ < (var a, b : Foo) : void > move_jit))
         var a, b : Foo
         b = Foo(a = 1, b = 2.0)

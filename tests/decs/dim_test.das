@@ -14,11 +14,11 @@ def operator ==(a, b : float[3]) {
 
 [test]
 def dim_test {
-    static_let <| $() {
+    static_let() {
         var migr : EntityId
     }
     for (t in range(3)) {
-        create_entity <| @(eid, cmp) {
+        create_entity() @(eid, cmp) {
             let ft = float(t)
             cmp |> set("eid", eid)
             apply_decs_template(cmp, Coord(xyz <- fixed_array<float>(1. + ft, 2. + ft, 3. + ft)))
@@ -27,14 +27,14 @@ def dim_test {
     }
     commit()
 
-    update_entity(migr) <| @(eid, cmp) {
+    update_entity(migr) @(eid, cmp) {
         verify(cmp |> has("Coord_xyz"))
         cmp |> set("Coord_xyz", fixed_array<float>(-1., -2., -3.))
     }
     commit()
 
     var i = 0
-    query <| $(c : Coord) {
+    query() $(c : Coord) {
         if (i == 0) {
             verify(c.xyz == fixed_array<float>(1., 2., 3.))
         } elif (i == 1) {
@@ -46,16 +46,16 @@ def dim_test {
     }
     assert(i == 3)
 
-    query <| $(var c : Coord) {
+    query() $(var c : Coord) {
         c.xyz = fixed_array<float>(13., 14., 15.)
     }
 
-    query(migr) <| $(var c : Coord) {
+    query(migr) $(var c : Coord) {
         c.xyz = fixed_array<float>(-1., -2., -3.)
     }
 
     i = 0
-    query <| $(c : Coord) {
+    query() $(c : Coord) {
         if (i == 0 || i == 1) {
             verify(c.xyz == fixed_array<float>(13., 14., 15.))
         } elif (i == 2) {

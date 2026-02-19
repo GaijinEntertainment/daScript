@@ -30,7 +30,7 @@ struct Foo {
 
 [test]
 def test_debug_eval(t : T?) {
-    t |> run("arithmetics") <| @@(t : T?) {
+    t |> run("arithmetics") @@(t : T?) {
         var context : table<string; Result>
         t |> equal("true", context |> eval_test("true"))
         t |> equal("false", context |> eval_test("false"))
@@ -65,7 +65,7 @@ def test_debug_eval(t : T?) {
         t |> equal("unknown variable foo", context |> eval_test("foo+1"))
         t |> equal("49", context |> eval_test("0x12+0x1f"))
     }
-    t |> run("variable operations") <| @@(t : T?) {
+    t |> run("variable operations") @@(t : T?) {
         var context : table<string; Result>
         var temp_int : int = 13
         var temp_str = "hello, world"

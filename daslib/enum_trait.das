@@ -82,7 +82,7 @@ class EnumFromStringConstruction : AstEnumerationAnnotation {
         let varName = "_`enum`table`{enu.name}"
         add_global_private_let(compiling_module(), varName, enu.at, qmacro(enum_to_table(type<$t(enumT)>)))
         // panic one
-        var inscope enumFn <- qmacro_function("{enu.name}") <| $(src : string) : $t(enumT) {
+        var inscope enumFn <- qmacro_function("{enu.name}") $(src : string) : $t(enumT) {
             if (!key_exists($i(varName), src)) {
                 panic("string_to_enum: enum value '{src}' not found in enum '{typeinfo typename(type<$t(enumT)>)}'")
             }
@@ -93,7 +93,7 @@ class EnumFromStringConstruction : AstEnumerationAnnotation {
         force_generated(enumFn, true)
         compiling_module() |> add_function(enumFn)
         // with default
-        var inscope enumFnDefault <- qmacro_function("{enu.name}") <| $(src : string; defaultValue : $t(enumT)) : $t(enumT) {
+        var inscope enumFnDefault <- qmacro_function("{enu.name}") $(src : string; defaultValue : $t(enumT)) : $t(enumT) {
             return $i(varName)?[src] ?? defaultValue
         }
         enumFnDefault.flags &= ~FunctionFlags.privateFunction

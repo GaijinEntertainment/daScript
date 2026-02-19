@@ -27,7 +27,7 @@ def count_down(n : int) : int {
 
 [test]
 def test_typed_coroutine(t : T?) {
-    t |> run("count_up via for loop") <| @(t : T?) {
+    t |> run("count_up via for loop") @(t : T?) {
         var vals : array<int>
         for (v in count_up(3)) {
             vals |> push(v)
@@ -37,7 +37,7 @@ def test_typed_coroutine(t : T?) {
         t |> equal(vals[1], 2)
         t |> equal(vals[2], 3)
     }
-    t |> run("count_down via for loop") <| @(t : T?) {
+    t |> run("count_down via for loop") @(t : T?) {
         var vals : array<int>
         for (v in count_down(3)) {
             vals |> push(v)
@@ -47,7 +47,7 @@ def test_typed_coroutine(t : T?) {
         t |> equal(vals[1], 2)
         t |> equal(vals[2], 1)
     }
-    t |> run("empty coroutine") <| @(t : T?) {
+    t |> run("empty coroutine") @(t : T?) {
         var vals : array<int>
         for (v in count_up(0)) {
             vals |> push(v)
@@ -66,7 +66,7 @@ def yielder() : int {
 
 [test]
 def test_yielder(t : T?) {
-    t |> run("yielder produces exact values") <| @(t : T?) {
+    t |> run("yielder produces exact values") @(t : T?) {
         var vals : array<int>
         for (v in yielder()) {
             vals |> push(v)
@@ -91,7 +91,7 @@ def stepper(n : int) {
 
 [test]
 def test_cr_run(t : T?) {
-    t |> run("cr_run drives void coroutine to completion") <| @(t : T?) {
+    t |> run("cr_run drives void coroutine to completion") @(t : T?) {
         g_step_count = 0
         var c <- stepper(5)
         cr_run(c)
@@ -121,7 +121,7 @@ def worker_b() {
 
 [test]
 def test_cr_run_all(t : T?) {
-    t |> run("cr_run_all runs multiple coroutines") <| @(t : T?) {
+    t |> run("cr_run_all runs multiple coroutines") @(t : T?) {
         g_a_count = 0
         g_b_count = 0
         var tasks : Coroutines
@@ -151,7 +151,7 @@ def parent_gen() : int {
 
 [test]
 def test_yeild_from(t : T?) {
-    t |> run("yeild_from delegates to sub-generator") <| @(t : T?) {
+    t |> run("yeild_from delegates to sub-generator") @(t : T?) {
         var vals : array<int>
         for (v in parent_gen()) {
             vals |> push(v)
@@ -183,7 +183,7 @@ def main_task() {
 
 [test]
 def test_co_await(t : T?) {
-    t |> run("co_await waits for sub-coroutine") <| @(t : T?) {
+    t |> run("co_await waits for sub-coroutine") @(t : T?) {
         g_main_log |> clear()
         var c <- main_task()
         cr_run(c)

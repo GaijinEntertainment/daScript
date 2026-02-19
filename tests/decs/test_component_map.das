@@ -69,14 +69,14 @@ def test_component_map_overwrite(t : T?) {
 def test_component_map_dot_syntax(t : T?) {
     // cmp.name := value uses operator . + operator :=
     restart()
-    let eid = create_entity <| @(eid, cmp) {
+    let eid = create_entity() @(eid, cmp) {
         cmp.score := 100
         cmp.tag := "test"
     }
     commit()
     var foundScore = 0
     var foundTag = ""
-    query(eid) <| $(score : int; tag : string) {
+    query(eid) $(score : int; tag : string) {
         foundScore = score
         foundTag = tag
     }
@@ -111,7 +111,7 @@ def test_component_map_remove_nonexistent(t : T?) {
 [test]
 def test_wide_component_types(t : T?) {
     restart()
-    let eid = create_entity <| @(eid, cmp) {
+    let eid = create_entity() @(eid, cmp) {
         cmp.vi2  := int2(1, 2)
         cmp.vi3  := int3(3, 4, 5)
         cmp.vi4  := int4(6, 7, 8, 9)
@@ -123,7 +123,7 @@ def test_wide_component_types(t : T?) {
         cmp.vi64 := int64(987654321)
     }
     commit()
-    query(eid) <| $(vi2 : int2; vi3 : int3; vi4 : int4; vf2 : float2; vd : double; vr : range; vb : bool; vu8 : uint8; vi64 : int64) {
+    query(eid) $(vi2 : int2; vi3 : int3; vi4 : int4; vf2 : float2; vd : double; vr : range; vb : bool; vu8 : uint8; vi64 : int64) {
         t |> equal(vi2, int2(1, 2))
         t |> equal(vi3, int3(3, 4, 5))
         t |> equal(vi4, int4(6, 7, 8, 9))
@@ -141,16 +141,16 @@ def test_wide_component_types(t : T?) {
 [test]
 def test_entity_id_component(t : T?) {
     restart()
-    let parent = create_entity <| @(eid, cmp) {
+    let parent = create_entity() @(eid, cmp) {
         cmp.name := "parent"
     }
-    let child = create_entity <| @(eid, cmp) {
+    let child = create_entity() @(eid, cmp) {
         cmp.name := "child"
         cmp.parent_id := parent
     }
     commit()
     var foundParent = INVALID_ENTITY_ID
-    query(child) <| $(parent_id : EntityId) {
+    query(child) $(parent_id : EntityId) {
         foundParent = parent_id
     }
     t |> equal(foundParent, parent)

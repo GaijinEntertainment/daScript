@@ -6,7 +6,7 @@ require daslib/fuzzer
 
 [test]
 def test_replace_multiple(t : T?) {
-    t |> run("replace multiple") <| @@(t : T?) {
+    t |> run("replace multiple") @@(t : T?) {
         // Test with multiple occurrences of different substrings
         t |> equal("_1_2_1_2", replace_multiple("_foo_bar_foo_bar", [("foo", "1"), ("bar", "2")]))
 

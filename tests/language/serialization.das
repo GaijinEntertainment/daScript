@@ -42,21 +42,21 @@ def serialize(var arch : Archive; var c : Color&) {
 
 [test]
 def test_primitive_round_trip(t : T?) {
-    t |> run("int round trip") <| @(t : T?) {
+    t |> run("int round trip") @(t : T?) {
         var val = 42
         var buf <- mem_archive_save(val)
         var loaded = 0
         mem_archive_load(buf, loaded)
         t |> equal(loaded, 42)
     }
-    t |> run("float round trip") <| @(t : T?) {
+    t |> run("float round trip") @(t : T?) {
         var val = 3.14
         var buf <- mem_archive_save(val)
         var loaded = 0.0
         mem_archive_load(buf, loaded)
         t |> equal(loaded, 3.14)
     }
-    t |> run("string round trip") <| @(t : T?) {
+    t |> run("string round trip") @(t : T?) {
         var val = "hello"
         var buf <- mem_archive_save(val)
         var loaded = ""
@@ -67,7 +67,7 @@ def test_primitive_round_trip(t : T?) {
 
 [test]
 def test_struct_round_trip(t : T?) {
-    t |> run("Player struct") <| @(t : T?) {
+    t |> run("Player struct") @(t : T?) {
         var p = Player(name = "hero", score = 100, alive = true)
         var buf <- mem_archive_save(p)
         var loaded : Player
@@ -80,7 +80,7 @@ def test_struct_round_trip(t : T?) {
 
 [test]
 def test_array_round_trip(t : T?) {
-    t |> run("int array") <| @(t : T?) {
+    t |> run("int array") @(t : T?) {
         var arr <- [10, 20, 30]
         var buf <- mem_archive_save(arr)
         var loaded : array<int>
@@ -94,7 +94,7 @@ def test_array_round_trip(t : T?) {
 
 [test]
 def test_table_round_trip(t : T?) {
-    t |> run("string-int table") <| @(t : T?) {
+    t |> run("string-int table") @(t : T?) {
         var tab : table<string; int>
         tab |> insert("a", 1)
         tab |> insert("b", 2)
@@ -112,7 +112,7 @@ def test_table_round_trip(t : T?) {
 
 [test]
 def test_tuple_round_trip(t : T?) {
-    t |> run("tuple int,string") <| @(t : T?) {
+    t |> run("tuple int,string") @(t : T?) {
         var tup = (42, "answer")
         var buf <- mem_archive_save(tup)
         var loaded : tuple<int; string>
@@ -124,7 +124,7 @@ def test_tuple_round_trip(t : T?) {
 
 [test]
 def test_manual_archive(t : T?) {
-    t |> run("MemSerializer write then read") <| @(t : T?) {
+    t |> run("MemSerializer write then read") @(t : T?) {
         // Write phase
         var writer = new MemSerializer()
         var warch = Archive(reading = false, stream = writer)
@@ -148,7 +148,7 @@ def test_manual_archive(t : T?) {
 
 [test]
 def test_custom_serialize(t : T?) {
-    t |> run("Color packs to 3 bytes") <| @(t : T?) {
+    t |> run("Color packs to 3 bytes") @(t : T?) {
         var c = Color(r = 1.0, g = 0.5, b = 0.0)
         var writer = new MemSerializer()
         var warch = Archive(reading = false, stream = writer)
@@ -161,7 +161,7 @@ def test_custom_serialize(t : T?) {
         t |> equal(data[1], uint8(0x7f))
         t |> equal(data[2], uint8(0x0))
     }
-    t |> run("Color round trip") <| @(t : T?) {
+    t |> run("Color round trip") @(t : T?) {
         var c = Color(r = 1.0, g = 0.0, b = 1.0)
         var writer = new MemSerializer()
         var warch = Archive(reading = false, stream = writer)
@@ -175,7 +175,7 @@ def test_custom_serialize(t : T?) {
         t |> equal(loaded.g, 0.0)
         t |> equal(loaded.b, 1.0)
     }
-    t |> run("Color array uses custom serialize") <| @(t : T?) {
+    t |> run("Color array uses custom serialize") @(t : T?) {
         unsafe {
             var colors <- [Color(r = 1.0, g = 0.0, b = 0.0), Color(r = 0.0, g = 1.0, b = 0.0)]
             var writer = new MemSerializer()

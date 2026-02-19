@@ -57,7 +57,7 @@ class AwaitCoroutineMacro : AstFunctionAnnotation {
     //! The idea is that coroutine or generator can continuously yield from another sub-coroutine or generator.
     def override transform(var call : smart_ptr<ExprCallFunc>; var errors : das_string) : ExpressionPtr {
         let iname = make_unique_private_name("_await_coroutine", call.at)
-        var inscope res <- qmacro_block <| $() {
+        var inscope res <- qmacro_block() {
             for ($i(iname) in $e(call.arguments[0])) {
                 yield $i(iname)
             }
@@ -104,7 +104,7 @@ class AsyncMacro : AstFunctionAnnotation {
             delete astVisitor
         }
 
-        var inscope blk <- qmacro_expr <| $() {
+        var inscope blk <- qmacro_expr() {
             return <- generator<$t(retT)>() <| $() {
                 $e(func.body)
                 return false
@@ -180,7 +180,7 @@ def move_clone_copy(var expr; voidRoutine : bool; var retType : smart_ptr<TypeDe
                 let name = make_unique_private_name("_async_iterator", expr.at)
                 let useMove = assignOp == AssignOp.move
                 let useClone = assignOp == AssignOp.clone
-                var inscope blk <- qmacro_block <| $() {
+                var inscope blk <- qmacro_block() {
                     for ($i(name) in $e(call.arguments[0])) {
                         if ($i(name) is res) {
                             if ($v(useMove)) {
@@ -307,7 +307,7 @@ class CollectAndReplaceIteratorFields : AstVisitor {
                     let name = make_unique_private_name("_async_iterator", expr.at)
                     let useMove = v.flags.init_via_move
                     let useClone = v.flags.init_via_clone
-                    var inscope blk <- qmacro_block <| $() {
+                    var inscope blk <- qmacro_block() {
                         var $i(v.name) : $t(v._type)
                         for ($i(name) in $e(call.arguments[0])) {
                             if ($i(name) is res) {

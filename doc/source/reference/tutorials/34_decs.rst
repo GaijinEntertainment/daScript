@@ -43,7 +43,7 @@ Creating entities
 
 .. code-block:: das
 
-    let player = create_entity <| @(eid, cmp) {
+    let player = create_entity() @(eid, cmp) {
         cmp.name := "hero"
         cmp.hp   := 100
         cmp.pos  := float3(0, 0, 0)
@@ -58,7 +58,7 @@ Component names in the block signature match component names on entities:
 
 .. code-block:: das
 
-    query <| $(name : string; hp : int; pos : float3) {
+    query() $(name : string; hp : int; pos : float3) {
         print("  {name}: hp={hp} pos={pos}\n")
     }
 
@@ -66,7 +66,7 @@ Query a specific entity by passing its ``EntityId``:
 
 .. code-block:: das
 
-    query(eid) <| $(tag : string; val : int) {
+    query(eid) $(tag : string; val : int) {
         print("Found: tag={tag} val={val}\n")
     }
 
@@ -77,7 +77,7 @@ Use ``var`` and ``&`` to modify components in place:
 
 .. code-block:: das
 
-    query <| $(var pos : float3&; vel : float3) {
+    query() $(var pos : float3&; vel : float3) {
         pos += vel
     }
 
@@ -107,7 +107,7 @@ an early-exit search:
 
 .. code-block:: das
 
-    let found = find_query <| $(idx : int) {
+    let found = find_query() $(idx : int) {
         if (idx == 7) {
             return true
         }
@@ -132,7 +132,7 @@ set changes, the entity moves to a different archetype:
 
 .. code-block:: das
 
-    update_entity(eid) <| @(eid, cmp) {
+    update_entity(eid) @(eid, cmp) {
         var hp = 0
         hp = get(cmp, "hp", hp)
         cmp |> set("hp", hp - 25)
@@ -141,7 +141,7 @@ set changes, the entity moves to a different archetype:
     commit()
 
     // Remove a component
-    update_entity(eid) <| @(eid, cmp) {
+    update_entity(eid) @(eid, cmp) {
         cmp |> remove("enraged")
     }
     commit()
@@ -154,7 +154,7 @@ with defaults must be ``const`` (no ``var``, no ``&``):
 
 .. code-block:: das
 
-    query <| $(name : string; alpha : float = 0.5) {
+    query() $(name : string; alpha : float = 0.5) {
         print("  {name}: alpha={alpha}\n")
     }
 
@@ -175,7 +175,7 @@ and ``remove_decs_template`` functions:
     }
 
     // Create entity with template
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         apply_decs_template(cmp, Particle(
             pos  = float3(0, 0, 0),
             vel  = float3(1, 0, 0),
@@ -184,7 +184,7 @@ and ``remove_decs_template`` functions:
     }
 
     // Query using template struct
-    query <| $(var p : Particle) {
+    query() $(var p : Particle) {
         p.pos += p.vel
         p.life -= 1
     }
@@ -216,9 +216,9 @@ Queries can be nested — the inner query sees all matching entities:
 
 .. code-block:: das
 
-    query <| $(name : string) {
+    query() $(name : string) {
         var sum = 0
-        query <| $(val : int) {
+        query() $(val : int) {
             sum += val
         }
         print("  {name} sees total val={sum}\n")
@@ -246,14 +246,14 @@ new entity occupying the same slot:
 
 .. code-block:: das
 
-    let eid1 = create_entity <| @(eid, cmp) {
+    let eid1 = create_entity() @(eid, cmp) {
         cmp.val := 1
     }
     commit()
     delete_entity(eid1)
     commit()
 
-    let eid2 = create_entity <| @(eid, cmp) {
+    let eid2 = create_entity() @(eid, cmp) {
         cmp.val := 2
     }
     commit()

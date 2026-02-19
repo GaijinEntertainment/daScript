@@ -640,7 +640,7 @@ def public for_eid_archetype(eid : EntityId implicit; hash : ComponentHash; var 
         return false
     }
     var qi = -1
-    decsState.queryLookup |> get(hash) <| $(ql) {
+    decsState.queryLookup |> get(hash) $(ql) {
         qi = ql - 1
     }
     if (qi == -1) {
@@ -664,7 +664,7 @@ def public for_each_archetype(hash : ComponentHash; var erq : function<() : EcsR
     //! Invokes block for each entity of each archetype that can be processed by the request.
     //! Request is returned by a specified function.
     var qi = -1
-    decsState.queryLookup |> get(hash) <| $(ql) {
+    decsState.queryLookup |> get(hash) $(ql) {
         qi = ql - 1
     }
     if (qi == -1) {
@@ -684,7 +684,7 @@ def public for_each_archetype_find(hash : ComponentHash; var erq : function<() :
     //! Request is returned by a specified function.
     //! If block returns true, iteration is stopped.
     var qi = -1
-    decsState.queryLookup |> get(hash) <| $(ql) {
+    decsState.queryLookup |> get(hash) $(ql) {
         qi = ql - 1
     }
     if (qi == -1) {
@@ -862,7 +862,7 @@ def private update_entity_imm(eid : EntityId; blk : lambda<(eid : EntityId; var 
         }
     } else {
         remove_entity(decsState.allArchetypes[arch_index], eidx)
-        with_archetype(new_ahash) <| $(var narch; idx; isNew) {
+        with_archetype(new_ahash) $(var narch; idx; isNew) {
             if (isNew) {
                 narch |> create_archetype(cmp, idx)
             }
@@ -879,7 +879,7 @@ def private create_entity_imm(eid : EntityId; blk : lambda<(eid : EntityId; var 
     invoke(blk, eid, cmp)
     cmp |> set("eid", eid)       // necessary?
     var ahash = cmp_archetype_hash(cmp)
-    with_archetype(ahash) <| $(var arch; idx; isNew) {
+    with_archetype(ahash) $(var arch; idx; isNew) {
         if (isNew) {
             arch |> create_archetype(cmp, idx)
         }

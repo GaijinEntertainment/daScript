@@ -70,18 +70,18 @@ def test_ast_typedecl {
 
 [test]
 def test_type_info(t : T?) {
-    t |> run("typeinfo") <| @(t : T?) {
+    t |> run("typeinfo") @(t : T?) {
         test_typeinfo()
         t |> success(!jit_enabled() || is_jit_function(@@ < (a : int) : void > take_it))
         t |> success(!jit_enabled() || is_jit_function(@@ < (a : int?) : void > take_it))
         t |> success(!jit_enabled() || is_jit_function(@@ < (a : array<int>) : void > take_it))
         t |> success(!jit_enabled() || is_jit_function(@@test_typeinfo))
     }
-    t |> run("typeinfo nojits") <| @(t : T?) {
+    t |> run("typeinfo nojits") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@test_rtti))
         print("rtti = {test_rtti()}\n")
     }
-    t |> run("typeinfo ast_typedecl") <| @(t : T?) {
+    t |> run("typeinfo ast_typedecl") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@test_ast_typedecl))
         var ccc <- test_ast_typedecl()
         t |> equal(ccc.baseType, Type.tInt)

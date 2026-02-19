@@ -475,7 +475,7 @@ def from_JV(v : JsonValue const explicit?; anything : auto(TT)) {
         if (v == null || !(v.value is _object)) {
             return <- ret
         }
-        apply(ret) <| $(name : string; var field; annotations) {
+        apply(ret) $(name : string; var field; annotations) {
             static_let("{typeinfo typename(type<TT-const-&>)}`{name}") {
                 var fieldState : JsonFieldState
                 var fieldStateParsed : bool = false
@@ -484,7 +484,7 @@ def from_JV(v : JsonValue const explicit?; anything : auto(TT)) {
                 fieldState <- parse_json_annotation(name, annotations)
                 fieldStateParsed = true
             }
-            (v as _object) |> get(fieldState.argName) <| $(val) {
+            (v as _object) |> get(fieldState.argName) $(val) {
                 move_to_ref(field, _::from_JV(val, decltype_noref(field)))
             }
         }
@@ -494,8 +494,8 @@ def from_JV(v : JsonValue const explicit?; anything : auto(TT)) {
         if (v == null || !(v.value is _object)) {
             return <- ret
         }
-        apply(ret) <| $(name : string; var field) {
-            (v as _object) |> get(name) <| $(val) {
+        apply(ret) $(name : string; var field) {
+            (v as _object) |> get(name) $(val) {
                 move_to_ref(field, _::from_JV(val, decltype_noref(field)))
             }
         }
@@ -529,8 +529,8 @@ def from_JV(v : JsonValue const explicit?; anything : auto(TT)) {
         unsafe {
             set_variant_index(ret, index)
         }
-        apply(ret) <| $(name : string; var field) {
-            (v as _object) |> get(name) <| $(val) {
+        apply(ret) $(name : string; var field) {
+            (v as _object) |> get(name) $(val) {
                 move_to_ref(field, _::from_JV(val, decltype_noref(field)))
             }
         }
@@ -560,7 +560,7 @@ def JV(value : auto(TT)) : JsonValue? {
         return _::JV(value)
     } static_elif (typeinfo is_struct(value)) {
         var map : table<string; JsonValue?>
-        apply(value) <| $(name : string; field; annotations) {
+        apply(value) $(name : string; field; annotations) {
             static_if (typeinfo is_function(field)) {
                 pass // skip functions
             } static_elif (typeinfo is_void_pointer(field)) {
@@ -615,7 +615,7 @@ def JV(value : auto(TT)) : JsonValue? {
         return _::JV(map)
     } static_elif (typeinfo is_tuple(value)) {
         var map : table<string; JsonValue?>
-        apply(value) <| $(name : string; field) {
+        apply(value) $(name : string; field) {
             static_if (typeinfo is_function(field)) {
                 pass // skip functions
             } static_elif (typeinfo is_void_pointer(field)) {
@@ -644,7 +644,7 @@ def JV(value : auto(TT)) : JsonValue? {
     } static_elif (typeinfo is_variant(value)) {
         var map : table<string; JsonValue?>
         map |> insert("$variant", _::JV(variant_index(value)))
-        apply(value) <| $(name : string; field) {
+        apply(value) $(name : string; field) {
             map |> insert(name, _::JV(field))
         }
         return _::JV(map)

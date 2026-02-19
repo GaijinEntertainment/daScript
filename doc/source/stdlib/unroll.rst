@@ -25,7 +25,7 @@ Example:
 
         [export]
         def main() {
-            unroll <| $() {
+            unroll() {
                 for (i in range(4)) {
                     print("step {i}\n")
                 }

@@ -17,7 +17,7 @@ Example:
         [export]
         def main() {
             print("start\n")
-            defer() <| $() {
+            defer() {
                 print("cleanup runs last\n")
             }
             print("middle\n")

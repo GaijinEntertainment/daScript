@@ -161,7 +161,7 @@ Foreach and replace
 match range (as ``int2``) to a block. Return ``true`` to continue::
 
   var re_num <- regex_compile("\\d+")
-  regex_foreach(re_num, "a12b34c56") <| $(at) {
+  regex_foreach(re_num, "a12b34c56") $(at) {
       print("[{at.x},{at.y}] ")   // [1,3] [4,6] [7,9]
       return true
   }
@@ -169,7 +169,7 @@ match range (as ``int2``) to a block. Return ``true`` to continue::
 ``regex_replace`` replaces every match using a block that receives the
 matched substring and returns the replacement::
 
-  let result = regex_replace(re_num, "a12b34c56") <| $(match_str) {
+  let result = regex_replace(re_num, "a12b34c56") $(match_str) {
       return "X"
   }
   print("{result}\n")   // aXbXcX
@@ -300,7 +300,7 @@ Phone number validation::
 Strip non-word characters::
 
   var re_strip <- %regex~[^\w]+%%
-  let cleaned = regex_replace(re_strip, "he!l@l#o") <| $(m) {
+  let cleaned = regex_replace(re_strip, "he!l@l#o") $(m) {
       return ""
   }
   // cleaned == "hello"

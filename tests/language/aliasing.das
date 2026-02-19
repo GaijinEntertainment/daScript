@@ -115,7 +115,7 @@ def set_with_2_extra_which_touches_global(var b : Foo; e1, e2 : int) : Foo {
 
 [test]
 def test_aliasing(t : T?) {
-    t |> run("straight up aliasing") <| @(t : T?) {
+    t |> run("straight up aliasing") @(t : T?) {
         var a = Foo(a = 1)
         var b : Foo
         a = set(a)                  // (1) 40211: function set result aliases argument a
@@ -124,7 +124,7 @@ def test_aliasing(t : T?) {
         b = set(a)                  // this one ok
         t |> equal(14, b.a)
     }
-    t |> run("field aliasing") <| @(t : T?) {
+    t |> run("field aliasing") @(t : T?) {
         var a = Foo(a = 1)
         var b : Foo
         a = set2(a.a)               // (2) 40211: function set result aliases argument inc
@@ -136,7 +136,7 @@ def test_aliasing(t : T?) {
         b = set2(a.a)               // this one ok
         t |> equal(14, b.a)
     }
-    t |> run("swizzle + vector subtype aliasing") <| @(t : T?) {
+    t |> run("swizzle + vector subtype aliasing") @(t : T?) {
         var a = Foo(b = float4(1.))
         var b : Foo
         a = set3(a.b.x)             // (3) 40211: function set result aliases argument incf
@@ -145,7 +145,7 @@ def test_aliasing(t : T?) {
         b = set3(a.b.y)             // this one ok
         t |> equal(14., b.b.y)
     }
-    t |> run("array [] aliasing") <| @(t : T?) {
+    t |> run("array [] aliasing") @(t : T?) {
         var a, b : Foo[2]
         a[1] = Foo(a = 1)
         a[0] = set(a[1])            // (4) 40211: function set result aliases argument a
@@ -155,7 +155,7 @@ def test_aliasing(t : T?) {
         b[0] = set(a[1])            // this one ok
         t |> equal(14, b[0].a)
     }
-    t |> run("array ?[] aliasing, ?? aliasing") <| @(t : T?) {
+    t |> run("array ?[] aliasing, ?? aliasing") @(t : T?) {
         var a, b : Foo[2]
         var defv = Foo(a = 2)
         a[0] = Foo(a = 1)
@@ -174,7 +174,7 @@ def test_aliasing(t : T?) {
         b?[3] ?? defv = set(a[0])   // this one ok
         t |> equal(14, defv.a)
     }
-    t |> run("cast aliasing") <| @(t : T?) {
+    t |> run("cast aliasing") @(t : T?) {
         var a = Foo(a = 1)
         var b = Foo(a = 2)
         a = set2(unsafe(reinterpret<int&> a.b)) // (7) 40211: function set result aliases argument inc
@@ -183,7 +183,7 @@ def test_aliasing(t : T?) {
         a = set2(unsafe(reinterpret<int&> b.b)) // this one ok
         t |> equal(13, a.a)
     }
-    t |> run("op3 aliasing") <| @(t : T?) {
+    t |> run("op3 aliasing") @(t : T?) {
         var a = Foo(a = 1)
         var b = Foo(a = 2)
         var cond = (random_int(seed) & 1) != 0
@@ -198,7 +198,7 @@ def test_aliasing(t : T?) {
         a = set(cond ? b : b)       // this one ok
         t |> equal(15, a.a)
     }
-    t |> run("ref2ptr aliasing") <| @(t : T?) {
+    t |> run("ref2ptr aliasing") @(t : T?) {
         var a = Foo(a = 1)
         var b = Foo(a = 2)
         a = set4(unsafe(addr(a.a))) // (10) 40211: function set result aliases argument a
@@ -212,7 +212,7 @@ def test_aliasing(t : T?) {
         a = set4(unsafe(addr(b.a))) // this one ok
         t |> equal(15, a.a)
     }
-    t |> run("ptr2ref, ref2value aliasing") <| @(t : T?) {
+    t |> run("ptr2ref, ref2value aliasing") @(t : T?) {
         var a = Foo(a = 1)
         var pa = unsafe(addr(a))
         var paa = unsafe(addr(a.a))
@@ -230,7 +230,7 @@ def test_aliasing(t : T?) {
         set2(*paa)          // this oke ok
         t |> equal(1, a.a)
     }
-    t |> run("global variable aliasing") <| @(t : T?) {
+    t |> run("global variable aliasing") @(t : T?) {
         g_a = Foo(a = 1)
         g_a = set5()        // (14) 40211: function set5 result aliases global variable ::g_a S<::Foo> through function set5
         t |> equal(14, g_a.a)
@@ -238,7 +238,7 @@ def test_aliasing(t : T?) {
         g_b = set5()        // this one ok
         t |> equal(14, g_b.a)
     }
-    t |> run("global variable through function aliasing") <| @(t : T?) {
+    t |> run("global variable through function aliasing") @(t : T?) {
         g_a = Foo(a = 1)
         g_a = set6()        // (15) 40211: function set6 result aliases global variable ::g_a S<::Foo> through function get_a
         t |> equal(14, g_a.a)
@@ -246,27 +246,27 @@ def test_aliasing(t : T?) {
         g_b = set6()        // this one ok
         t |> equal(14, g_b.a)
     }
-    t |> run("pointer argument false aliasing") <| @(t : T?) {
+    t |> run("pointer argument false aliasing") @(t : T?) {
         var a = new Foo(a = 1)
         var b : Foo
         b = set(*a)         // (16) 40211: function set result aliases argument a
                                 // note - false aliasing
         t |> equal(14, b.a)
     }
-    t |> run("pointer result false aliasing") <| @(t : T?) {
+    t |> run("pointer result false aliasing") @(t : T?) {
         var a = Foo(a = 1)
         var b = new Foo()
         *b = set(a)     // (17) 40211: function set result always aliases
                                 // note - false aliasing
         t |> equal(14, b.a)
     }
-    t |> run("global variable pointer aliasing") <| @(t : T?) {
+    t |> run("global variable pointer aliasing") @(t : T?) {
         *g_p_a = Foo(a = 1)   // (I) 40212: [[ExprMakeStruct ]] always aliases
         g_b = set7()    // (18) 40211: function set7 result aliases global variable ::g_p_a 1<S<::Foo>>? through function set7
                                 // note - false aliasing
         t |> equal(14, g_b.a)
     }
-    t |> run("pass_ref call aliasing") <| @(t : T?) {
+    t |> run("pass_ref call aliasing") @(t : T?) {
         var a = Foo(a = 1)
         a = set(pass_ref_a(a))  // (19) 40211: function set result aliases argument a
         t |> equal(14, a.a)
@@ -277,13 +277,13 @@ def test_aliasing(t : T?) {
         a = pass_ref_a(set(a))      // this one ok
         t |> equal(14, a.a)
     }
-    t |> run("make struct aliasing") <| @(t : T?) {
+    t |> run("make struct aliasing") @(t : T?) {
         var b : Bar
         b.f = Foo(a = 1)
         b = Bar(f = set(b.f))    // (II) 40212: [[ExprMakeStruct ]] aliases
         t |> equal(14, b.f.a)
     }
-    t |> run("make struct aliasing") <| @(t : T?) {
+    t |> run("make struct aliasing") @(t : T?) {
         var b2 : Bar[2]
         b2[0].f = Foo(a = 1)
         b2 = fixed_array(Bar(                      // (III) 40212: [[ExprMakeStruct ]] aliases
@@ -293,7 +293,7 @@ def test_aliasing(t : T?) {
         t |> equal(13, b2[0].f.a)
         t |> equal(14, b2[1].f.a)
     }
-    t |> run("straight up invoke function aliasing") <| @(t : T?) {
+    t |> run("straight up invoke function aliasing") @(t : T?) {
         var fn = @@set
         var a = Foo(a = 1)
         var b : Foo
@@ -303,13 +303,13 @@ def test_aliasing(t : T?) {
         b = invoke(fn, a)                 // this one ok
         t |> equal(14, b.a)
     }
-    t |> run("global function without aliasing") <| @(t : T?) {
+    t |> run("global function without aliasing") @(t : T?) {
         var fn = @@set_with_extra
         g_a = Foo(a = 1)
         g_a = invoke(fn, Foo(a = 1), 13)              // this one ok
         t |> equal(14, g_a.a)
     }
-    t |> run("global function with aliasing") <| @(t : T?) {
+    t |> run("global function with aliasing") @(t : T?) {
         var fn = @@set_with_2_extra
         fn = @@set_with_2_extra_which_touches_global     // we take address of function (anywhere in the program)
         fn = @@set_with_2_extra
@@ -317,7 +317,7 @@ def test_aliasing(t : T?) {
         g_a = invoke(fn, Foo(a = 1), 6, 7)             // (21) 40211: invoke result potentially aliases global g_a through function set_with_2_extra_which_touches_global S<::Foo> Ci Ci
         t |> equal(14, g_a.a)
     }
-    t |> run("straight up lambda aliasing") <| @(t : T?) {
+    t |> run("straight up lambda aliasing") @(t : T?) {
         var fn <- @(a : Foo) {
             var b = Foo(a = 13)
             b.a += a.a
@@ -331,7 +331,7 @@ def test_aliasing(t : T?) {
         b = invoke(fn, a)                 // this one ok
         t |> equal(14, b.a)
     }
-    t |> run("global lambda without aliasing") <| @(t : T?) {
+    t |> run("global lambda without aliasing") @(t : T?) {
         var fn <- @(var b : Foo; extra : int) : Foo {
             var a = Foo(a = extra)
             a.a += b.a
@@ -341,7 +341,7 @@ def test_aliasing(t : T?) {
         g_a = invoke(fn, Foo(a = 1), 13)              // this one ok
         t |> equal(14, g_a.a)
     }
-    t |> run("global lambda with aliasing") <| @(t : T?) {
+    t |> run("global lambda with aliasing") @(t : T?) {
         var fn <- @(var b : Foo; e1, e2 : int) : Foo {
             b.a += g_a.a + e1 + e2
             return b

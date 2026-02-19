@@ -43,7 +43,7 @@ The pipe operator
 
 Use ``<|`` to pass a trailing block argument::
 
-  do_twice() <| $() {
+  do_twice() {
       print("hello!\n")
   }
 

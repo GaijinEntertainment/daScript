@@ -15,9 +15,9 @@ def test_boundaries(t : T?) {
     let decoded = base64_decode(encoded).text
     t |> equal(encoded, reference)
     t |> equal(example, decoded)
-    t |> run("faker base64 encode and decode") <| @@(t : T?) {
+    t |> run("faker base64 encode and decode") @@(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             let fake_string = fake |> long_string
             let enc = base64_encode(fake_string)
             let dec = base64_decode(enc)

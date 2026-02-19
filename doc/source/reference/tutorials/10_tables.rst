@@ -58,13 +58,13 @@ Block-based lookup
 
 ``get()`` runs a block only if the key is found::
 
-  get(ages, "Bob") <| $(val) {
+  get(ages, "Bob") $(val) {
       print("Bob is {val} years old\n")
   }
 
 Pass ``var`` in the block parameter to modify the value in-place::
 
-  get(scores, "math") <| $(var val) {
+  get(scores, "math") $(var val) {
       val = 100
   }
 

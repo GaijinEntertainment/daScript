@@ -8,7 +8,7 @@ require daslib/defer
 [test]
 def test_uri(t : T?) {
     let uriStr = "scheme://userinfo@host:1234/one/two/three?quone=one&qtow=2#someframgnet"
-    using(uriStr) <| $(var uri : Uri#) {
+    using(uriStr) $(var uri : Uri#) {
         t |> equal(string(uri), uriStr)
         t |> equal(uri |> scheme, "scheme")
         t |> equal(uri |> user_info, "userinfo")
@@ -26,14 +26,14 @@ def test_uri(t : T?) {
 
 [test]
 def test_normalize_and_rebase(t : T?) {
-    t |> run("normalize") <| @@(t : T?) {
+    t |> run("normalize") @@(t : T?) {
         let uriStr = "file://somepath/./deadend/.././subpath/file.txt#somefrag"
-        using(uriStr) <| $(var uri : Uri#) {
+        using(uriStr) $(var uri : Uri#) {
             uri |> normalize
             t |> equal(string(uri), "file://somepath/subpath/file.txt#somefrag")
         }
     }
-    t |> run("add base uri") <| @@(t : T?) {
+    t |> run("add base uri") @@(t : T?) {
         unsafe {
             var relUri <- Uri("images/any")
             defer_delete(relUri)
@@ -44,7 +44,7 @@ def test_normalize_and_rebase(t : T?) {
             t |> equal(string(uri), "http://www.google.com/images/any")
         }
     }
-    t |> run("remove base uri") <| @@(t : T?) {
+    t |> run("remove base uri") @@(t : T?) {
         unsafe {
             var absUri <- Uri("http://www.google.com/images/any")
             defer_delete(absUri)
@@ -55,9 +55,9 @@ def test_normalize_and_rebase(t : T?) {
             t |> equal(string(uri), "any")
         }
     }
-    t |> run("strip") <| @@(t : T?) {
+    t |> run("strip") @@(t : T?) {
         let uriStr = "file://somepath/file.txt?a=1&b#somefrag"
-        using(uriStr) <| $(var uri : Uri#) {
+        using(uriStr) $(var uri : Uri#) {
             unsafe {
                 var uriS <- uri |> strip_uri(true, true)
                 defer_delete(uriS)
@@ -69,9 +69,9 @@ def test_normalize_and_rebase(t : T?) {
 
 [test]
 def test_uri_file_name(t : T?) {
-    t |> run("to_file_name") <| @@(t : T?) {
+    t |> run("to_file_name") @@(t : T?) {
         let uriStr = "file:///somedir/somefile.txt"
-        using(uriStr) <| $(var uri : Uri#) {
+        using(uriStr) $(var uri : Uri#) {
             let wfn = uri |> to_windows_file_name
             let ufn = uri |> to_unix_file_name
             let afn = uri |> to_file_name
@@ -80,14 +80,14 @@ def test_uri_file_name(t : T?) {
             t |> success(wfn == afn || ufn == afn)
         }
     }
-    t |> run("from_windows_file_name") <| @@(t : T?) {
+    t |> run("from_windows_file_name") @@(t : T?) {
         unsafe {
             var uri <- uri_from_windows_file_name("C:\\somedir\\somefile.txt")
             defer_delete(uri)
             t |> equal(string(uri), "file:///C:/somedir/somefile.txt")
         }
     }
-    t |> run("from_unix_file_name") <| @@(t : T?) {
+    t |> run("from_unix_file_name") @@(t : T?) {
         unsafe {
             var uri <- uri_from_unix_file_name("/somedir/somefile.txt")
             defer_delete(uri)
@@ -98,11 +98,11 @@ def test_uri_file_name(t : T?) {
 
 [test]
 def test_uri_query(t : T?) {
-    t |> run("split query") <| @@(t : T?) {
+    t |> run("split query") @@(t : T?) {
         let uriStr = "something?one=1&two=2&three=3&nothing"
-        using(uriStr) <| $(var uri : Uri#) {
+        using(uriStr) $(var uri : Uri#) {
             var count = 0
-            uri |> uri_for_each_query_kv <| $(k, v) {
+            uri |> uri_for_each_query_kv() $(k, v) {
                 count ++
                 if (k == "one") {
                     t |> equal(v, "1")
@@ -119,7 +119,7 @@ def test_uri_query(t : T?) {
             t |> equal(count, 4)
         }
     }
-    t |> run("compose query") <| @@(t : T?) {
+    t |> run("compose query") @@(t : T?) {
         unsafe {
             var qq <- {
                 "one" => "1",

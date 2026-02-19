@@ -60,12 +60,12 @@ def swizzle_1 {
 
 [test]
 def test_vector_swizzle(t : T?) {
-    t |> run("swizzle 1") <| @(t : T?) {
+    t |> run("swizzle 1") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@swizzle_1))
         let q = swizzle_1()
         t |> equal(2., q)
     }
-    t |> run("swizzle ref") <| @(t : T?) {
+    t |> run("swizzle ref") @(t : T?) {
         var v = float4(1, 2, 3, 4)
         t |> success(!jit_enabled() || is_jit_function(@@swizzle_ref_xyz))
         swizzle_ref_xyz(v, float3(5, 6, 7))
@@ -87,7 +87,7 @@ def test_vector_swizzle(t : T?) {
         swizzle_ref_y(v, 10.)
         t |> equal(v, float4(1, 10, 9, 7))
     }
-    t |> run("swizzle imm") <| @(t : T?) {
+    t |> run("swizzle imm") @(t : T?) {
         var v = float4(1, 2, 3, 4)
         t |> success(!jit_enabled() || is_jit_function(@@swizzle_xyz))
         t |> equal(float3(1, 2, 3), swizzle_xyz(v))

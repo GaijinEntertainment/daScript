@@ -9,9 +9,9 @@ require math
 
 [test]
 def test_is_alive_basic(t : T?) {
-    t |> run("alive entity returns true") <| @(t : T?) {
+    t |> run("alive entity returns true") @(t : T?) {
         restart()
-        var eid = create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        var eid = create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("name", "test")
         }
         commit()
@@ -22,7 +22,7 @@ def test_is_alive_basic(t : T?) {
 
 [test]
 def test_is_alive_invalid(t : T?) {
-    t |> run("INVALID_ENTITY_ID is not alive") <| @(t : T?) {
+    t |> run("INVALID_ENTITY_ID is not alive") @(t : T?) {
         restart()
         t |> equal(is_alive(INVALID_ENTITY_ID), false)
         restart()
@@ -31,9 +31,9 @@ def test_is_alive_invalid(t : T?) {
 
 [test]
 def test_is_alive_deleted(t : T?) {
-    t |> run("deleted entity is not alive") <| @(t : T?) {
+    t |> run("deleted entity is not alive") @(t : T?) {
         restart()
-        var eid = create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        var eid = create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("hp", 100)
         }
         commit()
@@ -47,16 +47,16 @@ def test_is_alive_deleted(t : T?) {
 
 [test]
 def test_is_alive_stale_generation(t : T?) {
-    t |> run("stale generation returns false after slot recycling") <| @(t : T?) {
+    t |> run("stale generation returns false after slot recycling") @(t : T?) {
         restart()
-        var old_eid = create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        var old_eid = create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("tag", "old")
         }
         commit()
         delete_entity(old_eid)
         commit()
         // Recycle the slot
-        var new_eid = create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        var new_eid = create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("tag", "new")
         }
         commit()
@@ -70,7 +70,7 @@ def test_is_alive_stale_generation(t : T?) {
 
 [test]
 def test_is_alive_out_of_bounds(t : T?) {
-    t |> run("entity id beyond lookup table is not alive") <| @(t : T?) {
+    t |> run("entity id beyond lookup table is not alive") @(t : T?) {
         restart()
         var fake_eid = EntityId(id = 99999u, generation = 1)
         t |> equal(is_alive(fake_eid), false)
@@ -80,15 +80,15 @@ def test_is_alive_out_of_bounds(t : T?) {
 
 [test]
 def test_is_alive_multiple_entities(t : T?) {
-    t |> run("mixed alive and dead entities") <| @(t : T?) {
+    t |> run("mixed alive and dead entities") @(t : T?) {
         restart()
-        var e1 = create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        var e1 = create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("v", 1)
         }
-        var e2 = create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        var e2 = create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("v", 2)
         }
-        var e3 = create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        var e3 = create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("v", 3)
         }
         commit()
@@ -103,9 +103,9 @@ def test_is_alive_multiple_entities(t : T?) {
 
 [test]
 def test_is_alive_before_commit(t : T?) {
-    t |> run("entity not alive before first commit") <| @(t : T?) {
+    t |> run("entity not alive before first commit") @(t : T?) {
         restart()
-        var eid = create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        var eid = create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("x", 1)
         }
         // Entity is deferred — not yet in the lookup table with matching generation
@@ -120,7 +120,7 @@ def test_is_alive_before_commit(t : T?) {
 
 [test]
 def test_entity_count_empty(t : T?) {
-    t |> run("empty world has zero entities") <| @(t : T?) {
+    t |> run("empty world has zero entities") @(t : T?) {
         restart()
         t |> equal(entity_count(), 0)
         restart()
@@ -129,19 +129,19 @@ def test_entity_count_empty(t : T?) {
 
 [test]
 def test_entity_count_basic(t : T?) {
-    t |> run("counts entities across archetypes") <| @(t : T?) {
+    t |> run("counts entities across archetypes") @(t : T?) {
         restart()
         // Archetype 1: name only
-        create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("name", "a")
         }
         // Archetype 2: name + hp
-        create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("name", "b")
             cmp |> set("hp", 50)
         }
         // Archetype 3: hp only
-        create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("hp", 100)
         }
         commit()
@@ -152,15 +152,15 @@ def test_entity_count_basic(t : T?) {
 
 [test]
 def test_entity_count_after_delete(t : T?) {
-    t |> run("count decreases after deletion") <| @(t : T?) {
+    t |> run("count decreases after deletion") @(t : T?) {
         restart()
-        var e1 = create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        var e1 = create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("v", 1)
         }
-        create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("v", 2)
         }
-        create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("v", 3)
         }
         commit()
@@ -174,14 +174,14 @@ def test_entity_count_after_delete(t : T?) {
 
 [test]
 def test_entity_count_create_delete_same_commit(t : T?) {
-    t |> run("create and delete in same commit") <| @(t : T?) {
+    t |> run("create and delete in same commit") @(t : T?) {
         restart()
-        create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("v", 1)
         }
         commit()
         t |> equal(entity_count(), 1)
-        var e2 = create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        var e2 = create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("v", 2)
         }
         delete_entity(e2)
@@ -194,10 +194,10 @@ def test_entity_count_create_delete_same_commit(t : T?) {
 
 [test]
 def test_entity_count_many(t : T?) {
-    t |> run("counts 100 entities") <| @(t : T?) {
+    t |> run("counts 100 entities") @(t : T?) {
         restart()
         for (i in range(100)) {
-            create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+            create_entity() @(eid : EntityId; var cmp : ComponentMap) {
                 cmp |> set("idx", i)
             }
         }
@@ -211,9 +211,9 @@ def test_entity_count_many(t : T?) {
 
 [test]
 def test_get_component_int(t : T?) {
-    t |> run("get int component") <| @(t : T?) {
+    t |> run("get int component") @(t : T?) {
         restart()
-        var eid = create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        var eid = create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("hp", 42)
         }
         commit()
@@ -224,9 +224,9 @@ def test_get_component_int(t : T?) {
 
 [test]
 def test_get_component_float(t : T?) {
-    t |> run("get float component") <| @(t : T?) {
+    t |> run("get float component") @(t : T?) {
         restart()
-        var eid = create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        var eid = create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("speed", 3.14f)
         }
         commit()
@@ -238,9 +238,9 @@ def test_get_component_float(t : T?) {
 
 [test]
 def test_get_component_string(t : T?) {
-    t |> run("get string component") <| @(t : T?) {
+    t |> run("get string component") @(t : T?) {
         restart()
-        var eid = create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        var eid = create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("name", "hero")
         }
         commit()
@@ -251,9 +251,9 @@ def test_get_component_string(t : T?) {
 
 [test]
 def test_get_component_float3(t : T?) {
-    t |> run("get float3 component") <| @(t : T?) {
+    t |> run("get float3 component") @(t : T?) {
         restart()
-        var eid = create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        var eid = create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("pos", float3(1.0, 2.0, 3.0))
         }
         commit()
@@ -267,9 +267,9 @@ def test_get_component_float3(t : T?) {
 
 [test]
 def test_get_component_bool(t : T?) {
-    t |> run("get bool component") <| @(t : T?) {
+    t |> run("get bool component") @(t : T?) {
         restart()
-        var eid = create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        var eid = create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("active", true)
         }
         commit()
@@ -280,9 +280,9 @@ def test_get_component_bool(t : T?) {
 
 [test]
 def test_get_component_missing(t : T?) {
-    t |> run("missing component returns default") <| @(t : T?) {
+    t |> run("missing component returns default") @(t : T?) {
         restart()
-        var eid = create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        var eid = create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("hp", 100)
         }
         commit()
@@ -293,9 +293,9 @@ def test_get_component_missing(t : T?) {
 
 [test]
 def test_get_component_dead_entity(t : T?) {
-    t |> run("dead entity returns default") <| @(t : T?) {
+    t |> run("dead entity returns default") @(t : T?) {
         restart()
-        var eid = create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        var eid = create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("hp", 100)
         }
         commit()
@@ -308,7 +308,7 @@ def test_get_component_dead_entity(t : T?) {
 
 [test]
 def test_get_component_invalid_entity(t : T?) {
-    t |> run("INVALID_ENTITY_ID returns default") <| @(t : T?) {
+    t |> run("INVALID_ENTITY_ID returns default") @(t : T?) {
         restart()
         t |> equal(get_component(INVALID_ENTITY_ID, "hp", -1), -1)
         restart()
@@ -317,14 +317,14 @@ def test_get_component_invalid_entity(t : T?) {
 
 [test]
 def test_get_component_after_update(t : T?) {
-    t |> run("reflects updated component value") <| @(t : T?) {
+    t |> run("reflects updated component value") @(t : T?) {
         restart()
-        var eid = create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        var eid = create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("hp", 100)
         }
         commit()
         t |> equal(get_component(eid, "hp", 0), 100)
-        update_entity(eid) <| @(eid : EntityId; var cmp : ComponentMap) {
+        update_entity(eid) @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("hp", 50)
         }
         commit()
@@ -335,15 +335,15 @@ def test_get_component_after_update(t : T?) {
 
 [test]
 def test_get_component_stale_generation(t : T?) {
-    t |> run("stale entity id returns default after recycling") <| @(t : T?) {
+    t |> run("stale entity id returns default after recycling") @(t : T?) {
         restart()
-        var old_eid = create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        var old_eid = create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("hp", 100)
         }
         commit()
         delete_entity(old_eid)
         commit()
-        var new_eid = create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        var new_eid = create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("hp", 999)
         }
         commit()
@@ -357,13 +357,13 @@ def test_get_component_stale_generation(t : T?) {
 
 [test]
 def test_get_component_multiple_entities(t : T?) {
-    t |> run("get components from different entities") <| @(t : T?) {
+    t |> run("get components from different entities") @(t : T?) {
         restart()
-        var e1 = create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        var e1 = create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("hp", 10)
             cmp |> set("name", "one")
         }
-        var e2 = create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        var e2 = create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("hp", 20)
             cmp |> set("name", "two")
         }
@@ -378,9 +378,9 @@ def test_get_component_multiple_entities(t : T?) {
 
 [test]
 def test_get_component_returns_copy(t : T?) {
-    t |> run("returned value is a copy, not a reference") <| @(t : T?) {
+    t |> run("returned value is a copy, not a reference") @(t : T?) {
         restart()
-        var eid = create_entity() <| @(eid : EntityId; var cmp : ComponentMap) {
+        var eid = create_entity() @(eid : EntityId; var cmp : ComponentMap) {
             cmp |> set("hp", 100)
         }
         commit()

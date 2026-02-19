@@ -12,7 +12,7 @@ def test_for {
 
 [test]
 def test_generator(t : T?) {
-    t |> run("make generator") <| @(t : T?) {
+    t |> run("make generator") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@test_for))
         var count = 0
         for (i, j in range(10), test_for()) {

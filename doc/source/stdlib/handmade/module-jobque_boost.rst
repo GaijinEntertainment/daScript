@@ -19,8 +19,8 @@ Example:
 
         [export]
         def main() {
-            with_job_status(1) <| $(status) {
-                new_thread <| @() {
+            with_job_status(1) $(status) {
+                new_thread() @() {
                     print("from thread\n")
                     status |> notify_and_release()
                 }
