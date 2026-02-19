@@ -6,28 +6,33 @@
 // of the compilation pipeline:
 //
 //   apply()  — during parsing, before inference.  Can add fields,
-//              validate annotation arguments, and generate new
+//              validate annotation arguments, and generate stub
 //              functions.  Cannot inspect inferred types.
 //
-//   patch()  — after inference.  Types are resolved, so type-aware
-//              validation is possible.  Can set astChanged to restart
-//              inference if modifications are needed.
+//   patch()  — after inference.  Types are resolved, so the macro
+//              can filter fields by type.  We fill in the describe
+//              function body here, skipping non-serializable types
+//              (lambdas, blocks, function pointers).  Sets astChanged
+//              to trigger re-inference of the modified body.
 //
 //   finish() — after all inference and optimization.  Read-only:
 //              useful for diagnostics and compile-time reporting.
 //
 // We build a [serializable] annotation that:
-//   1. adds a _version field and generates a describe_X() function
-//      for each annotated struct (apply)
-//   2. rejects structs with unsupported field types like lambdas
-//      and blocks (patch)
+//   1. adds a _version field and generates a stub describe_X()
+//      function (apply)
+//   2. fills in field printing, skipping non-serializable types
+//      like function pointers (patch)
 //   3. prints a compile-time summary of each struct (finish)
 //
 // Covers:
 //   - [structure_macro(name=...)] to register a structure annotation
 //   - AstStructureAnnotation with apply / patch / finish
 //   - add_structure_field to add fields during apply
-//   - Type validation after inference in patch
+//   - find_unique_function + reinterpret<ExprBlock?> to modify a
+//     generated function body in patch
+//   - Type-based field filtering after inference
+//   - astChanged to trigger re-inference after body modification
 //   - qmacro_function + $b() + $v() + $f() for code generation
 //   - Compile-time diagnostics in finish
 //
@@ -41,7 +46,7 @@ require structure_macro_mod
 
 // ── A simple struct ──
 //
-// Default version (1).  The macro adds _version = 1 automatically.
+// Default version (1).  All fields are serializable (float).
 
 [serializable]
 struct Color {
@@ -50,16 +55,17 @@ struct Color {
     b : float
 }
 
-// ── A struct with explicit version ──
+// ── A struct with a non-serializable field ──
 //
-// version=2 is stored in the annotation argument and used to
-// initialize the _version field.
+// version=2.  The `on_hit` function pointer cannot be serialized,
+// so patch() skips it when building field prints.
 
 [serializable(version=2)]
 struct Player {
     name : string
     health : int
     score : float
+    on_hit : function<(damage:int):void>
 }
 
 // ── Using the generated describe functions ──
@@ -81,8 +87,8 @@ def main() {
 }
 
 // compile-time output (from finish):
-//   [serializable] Color: 3 field(s), version 1
-//   [serializable] Player: 3 field(s), version 2
+//   [serializable] Color: 3 serializable field(s), version 1
+//   [serializable] Player: 3 serializable field(s), 1 skipped, version 2
 //
 // runtime output:
 // --- describe_Color ---

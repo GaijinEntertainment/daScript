@@ -38,10 +38,11 @@ the compilation pipeline:
 
 This tutorial builds a ``[serializable]`` annotation that:
 
-1. Adds a ``_version`` field to every annotated struct and generates a
-   ``describe_StructName()`` function that prints all fields (``apply``).
-2. Rejects structs with unsupported field types like lambdas and
-   blocks (``patch``).
+1. Adds a ``_version`` field and generates a **stub**
+   ``describe_StructName()`` function — header only (``apply``).
+2. Fills in the describe function body with per-field printing,
+   **skipping** non-serializable types like function pointers and
+   lambdas — only possible after inference (``patch``).
 3. Prints a compile-time summary of each struct (``finish``).
 
 
@@ -51,10 +52,12 @@ This tutorial builds a ``[serializable]`` annotation that:
    struct Player {
        name : string
        health : int
+       on_hit : function<(damage:int):void>   // skipped by describe
    }
 
 After compilation the struct gains a ``_version : int = 2`` field and a
-generated ``describe_Player`` function.
+generated ``describe_Player`` function that prints ``name`` and
+``health`` but skips ``on_hit`` (a function pointer).
 
 
 Why three methods?
@@ -66,14 +69,15 @@ what it can and cannot do:
 * **apply()** — The struct definition is parsed but types are not
   resolved.  You can add fields and generate functions, but you cannot
   inspect ``fld._type.baseType`` because types are still
-  ``autoinfer``.  Any generated functions or fields **must** be
-  created here so they exist when inference runs.
+  ``autoinfer``.  Any generated functions **must** be created here so
+  they exist when inference runs — but their bodies can be stubs
+  that ``patch()`` fills in later.
 
 * **patch()** — Runs after inference, so all types are resolved.  This
-  is the place for type-level validation.  If you generate new code
-  here, set ``astChanged = true`` to restart inference — and use a
-  guard (like a ``"patched"`` annotation argument) to avoid infinite
-  loops.
+  is the place for type-aware code generation or validation.  After
+  modifying a function body, set ``astChanged = true`` to restart
+  inference.  Use a guard to avoid infinite loops (e.g., check
+  whether the body length changed since the stub was created).
 
 * **finish()** — Everything is final: types are resolved, code is
   optimized.  No modifications allowed.  Use it for diagnostics,
@@ -159,8 +163,8 @@ arguments, so they must be either temporaries or clones.
 ``qmacro($v(version))`` creates an integer constant expression.
 
 
-Step 3 — Generate the describe function
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Step 3 — Generate a stub describe function
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: das
 
@@ -171,15 +175,6 @@ Step 3 — Generate the describe function
    bodyExprs |> emplace_new <| qmacro(print("{obj._version}"))
    bodyExprs |> emplace_new <| qmacro(print($v("):\n")))
 
-   for (fld in st.fields) {
-       if (fld.name == "_version") {
-           continue
-       }
-       bodyExprs |> emplace_new <| qmacro(print($v("  {fld.name} = ")))
-       bodyExprs |> emplace_new <| qmacro(print("{obj.$f(fld.name)}"))
-       bodyExprs |> emplace_new <| qmacro(print($v("\n")))
-   }
-
    var inscope fn <- qmacro_function(funcName) $(obj : $t(st)) {
        $b(bodyExprs)
    }
@@ -187,8 +182,15 @@ Step 3 — Generate the describe function
    fn.body |> force_at(st.at)
    add_function(st._module, fn)
 
-The body is built as an ``array<ExpressionPtr>`` of print
-statements.  There are two kinds of content:
+The stub function prints only the header line — the struct name and
+version.  **Per-field printing is deferred to** ``patch()`` **where
+types are known.**
+
+The function must exist before inference so callers (like ``main``)
+can reference ``describe_Color()`` or ``describe_Player()``.  Its
+body will be extended in ``patch()`` after types resolve.
+
+Two kinds of content appear in ``qmacro``:
 
 * **Compile-time constants** — field names, struct name.  Use
   ``$v("string")`` to splice a constant string into the generated
@@ -215,33 +217,97 @@ struct's module so callers can find it.
 Inside ``patch()``
 ------------------
 
+This is the heart of the tutorial.  In ``apply()`` we created a stub
+function — now we fill it in, using inferred type information to skip
+non-serializable fields.
+
+Step 1 — Guard against re-patching
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 .. code-block:: das
 
-   def override patch(var st : StructurePtr; var group : ModuleGroup;
-                      args : AnnotationArgumentList; var errors : das_string;
-                      var astChanged : bool&) : bool {
-       for (fld in st.fields) {
-           if (fld._type.baseType == Type.tBlock) {
-               errors := "struct has block field — blocks cannot be serialized"
-               return false
-           }
-           // ... also reject tLambda, tFunction
-       }
+   if (find_arg(args, "patched") is tBool) {
        return true
    }
 
-After inference, ``fld._type.baseType`` is resolved.  We reject
-blocks, lambdas, and functions because they cannot be meaningfully
-serialized.
+Setting ``astChanged`` causes the compiler to re-run inference,
+which calls ``patch()`` again.  Without a guard, this would loop
+forever.  We add a ``"patched"`` annotation argument (in Step 5)
+and check for it here — if present, the work is already done.
 
-.. note::
 
-   ``patch()`` receives a ``var astChanged : bool&`` parameter.
-   Setting it to ``true`` restarts inference — essential when
-   ``patch`` generates new code.  In this tutorial we only validate,
-   so we leave it ``false``.  When using ``astChanged``, always add
-   a guard to prevent infinite loops (e.g., check for a
-   ``"patched"`` annotation argument before regenerating).
+Step 2 — Find the stub function
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: das
+
+   let funcName = "describe_{st.name}"
+   var inscope fn <- st._module |> find_unique_function(funcName)
+
+``find_unique_function`` (from ``daslib/ast_boost``) searches a
+module for a function by name.  It returns a ``smart_ptr<Function>``
+pointing to the same object in the module — modifications through
+this pointer affect the actual function.
+
+
+Step 3 — Get the body as ExprBlock
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: das
+
+   unsafe {
+       var blk = reinterpret<ExprBlock?> fn.body
+
+The function body is an ``ExpressionPtr`` internally — we know it
+is an ``ExprBlock`` because we built it that way in ``apply()``.
+``reinterpret<ExprBlock?>`` (requires ``unsafe``) gives us a typed
+pointer so we can access the ``list`` array of statements.
+
+
+Step 4 — Append field-printing statements
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: das
+
+       for (fld in st.fields) {
+           if (fld.name == "_version") {
+               continue
+           }
+           if (fld._type.baseType == Type.tLambda ||
+               fld._type.baseType == Type.tFunction) {
+               continue
+           }
+           blk.list |> emplace_new <| qmacro(print($v("  {fld.name} = ")))
+           blk.list |> emplace_new <| qmacro(print("{obj.$f(fld.name)}"))
+           blk.list |> emplace_new <| qmacro(print($v("\n")))
+       }
+   }
+
+Now ``fld._type.baseType`` is resolved — this was ``autoinfer`` in
+``apply()`` but is the real type here.  We skip fields whose type
+is lambda or function pointer (blocks cannot appear as struct
+fields, so no ``tBlock`` check is needed).  The ``obj`` reference
+works because the generated expressions will be re-inferred inside
+the function where ``obj`` is a parameter.
+
+
+Step 5 — Mark as patched and trigger re-inference
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: das
+
+   for (ann in st.annotations) {
+       if (ann.annotation.name == "serializable") {
+           ann.arguments |> add_annotation_argument("patched", true)
+       }
+   }
+   astChanged = true
+
+We add a ``"patched"`` boolean argument to our own annotation —
+this is the marker that Step 1 checks on the next pass.  Then
+``astChanged = true`` tells the compiler to re-run inference on
+the modified function body.  On the next pass, ``find_arg(args,
+"patched")`` returns ``tBool`` and ``patch()`` returns immediately.
 
 
 Inside ``finish()``
@@ -251,24 +317,30 @@ Inside ``finish()``
 
    def override finish(var st : StructurePtr; var group : ModuleGroup;
                        args : AnnotationArgumentList; var errors : das_string) : bool {
-       var userFields = 0
+       var serializable = 0
+       var skipped = 0
        for (fld in st.fields) {
-           if (fld.name != "_version") {
-               userFields++
+           if (fld.name == "_version") {
+               continue
+           }
+           if (fld._type.baseType == Type.tLambda ||
+               fld._type.baseType == Type.tFunction) {
+               skipped++
+           } else {
+               serializable++
            }
        }
-       let ver = find_arg(args, "version")
-       if (ver is tInt) {
-           print("[serializable] {st.name}: {userFields} field(s), version {ver as tInt}\n")
-       } else {
-           print("[serializable] {st.name}: {userFields} field(s), version 1\n")
+       print("[serializable] {st.name}: {serializable} serializable field(s)")
+       if (skipped > 0) {
+           print(", {skipped} skipped")
        }
+       // ... print version
        return true
    }
 
 ``finish()`` runs after all inference and optimization.  The struct
-is in its final form — we count fields and read the ``version``
-annotation argument for a compile-time diagnostic.
+is in its final form — we count serializable and skipped fields and
+print a compile-time diagnostic.
 
 ``find_arg(args, "version")`` returns an ``RttiValue`` variant,
 checked with ``is tInt`` / ``as tInt``.
@@ -294,6 +366,7 @@ The usage file
        name : string
        health : int
        score : float
+       on_hit : function<(damage:int):void>
    }
 
    [export]
@@ -308,14 +381,16 @@ The usage file
        print("Player version: {p._version}\n")
    }
 
-``Color`` uses the default version (1).  ``Player`` specifies
-``version=2``.  The generated ``describe_Color`` and
-``describe_Player`` functions print each field's name and value.
+``Color`` uses the default version (1) — all fields are plain types.
+``Player`` specifies ``version=2`` and has an ``on_hit`` function
+pointer field.  The generated ``describe_Player`` prints ``name``,
+``health``, and ``score`` but **skips** ``on_hit`` because
+``patch()`` detected it as ``Type.tFunction``.
 
 Compile-time output (from ``finish``)::
 
-   [serializable] Color: 3 field(s), version 1
-   [serializable] Player: 3 field(s), version 2
+   [serializable] Color: 3 serializable field(s), version 1
+   [serializable] Player: 3 serializable field(s), 1 skipped, version 2
 
 Runtime output::
 
@@ -345,15 +420,19 @@ The full sequence for a ``[serializable]`` struct:
 
    parse struct definition
      ↓
-   apply() → add _version field, generate describe_X()
+   apply() → add _version field, generate stub describe_X()
      ↓
-   infer types (generated function is also inferred)
+   infer types (stub function is inferred with header-only body)
      ↓
-   patch() → validate field types (reject blocks/lambdas/functions)
+   patch() → find stub, append field prints (skip bad types), mark "patched", astChanged
+     ↓
+   re-infer (modified body now has field-specific print statements)
+     ↓
+   patch() → "patched" arg found → return immediately
      ↓
    optimize
      ↓
-   finish() → compile-time diagnostic
+   finish() → compile-time diagnostic (serializable vs skipped)
      ↓
    simulate → run
 
@@ -372,13 +451,19 @@ Key takeaways
    * - ``AstStructureAnnotation``
      - Base class with ``apply``, ``patch``, ``finish`` methods
    * - ``apply()``
-     - Pre-inference: add fields, generate functions, validate args
+     - Pre-inference: add fields, generate stub functions
    * - ``patch()``
-     - Post-inference: validate types, optionally restart inference
+     - Post-inference: fill in bodies using type info, set ``astChanged``
    * - ``finish()``
      - Final: read-only diagnostics and reporting
    * - ``astChanged``
      - Set ``true`` in ``patch`` to restart inference after changes
+   * - ``add_annotation_argument``
+     - Marks the annotation as processed to prevent infinite re-patching
+   * - ``find_unique_function``
+     - Locates a function by name in a module (``ast_boost``)
+   * - ``reinterpret<ExprBlock?>``
+     - Casts ``fn.body`` to ``ExprBlock?`` to access the statement list
    * - ``add_structure_field``
      - Appends a field to a struct; moves both type and init expression
    * - ``clone_type``
