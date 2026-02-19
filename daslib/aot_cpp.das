@@ -1357,7 +1357,7 @@ class public CppAot : AstVisitor {
             }
         }
         // pre-declare locals
-        collector.localTemps.get(blk.get_ptr()) $(temps) {
+        collector.localTemps.get(blk.get_ptr()) <| $(temps) {
             for (tmp in temps) {
                 write(*ss, tabs());
                 describeVarLocalCppType(ss, tmp._type, cross_platform);
