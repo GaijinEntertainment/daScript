@@ -141,9 +141,21 @@ Macro tutorial RST files live in `doc/source/reference/tutorials/macros/` with `
   - Next tutorial link (except last)
 - Toctree is the "Macro Tutorials" section (label `tutorials_macros`) in `doc/source/reference/tutorials.rst`
 
+## Tutorial development workflow
+
+When creating or modifying tutorials:
+
+1. **Write a throwaway test file** (e.g., `test_<topic>.das`) during development to validate the tutorial code works correctly
+2. **Run the test file** with `dastest` to confirm all behavior — always check `$LASTEXITCODE` after running `daslang.exe` (a crash may produce no output)
+3. **Do NOT stage or commit the test file** — tutorials are self-demonstrating (run them, read the output); they don't need a permanent test suite
+4. **Delete the test file** once the tutorial is confirmed working
+5. **Stage only** the tutorial source files (`.das`), RST documentation, and toctree/seealso updates
+
+Test files for tutorials are development scaffolding, not deliverables.
+
 ## Cross-reference labels
 
 - Tutorial labels for cross-references: `tutorial_hello_world`, `tutorial_variables`, `tutorial_operators`, `tutorial_control_flow`, `tutorial_functions`, `tutorial_arrays`, `tutorial_strings`, `tutorial_structs`, `tutorial_enumerations`, `tutorial_tables`, `tutorial_tuples_and_variants`, `tutorial_function_pointers`, `tutorial_blocks`, `tutorial_lambdas`, `tutorial_iterators_and_generators`, `tutorial_modules`, `tutorial_move_copy_clone`, `tutorial_classes`, `tutorial_generics`, `tutorial_lifetime`, `tutorial_error_handling`, `tutorial_unsafe`, `tutorial_string_format`, `tutorial_pattern_matching`, `tutorial_annotations`, `tutorial_contracts`, `tutorial_testing`, `tutorial_linq`, `tutorial_functional`, `tutorial_json`, `tutorial_regex`, `tutorial_operator_overloading`, `tutorial_pointers`, `tutorial_utility_patterns`, `tutorial_random`, `tutorial_dynamic_type_checking`, `tutorial_coroutines`, `tutorial_serialization`, `tutorial_testing_tools`
 - C++ integration tutorial labels: `tutorial_integration_cpp_hello_world`, `tutorial_integration_cpp_calling_functions`, `tutorial_integration_cpp_binding_functions`, `tutorial_integration_cpp_binding_types`, `tutorial_integration_cpp_binding_enums`, `tutorial_integration_cpp_interop`, `tutorial_integration_cpp_callbacks`, `tutorial_integration_cpp_methods`, `tutorial_integration_cpp_operators_and_properties`
 - C++ integration tutorial plan (remaining): 10 Custom Modules, 11 Context Variables, 12 Smart Pointers & GC, 13 AOT, 14 Serialization, 15 Custom Annotations, 16 Sandbox
-- Macro tutorial labels: `tutorial_macro_call_macro`, `tutorial_macro_when_expression`
+- Macro tutorial labels: `tutorial_macro_call_macro`, `tutorial_macro_when_expression`, `tutorial_macro_tag_function_macro`, `tutorial_macro_reader_macro`, `tutorial_macro_variant_macro`, `tutorial_macro_structure_macro`

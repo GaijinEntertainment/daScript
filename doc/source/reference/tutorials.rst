@@ -149,3 +149,4 @@ Run any tutorial from the project root::
    tutorials/macros/03_function_macro.rst
    tutorials/macros/04_advanced_function_macro.rst
    tutorials/macros/05_tag_function_macro.rst
+   tutorials/macros/06_structure_macro.rst

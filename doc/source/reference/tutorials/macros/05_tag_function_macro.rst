@@ -358,6 +358,8 @@ Key takeaways
 
    Previous tutorial: :ref:`tutorial_macro_advanced_function_macro`
 
+   Next tutorial: :ref:`tutorial_macro_structure_macro`
+
    Standard library examples:
    ``daslib/assert_once.das`` (closest to our ``once()``),
    ``daslib/unroll.das``, ``daslib/defer.das``, ``daslib/static_let.das``
