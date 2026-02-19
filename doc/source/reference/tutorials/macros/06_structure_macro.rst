@@ -492,6 +492,8 @@ Key takeaways
 
    Previous tutorial: :ref:`tutorial_macro_tag_function_macro`
 
+   Next tutorial: :ref:`tutorial_macro_block_macro`
+
    Standard library examples:
    ``daslib/interfaces.das`` (``apply`` + ``finish``),
    ``daslib/export_constructor.das`` (``apply`` only),

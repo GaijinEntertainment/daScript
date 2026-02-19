@@ -7,8 +7,8 @@
 MACRO(DAS_C_INTEGRATION_TUTORIAL target_name)
     add_executable(${target_name} ${ARGN})
     TARGET_COMPILE_DEFINITIONS(${target_name} PRIVATE DAS_MOD_EXPORTS)
-    TARGET_LINK_LIBRARIES(${target_name} libDaScript Threads::Threads)
-    ADD_DEPENDENCIES(${target_name} libDaScript)
+    TARGET_LINK_LIBRARIES(${target_name} libDaScriptDyn Threads::Threads)
+    ADD_DEPENDENCIES(${target_name} libDaScriptDyn)
     SETUP_CPP11(${target_name})
     set_target_properties(${target_name} PROPERTIES
         LINKER_LANGUAGE CXX
@@ -88,8 +88,8 @@ add_executable(integration_c_09
     ${INTEGRATION_C_09_AOT_GENERATED_SRC}
 )
 TARGET_COMPILE_DEFINITIONS(integration_c_09 PRIVATE DAS_MOD_EXPORTS)
-TARGET_LINK_LIBRARIES(integration_c_09 libDaScript Threads::Threads)
-ADD_DEPENDENCIES(integration_c_09 libDaScript integration_c_09_dasAotStub)
+TARGET_LINK_LIBRARIES(integration_c_09 libDaScriptDyn Threads::Threads)
+ADD_DEPENDENCIES(integration_c_09 libDaScriptDyn integration_c_09_dasAotStub)
 SETUP_CPP11(integration_c_09)
 set_target_properties(integration_c_09 PROPERTIES
     LINKER_LANGUAGE CXX
