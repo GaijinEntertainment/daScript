@@ -37,6 +37,8 @@ var public {
     strict_struct_fields = true
 }
 
+
+
 def PANIC(message : string) {
     to_log(LOG_ERROR, "PANIC: {message}\n")
     unsafe(exit(-1))
@@ -244,10 +246,16 @@ def cleanup_type_short(name : string) {
         res = "{res |> slice(0,-9)}[]#"
     }
     if (res |> ends_with(" const implicit")) {
-        res = "{res |> slice(0,-15)} implicit"
+        res = res |> slice(0, -15)
     }
     if (res |> ends_with(" const implicit#")) {
-        res = "{res |> slice(0,-16)} implicit#"
+        res = "{res |> slice(0,-16)}#"
+    }
+    if (res |> ends_with(" implicit")) {
+        res = res |> slice(0, -9)
+    }
+    if (res |> ends_with(" implicit#")) {
+        res = "{res |> slice(0,-10)}#"
     }
     if (res |> ends_with(" const ==const")) {
         res = "{res |> slice(0,-14)} ==const"

@@ -52,23 +52,23 @@ Handled structures
 
 .. das:attribute:: JobStatus
 
-.. _function-jobque__dot__rq_isReady_JobStatus_implicit:
+.. _function-jobque__dot__rq_isReady_JobStatus:
 
-.. das:function:: JobStatus implicit.isReady() : bool
+.. das:function:: JobStatus.isReady() : bool
 
 Whether the job has completed execution.
 
 
-.. _function-jobque__dot__rq_isValid_JobStatus_implicit:
+.. _function-jobque__dot__rq_isValid_JobStatus:
 
-.. das:function:: JobStatus implicit.isValid() : bool
+.. das:function:: JobStatus.isValid() : bool
 
 Whether the job status object refers to a valid, active job.
 
 
-.. _function-jobque__dot__rq_size_JobStatus_implicit:
+.. _function-jobque__dot__rq_size_JobStatus:
 
-.. das:function:: JobStatus implicit.size() : int
+.. das:function:: JobStatus.size() : int
 
 Returns the current entry count of the JobStatus or Channel.
 
@@ -87,16 +87,16 @@ Returns the current entry count of the JobStatus or Channel.
 
 .. das:attribute:: Channel
 
-.. _function-jobque__dot__rq_isEmpty_Channel_implicit:
+.. _function-jobque__dot__rq_isEmpty_Channel:
 
-.. das:function:: Channel implicit.isEmpty() : bool
+.. das:function:: Channel.isEmpty() : bool
 
 Whether the channel or pipe contains no remaining elements.
 
 
-.. _function-jobque__dot__rq_total_Channel_implicit:
+.. _function-jobque__dot__rq_total_Channel:
 
-.. das:function:: Channel implicit.total() : int
+.. das:function:: Channel.total() : int
 
 Total number of elements that have been added to the pipe.
 
@@ -138,31 +138,31 @@ Total number of elements that have been added to the pipe.
 Channel, JobStatus, Lockbox
 +++++++++++++++++++++++++++
 
-  *  :ref:`add_ref (status: JobStatus? implicit) <function-jobque_add_ref_JobStatus_q__implicit>`
-  *  :ref:`append (channel: JobStatus? implicit; size: int) : int <function-jobque_append_JobStatus_q__implicit_int>`
+  *  :ref:`add_ref (status: JobStatus?) <function-jobque_add_ref_JobStatus_q_>`
+  *  :ref:`append (channel: JobStatus?; size: int) : int <function-jobque_append_JobStatus_q__int>`
   *  :ref:`channel_create () : Channel? <function-jobque_channel_create>`
-  *  :ref:`channel_remove (channel: Channel?& implicit) <function-jobque_channel_remove_Channel_q__ref__implicit>`
+  *  :ref:`channel_remove (channel: Channel?&) <function-jobque_channel_remove_Channel_q__ref_>`
   *  :ref:`job_status_create () : JobStatus? <function-jobque_job_status_create>`
-  *  :ref:`job_status_remove (jobStatus: JobStatus?& implicit) <function-jobque_job_status_remove_JobStatus_q__ref__implicit>`
-  *  :ref:`join (job: JobStatus? implicit) <function-jobque_join_JobStatus_q__implicit>`
+  *  :ref:`job_status_remove (jobStatus: JobStatus?&) <function-jobque_job_status_remove_JobStatus_q__ref_>`
+  *  :ref:`join (job: JobStatus?) <function-jobque_join_JobStatus_q_>`
   *  :ref:`lock_box_create () : LockBox? <function-jobque_lock_box_create>`
-  *  :ref:`lock_box_remove (box: LockBox?& implicit) <function-jobque_lock_box_remove_LockBox_q__ref__implicit>`
-  *  :ref:`notify (job: JobStatus? implicit) <function-jobque_notify_JobStatus_q__implicit>`
-  *  :ref:`notify_and_release (job: JobStatus?& implicit) <function-jobque_notify_and_release_JobStatus_q__ref__implicit>`
-  *  :ref:`release (status: JobStatus?& implicit) <function-jobque_release_JobStatus_q__ref__implicit>`
+  *  :ref:`lock_box_remove (box: LockBox?&) <function-jobque_lock_box_remove_LockBox_q__ref_>`
+  *  :ref:`notify (job: JobStatus?) <function-jobque_notify_JobStatus_q_>`
+  *  :ref:`notify_and_release (job: JobStatus?&) <function-jobque_notify_and_release_JobStatus_q__ref_>`
+  *  :ref:`release (status: JobStatus?&) <function-jobque_release_JobStatus_q__ref_>`
 
-.. _function-jobque_add_ref_JobStatus_q__implicit:
+.. _function-jobque_add_ref_JobStatus_q_:
 
-.. das:function:: add_ref(status: JobStatus? implicit)
+.. das:function:: add_ref(status: JobStatus?)
 
 Increases the reference count of a ``JobStatus`` or ``Channel``, preventing premature deletion.
 
 
 :Arguments: * **status** :  :ref:`JobStatus <handle-jobque-JobStatus>`? implicit
 
-.. _function-jobque_append_JobStatus_q__implicit_int:
+.. _function-jobque_append_JobStatus_q__int:
 
-.. das:function:: append(channel: JobStatus? implicit; size: int) : int
+.. das:function:: append(channel: JobStatus?; size: int) : int
 
 Increases the entry count of the channel, signaling that new work has been added.
 
@@ -181,9 +181,9 @@ Increases the entry count of the channel, signaling that new work has been added
 Creates a new ``Channel`` for inter-thread communication and synchronization.
 
 
-.. _function-jobque_channel_remove_Channel_q__ref__implicit:
+.. _function-jobque_channel_remove_Channel_q__ref_:
 
-.. das:function:: channel_remove(channel: Channel?& implicit)
+.. das:function:: channel_remove(channel: Channel?&)
 
 .. warning::
   This is unsafe operation.
@@ -200,9 +200,9 @@ Destroys a ``Channel`` and releases its resources.
 Creates a new ``JobStatus`` object for tracking the completion state of asynchronous jobs.
 
 
-.. _function-jobque_job_status_remove_JobStatus_q__ref__implicit:
+.. _function-jobque_job_status_remove_JobStatus_q__ref_:
 
-.. das:function:: job_status_remove(jobStatus: JobStatus?& implicit)
+.. das:function:: job_status_remove(jobStatus: JobStatus?&)
 
 .. warning::
   This is unsafe operation.
@@ -212,9 +212,9 @@ Destroys a ``JobStatus`` object and releases its resources.
 
 :Arguments: * **jobStatus** :  :ref:`JobStatus <handle-jobque-JobStatus>`?\ & implicit
 
-.. _function-jobque_join_JobStatus_q__implicit:
+.. _function-jobque_join_JobStatus_q_:
 
-.. das:function:: join(job: JobStatus? implicit)
+.. das:function:: join(job: JobStatus?)
 
 Blocks the current thread until the job or channel's entry count reaches zero, indicating all work is complete.
 
@@ -228,9 +228,9 @@ Blocks the current thread until the job or channel's entry count reaches zero, i
 Creates a new ``LockBox`` for thread-safe shared access to a single value.
 
 
-.. _function-jobque_lock_box_remove_LockBox_q__ref__implicit:
+.. _function-jobque_lock_box_remove_LockBox_q__ref_:
 
-.. das:function:: lock_box_remove(box: LockBox?& implicit)
+.. das:function:: lock_box_remove(box: LockBox?&)
 
 .. warning::
   This is unsafe operation.
@@ -240,27 +240,27 @@ Destroys a ``LockBox`` and releases its resources.
 
 :Arguments: * **box** :  :ref:`LockBox <handle-jobque-LockBox>`?\ & implicit
 
-.. _function-jobque_notify_JobStatus_q__implicit:
+.. _function-jobque_notify_JobStatus_q_:
 
-.. das:function:: notify(job: JobStatus? implicit)
+.. das:function:: notify(job: JobStatus?)
 
 Decreases the channel's entry count, signaling that one unit of work has completed.
 
 
 :Arguments: * **job** :  :ref:`JobStatus <handle-jobque-JobStatus>`? implicit
 
-.. _function-jobque_notify_and_release_JobStatus_q__ref__implicit:
+.. _function-jobque_notify_and_release_JobStatus_q__ref_:
 
-.. das:function:: notify_and_release(job: JobStatus?& implicit)
+.. das:function:: notify_and_release(job: JobStatus?&)
 
 Decreases the entry count and the reference count of a ``Channel`` or ``JobStatus`` in a single operation.
 
 
 :Arguments: * **job** :  :ref:`JobStatus <handle-jobque-JobStatus>`?\ & implicit
 
-.. _function-jobque_release_JobStatus_q__ref__implicit:
+.. _function-jobque_release_JobStatus_q__ref_:
 
-.. das:function:: release(status: JobStatus?& implicit)
+.. das:function:: release(status: JobStatus?&)
 
 Decreases the reference count of a ``JobStatus`` or ``Channel``; the object is deleted when the count reaches zero.
 
@@ -406,17 +406,17 @@ Atomic
 ++++++
 
   *  :ref:`atomic32_create () : Atomic32? <function-jobque_atomic32_create>`
-  *  :ref:`atomic32_remove (atomic: Atomic32?& implicit) <function-jobque_atomic32_remove_Atomic32_q__ref__implicit>`
+  *  :ref:`atomic32_remove (atomic: Atomic32?&) <function-jobque_atomic32_remove_Atomic32_q__ref_>`
   *  :ref:`atomic64_create () : Atomic64? <function-jobque_atomic64_create>`
-  *  :ref:`atomic64_remove (atomic: Atomic64?& implicit) <function-jobque_atomic64_remove_Atomic64_q__ref__implicit>`
-  *  :ref:`dec (atomic: Atomic32? implicit) : int <function-jobque_dec_Atomic32_q__implicit>`
-  *  :ref:`dec (atomic: Atomic64? implicit) : int64 <function-jobque_dec_Atomic64_q__implicit>`
-  *  :ref:`get (atomic: Atomic32? implicit) : int <function-jobque_get_Atomic32_q__implicit>`
-  *  :ref:`get (atomic: Atomic64? implicit) : int64 <function-jobque_get_Atomic64_q__implicit>`
-  *  :ref:`inc (atomic: Atomic32? implicit) : int <function-jobque_inc_Atomic32_q__implicit>`
-  *  :ref:`inc (atomic: Atomic64? implicit) : int64 <function-jobque_inc_Atomic64_q__implicit>`
-  *  :ref:`set (atomic: Atomic32? implicit; value: int) <function-jobque_set_Atomic32_q__implicit_int>`
-  *  :ref:`set (atomic: Atomic64? implicit; value: int64) <function-jobque_set_Atomic64_q__implicit_int64>`
+  *  :ref:`atomic64_remove (atomic: Atomic64?&) <function-jobque_atomic64_remove_Atomic64_q__ref_>`
+  *  :ref:`dec (atomic: Atomic32?) : int <function-jobque_dec_Atomic32_q_>`
+  *  :ref:`dec (atomic: Atomic64?) : int64 <function-jobque_dec_Atomic64_q_>`
+  *  :ref:`get (atomic: Atomic32?) : int <function-jobque_get_Atomic32_q_>`
+  *  :ref:`get (atomic: Atomic64?) : int64 <function-jobque_get_Atomic64_q_>`
+  *  :ref:`inc (atomic: Atomic32?) : int <function-jobque_inc_Atomic32_q_>`
+  *  :ref:`inc (atomic: Atomic64?) : int64 <function-jobque_inc_Atomic64_q_>`
+  *  :ref:`set (atomic: Atomic32?; value: int) <function-jobque_set_Atomic32_q__int>`
+  *  :ref:`set (atomic: Atomic64?; value: int64) <function-jobque_set_Atomic64_q__int64>`
   *  :ref:`with_atomic32 (block: block\<(Atomic32?):void\>) <function-jobque_with_atomic32_block_ls_Atomic32_q__c_void_gr_>`
   *  :ref:`with_atomic64 (block: block\<(Atomic64?):void\>) <function-jobque_with_atomic64_block_ls_Atomic64_q__c_void_gr_>`
 
@@ -427,9 +427,9 @@ Atomic
 Creates an ``Atomic32`` — a thread-safe 32-bit integer for lock-free concurrent access.
 
 
-.. _function-jobque_atomic32_remove_Atomic32_q__ref__implicit:
+.. _function-jobque_atomic32_remove_Atomic32_q__ref_:
 
-.. das:function:: atomic32_remove(atomic: Atomic32?& implicit)
+.. das:function:: atomic32_remove(atomic: Atomic32?&)
 
 .. warning::
   This is unsafe operation.
@@ -446,9 +446,9 @@ Destroys an ``Atomic32`` and releases its resources.
 Creates an ``Atomic64`` — a thread-safe 64-bit integer for lock-free concurrent access.
 
 
-.. _function-jobque_atomic64_remove_Atomic64_q__ref__implicit:
+.. _function-jobque_atomic64_remove_Atomic64_q__ref_:
 
-.. das:function:: atomic64_remove(atomic: Atomic64?& implicit)
+.. das:function:: atomic64_remove(atomic: Atomic64?&)
 
 .. warning::
   This is unsafe operation.
@@ -462,18 +462,18 @@ Destroys an ``Atomic64`` and releases its resources.
 dec
 ^^^
 
-.. _function-jobque_dec_Atomic32_q__implicit:
+.. _function-jobque_dec_Atomic32_q_:
 
-.. das:function:: dec(atomic: Atomic32? implicit) : int
+.. das:function:: dec(atomic: Atomic32?) : int
 
 Atomically decrements the integer value and returns the result.
 
 
 :Arguments: * **atomic** :  :ref:`Atomic32 <handle-jobque-Atomic32>`? implicit
 
-.. _function-jobque_dec_Atomic64_q__implicit:
+.. _function-jobque_dec_Atomic64_q_:
 
-.. das:function:: dec(atomic: Atomic64? implicit) : int64
+.. das:function:: dec(atomic: Atomic64?) : int64
 
 ----
 
@@ -481,18 +481,18 @@ Atomically decrements the integer value and returns the result.
 get
 ^^^
 
-.. _function-jobque_get_Atomic32_q__implicit:
+.. _function-jobque_get_Atomic32_q_:
 
-.. das:function:: get(atomic: Atomic32? implicit) : int
+.. das:function:: get(atomic: Atomic32?) : int
 
 Returns the current value of the atomic integer.
 
 
 :Arguments: * **atomic** :  :ref:`Atomic32 <handle-jobque-Atomic32>`? implicit
 
-.. _function-jobque_get_Atomic64_q__implicit:
+.. _function-jobque_get_Atomic64_q_:
 
-.. das:function:: get(atomic: Atomic64? implicit) : int64
+.. das:function:: get(atomic: Atomic64?) : int64
 
 ----
 
@@ -500,18 +500,18 @@ Returns the current value of the atomic integer.
 inc
 ^^^
 
-.. _function-jobque_inc_Atomic32_q__implicit:
+.. _function-jobque_inc_Atomic32_q_:
 
-.. das:function:: inc(atomic: Atomic32? implicit) : int
+.. das:function:: inc(atomic: Atomic32?) : int
 
 Atomically increments the integer value and returns the result.
 
 
 :Arguments: * **atomic** :  :ref:`Atomic32 <handle-jobque-Atomic32>`? implicit
 
-.. _function-jobque_inc_Atomic64_q__implicit:
+.. _function-jobque_inc_Atomic64_q_:
 
-.. das:function:: inc(atomic: Atomic64? implicit) : int64
+.. das:function:: inc(atomic: Atomic64?) : int64
 
 ----
 
@@ -519,9 +519,9 @@ Atomically increments the integer value and returns the result.
 set
 ^^^
 
-.. _function-jobque_set_Atomic32_q__implicit_int:
+.. _function-jobque_set_Atomic32_q__int:
 
-.. das:function:: set(atomic: Atomic32? implicit; value: int)
+.. das:function:: set(atomic: Atomic32?; value: int)
 
 Sets the atomic integer to the specified value.
 
@@ -530,9 +530,9 @@ Sets the atomic integer to the specified value.
 
             * **value** : int
 
-.. _function-jobque_set_Atomic64_q__implicit_int64:
+.. _function-jobque_set_Atomic64_q__int64:
 
-.. das:function:: set(atomic: Atomic64? implicit; value: int64)
+.. das:function:: set(atomic: Atomic64?; value: int64)
 
 ----
 

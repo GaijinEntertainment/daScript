@@ -679,11 +679,11 @@ Containers
   *  :ref:`emplace_default (var tab: table\<auto(keyT), auto(valT)\>; key: keyT|keyT#) <function-builtin_emplace_default_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>`
   *  :ref:`emplace_new (var Arr: array\<smart_ptr\<auto(numT)\>\>; var value: smart_ptr\<numT\>) : auto <function-builtin_emplace_new_array_ls_smart_ptr_ls_autonumT_gr__gr__smart_ptr_ls_numT_gr_>`
   *  :ref:`emplace_new (var tab: table\<auto(kT), smart_ptr\<auto(vT)\>\>; key: kT; var value: smart_ptr\<vT\>) : auto <function-builtin_emplace_new_table_ls_autokT,_smart_ptr_ls_autovT_gr__gr__kT_smart_ptr_ls_vT_gr_>`
-  *  :ref:`empty (str: string implicit) : bool <function-builtin_empty_string_implicit>`
-  *  :ref:`empty (str: das_string implicit) : bool <function-builtin_empty_das_string_implicit>`
+  *  :ref:`empty (str: string) : bool <function-builtin_empty_string>`
+  *  :ref:`empty (str: das_string) : bool <function-builtin_empty_das_string>`
   *  :ref:`empty (a: table\<auto;auto\>|table\<auto;auto\>#) : bool <function-builtin_empty_table_ls_auto;auto_gr_table_ls_auto;auto_gr__hh_>`
   *  :ref:`empty (a: array\<auto\>|array\<auto\>#) : bool <function-builtin_empty_array_ls_auto_gr_array_ls_auto_gr__hh_>`
-  *  :ref:`empty (iterator: iterator implicit) : bool <function-builtin_empty_iterator_implicit>`
+  *  :ref:`empty (iterator: iterator) : bool <function-builtin_empty_iterator>`
   *  :ref:`erase (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#) : bool <function-builtin_erase_table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh_>`
   *  :ref:`erase (var Arr: array\<auto(numT)\>; at: int) : auto <function-builtin_erase_array_ls_autonumT_gr__int>`
   *  :ref:`erase (var Arr: array\<auto(numT)\>; at: int; count: int) : auto <function-builtin_erase_array_ls_autonumT_gr__int_int>`
@@ -1031,18 +1031,18 @@ Moves a smart pointer `value` into the end of the array `Arr`, constructing the 
 empty
 ^^^^^
 
-.. _function-builtin_empty_string_implicit:
+.. _function-builtin_empty_string:
 
-.. das:function:: empty(str: string implicit) : bool
+.. das:function:: empty(str: string) : bool
 
-Checks whether the string `str` is empty (null or zero-length) and returns `true` if so.
+Checks whether the `das_string` is empty (has zero length) and returns `true` if so.
 
 
 :Arguments: * **str** : string implicit
 
-.. _function-builtin_empty_das_string_implicit:
+.. _function-builtin_empty_das_string:
 
-.. das:function:: empty(str: das_string implicit) : bool
+.. das:function:: empty(str: das_string) : bool
 
 .. _function-builtin_empty_table_ls_auto;auto_gr_table_ls_auto;auto_gr__hh_:
 
@@ -1052,9 +1052,9 @@ Checks whether the string `str` is empty (null or zero-length) and returns `true
 
 .. das:function:: empty(a: array<auto>|array<auto>#) : bool
 
-.. _function-builtin_empty_iterator_implicit:
+.. _function-builtin_empty_iterator:
 
-.. das:function:: empty(iterator: iterator implicit) : bool
+.. das:function:: empty(iterator: iterator) : bool
 
 ----
 
@@ -1881,11 +1881,11 @@ Returns a mutable iterator over all fixed-size array values in a mutable `table<
 das::string manipulation
 ++++++++++++++++++++++++
 
-  *  :ref:`peek (src: das_string implicit; block: block\<(string#):void\>) <function-builtin_peek_das_string_implicit_block_ls_string_hh__c_void_gr_>`
+  *  :ref:`peek (src: das_string; block: block\<(string#):void\>) <function-builtin_peek_das_string_block_ls_string_hh__c_void_gr_>`
 
-.. _function-builtin_peek_das_string_implicit_block_ls_string_hh__c_void_gr_:
+.. _function-builtin_peek_das_string_block_ls_string_hh__c_void_gr_:
 
-.. das:function:: peek(src: das_string implicit; block: block<(string#):void>)
+.. das:function:: peek(src: das_string; block: block<(string#):void>)
 
 Provides zero-copy read access to the contents of a `das_string` by invoking `block` with a temporary string reference, avoiding allocation.
 
@@ -2011,10 +2011,10 @@ GC0 infrastructure
 ++++++++++++++++++
 
   *  :ref:`gc0_reset () <function-builtin_gc0_reset>`
-  *  :ref:`gc0_restore_ptr (name: string implicit) : void? <function-builtin_gc0_restore_ptr_string_implicit>`
-  *  :ref:`gc0_restore_smart_ptr (name: string implicit) : smart_ptr\<void\> <function-builtin_gc0_restore_smart_ptr_string_implicit>`
-  *  :ref:`gc0_save_ptr (name: string implicit; data: void? implicit) <function-builtin_gc0_save_ptr_string_implicit_void_q__implicit>`
-  *  :ref:`gc0_save_smart_ptr (name: string implicit; data: smart_ptr\<void\> implicit) <function-builtin_gc0_save_smart_ptr_string_implicit_smart_ptr_ls_void_gr__implicit>`
+  *  :ref:`gc0_restore_ptr (name: string) : void? <function-builtin_gc0_restore_ptr_string>`
+  *  :ref:`gc0_restore_smart_ptr (name: string) : smart_ptr\<void\> <function-builtin_gc0_restore_smart_ptr_string>`
+  *  :ref:`gc0_save_ptr (name: string; data: void?) <function-builtin_gc0_save_ptr_string_void_q_>`
+  *  :ref:`gc0_save_smart_ptr (name: string; data: smart_ptr\<void\>) <function-builtin_gc0_save_smart_ptr_string_smart_ptr_ls_void_gr_>`
 
 .. _function-builtin_gc0_reset:
 
@@ -2023,27 +2023,27 @@ GC0 infrastructure
 Clears the entire gc0 storage, invalidating all previously saved pointers and smart pointers stored within it.
 
 
-.. _function-builtin_gc0_restore_ptr_string_implicit:
+.. _function-builtin_gc0_restore_ptr_string:
 
-.. das:function:: gc0_restore_ptr(name: string implicit) : void?
+.. das:function:: gc0_restore_ptr(name: string) : void?
 
 Retrieves a raw pointer previously saved in gc0 storage under the specified `name`, returning `null` if not found.
 
 
 :Arguments: * **name** : string implicit
 
-.. _function-builtin_gc0_restore_smart_ptr_string_implicit:
+.. _function-builtin_gc0_restore_smart_ptr_string:
 
-.. das:function:: gc0_restore_smart_ptr(name: string implicit) : smart_ptr<void>
+.. das:function:: gc0_restore_smart_ptr(name: string) : smart_ptr<void>
 
 Retrieves a `smart_ptr<void>` previously saved in gc0 storage under the specified `name`.
 
 
 :Arguments: * **name** : string implicit
 
-.. _function-builtin_gc0_save_ptr_string_implicit_void_q__implicit:
+.. _function-builtin_gc0_save_ptr_string_void_q_:
 
-.. das:function:: gc0_save_ptr(name: string implicit; data: void? implicit)
+.. das:function:: gc0_save_ptr(name: string; data: void?)
 
 Stores a raw pointer `data` into gc0 storage under the specified `name`, allowing it to be retrieved later with `gc0_restore_ptr`.
 
@@ -2052,9 +2052,9 @@ Stores a raw pointer `data` into gc0 storage under the specified `name`, allowin
 
             * **data** : void? implicit
 
-.. _function-builtin_gc0_save_smart_ptr_string_implicit_smart_ptr_ls_void_gr__implicit:
+.. _function-builtin_gc0_save_smart_ptr_string_smart_ptr_ls_void_gr_:
 
-.. das:function:: gc0_save_smart_ptr(name: string implicit; data: smart_ptr<void> implicit)
+.. das:function:: gc0_save_smart_ptr(name: string; data: smart_ptr<void>)
 
 Stores a `smart_ptr<void>` `data` into gc0 storage under the specified `name`, allowing it to be retrieved later with `gc0_restore_smart_ptr`.
 
@@ -2072,13 +2072,13 @@ Smart ptr infrastructure
   *  :ref:`get_const_ptr (src: smart_ptr\<auto(TT)\>) : TT? <function-builtin_get_const_ptr_smart_ptr_ls_autoTT_gr_>`
   *  :ref:`get_ptr (var src: smart_ptr\<auto(TT)\> ==const) : TT? <function-builtin_get_ptr__smart_ptr_ls_autoTT_gr___eq__eq_const>`
   *  :ref:`get_ptr (src: smart_ptr\<auto(TT)\> ==const) : TT? <function-builtin_get_ptr_smart_ptr_ls_autoTT_gr___eq__eq_const>`
-  *  :ref:`move (dest: smart_ptr\<void\>& implicit; src: void? implicit) <function-builtin_move_smart_ptr_ls_void_gr__ref__implicit_void_q__implicit>`
-  *  :ref:`move (dest: smart_ptr\<void\>& implicit; src: smart_ptr\<void\>& implicit) <function-builtin_move_smart_ptr_ls_void_gr__ref__implicit_smart_ptr_ls_void_gr__ref__implicit>`
-  *  :ref:`move_new (dest: smart_ptr\<void\>& implicit; src: smart_ptr\<void\> implicit) <function-builtin_move_new_smart_ptr_ls_void_gr__ref__implicit_smart_ptr_ls_void_gr__implicit>`
-  *  :ref:`smart_ptr_clone (dest: smart_ptr\<void\>& implicit; src: void? implicit) <function-builtin_smart_ptr_clone_smart_ptr_ls_void_gr__ref__implicit_void_q__implicit>`
-  *  :ref:`smart_ptr_clone (dest: smart_ptr\<void\>& implicit; src: smart_ptr\<void\> implicit) <function-builtin_smart_ptr_clone_smart_ptr_ls_void_gr__ref__implicit_smart_ptr_ls_void_gr__implicit>`
-  *  :ref:`smart_ptr_is_valid (dest: smart_ptr\<void\> implicit) : bool <function-builtin_smart_ptr_is_valid_smart_ptr_ls_void_gr__implicit>`
-  *  :ref:`smart_ptr_use_count (ptr: smart_ptr\<void\> implicit) : uint <function-builtin_smart_ptr_use_count_smart_ptr_ls_void_gr__implicit>`
+  *  :ref:`move (dest: smart_ptr\<void\>&; src: void?) <function-builtin_move_smart_ptr_ls_void_gr__ref__void_q_>`
+  *  :ref:`move (dest: smart_ptr\<void\>&; src: smart_ptr\<void\>&) <function-builtin_move_smart_ptr_ls_void_gr__ref__smart_ptr_ls_void_gr__ref_>`
+  *  :ref:`move_new (dest: smart_ptr\<void\>&; src: smart_ptr\<void\>) <function-builtin_move_new_smart_ptr_ls_void_gr__ref__smart_ptr_ls_void_gr_>`
+  *  :ref:`smart_ptr_clone (dest: smart_ptr\<void\>&; src: void?) <function-builtin_smart_ptr_clone_smart_ptr_ls_void_gr__ref__void_q_>`
+  *  :ref:`smart_ptr_clone (dest: smart_ptr\<void\>&; src: smart_ptr\<void\>) <function-builtin_smart_ptr_clone_smart_ptr_ls_void_gr__ref__smart_ptr_ls_void_gr_>`
+  *  :ref:`smart_ptr_is_valid (dest: smart_ptr\<void\>) : bool <function-builtin_smart_ptr_is_valid_smart_ptr_ls_void_gr_>`
+  *  :ref:`smart_ptr_use_count (ptr: smart_ptr\<void\>) : uint <function-builtin_smart_ptr_use_count_smart_ptr_ls_void_gr_>`
 
 .. _function-builtin_add_ptr_ref_smart_ptr_ls_autoTT_gr_:
 
@@ -2121,9 +2121,9 @@ Extracts a mutable raw pointer of type `TT?` from the given mutable `smart_ptr<T
 move
 ^^^^
 
-.. _function-builtin_move_smart_ptr_ls_void_gr__ref__implicit_void_q__implicit:
+.. _function-builtin_move_smart_ptr_ls_void_gr__ref__void_q_:
 
-.. das:function:: move(dest: smart_ptr<void>& implicit; src: void? implicit)
+.. das:function:: move(dest: smart_ptr<void>&; src: void?)
 
 Moves a raw pointer `src` into the smart pointer `dest`, nullifying the previous contents of `dest` and transferring ownership of `src`.
 
@@ -2132,15 +2132,15 @@ Moves a raw pointer `src` into the smart pointer `dest`, nullifying the previous
 
             * **src** : void? implicit
 
-.. _function-builtin_move_smart_ptr_ls_void_gr__ref__implicit_smart_ptr_ls_void_gr__ref__implicit:
+.. _function-builtin_move_smart_ptr_ls_void_gr__ref__smart_ptr_ls_void_gr__ref_:
 
-.. das:function:: move(dest: smart_ptr<void>& implicit; src: smart_ptr<void>& implicit)
+.. das:function:: move(dest: smart_ptr<void>&; src: smart_ptr<void>&)
 
 ----
 
-.. _function-builtin_move_new_smart_ptr_ls_void_gr__ref__implicit_smart_ptr_ls_void_gr__implicit:
+.. _function-builtin_move_new_smart_ptr_ls_void_gr__ref__smart_ptr_ls_void_gr_:
 
-.. das:function:: move_new(dest: smart_ptr<void>& implicit; src: smart_ptr<void> implicit)
+.. das:function:: move_new(dest: smart_ptr<void>&; src: smart_ptr<void>)
 
 Moves a newly constructed smart pointer value `src` into `dest`, used to initialize a `smart_ptr` from a `new` expression.
 
@@ -2153,9 +2153,9 @@ Moves a newly constructed smart pointer value `src` into `dest`, used to initial
 smart_ptr_clone
 ^^^^^^^^^^^^^^^
 
-.. _function-builtin_smart_ptr_clone_smart_ptr_ls_void_gr__ref__implicit_void_q__implicit:
+.. _function-builtin_smart_ptr_clone_smart_ptr_ls_void_gr__ref__void_q_:
 
-.. das:function:: smart_ptr_clone(dest: smart_ptr<void>& implicit; src: void? implicit)
+.. das:function:: smart_ptr_clone(dest: smart_ptr<void>&; src: void?)
 
 Clones a raw pointer `src` into smart pointer `dest`, incrementing the internal reference count to share ownership.
 
@@ -2164,24 +2164,24 @@ Clones a raw pointer `src` into smart pointer `dest`, incrementing the internal 
 
             * **src** : void? implicit
 
-.. _function-builtin_smart_ptr_clone_smart_ptr_ls_void_gr__ref__implicit_smart_ptr_ls_void_gr__implicit:
+.. _function-builtin_smart_ptr_clone_smart_ptr_ls_void_gr__ref__smart_ptr_ls_void_gr_:
 
-.. das:function:: smart_ptr_clone(dest: smart_ptr<void>& implicit; src: smart_ptr<void> implicit)
+.. das:function:: smart_ptr_clone(dest: smart_ptr<void>&; src: smart_ptr<void>)
 
 ----
 
-.. _function-builtin_smart_ptr_is_valid_smart_ptr_ls_void_gr__implicit:
+.. _function-builtin_smart_ptr_is_valid_smart_ptr_ls_void_gr_:
 
-.. das:function:: smart_ptr_is_valid(dest: smart_ptr<void> implicit) : bool
+.. das:function:: smart_ptr_is_valid(dest: smart_ptr<void>) : bool
 
 Checks whether the smart pointer `dest` holds a non-null reference to valid data, returning true if it does.
 
 
 :Arguments: * **dest** : smart_ptr<void> implicit
 
-.. _function-builtin_smart_ptr_use_count_smart_ptr_ls_void_gr__implicit:
+.. _function-builtin_smart_ptr_use_count_smart_ptr_ls_void_gr_:
 
-.. das:function:: smart_ptr_use_count(ptr: smart_ptr<void> implicit) : uint
+.. das:function:: smart_ptr_use_count(ptr: smart_ptr<void>) : uint
 
 Returns the current reference count of the object managed by `ptr`, indicating how many smart pointers share ownership.
 
@@ -2195,7 +2195,7 @@ Macro infrastructure
 
   *  :ref:`is_compiling () : bool <function-builtin_is_compiling>`
   *  :ref:`is_compiling_macros () : bool <function-builtin_is_compiling_macros>`
-  *  :ref:`is_compiling_macros_in_module (name: string implicit) : bool <function-builtin_is_compiling_macros_in_module_string_implicit>`
+  *  :ref:`is_compiling_macros_in_module (name: string) : bool <function-builtin_is_compiling_macros_in_module_string>`
   *  :ref:`is_folding () : bool <function-builtin_is_folding>`
   *  :ref:`is_in_completion () : bool <function-builtin_is_in_completion>`
   *  :ref:`is_reporting_compilation_errors () : bool <function-builtin_is_reporting_compilation_errors>`
@@ -2214,9 +2214,9 @@ Returns `true` if the current context is in the process of being compiled, allow
 Returns `true` if the current context is being compiled and the compiler is currently executing the macro pass.
 
 
-.. _function-builtin_is_compiling_macros_in_module_string_implicit:
+.. _function-builtin_is_compiling_macros_in_module_string:
 
-.. das:function:: is_compiling_macros_in_module(name: string implicit) : bool
+.. das:function:: is_compiling_macros_in_module(name: string) : bool
 
 Returns `true` if the current context is being compiled during the macro pass and the compiler is processing the module specified by `name`.
 
@@ -2251,7 +2251,7 @@ Profiler
 
   *  :ref:`collect_profile_info () : string <function-builtin_collect_profile_info>`
   *  :ref:`dump_profile_info () <function-builtin_dump_profile_info>`
-  *  :ref:`profile (count: int; category: string implicit; block: block\<():void\>) : float <function-builtin_profile_int_string_implicit_block_ls__c_void_gr_>`
+  *  :ref:`profile (count: int; category: string; block: block\<():void\>) : float <function-builtin_profile_int_string_block_ls__c_void_gr_>`
   *  :ref:`reset_profiler () <function-builtin_reset_profiler>`
 
 .. _function-builtin_collect_profile_info:
@@ -2268,9 +2268,9 @@ Collects profiling information gathered by the built-in line profiler and return
 Prints the execution counts and timing data for all lines collected by the built-in line profiler to the standard output.
 
 
-.. _function-builtin_profile_int_string_implicit_block_ls__c_void_gr_:
+.. _function-builtin_profile_int_string_block_ls__c_void_gr_:
 
-.. das:function:: profile(count: int; category: string implicit; block: block<():void>) : float
+.. das:function:: profile(count: int; category: string; block: block<():void>) : float
 
 Executes `block` a total of `count` times under the given `category` label, prints the timing, and returns the minimum elapsed time in seconds across all iterations.
 
@@ -2295,19 +2295,19 @@ System infrastructure
 
   *  :ref:`aot_enabled () : bool <function-builtin_aot_enabled>`
   *  :ref:`breakpoint () <function-builtin_breakpoint>`
-  *  :ref:`error (text: string implicit) <function-builtin_error_string_implicit>`
+  *  :ref:`error (text: string) <function-builtin_error_string>`
   *  :ref:`eval_main_loop (block: block\<():void\>) <function-builtin_eval_main_loop_block_ls__c_void_gr_>`
   *  :ref:`get_das_root () : string <function-builtin_get_das_root>`
   *  :ref:`is_in_aot () : bool <function-builtin_is_in_aot>`
   *  :ref:`is_intern_strings () : bool <function-builtin_is_intern_strings>`
-  *  :ref:`panic (text: string implicit) <function-builtin_panic_string_implicit>`
-  *  :ref:`print (text: string implicit) <function-builtin_print_string_implicit>`
+  *  :ref:`panic (text: string) <function-builtin_panic_string>`
+  *  :ref:`print (text: string) <function-builtin_print_string>`
   *  :ref:`sprint (value: any; flags: print_flags) : string <function-builtin_sprint_any_print_flags>`
   *  :ref:`sprint_json (value: any; humanReadable: bool) : string <function-builtin_sprint_json_any_bool>`
   *  :ref:`stackwalk (args: bool = true; vars: bool = true) <function-builtin_stackwalk_bool_bool>`
   *  :ref:`terminate () <function-builtin_terminate>`
-  *  :ref:`to_compiler_log (text: string implicit) <function-builtin_to_compiler_log_string_implicit>`
-  *  :ref:`to_log (level: int; text: string implicit) <function-builtin_to_log_int_string_implicit>`
+  *  :ref:`to_compiler_log (text: string) <function-builtin_to_compiler_log_string>`
+  *  :ref:`to_log (level: int; text: string) <function-builtin_to_log_int_string>`
 
 .. _function-builtin_aot_enabled:
 
@@ -2323,9 +2323,9 @@ Checks whether ahead-of-time (AOT) compilation is enabled for the current progra
 Triggers a debugger breakpoint by calling `os_debugbreakpoint`, which is a link-time dependency expected to be provided by the host application or debugger tool.
 
 
-.. _function-builtin_error_string_implicit:
+.. _function-builtin_error_string:
 
-.. das:function:: error(text: string implicit)
+.. das:function:: error(text: string)
 
 Outputs the string `text` to the context's error stream, similar to `print` but directed to the error output channel.
 
@@ -2362,18 +2362,18 @@ Returns `true` if the compiler is currently generating ahead-of-time (AOT) compi
 Returns `true` if string interning is enabled in the current context, meaning identical strings share the same memory.
 
 
-.. _function-builtin_panic_string_implicit:
+.. _function-builtin_panic_string:
 
-.. das:function:: panic(text: string implicit)
+.. das:function:: panic(text: string)
 
 will cause panic. The program will be terminated if there is no recover. Panic is not an error handling mechanism and can not be used as such. It is indeed panic, fatal error. It is not supposed that program can completely correctly recover from panic, recover construction is provided so program can try to correctly shut-down or report fatal error. If there is no recover within the script, it will be called in calling eval (in C++ callee code).
 
 
 :Arguments: * **text** : string implicit
 
-.. _function-builtin_print_string_implicit:
+.. _function-builtin_print_string:
 
-.. das:function:: print(text: string implicit)
+.. das:function:: print(text: string)
 
 Outputs `text` to the current context's log, typically printing to standard output.
 
@@ -2420,18 +2420,18 @@ Prints the current call stack to the log; set `args` to include function argumen
 Immediately terminates execution of the current daslang context.
 
 
-.. _function-builtin_to_compiler_log_string_implicit:
+.. _function-builtin_to_compiler_log_string:
 
-.. das:function:: to_compiler_log(text: string implicit)
+.. das:function:: to_compiler_log(text: string)
 
 Outputs `text` to the compiler's log stream, typically used from within macro code during compilation.
 
 
 :Arguments: * **text** : string implicit
 
-.. _function-builtin_to_log_int_string_implicit:
+.. _function-builtin_to_log_int_string:
 
-.. das:function:: to_log(level: int; text: string implicit)
+.. das:function:: to_log(level: int; text: string)
 
 Outputs `text` to the logging infrastructure at the specified `level` (e.g. LOG_INFO, LOG_ERROR), rather than to standard output.
 
@@ -2447,7 +2447,7 @@ Memory manipulation
 
   *  :ref:`hash (value: int8) : uint64 <function-builtin_hash_int8>`
   *  :ref:`hash (data: any) : uint64 <function-builtin_hash_any>`
-  *  :ref:`hash (data: string implicit) : uint64 <function-builtin_hash_string_implicit>`
+  *  :ref:`hash (data: string) : uint64 <function-builtin_hash_string>`
   *  :ref:`hash (value: int) : uint64 <function-builtin_hash_int>`
   *  :ref:`hash (value: int16) : uint64 <function-builtin_hash_int16>`
   *  :ref:`hash (value: uint8) : uint64 <function-builtin_hash_uint8>`
@@ -2456,19 +2456,19 @@ Memory manipulation
   *  :ref:`hash (value: int64) : uint64 <function-builtin_hash_int64>`
   *  :ref:`hash (value: uint) : uint64 <function-builtin_hash_uint>`
   *  :ref:`hash (value: uint64) : uint64 <function-builtin_hash_uint64>`
-  *  :ref:`hash (value: void? implicit) : uint64 <function-builtin_hash_void_q__implicit>`
+  *  :ref:`hash (value: void?) : uint64 <function-builtin_hash_void_q_>`
   *  :ref:`hash (value: float) : uint64 <function-builtin_hash_float>`
-  *  :ref:`hash (value: das_string implicit) : uint64 <function-builtin_hash_das_string_implicit>`
+  *  :ref:`hash (value: das_string) : uint64 <function-builtin_hash_das_string>`
   *  :ref:`intptr (p: smart_ptr\<auto\>) : uint64 <function-builtin_intptr_smart_ptr_ls_auto_gr_>`
   *  :ref:`intptr (p: void?) : uint64 <function-builtin_intptr_void_q_>`
   *  :ref:`lock_data (a: array\<auto(TT)\> ==const|array\<auto(TT)\> const# ==const; blk: block\<(p:TT const?#;s:int):auto\>) : auto <function-builtin_lock_data_array_ls_autoTT_gr___eq__eq_constarray_ls_autoTT_gr__const_hh___eq__eq_const_block_ls_p_c_TT_const_q__hh_;s_c_int_c_auto_gr_>`
   *  :ref:`lock_data (var a: array\<auto(TT)\> ==const|array\<auto(TT)\># ==const; blk: block\<(var p:TT?#;s:int):auto\>) : auto <function-builtin_lock_data_array_ls_autoTT_gr___eq__eq_constarray_ls_autoTT_gr__hh___eq__eq_const_block_ls_var_p_c_TT_q__hh_;s_c_int_c_auto_gr_>`
   *  :ref:`map_to_array (data: void?; len: int; blk: block\<(var arg:array\<auto(TT)\>#):auto\>) : auto <function-builtin_map_to_array_void_q__int_block_ls_var_arg_c_array_ls_autoTT_gr__hh__c_auto_gr_>`
   *  :ref:`map_to_ro_array (data: void?; len: int; blk: block\<(arg:array\<auto(TT)\>#):auto\>) : auto <function-builtin_map_to_ro_array_void_q__int_block_ls_arg_c_array_ls_autoTT_gr__hh__c_auto_gr_>`
-  *  :ref:`memcmp (left: void? implicit; right: void? implicit; size: int) : int <function-builtin_memcmp_void_q__implicit_void_q__implicit_int>`
-  *  :ref:`memcpy (left: void? implicit; right: void? implicit; size: int) <function-builtin_memcpy_void_q__implicit_void_q__implicit_int>`
-  *  :ref:`set_variant_index (variant: variant\<\> implicit; index: int) <function-builtin_set_variant_index_variant_ls__gr__implicit_int>`
-  *  :ref:`variant_index (arg0: variant\<\> implicit) : int <function-builtin_variant_index_variant_ls__gr__implicit>`
+  *  :ref:`memcmp (left: void?; right: void?; size: int) : int <function-builtin_memcmp_void_q__void_q__int>`
+  *  :ref:`memcpy (left: void?; right: void?; size: int) <function-builtin_memcpy_void_q__void_q__int>`
+  *  :ref:`set_variant_index (variant: variant\<\>; index: int) <function-builtin_set_variant_index_variant_ls__gr__int>`
+  *  :ref:`variant_index (arg0: variant\<\>) : int <function-builtin_variant_index_variant_ls__gr_>`
 
 
 hash
@@ -2487,9 +2487,9 @@ Computes a 64-bit FNV-1a hash of the given `int8` value and returns it as `uint6
 
 .. das:function:: hash(data: any) : uint64
 
-.. _function-builtin_hash_string_implicit:
+.. _function-builtin_hash_string:
 
-.. das:function:: hash(data: string implicit) : uint64
+.. das:function:: hash(data: string) : uint64
 
 .. _function-builtin_hash_int:
 
@@ -2523,17 +2523,17 @@ Computes a 64-bit FNV-1a hash of the given `int8` value and returns it as `uint6
 
 .. das:function:: hash(value: uint64) : uint64
 
-.. _function-builtin_hash_void_q__implicit:
+.. _function-builtin_hash_void_q_:
 
-.. das:function:: hash(value: void? implicit) : uint64
+.. das:function:: hash(value: void?) : uint64
 
 .. _function-builtin_hash_float:
 
 .. das:function:: hash(value: float) : uint64
 
-.. _function-builtin_hash_das_string_implicit:
+.. _function-builtin_hash_das_string:
 
-.. das:function:: hash(value: das_string implicit) : uint64
+.. das:function:: hash(value: das_string) : uint64
 
 ----
 
@@ -2609,9 +2609,9 @@ Constructs a temporary read-only array of type `TT` over raw memory at `data` wi
 
             * **blk** : block<(arg:array<auto(TT)>\ #):auto>
 
-.. _function-builtin_memcmp_void_q__implicit_void_q__implicit_int:
+.. _function-builtin_memcmp_void_q__void_q__int:
 
-.. das:function:: memcmp(left: void? implicit; right: void? implicit; size: int) : int
+.. das:function:: memcmp(left: void?; right: void?; size: int) : int
 
 .. warning::
   This is unsafe operation.
@@ -2625,9 +2625,9 @@ Compares `size` bytes of memory at `left` and `right`, returning -1 if `left` is
 
             * **size** : int
 
-.. _function-builtin_memcpy_void_q__implicit_void_q__implicit_int:
+.. _function-builtin_memcpy_void_q__void_q__int:
 
-.. das:function:: memcpy(left: void? implicit; right: void? implicit; size: int)
+.. das:function:: memcpy(left: void?; right: void?; size: int)
 
 .. warning::
   This is unsafe operation.
@@ -2641,9 +2641,9 @@ Copies `size` bytes of memory from the address pointed to by `right` into the ad
 
             * **size** : int
 
-.. _function-builtin_set_variant_index_variant_ls__gr__implicit_int:
+.. _function-builtin_set_variant_index_variant_ls__gr__int:
 
-.. das:function:: set_variant_index(variant: variant<> implicit; index: int)
+.. das:function:: set_variant_index(variant: variant<>; index: int)
 
 .. warning::
   This is unsafe operation.
@@ -2655,9 +2655,9 @@ Overwrites the internal type discriminator of `variant` to `index`, changing whi
 
             * **index** : int
 
-.. _function-builtin_variant_index_variant_ls__gr__implicit:
+.. _function-builtin_variant_index_variant_ls__gr_:
 
-.. das:function:: variant_index(arg0: variant<> implicit) : int
+.. das:function:: variant_index(arg0: variant<>) : int
 
 Returns the zero-based index indicating which alternative the variant currently holds.
 
@@ -2813,24 +2813,24 @@ Returns the name of the operating system the program is running on, such as `"wi
 String formatting
 +++++++++++++++++
 
-  *  :ref:`fmt (format: string implicit; value: uint8) : string <function-builtin_fmt_string_implicit_uint8>`
-  *  :ref:`fmt (format: string implicit; value: int8) : string <function-builtin_fmt_string_implicit_int8>`
-  *  :ref:`fmt (format: string implicit; value: uint16) : string <function-builtin_fmt_string_implicit_uint16>`
-  *  :ref:`fmt (format: string implicit; value: int16) : string <function-builtin_fmt_string_implicit_int16>`
-  *  :ref:`fmt (format: string implicit; value: int64) : string <function-builtin_fmt_string_implicit_int64>`
-  *  :ref:`fmt (format: string implicit; value: uint) : string <function-builtin_fmt_string_implicit_uint>`
-  *  :ref:`fmt (format: string implicit; value: uint64) : string <function-builtin_fmt_string_implicit_uint64>`
-  *  :ref:`fmt (format: string implicit; value: int) : string <function-builtin_fmt_string_implicit_int>`
-  *  :ref:`fmt (format: string implicit; value: double) : string <function-builtin_fmt_string_implicit_double>`
-  *  :ref:`fmt (format: string implicit; value: float) : string <function-builtin_fmt_string_implicit_float>`
+  *  :ref:`fmt (format: string; value: uint8) : string <function-builtin_fmt_string_uint8>`
+  *  :ref:`fmt (format: string; value: int8) : string <function-builtin_fmt_string_int8>`
+  *  :ref:`fmt (format: string; value: uint16) : string <function-builtin_fmt_string_uint16>`
+  *  :ref:`fmt (format: string; value: int16) : string <function-builtin_fmt_string_int16>`
+  *  :ref:`fmt (format: string; value: int64) : string <function-builtin_fmt_string_int64>`
+  *  :ref:`fmt (format: string; value: uint) : string <function-builtin_fmt_string_uint>`
+  *  :ref:`fmt (format: string; value: uint64) : string <function-builtin_fmt_string_uint64>`
+  *  :ref:`fmt (format: string; value: int) : string <function-builtin_fmt_string_int>`
+  *  :ref:`fmt (format: string; value: double) : string <function-builtin_fmt_string_double>`
+  *  :ref:`fmt (format: string; value: float) : string <function-builtin_fmt_string_float>`
 
 
 fmt
 ^^^
 
-.. _function-builtin_fmt_string_implicit_uint8:
+.. _function-builtin_fmt_string_uint8:
 
-.. das:function:: fmt(format: string implicit; value: uint8) : string
+.. das:function:: fmt(format: string; value: uint8) : string
 
 Formats a `uint8` value as a string using the given `format` specifier (following libfmt / C++20 `std::format` syntax).
 
@@ -2839,41 +2839,41 @@ Formats a `uint8` value as a string using the given `format` specifier (followin
 
             * **value** : uint8
 
-.. _function-builtin_fmt_string_implicit_int8:
+.. _function-builtin_fmt_string_int8:
 
-.. das:function:: fmt(format: string implicit; value: int8) : string
+.. das:function:: fmt(format: string; value: int8) : string
 
-.. _function-builtin_fmt_string_implicit_uint16:
+.. _function-builtin_fmt_string_uint16:
 
-.. das:function:: fmt(format: string implicit; value: uint16) : string
+.. das:function:: fmt(format: string; value: uint16) : string
 
-.. _function-builtin_fmt_string_implicit_int16:
+.. _function-builtin_fmt_string_int16:
 
-.. das:function:: fmt(format: string implicit; value: int16) : string
+.. das:function:: fmt(format: string; value: int16) : string
 
-.. _function-builtin_fmt_string_implicit_int64:
+.. _function-builtin_fmt_string_int64:
 
-.. das:function:: fmt(format: string implicit; value: int64) : string
+.. das:function:: fmt(format: string; value: int64) : string
 
-.. _function-builtin_fmt_string_implicit_uint:
+.. _function-builtin_fmt_string_uint:
 
-.. das:function:: fmt(format: string implicit; value: uint) : string
+.. das:function:: fmt(format: string; value: uint) : string
 
-.. _function-builtin_fmt_string_implicit_uint64:
+.. _function-builtin_fmt_string_uint64:
 
-.. das:function:: fmt(format: string implicit; value: uint64) : string
+.. das:function:: fmt(format: string; value: uint64) : string
 
-.. _function-builtin_fmt_string_implicit_int:
+.. _function-builtin_fmt_string_int:
 
-.. das:function:: fmt(format: string implicit; value: int) : string
+.. das:function:: fmt(format: string; value: int) : string
 
-.. _function-builtin_fmt_string_implicit_double:
+.. _function-builtin_fmt_string_double:
 
-.. das:function:: fmt(format: string implicit; value: double) : string
+.. das:function:: fmt(format: string; value: double) : string
 
-.. _function-builtin_fmt_string_implicit_float:
+.. _function-builtin_fmt_string_float:
 
-.. das:function:: fmt(format: string implicit; value: float) : string
+.. das:function:: fmt(format: string; value: float) : string
 
 
 ++++++++++++++++++++
@@ -2991,10 +2991,10 @@ Passes through and returns a mutable reference to `a`, verifying that `a` and al
 Bit operations
 ++++++++++++++
 
-  *  :ref:`__bit_set (value: bitfield& implicit; mask: bitfield; on: bool) <function-builtin___bit_set_bitfield_ref__implicit_bitfield_bool>`
-  *  :ref:`__bit_set (value: bitfield8:uint8\<\>& implicit; mask: bitfield8:uint8\<\>; on: bool) <function-builtin___bit_set_bitfield8_c_uint8_ls__gr__ref__implicit_bitfield8_c_uint8_ls__gr__bool>`
-  *  :ref:`__bit_set (value: bitfield64:uint64\<\>& implicit; mask: bitfield64:uint64\<\>; on: bool) <function-builtin___bit_set_bitfield64_c_uint64_ls__gr__ref__implicit_bitfield64_c_uint64_ls__gr__bool>`
-  *  :ref:`__bit_set (value: bitfield16:uint16\<\>& implicit; mask: bitfield16:uint16\<\>; on: bool) <function-builtin___bit_set_bitfield16_c_uint16_ls__gr__ref__implicit_bitfield16_c_uint16_ls__gr__bool>`
+  *  :ref:`__bit_set (value: bitfield&; mask: bitfield; on: bool) <function-builtin___bit_set_bitfield_ref__bitfield_bool>`
+  *  :ref:`__bit_set (value: bitfield8:uint8\<\>&; mask: bitfield8:uint8\<\>; on: bool) <function-builtin___bit_set_bitfield8_c_uint8_ls__gr__ref__bitfield8_c_uint8_ls__gr__bool>`
+  *  :ref:`__bit_set (value: bitfield64:uint64\<\>&; mask: bitfield64:uint64\<\>; on: bool) <function-builtin___bit_set_bitfield64_c_uint64_ls__gr__ref__bitfield64_c_uint64_ls__gr__bool>`
+  *  :ref:`__bit_set (value: bitfield16:uint16\<\>&; mask: bitfield16:uint16\<\>; on: bool) <function-builtin___bit_set_bitfield16_c_uint16_ls__gr__ref__bitfield16_c_uint16_ls__gr__bool>`
   *  :ref:`clz (bits: uint64) : uint64 <function-builtin_clz_uint64>`
   *  :ref:`clz (bits: uint) : uint <function-builtin_clz_uint>`
   *  :ref:`ctz (bits: uint64) : uint64 <function-builtin_ctz_uint64>`
@@ -3007,11 +3007,11 @@ Bit operations
 __bit_set
 ^^^^^^^^^
 
-.. _function-builtin___bit_set_bitfield_ref__implicit_bitfield_bool:
+.. _function-builtin___bit_set_bitfield_ref__bitfield_bool:
 
-.. das:function:: __bit_set(value: bitfield& implicit; mask: bitfield; on: bool)
+.. das:function:: __bit_set(value: bitfield&; mask: bitfield; on: bool)
 
-Sets or clears the bits specified by `mask` in the bitfield `value`, turning them on if `on` is true or off if `on` is false.
+Sets or clears the bits specified by `mask` in the 16-bit bitfield `value`, turning them on if `on` is true or off if `on` is false.
 
 
 :Arguments: * **value** : bitfield<>\ & implicit
@@ -3020,17 +3020,17 @@ Sets or clears the bits specified by `mask` in the bitfield `value`, turning the
 
             * **on** : bool
 
-.. _function-builtin___bit_set_bitfield8_c_uint8_ls__gr__ref__implicit_bitfield8_c_uint8_ls__gr__bool:
+.. _function-builtin___bit_set_bitfield8_c_uint8_ls__gr__ref__bitfield8_c_uint8_ls__gr__bool:
 
-.. das:function:: __bit_set(value: bitfield8:uint8<>& implicit; mask: bitfield8:uint8<>; on: bool)
+.. das:function:: __bit_set(value: bitfield8:uint8<>&; mask: bitfield8:uint8<>; on: bool)
 
-.. _function-builtin___bit_set_bitfield64_c_uint64_ls__gr__ref__implicit_bitfield64_c_uint64_ls__gr__bool:
+.. _function-builtin___bit_set_bitfield64_c_uint64_ls__gr__ref__bitfield64_c_uint64_ls__gr__bool:
 
-.. das:function:: __bit_set(value: bitfield64:uint64<>& implicit; mask: bitfield64:uint64<>; on: bool)
+.. das:function:: __bit_set(value: bitfield64:uint64<>&; mask: bitfield64:uint64<>; on: bool)
 
-.. _function-builtin___bit_set_bitfield16_c_uint16_ls__gr__ref__implicit_bitfield16_c_uint16_ls__gr__bool:
+.. _function-builtin___bit_set_bitfield16_c_uint16_ls__gr__ref__bitfield16_c_uint16_ls__gr__bool:
 
-.. das:function:: __bit_set(value: bitfield16:uint16<>& implicit; mask: bitfield16:uint16<>; on: bool)
+.. das:function:: __bit_set(value: bitfield16:uint16<>&; mask: bitfield16:uint16<>; on: bool)
 
 ----
 
@@ -3142,11 +3142,11 @@ Constructs a `urange` value from the two `uint` endpoints `arg0` (inclusive) and
 RTTI
 ++++
 
-  *  :ref:`class_rtti_size (ptr: void? implicit) : int <function-builtin_class_rtti_size_void_q__implicit>`
+  *  :ref:`class_rtti_size (ptr: void?) : int <function-builtin_class_rtti_size_void_q_>`
 
-.. _function-builtin_class_rtti_size_void_q__implicit:
+.. _function-builtin_class_rtti_size_void_q_:
 
-.. das:function:: class_rtti_size(ptr: void? implicit) : int
+.. das:function:: class_rtti_size(ptr: void?) : int
 
 Examines the RTTI (runtime type information) associated with the class at `ptr` and returns the size in bytes of its TypeInfo structure.
 
@@ -3245,15 +3245,15 @@ Creates an infinite iterator over unsigned integers beginning at `start` and inc
 Memset
 ++++++
 
-  *  :ref:`memset128 (left: void? implicit; value: uint4; count: int) <function-builtin_memset128_void_q__implicit_uint4_int>`
-  *  :ref:`memset16 (left: void? implicit; value: uint16; count: int) <function-builtin_memset16_void_q__implicit_uint16_int>`
-  *  :ref:`memset32 (left: void? implicit; value: uint; count: int) <function-builtin_memset32_void_q__implicit_uint_int>`
-  *  :ref:`memset64 (left: void? implicit; value: uint64; count: int) <function-builtin_memset64_void_q__implicit_uint64_int>`
-  *  :ref:`memset8 (left: void? implicit; value: uint8; count: int) <function-builtin_memset8_void_q__implicit_uint8_int>`
+  *  :ref:`memset128 (left: void?; value: uint4; count: int) <function-builtin_memset128_void_q__uint4_int>`
+  *  :ref:`memset16 (left: void?; value: uint16; count: int) <function-builtin_memset16_void_q__uint16_int>`
+  *  :ref:`memset32 (left: void?; value: uint; count: int) <function-builtin_memset32_void_q__uint_int>`
+  *  :ref:`memset64 (left: void?; value: uint64; count: int) <function-builtin_memset64_void_q__uint64_int>`
+  *  :ref:`memset8 (left: void?; value: uint8; count: int) <function-builtin_memset8_void_q__uint8_int>`
 
-.. _function-builtin_memset128_void_q__implicit_uint4_int:
+.. _function-builtin_memset128_void_q__uint4_int:
 
-.. das:function:: memset128(left: void? implicit; value: uint4; count: int)
+.. das:function:: memset128(left: void?; value: uint4; count: int)
 
 .. warning::
   This is unsafe operation.
@@ -3267,9 +3267,9 @@ Fills memory at `left` with `count` copies of the 128-bit `uint4` vector `value`
 
             * **count** : int
 
-.. _function-builtin_memset16_void_q__implicit_uint16_int:
+.. _function-builtin_memset16_void_q__uint16_int:
 
-.. das:function:: memset16(left: void? implicit; value: uint16; count: int)
+.. das:function:: memset16(left: void?; value: uint16; count: int)
 
 .. warning::
   This is unsafe operation.
@@ -3283,9 +3283,9 @@ Fills memory at `left` with `count` copies of the 16-bit `value`.
 
             * **count** : int
 
-.. _function-builtin_memset32_void_q__implicit_uint_int:
+.. _function-builtin_memset32_void_q__uint_int:
 
-.. das:function:: memset32(left: void? implicit; value: uint; count: int)
+.. das:function:: memset32(left: void?; value: uint; count: int)
 
 .. warning::
   This is unsafe operation.
@@ -3299,9 +3299,9 @@ Fills memory at `left` with `count` copies of the 32-bit `value`.
 
             * **count** : int
 
-.. _function-builtin_memset64_void_q__implicit_uint64_int:
+.. _function-builtin_memset64_void_q__uint64_int:
 
-.. das:function:: memset64(left: void? implicit; value: uint64; count: int)
+.. das:function:: memset64(left: void?; value: uint64; count: int)
 
 .. warning::
   This is unsafe operation.
@@ -3315,9 +3315,9 @@ Fills memory at `left` with `count` copies of the 64-bit `value`.
 
             * **count** : int
 
-.. _function-builtin_memset8_void_q__implicit_uint8_int:
+.. _function-builtin_memset8_void_q__uint8_int:
 
-.. das:function:: memset8(left: void? implicit; value: uint8; count: int)
+.. das:function:: memset8(left: void?; value: uint8; count: int)
 
 .. warning::
   This is unsafe operation.
@@ -3336,13 +3336,13 @@ Fills memory at `left` with `count` copies of the 8-bit `value`, equivalent to t
 Malloc
 ++++++
 
-  *  :ref:`free (ptr: void? implicit) <function-builtin_free_void_q__implicit>`
+  *  :ref:`free (ptr: void?) <function-builtin_free_void_q_>`
   *  :ref:`malloc (size: uint64) : void? <function-builtin_malloc_uint64>`
-  *  :ref:`malloc_usable_size (ptr: void? implicit) : uint64 <function-builtin_malloc_usable_size_void_q__implicit>`
+  *  :ref:`malloc_usable_size (ptr: void?) : uint64 <function-builtin_malloc_usable_size_void_q_>`
 
-.. _function-builtin_free_void_q__implicit:
+.. _function-builtin_free_void_q_:
 
-.. das:function:: free(ptr: void? implicit)
+.. das:function:: free(ptr: void?)
 
 .. warning::
   This is unsafe operation.
@@ -3364,9 +3364,9 @@ Allocates a block of uninitialized memory of the specified `size` in bytes, C-st
 
 :Arguments: * **size** : uint64
 
-.. _function-builtin_malloc_usable_size_void_q__implicit:
+.. _function-builtin_malloc_usable_size_void_q_:
 
-.. das:function:: malloc_usable_size(ptr: void? implicit) : uint64
+.. das:function:: malloc_usable_size(ptr: void?) : uint64
 
 .. warning::
   This is unsafe operation.

@@ -985,618 +985,618 @@ Any expression (base class).
 
 .. das:attribute:: TypeDecl
 
-.. _function-ast__dot__rq_canAot_TypeDecl_implicit:
+.. _function-ast__dot__rq_canAot_TypeDecl:
 
-.. das:function:: TypeDecl implicit.canAot() : bool
+.. das:function:: TypeDecl.canAot() : bool
 
 Returns whether the given type can be ahead-of-time compiled.
 
 
-.. _function-ast__dot__rq_isExprType_TypeDecl_implicit:
+.. _function-ast__dot__rq_isExprType_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isExprType() : bool
+.. das:function:: TypeDecl.isExprType() : bool
 
 Returns whether the type hierarchy contains an expression type.
 
 
-.. _function-ast__dot__rq_isSimpleType_TypeDecl_implicit:
+.. _function-ast__dot__rq_isSimpleType_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isSimpleType() : bool
+.. das:function:: TypeDecl.isSimpleType() : bool
 
 Returns whether the given type is a simple non-void type that does not require resolution at inference time.
 
 
-.. _function-ast__dot__rq_isArray_TypeDecl_implicit:
+.. _function-ast__dot__rq_isArray_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isArray() : bool
+.. das:function:: TypeDecl.isArray() : bool
 
 Returns whether the given type is an array type.
 
 
-.. _function-ast__dot__rq_isGoodIteratorType_TypeDecl_implicit:
+.. _function-ast__dot__rq_isGoodIteratorType_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isGoodIteratorType() : bool
+.. das:function:: TypeDecl.isGoodIteratorType() : bool
 
 Returns whether the given type is an iterator type.
 
 
-.. _function-ast__dot__rq_isGoodArrayType_TypeDecl_implicit:
+.. _function-ast__dot__rq_isGoodArrayType_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isGoodArrayType() : bool
+.. das:function:: TypeDecl.isGoodArrayType() : bool
 
 Returns whether the given type is a dynamic array type.
 
 
-.. _function-ast__dot__rq_isGoodTableType_TypeDecl_implicit:
+.. _function-ast__dot__rq_isGoodTableType_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isGoodTableType() : bool
+.. das:function:: TypeDecl.isGoodTableType() : bool
 
 Returns whether the given type is a table type.
 
 
-.. _function-ast__dot__rq_isGoodBlockType_TypeDecl_implicit:
+.. _function-ast__dot__rq_isGoodBlockType_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isGoodBlockType() : bool
+.. das:function:: TypeDecl.isGoodBlockType() : bool
 
 Returns whether the given type is a block type.
 
 
-.. _function-ast__dot__rq_isGoodFunctionType_TypeDecl_implicit:
+.. _function-ast__dot__rq_isGoodFunctionType_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isGoodFunctionType() : bool
+.. das:function:: TypeDecl.isGoodFunctionType() : bool
 
 Returns whether the given type is a function type.
 
 
-.. _function-ast__dot__rq_isGoodLambdaType_TypeDecl_implicit:
+.. _function-ast__dot__rq_isGoodLambdaType_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isGoodLambdaType() : bool
+.. das:function:: TypeDecl.isGoodLambdaType() : bool
 
 Returns whether the given type is a lambda type.
 
 
-.. _function-ast__dot__rq_isGoodTupleType_TypeDecl_implicit:
+.. _function-ast__dot__rq_isGoodTupleType_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isGoodTupleType() : bool
+.. das:function:: TypeDecl.isGoodTupleType() : bool
 
 Returns whether the given type is a tuple type.
 
 
-.. _function-ast__dot__rq_isGoodVariantType_TypeDecl_implicit:
+.. _function-ast__dot__rq_isGoodVariantType_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isGoodVariantType() : bool
+.. das:function:: TypeDecl.isGoodVariantType() : bool
 
 Returns whether the given type is a variant type.
 
 
-.. _function-ast__dot__rq_isVoid_TypeDecl_implicit:
+.. _function-ast__dot__rq_isVoid_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isVoid() : bool
+.. das:function:: TypeDecl.isVoid() : bool
 
 Returns whether the given type is the void type.
 
 
-.. _function-ast__dot__rq_isAnyType_TypeDecl_implicit:
+.. _function-ast__dot__rq_isAnyType_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isAnyType() : bool
+.. das:function:: TypeDecl.isAnyType() : bool
 
 Returns whether the given type is the any type, passed as vec4f via standard C++ interop.
 
 
-.. _function-ast__dot__rq_isRef_TypeDecl_implicit:
+.. _function-ast__dot__rq_isRef_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isRef() : bool
+.. das:function:: TypeDecl.isRef() : bool
 
 Returns whether the given type is a reference value.
 
 
-.. _function-ast__dot__rq_isRefType_TypeDecl_implicit:
+.. _function-ast__dot__rq_isRefType_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isRefType() : bool
+.. das:function:: TypeDecl.isRefType() : bool
 
 Returns whether the given type is a reference type.
 
 
-.. _function-ast__dot__rq_canWrite_TypeDecl_implicit:
+.. _function-ast__dot__rq_canWrite_TypeDecl:
 
-.. das:function:: TypeDecl implicit.canWrite() : bool
+.. das:function:: TypeDecl.canWrite() : bool
 
 Returns whether the given type can be written to.
 
 
-.. _function-ast__dot__rq_isAotAlias_TypeDecl_implicit:
+.. _function-ast__dot__rq_isAotAlias_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isAotAlias() : bool
+.. das:function:: TypeDecl.isAotAlias() : bool
 
 Returns whether the type definition contains an AOT alias type.
 
 
-.. _function-ast__dot__rq_isShareable_TypeDecl_implicit:
+.. _function-ast__dot__rq_isShareable_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isShareable() : bool
+.. das:function:: TypeDecl.isShareable() : bool
 
 Returns whether the given type is shareable across contexts.
 
 
-.. _function-ast__dot__rq_isIndex_TypeDecl_implicit:
+.. _function-ast__dot__rq_isIndex_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isIndex() : bool
+.. das:function:: TypeDecl.isIndex() : bool
 
 Returns whether the given type is an index type.
 
 
-.. _function-ast__dot__rq_isBool_TypeDecl_implicit:
+.. _function-ast__dot__rq_isBool_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isBool() : bool
+.. das:function:: TypeDecl.isBool() : bool
 
 Returns whether the given type is a boolean type.
 
 
-.. _function-ast__dot__rq_isInteger_TypeDecl_implicit:
+.. _function-ast__dot__rq_isInteger_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isInteger() : bool
+.. das:function:: TypeDecl.isInteger() : bool
 
 Returns whether the given type is an integer type.
 
 
-.. _function-ast__dot__rq_isSignedInteger_TypeDecl_implicit:
+.. _function-ast__dot__rq_isSignedInteger_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isSignedInteger() : bool
+.. das:function:: TypeDecl.isSignedInteger() : bool
 
 Returns whether the given type is a signed integer type.
 
 
-.. _function-ast__dot__rq_isUnsignedInteger_TypeDecl_implicit:
+.. _function-ast__dot__rq_isUnsignedInteger_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isUnsignedInteger() : bool
+.. das:function:: TypeDecl.isUnsignedInteger() : bool
 
 Returns whether the given type is an unsigned integer type.
 
 
-.. _function-ast__dot__rq_isSignedIntegerOrIntVec_TypeDecl_implicit:
+.. _function-ast__dot__rq_isSignedIntegerOrIntVec_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isSignedIntegerOrIntVec() : bool
+.. das:function:: TypeDecl.isSignedIntegerOrIntVec() : bool
 
 Returns whether the given type is a signed integer or signed integer vector type.
 
 
-.. _function-ast__dot__rq_isUnsignedIntegerOrIntVec_TypeDecl_implicit:
+.. _function-ast__dot__rq_isUnsignedIntegerOrIntVec_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isUnsignedIntegerOrIntVec() : bool
+.. das:function:: TypeDecl.isUnsignedIntegerOrIntVec() : bool
 
 Returns whether the given type is an unsigned integer or unsigned integer vector type.
 
 
-.. _function-ast__dot__rq_isFloatOrDouble_TypeDecl_implicit:
+.. _function-ast__dot__rq_isFloatOrDouble_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isFloatOrDouble() : bool
+.. das:function:: TypeDecl.isFloatOrDouble() : bool
 
 Returns whether the given type is a float or double type.
 
 
-.. _function-ast__dot__rq_isNumeric_TypeDecl_implicit:
+.. _function-ast__dot__rq_isNumeric_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isNumeric() : bool
+.. das:function:: TypeDecl.isNumeric() : bool
 
 Returns whether the given type is a numeric type.
 
 
-.. _function-ast__dot__rq_isNumericComparable_TypeDecl_implicit:
+.. _function-ast__dot__rq_isNumericComparable_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isNumericComparable() : bool
+.. das:function:: TypeDecl.isNumericComparable() : bool
 
 Returns whether the given type supports numeric comparison.
 
 
-.. _function-ast__dot__rq_isPointer_TypeDecl_implicit:
+.. _function-ast__dot__rq_isPointer_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isPointer() : bool
+.. das:function:: TypeDecl.isPointer() : bool
 
 Returns whether the given type is a pointer type.
 
 
-.. _function-ast__dot__rq_isSmartPointer_TypeDecl_implicit:
+.. _function-ast__dot__rq_isSmartPointer_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isSmartPointer() : bool
+.. das:function:: TypeDecl.isSmartPointer() : bool
 
 Returns whether the given type is a smart pointer type.
 
 
-.. _function-ast__dot__rq_isVoidPointer_TypeDecl_implicit:
+.. _function-ast__dot__rq_isVoidPointer_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isVoidPointer() : bool
+.. das:function:: TypeDecl.isVoidPointer() : bool
 
 Returns whether the given type is a void pointer type.
 
 
-.. _function-ast__dot__rq_isIterator_TypeDecl_implicit:
+.. _function-ast__dot__rq_isIterator_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isIterator() : bool
+.. das:function:: TypeDecl.isIterator() : bool
 
 Returns whether the given type is an iterator type.
 
 
-.. _function-ast__dot__rq_isEnum_TypeDecl_implicit:
+.. _function-ast__dot__rq_isEnum_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isEnum() : bool
+.. das:function:: TypeDecl.isEnum() : bool
 
 Returns whether the given type is an enumeration type.
 
 
-.. _function-ast__dot__rq_isEnumT_TypeDecl_implicit:
+.. _function-ast__dot__rq_isEnumT_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isEnumT() : bool
+.. das:function:: TypeDecl.isEnumT() : bool
 
 Returns whether the base type of the given type is an enumeration type.
 
 
-.. _function-ast__dot__rq_isHandle_TypeDecl_implicit:
+.. _function-ast__dot__rq_isHandle_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isHandle() : bool
+.. das:function:: TypeDecl.isHandle() : bool
 
 Returns whether the given type is a handle type, representing a C++ type exposed to daslang via TypeAnnotation.
 
 
-.. _function-ast__dot__rq_isStructure_TypeDecl_implicit:
+.. _function-ast__dot__rq_isStructure_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isStructure() : bool
+.. das:function:: TypeDecl.isStructure() : bool
 
 Returns whether the given type is a structure type.
 
 
-.. _function-ast__dot__rq_isClass_TypeDecl_implicit:
+.. _function-ast__dot__rq_isClass_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isClass() : bool
+.. das:function:: TypeDecl.isClass() : bool
 
 Returns whether the given type is a class type.
 
 
-.. _function-ast__dot__rq_isFunction_TypeDecl_implicit:
+.. _function-ast__dot__rq_isFunction_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isFunction() : bool
+.. das:function:: TypeDecl.isFunction() : bool
 
 Returns whether the given type is a function type.
 
 
-.. _function-ast__dot__rq_isTuple_TypeDecl_implicit:
+.. _function-ast__dot__rq_isTuple_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isTuple() : bool
+.. das:function:: TypeDecl.isTuple() : bool
 
 Returns whether the given type is a tuple type.
 
 
-.. _function-ast__dot__rq_isVariant_TypeDecl_implicit:
+.. _function-ast__dot__rq_isVariant_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isVariant() : bool
+.. das:function:: TypeDecl.isVariant() : bool
 
 Returns whether the given type is a variant type.
 
 
-.. _function-ast__dot__rq_sizeOf_TypeDecl_implicit:
+.. _function-ast__dot__rq_sizeOf_TypeDecl:
 
-.. das:function:: TypeDecl implicit.sizeOf() : int
+.. das:function:: TypeDecl.sizeOf() : int
 
 Returns the size of the given type in bytes.
 
 
-.. _function-ast__dot__rq_countOf_TypeDecl_implicit:
+.. _function-ast__dot__rq_countOf_TypeDecl:
 
-.. das:function:: TypeDecl implicit.countOf() : int
+.. das:function:: TypeDecl.countOf() : int
 
 Returns the number of elements if the given type is a fixed array, otherwise returns 1.
 
 
-.. _function-ast__dot__rq_alignOf_TypeDecl_implicit:
+.. _function-ast__dot__rq_alignOf_TypeDecl:
 
-.. das:function:: TypeDecl implicit.alignOf() : int
+.. das:function:: TypeDecl.alignOf() : int
 
 Returns the memory alignment requirement of the type in bytes.
 
 
-.. _function-ast__dot__rq_baseSizeOf_TypeDecl_implicit:
+.. _function-ast__dot__rq_baseSizeOf_TypeDecl:
 
-.. das:function:: TypeDecl implicit.baseSizeOf() : int
+.. das:function:: TypeDecl.baseSizeOf() : int
 
 Returns the size of the given type in bytes, excluding fixed array dimensions.
 
 
-.. _function-ast__dot__rq_stride_TypeDecl_implicit:
+.. _function-ast__dot__rq_stride_TypeDecl:
 
-.. das:function:: TypeDecl implicit.stride() : int
+.. das:function:: TypeDecl.stride() : int
 
 Returns the stride size in bytes of an element in a fixed array type.
 
 
-.. _function-ast__dot__rq_tupleSize_TypeDecl_implicit:
+.. _function-ast__dot__rq_tupleSize_TypeDecl:
 
-.. das:function:: TypeDecl implicit.tupleSize() : int
+.. das:function:: TypeDecl.tupleSize() : int
 
 Returns the size of the given tuple type in bytes.
 
 
-.. _function-ast__dot__rq_tupleAlign_TypeDecl_implicit:
+.. _function-ast__dot__rq_tupleAlign_TypeDecl:
 
-.. das:function:: TypeDecl implicit.tupleAlign() : int
+.. das:function:: TypeDecl.tupleAlign() : int
 
 Returns the alignment of the given tuple type in bytes.
 
 
-.. _function-ast__dot__rq_variantSize_TypeDecl_implicit:
+.. _function-ast__dot__rq_variantSize_TypeDecl:
 
-.. das:function:: TypeDecl implicit.variantSize() : int
+.. das:function:: TypeDecl.variantSize() : int
 
 Returns the size of the given variant type in bytes.
 
 
-.. _function-ast__dot__rq_variantAlign_TypeDecl_implicit:
+.. _function-ast__dot__rq_variantAlign_TypeDecl:
 
-.. das:function:: TypeDecl implicit.variantAlign() : int
+.. das:function:: TypeDecl.variantAlign() : int
 
 Returns the alignment of the given variant type in bytes.
 
 
-.. _function-ast__dot__rq_canCopy_TypeDecl_implicit:
+.. _function-ast__dot__rq_canCopy_TypeDecl:
 
-.. das:function:: TypeDecl implicit.canCopy() : bool
+.. das:function:: TypeDecl.canCopy() : bool
 
 Returns whether the given type can be copied.
 
 
-.. _function-ast__dot__rq_canMove_TypeDecl_implicit:
+.. _function-ast__dot__rq_canMove_TypeDecl:
 
-.. das:function:: TypeDecl implicit.canMove() : bool
+.. das:function:: TypeDecl.canMove() : bool
 
 Returns whether the given type can be moved.
 
 
-.. _function-ast__dot__rq_canClone_TypeDecl_implicit:
+.. _function-ast__dot__rq_canClone_TypeDecl:
 
-.. das:function:: TypeDecl implicit.canClone() : bool
+.. das:function:: TypeDecl.canClone() : bool
 
 Returns whether the given type can be cloned.
 
 
-.. _function-ast__dot__rq_canCloneFromConst_TypeDecl_implicit:
+.. _function-ast__dot__rq_canCloneFromConst_TypeDecl:
 
-.. das:function:: TypeDecl implicit.canCloneFromConst() : bool
+.. das:function:: TypeDecl.canCloneFromConst() : bool
 
 Returns whether the given type can be cloned from a const instance.
 
 
-.. _function-ast__dot__rq_canNew_TypeDecl_implicit:
+.. _function-ast__dot__rq_canNew_TypeDecl:
 
-.. das:function:: TypeDecl implicit.canNew() : bool
+.. das:function:: TypeDecl.canNew() : bool
 
 Returns whether the given type can be heap-allocated via the new operator.
 
 
-.. _function-ast__dot__rq_canDeletePtr_TypeDecl_implicit:
+.. _function-ast__dot__rq_canDeletePtr_TypeDecl:
 
-.. das:function:: TypeDecl implicit.canDeletePtr() : bool
+.. das:function:: TypeDecl.canDeletePtr() : bool
 
 Returns whether the pointer to the given type can be deleted.
 
 
-.. _function-ast__dot__rq_canDelete_TypeDecl_implicit:
+.. _function-ast__dot__rq_canDelete_TypeDecl:
 
-.. das:function:: TypeDecl implicit.canDelete() : bool
+.. das:function:: TypeDecl.canDelete() : bool
 
 Returns whether the given type can be deleted.
 
 
-.. _function-ast__dot__rq_needDelete_TypeDecl_implicit:
+.. _function-ast__dot__rq_needDelete_TypeDecl:
 
-.. das:function:: TypeDecl implicit.needDelete() : bool
+.. das:function:: TypeDecl.needDelete() : bool
 
 Returns whether the given type requires explicit deletion.
 
 
-.. _function-ast__dot__rq_isPod_TypeDecl_implicit:
+.. _function-ast__dot__rq_isPod_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isPod() : bool
+.. das:function:: TypeDecl.isPod() : bool
 
 Returns whether the given type is a plain old data (POD) type.
 
 
-.. _function-ast__dot__rq_isRawPod_TypeDecl_implicit:
+.. _function-ast__dot__rq_isRawPod_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isRawPod() : bool
+.. das:function:: TypeDecl.isRawPod() : bool
 
 Returns whether the given type is a raw POD type containing no pointers or strings.
 
 
-.. _function-ast__dot__rq_isNoHeapType_TypeDecl_implicit:
+.. _function-ast__dot__rq_isNoHeapType_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isNoHeapType() : bool
+.. das:function:: TypeDecl.isNoHeapType() : bool
 
 Returns whether the given type can be used without heap allocation.
 
 
-.. _function-ast__dot__rq_isWorkhorseType_TypeDecl_implicit:
+.. _function-ast__dot__rq_isWorkhorseType_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isWorkhorseType() : bool
+.. das:function:: TypeDecl.isWorkhorseType() : bool
 
 Returns whether the given type is a workhorse type, which is a built-in non-reference type.
 
 
-.. _function-ast__dot__rq_isPolicyType_TypeDecl_implicit:
+.. _function-ast__dot__rq_isPolicyType_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isPolicyType() : bool
+.. das:function:: TypeDecl.isPolicyType() : bool
 
 Returns whether the given type is a policy type with SimNode implementations available for it.
 
 
-.. _function-ast__dot__rq_isVecPolicyType_TypeDecl_implicit:
+.. _function-ast__dot__rq_isVecPolicyType_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isVecPolicyType() : bool
+.. das:function:: TypeDecl.isVecPolicyType() : bool
 
 Returns whether the given type is a vector policy type, which is any policy type other than string.
 
 
-.. _function-ast__dot__rq_isReturnType_TypeDecl_implicit:
+.. _function-ast__dot__rq_isReturnType_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isReturnType() : bool
+.. das:function:: TypeDecl.isReturnType() : bool
 
 Returns whether the given type can be used as a return type, which includes anything except block.
 
 
-.. _function-ast__dot__rq_isCtorType_TypeDecl_implicit:
+.. _function-ast__dot__rq_isCtorType_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isCtorType() : bool
+.. das:function:: TypeDecl.isCtorType() : bool
 
 Returns whether the given basic type is a constructor type that can be constructed via its type name, such as int(3.4).
 
 
-.. _function-ast__dot__rq_isRange_TypeDecl_implicit:
+.. _function-ast__dot__rq_isRange_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isRange() : bool
+.. das:function:: TypeDecl.isRange() : bool
 
 Returns whether the given type is a range type.
 
 
-.. _function-ast__dot__rq_isString_TypeDecl_implicit:
+.. _function-ast__dot__rq_isString_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isString() : bool
+.. das:function:: TypeDecl.isString() : bool
 
 Returns whether the given type is a string type.
 
 
-.. _function-ast__dot__rq_isConst_TypeDecl_implicit:
+.. _function-ast__dot__rq_isConst_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isConst() : bool
+.. das:function:: TypeDecl.isConst() : bool
 
 Returns whether the given type is const-qualified.
 
 
-.. _function-ast__dot__rq_isFoldable_TypeDecl_implicit:
+.. _function-ast__dot__rq_isFoldable_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isFoldable() : bool
+.. das:function:: TypeDecl.isFoldable() : bool
 
 Returns whether the given type is foldable, such as integer or float, as opposed to pointer or array.
 
 
-.. _function-ast__dot__rq_isAlias_TypeDecl_implicit:
+.. _function-ast__dot__rq_isAlias_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isAlias() : bool
+.. das:function:: TypeDecl.isAlias() : bool
 
 Returns whether the type definition contains an alias type.
 
 
-.. _function-ast__dot__rq_isAutoArrayResolved_TypeDecl_implicit:
+.. _function-ast__dot__rq_isAutoArrayResolved_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isAutoArrayResolved() : bool
+.. das:function:: TypeDecl.isAutoArrayResolved() : bool
 
 Returns whether all fixed array dimensions are fully resolved with no auto or expression dimensions remaining.
 
 
-.. _function-ast__dot__rq_isAuto_TypeDecl_implicit:
+.. _function-ast__dot__rq_isAuto_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isAuto() : bool
+.. das:function:: TypeDecl.isAuto() : bool
 
 Returns whether the type definition contains an auto type.
 
 
-.. _function-ast__dot__rq_isAutoOrAlias_TypeDecl_implicit:
+.. _function-ast__dot__rq_isAutoOrAlias_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isAutoOrAlias() : bool
+.. das:function:: TypeDecl.isAutoOrAlias() : bool
 
 Returns whether the type definition contains an auto or alias type.
 
 
-.. _function-ast__dot__rq_isVectorType_TypeDecl_implicit:
+.. _function-ast__dot__rq_isVectorType_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isVectorType() : bool
+.. das:function:: TypeDecl.isVectorType() : bool
 
 Returns whether the given type is a vector type such as int2, float3, or range64.
 
 
-.. _function-ast__dot__rq_isBitfield_TypeDecl_implicit:
+.. _function-ast__dot__rq_isBitfield_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isBitfield() : bool
+.. das:function:: TypeDecl.isBitfield() : bool
 
 Returns whether the given type is a bitfield type.
 
 
-.. _function-ast__dot__rq_isLocal_TypeDecl_implicit:
+.. _function-ast__dot__rq_isLocal_TypeDecl:
 
-.. das:function:: TypeDecl implicit.isLocal() : bool
+.. das:function:: TypeDecl.isLocal() : bool
 
 Returns whether the given type is a local type that can be allocated on the stack.
 
 
-.. _function-ast__dot__rq_hasClasses_TypeDecl_implicit:
+.. _function-ast__dot__rq_hasClasses_TypeDecl:
 
-.. das:function:: TypeDecl implicit.hasClasses() : bool
+.. das:function:: TypeDecl.hasClasses() : bool
 
 Returns whether the type definition contains any class types.
 
 
-.. _function-ast__dot__rq_hasNonTrivialCtor_TypeDecl_implicit:
+.. _function-ast__dot__rq_hasNonTrivialCtor_TypeDecl:
 
-.. das:function:: TypeDecl implicit.hasNonTrivialCtor() : bool
+.. das:function:: TypeDecl.hasNonTrivialCtor() : bool
 
 Returns whether the type definition contains any non-trivial constructors.
 
 
-.. _function-ast__dot__rq_hasNonTrivialDtor_TypeDecl_implicit:
+.. _function-ast__dot__rq_hasNonTrivialDtor_TypeDecl:
 
-.. das:function:: TypeDecl implicit.hasNonTrivialDtor() : bool
+.. das:function:: TypeDecl.hasNonTrivialDtor() : bool
 
 Returns whether the type definition contains any non-trivial destructors.
 
 
-.. _function-ast__dot__rq_hasNonTrivialCopy_TypeDecl_implicit:
+.. _function-ast__dot__rq_hasNonTrivialCopy_TypeDecl:
 
-.. das:function:: TypeDecl implicit.hasNonTrivialCopy() : bool
+.. das:function:: TypeDecl.hasNonTrivialCopy() : bool
 
 Returns whether the type definition contains any non-trivial copy operations.
 
 
-.. _function-ast__dot__rq_canBePlacedInContainer_TypeDecl_implicit:
+.. _function-ast__dot__rq_canBePlacedInContainer_TypeDecl:
 
-.. das:function:: TypeDecl implicit.canBePlacedInContainer() : bool
+.. das:function:: TypeDecl.canBePlacedInContainer() : bool
 
 Returns whether the given type can be placed in a container.
 
 
-.. _function-ast__dot__rq_vectorBaseType_TypeDecl_implicit:
+.. _function-ast__dot__rq_vectorBaseType_TypeDecl:
 
-.. das:function:: TypeDecl implicit.vectorBaseType() : Type
+.. das:function:: TypeDecl.vectorBaseType() : Type
 
 Returns the scalar base type of a vector type, for example float for float4.
 
 
-.. _function-ast__dot__rq_vectorDim_TypeDecl_implicit:
+.. _function-ast__dot__rq_vectorDim_TypeDecl:
 
-.. das:function:: TypeDecl implicit.vectorDim() : int
+.. das:function:: TypeDecl.vectorDim() : int
 
 Returns the number of components in a vector type, for example 4 for float4.
 
 
-.. _function-ast__dot__rq_canInitWithZero_TypeDecl_implicit:
+.. _function-ast__dot__rq_canInitWithZero_TypeDecl:
 
-.. das:function:: TypeDecl implicit.canInitWithZero() : bool
+.. das:function:: TypeDecl.canInitWithZero() : bool
 
 Returns whether the given type can be initialized by zeroing its memory.
 
 
-.. _function-ast__dot__rq_rangeBaseType_TypeDecl_implicit:
+.. _function-ast__dot__rq_rangeBaseType_TypeDecl:
 
-.. das:function:: TypeDecl implicit.rangeBaseType() : Type
+.. das:function:: TypeDecl.rangeBaseType() : Type
 
 Returns the base type of a range type, for example int64 for range64.
 
 
-.. _function-ast__dot__rq_unsafeInit_TypeDecl_implicit:
+.. _function-ast__dot__rq_unsafeInit_TypeDecl:
 
-.. das:function:: TypeDecl implicit.unsafeInit() : bool
+.. das:function:: TypeDecl.unsafeInit() : bool
 
 Returns whether the given type requires initialization and skipping it would be unsafe.
 
 
-.. _function-ast__dot__rq_get_mnh_TypeDecl_implicit:
+.. _function-ast__dot__rq_get_mnh_TypeDecl:
 
-.. das:function:: TypeDecl implicit.get_mnh() : uint64
+.. das:function:: TypeDecl.get_mnh() : uint64
 
 Returns the mangled name hash of the given type.
 
@@ -1813,9 +1813,9 @@ Any type declaration.
 
 .. das:attribute:: Structure
 
-.. _function-ast__dot__rq_sizeOf_Structure_implicit:
+.. _function-ast__dot__rq_sizeOf_Structure:
 
-.. das:function:: Structure implicit.sizeOf() : int
+.. das:function:: Structure.sizeOf() : int
 
 Returns the size of the given type in bytes.
 
@@ -1908,23 +1908,23 @@ Enumeration declaration.
 
 .. das:attribute:: Function
 
-.. _function-ast__dot__rq_origin_Function_implicit:
+.. _function-ast__dot__rq_origin_Function:
 
-.. das:function:: Function implicit.origin() : Function?
+.. das:function:: Function.origin() : Function?
 
 Returns the origin function, indicating which generic function this was instantiated from, if any.
 
 
-.. _function-ast__dot__rq_getMangledNameHash_Function_implicit:
+.. _function-ast__dot__rq_getMangledNameHash_Function:
 
-.. das:function:: Function implicit.getMangledNameHash() : uint64
+.. das:function:: Function.getMangledNameHash() : uint64
 
 Returns the mangled name hash of the given function.
 
 
-.. _function-ast__dot__rq_isGeneric_Function_implicit:
+.. _function-ast__dot__rq_isGeneric_Function:
 
-.. das:function:: Function implicit.isGeneric() : bool
+.. das:function:: Function.isGeneric() : bool
 
 Returns whether the given function is a generic function.
 
@@ -2090,16 +2090,16 @@ Generic function infer history.
 
 .. das:attribute:: Variable
 
-.. _function-ast__dot__rq_isAccessUnused_Variable_implicit:
+.. _function-ast__dot__rq_isAccessUnused_Variable:
 
-.. das:function:: Variable implicit.isAccessUnused() : bool
+.. das:function:: Variable.isAccessUnused() : bool
 
 Returns whether the given variable is never accessed in the code.
 
 
-.. _function-ast__dot__rq_getMangledNameHash_Variable_implicit:
+.. _function-ast__dot__rq_getMangledNameHash_Variable:
 
-.. das:function:: Variable implicit.getMangledNameHash() : uint64
+.. das:function:: Variable.getMangledNameHash() : uint64
 
 Returns the mangled name hash of the given function.
 
@@ -3432,9 +3432,9 @@ Debug expression (`debug(x)` or `debug(x,"x=")`)
 
 .. das:attribute:: ExprInvoke
 
-.. _function-ast__dot__rq_isCopyOrMove_ExprInvoke_implicit:
+.. _function-ast__dot__rq_isCopyOrMove_ExprInvoke:
 
-.. das:function:: ExprInvoke implicit.isCopyOrMove() : bool
+.. das:function:: ExprInvoke.isCopyOrMove() : bool
 
 Returns whether the given invoke expression requires a copy or move of a reference type.
 
@@ -3753,9 +3753,9 @@ Vector swizzle operation (`vec.xxy` or `vec.y`)
 
 .. das:attribute:: ExprField
 
-.. _function-ast__dot__rq_field_ExprField_implicit:
+.. _function-ast__dot__rq_field_ExprField:
 
-.. das:function:: ExprField implicit.field() : FieldDeclaration?
+.. das:function:: ExprField.field() : FieldDeclaration?
 
 Returns a pointer to the named field of a structure, or null if the field does not exist or the type is not a structure.
 
@@ -4112,9 +4112,9 @@ Compilation time only fake context expression. Will simulate as current evaluati
 
 .. das:attribute:: ExprFakeLineInfo
 
-.. _function-ast__dot__rq_getValue_ExprFakeLineInfo_implicit:
+.. _function-ast__dot__rq_getValue_ExprFakeLineInfo:
 
-.. das:function:: ExprFakeLineInfo implicit.getValue() : void?
+.. das:function:: ExprFakeLineInfo.getValue() : void?
 
 Returns the constant value stored in this expression node.
 
@@ -4145,9 +4145,9 @@ Compilation time only fake lineinfo expression. Will simulate as current file an
 
 .. das:attribute:: ExprConstPtr
 
-.. _function-ast__dot__rq_getValue_ExprConstPtr_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstPtr:
 
-.. das:function:: ExprConstPtr implicit.getValue() : void?
+.. das:function:: ExprConstPtr.getValue() : void?
 
 Returns the constant value stored in this expression node.
 
@@ -4178,9 +4178,9 @@ Null (`null`). Technically can be any other pointer, but it is used for nullptr.
 
 .. das:attribute:: ExprConstInt8
 
-.. _function-ast__dot__rq_getValue_ExprConstInt8_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstInt8:
 
-.. das:function:: ExprConstInt8 implicit.getValue() : int8
+.. das:function:: ExprConstInt8.getValue() : int8
 
 Returns the constant value stored in this expression node.
 
@@ -4211,9 +4211,9 @@ Holds int8 constant.
 
 .. das:attribute:: ExprConstInt16
 
-.. _function-ast__dot__rq_getValue_ExprConstInt16_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstInt16:
 
-.. das:function:: ExprConstInt16 implicit.getValue() : int16
+.. das:function:: ExprConstInt16.getValue() : int16
 
 Returns the constant value stored in this expression node.
 
@@ -4244,9 +4244,9 @@ Holds int16 constant.
 
 .. das:attribute:: ExprConstInt64
 
-.. _function-ast__dot__rq_getValue_ExprConstInt64_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstInt64:
 
-.. das:function:: ExprConstInt64 implicit.getValue() : int64
+.. das:function:: ExprConstInt64.getValue() : int64
 
 Returns the constant value stored in this expression node.
 
@@ -4277,9 +4277,9 @@ Holds int64 constant.
 
 .. das:attribute:: ExprConstInt
 
-.. _function-ast__dot__rq_getValue_ExprConstInt_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstInt:
 
-.. das:function:: ExprConstInt implicit.getValue() : int
+.. das:function:: ExprConstInt.getValue() : int
 
 Returns the constant value stored in this expression node.
 
@@ -4310,9 +4310,9 @@ Holds int constant.
 
 .. das:attribute:: ExprConstInt2
 
-.. _function-ast__dot__rq_getValue_ExprConstInt2_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstInt2:
 
-.. das:function:: ExprConstInt2 implicit.getValue() : int2
+.. das:function:: ExprConstInt2.getValue() : int2
 
 Returns the constant value stored in this expression node.
 
@@ -4343,9 +4343,9 @@ Holds int2 constant.
 
 .. das:attribute:: ExprConstInt3
 
-.. _function-ast__dot__rq_getValue_ExprConstInt3_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstInt3:
 
-.. das:function:: ExprConstInt3 implicit.getValue() : int3
+.. das:function:: ExprConstInt3.getValue() : int3
 
 Returns the constant value stored in this expression node.
 
@@ -4376,9 +4376,9 @@ Holds int3 constant.
 
 .. das:attribute:: ExprConstInt4
 
-.. _function-ast__dot__rq_getValue_ExprConstInt4_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstInt4:
 
-.. das:function:: ExprConstInt4 implicit.getValue() : int4
+.. das:function:: ExprConstInt4.getValue() : int4
 
 Returns the constant value stored in this expression node.
 
@@ -4409,9 +4409,9 @@ Holds int4 constant.
 
 .. das:attribute:: ExprConstUInt8
 
-.. _function-ast__dot__rq_getValue_ExprConstUInt8_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstUInt8:
 
-.. das:function:: ExprConstUInt8 implicit.getValue() : uint8
+.. das:function:: ExprConstUInt8.getValue() : uint8
 
 Returns the constant value stored in this expression node.
 
@@ -4442,9 +4442,9 @@ Holds uint8 constant.
 
 .. das:attribute:: ExprConstUInt16
 
-.. _function-ast__dot__rq_getValue_ExprConstUInt16_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstUInt16:
 
-.. das:function:: ExprConstUInt16 implicit.getValue() : uint16
+.. das:function:: ExprConstUInt16.getValue() : uint16
 
 Returns the constant value stored in this expression node.
 
@@ -4475,9 +4475,9 @@ Holds uint16 constant.
 
 .. das:attribute:: ExprConstUInt64
 
-.. _function-ast__dot__rq_getValue_ExprConstUInt64_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstUInt64:
 
-.. das:function:: ExprConstUInt64 implicit.getValue() : uint64
+.. das:function:: ExprConstUInt64.getValue() : uint64
 
 Returns the constant value stored in this expression node.
 
@@ -4508,9 +4508,9 @@ Holds uint64 constant.
 
 .. das:attribute:: ExprConstUInt
 
-.. _function-ast__dot__rq_getValue_ExprConstUInt_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstUInt:
 
-.. das:function:: ExprConstUInt implicit.getValue() : uint
+.. das:function:: ExprConstUInt.getValue() : uint
 
 Returns the constant value stored in this expression node.
 
@@ -4541,9 +4541,9 @@ Holds uint constant.
 
 .. das:attribute:: ExprConstUInt2
 
-.. _function-ast__dot__rq_getValue_ExprConstUInt2_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstUInt2:
 
-.. das:function:: ExprConstUInt2 implicit.getValue() : uint2
+.. das:function:: ExprConstUInt2.getValue() : uint2
 
 Returns the constant value stored in this expression node.
 
@@ -4574,9 +4574,9 @@ Holds uint2 constant.
 
 .. das:attribute:: ExprConstUInt3
 
-.. _function-ast__dot__rq_getValue_ExprConstUInt3_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstUInt3:
 
-.. das:function:: ExprConstUInt3 implicit.getValue() : uint3
+.. das:function:: ExprConstUInt3.getValue() : uint3
 
 Returns the constant value stored in this expression node.
 
@@ -4607,9 +4607,9 @@ Holds uint3 constant.
 
 .. das:attribute:: ExprConstUInt4
 
-.. _function-ast__dot__rq_getValue_ExprConstUInt4_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstUInt4:
 
-.. das:function:: ExprConstUInt4 implicit.getValue() : uint4
+.. das:function:: ExprConstUInt4.getValue() : uint4
 
 Returns the constant value stored in this expression node.
 
@@ -4640,9 +4640,9 @@ Holds uint4 constant.
 
 .. das:attribute:: ExprConstRange
 
-.. _function-ast__dot__rq_getValue_ExprConstRange_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstRange:
 
-.. das:function:: ExprConstRange implicit.getValue() : range
+.. das:function:: ExprConstRange.getValue() : range
 
 Returns the constant value stored in this expression node.
 
@@ -4673,9 +4673,9 @@ Holds range constant.
 
 .. das:attribute:: ExprConstURange
 
-.. _function-ast__dot__rq_getValue_ExprConstURange_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstURange:
 
-.. das:function:: ExprConstURange implicit.getValue() : urange
+.. das:function:: ExprConstURange.getValue() : urange
 
 Returns the constant value stored in this expression node.
 
@@ -4706,9 +4706,9 @@ Holds urange constant.
 
 .. das:attribute:: ExprConstRange64
 
-.. _function-ast__dot__rq_getValue_ExprConstRange64_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstRange64:
 
-.. das:function:: ExprConstRange64 implicit.getValue() : range64
+.. das:function:: ExprConstRange64.getValue() : range64
 
 Returns the constant value stored in this expression node.
 
@@ -4739,9 +4739,9 @@ Holds range64 constant.
 
 .. das:attribute:: ExprConstURange64
 
-.. _function-ast__dot__rq_getValue_ExprConstURange64_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstURange64:
 
-.. das:function:: ExprConstURange64 implicit.getValue() : urange64
+.. das:function:: ExprConstURange64.getValue() : urange64
 
 Returns the constant value stored in this expression node.
 
@@ -4772,9 +4772,9 @@ Holds urange64 constant.
 
 .. das:attribute:: ExprConstFloat
 
-.. _function-ast__dot__rq_getValue_ExprConstFloat_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstFloat:
 
-.. das:function:: ExprConstFloat implicit.getValue() : float
+.. das:function:: ExprConstFloat.getValue() : float
 
 Returns the constant value stored in this expression node.
 
@@ -4805,9 +4805,9 @@ Holds float constant.
 
 .. das:attribute:: ExprConstFloat2
 
-.. _function-ast__dot__rq_getValue_ExprConstFloat2_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstFloat2:
 
-.. das:function:: ExprConstFloat2 implicit.getValue() : float2
+.. das:function:: ExprConstFloat2.getValue() : float2
 
 Returns the constant value stored in this expression node.
 
@@ -4838,9 +4838,9 @@ Holds float2 constant.
 
 .. das:attribute:: ExprConstFloat3
 
-.. _function-ast__dot__rq_getValue_ExprConstFloat3_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstFloat3:
 
-.. das:function:: ExprConstFloat3 implicit.getValue() : float3
+.. das:function:: ExprConstFloat3.getValue() : float3
 
 Returns the constant value stored in this expression node.
 
@@ -4871,9 +4871,9 @@ Holds float3 constant.
 
 .. das:attribute:: ExprConstFloat4
 
-.. _function-ast__dot__rq_getValue_ExprConstFloat4_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstFloat4:
 
-.. das:function:: ExprConstFloat4 implicit.getValue() : float4
+.. das:function:: ExprConstFloat4.getValue() : float4
 
 Returns the constant value stored in this expression node.
 
@@ -4904,9 +4904,9 @@ Holds float4 constant.
 
 .. das:attribute:: ExprConstDouble
 
-.. _function-ast__dot__rq_getValue_ExprConstDouble_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstDouble:
 
-.. das:function:: ExprConstDouble implicit.getValue() : double
+.. das:function:: ExprConstDouble.getValue() : double
 
 Returns the constant value stored in this expression node.
 
@@ -4937,9 +4937,9 @@ Holds double constant.
 
 .. das:attribute:: ExprConstBool
 
-.. _function-ast__dot__rq_getValue_ExprConstBool_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstBool:
 
-.. das:function:: ExprConstBool implicit.getValue() : bool
+.. das:function:: ExprConstBool.getValue() : bool
 
 Returns the constant value stored in this expression node.
 
@@ -5098,9 +5098,9 @@ Holds enumeration constant, both type and entry (`Foo bar`).
 
 .. das:attribute:: ExprConstBitfield
 
-.. _function-ast__dot__rq_getValue_ExprConstBitfield_implicit:
+.. _function-ast__dot__rq_getValue_ExprConstBitfield:
 
-.. das:function:: ExprConstBitfield implicit.getValue() : uint64
+.. das:function:: ExprConstBitfield.getValue() : uint64
 
 Returns the constant value stored in this expression node.
 
@@ -5522,11 +5522,11 @@ Implements the `Visitor` interface for traversing and transforming the AST tree.
 Call generation
 +++++++++++++++
 
-  *  :ref:`make_call (at: LineInfo implicit; name: string implicit) : smart_ptr\<Expression\> <function-ast_make_call_LineInfo_implicit_string_implicit>`
+  *  :ref:`make_call (at: LineInfo; name: string) : smart_ptr\<Expression\> <function-ast_make_call_LineInfo_string>`
 
-.. _function-ast_make_call_LineInfo_implicit_string_implicit:
+.. _function-ast_make_call_LineInfo_string:
 
-.. das:function:: make_call(at: LineInfo implicit; name: string implicit) : smart_ptr<Expression>
+.. das:function:: make_call(at: LineInfo; name: string) : smart_ptr<Expression>
 
 Creates the appropriate call expression for a given function name in the program.
 
@@ -5540,23 +5540,23 @@ Creates the appropriate call expression for a given function name in the program
 Visitor pattern
 +++++++++++++++
 
-  *  :ref:`visit (expression: smart_ptr\<TypeDecl\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit) : smart_ptr\<TypeDecl\> <function-ast_visit_smart_ptr_ls_TypeDecl_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit>`
-  *  :ref:`visit (program: smart_ptr\<Program\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit) <function-ast_visit_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit>`
-  *  :ref:`visit (function: smart_ptr\<Function\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit) <function-ast_visit_smart_ptr_ls_Function_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit>`
-  *  :ref:`visit (expression: smart_ptr\<Expression\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit) : smart_ptr\<Expression\> <function-ast_visit_smart_ptr_ls_Expression_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit>`
-  *  :ref:`visit_enumeration (program: smart_ptr\<Program\> implicit; enumeration: smart_ptr\<Enumeration\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit) <function-ast_visit_enumeration_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_Enumeration_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit>`
-  *  :ref:`visit_finally (expression: smart_ptr\<ExprBlock\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit) <function-ast_visit_finally_smart_ptr_ls_ExprBlock_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit>`
-  *  :ref:`visit_module (program: smart_ptr\<Program\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit; module: Module? implicit) <function-ast_visit_module_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit_Module_q__implicit>`
-  *  :ref:`visit_modules (program: smart_ptr\<Program\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit) <function-ast_visit_modules_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit>`
-  *  :ref:`visit_structure (program: smart_ptr\<Program\> implicit; structure: smart_ptr\<Structure\> implicit; adapter: smart_ptr\<VisitorAdapter\> implicit) <function-ast_visit_structure_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_Structure_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit>`
+  *  :ref:`visit (expression: smart_ptr\<TypeDecl\>; adapter: smart_ptr\<VisitorAdapter\>) : smart_ptr\<TypeDecl\> <function-ast_visit_smart_ptr_ls_TypeDecl_gr__smart_ptr_ls_VisitorAdapter_gr_>`
+  *  :ref:`visit (program: smart_ptr\<Program\>; adapter: smart_ptr\<VisitorAdapter\>) <function-ast_visit_smart_ptr_ls_Program_gr__smart_ptr_ls_VisitorAdapter_gr_>`
+  *  :ref:`visit (function: smart_ptr\<Function\>; adapter: smart_ptr\<VisitorAdapter\>) <function-ast_visit_smart_ptr_ls_Function_gr__smart_ptr_ls_VisitorAdapter_gr_>`
+  *  :ref:`visit (expression: smart_ptr\<Expression\>; adapter: smart_ptr\<VisitorAdapter\>) : smart_ptr\<Expression\> <function-ast_visit_smart_ptr_ls_Expression_gr__smart_ptr_ls_VisitorAdapter_gr_>`
+  *  :ref:`visit_enumeration (program: smart_ptr\<Program\>; enumeration: smart_ptr\<Enumeration\>; adapter: smart_ptr\<VisitorAdapter\>) <function-ast_visit_enumeration_smart_ptr_ls_Program_gr__smart_ptr_ls_Enumeration_gr__smart_ptr_ls_VisitorAdapter_gr_>`
+  *  :ref:`visit_finally (expression: smart_ptr\<ExprBlock\>; adapter: smart_ptr\<VisitorAdapter\>) <function-ast_visit_finally_smart_ptr_ls_ExprBlock_gr__smart_ptr_ls_VisitorAdapter_gr_>`
+  *  :ref:`visit_module (program: smart_ptr\<Program\>; adapter: smart_ptr\<VisitorAdapter\>; module: Module?) <function-ast_visit_module_smart_ptr_ls_Program_gr__smart_ptr_ls_VisitorAdapter_gr__Module_q_>`
+  *  :ref:`visit_modules (program: smart_ptr\<Program\>; adapter: smart_ptr\<VisitorAdapter\>) <function-ast_visit_modules_smart_ptr_ls_Program_gr__smart_ptr_ls_VisitorAdapter_gr_>`
+  *  :ref:`visit_structure (program: smart_ptr\<Program\>; structure: smart_ptr\<Structure\>; adapter: smart_ptr\<VisitorAdapter\>) <function-ast_visit_structure_smart_ptr_ls_Program_gr__smart_ptr_ls_Structure_gr__smart_ptr_ls_VisitorAdapter_gr_>`
 
 
 visit
 ^^^^^
 
-.. _function-ast_visit_smart_ptr_ls_TypeDecl_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit:
+.. _function-ast_visit_smart_ptr_ls_TypeDecl_gr__smart_ptr_ls_VisitorAdapter_gr_:
 
-.. das:function:: visit(expression: smart_ptr<TypeDecl> implicit; adapter: smart_ptr<VisitorAdapter> implicit) : smart_ptr<TypeDecl>
+.. das:function:: visit(expression: smart_ptr<TypeDecl>; adapter: smart_ptr<VisitorAdapter>) : smart_ptr<TypeDecl>
 
 Invokes an AST visitor on the given object.
 
@@ -5565,23 +5565,23 @@ Invokes an AST visitor on the given object.
 
             * **adapter** : smart_ptr< :ref:`VisitorAdapter <handle-ast-VisitorAdapter>`> implicit
 
-.. _function-ast_visit_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit:
+.. _function-ast_visit_smart_ptr_ls_Program_gr__smart_ptr_ls_VisitorAdapter_gr_:
 
-.. das:function:: visit(program: smart_ptr<Program> implicit; adapter: smart_ptr<VisitorAdapter> implicit)
+.. das:function:: visit(program: smart_ptr<Program>; adapter: smart_ptr<VisitorAdapter>)
 
-.. _function-ast_visit_smart_ptr_ls_Function_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit:
+.. _function-ast_visit_smart_ptr_ls_Function_gr__smart_ptr_ls_VisitorAdapter_gr_:
 
-.. das:function:: visit(function: smart_ptr<Function> implicit; adapter: smart_ptr<VisitorAdapter> implicit)
+.. das:function:: visit(function: smart_ptr<Function>; adapter: smart_ptr<VisitorAdapter>)
 
-.. _function-ast_visit_smart_ptr_ls_Expression_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit:
+.. _function-ast_visit_smart_ptr_ls_Expression_gr__smart_ptr_ls_VisitorAdapter_gr_:
 
-.. das:function:: visit(expression: smart_ptr<Expression> implicit; adapter: smart_ptr<VisitorAdapter> implicit) : smart_ptr<Expression>
+.. das:function:: visit(expression: smart_ptr<Expression>; adapter: smart_ptr<VisitorAdapter>) : smart_ptr<Expression>
 
 ----
 
-.. _function-ast_visit_enumeration_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_Enumeration_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit:
+.. _function-ast_visit_enumeration_smart_ptr_ls_Program_gr__smart_ptr_ls_Enumeration_gr__smart_ptr_ls_VisitorAdapter_gr_:
 
-.. das:function:: visit_enumeration(program: smart_ptr<Program> implicit; enumeration: smart_ptr<Enumeration> implicit; adapter: smart_ptr<VisitorAdapter> implicit)
+.. das:function:: visit_enumeration(program: smart_ptr<Program>; enumeration: smart_ptr<Enumeration>; adapter: smart_ptr<VisitorAdapter>)
 
 Invokes an AST visitor on the given enumeration.
 
@@ -5592,9 +5592,9 @@ Invokes an AST visitor on the given enumeration.
 
             * **adapter** : smart_ptr< :ref:`VisitorAdapter <handle-ast-VisitorAdapter>`> implicit
 
-.. _function-ast_visit_finally_smart_ptr_ls_ExprBlock_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit:
+.. _function-ast_visit_finally_smart_ptr_ls_ExprBlock_gr__smart_ptr_ls_VisitorAdapter_gr_:
 
-.. das:function:: visit_finally(expression: smart_ptr<ExprBlock> implicit; adapter: smart_ptr<VisitorAdapter> implicit)
+.. das:function:: visit_finally(expression: smart_ptr<ExprBlock>; adapter: smart_ptr<VisitorAdapter>)
 
 Invokes the visitor on the finally section of a block.
 
@@ -5603,9 +5603,9 @@ Invokes the visitor on the finally section of a block.
 
             * **adapter** : smart_ptr< :ref:`VisitorAdapter <handle-ast-VisitorAdapter>`> implicit
 
-.. _function-ast_visit_module_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit_Module_q__implicit:
+.. _function-ast_visit_module_smart_ptr_ls_Program_gr__smart_ptr_ls_VisitorAdapter_gr__Module_q_:
 
-.. das:function:: visit_module(program: smart_ptr<Program> implicit; adapter: smart_ptr<VisitorAdapter> implicit; module: Module? implicit)
+.. das:function:: visit_module(program: smart_ptr<Program>; adapter: smart_ptr<VisitorAdapter>; module: Module?)
 
 Invokes an AST visitor on the given module.
 
@@ -5616,9 +5616,9 @@ Invokes an AST visitor on the given module.
 
             * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-.. _function-ast_visit_modules_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit:
+.. _function-ast_visit_modules_smart_ptr_ls_Program_gr__smart_ptr_ls_VisitorAdapter_gr_:
 
-.. das:function:: visit_modules(program: smart_ptr<Program> implicit; adapter: smart_ptr<VisitorAdapter> implicit)
+.. das:function:: visit_modules(program: smart_ptr<Program>; adapter: smart_ptr<VisitorAdapter>)
 
 Invokes an AST visitor on all modules in the specified program.
 
@@ -5627,9 +5627,9 @@ Invokes an AST visitor on all modules in the specified program.
 
             * **adapter** : smart_ptr< :ref:`VisitorAdapter <handle-ast-VisitorAdapter>`> implicit
 
-.. _function-ast_visit_structure_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_Structure_gr__implicit_smart_ptr_ls_VisitorAdapter_gr__implicit:
+.. _function-ast_visit_structure_smart_ptr_ls_Program_gr__smart_ptr_ls_Structure_gr__smart_ptr_ls_VisitorAdapter_gr_:
 
-.. das:function:: visit_structure(program: smart_ptr<Program> implicit; structure: smart_ptr<Structure> implicit; adapter: smart_ptr<VisitorAdapter> implicit)
+.. das:function:: visit_structure(program: smart_ptr<Program>; structure: smart_ptr<Structure>; adapter: smart_ptr<VisitorAdapter>)
 
 Invokes an AST visitor on the given structure.
 
@@ -5645,18 +5645,18 @@ Invokes an AST visitor on the given structure.
 Expression generation
 +++++++++++++++++++++
 
-  *  :ref:`force_generated (function: smart_ptr\<Function\> const& implicit; value: bool) <function-ast_force_generated_smart_ptr_ls_Function_gr__const_ref__implicit_bool>`
-  *  :ref:`force_generated (expression: smart_ptr\<Expression\> const& implicit; value: bool) <function-ast_force_generated_smart_ptr_ls_Expression_gr__const_ref__implicit_bool>`
-  *  :ref:`get_expression_annotation (expr: Expression? implicit) : Annotation? <function-ast_get_expression_annotation_Expression_q__implicit>`
-  *  :ref:`make_type_info_structure (ctx: Context implicit; type: smart_ptr\<TypeDecl\> implicit) : TypeInfo? <function-ast_make_type_info_structure_Context_implicit_smart_ptr_ls_TypeDecl_gr__implicit>`
+  *  :ref:`force_generated (function: smart_ptr\<Function\> const&; value: bool) <function-ast_force_generated_smart_ptr_ls_Function_gr__const_ref__bool>`
+  *  :ref:`force_generated (expression: smart_ptr\<Expression\> const&; value: bool) <function-ast_force_generated_smart_ptr_ls_Expression_gr__const_ref__bool>`
+  *  :ref:`get_expression_annotation (expr: Expression?) : Annotation? <function-ast_get_expression_annotation_Expression_q_>`
+  *  :ref:`make_type_info_structure (ctx: Context; type: smart_ptr\<TypeDecl\>) : TypeInfo? <function-ast_make_type_info_structure_Context_smart_ptr_ls_TypeDecl_gr_>`
 
 
 force_generated
 ^^^^^^^^^^^^^^^
 
-.. _function-ast_force_generated_smart_ptr_ls_Function_gr__const_ref__implicit_bool:
+.. _function-ast_force_generated_smart_ptr_ls_Function_gr__const_ref__bool:
 
-.. das:function:: force_generated(function: smart_ptr<Function> const& implicit; value: bool)
+.. das:function:: force_generated(function: smart_ptr<Function> const&; value: bool)
 
 Sets the generated flag on an expression and its subexpressions.
 
@@ -5665,24 +5665,24 @@ Sets the generated flag on an expression and its subexpressions.
 
             * **value** : bool
 
-.. _function-ast_force_generated_smart_ptr_ls_Expression_gr__const_ref__implicit_bool:
+.. _function-ast_force_generated_smart_ptr_ls_Expression_gr__const_ref__bool:
 
-.. das:function:: force_generated(expression: smart_ptr<Expression> const& implicit; value: bool)
+.. das:function:: force_generated(expression: smart_ptr<Expression> const&; value: bool)
 
 ----
 
-.. _function-ast_get_expression_annotation_Expression_q__implicit:
+.. _function-ast_get_expression_annotation_Expression_q_:
 
-.. das:function:: get_expression_annotation(expr: Expression? implicit) : Annotation?
+.. das:function:: get_expression_annotation(expr: Expression?) : Annotation?
 
 Returns the Annotation associated with an Expression or its inherited types.
 
 
 :Arguments: * **expr** :  :ref:`Expression <handle-ast-Expression>`? implicit
 
-.. _function-ast_make_type_info_structure_Context_implicit_smart_ptr_ls_TypeDecl_gr__implicit:
+.. _function-ast_make_type_info_structure_Context_smart_ptr_ls_TypeDecl_gr_:
 
-.. das:function:: make_type_info_structure(ctx: Context implicit; type: smart_ptr<TypeDecl> implicit) : TypeInfo?
+.. das:function:: make_type_info_structure(ctx: Context; type: smart_ptr<TypeDecl>) : TypeInfo?
 
 Returns a new TypeInfo corresponding to the specified type.
 
@@ -5697,44 +5697,44 @@ Adapter generation
 ++++++++++++++++++
 
   *  :ref:`make_block_annotation (name: string; var someClassPtr: auto) : FunctionAnnotationPtr <function-ast_make_block_annotation_string_auto_0x287>`
-  *  :ref:`make_block_annotation (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<FunctionAnnotation\> <function-ast_make_block_annotation_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
-  *  :ref:`make_block_type (blk: ExprBlock? implicit) : smart_ptr\<TypeDecl\> <function-ast_make_block_type_ExprBlock_q__implicit>`
-  *  :ref:`make_call_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<CallMacro\> <function-ast_make_call_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`make_block_annotation (name: string; class: void?; info: StructInfo const?) : smart_ptr\<FunctionAnnotation\> <function-ast_make_block_annotation_string_void_q__StructInfo_const_q_>`
+  *  :ref:`make_block_type (blk: ExprBlock?) : smart_ptr\<TypeDecl\> <function-ast_make_block_type_ExprBlock_q_>`
+  *  :ref:`make_call_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<CallMacro\> <function-ast_make_call_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_call_macro (name: string; var someClassPtr: auto) : CallMacroPtr <function-ast_make_call_macro_string_auto_0x2da>`
-  *  :ref:`make_capture_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<CaptureMacro\> <function-ast_make_capture_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`make_capture_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<CaptureMacro\> <function-ast_make_capture_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_capture_macro (name: string; var someClassPtr: auto) : CaptureMacroPtr <function-ast_make_capture_macro_string_auto_0x320>`
-  *  :ref:`make_clone_structure (structure: Structure? implicit) : smart_ptr\<Function\> <function-ast_make_clone_structure_Structure_q__implicit>`
-  *  :ref:`make_comment_reader (class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<CommentReader\> <function-ast_make_comment_reader_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`make_clone_structure (structure: Structure?) : smart_ptr\<Function\> <function-ast_make_clone_structure_Structure_q_>`
+  *  :ref:`make_comment_reader (class: void?; info: StructInfo const?) : smart_ptr\<CommentReader\> <function-ast_make_comment_reader_void_q__StructInfo_const_q_>`
   *  :ref:`make_comment_reader (name: string; var someClassPtr: auto) : CommentReaderPtr <function-ast_make_comment_reader_string_auto_0x2cc>`
-  *  :ref:`make_enum_debug_info (helper: smart_ptr\<DebugInfoHelper\> implicit; en: Enumeration const? implicit) : EnumInfo? <function-ast_make_enum_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_Enumeration_const_q__implicit>`
+  *  :ref:`make_enum_debug_info (helper: smart_ptr\<DebugInfoHelper\>; en: Enumeration const?) : EnumInfo? <function-ast_make_enum_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Enumeration_const_q_>`
   *  :ref:`make_enumeration_annotation (name: string; var someClassPtr: auto) : EnumerationAnnotationPtr <function-ast_make_enumeration_annotation_string_auto_0x2a3>`
-  *  :ref:`make_enumeration_annotation (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<EnumerationAnnotation\> <function-ast_make_enumeration_annotation_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
-  *  :ref:`make_for_loop_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<ForLoopMacro\> <function-ast_make_for_loop_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`make_enumeration_annotation (name: string; class: void?; info: StructInfo const?) : smart_ptr\<EnumerationAnnotation\> <function-ast_make_enumeration_annotation_string_void_q__StructInfo_const_q_>`
+  *  :ref:`make_for_loop_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<ForLoopMacro\> <function-ast_make_for_loop_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_for_loop_macro (name: string; var someClassPtr: auto) : ForLoopMacroPtr <function-ast_make_for_loop_macro_string_auto_0x312>`
   *  :ref:`make_function_annotation (name: string; var someClassPtr: auto) : FunctionAnnotationPtr <function-ast_make_function_annotation_string_auto_0x279>`
-  *  :ref:`make_function_annotation (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<FunctionAnnotation\> <function-ast_make_function_annotation_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
-  *  :ref:`make_function_debug_info (helper: smart_ptr\<DebugInfoHelper\> implicit; fn: Function const? implicit) : FuncInfo? <function-ast_make_function_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_Function_const_q__implicit>`
-  *  :ref:`make_invokable_type_debug_info (helper: smart_ptr\<DebugInfoHelper\> implicit; blk: smart_ptr\<TypeDecl\> implicit; at: LineInfo implicit) : FuncInfo? <function-ast_make_invokable_type_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit_LineInfo_implicit>`
-  *  :ref:`make_pass_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<PassMacro\> <function-ast_make_pass_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`make_function_annotation (name: string; class: void?; info: StructInfo const?) : smart_ptr\<FunctionAnnotation\> <function-ast_make_function_annotation_string_void_q__StructInfo_const_q_>`
+  *  :ref:`make_function_debug_info (helper: smart_ptr\<DebugInfoHelper\>; fn: Function const?) : FuncInfo? <function-ast_make_function_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Function_const_q_>`
+  *  :ref:`make_invokable_type_debug_info (helper: smart_ptr\<DebugInfoHelper\>; blk: smart_ptr\<TypeDecl\>; at: LineInfo) : FuncInfo? <function-ast_make_invokable_type_debug_info_smart_ptr_ls_DebugInfoHelper_gr__smart_ptr_ls_TypeDecl_gr__LineInfo>`
+  *  :ref:`make_pass_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<PassMacro\> <function-ast_make_pass_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_pass_macro (name: string; var someClassPtr: auto) : PassMacroPtr <function-ast_make_pass_macro_string_auto_0x2f6>`
   *  :ref:`make_reader_macro (name: string; var someClassPtr: auto) : ReaderMacroPtr <function-ast_make_reader_macro_string_auto_0x2be>`
-  *  :ref:`make_reader_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<ReaderMacro\> <function-ast_make_reader_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`make_reader_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<ReaderMacro\> <function-ast_make_reader_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_simulate_macro (name: string; var someClassPtr: auto) : SimulateMacroPtr <function-ast_make_simulate_macro_string_auto_0x339>`
-  *  :ref:`make_simulate_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<SimulateMacro\> <function-ast_make_simulate_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
-  *  :ref:`make_struct_debug_info (helper: smart_ptr\<DebugInfoHelper\> implicit; st: Structure const? implicit) : StructInfo? <function-ast_make_struct_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_Structure_const_q__implicit>`
-  *  :ref:`make_struct_variable_debug_info (helper: smart_ptr\<DebugInfoHelper\> implicit; st: Structure const? implicit; var: FieldDeclaration const? implicit) : VarInfo? <function-ast_make_struct_variable_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_Structure_const_q__implicit_FieldDeclaration_const_q__implicit>`
+  *  :ref:`make_simulate_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<SimulateMacro\> <function-ast_make_simulate_macro_string_void_q__StructInfo_const_q_>`
+  *  :ref:`make_struct_debug_info (helper: smart_ptr\<DebugInfoHelper\>; st: Structure const?) : StructInfo? <function-ast_make_struct_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Structure_const_q_>`
+  *  :ref:`make_struct_variable_debug_info (helper: smart_ptr\<DebugInfoHelper\>; st: Structure const?; var: FieldDeclaration const?) : VarInfo? <function-ast_make_struct_variable_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Structure_const_q__FieldDeclaration_const_q_>`
   *  :ref:`make_structure_annotation (name: string; var someClassPtr: auto) : StructureAnnotationPtr <function-ast_make_structure_annotation_string_auto_0x295>`
-  *  :ref:`make_structure_annotation (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<StructureAnnotation\> <function-ast_make_structure_annotation_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
-  *  :ref:`make_type_info (helper: smart_ptr\<DebugInfoHelper\> implicit; info: TypeInfo? implicit; type: smart_ptr\<TypeDecl\> const& implicit) : TypeInfo? <function-ast_make_type_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_TypeInfo_q__implicit_smart_ptr_ls_TypeDecl_gr__const_ref__implicit>`
+  *  :ref:`make_structure_annotation (name: string; class: void?; info: StructInfo const?) : smart_ptr\<StructureAnnotation\> <function-ast_make_structure_annotation_string_void_q__StructInfo_const_q_>`
+  *  :ref:`make_type_info (helper: smart_ptr\<DebugInfoHelper\>; info: TypeInfo?; type: smart_ptr\<TypeDecl\> const&) : TypeInfo? <function-ast_make_type_info_smart_ptr_ls_DebugInfoHelper_gr__TypeInfo_q__smart_ptr_ls_TypeDecl_gr__const_ref_>`
   *  :ref:`make_type_macro (name: string; var someClassPtr: auto) : TypeMacroPtr <function-ast_make_type_macro_string_auto_0x32c>`
-  *  :ref:`make_type_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<TypeMacro\> <function-ast_make_type_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
-  *  :ref:`make_typeinfo_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<TypeInfoMacro\> <function-ast_make_typeinfo_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`make_type_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<TypeMacro\> <function-ast_make_type_macro_string_void_q__StructInfo_const_q_>`
+  *  :ref:`make_typeinfo_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<TypeInfoMacro\> <function-ast_make_typeinfo_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_typeinfo_macro (name: string; var someClassPtr: auto) : TypeInfoMacroPtr <function-ast_make_typeinfo_macro_string_auto_0x2e8>`
-  *  :ref:`make_variable_debug_info (helper: smart_ptr\<DebugInfoHelper\> implicit; var: Variable? implicit) : VarInfo? <function-ast_make_variable_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_Variable_q__implicit>`
+  *  :ref:`make_variable_debug_info (helper: smart_ptr\<DebugInfoHelper\>; var: Variable?) : VarInfo? <function-ast_make_variable_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Variable_q_>`
   *  :ref:`make_variant_macro (name: string; var someClassPtr: auto) : VariantMacroPtr <function-ast_make_variant_macro_string_auto_0x304>`
-  *  :ref:`make_variant_macro (name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<VariantMacro\> <function-ast_make_variant_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`make_variant_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<VariantMacro\> <function-ast_make_variant_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_visitor (someClass: auto) : smart_ptr\<VisitorAdapter\> <function-ast_make_visitor_auto_0x2ae>`
-  *  :ref:`make_visitor (class: void? implicit; info: StructInfo const? implicit) : smart_ptr\<VisitorAdapter\> <function-ast_make_visitor_void_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`make_visitor (class: void?; info: StructInfo const?) : smart_ptr\<VisitorAdapter\> <function-ast_make_visitor_void_q__StructInfo_const_q_>`
 
 
 make_block_annotation
@@ -5751,15 +5751,15 @@ Creates an adapter for the AstBlockAnnotation interface.
 
             * **someClassPtr** : auto
 
-.. _function-ast_make_block_annotation_string_implicit_void_q__implicit_StructInfo_const_q__implicit:
+.. _function-ast_make_block_annotation_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_block_annotation(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<FunctionAnnotation>
+.. das:function:: make_block_annotation(name: string; class: void?; info: StructInfo const?) : smart_ptr<FunctionAnnotation>
 
 ----
 
-.. _function-ast_make_block_type_ExprBlock_q__implicit:
+.. _function-ast_make_block_type_ExprBlock_q_:
 
-.. das:function:: make_block_type(blk: ExprBlock? implicit) : smart_ptr<TypeDecl>
+.. das:function:: make_block_type(blk: ExprBlock?) : smart_ptr<TypeDecl>
 
 Generates a TypeDeclPtr for a specified block or lambda type.
 
@@ -5770,9 +5770,9 @@ Generates a TypeDeclPtr for a specified block or lambda type.
 make_call_macro
 ^^^^^^^^^^^^^^^
 
-.. _function-ast_make_call_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit:
+.. _function-ast_make_call_macro_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_call_macro(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<CallMacro>
+.. das:function:: make_call_macro(name: string; class: void?; info: StructInfo const?) : smart_ptr<CallMacro>
 
 Creates an adapter for the AstCallMacro interface.
 
@@ -5793,9 +5793,9 @@ Creates an adapter for the AstCallMacro interface.
 make_capture_macro
 ^^^^^^^^^^^^^^^^^^
 
-.. _function-ast_make_capture_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit:
+.. _function-ast_make_capture_macro_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_capture_macro(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<CaptureMacro>
+.. das:function:: make_capture_macro(name: string; class: void?; info: StructInfo const?) : smart_ptr<CaptureMacro>
 
 Creates an adapter for the AstCaptureMacro interface.
 
@@ -5812,9 +5812,9 @@ Creates an adapter for the AstCaptureMacro interface.
 
 ----
 
-.. _function-ast_make_clone_structure_Structure_q__implicit:
+.. _function-ast_make_clone_structure_Structure_q_:
 
-.. das:function:: make_clone_structure(structure: Structure? implicit) : smart_ptr<Function>
+.. das:function:: make_clone_structure(structure: Structure?) : smart_ptr<Function>
 
 Generates a clone function for the given structure.
 
@@ -5825,9 +5825,9 @@ Generates a clone function for the given structure.
 make_comment_reader
 ^^^^^^^^^^^^^^^^^^^
 
-.. _function-ast_make_comment_reader_void_q__implicit_StructInfo_const_q__implicit:
+.. _function-ast_make_comment_reader_void_q__StructInfo_const_q_:
 
-.. das:function:: make_comment_reader(class: void? implicit; info: StructInfo const? implicit) : smart_ptr<CommentReader>
+.. das:function:: make_comment_reader(class: void?; info: StructInfo const?) : smart_ptr<CommentReader>
 
 Creates an adapter for the AstCommentReader interface.
 
@@ -5842,9 +5842,9 @@ Creates an adapter for the AstCommentReader interface.
 
 ----
 
-.. _function-ast_make_enum_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_Enumeration_const_q__implicit:
+.. _function-ast_make_enum_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Enumeration_const_q_:
 
-.. das:function:: make_enum_debug_info(helper: smart_ptr<DebugInfoHelper> implicit; en: Enumeration const? implicit) : EnumInfo?
+.. das:function:: make_enum_debug_info(helper: smart_ptr<DebugInfoHelper>; en: Enumeration const?) : EnumInfo?
 
 Generates an EnumInfo for the specified enumeration using the given DebugInfoHelper.
 
@@ -5868,9 +5868,9 @@ Creates an adapter for the AstEnumerationAnnotation interface.
 
             * **someClassPtr** : auto
 
-.. _function-ast_make_enumeration_annotation_string_implicit_void_q__implicit_StructInfo_const_q__implicit:
+.. _function-ast_make_enumeration_annotation_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_enumeration_annotation(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<EnumerationAnnotation>
+.. das:function:: make_enumeration_annotation(name: string; class: void?; info: StructInfo const?) : smart_ptr<EnumerationAnnotation>
 
 ----
 
@@ -5878,9 +5878,9 @@ Creates an adapter for the AstEnumerationAnnotation interface.
 make_for_loop_macro
 ^^^^^^^^^^^^^^^^^^^
 
-.. _function-ast_make_for_loop_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit:
+.. _function-ast_make_for_loop_macro_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_for_loop_macro(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<ForLoopMacro>
+.. das:function:: make_for_loop_macro(name: string; class: void?; info: StructInfo const?) : smart_ptr<ForLoopMacro>
 
 Creates an adapter for the AstForLoopMacro interface.
 
@@ -5912,15 +5912,15 @@ Creates an adapter for the AstFunctionAnnotation interface.
 
             * **someClassPtr** : auto
 
-.. _function-ast_make_function_annotation_string_implicit_void_q__implicit_StructInfo_const_q__implicit:
+.. _function-ast_make_function_annotation_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_function_annotation(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<FunctionAnnotation>
+.. das:function:: make_function_annotation(name: string; class: void?; info: StructInfo const?) : smart_ptr<FunctionAnnotation>
 
 ----
 
-.. _function-ast_make_function_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_Function_const_q__implicit:
+.. _function-ast_make_function_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Function_const_q_:
 
-.. das:function:: make_function_debug_info(helper: smart_ptr<DebugInfoHelper> implicit; fn: Function const? implicit) : FuncInfo?
+.. das:function:: make_function_debug_info(helper: smart_ptr<DebugInfoHelper>; fn: Function const?) : FuncInfo?
 
 Generates a FuncInfo for the specified function using the given DebugInfoHelper.
 
@@ -5929,9 +5929,9 @@ Generates a FuncInfo for the specified function using the given DebugInfoHelper.
 
             * **fn** :  :ref:`Function <handle-ast-Function>`? implicit
 
-.. _function-ast_make_invokable_type_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit_LineInfo_implicit:
+.. _function-ast_make_invokable_type_debug_info_smart_ptr_ls_DebugInfoHelper_gr__smart_ptr_ls_TypeDecl_gr__LineInfo:
 
-.. das:function:: make_invokable_type_debug_info(helper: smart_ptr<DebugInfoHelper> implicit; blk: smart_ptr<TypeDecl> implicit; at: LineInfo implicit) : FuncInfo?
+.. das:function:: make_invokable_type_debug_info(helper: smart_ptr<DebugInfoHelper>; blk: smart_ptr<TypeDecl>; at: LineInfo) : FuncInfo?
 
 Generates a FuncInfo for an invokable type such as a lambda or block using the given DebugInfoHelper.
 
@@ -5946,9 +5946,9 @@ Generates a FuncInfo for an invokable type such as a lambda or block using the g
 make_pass_macro
 ^^^^^^^^^^^^^^^
 
-.. _function-ast_make_pass_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit:
+.. _function-ast_make_pass_macro_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_pass_macro(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<PassMacro>
+.. das:function:: make_pass_macro(name: string; class: void?; info: StructInfo const?) : smart_ptr<PassMacro>
 
 Creates an adapter for the AstPassMacro interface.
 
@@ -5980,9 +5980,9 @@ Creates an adapter for the AstReaderMacro interface.
 
             * **someClassPtr** : auto
 
-.. _function-ast_make_reader_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit:
+.. _function-ast_make_reader_macro_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_reader_macro(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<ReaderMacro>
+.. das:function:: make_reader_macro(name: string; class: void?; info: StructInfo const?) : smart_ptr<ReaderMacro>
 
 ----
 
@@ -6001,15 +6001,15 @@ Creates an adapter for the AstSimulateMacro interface.
 
             * **someClassPtr** : auto
 
-.. _function-ast_make_simulate_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit:
+.. _function-ast_make_simulate_macro_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_simulate_macro(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<SimulateMacro>
+.. das:function:: make_simulate_macro(name: string; class: void?; info: StructInfo const?) : smart_ptr<SimulateMacro>
 
 ----
 
-.. _function-ast_make_struct_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_Structure_const_q__implicit:
+.. _function-ast_make_struct_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Structure_const_q_:
 
-.. das:function:: make_struct_debug_info(helper: smart_ptr<DebugInfoHelper> implicit; st: Structure const? implicit) : StructInfo?
+.. das:function:: make_struct_debug_info(helper: smart_ptr<DebugInfoHelper>; st: Structure const?) : StructInfo?
 
 Generates a StructInfo for the specified structure using the given DebugInfoHelper.
 
@@ -6018,9 +6018,9 @@ Generates a StructInfo for the specified structure using the given DebugInfoHelp
 
             * **st** :  :ref:`Structure <handle-ast-Structure>`? implicit
 
-.. _function-ast_make_struct_variable_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_Structure_const_q__implicit_FieldDeclaration_const_q__implicit:
+.. _function-ast_make_struct_variable_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Structure_const_q__FieldDeclaration_const_q_:
 
-.. das:function:: make_struct_variable_debug_info(helper: smart_ptr<DebugInfoHelper> implicit; st: Structure const? implicit; var: FieldDeclaration const? implicit) : VarInfo?
+.. das:function:: make_struct_variable_debug_info(helper: smart_ptr<DebugInfoHelper>; st: Structure const?; var: FieldDeclaration const?) : VarInfo?
 
 Generates a VariableInfo for a structure field using the given DebugInfoHelper.
 
@@ -6046,15 +6046,15 @@ Creates an adapter for the AstStructureAnnotation interface.
 
             * **someClassPtr** : auto
 
-.. _function-ast_make_structure_annotation_string_implicit_void_q__implicit_StructInfo_const_q__implicit:
+.. _function-ast_make_structure_annotation_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_structure_annotation(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<StructureAnnotation>
+.. das:function:: make_structure_annotation(name: string; class: void?; info: StructInfo const?) : smart_ptr<StructureAnnotation>
 
 ----
 
-.. _function-ast_make_type_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_TypeInfo_q__implicit_smart_ptr_ls_TypeDecl_gr__const_ref__implicit:
+.. _function-ast_make_type_info_smart_ptr_ls_DebugInfoHelper_gr__TypeInfo_q__smart_ptr_ls_TypeDecl_gr__const_ref_:
 
-.. das:function:: make_type_info(helper: smart_ptr<DebugInfoHelper> implicit; info: TypeInfo? implicit; type: smart_ptr<TypeDecl> const& implicit) : TypeInfo?
+.. das:function:: make_type_info(helper: smart_ptr<DebugInfoHelper>; info: TypeInfo?; type: smart_ptr<TypeDecl> const&) : TypeInfo?
 
 Generates a TypeInfo for the specified type using the given DebugInfoHelper.
 
@@ -6080,9 +6080,9 @@ Creates an adapter for the AstTypeMacro interface.
 
             * **someClassPtr** : auto
 
-.. _function-ast_make_type_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit:
+.. _function-ast_make_type_macro_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_type_macro(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<TypeMacro>
+.. das:function:: make_type_macro(name: string; class: void?; info: StructInfo const?) : smart_ptr<TypeMacro>
 
 ----
 
@@ -6090,9 +6090,9 @@ Creates an adapter for the AstTypeMacro interface.
 make_typeinfo_macro
 ^^^^^^^^^^^^^^^^^^^
 
-.. _function-ast_make_typeinfo_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit:
+.. _function-ast_make_typeinfo_macro_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_typeinfo_macro(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<TypeInfoMacro>
+.. das:function:: make_typeinfo_macro(name: string; class: void?; info: StructInfo const?) : smart_ptr<TypeInfoMacro>
 
 Creates an adapter for the AstTypeInfoMacro interface.
 
@@ -6109,9 +6109,9 @@ Creates an adapter for the AstTypeInfoMacro interface.
 
 ----
 
-.. _function-ast_make_variable_debug_info_smart_ptr_ls_DebugInfoHelper_gr__implicit_Variable_q__implicit:
+.. _function-ast_make_variable_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Variable_q_:
 
-.. das:function:: make_variable_debug_info(helper: smart_ptr<DebugInfoHelper> implicit; var: Variable? implicit) : VarInfo?
+.. das:function:: make_variable_debug_info(helper: smart_ptr<DebugInfoHelper>; var: Variable?) : VarInfo?
 
 Generates a VariableInfo for the specified variable using the given DebugInfoHelper.
 
@@ -6135,9 +6135,9 @@ Creates an adapter for the AstVariantMacro interface.
 
             * **someClassPtr** : auto
 
-.. _function-ast_make_variant_macro_string_implicit_void_q__implicit_StructInfo_const_q__implicit:
+.. _function-ast_make_variant_macro_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_variant_macro(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<VariantMacro>
+.. das:function:: make_variant_macro(name: string; class: void?; info: StructInfo const?) : smart_ptr<VariantMacro>
 
 ----
 
@@ -6154,30 +6154,30 @@ Creates an adapter for the AstVisitor interface.
 
 :Arguments: * **someClass** : auto
 
-.. _function-ast_make_visitor_void_q__implicit_StructInfo_const_q__implicit:
+.. _function-ast_make_visitor_void_q__StructInfo_const_q_:
 
-.. das:function:: make_visitor(class: void? implicit; info: StructInfo const? implicit) : smart_ptr<VisitorAdapter>
+.. das:function:: make_visitor(class: void?; info: StructInfo const?) : smart_ptr<VisitorAdapter>
 
 
 +++++++++++++++++++
 Adapter application
 +++++++++++++++++++
 
-  *  :ref:`add_block_annotation (block: smart_ptr\<ExprBlock\> implicit; annotation: smart_ptr\<FunctionAnnotation\>& implicit) <function-ast_add_block_annotation_smart_ptr_ls_ExprBlock_gr__implicit_smart_ptr_ls_FunctionAnnotation_gr__ref__implicit>`
-  *  :ref:`add_block_annotation (block: smart_ptr\<ExprBlock\> implicit; annotation: smart_ptr\<AnnotationDeclaration\>& implicit) <function-ast_add_block_annotation_smart_ptr_ls_ExprBlock_gr__implicit_smart_ptr_ls_AnnotationDeclaration_gr__ref__implicit>`
-  *  :ref:`add_call_macro (module: Module? implicit; annotation: smart_ptr\<CallMacro\>& implicit) <function-ast_add_call_macro_Module_q__implicit_smart_ptr_ls_CallMacro_gr__ref__implicit>`
-  *  :ref:`add_capture_macro (module: Module? implicit; annotation: smart_ptr\<CaptureMacro\>& implicit) <function-ast_add_capture_macro_Module_q__implicit_smart_ptr_ls_CaptureMacro_gr__ref__implicit>`
-  *  :ref:`add_comment_reader (module: Module? implicit; reader: smart_ptr\<CommentReader\>& implicit) <function-ast_add_comment_reader_Module_q__implicit_smart_ptr_ls_CommentReader_gr__ref__implicit>`
-  *  :ref:`add_dirty_infer_macro (module: Module? implicit; annotation: smart_ptr\<PassMacro\>& implicit) <function-ast_add_dirty_infer_macro_Module_q__implicit_smart_ptr_ls_PassMacro_gr__ref__implicit>`
-  *  :ref:`add_enumeration_annotation (module: Module? implicit; annotation: smart_ptr\<EnumerationAnnotation\>& implicit) <function-ast_add_enumeration_annotation_Module_q__implicit_smart_ptr_ls_EnumerationAnnotation_gr__ref__implicit>`
-  *  :ref:`add_for_loop_macro (module: Module? implicit; annotation: smart_ptr\<ForLoopMacro\>& implicit) <function-ast_add_for_loop_macro_Module_q__implicit_smart_ptr_ls_ForLoopMacro_gr__ref__implicit>`
-  *  :ref:`add_function_annotation (function: smart_ptr\<Function\> implicit; annotation: smart_ptr\<FunctionAnnotation\>& implicit) <function-ast_add_function_annotation_smart_ptr_ls_Function_gr__implicit_smart_ptr_ls_FunctionAnnotation_gr__ref__implicit>`
-  *  :ref:`add_function_annotation (module: Module? implicit; annotation: smart_ptr\<FunctionAnnotation\>& implicit) <function-ast_add_function_annotation_Module_q__implicit_smart_ptr_ls_FunctionAnnotation_gr__ref__implicit>`
-  *  :ref:`add_function_annotation (function: smart_ptr\<Function\> implicit; annotation: smart_ptr\<AnnotationDeclaration\>& implicit) <function-ast_add_function_annotation_smart_ptr_ls_Function_gr__implicit_smart_ptr_ls_AnnotationDeclaration_gr__ref__implicit>`
-  *  :ref:`add_global_lint_macro (module: Module? implicit; annotation: smart_ptr\<PassMacro\>& implicit) <function-ast_add_global_lint_macro_Module_q__implicit_smart_ptr_ls_PassMacro_gr__ref__implicit>`
-  *  :ref:`add_infer_macro (module: Module? implicit; annotation: smart_ptr\<PassMacro\>& implicit) <function-ast_add_infer_macro_Module_q__implicit_smart_ptr_ls_PassMacro_gr__ref__implicit>`
-  *  :ref:`add_lint_macro (module: Module? implicit; annotation: smart_ptr\<PassMacro\>& implicit) <function-ast_add_lint_macro_Module_q__implicit_smart_ptr_ls_PassMacro_gr__ref__implicit>`
-  *  :ref:`add_module_option (module: Module? implicit; option: string implicit; type: Type) <function-ast_add_module_option_Module_q__implicit_string_implicit_Type>`
+  *  :ref:`add_block_annotation (block: smart_ptr\<ExprBlock\>; annotation: smart_ptr\<FunctionAnnotation\>&) <function-ast_add_block_annotation_smart_ptr_ls_ExprBlock_gr__smart_ptr_ls_FunctionAnnotation_gr__ref_>`
+  *  :ref:`add_block_annotation (block: smart_ptr\<ExprBlock\>; annotation: smart_ptr\<AnnotationDeclaration\>&) <function-ast_add_block_annotation_smart_ptr_ls_ExprBlock_gr__smart_ptr_ls_AnnotationDeclaration_gr__ref_>`
+  *  :ref:`add_call_macro (module: Module?; annotation: smart_ptr\<CallMacro\>&) <function-ast_add_call_macro_Module_q__smart_ptr_ls_CallMacro_gr__ref_>`
+  *  :ref:`add_capture_macro (module: Module?; annotation: smart_ptr\<CaptureMacro\>&) <function-ast_add_capture_macro_Module_q__smart_ptr_ls_CaptureMacro_gr__ref_>`
+  *  :ref:`add_comment_reader (module: Module?; reader: smart_ptr\<CommentReader\>&) <function-ast_add_comment_reader_Module_q__smart_ptr_ls_CommentReader_gr__ref_>`
+  *  :ref:`add_dirty_infer_macro (module: Module?; annotation: smart_ptr\<PassMacro\>&) <function-ast_add_dirty_infer_macro_Module_q__smart_ptr_ls_PassMacro_gr__ref_>`
+  *  :ref:`add_enumeration_annotation (module: Module?; annotation: smart_ptr\<EnumerationAnnotation\>&) <function-ast_add_enumeration_annotation_Module_q__smart_ptr_ls_EnumerationAnnotation_gr__ref_>`
+  *  :ref:`add_for_loop_macro (module: Module?; annotation: smart_ptr\<ForLoopMacro\>&) <function-ast_add_for_loop_macro_Module_q__smart_ptr_ls_ForLoopMacro_gr__ref_>`
+  *  :ref:`add_function_annotation (function: smart_ptr\<Function\>; annotation: smart_ptr\<FunctionAnnotation\>&) <function-ast_add_function_annotation_smart_ptr_ls_Function_gr__smart_ptr_ls_FunctionAnnotation_gr__ref_>`
+  *  :ref:`add_function_annotation (module: Module?; annotation: smart_ptr\<FunctionAnnotation\>&) <function-ast_add_function_annotation_Module_q__smart_ptr_ls_FunctionAnnotation_gr__ref_>`
+  *  :ref:`add_function_annotation (function: smart_ptr\<Function\>; annotation: smart_ptr\<AnnotationDeclaration\>&) <function-ast_add_function_annotation_smart_ptr_ls_Function_gr__smart_ptr_ls_AnnotationDeclaration_gr__ref_>`
+  *  :ref:`add_global_lint_macro (module: Module?; annotation: smart_ptr\<PassMacro\>&) <function-ast_add_global_lint_macro_Module_q__smart_ptr_ls_PassMacro_gr__ref_>`
+  *  :ref:`add_infer_macro (module: Module?; annotation: smart_ptr\<PassMacro\>&) <function-ast_add_infer_macro_Module_q__smart_ptr_ls_PassMacro_gr__ref_>`
+  *  :ref:`add_lint_macro (module: Module?; annotation: smart_ptr\<PassMacro\>&) <function-ast_add_lint_macro_Module_q__smart_ptr_ls_PassMacro_gr__ref_>`
+  *  :ref:`add_module_option (module: Module?; option: string; type: Type) <function-ast_add_module_option_Module_q__string_Type>`
   *  :ref:`add_new_block_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_block_annotation_string_auto_0x345>`
   *  :ref:`add_new_call_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_call_macro_string_auto_0x38c>`
   *  :ref:`add_new_capture_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_capture_macro_string_auto_0x36f>`
@@ -6197,23 +6197,23 @@ Adapter application
   *  :ref:`add_new_type_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_type_macro_string_auto_0x375>`
   *  :ref:`add_new_typeinfo_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_typeinfo_macro_string_auto_0x392>`
   *  :ref:`add_new_variant_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_variant_macro_string_auto_0x363>`
-  *  :ref:`add_optimization_macro (module: Module? implicit; annotation: smart_ptr\<PassMacro\>& implicit) <function-ast_add_optimization_macro_Module_q__implicit_smart_ptr_ls_PassMacro_gr__ref__implicit>`
-  *  :ref:`add_reader_macro (module: Module? implicit; annotation: smart_ptr\<ReaderMacro\>& implicit) <function-ast_add_reader_macro_Module_q__implicit_smart_ptr_ls_ReaderMacro_gr__ref__implicit>`
-  *  :ref:`add_simulate_macro (module: Module? implicit; annotation: smart_ptr\<SimulateMacro\>& implicit) <function-ast_add_simulate_macro_Module_q__implicit_smart_ptr_ls_SimulateMacro_gr__ref__implicit>`
-  *  :ref:`add_structure_annotation (structure: smart_ptr\<Structure\> implicit; annotation: smart_ptr\<StructureAnnotation\>& implicit) <function-ast_add_structure_annotation_smart_ptr_ls_Structure_gr__implicit_smart_ptr_ls_StructureAnnotation_gr__ref__implicit>`
-  *  :ref:`add_structure_annotation (module: Module? implicit; annotation: smart_ptr\<StructureAnnotation\>& implicit) <function-ast_add_structure_annotation_Module_q__implicit_smart_ptr_ls_StructureAnnotation_gr__ref__implicit>`
-  *  :ref:`add_structure_annotation (structure: smart_ptr\<Structure\> implicit; annotation: smart_ptr\<AnnotationDeclaration\>& implicit) <function-ast_add_structure_annotation_smart_ptr_ls_Structure_gr__implicit_smart_ptr_ls_AnnotationDeclaration_gr__ref__implicit>`
-  *  :ref:`add_type_macro (module: Module? implicit; annotation: smart_ptr\<TypeMacro\>& implicit) <function-ast_add_type_macro_Module_q__implicit_smart_ptr_ls_TypeMacro_gr__ref__implicit>`
-  *  :ref:`add_typeinfo_macro (module: Module? implicit; annotation: smart_ptr\<TypeInfoMacro\>& implicit) <function-ast_add_typeinfo_macro_Module_q__implicit_smart_ptr_ls_TypeInfoMacro_gr__ref__implicit>`
-  *  :ref:`add_variant_macro (module: Module? implicit; annotation: smart_ptr\<VariantMacro\>& implicit) <function-ast_add_variant_macro_Module_q__implicit_smart_ptr_ls_VariantMacro_gr__ref__implicit>`
+  *  :ref:`add_optimization_macro (module: Module?; annotation: smart_ptr\<PassMacro\>&) <function-ast_add_optimization_macro_Module_q__smart_ptr_ls_PassMacro_gr__ref_>`
+  *  :ref:`add_reader_macro (module: Module?; annotation: smart_ptr\<ReaderMacro\>&) <function-ast_add_reader_macro_Module_q__smart_ptr_ls_ReaderMacro_gr__ref_>`
+  *  :ref:`add_simulate_macro (module: Module?; annotation: smart_ptr\<SimulateMacro\>&) <function-ast_add_simulate_macro_Module_q__smart_ptr_ls_SimulateMacro_gr__ref_>`
+  *  :ref:`add_structure_annotation (structure: smart_ptr\<Structure\>; annotation: smart_ptr\<StructureAnnotation\>&) <function-ast_add_structure_annotation_smart_ptr_ls_Structure_gr__smart_ptr_ls_StructureAnnotation_gr__ref_>`
+  *  :ref:`add_structure_annotation (module: Module?; annotation: smart_ptr\<StructureAnnotation\>&) <function-ast_add_structure_annotation_Module_q__smart_ptr_ls_StructureAnnotation_gr__ref_>`
+  *  :ref:`add_structure_annotation (structure: smart_ptr\<Structure\>; annotation: smart_ptr\<AnnotationDeclaration\>&) <function-ast_add_structure_annotation_smart_ptr_ls_Structure_gr__smart_ptr_ls_AnnotationDeclaration_gr__ref_>`
+  *  :ref:`add_type_macro (module: Module?; annotation: smart_ptr\<TypeMacro\>&) <function-ast_add_type_macro_Module_q__smart_ptr_ls_TypeMacro_gr__ref_>`
+  *  :ref:`add_typeinfo_macro (module: Module?; annotation: smart_ptr\<TypeInfoMacro\>&) <function-ast_add_typeinfo_macro_Module_q__smart_ptr_ls_TypeInfoMacro_gr__ref_>`
+  *  :ref:`add_variant_macro (module: Module?; annotation: smart_ptr\<VariantMacro\>&) <function-ast_add_variant_macro_Module_q__smart_ptr_ls_VariantMacro_gr__ref_>`
 
 
 add_block_annotation
 ^^^^^^^^^^^^^^^^^^^^
 
-.. _function-ast_add_block_annotation_smart_ptr_ls_ExprBlock_gr__implicit_smart_ptr_ls_FunctionAnnotation_gr__ref__implicit:
+.. _function-ast_add_block_annotation_smart_ptr_ls_ExprBlock_gr__smart_ptr_ls_FunctionAnnotation_gr__ref_:
 
-.. das:function:: add_block_annotation(block: smart_ptr<ExprBlock> implicit; annotation: smart_ptr<FunctionAnnotation>& implicit)
+.. das:function:: add_block_annotation(block: smart_ptr<ExprBlock>; annotation: smart_ptr<FunctionAnnotation>&)
 
 Adds an annotation declaration to a block.
 
@@ -6222,15 +6222,15 @@ Adds an annotation declaration to a block.
 
             * **annotation** : smart_ptr< :ref:`FunctionAnnotation <handle-ast-FunctionAnnotation>`>\ & implicit
 
-.. _function-ast_add_block_annotation_smart_ptr_ls_ExprBlock_gr__implicit_smart_ptr_ls_AnnotationDeclaration_gr__ref__implicit:
+.. _function-ast_add_block_annotation_smart_ptr_ls_ExprBlock_gr__smart_ptr_ls_AnnotationDeclaration_gr__ref_:
 
-.. das:function:: add_block_annotation(block: smart_ptr<ExprBlock> implicit; annotation: smart_ptr<AnnotationDeclaration>& implicit)
+.. das:function:: add_block_annotation(block: smart_ptr<ExprBlock>; annotation: smart_ptr<AnnotationDeclaration>&)
 
 ----
 
-.. _function-ast_add_call_macro_Module_q__implicit_smart_ptr_ls_CallMacro_gr__ref__implicit:
+.. _function-ast_add_call_macro_Module_q__smart_ptr_ls_CallMacro_gr__ref_:
 
-.. das:function:: add_call_macro(module: Module? implicit; annotation: smart_ptr<CallMacro>& implicit)
+.. das:function:: add_call_macro(module: Module?; annotation: smart_ptr<CallMacro>&)
 
 Adds an AstCallMacro adapter to the specified module.
 
@@ -6239,9 +6239,9 @@ Adds an AstCallMacro adapter to the specified module.
 
             * **annotation** : smart_ptr< :ref:`CallMacro <handle-ast-CallMacro>`>\ & implicit
 
-.. _function-ast_add_capture_macro_Module_q__implicit_smart_ptr_ls_CaptureMacro_gr__ref__implicit:
+.. _function-ast_add_capture_macro_Module_q__smart_ptr_ls_CaptureMacro_gr__ref_:
 
-.. das:function:: add_capture_macro(module: Module? implicit; annotation: smart_ptr<CaptureMacro>& implicit)
+.. das:function:: add_capture_macro(module: Module?; annotation: smart_ptr<CaptureMacro>&)
 
 Adds an AstCaptureMacro to the specified module.
 
@@ -6250,9 +6250,9 @@ Adds an AstCaptureMacro to the specified module.
 
             * **annotation** : smart_ptr< :ref:`CaptureMacro <handle-ast-CaptureMacro>`>\ & implicit
 
-.. _function-ast_add_comment_reader_Module_q__implicit_smart_ptr_ls_CommentReader_gr__ref__implicit:
+.. _function-ast_add_comment_reader_Module_q__smart_ptr_ls_CommentReader_gr__ref_:
 
-.. das:function:: add_comment_reader(module: Module? implicit; reader: smart_ptr<CommentReader>& implicit)
+.. das:function:: add_comment_reader(module: Module?; reader: smart_ptr<CommentReader>&)
 
 Adds an AstCommentReader adapter to the specified module.
 
@@ -6261,9 +6261,9 @@ Adds an AstCommentReader adapter to the specified module.
 
             * **reader** : smart_ptr< :ref:`CommentReader <handle-ast-CommentReader>`>\ & implicit
 
-.. _function-ast_add_dirty_infer_macro_Module_q__implicit_smart_ptr_ls_PassMacro_gr__ref__implicit:
+.. _function-ast_add_dirty_infer_macro_Module_q__smart_ptr_ls_PassMacro_gr__ref_:
 
-.. das:function:: add_dirty_infer_macro(module: Module? implicit; annotation: smart_ptr<PassMacro>& implicit)
+.. das:function:: add_dirty_infer_macro(module: Module?; annotation: smart_ptr<PassMacro>&)
 
 Adds an AstPassMacro adapter to the dirty inference pass.
 
@@ -6272,9 +6272,9 @@ Adds an AstPassMacro adapter to the dirty inference pass.
 
             * **annotation** : smart_ptr< :ref:`PassMacro <handle-ast-PassMacro>`>\ & implicit
 
-.. _function-ast_add_enumeration_annotation_Module_q__implicit_smart_ptr_ls_EnumerationAnnotation_gr__ref__implicit:
+.. _function-ast_add_enumeration_annotation_Module_q__smart_ptr_ls_EnumerationAnnotation_gr__ref_:
 
-.. das:function:: add_enumeration_annotation(module: Module? implicit; annotation: smart_ptr<EnumerationAnnotation>& implicit)
+.. das:function:: add_enumeration_annotation(module: Module?; annotation: smart_ptr<EnumerationAnnotation>&)
 
 Adds an annotation to an enumeration and calls apply if applicable.
 
@@ -6283,9 +6283,9 @@ Adds an annotation to an enumeration and calls apply if applicable.
 
             * **annotation** : smart_ptr< :ref:`EnumerationAnnotation <handle-ast-EnumerationAnnotation>`>\ & implicit
 
-.. _function-ast_add_for_loop_macro_Module_q__implicit_smart_ptr_ls_ForLoopMacro_gr__ref__implicit:
+.. _function-ast_add_for_loop_macro_Module_q__smart_ptr_ls_ForLoopMacro_gr__ref_:
 
-.. das:function:: add_for_loop_macro(module: Module? implicit; annotation: smart_ptr<ForLoopMacro>& implicit)
+.. das:function:: add_for_loop_macro(module: Module?; annotation: smart_ptr<ForLoopMacro>&)
 
 Adds an AstForLoopMacro to the specified module.
 
@@ -6298,9 +6298,9 @@ Adds an AstForLoopMacro to the specified module.
 add_function_annotation
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-.. _function-ast_add_function_annotation_smart_ptr_ls_Function_gr__implicit_smart_ptr_ls_FunctionAnnotation_gr__ref__implicit:
+.. _function-ast_add_function_annotation_smart_ptr_ls_Function_gr__smart_ptr_ls_FunctionAnnotation_gr__ref_:
 
-.. das:function:: add_function_annotation(function: smart_ptr<Function> implicit; annotation: smart_ptr<FunctionAnnotation>& implicit)
+.. das:function:: add_function_annotation(function: smart_ptr<Function>; annotation: smart_ptr<FunctionAnnotation>&)
 
 Adds an annotation to a function and calls apply if applicable.
 
@@ -6309,19 +6309,19 @@ Adds an annotation to a function and calls apply if applicable.
 
             * **annotation** : smart_ptr< :ref:`FunctionAnnotation <handle-ast-FunctionAnnotation>`>\ & implicit
 
-.. _function-ast_add_function_annotation_Module_q__implicit_smart_ptr_ls_FunctionAnnotation_gr__ref__implicit:
+.. _function-ast_add_function_annotation_Module_q__smart_ptr_ls_FunctionAnnotation_gr__ref_:
 
-.. das:function:: add_function_annotation(module: Module? implicit; annotation: smart_ptr<FunctionAnnotation>& implicit)
+.. das:function:: add_function_annotation(module: Module?; annotation: smart_ptr<FunctionAnnotation>&)
 
-.. _function-ast_add_function_annotation_smart_ptr_ls_Function_gr__implicit_smart_ptr_ls_AnnotationDeclaration_gr__ref__implicit:
+.. _function-ast_add_function_annotation_smart_ptr_ls_Function_gr__smart_ptr_ls_AnnotationDeclaration_gr__ref_:
 
-.. das:function:: add_function_annotation(function: smart_ptr<Function> implicit; annotation: smart_ptr<AnnotationDeclaration>& implicit)
+.. das:function:: add_function_annotation(function: smart_ptr<Function>; annotation: smart_ptr<AnnotationDeclaration>&)
 
 ----
 
-.. _function-ast_add_global_lint_macro_Module_q__implicit_smart_ptr_ls_PassMacro_gr__ref__implicit:
+.. _function-ast_add_global_lint_macro_Module_q__smart_ptr_ls_PassMacro_gr__ref_:
 
-.. das:function:: add_global_lint_macro(module: Module? implicit; annotation: smart_ptr<PassMacro>& implicit)
+.. das:function:: add_global_lint_macro(module: Module?; annotation: smart_ptr<PassMacro>&)
 
 Adds an AstPassMacro adapter to the global lint pass.
 
@@ -6330,9 +6330,9 @@ Adds an AstPassMacro adapter to the global lint pass.
 
             * **annotation** : smart_ptr< :ref:`PassMacro <handle-ast-PassMacro>`>\ & implicit
 
-.. _function-ast_add_infer_macro_Module_q__implicit_smart_ptr_ls_PassMacro_gr__ref__implicit:
+.. _function-ast_add_infer_macro_Module_q__smart_ptr_ls_PassMacro_gr__ref_:
 
-.. das:function:: add_infer_macro(module: Module? implicit; annotation: smart_ptr<PassMacro>& implicit)
+.. das:function:: add_infer_macro(module: Module?; annotation: smart_ptr<PassMacro>&)
 
 Adds an AstPassMacro adapter to the type inference pass.
 
@@ -6341,9 +6341,9 @@ Adds an AstPassMacro adapter to the type inference pass.
 
             * **annotation** : smart_ptr< :ref:`PassMacro <handle-ast-PassMacro>`>\ & implicit
 
-.. _function-ast_add_lint_macro_Module_q__implicit_smart_ptr_ls_PassMacro_gr__ref__implicit:
+.. _function-ast_add_lint_macro_Module_q__smart_ptr_ls_PassMacro_gr__ref_:
 
-.. das:function:: add_lint_macro(module: Module? implicit; annotation: smart_ptr<PassMacro>& implicit)
+.. das:function:: add_lint_macro(module: Module?; annotation: smart_ptr<PassMacro>&)
 
 Adds an AstPassMacro adapter to the lint pass of the current module.
 
@@ -6352,9 +6352,9 @@ Adds an AstPassMacro adapter to the lint pass of the current module.
 
             * **annotation** : smart_ptr< :ref:`PassMacro <handle-ast-PassMacro>`>\ & implicit
 
-.. _function-ast_add_module_option_Module_q__implicit_string_implicit_Type:
+.. _function-ast_add_module_option_Module_q__string_Type:
 
-.. das:function:: add_module_option(module: Module? implicit; option: string implicit; type: Type)
+.. das:function:: add_module_option(module: Module?; option: string; type: Type)
 
 Adds a module-specific option accessible via the `options` keyword.
 
@@ -6574,9 +6574,9 @@ Creates an AstVariantMacro adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_optimization_macro_Module_q__implicit_smart_ptr_ls_PassMacro_gr__ref__implicit:
+.. _function-ast_add_optimization_macro_Module_q__smart_ptr_ls_PassMacro_gr__ref_:
 
-.. das:function:: add_optimization_macro(module: Module? implicit; annotation: smart_ptr<PassMacro>& implicit)
+.. das:function:: add_optimization_macro(module: Module?; annotation: smart_ptr<PassMacro>&)
 
 Adds an AstPassMacro adapter to the optimization pass of a specific module.
 
@@ -6585,9 +6585,9 @@ Adds an AstPassMacro adapter to the optimization pass of a specific module.
 
             * **annotation** : smart_ptr< :ref:`PassMacro <handle-ast-PassMacro>`>\ & implicit
 
-.. _function-ast_add_reader_macro_Module_q__implicit_smart_ptr_ls_ReaderMacro_gr__ref__implicit:
+.. _function-ast_add_reader_macro_Module_q__smart_ptr_ls_ReaderMacro_gr__ref_:
 
-.. das:function:: add_reader_macro(module: Module? implicit; annotation: smart_ptr<ReaderMacro>& implicit)
+.. das:function:: add_reader_macro(module: Module?; annotation: smart_ptr<ReaderMacro>&)
 
 Adds an AstReaderMacro adapter to the specified module.
 
@@ -6596,9 +6596,9 @@ Adds an AstReaderMacro adapter to the specified module.
 
             * **annotation** : smart_ptr< :ref:`ReaderMacro <handle-ast-ReaderMacro>`>\ & implicit
 
-.. _function-ast_add_simulate_macro_Module_q__implicit_smart_ptr_ls_SimulateMacro_gr__ref__implicit:
+.. _function-ast_add_simulate_macro_Module_q__smart_ptr_ls_SimulateMacro_gr__ref_:
 
-.. das:function:: add_simulate_macro(module: Module? implicit; annotation: smart_ptr<SimulateMacro>& implicit)
+.. das:function:: add_simulate_macro(module: Module?; annotation: smart_ptr<SimulateMacro>&)
 
 Adds an AstSimulateMacro adapter to the specified module.
 
@@ -6611,9 +6611,9 @@ Adds an AstSimulateMacro adapter to the specified module.
 add_structure_annotation
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. _function-ast_add_structure_annotation_smart_ptr_ls_Structure_gr__implicit_smart_ptr_ls_StructureAnnotation_gr__ref__implicit:
+.. _function-ast_add_structure_annotation_smart_ptr_ls_Structure_gr__smart_ptr_ls_StructureAnnotation_gr__ref_:
 
-.. das:function:: add_structure_annotation(structure: smart_ptr<Structure> implicit; annotation: smart_ptr<StructureAnnotation>& implicit)
+.. das:function:: add_structure_annotation(structure: smart_ptr<Structure>; annotation: smart_ptr<StructureAnnotation>&)
 
 Adds a structure annotation to the given object, calling apply if applicable.
 
@@ -6622,19 +6622,19 @@ Adds a structure annotation to the given object, calling apply if applicable.
 
             * **annotation** : smart_ptr< :ref:`StructureAnnotation <handle-ast-StructureAnnotation>`>\ & implicit
 
-.. _function-ast_add_structure_annotation_Module_q__implicit_smart_ptr_ls_StructureAnnotation_gr__ref__implicit:
+.. _function-ast_add_structure_annotation_Module_q__smart_ptr_ls_StructureAnnotation_gr__ref_:
 
-.. das:function:: add_structure_annotation(module: Module? implicit; annotation: smart_ptr<StructureAnnotation>& implicit)
+.. das:function:: add_structure_annotation(module: Module?; annotation: smart_ptr<StructureAnnotation>&)
 
-.. _function-ast_add_structure_annotation_smart_ptr_ls_Structure_gr__implicit_smart_ptr_ls_AnnotationDeclaration_gr__ref__implicit:
+.. _function-ast_add_structure_annotation_smart_ptr_ls_Structure_gr__smart_ptr_ls_AnnotationDeclaration_gr__ref_:
 
-.. das:function:: add_structure_annotation(structure: smart_ptr<Structure> implicit; annotation: smart_ptr<AnnotationDeclaration>& implicit)
+.. das:function:: add_structure_annotation(structure: smart_ptr<Structure>; annotation: smart_ptr<AnnotationDeclaration>&)
 
 ----
 
-.. _function-ast_add_type_macro_Module_q__implicit_smart_ptr_ls_TypeMacro_gr__ref__implicit:
+.. _function-ast_add_type_macro_Module_q__smart_ptr_ls_TypeMacro_gr__ref_:
 
-.. das:function:: add_type_macro(module: Module? implicit; annotation: smart_ptr<TypeMacro>& implicit)
+.. das:function:: add_type_macro(module: Module?; annotation: smart_ptr<TypeMacro>&)
 
 Adds an AstTypeMacro adapter to the specified module.
 
@@ -6643,9 +6643,9 @@ Adds an AstTypeMacro adapter to the specified module.
 
             * **annotation** : smart_ptr< :ref:`TypeMacro <handle-ast-TypeMacro>`>\ & implicit
 
-.. _function-ast_add_typeinfo_macro_Module_q__implicit_smart_ptr_ls_TypeInfoMacro_gr__ref__implicit:
+.. _function-ast_add_typeinfo_macro_Module_q__smart_ptr_ls_TypeInfoMacro_gr__ref_:
 
-.. das:function:: add_typeinfo_macro(module: Module? implicit; annotation: smart_ptr<TypeInfoMacro>& implicit)
+.. das:function:: add_typeinfo_macro(module: Module?; annotation: smart_ptr<TypeInfoMacro>&)
 
 Adds an AstTypeInfoMacro adapter to the specified module.
 
@@ -6654,9 +6654,9 @@ Adds an AstTypeInfoMacro adapter to the specified module.
 
             * **annotation** : smart_ptr< :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>`>\ & implicit
 
-.. _function-ast_add_variant_macro_Module_q__implicit_smart_ptr_ls_VariantMacro_gr__ref__implicit:
+.. _function-ast_add_variant_macro_Module_q__smart_ptr_ls_VariantMacro_gr__ref_:
 
-.. das:function:: add_variant_macro(module: Module? implicit; annotation: smart_ptr<VariantMacro>& implicit)
+.. das:function:: add_variant_macro(module: Module?; annotation: smart_ptr<VariantMacro>&)
 
 Adds an AstVariantMacro adapter to the specified module.
 
@@ -6670,20 +6670,20 @@ Adds an AstVariantMacro adapter to the specified module.
 Adding objects to objects
 +++++++++++++++++++++++++
 
-  *  :ref:`add_alias (module: Module? implicit; structure: smart_ptr\<TypeDecl\>& implicit) : bool <function-ast_add_alias_Module_q__implicit_smart_ptr_ls_TypeDecl_gr__ref__implicit>`
-  *  :ref:`add_enumeration_entry (enum: smart_ptr\<Enumeration\> implicit; name: string implicit) : int <function-ast_add_enumeration_entry_smart_ptr_ls_Enumeration_gr__implicit_string_implicit>`
-  *  :ref:`add_function (module: Module? implicit; function: smart_ptr\<Function\>& implicit) : bool <function-ast_add_function_Module_q__implicit_smart_ptr_ls_Function_gr__ref__implicit>`
-  *  :ref:`add_generic (module: Module? implicit; function: smart_ptr\<Function\>& implicit) : bool <function-ast_add_generic_Module_q__implicit_smart_ptr_ls_Function_gr__ref__implicit>`
-  *  :ref:`add_keyword (module: Module? implicit; keyword: string implicit; needOxfordComma: bool) : bool <function-ast_add_keyword_Module_q__implicit_string_implicit_bool>`
-  *  :ref:`add_module_require (module: Module? implicit; publicModule: Module? implicit; pub: bool) : bool <function-ast_add_module_require_Module_q__implicit_Module_q__implicit_bool>`
-  *  :ref:`add_structure (module: Module? implicit; structure: smart_ptr\<Structure\>& implicit) : bool <function-ast_add_structure_Module_q__implicit_smart_ptr_ls_Structure_gr__ref__implicit>`
-  *  :ref:`add_structure_alias (structure: Structure? implicit; aliasName: string implicit; alias: smart_ptr\<TypeDecl\> const& implicit) : bool <function-ast_add_structure_alias_Structure_q__implicit_string_implicit_smart_ptr_ls_TypeDecl_gr__const_ref__implicit>`
-  *  :ref:`add_type_function (module: Module? implicit; keyword: string implicit) : bool <function-ast_add_type_function_Module_q__implicit_string_implicit>`
-  *  :ref:`add_variable (module: Module? implicit; variable: smart_ptr\<Variable\>& implicit) : bool <function-ast_add_variable_Module_q__implicit_smart_ptr_ls_Variable_gr__ref__implicit>`
+  *  :ref:`add_alias (module: Module?; structure: smart_ptr\<TypeDecl\>&) : bool <function-ast_add_alias_Module_q__smart_ptr_ls_TypeDecl_gr__ref_>`
+  *  :ref:`add_enumeration_entry (enum: smart_ptr\<Enumeration\>; name: string) : int <function-ast_add_enumeration_entry_smart_ptr_ls_Enumeration_gr__string>`
+  *  :ref:`add_function (module: Module?; function: smart_ptr\<Function\>&) : bool <function-ast_add_function_Module_q__smart_ptr_ls_Function_gr__ref_>`
+  *  :ref:`add_generic (module: Module?; function: smart_ptr\<Function\>&) : bool <function-ast_add_generic_Module_q__smart_ptr_ls_Function_gr__ref_>`
+  *  :ref:`add_keyword (module: Module?; keyword: string; needOxfordComma: bool) : bool <function-ast_add_keyword_Module_q__string_bool>`
+  *  :ref:`add_module_require (module: Module?; publicModule: Module?; pub: bool) : bool <function-ast_add_module_require_Module_q__Module_q__bool>`
+  *  :ref:`add_structure (module: Module?; structure: smart_ptr\<Structure\>&) : bool <function-ast_add_structure_Module_q__smart_ptr_ls_Structure_gr__ref_>`
+  *  :ref:`add_structure_alias (structure: Structure?; aliasName: string; alias: smart_ptr\<TypeDecl\> const&) : bool <function-ast_add_structure_alias_Structure_q__string_smart_ptr_ls_TypeDecl_gr__const_ref_>`
+  *  :ref:`add_type_function (module: Module?; keyword: string) : bool <function-ast_add_type_function_Module_q__string>`
+  *  :ref:`add_variable (module: Module?; variable: smart_ptr\<Variable\>&) : bool <function-ast_add_variable_Module_q__smart_ptr_ls_Variable_gr__ref_>`
 
-.. _function-ast_add_alias_Module_q__implicit_smart_ptr_ls_TypeDecl_gr__ref__implicit:
+.. _function-ast_add_alias_Module_q__smart_ptr_ls_TypeDecl_gr__ref_:
 
-.. das:function:: add_alias(module: Module? implicit; structure: smart_ptr<TypeDecl>& implicit) : bool
+.. das:function:: add_alias(module: Module?; structure: smart_ptr<TypeDecl>&) : bool
 
 Adds a type alias to the specified module.
 
@@ -6692,9 +6692,9 @@ Adds a type alias to the specified module.
 
             * **structure** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`>\ & implicit
 
-.. _function-ast_add_enumeration_entry_smart_ptr_ls_Enumeration_gr__implicit_string_implicit:
+.. _function-ast_add_enumeration_entry_smart_ptr_ls_Enumeration_gr__string:
 
-.. das:function:: add_enumeration_entry(enum: smart_ptr<Enumeration> implicit; name: string implicit) : int
+.. das:function:: add_enumeration_entry(enum: smart_ptr<Enumeration>; name: string) : int
 
 Adds a new entry to an enumeration annotation.
 
@@ -6703,9 +6703,9 @@ Adds a new entry to an enumeration annotation.
 
             * **name** : string implicit
 
-.. _function-ast_add_function_Module_q__implicit_smart_ptr_ls_Function_gr__ref__implicit:
+.. _function-ast_add_function_Module_q__smart_ptr_ls_Function_gr__ref_:
 
-.. das:function:: add_function(module: Module? implicit; function: smart_ptr<Function>& implicit) : bool
+.. das:function:: add_function(module: Module?; function: smart_ptr<Function>&) : bool
 
 Adds a function to a module, returning false if a duplicate already exists.
 
@@ -6714,9 +6714,9 @@ Adds a function to a module, returning false if a duplicate already exists.
 
             * **function** : smart_ptr< :ref:`Function <handle-ast-Function>`>\ & implicit
 
-.. _function-ast_add_generic_Module_q__implicit_smart_ptr_ls_Function_gr__ref__implicit:
+.. _function-ast_add_generic_Module_q__smart_ptr_ls_Function_gr__ref_:
 
-.. das:function:: add_generic(module: Module? implicit; function: smart_ptr<Function>& implicit) : bool
+.. das:function:: add_generic(module: Module?; function: smart_ptr<Function>&) : bool
 
 Adds a generic function to a module, returning false if a duplicate already exists.
 
@@ -6725,9 +6725,9 @@ Adds a generic function to a module, returning false if a duplicate already exis
 
             * **function** : smart_ptr< :ref:`Function <handle-ast-Function>`>\ & implicit
 
-.. _function-ast_add_keyword_Module_q__implicit_string_implicit_bool:
+.. _function-ast_add_keyword_Module_q__string_bool:
 
-.. das:function:: add_keyword(module: Module? implicit; keyword: string implicit; needOxfordComma: bool) : bool
+.. das:function:: add_keyword(module: Module?; keyword: string; needOxfordComma: bool) : bool
 
 Registers a new keyword in the specified module, making it available to the parser.
 
@@ -6739,9 +6739,9 @@ Registers a new keyword in the specified module, making it available to the pars
 
             * **needOxfordComma** : bool
 
-.. _function-ast_add_module_require_Module_q__implicit_Module_q__implicit_bool:
+.. _function-ast_add_module_require_Module_q__Module_q__bool:
 
-.. das:function:: add_module_require(module: Module? implicit; publicModule: Module? implicit; pub: bool) : bool
+.. das:function:: add_module_require(module: Module?; publicModule: Module?; pub: bool) : bool
 
 Adds module dependencies, similar to the `require` keyword.
 
@@ -6752,9 +6752,9 @@ Adds module dependencies, similar to the `require` keyword.
 
             * **pub** : bool
 
-.. _function-ast_add_structure_Module_q__implicit_smart_ptr_ls_Structure_gr__ref__implicit:
+.. _function-ast_add_structure_Module_q__smart_ptr_ls_Structure_gr__ref_:
 
-.. das:function:: add_structure(module: Module? implicit; structure: smart_ptr<Structure>& implicit) : bool
+.. das:function:: add_structure(module: Module?; structure: smart_ptr<Structure>&) : bool
 
 Adds a structure to a module, returning false if a duplicate already exists.
 
@@ -6763,9 +6763,9 @@ Adds a structure to a module, returning false if a duplicate already exists.
 
             * **structure** : smart_ptr< :ref:`Structure <handle-ast-Structure>`>\ & implicit
 
-.. _function-ast_add_structure_alias_Structure_q__implicit_string_implicit_smart_ptr_ls_TypeDecl_gr__const_ref__implicit:
+.. _function-ast_add_structure_alias_Structure_q__string_smart_ptr_ls_TypeDecl_gr__const_ref_:
 
-.. das:function:: add_structure_alias(structure: Structure? implicit; aliasName: string implicit; alias: smart_ptr<TypeDecl> const& implicit) : bool
+.. das:function:: add_structure_alias(structure: Structure?; aliasName: string; alias: smart_ptr<TypeDecl> const&) : bool
 
 Adds a typedef alias to a structure type in the AST, equivalent to a typedef in the structure body.
 
@@ -6776,9 +6776,9 @@ Adds a typedef alias to a structure type in the AST, equivalent to a typedef in 
 
             * **alias** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`>\ & implicit
 
-.. _function-ast_add_type_function_Module_q__implicit_string_implicit:
+.. _function-ast_add_type_function_Module_q__string:
 
-.. das:function:: add_type_function(module: Module? implicit; keyword: string implicit) : bool
+.. das:function:: add_type_function(module: Module?; keyword: string) : bool
 
 Adds a type function keyword, allowing function calls to accept type arguments before regular arguments via the `some_call<type_args>(regular_args)` syntax.
 
@@ -6787,9 +6787,9 @@ Adds a type function keyword, allowing function calls to accept type arguments b
 
             * **keyword** : string implicit
 
-.. _function-ast_add_variable_Module_q__implicit_smart_ptr_ls_Variable_gr__ref__implicit:
+.. _function-ast_add_variable_Module_q__smart_ptr_ls_Variable_gr__ref_:
 
-.. das:function:: add_variable(module: Module? implicit; variable: smart_ptr<Variable>& implicit) : bool
+.. das:function:: add_variable(module: Module?; variable: smart_ptr<Variable>&) : bool
 
 Adds a variable to a module, returning false if a duplicate already exists.
 
@@ -6846,10 +6846,10 @@ Textual descriptions of the objects
   *  :ref:`describe (expr: smart_ptr\<Expression\>) : auto <function-ast_describe_smart_ptr_ls_Expression_gr_>`
   *  :ref:`describe (decl: smart_ptr\<TypeDecl\>; extra: bool = true; contracts: bool = true; modules: bool = true) : auto <function-ast_describe_smart_ptr_ls_TypeDecl_gr__bool_bool_bool>`
   *  :ref:`describe_cpp (decl: smart_ptr\<TypeDecl\>; substitureRef: bool = false; skipRef: bool = false; skipConst: bool = false; redundantConst: bool = true; chooseSmartPtr: bool = true) : auto <function-ast_describe_cpp_smart_ptr_ls_TypeDecl_gr__bool_bool_bool_bool_bool>`
-  *  :ref:`describe_expression (expression: smart_ptr\<Expression\> implicit) : string <function-ast_describe_expression_smart_ptr_ls_Expression_gr__implicit>`
-  *  :ref:`describe_function (function: smart_ptr\<Function\> implicit) : string <function-ast_describe_function_smart_ptr_ls_Function_gr__implicit>`
-  *  :ref:`describe_typedecl (type: smart_ptr\<TypeDecl\> implicit; extra: bool; contracts: bool; module: bool) : string <function-ast_describe_typedecl_smart_ptr_ls_TypeDecl_gr__implicit_bool_bool_bool>`
-  *  :ref:`describe_typedecl_cpp (type: smart_ptr\<TypeDecl\> implicit; substitueRef: bool; skipRef: bool; skipConst: bool; redundantConst: bool; choose_smart_ptr: bool) : string <function-ast_describe_typedecl_cpp_smart_ptr_ls_TypeDecl_gr__implicit_bool_bool_bool_bool_bool>`
+  *  :ref:`describe_expression (expression: smart_ptr\<Expression\>) : string <function-ast_describe_expression_smart_ptr_ls_Expression_gr_>`
+  *  :ref:`describe_function (function: smart_ptr\<Function\>) : string <function-ast_describe_function_smart_ptr_ls_Function_gr_>`
+  *  :ref:`describe_typedecl (type: smart_ptr\<TypeDecl\>; extra: bool; contracts: bool; module: bool) : string <function-ast_describe_typedecl_smart_ptr_ls_TypeDecl_gr__bool_bool_bool>`
+  *  :ref:`describe_typedecl_cpp (type: smart_ptr\<TypeDecl\>; substitueRef: bool; skipRef: bool; skipConst: bool; redundantConst: bool; choose_smart_ptr: bool) : string <function-ast_describe_typedecl_cpp_smart_ptr_ls_TypeDecl_gr__bool_bool_bool_bool_bool>`
 
 .. _function-ast_das_to_string_Type:
 
@@ -6902,27 +6902,27 @@ Produces a C++ source code string representation of the given TypeDecl.
 
             * **chooseSmartPtr** : bool
 
-.. _function-ast_describe_expression_smart_ptr_ls_Expression_gr__implicit:
+.. _function-ast_describe_expression_smart_ptr_ls_Expression_gr_:
 
-.. das:function:: describe_expression(expression: smart_ptr<Expression> implicit) : string
+.. das:function:: describe_expression(expression: smart_ptr<Expression>) : string
 
 Returns a string description of the Expression matching the corresponding daslang source code.
 
 
 :Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> implicit
 
-.. _function-ast_describe_function_smart_ptr_ls_Function_gr__implicit:
+.. _function-ast_describe_function_smart_ptr_ls_Function_gr_:
 
-.. das:function:: describe_function(function: smart_ptr<Function> implicit) : string
+.. das:function:: describe_function(function: smart_ptr<Function>) : string
 
 Returns a string description of the Function matching the corresponding daslang function declaration.
 
 
 :Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>`> implicit
 
-.. _function-ast_describe_typedecl_smart_ptr_ls_TypeDecl_gr__implicit_bool_bool_bool:
+.. _function-ast_describe_typedecl_smart_ptr_ls_TypeDecl_gr__bool_bool_bool:
 
-.. das:function:: describe_typedecl(type: smart_ptr<TypeDecl> implicit; extra: bool; contracts: bool; module: bool) : string
+.. das:function:: describe_typedecl(type: smart_ptr<TypeDecl>; extra: bool; contracts: bool; module: bool) : string
 
 Returns a string description of the TypeDecl matching the corresponding daslang type declaration.
 
@@ -6935,9 +6935,9 @@ Returns a string description of the TypeDecl matching the corresponding daslang 
 
             * **module** : bool
 
-.. _function-ast_describe_typedecl_cpp_smart_ptr_ls_TypeDecl_gr__implicit_bool_bool_bool_bool_bool:
+.. _function-ast_describe_typedecl_cpp_smart_ptr_ls_TypeDecl_gr__bool_bool_bool_bool_bool:
 
-.. das:function:: describe_typedecl_cpp(type: smart_ptr<TypeDecl> implicit; substitueRef: bool; skipRef: bool; skipConst: bool; redundantConst: bool; choose_smart_ptr: bool) : string
+.. das:function:: describe_typedecl_cpp(type: smart_ptr<TypeDecl>; substitueRef: bool; skipRef: bool; skipConst: bool; redundantConst: bool; choose_smart_ptr: bool) : string
 
 Returns a string description of the TypeDecl matching the corresponding C++ type declaration.
 
@@ -6959,26 +6959,26 @@ Returns a string description of the TypeDecl matching the corresponding C++ type
 Searching
 +++++++++
 
-  *  :ref:`find_bitfield_name (bit: smart_ptr\<TypeDecl\> implicit; value: bitfield) : string <function-ast_find_bitfield_name_smart_ptr_ls_TypeDecl_gr__implicit_bitfield>`
-  *  :ref:`find_call_macro (module: Module? implicit; name: string implicit) : CallMacro? <function-ast_find_call_macro_Module_q__implicit_string_implicit>`
-  *  :ref:`find_compiling_function_by_mangled_name_hash (moduleName: string implicit; mangledNameHash: uint64) : smart_ptr\<Function\> <function-ast_find_compiling_function_by_mangled_name_hash_string_implicit_uint64>`
+  *  :ref:`find_bitfield_name (bit: smart_ptr\<TypeDecl\>; value: bitfield) : string <function-ast_find_bitfield_name_smart_ptr_ls_TypeDecl_gr__bitfield>`
+  *  :ref:`find_call_macro (module: Module?; name: string) : CallMacro? <function-ast_find_call_macro_Module_q__string>`
+  *  :ref:`find_compiling_function_by_mangled_name_hash (moduleName: string; mangledNameHash: uint64) : smart_ptr\<Function\> <function-ast_find_compiling_function_by_mangled_name_hash_string_uint64>`
   *  :ref:`find_compiling_module (name: string) : Module? <function-ast_find_compiling_module_string>`
-  *  :ref:`find_enum_name (enum: Enumeration? implicit; value: int64) : string <function-ast_find_enum_name_Enumeration_q__implicit_int64>`
-  *  :ref:`find_enum_value (enum: Enumeration? implicit; value: string implicit) : int64 <function-ast_find_enum_value_Enumeration_q__implicit_string_implicit>`
-  *  :ref:`find_enum_value (enum: smart_ptr\<Enumeration\> implicit; value: string implicit) : int64 <function-ast_find_enum_value_smart_ptr_ls_Enumeration_gr__implicit_string_implicit>`
-  *  :ref:`find_matching_variable (program: Program? implicit; function: Function? implicit; name: string implicit; seePrivate: bool; block: block\<(array\<smart_ptr\<Variable\>\>#):void\>) <function-ast_find_matching_variable_Program_q__implicit_Function_q__implicit_string_implicit_bool_block_ls_array_ls_smart_ptr_ls_Variable_gr__gr__hh__c_void_gr_>`
+  *  :ref:`find_enum_name (enum: Enumeration?; value: int64) : string <function-ast_find_enum_name_Enumeration_q__int64>`
+  *  :ref:`find_enum_value (enum: Enumeration?; value: string) : int64 <function-ast_find_enum_value_Enumeration_q__string>`
+  *  :ref:`find_enum_value (enum: smart_ptr\<Enumeration\>; value: string) : int64 <function-ast_find_enum_value_smart_ptr_ls_Enumeration_gr__string>`
+  *  :ref:`find_matching_variable (program: Program?; function: Function?; name: string; seePrivate: bool; block: block\<(array\<smart_ptr\<Variable\>\>#):void\>) <function-ast_find_matching_variable_Program_q__Function_q__string_bool_block_ls_array_ls_smart_ptr_ls_Variable_gr__gr__hh__c_void_gr_>`
   *  :ref:`find_module (name: string) : Module? <function-ast_find_module_string>`
   *  :ref:`find_module (prog: smart_ptr\<Program\>; name: string) : Module? <function-ast_find_module_smart_ptr_ls_Program_gr__string>`
-  *  :ref:`find_module_function_via_rtti (module: Module? implicit; function: function\<():void\>) : smart_ptr\<Function\> <function-ast_find_module_function_via_rtti_Module_q__implicit_function_ls__c_void_gr_>`
-  *  :ref:`find_module_via_rtti (program: smart_ptr\<Program\> implicit; name: string implicit) : Module? <function-ast_find_module_via_rtti_smart_ptr_ls_Program_gr__implicit_string_implicit>`
-  *  :ref:`find_struct_field_parent (structure: smart_ptr\<Structure\> implicit; name: string implicit) : Structure const? <function-ast_find_struct_field_parent_smart_ptr_ls_Structure_gr__implicit_string_implicit>`
-  *  :ref:`find_structure_field (structPtr: Structure? implicit; field: string implicit) : FieldDeclaration? <function-ast_find_structure_field_Structure_q__implicit_string_implicit>`
-  *  :ref:`find_unique_structure (program: smart_ptr\<Program\> implicit; name: string implicit) : Structure? <function-ast_find_unique_structure_smart_ptr_ls_Program_gr__implicit_string_implicit>`
-  *  :ref:`find_variable (module: Module? implicit; variable: string implicit) : smart_ptr\<Variable\> <function-ast_find_variable_Module_q__implicit_string_implicit>`
+  *  :ref:`find_module_function_via_rtti (module: Module?; function: function\<():void\>) : smart_ptr\<Function\> <function-ast_find_module_function_via_rtti_Module_q__function_ls__c_void_gr_>`
+  *  :ref:`find_module_via_rtti (program: smart_ptr\<Program\>; name: string) : Module? <function-ast_find_module_via_rtti_smart_ptr_ls_Program_gr__string>`
+  *  :ref:`find_struct_field_parent (structure: smart_ptr\<Structure\>; name: string) : Structure const? <function-ast_find_struct_field_parent_smart_ptr_ls_Structure_gr__string>`
+  *  :ref:`find_structure_field (structPtr: Structure?; field: string) : FieldDeclaration? <function-ast_find_structure_field_Structure_q__string>`
+  *  :ref:`find_unique_structure (program: smart_ptr\<Program\>; name: string) : Structure? <function-ast_find_unique_structure_smart_ptr_ls_Program_gr__string>`
+  *  :ref:`find_variable (module: Module?; variable: string) : smart_ptr\<Variable\> <function-ast_find_variable_Module_q__string>`
 
-.. _function-ast_find_bitfield_name_smart_ptr_ls_TypeDecl_gr__implicit_bitfield:
+.. _function-ast_find_bitfield_name_smart_ptr_ls_TypeDecl_gr__bitfield:
 
-.. das:function:: find_bitfield_name(bit: smart_ptr<TypeDecl> implicit; value: bitfield) : string
+.. das:function:: find_bitfield_name(bit: smart_ptr<TypeDecl>; value: bitfield) : string
 
 Finds the name of a bitfield value in the specified type.
 
@@ -6987,9 +6987,9 @@ Finds the name of a bitfield value in the specified type.
 
             * **value** : bitfield<>
 
-.. _function-ast_find_call_macro_Module_q__implicit_string_implicit:
+.. _function-ast_find_call_macro_Module_q__string:
 
-.. das:function:: find_call_macro(module: Module? implicit; name: string implicit) : CallMacro?
+.. das:function:: find_call_macro(module: Module?; name: string) : CallMacro?
 
 Finds a CallMacro by name in the specified module.
 
@@ -6998,9 +6998,9 @@ Finds a CallMacro by name in the specified module.
 
             * **name** : string implicit
 
-.. _function-ast_find_compiling_function_by_mangled_name_hash_string_implicit_uint64:
+.. _function-ast_find_compiling_function_by_mangled_name_hash_string_uint64:
 
-.. das:function:: find_compiling_function_by_mangled_name_hash(moduleName: string implicit; mangledNameHash: uint64) : smart_ptr<Function>
+.. das:function:: find_compiling_function_by_mangled_name_hash(moduleName: string; mangledNameHash: uint64) : smart_ptr<Function>
 
 Returns a Function from the currently compiling program given its mangled name hash.
 
@@ -7018,9 +7018,9 @@ Finds a module by name in the currently compiling program.
 
 :Arguments: * **name** : string
 
-.. _function-ast_find_enum_name_Enumeration_q__implicit_int64:
+.. _function-ast_find_enum_name_Enumeration_q__int64:
 
-.. das:function:: find_enum_name(enum: Enumeration? implicit; value: int64) : string
+.. das:function:: find_enum_name(enum: Enumeration?; value: int64) : string
 
 Finds the name corresponding to an enumeration value in the specified type.
 
@@ -7033,9 +7033,9 @@ Finds the name corresponding to an enumeration value in the specified type.
 find_enum_value
 ^^^^^^^^^^^^^^^
 
-.. _function-ast_find_enum_value_Enumeration_q__implicit_string_implicit:
+.. _function-ast_find_enum_value_Enumeration_q__string:
 
-.. das:function:: find_enum_value(enum: Enumeration? implicit; value: string implicit) : int64
+.. das:function:: find_enum_value(enum: Enumeration?; value: string) : int64
 
 Finds the integer value corresponding to an enumeration name in the specified type.
 
@@ -7044,15 +7044,15 @@ Finds the integer value corresponding to an enumeration name in the specified ty
 
             * **value** : string implicit
 
-.. _function-ast_find_enum_value_smart_ptr_ls_Enumeration_gr__implicit_string_implicit:
+.. _function-ast_find_enum_value_smart_ptr_ls_Enumeration_gr__string:
 
-.. das:function:: find_enum_value(enum: smart_ptr<Enumeration> implicit; value: string implicit) : int64
+.. das:function:: find_enum_value(enum: smart_ptr<Enumeration>; value: string) : int64
 
 ----
 
-.. _function-ast_find_matching_variable_Program_q__implicit_Function_q__implicit_string_implicit_bool_block_ls_array_ls_smart_ptr_ls_Variable_gr__gr__hh__c_void_gr_:
+.. _function-ast_find_matching_variable_Program_q__Function_q__string_bool_block_ls_array_ls_smart_ptr_ls_Variable_gr__gr__hh__c_void_gr_:
 
-.. das:function:: find_matching_variable(program: Program? implicit; function: Function? implicit; name: string implicit; seePrivate: bool; block: block<(array<smart_ptr<Variable>>#):void>)
+.. das:function:: find_matching_variable(program: Program?; function: Function?; name: string; seePrivate: bool; block: block<(array<smart_ptr<Variable>>#):void>)
 
 Finds a global or shared variable accessible from the given function, according to visibility and privacy rules.
 
@@ -7086,9 +7086,9 @@ Finds a module by name in the specified program.
 
 ----
 
-.. _function-ast_find_module_function_via_rtti_Module_q__implicit_function_ls__c_void_gr_:
+.. _function-ast_find_module_function_via_rtti_Module_q__function_ls__c_void_gr_:
 
-.. das:function:: find_module_function_via_rtti(module: Module? implicit; function: function<():void>) : smart_ptr<Function>
+.. das:function:: find_module_function_via_rtti(module: Module?; function: function<():void>) : smart_ptr<Function>
 
 Finds a function by name in the specified module using RTTI.
 
@@ -7097,9 +7097,9 @@ Finds a function by name in the specified module using RTTI.
 
             * **function** : function<void>
 
-.. _function-ast_find_module_via_rtti_smart_ptr_ls_Program_gr__implicit_string_implicit:
+.. _function-ast_find_module_via_rtti_smart_ptr_ls_Program_gr__string:
 
-.. das:function:: find_module_via_rtti(program: smart_ptr<Program> implicit; name: string implicit) : Module?
+.. das:function:: find_module_via_rtti(program: smart_ptr<Program>; name: string) : Module?
 
 Finds a module by name in the specified program using RTTI.
 
@@ -7108,9 +7108,9 @@ Finds a module by name in the specified program using RTTI.
 
             * **name** : string implicit
 
-.. _function-ast_find_struct_field_parent_smart_ptr_ls_Structure_gr__implicit_string_implicit:
+.. _function-ast_find_struct_field_parent_smart_ptr_ls_Structure_gr__string:
 
-.. das:function:: find_struct_field_parent(structure: smart_ptr<Structure> implicit; name: string implicit) : Structure const?
+.. das:function:: find_struct_field_parent(structure: smart_ptr<Structure>; name: string) : Structure const?
 
 Finds the parent structure that declares the specified field.
 
@@ -7119,9 +7119,9 @@ Finds the parent structure that declares the specified field.
 
             * **name** : string implicit
 
-.. _function-ast_find_structure_field_Structure_q__implicit_string_implicit:
+.. _function-ast_find_structure_field_Structure_q__string:
 
-.. das:function:: find_structure_field(structPtr: Structure? implicit; field: string implicit) : FieldDeclaration?
+.. das:function:: find_structure_field(structPtr: Structure?; field: string) : FieldDeclaration?
 
 Returns the FieldDeclaration for a specific field of a structure type, or null if not found.
 
@@ -7130,9 +7130,9 @@ Returns the FieldDeclaration for a specific field of a structure type, or null i
 
             * **field** : string implicit
 
-.. _function-ast_find_unique_structure_smart_ptr_ls_Program_gr__implicit_string_implicit:
+.. _function-ast_find_unique_structure_smart_ptr_ls_Program_gr__string:
 
-.. das:function:: find_unique_structure(program: smart_ptr<Program> implicit; name: string implicit) : Structure?
+.. das:function:: find_unique_structure(program: smart_ptr<Program>; name: string) : Structure?
 
 Finds a uniquely named structure in the program, returning it if unique or null if ambiguous.
 
@@ -7141,9 +7141,9 @@ Finds a uniquely named structure in the program, returning it if unique or null 
 
             * **name** : string implicit
 
-.. _function-ast_find_variable_Module_q__implicit_string_implicit:
+.. _function-ast_find_variable_Module_q__string:
 
-.. das:function:: find_variable(module: Module? implicit; variable: string implicit) : smart_ptr<Variable>
+.. das:function:: find_variable(module: Module?; variable: string) : smart_ptr<Variable>
 
 Finds a variable by name in the specified module.
 
@@ -7157,31 +7157,31 @@ Finds a variable by name in the specified module.
 Iterating
 +++++++++
 
-  *  :ref:`any_array_foreach (array: void? implicit; stride: int; block: block\<(void?):void\>) <function-ast_any_array_foreach_void_q__implicit_int_block_ls_void_q__c_void_gr_>`
-  *  :ref:`any_table_foreach (table: void? implicit; keyStride: int; valueStride: int; block: block\<(void?;void?):void\>) <function-ast_any_table_foreach_void_q__implicit_int_int_block_ls_void_q_;void_q__c_void_gr_>`
-  *  :ref:`for_each_annotation_ordered (module: Module? implicit; block: block\<(uint64;uint64):void\>) <function-ast_for_each_annotation_ordered_Module_q__implicit_block_ls_uint64;uint64_c_void_gr_>`
-  *  :ref:`for_each_call_macro (module: Module? implicit; block: block\<(string#):void\>) <function-ast_for_each_call_macro_Module_q__implicit_block_ls_string_hh__c_void_gr_>`
-  *  :ref:`for_each_enumeration (module: Module? implicit; block: block\<(smart_ptr\<Enumeration\>):void\>) <function-ast_for_each_enumeration_Module_q__implicit_block_ls_smart_ptr_ls_Enumeration_gr__c_void_gr_>`
-  *  :ref:`for_each_field (annotation: BasicStructureAnnotation implicit; block: block\<(string;string;smart_ptr\<TypeDecl\>;uint):void\>) <function-ast_for_each_field_BasicStructureAnnotation_implicit_block_ls_string;string;smart_ptr_ls_TypeDecl_gr_;uint_c_void_gr_>`
-  *  :ref:`for_each_for_loop_macro (module: Module? implicit; block: block\<(smart_ptr\<ForLoopMacro\>):void\>) <function-ast_for_each_for_loop_macro_Module_q__implicit_block_ls_smart_ptr_ls_ForLoopMacro_gr__c_void_gr_>`
-  *  :ref:`for_each_function (module: Module? implicit; name: string implicit; block: block\<(smart_ptr\<Function\>):void\>) <function-ast_for_each_function_Module_q__implicit_string_implicit_block_ls_smart_ptr_ls_Function_gr__c_void_gr_>`
-  *  :ref:`for_each_generic (module: Module? implicit; name: string implicit; block: block\<(smart_ptr\<Function\>):void\>) <function-ast_for_each_generic_Module_q__implicit_string_implicit_block_ls_smart_ptr_ls_Function_gr__c_void_gr_>`
-  *  :ref:`for_each_generic (module: Module? implicit; block: block\<(smart_ptr\<Function\>):void\>) <function-ast_for_each_generic_Module_q__implicit_block_ls_smart_ptr_ls_Function_gr__c_void_gr_>`
-  *  :ref:`for_each_global (module: Module? implicit; block: block\<(smart_ptr\<Variable\>):void\>) <function-ast_for_each_global_Module_q__implicit_block_ls_smart_ptr_ls_Variable_gr__c_void_gr_>`
-  *  :ref:`for_each_module (program: Program? implicit; block: block\<(Module?):void\>) <function-ast_for_each_module_Program_q__implicit_block_ls_Module_q__c_void_gr_>`
-  *  :ref:`for_each_module_function (module: Module? implicit; blk: block\<(smart_ptr\<Function\>):void\>) <function-ast_for_each_module_function_Module_q__implicit_block_ls_smart_ptr_ls_Function_gr__c_void_gr_>`
-  *  :ref:`for_each_module_no_order (program: Program? implicit; block: block\<(Module?):void\>) <function-ast_for_each_module_no_order_Program_q__implicit_block_ls_Module_q__c_void_gr_>`
-  *  :ref:`for_each_reader_macro (module: Module? implicit; block: block\<(string#):void\>) <function-ast_for_each_reader_macro_Module_q__implicit_block_ls_string_hh__c_void_gr_>`
-  *  :ref:`for_each_structure (module: Module? implicit; block: block\<(smart_ptr\<Structure\>):void\>) <function-ast_for_each_structure_Module_q__implicit_block_ls_smart_ptr_ls_Structure_gr__c_void_gr_>`
-  *  :ref:`for_each_structure_alias (structure: Structure? implicit; block: block\<(smart_ptr\<TypeDecl\>):void\>) <function-ast_for_each_structure_alias_Structure_q__implicit_block_ls_smart_ptr_ls_TypeDecl_gr__c_void_gr_>`
-  *  :ref:`for_each_typedef (module: Module? implicit; block: block\<(string#;smart_ptr\<TypeDecl\>):void\>) <function-ast_for_each_typedef_Module_q__implicit_block_ls_string_hh_;smart_ptr_ls_TypeDecl_gr__c_void_gr_>`
-  *  :ref:`for_each_typeinfo_macro (module: Module? implicit; block: block\<(smart_ptr\<TypeInfoMacro\>):void\>) <function-ast_for_each_typeinfo_macro_Module_q__implicit_block_ls_smart_ptr_ls_TypeInfoMacro_gr__c_void_gr_>`
-  *  :ref:`for_each_typemacro (module: Module? implicit; block: block\<(smart_ptr\<TypeMacro\>):void\>) <function-ast_for_each_typemacro_Module_q__implicit_block_ls_smart_ptr_ls_TypeMacro_gr__c_void_gr_>`
-  *  :ref:`for_each_variant_macro (module: Module? implicit; block: block\<(smart_ptr\<VariantMacro\>):void\>) <function-ast_for_each_variant_macro_Module_q__implicit_block_ls_smart_ptr_ls_VariantMacro_gr__c_void_gr_>`
+  *  :ref:`any_array_foreach (array: void?; stride: int; block: block\<(void?):void\>) <function-ast_any_array_foreach_void_q__int_block_ls_void_q__c_void_gr_>`
+  *  :ref:`any_table_foreach (table: void?; keyStride: int; valueStride: int; block: block\<(void?;void?):void\>) <function-ast_any_table_foreach_void_q__int_int_block_ls_void_q_;void_q__c_void_gr_>`
+  *  :ref:`for_each_annotation_ordered (module: Module?; block: block\<(uint64;uint64):void\>) <function-ast_for_each_annotation_ordered_Module_q__block_ls_uint64;uint64_c_void_gr_>`
+  *  :ref:`for_each_call_macro (module: Module?; block: block\<(string#):void\>) <function-ast_for_each_call_macro_Module_q__block_ls_string_hh__c_void_gr_>`
+  *  :ref:`for_each_enumeration (module: Module?; block: block\<(smart_ptr\<Enumeration\>):void\>) <function-ast_for_each_enumeration_Module_q__block_ls_smart_ptr_ls_Enumeration_gr__c_void_gr_>`
+  *  :ref:`for_each_field (annotation: BasicStructureAnnotation; block: block\<(string;string;smart_ptr\<TypeDecl\>;uint):void\>) <function-ast_for_each_field_BasicStructureAnnotation_block_ls_string;string;smart_ptr_ls_TypeDecl_gr_;uint_c_void_gr_>`
+  *  :ref:`for_each_for_loop_macro (module: Module?; block: block\<(smart_ptr\<ForLoopMacro\>):void\>) <function-ast_for_each_for_loop_macro_Module_q__block_ls_smart_ptr_ls_ForLoopMacro_gr__c_void_gr_>`
+  *  :ref:`for_each_function (module: Module?; name: string; block: block\<(smart_ptr\<Function\>):void\>) <function-ast_for_each_function_Module_q__string_block_ls_smart_ptr_ls_Function_gr__c_void_gr_>`
+  *  :ref:`for_each_generic (module: Module?; name: string; block: block\<(smart_ptr\<Function\>):void\>) <function-ast_for_each_generic_Module_q__string_block_ls_smart_ptr_ls_Function_gr__c_void_gr_>`
+  *  :ref:`for_each_generic (module: Module?; block: block\<(smart_ptr\<Function\>):void\>) <function-ast_for_each_generic_Module_q__block_ls_smart_ptr_ls_Function_gr__c_void_gr_>`
+  *  :ref:`for_each_global (module: Module?; block: block\<(smart_ptr\<Variable\>):void\>) <function-ast_for_each_global_Module_q__block_ls_smart_ptr_ls_Variable_gr__c_void_gr_>`
+  *  :ref:`for_each_module (program: Program?; block: block\<(Module?):void\>) <function-ast_for_each_module_Program_q__block_ls_Module_q__c_void_gr_>`
+  *  :ref:`for_each_module_function (module: Module?; blk: block\<(smart_ptr\<Function\>):void\>) <function-ast_for_each_module_function_Module_q__block_ls_smart_ptr_ls_Function_gr__c_void_gr_>`
+  *  :ref:`for_each_module_no_order (program: Program?; block: block\<(Module?):void\>) <function-ast_for_each_module_no_order_Program_q__block_ls_Module_q__c_void_gr_>`
+  *  :ref:`for_each_reader_macro (module: Module?; block: block\<(string#):void\>) <function-ast_for_each_reader_macro_Module_q__block_ls_string_hh__c_void_gr_>`
+  *  :ref:`for_each_structure (module: Module?; block: block\<(smart_ptr\<Structure\>):void\>) <function-ast_for_each_structure_Module_q__block_ls_smart_ptr_ls_Structure_gr__c_void_gr_>`
+  *  :ref:`for_each_structure_alias (structure: Structure?; block: block\<(smart_ptr\<TypeDecl\>):void\>) <function-ast_for_each_structure_alias_Structure_q__block_ls_smart_ptr_ls_TypeDecl_gr__c_void_gr_>`
+  *  :ref:`for_each_typedef (module: Module?; block: block\<(string#;smart_ptr\<TypeDecl\>):void\>) <function-ast_for_each_typedef_Module_q__block_ls_string_hh_;smart_ptr_ls_TypeDecl_gr__c_void_gr_>`
+  *  :ref:`for_each_typeinfo_macro (module: Module?; block: block\<(smart_ptr\<TypeInfoMacro\>):void\>) <function-ast_for_each_typeinfo_macro_Module_q__block_ls_smart_ptr_ls_TypeInfoMacro_gr__c_void_gr_>`
+  *  :ref:`for_each_typemacro (module: Module?; block: block\<(smart_ptr\<TypeMacro\>):void\>) <function-ast_for_each_typemacro_Module_q__block_ls_smart_ptr_ls_TypeMacro_gr__c_void_gr_>`
+  *  :ref:`for_each_variant_macro (module: Module?; block: block\<(smart_ptr\<VariantMacro\>):void\>) <function-ast_for_each_variant_macro_Module_q__block_ls_smart_ptr_ls_VariantMacro_gr__c_void_gr_>`
 
-.. _function-ast_any_array_foreach_void_q__implicit_int_block_ls_void_q__c_void_gr_:
+.. _function-ast_any_array_foreach_void_q__int_block_ls_void_q__c_void_gr_:
 
-.. das:function:: any_array_foreach(array: void? implicit; stride: int; block: block<(void?):void>)
+.. das:function:: any_array_foreach(array: void?; stride: int; block: block<(void?):void>)
 
 Iterates through any `array<>` type in a typeless fashion using `void?` pointers.
 
@@ -7192,9 +7192,9 @@ Iterates through any `array<>` type in a typeless fashion using `void?` pointers
 
             * **block** : block<(void?):void> implicit
 
-.. _function-ast_any_table_foreach_void_q__implicit_int_int_block_ls_void_q_;void_q__c_void_gr_:
+.. _function-ast_any_table_foreach_void_q__int_int_block_ls_void_q_;void_q__c_void_gr_:
 
-.. das:function:: any_table_foreach(table: void? implicit; keyStride: int; valueStride: int; block: block<(void?;void?):void>)
+.. das:function:: any_table_foreach(table: void?; keyStride: int; valueStride: int; block: block<(void?;void?):void>)
 
 Iterates through any `table<>` type in a typeless fashion using `void?` pointers.
 
@@ -7207,9 +7207,9 @@ Iterates through any `table<>` type in a typeless fashion using `void?` pointers
 
             * **block** : block<(void?;void?):void> implicit
 
-.. _function-ast_for_each_annotation_ordered_Module_q__implicit_block_ls_uint64;uint64_c_void_gr_:
+.. _function-ast_for_each_annotation_ordered_Module_q__block_ls_uint64;uint64_c_void_gr_:
 
-.. das:function:: for_each_annotation_ordered(module: Module? implicit; block: block<(uint64;uint64):void>)
+.. das:function:: for_each_annotation_ordered(module: Module?; block: block<(uint64;uint64):void>)
 
 Iterates through each annotation in the given module in the order they were added.
 
@@ -7218,9 +7218,9 @@ Iterates through each annotation in the given module in the order they were adde
 
             * **block** : block<(uint64;uint64):void> implicit
 
-.. _function-ast_for_each_call_macro_Module_q__implicit_block_ls_string_hh__c_void_gr_:
+.. _function-ast_for_each_call_macro_Module_q__block_ls_string_hh__c_void_gr_:
 
-.. das:function:: for_each_call_macro(module: Module? implicit; block: block<(string#):void>)
+.. das:function:: for_each_call_macro(module: Module?; block: block<(string#):void>)
 
 Iterates through every CallMacro adapter in the specified module.
 
@@ -7229,9 +7229,9 @@ Iterates through every CallMacro adapter in the specified module.
 
             * **block** : block<(string\ #):void> implicit
 
-.. _function-ast_for_each_enumeration_Module_q__implicit_block_ls_smart_ptr_ls_Enumeration_gr__c_void_gr_:
+.. _function-ast_for_each_enumeration_Module_q__block_ls_smart_ptr_ls_Enumeration_gr__c_void_gr_:
 
-.. das:function:: for_each_enumeration(module: Module? implicit; block: block<(smart_ptr<Enumeration>):void>)
+.. das:function:: for_each_enumeration(module: Module?; block: block<(smart_ptr<Enumeration>):void>)
 
 Iterates through every enumeration in the specified module.
 
@@ -7240,9 +7240,9 @@ Iterates through every enumeration in the specified module.
 
             * **block** : block<(smart_ptr< :ref:`Enumeration <handle-ast-Enumeration>`>):void> implicit
 
-.. _function-ast_for_each_field_BasicStructureAnnotation_implicit_block_ls_string;string;smart_ptr_ls_TypeDecl_gr_;uint_c_void_gr_:
+.. _function-ast_for_each_field_BasicStructureAnnotation_block_ls_string;string;smart_ptr_ls_TypeDecl_gr_;uint_c_void_gr_:
 
-.. das:function:: for_each_field(annotation: BasicStructureAnnotation implicit; block: block<(string;string;smart_ptr<TypeDecl>;uint):void>)
+.. das:function:: for_each_field(annotation: BasicStructureAnnotation; block: block<(string;string;smart_ptr<TypeDecl>;uint):void>)
 
 Iterates through every field in a BuiltinStructure handled type.
 
@@ -7251,9 +7251,9 @@ Iterates through every field in a BuiltinStructure handled type.
 
             * **block** : block<(string;string;smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`>;uint):void> implicit
 
-.. _function-ast_for_each_for_loop_macro_Module_q__implicit_block_ls_smart_ptr_ls_ForLoopMacro_gr__c_void_gr_:
+.. _function-ast_for_each_for_loop_macro_Module_q__block_ls_smart_ptr_ls_ForLoopMacro_gr__c_void_gr_:
 
-.. das:function:: for_each_for_loop_macro(module: Module? implicit; block: block<(smart_ptr<ForLoopMacro>):void>)
+.. das:function:: for_each_for_loop_macro(module: Module?; block: block<(smart_ptr<ForLoopMacro>):void>)
 
 Iterates through every for-loop macro in the specified module.
 
@@ -7262,9 +7262,9 @@ Iterates through every for-loop macro in the specified module.
 
             * **block** : block<(smart_ptr< :ref:`ForLoopMacro <handle-ast-ForLoopMacro>`>):void> implicit
 
-.. _function-ast_for_each_function_Module_q__implicit_string_implicit_block_ls_smart_ptr_ls_Function_gr__c_void_gr_:
+.. _function-ast_for_each_function_Module_q__string_block_ls_smart_ptr_ls_Function_gr__c_void_gr_:
 
-.. das:function:: for_each_function(module: Module? implicit; name: string implicit; block: block<(smart_ptr<Function>):void>)
+.. das:function:: for_each_function(module: Module?; name: string; block: block<(smart_ptr<Function>):void>)
 
 Iterates through each function in the given module, matching all functions if the name is empty.
 
@@ -7279,9 +7279,9 @@ Iterates through each function in the given module, matching all functions if th
 for_each_generic
 ^^^^^^^^^^^^^^^^
 
-.. _function-ast_for_each_generic_Module_q__implicit_string_implicit_block_ls_smart_ptr_ls_Function_gr__c_void_gr_:
+.. _function-ast_for_each_generic_Module_q__string_block_ls_smart_ptr_ls_Function_gr__c_void_gr_:
 
-.. das:function:: for_each_generic(module: Module? implicit; name: string implicit; block: block<(smart_ptr<Function>):void>)
+.. das:function:: for_each_generic(module: Module?; name: string; block: block<(smart_ptr<Function>):void>)
 
 Iterates through each generic function in the given module.
 
@@ -7292,15 +7292,15 @@ Iterates through each generic function in the given module.
 
             * **block** : block<(smart_ptr< :ref:`Function <handle-ast-Function>`>):void> implicit
 
-.. _function-ast_for_each_generic_Module_q__implicit_block_ls_smart_ptr_ls_Function_gr__c_void_gr_:
+.. _function-ast_for_each_generic_Module_q__block_ls_smart_ptr_ls_Function_gr__c_void_gr_:
 
-.. das:function:: for_each_generic(module: Module? implicit; block: block<(smart_ptr<Function>):void>)
+.. das:function:: for_each_generic(module: Module?; block: block<(smart_ptr<Function>):void>)
 
 ----
 
-.. _function-ast_for_each_global_Module_q__implicit_block_ls_smart_ptr_ls_Variable_gr__c_void_gr_:
+.. _function-ast_for_each_global_Module_q__block_ls_smart_ptr_ls_Variable_gr__c_void_gr_:
 
-.. das:function:: for_each_global(module: Module? implicit; block: block<(smart_ptr<Variable>):void>)
+.. das:function:: for_each_global(module: Module?; block: block<(smart_ptr<Variable>):void>)
 
 Iterates through every global variable in the specified module.
 
@@ -7309,9 +7309,9 @@ Iterates through every global variable in the specified module.
 
             * **block** : block<(smart_ptr< :ref:`Variable <handle-ast-Variable>`>):void> implicit
 
-.. _function-ast_for_each_module_Program_q__implicit_block_ls_Module_q__c_void_gr_:
+.. _function-ast_for_each_module_Program_q__block_ls_Module_q__c_void_gr_:
 
-.. das:function:: for_each_module(program: Program? implicit; block: block<(Module?):void>)
+.. das:function:: for_each_module(program: Program?; block: block<(Module?):void>)
 
 Iterates through each module in the program in dependency order.
 
@@ -7320,9 +7320,9 @@ Iterates through each module in the program in dependency order.
 
             * **block** : block<( :ref:`Module <handle-rtti-Module>`?):void> implicit
 
-.. _function-ast_for_each_module_function_Module_q__implicit_block_ls_smart_ptr_ls_Function_gr__c_void_gr_:
+.. _function-ast_for_each_module_function_Module_q__block_ls_smart_ptr_ls_Function_gr__c_void_gr_:
 
-.. das:function:: for_each_module_function(module: Module? implicit; blk: block<(smart_ptr<Function>):void>)
+.. das:function:: for_each_module_function(module: Module?; blk: block<(smart_ptr<Function>):void>)
 
 Iterates through each function in the given module.
 
@@ -7331,9 +7331,9 @@ Iterates through each function in the given module.
 
             * **blk** : block<(smart_ptr< :ref:`Function <handle-ast-Function>`>):void> implicit
 
-.. _function-ast_for_each_module_no_order_Program_q__implicit_block_ls_Module_q__c_void_gr_:
+.. _function-ast_for_each_module_no_order_Program_q__block_ls_Module_q__c_void_gr_:
 
-.. das:function:: for_each_module_no_order(program: Program? implicit; block: block<(Module?):void>)
+.. das:function:: for_each_module_no_order(program: Program?; block: block<(Module?):void>)
 
 Iterates through each module in the program in no particular order, as they appear in the library group.
 
@@ -7342,9 +7342,9 @@ Iterates through each module in the program in no particular order, as they appe
 
             * **block** : block<( :ref:`Module <handle-rtti-Module>`?):void> implicit
 
-.. _function-ast_for_each_reader_macro_Module_q__implicit_block_ls_string_hh__c_void_gr_:
+.. _function-ast_for_each_reader_macro_Module_q__block_ls_string_hh__c_void_gr_:
 
-.. das:function:: for_each_reader_macro(module: Module? implicit; block: block<(string#):void>)
+.. das:function:: for_each_reader_macro(module: Module?; block: block<(string#):void>)
 
 Iterates through each reader macro in the given module.
 
@@ -7353,9 +7353,9 @@ Iterates through each reader macro in the given module.
 
             * **block** : block<(string\ #):void> implicit
 
-.. _function-ast_for_each_structure_Module_q__implicit_block_ls_smart_ptr_ls_Structure_gr__c_void_gr_:
+.. _function-ast_for_each_structure_Module_q__block_ls_smart_ptr_ls_Structure_gr__c_void_gr_:
 
-.. das:function:: for_each_structure(module: Module? implicit; block: block<(smart_ptr<Structure>):void>)
+.. das:function:: for_each_structure(module: Module?; block: block<(smart_ptr<Structure>):void>)
 
 Iterates through every structure in the specified module.
 
@@ -7364,9 +7364,9 @@ Iterates through every structure in the specified module.
 
             * **block** : block<(smart_ptr< :ref:`Structure <handle-ast-Structure>`>):void> implicit
 
-.. _function-ast_for_each_structure_alias_Structure_q__implicit_block_ls_smart_ptr_ls_TypeDecl_gr__c_void_gr_:
+.. _function-ast_for_each_structure_alias_Structure_q__block_ls_smart_ptr_ls_TypeDecl_gr__c_void_gr_:
 
-.. das:function:: for_each_structure_alias(structure: Structure? implicit; block: block<(smart_ptr<TypeDecl>):void>)
+.. das:function:: for_each_structure_alias(structure: Structure?; block: block<(smart_ptr<TypeDecl>):void>)
 
 Iterates over all structure aliases defined in the given structure type, invoking the provided block for each alias.
 
@@ -7375,9 +7375,9 @@ Iterates over all structure aliases defined in the given structure type, invokin
 
             * **block** : block<(smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`>):void> implicit
 
-.. _function-ast_for_each_typedef_Module_q__implicit_block_ls_string_hh_;smart_ptr_ls_TypeDecl_gr__c_void_gr_:
+.. _function-ast_for_each_typedef_Module_q__block_ls_string_hh_;smart_ptr_ls_TypeDecl_gr__c_void_gr_:
 
-.. das:function:: for_each_typedef(module: Module? implicit; block: block<(string#;smart_ptr<TypeDecl>):void>)
+.. das:function:: for_each_typedef(module: Module?; block: block<(string#;smart_ptr<TypeDecl>):void>)
 
 Iterates through every typedef in the specified module.
 
@@ -7386,9 +7386,9 @@ Iterates through every typedef in the specified module.
 
             * **block** : block<(string\ #;smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`>):void> implicit
 
-.. _function-ast_for_each_typeinfo_macro_Module_q__implicit_block_ls_smart_ptr_ls_TypeInfoMacro_gr__c_void_gr_:
+.. _function-ast_for_each_typeinfo_macro_Module_q__block_ls_smart_ptr_ls_TypeInfoMacro_gr__c_void_gr_:
 
-.. das:function:: for_each_typeinfo_macro(module: Module? implicit; block: block<(smart_ptr<TypeInfoMacro>):void>)
+.. das:function:: for_each_typeinfo_macro(module: Module?; block: block<(smart_ptr<TypeInfoMacro>):void>)
 
 Iterates through each typeinfo macro in the given module.
 
@@ -7397,9 +7397,9 @@ Iterates through each typeinfo macro in the given module.
 
             * **block** : block<(smart_ptr< :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>`>):void> implicit
 
-.. _function-ast_for_each_typemacro_Module_q__implicit_block_ls_smart_ptr_ls_TypeMacro_gr__c_void_gr_:
+.. _function-ast_for_each_typemacro_Module_q__block_ls_smart_ptr_ls_TypeMacro_gr__c_void_gr_:
 
-.. das:function:: for_each_typemacro(module: Module? implicit; block: block<(smart_ptr<TypeMacro>):void>)
+.. das:function:: for_each_typemacro(module: Module?; block: block<(smart_ptr<TypeMacro>):void>)
 
 Iterates over all type macros registered in the given module, invoking the provided block for each one.
 
@@ -7408,9 +7408,9 @@ Iterates over all type macros registered in the given module, invoking the provi
 
             * **block** : block<(smart_ptr< :ref:`TypeMacro <handle-ast-TypeMacro>`>):void> implicit
 
-.. _function-ast_for_each_variant_macro_Module_q__implicit_block_ls_smart_ptr_ls_VariantMacro_gr__c_void_gr_:
+.. _function-ast_for_each_variant_macro_Module_q__block_ls_smart_ptr_ls_VariantMacro_gr__c_void_gr_:
 
-.. das:function:: for_each_variant_macro(module: Module? implicit; block: block<(smart_ptr<VariantMacro>):void>)
+.. das:function:: for_each_variant_macro(module: Module?; block: block<(smart_ptr<VariantMacro>):void>)
 
 Iterates through each variant macro in the given module.
 
@@ -7424,26 +7424,26 @@ Iterates through each variant macro in the given module.
 Cloning
 +++++++
 
-  *  :ref:`clone_expression (expression: smart_ptr\<Expression\> implicit) : smart_ptr\<Expression\> <function-ast_clone_expression_smart_ptr_ls_Expression_gr__implicit>`
-  *  :ref:`clone_file_info (name: string implicit; tab_size: int) : FileInfo? <function-ast_clone_file_info_string_implicit_int>`
-  *  :ref:`clone_function (function: smart_ptr\<Function\> implicit) : smart_ptr\<Function\> <function-ast_clone_function_smart_ptr_ls_Function_gr__implicit>`
+  *  :ref:`clone_expression (expression: smart_ptr\<Expression\>) : smart_ptr\<Expression\> <function-ast_clone_expression_smart_ptr_ls_Expression_gr_>`
+  *  :ref:`clone_file_info (name: string; tab_size: int) : FileInfo? <function-ast_clone_file_info_string_int>`
+  *  :ref:`clone_function (function: smart_ptr\<Function\>) : smart_ptr\<Function\> <function-ast_clone_function_smart_ptr_ls_Function_gr_>`
   *  :ref:`clone_function (fn: Function?) : FunctionPtr <function-ast_clone_function_Function_q_>`
-  *  :ref:`clone_structure (structure: Structure const? implicit) : smart_ptr\<Structure\> <function-ast_clone_structure_Structure_const_q__implicit>`
-  *  :ref:`clone_type (type: smart_ptr\<TypeDecl\> implicit) : smart_ptr\<TypeDecl\> <function-ast_clone_type_smart_ptr_ls_TypeDecl_gr__implicit>`
-  *  :ref:`clone_variable (variable: smart_ptr\<Variable\> implicit) : smart_ptr\<Variable\> <function-ast_clone_variable_smart_ptr_ls_Variable_gr__implicit>`
+  *  :ref:`clone_structure (structure: Structure const?) : smart_ptr\<Structure\> <function-ast_clone_structure_Structure_const_q_>`
+  *  :ref:`clone_type (type: smart_ptr\<TypeDecl\>) : smart_ptr\<TypeDecl\> <function-ast_clone_type_smart_ptr_ls_TypeDecl_gr_>`
+  *  :ref:`clone_variable (variable: smart_ptr\<Variable\>) : smart_ptr\<Variable\> <function-ast_clone_variable_smart_ptr_ls_Variable_gr_>`
 
-.. _function-ast_clone_expression_smart_ptr_ls_Expression_gr__implicit:
+.. _function-ast_clone_expression_smart_ptr_ls_Expression_gr_:
 
-.. das:function:: clone_expression(expression: smart_ptr<Expression> implicit) : smart_ptr<Expression>
+.. das:function:: clone_expression(expression: smart_ptr<Expression>) : smart_ptr<Expression>
 
 Clones an Expression along with all its subexpressions and corresponding type information.
 
 
 :Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> implicit
 
-.. _function-ast_clone_file_info_string_implicit_int:
+.. _function-ast_clone_file_info_string_int:
 
-.. das:function:: clone_file_info(name: string implicit; tab_size: int) : FileInfo?
+.. das:function:: clone_file_info(name: string; tab_size: int) : FileInfo?
 
 Clones a FileInfo structure.
 
@@ -7456,9 +7456,9 @@ Clones a FileInfo structure.
 clone_function
 ^^^^^^^^^^^^^^
 
-.. _function-ast_clone_function_smart_ptr_ls_Function_gr__implicit:
+.. _function-ast_clone_function_smart_ptr_ls_Function_gr_:
 
-.. das:function:: clone_function(function: smart_ptr<Function> implicit) : smart_ptr<Function>
+.. das:function:: clone_function(function: smart_ptr<Function>) : smart_ptr<Function>
 
 Clones a Function and all of its contents.
 
@@ -7471,27 +7471,27 @@ Clones a Function and all of its contents.
 
 ----
 
-.. _function-ast_clone_structure_Structure_const_q__implicit:
+.. _function-ast_clone_structure_Structure_const_q_:
 
-.. das:function:: clone_structure(structure: Structure const? implicit) : smart_ptr<Structure>
+.. das:function:: clone_structure(structure: Structure const?) : smart_ptr<Structure>
 
 Returns a deep clone of the specified Structure.
 
 
 :Arguments: * **structure** :  :ref:`Structure <handle-ast-Structure>`? implicit
 
-.. _function-ast_clone_type_smart_ptr_ls_TypeDecl_gr__implicit:
+.. _function-ast_clone_type_smart_ptr_ls_TypeDecl_gr_:
 
-.. das:function:: clone_type(type: smart_ptr<TypeDecl> implicit) : smart_ptr<TypeDecl>
+.. das:function:: clone_type(type: smart_ptr<TypeDecl>) : smart_ptr<TypeDecl>
 
 Clones a TypeDecl along with all its subtypes.
 
 
 :Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
 
-.. _function-ast_clone_variable_smart_ptr_ls_Variable_gr__implicit:
+.. _function-ast_clone_variable_smart_ptr_ls_Variable_gr_:
 
-.. das:function:: clone_variable(variable: smart_ptr<Variable> implicit) : smart_ptr<Variable>
+.. das:function:: clone_variable(variable: smart_ptr<Variable>) : smart_ptr<Variable>
 
 Clones a Variable and all of its contents.
 
@@ -7503,40 +7503,40 @@ Clones a Variable and all of its contents.
 Mangled name
 ++++++++++++
 
-  *  :ref:`get_mangled_name (function: smart_ptr\<Function\> implicit) : string <function-ast_get_mangled_name_smart_ptr_ls_Function_gr__implicit>`
-  *  :ref:`get_mangled_name (type: smart_ptr\<TypeDecl\> implicit) : string <function-ast_get_mangled_name_smart_ptr_ls_TypeDecl_gr__implicit>`
-  *  :ref:`get_mangled_name (variable: smart_ptr\<Variable\> implicit) : string <function-ast_get_mangled_name_smart_ptr_ls_Variable_gr__implicit>`
-  *  :ref:`get_mangled_name (variable: smart_ptr\<ExprBlock\> implicit) : string <function-ast_get_mangled_name_smart_ptr_ls_ExprBlock_gr__implicit>`
+  *  :ref:`get_mangled_name (function: smart_ptr\<Function\>) : string <function-ast_get_mangled_name_smart_ptr_ls_Function_gr_>`
+  *  :ref:`get_mangled_name (type: smart_ptr\<TypeDecl\>) : string <function-ast_get_mangled_name_smart_ptr_ls_TypeDecl_gr_>`
+  *  :ref:`get_mangled_name (variable: smart_ptr\<Variable\>) : string <function-ast_get_mangled_name_smart_ptr_ls_Variable_gr_>`
+  *  :ref:`get_mangled_name (variable: smart_ptr\<ExprBlock\>) : string <function-ast_get_mangled_name_smart_ptr_ls_ExprBlock_gr_>`
   *  :ref:`get_mangled_name (decl: TypeDecl?) : auto <function-ast_get_mangled_name_TypeDecl_q_>`
   *  :ref:`get_mangled_name (fn: Function?) : auto <function-ast_get_mangled_name_Function_q_>`
   *  :ref:`get_mangled_name (decl: Variable?) : auto <function-ast_get_mangled_name_Variable_q_>`
   *  :ref:`get_mangled_name (decl: ExprBlock?) : auto <function-ast_get_mangled_name_ExprBlock_q_>`
-  *  :ref:`parse_mangled_name (txt: string implicit; lib: ModuleGroup implicit; thisModule: Module? implicit) : smart_ptr\<TypeDecl\> <function-ast_parse_mangled_name_string_implicit_ModuleGroup_implicit_Module_q__implicit>`
+  *  :ref:`parse_mangled_name (txt: string; lib: ModuleGroup; thisModule: Module?) : smart_ptr\<TypeDecl\> <function-ast_parse_mangled_name_string_ModuleGroup_Module_q_>`
 
 
 get_mangled_name
 ^^^^^^^^^^^^^^^^
 
-.. _function-ast_get_mangled_name_smart_ptr_ls_Function_gr__implicit:
+.. _function-ast_get_mangled_name_smart_ptr_ls_Function_gr_:
 
-.. das:function:: get_mangled_name(function: smart_ptr<Function> implicit) : string
+.. das:function:: get_mangled_name(function: smart_ptr<Function>) : string
 
 Returns the mangled name of the specified object.
 
 
 :Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>`> implicit
 
-.. _function-ast_get_mangled_name_smart_ptr_ls_TypeDecl_gr__implicit:
+.. _function-ast_get_mangled_name_smart_ptr_ls_TypeDecl_gr_:
 
-.. das:function:: get_mangled_name(type: smart_ptr<TypeDecl> implicit) : string
+.. das:function:: get_mangled_name(type: smart_ptr<TypeDecl>) : string
 
-.. _function-ast_get_mangled_name_smart_ptr_ls_Variable_gr__implicit:
+.. _function-ast_get_mangled_name_smart_ptr_ls_Variable_gr_:
 
-.. das:function:: get_mangled_name(variable: smart_ptr<Variable> implicit) : string
+.. das:function:: get_mangled_name(variable: smart_ptr<Variable>) : string
 
-.. _function-ast_get_mangled_name_smart_ptr_ls_ExprBlock_gr__implicit:
+.. _function-ast_get_mangled_name_smart_ptr_ls_ExprBlock_gr_:
 
-.. das:function:: get_mangled_name(variable: smart_ptr<ExprBlock> implicit) : string
+.. das:function:: get_mangled_name(variable: smart_ptr<ExprBlock>) : string
 
 .. _function-ast_get_mangled_name_TypeDecl_q_:
 
@@ -7556,9 +7556,9 @@ Returns the mangled name of the specified object.
 
 ----
 
-.. _function-ast_parse_mangled_name_string_implicit_ModuleGroup_implicit_Module_q__implicit:
+.. _function-ast_parse_mangled_name_string_ModuleGroup_Module_q_:
 
-.. das:function:: parse_mangled_name(txt: string implicit; lib: ModuleGroup implicit; thisModule: Module? implicit) : smart_ptr<TypeDecl>
+.. das:function:: parse_mangled_name(txt: string; lib: ModuleGroup; thisModule: Module?) : smart_ptr<TypeDecl>
 
 Parses a mangled name string and creates the corresponding TypeDecl.
 
@@ -7574,33 +7574,33 @@ Parses a mangled name string and creates the corresponding TypeDecl.
 Size and offset
 +++++++++++++++
 
-  *  :ref:`any_array_size (array: void? implicit) : int <function-ast_any_array_size_void_q__implicit>`
-  *  :ref:`any_table_size (table: void? implicit) : int <function-ast_any_table_size_void_q__implicit>`
-  *  :ref:`get_handled_type_field_offset (type: smart_ptr\<TypeAnnotation\> implicit; field: string implicit) : uint <function-ast_get_handled_type_field_offset_smart_ptr_ls_TypeAnnotation_gr__implicit_string_implicit>`
-  *  :ref:`get_tuple_field_offset (typle: smart_ptr\<TypeDecl\> implicit; index: int) : int <function-ast_get_tuple_field_offset_smart_ptr_ls_TypeDecl_gr__implicit_int>`
-  *  :ref:`get_variant_field_offset (variant: smart_ptr\<TypeDecl\> implicit; index: int) : int <function-ast_get_variant_field_offset_smart_ptr_ls_TypeDecl_gr__implicit_int>`
+  *  :ref:`any_array_size (array: void?) : int <function-ast_any_array_size_void_q_>`
+  *  :ref:`any_table_size (table: void?) : int <function-ast_any_table_size_void_q_>`
+  *  :ref:`get_handled_type_field_offset (type: smart_ptr\<TypeAnnotation\>; field: string) : uint <function-ast_get_handled_type_field_offset_smart_ptr_ls_TypeAnnotation_gr__string>`
+  *  :ref:`get_tuple_field_offset (typle: smart_ptr\<TypeDecl\>; index: int) : int <function-ast_get_tuple_field_offset_smart_ptr_ls_TypeDecl_gr__int>`
+  *  :ref:`get_variant_field_offset (variant: smart_ptr\<TypeDecl\>; index: int) : int <function-ast_get_variant_field_offset_smart_ptr_ls_TypeDecl_gr__int>`
 
-.. _function-ast_any_array_size_void_q__implicit:
+.. _function-ast_any_array_size_void_q_:
 
-.. das:function:: any_array_size(array: void? implicit) : int
+.. das:function:: any_array_size(array: void?) : int
 
 Returns the size of an array from a pointer to an `array<>` object.
 
 
 :Arguments: * **array** : void? implicit
 
-.. _function-ast_any_table_size_void_q__implicit:
+.. _function-ast_any_table_size_void_q_:
 
-.. das:function:: any_table_size(table: void? implicit) : int
+.. das:function:: any_table_size(table: void?) : int
 
 Returns the size of a table from a pointer to a `table<>` object.
 
 
 :Arguments: * **table** : void? implicit
 
-.. _function-ast_get_handled_type_field_offset_smart_ptr_ls_TypeAnnotation_gr__implicit_string_implicit:
+.. _function-ast_get_handled_type_field_offset_smart_ptr_ls_TypeAnnotation_gr__string:
 
-.. das:function:: get_handled_type_field_offset(type: smart_ptr<TypeAnnotation> implicit; field: string implicit) : uint
+.. das:function:: get_handled_type_field_offset(type: smart_ptr<TypeAnnotation>; field: string) : uint
 
 Returns the byte offset of a field in a ManagedStructure handled type.
 
@@ -7609,9 +7609,9 @@ Returns the byte offset of a field in a ManagedStructure handled type.
 
             * **field** : string implicit
 
-.. _function-ast_get_tuple_field_offset_smart_ptr_ls_TypeDecl_gr__implicit_int:
+.. _function-ast_get_tuple_field_offset_smart_ptr_ls_TypeDecl_gr__int:
 
-.. das:function:: get_tuple_field_offset(typle: smart_ptr<TypeDecl> implicit; index: int) : int
+.. das:function:: get_tuple_field_offset(typle: smart_ptr<TypeDecl>; index: int) : int
 
 Returns the byte offset of a tuple field.
 
@@ -7620,9 +7620,9 @@ Returns the byte offset of a tuple field.
 
             * **index** : int
 
-.. _function-ast_get_variant_field_offset_smart_ptr_ls_TypeDecl_gr__implicit_int:
+.. _function-ast_get_variant_field_offset_smart_ptr_ls_TypeDecl_gr__int:
 
-.. das:function:: get_variant_field_offset(variant: smart_ptr<TypeDecl> implicit; index: int) : int
+.. das:function:: get_variant_field_offset(variant: smart_ptr<TypeDecl>; index: int) : int
 
 Returns the byte offset of a variant field.
 
@@ -7636,11 +7636,11 @@ Returns the byte offset of a variant field.
 Evaluations
 +++++++++++
 
-  *  :ref:`eval_single_expression (expr: smart_ptr\<Expression\> const& implicit; ok: bool& implicit) : float4 <function-ast_eval_single_expression_smart_ptr_ls_Expression_gr__const_ref__implicit_bool_ref__implicit>`
+  *  :ref:`eval_single_expression (expr: smart_ptr\<Expression\> const&; ok: bool&) : float4 <function-ast_eval_single_expression_smart_ptr_ls_Expression_gr__const_ref__bool_ref_>`
 
-.. _function-ast_eval_single_expression_smart_ptr_ls_Expression_gr__const_ref__implicit_bool_ref__implicit:
+.. _function-ast_eval_single_expression_smart_ptr_ls_Expression_gr__const_ref__bool_ref_:
 
-.. das:function:: eval_single_expression(expr: smart_ptr<Expression> const& implicit; ok: bool& implicit) : float4
+.. das:function:: eval_single_expression(expr: smart_ptr<Expression> const&; ok: bool&) : float4
 
 .. warning::
   This is unsafe operation.
@@ -7657,11 +7657,11 @@ Simulates and evaluates a single expression on a separate context.
 Error reporting
 +++++++++++++++
 
-  *  :ref:`macro_error (porogram: smart_ptr\<Program\> implicit; at: LineInfo implicit; message: string implicit) <function-ast_macro_error_smart_ptr_ls_Program_gr__implicit_LineInfo_implicit_string_implicit>`
+  *  :ref:`macro_error (porogram: smart_ptr\<Program\>; at: LineInfo; message: string) <function-ast_macro_error_smart_ptr_ls_Program_gr__LineInfo_string>`
 
-.. _function-ast_macro_error_smart_ptr_ls_Program_gr__implicit_LineInfo_implicit_string_implicit:
+.. _function-ast_macro_error_smart_ptr_ls_Program_gr__LineInfo_string:
 
-.. das:function:: macro_error(porogram: smart_ptr<Program> implicit; at: LineInfo implicit; message: string implicit)
+.. das:function:: macro_error(porogram: smart_ptr<Program>; at: LineInfo; message: string)
 
 Reports an error to the currently compiling program during the active compilation pass.
 
@@ -7677,14 +7677,14 @@ Reports an error to the currently compiling program during the active compilatio
 Location and context
 ++++++++++++++++++++
 
-  *  :ref:`collect_dependencies (function: smart_ptr\<Function\> implicit; block: block\<(array\<Function?\>;array\<Variable?\>):void\>) <function-ast_collect_dependencies_smart_ptr_ls_Function_gr__implicit_block_ls_array_ls_Function_q__gr_;array_ls_Variable_q__gr__c_void_gr_>`
-  *  :ref:`force_at (function: smart_ptr\<Function\> const& implicit; at: LineInfo implicit) <function-ast_force_at_smart_ptr_ls_Function_gr__const_ref__implicit_LineInfo_implicit>`
-  *  :ref:`force_at (expression: smart_ptr\<Expression\> const& implicit; at: LineInfo implicit) <function-ast_force_at_smart_ptr_ls_Expression_gr__const_ref__implicit_LineInfo_implicit>`
-  *  :ref:`get_ast_context (program: smart_ptr\<Program\> implicit; expression: smart_ptr\<Expression\> implicit; block: block\<(bool;AstContext):void\>) <function-ast_get_ast_context_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_Expression_gr__implicit_block_ls_bool;AstContext_c_void_gr_>`
+  *  :ref:`collect_dependencies (function: smart_ptr\<Function\>; block: block\<(array\<Function?\>;array\<Variable?\>):void\>) <function-ast_collect_dependencies_smart_ptr_ls_Function_gr__block_ls_array_ls_Function_q__gr_;array_ls_Variable_q__gr__c_void_gr_>`
+  *  :ref:`force_at (function: smart_ptr\<Function\> const&; at: LineInfo) <function-ast_force_at_smart_ptr_ls_Function_gr__const_ref__LineInfo>`
+  *  :ref:`force_at (expression: smart_ptr\<Expression\> const&; at: LineInfo) <function-ast_force_at_smart_ptr_ls_Expression_gr__const_ref__LineInfo>`
+  *  :ref:`get_ast_context (program: smart_ptr\<Program\>; expression: smart_ptr\<Expression\>; block: block\<(bool;AstContext):void\>) <function-ast_get_ast_context_smart_ptr_ls_Program_gr__smart_ptr_ls_Expression_gr__block_ls_bool;AstContext_c_void_gr_>`
 
-.. _function-ast_collect_dependencies_smart_ptr_ls_Function_gr__implicit_block_ls_array_ls_Function_q__gr_;array_ls_Variable_q__gr__c_void_gr_:
+.. _function-ast_collect_dependencies_smart_ptr_ls_Function_gr__block_ls_array_ls_Function_q__gr_;array_ls_Variable_q__gr__c_void_gr_:
 
-.. das:function:: collect_dependencies(function: smart_ptr<Function> implicit; block: block<(array<Function?>;array<Variable?>):void>)
+.. das:function:: collect_dependencies(function: smart_ptr<Function>; block: block<(array<Function?>;array<Variable?>):void>)
 
 Collects dependencies of a given function, including other functions it calls and global variables it accesses.
 
@@ -7697,9 +7697,9 @@ Collects dependencies of a given function, including other functions it calls an
 force_at
 ^^^^^^^^
 
-.. _function-ast_force_at_smart_ptr_ls_Function_gr__const_ref__implicit_LineInfo_implicit:
+.. _function-ast_force_at_smart_ptr_ls_Function_gr__const_ref__LineInfo:
 
-.. das:function:: force_at(function: smart_ptr<Function> const& implicit; at: LineInfo implicit)
+.. das:function:: force_at(function: smart_ptr<Function> const&; at: LineInfo)
 
 Replaces line info in an expression, its subexpressions, and their types.
 
@@ -7708,15 +7708,15 @@ Replaces line info in an expression, its subexpressions, and their types.
 
             * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` implicit
 
-.. _function-ast_force_at_smart_ptr_ls_Expression_gr__const_ref__implicit_LineInfo_implicit:
+.. _function-ast_force_at_smart_ptr_ls_Expression_gr__const_ref__LineInfo:
 
-.. das:function:: force_at(expression: smart_ptr<Expression> const& implicit; at: LineInfo implicit)
+.. das:function:: force_at(expression: smart_ptr<Expression> const&; at: LineInfo)
 
 ----
 
-.. _function-ast_get_ast_context_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_Expression_gr__implicit_block_ls_bool;AstContext_c_void_gr_:
+.. _function-ast_get_ast_context_smart_ptr_ls_Program_gr__smart_ptr_ls_Expression_gr__block_ls_bool;AstContext_c_void_gr_:
 
-.. das:function:: get_ast_context(program: smart_ptr<Program> implicit; expression: smart_ptr<Expression> implicit; block: block<(bool;AstContext):void>)
+.. das:function:: get_ast_context(program: smart_ptr<Program>; expression: smart_ptr<Expression>; block: block<(bool;AstContext):void>)
 
 Returns the AstContext for a given expression, including the current function, loops, blocks, scopes, and with sections.
 
@@ -7732,12 +7732,12 @@ Returns the AstContext for a given expression, including the current function, l
 Use queries
 +++++++++++
 
-  *  :ref:`get_use_functions (func: smart_ptr\<Function\> implicit; block: block\<(smart_ptr\<Function\>):void\>) <function-ast_get_use_functions_smart_ptr_ls_Function_gr__implicit_block_ls_smart_ptr_ls_Function_gr__c_void_gr_>`
-  *  :ref:`get_use_global_variables (func: smart_ptr\<Function\> implicit; block: block\<(smart_ptr\<Variable\>):void\>) <function-ast_get_use_global_variables_smart_ptr_ls_Function_gr__implicit_block_ls_smart_ptr_ls_Variable_gr__c_void_gr_>`
+  *  :ref:`get_use_functions (func: smart_ptr\<Function\>; block: block\<(smart_ptr\<Function\>):void\>) <function-ast_get_use_functions_smart_ptr_ls_Function_gr__block_ls_smart_ptr_ls_Function_gr__c_void_gr_>`
+  *  :ref:`get_use_global_variables (func: smart_ptr\<Function\>; block: block\<(smart_ptr\<Variable\>):void\>) <function-ast_get_use_global_variables_smart_ptr_ls_Function_gr__block_ls_smart_ptr_ls_Variable_gr__c_void_gr_>`
 
-.. _function-ast_get_use_functions_smart_ptr_ls_Function_gr__implicit_block_ls_smart_ptr_ls_Function_gr__c_void_gr_:
+.. _function-ast_get_use_functions_smart_ptr_ls_Function_gr__block_ls_smart_ptr_ls_Function_gr__c_void_gr_:
 
-.. das:function:: get_use_functions(func: smart_ptr<Function> implicit; block: block<(smart_ptr<Function>):void>)
+.. das:function:: get_use_functions(func: smart_ptr<Function>; block: block<(smart_ptr<Function>):void>)
 
 Invokes a block with the list of all functions called by the specified function.
 
@@ -7746,9 +7746,9 @@ Invokes a block with the list of all functions called by the specified function.
 
             * **block** : block<(smart_ptr< :ref:`Function <handle-ast-Function>`>):void> implicit
 
-.. _function-ast_get_use_global_variables_smart_ptr_ls_Function_gr__implicit_block_ls_smart_ptr_ls_Variable_gr__c_void_gr_:
+.. _function-ast_get_use_global_variables_smart_ptr_ls_Function_gr__block_ls_smart_ptr_ls_Variable_gr__c_void_gr_:
 
-.. das:function:: get_use_global_variables(func: smart_ptr<Function> implicit; block: block<(smart_ptr<Variable>):void>)
+.. das:function:: get_use_global_variables(func: smart_ptr<Function>; block: block<(smart_ptr<Variable>):void>)
 
 Invokes a block with the list of all global variables accessed by the specified function.
 
@@ -7762,11 +7762,11 @@ Invokes a block with the list of all global variables accessed by the specified 
 Log
 +++
 
-  *  :ref:`to_compilation_log (text: string implicit) <function-ast_to_compilation_log_string_implicit>`
+  *  :ref:`to_compilation_log (text: string) <function-ast_to_compilation_log_string>`
 
-.. _function-ast_to_compilation_log_string_implicit:
+.. _function-ast_to_compilation_log_string:
 
-.. das:function:: to_compilation_log(text: string implicit)
+.. das:function:: to_compilation_log(text: string)
 
 Writes a message to the compilation log from a macro during compilation.
 
@@ -7778,11 +7778,11 @@ Writes a message to the compilation log from a macro during compilation.
 Removal
 +++++++
 
-  *  :ref:`remove_structure (module: Module? implicit; structure: smart_ptr\<Structure\>& implicit) : bool <function-ast_remove_structure_Module_q__implicit_smart_ptr_ls_Structure_gr__ref__implicit>`
+  *  :ref:`remove_structure (module: Module?; structure: smart_ptr\<Structure\>&) : bool <function-ast_remove_structure_Module_q__smart_ptr_ls_Structure_gr__ref_>`
 
-.. _function-ast_remove_structure_Module_q__implicit_smart_ptr_ls_Structure_gr__ref__implicit:
+.. _function-ast_remove_structure_Module_q__smart_ptr_ls_Structure_gr__ref_:
 
-.. das:function:: remove_structure(module: Module? implicit; structure: smart_ptr<Structure>& implicit) : bool
+.. das:function:: remove_structure(module: Module?; structure: smart_ptr<Structure>&) : bool
 
 Removes a structure declaration from the specified module.
 
@@ -7796,34 +7796,34 @@ Removes a structure declaration from the specified module.
 Properties
 ++++++++++
 
-  *  :ref:`can_access_global_variable (variable: smart_ptr\<Variable\> const& implicit; module: Module? implicit; thisModule: Module? implicit) : bool <function-ast_can_access_global_variable_smart_ptr_ls_Variable_gr__const_ref__implicit_Module_q__implicit_Module_q__implicit>`
-  *  :ref:`get_aot_arg_prefix (func: Function? implicit; call: ExprCallFunc? implicit; argIndex: int) : string <function-ast_get_aot_arg_prefix_Function_q__implicit_ExprCallFunc_q__implicit_int>`
-  *  :ref:`get_aot_arg_suffix (func: Function? implicit; call: ExprCallFunc? implicit; argIndex: int) : string <function-ast_get_aot_arg_suffix_Function_q__implicit_ExprCallFunc_q__implicit_int>`
-  *  :ref:`get_aot_name (func: Function? implicit; call: ExprCallFunc? implicit) : string <function-ast_get_aot_name_Function_q__implicit_ExprCallFunc_q__implicit>`
-  *  :ref:`get_current_search_module (program: Program? implicit; function: Function? implicit; moduleName: string implicit) : Module? <function-ast_get_current_search_module_Program_q__implicit_Function_q__implicit_string_implicit>`
-  *  :ref:`get_field_type (type: smart_ptr\<TypeDecl\> implicit; fieldName: string implicit; constant: bool) : smart_ptr\<TypeDecl\> <function-ast_get_field_type_smart_ptr_ls_TypeDecl_gr__implicit_string_implicit_bool>`
-  *  :ref:`get_func_aot_prefix (ann: FunctionAnnotation? implicit; stg: StringBuilderWriter? implicit; call: ExprCallFunc? implicit) <function-ast_get_func_aot_prefix_FunctionAnnotation_q__implicit_StringBuilderWriter_q__implicit_ExprCallFunc_q__implicit>`
-  *  :ref:`get_function_aot_hash (fun: Function const? implicit) : uint64 <function-ast_get_function_aot_hash_Function_const_q__implicit>`
-  *  :ref:`get_function_hash_by_id (fun: Function? implicit; id: int; pctx: void? implicit) : uint64 <function-ast_get_function_hash_by_id_Function_q__implicit_int_void_q__implicit>`
-  *  :ref:`get_handled_type_field_type (type: smart_ptr\<TypeAnnotation\> implicit; field: string implicit) : TypeInfo? <function-ast_get_handled_type_field_type_smart_ptr_ls_TypeAnnotation_gr__implicit_string_implicit>`
-  *  :ref:`get_handled_type_field_type_declaration (type: smart_ptr\<TypeAnnotation\> implicit; field: string implicit; isConst: bool) : smart_ptr\<TypeDecl\> <function-ast_get_handled_type_field_type_declaration_smart_ptr_ls_TypeAnnotation_gr__implicit_string_implicit_bool>`
-  *  :ref:`get_handled_type_index_type_declaration (type: TypeAnnotation? implicit; src: Expression? implicit; idx: Expression? implicit) : smart_ptr\<TypeDecl\> <function-ast_get_handled_type_index_type_declaration_TypeAnnotation_q__implicit_Expression_q__implicit_Expression_q__implicit>`
-  *  :ref:`get_struct_aot_prefix (ann: StructureAnnotation? implicit; structure: Structure? implicit; args: AnnotationArgumentList implicit; stg: StringBuilderWriter? implicit) <function-ast_get_struct_aot_prefix_StructureAnnotation_q__implicit_Structure_q__implicit_AnnotationArgumentList_implicit_StringBuilderWriter_q__implicit>`
-  *  :ref:`get_structure_alias (structure: Structure? implicit; aliasName: string implicit) : smart_ptr\<TypeDecl\> <function-ast_get_structure_alias_Structure_q__implicit_string_implicit>`
-  *  :ref:`get_underlying_value_type (type: smart_ptr\<TypeDecl\> implicit) : smart_ptr\<TypeDecl\> <function-ast_get_underlying_value_type_smart_ptr_ls_TypeDecl_gr__implicit>`
-  *  :ref:`get_vector_length (vec: void? implicit; type: smart_ptr\<TypeDecl\> implicit) : int <function-ast_get_vector_length_void_q__implicit_smart_ptr_ls_TypeDecl_gr__implicit>`
-  *  :ref:`get_vector_ptr_at_index (vec: void? implicit; type: TypeDecl? implicit; idx: int) : void? <function-ast_get_vector_ptr_at_index_void_q__implicit_TypeDecl_q__implicit_int>`
-  *  :ref:`has_field (type: smart_ptr\<TypeDecl\> implicit; fieldName: string implicit; constant: bool) : bool <function-ast_has_field_smart_ptr_ls_TypeDecl_gr__implicit_string_implicit_bool>`
-  *  :ref:`is_expr_const (expression: smart_ptr\<Expression\> const& implicit) : bool <function-ast_is_expr_const_smart_ptr_ls_Expression_gr__const_ref__implicit>`
-  *  :ref:`is_expr_like_call (expression: smart_ptr\<Expression\> const& implicit) : bool <function-ast_is_expr_like_call_smart_ptr_ls_Expression_gr__const_ref__implicit>`
-  *  :ref:`is_same_type (leftType: smart_ptr\<TypeDecl\> implicit; rightType: smart_ptr\<TypeDecl\> implicit; refMatters: RefMatters; constMatters: ConstMatters; tempMatters: TemporaryMatters) : bool <function-ast_is_same_type_smart_ptr_ls_TypeDecl_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit_RefMatters_ConstMatters_TemporaryMatters>`
-  *  :ref:`is_same_type (argType: smart_ptr\<TypeDecl\> implicit; passType: smart_ptr\<TypeDecl\> implicit; refMatters: bool; constMatters: bool; temporaryMatters: bool; allowSubstitute: bool) : bool <function-ast_is_same_type_smart_ptr_ls_TypeDecl_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit_bool_bool_bool_bool>`
-  *  :ref:`is_temp_type (type: smart_ptr\<TypeDecl\> implicit; refMatters: bool) : bool <function-ast_is_temp_type_smart_ptr_ls_TypeDecl_gr__implicit_bool>`
-  *  :ref:`is_visible_directly (from_module: Module? implicit; which_module: Module? implicit) : bool <function-ast_is_visible_directly_Module_q__implicit_Module_q__implicit>`
+  *  :ref:`can_access_global_variable (variable: smart_ptr\<Variable\> const&; module: Module?; thisModule: Module?) : bool <function-ast_can_access_global_variable_smart_ptr_ls_Variable_gr__const_ref__Module_q__Module_q_>`
+  *  :ref:`get_aot_arg_prefix (func: Function?; call: ExprCallFunc?; argIndex: int) : string <function-ast_get_aot_arg_prefix_Function_q__ExprCallFunc_q__int>`
+  *  :ref:`get_aot_arg_suffix (func: Function?; call: ExprCallFunc?; argIndex: int) : string <function-ast_get_aot_arg_suffix_Function_q__ExprCallFunc_q__int>`
+  *  :ref:`get_aot_name (func: Function?; call: ExprCallFunc?) : string <function-ast_get_aot_name_Function_q__ExprCallFunc_q_>`
+  *  :ref:`get_current_search_module (program: Program?; function: Function?; moduleName: string) : Module? <function-ast_get_current_search_module_Program_q__Function_q__string>`
+  *  :ref:`get_field_type (type: smart_ptr\<TypeDecl\>; fieldName: string; constant: bool) : smart_ptr\<TypeDecl\> <function-ast_get_field_type_smart_ptr_ls_TypeDecl_gr__string_bool>`
+  *  :ref:`get_func_aot_prefix (ann: FunctionAnnotation?; stg: StringBuilderWriter?; call: ExprCallFunc?) <function-ast_get_func_aot_prefix_FunctionAnnotation_q__StringBuilderWriter_q__ExprCallFunc_q_>`
+  *  :ref:`get_function_aot_hash (fun: Function const?) : uint64 <function-ast_get_function_aot_hash_Function_const_q_>`
+  *  :ref:`get_function_hash_by_id (fun: Function?; id: int; pctx: void?) : uint64 <function-ast_get_function_hash_by_id_Function_q__int_void_q_>`
+  *  :ref:`get_handled_type_field_type (type: smart_ptr\<TypeAnnotation\>; field: string) : TypeInfo? <function-ast_get_handled_type_field_type_smart_ptr_ls_TypeAnnotation_gr__string>`
+  *  :ref:`get_handled_type_field_type_declaration (type: smart_ptr\<TypeAnnotation\>; field: string; isConst: bool) : smart_ptr\<TypeDecl\> <function-ast_get_handled_type_field_type_declaration_smart_ptr_ls_TypeAnnotation_gr__string_bool>`
+  *  :ref:`get_handled_type_index_type_declaration (type: TypeAnnotation?; src: Expression?; idx: Expression?) : smart_ptr\<TypeDecl\> <function-ast_get_handled_type_index_type_declaration_TypeAnnotation_q__Expression_q__Expression_q_>`
+  *  :ref:`get_struct_aot_prefix (ann: StructureAnnotation?; structure: Structure?; args: AnnotationArgumentList; stg: StringBuilderWriter?) <function-ast_get_struct_aot_prefix_StructureAnnotation_q__Structure_q__AnnotationArgumentList_StringBuilderWriter_q_>`
+  *  :ref:`get_structure_alias (structure: Structure?; aliasName: string) : smart_ptr\<TypeDecl\> <function-ast_get_structure_alias_Structure_q__string>`
+  *  :ref:`get_underlying_value_type (type: smart_ptr\<TypeDecl\>) : smart_ptr\<TypeDecl\> <function-ast_get_underlying_value_type_smart_ptr_ls_TypeDecl_gr_>`
+  *  :ref:`get_vector_length (vec: void?; type: smart_ptr\<TypeDecl\>) : int <function-ast_get_vector_length_void_q__smart_ptr_ls_TypeDecl_gr_>`
+  *  :ref:`get_vector_ptr_at_index (vec: void?; type: TypeDecl?; idx: int) : void? <function-ast_get_vector_ptr_at_index_void_q__TypeDecl_q__int>`
+  *  :ref:`has_field (type: smart_ptr\<TypeDecl\>; fieldName: string; constant: bool) : bool <function-ast_has_field_smart_ptr_ls_TypeDecl_gr__string_bool>`
+  *  :ref:`is_expr_const (expression: smart_ptr\<Expression\> const&) : bool <function-ast_is_expr_const_smart_ptr_ls_Expression_gr__const_ref_>`
+  *  :ref:`is_expr_like_call (expression: smart_ptr\<Expression\> const&) : bool <function-ast_is_expr_like_call_smart_ptr_ls_Expression_gr__const_ref_>`
+  *  :ref:`is_same_type (leftType: smart_ptr\<TypeDecl\>; rightType: smart_ptr\<TypeDecl\>; refMatters: RefMatters; constMatters: ConstMatters; tempMatters: TemporaryMatters) : bool <function-ast_is_same_type_smart_ptr_ls_TypeDecl_gr__smart_ptr_ls_TypeDecl_gr__RefMatters_ConstMatters_TemporaryMatters>`
+  *  :ref:`is_same_type (argType: smart_ptr\<TypeDecl\>; passType: smart_ptr\<TypeDecl\>; refMatters: bool; constMatters: bool; temporaryMatters: bool; allowSubstitute: bool) : bool <function-ast_is_same_type_smart_ptr_ls_TypeDecl_gr__smart_ptr_ls_TypeDecl_gr__bool_bool_bool_bool>`
+  *  :ref:`is_temp_type (type: smart_ptr\<TypeDecl\>; refMatters: bool) : bool <function-ast_is_temp_type_smart_ptr_ls_TypeDecl_gr__bool>`
+  *  :ref:`is_visible_directly (from_module: Module?; which_module: Module?) : bool <function-ast_is_visible_directly_Module_q__Module_q_>`
 
-.. _function-ast_can_access_global_variable_smart_ptr_ls_Variable_gr__const_ref__implicit_Module_q__implicit_Module_q__implicit:
+.. _function-ast_can_access_global_variable_smart_ptr_ls_Variable_gr__const_ref__Module_q__Module_q_:
 
-.. das:function:: can_access_global_variable(variable: smart_ptr<Variable> const& implicit; module: Module? implicit; thisModule: Module? implicit) : bool
+.. das:function:: can_access_global_variable(variable: smart_ptr<Variable> const&; module: Module?; thisModule: Module?) : bool
 
 Returns true if a global variable is accessible from the specified module.
 
@@ -7834,9 +7834,9 @@ Returns true if a global variable is accessible from the specified module.
 
             * **thisModule** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-.. _function-ast_get_aot_arg_prefix_Function_q__implicit_ExprCallFunc_q__implicit_int:
+.. _function-ast_get_aot_arg_prefix_Function_q__ExprCallFunc_q__int:
 
-.. das:function:: get_aot_arg_prefix(func: Function? implicit; call: ExprCallFunc? implicit; argIndex: int) : string
+.. das:function:: get_aot_arg_prefix(func: Function?; call: ExprCallFunc?; argIndex: int) : string
 
 Returns the AOT argument prefix string for the specified function.
 
@@ -7847,9 +7847,9 @@ Returns the AOT argument prefix string for the specified function.
 
             * **argIndex** : int
 
-.. _function-ast_get_aot_arg_suffix_Function_q__implicit_ExprCallFunc_q__implicit_int:
+.. _function-ast_get_aot_arg_suffix_Function_q__ExprCallFunc_q__int:
 
-.. das:function:: get_aot_arg_suffix(func: Function? implicit; call: ExprCallFunc? implicit; argIndex: int) : string
+.. das:function:: get_aot_arg_suffix(func: Function?; call: ExprCallFunc?; argIndex: int) : string
 
 Returns the AOT argument suffix string for the specified function.
 
@@ -7860,9 +7860,9 @@ Returns the AOT argument suffix string for the specified function.
 
             * **argIndex** : int
 
-.. _function-ast_get_aot_name_Function_q__implicit_ExprCallFunc_q__implicit:
+.. _function-ast_get_aot_name_Function_q__ExprCallFunc_q_:
 
-.. das:function:: get_aot_name(func: Function? implicit; call: ExprCallFunc? implicit) : string
+.. das:function:: get_aot_name(func: Function?; call: ExprCallFunc?) : string
 
 Returns the AOT-generated name for the specified function.
 
@@ -7871,9 +7871,9 @@ Returns the AOT-generated name for the specified function.
 
             * **call** :  :ref:`ExprCallFunc <handle-ast-ExprCallFunc>`? implicit
 
-.. _function-ast_get_current_search_module_Program_q__implicit_Function_q__implicit_string_implicit:
+.. _function-ast_get_current_search_module_Program_q__Function_q__string:
 
-.. das:function:: get_current_search_module(program: Program? implicit; function: Function? implicit; moduleName: string implicit) : Module?
+.. das:function:: get_current_search_module(program: Program?; function: Function?; moduleName: string) : Module?
 
 Returns the module currently being searched for a function by name, correctly resolving special names like `""`, `"_"`, `"*"`, and `"__"`.
 
@@ -7884,9 +7884,9 @@ Returns the module currently being searched for a function by name, correctly re
 
             * **moduleName** : string implicit
 
-.. _function-ast_get_field_type_smart_ptr_ls_TypeDecl_gr__implicit_string_implicit_bool:
+.. _function-ast_get_field_type_smart_ptr_ls_TypeDecl_gr__string_bool:
 
-.. das:function:: get_field_type(type: smart_ptr<TypeDecl> implicit; fieldName: string implicit; constant: bool) : smart_ptr<TypeDecl>
+.. das:function:: get_field_type(type: smart_ptr<TypeDecl>; fieldName: string; constant: bool) : smart_ptr<TypeDecl>
 
 Returns the type of a field if the target is a structure, variant, tuple, handled type, or pointer to any of those, or null otherwise.
 
@@ -7897,9 +7897,9 @@ Returns the type of a field if the target is a structure, variant, tuple, handle
 
             * **constant** : bool
 
-.. _function-ast_get_func_aot_prefix_FunctionAnnotation_q__implicit_StringBuilderWriter_q__implicit_ExprCallFunc_q__implicit:
+.. _function-ast_get_func_aot_prefix_FunctionAnnotation_q__StringBuilderWriter_q__ExprCallFunc_q_:
 
-.. das:function:: get_func_aot_prefix(ann: FunctionAnnotation? implicit; stg: StringBuilderWriter? implicit; call: ExprCallFunc? implicit)
+.. das:function:: get_func_aot_prefix(ann: FunctionAnnotation?; stg: StringBuilderWriter?; call: ExprCallFunc?)
 
 Returns the AOT function prefix string for the specified function.
 
@@ -7910,18 +7910,18 @@ Returns the AOT function prefix string for the specified function.
 
             * **call** :  :ref:`ExprCallFunc <handle-ast-ExprCallFunc>`? implicit
 
-.. _function-ast_get_function_aot_hash_Function_const_q__implicit:
+.. _function-ast_get_function_aot_hash_Function_const_q_:
 
-.. das:function:: get_function_aot_hash(fun: Function const? implicit) : uint64
+.. das:function:: get_function_aot_hash(fun: Function const?) : uint64
 
 Returns the hash of a function used for AOT matching.
 
 
 :Arguments: * **fun** :  :ref:`Function <handle-ast-Function>`? implicit
 
-.. _function-ast_get_function_hash_by_id_Function_q__implicit_int_void_q__implicit:
+.. _function-ast_get_function_hash_by_id_Function_q__int_void_q_:
 
-.. das:function:: get_function_hash_by_id(fun: Function? implicit; id: int; pctx: void? implicit) : uint64
+.. das:function:: get_function_hash_by_id(fun: Function?; id: int; pctx: void?) : uint64
 
 Returns the hash of a function given its unique identifier.
 
@@ -7932,9 +7932,9 @@ Returns the hash of a function given its unique identifier.
 
             * **pctx** : void? implicit
 
-.. _function-ast_get_handled_type_field_type_smart_ptr_ls_TypeAnnotation_gr__implicit_string_implicit:
+.. _function-ast_get_handled_type_field_type_smart_ptr_ls_TypeAnnotation_gr__string:
 
-.. das:function:: get_handled_type_field_type(type: smart_ptr<TypeAnnotation> implicit; field: string implicit) : TypeInfo?
+.. das:function:: get_handled_type_field_type(type: smart_ptr<TypeAnnotation>; field: string) : TypeInfo?
 
 Returns the type of a field in a ManagedStructure handled type.
 
@@ -7943,9 +7943,9 @@ Returns the type of a field in a ManagedStructure handled type.
 
             * **field** : string implicit
 
-.. _function-ast_get_handled_type_field_type_declaration_smart_ptr_ls_TypeAnnotation_gr__implicit_string_implicit_bool:
+.. _function-ast_get_handled_type_field_type_declaration_smart_ptr_ls_TypeAnnotation_gr__string_bool:
 
-.. das:function:: get_handled_type_field_type_declaration(type: smart_ptr<TypeAnnotation> implicit; field: string implicit; isConst: bool) : smart_ptr<TypeDecl>
+.. das:function:: get_handled_type_field_type_declaration(type: smart_ptr<TypeAnnotation>; field: string; isConst: bool) : smart_ptr<TypeDecl>
 
 Returns the type declaration of a field in a ManagedStructure handled type.
 
@@ -7956,9 +7956,9 @@ Returns the type declaration of a field in a ManagedStructure handled type.
 
             * **isConst** : bool
 
-.. _function-ast_get_handled_type_index_type_declaration_TypeAnnotation_q__implicit_Expression_q__implicit_Expression_q__implicit:
+.. _function-ast_get_handled_type_index_type_declaration_TypeAnnotation_q__Expression_q__Expression_q_:
 
-.. das:function:: get_handled_type_index_type_declaration(type: TypeAnnotation? implicit; src: Expression? implicit; idx: Expression? implicit) : smart_ptr<TypeDecl>
+.. das:function:: get_handled_type_index_type_declaration(type: TypeAnnotation?; src: Expression?; idx: Expression?) : smart_ptr<TypeDecl>
 
 Returns the type declaration of the index operator for a handled type.
 
@@ -7969,9 +7969,9 @@ Returns the type declaration of the index operator for a handled type.
 
             * **idx** :  :ref:`Expression <handle-ast-Expression>`? implicit
 
-.. _function-ast_get_struct_aot_prefix_StructureAnnotation_q__implicit_Structure_q__implicit_AnnotationArgumentList_implicit_StringBuilderWriter_q__implicit:
+.. _function-ast_get_struct_aot_prefix_StructureAnnotation_q__Structure_q__AnnotationArgumentList_StringBuilderWriter_q_:
 
-.. das:function:: get_struct_aot_prefix(ann: StructureAnnotation? implicit; structure: Structure? implicit; args: AnnotationArgumentList implicit; stg: StringBuilderWriter? implicit)
+.. das:function:: get_struct_aot_prefix(ann: StructureAnnotation?; structure: Structure?; args: AnnotationArgumentList; stg: StringBuilderWriter?)
 
 Returns the AOT prefix string for the specified structure.
 
@@ -7984,9 +7984,9 @@ Returns the AOT prefix string for the specified structure.
 
             * **stg** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`? implicit
 
-.. _function-ast_get_structure_alias_Structure_q__implicit_string_implicit:
+.. _function-ast_get_structure_alias_Structure_q__string:
 
-.. das:function:: get_structure_alias(structure: Structure? implicit; aliasName: string implicit) : smart_ptr<TypeDecl>
+.. das:function:: get_structure_alias(structure: Structure?; aliasName: string) : smart_ptr<TypeDecl>
 
 Finds and returns a structure alias type by its alias name.
 
@@ -7995,18 +7995,18 @@ Finds and returns a structure alias type by its alias name.
 
             * **aliasName** : string implicit
 
-.. _function-ast_get_underlying_value_type_smart_ptr_ls_TypeDecl_gr__implicit:
+.. _function-ast_get_underlying_value_type_smart_ptr_ls_TypeDecl_gr_:
 
-.. das:function:: get_underlying_value_type(type: smart_ptr<TypeDecl> implicit) : smart_ptr<TypeDecl>
+.. das:function:: get_underlying_value_type(type: smart_ptr<TypeDecl>) : smart_ptr<TypeDecl>
 
 Returns the daslang type aliased by a ManagedValue handled type.
 
 
 :Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
 
-.. _function-ast_get_vector_length_void_q__implicit_smart_ptr_ls_TypeDecl_gr__implicit:
+.. _function-ast_get_vector_length_void_q__smart_ptr_ls_TypeDecl_gr_:
 
-.. das:function:: get_vector_length(vec: void? implicit; type: smart_ptr<TypeDecl> implicit) : int
+.. das:function:: get_vector_length(vec: void?; type: smart_ptr<TypeDecl>) : int
 
 Returns the length of a vector given a pointer to the vector object and its TypeDeclPtr.
 
@@ -8015,9 +8015,9 @@ Returns the length of a vector given a pointer to the vector object and its Type
 
             * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
 
-.. _function-ast_get_vector_ptr_at_index_void_q__implicit_TypeDecl_q__implicit_int:
+.. _function-ast_get_vector_ptr_at_index_void_q__TypeDecl_q__int:
 
-.. das:function:: get_vector_ptr_at_index(vec: void? implicit; type: TypeDecl? implicit; idx: int) : void?
+.. das:function:: get_vector_ptr_at_index(vec: void?; type: TypeDecl?; idx: int) : void?
 
 Returns a pointer to the vector element at the specified index given a pointer to the vector object and its TypeDeclPtr.
 
@@ -8028,9 +8028,9 @@ Returns a pointer to the vector element at the specified index given a pointer t
 
             * **idx** : int
 
-.. _function-ast_has_field_smart_ptr_ls_TypeDecl_gr__implicit_string_implicit_bool:
+.. _function-ast_has_field_smart_ptr_ls_TypeDecl_gr__string_bool:
 
-.. das:function:: has_field(type: smart_ptr<TypeDecl> implicit; fieldName: string implicit; constant: bool) : bool
+.. das:function:: has_field(type: smart_ptr<TypeDecl>; fieldName: string; constant: bool) : bool
 
 Returns true if a structure, variant, tuple, handled type, or pointer to any of those has the specified field.
 
@@ -8041,18 +8041,18 @@ Returns true if a structure, variant, tuple, handled type, or pointer to any of 
 
             * **constant** : bool
 
-.. _function-ast_is_expr_const_smart_ptr_ls_Expression_gr__const_ref__implicit:
+.. _function-ast_is_expr_const_smart_ptr_ls_Expression_gr__const_ref_:
 
-.. das:function:: is_expr_const(expression: smart_ptr<Expression> const& implicit) : bool
+.. das:function:: is_expr_const(expression: smart_ptr<Expression> const&) : bool
 
 Returns true if the expression is or inherits from ExprConst.
 
 
 :Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>`>\ & implicit
 
-.. _function-ast_is_expr_like_call_smart_ptr_ls_Expression_gr__const_ref__implicit:
+.. _function-ast_is_expr_like_call_smart_ptr_ls_Expression_gr__const_ref_:
 
-.. das:function:: is_expr_like_call(expression: smart_ptr<Expression> const& implicit) : bool
+.. das:function:: is_expr_like_call(expression: smart_ptr<Expression> const&) : bool
 
 Returns true if the expression is or inherits from ExprLooksLikeCall.
 
@@ -8063,9 +8063,9 @@ Returns true if the expression is or inherits from ExprLooksLikeCall.
 is_same_type
 ^^^^^^^^^^^^
 
-.. _function-ast_is_same_type_smart_ptr_ls_TypeDecl_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit_RefMatters_ConstMatters_TemporaryMatters:
+.. _function-ast_is_same_type_smart_ptr_ls_TypeDecl_gr__smart_ptr_ls_TypeDecl_gr__RefMatters_ConstMatters_TemporaryMatters:
 
-.. das:function:: is_same_type(leftType: smart_ptr<TypeDecl> implicit; rightType: smart_ptr<TypeDecl> implicit; refMatters: RefMatters; constMatters: ConstMatters; tempMatters: TemporaryMatters) : bool
+.. das:function:: is_same_type(leftType: smart_ptr<TypeDecl>; rightType: smart_ptr<TypeDecl>; refMatters: RefMatters; constMatters: ConstMatters; tempMatters: TemporaryMatters) : bool
 
 Compares two types using the given comparison parameters and returns true if they match.
 
@@ -8080,15 +8080,15 @@ Compares two types using the given comparison parameters and returns true if the
 
             * **tempMatters** :  :ref:`TemporaryMatters <enum-rtti-TemporaryMatters>`
 
-.. _function-ast_is_same_type_smart_ptr_ls_TypeDecl_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit_bool_bool_bool_bool:
+.. _function-ast_is_same_type_smart_ptr_ls_TypeDecl_gr__smart_ptr_ls_TypeDecl_gr__bool_bool_bool_bool:
 
-.. das:function:: is_same_type(argType: smart_ptr<TypeDecl> implicit; passType: smart_ptr<TypeDecl> implicit; refMatters: bool; constMatters: bool; temporaryMatters: bool; allowSubstitute: bool) : bool
+.. das:function:: is_same_type(argType: smart_ptr<TypeDecl>; passType: smart_ptr<TypeDecl>; refMatters: bool; constMatters: bool; temporaryMatters: bool; allowSubstitute: bool) : bool
 
 ----
 
-.. _function-ast_is_temp_type_smart_ptr_ls_TypeDecl_gr__implicit_bool:
+.. _function-ast_is_temp_type_smart_ptr_ls_TypeDecl_gr__bool:
 
-.. das:function:: is_temp_type(type: smart_ptr<TypeDecl> implicit; refMatters: bool) : bool
+.. das:function:: is_temp_type(type: smart_ptr<TypeDecl>; refMatters: bool) : bool
 
 Returns true if the specified type can be temporary.
 
@@ -8097,9 +8097,9 @@ Returns true if the specified type can be temporary.
 
             * **refMatters** : bool
 
-.. _function-ast_is_visible_directly_Module_q__implicit_Module_q__implicit:
+.. _function-ast_is_visible_directly_Module_q__Module_q_:
 
-.. das:function:: is_visible_directly(from_module: Module? implicit; which_module: Module? implicit) : bool
+.. das:function:: is_visible_directly(from_module: Module?; which_module: Module?) : bool
 
 Returns true if one module is directly visible from another module.
 
@@ -8113,12 +8113,12 @@ Returns true if one module is directly visible from another module.
 Infer
 +++++
 
-  *  :ref:`infer_generic_type (type: smart_ptr\<TypeDecl\> implicit; passType: smart_ptr\<TypeDecl\> implicit; topLevel: bool; isPassType: bool) : smart_ptr\<TypeDecl\> <function-ast_infer_generic_type_smart_ptr_ls_TypeDecl_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit_bool_bool>`
-  *  :ref:`update_alias_map (program: smart_ptr\<Program\> implicit; argType: smart_ptr\<TypeDecl\> implicit; passType: smart_ptr\<TypeDecl\> implicit) <function-ast_update_alias_map_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit>`
+  *  :ref:`infer_generic_type (type: smart_ptr\<TypeDecl\>; passType: smart_ptr\<TypeDecl\>; topLevel: bool; isPassType: bool) : smart_ptr\<TypeDecl\> <function-ast_infer_generic_type_smart_ptr_ls_TypeDecl_gr__smart_ptr_ls_TypeDecl_gr__bool_bool>`
+  *  :ref:`update_alias_map (program: smart_ptr\<Program\>; argType: smart_ptr\<TypeDecl\>; passType: smart_ptr\<TypeDecl\>) <function-ast_update_alias_map_smart_ptr_ls_Program_gr__smart_ptr_ls_TypeDecl_gr__smart_ptr_ls_TypeDecl_gr_>`
 
-.. _function-ast_infer_generic_type_smart_ptr_ls_TypeDecl_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit_bool_bool:
+.. _function-ast_infer_generic_type_smart_ptr_ls_TypeDecl_gr__smart_ptr_ls_TypeDecl_gr__bool_bool:
 
-.. das:function:: infer_generic_type(type: smart_ptr<TypeDecl> implicit; passType: smart_ptr<TypeDecl> implicit; topLevel: bool; isPassType: bool) : smart_ptr<TypeDecl>
+.. das:function:: infer_generic_type(type: smart_ptr<TypeDecl>; passType: smart_ptr<TypeDecl>; topLevel: bool; isPassType: bool) : smart_ptr<TypeDecl>
 
 Infers a concrete type from a generic type declaration and a pass type.
 
@@ -8131,9 +8131,9 @@ Infers a concrete type from a generic type declaration and a pass type.
 
             * **isPassType** : bool
 
-.. _function-ast_update_alias_map_smart_ptr_ls_Program_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit_smart_ptr_ls_TypeDecl_gr__implicit:
+.. _function-ast_update_alias_map_smart_ptr_ls_Program_gr__smart_ptr_ls_TypeDecl_gr__smart_ptr_ls_TypeDecl_gr_:
 
-.. das:function:: update_alias_map(program: smart_ptr<Program> implicit; argType: smart_ptr<TypeDecl> implicit; passType: smart_ptr<TypeDecl> implicit)
+.. das:function:: update_alias_map(program: smart_ptr<Program>; argType: smart_ptr<TypeDecl>; passType: smart_ptr<TypeDecl>)
 
 Updates the alias map for the specified type during inference.
 
@@ -8149,14 +8149,14 @@ Updates the alias map for the specified type during inference.
 Module queries
 ++++++++++++++
 
-  *  :ref:`module_find_annotation (module: Module const? implicit; name: string implicit) : smart_ptr\<Annotation\> <function-ast_module_find_annotation_Module_const_q__implicit_string_implicit>`
-  *  :ref:`module_find_structure (program: Module const? implicit; name: string implicit) : Structure? <function-ast_module_find_structure_Module_const_q__implicit_string_implicit>`
-  *  :ref:`module_find_type_annotation (module: Module const? implicit; name: string implicit) : TypeAnnotation? <function-ast_module_find_type_annotation_Module_const_q__implicit_string_implicit>`
-  *  :ref:`not_inferred (function: Function? implicit) <function-ast_not_inferred_Function_q__implicit>`
+  *  :ref:`module_find_annotation (module: Module const?; name: string) : smart_ptr\<Annotation\> <function-ast_module_find_annotation_Module_const_q__string>`
+  *  :ref:`module_find_structure (program: Module const?; name: string) : Structure? <function-ast_module_find_structure_Module_const_q__string>`
+  *  :ref:`module_find_type_annotation (module: Module const?; name: string) : TypeAnnotation? <function-ast_module_find_type_annotation_Module_const_q__string>`
+  *  :ref:`not_inferred (function: Function?) <function-ast_not_inferred_Function_q_>`
 
-.. _function-ast_module_find_annotation_Module_const_q__implicit_string_implicit:
+.. _function-ast_module_find_annotation_Module_const_q__string:
 
-.. das:function:: module_find_annotation(module: Module const? implicit; name: string implicit) : smart_ptr<Annotation>
+.. das:function:: module_find_annotation(module: Module const?; name: string) : smart_ptr<Annotation>
 
 Finds an annotation by name in the specified module.
 
@@ -8165,9 +8165,9 @@ Finds an annotation by name in the specified module.
 
             * **name** : string implicit
 
-.. _function-ast_module_find_structure_Module_const_q__implicit_string_implicit:
+.. _function-ast_module_find_structure_Module_const_q__string:
 
-.. das:function:: module_find_structure(program: Module const? implicit; name: string implicit) : Structure?
+.. das:function:: module_find_structure(program: Module const?; name: string) : Structure?
 
 Finds a structure by name in the specified module.
 
@@ -8176,9 +8176,9 @@ Finds a structure by name in the specified module.
 
             * **name** : string implicit
 
-.. _function-ast_module_find_type_annotation_Module_const_q__implicit_string_implicit:
+.. _function-ast_module_find_type_annotation_Module_const_q__string:
 
-.. das:function:: module_find_type_annotation(module: Module const? implicit; name: string implicit) : TypeAnnotation?
+.. das:function:: module_find_type_annotation(module: Module const?; name: string) : TypeAnnotation?
 
 Finds a type annotation by name in the specified module.
 
@@ -8187,9 +8187,9 @@ Finds a type annotation by name in the specified module.
 
             * **name** : string implicit
 
-.. _function-ast_not_inferred_Function_q__implicit:
+.. _function-ast_not_inferred_Function_q_:
 
-.. das:function:: not_inferred(function: Function? implicit)
+.. das:function:: not_inferred(function: Function?)
 
 Marks a function as modified by a macro so that it will be inferred again.
 
@@ -8201,17 +8201,17 @@ Marks a function as modified by a macro so that it will be inferred again.
 Debug info helpers
 ++++++++++++++++++
 
-  *  :ref:`debug_helper_find_struct_cppname (helper: smart_ptr\<DebugInfoHelper\> const& implicit; struct_info: StructInfo? implicit) : string <function-ast_debug_helper_find_struct_cppname_smart_ptr_ls_DebugInfoHelper_gr__const_ref__implicit_StructInfo_q__implicit>`
-  *  :ref:`debug_helper_find_type_cppname (helper: smart_ptr\<DebugInfoHelper\> const& implicit; type_info: TypeInfo? implicit) : string <function-ast_debug_helper_find_type_cppname_smart_ptr_ls_DebugInfoHelper_gr__const_ref__implicit_TypeInfo_q__implicit>`
-  *  :ref:`debug_helper_iter_enums (helper: smart_ptr\<DebugInfoHelper\> implicit; blk: block\<(string;EnumInfo?):void\>) <function-ast_debug_helper_iter_enums_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;EnumInfo_q__c_void_gr_>`
-  *  :ref:`debug_helper_iter_funcs (helper: smart_ptr\<DebugInfoHelper\> implicit; blk: block\<(string;FuncInfo?):void\>) <function-ast_debug_helper_iter_funcs_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;FuncInfo_q__c_void_gr_>`
-  *  :ref:`debug_helper_iter_structs (helper: smart_ptr\<DebugInfoHelper\> implicit; blk: block\<(string;StructInfo?):void\>) <function-ast_debug_helper_iter_structs_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;StructInfo_q__c_void_gr_>`
-  *  :ref:`debug_helper_iter_types (helper: smart_ptr\<DebugInfoHelper\> implicit; blk: block\<(string;TypeInfo?):void\>) <function-ast_debug_helper_iter_types_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;TypeInfo_q__c_void_gr_>`
-  *  :ref:`debug_helper_iter_vars (helper: smart_ptr\<DebugInfoHelper\> implicit; blk: block\<(string;VarInfo?):void\>) <function-ast_debug_helper_iter_vars_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;VarInfo_q__c_void_gr_>`
+  *  :ref:`debug_helper_find_struct_cppname (helper: smart_ptr\<DebugInfoHelper\> const&; struct_info: StructInfo?) : string <function-ast_debug_helper_find_struct_cppname_smart_ptr_ls_DebugInfoHelper_gr__const_ref__StructInfo_q_>`
+  *  :ref:`debug_helper_find_type_cppname (helper: smart_ptr\<DebugInfoHelper\> const&; type_info: TypeInfo?) : string <function-ast_debug_helper_find_type_cppname_smart_ptr_ls_DebugInfoHelper_gr__const_ref__TypeInfo_q_>`
+  *  :ref:`debug_helper_iter_enums (helper: smart_ptr\<DebugInfoHelper\>; blk: block\<(string;EnumInfo?):void\>) <function-ast_debug_helper_iter_enums_smart_ptr_ls_DebugInfoHelper_gr__block_ls_string;EnumInfo_q__c_void_gr_>`
+  *  :ref:`debug_helper_iter_funcs (helper: smart_ptr\<DebugInfoHelper\>; blk: block\<(string;FuncInfo?):void\>) <function-ast_debug_helper_iter_funcs_smart_ptr_ls_DebugInfoHelper_gr__block_ls_string;FuncInfo_q__c_void_gr_>`
+  *  :ref:`debug_helper_iter_structs (helper: smart_ptr\<DebugInfoHelper\>; blk: block\<(string;StructInfo?):void\>) <function-ast_debug_helper_iter_structs_smart_ptr_ls_DebugInfoHelper_gr__block_ls_string;StructInfo_q__c_void_gr_>`
+  *  :ref:`debug_helper_iter_types (helper: smart_ptr\<DebugInfoHelper\>; blk: block\<(string;TypeInfo?):void\>) <function-ast_debug_helper_iter_types_smart_ptr_ls_DebugInfoHelper_gr__block_ls_string;TypeInfo_q__c_void_gr_>`
+  *  :ref:`debug_helper_iter_vars (helper: smart_ptr\<DebugInfoHelper\>; blk: block\<(string;VarInfo?):void\>) <function-ast_debug_helper_iter_vars_smart_ptr_ls_DebugInfoHelper_gr__block_ls_string;VarInfo_q__c_void_gr_>`
 
-.. _function-ast_debug_helper_find_struct_cppname_smart_ptr_ls_DebugInfoHelper_gr__const_ref__implicit_StructInfo_q__implicit:
+.. _function-ast_debug_helper_find_struct_cppname_smart_ptr_ls_DebugInfoHelper_gr__const_ref__StructInfo_q_:
 
-.. das:function:: debug_helper_find_struct_cppname(helper: smart_ptr<DebugInfoHelper> const& implicit; struct_info: StructInfo? implicit) : string
+.. das:function:: debug_helper_find_struct_cppname(helper: smart_ptr<DebugInfoHelper> const&; struct_info: StructInfo?) : string
 
 Finds a structure in the DebugInfoHelper and returns its C++ name.
 
@@ -8220,9 +8220,9 @@ Finds a structure in the DebugInfoHelper and returns its C++ name.
 
             * **struct_info** :  :ref:`StructInfo <handle-rtti-StructInfo>`? implicit
 
-.. _function-ast_debug_helper_find_type_cppname_smart_ptr_ls_DebugInfoHelper_gr__const_ref__implicit_TypeInfo_q__implicit:
+.. _function-ast_debug_helper_find_type_cppname_smart_ptr_ls_DebugInfoHelper_gr__const_ref__TypeInfo_q_:
 
-.. das:function:: debug_helper_find_type_cppname(helper: smart_ptr<DebugInfoHelper> const& implicit; type_info: TypeInfo? implicit) : string
+.. das:function:: debug_helper_find_type_cppname(helper: smart_ptr<DebugInfoHelper> const&; type_info: TypeInfo?) : string
 
 Finds a type in the DebugInfoHelper and returns its C++ name.
 
@@ -8231,9 +8231,9 @@ Finds a type in the DebugInfoHelper and returns its C++ name.
 
             * **type_info** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`? implicit
 
-.. _function-ast_debug_helper_iter_enums_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;EnumInfo_q__c_void_gr_:
+.. _function-ast_debug_helper_iter_enums_smart_ptr_ls_DebugInfoHelper_gr__block_ls_string;EnumInfo_q__c_void_gr_:
 
-.. das:function:: debug_helper_iter_enums(helper: smart_ptr<DebugInfoHelper> implicit; blk: block<(string;EnumInfo?):void>)
+.. das:function:: debug_helper_iter_enums(helper: smart_ptr<DebugInfoHelper>; blk: block<(string;EnumInfo?):void>)
 
 Iterates through all enumerations in the DebugInfoHelper, invoking the provided block for each one.
 
@@ -8242,9 +8242,9 @@ Iterates through all enumerations in the DebugInfoHelper, invoking the provided 
 
             * **blk** : block<(string; :ref:`EnumInfo <handle-rtti-EnumInfo>`?):void> implicit
 
-.. _function-ast_debug_helper_iter_funcs_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;FuncInfo_q__c_void_gr_:
+.. _function-ast_debug_helper_iter_funcs_smart_ptr_ls_DebugInfoHelper_gr__block_ls_string;FuncInfo_q__c_void_gr_:
 
-.. das:function:: debug_helper_iter_funcs(helper: smart_ptr<DebugInfoHelper> implicit; blk: block<(string;FuncInfo?):void>)
+.. das:function:: debug_helper_iter_funcs(helper: smart_ptr<DebugInfoHelper>; blk: block<(string;FuncInfo?):void>)
 
 Iterates through all functions in the DebugInfoHelper, invoking the provided block for each one.
 
@@ -8253,9 +8253,9 @@ Iterates through all functions in the DebugInfoHelper, invoking the provided blo
 
             * **blk** : block<(string; :ref:`FuncInfo <handle-rtti-FuncInfo>`?):void> implicit
 
-.. _function-ast_debug_helper_iter_structs_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;StructInfo_q__c_void_gr_:
+.. _function-ast_debug_helper_iter_structs_smart_ptr_ls_DebugInfoHelper_gr__block_ls_string;StructInfo_q__c_void_gr_:
 
-.. das:function:: debug_helper_iter_structs(helper: smart_ptr<DebugInfoHelper> implicit; blk: block<(string;StructInfo?):void>)
+.. das:function:: debug_helper_iter_structs(helper: smart_ptr<DebugInfoHelper>; blk: block<(string;StructInfo?):void>)
 
 Iterates through all structures in the DebugInfoHelper, invoking the provided block for each one.
 
@@ -8264,9 +8264,9 @@ Iterates through all structures in the DebugInfoHelper, invoking the provided bl
 
             * **blk** : block<(string; :ref:`StructInfo <handle-rtti-StructInfo>`?):void> implicit
 
-.. _function-ast_debug_helper_iter_types_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;TypeInfo_q__c_void_gr_:
+.. _function-ast_debug_helper_iter_types_smart_ptr_ls_DebugInfoHelper_gr__block_ls_string;TypeInfo_q__c_void_gr_:
 
-.. das:function:: debug_helper_iter_types(helper: smart_ptr<DebugInfoHelper> implicit; blk: block<(string;TypeInfo?):void>)
+.. das:function:: debug_helper_iter_types(helper: smart_ptr<DebugInfoHelper>; blk: block<(string;TypeInfo?):void>)
 
 Iterates through all types in the DebugInfoHelper, invoking the provided block for each one.
 
@@ -8275,9 +8275,9 @@ Iterates through all types in the DebugInfoHelper, invoking the provided block f
 
             * **blk** : block<(string; :ref:`TypeInfo <handle-rtti-TypeInfo>`?):void> implicit
 
-.. _function-ast_debug_helper_iter_vars_smart_ptr_ls_DebugInfoHelper_gr__implicit_block_ls_string;VarInfo_q__c_void_gr_:
+.. _function-ast_debug_helper_iter_vars_smart_ptr_ls_DebugInfoHelper_gr__block_ls_string;VarInfo_q__c_void_gr_:
 
-.. das:function:: debug_helper_iter_vars(helper: smart_ptr<DebugInfoHelper> implicit; blk: block<(string;VarInfo?):void>)
+.. das:function:: debug_helper_iter_vars(helper: smart_ptr<DebugInfoHelper>; blk: block<(string;VarInfo?):void>)
 
 Iterates through all variables in the DebugInfoHelper, invoking the provided block for each one.
 
@@ -8291,22 +8291,22 @@ Iterates through all variables in the DebugInfoHelper, invoking the provided blo
 AOT support
 +++++++++++
 
-  *  :ref:`aot_need_type_info (macro: TypeInfoMacro const? implicit; expr: smart_ptr\<Expression\> implicit) : bool <function-ast_aot_need_type_info_TypeInfoMacro_const_q__implicit_smart_ptr_ls_Expression_gr__implicit>`
-  *  :ref:`aot_previsit_get_field (ann: TypeAnnotation? implicit; ss: StringBuilderWriter? implicit; name: string implicit) <function-ast_aot_previsit_get_field_TypeAnnotation_q__implicit_StringBuilderWriter_q__implicit_string_implicit>`
-  *  :ref:`aot_previsit_get_field_ptr (ann: TypeAnnotation? implicit; ss: StringBuilderWriter? implicit; name: string implicit) <function-ast_aot_previsit_get_field_ptr_TypeAnnotation_q__implicit_StringBuilderWriter_q__implicit_string_implicit>`
-  *  :ref:`aot_require (mod: Module? implicit; ss: StringBuilderWriter? implicit) : bool <function-ast_aot_require_Module_q__implicit_StringBuilderWriter_q__implicit>`
-  *  :ref:`aot_type_ann_get_field_ptr (ann: TypeAnnotation? implicit; ss: StringBuilderWriter? implicit; name: string implicit) <function-ast_aot_type_ann_get_field_ptr_TypeAnnotation_q__implicit_StringBuilderWriter_q__implicit_string_implicit>`
-  *  :ref:`aot_visit_get_field (ann: TypeAnnotation? implicit; ss: StringBuilderWriter? implicit; name: string implicit) <function-ast_aot_visit_get_field_TypeAnnotation_q__implicit_StringBuilderWriter_q__implicit_string_implicit>`
-  *  :ref:`getInitSemanticHashWithDep (program: smart_ptr\<Program\> implicit; init: uint64) : uint64 <function-ast_getInitSemanticHashWithDep_smart_ptr_ls_Program_gr__implicit_uint64>`
-  *  :ref:`macro_aot_infix (macro: TypeInfoMacro? implicit; ss: StringBuilderWriter? implicit; expr: smart_ptr\<Expression\> implicit) : bool <function-ast_macro_aot_infix_TypeInfoMacro_q__implicit_StringBuilderWriter_q__implicit_smart_ptr_ls_Expression_gr__implicit>`
-  *  :ref:`write_aot_body (structure: StructureAnnotation? implicit; st: smart_ptr\<Structure\> implicit; args: AnnotationArgumentList implicit; writer: StringBuilderWriter? implicit) <function-ast_write_aot_body_StructureAnnotation_q__implicit_smart_ptr_ls_Structure_gr__implicit_AnnotationArgumentList_implicit_StringBuilderWriter_q__implicit>`
-  *  :ref:`write_aot_macro_prefix (macro: TypeInfoMacro? implicit; ss: StringBuilderWriter? implicit; expr: smart_ptr\<Expression\> implicit) <function-ast_write_aot_macro_prefix_TypeInfoMacro_q__implicit_StringBuilderWriter_q__implicit_smart_ptr_ls_Expression_gr__implicit>`
-  *  :ref:`write_aot_macro_suffix (macro: TypeInfoMacro? implicit; ss: StringBuilderWriter? implicit; expr: smart_ptr\<Expression\> implicit) <function-ast_write_aot_macro_suffix_TypeInfoMacro_q__implicit_StringBuilderWriter_q__implicit_smart_ptr_ls_Expression_gr__implicit>`
-  *  :ref:`write_aot_suffix (structure: StructureAnnotation? implicit; st: smart_ptr\<Structure\> implicit; args: AnnotationArgumentList implicit; writer: StringBuilderWriter? implicit) <function-ast_write_aot_suffix_StructureAnnotation_q__implicit_smart_ptr_ls_Structure_gr__implicit_AnnotationArgumentList_implicit_StringBuilderWriter_q__implicit>`
+  *  :ref:`aot_need_type_info (macro: TypeInfoMacro const?; expr: smart_ptr\<Expression\>) : bool <function-ast_aot_need_type_info_TypeInfoMacro_const_q__smart_ptr_ls_Expression_gr_>`
+  *  :ref:`aot_previsit_get_field (ann: TypeAnnotation?; ss: StringBuilderWriter?; name: string) <function-ast_aot_previsit_get_field_TypeAnnotation_q__StringBuilderWriter_q__string>`
+  *  :ref:`aot_previsit_get_field_ptr (ann: TypeAnnotation?; ss: StringBuilderWriter?; name: string) <function-ast_aot_previsit_get_field_ptr_TypeAnnotation_q__StringBuilderWriter_q__string>`
+  *  :ref:`aot_require (mod: Module?; ss: StringBuilderWriter?) : bool <function-ast_aot_require_Module_q__StringBuilderWriter_q_>`
+  *  :ref:`aot_type_ann_get_field_ptr (ann: TypeAnnotation?; ss: StringBuilderWriter?; name: string) <function-ast_aot_type_ann_get_field_ptr_TypeAnnotation_q__StringBuilderWriter_q__string>`
+  *  :ref:`aot_visit_get_field (ann: TypeAnnotation?; ss: StringBuilderWriter?; name: string) <function-ast_aot_visit_get_field_TypeAnnotation_q__StringBuilderWriter_q__string>`
+  *  :ref:`getInitSemanticHashWithDep (program: smart_ptr\<Program\>; init: uint64) : uint64 <function-ast_getInitSemanticHashWithDep_smart_ptr_ls_Program_gr__uint64>`
+  *  :ref:`macro_aot_infix (macro: TypeInfoMacro?; ss: StringBuilderWriter?; expr: smart_ptr\<Expression\>) : bool <function-ast_macro_aot_infix_TypeInfoMacro_q__StringBuilderWriter_q__smart_ptr_ls_Expression_gr_>`
+  *  :ref:`write_aot_body (structure: StructureAnnotation?; st: smart_ptr\<Structure\>; args: AnnotationArgumentList; writer: StringBuilderWriter?) <function-ast_write_aot_body_StructureAnnotation_q__smart_ptr_ls_Structure_gr__AnnotationArgumentList_StringBuilderWriter_q_>`
+  *  :ref:`write_aot_macro_prefix (macro: TypeInfoMacro?; ss: StringBuilderWriter?; expr: smart_ptr\<Expression\>) <function-ast_write_aot_macro_prefix_TypeInfoMacro_q__StringBuilderWriter_q__smart_ptr_ls_Expression_gr_>`
+  *  :ref:`write_aot_macro_suffix (macro: TypeInfoMacro?; ss: StringBuilderWriter?; expr: smart_ptr\<Expression\>) <function-ast_write_aot_macro_suffix_TypeInfoMacro_q__StringBuilderWriter_q__smart_ptr_ls_Expression_gr_>`
+  *  :ref:`write_aot_suffix (structure: StructureAnnotation?; st: smart_ptr\<Structure\>; args: AnnotationArgumentList; writer: StringBuilderWriter?) <function-ast_write_aot_suffix_StructureAnnotation_q__smart_ptr_ls_Structure_gr__AnnotationArgumentList_StringBuilderWriter_q_>`
 
-.. _function-ast_aot_need_type_info_TypeInfoMacro_const_q__implicit_smart_ptr_ls_Expression_gr__implicit:
+.. _function-ast_aot_need_type_info_TypeInfoMacro_const_q__smart_ptr_ls_Expression_gr_:
 
-.. das:function:: aot_need_type_info(macro: TypeInfoMacro const? implicit; expr: smart_ptr<Expression> implicit) : bool
+.. das:function:: aot_need_type_info(macro: TypeInfoMacro const?; expr: smart_ptr<Expression>) : bool
 
 Returns true if a `TypeInfo?` is needed for the specified type in a typeinfo expression.
 
@@ -8315,9 +8315,9 @@ Returns true if a `TypeInfo?` is needed for the specified type in a typeinfo exp
 
             * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> implicit
 
-.. _function-ast_aot_previsit_get_field_TypeAnnotation_q__implicit_StringBuilderWriter_q__implicit_string_implicit:
+.. _function-ast_aot_previsit_get_field_TypeAnnotation_q__StringBuilderWriter_q__string:
 
-.. das:function:: aot_previsit_get_field(ann: TypeAnnotation? implicit; ss: StringBuilderWriter? implicit; name: string implicit)
+.. das:function:: aot_previsit_get_field(ann: TypeAnnotation?; ss: StringBuilderWriter?; name: string)
 
 Performs the pre-visit step for field access during AOT code generation.
 
@@ -8328,9 +8328,9 @@ Performs the pre-visit step for field access during AOT code generation.
 
             * **name** : string implicit
 
-.. _function-ast_aot_previsit_get_field_ptr_TypeAnnotation_q__implicit_StringBuilderWriter_q__implicit_string_implicit:
+.. _function-ast_aot_previsit_get_field_ptr_TypeAnnotation_q__StringBuilderWriter_q__string:
 
-.. das:function:: aot_previsit_get_field_ptr(ann: TypeAnnotation? implicit; ss: StringBuilderWriter? implicit; name: string implicit)
+.. das:function:: aot_previsit_get_field_ptr(ann: TypeAnnotation?; ss: StringBuilderWriter?; name: string)
 
 Performs the pre-visit step for field pointer access during AOT code generation.
 
@@ -8341,9 +8341,9 @@ Performs the pre-visit step for field pointer access during AOT code generation.
 
             * **name** : string implicit
 
-.. _function-ast_aot_require_Module_q__implicit_StringBuilderWriter_q__implicit:
+.. _function-ast_aot_require_Module_q__StringBuilderWriter_q_:
 
-.. das:function:: aot_require(mod: Module? implicit; ss: StringBuilderWriter? implicit) : bool
+.. das:function:: aot_require(mod: Module?; ss: StringBuilderWriter?) : bool
 
 Writes data to the require section of an AOT module.
 
@@ -8352,9 +8352,9 @@ Writes data to the require section of an AOT module.
 
             * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`? implicit
 
-.. _function-ast_aot_type_ann_get_field_ptr_TypeAnnotation_q__implicit_StringBuilderWriter_q__implicit_string_implicit:
+.. _function-ast_aot_type_ann_get_field_ptr_TypeAnnotation_q__StringBuilderWriter_q__string:
 
-.. das:function:: aot_type_ann_get_field_ptr(ann: TypeAnnotation? implicit; ss: StringBuilderWriter? implicit; name: string implicit)
+.. das:function:: aot_type_ann_get_field_ptr(ann: TypeAnnotation?; ss: StringBuilderWriter?; name: string)
 
 Returns the access symbol string for a field, such as `->` for pointer types or `.` for value types.
 
@@ -8365,9 +8365,9 @@ Returns the access symbol string for a field, such as `->` for pointer types or 
 
             * **name** : string implicit
 
-.. _function-ast_aot_visit_get_field_TypeAnnotation_q__implicit_StringBuilderWriter_q__implicit_string_implicit:
+.. _function-ast_aot_visit_get_field_TypeAnnotation_q__StringBuilderWriter_q__string:
 
-.. das:function:: aot_visit_get_field(ann: TypeAnnotation? implicit; ss: StringBuilderWriter? implicit; name: string implicit)
+.. das:function:: aot_visit_get_field(ann: TypeAnnotation?; ss: StringBuilderWriter?; name: string)
 
 Performs the visit step for field access during AOT code generation.
 
@@ -8378,9 +8378,9 @@ Performs the visit step for field access during AOT code generation.
 
             * **name** : string implicit
 
-.. _function-ast_getInitSemanticHashWithDep_smart_ptr_ls_Program_gr__implicit_uint64:
+.. _function-ast_getInitSemanticHashWithDep_smart_ptr_ls_Program_gr__uint64:
 
-.. das:function:: getInitSemanticHashWithDep(program: smart_ptr<Program> implicit; init: uint64) : uint64
+.. das:function:: getInitSemanticHashWithDep(program: smart_ptr<Program>; init: uint64) : uint64
 
 Returns the initialization semantic hash including dependencies for the entire program.
 
@@ -8389,9 +8389,9 @@ Returns the initialization semantic hash including dependencies for the entire p
 
             * **init** : uint64
 
-.. _function-ast_macro_aot_infix_TypeInfoMacro_q__implicit_StringBuilderWriter_q__implicit_smart_ptr_ls_Expression_gr__implicit:
+.. _function-ast_macro_aot_infix_TypeInfoMacro_q__StringBuilderWriter_q__smart_ptr_ls_Expression_gr_:
 
-.. das:function:: macro_aot_infix(macro: TypeInfoMacro? implicit; ss: StringBuilderWriter? implicit; expr: smart_ptr<Expression> implicit) : bool
+.. das:function:: macro_aot_infix(macro: TypeInfoMacro?; ss: StringBuilderWriter?; expr: smart_ptr<Expression>) : bool
 
 Returns true if the macro requires an AOT infix operator for the specified handled type.
 
@@ -8402,9 +8402,9 @@ Returns true if the macro requires an AOT infix operator for the specified handl
 
             * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> implicit
 
-.. _function-ast_write_aot_body_StructureAnnotation_q__implicit_smart_ptr_ls_Structure_gr__implicit_AnnotationArgumentList_implicit_StringBuilderWriter_q__implicit:
+.. _function-ast_write_aot_body_StructureAnnotation_q__smart_ptr_ls_Structure_gr__AnnotationArgumentList_StringBuilderWriter_q_:
 
-.. das:function:: write_aot_body(structure: StructureAnnotation? implicit; st: smart_ptr<Structure> implicit; args: AnnotationArgumentList implicit; writer: StringBuilderWriter? implicit)
+.. das:function:: write_aot_body(structure: StructureAnnotation?; st: smart_ptr<Structure>; args: AnnotationArgumentList; writer: StringBuilderWriter?)
 
 Writes the AOT body code for the specified StructureAnnotation.
 
@@ -8417,9 +8417,9 @@ Writes the AOT body code for the specified StructureAnnotation.
 
             * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`? implicit
 
-.. _function-ast_write_aot_macro_prefix_TypeInfoMacro_q__implicit_StringBuilderWriter_q__implicit_smart_ptr_ls_Expression_gr__implicit:
+.. _function-ast_write_aot_macro_prefix_TypeInfoMacro_q__StringBuilderWriter_q__smart_ptr_ls_Expression_gr_:
 
-.. das:function:: write_aot_macro_prefix(macro: TypeInfoMacro? implicit; ss: StringBuilderWriter? implicit; expr: smart_ptr<Expression> implicit)
+.. das:function:: write_aot_macro_prefix(macro: TypeInfoMacro?; ss: StringBuilderWriter?; expr: smart_ptr<Expression>)
 
 Writes the AOT macro prefix code for the specified TypeInfoMacro.
 
@@ -8430,9 +8430,9 @@ Writes the AOT macro prefix code for the specified TypeInfoMacro.
 
             * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> implicit
 
-.. _function-ast_write_aot_macro_suffix_TypeInfoMacro_q__implicit_StringBuilderWriter_q__implicit_smart_ptr_ls_Expression_gr__implicit:
+.. _function-ast_write_aot_macro_suffix_TypeInfoMacro_q__StringBuilderWriter_q__smart_ptr_ls_Expression_gr_:
 
-.. das:function:: write_aot_macro_suffix(macro: TypeInfoMacro? implicit; ss: StringBuilderWriter? implicit; expr: smart_ptr<Expression> implicit)
+.. das:function:: write_aot_macro_suffix(macro: TypeInfoMacro?; ss: StringBuilderWriter?; expr: smart_ptr<Expression>)
 
 Writes the AOT macro suffix code for the specified TypeInfoMacro.
 
@@ -8443,9 +8443,9 @@ Writes the AOT macro suffix code for the specified TypeInfoMacro.
 
             * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>`> implicit
 
-.. _function-ast_write_aot_suffix_StructureAnnotation_q__implicit_smart_ptr_ls_Structure_gr__implicit_AnnotationArgumentList_implicit_StringBuilderWriter_q__implicit:
+.. _function-ast_write_aot_suffix_StructureAnnotation_q__smart_ptr_ls_Structure_gr__AnnotationArgumentList_StringBuilderWriter_q_:
 
-.. das:function:: write_aot_suffix(structure: StructureAnnotation? implicit; st: smart_ptr<Structure> implicit; args: AnnotationArgumentList implicit; writer: StringBuilderWriter? implicit)
+.. das:function:: write_aot_suffix(structure: StructureAnnotation?; st: smart_ptr<Structure>; args: AnnotationArgumentList; writer: StringBuilderWriter?)
 
 Writes the AOT suffix code for the specified StructureAnnotation.
 
@@ -8463,21 +8463,21 @@ Writes the AOT suffix code for the specified StructureAnnotation.
 String builder writer
 +++++++++++++++++++++
 
-  *  :ref:`string_builder_clear (ss: StringBuilderWriter? implicit) <function-ast_string_builder_clear_StringBuilderWriter_q__implicit>`
-  *  :ref:`string_builder_str (ss: StringBuilderWriter? implicit) : string <function-ast_string_builder_str_StringBuilderWriter_q__implicit>`
+  *  :ref:`string_builder_clear (ss: StringBuilderWriter?) <function-ast_string_builder_clear_StringBuilderWriter_q_>`
+  *  :ref:`string_builder_str (ss: StringBuilderWriter?) : string <function-ast_string_builder_str_StringBuilderWriter_q_>`
 
-.. _function-ast_string_builder_clear_StringBuilderWriter_q__implicit:
+.. _function-ast_string_builder_clear_StringBuilderWriter_q_:
 
-.. das:function:: string_builder_clear(ss: StringBuilderWriter? implicit)
+.. das:function:: string_builder_clear(ss: StringBuilderWriter?)
 
 Clears a StringBuilder object given a pointer to it.
 
 
 :Arguments: * **ss** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`? implicit
 
-.. _function-ast_string_builder_str_StringBuilderWriter_q__implicit:
+.. _function-ast_string_builder_str_StringBuilderWriter_q_:
 
-.. das:function:: string_builder_str(ss: StringBuilderWriter? implicit) : string
+.. das:function:: string_builder_str(ss: StringBuilderWriter?) : string
 
 Returns the accumulated string from a StringBuilder object given a pointer to it.
 

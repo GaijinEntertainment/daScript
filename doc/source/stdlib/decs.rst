@@ -242,8 +242,8 @@ Comparison and access
 +++++++++++++++++++++
 
   *  :ref:`ComponentMap. (var cmp: ComponentMap; name: string) : ComponentValue& <function-decs__dot__ComponentMap_string>`
-  *  :ref:`EntityId implicit\!= (a: EntityId implicit; b: EntityId implicit) : bool <function-decs__ex__eq__EntityId_implicit_EntityId_implicit>`
-  *  :ref:`EntityId implicit== (a: EntityId implicit; b: EntityId implicit) : bool <function-decs__eq__eq__EntityId_implicit_EntityId_implicit>`
+  *  :ref:`EntityId\!= (a: EntityId; b: EntityId) : bool <function-decs__ex__eq__EntityId_EntityId>`
+  *  :ref:`EntityId== (a: EntityId; b: EntityId) : bool <function-decs__eq__eq__EntityId_EntityId>`
 
 .. _function-decs__dot__ComponentMap_string:
 
@@ -259,9 +259,9 @@ Access to component value by name. For example::
 
             * **name** : string
 
-.. _function-decs__ex__eq__EntityId_implicit_EntityId_implicit:
+.. _function-decs__ex__eq__EntityId_EntityId:
 
-.. das:function:: EntityId implicit!=(a: EntityId implicit; b: EntityId implicit) : bool
+.. das:function:: EntityId!=(a: EntityId; b: EntityId) : bool
 
 Inequality operator for entity IDs.
 
@@ -270,9 +270,9 @@ Inequality operator for entity IDs.
 
             * **b** :  :ref:`EntityId <struct-decs-EntityId>` implicit
 
-.. _function-decs__eq__eq__EntityId_implicit_EntityId_implicit:
+.. _function-decs__eq__eq__EntityId_EntityId:
 
-.. das:function:: EntityId implicit==(a: EntityId implicit; b: EntityId implicit) : bool
+.. das:function:: EntityId==(a: EntityId; b: EntityId) : bool
 
 Equality operator for entity IDs.
 
@@ -666,8 +666,8 @@ Deferred actions
 ++++++++++++++++
 
   *  :ref:`create_entity (var blk: lambda\<(eid:EntityId;var cmp:ComponentMap):void\>) : EntityId <function-decs_create_entity_lambda_ls_eid_c_EntityId;var_cmp_c_ComponentMap_c_void_gr_>`
-  *  :ref:`delete_entity (entityid: EntityId implicit) <function-decs_delete_entity_EntityId_implicit>`
-  *  :ref:`update_entity (entityid: EntityId implicit; var blk: lambda\<(eid:EntityId;var cmp:ComponentMap):void\>) <function-decs_update_entity_EntityId_implicit_lambda_ls_eid_c_EntityId;var_cmp_c_ComponentMap_c_void_gr_>`
+  *  :ref:`delete_entity (entityid: EntityId) <function-decs_delete_entity_EntityId>`
+  *  :ref:`update_entity (entityid: EntityId; var blk: lambda\<(eid:EntityId;var cmp:ComponentMap):void\>) <function-decs_update_entity_EntityId_lambda_ls_eid_c_EntityId;var_cmp_c_ComponentMap_c_void_gr_>`
 
 .. _function-decs_create_entity_lambda_ls_eid_c_EntityId;var_cmp_c_ComponentMap_c_void_gr_:
 
@@ -678,18 +678,18 @@ Creates deferred action to create entity.
 
 :Arguments: * **blk** : lambda<(eid: :ref:`EntityId <struct-decs-EntityId>`;cmp: :ref:`ComponentMap <alias-ComponentMap>`):void>
 
-.. _function-decs_delete_entity_EntityId_implicit:
+.. _function-decs_delete_entity_EntityId:
 
-.. das:function:: delete_entity(entityid: EntityId implicit)
+.. das:function:: delete_entity(entityid: EntityId)
 
 Creates deferred action to delete entity specified by id.
 
 
 :Arguments: * **entityid** :  :ref:`EntityId <struct-decs-EntityId>` implicit
 
-.. _function-decs_update_entity_EntityId_implicit_lambda_ls_eid_c_EntityId;var_cmp_c_ComponentMap_c_void_gr_:
+.. _function-decs_update_entity_EntityId_lambda_ls_eid_c_EntityId;var_cmp_c_ComponentMap_c_void_gr_:
 
-.. das:function:: update_entity(entityid: EntityId implicit; blk: lambda<(eid:EntityId;var cmp:ComponentMap):void>)
+.. das:function:: update_entity(entityid: EntityId; blk: lambda<(eid:EntityId;var cmp:ComponentMap):void>)
 
 Creates deferred action to update entity specified by id.
 
@@ -739,7 +739,7 @@ Iteration
   *  :ref:`for_each_archetype (hash: ComponentHash; var erq: function\<():void\>; blk: block\<(arch:Archetype):void\>) <function-decs_for_each_archetype_ComponentHash_function_ls__c_void_gr__block_ls_arch_c_Archetype_c_void_gr_>`
   *  :ref:`for_each_archetype (var erq: EcsRequest; blk: block\<(arch:Archetype):void\>) <function-decs_for_each_archetype_EcsRequest_block_ls_arch_c_Archetype_c_void_gr_>`
   *  :ref:`for_each_archetype_find (hash: ComponentHash; var erq: function\<():void\>; blk: block\<(arch:Archetype):bool\>) : bool <function-decs_for_each_archetype_find_ComponentHash_function_ls__c_void_gr__block_ls_arch_c_Archetype_c_bool_gr_>`
-  *  :ref:`for_eid_archetype (eid: EntityId implicit; hash: ComponentHash; var erq: function\<():void\>; blk: block\<(arch:Archetype;index:int):void\>) : bool <function-decs_for_eid_archetype_EntityId_implicit_ComponentHash_function_ls__c_void_gr__block_ls_arch_c_Archetype;index_c_int_c_void_gr_>`
+  *  :ref:`for_eid_archetype (eid: EntityId; hash: ComponentHash; var erq: function\<():void\>; blk: block\<(arch:Archetype;index:int):void\>) : bool <function-decs_for_eid_archetype_EntityId_ComponentHash_function_ls__c_void_gr__block_ls_arch_c_Archetype;index_c_int_c_void_gr_>`
   *  :ref:`get_default_ro (arch: Archetype; name: string; value: auto(TT)) : iterator\<TT const&\> <function-decs_get_default_ro_Archetype_string_autoTT_0x30a>`
   *  :ref:`get_optional (arch: Archetype; name: string; value: auto(TT)?) : iterator\<TT?\> <function-decs_get_optional_Archetype_string_autoTT_q_>`
   *  :ref:`get_ro (arch: Archetype; name: string; value: auto(TT)) : array\<TT\> <function-decs_get_ro_Archetype_string_autoTT_0x303>`
@@ -800,9 +800,9 @@ If block returns true, iteration is stopped.
 
             * **blk** : block<(arch: :ref:`Archetype <struct-decs-Archetype>`):bool>
 
-.. _function-decs_for_eid_archetype_EntityId_implicit_ComponentHash_function_ls__c_void_gr__block_ls_arch_c_Archetype;index_c_int_c_void_gr_:
+.. _function-decs_for_eid_archetype_EntityId_ComponentHash_function_ls__c_void_gr__block_ls_arch_c_Archetype;index_c_int_c_void_gr_:
 
-.. das:function:: for_eid_archetype(eid: EntityId implicit; hash: ComponentHash; erq: function<():void>; blk: block<(arch:Archetype;index:int):void>) : bool
+.. das:function:: for_eid_archetype(eid: EntityId; hash: ComponentHash; erq: function<():void>; blk: block<(arch:Archetype;index:int):void>) : bool
 
 Invokes block for the specific entity id, given request.
 Request is returned by a specified function.

@@ -865,30 +865,30 @@ Information about a section of the file stored in the `FileAccess` object.
 
 .. das:attribute:: Context
 
-.. _function-rtti__dot__rq_getInitSemanticHash_Context_implicit:
+.. _function-rtti__dot__rq_getInitSemanticHash_Context:
 
-.. das:function:: Context implicit.getInitSemanticHash() : uint64
+.. das:function:: Context.getInitSemanticHash() : uint64
 
 Property-like accessor that returns the ``uint64`` semantic hash of the initialization code for the given ``Context``, useful for detecting code changes.
 
 
-.. _function-rtti__dot__rq_totalFunctions_Context_implicit:
+.. _function-rtti__dot__rq_totalFunctions_Context:
 
-.. das:function:: Context implicit.totalFunctions() : int
+.. das:function:: Context.totalFunctions() : int
 
 Property-like accessor that returns the total number of registered ``SimFunction`` entries in the given ``Context``.
 
 
-.. _function-rtti__dot__rq_totalVariables_Context_implicit:
+.. _function-rtti__dot__rq_totalVariables_Context:
 
-.. das:function:: Context implicit.totalVariables() : int
+.. das:function:: Context.totalVariables() : int
 
 Property-like accessor that returns the total number of global variables registered in the given ``Context``.
 
 
-.. _function-rtti__dot__rq_getCodeAllocatorId_Context_implicit:
+.. _function-rtti__dot__rq_getCodeAllocatorId_Context:
 
-.. das:function:: Context implicit.getCodeAllocatorId() : uint64
+.. das:function:: Context.getCodeAllocatorId() : uint64
 
 Property-like accessor that returns a non-persistent unique integer ID of the code (node) allocator associated with the given ``Context``.
 
@@ -997,16 +997,16 @@ Single argument of the annotation, typically part of the `AnnotationArgumentList
 
 .. das:attribute:: Program
 
-.. _function-rtti__dot__rq_getThisModule_Program_implicit:
+.. _function-rtti__dot__rq_getThisModule_Program:
 
-.. das:function:: Program implicit.getThisModule() : Module?
+.. das:function:: Program.getThisModule() : Module?
 
 Property-like accessor that returns the ``Module`` pointer for the module currently being inferred in the given ``Program``.
 
 
-.. _function-rtti__dot__rq_getDebugger_Program_implicit:
+.. _function-rtti__dot__rq_getDebugger_Program:
 
-.. das:function:: Program implicit.getDebugger() : bool
+.. das:function:: Program.getDebugger() : bool
 
 Property-like accessor that returns ``true`` if the debugger is attached and enabled for the given ``Program``.
 
@@ -1043,44 +1043,44 @@ Object representing full information about Daslang program during and after comp
 
 .. das:attribute:: Annotation
 
-.. _function-rtti__dot__rq_isTypeAnnotation_Annotation_implicit:
+.. _function-rtti__dot__rq_isTypeAnnotation_Annotation:
 
-.. das:function:: Annotation implicit.isTypeAnnotation() : bool
+.. das:function:: Annotation.isTypeAnnotation() : bool
 
 Property-like accessor that returns ``true`` if the given ``Annotation`` is a ``TypeAnnotation`` (defines a handled type).
 
 
-.. _function-rtti__dot__rq_isBasicStructureAnnotation_Annotation_implicit:
+.. _function-rtti__dot__rq_isBasicStructureAnnotation_Annotation:
 
-.. das:function:: Annotation implicit.isBasicStructureAnnotation() : bool
+.. das:function:: Annotation.isBasicStructureAnnotation() : bool
 
 Property-like accessor that returns ``true`` if the given ``Annotation`` is a ``BasicStructureAnnotation``, which exposes C++ struct fields to daslang.
 
 
-.. _function-rtti__dot__rq_isStructureAnnotation_Annotation_implicit:
+.. _function-rtti__dot__rq_isStructureAnnotation_Annotation:
 
-.. das:function:: Annotation implicit.isStructureAnnotation() : bool
+.. das:function:: Annotation.isStructureAnnotation() : bool
 
 Property-like accessor that returns ``true`` if the given ``Annotation`` is a structure annotation (applied to struct declarations).
 
 
-.. _function-rtti__dot__rq_isStructureTypeAnnotation_Annotation_implicit:
+.. _function-rtti__dot__rq_isStructureTypeAnnotation_Annotation:
 
-.. das:function:: Annotation implicit.isStructureTypeAnnotation() : bool
+.. das:function:: Annotation.isStructureTypeAnnotation() : bool
 
 Property-like accessor that returns ``true`` if the given ``Annotation`` is a ``StructureTypeAnnotation``, which binds a C++ class as a daslang handled struct.
 
 
-.. _function-rtti__dot__rq_isFunctionAnnotation_Annotation_implicit:
+.. _function-rtti__dot__rq_isFunctionAnnotation_Annotation:
 
-.. das:function:: Annotation implicit.isFunctionAnnotation() : bool
+.. das:function:: Annotation.isFunctionAnnotation() : bool
 
 Property-like accessor that returns ``true`` if the given ``Annotation`` is a ``FunctionAnnotation`` (applied to functions).
 
 
-.. _function-rtti__dot__rq_isEnumerationAnnotation_Annotation_implicit:
+.. _function-rtti__dot__rq_isEnumerationAnnotation_Annotation:
 
-.. das:function:: Annotation implicit.isEnumerationAnnotation() : bool
+.. das:function:: Annotation.isEnumerationAnnotation() : bool
 
 Property-like accessor that returns ``true`` if the given ``Annotation`` is an ``EnumerationAnnotation``.
 
@@ -1127,156 +1127,156 @@ Annotation declaration, its location, and arguments.
 
 .. das:attribute:: TypeAnnotation
 
-.. _function-rtti__dot__rq_is_any_vector_TypeAnnotation_implicit:
+.. _function-rtti__dot__rq_is_any_vector_TypeAnnotation:
 
-.. das:function:: TypeAnnotation implicit.is_any_vector() : bool
+.. das:function:: TypeAnnotation.is_any_vector() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` wraps any C++ vector-like container (e.g., ``std::vector``).
 
 
-.. _function-rtti__dot__rq_canMove_TypeAnnotation_implicit:
+.. _function-rtti__dot__rq_canMove_TypeAnnotation:
 
-.. das:function:: TypeAnnotation implicit.canMove() : bool
+.. das:function:: TypeAnnotation.canMove() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` supports move semantics.
 
 
-.. _function-rtti__dot__rq_canCopy_TypeAnnotation_implicit:
+.. _function-rtti__dot__rq_canCopy_TypeAnnotation:
 
-.. das:function:: TypeAnnotation implicit.canCopy() : bool
+.. das:function:: TypeAnnotation.canCopy() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` supports copy semantics.
 
 
-.. _function-rtti__dot__rq_canClone_TypeAnnotation_implicit:
+.. _function-rtti__dot__rq_canClone_TypeAnnotation:
 
-.. das:function:: TypeAnnotation implicit.canClone() : bool
+.. das:function:: TypeAnnotation.canClone() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` supports the clone operation.
 
 
-.. _function-rtti__dot__rq_isPod_TypeAnnotation_implicit:
+.. _function-rtti__dot__rq_isPod_TypeAnnotation:
 
-.. das:function:: TypeAnnotation implicit.isPod() : bool
+.. das:function:: TypeAnnotation.isPod() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` is a POD (plain old data) type — no constructor, destructor, or special semantics.
 
 
-.. _function-rtti__dot__rq_isRawPod_TypeAnnotation_implicit:
+.. _function-rtti__dot__rq_isRawPod_TypeAnnotation:
 
-.. das:function:: TypeAnnotation implicit.isRawPod() : bool
+.. das:function:: TypeAnnotation.isRawPod() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` is a raw POD type — a basic value type excluding pointers and strings.
 
 
-.. _function-rtti__dot__rq_isRefType_TypeAnnotation_implicit:
+.. _function-rtti__dot__rq_isRefType_TypeAnnotation:
 
-.. das:function:: TypeAnnotation implicit.isRefType() : bool
+.. das:function:: TypeAnnotation.isRefType() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` is always passed by reference, or is itself a reference type.
 
 
-.. _function-rtti__dot__rq_hasNonTrivialCtor_TypeAnnotation_implicit:
+.. _function-rtti__dot__rq_hasNonTrivialCtor_TypeAnnotation:
 
-.. das:function:: TypeAnnotation implicit.hasNonTrivialCtor() : bool
+.. das:function:: TypeAnnotation.hasNonTrivialCtor() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` has a non-trivial constructor (requires explicit initialization).
 
 
-.. _function-rtti__dot__rq_hasNonTrivialDtor_TypeAnnotation_implicit:
+.. _function-rtti__dot__rq_hasNonTrivialDtor_TypeAnnotation:
 
-.. das:function:: TypeAnnotation implicit.hasNonTrivialDtor() : bool
+.. das:function:: TypeAnnotation.hasNonTrivialDtor() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` has a non-trivial destructor (requires explicit finalization).
 
 
-.. _function-rtti__dot__rq_hasNonTrivialCopy_TypeAnnotation_implicit:
+.. _function-rtti__dot__rq_hasNonTrivialCopy_TypeAnnotation:
 
-.. das:function:: TypeAnnotation implicit.hasNonTrivialCopy() : bool
+.. das:function:: TypeAnnotation.hasNonTrivialCopy() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` has non-trivial copy semantics (i.e., a custom copy constructor).
 
 
-.. _function-rtti__dot__rq_canBePlacedInContainer_TypeAnnotation_implicit:
+.. _function-rtti__dot__rq_canBePlacedInContainer_TypeAnnotation:
 
-.. das:function:: TypeAnnotation implicit.canBePlacedInContainer() : bool
+.. das:function:: TypeAnnotation.canBePlacedInContainer() : bool
 
 Property-like accessor that returns ``true`` if values of the given ``TypeAnnotation`` can be stored inside arrays, tables, or other containers.
 
 
-.. _function-rtti__dot__rq_isLocal_TypeAnnotation_implicit:
+.. _function-rtti__dot__rq_isLocal_TypeAnnotation:
 
-.. das:function:: TypeAnnotation implicit.isLocal() : bool
+.. das:function:: TypeAnnotation.isLocal() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` can be used as a local variable type within a function.
 
 
-.. _function-rtti__dot__rq_canNew_TypeAnnotation_implicit:
+.. _function-rtti__dot__rq_canNew_TypeAnnotation:
 
-.. das:function:: TypeAnnotation implicit.canNew() : bool
+.. das:function:: TypeAnnotation.canNew() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` supports heap allocation via ``new``.
 
 
-.. _function-rtti__dot__rq_canDelete_TypeAnnotation_implicit:
+.. _function-rtti__dot__rq_canDelete_TypeAnnotation:
 
-.. das:function:: TypeAnnotation implicit.canDelete() : bool
+.. das:function:: TypeAnnotation.canDelete() : bool
 
 Property-like accessor that returns ``true`` if values of the given ``TypeAnnotation`` can be explicitly deleted.
 
 
-.. _function-rtti__dot__rq_needDelete_TypeAnnotation_implicit:
+.. _function-rtti__dot__rq_needDelete_TypeAnnotation:
 
-.. das:function:: TypeAnnotation implicit.needDelete() : bool
+.. das:function:: TypeAnnotation.needDelete() : bool
 
 Property-like accessor that returns ``true`` if values of the given ``TypeAnnotation`` require explicit ``delete`` to free resources.
 
 
-.. _function-rtti__dot__rq_canDeletePtr_TypeAnnotation_implicit:
+.. _function-rtti__dot__rq_canDeletePtr_TypeAnnotation:
 
-.. das:function:: TypeAnnotation implicit.canDeletePtr() : bool
+.. das:function:: TypeAnnotation.canDeletePtr() : bool
 
 Property-like accessor that returns ``true`` if a pointer to the given ``TypeAnnotation`` type can be explicitly deleted.
 
 
-.. _function-rtti__dot__rq_isIterable_TypeAnnotation_implicit:
+.. _function-rtti__dot__rq_isIterable_TypeAnnotation:
 
-.. das:function:: TypeAnnotation implicit.isIterable() : bool
+.. das:function:: TypeAnnotation.isIterable() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` supports iteration via ``for``.
 
 
-.. _function-rtti__dot__rq_isShareable_TypeAnnotation_implicit:
+.. _function-rtti__dot__rq_isShareable_TypeAnnotation:
 
-.. das:function:: TypeAnnotation implicit.isShareable() : bool
+.. das:function:: TypeAnnotation.isShareable() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` can be shared across multiple ``Context`` objects.
 
 
-.. _function-rtti__dot__rq_isSmart_TypeAnnotation_implicit:
+.. _function-rtti__dot__rq_isSmart_TypeAnnotation:
 
-.. das:function:: TypeAnnotation implicit.isSmart() : bool
+.. das:function:: TypeAnnotation.isSmart() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` represents a ``smart_ptr`` managed type.
 
 
-.. _function-rtti__dot__rq_avoidNullPtr_TypeAnnotation_implicit:
+.. _function-rtti__dot__rq_avoidNullPtr_TypeAnnotation:
 
-.. das:function:: TypeAnnotation implicit.avoidNullPtr() : bool
+.. das:function:: TypeAnnotation.avoidNullPtr() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` requires pointers to its type to be non-null (i.e., must be initialized on creation).
 
 
-.. _function-rtti__dot__rq_sizeOf_TypeAnnotation_implicit:
+.. _function-rtti__dot__rq_sizeOf_TypeAnnotation:
 
-.. das:function:: TypeAnnotation implicit.sizeOf() : uint64
+.. das:function:: TypeAnnotation.sizeOf() : uint64
 
 Property-like accessor that returns the size in bytes of the type described by the given ``TypeAnnotation``.
 
 
-.. _function-rtti__dot__rq_alignOf_TypeAnnotation_implicit:
+.. _function-rtti__dot__rq_alignOf_TypeAnnotation:
 
-.. das:function:: TypeAnnotation implicit.alignOf() : uint64
+.. das:function:: TypeAnnotation.alignOf() : uint64
 
 Property-like accessor that returns the memory alignment requirement (in bytes) of the type described by the given ``TypeAnnotation``.
 
@@ -1339,9 +1339,9 @@ Handled type.
 
 .. das:attribute:: BasicStructureAnnotation
 
-.. _function-rtti__dot__rq_fieldCount_BasicStructureAnnotation_implicit:
+.. _function-rtti__dot__rq_fieldCount_BasicStructureAnnotation:
 
-.. das:function:: BasicStructureAnnotation implicit.fieldCount() : int
+.. das:function:: BasicStructureAnnotation.fieldCount() : int
 
 Property-like accessor that returns the number of fields declared in the given ``BasicStructureAnnotation``.
 
@@ -1416,93 +1416,93 @@ Type object which represents structure or class.
 
 .. das:attribute:: TypeInfo
 
-.. _function-rtti__dot__rq_enumType_TypeInfo_implicit:
+.. _function-rtti__dot__rq_enumType_TypeInfo:
 
-.. das:function:: TypeInfo implicit.enumType() : EnumInfo?
+.. das:function:: TypeInfo.enumType() : EnumInfo?
 
 Property-like accessor that returns the ``EnumInfo`` pointer describing the underlying enumeration for the given enum ``TypeAnnotation``.
 
 
-.. _function-rtti__dot__rq_isRef_TypeInfo_implicit:
+.. _function-rtti__dot__rq_isRef_TypeInfo:
 
-.. das:function:: TypeInfo implicit.isRef() : bool
+.. das:function:: TypeInfo.isRef() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeInfo`` describes a reference (``&``) type.
 
 
-.. _function-rtti__dot__rq_isRefType_TypeInfo_implicit:
+.. _function-rtti__dot__rq_isRefType_TypeInfo:
 
-.. das:function:: TypeInfo implicit.isRefType() : bool
+.. das:function:: TypeInfo.isRefType() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` is always passed by reference, or is itself a reference type.
 
 
-.. _function-rtti__dot__rq_isRefValue_TypeInfo_implicit:
+.. _function-rtti__dot__rq_isRefValue_TypeInfo:
 
-.. das:function:: TypeInfo implicit.isRefValue() : bool
+.. das:function:: TypeInfo.isRefValue() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeInfo`` describes a ref-value type (boxed value accessed by reference).
 
 
-.. _function-rtti__dot__rq_canCopy_TypeInfo_implicit:
+.. _function-rtti__dot__rq_canCopy_TypeInfo:
 
-.. das:function:: TypeInfo implicit.canCopy() : bool
+.. das:function:: TypeInfo.canCopy() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` supports copy semantics.
 
 
-.. _function-rtti__dot__rq_isPod_TypeInfo_implicit:
+.. _function-rtti__dot__rq_isPod_TypeInfo:
 
-.. das:function:: TypeInfo implicit.isPod() : bool
+.. das:function:: TypeInfo.isPod() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` is a POD (plain old data) type — no constructor, destructor, or special semantics.
 
 
-.. _function-rtti__dot__rq_isRawPod_TypeInfo_implicit:
+.. _function-rtti__dot__rq_isRawPod_TypeInfo:
 
-.. das:function:: TypeInfo implicit.isRawPod() : bool
+.. das:function:: TypeInfo.isRawPod() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeAnnotation`` is a raw POD type — a basic value type excluding pointers and strings.
 
 
-.. _function-rtti__dot__rq_isConst_TypeInfo_implicit:
+.. _function-rtti__dot__rq_isConst_TypeInfo:
 
-.. das:function:: TypeInfo implicit.isConst() : bool
+.. das:function:: TypeInfo.isConst() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeInfo`` describes a ``const``-qualified type.
 
 
-.. _function-rtti__dot__rq_isTemp_TypeInfo_implicit:
+.. _function-rtti__dot__rq_isTemp_TypeInfo:
 
-.. das:function:: TypeInfo implicit.isTemp() : bool
+.. das:function:: TypeInfo.isTemp() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeInfo`` describes a temporary (``#``) type that cannot be captured or stored.
 
 
-.. _function-rtti__dot__rq_isImplicit_TypeInfo_implicit:
+.. _function-rtti__dot__rq_isImplicit_TypeInfo:
 
-.. das:function:: TypeInfo implicit.isImplicit() : bool
+.. das:function:: TypeInfo.isImplicit() : bool
 
 Property-like accessor that returns ``true`` if the given ``TypeInfo`` describes an implicit (compiler-inferred) type.
 
 
-.. _function-rtti__dot__rq_annotation_TypeInfo_implicit:
+.. _function-rtti__dot__rq_annotation_TypeInfo:
 
-.. das:function:: TypeInfo implicit.annotation() : TypeAnnotation?
+.. das:function:: TypeInfo.annotation() : TypeAnnotation?
 
 Property-like accessor that returns the ``Annotation`` pointer associated with the given ``TypeInfo``.
 
 
-.. _function-rtti__dot__rq_annotation_or_name_TypeInfo_implicit:
+.. _function-rtti__dot__rq_annotation_or_name_TypeInfo:
 
-.. das:function:: TypeInfo implicit.annotation_or_name() : TypeAnnotation?
+.. das:function:: TypeInfo.annotation_or_name() : TypeAnnotation?
 
 Property-like accessor that returns the annotation name if one exists, otherwise returns the raw type name from the given ``TypeInfo``.
 
 
-.. _function-rtti__dot__rq_structType_TypeInfo_implicit:
+.. _function-rtti__dot__rq_structType_TypeInfo:
 
-.. das:function:: TypeInfo implicit.structType() : StructInfo?
+.. das:function:: TypeInfo.structType() : StructInfo?
 
 Property-like accessor that returns the ``StructInfo`` pointer for the struct described by the given ``TypeInfo``, or null if not a struct type.
 
@@ -1673,9 +1673,9 @@ Object which represents function declaration.
 
 .. das:attribute:: SimFunction
 
-.. _function-rtti__dot__rq_lineInfo_SimFunction_implicit:
+.. _function-rtti__dot__rq_lineInfo_SimFunction:
 
-.. das:function:: SimFunction implicit.lineInfo() : LineInfo const?
+.. das:function:: SimFunction.lineInfo() : LineInfo const?
 
 Property-like accessor that returns the ``LineInfo`` (source location) associated with the given function's ``FuncInfo``.
 
@@ -1757,7 +1757,7 @@ Initialization and finalization
 
   *  :ref:`CodeOfPolicies () : CodeOfPolicies <function-rtti_CodeOfPolicies>`
   *  :ref:`LineInfo () : LineInfo <function-rtti_LineInfo>`
-  *  :ref:`LineInfo (arg0: FileInfo? implicit; arg1: int; arg2: int; arg3: int; arg4: int) : LineInfo <function-rtti_LineInfo_FileInfo_q__implicit_int_int_int_int>`
+  *  :ref:`LineInfo (arg0: FileInfo?; arg1: int; arg2: int; arg3: int; arg4: int) : LineInfo <function-rtti_LineInfo_FileInfo_q__int_int_int_int>`
   *  :ref:`RttiValue_nothing () : auto <function-rtti_RttiValue_nothing>`
   *  :ref:`using (arg0: block\<(CodeOfPolicies):void\>) <function-rtti_using_block_ls_CodeOfPolicies_c_void_gr_>`
   *  :ref:`using (arg0: block\<(ModuleGroup):void\>) <function-rtti_using_block_ls_ModuleGroup_c_void_gr_>`
@@ -1781,9 +1781,9 @@ LineInfo
 Constructs a default-initialized ``LineInfo`` structure representing source file location (file, line, column).
 
 
-.. _function-rtti_LineInfo_FileInfo_q__implicit_int_int_int_int:
+.. _function-rtti_LineInfo_FileInfo_q__int_int_int_int:
 
-.. das:function:: LineInfo(arg0: FileInfo? implicit; arg1: int; arg2: int; arg3: int; arg4: int) : LineInfo
+.. das:function:: LineInfo(arg0: FileInfo?; arg1: int; arg2: int; arg3: int; arg4: int) : LineInfo
 
 ----
 
@@ -1824,15 +1824,15 @@ Type access
   *  :ref:`arg_names (info: VarInfo) : auto <function-rtti_arg_names_VarInfo>`
   *  :ref:`arg_types (info: VarInfo) : auto <function-rtti_arg_types_VarInfo>`
   *  :ref:`arg_types (info: TypeInfo) : auto <function-rtti_arg_types_TypeInfo>`
-  *  :ref:`builtin_is_same_type (a: TypeInfo const? implicit; b: TypeInfo const? implicit; refMatters: RefMatters; cosntMatters: ConstMatters; tempMatters: TemporaryMatters; topLevel: bool) : bool <function-rtti_builtin_is_same_type_TypeInfo_const_q__implicit_TypeInfo_const_q__implicit_RefMatters_ConstMatters_TemporaryMatters_bool>`
+  *  :ref:`builtin_is_same_type (a: TypeInfo const?; b: TypeInfo const?; refMatters: RefMatters; cosntMatters: ConstMatters; tempMatters: TemporaryMatters; topLevel: bool) : bool <function-rtti_builtin_is_same_type_TypeInfo_const_q__TypeInfo_const_q__RefMatters_ConstMatters_TemporaryMatters_bool>`
   *  :ref:`each_dim (info: TypeInfo) : auto <function-rtti_each_dim_TypeInfo>`
   *  :ref:`each_dim (info: VarInfo) : auto <function-rtti_each_dim_VarInfo>`
   *  :ref:`get_das_type_name (type: Type) : string <function-rtti_get_das_type_name_Type>`
-  *  :ref:`get_dim (typeinfo: VarInfo implicit; index: int) : int <function-rtti_get_dim_VarInfo_implicit_int>`
-  *  :ref:`get_dim (typeinfo: TypeInfo implicit; index: int) : int <function-rtti_get_dim_TypeInfo_implicit_int>`
-  *  :ref:`get_type_align (type: TypeInfo? implicit) : int <function-rtti_get_type_align_TypeInfo_q__implicit>`
-  *  :ref:`get_type_size (type: TypeInfo? implicit) : int <function-rtti_get_type_size_TypeInfo_q__implicit>`
-  *  :ref:`is_compatible_cast (from: StructInfo const? implicit; to: StructInfo const? implicit) : bool <function-rtti_is_compatible_cast_StructInfo_const_q__implicit_StructInfo_const_q__implicit>`
+  *  :ref:`get_dim (typeinfo: VarInfo; index: int) : int <function-rtti_get_dim_VarInfo_int>`
+  *  :ref:`get_dim (typeinfo: TypeInfo; index: int) : int <function-rtti_get_dim_TypeInfo_int>`
+  *  :ref:`get_type_align (type: TypeInfo?) : int <function-rtti_get_type_align_TypeInfo_q_>`
+  *  :ref:`get_type_size (type: TypeInfo?) : int <function-rtti_get_type_size_TypeInfo_q_>`
+  *  :ref:`is_compatible_cast (from: StructInfo const?; to: StructInfo const?) : bool <function-rtti_is_compatible_cast_StructInfo_const_q__StructInfo_const_q_>`
   *  :ref:`is_compatible_cast (a: StructInfo; b: StructInfo) : auto <function-rtti_is_compatible_cast_StructInfo_StructInfo>`
   *  :ref:`is_same_type (a: TypeInfo; b: TypeInfo; refMatters: RefMatters = RefMatters.yes; constMatters: ConstMatters = ConstMatters.yes; temporaryMatters: TemporaryMatters = TemporaryMatters.yes; topLevel: bool = true) : auto <function-rtti_is_same_type_TypeInfo_TypeInfo_RefMatters_ConstMatters_TemporaryMatters_bool>`
 
@@ -1874,9 +1874,9 @@ Iterates through the argument types of an RTTI type, yielding each element as a 
 
 ----
 
-.. _function-rtti_builtin_is_same_type_TypeInfo_const_q__implicit_TypeInfo_const_q__implicit_RefMatters_ConstMatters_TemporaryMatters_bool:
+.. _function-rtti_builtin_is_same_type_TypeInfo_const_q__TypeInfo_const_q__RefMatters_ConstMatters_TemporaryMatters_bool:
 
-.. das:function:: builtin_is_same_type(a: TypeInfo const? implicit; b: TypeInfo const? implicit; refMatters: RefMatters; cosntMatters: ConstMatters; tempMatters: TemporaryMatters; topLevel: bool) : bool
+.. das:function:: builtin_is_same_type(a: TypeInfo const?; b: TypeInfo const?; refMatters: RefMatters; cosntMatters: ConstMatters; tempMatters: TemporaryMatters; topLevel: bool) : bool
 
 Returns ``true`` if two ``TypeInfo`` pointers describe the same type, with flags controlling whether ref, const, temp, and other qualifiers are included in the comparison.
 
@@ -1925,9 +1925,9 @@ Returns the canonical ``string`` name of the given ``Type`` enumeration value (e
 get_dim
 ^^^^^^^
 
-.. _function-rtti_get_dim_VarInfo_implicit_int:
+.. _function-rtti_get_dim_VarInfo_int:
 
-.. das:function:: get_dim(typeinfo: VarInfo implicit; index: int) : int
+.. das:function:: get_dim(typeinfo: VarInfo; index: int) : int
 
 Returns the dimension size (``int``) at the specified index for a fixed-size array type described by ``TypeInfo``.
 
@@ -1936,24 +1936,24 @@ Returns the dimension size (``int``) at the specified index for a fixed-size arr
 
             * **index** : int
 
-.. _function-rtti_get_dim_TypeInfo_implicit_int:
+.. _function-rtti_get_dim_TypeInfo_int:
 
-.. das:function:: get_dim(typeinfo: TypeInfo implicit; index: int) : int
+.. das:function:: get_dim(typeinfo: TypeInfo; index: int) : int
 
 ----
 
-.. _function-rtti_get_type_align_TypeInfo_q__implicit:
+.. _function-rtti_get_type_align_TypeInfo_q_:
 
-.. das:function:: get_type_align(type: TypeInfo? implicit) : int
+.. das:function:: get_type_align(type: TypeInfo?) : int
 
 Returns the memory alignment (``int``, in bytes) of the type described by the given ``TypeInfo``.
 
 
 :Arguments: * **type** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`? implicit
 
-.. _function-rtti_get_type_size_TypeInfo_q__implicit:
+.. _function-rtti_get_type_size_TypeInfo_q_:
 
-.. das:function:: get_type_size(type: TypeInfo? implicit) : int
+.. das:function:: get_type_size(type: TypeInfo?) : int
 
 Returns the size (``int``, in bytes) of the type described by the given ``TypeInfo``.
 
@@ -1964,9 +1964,9 @@ Returns the size (``int``, in bytes) of the type described by the given ``TypeIn
 is_compatible_cast
 ^^^^^^^^^^^^^^^^^^
 
-.. _function-rtti_is_compatible_cast_StructInfo_const_q__implicit_StructInfo_const_q__implicit:
+.. _function-rtti_is_compatible_cast_StructInfo_const_q__StructInfo_const_q_:
 
-.. das:function:: is_compatible_cast(from: StructInfo const? implicit; to: StructInfo const? implicit) : bool
+.. das:function:: is_compatible_cast(from: StructInfo const?; to: StructInfo const?) : bool
 
 Returns ``true`` if an object of type ``from`` (``StructInfo``) can be safely cast to type ``to`` (``StructInfo``), following the class hierarchy.
 
@@ -2008,15 +2008,15 @@ Rtti context access
   *  :ref:`class_info (cl: auto) : StructInfo const? <function-rtti_class_info_auto_0x74>`
   *  :ref:`context_for_each_function (blk: block\<(info:FuncInfo):void\>) : auto <function-rtti_context_for_each_function_block_ls_info_c_FuncInfo_c_void_gr_>`
   *  :ref:`context_for_each_variable (blk: block\<(info:VarInfo):void\>) : auto <function-rtti_context_for_each_variable_block_ls_info_c_VarInfo_c_void_gr_>`
-  *  :ref:`get_function_by_mnh (context: Context implicit; MNH: uint64) : function\<():void\> <function-rtti_get_function_by_mnh_Context_implicit_uint64>`
+  *  :ref:`get_function_by_mnh (context: Context; MNH: uint64) : function\<():void\> <function-rtti_get_function_by_mnh_Context_uint64>`
   *  :ref:`get_function_info (context: any; index: int) : FuncInfo <function-rtti_get_function_info_any_int>`
-  *  :ref:`get_function_info (context: Context implicit; function: function\<():void\>) : FuncInfo const? <function-rtti_get_function_info_Context_implicit_function_ls__c_void_gr_>`
+  *  :ref:`get_function_info (context: Context; function: function\<():void\>) : FuncInfo const? <function-rtti_get_function_info_Context_function_ls__c_void_gr_>`
   *  :ref:`get_line_info () : LineInfo <function-rtti_get_line_info>`
   *  :ref:`get_line_info (depth: int) : LineInfo <function-rtti_get_line_info_int>`
-  *  :ref:`get_total_functions (context: Context implicit) : int <function-rtti_get_total_functions_Context_implicit>`
-  *  :ref:`get_total_variables (context: Context implicit) : int <function-rtti_get_total_variables_Context_implicit>`
+  *  :ref:`get_total_functions (context: Context) : int <function-rtti_get_total_functions_Context>`
+  *  :ref:`get_total_variables (context: Context) : int <function-rtti_get_total_variables_Context>`
   *  :ref:`get_variable_info (context: any; index: int) : VarInfo <function-rtti_get_variable_info_any_int>`
-  *  :ref:`get_variable_value (varInfo: VarInfo implicit) : RttiValue <function-rtti_get_variable_value_VarInfo_implicit>`
+  *  :ref:`get_variable_value (varInfo: VarInfo) : RttiValue <function-rtti_get_variable_value_VarInfo>`
   *  :ref:`this_context () : Context& <function-rtti_this_context>`
   *  :ref:`type_info (cl: auto) : TypeInfo const? <function-rtti_type_info_auto_0x94>`
   *  :ref:`type_info (vinfo: VarInfo) : TypeInfo const? <function-rtti_type_info_VarInfo>`
@@ -2049,9 +2049,9 @@ Iterates through all global variables in the given ``Context``, yielding a ``Var
 
 :Arguments: * **blk** : block<(info: :ref:`VarInfo <handle-rtti-VarInfo>`):void>
 
-.. _function-rtti_get_function_by_mnh_Context_implicit_uint64:
+.. _function-rtti_get_function_by_mnh_Context_uint64:
 
-.. das:function:: get_function_by_mnh(context: Context implicit; MNH: uint64) : function<():void>
+.. das:function:: get_function_by_mnh(context: Context; MNH: uint64) : function<():void>
 
 Returns a ``SimFunction`` pointer looked up by mangled name hash — an alternative form of ``get_function_address``.
 
@@ -2075,9 +2075,9 @@ Returns the ``FuncInfo`` pointer for a function at the given index in the ``Cont
 
             * **index** : int
 
-.. _function-rtti_get_function_info_Context_implicit_function_ls__c_void_gr_:
+.. _function-rtti_get_function_info_Context_function_ls__c_void_gr_:
 
-.. das:function:: get_function_info(context: Context implicit; function: function<():void>) : FuncInfo const?
+.. das:function:: get_function_info(context: Context; function: function<():void>) : FuncInfo const?
 
 ----
 
@@ -2098,18 +2098,18 @@ Returns a ``LineInfo`` structure representing the source location (file, line, c
 
 ----
 
-.. _function-rtti_get_total_functions_Context_implicit:
+.. _function-rtti_get_total_functions_Context:
 
-.. das:function:: get_total_functions(context: Context implicit) : int
+.. das:function:: get_total_functions(context: Context) : int
 
 Returns the total number of registered functions (``int``) in the given ``Context``.
 
 
 :Arguments: * **context** :  :ref:`Context <handle-rtti-Context>` implicit
 
-.. _function-rtti_get_total_variables_Context_implicit:
+.. _function-rtti_get_total_variables_Context:
 
-.. das:function:: get_total_variables(context: Context implicit) : int
+.. das:function:: get_total_variables(context: Context) : int
 
 Returns the total number of global variables (``int``) in the given ``Context``.
 
@@ -2127,9 +2127,9 @@ Returns the ``VarInfo`` pointer for a global variable at the given index in the 
 
             * **index** : int
 
-.. _function-rtti_get_variable_value_VarInfo_implicit:
+.. _function-rtti_get_variable_value_VarInfo:
 
-.. das:function:: get_variable_value(varInfo: VarInfo implicit) : RttiValue
+.. das:function:: get_variable_value(varInfo: VarInfo) : RttiValue
 
 Returns an ``RttiValue`` variant representing the current value of a global variable, looked up by ``VarInfo`` in the given ``Context``.
 
@@ -2169,32 +2169,32 @@ Returns the ``TypeInfo`` object for the specified local variable or expression, 
 Program access
 ++++++++++++++
 
-  *  :ref:`get_module (name: string implicit) : Module? <function-rtti_get_module_string_implicit>`
-  *  :ref:`get_this_module (program: smart_ptr\<Program\> implicit) : Module? <function-rtti_get_this_module_smart_ptr_ls_Program_gr__implicit>`
-  *  :ref:`program_for_each_module (program: smart_ptr\<Program\> implicit; block: block\<(Module?):void\>) <function-rtti_program_for_each_module_smart_ptr_ls_Program_gr__implicit_block_ls_Module_q__c_void_gr_>`
+  *  :ref:`get_module (name: string) : Module? <function-rtti_get_module_string>`
+  *  :ref:`get_this_module (program: smart_ptr\<Program\>) : Module? <function-rtti_get_this_module_smart_ptr_ls_Program_gr_>`
+  *  :ref:`program_for_each_module (program: smart_ptr\<Program\>; block: block\<(Module?):void\>) <function-rtti_program_for_each_module_smart_ptr_ls_Program_gr__block_ls_Module_q__c_void_gr_>`
   *  :ref:`program_for_each_registered_module (block: block\<(Module?):void\>) <function-rtti_program_for_each_registered_module_block_ls_Module_q__c_void_gr_>`
 
-.. _function-rtti_get_module_string_implicit:
+.. _function-rtti_get_module_string:
 
-.. das:function:: get_module(name: string implicit) : Module?
+.. das:function:: get_module(name: string) : Module?
 
 Returns a ``Module`` pointer looked up by module name ``string``, or null if no such module is registered.
 
 
 :Arguments: * **name** : string implicit
 
-.. _function-rtti_get_this_module_smart_ptr_ls_Program_gr__implicit:
+.. _function-rtti_get_this_module_smart_ptr_ls_Program_gr_:
 
-.. das:function:: get_this_module(program: smart_ptr<Program> implicit) : Module?
+.. das:function:: get_this_module(program: smart_ptr<Program>) : Module?
 
 Returns the ``Module`` pointer for the module currently being compiled or inferred, retrieved from the ``Program``.
 
 
 :Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>`> implicit
 
-.. _function-rtti_program_for_each_module_smart_ptr_ls_Program_gr__implicit_block_ls_Module_q__c_void_gr_:
+.. _function-rtti_program_for_each_module_smart_ptr_ls_Program_gr__block_ls_Module_q__c_void_gr_:
 
-.. das:function:: program_for_each_module(program: smart_ptr<Program> implicit; block: block<(Module?):void>)
+.. das:function:: program_for_each_module(program: smart_ptr<Program>; block: block<(Module?):void>)
 
 Iterates through all modules referenced by the given ``Program`` (including transitive dependencies), yielding a ``Module`` pointer for each.
 
@@ -2217,17 +2217,17 @@ Iterates through all modules registered in the daslang runtime (globally, not pe
 Module access
 +++++++++++++
 
-  *  :ref:`module_for_each_annotation (module: Module? implicit; block: block\<(Annotation):void\>) <function-rtti_module_for_each_annotation_Module_q__implicit_block_ls_Annotation_c_void_gr_>`
-  *  :ref:`module_for_each_dependency (module: Module? implicit; block: block\<(Module?;bool):void\>) <function-rtti_module_for_each_dependency_Module_q__implicit_block_ls_Module_q_;bool_c_void_gr_>`
-  *  :ref:`module_for_each_enumeration (module: Module? implicit; block: block\<(EnumInfo):void\>) <function-rtti_module_for_each_enumeration_Module_q__implicit_block_ls_EnumInfo_c_void_gr_>`
-  *  :ref:`module_for_each_function (module: Module? implicit; block: block\<(FuncInfo):void\>) <function-rtti_module_for_each_function_Module_q__implicit_block_ls_FuncInfo_c_void_gr_>`
-  *  :ref:`module_for_each_generic (module: Module? implicit; block: block\<(FuncInfo):void\>) <function-rtti_module_for_each_generic_Module_q__implicit_block_ls_FuncInfo_c_void_gr_>`
-  *  :ref:`module_for_each_global (module: Module? implicit; block: block\<(VarInfo):void\>) <function-rtti_module_for_each_global_Module_q__implicit_block_ls_VarInfo_c_void_gr_>`
-  *  :ref:`module_for_each_structure (module: Module? implicit; block: block\<(StructInfo):void\>) <function-rtti_module_for_each_structure_Module_q__implicit_block_ls_StructInfo_c_void_gr_>`
+  *  :ref:`module_for_each_annotation (module: Module?; block: block\<(Annotation):void\>) <function-rtti_module_for_each_annotation_Module_q__block_ls_Annotation_c_void_gr_>`
+  *  :ref:`module_for_each_dependency (module: Module?; block: block\<(Module?;bool):void\>) <function-rtti_module_for_each_dependency_Module_q__block_ls_Module_q_;bool_c_void_gr_>`
+  *  :ref:`module_for_each_enumeration (module: Module?; block: block\<(EnumInfo):void\>) <function-rtti_module_for_each_enumeration_Module_q__block_ls_EnumInfo_c_void_gr_>`
+  *  :ref:`module_for_each_function (module: Module?; block: block\<(FuncInfo):void\>) <function-rtti_module_for_each_function_Module_q__block_ls_FuncInfo_c_void_gr_>`
+  *  :ref:`module_for_each_generic (module: Module?; block: block\<(FuncInfo):void\>) <function-rtti_module_for_each_generic_Module_q__block_ls_FuncInfo_c_void_gr_>`
+  *  :ref:`module_for_each_global (module: Module?; block: block\<(VarInfo):void\>) <function-rtti_module_for_each_global_Module_q__block_ls_VarInfo_c_void_gr_>`
+  *  :ref:`module_for_each_structure (module: Module?; block: block\<(StructInfo):void\>) <function-rtti_module_for_each_structure_Module_q__block_ls_StructInfo_c_void_gr_>`
 
-.. _function-rtti_module_for_each_annotation_Module_q__implicit_block_ls_Annotation_c_void_gr_:
+.. _function-rtti_module_for_each_annotation_Module_q__block_ls_Annotation_c_void_gr_:
 
-.. das:function:: module_for_each_annotation(module: Module? implicit; block: block<(Annotation):void>)
+.. das:function:: module_for_each_annotation(module: Module?; block: block<(Annotation):void>)
 
 Iterates through each annotation (handled type) in the given ``Module``, yielding an ``Annotation`` pointer for each registered annotation.
 
@@ -2236,9 +2236,9 @@ Iterates through each annotation (handled type) in the given ``Module``, yieldin
 
             * **block** : block<( :ref:`Annotation <handle-rtti-Annotation>`):void> implicit
 
-.. _function-rtti_module_for_each_dependency_Module_q__implicit_block_ls_Module_q_;bool_c_void_gr_:
+.. _function-rtti_module_for_each_dependency_Module_q__block_ls_Module_q_;bool_c_void_gr_:
 
-.. das:function:: module_for_each_dependency(module: Module? implicit; block: block<(Module?;bool):void>)
+.. das:function:: module_for_each_dependency(module: Module?; block: block<(Module?;bool):void>)
 
 Iterates through each module dependency of the given ``Module``, yielding the dependent ``Module`` pointer for each required module.
 
@@ -2247,9 +2247,9 @@ Iterates through each module dependency of the given ``Module``, yielding the de
 
             * **block** : block<( :ref:`Module <handle-rtti-Module>`?;bool):void> implicit
 
-.. _function-rtti_module_for_each_enumeration_Module_q__implicit_block_ls_EnumInfo_c_void_gr_:
+.. _function-rtti_module_for_each_enumeration_Module_q__block_ls_EnumInfo_c_void_gr_:
 
-.. das:function:: module_for_each_enumeration(module: Module? implicit; block: block<(EnumInfo):void>)
+.. das:function:: module_for_each_enumeration(module: Module?; block: block<(EnumInfo):void>)
 
 Iterates through each enumeration declared in the given ``Module``, yielding an ``EnumInfo`` pointer for each enum.
 
@@ -2258,9 +2258,9 @@ Iterates through each enumeration declared in the given ``Module``, yielding an 
 
             * **block** : block<( :ref:`EnumInfo <handle-rtti-EnumInfo>`):void> implicit
 
-.. _function-rtti_module_for_each_function_Module_q__implicit_block_ls_FuncInfo_c_void_gr_:
+.. _function-rtti_module_for_each_function_Module_q__block_ls_FuncInfo_c_void_gr_:
 
-.. das:function:: module_for_each_function(module: Module? implicit; block: block<(FuncInfo):void>)
+.. das:function:: module_for_each_function(module: Module?; block: block<(FuncInfo):void>)
 
 Iterates through each function declared in the given ``Module``, yielding a ``FuncInfo`` pointer for each function.
 
@@ -2269,9 +2269,9 @@ Iterates through each function declared in the given ``Module``, yielding a ``Fu
 
             * **block** : block<( :ref:`FuncInfo <handle-rtti-FuncInfo>`):void> implicit
 
-.. _function-rtti_module_for_each_generic_Module_q__implicit_block_ls_FuncInfo_c_void_gr_:
+.. _function-rtti_module_for_each_generic_Module_q__block_ls_FuncInfo_c_void_gr_:
 
-.. das:function:: module_for_each_generic(module: Module? implicit; block: block<(FuncInfo):void>)
+.. das:function:: module_for_each_generic(module: Module?; block: block<(FuncInfo):void>)
 
 Iterates through each generic (template) function declared in the given ``Module``, yielding a ``FuncInfo`` pointer for each generic.
 
@@ -2280,9 +2280,9 @@ Iterates through each generic (template) function declared in the given ``Module
 
             * **block** : block<( :ref:`FuncInfo <handle-rtti-FuncInfo>`):void> implicit
 
-.. _function-rtti_module_for_each_global_Module_q__implicit_block_ls_VarInfo_c_void_gr_:
+.. _function-rtti_module_for_each_global_Module_q__block_ls_VarInfo_c_void_gr_:
 
-.. das:function:: module_for_each_global(module: Module? implicit; block: block<(VarInfo):void>)
+.. das:function:: module_for_each_global(module: Module?; block: block<(VarInfo):void>)
 
 Iterates through each global variable declared in the given ``Module``, yielding a ``VarInfo`` pointer for each variable.
 
@@ -2291,9 +2291,9 @@ Iterates through each global variable declared in the given ``Module``, yielding
 
             * **block** : block<( :ref:`VarInfo <handle-rtti-VarInfo>`):void> implicit
 
-.. _function-rtti_module_for_each_structure_Module_q__implicit_block_ls_StructInfo_c_void_gr_:
+.. _function-rtti_module_for_each_structure_Module_q__block_ls_StructInfo_c_void_gr_:
 
-.. das:function:: module_for_each_structure(module: Module? implicit; block: block<(StructInfo):void>)
+.. das:function:: module_for_each_structure(module: Module?; block: block<(StructInfo):void>)
 
 Iterates through each structure declaration in the given ``Module``, yielding a ``StructInfo`` pointer for each struct.
 
@@ -2307,12 +2307,12 @@ Iterates through each structure declaration in the given ``Module``, yielding a 
 Annotation access
 +++++++++++++++++
 
-  *  :ref:`add_annotation_argument (annotation: AnnotationArgumentList implicit; name: string implicit) : int <function-rtti_add_annotation_argument_AnnotationArgumentList_implicit_string_implicit>`
-  *  :ref:`get_annotation_argument_value (info: AnnotationArgument implicit) : RttiValue <function-rtti_get_annotation_argument_value_AnnotationArgument_implicit>`
+  *  :ref:`add_annotation_argument (annotation: AnnotationArgumentList; name: string) : int <function-rtti_add_annotation_argument_AnnotationArgumentList_string>`
+  *  :ref:`get_annotation_argument_value (info: AnnotationArgument) : RttiValue <function-rtti_get_annotation_argument_value_AnnotationArgument>`
 
-.. _function-rtti_add_annotation_argument_AnnotationArgumentList_implicit_string_implicit:
+.. _function-rtti_add_annotation_argument_AnnotationArgumentList_string:
 
-.. das:function:: add_annotation_argument(annotation: AnnotationArgumentList implicit; name: string implicit) : int
+.. das:function:: add_annotation_argument(annotation: AnnotationArgumentList; name: string) : int
 
 Appends an annotation argument (name-value pair) to the given ``AnnotationArgumentList``, used when constructing annotations programmatically.
 
@@ -2321,9 +2321,9 @@ Appends an annotation argument (name-value pair) to the given ``AnnotationArgume
 
             * **name** : string implicit
 
-.. _function-rtti_get_annotation_argument_value_AnnotationArgument_implicit:
+.. _function-rtti_get_annotation_argument_value_AnnotationArgument:
 
-.. das:function:: get_annotation_argument_value(info: AnnotationArgument implicit) : RttiValue
+.. das:function:: get_annotation_argument_value(info: AnnotationArgument) : RttiValue
 
 Returns an ``RttiValue`` variant representing the value of a specific named argument from an ``AnnotationArgumentList``.
 
@@ -2335,20 +2335,20 @@ Returns an ``RttiValue`` variant representing the value of a specific named argu
 Compilation and simulation
 ++++++++++++++++++++++++++
 
-  *  :ref:`compile (module_name: string implicit; codeText: string implicit; codeOfPolicies: CodeOfPolicies implicit; exportAll: bool; block: block\<(bool;smart_ptr\<Program\>;das_string):void\>) <function-rtti_compile_string_implicit_string_implicit_CodeOfPolicies_implicit_bool_block_ls_bool;smart_ptr_ls_Program_gr_;das_string_c_void_gr_>`
-  *  :ref:`compile (module_name: string implicit; codeText: string implicit; codeOfPolicies: CodeOfPolicies implicit; block: block\<(bool;smart_ptr\<Program\>;das_string):void\>) <function-rtti_compile_string_implicit_string_implicit_CodeOfPolicies_implicit_block_ls_bool;smart_ptr_ls_Program_gr_;das_string_c_void_gr_>`
-  *  :ref:`compile_file (module_name: string implicit; fileAccess: smart_ptr\<FileAccess\> implicit; moduleGroup: ModuleGroup? implicit; codeOfPolicies: CodeOfPolicies implicit; block: block\<(bool;smart_ptr\<Program\>;das_string):void\>) <function-rtti_compile_file_string_implicit_smart_ptr_ls_FileAccess_gr__implicit_ModuleGroup_q__implicit_CodeOfPolicies_implicit_block_ls_bool;smart_ptr_ls_Program_gr_;das_string_c_void_gr_>`
-  *  :ref:`for_each_expected_error (program: smart_ptr\<Program\> implicit; block: block\<(CompilationError;int):void\>) <function-rtti_for_each_expected_error_smart_ptr_ls_Program_gr__implicit_block_ls_CompilationError;int_c_void_gr_>`
-  *  :ref:`for_each_require_declaration (program: smart_ptr\<Program\> implicit; block: block\<(Module?;string#;string#;bool;LineInfo):void\>) <function-rtti_for_each_require_declaration_smart_ptr_ls_Program_gr__implicit_block_ls_Module_q_;string_hh_;string_hh_;bool;LineInfo_c_void_gr_>`
-  *  :ref:`simulate (program: smart_ptr\<Program\> const& implicit; block: block\<(bool;smart_ptr\<Context\>;das_string):void\>) <function-rtti_simulate_smart_ptr_ls_Program_gr__const_ref__implicit_block_ls_bool;smart_ptr_ls_Context_gr_;das_string_c_void_gr_>`
+  *  :ref:`compile (module_name: string; codeText: string; codeOfPolicies: CodeOfPolicies; exportAll: bool; block: block\<(bool;smart_ptr\<Program\>;das_string):void\>) <function-rtti_compile_string_string_CodeOfPolicies_bool_block_ls_bool;smart_ptr_ls_Program_gr_;das_string_c_void_gr_>`
+  *  :ref:`compile (module_name: string; codeText: string; codeOfPolicies: CodeOfPolicies; block: block\<(bool;smart_ptr\<Program\>;das_string):void\>) <function-rtti_compile_string_string_CodeOfPolicies_block_ls_bool;smart_ptr_ls_Program_gr_;das_string_c_void_gr_>`
+  *  :ref:`compile_file (module_name: string; fileAccess: smart_ptr\<FileAccess\>; moduleGroup: ModuleGroup?; codeOfPolicies: CodeOfPolicies; block: block\<(bool;smart_ptr\<Program\>;das_string):void\>) <function-rtti_compile_file_string_smart_ptr_ls_FileAccess_gr__ModuleGroup_q__CodeOfPolicies_block_ls_bool;smart_ptr_ls_Program_gr_;das_string_c_void_gr_>`
+  *  :ref:`for_each_expected_error (program: smart_ptr\<Program\>; block: block\<(CompilationError;int):void\>) <function-rtti_for_each_expected_error_smart_ptr_ls_Program_gr__block_ls_CompilationError;int_c_void_gr_>`
+  *  :ref:`for_each_require_declaration (program: smart_ptr\<Program\>; block: block\<(Module?;string#;string#;bool;LineInfo):void\>) <function-rtti_for_each_require_declaration_smart_ptr_ls_Program_gr__block_ls_Module_q_;string_hh_;string_hh_;bool;LineInfo_c_void_gr_>`
+  *  :ref:`simulate (program: smart_ptr\<Program\> const&; block: block\<(bool;smart_ptr\<Context\>;das_string):void\>) <function-rtti_simulate_smart_ptr_ls_Program_gr__const_ref__block_ls_bool;smart_ptr_ls_Context_gr_;das_string_c_void_gr_>`
 
 
 compile
 ^^^^^^^
 
-.. _function-rtti_compile_string_implicit_string_implicit_CodeOfPolicies_implicit_bool_block_ls_bool;smart_ptr_ls_Program_gr_;das_string_c_void_gr_:
+.. _function-rtti_compile_string_string_CodeOfPolicies_bool_block_ls_bool;smart_ptr_ls_Program_gr_;das_string_c_void_gr_:
 
-.. das:function:: compile(module_name: string implicit; codeText: string implicit; codeOfPolicies: CodeOfPolicies implicit; exportAll: bool; block: block<(bool;smart_ptr<Program>;das_string):void>)
+.. das:function:: compile(module_name: string; codeText: string; codeOfPolicies: CodeOfPolicies; exportAll: bool; block: block<(bool;smart_ptr<Program>;das_string):void>)
 
 Compiles a daslang program from a source code string using the provided ``FileAccess`` and ``ModuleGroup``, returning a ``ProgramPtr`` (null on failure).
 
@@ -2363,15 +2363,15 @@ Compiles a daslang program from a source code string using the provided ``FileAc
 
             * **block** : block<(bool;smart_ptr< :ref:`Program <handle-rtti-Program>`>; :ref:`das_string <handle-builtin-das_string>`):void> implicit
 
-.. _function-rtti_compile_string_implicit_string_implicit_CodeOfPolicies_implicit_block_ls_bool;smart_ptr_ls_Program_gr_;das_string_c_void_gr_:
+.. _function-rtti_compile_string_string_CodeOfPolicies_block_ls_bool;smart_ptr_ls_Program_gr_;das_string_c_void_gr_:
 
-.. das:function:: compile(module_name: string implicit; codeText: string implicit; codeOfPolicies: CodeOfPolicies implicit; block: block<(bool;smart_ptr<Program>;das_string):void>)
+.. das:function:: compile(module_name: string; codeText: string; codeOfPolicies: CodeOfPolicies; block: block<(bool;smart_ptr<Program>;das_string):void>)
 
 ----
 
-.. _function-rtti_compile_file_string_implicit_smart_ptr_ls_FileAccess_gr__implicit_ModuleGroup_q__implicit_CodeOfPolicies_implicit_block_ls_bool;smart_ptr_ls_Program_gr_;das_string_c_void_gr_:
+.. _function-rtti_compile_file_string_smart_ptr_ls_FileAccess_gr__ModuleGroup_q__CodeOfPolicies_block_ls_bool;smart_ptr_ls_Program_gr_;das_string_c_void_gr_:
 
-.. das:function:: compile_file(module_name: string implicit; fileAccess: smart_ptr<FileAccess> implicit; moduleGroup: ModuleGroup? implicit; codeOfPolicies: CodeOfPolicies implicit; block: block<(bool;smart_ptr<Program>;das_string):void>)
+.. das:function:: compile_file(module_name: string; fileAccess: smart_ptr<FileAccess>; moduleGroup: ModuleGroup?; codeOfPolicies: CodeOfPolicies; block: block<(bool;smart_ptr<Program>;das_string):void>)
 
 Compiles a daslang program from a file registered in the given ``FileAccess`` object, returning a ``ProgramPtr`` (null on failure).
 
@@ -2386,9 +2386,9 @@ Compiles a daslang program from a file registered in the given ``FileAccess`` ob
 
             * **block** : block<(bool;smart_ptr< :ref:`Program <handle-rtti-Program>`>; :ref:`das_string <handle-builtin-das_string>`):void> implicit
 
-.. _function-rtti_for_each_expected_error_smart_ptr_ls_Program_gr__implicit_block_ls_CompilationError;int_c_void_gr_:
+.. _function-rtti_for_each_expected_error_smart_ptr_ls_Program_gr__block_ls_CompilationError;int_c_void_gr_:
 
-.. das:function:: for_each_expected_error(program: smart_ptr<Program> implicit; block: block<(CompilationError;int):void>)
+.. das:function:: for_each_expected_error(program: smart_ptr<Program>; block: block<(CompilationError;int):void>)
 
 Iterates through each expected compilation error declared in the ``Program`` (via ``expect``), yielding the error code for each.
 
@@ -2397,9 +2397,9 @@ Iterates through each expected compilation error declared in the ``Program`` (vi
 
             * **block** : block<( :ref:`CompilationError <enum-rtti-CompilationError>`;int):void> implicit
 
-.. _function-rtti_for_each_require_declaration_smart_ptr_ls_Program_gr__implicit_block_ls_Module_q_;string_hh_;string_hh_;bool;LineInfo_c_void_gr_:
+.. _function-rtti_for_each_require_declaration_smart_ptr_ls_Program_gr__block_ls_Module_q_;string_hh_;string_hh_;bool;LineInfo_c_void_gr_:
 
-.. das:function:: for_each_require_declaration(program: smart_ptr<Program> implicit; block: block<(Module?;string#;string#;bool;LineInfo):void>)
+.. das:function:: for_each_require_declaration(program: smart_ptr<Program>; block: block<(Module?;string#;string#;bool;LineInfo):void>)
 
 Iterates through each ``require`` declaration of the compiled ``Program``, yielding the module name, public/private flag, and source ``LineInfo``.
 
@@ -2408,9 +2408,9 @@ Iterates through each ``require`` declaration of the compiled ``Program``, yield
 
             * **block** : block<( :ref:`Module <handle-rtti-Module>`?;string\ #;string\ #;bool; :ref:`LineInfo <handle-rtti-LineInfo>`\ &):void> implicit
 
-.. _function-rtti_simulate_smart_ptr_ls_Program_gr__const_ref__implicit_block_ls_bool;smart_ptr_ls_Context_gr_;das_string_c_void_gr_:
+.. _function-rtti_simulate_smart_ptr_ls_Program_gr__const_ref__block_ls_bool;smart_ptr_ls_Context_gr_;das_string_c_void_gr_:
 
-.. das:function:: simulate(program: smart_ptr<Program> const& implicit; block: block<(bool;smart_ptr<Context>;das_string):void>)
+.. das:function:: simulate(program: smart_ptr<Program> const&; block: block<(bool;smart_ptr<Context>;das_string):void>)
 
 Simulates (links and initializes) a compiled ``Program``, returning a ``Context`` pointer ready for function execution, or null on failure.
 
@@ -2424,13 +2424,13 @@ Simulates (links and initializes) a compiled ``Program``, returning a ``Context`
 File access
 +++++++++++
 
-  *  :ref:`add_file_access_root (access: smart_ptr\<FileAccess\> implicit; mod: string implicit; path: string implicit) : bool <function-rtti_add_file_access_root_smart_ptr_ls_FileAccess_gr__implicit_string_implicit_string_implicit>`
-  *  :ref:`make_file_access (project: string implicit) : smart_ptr\<FileAccess\> <function-rtti_make_file_access_string_implicit>`
-  *  :ref:`set_file_source (access: smart_ptr\<FileAccess\> implicit; fileName: string implicit; text: string implicit) : bool <function-rtti_set_file_source_smart_ptr_ls_FileAccess_gr__implicit_string_implicit_string_implicit>`
+  *  :ref:`add_file_access_root (access: smart_ptr\<FileAccess\>; mod: string; path: string) : bool <function-rtti_add_file_access_root_smart_ptr_ls_FileAccess_gr__string_string>`
+  *  :ref:`make_file_access (project: string) : smart_ptr\<FileAccess\> <function-rtti_make_file_access_string>`
+  *  :ref:`set_file_source (access: smart_ptr\<FileAccess\>; fileName: string; text: string) : bool <function-rtti_set_file_source_smart_ptr_ls_FileAccess_gr__string_string>`
 
-.. _function-rtti_add_file_access_root_smart_ptr_ls_FileAccess_gr__implicit_string_implicit_string_implicit:
+.. _function-rtti_add_file_access_root_smart_ptr_ls_FileAccess_gr__string_string:
 
-.. das:function:: add_file_access_root(access: smart_ptr<FileAccess> implicit; mod: string implicit; path: string implicit) : bool
+.. das:function:: add_file_access_root(access: smart_ptr<FileAccess>; mod: string; path: string) : bool
 
 Adds an extra root directory (search path) to the given ``FileAccess`` object, expanding where ``require`` resolves files from.
 
@@ -2441,18 +2441,18 @@ Adds an extra root directory (search path) to the given ``FileAccess`` object, e
 
             * **path** : string implicit
 
-.. _function-rtti_make_file_access_string_implicit:
+.. _function-rtti_make_file_access_string:
 
-.. das:function:: make_file_access(project: string implicit) : smart_ptr<FileAccess>
+.. das:function:: make_file_access(project: string) : smart_ptr<FileAccess>
 
 Creates and returns a new ``FileAccessPtr`` (``smart_ptr<FileAccess>``) initialized as a default file-system-backed project.
 
 
 :Arguments: * **project** : string implicit
 
-.. _function-rtti_set_file_source_smart_ptr_ls_FileAccess_gr__implicit_string_implicit_string_implicit:
+.. _function-rtti_set_file_source_smart_ptr_ls_FileAccess_gr__string_string:
 
-.. das:function:: set_file_source(access: smart_ptr<FileAccess> implicit; fileName: string implicit; text: string implicit) : bool
+.. das:function:: set_file_source(access: smart_ptr<FileAccess>; fileName: string; text: string) : bool
 
 Registers a source code ``string`` for the given file name inside the ``FileAccess`` object, allowing in-memory compilation without disk files.
 
@@ -2468,14 +2468,14 @@ Registers a source code ``string`` for the given file name inside the ``FileAcce
 Structure access
 ++++++++++++++++
 
-  *  :ref:`basic_struct_for_each_field (annotation: BasicStructureAnnotation implicit; block: block\<(string;string;TypeInfo;uint):void\>) <function-rtti_basic_struct_for_each_field_BasicStructureAnnotation_implicit_block_ls_string;string;TypeInfo;uint_c_void_gr_>`
-  *  :ref:`basic_struct_for_each_parent (annotation: BasicStructureAnnotation implicit; block: block\<(Annotation?):void\>) <function-rtti_basic_struct_for_each_parent_BasicStructureAnnotation_implicit_block_ls_Annotation_q__c_void_gr_>`
-  *  :ref:`rtti_builtin_structure_for_each_annotation (struct: StructInfo implicit; block: block\<():void\>) <function-rtti_rtti_builtin_structure_for_each_annotation_StructInfo_implicit_block_ls__c_void_gr_>`
+  *  :ref:`basic_struct_for_each_field (annotation: BasicStructureAnnotation; block: block\<(string;string;TypeInfo;uint):void\>) <function-rtti_basic_struct_for_each_field_BasicStructureAnnotation_block_ls_string;string;TypeInfo;uint_c_void_gr_>`
+  *  :ref:`basic_struct_for_each_parent (annotation: BasicStructureAnnotation; block: block\<(Annotation?):void\>) <function-rtti_basic_struct_for_each_parent_BasicStructureAnnotation_block_ls_Annotation_q__c_void_gr_>`
+  *  :ref:`rtti_builtin_structure_for_each_annotation (struct: StructInfo; block: block\<():void\>) <function-rtti_rtti_builtin_structure_for_each_annotation_StructInfo_block_ls__c_void_gr_>`
   *  :ref:`structure_for_each_annotation (st: StructInfo; subexpr: block\<(ann:Annotation;args:AnnotationArguments):void\>) : auto <function-rtti_structure_for_each_annotation_StructInfo_block_ls_ann_c_Annotation;args_c_AnnotationArguments_c_void_gr_>`
 
-.. _function-rtti_basic_struct_for_each_field_BasicStructureAnnotation_implicit_block_ls_string;string;TypeInfo;uint_c_void_gr_:
+.. _function-rtti_basic_struct_for_each_field_BasicStructureAnnotation_block_ls_string;string;TypeInfo;uint_c_void_gr_:
 
-.. das:function:: basic_struct_for_each_field(annotation: BasicStructureAnnotation implicit; block: block<(string;string;TypeInfo;uint):void>)
+.. das:function:: basic_struct_for_each_field(annotation: BasicStructureAnnotation; block: block<(string;string;TypeInfo;uint):void>)
 
 Iterates through each field of a ``BasicStructureAnnotation``, yielding the field name, C++ name, ``TypeInfo``, and byte offset for each field.
 
@@ -2484,9 +2484,9 @@ Iterates through each field of a ``BasicStructureAnnotation``, yielding the fiel
 
             * **block** : block<(string;string; :ref:`TypeInfo <handle-rtti-TypeInfo>`;uint):void> implicit
 
-.. _function-rtti_basic_struct_for_each_parent_BasicStructureAnnotation_implicit_block_ls_Annotation_q__c_void_gr_:
+.. _function-rtti_basic_struct_for_each_parent_BasicStructureAnnotation_block_ls_Annotation_q__c_void_gr_:
 
-.. das:function:: basic_struct_for_each_parent(annotation: BasicStructureAnnotation implicit; block: block<(Annotation?):void>)
+.. das:function:: basic_struct_for_each_parent(annotation: BasicStructureAnnotation; block: block<(Annotation?):void>)
 
 Iterates through each parent (base class) of a ``BasicStructureAnnotation``, yielding the parent ``TypeInfo`` for each ancestor.
 
@@ -2495,9 +2495,9 @@ Iterates through each parent (base class) of a ``BasicStructureAnnotation``, yie
 
             * **block** : block<( :ref:`Annotation <handle-rtti-Annotation>`?):void> implicit
 
-.. _function-rtti_rtti_builtin_structure_for_each_annotation_StructInfo_implicit_block_ls__c_void_gr_:
+.. _function-rtti_rtti_builtin_structure_for_each_annotation_StructInfo_block_ls__c_void_gr_:
 
-.. das:function:: rtti_builtin_structure_for_each_annotation(struct: StructInfo implicit; block: block<():void>)
+.. das:function:: rtti_builtin_structure_for_each_annotation(struct: StructInfo; block: block<():void>)
 
 Iterates through each annotation attached to a ``StructInfo``, yielding the annotation name and its ``AnnotationArgumentList`` for each.
 
@@ -2522,19 +2522,19 @@ Iterates through each annotation attached to a ``StructInfo``, yielding the anno
 Data walking and printing
 +++++++++++++++++++++++++
 
-  *  :ref:`describe (lineinfo: LineInfo implicit; fully: bool = false) : string <function-rtti_describe_LineInfo_implicit_bool>`
-  *  :ref:`describe (type: TypeInfo const? implicit) : string <function-rtti_describe_TypeInfo_const_q__implicit>`
-  *  :ref:`get_mangled_name (type: TypeInfo const? implicit) : string <function-rtti_get_mangled_name_TypeInfo_const_q__implicit>`
-  *  :ref:`sprint_data (data: float4; type: TypeInfo const? implicit; flags: bitfield) : string <function-rtti_sprint_data_float4_TypeInfo_const_q__implicit_bitfield>`
-  *  :ref:`sprint_data (data: void? implicit; type: TypeInfo const? implicit; flags: bitfield) : string <function-rtti_sprint_data_void_q__implicit_TypeInfo_const_q__implicit_bitfield>`
+  *  :ref:`describe (lineinfo: LineInfo; fully: bool = false) : string <function-rtti_describe_LineInfo_bool>`
+  *  :ref:`describe (type: TypeInfo const?) : string <function-rtti_describe_TypeInfo_const_q_>`
+  *  :ref:`get_mangled_name (type: TypeInfo const?) : string <function-rtti_get_mangled_name_TypeInfo_const_q_>`
+  *  :ref:`sprint_data (data: float4; type: TypeInfo const?; flags: bitfield) : string <function-rtti_sprint_data_float4_TypeInfo_const_q__bitfield>`
+  *  :ref:`sprint_data (data: void?; type: TypeInfo const?; flags: bitfield) : string <function-rtti_sprint_data_void_q__TypeInfo_const_q__bitfield>`
 
 
 describe
 ^^^^^^^^
 
-.. _function-rtti_describe_LineInfo_implicit_bool:
+.. _function-rtti_describe_LineInfo_bool:
 
-.. das:function:: describe(lineinfo: LineInfo implicit; fully: bool = false) : string
+.. das:function:: describe(lineinfo: LineInfo; fully: bool = false) : string
 
 Returns a human-readable ``string`` description of an RTTI object (``TypeInfo``, ``VarInfo``, ``FuncInfo``, etc.), useful for logging and debug output.
 
@@ -2543,15 +2543,15 @@ Returns a human-readable ``string`` description of an RTTI object (``TypeInfo``,
 
             * **fully** : bool
 
-.. _function-rtti_describe_TypeInfo_const_q__implicit:
+.. _function-rtti_describe_TypeInfo_const_q_:
 
-.. das:function:: describe(type: TypeInfo const? implicit) : string
+.. das:function:: describe(type: TypeInfo const?) : string
 
 ----
 
-.. _function-rtti_get_mangled_name_TypeInfo_const_q__implicit:
+.. _function-rtti_get_mangled_name_TypeInfo_const_q_:
 
-.. das:function:: get_mangled_name(type: TypeInfo const? implicit) : string
+.. das:function:: get_mangled_name(type: TypeInfo const?) : string
 
 Returns the full mangled name ``string`` for the given ``FuncInfo``, encoding its module, name, and argument types.
 
@@ -2562,9 +2562,9 @@ Returns the full mangled name ``string`` for the given ``FuncInfo``, encoding it
 sprint_data
 ^^^^^^^^^^^
 
-.. _function-rtti_sprint_data_float4_TypeInfo_const_q__implicit_bitfield:
+.. _function-rtti_sprint_data_float4_TypeInfo_const_q__bitfield:
 
-.. das:function:: sprint_data(data: float4; type: TypeInfo const? implicit; flags: bitfield) : string
+.. das:function:: sprint_data(data: float4; type: TypeInfo const?; flags: bitfield) : string
 
 Returns a ``string`` representation of a value given its data pointer and ``TypeInfo``, similar to ``debug`` or ``print`` but capturing output as a string.
 
@@ -2575,23 +2575,23 @@ Returns a ``string`` representation of a value given its data pointer and ``Type
 
             * **flags** : bitfield<>
 
-.. _function-rtti_sprint_data_void_q__implicit_TypeInfo_const_q__implicit_bitfield:
+.. _function-rtti_sprint_data_void_q__TypeInfo_const_q__bitfield:
 
-.. das:function:: sprint_data(data: void? implicit; type: TypeInfo const? implicit; flags: bitfield) : string
+.. das:function:: sprint_data(data: void?; type: TypeInfo const?; flags: bitfield) : string
 
 
 ++++++++++++++++++++++++++++++
 Function and mangled name hash
 ++++++++++++++++++++++++++++++
 
-  *  :ref:`get_function_address (MNH: uint64; at: Context implicit) : uint64 <function-rtti_get_function_address_uint64_Context_implicit>`
-  *  :ref:`get_function_by_mangled_name_hash (src: uint64; context: Context implicit) : function\<():void\> <function-rtti_get_function_by_mangled_name_hash_uint64_Context_implicit>`
+  *  :ref:`get_function_address (MNH: uint64; at: Context) : uint64 <function-rtti_get_function_address_uint64_Context>`
+  *  :ref:`get_function_by_mangled_name_hash (src: uint64; context: Context) : function\<():void\> <function-rtti_get_function_by_mangled_name_hash_uint64_Context>`
   *  :ref:`get_function_by_mangled_name_hash (src: uint64) : function\<():void\> <function-rtti_get_function_by_mangled_name_hash_uint64>`
   *  :ref:`get_function_mangled_name_hash (src: function\<():void\>) : uint64 <function-rtti_get_function_mangled_name_hash_function_ls__c_void_gr_>`
 
-.. _function-rtti_get_function_address_uint64_Context_implicit:
+.. _function-rtti_get_function_address_uint64_Context:
 
-.. das:function:: get_function_address(MNH: uint64; at: Context implicit) : uint64
+.. das:function:: get_function_address(MNH: uint64; at: Context) : uint64
 
 Returns a ``SimFunction`` pointer looked up by mangled name hash in the given ``Context``, or null if not found.
 
@@ -2604,9 +2604,9 @@ Returns a ``SimFunction`` pointer looked up by mangled name hash in the given ``
 get_function_by_mangled_name_hash
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. _function-rtti_get_function_by_mangled_name_hash_uint64_Context_implicit:
+.. _function-rtti_get_function_by_mangled_name_hash_uint64_Context:
 
-.. das:function:: get_function_by_mangled_name_hash(src: uint64; context: Context implicit) : function<():void>
+.. das:function:: get_function_by_mangled_name_hash(src: uint64; context: Context) : function<():void>
 
 Returns a ``function<>`` lambda value looked up by its mangled name hash in the given ``Context``.
 
@@ -2635,13 +2635,13 @@ Returns the ``uint64`` mangled name hash for the given ``function<>`` value, whi
 Context and mutex locking
 +++++++++++++++++++++++++
 
-  *  :ref:`lock_context (lock_context: Context implicit; block: block\<():void\>) <function-rtti_lock_context_Context_implicit_block_ls__c_void_gr_>`
-  *  :ref:`lock_mutex (mutex: recursive_mutex implicit; block: block\<():void\>) <function-rtti_lock_mutex_recursive_mutex_implicit_block_ls__c_void_gr_>`
+  *  :ref:`lock_context (lock_context: Context; block: block\<():void\>) <function-rtti_lock_context_Context_block_ls__c_void_gr_>`
+  *  :ref:`lock_mutex (mutex: recursive_mutex; block: block\<():void\>) <function-rtti_lock_mutex_recursive_mutex_block_ls__c_void_gr_>`
   *  :ref:`lock_this_context (block: block\<():void\>) <function-rtti_lock_this_context_block_ls__c_void_gr_>`
 
-.. _function-rtti_lock_context_Context_implicit_block_ls__c_void_gr_:
+.. _function-rtti_lock_context_Context_block_ls__c_void_gr_:
 
-.. das:function:: lock_context(lock_context: Context implicit; block: block<():void>)
+.. das:function:: lock_context(lock_context: Context; block: block<():void>)
 
 Acquires a recursive lock on the given ``Context`` and executes a block, ensuring thread-safe access to context data within the scope.
 
@@ -2650,9 +2650,9 @@ Acquires a recursive lock on the given ``Context`` and executes a block, ensurin
 
             * **block** : block<void> implicit
 
-.. _function-rtti_lock_mutex_recursive_mutex_implicit_block_ls__c_void_gr_:
+.. _function-rtti_lock_mutex_recursive_mutex_block_ls__c_void_gr_:
 
-.. das:function:: lock_mutex(mutex: recursive_mutex implicit; block: block<():void>)
+.. das:function:: lock_mutex(mutex: recursive_mutex; block: block<():void>)
 
 Acquires a recursive lock on the given ``recursive_mutex`` and executes a block, releasing the lock when the block exits.
 
@@ -2675,11 +2675,11 @@ Acquires a recursive lock on the current ``Context`` and executes a block, ensur
 Runtime data access
 +++++++++++++++++++
 
-  *  :ref:`get_table_key_index (table: void? implicit; key: any; baseType: Type; valueTypeSize: int) : int <function-rtti_get_table_key_index_void_q__implicit_any_Type_int>`
+  *  :ref:`get_table_key_index (table: void?; key: any; baseType: Type; valueTypeSize: int) : int <function-rtti_get_table_key_index_void_q__any_Type_int>`
 
-.. _function-rtti_get_table_key_index_void_q__implicit_any_Type_int:
+.. _function-rtti_get_table_key_index_void_q__any_Type_int:
 
-.. das:function:: get_table_key_index(table: void? implicit; key: any; baseType: Type; valueTypeSize: int) : int
+.. das:function:: get_table_key_index(table: void?; key: any; baseType: Type; valueTypeSize: int) : int
 
 Returns the internal slot index (``int``) for the given key within a ``table`` value, or ``-1`` if the key is not present.
 
@@ -2697,12 +2697,12 @@ Returns the internal slot index (``int``) for the given key within a ``table`` v
 Tuple and variant access
 ++++++++++++++++++++++++
 
-  *  :ref:`get_tuple_field_offset (type: TypeInfo? implicit; index: int) : int <function-rtti_get_tuple_field_offset_TypeInfo_q__implicit_int>`
-  *  :ref:`get_variant_field_offset (type: TypeInfo? implicit; index: int) : int <function-rtti_get_variant_field_offset_TypeInfo_q__implicit_int>`
+  *  :ref:`get_tuple_field_offset (type: TypeInfo?; index: int) : int <function-rtti_get_tuple_field_offset_TypeInfo_q__int>`
+  *  :ref:`get_variant_field_offset (type: TypeInfo?; index: int) : int <function-rtti_get_variant_field_offset_TypeInfo_q__int>`
 
-.. _function-rtti_get_tuple_field_offset_TypeInfo_q__implicit_int:
+.. _function-rtti_get_tuple_field_offset_TypeInfo_q__int:
 
-.. das:function:: get_tuple_field_offset(type: TypeInfo? implicit; index: int) : int
+.. das:function:: get_tuple_field_offset(type: TypeInfo?; index: int) : int
 
 Returns the byte offset (``int``) of a field at the given index within a tuple type described by ``TypeInfo``.
 
@@ -2711,9 +2711,9 @@ Returns the byte offset (``int``) of a field at the given index within a tuple t
 
             * **index** : int
 
-.. _function-rtti_get_variant_field_offset_TypeInfo_q__implicit_int:
+.. _function-rtti_get_variant_field_offset_TypeInfo_q__int:
 
-.. das:function:: get_variant_field_offset(type: TypeInfo? implicit; index: int) : int
+.. das:function:: get_variant_field_offset(type: TypeInfo?; index: int) : int
 
 Returns the byte offset (``int``) of a field at the given index within a variant type described by ``TypeInfo``.
 

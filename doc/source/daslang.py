@@ -103,7 +103,7 @@ class DASObject(ObjectDescription):
         if prefix:
             signode += addnodes.desc_addname(prefix + '.', prefix + '.')
         elif mod_name:
-            signode += addnodes.desc_addname(mod_name + '.', mod_name + '.')
+            signode += addnodes.desc_addname(mod_name + '::', mod_name + '::')
         signode += addnodes.desc_name(name, name)
         if self.has_arguments:
             if not arglist:
@@ -498,7 +498,7 @@ class DaslangLexer(RegexLexer):
             (r'[/*]', Comment.Multiline),
         ],
         'string': [
-            (r'\\[\\nrt"\'{]', String.Escape),
+            (r'\\[\\nrt"\'{}]', String.Escape),
             (r'\{', String.Interpol, 'interpolation'),
             (r'[^"\\{]+', String.Double),
             (r'"', String.Double, '#pop'),
