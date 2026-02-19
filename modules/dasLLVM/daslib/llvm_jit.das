@@ -6502,6 +6502,22 @@ def finalize_jit(use_dll : bool; gen_exe : bool; lib_handle : DLLHandle?) : JitS
     return result
 }
 
+// Map C-function to call another function `tgt_fn`.
+def remap_fn(fn_name : string; ctx : LLVMContextRef; mod : LLVMOpaqueModule?;
+             tgt_type : LLVMOpaqueType?; tgt_fn : LLVMOpaqueValue?) {
+    let fn = LLVMGetNamedFunction(mod, fn_name)
+    assert(fn != null)
+    // Check that this function indeed C-function with no body.
+    verify(LLVMCountBasicBlocks(fn) == 0u)
+
+    let b = LLVMCreateBuilderInContext(ctx)
+    defer <| $() { LLVMDisposeBuilder(b); }
+    let bb = LLVMAppendBasicBlockInContext(ctx, fn, "entry")
+    LLVMPositionBuilderAtEnd(b, bb)
+    LLVMBuildCall2(b, tgt_type, tgt_fn, [], "")
+    LLVMBuildUnreachable(b)
+}
+
 // Creates main function that initializes a standalone JIT context, registers
 // all compiled functions, runs init scripts, then calls the program entry point.
 def inject_main(ctx : LLVMContextRef; funcs : array<FunctionPtr>;
@@ -6592,6 +6608,22 @@ def inject_main(ctx : LLVMContextRef; funcs : array<FunctionPtr>;
             types.LLVMVoidPtrType(),  // void**      ptr  (address of the function-pointer global)
         )
     )
+
+    var trap_typ = LLVMFunctionType(types.t_void, [])
+    var trap_ptr = LLVMAddFunctionWithType(g_mod, "jit_trap", trap_typ)
+
+    if (true) {
+        // List all functions which take as input SimNode or some pointer, e.g.
+        // type info.
+        // They should be replaced with `trap` so we'll fail in runtime.
+        remap_fn(FN_JIT_STRING_BUILDER_TEMP, ctx,  mod, trap_typ, trap_ptr)
+        remap_fn(FN_JIT_STRING_BUILDER, ctx,  mod, trap_typ, trap_ptr)
+    }
+    for ((name, at) in missed_calls) {
+        to_log(LOG_WARNING, "LLVM JIT: Emit trap for {name.glob()} at {at}.\n")
+        let global_func_ptr = LLVMGetNamedGlobal(g_mod, name.glob());
+        LLVMSetInitializer(global_func_ptr, trap_ptr)
+    }
     var reg_extern_fn = LLVMAddFunctionWithType(g_mod, "jit_init_extern_function", reg_extern_fn_type)
     for (ext_fn in extern_functions) {
         let global_var = LLVMGetNamedGlobal(g_mod, ext_fn.global_dll_name.glob())
@@ -6661,6 +6693,10 @@ class JIT_LLVM : AstSimulateMacro {
         let opt_level = prog.policies.jit_opt_level
         let size_level = prog.policies.jit_size_level
         let emit_prologue = true // prog.policies.emit_prologue
+        // If you're sure `dynamic` functions is not reachable set this flag
+        // to `true` and fail in runtime on `jit_trap` if they turns
+        // out to be reachable.
+        let exe_strict = true
         assume config_out_folder = string(prog.policies.jit_output_folder)
         let output_folder = config_out_folder |> empty() ? "{get_das_root()}/jitted_scripts/" : config_out_folder
         assume path_to_shared_lib = string(prog.policies.jit_path_to_shared_lib)
@@ -6739,7 +6775,7 @@ class JIT_LLVM : AstSimulateMacro {
                     }
                 }
                 if (gen_exe) {
-                    let fn = inject_main(g_ctx, funcs, prog, exe_main, g_mod, g_prim_t, uids, true)
+                    let fn = inject_main(g_ctx, funcs, prog, exe_main, g_mod, g_prim_t, uids, exe_strict)
                     if (fn == null) {
                         finalize_jit(use_dll, gen_exe, g_dynamic_lib_handle)
                         // JIT failed. Couldn't create executable.

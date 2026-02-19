@@ -224,6 +224,10 @@ extern "C" {
         });
     }
 
+    DAS_API void jit_trap() {
+        DAS_FATAL_ERROR("FATAL: Unresolved dynamic function call in compiled code. This indicates a missing JIT symbol. Disable `strict` mode or remove this call.\n");
+    }
+
     DAS_API void *das_get_jit_init_extern_function() {
         return (void *) &jit_init_extern_function;
     }
