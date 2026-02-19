@@ -1445,6 +1445,8 @@ namespace das {
             addAlias(makeStructInfoFlags());
             addAlias(makeModuleFlags());
             addAlias(makeAnnotationDeclarationFlags());
+            addAlias(makeSimFunctionFlags());
+            addAlias(makeLocalVariableInfoFlagsFlags());
             // CodeOfPolicies
             addAnnotation(make_smart<CodeOfPoliciesAnnotation>(lib));
             addCtorAndUsing<CodeOfPolicies>(*this,lib,"CodeOfPolicies","CodeOfPolicies");

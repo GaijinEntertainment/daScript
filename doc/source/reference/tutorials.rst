@@ -145,3 +145,4 @@ Run any tutorial from the project root::
    :maxdepth: 1
 
    tutorials/macros/01_call_macro.rst
+   tutorials/macros/02_when_macro.rst

@@ -745,6 +745,16 @@ properties of the `ExprIf` object.
 
 
 
+.. _alias-StringBuilderFlags:
+
+.. das:attribute:: bitfield StringBuilderFlags
+
+:Fields: * **isTempString** (0x1)
+
+// stub
+bitfield<isTempString> aka StringBuilderFlags
+
+
 .. _alias-ExpressionPtr:
 
 .. das:attribute:: ExpressionPtr = smart_ptr<Expression>

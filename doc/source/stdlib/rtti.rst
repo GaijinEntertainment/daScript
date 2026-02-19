@@ -176,6 +176,38 @@ Flags which represent properties of the `AnnotationDeclaration` object.
 
 
 
+.. _alias-SimFunctionFlags:
+
+.. das:attribute:: bitfield SimFunctionFlags
+
+:Fields: * **aot** (0x1)
+
+         * **fastcall** (0x2)
+
+         * **builtin** (0x4)
+
+         * **jit** (0x8)
+
+         * **unsafe** (0x10)
+
+         * **cmres** (0x20)
+
+         * **pinvoke** (0x40)
+
+// stub
+bitfield<aot;fastcall;builtin;jit;unsafe;cmres;pinvoke> aka SimFunctionFlags
+
+
+.. _alias-LocalVariableInfoFlags:
+
+.. das:attribute:: bitfield LocalVariableInfoFlags
+
+:Fields: * **cmres** (0x1)
+
+// stub
+bitfield<cmres> aka LocalVariableInfoFlags
+
+
 .. _alias-RttiValue:
 
 .. das:attribute:: variant RttiValue

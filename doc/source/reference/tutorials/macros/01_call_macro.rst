@@ -212,5 +212,7 @@ Expected output::
    :download:`call_macro_mod.das <../../../../../tutorials/macros/call_macro_mod.das>`,
    :download:`01_call_macro.das <../../../../../tutorials/macros/01_call_macro.das>`
 
+   Next tutorial: :ref:`tutorial_macro_when_expression`
+
    Language reference: :ref:`Macros <macros>` — full macro system documentation
 
