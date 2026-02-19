@@ -68,7 +68,7 @@ namespace das {
         for ( auto & p : refs ) {
             auto it = objects.find(p.second);
             if ( it == objects.end() ) {
-                throw std::runtime_error{"ast serializer function ref not found"};
+                throw dasException{"ast serializer function ref not found", LineInfo()};
             } else {
                 *p.first = it->second.get();
             }
@@ -81,11 +81,12 @@ namespace das {
         va_start(args, fmt);
 
         char err[256];
-        vsnprintf(err, 256, fmt, args);
+        int len = vsnprintf(err, 256, fmt, args);
+        err[len] = '\0';
 
         va_end(args);
 
-        throw std::runtime_error{err};
+        throw dasException{err, LineInfo()};
     }
 
     #define SERIALIZER_VERIFYF(cond, ...) {                 \
@@ -145,7 +146,7 @@ namespace das {
         try {
             cb(*this);
             return true;
-        } catch ( const std::runtime_error & ) {
+        } catch ( const dasException & ) {
             failed = true;
             return false;
         }
@@ -2313,7 +2314,7 @@ namespace das {
                     deser->setModuleName(name);
                     program->library.addModule(deser);
                     ser << *deser;
-                } catch ( const std::runtime_error & r ) {
+                } catch ( const dasException & r ) {
                     delete deser;
                     LOG(LogLevel::warning) << "das: serialize: " << r.what();
                     program->failToCompile = true;
@@ -2329,18 +2330,18 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 75;
+        static constexpr uint32_t currentVersion = 76;
         return currentVersion;
     }
 
     // Serializes the whole script as opposed to just one module
-    bool AstSerializer::serializeScript ( ProgramPtr program ) noexcept {
+    bool WIN_EH_NO_ASAN AstSerializer::serializeScript ( ProgramPtr program ) noexcept {
         try {
             program->serialize(*this);
             return true;
-        } catch ( const std::runtime_error & r ) {
+        } catch ( const dasException & r ) {
             program->failToCompile = true;
-            LOG(LogLevel::warning) << "das: serialize: " << r.what();
+            LOG(LogLevel::warning) << "das: serialize:" << r.what();
             return false;
         }
     }
