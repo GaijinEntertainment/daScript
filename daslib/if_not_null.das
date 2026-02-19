@@ -43,7 +43,7 @@ class ApplyMacro : AstCallMacro {
             if (!PTR._type.flags.constant) {
                 vtype.flags |= TypeDeclFlags.removeConstant
             }
-            return <- qmacro_block <| $() {
+            return <- qmacro_block() {
                 let $i(ifnn_name) : $t(vtype) = $e(PTR)
                 if ($i(ifnn_name) != null) {
                     $c(fcall.name)(*$i(ifnn_name), $a(fcall.arguments))

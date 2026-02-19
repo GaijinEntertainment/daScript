@@ -49,7 +49,7 @@ build_string
 
   require strings
 
-  var csv = build_string() <| $(var writer : StringBuilderWriter) {
+  var csv = build_string() $(var writer : StringBuilderWriter) {
       writer |> write("name,score\n")
       writer |> write("Alice,95\n")
   }

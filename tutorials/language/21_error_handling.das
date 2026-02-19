@@ -79,13 +79,13 @@ def process_with_cleanup() {
 def defer_example() {
     print("  step 1: acquire resources\n")
 
-    defer() <| $() {
+    defer() {
         print("  step 4: cleanup A (deferred first)\n")
     }
 
     print("  step 2: do work\n")
 
-    defer() <| $() {
+    defer() {
         print("  step 3: cleanup B (deferred second, runs first)\n")
     }
 
@@ -148,7 +148,7 @@ def main {
     // - static_assert() — compile-time assertion
     // - concept_assert() — compile-time, reported at call site
     // - finally { }     — runs on scope exit
-    // - defer() <| $() { } — LIFO cleanup (from daslib/defer)
+    // - defer() { } — LIFO cleanup (from daslib/defer)
 }
 
 // output:

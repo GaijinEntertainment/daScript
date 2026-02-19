@@ -51,13 +51,13 @@ def main {
     // The <| operator passes a block as the last argument.
     // $() declares a block with no parameters.
     print("do_twice:\n")
-    do_twice() <| $() {
+    do_twice() {
         print("  hello!\n")
     }
 
     // === Block with parameters ===
     // $(x) declares a block parameter. Types are inferred from the function signature.
-    let result = apply_to(10) <| $(x) {
+    let result = apply_to(10) $(x) {
         return x * x
     }
     print("apply_to(10, x*x) = {result}\n")
@@ -76,7 +76,7 @@ def main {
     // No copy is made — the block sees the original variables.
     var total = 0
     var data <- [10, 20, 30, 40, 50]
-    each_indexed(data) <| $(idx, val) {
+    each_indexed(data) $(idx, val) {
         total += val
         print("  [{idx}] = {val}\n")
     }
@@ -107,7 +107,7 @@ def main {
     // === Practical example: find_if ===
     var names <- ["Alice", "Bob", "Carol", "Dave"]
     var found = ""
-    find_first(names) <| $(name) {
+    find_first(names) $(name) {
         if (name == "Carol") {
             found = name
             return true
@@ -118,8 +118,8 @@ def main {
 
     // === Nested blocks ===
     var sum = 0
-    do_twice() <| $() {
-        do_twice() <| $() {
+    do_twice() {
+        do_twice() {
             sum++
         }
     }

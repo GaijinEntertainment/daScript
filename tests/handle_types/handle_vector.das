@@ -32,7 +32,7 @@ def test_point3_array_each(t : T?; arr : Point3Array) {
 }
 
 def test_point3_array_block(t : T?) {
-    testPoint3Array() <| $(arr) {
+    testPoint3Array() $(arr) {
         assert(arr |> length == 10)
         for (p in arr) {
             t |> equal(1.0, p.x)
@@ -44,17 +44,17 @@ def test_point3_array_block(t : T?) {
 
 [test]
 def test_handle_type(t : T?) {
-    t |> run("[]") <| @(t : T?) {
-        testPoint3Array() <| $(arr) {
+    t |> run("[]") @(t : T?) {
+        testPoint3Array() $(arr) {
             test_point3_array_index(t, arr)
         }
     }
-    t |> run("each") <| @(t : T?) {
-        testPoint3Array() <| $(arr) {
+    t |> run("each") @(t : T?) {
+        testPoint3Array() $(arr) {
             test_point3_array_each(t, arr)
         }
     }
-    t |> run("invoke block") <| @(t : T?) {
+    t |> run("invoke block") @(t : T?) {
         test_point3_array_block(t)
     }
 }

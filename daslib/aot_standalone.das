@@ -66,7 +66,7 @@ def writeStandaloneContextMethods(var prog : ProgramPtr; var logs : StringBuilde
                 // It doesn't cover all cases, but anyway we'll get CE.
                 panic("Structures is not allowed in standalone contexts arguments.")
             }
-            let type_str = build_string() <| $(var wr) {
+            let type_str = build_string() $(var wr) {
                 if (isLocalVec(variable._type)) {
                     describeLocalCppType(unsafe(addr(wr)), variable._type, cfg.cross_platform);
                 } else {
@@ -296,7 +296,7 @@ def writeRegistration(var header : StringBuilderWriter;
  * @return String with initialization of all functions
  */
 def GetFunctionInfo(pfun : Function?, info : string) {
-    return build_string() <| $(tw) {
+    return build_string() $(tw) {
         let args = ["\"{pfun.name}\"",
                     "\"{pfun |> get_mangled_name()}\"",
                     "0x{pfun.getMangledNameHash:x}",
@@ -320,7 +320,7 @@ def addFunctionInfo(disableInit : bool; rtti : bool, fnn : array<Function?>, var
         lookupFunctionTable.push((pfun, info));
     }
 
-    return build_string() <| $(tw) {
+    return build_string() $(tw) {
         for ((fun_info, info) in lookupFunctionTable) {
             write(tw, GetFunctionInfo(fun_info, funcInfoName(info)));
         }
@@ -332,8 +332,8 @@ def genStandaloneSrc(var program : ProgramPtr;
                      var source : StringBuilderWriter; cfg : StandaloneContextCfg;
                      var coll : BlockVariableCollector?) {
     var initFunctions : string;
-    let ctx_generated = build_string() <| $(tw) {
-        let deps = build_string() <| $(tmp_writer) {
+    let ctx_generated = build_string() $(tw) {
+        let deps = build_string() $(tmp_writer) {
             var cpp_aot = new CppAot(program := program, collector = coll, ss = unsafe(addr(tmp_writer)), cross_platform = cfg.cross_platform);
             var inscope aot_adapter <- make_visitor(*cpp_aot)
             cpp_aot.adapter := aot_adapter
@@ -343,7 +343,7 @@ def genStandaloneSrc(var program : ProgramPtr;
             }
         }
         write(tw, deps);
-        build_string() <| $(tmp_writer) {
+        build_string() $(tmp_writer) {
             var gen = new StandaloneContextGen(program, unsafe(addr(tmp_writer)), coll, cfg.cross_platform);
             var inscope adapter <- make_visitor(*gen)
             gen.adapter := adapter
@@ -391,8 +391,8 @@ def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string
     // if ( mod.isProperBuiltin() ) return true;
     let mod_name = mod.moduleFlags.promoted ? "" : string(mod.name);
     var source_content = ""
-    let header_content = build_string() <| $(header) {
-    source_content = build_string() <| $(source) {
+    let header_content = build_string() $(header) {
+    source_content = build_string() $(source) {
         if (mod_name |> length() != 0) {
             write(header, "// Module {mod_name}\n");
         }
@@ -424,7 +424,7 @@ def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string
     let cur_mod = mod.name.empty() ? cfg.context_name : string(mod.name);
     let outputFile = "{cfg.cpp_output_dir}/{cur_mod}.das";
     // if (mod.name.empty()) {
-        fopen("{outputFile}.h", "wb") <| $(fw) {
+        fopen("{outputFile}.h", "wb") $(fw) {
             if (fw != null) {
                 fwrite(fw, header_content)
             } else {
@@ -432,7 +432,7 @@ def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string
             }
         }
     // }
-    fopen("{outputFile}.cpp", "wb") <| $(fw) {
+    fopen("{outputFile}.cpp", "wb") $(fw) {
         if (fw != null) {
             fwrite(fw, source_content)
         } else {
@@ -451,10 +451,10 @@ def public standalone_aot(input : string; output_dir : string; cross_platform : 
                                    cpp_output_dir = output_dir,
                                    cross_platform = cross_platform)
     var result = "";
-    using <| $(var mg : ModuleGroup) {
+    using() $(var mg : ModuleGroup) {
         var inscope access <- make_file_access("")
-        compile_and_simulate(input, access, unsafe(addr(mg)), cop) <| $(var program : ProgramPtr; var pctx : smart_ptr<Context>) {
-            result = build_string() <| $(writer) {
+        compile_and_simulate(input, access, unsafe(addr(mg)), cop) $(var program : ProgramPtr; var pctx : smart_ptr<Context>) {
+            result = build_string() $(writer) {
                 // lets comment on required modules
                 var modules_str : array<string>
                 let (modules_str, noAotModule) = getRequiredModulesFor(program)

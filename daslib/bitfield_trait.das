@@ -40,7 +40,7 @@ class EachBitfieldMacro : AstFunctionAnnotation {
             yields |> emplace_new <| qmacro_expr(${ yield $v(bitfield(1ul << uint64(bit))); })
         }
         let call_name = "field`names"
-        var inscope qfn <- qmacro_function(call_name) <| $() {
+        var inscope qfn <- qmacro_function(call_name) {
             return <- generator<$t(call.arguments[0]._type)>() <| $() {
                 $b(yields)
                 return false
@@ -75,7 +75,7 @@ class EachBitNameBitfieldMacro : AstFunctionAnnotation {
             yields |> emplace_new <| qmacro_expr(${ yield $v(string(name)); })
         }
         let call_name = "field`names"
-        var inscope qfn <- qmacro_function(call_name) <| $() {
+        var inscope qfn <- qmacro_function(call_name) {
             return <- generator<string>() <| $() {
                 $b(yields)
                 return false

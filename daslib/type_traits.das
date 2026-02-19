@@ -49,11 +49,11 @@ class TypeInfoHasProperty : AstTypeInfoMacro {
 
             let propName = ".`{expr.subtrait}"
             var res = false
-            get_ptr(compiling_program()) |> for_each_module() <| $(mod) {
+            get_ptr(compiling_program()) |> for_each_module() $(mod) {
                 if (res) {
                     return
                 }
-                mod |> for_each_function(propName) <| $(fn) {
+                mod |> for_each_function(propName) $(fn) {
                     if (fn.moreFlags.propertyFunction && expr.typeexpr |> is_same_type(fn.arguments[0]._type, RefMatters.yes, ConstMatters.no, TemporaryMatters.no)) {
                         res = true
                     }

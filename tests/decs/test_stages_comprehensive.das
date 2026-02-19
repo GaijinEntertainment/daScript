@@ -32,7 +32,7 @@ def add_score(var score : int&) {
 [test]
 def test_stage_modifies_components(t : T?) {
     restart()
-    let eid = create_entity <| @(eid, cmp) {
+    let eid = create_entity() @(eid, cmp) {
         cmp.pos := float3(0, 0, 0)
         cmp.vel := float3(1, 0, 0)
         cmp.vy  := 100.0
@@ -41,7 +41,7 @@ def test_stage_modifies_components(t : T?) {
     decs_stage("physics")
     var finalPos = float3(0)
     var finalVy = 0.0
-    query(eid) <| $(pos : float3; vy : float) {
+    query(eid) $(pos : float3; vy : float) {
         finalPos = pos
         finalVy = vy
     }
@@ -53,23 +53,23 @@ def test_stage_modifies_components(t : T?) {
 def test_stage_with_require(t : T?) {
     restart()
     // entity WITH "scored" — should be affected
-    let e1 = create_entity <| @(eid, cmp) {
+    let e1 = create_entity() @(eid, cmp) {
         cmp.score := 0
         cmp.scored := true
     }
     // entity WITHOUT "scored" — should NOT be affected
-    let e2 = create_entity <| @(eid, cmp) {
+    let e2 = create_entity() @(eid, cmp) {
         cmp.score := 0
     }
     commit()
     decs_stage("scoring")
     var v1 = -1
-    query(e1) <| $(score : int) {
+    query(e1) $(score : int) {
         v1 = score
     }
     t |> equal(v1, 1)
     var v2 = -1
-    query(e2) <| $(score : int) {
+    query(e2) $(score : int) {
         v2 = score
     }
     t |> equal(v2, 0)
@@ -78,7 +78,7 @@ def test_stage_with_require(t : T?) {
 [test]
 def test_stage_multiple_invocations(t : T?) {
     restart()
-    let eid = create_entity <| @(eid, cmp) {
+    let eid = create_entity() @(eid, cmp) {
         cmp.vy := 100.0
     }
     commit()
@@ -87,7 +87,7 @@ def test_stage_multiple_invocations(t : T?) {
     decs_stage("physics")
     decs_stage("physics")
     var v = 0.0
-    query(eid) <| $(vy : float) {
+    query(eid) $(vy : float) {
         v = vy
     }
     // approximately 100 - 29.4
@@ -97,14 +97,14 @@ def test_stage_multiple_invocations(t : T?) {
 [test]
 def test_nonexistent_stage_is_noop(t : T?) {
     restart()
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         cmp.val := 42
     }
     commit()
     // stage that doesn't exist does nothing
     decs_stage("does_not_exist")
     var v = 0
-    query <| $(val : int) {
+    query() $(val : int) {
         v = val
     }
     t |> equal(v, 42)
@@ -114,13 +114,13 @@ def test_nonexistent_stage_is_noop(t : T?) {
 def test_stage_commits_before_and_after(t : T?) {
     // decs_stage calls commit() before and after
     restart()
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         cmp.vy := 50.0
     }
     // DON'T call commit — decs_stage should do it
     decs_stage("physics")
     var v = 0.0
-    query <| $(vy : float) {
+    query() $(vy : float) {
         v = vy
     }
     t |> equal(v, 50.0 - 9.8)

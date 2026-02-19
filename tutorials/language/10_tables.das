@@ -43,7 +43,7 @@ def main {
 
     // === Block-based lookup with get() ===
     // get() runs a block only if the key is found.
-    get(ages, "Bob") <| $(val) {
+    get(ages, "Bob") $(val) {
         print("Bob is {val} years old\n")
     }
 
@@ -72,7 +72,7 @@ def main {
 
     // === Modifying values ===
     // Use get() with a mutable block to modify in-place
-    get(scores, "math") <| $(var val) {
+    get(scores, "math") $(var val) {
         val = 100     // update math score
     }
     print("updated math: {scores?["math"] ?? 0}\n")

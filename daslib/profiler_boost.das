@@ -19,7 +19,7 @@ require daslib/apply_in_context
 [apply_in_context(profiler)]
 def internal_enable_profiler(var ctxId : uint64; enabled : bool) {
     unsafe {
-        lock_debug_agent <| $() {
+        lock_debug_agent() {
             profiler::set_enable_profiler(ctxId, enabled)
         }
     }

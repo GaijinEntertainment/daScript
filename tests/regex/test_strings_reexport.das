@@ -8,20 +8,20 @@ require daslib/regex
 
 [test]
 def test_strings_visible_via_regex(t : T?) {
-    t |> run("slice available") <| @(t : T?) {
+    t |> run("slice available") @(t : T?) {
         let s = "hello world"
         t |> equal(slice(s, 0, 5), "hello")
     }
-    t |> run("starts_with available") <| @(t : T?) {
+    t |> run("starts_with available") @(t : T?) {
         t |> equal(starts_with("hello", "hel"), true)
     }
-    t |> run("ends_with available") <| @(t : T?) {
+    t |> run("ends_with available") @(t : T?) {
         t |> equal(ends_with("hello", "llo"), true)
     }
-    t |> run("to_lower available") <| @(t : T?) {
+    t |> run("to_lower available") @(t : T?) {
         t |> equal(to_lower("ABC"), "abc")
     }
-    t |> run("operator [] with slice from strings") <| @(t : T?) {
+    t |> run("operator [] with slice from strings") @(t : T?) {
         var re : Regex
         regex_compile(re, "(\\w+)@(\\w+)")
         let str = "user@host"

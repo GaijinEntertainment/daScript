@@ -11,13 +11,13 @@ enum Foo {
 
 [test]
 def test_enum_conversions(t : T?) {
-    t |> run("enum to string") <| @(t : T?) {
+    t |> run("enum to string") @(t : T?) {
         let s = "{Foo.two}"
         t |> equal("two", s)
         let q = string(Foo.two)
         t |> equal("two", q)
     }
-    t |> run("string to enum") <| @(t : T?) {
+    t |> run("string to enum") @(t : T?) {
         let q = to_enum(type<Foo>, "two")
         t |> equal(Foo.two, q)
         let r = to_enum(type<Foo>, "five", Foo.three)
@@ -35,7 +35,7 @@ enum Bar {
 
 [test]
 def test_enum_macro_conversions(t : T?) {
-    t |> run("enum macro") <| @(t : T?) {
+    t |> run("enum macro") @(t : T?) {
         let b = Bar("three")                // this conversion can panic
         t |> equal(Bar.three, b)
         let s = "{b}"

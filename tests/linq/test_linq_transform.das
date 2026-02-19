@@ -11,7 +11,7 @@ require _common
 
 [test]
 def test_select_transform(t : T?) {
-    t |> run("basic select_transform") <| @(t : T?) {
+    t |> run("basic select_transform") @(t : T?) {
         var chars = ["a", "b", "c", "d", "e"]
         var query = _select(
             chars.to_sequence(),
@@ -22,7 +22,7 @@ def test_select_transform(t : T?) {
             t |> equal(ch + ch, q._1)
         }
     }
-    t |> run("complex select_transform") <| @(t : T?) {
+    t |> run("complex select_transform") @(t : T?) {
         var qcomplex = _select(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             (_.a[0], _.a[1])
@@ -32,7 +32,7 @@ def test_select_transform(t : T?) {
             t |> equal(q._1, i * 10)
         }
     }
-    t |> run("select_transform to array") <| @(t : T?) {
+    t |> run("select_transform to array") @(t : T?) {
         var chars = ["a", "b", "c", "d", "e"]
         var query = _select_to_array(
             chars.to_sequence(),
@@ -47,7 +47,7 @@ def test_select_transform(t : T?) {
 
 [test]
 def test_select(t : T?) {
-    t |> run("basic select") <| @(t : T?) {
+    t |> run("basic select") @(t : T?) {
         var chars = ["a", "b", "c", "d", "e"]
         var query = select(chars.to_sequence())
         for (i, ch, q in 0..5, chars, query) {
@@ -55,7 +55,7 @@ def test_select(t : T?) {
             t |> equal(ch, q._1)
         }
     }
-    t |> run("complex select") <| @(t : T?) {
+    t |> run("complex select") @(t : T?) {
         var qcomplex = select(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
         )
@@ -65,7 +65,7 @@ def test_select(t : T?) {
             t |> equal(q._1.a[1], i * 10)
         }
     }
-    t |> run("select to array") <| @(t : T?) {
+    t |> run("select to array") @(t : T?) {
         var chars = ["a", "b", "c", "d", "e"]
         var query = select(chars.to_sequence()).to_array()
         for (i, ch, q in 0..5, chars, query) {
@@ -73,7 +73,7 @@ def test_select(t : T?) {
             t |> equal(ch, q._1)
         }
     }
-    t |> run("complex select to array") <| @(t : T?) {
+    t |> run("complex select to array") @(t : T?) {
         var qcomplex = select(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
         ).to_array()
@@ -83,7 +83,7 @@ def test_select(t : T?) {
             t |> equal(q._1.a[1], i * 10)
         }
     }
-    t |> run("select to sequence") <| @(t : T?) {
+    t |> run("select to sequence") @(t : T?) {
         var chars = ["a", "b", "c", "d", "e"]
         var query = select(chars).to_sequence()
         for (i, ch, q in 0..5, chars, query) {
@@ -91,7 +91,7 @@ def test_select(t : T?) {
             t |> equal(ch, q._1)
         }
     }
-    t |> run("complex select to sequence") <| @(t : T?) {
+    t |> run("complex select to sequence") @(t : T?) {
         var qcomplex = select(
             [for (x in 0..5); ComplexType(a = [x, x * 10])]
         ).to_sequence()
@@ -105,7 +105,7 @@ def test_select(t : T?) {
 
 [test]
 def test_selectmany(t : T?) {
-    t |> run("basic selectmany") <| @(t : T?) {
+    t |> run("basic selectmany") @(t : T?) {
         var seq_seq = [
             ["a", "b", "c"].to_sequence(),
             ["d", "e", "f"].to_sequence(),
@@ -124,7 +124,7 @@ def test_selectmany(t : T?) {
             t |> equal(i, q)
         }
     }
-    t |> run("complex selectmany") <| @(t : T?) {
+    t |> run("complex selectmany") @(t : T?) {
         var seq_seq = [
             [ComplexType(a = [1, 10]), ComplexType(a = [2, 20])].to_sequence(),
             [ComplexType(a = [3, 30]), ComplexType(a = [4, 40])].to_sequence(),
@@ -144,7 +144,7 @@ def test_selectmany(t : T?) {
             t |> equal(i._1, q._1)
         }
     }
-    t |> run("selectmany to array") <| @(t : T?) {
+    t |> run("selectmany to array") @(t : T?) {
         var seq_seq = [
             ["a", "b", "c"].to_sequence(),
             ["d", "e", "f"].to_sequence(),
@@ -164,7 +164,7 @@ def test_selectmany(t : T?) {
             t |> equal(i, q)
         }
     }
-    t |> run("selectmany from array") <| @(t : T?) {
+    t |> run("selectmany from array") @(t : T?) {
         var seq_seq = [
             ["a", "b", "c"],
             ["d", "e", "f"],
@@ -187,7 +187,7 @@ def test_selectmany(t : T?) {
 
 [test]
 def test_selectmany_collsel(t : T?) {
-    t |> run("basic selectmany with collection selector") <| @(t : T?) {
+    t |> run("basic selectmany with collection selector") @(t : T?) {
         var chars = ["a", "b", "c", "d", "e"]
         var query = select_many(
             chars.to_sequence(),
@@ -205,7 +205,7 @@ def test_selectmany_collsel(t : T?) {
             t |> equal(i, q)
         }
     }
-    t |> run("complex selectmany with collection selector") <| @(t : T?) {
+    t |> run("complex selectmany with collection selector") @(t : T?) {
         var seq_seq = [
             ComplexType(a = [1, 10]),
             ComplexType(a = [2, 20]),
@@ -233,7 +233,7 @@ def test_selectmany_collsel(t : T?) {
 
 [test]
 def test_zip(t : T?) {
-    t |> run("basic zip") <| @(t : T?) {
+    t |> run("basic zip") @(t : T?) {
         var query = zip(
             [iterator for(x in 0..5); x],
             [iterator for(x in 10..15); x]
@@ -251,7 +251,7 @@ def test_zip(t : T?) {
             t |> equal(c._1, e._1)
         }
     }
-    t |> run("zip to array") <| @(t : T?) {
+    t |> run("zip to array") @(t : T?) {
         var query = zip_to_array(
             [iterator for(x in 0..5); x],
             [iterator for(x in 10..15); x]
@@ -270,7 +270,7 @@ def test_zip(t : T?) {
             t |> equal(c._1, e._1)
         }
     }
-    t |> run("complex zip") <| @(t : T?) {
+    t |> run("complex zip") @(t : T?) {
         var qcomplex = zip(
             [iterator for(x in 0..5); x],
             [iterator for(x in 10..15); x * 2],
@@ -288,7 +288,7 @@ def test_zip(t : T?) {
             t |> equal(c._1, e._1)
         }
     }
-    t |> run("complex zip with complex types") <| @(t : T?) {
+    t |> run("complex zip with complex types") @(t : T?) {
         var qcomplex = zip(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             [iterator for(x in 10..15); ComplexType(a = [x, x * 20])],
@@ -308,7 +308,7 @@ def test_zip(t : T?) {
             t |> equal(c._3, e._3)
         }
     }
-    t |> run("complex zip to array") <| @(t : T?) {
+    t |> run("complex zip to array") @(t : T?) {
         var qcomplex = zip_to_array(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             [iterator for(x in 10..15); ComplexType(a = [x, x * 20])],
@@ -333,7 +333,7 @@ def test_zip(t : T?) {
 
 [test]
 def test_zip3(t : T?) {
-    t |> run("basic zip 3 iterators") <| @(t : T?) {
+    t |> run("basic zip 3 iterators") @(t : T?) {
         var query = zip(
             [iterator for(x in 0..3); x],
             [iterator for(x in 10..13); x],
@@ -348,7 +348,7 @@ def test_zip3(t : T?) {
         }
         t |> equal(idx, 3)
     }
-    t |> run("zip 3 arrays") <| @(t : T?) {
+    t |> run("zip 3 arrays") @(t : T?) {
         var a = [0, 1, 2]
         var b = [10, 11, 12]
         var c = [100, 101, 102]
@@ -360,7 +360,7 @@ def test_zip3(t : T?) {
             t |> equal(r._2, i + 100)
         }
     }
-    t |> run("zip 3 to array") <| @(t : T?) {
+    t |> run("zip 3 to array") @(t : T?) {
         var result = zip_to_array(
             [iterator for(x in 0..3); x],
             [iterator for(x in 10..13); x],
@@ -374,7 +374,7 @@ def test_zip3(t : T?) {
             t |> equal(r._2, i + 100)
         }
     }
-    t |> run("zip 3 with unequal lengths") <| @(t : T?) {
+    t |> run("zip 3 with unequal lengths") @(t : T?) {
         var result = zip_to_array(
             [iterator for(x in 0..5); x],
             [iterator for(x in 10..13); x],

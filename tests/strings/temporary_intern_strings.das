@@ -10,9 +10,9 @@ var payload = "long str"
 [test]
 def test_temps_strings(t : T?) {
 
-    t |> run("keep intern strings") <| @@(t) {
+    t |> run("keep intern strings") @@(t) {
 
-        temp_string("long str {payload}\n") <| $(s) {
+        temp_string("long str {payload}\n") $(s) {
             print(s)
             t |> equal(s, "long str long str\n")
         }
@@ -20,12 +20,12 @@ def test_temps_strings(t : T?) {
         // keep intern strings, because amount of references is unknown
         t |> equal(string_heap_bytes_allocated(), 0x14ul)
 
-        build_temp_string() <| $(sb) {
+        build_temp_string() $(sb) {
             sb |> write("long builder str ")
             sb |> write(payload)
             sb |> write("\n")
         }
-        lpipe <| $(s) {
+        lpipe() $(s) {
             print(s)
             t |> equal(s, "long builder str long str\n")
         }

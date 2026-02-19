@@ -44,9 +44,9 @@ reduce and fold
 
 ``reduce`` combines elements pairwise. ``fold`` adds an initial seed::
 
-  var total = reduce(src) <| $(a, b : int) : int { return a + b }
+  var total = reduce(src) $(a, b : int) : int { return a + b }
 
-  var product = fold(src, 1) <| $(acc, x : int) : int { return acc * x }
+  var product = fold(src, 1) $(acc, x : int) : int { return acc * x }
 
 ``reduce_or_default`` returns a fallback on empty input instead of panicking::
 
@@ -118,7 +118,7 @@ Side-effects and debugging
 
 ::
 
-  for_each(src) <| $(x : int) { total += x }
+  for_each(src) $(x : int) { total += x }
 
   var tapped <- tap(src, @(x : int) { print("debug: {x}\n"); })
 
@@ -129,7 +129,7 @@ Chain these together to build data pipelines::
 
   var big <- filter(src, @(x : int) : bool { return x >= 5; })
   var doubled <- map(big, @(x : int) : int { return x * 2; })
-  var result = fold(doubled, 0) <| $(acc, x : int) : int { return acc + x }
+  var result = fold(doubled, 0) $(acc, x : int) : int { return acc + x }
 
 .. seealso::
 

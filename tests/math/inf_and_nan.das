@@ -39,14 +39,14 @@ def geq(a, b) {
 
 [test]
 def test_inf_and_nan(t : T?) {
-    t |> run("inf and neg inf") <| @@(t : T?) {
+    t |> run("inf and neg inf") @@(t : T?) {
         t |> strictEqual(100.0 / 0.0, inf)
         t |> strictEqual(-100.0 / 0.0, neg_inf)
         t |> strictEqual(inf / inf, neg_nan)
         t |> strictEqual(-(inf / inf), nan)
     }
 
-    t |> run("is_finite and is_nan") <| @@(t : T?) {
+    t |> run("is_finite and is_nan") @@(t : T?) {
         t |> success(!is_finite(inf))
         t |> success(!is_finite(neg_inf))
         t |> success(!is_finite(nan))
@@ -61,7 +61,7 @@ def test_inf_and_nan(t : T?) {
         t |> success(!is_nan(0.))
     }
 
-    t |> run("inf and nan comparisons") <| @@(t : T?) {
+    t |> run("inf and nan comparisons") @@(t : T?) {
         t |> success(!eq(nan, nan))
         t |> success(!eq(1., nan))
         t |> success(!eq(nan, 1.))

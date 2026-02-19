@@ -30,7 +30,7 @@ class MacroVerifyMacro : AstFunctionAnnotation {
     //!        return [[ExpressionPtr]]
     def override transform(var call : smart_ptr<ExprCallFunc>; var errors : das_string) : ExpressionPtr {
         // if ..
-        var inscope res <- qmacro_block() <| $() {
+        var inscope res <- qmacro_block() {
             if (!$e(call.arguments[0])) {
                 macro_error($e(call.arguments[1]), $e(call.arguments[2]), $e(call.arguments[3]))
                 return <- default<ExpressionPtr>

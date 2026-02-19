@@ -105,7 +105,7 @@ def generateApplyVisitStruct(stype : TypeDeclPtr; frange : range; fnname : strin
 [macro_function]
 def generateApplyVisitStruct(stype : TypeDeclPtr; fnname : string; at : LineInfo; hasExtraArg : bool) : array<string> {
     var names : array<string>
-    for_each_subrange(length(stype.structType.fields)) <| $(frange) {
+    for_each_subrange(length(stype.structType.fields)) $(frange) {
         generateApplyVisitStruct(stype, frange, "{fnname}`{frange.x}`{frange.y}", at, names, hasExtraArg)
     }
     return <- names
@@ -155,7 +155,7 @@ def generateApplyVisitTuple(stype : TypeDeclPtr; frange : range; fnname : string
 [macro_function]
 def generateApplyVisitTuple(stype : TypeDeclPtr; fnname : string; at : LineInfo) : array<string> {
     var names : array<string>
-    for_each_subrange(length(stype.argTypes)) <| $(frange) {
+    for_each_subrange(length(stype.argTypes)) $(frange) {
         generateApplyVisitTuple(stype, frange, "{fnname}`{frange.x}`{frange.y}", at, names)
     }
     return <- names
@@ -184,7 +184,7 @@ def generateApplyVisitVariant(stype : TypeDeclPtr; frange : range; fnname : stri
             assume flda = stype.argTypes[fldi]
             let fldname = length(stype.argNames) == length(stype.argTypes) ? string(stype.argNames[fldi]) : "_{fldi}"
             names |> push(fldname)
-            var inscope vexpr <- qmacro_block <| $() {
+            var inscope vexpr <- qmacro_block() {
                 if (variant_index(_`_self) == $v(fldi)) {
                     invoke($i("__arg_{fldname}"), _`_self as $f(fldname))
                     return
@@ -215,7 +215,7 @@ def generateApplyVisitVariant(stype : TypeDeclPtr; frange : range; fnname : stri
 [macro_function]
 def generateApplyVisitVariant(stype : TypeDeclPtr; fnname : string; at : LineInfo) : array<string> {
     var names : array<string>
-    for_each_subrange(length(stype.argTypes)) <| $(frange) {
+    for_each_subrange(length(stype.argTypes)) $(frange) {
         generateApplyVisitVariant(stype, frange, "{fnname}`{frange.x}`{frange.y}", at, names)
     }
     return <- names
@@ -291,7 +291,7 @@ class ApplyMacro : AstCallMacro {
             }
             // make a collection of calls
             var inscope calls : array<ExpressionPtr>
-            for_each_subrange(nfields) <| $(frange) {
+            for_each_subrange(nfields) $(frange) {
                 var inscope call <- new ExprCall(name := "_::{callName}`{frange.x}`{frange.y}", at = expr.at)
                 emplace_new(call.arguments, clone_expression(expr.arguments[0]))
                 for (idx in frange) {

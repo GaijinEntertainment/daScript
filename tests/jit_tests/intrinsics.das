@@ -22,7 +22,7 @@ def test_roundi(t : T?; a : auto(TT)) {
 [test]
 def test_intrin_roundi(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_float_or_float_vec_op1(t, fake, "test_roundi")
     }
 }
@@ -39,7 +39,7 @@ def test_trunci(t : T?; a : auto(TT)) {
 [test]
 def test_intrin_trunci(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_float_or_float_vec_op1(t, fake, "test_trunci")
     }
 }
@@ -56,7 +56,7 @@ def test_floor(t : T?; a : auto(TT)) {
 [test]
 def test_intrin_floor(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_float_or_float_vec_op1(t, fake, "test_floor")
     }
 }
@@ -74,7 +74,7 @@ def test_ceil(t : T?; a : auto(TT)) {
 [test]
 def test_intrin_ceil(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_float_or_float_vec_op1(t, fake, "test_ceil")
     }
 }
@@ -91,7 +91,7 @@ def test_sqrt(t : T?; a : auto(TT)) {
 [test]
 def test_intrin_sqrt(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_float_double_or_float_vec_op1(t, fake, "test_sqrt")
     }
 }
@@ -111,7 +111,7 @@ def test_rcp(t : T?; a : auto(TT)) {
 [test]
 def test_intrin_rcp(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_float_or_float_vec_op1(t, fake, "test_rcp")
     }
 }
@@ -131,7 +131,7 @@ def test_rcp_est(t : T?; a : auto(TT)) {
 [test]
 def test_intrin_rcp_est(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_float_or_float_vec_op1(t, fake, "test_rcp_est")
     }
 }
@@ -151,7 +151,7 @@ def test_rsqrt(t : T?; a : auto(TT)) {
 [test]
 def test_intrin_rsqrt(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_float_or_float_vec_op1(t, fake, "test_rsqrt")
     }
 }
@@ -171,7 +171,7 @@ def test_rsqrt_est(t : T?; a : auto(TT)) {
 [test]
 def test_intrin_rsqrt_est(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_float_or_float_vec_op1(t, fake, "test_rsqrt_est")
     }
 }
@@ -191,7 +191,7 @@ def test_exp(t : T?; a : auto(TT)) {
 [test]
 def test_intrin_exp(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_float_double_or_float_vec_op1(t, fake, "test_exp")
     }
 }
@@ -211,7 +211,7 @@ def test_exp2(t : T?; a : auto(TT)) {
 [test]
 def test_intrin_exp2(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_float_double_or_float_vec_op1(t, fake, "test_exp2")
     }
 }
@@ -231,7 +231,7 @@ def test_log(t : T?; a : auto(TT)) {
 [test]
 def test_intrin_log(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_float_double_or_float_vec_op1(t, fake, "test_log")
     }
 }
@@ -251,7 +251,7 @@ def test_log2(t : T?; a : auto(TT)) {
 [test]
 def test_intrin_log2(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_float_double_or_float_vec_op1(t, fake, "test_log2")
     }
 }
@@ -268,7 +268,7 @@ def test_popcount(t : T?; a : auto(TT)) {
 [test]
 def test_popcount(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_all_unsigned_ints_op1(t, fake, "test_popcount")
     }
 }
@@ -285,7 +285,7 @@ def test_ctz(t : T?; a : auto(TT)) {
 [test]
 def test_ctz(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_all_unsigned_ints_op1(t, fake, "test_ctz")
     }
 }
@@ -302,7 +302,7 @@ def test_clz(t : T?; a : auto(TT)) {
 [test]
 def test_clz(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_all_unsigned_ints_op1(t, fake, "test_clz")
     }
 }
@@ -319,7 +319,7 @@ def test_min(t : T?; a, b : auto(TT)) {
 [test]
 def test_min(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_numeric_and_vector_op2(t, fake, "test_min")
     }
 }
@@ -336,7 +336,7 @@ def test_max(t : T?; a, b : auto(TT)) {
 [test]
 def test_max(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_numeric_and_vector_op2(t, fake, "test_max")
     }
 }
@@ -353,7 +353,7 @@ def test_abs(t : T?; a : auto(TT)) {
 [test]
 def test_abs(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_numeric_and_vector_signed_op1(t, fake, "test_abs")
     }
 }
@@ -370,7 +370,7 @@ def test_saturate(t : T?; a : auto(TT)) {
 [test]
 def test_saturate(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_float_or_float_vec_op1(t, fake, "test_saturate")
     }
 }
@@ -390,7 +390,7 @@ def test_pow(t : T?; a, b : auto(TT)) {
 [test]
 def test_intrin_pow(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_float_double_or_float_vec_op2(t, fake, "test_pow")
     }
 }
@@ -410,13 +410,13 @@ def test_mad(t : T?; a : auto(TT); b : auto(QQ); c : TT) {
 [test]
 def test_mad(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_numeric_op3(t, fake, "test_mad")
     }
-    fuzz <| $() {
+    fuzz() {
         fuzz_vec_op3(t, fake, "test_mad")
     }
-    fuzz <| $() {
+    fuzz() {
         fuzz_vec_mad_op3(t, fake, "test_mad")
     }
 }
@@ -460,7 +460,7 @@ def float3_lerp(from, to : float3; t : float) : float3 {
 def test_lerp(t : T?) {
     t |> success(!jit_enabled() || is_jit_function(@@ < (a : float3; b : float3; c : float) : float3 > float3_lerp))
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_float_double_or_float_vec_op3(t, fake, "test_lerp")
     }
 }
@@ -485,10 +485,10 @@ def test_clamp(t : T?) {
     t |> equal(4, jit_clamp(10, 3, 4))
     t |> equal(3, jit_clamp(2, 3, 4))
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_numeric_op3(t, fake, "test_clamp")
     }
-    fuzz <| $() {
+    fuzz() {
         fuzz_vec_op3(t, fake, "test_clamp")
     }
 }

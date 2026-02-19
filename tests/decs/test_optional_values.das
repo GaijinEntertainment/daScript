@@ -9,17 +9,17 @@ require dastest/testing_boost public
 [test]
 def test_optional_values(t : T?) {
     restart()
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         cmp.a := 1
     }
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         cmp.a := 2
         cmp.b := 10
     }
     commit()
-    t |> run("proper optional") <| @@(t : T?) {
+    t |> run("proper optional") @@(t : T?) {
         var count = 0
-        query <| $(a : int; @optional b : int?) {
+        query() $(a : int; @optional b : int?) {
             if (b == null) {
                 t |> equal(a, 1)
             } else {
@@ -30,11 +30,11 @@ def test_optional_values(t : T?) {
         }
         t |> equal(count, 2)
     }
-    t |> run("proper optional") <| @@(t : T?) {
+    t |> run("proper optional") @@(t : T?) {
         var failed = false
         try {
             // runtime error - component array b type mismatch, expecting int vs int?
-            query <| $(a : int; b : int?) {// note no optional
+            query() $(a : int; b : int?) {// note no optional
                 pass
             }
         } recover {

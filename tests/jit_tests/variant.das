@@ -86,13 +86,13 @@ def change_variant_index {
 
 [test]
 def test_variant(t : T?) {
-    t |> run("variant field") <| @(t : T?) {
+    t |> run("variant field") @(t : T?) {
         var f : FooT
         t |> success(!jit_enabled() || is_jit_function(@@variant_field))
         var res = variant_field(f)
         t |> equal(res, int(0x3f800000))
     }
-    t |> run("variant field move") <| @(t : T?) {
+    t |> run("variant field move") @(t : T?) {
         var f : FooT
         t |> success(!jit_enabled() || is_jit_function(@@variant_field_move))
         f = FooT(a = 1234)
@@ -100,19 +100,19 @@ def test_variant(t : T?) {
         t |> equal(0, f as a)
         t |> equal(1234, (res as foo) as a)
     }
-    t |> run("variant is") <| @(t : T?) {
+    t |> run("variant is") @(t : T?) {
         var f : FooT
         t |> success(!jit_enabled() || is_jit_function(@@variant_is))
         t |> success(variant_is(f))
         t |> equal(1., f as b)
     }
-    t |> run("variant as") <| @(t : T?) {
+    t |> run("variant as") @(t : T?) {
         var f : FooT
         t |> success(!jit_enabled() || is_jit_function(@@variant_as))
         t |> equal(2., variant_as(f))
         t |> equal(2., f as b)
     }
-    t |> run("variant as panic") <| @(t : T?) {
+    t |> run("variant as panic") @(t : T?) {
         var f : FooT
         t |> success(!jit_enabled() || is_jit_function(@@variant_as_panic))
         var failed = false
@@ -124,27 +124,27 @@ def test_variant(t : T?) {
         t |> success(failed)
     }
 
-    t |> run("make variant cmres") <| @(t : T?) {
+    t |> run("make variant cmres") @(t : T?) {
         var f = make_variant_cmres()
         t |> success(!jit_enabled() || is_jit_function(@@make_variant_cmres))
         t |> success(f is a)
         t |> equal(13, f as a)
     }
-    t |> run("make struct with substruct cmres") <| @(t : T?) {
+    t |> run("make struct with substruct cmres") @(t : T?) {
         var f = make_variant_with_subvariant_cmres()
         t |> success(!jit_enabled() || is_jit_function(@@make_variant_with_subvariant_cmres))
         t |> success(f is foo)
         t |> success(f as foo is a)
         t |> equal(13, f as foo as a)
     }
-    t |> run("make struct with substruct equal to call to cmres") <| @(t : T?) {
+    t |> run("make struct with substruct equal to call to cmres") @(t : T?) {
         var f = make_variant_with_field_call_to_cmres()
         t |> success(!jit_enabled() || is_jit_function(@@make_variant_with_field_call_to_cmres))
         t |> success(f is foo)
         t |> success(f as foo is c)
         t |> equal("1234", f as foo as c)
     }
-    t |> run("make struct on stack") <| @(t : T?) {
+    t |> run("make struct on stack") @(t : T?) {
         var a = make_variant_on_stack(true)
         var b = make_variant_on_stack(false)
         t |> success(!jit_enabled() || is_jit_function(@@make_variant_on_stack))
@@ -153,7 +153,7 @@ def test_variant(t : T?) {
         t |> success(b is b)
         t |> equal(2., b as b)
     }
-    t |> run("make struct with substruct on stack") <| @(t : T?) {
+    t |> run("make struct with substruct on stack") @(t : T?) {
         var a = make_variant_with_subvariant_on_stack(true)
         var b = make_variant_with_subvariant_on_stack(false)
         t |> success(!jit_enabled() || is_jit_function(@@make_variant_with_subvariant_on_stack))
@@ -164,11 +164,11 @@ def test_variant(t : T?) {
         t |> success(b as foo is b)
         t |> equal(2., b as foo as b)
     }
-    t |> run("variant_index") <| @(t : T?) {
+    t |> run("variant_index") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@ask_variant_index))
         t |> equal(1, ask_variant_index())
     }
-    t |> run("set_variant_index") <| @(t : T?) {
+    t |> run("set_variant_index") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@change_variant_index))
         t |> equal(int(0x3f800000), change_variant_index())
     }

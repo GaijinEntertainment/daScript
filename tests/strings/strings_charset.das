@@ -6,7 +6,7 @@ require daslib/fuzzer
 
 [test]
 def test_charset(t : T?) {
-    t |> run("charset") <| @@(t : T?) {
+    t |> run("charset") @@(t : T?) {
         var ch : uint[8]
         t |> success(!is_char_in_set('A', ch))
         ch['A' / 32] |= 1u << uint('A' & 31)
@@ -14,9 +14,9 @@ def test_charset(t : T?) {
         t |> equal(set_total(ch), 1u)
         t |> equal(set_element(0, ch), 'A')
     }
-    t |> run("fuzz charset") <| @@(t : T?) {
+    t |> run("fuzz charset") @@(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             let ch = fake |> any_set
             var total = 0u
             for (c in ch) {
@@ -43,10 +43,10 @@ def test_charset(t : T?) {
             }
         }
     }
-    t |> run("fuzz set_element") <| @@(t : T?) {
+    t |> run("fuzz set_element") @@(t : T?) {
         var fake <- Faker()
         var count = 0
-        fuzz(1000) <| $() {
+        fuzz(1000) {
             let ch = fake |> any_set
             let total = int(set_total(ch))
             let idx = fake |> random_int
@@ -56,9 +56,9 @@ def test_charset(t : T?) {
         }
         t |> equal(count, 1000)
     }
-    t |> run("fuzz is_char_in_charset") <| @@(t : T?) {
+    t |> run("fuzz is_char_in_charset") @@(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             let ch = fake |> any_set
             let total = int(set_total(ch))
             let idx = fake |> random_int

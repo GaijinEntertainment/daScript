@@ -216,7 +216,7 @@ Building strings
 
 .. code-block:: das
 
-    let result = build_string() <| $(var writer) {
+    let result = build_string() $(var writer) {
         write(writer, "Name: ")
         write(writer, "Alice")
         write(writer, ", Score: ")

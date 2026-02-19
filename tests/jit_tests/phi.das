@@ -34,14 +34,14 @@ def test_phi(t : T?) {
     t |> equal(1, test_min(3, 1, 2))
     t |> equal(1, test_min(3, 2, 1))
 
-    t |> run("min2") <| @(t : T?) {
+    t |> run("min2") @(t : T?) {
         var fake <- Faker()
         var a = fake |> random_int
         var b = fake |> random_int
         t |> equal(test_min(a, b), a < b ? a : b)
     }
 
-    t |> run("min3") <| @(t : T?) {
+    t |> run("min3") @(t : T?) {
         var fake <- Faker()
         var a = fake |> random_int
         var b = fake |> random_int

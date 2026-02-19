@@ -70,7 +70,7 @@ class TemplateMacro : AstFunctionAnnotation {
             compiling_program() |> macro_error(expr.at, "expecting inferred function")
             return <- expr
         }
-        let taidx = find_index_if(each(expr.func.annotations)) <| $(ann) {
+        let taidx = find_index_if(each(expr.func.annotations)) $(ann) {
             return ann.annotation.name == "template"
         }
         if (taidx == -1) {
@@ -86,7 +86,7 @@ class TemplateMacro : AstFunctionAnnotation {
         newcall.func = null
         var extra = ""
         for (t in fclone.annotations[taidx].arguments) {
-            let argidx = find_index_if(each(fclone.arguments)) <| $(farg) {
+            let argidx = find_index_if(each(fclone.arguments)) $(farg) {
                 return farg.name == t.name
             }
             if (argidx == -1) {

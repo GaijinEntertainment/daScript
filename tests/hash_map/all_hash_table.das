@@ -116,13 +116,13 @@ def table_ops(t : T?; var a : auto(AnyTable_int_to_Foo); var e : Foo; var et : F
 
 [test]
 def all_ops(t : T?) {
-    t |> run("FlatHashMap") <| @(t : T?) {
+    t |> run("FlatHashMap") @(t : T?) {
         var tab <- FlatHashMap_int_Foo()
         t |> success(tab.empty())
         t |> equal(0, tab.length())
         table_ops(t, tab, Foo(a = 1), Foo(a = 2))
     }
-    t |> run("CuckooHashMap") <| @(t : T?) {
+    t |> run("CuckooHashMap") @(t : T?) {
         var tab <- CuckooHashMap_int_Foo()
         t |> success(tab.empty())
         t |> equal(0, tab.length())

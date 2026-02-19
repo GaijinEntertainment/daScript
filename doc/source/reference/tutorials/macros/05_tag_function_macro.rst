@@ -206,7 +206,7 @@ Step 4 — Build the replacement
 
 .. code-block:: das
 
-   var inscope replacement <- qmacro_block() <| $() {
+   var inscope replacement <- qmacro_block() {
        if (!$i(flag_name)) {
            $i(flag_name) = true
            $b(stmts)
@@ -320,40 +320,34 @@ Full output::
 Key takeaways
 =============
 
-+-----------------------------------+-------------------------------------------+
-| Concept                           | What it does                              |
-+===================================+===========================================+
-| ``[tag_function(tag)]``           | Marks a function with a string tag —      |
-|                                   | no class lookup at parse time             |
-+-----------------------------------+-------------------------------------------+
-| ``[tag_function_macro(tag="..")]``| During module setup, attaches the macro   |
-|                                   | class to all functions with matching tag   |
-+-----------------------------------+-------------------------------------------+
-| ``transform()``                   | Called at every call site; returns a       |
-|                                   | replacement ``ExpressionPtr``             |
-+-----------------------------------+-------------------------------------------+
-| ``make_unique_private_name``      | Generates ``prefix_LINE_COLUMN`` names    |
-|                                   | unique to each call site                  |
-+-----------------------------------+-------------------------------------------+
-| ``add_global_private_var``        | Creates a private mutable module-level    |
-|                                   | variable at compile time                  |
-+-----------------------------------+-------------------------------------------+
-| ``clone_expression``              | Deep-clones an AST node (never mutate     |
-|                                   | the original)                             |
-+-----------------------------------+-------------------------------------------+
-| ``move_unquote_block``            | Unwraps ``ExprMakeBlock`` →               |
-|                                   | ``ExprBlock``                             |
-+-----------------------------------+-------------------------------------------+
-| ``qmacro_block``                  | Reification: builds a block from          |
-|                                   | spliced identifiers and statements        |
-+-----------------------------------+-------------------------------------------+
-| ``$i(name)``                      | Splice a string as an identifier          |
-+-----------------------------------+-------------------------------------------+
-| ``$b(stmts)``                     | Splice ``array<ExpressionPtr>`` as a      |
-|                                   | statement list                            |
-+-----------------------------------+-------------------------------------------+
-| ``force_at``                      | Stamps source location on all nodes       |
-+-----------------------------------+-------------------------------------------+
+.. list-table::
+   :widths: 40 60
+   :header-rows: 1
+
+   * - Concept
+     - What it does
+   * - ``[tag_function(tag)]``
+     - Marks a function with a string tag — no class lookup at parse time
+   * - ``[tag_function_macro(tag="..")]``
+     - During module setup, attaches the macro class to all functions with matching tag
+   * - ``transform()``
+     - Called at every call site; returns a replacement ``ExpressionPtr``
+   * - ``make_unique_private_name``
+     - Generates ``prefix_LINE_COLUMN`` names unique to each call site
+   * - ``add_global_private_var``
+     - Creates a private mutable module-level variable at compile time
+   * - ``clone_expression``
+     - Deep-clones an AST node (never mutate the original)
+   * - ``move_unquote_block``
+     - Unwraps ``ExprMakeBlock`` → ``ExprBlock``
+   * - ``qmacro_block``
+     - Reification: builds a block from spliced identifiers and statements
+   * - ``$i(name)``
+     - Splice a string as an identifier
+   * - ``$b(stmts)``
+     - Splice ``array<ExpressionPtr>`` as a statement list
+   * - ``force_at``
+     - Stamps source location on all nodes
 
 
 .. seealso::

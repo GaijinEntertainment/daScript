@@ -15,21 +15,21 @@ def call_block(blk : block<(arg : int) : void>) {
 
 [test]
 def test_aka_everything(t : T?) {
-    t |> run("basic aka") <| @(t : T?) {
+    t |> run("basic aka") @(t : T?) {
         var x aka X = 5
         X = 13
         t |> equal(x, 13)
     }
-    t |> run("aka function") <| @(t : T?) {
+    t |> run("aka function") @(t : T?) {
         test_aka_func(t, 5)
     }
-    t |> run("aka block") <| @(t : T?) {
-        call_block <| $(x aka X) {
+    t |> run("aka block") @(t : T?) {
+        call_block() $(x aka X) {
             let tx = x
             t |> equal(tx, X)
         }
     }
-    t |> run("nested aka block") <| @(t : T?) {
+    t |> run("nested aka block") @(t : T?) {
         var tot = 0
         var same = 0
         for (x aka X in range(10)) {

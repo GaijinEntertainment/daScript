@@ -256,7 +256,7 @@ def foreach_and_replace() {
     var re_num <- regex_compile("\\d+")
     let src = "a12b34c56"
     print("matches in '{src}': ")
-    regex_foreach(re_num, src) <| $(at) {
+    regex_foreach(re_num, src) $(at) {
         print("[{at.x},{at.y}]='{slice(src, at.x, at.y)}' ")
         return true  // continue
     }
@@ -264,7 +264,7 @@ def foreach_and_replace() {
     // output: matches in 'a12b34c56': [1,3]='12' [4,6]='34' [7,9]='56'
 
     // replace all digit sequences with "X"
-    let result = regex_replace(re_num, src) <| $(match_str) {
+    let result = regex_replace(re_num, src) $(match_str) {
         return "X"
     }
     print("replaced: {result}\n")
@@ -429,7 +429,7 @@ def practical_examples() {
 
     // strip non-word characters from a string
     var re_strip <- %regex~[^\w]+%%
-    let cleaned = regex_replace(re_strip, "he!l@l#o") <| $(match_str) {
+    let cleaned = regex_replace(re_strip, "he!l@l#o") $(match_str) {
         return ""
     }
     print("cleaned: {cleaned}\n")

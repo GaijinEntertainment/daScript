@@ -87,7 +87,7 @@ class ImplementsMacro : AstStructureAnnotation {
         var inscope iface_ptr <- qmacro_type(type<$t(parent)?>)
         st |> add_structure_field(iface_var_name, clone_type(iface_ptr), default<ExpressionPtr>)
         // add function {st}::get`{Foo} : Foo?
-        var inscope fn_get_i <- qmacro_method(iface_get_name_func, st) <| $(var self : $t(st)) : $t(iface_ptr) {
+        var inscope fn_get_i <- qmacro_method(iface_get_name_func, st) $(var self : $t(st)) : $t(iface_ptr) {
             if (self.$f(iface_var_name) == null) {
                 self.$f(iface_var_name) = new <$t(cls)>(unsafe(addr(self)))
             }
@@ -100,7 +100,7 @@ class ImplementsMacro : AstStructureAnnotation {
         cls.fields[fi].annotation |> add_annotation_argument("do_not_delete", true)
         cls.fields[fi].flags |= FieldDeclarationFlags.doNotDelete | FieldDeclarationFlags.privateField
         // add {cls} ( var s : {ST}? )
-        var inscope ctor <- qmacro_function("{iface_class_name}`{iface_class_name}") <| $(s : $t(st_ptr)) {
+        var inscope ctor <- qmacro_function("{iface_class_name}`{iface_class_name}") $(s : $t(st_ptr)) {
             _self = s
         }
         var inscope ctor_fun <- make_class_constructor(cls, ctor)
@@ -135,7 +135,7 @@ class ImplementsMacro : AstStructureAnnotation {
                                 fmethod_args |> emplace_new <| new Variable(name := n, _type <- clone_type(t))
                             }
                         }
-                        var inscope fmethod <- qmacro_method(fmethod_name, cls) <| $(self : $t(cls); $a(fmethod_args)) : $t(cm._type.firstType) {
+                        var inscope fmethod <- qmacro_method(fmethod_name, cls) $(self : $t(cls); $a(fmethod_args)) : $t(cm._type.firstType) {
                             generic_return(invoke(self._self.$f(fld.name), *self._self, $a(fcall_args)))
                         }
                         add_function(st._module, fmethod)

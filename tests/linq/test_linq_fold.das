@@ -10,7 +10,7 @@ require _common
 
 [test]
 def test_comprehension_fold(t : T?) {
-    t |> run("basic comprehension") <| @(t : T?) {
+    t |> run("basic comprehension") @(t : T?) {
         var t1 <- ([1, 2, 3, 4, 5].to_sequence()
             ._where(_ <= 3)
             .to_array()
@@ -21,7 +21,7 @@ def test_comprehension_fold(t : T?) {
         }
     }
 
-    t |> run("comprehension with select") <| @(t : T?) {
+    t |> run("comprehension with select") @(t : T?) {
         var t2 <- ([1, 2, 3, 4, 5].to_sequence()
             ._where(_ <= 3)
             ._select(_ * 2)
@@ -32,7 +32,7 @@ def test_comprehension_fold(t : T?) {
         }
     }
 
-    t |> run("comprehension with select to array") <| @(t : T?) {
+    t |> run("comprehension with select to array") @(t : T?) {
         var t3 <- ([1, 2, 3, 4, 5].to_sequence()
             ._select(_ * 2)
             .to_array()
@@ -43,7 +43,7 @@ def test_comprehension_fold(t : T?) {
         }
     }
 
-    t |> run("selct-where comprehension") <| @(t : T?) {
+    t |> run("selct-where comprehension") @(t : T?) {
         var t4 <- ([1, 2, 3, 4, 5].to_sequence()
             ._select(_ * 2)
             ._where(_ <= 6)
@@ -54,7 +54,7 @@ def test_comprehension_fold(t : T?) {
         }
     }
 
-    t |> run("select-where from array comprehension") <| @(t : T?) {
+    t |> run("select-where from array comprehension") @(t : T?) {
         var t5 <- ([1, 2, 3, 4, 5]
             ._select(_ * 2)
             ._where(_ <= 6)
@@ -66,7 +66,7 @@ def test_comprehension_fold(t : T?) {
     }
 
     // returns array of ComplexType
-    t |> run("ComplexType select-where comprehension") <| @(t : T?) {
+    t |> run("ComplexType select-where comprehension") @(t : T?) {
         var t6 <- ([1, 2, 3, 4, 5].to_sequence()
             ._select(ComplexType(a = [_ * 2, _ * 3]))
             ._where(_.a[0] <= 6)
@@ -78,7 +78,7 @@ def test_comprehension_fold(t : T?) {
         }
     }
     // return iterator of ComplexType
-    t |> run("ComplexType where-select comprehension") <| @(t : T?) {
+    t |> run("ComplexType where-select comprehension") @(t : T?) {
         var t7 <- ([1, 2, 3, 4, 5].to_sequence()
             ._select(ComplexType(a = [_ * 2, _ * 3]))
             ._where(_.a[0] <= 3)
@@ -92,7 +92,7 @@ def test_comprehension_fold(t : T?) {
 
 [test]
 def test_generic_fold(t : T?) {
-    t |> run("default array to array") <| @(t : T?) {
+    t |> run("default array to array") @(t : T?) {
         var t1 <- ([1, 2, 3, 4, 5]
             .reverse()
             ._where(_ <= 3)
@@ -104,7 +104,7 @@ def test_generic_fold(t : T?) {
             t |> equal((3 - i) * 2, v)
         }
     }
-    t |> run("default iterator to iterator") <| @(t : T?) {
+    t |> run("default iterator to iterator") @(t : T?) {
         var t2 <- ([1, 2, 3, 4, 5].to_sequence()
             .reverse()
             ._where(_ <= 3)
@@ -116,7 +116,7 @@ def test_generic_fold(t : T?) {
             t |> equal((3 - i) * 2, v)
         }
     }
-    t |> run("reverse_to_array") <| @(t : T?) {
+    t |> run("reverse_to_array") @(t : T?) {
         var iterv <- [iterator for(x in 1..6); x]
         var t2a <- (iterv
             .reverse()
@@ -129,7 +129,7 @@ def test_generic_fold(t : T?) {
             t |> equal((3 - i) * 2, v)
         }
     }
-    t |> run("default array to iterator") <| @(t : T?) {
+    t |> run("default array to iterator") @(t : T?) {
         var t3 <- ([1, 2, 3, 4, 5]
             .to_sequence()
             .reverse()
@@ -142,7 +142,7 @@ def test_generic_fold(t : T?) {
             t |> equal((3 - i) * 2, v)
         }
     }
-    t |> run("default iterator to array") <| @(t : T?) {
+    t |> run("default iterator to array") @(t : T?) {
         var t4 <- ([1, 2, 3, 4, 5].to_sequence()
             .reverse()
             ._where(_ <= 3)
@@ -159,7 +159,7 @@ def test_generic_fold(t : T?) {
 
 [test]
 def test_generic_fold_order(t : T?) {
-    t |> run("order fold") <| @(t : T?) {
+    t |> run("order fold") @(t : T?) {
         var t5 <- ([5, 3, 1, 4, 2]
             .to_sequence()
             .order($(a, b) => a < b)
@@ -170,7 +170,7 @@ def test_generic_fold_order(t : T?) {
             t |> equal(i + 1, v)
         }
     }
-    t |> run("order_descending fold") <| @(t : T?) {
+    t |> run("order_descending fold") @(t : T?) {
         var t6 <- ([5, 3, 1, 4, 2]
             .to_sequence()
             .order_descending($(a, b) => a < b)
@@ -181,7 +181,7 @@ def test_generic_fold_order(t : T?) {
             t |> equal(5 - i, v)
         }
     }
-    t |> run("order_by fold") <| @(t : T?) {
+    t |> run("order_by fold") @(t : T?) {
         var t7 = (["apple", "banana", "kiwi", "cherry", "blueberry"]
             .to_sequence()
             ._order_by(length(_))
@@ -193,7 +193,7 @@ def test_generic_fold_order(t : T?) {
             t |> equal(sorted[i], v)
         }
     }
-    t |> run("order_by_descending fold") <| @(t : T?) {
+    t |> run("order_by_descending fold") @(t : T?) {
         var t8 = (["apple", "banana", "kiwi", "cherry", "blueberry"]
             ._order_by_descending(length(_))
             ._fold()
@@ -208,7 +208,7 @@ def test_generic_fold_order(t : T?) {
 
 [test]
 def test_generic_fold_aggregates(t : T?) {
-    t |> run("min fold") <| @(t : T?) {
+    t |> run("min fold") @(t : T?) {
         var t1 = ([5, 3, 8, 1, 4]
             .to_sequence()
             .min()
@@ -217,7 +217,7 @@ def test_generic_fold_aggregates(t : T?) {
         t |> equal(typeinfo typename(t1), "int")
         t |> equal(1, t1)
     }
-    t |> run("min_by fold") <| @(t : T?) {
+    t |> run("min_by fold") @(t : T?) {
         var t2 = (["apple", "banana", "kiwi", "cherry", "blueberry"]
             .to_sequence()
             ._min_by(length(_))
@@ -226,7 +226,7 @@ def test_generic_fold_aggregates(t : T?) {
         t |> equal(typeinfo typename(t2), "string")
         t |> equal("kiwi", t2)
     }
-    t |> run("max fold") <| @(t : T?) {
+    t |> run("max fold") @(t : T?) {
         var t2 = ([5, 3, 8, 1, 4]
             .to_sequence()
             .max()
@@ -235,7 +235,7 @@ def test_generic_fold_aggregates(t : T?) {
         t |> equal(typeinfo typename(t2), "int")
         t |> equal(8, t2)
     }
-    t |> run("max_by fold") <| @(t : T?) {
+    t |> run("max_by fold") @(t : T?) {
         var t2 = (["apple", "banana", "kiwi", "cherry", "blueberry"]
             .to_sequence()
             ._max_by(length(_))
@@ -244,7 +244,7 @@ def test_generic_fold_aggregates(t : T?) {
         t |> equal(typeinfo typename(t2), "string")
         t |> equal("blueberry", t2)
     }
-    t |> run("min_max fold") <| @(t : T?) {
+    t |> run("min_max fold") @(t : T?) {
         var (tmin, tmax) = ([5, 3, 8, 1, 4]
             .to_sequence()
             .min_max()
@@ -255,7 +255,7 @@ def test_generic_fold_aggregates(t : T?) {
         t |> equal(1, tmin)
         t |> equal(8, tmax)
     }
-    t |> run("min_max_by fold") <| @(t : T?) {
+    t |> run("min_max_by fold") @(t : T?) {
         var (tmin, tmax) = (["apple", "banana", "kiwi", "cherry", "blueberry"]
             .to_sequence()
             ._min_max_by(length(_))
@@ -266,7 +266,7 @@ def test_generic_fold_aggregates(t : T?) {
         t |> equal("kiwi", tmin)
         t |> equal("blueberry", tmax)
     }
-    t |> run("average fold") <| @(t : T?) {
+    t |> run("average fold") @(t : T?) {
         var t2 = ([1, 2, 3, 4, 5, 6, 7, 8]
             .to_sequence()
             .average()
@@ -275,7 +275,7 @@ def test_generic_fold_aggregates(t : T?) {
         t |> equal(typeinfo typename(t2), "int")
         t |> equal(4, t2)
     }
-    t |> run("min_max_avarage fold") <| @(t : T?) {
+    t |> run("min_max_avarage fold") @(t : T?) {
         var (tmin, tmax, tavg) = ([1, 2, 3, 4, 5, 6, 7, 8]
             .to_sequence()
             .min_max_average()
@@ -288,7 +288,7 @@ def test_generic_fold_aggregates(t : T?) {
         t |> equal(8, tmax)
         t |> equal(4, tavg)
     }
-    t |> run("sum fold") <| @(t : T?) {
+    t |> run("sum fold") @(t : T?) {
         var t2 = ([1, 2, 3, 4, 5, 6, 7, 8]
             .to_sequence()
             .sum()
@@ -297,7 +297,7 @@ def test_generic_fold_aggregates(t : T?) {
         t |> equal(typeinfo typename(t2), "int")
         t |> equal(36, t2)
     }
-    t |> run("aggregate fold") <| @(t : T?) {
+    t |> run("aggregate fold") @(t : T?) {
         var t2 = ([1, 2, 3, 4, 5, 6, 7, 8]
             .to_sequence()
             .aggregate("", $(a, b) => "{a},{b}")
@@ -310,7 +310,7 @@ def test_generic_fold_aggregates(t : T?) {
 
 [test]
 def test_generic_fold_skip_and_take(t : T?) {
-    t |> run("skip fold") <| @(t : T?) {
+    t |> run("skip fold") @(t : T?) {
         var t1 = ([5, 3, 8, 1, 4]
             .to_sequence()
             .skip(2)
@@ -320,7 +320,7 @@ def test_generic_fold_skip_and_take(t : T?) {
         t |> equal(typeinfo typename(t1), "int")
         t |> equal(1, t1)
     }
-    t |> run("skip_while fold") <| @(t : T?) {
+    t |> run("skip_while fold") @(t : T?) {
         var t2 = ([5, 3, 8, 1, 4]
             .to_sequence()
             ._skip_while(_ > 3)
@@ -330,7 +330,7 @@ def test_generic_fold_skip_and_take(t : T?) {
         t |> equal(typeinfo typename(t2), "int")
         t |> equal(1, t2)
     }
-    t |> run("take fold") <| @(t : T?) {
+    t |> run("take fold") @(t : T?) {
         var t3 = ([5, 3, 8, 1, 4]
             .to_sequence()
             .take(3)
@@ -340,7 +340,7 @@ def test_generic_fold_skip_and_take(t : T?) {
         t |> equal(typeinfo typename(t3), "int")
         t |> equal(8, t3)
     }
-    t |> run("take_while fold") <| @(t : T?) {
+    t |> run("take_while fold") @(t : T?) {
         var t4 = ([5, 3, 8, 1, 4]
             .to_sequence()
             ._take_while(_ < 8)
@@ -350,7 +350,7 @@ def test_generic_fold_skip_and_take(t : T?) {
         t |> equal(typeinfo typename(t4), "int")
         t |> equal(5, t4)
     }
-    t |> run("take range fold") <| @(t : T?) {
+    t |> run("take range fold") @(t : T?) {
         var t5 = ([5, 3, 8, 1, 4]
             .to_sequence()
             .take(1..4)
@@ -364,7 +364,7 @@ def test_generic_fold_skip_and_take(t : T?) {
 
 [test]
 def test_concat(t : T?) {
-    t |> run("basic concat") <| @(t : T?) {
+    t |> run("basic concat") @(t : T?) {
         var q <- (
             concat(
                 [1, 2, 3, 4, 5]
@@ -386,7 +386,7 @@ def test_concat(t : T?) {
             t |> equal(expected[i], v)
         }
     }
-    t |> run("basic append") <| @(t : T?) {
+    t |> run("basic append") @(t : T?) {
         var q <- (
             append(
                 [1, 2, 3, 4, 5]
@@ -405,7 +405,7 @@ def test_concat(t : T?) {
             t |> equal(expected[i], v)
         }
     }
-    t |> run("basic prepend") <| @(t : T?) {
+    t |> run("basic prepend") @(t : T?) {
         var q <- (
             prepend(
                 [1, 2, 3, 4, 5]
@@ -428,7 +428,7 @@ def test_concat(t : T?) {
 
 [test]
 def test_any_all_contains(t : T?) {
-    t |> run("fold any") <| @(t : T?) {
+    t |> run("fold any") @(t : T?) {
         var query = (
             [for (x in 0..5); x]
             ._any(_ > 3)
@@ -436,7 +436,7 @@ def test_any_all_contains(t : T?) {
         )
         t |> success(query)
     }
-    t |> run("fold any false") <| @(t : T?) {
+    t |> run("fold any false") @(t : T?) {
         var qpred2 = (
             [iterator for(x in 0..5); x]
             ._any(_ > 10)
@@ -444,7 +444,7 @@ def test_any_all_contains(t : T?) {
         )
         t |> success(!qpred2)
     }
-    t |> run("fold all") <| @(t : T?) {
+    t |> run("fold all") @(t : T?) {
         var query = (
             [iterator for(x in 0..5); x]
             ._all(_ < 5)
@@ -452,7 +452,7 @@ def test_any_all_contains(t : T?) {
         )
         t |> success(query)
     }
-    t |> run("fold all empty") <| @(t : T?) {
+    t |> run("fold all empty") @(t : T?) {
         var qempty = (
             empty(type<int>)
             ._all(_ < 5)
@@ -460,7 +460,7 @@ def test_any_all_contains(t : T?) {
         )
         t |> success(qempty)
     }
-    t |> run("fold contains") <| @(t : T?) {
+    t |> run("fold contains") @(t : T?) {
         var query = (
             [iterator for(x in 0..5); x]
             .contains(3)
@@ -468,7 +468,7 @@ def test_any_all_contains(t : T?) {
         )
         t |> success(query)
     }
-    t |> run("fold complex contains") <| @(t : T?) {
+    t |> run("fold complex contains") @(t : T?) {
         var qcomplex = (
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
             .contains(ComplexType(a = [3, 30]))
@@ -476,7 +476,7 @@ def test_any_all_contains(t : T?) {
         )
         t |> success(qcomplex)
     }
-    t |> run("fold complex contains false") <| @(t : T?) {
+    t |> run("fold complex contains false") @(t : T?) {
         var qcomplex = (
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
             .contains(ComplexType(a = [3, 31]))
@@ -488,7 +488,7 @@ def test_any_all_contains(t : T?) {
 
 [test]
 def test_distinct_and_distinct_by(t : T?) {
-    t |> run("basic distinct") <| @(t : T?) {
+    t |> run("basic distinct") @(t : T?) {
         var query = distinct(
             [iterator for(x in 0..5); x]
         )._fold()
@@ -496,7 +496,7 @@ def test_distinct_and_distinct_by(t : T?) {
             t |> equal(c, i)
         }
     }
-    t |> run("complex distinct") <| @(t : T?) {
+    t |> run("complex distinct") @(t : T?) {
         var qcomplex = distinct(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])]
         )._fold()
@@ -504,7 +504,7 @@ def test_distinct_and_distinct_by(t : T?) {
             t |> success(c.a.Equal([i, i * 10]))
         }
     }
-    t |> run("distinc by") <| @(t : T?) {
+    t |> run("distinc by") @(t : T?) {
         var qdistinctby = (
             [iterator for(x in 0..5); ComplexType(a = [x % 3, x * 10])]
             ._distinct_by(_.a[0])
@@ -523,7 +523,7 @@ def test_distinct_and_distinct_by(t : T?) {
 
 [test]
 def test_unique(t : T?) {
-    t |> run("basic unique") <| @(t : T?) {
+    t |> run("basic unique") @(t : T?) {
         var t1 <- (
             [1, 2, 3, 4, 5]
             ._select(_ % 4)
@@ -540,7 +540,7 @@ def test_unique(t : T?) {
             t |> equal(expected[i], v)
         }
     }
-    t |> run("basic unique by") <| @(t : T?) {
+    t |> run("basic unique by") @(t : T?) {
         var t1 <- (
             [1, 2, 3, 4, 5]
             ._select(_ % 4)
@@ -562,7 +562,7 @@ def test_unique(t : T?) {
 
 [test]
 def test_except(t : T?) {
-    t |> run("basic except") <| @(t : T?) {
+    t |> run("basic except") @(t : T?) {
         var t1 <- (
             [1, 2, 3, 4, 5]
             ._select(_ % 4)
@@ -580,7 +580,7 @@ def test_except(t : T?) {
             t |> equal(expected[i], v)
         }
     }
-    t |> run("basic except by") <| @(t : T?) {
+    t |> run("basic except by") @(t : T?) {
         var t1 <- (
             [1, 2, 3, 4, 5]
             ._select(_ % 4)
@@ -603,7 +603,7 @@ def test_except(t : T?) {
 
 [test]
 def test_intersect(t : T?) {
-    t |> run("basic intersect") <| @(t : T?) {
+    t |> run("basic intersect") @(t : T?) {
         var t1 <- (
             [1, 2, 3, 4, 5]
             ._select(_)
@@ -620,7 +620,7 @@ def test_intersect(t : T?) {
             t |> equal(expected[i], v)
         }
     }
-    t |> run("basic intersect by") <| @(t : T?) {
+    t |> run("basic intersect by") @(t : T?) {
         var t1 <- (
             [1, 2, 3, 4, 5]
             ._select(_)
@@ -642,7 +642,7 @@ def test_intersect(t : T?) {
 
 [test]
 def test_chunk(t : T?) {
-    t |> run("basic chunk") <| @(t : T?) {
+    t |> run("basic chunk") @(t : T?) {
         var query = (
             [for (x in 0..7); x]
             .chunk(2)
@@ -660,7 +660,7 @@ def test_chunk(t : T?) {
 
 [test]
 def test_zip(t : T?) {
-    t |> run("basic zip") <| @(t : T?) {
+    t |> run("basic zip") @(t : T?) {
         var query = (
             [for (x in 0..6); x]
             ._select(_ * _)
@@ -678,7 +678,7 @@ def test_zip(t : T?) {
             t |> equal(expected[i]._1, v._1)
         }
     }
-    t |> run("zip with predicate") <| @(t : T?) {
+    t |> run("zip with predicate") @(t : T?) {
         var query = (
             [for (x in 0..6); x]
             .zip(
@@ -699,7 +699,7 @@ def test_zip(t : T?) {
 
 [test]
 def test_order_distinct(t : T?) {
-    t |> run("basic order distinct") <| @(t : T?) {
+    t |> run("basic order distinct") @(t : T?) {
         var t7 = (
             [5, 4, 4, 3, 4, 2, 1, 1, 4, 3]
             ._select(_ * 10)
@@ -711,7 +711,7 @@ def test_order_distinct(t : T?) {
         t |> equal(typeinfo typename(t7), "int")
         t |> equal(10, t7)
     }
-    t |> run("first position order distinct") <| @(t : T?) {
+    t |> run("first position order distinct") @(t : T?) {
         var t7 = (
             [5, 4, 4, 3, 4, 2, 1, 1, 4, 3]
             .order()

@@ -45,7 +45,7 @@ def binary_search_demo() {
 
     // Custom comparator — descending order
     var desc <- [9, 7, 5, 3, 1]
-    let idx = lower_bound(desc, 5) <| $(lhs, rhs : int const) {
+    let idx = lower_bound(desc, 5) $(lhs, rhs : int const) {
         return lhs > rhs
     }
     print("lower_bound in descending [9,7,5,3,1] for 5 = {idx}\n") // 2
@@ -127,7 +127,7 @@ def query_demo() {
 
     // Custom comparator: find the element closest to zero
     var c <- [-10, 3, -7, 2]
-    let idx = min_element(c) <| $(lhs, rhs : int const) {
+    let idx = min_element(c) $(lhs, rhs : int const) {
         return lhs * lhs < rhs * rhs
     }
     print("min by magnitude: index {idx}, value {c[idx]}\n")  // 3, value 2

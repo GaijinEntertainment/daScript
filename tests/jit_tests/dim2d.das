@@ -58,7 +58,7 @@ def check_order_jit : bool {
 
 [test, no_jit]
 def test_dim(t : T?) {
-    t |> run("multidim access") <| @(t : T?) {
+    t |> run("multidim access") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@ < () : bool > check_order_jit))
         init_no_jit()
         t |> success(check_order_jit())

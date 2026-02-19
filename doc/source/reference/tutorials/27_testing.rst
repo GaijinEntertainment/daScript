@@ -60,10 +60,10 @@ Group related checks with ``run``::
 
   [test]
   def test_strings(t : T?) {
-      t |> run("concat") <| @@(t : T?) {
+      t |> run("concat") @@(t : T?) {
           t |> equal("ab" + "cd", "abcd")
       }
-      t |> run("length") <| @@(t : T?) {
+      t |> run("length") @@(t : T?) {
           t |> equal(length("hello"), 5)
       }
   }

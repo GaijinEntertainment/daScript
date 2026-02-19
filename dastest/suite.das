@@ -106,16 +106,16 @@ def test_file(file_name : string; ctx : SuiteCtx; file_ctx : FileCtx) : SuiteRes
     var res : SuiteResult
     var inscope access <- make_file_access(ctx.projectPath)
     access |> add_file_access_root("dastest", ctx.dastestRoot)
-    using <| $(var mg : ModuleGroup) {
-        using <| $(var cop : CodeOfPolicies) {
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
             cop.aot_module = true
             cop.threadlock_context = true
             cop.jit_enabled = jit_enabled()
             cop.jit_module := "{get_das_root()}/daslib/just_in_time.das"
-            compile_file(file_name, access, unsafe(addr(mg)), cop) <| $(ok, program, output) {
+            compile_file(file_name, access, unsafe(addr(mg)), cop) $(ok, program, output) {
                 var expectedErrors : table<CompilationError; int>
                 if (program != null) {
-                    program |> for_each_expected_error <| $(err, count) {
+                    program |> for_each_expected_error() $(err, count) {
                         expectedErrors |> insert(err, count)
                     }
                 }
@@ -176,7 +176,7 @@ def test_file(file_name : string; ctx : SuiteCtx; file_ctx : FileCtx) : SuiteRes
                     }
                     return
                 }
-                simulate(program) <| $(sok; context; serrors) {
+                simulate(program) $(sok; context; serrors) {
                     if (!sok) {
                         res.total += 1
                         res.errors += 1
@@ -225,7 +225,7 @@ def test_module(var mod : rtti::Module; var context : rtti::Context; suite_ctx :
         fileCtx.context = addr(context)
         modPtr = addr(mod)
     }
-    modPtr |> module_for_each_function <| $(f) {
+    modPtr |> module_for_each_function() $(f) {
         if (f.hash == 0ul) {
             return
         }

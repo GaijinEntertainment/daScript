@@ -9,7 +9,7 @@ require _common
 
 [test]
 def test_join(t : T?) {
-    t |> run("basic join") <| @(t : T?) {
+    t |> run("basic join") @(t : T?) {
         var query = join(
             persons.to_sequence(),
             pets.to_sequence(),
@@ -28,7 +28,7 @@ def test_join(t : T?) {
             t |> equal(c._1, e._1)
         }
     }
-    t |> run("complex join") <| @(t : T?) {
+    t |> run("complex join") @(t : T?) {
         var qcomplex = join(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
@@ -48,7 +48,7 @@ def test_join(t : T?) {
             t |> equal(c.a[1], e._1)
         }
     }
-    t |> run("array join") <| @(t : T?) {
+    t |> run("array join") @(t : T?) {
         var arr1 = [1, 2, 3, 4, 5]
         var arr2 = [4, 5, 6, 7, 8]
         var query = join(
@@ -67,7 +67,7 @@ def test_join(t : T?) {
             t |> equal(c._1, e._1)
         }
     }
-    t |> run("join to array") <| @(t : T?) {
+    t |> run("join to array") @(t : T?) {
         var arr1 = [1, 2, 3, 4, 5].to_sequence_move()
         var arr2 = [4, 5, 6, 7, 8].to_sequence_move()
         var query = join(
@@ -86,7 +86,7 @@ def test_join(t : T?) {
             t |> equal(c._1, e._1)
         }
     }
-    t |> run("join to sequence") <| @(t : T?) {
+    t |> run("join to sequence") @(t : T?) {
         var arr1 = [1, 2, 3, 4, 5]
         var arr2 = [4, 5, 6, 7, 8]
         var query = join(
@@ -109,7 +109,7 @@ def test_join(t : T?) {
 
 [test]
 def test_groupjoin(t : T?) {
-    t |> run("basic group join") <| @(t : T?) {
+    t |> run("basic group join") @(t : T?) {
         var query = group_join(
             persons.to_sequence(),
             pets.to_sequence(),
@@ -130,7 +130,7 @@ def test_groupjoin(t : T?) {
             }
         }
     }
-    t |> run("complex group join") <| @(t : T?) {
+    t |> run("complex group join") @(t : T?) {
         var qcomplex = group_join(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
@@ -154,7 +154,7 @@ def test_groupjoin(t : T?) {
             }
         }
     }
-    t |> run("group join from array") <| @(t : T?) {
+    t |> run("group join from array") @(t : T?) {
         var query = group_join(
             persons,
             pets,
@@ -175,7 +175,7 @@ def test_groupjoin(t : T?) {
             }
         }
     }
-    t |> run("group join to array") <| @(t : T?) {
+    t |> run("group join to array") @(t : T?) {
         var query = group_join_to_array(
             persons.to_sequence(),
             pets.to_sequence(),
@@ -196,7 +196,7 @@ def test_groupjoin(t : T?) {
             }
         }
     }
-    t |> run("group join to sequence") <| @(t : T?) {
+    t |> run("group join to sequence") @(t : T?) {
         var query = group_join_to_array(
             persons.to_sequence(),
             pets.to_sequence(),
@@ -221,7 +221,7 @@ def test_groupjoin(t : T?) {
 
 [test]
 def test_groupby(t : T?) {
-    t |> run("basic group by") <| @(t : T?) {
+    t |> run("basic group by") @(t : T?) {
         var query = group_by(
             pets.to_sequence(),
             $(pet : Pet) => floor(pet.age),
@@ -243,7 +243,7 @@ def test_groupby(t : T?) {
             t |> equal(c._3, e._3)
         }
     }
-    t |> run("complex group by") <| @(t : T?) {
+    t |> run("complex group by") @(t : T?) {
         var qcomplex = group_by(
             [iterator for(x in 0..5); ComplexType(a = [x % 2, x * 10])],
             $(c : ComplexType) => c.a[0],
@@ -264,7 +264,7 @@ def test_groupby(t : T?) {
             t |> equal(c._3, e._3)
         }
     }
-    t |> run("group by from array") <| @(t : T?) {
+    t |> run("group by from array") @(t : T?) {
         var query = group_by(
             pets,
             $(pet : Pet) => floor(pet.age),
@@ -286,7 +286,7 @@ def test_groupby(t : T?) {
             t |> equal(c._3, e._3)
         }
     }
-    t |> run("group by to array") <| @(t : T?) {
+    t |> run("group by to array") @(t : T?) {
         var query = group_by_to_array(
             pets.to_sequence(),
             $(pet : Pet) => floor(pet.age),
@@ -308,7 +308,7 @@ def test_groupby(t : T?) {
             t |> equal(c._3, e._3)
         }
     }
-    t |> run("group by to sequence") <| @(t : T?) {
+    t |> run("group by to sequence") @(t : T?) {
         var query = group_by_to_array(
             pets.to_sequence(),
             $(pet : Pet) => floor(pet.age),

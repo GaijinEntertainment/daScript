@@ -34,7 +34,7 @@ class Square : Rectangle {
 
 [test]
 def test_is_instance_of(t : T?) {
-    t |> run("circle is Circle") <| @(t : T?) {
+    t |> run("circle is Circle") @(t : T?) {
         unsafe {
             var inscope c = new Circle()
             t |> equal(is_instance_of(c, type<Circle>), true)
@@ -42,7 +42,7 @@ def test_is_instance_of(t : T?) {
             t |> equal(is_instance_of(c, type<Rectangle>), false)
         }
     }
-    t |> run("square is Rectangle and Shape") <| @(t : T?) {
+    t |> run("square is Rectangle and Shape") @(t : T?) {
         unsafe {
             var inscope sq = new Square(5.0)
             t |> equal(is_instance_of(sq, type<Square>), true)
@@ -55,7 +55,7 @@ def test_is_instance_of(t : T?) {
 
 [test]
 def test_dynamic_type_cast(t : T?) {
-    t |> run("cast Shape? to Circle?") <| @(t : T?) {
+    t |> run("cast Shape? to Circle?") @(t : T?) {
         unsafe {
             var inscope s : Shape? = new Circle()
             var c = dynamic_type_cast(s, type<Circle>)
@@ -64,7 +64,7 @@ def test_dynamic_type_cast(t : T?) {
             t |> equal(r == null, true)
         }
     }
-    t |> run("cast to base type succeeds") <| @(t : T?) {
+    t |> run("cast to base type succeeds") @(t : T?) {
         unsafe {
             var inscope sq : Shape? = new Square(3.0)
             var asRect = dynamic_type_cast(sq, type<Rectangle>)
@@ -75,7 +75,7 @@ def test_dynamic_type_cast(t : T?) {
 
 [test]
 def test_force_dynamic_type_cast(t : T?) {
-    t |> run("force cast succeeds on correct type") <| @(t : T?) {
+    t |> run("force cast succeeds on correct type") @(t : T?) {
         unsafe {
             var inscope s : Shape? = new Circle()
             var c = force_dynamic_type_cast(s, type<Circle>)
@@ -86,14 +86,14 @@ def test_force_dynamic_type_cast(t : T?) {
 
 [test]
 def test_is_as_syntax(t : T?) {
-    t |> run("is syntax") <| @(t : T?) {
+    t |> run("is syntax") @(t : T?) {
         unsafe {
             var inscope s : Shape? = new Circle()
             t |> equal(s is Circle, true)
             t |> equal(s is Rectangle, false)
         }
     }
-    t |> run("as syntax") <| @(t : T?) {
+    t |> run("as syntax") @(t : T?) {
         unsafe {
             var inscope s : Shape? = new Circle()
             var c = s as Circle
@@ -104,14 +104,14 @@ def test_is_as_syntax(t : T?) {
 
 [test]
 def test_polymorphic_area(t : T?) {
-    t |> run("area via const method") <| @(t : T?) {
+    t |> run("area via const method") @(t : T?) {
         unsafe {
             var inscope c : Shape? = new Circle()
             t |> equal(c->area() > 3.14, true)
             t |> equal(c->area() < 3.15, true)
         }
     }
-    t |> run("square area via inheritance") <| @(t : T?) {
+    t |> run("square area via inheritance") @(t : T?) {
         unsafe {
             var inscope sq : Shape? = new Square(4.0)
             t |> equal(sq->area(), 16.0)

@@ -383,7 +383,7 @@ def describe_type(td : TypeDecl?) {
 }
 
 def describe_type(td : TypeDeclPtr) {
-    return build_string() <| $(var writer) {
+    return build_string() $(var writer) {
         if (!empty(td.alias) && !td.isAuto && !td.isAlias) {
             write(writer, make_ref(alias_label_name(td), string(td.alias)))
             return
@@ -618,7 +618,7 @@ def private write_table_line(var writer : StringBuilderWriter; line : array<stri
 }
 
 def make_table(title : string; tab : array<array<string>>) {
-    return build_string() <| $(writer) {
+    return build_string() $(writer) {
         let header = ":{title}:"
         let headerLen = length(header)
         let offset = strings::repeat(" ", headerLen)
@@ -659,7 +659,7 @@ def make_table(title : string; tab : array<array<string>>) {
 
 
 def make_table_(tab : array<array<string>>; withHeader : bool = false) {
-    return build_string() <| $(writer) {
+    return build_string() $(writer) {
         let rows = length(tab)
         var cols = 0
         for (c in tab) {
@@ -682,7 +682,7 @@ def make_table_(tab : array<array<string>>; withHeader : bool = false) {
 }
 
 // def make_fake_table(tab:array<array<string>>)
-//     return build_string() <| $(writer)
+//     return build_string() $(writer)
 //         let rows = length(tab)
 //         var cols = 0
 //         for c in tab
@@ -722,7 +722,7 @@ def topic(mod : Module?) {
 }
 
 def document_topic(doc_file : file; topic, content : string implicit) {
-    document_topic(doc_file, topic, content) <| $(txt) {
+    document_topic(doc_file, topic, content) $(txt) {
         return txt
     }
 }
@@ -732,7 +732,7 @@ def document_function_topic(doc_file : file; resType : smart_ptr<TypeDecl>&; top
     var paramsIdx = -1
     var returnsIdx = -1
     let header = "Arguments"
-    document_topic(doc_file, topic, content) <| $(txt) {
+    document_topic(doc_file, topic, content) $(txt) {
 
         var addDescription = false
         var lines <- txt |> replace("\r\n", "\n") |> split("\n")
@@ -804,7 +804,7 @@ def document_function_topic(doc_file : file; resType : smart_ptr<TypeDecl>&; top
 }
 
 def document_topic(header : string; doc_file : file; topic, content : string implicit; var tab : array<array<string>>) {
-    document_topic(doc_file, topic, content) <| $(txt) {
+    document_topic(doc_file, topic, content) $(txt) {
         if (add_stub_header && txt |> starts_with(STUB)) {
             if (length(tab) > 1) {
                 fwrite(doc_file, make_table(header, tab))
@@ -813,7 +813,7 @@ def document_topic(header : string; doc_file : file; topic, content : string imp
         }
 
         var hasDoc = false
-        txt |> replace("\r\n", "\n") |> split("\n") <| $(lines) {
+        txt |> replace("\r\n", "\n") |> split("\n") $(lines) {
             var got = length(lines)
             while (got > 0 && trim(lines[got - 1]) == "") {
                 got -= 1
@@ -877,7 +877,7 @@ def document_topic(doc_file : file; topic, content : string implicit; cb : block
     mkdir_rec(dir_name(topic_file_name))
     var st : FStat
     if (topic |> starts_with("|handmade/") && !stat(topic_file_name, st)) {
-        fopen(topic_file_name, "wb") <| $(topic_file) {
+        fopen(topic_file_name, "wb") $(topic_file) {
             if (topic_file != null) {
                 if (add_stub_header) {
                     fwrite(topic_file, "{STUB}\n")
@@ -892,7 +892,7 @@ def document_topic(doc_file : file; topic, content : string implicit; cb : block
     }
 
     if (stat(topic_file_name, st)) {
-        fopen(topic_file_name, "rb") <| $(topic_file) {
+        fopen(topic_file_name, "rb") $(topic_file) {
             if (topic_file != null) {
                 let instxt = cb |> invoke(fread(topic_file))
                 fwrite(doc_file, instxt)
@@ -920,7 +920,7 @@ def document_bitfield(mod : Module?; doc_file : file; name : string; value : Typ
     }
 
     let shortType = value.describe_type_short()
-    for_each_global(mod) <| $(glob) {
+    for_each_global(mod) $(glob) {
         if (glob.flags.bitfield_constant && glob._type.describe_type_short() == shortType) {
             var line : array<string>
             var parts <- split(string(glob.name), "`")
@@ -982,7 +982,7 @@ def document_typedefs(doc_file : file; mods : array<Module?>) {
         if (any) {
             break
         }
-        for_each_typedef(mod) <| $(name, value) {
+        for_each_typedef(mod) $(name, value) {
             if (value.flags.isPrivateAlias) {
                 return
             }
@@ -994,7 +994,7 @@ def document_typedefs(doc_file : file; mods : array<Module?>) {
     }
     fwrite(doc_file, make_group("Type aliases"))
     for (mod in mods) {
-        for_each_typedef(mod) <| $(name, value) {
+        for_each_typedef(mod) $(name, value) {
             if (value.flags.isPrivateAlias) {
                 return
             }
@@ -1036,7 +1036,7 @@ def document_global_constants(doc_file : file; mods : array<Module?>) {
         if (any) {
             break
         }
-        for_each_global(mod) <| $(value) {
+        for_each_global(mod) $(value) {
             if (!any && is_global_constant(value)) {
                 any = true
             }
@@ -1047,7 +1047,7 @@ def document_global_constants(doc_file : file; mods : array<Module?>) {
     }
     fwrite(doc_file, make_group("Constants"))
     for (mod in mods) {
-        for_each_global(mod) <| $(value) {
+        for_each_global(mod) $(value) {
             if (is_global_constant(value)) {
                 document_global_constant(doc_file, mod, value)
             }
@@ -1079,7 +1079,7 @@ def public document_enumerations(doc_file : file; mods : array<Module?>) : bool 
         if (any) {
             break
         }
-        for_each_enumeration(mod) <| $(value) {
+        for_each_enumeration(mod) $(value) {
             if (any || value.isPrivate) {
                 return
             }
@@ -1091,7 +1091,7 @@ def public document_enumerations(doc_file : file; mods : array<Module?>) : bool 
     }
     fwrite(doc_file, make_group("Enumerations"))
     for (mod in mods) {
-        for_each_enumeration(mod) <| $(value) {
+        for_each_enumeration(mod) $(value) {
             if (value.isPrivate) {
                 return
             }
@@ -1275,7 +1275,7 @@ def document_classes(doc_file : file; mods : array<Module?>) {
         if (any) {
             break
         }
-        for_each_structure(mod) <| $(value) {
+        for_each_structure(mod) $(value) {
             if (!any && value.flags.isClass && !value.flags.privateStructure) {
                 any = true
             }
@@ -1286,7 +1286,7 @@ def document_classes(doc_file : file; mods : array<Module?>) {
     }
     fwrite(doc_file, make_group("Classes"))
     for (mod in mods) {
-        for_each_structure(mod) <| $(value) {
+        for_each_structure(mod) $(value) {
             if (!value.flags.isClass || value.flags.privateStructure) {
                 return
             }
@@ -1313,7 +1313,7 @@ def document_classes(doc_file : file; mods : array<Module?>) {
             }
 
             let staticFieldPrefix = "{value.name}`"
-            for_each_global(mod) <| $(gVar) {
+            for_each_global(mod) $(gVar) {
                 if (string(gVar.name).starts_with(staticFieldPrefix)) {
                     var line : array<string>
                     push(line, "{value.name}.{string(gVar.name).slice(length(staticFieldPrefix))}")
@@ -1346,7 +1346,7 @@ def document_classes(doc_file : file; mods : array<Module?>) {
             }
             var first = true
             var inscope annT <- new TypeDecl(baseType = Type.tStructure, structType = get_ptr(value))
-            for_each_function(mod, "") <| $(func) {
+            for_each_function(mod, "") $(func) {
                 if (func.flags.isClassMethod && func.classParent == value && func.name == value.name && !is_trivial_ctor(func)) {// ctor
                     document_function(doc_file, mod, func, /*drop first arg*/0, "{value.name}-", "das:function")
                     return
@@ -1416,7 +1416,7 @@ def document_typemacros(doc_file : file; mods : array<Module?>) {
         if (any) {
             break
         }
-        for_each_structure(mod) <| $(value) {
+        for_each_structure(mod) $(value) {
             if (any || value.parent == null ||  value.parent.name != "AstTypeMacro" || value.parent._module.name != "ast") {
                 return
             }
@@ -1428,7 +1428,7 @@ def document_typemacros(doc_file : file; mods : array<Module?>) {
     }
     fwrite(doc_file, make_group("Type macros"))
     for (mod in mods) {
-        for_each_structure(mod) <| $(value) {
+        for_each_structure(mod) $(value) {
             if (value.parent == null ||  value.parent.name != "AstTypeMacro" || value.parent._module.name != "ast") {
                 return
             }
@@ -1480,7 +1480,7 @@ def document_structure(doc_file : file; mod : Module?; var value : StructurePtr)
 
     // Document struct methods (module-level functions with isClassMethod flag).
     // For structs (unlike classes), methods are not stored as struct fields after inference.
-    for_each_function(mod, "") <| $(func) {
+    for_each_function(mod, "") $(func) {
         if (!func.flags.isClassMethod || func.classParent != value) {
             return
         }
@@ -1500,7 +1500,7 @@ def document_structure(doc_file : file; mod : Module?; var value : StructurePtr)
 
     var inscope annT <- new TypeDecl(baseType = Type.tStructure, structType = get_ptr(value))
     var first = true
-    for_each_function(mod, "") <| $(func) {
+    for_each_function(mod, "") $(func) {
         if (func.flags.isClassMethod && func.classParent == value && func.name == value.name && !is_trivial_ctor(func)) {// ctor
             document_function(doc_file, mod, func, /*drop first arg*/0, "{value.name}-", "das:function")
             return
@@ -1529,7 +1529,7 @@ def document_structures(doc_file : file; mods : array<Module?>) {
         if (any) {
             break
         }
-        for_each_structure(mod) <| $(value) {
+        for_each_structure(mod) $(value) {
             if (any || value.flags.isClass || value.flags.generated || value.flags.privateStructure) {
                 return
             }
@@ -1541,7 +1541,7 @@ def document_structures(doc_file : file; mods : array<Module?>) {
     }
     fwrite(doc_file, make_group("Structures"))
     for (mod in mods) {
-        for_each_structure(mod) <| $(value) {
+        for_each_structure(mod) $(value) {
             if (value.flags.isClass || value.flags.generated || value.flags.privateStructure) {
                 return
             }
@@ -1559,7 +1559,7 @@ def document_structure_annotation(doc_file : file; mod : Module?; value) {
     props |> emplace(array<string>("field", "type"))
     var inscope annT <- new TypeDecl(baseType = Type.tHandle,
         annotation = unsafe(reinterpret<TypeAnnotation?> value))
-    for_each_function(mod, "") <| $(func) {
+    for_each_function(mod, "") $(func) {
         if (!func.moreFlags.propertyFunction) {
             return
         }
@@ -1589,7 +1589,7 @@ def document_structure_annotation(doc_file : file; mod : Module?; value) {
     var tab : array<array<string>>
     tab |> emplace(array<string>("field", "type"))
     var fields : array<tuple<name : string; typ : string; offset : uint>>
-    for_each_field(*ann) <| $(name, cppName, xtype, offset) {
+    for_each_field(*ann) $(name, cppName, xtype, offset) {
         fields |> emplace((name, describe_type(xtype), offset))
     }
 
@@ -1611,7 +1611,7 @@ def document_structure_annotations(doc_file : file; mods : array<Module?>; var h
         if (any) {
             break
         }
-        module_for_each_annotation(mod) <| $(value) {
+        module_for_each_annotation(mod) $(value) {
             if (any || !value.isBasicStructureAnnotation || (hook.annotationFilter != null && !hook.annotationFilter |> invoke(value))) {
                 return
             }
@@ -1623,7 +1623,7 @@ def document_structure_annotations(doc_file : file; mods : array<Module?>; var h
     }
     fwrite(doc_file, make_group("Handled structures"))
     for (mod in mods) {
-        module_for_each_annotation(mod) <| $(value) {
+        module_for_each_annotation(mod) $(value) {
             if (!value.isBasicStructureAnnotation || (hook.annotationFilter != null && !hook.annotationFilter |> invoke(value))) {
                 return
             }
@@ -1645,7 +1645,7 @@ def document_enumeration_annotations(doc_file : file; mods : array<Module?>; var
         if (any) {
             break
         }
-        module_for_each_annotation(mod) <| $(value) {
+        module_for_each_annotation(mod) $(value) {
             if (!value.isEnumerationAnnotation) {
                 return
             }
@@ -1657,7 +1657,7 @@ def document_enumeration_annotations(doc_file : file; mods : array<Module?>; var
     }
     fwrite(doc_file, make_group("Handled enumerations"))
     for (mod in mods) {
-        module_for_each_annotation(mod) <| $(value) {
+        module_for_each_annotation(mod) $(value) {
             if (!value.isEnumerationAnnotation) {
                 return
             }
@@ -1680,7 +1680,7 @@ def document_function_annotations(doc_file : file; mods : array<Module?>; var ho
         if (any) {
             break
         }
-        module_for_each_annotation(mod) <| $(value) {
+        module_for_each_annotation(mod) $(value) {
             if (any || !value.isFunctionAnnotation || (hook.annotationFilter != null && !hook.annotationFilter |> invoke(value))) {
                 return
             }
@@ -1692,7 +1692,7 @@ def document_function_annotations(doc_file : file; mods : array<Module?>; var ho
     }
     fwrite(doc_file, make_group("Function annotations"))
     for (mod in mods) {
-        module_for_each_annotation(mod) <| $(value) {
+        module_for_each_annotation(mod) $(value) {
             if (!value.isFunctionAnnotation || (hook.annotationFilter != null && !hook.annotationFilter |> invoke(value))) {
                 return
             }
@@ -1714,7 +1714,7 @@ def document_annotations(doc_file : file; mods : array<Module?>; var hook = Docs
         if (any) {
             break
         }
-        module_for_each_annotation(mod) <| $(value) {
+        module_for_each_annotation(mod) $(value) {
             if (any || !value.isTypeAnnotation || value.isEnumerationAnnotation || value.isBasicStructureAnnotation || (hook.annotationFilter != null && !hook.annotationFilter |> invoke(value))) {
                 return
             }
@@ -1726,7 +1726,7 @@ def document_annotations(doc_file : file; mods : array<Module?>; var hook = Docs
     }
     fwrite(doc_file, make_group("Handled types"))
     for (mod in mods) {
-        module_for_each_annotation(mod) <| $(value) {
+        module_for_each_annotation(mod) $(value) {
             if (!value.isTypeAnnotation || value.isEnumerationAnnotation || value.isBasicStructureAnnotation || (hook.annotationFilter != null && !hook.annotationFilter |> invoke(value))) {
                 return
             }
@@ -1751,7 +1751,7 @@ def document_structure_macros(doc_file : file; mods : array<Module?>) {
         if (any) {
             break
         }
-        module_for_each_annotation(mod) <| $(value) {
+        module_for_each_annotation(mod) $(value) {
             if (any || value.isTypeAnnotation || value.isEnumerationAnnotation || value.isBasicStructureAnnotation || value.isFunctionAnnotation) {
                 return
             }
@@ -1763,7 +1763,7 @@ def document_structure_macros(doc_file : file; mods : array<Module?>) {
     }
     fwrite(doc_file, make_group("Structure macros"))
     for (mod in mods) {
-        module_for_each_annotation(mod) <| $(value) {
+        module_for_each_annotation(mod) $(value) {
             if (value.isTypeAnnotation || value.isEnumerationAnnotation || value.isBasicStructureAnnotation || value.isFunctionAnnotation) {
                 return
             }
@@ -1785,7 +1785,7 @@ def document_call_macros(doc_file : file; mods : array<Module?>) {
         if (any) {
             break
         }
-        for_each_call_macro(mod) <| $(value) {
+        for_each_call_macro(mod) $(value) {
             any = true
         }
     }
@@ -1794,7 +1794,7 @@ def document_call_macros(doc_file : file; mods : array<Module?>) {
     }
     fwrite(doc_file, make_group("Call macros"))
     for (mod in mods) {
-        for_each_call_macro(mod) <| $(value) {
+        for_each_call_macro(mod) $(value) {
             document_call_macro(doc_file, mod, value)
         }
     }
@@ -1813,7 +1813,7 @@ def document_reader_macros(doc_file : file; mods : array<Module?>) {
         if (any) {
             break
         }
-        for_each_reader_macro(mod) <| $(value) {
+        for_each_reader_macro(mod) $(value) {
             any = true
         }
     }
@@ -1822,7 +1822,7 @@ def document_reader_macros(doc_file : file; mods : array<Module?>) {
     }
     fwrite(doc_file, make_group("Reader macros"))
     for (mod in mods) {
-        for_each_reader_macro(mod) <| $(value) {
+        for_each_reader_macro(mod) $(value) {
             document_reader_macro(doc_file, mod, value)
         }
     }
@@ -1841,7 +1841,7 @@ def document_variant_macros(doc_file : file; mods : array<Module?>) {
         if (any) {
             break
         }
-        for_each_variant_macro(mod) <| $(value) {
+        for_each_variant_macro(mod) $(value) {
             any = true
         }
     }
@@ -1850,7 +1850,7 @@ def document_variant_macros(doc_file : file; mods : array<Module?>) {
     }
     fwrite(doc_file, make_group("Variant macros"))
     for (mod in mods) {
-        for_each_variant_macro(mod) <| $(value) {
+        for_each_variant_macro(mod) $(value) {
             document_variant_macro(doc_file, mod, string(value.name))
         }
     }
@@ -1869,7 +1869,7 @@ def document_typeinfo_macros(doc_file : file; mods : array<Module?>) {
         if (any) {
             break
         }
-        for_each_typeinfo_macro(mod) <| $(value) {
+        for_each_typeinfo_macro(mod) $(value) {
             any = true
         }
     }
@@ -1878,7 +1878,7 @@ def document_typeinfo_macros(doc_file : file; mods : array<Module?>) {
     }
     fwrite(doc_file, make_group("Typeinfo macros"))
     for (mod in mods) {
-        for_each_typeinfo_macro(mod) <| $(value) {
+        for_each_typeinfo_macro(mod) $(value) {
             document_typeinfo_macro(doc_file, mod, string(value.name))
         }
     }
@@ -1901,7 +1901,7 @@ def function_needs_documenting(func : FunctionPtr | Function?) {
         return false
     }
     var isBuiltin = false
-    peek(func._module.name) <| $(name) {
+    peek(func._module.name) $(name) {
         if (name == "$") {
             isBuiltin = true
         }
@@ -1909,7 +1909,7 @@ def function_needs_documenting(func : FunctionPtr | Function?) {
     // skip builtin operators
     var isOperator = false
     if (isBuiltin) {
-        peek(func.name) <| $(name) {
+        peek(func.name) $(name) {
             let ch = character_at(name, 0)
             if (!is_alpha(ch) && !is_number(ch) && ch != '_') {
                 isOperator = true
@@ -1922,7 +1922,7 @@ def function_needs_documenting(func : FunctionPtr | Function?) {
     // skip builtin type c'tors
     var isTypeConstructor = false
     if (isBuiltin) {
-        peek(func.name) <| $(name) {
+        peek(func.name) $(name) {
             if (func.result != null && func.result.isCtorType) {
                 let tname = das_to_string(func.result.baseType)
                 if (name == tname) {
@@ -1936,7 +1936,7 @@ def function_needs_documenting(func : FunctionPtr | Function?) {
     }
     // skip ones starting with _builtin or __builtin
     var isBuiltinName = false
-    peek(func.name) <| $(name) {
+    peek(func.name) $(name) {
         if (starts_with(name, "_builtin") || starts_with(name, "__builtin")) {
             isBuiltinName = true
         }
@@ -2070,7 +2070,7 @@ def document_functions(doc_file : file; mods : array<Module?>; var groups : arra
     }
     var first_function = true
     for (mod in mods) {
-        for_each_function(mod, "") <| $(func) {
+        for_each_function(mod, "") $(func) {
             if (!function_needs_documenting(func)) {
                 return
             }
@@ -2085,7 +2085,7 @@ def document_functions(doc_file : file; mods : array<Module?>; var groups : arra
             }
             document_function(doc_file, mod, func)
         }
-        for_each_generic(mod) <| $(func) {
+        for_each_generic(mod) $(func) {
             if (!function_needs_documenting(func)) {
                 return
             }
@@ -2121,14 +2121,14 @@ def debug_group(var group : DocGroup) {
 
 def public append_to_group_by_regex(var group : DocGroup; var mod : Module?; var reg : Regex) : DocGroup& {
     //! Appends functions whose names match the given regex to an existing DocGroup.
-    for_each_function(mod, "") <| $(func) {
+    for_each_function(mod, "") $(func) {
         if (function_needs_documenting(func)) {
             if (regex_match(reg, string(func.name)) != -1) {
                 push(group.func, (get_ptr(func), mod))
             }
         }
     }
-    for_each_generic(mod) <| $(func) {
+    for_each_generic(mod) $(func) {
         if (function_needs_documenting(func)) {
             if (regex_match(reg, string(func.name)) != -1) {
                 push(group.func, (get_ptr(func), mod))
@@ -2176,19 +2176,19 @@ def private generate_substitute_stub(mod : Module?; substname : string) {
     // if stat(substname,st)   // this is actually 'see if it exists'
     //     return
     mkdir_rec(dir_name(substname))
-    fopen(substname, "wb") <| $(stub_file) {
+    fopen(substname, "wb") $(stub_file) {
         if (stub_file != null) {
             var tab : table<string>
             // typedefs
-            for_each_typedef(mod) <| $(name, value) {
+            for_each_typedef(mod) $(name, value) {
                 generate_topic_stub(tab, stub_file, topic("typedef", mod, name))
             }
             // enumerations
-            for_each_enumeration(mod) <| $(value) {
+            for_each_enumeration(mod) $(value) {
                 generate_topic_stub(tab, stub_file, topic("enumeration", mod, string(value.name)))
             }
             // structure everything
-            for_each_structure(mod) <| $(value) {
+            for_each_structure(mod) $(value) {
                 if (value.flags.isClass) {
                     // classes and methods
                     generate_topic_stub(tab, stub_file, topic("class", mod, string(value.name)))
@@ -2202,18 +2202,18 @@ def private generate_substitute_stub(mod : Module?; substname : string) {
                     generate_topic_stub(tab, stub_file, topic("structure", mod, string(value.name)))
                 }
             }
-            for_each_function(mod, "") <| $(func) {
+            for_each_function(mod, "") $(func) {
                 if (function_needs_documenting(func)) {
                     generate_topic_stub(tab, stub_file, topic("function", mod, "{func.name}"))
                 }
             }
-            for_each_generic(mod) <| $(func) {
+            for_each_generic(mod) $(func) {
                 if (function_needs_documenting(func)) {
                     generate_topic_stub(tab, stub_file, topic("function", mod, "{func.name}"))
                 }
             }
             // annotations
-            module_for_each_annotation(mod) <| $(value) {
+            module_for_each_annotation(mod) $(value) {
                 if (value.isBasicStructureAnnotation) {
                     generate_topic_stub(tab, stub_file, topic("structure_annotation", mod, string(value.name)))
                 } elif (value.isTypeAnnotation) {
@@ -2221,7 +2221,7 @@ def private generate_substitute_stub(mod : Module?; substname : string) {
                 }
             }
             // variables
-            for_each_global(mod) <| $(value) {
+            for_each_global(mod) $(value) {
                 if (is_global_constant(value)) {
                     generate_topic_stub(tab, stub_file, topic("variable", mod, string(value.name)))
                 }

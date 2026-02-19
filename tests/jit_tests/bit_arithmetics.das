@@ -136,9 +136,9 @@ def test_rol_equ(t : T?; a : auto(TTA); b : auto(TTB)) {
 
 [test]
 def test_bit_arithmetics_op2(t : T?) {
-    t |> run("& | ^") <| @(t : T?) {
+    t |> run("& | ^") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             fuzz_int_vector_op2(t, fake, "test_and")
             fuzz_int_vector_op2(t, fake, "test_or")
             fuzz_int_vector_op2(t, fake, "test_xor")
@@ -149,9 +149,9 @@ def test_bit_arithmetics_op2(t : T?) {
         }
     }
 
-    t |> run("&=") <| @(t : T?) {
+    t |> run("&=") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             fuzz_int_vector_op2(t, fake, "test_and_equ")
             fuzz_int_vector_op2(t, fake, "test_or_equ")
             fuzz_int_vector_op2(t, fake, "test_xor_equ")
@@ -179,9 +179,9 @@ def fuzz_int_uint(t : T?; var fake : Faker; funcname : string) {
 
 [test]
 def test_bit_arithmetics_op1(t : T?) {
-    t |> run("~") <| @(t : T?) {
+    t |> run("~") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             fuzz_int_uint(t, fake, "test_neg")
         }
     }

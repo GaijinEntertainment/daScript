@@ -47,17 +47,17 @@ def tab_key_exist(var tab : table<int; string>; key : int) {
 
 [test]
 def test_table(t : T?) {
-    t |> run("make_table") <| @(t : T?) {
+    t |> run("make_table") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@make_table_jit))
         var tab <- make_table_jit()
         t |> success(test_table(tab))
     }
-    t |> run("[], size") <| @(t : T?) {
+    t |> run("[], size") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@test_table_jit))
         var tab <- make_table()
         t |> success(test_table_jit(tab))
     }
-    t |> run("erase") <| @(t : T?) {
+    t |> run("erase") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@tab_erase))
         var tab <- {
             1 => "1",
@@ -69,7 +69,7 @@ def test_table(t : T?) {
         t |> success(!key_exists(tab, 2))
         t |> success(key_exists(tab, 3))
     }
-    t |> run("set insert") <| @(t : T?) {
+    t |> run("set insert") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@tab_set_insert))
         var tab <- { 1, 2, 4 }
         t |> success(key_exists(tab, 1))
@@ -82,7 +82,7 @@ def test_table(t : T?) {
         t |> success(key_exists(tab, 3))
         t |> success(key_exists(tab, 4))
     }
-    t |> run("find") <| @(t : T?) {
+    t |> run("find") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@tab_find))
         var tab <- {
             1 => "1",
@@ -94,7 +94,7 @@ def test_table(t : T?) {
         t |> equal(null, tab_find(tab, 3))
         t |> equal("4", *tab_find(tab, 4))
     }
-    t |> run("key exists") <| @(t : T?) {
+    t |> run("key exists") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@tab_key_exist))
         var tab <- {
             1 => "1",

@@ -29,7 +29,7 @@ def defer_basics() {
 
     // The deferred block runs AFTER the rest of the scope
     print("step 1\n")
-    defer() <| $() {
+    defer() {
         print("cleanup (deferred)\n")
     }
     print("step 2\n")
@@ -45,10 +45,10 @@ def defer_basics() {
 def defer_ordering() {
     print("\n=== defer ordering ===\n")
 
-    defer() <| $() {
+    defer() {
         print("first defer (runs last)\n")
     }
-    defer() <| $() {
+    defer() {
         print("second defer (runs first)\n")
     }
     print("main body\n")
@@ -61,7 +61,7 @@ def defer_ordering() {
 def defer_early_return(do_early : bool) {
     print("\n=== defer early return (early={do_early}) ===\n")
 
-    defer() <| $() {
+    defer() {
         print("cleanup always runs\n")
     }
 
@@ -83,7 +83,7 @@ def defer_in_condition() {
 
     print("before if\n")
     if (true) {
-        defer() <| $() {
+        defer() {
             print("deferred inside if\n")
         }
         print("inside if\n")
@@ -111,12 +111,12 @@ def defer_practical() {
     print("\n=== defer practical ===\n")
 
     acquire_resource("database")
-    defer() <| $() {
+    defer() {
         release_resource("database")
     }
 
     acquire_resource("file")
-    defer() <| $() {
+    defer() {
         release_resource("file")
     }
 
@@ -133,7 +133,7 @@ def defer_practical() {
 // just like C's `static` local variables.
 
 def call_counter() : int {
-    static_let() <| $() {
+    static_let() {
         var count = 0
     }
     count ++
@@ -154,7 +154,7 @@ def static_let_basics() {
 // Use static_let for expensive one-time setup: the initializer runs once.
 
 def get_lookup_table() : int {
-    static_let() <| $() {
+    static_let() {
         var lookup <- [10, 20, 30, 40, 50]
     }
     var total = 0
@@ -177,7 +177,7 @@ def static_let_init() {
 // blocks in different functions that might otherwise collide.
 
 def named_counter_a() : int {
-    static_let("counter_a") <| $() {
+    static_let("counter_a") {
         var n = 0
     }
     n ++
@@ -185,7 +185,7 @@ def named_counter_a() : int {
 }
 
 def named_counter_b() : int {
-    static_let("counter_b") <| $() {
+    static_let("counter_b") {
         var n = 0
     }
     n ++
@@ -211,12 +211,12 @@ def static_let_named() {
 // the defer() call.  This differs from Go, where defer is runtime-conditional.
 
 def cached_computation(input : int) : int {
-    static_let() <| $() {
+    static_let() {
         var last_input = -1
         var last_result = 0
     }
 
-    defer() <| $() {
+    defer() {
         print("  exiting cached_computation({input})\n")
     }
 

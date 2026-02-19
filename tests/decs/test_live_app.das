@@ -9,7 +9,7 @@ require daslib/live
 def initialize(full_restart : bool) {
     if (full_restart) {
         restart()
-        create_entity <| @(eid, cmp) {
+        create_entity() @(eid, cmp) {
             cmp |> set("name", "one entity")
         }
         commit()
@@ -18,7 +18,7 @@ def initialize(full_restart : bool) {
 
 [export]
 def act(dt : float) {
-    query <| $(name : string) {
+    query() $(name : string) {
         assert(name == "one entity")
     }
 }

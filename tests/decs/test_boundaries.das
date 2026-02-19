@@ -8,12 +8,12 @@ require dastest/testing_boost public
 [test]
 def test_boundaries(t : T?) {
     restart()
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         cmp |> set("i", 1)
     }
     commit()
-    t |> run("commit inside query") <| @@(t : T?) {
-        query <| $(i : int) {
+    t |> run("commit inside query") @@(t : T?) {
+        query() $(i : int) {
             var failed = false
             try {
                 commit()
@@ -23,8 +23,8 @@ def test_boundaries(t : T?) {
             t |> success(failed)
         }
     }
-    t |> run("restart inside query") <| @@(t : T?) {
-        query <| $(i : int) {
+    t |> run("restart inside query") @@(t : T?) {
+        query() $(i : int) {
             var failed = false
             try {
                 commit()

@@ -54,7 +54,7 @@ def make_struct_with_subdim {
 
 [test]
 def test_dim(t : T?) {
-    t |> run("array []") <| @(t : T?) {
+    t |> run("array []") @(t : T?) {
         var x : int[10]
         t |> success(!jit_enabled() || is_jit_function(@@makeAll13))
         t |> success(!jit_enabled() || is_jit_function(@@addAll))
@@ -64,7 +64,7 @@ def test_dim(t : T?) {
         }
         t |> equal(addAll(x), 130)
     }
-    t |> run("out of range") <| @(t : T?) {
+    t |> run("out of range") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@outOfRange))
         var x : int[10]
         var failed = false
@@ -76,7 +76,7 @@ def test_dim(t : T?) {
         }
         t |> success(failed, "out of range caused panic")
     }
-    t |> run("make dim cmres") <| @(t : T?) {
+    t |> run("make dim cmres") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@make_dim_cmres))
         var x = make_dim_cmres()
         t |> equal(length(x), 5)
@@ -84,7 +84,7 @@ def test_dim(t : T?) {
             t |> equal(x[i], i + 1)
         }
     }
-    t |> run("make dim on stack") <| @(t : T?) {
+    t |> run("make dim on stack") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@make_dim_on_stack))
         var a = make_dim_on_stack(true)
         var b = make_dim_on_stack(false)
@@ -95,7 +95,7 @@ def test_dim(t : T?) {
             t |> equal(b[i], i + 6)
         }
     }
-    t |> run("make dim with index to call cmres") <| @(t : T?) {
+    t |> run("make dim with index to call cmres") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@make_dim_with_index_call_to_cmres))
         var x = make_dim_with_index_call_to_cmres()
         t |> equal(length(x), 5)
@@ -104,7 +104,7 @@ def test_dim(t : T?) {
             t |> equal(x[i].b, i + 6)
         }
     }
-    t |> run("make struct with subdim") <| @(t : T?) {
+    t |> run("make struct with subdim") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@make_struct_with_subdim))
         var x = make_struct_with_subdim()
         for (i in range(5)) {

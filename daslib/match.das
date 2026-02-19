@@ -97,7 +97,7 @@ def match_copy(what : TypeDeclPtr; wths : Expression?; makeType : TypeDeclPtr; a
     log_m("\tmatch_copy {describe(what)} {describe(makeType)} {describe(access)}")
     let tempName = make_unique_private_name("__`match`copy", wths.at)
     var inscope prefixType <- clone_type(makeType)
-    var inscope prefix <- qmacro_expr <| $() {
+    var inscope prefix <- qmacro_expr() {
         let $i(tempName) : $t(prefixType)
     }
     prefix |> force_at(wths.at)
@@ -407,7 +407,7 @@ def match_expr(what : TypeDeclPtr; wthmt : ExprCall?; access : ExpressionPtr; va
     }
     var inscope expr <- clone_expression(value)
     unsafe {
-        expr <- apply_template(expr) <| $(rules) {
+        expr <- apply_template(expr) $(rules) {
             for (dv, dn in keys(to.declarations), values(to.declarations)) {
                 rules |> replaceVariable(dv) <| clone_expression(dn)
             }
@@ -426,7 +426,7 @@ def match_guards(what : TypeDeclPtr; wth : ExprOp2?; access : ExpressionPtr; var
         log_m("\tguards {describe(wth.right)} at {wth.right.at}\n")
         var inscope guards <- clone_expression(wth.right)
         unsafe {
-            guards <- apply_template(guards) <| $(rules) {
+            guards <- apply_template(guards) $(rules) {
                 for (dv, dn in keys(to.declarations), values(to.declarations)) {
                     rules |> replaceVariable(dv) <| clone_expression(dn)
                 }
@@ -669,7 +669,7 @@ class MatchMacro : AstCallMacro {
                     for (l in (eto.if_true as ExprBlock).finalList) {
                         nblk.finalList |> emplace_new <| clone_expression(l)
                     }
-                    apply_template(nblk) <| $(rules) {
+                    apply_template(nblk) $(rules) {
                         for (dv, dn in keys(to.declarations), values(to.declarations)) {
                             rules |> replaceVariable(dv) <| clone_expression(dn)
                         }

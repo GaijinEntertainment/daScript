@@ -16,7 +16,7 @@ Example:
     require daslib/static_let
 
         def counter() : int {
-            static_let <| $() {
+            static_let() {
                 var count = 0
             }
             count ++

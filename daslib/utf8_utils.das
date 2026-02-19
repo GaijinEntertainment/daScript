@@ -217,7 +217,7 @@ def public utf8_decode(source_utf8_string : array<uint8> const implicit) : array
 def public utf8_decode(source_utf8_string : string const) : array<uint> {
     //! Converts UTF-8 string to UTF-32 and returns it as an array of codepoints (UTF-32 string)
     var dest_utf32_string : array<uint>
-    peek_data(source_utf8_string) <| $(arr) {
+    peek_data(source_utf8_string) $(arr) {
         dest_utf32_string |> utf8_decode(arr)
     }
     return <- dest_utf32_string
@@ -226,15 +226,15 @@ def public utf8_decode(source_utf8_string : string const) : array<uint> {
 
 def public utf8_decode(var dest_utf32_string : array<uint>; source_utf8_string : string const) {
     //! Converts UTF-8 string to UTF-32 and appends it to the array of codepoints (UTF-32 string)
-    peek_data(source_utf8_string) <| $(arr) {
+    peek_data(source_utf8_string) $(arr) {
         dest_utf32_string |> utf8_decode(arr)
     }
 }
 
 def decode_unicode_escape(str : string) {
     //! Decodes Unicode escape sequences (backslash followed by hex digits) in a string to UTF-8.
-    return build_string <| $(writer) {
-        peek_data(str) <| $(p) {
+    return build_string() $(writer) {
+        peek_data(str) $(p) {
             var i = 0
             let llen = p |> length
             var bang : array<uint8>

@@ -131,19 +131,19 @@ def main() {
         let totalFiles = length(files)
         let totalThreads = max(1, args |> get_int_arg("--isolated-mode-threads", get_total_hw_threads() * 2)) // magic x2, os should be able to schedule sub processes in parallel
         log::info("Running {totalFiles} tests in isolated mode with {totalThreads} threads\n")
-        with_channel(totalFiles) <| $(inputChannel) {
-            with_channel(totalFiles) <| $(outputChannel) {
-                with_job_status(totalThreads) <| $(completion) {
+        with_channel(totalFiles) $(inputChannel) {
+            with_channel(totalFiles) $(outputChannel) {
+                with_job_status(totalThreads) $(completion) {
 
                     for (t in range(totalThreads)) {
                         new_thread <| @ {
-                            for_each_clone(inputChannel) <| $(input : IsoInput#) {
+                            for_each_clone(inputChannel) $(input : IsoInput#) {
                                 var isoRes : IsolatedResult
                                 isoRes.uri = clone_string(input.uri)
                                 isoRes.cmd = clone_string(input.cmd)
                                 let fileTime = ref_time_ticks()
                                 unsafe {
-                                    isoRes.exitCode = popen(input.cmd) <| $(f) {
+                                    isoRes.exitCode = popen(input.cmd) $(f) {
                                         if (f == null) {
                                             // log::error("Internal error: Failed to execute cmd > {input.cmd}")
                                             isoRes.err |> push("Internal error: Failed to execute cmd > {input.cmd}")

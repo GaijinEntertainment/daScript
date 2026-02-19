@@ -106,7 +106,7 @@ class OnceMacro : AstFunctionAnnotation {
         // Step 4: Build the replacement AST using qmacro_block.
         //         $i(flag_name) splices the flag name as an identifier.
         //         $b(stmts) splices the statement array into the block.
-        var inscope replacement <- qmacro_block() <| $() {
+        var inscope replacement <- qmacro_block() {
             if (!$i(flag_name)) {
                 $i(flag_name) = true
                 $b(stmts)

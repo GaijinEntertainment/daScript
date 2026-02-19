@@ -77,7 +77,7 @@ def check_set_vec4(t : T?; var v : auto(vecT); a1, a2, a3, a4 : auto(argT)) {
 
 [test]
 def test_vector_swizzle(t : T?) {
-    t |> run("vector2 [] r2v") <| @(t : T?) {
+    t |> run("vector2 [] r2v") @(t : T?) {
         check_vec2_at_r2v(t, type<float2>, 1.0, 2.0)
         check_vec2_at_r2v(t, type<int2>, 1, 2)
         check_vec2_at_r2v(t, type<uint2>, 1u, 2u)
@@ -86,17 +86,17 @@ def test_vector_swizzle(t : T?) {
         check_vec2_at_r2v(t, type<range64>, 1l, 2l)
         check_vec2_at_r2v(t, type<urange64>, 1ul, 2ul)
     }
-    t |> run("vector3 [] r2v") <| @(t : T?) {
+    t |> run("vector3 [] r2v") @(t : T?) {
         check_vec3_at_r2v(t, type<float3>, 1.0, 2.0, 3.0)
         check_vec3_at_r2v(t, type<int3>, 1, 2, 3)
         check_vec3_at_r2v(t, type<uint3>, 1u, 2u, 3u)
     }
-    t |> run("vector4 [] r2v") <| @(t : T?) {
+    t |> run("vector4 [] r2v") @(t : T?) {
         check_vec4_at_r2v(t, type<float4>, 1.0, 2.0, 3.0, 4.0)
         check_vec4_at_r2v(t, type<int4>, 1, 2, 3, 4)
         check_vec4_at_r2v(t, type<uint4>, 1u, 2u, 3u, 4u)
     }
-    t |> run("set vector2 []") <| @(t : T?) {
+    t |> run("set vector2 []") @(t : T?) {
         check_set_vec2(t, type<float2>, 1.0, 2.0)
         check_set_vec2(t, type<int2>, 1, 2)
         check_set_vec2(t, type<uint2>, 1u, 2u)
@@ -105,12 +105,12 @@ def test_vector_swizzle(t : T?) {
         check_set_vec2(t, type<range64>, 1l, 2l)
         check_set_vec2(t, type<urange64>, 1ul, 2ul)
     }
-    t |> run("set vector3 []") <| @(t : T?) {
+    t |> run("set vector3 []") @(t : T?) {
         check_set_vec3(t, type<float3>, 1.0, 2.0, 3.0)
         check_set_vec3(t, type<int3>, 1, 2, 3)
         check_set_vec3(t, type<uint3>, 1u, 2u, 3u)
     }
-    t |> run("set vector4 []") <| @(t : T?) {
+    t |> run("set vector4 []") @(t : T?) {
         check_set_vec4(t, type<float4>, 1.0, 2.0, 3.0, 4.0)
         check_set_vec4(t, type<int4>, 1, 2, 3, 4)
         check_set_vec4(t, type<uint4>, 1u, 2u, 3u, 4u)

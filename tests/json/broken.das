@@ -68,19 +68,19 @@ def test_broken(t : T?; text : string) {
 
 [test]
 def broken_json(t : T?) {
-    t |> run("string concatination") <| @(t : T?) {
+    t |> run("string concatination") @(t : T?) {
         test_broken(t, broken1)
     }
-    t |> run("quotes") <| @(t : T?) {
+    t |> run("quotes") @(t : T?) {
         test_broken(t, broken2)
     }
-    t |> run("extra ,") <| @(t : T?) {
+    t |> run("extra ,") @(t : T?) {
         test_broken(t, broken3)
     }
-    t |> run("missing ,") <| @(t : T?) {
+    t |> run("missing ,") @(t : T?) {
         test_broken(t, broken4)
     }
-    t |> run("extra \u004857") <| @(t : T?) {
+    t |> run("extra \u004857") @(t : T?) {
         test_broken(t, broken5)
     }
 }

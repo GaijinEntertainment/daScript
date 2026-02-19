@@ -142,7 +142,7 @@ def op_equ_tab(a, b : table<string; auto(TT)>) {
             return false
         }
         var same = false
-        b |> get(k) <| $(pv) {
+        b |> get(k) $(pv) {
             same = pv == v
         }
     }

@@ -125,9 +125,9 @@ def test_mod_equ(t : T?; a, b : auto(TT)) {
 
 [test]
 def test_arithmetics_op2(t : T?) {
-    t |> run("+, -, *, /, %") <| @(t : T?) {
+    t |> run("+, -, *, /, %") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             fuzz_numeric_and_vector_op2(t, fake, "test_add")
             fuzz_numeric_and_vector_op2(t, fake, "test_sub")
             fuzz_numeric_and_vector_op2(t, fake, "test_mul")
@@ -136,9 +136,9 @@ def test_arithmetics_op2(t : T?) {
         }
     }
 
-    t |> run("+=, -=, *=, /=, %=") <| @(t : T?) {
+    t |> run("+=, -=, *=, /=, %=") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             fuzz_numeric_and_vector_op2(t, fake, "test_add_equ")
             fuzz_numeric_and_vector_op2(t, fake, "test_sub_equ")
             fuzz_numeric_and_vector_op2(t, fake, "test_mul_equ")
@@ -150,9 +150,9 @@ def test_arithmetics_op2(t : T?) {
 
 [test]
 def test_arithmetics_vec_and_scalar_op2(t : T?) {
-    t |> run("* / vector vs salar") <| @(t : T?) {
+    t |> run("* / vector vs salar") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             fuzz_numeric_vec_scal_op2(t, fake, "test_mul")
             fuzz_numeric_vec_scal_op2(t, fake, "test_div_vec")
             fuzz_numeric_scal_vec_op2(t, fake, "test_mul")
@@ -160,9 +160,9 @@ def test_arithmetics_vec_and_scalar_op2(t : T?) {
         }
     }
 
-    t |> run("*= /= vector vs scalar") <| @(t : T?) {
+    t |> run("*= /= vector vs scalar") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             fuzz_numeric_vec_scal_op2(t, fake, "test_mul_equ")
             fuzz_numeric_vec_scal_op2(t, fake, "test_div_equ_vec")
         }
@@ -233,15 +233,15 @@ def test_neg(t : T?; a : auto(TT)) {
 
 [test]
 def test_arithmetics_op1(t : T?) {
-    t |> run("-") <| @(t : T?) {
+    t |> run("-") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             fuzz_numeric_and_vector_op1(t, fake, "test_neg")
         }
     }
-    t |> run("++, --, +++, ---") <| @(t : T?) {
+    t |> run("++, --, +++, ---") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             fuzz_numeric_op1(t, fake, "test_post_inc")
             fuzz_numeric_op1(t, fake, "test_post_dec")
             fuzz_numeric_op1(t, fake, "test_pre_inc")

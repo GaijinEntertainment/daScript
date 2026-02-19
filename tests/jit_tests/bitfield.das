@@ -19,13 +19,13 @@ def set_one(var b : bits123) {
 
 [test]
 def test_bitfield(t : T?) {
-    t |> run("one") <| @(t : T?) {
+    t |> run("one") @(t : T?) {
         verify(!jit_enabled() || is_jit_function(@@is_one))
         t |> equal(true, is_one(bits123.one))
         t |> equal(false, is_one(bits123.two))
         t |> equal(false, is_one(bits123.three))
     }
-    t |> run("set_one") <| @(t : T?) {
+    t |> run("set_one") @(t : T?) {
         verify(!jit_enabled() || is_jit_function(@@set_one))
         t |> equal(bits123.one, set_one(bits123.one))
         t |> equal(bits123.one | bits123.two, set_one(bits123.two))

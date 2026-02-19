@@ -30,7 +30,7 @@ def test_float(t : T?; a : auto(TT)) {
 // [test]
 def test_intrin_float(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_numeric_and_storage_op1(t, fake, "test_float")
     }
 }
@@ -49,7 +49,7 @@ def test_double(t : T?; a : auto(TT)) {
 // [test]
 def test_intrin_double(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_numeric_and_storage_op1(t, fake, "test_double")
     }
 }
@@ -71,7 +71,7 @@ def test_int(t : T?; a : auto(TT)) {
 // [test]
 def test_intrin_int(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_numeric_and_storage_op1(t, fake, "test_int")
     }
     t |> success(!jit_enabled() || is_jit_function(@@ < (a : CompilationError) : int > jit_int))
@@ -92,7 +92,7 @@ def test_uint(t : T?; a : auto(TT)) {
 // [test]
 def test_intrin_uint(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_numeric_and_storage_op1(t, fake, "test_uint")
     }
     t |> success(!jit_enabled() || is_jit_function(@@ < (a : CompilationError) : int > jit_uint))
@@ -114,7 +114,7 @@ def test_int8(t : T?; a : auto(TT)) {
 // [test]
 def test_intrin_int8(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_numeric_and_storage_op1(t, fake, "test_int8")
     }
     t |> success(!jit_enabled() || is_jit_function(@@ < (a : CompilationError) : int > jit_int8))
@@ -136,7 +136,7 @@ def test_uint8(t : T?; a : auto(TT)) {
 // [test]
 def test_intrin_uint8(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_numeric_and_storage_op1(t, fake, "test_uint8")
     }
     t |> success(!jit_enabled() || is_jit_function(@@ < (a : CompilationError) : int > jit_uint8))
@@ -157,7 +157,7 @@ def test_int16(t : T?; a : auto(TT)) {
 // [test]
 def test_intrin_int16(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_numeric_and_storage_op1(t, fake, "test_int16")
     }
     t |> success(!jit_enabled() || is_jit_function(@@ < (a : CompilationError) : int > jit_int16))
@@ -179,7 +179,7 @@ def test_uint16(t : T?; a : auto(TT)) {
 // [test]
 def test_intrin_uint16(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_numeric_and_storage_op1(t, fake, "test_uint16")
     }
     t |> success(!jit_enabled() || is_jit_function(@@ < (a : CompilationError) : int > jit_uint16))
@@ -201,7 +201,7 @@ def test_int64(t : T?; a : auto(TT)) {
 // [test]
 def test_intrin_int64(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_numeric_and_storage_op1(t, fake, "test_int64")
     }
     t |> success(!jit_enabled() || is_jit_function(@@ < (a : CompilationError) : int > jit_int64))
@@ -223,7 +223,7 @@ def test_uint64(t : T?; a : auto(TT)) {
 // [test]
 def test_intrin_uint64(t : T?) {
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         fuzz_numeric_and_storage_op1(t, fake, "test_uint64")
     }
     t |> success(!jit_enabled() || is_jit_function(@@ < (a : CompilationError) : int > jit_uint64))
@@ -269,12 +269,12 @@ def test_float4_4(t : T?; x, y, z, w : auto(TT)) {
 
 // [test]
 def test_intrin_float4(t : T?) {
-    t |> run("float4()") <| @(t : T?) {
+    t |> run("float4()") @(t : T?) {
         t |> strictEqual(float4(), jit_float4_0(), "float4()")
     }
-    t |> run("float4(x)") <| @(t : T?) {
+    t |> run("float4(x)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             test_float4(t, fake |> random_int)
             test_float4(t, fake |> random_uint)
             test_float4(t, fake |> random_float)
@@ -284,42 +284,42 @@ def test_intrin_float4(t : T?) {
             test_float4(t, fake |> random_uint4)
         }
     }
-    t |> run("float4(x,y)") <| @(t : T?) {
+    t |> run("float4(x,y)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             let f1 = fake |> random_float
             let f2 = fake |> random_float3
             t |> strictEqual(float4(f1, f2), jit_float4_2(f1, f2), "float4(x,y) // 1,3")
         }
-        fuzz <| $() {
+        fuzz() {
             let f1 = fake |> random_float2
             let f2 = fake |> random_float2
             t |> strictEqual(float4(f1, f2), jit_float4_2(f1, f2), "float4(x,y) // 2,2")
         }
-        fuzz <| $() {
+        fuzz() {
             let f1 = fake |> random_float3
             let f2 = fake |> random_float
             t |> strictEqual(float4(f1, f2), jit_float4_2(f1, f2), "float4(x,y) // 3,1")
         }
     }
-    t |> run("float4(x,y,z)") <| @(t : T?) {
+    t |> run("float4(x,y,z)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             let f1 = fake |> random_float
             let f2 = fake |> random_float
             let f3 = fake |> random_float2
             t |> strictEqual(float4(f1, f2, f3), jit_float4_3(f1, f2, f3), "float4(x,y) // 1,1,2")
         }
-        fuzz <| $() {
+        fuzz() {
             let f1 = fake |> random_float
             let f2 = fake |> random_float2
             let f3 = fake |> random_float
             t |> strictEqual(float4(f1, f2, f3), jit_float4_3(f1, f2, f3), "float4(x,y,z) // 1,2,1")
         }
     }
-    t |> run("float4(x,y,z,w)") <| @(t : T?) {
+    t |> run("float4(x,y,z,w)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             fuzz_numeric_op4(t, fake, "test_float4_4")
         }
     }
@@ -356,12 +356,12 @@ def test_float3_3(t : T?; x, y, z : auto(TT)) {
 
 // [test]
 def test_intrin_float3(t : T?) {
-    t |> run("float3()") <| @(t : T?) {
+    t |> run("float3()") @(t : T?) {
         t |> strictEqual(float3(), jit_float3_0(), "float3()")
     }
-    t |> run("float3(x)") <| @(t : T?) {
+    t |> run("float3(x)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             test_float3(t, fake |> random_int)
             test_float3(t, fake |> random_uint)
             test_float3(t, fake |> random_float)
@@ -371,22 +371,22 @@ def test_intrin_float3(t : T?) {
             test_float3(t, fake |> random_uint3)
         }
     }
-    t |> run("float3(x,y)") <| @(t : T?) {
+    t |> run("float3(x,y)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             let f1 = fake |> random_float
             let f2 = fake |> random_float2
             t |> strictEqual(float3(f1, f2), jit_float3_2(f1, f2), "float3(x,y) // 1,2")
         }
-        fuzz <| $() {
+        fuzz() {
             let f1 = fake |> random_float2
             let f2 = fake |> random_float
             t |> strictEqual(float3(f1, f2), jit_float3_2(f1, f2), "float3(x,y) // 2,1")
         }
     }
-    t |> run("float3(x,y,z)") <| @(t : T?) {
+    t |> run("float3(x,y,z)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             fuzz_numeric_op3(t, fake, "test_float3_3")
         }
     }
@@ -419,12 +419,12 @@ def test_float2_2(t : T?; x, y : auto(TT)) {
 
 // [test]
 def test_intrin_float2(t : T?) {
-    t |> run("float2()") <| @(t : T?) {
+    t |> run("float2()") @(t : T?) {
         t |> strictEqual(float2(), jit_float2_0(), "float2()")
     }
-    t |> run("float2(x)") <| @(t : T?) {
+    t |> run("float2(x)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             test_float2(t, fake |> random_int)
             test_float2(t, fake |> random_uint)
             test_float2(t, fake |> random_float)
@@ -434,9 +434,9 @@ def test_intrin_float2(t : T?) {
             test_float2(t, fake |> random_uint2)
         }
     }
-    t |> run("float2(x,y,z)") <| @(t : T?) {
+    t |> run("float2(x,y,z)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             fuzz_numeric_op2(t, fake, "test_float2_2")
         }
     }
@@ -477,12 +477,12 @@ def test_int4_4(t : T?; x, y, z, w : auto(TT)) {
 
 // [test]
 def test_intrin_int4(t : T?) {
-    t |> run("int4()") <| @(t : T?) {
+    t |> run("int4()") @(t : T?) {
         t |> strictEqual(int4(), jit_int4_0(), "int4()")
     }
-    t |> run("int4(x)") <| @(t : T?) {
+    t |> run("int4(x)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             test_int4(t, fake |> random_int)
             test_int4(t, fake |> random_uint)
             test_int4(t, fake |> random_float)
@@ -492,42 +492,42 @@ def test_intrin_int4(t : T?) {
             test_int4(t, fake |> random_uint4)
         }
     }
-    t |> run("int4(x,y)") <| @(t : T?) {
+    t |> run("int4(x,y)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             let f1 = fake |> random_int
             let f2 = fake |> random_int3
             t |> strictEqual(int4(f1, f2), jit_int4_2(f1, f2), "int4(x,y) // 1,3")
         }
-        fuzz <| $() {
+        fuzz() {
             let f1 = fake |> random_int2
             let f2 = fake |> random_int2
             t |> strictEqual(int4(f1, f2), jit_int4_2(f1, f2), "int4(x,y) // 2,2")
         }
-        fuzz <| $() {
+        fuzz() {
             let f1 = fake |> random_int3
             let f2 = fake |> random_int
             t |> strictEqual(int4(f1, f2), jit_int4_2(f1, f2), "int4(x,y) // 3,1")
         }
     }
-    t |> run("int4(x,y,z)") <| @(t : T?) {
+    t |> run("int4(x,y,z)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             let f1 = fake |> random_int
             let f2 = fake |> random_int
             let f3 = fake |> random_int2
             t |> strictEqual(int4(f1, f2, f3), jit_int4_3(f1, f2, f3), "int4(x,y) // 1,1,2")
         }
-        fuzz <| $() {
+        fuzz() {
             let f1 = fake |> random_int
             let f2 = fake |> random_int2
             let f3 = fake |> random_int
             t |> strictEqual(int4(f1, f2, f3), jit_int4_3(f1, f2, f3), "int4(x,y,z) // 1,2,1")
         }
     }
-    t |> run("int4(x,y,z,w)") <| @(t : T?) {
+    t |> run("int4(x,y,z,w)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             fuzz_numeric_op4(t, fake, "test_int4_4")
         }
     }
@@ -564,12 +564,12 @@ def test_int3_3(t : T?; x, y, z : auto(TT)) {
 
 // [test]
 def test_intrin_int3(t : T?) {
-    t |> run("int3()") <| @(t : T?) {
+    t |> run("int3()") @(t : T?) {
         t |> strictEqual(int3(), jit_int3_0(), "int3()")
     }
-    t |> run("int3(x)") <| @(t : T?) {
+    t |> run("int3(x)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             test_int3(t, fake |> random_int)
             test_int3(t, fake |> random_uint)
             test_int3(t, fake |> random_float)
@@ -579,22 +579,22 @@ def test_intrin_int3(t : T?) {
             test_int3(t, fake |> random_uint3)
         }
     }
-    t |> run("int3(x,y)") <| @(t : T?) {
+    t |> run("int3(x,y)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             let f1 = fake |> random_int
             let f2 = fake |> random_int2
             t |> strictEqual(int3(f1, f2), jit_int3_2(f1, f2), "int3(x,y) // 1,2")
         }
-        fuzz <| $() {
+        fuzz() {
             let f1 = fake |> random_int2
             let f2 = fake |> random_int
             t |> strictEqual(int3(f1, f2), jit_int3_2(f1, f2), "int3(x,y) // 2,1")
         }
     }
-    t |> run("int3(x,y,z)") <| @(t : T?) {
+    t |> run("int3(x,y,z)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             fuzz_numeric_op3(t, fake, "test_int3_3")
         }
     }
@@ -627,12 +627,12 @@ def test_int2_2(t : T?; x, y : auto(TT)) {
 
 // [test]
 def test_intrin_int2(t : T?) {
-    t |> run("int2()") <| @(t : T?) {
+    t |> run("int2()") @(t : T?) {
         t |> strictEqual(int2(), jit_int2_0(), "int2()")
     }
-    t |> run("int2(x)") <| @(t : T?) {
+    t |> run("int2(x)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             test_int2(t, fake |> random_int)
             test_int2(t, fake |> random_uint)
             test_int2(t, fake |> random_float)
@@ -642,9 +642,9 @@ def test_intrin_int2(t : T?) {
             test_int2(t, fake |> random_uint2)
         }
     }
-    t |> run("int2(x,y)") <| @(t : T?) {
+    t |> run("int2(x,y)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             fuzz_numeric_op2(t, fake, "test_int2_2")
         }
     }
@@ -685,12 +685,12 @@ def test_uint4_4(t : T?; x, y, z, w : auto(TT)) {
 
 // [test]
 def test_intrin_uint4(t : T?) {
-    t |> run("uint4()") <| @(t : T?) {
+    t |> run("uint4()") @(t : T?) {
         t |> strictEqual(uint4(), jit_uint4_0(), "uint4()")
     }
-    t |> run("uint4(x)") <| @(t : T?) {
+    t |> run("uint4(x)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             test_uint4(t, fake |> random_int)
             test_uint4(t, fake |> random_uint)
             test_uint4(t, fake |> random_float)
@@ -700,42 +700,42 @@ def test_intrin_uint4(t : T?) {
             test_uint4(t, fake |> random_uint4)
         }
     }
-    t |> run("uint4(x,y)") <| @(t : T?) {
+    t |> run("uint4(x,y)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             let f1 = fake |> random_uint
             let f2 = fake |> random_uint3
             t |> strictEqual(uint4(f1, f2), jit_uint4_2(f1, f2), "uint4(x,y) // 1,3")
         }
-        fuzz <| $() {
+        fuzz() {
             let f1 = fake |> random_uint2
             let f2 = fake |> random_uint2
             t |> strictEqual(uint4(f1, f2), jit_uint4_2(f1, f2), "uint4(x,y) // 2,2")
         }
-        fuzz <| $() {
+        fuzz() {
             let f1 = fake |> random_uint3
             let f2 = fake |> random_uint
             t |> strictEqual(uint4(f1, f2), jit_uint4_2(f1, f2), "uint4(x,y) // 3,1")
         }
     }
-    t |> run("uint4(x,y,z)") <| @(t : T?) {
+    t |> run("uint4(x,y,z)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             let f1 = fake |> random_uint
             let f2 = fake |> random_uint
             let f3 = fake |> random_uint2
             t |> strictEqual(uint4(f1, f2, f3), jit_uint4_3(f1, f2, f3), "uint4(x,y) // 1,1,2")
         }
-        fuzz <| $() {
+        fuzz() {
             let f1 = fake |> random_uint
             let f2 = fake |> random_uint2
             let f3 = fake |> random_uint
             t |> strictEqual(uint4(f1, f2, f3), jit_uint4_3(f1, f2, f3), "uint4(x,y,z) // 1,2,1")
         }
     }
-    t |> run("uint4(x,y,z,w)") <| @(t : T?) {
+    t |> run("uint4(x,y,z,w)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             fuzz_numeric_op4(t, fake, "test_uint4_4")
         }
     }
@@ -772,12 +772,12 @@ def test_uint3_3(t : T?; x, y, z : auto(TT)) {
 
 // [test]
 def test_intrin_uint3(t : T?) {
-    t |> run("uint3()") <| @(t : T?) {
+    t |> run("uint3()") @(t : T?) {
         t |> strictEqual(uint3(), jit_uint3_0(), "uint3()")
     }
-    t |> run("uint3(x)") <| @(t : T?) {
+    t |> run("uint3(x)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             test_uint3(t, fake |> random_int)
             test_uint3(t, fake |> random_uint)
             test_uint3(t, fake |> random_float)
@@ -787,22 +787,22 @@ def test_intrin_uint3(t : T?) {
             test_uint3(t, fake |> random_uint3)
         }
     }
-    t |> run("uint3(x,y)") <| @(t : T?) {
+    t |> run("uint3(x,y)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             let f1 = fake |> random_uint
             let f2 = fake |> random_uint2
             t |> strictEqual(uint3(f1, f2), jit_uint3_2(f1, f2), "uint3(x,y) // 1,2")
         }
-        fuzz <| $() {
+        fuzz() {
             let f1 = fake |> random_uint2
             let f2 = fake |> random_uint
             t |> strictEqual(uint3(f1, f2), jit_uint3_2(f1, f2), "uint3(x,y) // 2,1")
         }
     }
-    t |> run("uint3(x,y,z)") <| @(t : T?) {
+    t |> run("uint3(x,y,z)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             fuzz_numeric_op3(t, fake, "test_uint3_3")
         }
     }
@@ -835,12 +835,12 @@ def test_uint2_2(t : T?; x, y : auto(TT)) {
 
 // [test]
 def test_intrin_uint2(t : T?) {
-    t |> run("uint2()") <| @(t : T?) {
+    t |> run("uint2()") @(t : T?) {
         t |> strictEqual(uint2(), jit_uint2_0(), "uint2()")
     }
-    t |> run("uint2(x)") <| @(t : T?) {
+    t |> run("uint2(x)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             test_uint2(t, fake |> random_int)
             test_uint2(t, fake |> random_uint)
             test_uint2(t, fake |> random_float)
@@ -850,9 +850,9 @@ def test_intrin_uint2(t : T?) {
             test_uint2(t, fake |> random_uint2)
         }
     }
-    t |> run("uint2(x,y)") <| @(t : T?) {
+    t |> run("uint2(x,y)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             fuzz_numeric_op2(t, fake, "test_uint2_2")
         }
     }
@@ -895,12 +895,12 @@ def test_interval_2(t : T?; x, y : auto(TT)) {
 
 // [test]
 def test_intrin_range(t : T?) {
-    t |> run("range()") <| @(t : T?) {
+    t |> run("range()") @(t : T?) {
         t |> strictEqual(range(), jit_range_0(), "range()")
     }
-    t |> run("range(x)") <| @(t : T?) {
+    t |> run("range(x)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             test_range(t, fake |> random_int)
             test_range(t, fake |> random_uint)
             test_range(t, fake |> random_float)
@@ -908,15 +908,15 @@ def test_intrin_range(t : T?) {
             test_range(t, fake |> random_range)
         }
     }
-    t |> run("range(x,y)") <| @(t : T?) {
+    t |> run("range(x,y)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             fuzz_numeric_op2(t, fake, "test_range_2")
         }
     }
-    t |> run("x..y") <| @(t : T?) {
+    t |> run("x..y") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             test_interval_2(t, fake |> random_int, fake |> random_int)
         }
     }
@@ -949,12 +949,12 @@ def test_urange_2(t : T?; x, y : auto(TT)) {
 
 // [test]
 def test_intrin_urange(t : T?) {
-    t |> run("urange()") <| @(t : T?) {
+    t |> run("urange()") @(t : T?) {
         t |> strictEqual(urange(), jit_urange_0(), "urange()")
     }
-    t |> run("urange(x)") <| @(t : T?) {
+    t |> run("urange(x)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             test_urange(t, fake |> random_int)
             test_urange(t, fake |> random_uint)
             test_urange(t, fake |> random_float)
@@ -962,15 +962,15 @@ def test_intrin_urange(t : T?) {
             test_urange(t, fake |> random_urange)
         }
     }
-    t |> run("urange(x,y)") <| @(t : T?) {
+    t |> run("urange(x,y)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             fuzz_numeric_op2(t, fake, "test_urange_2")
         }
     }
-    t |> run("x..y") <| @(t : T?) {
+    t |> run("x..y") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             test_interval_2(t, fake |> random_uint, fake |> random_uint)
         }
     }
@@ -1003,12 +1003,12 @@ def test_range64_2(t : T?; x, y : auto(TT)) {
 
 // [test]
 def test_intrin_range64(t : T?) {
-    t |> run("range64()") <| @(t : T?) {
+    t |> run("range64()") @(t : T?) {
         t |> strictEqual(range64(), jit_range64_0(), "range64()")
     }
-    t |> run("range64(x)") <| @(t : T?) {
+    t |> run("range64(x)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             test_range64(t, fake |> random_int)
             test_range64(t, fake |> random_uint)
             test_range64(t, fake |> random_float)
@@ -1016,15 +1016,15 @@ def test_intrin_range64(t : T?) {
             test_range64(t, fake |> random_range64)
         }
     }
-    t |> run("range64(x,y)") <| @(t : T?) {
+    t |> run("range64(x,y)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             fuzz_numeric_op2(t, fake, "test_range64_2")
         }
     }
-    t |> run("x..y") <| @(t : T?) {
+    t |> run("x..y") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             test_interval_2(t, fake |> random_int64, fake |> random_int64)
         }
     }
@@ -1057,12 +1057,12 @@ def test_urange64_2(t : T?; x, y : auto(TT)) {
 
 // [test]
 def test_intrin_urange64(t : T?) {
-    t |> run("urange64()") <| @(t : T?) {
+    t |> run("urange64()") @(t : T?) {
         t |> strictEqual(urange64(), jit_urange64_0(), "urange64()")
     }
-    t |> run("urange64(x)") <| @(t : T?) {
+    t |> run("urange64(x)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             test_urange64(t, fake |> random_int)
             test_urange64(t, fake |> random_uint)
             test_urange64(t, fake |> random_float)
@@ -1070,15 +1070,15 @@ def test_intrin_urange64(t : T?) {
             test_urange64(t, fake |> random_urange64)
         }
     }
-    t |> run("urange64(x,y)") <| @(t : T?) {
+    t |> run("urange64(x,y)") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             fuzz_numeric_op2(t, fake, "test_urange64_2")
         }
     }
-    t |> run("x..y") <| @(t : T?) {
+    t |> run("x..y") @(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             test_interval_2(t, fake |> random_uint64, fake |> random_uint64)
         }
     }

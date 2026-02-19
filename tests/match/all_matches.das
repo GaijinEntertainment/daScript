@@ -433,47 +433,47 @@ def multi_match_test(a : int) {
 
 [test]
 def test_all_match(t : T?) {
-    t |> run("enum match") <| @@(t : T?) {
+    t |> run("enum match") @@(t : T?) {
         t |> equal(0, enum_match(Color.black))
         t |> equal(1, enum_match(Color.red))
         t |> equal(-1, enum_match(Color.green))
         t |> equal(-1, enum_match(Color.blue))
     }
-    t |> run("enum static match") <| @@(t : T?) {
+    t |> run("enum static match") @@(t : T?) {
         t |> equal(0, enum_static_match(Color.black, null))
         t |> equal(1, enum_static_match(1234, 1234))
         t |> equal(-1, enum_static_match(5678, 1234))
         t |> equal(-1, enum_static_match("a", 1234))
     }
-    t |> run("enum static match by type") <| @@(t : T?) {
+    t |> run("enum static match by type") @@(t : T?) {
         t |> equal(13, static_match_by_type(13))
         t |> equal(-1, static_match_by_type(13.))
     }
-    t |> run("struct match") <| @@(t : T?) {
+    t |> run("struct match") @@(t : T?) {
         t |> equal(0, struct_match(Foo(a = 13)))
         t |> equal(23, struct_match(Foo(a = 23)))
         t |> equal(0, struct_match(Bar(a = 13)))
         t |> equal(23, struct_match(Bar(a = 23, b = 13.0)))
         t |> equal(-1, struct_match(Bar(a = 23, b = 14.0)))
     }
-    t |> run("guards match") <| @@(t : T?) {
+    t |> run("guards match") @@(t : T?) {
         t |> equal("2 > 1", guards_match(AB(a = 1, b = 2)))
         t |> equal("1 <= 2", guards_match(AB(a = 2, b = 1)))
     }
-    t |> run("variant match") <| @@(t : T?) {
+    t |> run("variant match") @@(t : T?) {
         t |> equal(1, variant_match(IF(i = 1)))
         t |> equal(2, variant_match(IF(f = 1.0)))
     }
-    t |> run("variant as match") <| @@(t : T?) {
+    t |> run("variant as match") @@(t : T?) {
         t |> equal("int", variant_as_match(IF(i = 1)))
         t |> equal("float", variant_as_match(IF(f = 1.0)))
     }
-    t |> run("nested struct + variant as match") <| @@(t : T?) {
+    t |> run("nested struct + variant as match") @@(t : T?) {
         t |> equal(1, nested_struct_match(Foo(a = 1, v = IF(i = 1))))
         t |> equal(2, nested_struct_match(Foo(v = IF(f = 1.))))
         t |> equal(0, nested_struct_match(Foo(a = 13, v = IF(i = 1))))
     }
-    t |> run("static array match") <| @@(t : T?) {
+    t |> run("static array match") @@(t : T?) {
         t |> equal(1, static_array_match(fixed_array<int>(1, 2, 3)))
         t |> equal(0, static_array_match(fixed_array<int>(0, 1, 2)))   // strts with 0
         t |> equal(0, static_array_match(fixed_array<int>(0, 0, 0)))   // strts with 0
@@ -481,7 +481,7 @@ def test_all_match(t : T?) {
         t |> equal(2, static_array_match(fixed_array<int>(3, 3, 13))) // ends with 12
         t |> equal(3, static_array_match(fixed_array<int>(12, 3, 12))) // starts and ends with 12
     }
-    t |> run("dynamic array match") <| @@(t : T?) {
+    t |> run("dynamic array match") @@(t : T?) {
         t |> equal(1, dynamic_array_match(array<int>(1, 2, 3)))          // summ is 6, 3 total
         t |> equal(0, dynamic_array_match(array<int>(0, 0, 0)))          // first 3 are 0
         t |> equal(0, dynamic_array_match(array<int>(0, 0, 0, 1, 2, 3))) // first 3 are 0
@@ -493,64 +493,64 @@ def test_all_match(t : T?) {
         t |> equal(3, dynamic_array_match(array<int>(0, 1, 2, 3))) // starts with 0,1, ends with 2,3
         t |> equal(3, dynamic_array_match(array<int>(0, 1, 12, 11, 10, 2, 3))) // starts with 0,1, ends with 2,3
     }
-    t |> run("match_expr") <| @@(t : T?) {
+    t |> run("match_expr") @@(t : T?) {
         t |> equal(true, ascending_array_match(fixed_array<int>(1, 2, 3)))
         t |> equal(true, ascending_array_match(fixed_array<int>(0, 1, 2)))
         t |> equal(false, ascending_array_match(fixed_array<int>(1, 1, 2)))
     }
-    t |> run("match tuple") <| @@(t : T?) {
+    t |> run("match tuple") @@(t : T?) {
         t |> equal(1, tuple_match((1, 2.0, "3")))
         t |> equal(0, tuple_match((1, 2.0, "4")))
         t |> equal(2, tuple_match((13, 2.0, "4")))
         t |> equal(3, tuple_match((11, 2.0, "13")))
         t |> equal(4, tuple_match((2, 2.0, "2")))
     }
-    t |> run("or match") <| @@(t : T?) {
+    t |> run("or match") @@(t : T?) {
         t |> equal(true, or_match(1))
         t |> equal(true, or_match(2))
         t |> equal(false, or_match(3))
     }
-    t |> run("or match with variable") <| @@(t : T?) {
+    t |> run("or match with variable") @@(t : T?) {
         t |> equal(1., or_match_v(Bar(a = 1, b = 1.)))
         t |> equal(1., or_match_v(Bar(a = 2, b = 1.)))
         t |> equal(0., or_match_v(Bar(a = 3, b = 1.)))
     }
-    t |> run("struct ptr match") <| @@(t : T?) {
+    t |> run("struct ptr match") @@(t : T?) {
         t |> equal(-1, struct_ptr_match(null))
         t |> equal(0, struct_ptr_match(new Foo(a = 13)))
         t |> equal(23, struct_ptr_match(new Foo(a = 23)))
     }
-    t |> run("match handle ptr") <| @@(t : T?) {
+    t |> run("match handle ptr") @@(t : T?) {
         t |> equal("null", match_handle_ptr(default<TypeDeclPtr>))
         var inscope tp <- new TypeDecl(baseType = Type.tPointer)
         t |> equal("pointer", match_handle_ptr(tp))
         var inscope tnp <- new TypeDecl(baseType = Type.tInt)
         t |> equal("anything", match_handle_ptr(tnp))
     }
-    t |> run("match ast expression ptr") <| @@(t : T?) {
+    t |> run("match ast expression ptr") @@(t : T?) {
         t |> equal("null", match_ast_expr_ptr(default<ExpressionPtr>))
         var inscope ep <- new ExprConstInt(value = 13)
         t |> equal("int 13", match_ast_expr_ptr(ep))
         var inscope fp <- new ExprConstFloat(value = 13.0)
         t |> equal("anything", match_ast_expr_ptr(fp))
     }
-    t |> run("match as is") <| @@(t : T?) {
+    t |> run("match as is") @@(t : T?) {
         t |> equal(0., matching_as_and_is(Cmd()))
         t |> equal(3., matching_as_and_is(CmdMove(x = 1., y = 2.)))
     }
-    t |> run("match type is") <| @@(t : T?) {
+    t |> run("match type is") @@(t : T?) {
         t |> equal(0., matching_type_as_is(Cmd()))
         t |> equal(3., matching_type_as_is(CmdMove(x = 1., y = 2.)))
     }
-    t |> run("match copy") <| @@(t : T?) {
+    t |> run("match copy") @@(t : T?) {
         t |> equal(0., matching_copy(Cmd()))
         t |> equal(6., matching_copy(CmdLocate(x = 1., y = 2., z = 3.)))
     }
-    t |> run("match type copy") <| @@(t : T?) {
+    t |> run("match type copy") @@(t : T?) {
         t |> equal(0., matching_type_copy(Cmd()))
         t |> equal(6., matching_type_copy(CmdLocate(x = 1., y = 2., z = 3.)))
     }
-    t |> run("multi-match test") <| @@(t : T?) {
+    t |> run("multi-match test") @@(t : T?) {
         t |> equal("0 zero", multi_match_test(0))
         t |> equal("1 one odd", multi_match_test(1))
         t |> equal("2 two even", multi_match_test(2))

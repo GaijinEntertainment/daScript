@@ -10,12 +10,12 @@ def test_serialize(var t : T?) {
     restart()
     let entitiesNum = 3
     for (i in range(entitiesNum)) {
-        create_entity <| @(eid, cmp) {
+        create_entity() @(eid, cmp) {
             cmp |> set("i", i)
         }
     }
     for (i in range(entitiesNum)) {
-        create_entity <| @(eid, cmp) {
+        create_entity() @(eid, cmp) {
             cmp |> set("i", i)
             cmp |> set("s", "__{i}__")
         }
@@ -23,7 +23,7 @@ def test_serialize(var t : T?) {
     commit()
     var check_it <- $() {
         var num = 0
-        query <| $(i : int) {
+        query() $(i : int) {
             num += 1
             if (i < 0 || i >= 3) {
                 t->fatal("wrong size")
@@ -31,7 +31,7 @@ def test_serialize(var t : T?) {
         }
         t |> equal(num, entitiesNum + entitiesNum)
         num = 0
-        query <| $(i : int; s : string) {
+        query() $(i : int; s : string) {
             num += 1
             t |> equal(s, "__{i}__")
         }
@@ -40,7 +40,7 @@ def test_serialize(var t : T?) {
     invoke(check_it)
     var data <- mem_archive_save(decsState)
     restart()
-    query <| $(i : int) {
+    query() $(i : int) {
         panic("something is up")
     }
 

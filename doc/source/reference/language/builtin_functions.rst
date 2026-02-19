@@ -254,7 +254,7 @@ Remove & Erase
 
     .. code-block:: das
 
-        erase_if(arr) <| $(x) { return x < 0 }
+        erase_if(arr) $(x) { return x < 0 }
 
 .. das:function:: remove_value(var arr : array<T>; value : T) : bool
 
@@ -317,7 +317,7 @@ Sorting
 
     .. code-block:: das
 
-        sort(arr) <| $(a, b) { return a > b }  // descending order
+        sort(arr) $(a, b) { return a > b }  // descending order
 
 ^^^^^^^^^^^^^^^^
 Swap
@@ -346,7 +346,7 @@ Lookup
 
     .. code-block:: das
 
-        get(tab, "key") <| $(value) {
+        get(tab, "key") $(value) {
             print("found: {value}\n")
         }
 
@@ -514,7 +514,7 @@ Lock Operations
 
     .. code-block:: das
 
-        lock(my_table) <| $(t) {
+        lock(my_table) $(t) {
             for (key in keys(t)) {
                 print("{key}\n")
             }

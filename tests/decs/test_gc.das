@@ -12,15 +12,15 @@ require daslib/static_let
 def test_archive_arrays(t : T?) {
     restart()
     for (i in range(3)) {
-        create_entity <| @(eid, cmp) {
+        create_entity() @(eid, cmp) {
             cmp |> set("values", [for (x in range(i + 1)); x])
             cmp |> set("i", i)
         }
     }
     commit()
-    t |> run("before gc") <| @(t : T?) {
+    t |> run("before gc") @(t : T?) {
         var tot = 0
-        query <| $(values : array<int>; i : int) {
+        query() $(values : array<int>; i : int) {
             tot ++
             for (x, v in range(i + 1), values) {
                 t |> equal(x, v)
@@ -31,9 +31,9 @@ def test_archive_arrays(t : T?) {
     var data <- mem_archive_save(decsState)
     restart()
     data |> mem_archive_load(decsState)
-    t |> run("after gc") <| @(t : T?) {
+    t |> run("after gc") @(t : T?) {
         var tot = 0
-        query <| $(values : array<int>; i : int) {
+        query() $(values : array<int>; i : int) {
             tot ++
             for (x, v in range(i + 1), values) {
                 t |> equal(x, v)
@@ -47,14 +47,14 @@ def test_archive_arrays(t : T?) {
 def test_archive_strings(t : T?) {
     restart()
     for (i in range(3)) {
-        create_entity <| @(eid, cmp) {
+        create_entity() @(eid, cmp) {
             cmp.txt := "hello_{i}"
         }
     }
     commit()
-    t |> run("before string gc") <| @(t : T?) {
+    t |> run("before string gc") @(t : T?) {
         var i = 0
-        query <| $(txt : string) {
+        query() $(txt : string) {
             t |> equal(txt, "hello_{i++}")
         }
         t |> equal(i, 3)
@@ -62,9 +62,9 @@ def test_archive_strings(t : T?) {
     var data <- mem_archive_save(decsState)
     restart()
     data |> mem_archive_load(decsState)
-    t |> run("after string gc") <| @(t : T?) {
+    t |> run("after string gc") @(t : T?) {
         var j = 0
-        query <| $(txt : string) {
+        query() $(txt : string) {
             t |> equal(txt, "hello_{j++}")
         }
         t |> equal(j, 3)
@@ -75,14 +75,14 @@ def test_archive_strings(t : T?) {
 def test_gc_arrays(t : T?) {
     restart()
     for (i in range(3)) {
-        create_entity <| @(eid, cmp) {
+        create_entity() @(eid, cmp) {
             cmp |> set("values", [for (x in range(i + 1)); x])
             cmp |> set("i", i)
         }
     }
     commit()
-    t |> run("before gc") <| @(t : T?) {
-        query <| $(values : array<int>; i : int) {
+    t |> run("before gc") @(t : T?) {
+        query() $(values : array<int>; i : int) {
             for (x, v in range(i + 1), values) {
                 t |> equal(x, v)
             }
@@ -93,8 +93,8 @@ def test_gc_arrays(t : T?) {
         heap_collect(true, true)
     }
     after_gc()
-    t |> run("after gc") <| @(t : T?) {
-        query <| $(values : array<int>; i : int) {
+    t |> run("after gc") @(t : T?) {
+        query() $(values : array<int>; i : int) {
             for (x, v in range(i + 1), values) {
                 t |> equal(x, v)
             }
@@ -106,14 +106,14 @@ def test_gc_arrays(t : T?) {
 def test_gc_strings(t : T?) {
     restart()
     for (i in range(3)) {
-        create_entity <| @(eid, cmp) {
+        create_entity() @(eid, cmp) {
             cmp.txt := "hello_{i}"
         }
     }
     commit()
-    t |> run("before string gc") <| @(t : T?) {
+    t |> run("before string gc") @(t : T?) {
         var i = 0
-        query <| $(txt : string) {
+        query() $(txt : string) {
             t |> equal(txt, "hello_{i++}")
         }
         t |> equal(i, 3)
@@ -123,9 +123,9 @@ def test_gc_strings(t : T?) {
         heap_collect(true, true)
     }
     after_gc()
-    t |> run("after string gc") <| @(t : T?) {
+    t |> run("after string gc") @(t : T?) {
         var j = 0
-        query <| $(txt : string) {
+        query() $(txt : string) {
             t |> equal(txt, "hello_{j++}")
         }
         t |> equal(j, 3)
@@ -146,7 +146,7 @@ class FooWithLifetime {
 def test_arrays_lifetime(t : T?) {
     restart()
     for (i in range(3)) {
-        create_entity <| @(eid, cmp) {
+        create_entity() @(eid, cmp) {
             cmp |> set("pfoo", new FooWithLifetime())
         }
     }
@@ -160,13 +160,13 @@ def test_arrays_lifetime(t : T?) {
 def test_gc_stress(t : T?) {
     var seed = random_seed(13)
     restart()
-    static_let <| $() {
+    static_let() {
         var TOTAL_EID = 0
     }
     for (count in range(20)) {
         let morei = (random_int(seed) & 31) + 10
         for (i in range(morei)) {
-            create_entity <| @(eid, cmp) {
+            create_entity() @(eid, cmp) {
                 var values <- [for (x in range(i)); int2(x, x + 13)]
                 cmp |> set("values", values)
                 let random_arch = random_int(seed) & 31
@@ -177,7 +177,7 @@ def test_gc_stress(t : T?) {
         }
         let morej = (random_int(seed) & 31) + 10
         for (j in range(morei)) {
-            create_entity <| @(eid, cmp) {
+            create_entity() @(eid, cmp) {
                 cmp.txt := "text_{eid}"
                 let random_arch = random_int(seed) & 63
                 cmp |> set("arch_{random_arch}", random_arch)
@@ -185,7 +185,7 @@ def test_gc_stress(t : T?) {
             }
         }
         let delk = (random_int(seed) & 63)
-        query <| $(eid : EntityId) {
+        query() $(eid : EntityId) {
             let chance = random_int(seed) % 100
             if (chance <= 13) {
                 delete_entity(eid)
@@ -200,17 +200,17 @@ def test_gc_stress(t : T?) {
             after_gc()
         }
         commit()
-        query <| $(eid : EntityId; text : string) {
+        query() $(eid : EntityId; text : string) {
             t |> equal(text, "text_{eid}")
         }
-        query <| $(var values : array<int2>; var i : int) {
+        query() $(var values : array<int2>; var i : int) {
             let addi = (random_int(seed) & 511) + 10
             for (tt in range(addi)) {
                 values |> push(int2(i + tt, i + tt + 13))
             }
             i += addi
         }
-        query <| $(var values : array<int2>; var i : int) {
+        query() $(var values : array<int2>; var i : int) {
             var subi = (random_int(seed) & 63) + 5
             subi = min(length(values) - 10, subi)
             for (tt in range(subi)) {
@@ -218,7 +218,7 @@ def test_gc_stress(t : T?) {
             }
             i -= subi
         }
-        query <| $(values : array<int2>; i : int) {
+        query() $(values : array<int2>; i : int) {
             for (x, v in range(i + 1), values) {
                 if (!t |> equal(int2(x, x + 13), v)) {
                     break
@@ -240,7 +240,7 @@ def test_gc_stress(t : T?) {
             }
             after_gc()
         }
-        query <| $(values : array<int2>; i : int) {
+        query() $(values : array<int2>; i : int) {
             for (x, v in range(i + 1), values) {
                 if (!t |> equal(int2(x, x + 13), v)) {
                     break
@@ -248,12 +248,12 @@ def test_gc_stress(t : T?) {
             }
         }
         var te = 0
-        query <| $(eid : EntityId) {
+        query() $(eid : EntityId) {
             te ++
         }
         t |> equal(te, TOTAL_EID)
         te = 0
-        find_query <| $(eid : EntityId) {
+        find_query() $(eid : EntityId) {
             te ++
             return false
         }

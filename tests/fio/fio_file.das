@@ -22,9 +22,9 @@ def operator ==(a, b : array<uint8> implicit) {
 
 [test]
 def test_fopen(t : T?) {
-    t |> run("fuzz fopen") <| @@(t : T?) {
+    t |> run("fuzz fopen") @@(t : T?) {
         var fake <- Faker()
-        fuzz(TOTAL_FUZZ_FILES) <| $() {
+        fuzz(TOTAL_FUZZ_FILES) {
             let fname = fake |> any_file_name           // note: this should be any_string, but we are getting strange strange file names (unicode?), and one does not delete
             var stat : FStat
             if (!stat(fname, stat) && !stat.is_valid) {
@@ -32,7 +32,7 @@ def test_fopen(t : T?) {
                 if (f != null) {
                     fclose(f)
                     var written = false
-                    fopen(fname, "a") <| $(ff) {
+                    fopen(fname, "a") $(ff) {
                         fwrite(ff, "test")
                         written = true
                     }
@@ -43,16 +43,16 @@ def test_fopen(t : T?) {
         }
     }
 
-    t |> run("fuzz fread") <| @@(t : T?) {
+    t |> run("fuzz fread") @@(t : T?) {
         var fake <- Faker()
-        fuzz(TOTAL_FUZZ_FILES) <| $() {
+        fuzz(TOTAL_FUZZ_FILES) {
             let fname = fake |> any_file_name
             var stat : FStat
             if (!stat(fname, stat) && !stat.is_valid) {
-                fopen(fname, "wb") <| $(f) {
+                fopen(fname, "wb") $(f) {
                     fwrite(f, "test")
                 }
-                fopen(fname, "rb") <| $(f) {
+                fopen(fname, "rb") $(f) {
                     t |> equal(fread(f), "test")
                 }
                 t |> success(remove(fname))
@@ -60,18 +60,18 @@ def test_fopen(t : T?) {
         }
     }
 
-    t |> run("fuzz fmap") <| @@(t : T?) {
+    t |> run("fuzz fmap") @@(t : T?) {
         var fake <- Faker()
-        fuzz(TOTAL_FUZZ_FILES) <| $() {
+        fuzz(TOTAL_FUZZ_FILES) {
             let fname = fake |> any_file_name
             var stat : FStat
             if (!stat(fname, stat) && !stat.is_valid) {
-                fopen(fname, "wb") <| $(f) {
+                fopen(fname, "wb") $(f) {
                     fwrite(f, "test")
                 }
-                fopen(fname, "rb") <| $(f) {
-                    fmap(f) <| $(arr1) {
-                        peek_data("test") <| $(arr2) {
+                fopen(fname, "rb") $(f) {
+                    fmap(f) $(arr1) {
+                        peek_data("test") $(arr2) {
                             t |> equal(arr1, arr2)
                         }
                     }

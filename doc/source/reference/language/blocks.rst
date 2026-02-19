@@ -66,7 +66,7 @@ Similarly typed blocks are typically declared via pipe syntax:
 .. code-block:: das
 
     var v1 = 1                              // block with arguments
-    res = radd(v1) <| $(var a:int&):int {
+    res = radd(v1) $(var a:int&):int {
         return a++
     }
 

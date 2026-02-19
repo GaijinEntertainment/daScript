@@ -44,7 +44,7 @@ Custom comparators let you search in non-default order:
 .. code-block:: das
 
     var desc <- [9, 7, 5, 3, 1]
-    let idx = lower_bound(desc, 5) <| $(lhs, rhs : int const) {
+    let idx = lower_bound(desc, 5) $(lhs, rhs : int const) {
         return lhs > rhs
     }
     print("{idx}\n") // 2

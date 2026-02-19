@@ -57,14 +57,14 @@ def handle_index(var m : float4x4) {
 
 [test]
 def test_handle_type(t : T?) {
-    t |> run("handle val") <| @(t : T?) {
+    t |> run("handle val") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@handle_val))
         var num = 0
         var iid = handle_val(num)
         t |> equal(13, int(iid))
         t |> equal(-1, num)
     }
-    t |> run("handle eid") <| @(t : T?) {
+    t |> run("handle eid") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@handle_eid))
         var l <- @(var val : int) : EntityId {
             return EntityId(val)
@@ -72,7 +72,7 @@ def test_handle_type(t : T?) {
         var eid = handle_eid(l)
         t |> equal(13, int(eid))
     }
-    t |> run("handle op1") <| @(t : T?) {
+    t |> run("handle op1") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@handle_ref_op1))
         var a, b, c : float4x4
         identity(a)
@@ -80,7 +80,7 @@ def test_handle_type(t : T?) {
         identity(c)
         t |> equal(-c, b)
     }
-    t |> run("handle op2") <| @(t : T?) {
+    t |> run("handle op2") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@handle_ref_op2))
         var a, b, c, d : float4x4
         identity(a)
@@ -89,7 +89,7 @@ def test_handle_type(t : T?) {
         identity(d)
         t |> equal(d, c)
     }
-    t |> run("handle fun") <| @(t : T?) {
+    t |> run("handle fun") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@handle_fun))
         var a : float4x4
         identity(a)
@@ -102,7 +102,7 @@ def test_handle_type(t : T?) {
         var c = inverse(a)
         t |> equal(c, b)
     }
-    t |> run("handle fields") <| @(t : T?) {
+    t |> run("handle fields") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@handle_fields))
         var m : float4x4
         var my = handle_fields(m)
@@ -112,7 +112,7 @@ def test_handle_type(t : T?) {
         t |> equal(float4(0, 0, 0, 4), m.w)
         t |> equal(float4(0, 2, 0, 0), my)
     }
-    t |> run("handle index") <| @(t : T?) {
+    t |> run("handle index") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@handle_index))
         var m : float4x4
         var my = handle_index(m)
@@ -122,7 +122,7 @@ def test_handle_type(t : T?) {
         t |> equal(float4(0, 0, 0, 4), m.w)
         t |> equal(float4(0, 2, 0, 0), my)
     }
-    t |> run("handle fields ptr") <| @(t : T?) {
+    t |> run("handle fields ptr") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@handle_fields_ptr))
         var m : float4x4
         var my = handle_fields_ptr(unsafe(addr(m)))

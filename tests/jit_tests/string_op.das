@@ -13,7 +13,7 @@ def strcati(var a : string&; b : string) {
 
 [test]
 def test_ref(t : T?) {
-    t |> run("string + and +=") <| @(t : T?) {
+    t |> run("string + and +=") @(t : T?) {
         var a = "hello "
         var b = "world"
         let c = strcat(a, b)

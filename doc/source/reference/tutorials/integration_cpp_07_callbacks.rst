@@ -154,7 +154,7 @@ Function pointers use ``@@function_name``:
    [export]
    def test() {
        // Block callback
-       with_values(10, 20) <| $(a, b) {
+       with_values(10, 20) $(a, b) {
            print("a + b = {a + b}\n")
        }
 
@@ -162,18 +162,18 @@ Function pointers use ``@@function_name``:
        call_function_twice(@@print_value, 5)
 
        // Fibonacci iteration
-       for_each_fibonacci(5) <| $(index, value) {
+       for_each_fibonacci(5) $(index, value) {
            print("fib({index}) = {value}\n")
        }
 
        // Reduce — sum 1..10
-       let total = reduce_range(1, 11, 0) <| $(acc, i) {
+       let total = reduce_range(1, 11, 0) $(acc, i) {
            return acc + i
        }
        print("sum = {total}\n")
 
        // Reduce — factorial 10
-       let fact = reduce_range(1, 11, 1) <| $(acc, i) {
+       let fact = reduce_range(1, 11, 1) $(acc, i) {
            return acc * i
        }
        print("10! = {fact}\n")

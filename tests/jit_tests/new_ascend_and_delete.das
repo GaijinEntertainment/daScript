@@ -38,16 +38,16 @@ def test_delete(t : T?; var f : FancyClass?) {
 
 [test]
 def test_new_and_ascend_delete(t : T?) {
-    t |> run("new") <| @(t : T?) {
+    t |> run("new") @(t : T?) {
         test_new(t)
     }
-    t |> run("ascend") <| @(t : T?) {
+    t |> run("ascend") @(t : T?) {
         test_ascend(t)
     }
-    t |> run("ascend_cmres") <| @(t : T?) {
+    t |> run("ascend_cmres") @(t : T?) {
         test_ascend_cmres(t)
     }
-    t |> run("delete") <| @(t : T?) {
+    t |> run("delete") @(t : T?) {
         test_delete(t, new FancyClass())
     }
 }
@@ -172,19 +172,19 @@ def access_test(t : T?) {
 
 [test]
 def test_smart_ptr(t : T?) {
-    t |> run("scope test") <| @(t : T?) {
+    t |> run("scope test") @(t : T?) {
         scope_test(t)
     }
-    t |> run("move test") <| @(t : T?) {
+    t |> run("move test") @(t : T?) {
         scope_test(t)
     }
-    t |> run("ref count test") <| @(t : T?) {
+    t |> run("ref count test") @(t : T?) {
         ref_count_test(t)
     }
-    t |> run("access test") <| @(t : T?) {
+    t |> run("access test") @(t : T?) {
         access_test(t)
     }
-    t |> run("return smart ptr from C++") <| @(t : T?) {
+    t |> run("return smart ptr from C++") @(t : T?) {
         return_smart_ptr(t)
     }
 }

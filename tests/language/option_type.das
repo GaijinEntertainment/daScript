@@ -11,7 +11,7 @@ def bar(var a : auto | int&) {
 
 [test]
 def test_option_type(t : T?) {
-    t |> run("preserve ref") <| @(t : T?) {
+    t |> run("preserve ref") @(t : T?) {
         var a : int
         bar(a)              // match foo(auto), not foo(int&)
         t |> equal(0, a)

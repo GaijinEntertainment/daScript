@@ -21,11 +21,11 @@ def public format_file(file_name : string const) {
     //! Reads a daslang source file, formats it, and writes the result back if changed.
     var unformatted : string = ""
     var formatted : string = ""
-    fopen(file_name, "rb") <| $(fr) {
+    fopen(file_name, "rb") $(fr) {
         if (fr == null) {
             to_log(LOG_ERROR, "cannot open '{file_name}'\n")
         } else {
-            fmap(fr) <| $(data) {
+            fmap(fr) $(data) {
                 unformatted = string(data)
                 formatted = format_source(data)
             }
@@ -33,7 +33,7 @@ def public format_file(file_name : string const) {
     }
 
     if (!empty(formatted) && formatted != unformatted) {
-        fopen(file_name, "wb") <| $(fw) {
+        fopen(file_name, "wb") $(fw) {
             if (fw == null) {
                 to_log(LOG_ERROR, "cannot open '{file_name} for write'\n")
             } else {
@@ -79,7 +79,7 @@ def main() {
     }
 
     if (!empty(filesListFn)) {
-        fopen(filesListFn, "rb") <| $(f) {
+        fopen(filesListFn, "rb") $(f) {
             if (f == null) {
                 to_log(LOG_ERROR, "cannot open '{filesListFn}'\n")
             } else {

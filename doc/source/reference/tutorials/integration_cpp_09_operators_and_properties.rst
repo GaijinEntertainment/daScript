@@ -204,7 +204,7 @@ Without annotation overrides, local Color variables need workarounds:
    // ERROR: let c = Color()  → error[30108] without unsafe!
 
    // Way 1: `using` pattern — safe, constructs on stack via block
-   using() <| $(var c : Color#) {
+   using() $(var c : Color#) {
        c.r = 1.0
        c.g = 0.5
        print("{c.brightness}\n")   // 0.5925
@@ -225,7 +225,7 @@ Without annotation overrides, local Color variables need workarounds:
 1. A **constructor function** named after the type — calls placement new
    in daslang.
 2. A **``using`` function** for block-based construction —
-   ``using() <| $(var c : Type#) { ... }``.
+   ``using() $(var c : Type#) { ... }``.
 
 .. code-block:: cpp
 

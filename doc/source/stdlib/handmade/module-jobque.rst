@@ -19,7 +19,7 @@ Example:
 
         [export]
         def main() {
-            with_atomic32 <| $(counter) {
+            with_atomic32() $(counter) {
                 counter |> set(10)
                 print("value = {counter |> get}\n")
                 let after_inc = counter |> inc

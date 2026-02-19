@@ -42,7 +42,7 @@ def make_tuple_with_subtuple_on_stack(which : bool) : BarT {
 
 [test]
 def test_tuple(t : T?) {
-    t |> run("tuple field") <| @(t : T?) {
+    t |> run("tuple field") @(t : T?) {
         var f : FooT
         f.d = 13
         t |> success(!jit_enabled() || is_jit_function(@@tuple_field))
@@ -52,7 +52,7 @@ def test_tuple(t : T?) {
         t |> equal(2.0, f.b)
         t |> equal("hello", f.c)
     }
-    t |> run("make tuple cmres") <| @(t : T?) {
+    t |> run("make tuple cmres") @(t : T?) {
         var f = make_tuple_cmres()
         t |> success(!jit_enabled() || is_jit_function(@@make_tuple_cmres))
         t |> equal(1, f.a)
@@ -60,7 +60,7 @@ def test_tuple(t : T?) {
         t |> equal("bar", f.c)
         t |> equal(0, f.d)
     }
-    t |> run("make struct with substruct cmres") <| @(t : T?) {
+    t |> run("make struct with substruct cmres") @(t : T?) {
         var f = make_tuple_with_subtuple_cmres()
         t |> success(!jit_enabled() || is_jit_function(@@make_tuple_with_subtuple_cmres))
         t |> equal(1, f.a)
@@ -70,7 +70,7 @@ def test_tuple(t : T?) {
         t |> equal(0, f.foo.d)
         t |> equal(4, f.b)
     }
-    t |> run("make struct with substruct equal to call to cmres") <| @(t : T?) {
+    t |> run("make struct with substruct equal to call to cmres") @(t : T?) {
         var f = make_tuple_with_field_call_to_cmres()
         t |> success(!jit_enabled() || is_jit_function(@@make_tuple_with_field_call_to_cmres))
         t |> equal(1, f.a)
@@ -80,7 +80,7 @@ def test_tuple(t : T?) {
         t |> equal(1234,  f.foo.d)
         t |> equal(4, f.b)
     }
-    t |> run("make struct on stack") <| @(t : T?) {
+    t |> run("make struct on stack") @(t : T?) {
         var a = make_tuple_on_stack(true)
         var b = make_tuple_on_stack(false)
         t |> success(!jit_enabled() || is_jit_function(@@make_tuple_on_stack))
@@ -93,7 +93,7 @@ def test_tuple(t : T?) {
         t |> equal("4", b.c)
         t |> equal(5,   b.d)
     }
-    t |> run("make struct with substruct on stack") <| @(t : T?) {
+    t |> run("make struct with substruct on stack") @(t : T?) {
         var a = make_tuple_with_subtuple_on_stack(true)
         var b = make_tuple_with_subtuple_on_stack(false)
         t |> success(!jit_enabled() || is_jit_function(@@make_tuple_with_subtuple_on_stack))

@@ -521,7 +521,7 @@ finalized at the end of the scope:
 
 .. code-block:: das
 
-    using() <| $(var s : das_string) {
+    using() $(var s : das_string) {
         s := "hello"
         print("{s}\n")
         // s is finalized here

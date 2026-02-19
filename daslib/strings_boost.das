@@ -32,7 +32,7 @@ def join(it; separator : string implicit) {
         concept_assert(false, "can't join non-iterable type")
         return ""
     } else {
-        let st = build_string() <| $(var writer) {
+        let st = build_string() $(var writer) {
             var skip_first = true
             for (elem in it) {
                 if (skip_first) {
@@ -53,7 +53,7 @@ def join(it; separator : string implicit) {
 
 def join(var it : iterator<auto(TT)>; separator : string implicit) {
     //! joins iterable `it` elements into a single string with `separator` between elements
-    let st = build_string() <| $(var writer) {
+    let st = build_string() $(var writer) {
         var skip_first = true
         for (elem in it) {
             if (skip_first) {
@@ -73,7 +73,7 @@ def join(var it : iterator<auto(TT)>; separator : string implicit) {
 
 def private join_implement(iterable; separator : string; blk) : string {
     //! joins iterable `it` elements into a single string with `separator` between elements
-    let st = build_string() <| $(var writer) {
+    let st = build_string() $(var writer) {
         var skip_first = true
         for (elem in iterable) {
             if (skip_first) {
@@ -111,7 +111,7 @@ def split(text, delim : string implicit; blk : block< (arg : array<string>#) >) 
 def split(text, delim : string implicit) : array<string> {
     //! splits text by delimiter and returns the resulting array
     var res : array<string>
-    builtin_string_split(text, delim) <| $(arr : array<string>#) : void {
+    builtin_string_split(text, delim) $(arr : array<string>#) : void {
         res := arr
     }
     return <- res
@@ -126,7 +126,7 @@ def split_by_chars(text, delim : string implicit; blk : block< (arg : array<stri
 def split_by_chars(text, delim : string implicit) : array<string> {
     //! splits text by any of the characters in delim and returns the resulting array
     var res : array<string>
-    builtin_string_split_by_char(text, delim) <| $(arr : array<string>#) : void {
+    builtin_string_split_by_char(text, delim) $(arr : array<string>#) : void {
         res := arr
     }
     return <- res
@@ -213,7 +213,7 @@ def replace_multiple(source : string; replaces : array<tuple<text : string; repl
         return source
     }
     //! replaces occurances of multiple strings in a string. does not support overlap
-    return build_string <| $(writer) {
+    return build_string() $(writer) {
         var index = 0
         let len = source |> length
         while (index < len) {
@@ -290,7 +290,7 @@ def public pad_right(str : string; width : int; ch : int = ' ') : string {
     if (l >= width) {
         return str
     }
-    return build_string <| $(writer) {
+    return build_string() $(writer) {
         writer |> write(str)
         writer |> write_chars(ch, width - l)
     }
@@ -303,7 +303,7 @@ def public pad_left(str : string; width : int; ch : int = ' ') : string {
     if (l >= width) {
         return str
     }
-    return build_string <| $(writer) {
+    return build_string() $(writer) {
         writer |> write_chars(ch, width - l)
         writer |> write(str)
     }
@@ -335,7 +335,7 @@ def public capitalize(str : string) : string {
     }
     let first = character_at(str, 0)
     if (first >= 'a' && first <= 'z') {
-        return build_string <| $(writer) {
+        return build_string() $(writer) {
             writer |> write_char(first - 'a' + 'A')
             if (str |> length() > 1) {
                 writer |> write(str |> slice(1))

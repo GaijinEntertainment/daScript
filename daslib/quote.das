@@ -316,7 +316,7 @@ def private convert_quote_structure(mod : Module?; data : uint8 const?;
                                     tstr : string; info : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
     assume ann = info.annotation;
     var inscope mkS1 <- new default<MakeStruct>;
-    for_each_field(*unsafe(reinterpret<BasicStructureAnnotation?>(ann))) <| $(name, cppName, xtype, offset) {
+    for_each_field(*unsafe(reinterpret<BasicStructureAnnotation?>(ann))) $(name, cppName, xtype, offset) {
         var inscope mkFld = convert_quote_struct_field(mod, data, tstr, name, offset, xtype, at);
         if (mkFld != null) {
             emplace(*mkS1, mkFld);

@@ -38,7 +38,7 @@ class AssertOnceMacro : AstFunctionAnnotation {
             return <- default<ExpressionPtr>
         }
         // if ..
-        var inscope qb <- qmacro_block() <| $() {
+        var inscope qb <- qmacro_block() {
             if ($i(once_name) && !$e(call.arguments[0])) {
                 $i(once_name) = false
                 assert(false, $e(call.arguments[1]))

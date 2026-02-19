@@ -12,12 +12,12 @@ struct IntVal {
 
 [test]
 def test_wait_group_basic(t : T?) {
-    t |> run("with_wait_group waits for all notifications") <| @(t : T?) {
-        with_job_que() <| $() {
-            with_channel(3) <| $(ch) {
-                with_wait_group(3) <| $(wg) {
+    t |> run("with_wait_group waits for all notifications") @(t : T?) {
+        with_job_que() {
+            with_channel(3) $(ch) {
+                with_wait_group(3) $(wg) {
                     for (i in range(3)) {
-                        new_job() <| @() {
+                        new_job() @() {
                             ch |> push_clone(IntVal(v = i * 10))
                             ch |> notify_and_release
                             wg |> notify_and_release
@@ -26,7 +26,7 @@ def test_wait_group_basic(t : T?) {
                 }
                 // After with_wait_group returns, all jobs are done
                 var results : array<int>
-                ch |> for_each_clone() <| $(val : IntVal#) {
+                ch |> for_each_clone() $(val : IntVal#) {
                     results |> push(val.v)
                 }
                 t |> equal(3, length(results))
@@ -41,9 +41,9 @@ def test_wait_group_basic(t : T?) {
 
 [test]
 def test_wait_group_zero_count(t : T?) {
-    t |> run("with_wait_group with 0 count returns immediately") <| @(t : T?) {
+    t |> run("with_wait_group with 0 count returns immediately") @(t : T?) {
         var entered = false
-        with_wait_group(0) <| $(wg) {
+        with_wait_group(0) $(wg) {
             entered = true
             t |> equal(true, wg.isReady)
         }
@@ -53,13 +53,13 @@ def test_wait_group_zero_count(t : T?) {
 
 [test]
 def test_wait_group_no_count(t : T?) {
-    t |> run("with_wait_group no-count variant with append") <| @(t : T?) {
-        with_job_que() <| $() {
-            with_channel(2) <| $(ch) {
-                with_wait_group() <| $(wg) {
+    t |> run("with_wait_group no-count variant with append") @(t : T?) {
+        with_job_que() {
+            with_channel(2) $(ch) {
+                with_wait_group() $(wg) {
                     wg |> append(2)
                     for (i in range(2)) {
-                        new_job() <| @() {
+                        new_job() @() {
                             ch |> push_clone(IntVal(v = i + 1))
                             ch |> notify_and_release
                             wg |> notify_and_release
@@ -68,7 +68,7 @@ def test_wait_group_no_count(t : T?) {
                 }
                 // All jobs completed
                 var results : array<int>
-                ch |> for_each_clone() <| $(val : IntVal#) {
+                ch |> for_each_clone() $(val : IntVal#) {
                     results |> push(val.v)
                 }
                 t |> equal(2, length(results))
@@ -84,18 +84,18 @@ def test_wait_group_no_count(t : T?) {
 
 [test]
 def test_done_alias(t : T?) {
-    t |> run("done signals notification like notify_and_release") <| @(t : T?) {
-        with_job_que() <| $() {
-            with_channel(1) <| $(ch) {
-                with_wait_group(1) <| $(wg) {
-                    new_job() <| @() {
+    t |> run("done signals notification like notify_and_release") @(t : T?) {
+        with_job_que() {
+            with_channel(1) $(ch) {
+                with_wait_group(1) $(wg) {
+                    new_job() @() {
                         ch |> push_clone(IntVal(v = 777))
                         ch |> notify_and_release
                         wg |> done
                     }
                 }
                 var got = 0
-                ch |> for_each_clone() <| $(val : IntVal#) {
+                ch |> for_each_clone() $(val : IntVal#) {
                     got = val.v
                 }
                 t |> equal(777, got)
@@ -106,18 +106,18 @@ def test_done_alias(t : T?) {
 
 [test]
 def test_wait_group_single_job(t : T?) {
-    t |> run("with_wait_group with single job") <| @(t : T?) {
-        with_job_que() <| $() {
-            with_channel(1) <| $(ch) {
-                with_wait_group(1) <| $(wg) {
-                    new_job() <| @() {
+    t |> run("with_wait_group with single job") @(t : T?) {
+        with_job_que() {
+            with_channel(1) $(ch) {
+                with_wait_group(1) $(wg) {
+                    new_job() @() {
                         ch |> push_clone(IntVal(v = 999))
                         ch |> notify_and_release
                         wg |> notify_and_release
                     }
                 }
                 var got = 0
-                ch |> for_each_clone() <| $(val : IntVal#) {
+                ch |> for_each_clone() $(val : IntVal#) {
                     got = val.v
                 }
                 t |> equal(999, got)
@@ -128,18 +128,18 @@ def test_wait_group_single_job(t : T?) {
 
 [test]
 def test_wait_group_with_thread(t : T?) {
-    t |> run("with_wait_group works with new_thread") <| @(t : T?) {
-        with_job_que() <| $() {
-            with_channel(1) <| $(ch) {
-                with_wait_group(1) <| $(wg) {
-                    new_thread() <| @() {
+    t |> run("with_wait_group works with new_thread") @(t : T?) {
+        with_job_que() {
+            with_channel(1) $(ch) {
+                with_wait_group(1) $(wg) {
+                    new_thread() @() {
                         ch |> push_clone(IntVal(v = 123))
                         ch |> notify_and_release
                         wg |> notify_and_release
                     }
                 }
                 var got = 0
-                ch |> for_each_clone() <| $(val : IntVal#) {
+                ch |> for_each_clone() $(val : IntVal#) {
                     got = val.v
                 }
                 t |> equal(123, got)

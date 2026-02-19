@@ -17,7 +17,7 @@ def argument_too_big(a : foo) {// 30108: argument variable a is too big
     var b <- @(b : foo) { // 30108: argument variable b is too big
         print("b = {b}\n")
     }
-    invoke() <| $(c : foo) {// 30108: block argument variable c is too big
+    invoke() $(c : foo) {// 30108: block argument variable c is too big
         print("c = {c}\n")
     }
     lpipe(a)

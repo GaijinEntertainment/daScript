@@ -36,33 +36,33 @@ def test_float_and_double(t : T?) {
     fake_float(floor)
     fake_float(saturate)
 
-    t |> run("fuzz is_finit") <| @@(t : T?) {
+    t |> run("fuzz is_finit") @@(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             t |> accept(is_finite(fake |> random_float))
         }
-        fuzz <| $() {
+        fuzz() {
             t |> accept(is_finite(fake |> random_double))
         }
     }
 
-    t |> run("fuzz is_nan") <| @@(t : T?) {
+    t |> run("fuzz is_nan") @@(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             t |> accept(is_nan(fake |> random_float))
         }
-        fuzz <| $() {
+        fuzz() {
             t |> accept(is_nan(fake |> random_double))
         }
     }
 
-    t |> run("fuzz sincos") <| @@(t : T?) {
+    t |> run("fuzz sincos") @@(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             var s, c : float
             sincos(fake |> random_float, s, c)
         }
-        fuzz <| $() {
+        fuzz() {
             var s, c : double
             sincos(fake |> random_double, s, c)
         }
@@ -85,44 +85,44 @@ def test_float_only(t : T?) {
 
 [test]
 def test_float3_only(t : T?) {
-    t |> run("fuzz cross") <| @@(t : T?) {
+    t |> run("fuzz cross") @@(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             t |> accept(cross(fake |> random_float3, fake |> random_float3))
         }
     }
 
-    t |> run("fuzz distance") <| @@(t : T?) {
+    t |> run("fuzz distance") @@(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             t |> accept(distance(fake |> random_float3, fake |> random_float3))
         }
     }
 
-    t |> run("fuzz distance_sq") <| @@(t : T?) {
+    t |> run("fuzz distance_sq") @@(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             t |> accept(distance_sq(fake |> random_float3, fake |> random_float3))
         }
     }
 
-    t |> run("fuzz inv_distance") <| @@(t : T?) {
+    t |> run("fuzz inv_distance") @@(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             t |> accept(inv_distance(fake |> random_float3, fake |> random_float3))
         }
     }
 
-    t |> run("fuzz inv_distance_sq") <| @@(t : T?) {
+    t |> run("fuzz inv_distance_sq") @@(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             t |> accept(inv_distance_sq(fake |> random_float3, fake |> random_float3))
         }
     }
 
-    t |> run("fuzz reflect") <| @@(t : T?) {
+    t |> run("fuzz reflect") @@(t : T?) {
         var fake <- Faker()
-        fuzz <| $() {
+        fuzz() {
             t |> accept(reflect(fake |> random_float3, fake |> random_float3))
         }
     }

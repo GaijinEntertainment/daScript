@@ -9,7 +9,7 @@ require _common
 
 [test]
 def test_skip(t : T?) {
-    t |> run("basic skip") <| @(t : T?) {
+    t |> run("basic skip") @(t : T?) {
         var query = skip(
             [iterator for(x in 0..5); x],
             2
@@ -18,7 +18,7 @@ def test_skip(t : T?) {
             t |> equal(c, i + 2)
         }
     }
-    t |> run("skip while") <| @(t : T?) {
+    t |> run("skip while") @(t : T?) {
         var query_skip = _skip_while(
             [iterator for(x in 0..5); x],
             _ < 3
@@ -27,7 +27,7 @@ def test_skip(t : T?) {
             t |> equal(c, i + 3)
         }
     }
-    t |> run("complex skip") <| @(t : T?) {
+    t |> run("complex skip") @(t : T?) {
         var qcomplex = skip(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             2
@@ -36,7 +36,7 @@ def test_skip(t : T?) {
             t |> success(c.a.Equal([i + 2, (i + 2) * 10]))
         }
     }
-    t |> run("complex skip while") <| @(t : T?) {
+    t |> run("complex skip while") @(t : T?) {
         var qcomplex_skip_while = _skip_while(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             _.a[0] < 3
@@ -45,7 +45,7 @@ def test_skip(t : T?) {
             t |> success(c.a.Equal([i + 3, (i + 3) * 10]))
         }
     }
-    t |> run("skip to array") <| @(t : T?) {
+    t |> run("skip to array") @(t : T?) {
         var query_array = skip_to_array(
             [iterator for(x in 0..5); x],
             2
@@ -55,7 +55,7 @@ def test_skip(t : T?) {
             t |> equal(c, i + 2)
         }
     }
-    t |> run("skip in place") <| @(t : T?) {
+    t |> run("skip in place") @(t : T?) {
         var arr = [0, 1, 2, 3, 4, 5]
         skip_inplace(arr, 2)
         t |> equal(4, length(arr))
@@ -67,7 +67,7 @@ def test_skip(t : T?) {
 
 [test]
 def test_take(t : T?) {
-    t |> run("basic take") <| @(t : T?) {
+    t |> run("basic take") @(t : T?) {
         var query = take(
             [iterator for(x in 0..5); x],
             3
@@ -76,7 +76,7 @@ def test_take(t : T?) {
             t |> equal(c, i)
         }
     }
-    t |> run("complex take while") <| @(t : T?) {
+    t |> run("complex take while") @(t : T?) {
         var query_take_while = _take_while(
             [iterator for(x in 0..5); x],
             _ < 3
@@ -85,7 +85,7 @@ def test_take(t : T?) {
             t |> equal(c, i)
         }
     }
-    t |> run("complex take range") <| @(t : T?) {
+    t |> run("complex take range") @(t : T?) {
         var query_take_range = take(
             [for (x in 0..5); x],
             1..4
@@ -95,7 +95,7 @@ def test_take(t : T?) {
             t |> equal(c, i + 1)
         }
     }
-    t |> run("complex take") <| @(t : T?) {
+    t |> run("complex take") @(t : T?) {
         var qcomplex = take(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             3
@@ -104,7 +104,7 @@ def test_take(t : T?) {
             t |> success(c.a.Equal([i, i * 10]))
         }
     }
-    t |> run("complex take while") <| @(t : T?) {
+    t |> run("complex take while") @(t : T?) {
         var qcomplex_take_while = _take_while(
             [iterator for(x in 0..5); ComplexType(a = [x, x * 10])],
             _.a[0] < 3
@@ -113,7 +113,7 @@ def test_take(t : T?) {
             t |> success(c.a.Equal([i, i * 10]))
         }
     }
-    t |> run("take to array") <| @(t : T?) {
+    t |> run("take to array") @(t : T?) {
         var query_array = take_to_array(
             [iterator for(x in 0..5); x],
             3
@@ -123,7 +123,7 @@ def test_take(t : T?) {
             t |> equal(c, i)
         }
     }
-    t |> run("take in place") <| @(t : T?) {
+    t |> run("take in place") @(t : T?) {
         var arr = [0, 1, 2, 3, 4, 5]
         take_inplace(arr, 3)
         t |> equal(3, length(arr))
@@ -131,7 +131,7 @@ def test_take(t : T?) {
             t |> equal(c, i)
         }
     }
-    t |> run("take range in place") <| @(t : T?) {
+    t |> run("take range in place") @(t : T?) {
         var arr = [0, 1, 2, 3, 4, 5]
         take_inplace(arr, 1..4)
         t |> equal(3, length(arr))
@@ -139,7 +139,7 @@ def test_take(t : T?) {
             t |> equal(c, i + 1)
         }
     }
-    t |> run("take range to array") <| @(t : T?) {
+    t |> run("take range to array") @(t : T?) {
         var query_array = take_to_array(
             [iterator for(x in 0..5); x],
             1..4
@@ -154,7 +154,7 @@ def test_take(t : T?) {
 
 [test]
 def test_skip_last(t : T?) {
-    t |> run("skip last from iterator") <| @(t : T?) {
+    t |> run("skip last from iterator") @(t : T?) {
         var query = skip_last(
             [iterator for(x in 0..5); x],
             2
@@ -168,7 +168,7 @@ def test_skip_last(t : T?) {
         t |> equal(result[1], 1)
         t |> equal(result[2], 2)
     }
-    t |> run("skip last from array") <| @(t : T?) {
+    t |> run("skip last from array") @(t : T?) {
         var arr = [0, 1, 2, 3, 4]
         var result = skip_last(arr, 2)
         t |> equal(3, length(result))
@@ -176,7 +176,7 @@ def test_skip_last(t : T?) {
             t |> equal(c, i)
         }
     }
-    t |> run("skip last in place") <| @(t : T?) {
+    t |> run("skip last in place") @(t : T?) {
         var arr = [0, 1, 2, 3, 4]
         skip_last_inplace(arr, 2)
         t |> equal(3, length(arr))
@@ -184,7 +184,7 @@ def test_skip_last(t : T?) {
             t |> equal(c, i)
         }
     }
-    t |> run("skip last to array") <| @(t : T?) {
+    t |> run("skip last to array") @(t : T?) {
         var result = skip_last_to_array(
             [iterator for(x in 0..5); x],
             2
@@ -195,17 +195,17 @@ def test_skip_last(t : T?) {
             t |> equal(c, i)
         }
     }
-    t |> run("skip last all") <| @(t : T?) {
+    t |> run("skip last all") @(t : T?) {
         var arr = [0, 1, 2]
         var result = skip_last(arr, 5)
         t |> equal(0, length(result))
     }
-    t |> run("skip last zero") <| @(t : T?) {
+    t |> run("skip last zero") @(t : T?) {
         var arr = [0, 1, 2]
         var result = skip_last(arr, 0)
         t |> equal(3, length(result))
     }
-    t |> run("skip last with _fold") <| @(t : T?) {
+    t |> run("skip last with _fold") @(t : T?) {
         var result = (
             [0, 1, 2, 3, 4]
             .skip_last(2)
@@ -221,7 +221,7 @@ def test_skip_last(t : T?) {
 
 [test]
 def test_take_last(t : T?) {
-    t |> run("take last from iterator") <| @(t : T?) {
+    t |> run("take last from iterator") @(t : T?) {
         var query = take_last(
             [iterator for(x in 0..5); x],
             2
@@ -234,21 +234,21 @@ def test_take_last(t : T?) {
         t |> equal(result[0], 3)
         t |> equal(result[1], 4)
     }
-    t |> run("take last from array") <| @(t : T?) {
+    t |> run("take last from array") @(t : T?) {
         var arr = [0, 1, 2, 3, 4]
         var result = take_last(arr, 2)
         t |> equal(2, length(result))
         t |> equal(result[0], 3)
         t |> equal(result[1], 4)
     }
-    t |> run("take last in place") <| @(t : T?) {
+    t |> run("take last in place") @(t : T?) {
         var arr = [0, 1, 2, 3, 4]
         take_last_inplace(arr, 2)
         t |> equal(2, length(arr))
         t |> equal(arr[0], 3)
         t |> equal(arr[1], 4)
     }
-    t |> run("take last to array") <| @(t : T?) {
+    t |> run("take last to array") @(t : T?) {
         var result = take_last_to_array(
             [iterator for(x in 0..5); x],
             2
@@ -258,17 +258,17 @@ def test_take_last(t : T?) {
         t |> equal(result[0], 3)
         t |> equal(result[1], 4)
     }
-    t |> run("take last all") <| @(t : T?) {
+    t |> run("take last all") @(t : T?) {
         var arr = [0, 1, 2]
         var result = take_last(arr, 5)
         t |> equal(3, length(result))
     }
-    t |> run("take last zero") <| @(t : T?) {
+    t |> run("take last zero") @(t : T?) {
         var arr = [0, 1, 2]
         var result = take_last(arr, 0)
         t |> equal(0, length(result))
     }
-    t |> run("take last with _fold") <| @(t : T?) {
+    t |> run("take last with _fold") @(t : T?) {
         var result = (
             [0, 1, 2, 3, 4]
             .take_last(2)
@@ -283,7 +283,7 @@ def test_take_last(t : T?) {
 
 [test]
 def text_chunk(t : T?) {
-    t |> run("basic chunk") <| @(t : T?) {
+    t |> run("basic chunk") @(t : T?) {
         var query = chunk(
             [iterator for(x in 0..6); x],
             2
@@ -299,7 +299,7 @@ def text_chunk(t : T?) {
             }
         }
     }
-    t |> run("complex chunk") <| @(t : T?) {
+    t |> run("complex chunk") @(t : T?) {
         var qcomplex = chunk(
             [iterator for(x in 0..6); ComplexType(a = [x, x * 10])],
             2
@@ -316,7 +316,7 @@ def text_chunk(t : T?) {
             }
         }
     }
-    t |> run("chunk to array") <| @(t : T?) {
+    t |> run("chunk to array") @(t : T?) {
         var query_array = chunk_to_array(
             [iterator for(x in 0..6); x],
             2

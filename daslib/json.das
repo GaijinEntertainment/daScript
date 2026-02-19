@@ -612,7 +612,7 @@ def private write_value(var writer : StringBuilderWriter; jsv : JsonValue?; dept
 
 def write_json(val : JsonValue?) : string {
     //! returns JSON (textual) representation of JsonValue as a string.
-    let st = build_string() <| $(var writer) {
+    let st = build_string() $(var writer) {
         write_value(writer, val, 0)
     }
     return st
@@ -631,8 +631,8 @@ def try_fixing_broken_json(var bad : string) {
     //! 2. "text "nested text" text" nested quotes
     //! 3. extra , at the end of object or array
     //! 4. /uXXXXXX sequences in the middle of white space
-    return build_string <| $(writer) {
-        peek_data(bad) <| $(str) {
+    return build_string() $(writer) {
+        peek_data(bad) $(str) {
             var i = 0
             let lstr = length(str)
             while (i < lstr) {

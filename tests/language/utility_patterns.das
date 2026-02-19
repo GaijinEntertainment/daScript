@@ -14,29 +14,29 @@ require strings
 
 [test]
 def test_defer_basic(t : T?) {
-    t |> run("defer executes on scope exit") <| @(t : T?) {
+    t |> run("defer executes on scope exit") @(t : T?) {
         var log = ""
-        invoke() <| $() {
-            defer() <| $() {
+        invoke() {
+            defer() {
                 log += "cleanup"
             }
             log += "work,"
         }
         t |> equal(log, "work,cleanup")
     }
-    t |> run("defer LIFO ordering") <| @(t : T?) {
+    t |> run("defer LIFO ordering") @(t : T?) {
         var log = ""
-        invoke() <| $() {
-            defer() <| $() { log += "1"; }
-            defer() <| $() { log += "2"; }
-            defer() <| $() { log += "3"; }
+        invoke() {
+            defer() { log += "1"; }
+            defer() { log += "2"; }
+            defer() { log += "3"; }
         }
         t |> equal(log, "321")
     }
-    t |> run("defer runs on early return") <| @(t : T?) {
+    t |> run("defer runs on early return") @(t : T?) {
         var log = ""
-        invoke() <| $() {
-            defer() <| $() { log += "cleaned"; }
+        invoke() {
+            defer() { log += "cleaned"; }
             log += "before,"
             return
         }
@@ -50,7 +50,7 @@ def test_defer_basic(t : T?) {
 
 def call_counter() : int {
     var count = 0
-    static_let <| $() {
+    static_let() {
         var counter = 0
     }
     counter ++
@@ -60,7 +60,7 @@ def call_counter() : int {
 
 [test]
 def test_static_let(t : T?) {
-    t |> run("static_let persists across calls") <| @(t : T?) {
+    t |> run("static_let persists across calls") @(t : T?) {
         // Reset by calling multiple times and verifying increment
         let a = call_counter()
         let b = call_counter()

@@ -24,36 +24,36 @@ def operator +(a, b : Foo) {
 
 [test]
 def test_lpipe(t : T?) {
-    t |> run("lpipe into function call") <| @(t : T?) {
+    t |> run("lpipe into function call") @(t : T?) {
         g_add_res = 0
         gadd(1)
         lpipe(2)
         t |> equal(3, g_add_res)
     }
-    t |> run("lpipe into variable init") <| @(t : T?) {
+    t |> run("lpipe into variable init") @(t : T?) {
         var i = add(1)
         lpipe(2)
         t |> equal(3, i)
     }
-    t |> run("lpipe into assignment operation") <| @(t : T?) {
+    t |> run("lpipe into assignment operation") @(t : T?) {
         var i = 0
         i = add(1)
         lpipe(2)
         t |> equal(3, i)
     }
-    t |> run("lpipe into clone operation") <| @(t : T?) {
+    t |> run("lpipe into clone operation") @(t : T?) {
         var i = 0
         i := add(1)
         lpipe(2)
         t |> equal(3, i)
     }
-    t |> run("lpipe into move operation") <| @(t : T?) {
+    t |> run("lpipe into move operation") @(t : T?) {
         var i = Foo(a = 0)
         i <- add(Foo(a = 1))
         lpipe(Foo(a = 2))
         t |> equal(3, i.a)
     }
-    t |> run("lpipe into variable") <| @(t : T?) {
+    t |> run("lpipe into variable") @(t : T?) {
         g_add_res = 0
         gadd
         lpipe(1)

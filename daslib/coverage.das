@@ -39,7 +39,7 @@ var checkData = new table<string; table<uint>>(); //! Global table tracking whic
 
 def private single_file_report(name : string) {
     var data : string;
-    (*coverageData) |> get(name) <| $(x) {
+    (*coverageData) |> get(name) $(x) {
         for (k, v in keys(x.lines), values(x.lines)) {
             data += "DA:{k |> int},{v |> int}\n"
         }

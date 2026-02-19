@@ -28,7 +28,7 @@ def operator <(a, b : NoCopy) : bool {
 
 [test]
 def test_erase_all_non_copyable(t : T?) {
-    t |> run("erases matching non-copyable elements") <| @(t : T?) {
+    t |> run("erases matching non-copyable elements") @(t : T?) {
         var a : array<NoCopy>
         a |> emplace(NoCopy(id = 1, data <- [10]))
         a |> emplace(NoCopy(id = 2, data <- [20]))
@@ -45,14 +45,14 @@ def test_erase_all_non_copyable(t : T?) {
         t |> equal(a[1].data[0], 30)
         t |> equal(a[2].data[0], 50)
     }
-    t |> run("erases all non-copyable elements") <| @(t : T?) {
+    t |> run("erases all non-copyable elements") @(t : T?) {
         var a : array<NoCopy>
         a |> emplace(NoCopy(id = 1))
         a |> emplace(NoCopy(id = 1))
         erase_all(a, NoCopy(id = 1))
         t |> equal(length(a), 0)
     }
-    t |> run("no match leaves array intact") <| @(t : T?) {
+    t |> run("no match leaves array intact") @(t : T?) {
         var a : array<NoCopy>
         a |> emplace(NoCopy(id = 1, data <- [10]))
         a |> emplace(NoCopy(id = 2, data <- [20]))
@@ -67,7 +67,7 @@ def test_erase_all_non_copyable(t : T?) {
 
 [test]
 def test_fill_non_copyable(t : T?) {
-    t |> run("fills with cloned non-copyable values") <| @(t : T?) {
+    t |> run("fills with cloned non-copyable values") @(t : T?) {
         var a : array<NoCopy>
         resize(a, 3)
         var proto : NoCopy
@@ -93,7 +93,7 @@ def test_fill_non_copyable(t : T?) {
 
 [test]
 def test_combine_non_copyable(t : T?) {
-    t |> run("combines arrays of non-copyable type") <| @(t : T?) {
+    t |> run("combines arrays of non-copyable type") @(t : T?) {
         var a : array<NoCopy>
         a |> emplace(NoCopy(id = 1, data <- [10]))
         a |> emplace(NoCopy(id = 2, data <- [20]))
@@ -118,7 +118,7 @@ def test_combine_non_copyable(t : T?) {
 
 [test]
 def test_unique_non_copyable(t : T?) {
-    t |> run("unique on sorted non-copyable array") <| @(t : T?) {
+    t |> run("unique on sorted non-copyable array") @(t : T?) {
         var a : array<NoCopy>
         a |> emplace(NoCopy(id = 1, data <- [10]))
         a |> emplace(NoCopy(id = 1, data <- [11]))
@@ -137,7 +137,7 @@ def test_unique_non_copyable(t : T?) {
 
 [test]
 def test_reverse_non_copyable(t : T?) {
-    t |> run("reverses non-copyable array") <| @(t : T?) {
+    t |> run("reverses non-copyable array") @(t : T?) {
         var a : array<NoCopy>
         a |> emplace(NoCopy(id = 1, data <- [10]))
         a |> emplace(NoCopy(id = 2, data <- [20]))
@@ -155,7 +155,7 @@ def test_reverse_non_copyable(t : T?) {
 
 [test]
 def test_rotate_non_copyable(t : T?) {
-    t |> run("rotates non-copyable array") <| @(t : T?) {
+    t |> run("rotates non-copyable array") @(t : T?) {
         var a : array<NoCopy>
         a |> emplace(NoCopy(id = 1, data <- [10]))
         a |> emplace(NoCopy(id = 2, data <- [20]))

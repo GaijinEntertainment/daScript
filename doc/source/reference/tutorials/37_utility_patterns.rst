@@ -30,7 +30,7 @@ defer its cleanup, keeping the two related operations adjacent.
 .. code-block:: das
 
     print("step 1\n")
-    defer() <| $() {
+    defer() {
         print("cleanup (deferred)\n")
     }
     print("step 2\n")
@@ -49,10 +49,10 @@ last deferred block runs first, just like Go:
 
 .. code-block:: das
 
-    defer() <| $() {
+    defer() {
         print("first defer (runs last)\n")
     }
-    defer() <| $() {
+    defer() {
         print("second defer (runs first)\n")
     }
     print("main body\n")
@@ -70,7 +70,7 @@ Deferred blocks run even when the function returns early.  This makes
 .. code-block:: das
 
     def defer_early_return(do_early : bool) {
-        defer() <| $() {
+        defer() {
             print("cleanup always runs\n")
         }
         if (do_early) {
@@ -90,7 +90,7 @@ block, it only runs when that ``if`` block exits, not the function scope:
 
     print("before if\n")
     if (true) {
-        defer() <| $() {
+        defer() {
             print("deferred inside if\n")
         }
         print("inside if\n")
@@ -110,11 +110,11 @@ The classic use case: acquire a resource, immediately defer its release:
 .. code-block:: das
 
     acquire_resource("database")
-    defer() <| $() {
+    defer() {
         release_resource("database")
     }
     acquire_resource("file")
-    defer() <| $() {
+    defer() {
         release_resource("file")
     }
     // On scope exit: file released first (LIFO), then database
@@ -136,7 +136,7 @@ The variable is initialized once and retains its value, just like C's
 .. code-block:: das
 
     def call_counter() : int {
-        static_let() <| $() {
+        static_let() {
             var count = 0
         }
         count ++
@@ -157,7 +157,7 @@ once:
 .. code-block:: das
 
     def get_lookup_table() : int {
-        static_let() <| $() {
+        static_let() {
             var lookup <- [10, 20, 30, 40, 50]
         }
         var total = 0
@@ -177,7 +177,7 @@ blocks in different functions that might otherwise collide:
 .. code-block:: das
 
     def named_counter_a() : int {
-        static_let("counter_a") <| $() {
+        static_let("counter_a") {
             var n = 0
         }
         n ++
@@ -193,11 +193,11 @@ to log when the function exits:
 .. code-block:: das
 
     def cached_computation(input : int) : int {
-        static_let() <| $() {
+        static_let() {
             var last_input = -1
             var last_result = 0
         }
-        defer() <| $() {
+        defer() {
             print("  exiting cached_computation({input})\n")
         }
         if (input == last_input) {

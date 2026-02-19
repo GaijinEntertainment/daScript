@@ -14,7 +14,7 @@ def test_levenshtein_distance_fast(t : T?) {
     t |> equal(levenshtein_distance_fast("Saturday", "Sunday"), 3)
     let limit = int(re_gen_get_rep_limit())
     var fake <- Faker()
-    fuzz <| $() {
+    fuzz() {
         let ss = fake |> any_string
         let tt = fake |> any_string
         let dist = levenshtein_distance_fast(ss, tt)
