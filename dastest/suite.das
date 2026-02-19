@@ -8,7 +8,10 @@ require ast
 require strings
 require debugapi
 require fio
+require daslib/strings_boost
+require daslib/json_boost
 require daslib/defer
+require math
 
 require log
 require testing
@@ -16,12 +19,35 @@ require suite_result public
 
 
 struct SuiteCtx {
+    // Shared options.
     dastestRoot : string
     projectPath : string
     uriPaths : bool = false
-    testNames : array<string>
     verbose : bool = false
     compile_only : bool = false
+
+    // Testing-related options.
+    testNames : array<string>
+
+    // Benchmarking-related options.
+    bench_count : int = 1
+    bench_format : BenchmarkOutputFormat = BenchmarkOutputFormat.native
+    bench_enabled : bool = false // whether to run benchmarks or not
+    bench_names : array<string> // filters the top-level benchmarks
+    queued_benchmarks : array<Benchmark> // filled with file-local benchmarks
+}
+
+enum BenchmarkOutputFormat {
+    native,
+    go_export, // https://golang.org/design/14313-benchmark-format
+    json,
+}
+
+// Benchmark holds everything we need to execute the
+// user benchmark later, after all the tests are passed.
+struct Benchmark {
+    name : string
+    fn : function<(b : B?) : void>
 }
 
 
@@ -30,12 +56,22 @@ def createSuiteCtx() : SuiteCtx {
 }
 
 
-def private collect_tests_names(args : array<string>; var names : array<string>) {
+def private collect_target_names(key : string, args : array<string>; var names : array<string>) {
     for (i in range(length(args) - 1)) {
-        if (args[i] == "--test-names") {
+        if (args[i] == key) {
             names |> push <| args[i + 1]
         }
     }
+}
+
+
+def private collect_tests_names(args : array<string>; var names : array<string>) {
+    collect_target_names("--test-names", args, names)
+}
+
+
+def private collect_bench_names(args : array<string>; var names : array<string>) {
+    collect_target_names("--bench-names", args, names)
 }
 
 
@@ -54,6 +90,17 @@ def SuiteCtx(args : array<string>) : SuiteCtx {
     ctx.projectPath = args |> get_str_arg("--test-project", "")
     ctx.compile_only = args |> has_value("--compile-only")
     collect_tests_names(args, ctx.testNames)
+
+    ctx.bench_enabled = args |> has_value("--bench")
+    collect_bench_names(args, ctx.bench_names)
+    let bench_format = args |> get_str_arg("--bench-format", "")
+    if (bench_format == "go") {
+        ctx.bench_format = BenchmarkOutputFormat.go_export
+    } elif (bench_format == "json") {
+        ctx.bench_format = BenchmarkOutputFormat.json
+    }
+    ctx.bench_count  = to_int(args.get_str_arg("--count", "1"))
+
     return <- ctx
 }
 
@@ -81,11 +128,14 @@ def private internalFileCtx(ctx : SuiteCtx) : FileCtx {
 }
 
 
-def private match_test_name(name : string; ctx : SuiteCtx) {
-    if (length(ctx.testNames) == 0) {
+// match_func_name may reject a test if explicit test list
+// was specified via --test-names parameter.
+// If it's empty, the test is always accepted and therefore executed.
+def private match_func_name(name : string; allowed : array<string>&) {
+    if (length(allowed) == 0) {
         return true
     }
-    for (match in ctx.testNames) {
+    for (match in allowed) {
         if (name |> starts_with(match)) {
             return true
         }
@@ -94,19 +144,20 @@ def private match_test_name(name : string; ctx : SuiteCtx) {
 }
 
 
-def test_file(file_name : string; ctx : SuiteCtx) : SuiteResult {
+def test_file(file_name : string; var ctx : SuiteCtx) : SuiteResult {
     var inscope fileCtx <- internalFileCtx(ctx)
     var res = test_file(file_name, ctx, fileCtx)
     return res
 }
 
 
-def test_file(file_name : string; ctx : SuiteCtx; file_ctx : FileCtx) : SuiteResult {
+def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : SuiteResult {
     var res : SuiteResult
     var inscope access <- make_file_access(ctx.projectPath)
     access |> add_file_access_root("dastest", ctx.dastestRoot)
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
+            ctx.queued_benchmarks |> clear
             cop.aot_module = true
             cop.threadlock_context = true
             cop.jit_enabled = jit_enabled()
@@ -184,7 +235,11 @@ def test_file(file_name : string; ctx : SuiteCtx; file_ctx : FileCtx) : SuiteRes
                     }
                     var mod = program |> get_this_module()
                     if (mod != null && context != null) {
-                        res += test_module(*mod, *context, ctx, file_ctx)
+                        let module_result = test_module(*mod, *context, ctx, file_ctx)
+                        if (module_result.failed + module_result.errors == 0) {
+                            run_queued_benchmarks(ctx, file_ctx, res)
+                        }
+                        res += module_result
                     } else {
                         res.errors += 1
                         res.total += 1
@@ -205,14 +260,14 @@ def test_file(file_name : string; ctx : SuiteCtx; file_ctx : FileCtx) : SuiteRes
 }
 
 
-def test_module(var mod : rtti::Module; var context : rtti::Context; suite_ctx : SuiteCtx) : SuiteResult {
+def test_module(var mod : rtti::Module; var context : rtti::Context; var suite_ctx : SuiteCtx) : SuiteResult {
     var inscope fileCtx <- internalFileCtx(suite_ctx)
     var res = test_module(mod, context, suite_ctx, fileCtx)
     return res
 }
 
 
-def test_module(var mod : rtti::Module; var context : rtti::Context; suite_ctx : SuiteCtx; file_ctx : FileCtx) : SuiteResult {
+def test_module(var mod : rtti::Module; var context : rtti::Context; var suite_ctx : SuiteCtx; file_ctx : FileCtx) : SuiteResult {
     if (suite_ctx.compile_only) {
         return default<SuiteResult>
     }
@@ -232,19 +287,39 @@ def test_module(var mod : rtti::Module; var context : rtti::Context; suite_ctx :
         if (fn == null) {
             return
         }
+        var test_name = ""
+        var test_kind = ""
         for (ann in fn.annotations) {
-            if (ann.annotation.name == "test") {
-                var name = "{fn.name}"
-                for (arg in ann.arguments) {
-                    if (arg.name == "name") {
-                        name = "{arg.sValue}"
-                    }
-                }
-                if (match_test_name(name, suite_ctx)) {
-                    test_any(name, func, length(fn.arguments), fileCtx, res)
-                }
-                return
+            var tag = "{ann.annotation.name}"
+            if (tag != "test" && tag != "benchmark") {
+                continue
             }
+            test_kind = tag
+            var name = "{fn.name}"
+            // Both [test] and [benchmark] allow a form like [test(name=foo)]
+            // to override the default test name.
+            for (arg in ann.arguments) {
+                if (arg.name == "name") {
+                    name = "{arg.sValue}"
+                }
+            }
+            test_name = name
+            break
+        }
+        if (test_kind == "") {
+            // Not a test nor benchmark.
+            return
+        }
+        let allowed_list & = test_kind == "benchmark" ? suite_ctx.bench_names : suite_ctx.testNames
+        if (!match_func_name(test_name, allowed_list)) {
+            return
+        }
+        if (test_kind == "test") {
+            test_any(test_name, func, length(fn.arguments), fileCtx, res)
+        } elif (test_kind == "benchmark" && suite_ctx.bench_enabled) {
+            let bench_func = unsafe(reinterpret<function<(b : B?) : void>>(func))
+            let queued_bench = Benchmark(name = test_name, fn = bench_func)
+            suite_ctx.queued_benchmarks |> push(queued_bench)
         }
     }
     return res
@@ -408,6 +483,160 @@ def private test_any(name : string; func; args_num : int; var context : FileCtx;
     }
 }
 
+def private run_queued_benchmarks(var suite_ctx : SuiteCtx; var file_ctx : FileCtx, var res : SuiteResult&) {
+    for (q in suite_ctx.queued_benchmarks) {
+        let failed = res.failed
+        for (i in range(suite_ctx.bench_count)) {
+            run_benchmark(suite_ctx, file_ctx, res, q.name, q.fn)
+            if (res.failed > failed) {
+                break
+            }
+        }
+    }
+}
+
+def private run_benchmark(var suite_ctx : SuiteCtx; var file_ctx : FileCtx; var res : SuiteResult&; name : string; func : function<(b : B?) : void>) {
+    var benchmarking = new B(name = name)
+
+    let t0 = ref_time_ticks()
+    var deliberateRecover = false
+
+    var func_type = "INTERP"
+    if (is_in_aot()) {
+        func_type = "AOT"
+    } elif (is_jit_function(func)) {
+        func_type = "JIT"
+    }
+
+    try {
+        unsafe { // needed to capture &benchmarking &file_ctx
+            benchmarking.on_fail <- @ capture(& benchmarking, & deliberateRecover) (now : bool) {
+                deliberateRecover = now
+                benchmarking.failed = true
+            }
+
+            benchmarking.on_start <- @capture(& suite_ctx, & benchmarking, & file_ctx) (sub_name : string) {
+                let is_first_bench = !benchmarking.started
+                benchmarking.started = true
+                benchmarking.current_sub_name = sub_name
+
+                if (suite_ctx.bench_format == BenchmarkOutputFormat.native) {
+                    if (is_first_bench) {
+                        log::info("{file_ctx.indenting}=== RUN BENCHMARK '{benchmarking.name}' [{blue_str(func_type)}]")
+                    }
+                    let full_name = "\t{sub_name}"
+                    let padded_name = pad_right(full_name, 22, ' ')
+                    info_raw("{file_ctx.indenting}{padded_name} ")
+                    return
+                }
+
+                if (suite_ctx.bench_format == BenchmarkOutputFormat.go_export) {
+                    // This output format follows the https://golang.org/design/14313-benchmark-format
+                    // to allow 3rd-party tool usage.
+                    // One of such tools is https://pkg.go.dev/golang.org/x/perf/cmd/benchstat
+                    // The format requires a name like "^Benchmark[A-Z].*",
+                    // hence the somewhat artificial Das injection.
+                    var go_name = name
+                    if (starts_with(name, "benchmark_")) {
+                        // Avoid stutter.
+                        go_name = slice(name, length("benchmark_"))
+                    }
+                    info_raw("BenchmarkDas_{go_name}/sub={sub_name}-1\t\t")
+                    return
+                }
+
+                if (suite_ctx.bench_format == BenchmarkOutputFormat.go_export) {
+                    // Print the whole row once it's ready.
+                    // This format is not intended for interactive use.
+                    return
+                }
+            }
+
+            benchmarking.on_finished <- @capture(& suite_ctx, & benchmarking) (stats : BenchmarkRunStats) {
+                let n = stats.n
+                let time_ns = stats.time_ns
+                let allocs = stats.allocs
+                let heap_bytes = stats.heap_bytes
+
+                benchmarking.finished = true
+
+                // TODO(quasilyte): don't cast to float when ceil can work on doubles.
+                let avg_time = double(time_ns) / double(n)
+                let avg_heap_bytes = double(ceil(float(heap_bytes) / float(n)))
+                let avg_num_allocs = double(ceil(float(allocs) / float(n)))
+                let avg_string_heap_bytes = double(ceil(float(stats.string_heap_bytes) / float(n)))
+                let avg_string_num_allocs = double(ceil(float(stats.string_allocs) / float(n)))
+
+                if (suite_ctx.bench_format == BenchmarkOutputFormat.native) {
+                    let entries = [
+                        (int64(avg_time), "ns/op", 18, false),
+                        (int64(avg_heap_bytes), "B/op", 14, true),
+                        (int64(avg_num_allocs), "allocs/op", 16, true),
+                        (int64(avg_string_heap_bytes), "SB/op", 14, true),
+                        (int64(avg_string_num_allocs), "strings/op", 16, true),
+                    ]
+                    let msg = build_string() $(var w) {
+                        for (i, (val, measure, width, is_alloc) in range(length(entries)), entries) {
+                            let val_s = "{val}"
+                            let printed_width = length(val_s + " " + measure)
+                            let sep = repeat(" ", max(width - printed_width, 1))
+                            let is_last = i == length(entries) - 1
+                            var colored_val = yellow_str(val_s)
+                            if (is_alloc && val == 0l) {
+                                colored_val = green_str(val_s)
+                            }
+                            w |> write(colored_val + " " + measure)
+                            if (!is_last) {
+                                w |> write(sep)
+                            }
+                        }
+                    }
+                    info_raw("{msg}\n")
+                    return
+                }
+
+                if (suite_ctx.bench_format == BenchmarkOutputFormat.go_export) {
+                    info_raw("{n}\t\t{avg_time:.1f} ns/op\t{avg_heap_bytes} B/op\t{avg_num_allocs} allocs/op\t{avg_string_heap_bytes} SB/op\t{avg_string_num_allocs} strings/op\n")
+                    return
+                }
+
+                if (suite_ctx.bench_format == BenchmarkOutputFormat.json) {
+                    var s = sprint_json(stats, false)
+                    info_raw("{s}\n")
+                    return
+                }
+            }
+        }
+
+        invoke(func, benchmarking)
+    } recover {
+        benchmarking.failed = true
+    }
+
+    // A failed bench increases the failure count and may
+    // print an exception if it wasn't a controlled panic via fail or failNow.
+    if (benchmarking.failed) {
+        let dt = get_time_usec(t0)
+        res.failed++
+        if (benchmarking.started && !benchmarking.finished) {
+            if (suite_ctx.bench_format != BenchmarkOutputFormat.json) {
+                print("\n")
+            }
+        }
+        log::error("{file_ctx.indenting}--- FAIL '{name}' in '{benchmarking.current_sub_name}' {time_dt_hr(dt)}")
+        if (!deliberateRecover) {
+            unsafe {
+                let context & = this_context()
+                if (!empty(context.exception)) {
+                    log::error("{file_info_hr(context.exceptionAt, file_ctx.uriPaths)}: {file_ctx.indenting}{context.exception}")
+                }
+                if (!empty(context.last_exception)) {
+                    log::error("{file_info_hr(context.exceptionAt, file_ctx.uriPaths)}: {file_ctx.indenting}{context.last_exception}")
+                }
+            }
+        }
+    }
+}
 
 def private errorOrBlue(expectFailure : bool; msg : string) {
     if (expectFailure) {

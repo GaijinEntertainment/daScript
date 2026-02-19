@@ -5,18 +5,18 @@ struct A {
     a : int
 }
 
-struct B {
+struct BB {
     b : int
 }
 
 variant Foo {
     a : A
-    b : B
+    b : BB
 }
 
 let foo <- fixed_array<Foo>(
     Foo(a = A(a = 1)),
-    Foo(b = B(b = 2))
+    Foo(b = BB(b = 2))
 );
 
 [test]
