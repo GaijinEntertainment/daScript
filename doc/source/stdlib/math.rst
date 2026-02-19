@@ -429,8 +429,8 @@ float* and double
   *  :ref:`sin (x: float3) : float3 <function-math_sin_float3>`
   *  :ref:`sin (x: float2) : float2 <function-math_sin_float2>`
   *  :ref:`sin (x: float) : float <function-math_sin_float>`
-  *  :ref:`sincos (x: float; s: float& implicit; c: float& implicit) <function-math_sincos_float_float_ref__implicit_float_ref__implicit>`
-  *  :ref:`sincos (x: double; s: double& implicit; c: double& implicit) <function-math_sincos_double_double_ref__implicit_double_ref__implicit>`
+  *  :ref:`sincos (x: float; s: float&; c: float&) <function-math_sincos_float_float_ref__float_ref_>`
+  *  :ref:`sincos (x: double; s: double&; c: double&) <function-math_sincos_double_double_ref__double_ref_>`
   *  :ref:`sqrt (x: double) : double <function-math_sqrt_double>`
   *  :ref:`sqrt (x: float4) : float4 <function-math_sqrt_float4>`
   *  :ref:`sqrt (x: float3) : float3 <function-math_sqrt_float3>`
@@ -1145,9 +1145,9 @@ Returns the sine of the angle x given in radians for double or float, with outpu
 sincos
 ^^^^^^
 
-.. _function-math_sincos_float_float_ref__implicit_float_ref__implicit:
+.. _function-math_sincos_float_float_ref__float_ref_:
 
-.. das:function:: sincos(x: float; s: float& implicit; c: float& implicit)
+.. das:function:: sincos(x: float; s: float&; c: float&)
 
 Computes both the sine and cosine of the angle x in radians simultaneously, writing the results to output parameters s and c, for float or double types.
 
@@ -1158,9 +1158,9 @@ Computes both the sine and cosine of the angle x in radians simultaneously, writ
 
             * **c** : float\ & implicit
 
-.. _function-math_sincos_double_double_ref__implicit_double_ref__implicit:
+.. _function-math_sincos_double_double_ref__double_ref_:
 
-.. das:function:: sincos(x: double; s: double& implicit; c: double& implicit)
+.. das:function:: sincos(x: double; s: double&; c: double&)
 
 ----
 
@@ -1242,9 +1242,9 @@ float* only
   *  :ref:`ceili (x: double) : int <function-math_ceili_double>`
   *  :ref:`ceili (x: float3) : int3 <function-math_ceili_float3>`
   *  :ref:`ceili (x: float2) : int2 <function-math_ceili_float2>`
-  *  :ref:`float3x3 implicit- (x: float3x3 implicit) : float3x3 <function-math_-_float3x3_implicit>`
-  *  :ref:`float3x4 implicit- (x: float3x4 implicit) : float3x4 <function-math_-_float3x4_implicit>`
-  *  :ref:`float4x4 implicit- (x: float4x4 implicit) : float4x4 <function-math_-_float4x4_implicit>`
+  *  :ref:`float3x3- (x: float3x3) : float3x3 <function-math_-_float3x3>`
+  *  :ref:`float3x4- (x: float3x4) : float3x4 <function-math_-_float3x4>`
+  *  :ref:`float4x4- (x: float4x4) : float4x4 <function-math_-_float4x4>`
   *  :ref:`floori (x: float) : int <function-math_floori_float>`
   *  :ref:`floori (x: float2) : int2 <function-math_floori_float2>`
   *  :ref:`floori (x: float4) : int4 <function-math_floori_float4>`
@@ -1368,27 +1368,27 @@ Returns the smallest integer not less than x (rounds toward positive infinity), 
 
 ----
 
-.. _function-math_-_float3x3_implicit:
+.. _function-math_-_float3x3:
 
-.. das:function:: float3x3 implicit-(x: float3x3 implicit) : float3x3
+.. das:function:: float3x3-(x: float3x3) : float3x3
 
 Returns the component-wise arithmetic negation of a matrix, flipping the sign of every element; works with float3x3, float3x4, and float4x4 matrix types.
 
 
 :Arguments: * **x** :  :ref:`float3x3 <handle-math-float3x3>` implicit
 
-.. _function-math_-_float3x4_implicit:
+.. _function-math_-_float3x4:
 
-.. das:function:: float3x4 implicit-(x: float3x4 implicit) : float3x4
+.. das:function:: float3x4-(x: float3x4) : float3x4
 
 Returns the component-wise arithmetic negation of a matrix, flipping the sign of every element; works with float3x3, float3x4, and float4x4 matrix types.
 
 
 :Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>` implicit
 
-.. _function-math_-_float4x4_implicit:
+.. _function-math_-_float4x4:
 
-.. das:function:: float4x4 implicit-(x: float4x4 implicit) : float4x4
+.. das:function:: float4x4-(x: float4x4) : float4x4
 
 Returns the component-wise arithmetic negation of a matrix, flipping the sign of every element; works with float3x3, float3x4, and float4x4 matrix types.
 
@@ -2459,22 +2459,22 @@ Returns a reference to the row vector at index `i` from a float4x4 matrix.
 Matrix operations
 +++++++++++++++++
 
-  *  :ref:`float3x3 implicit\!= (x: float3x3 implicit; y: float3x3 implicit) : bool <function-math__ex__eq__float3x3_implicit_float3x3_implicit>`
-  *  :ref:`float3x3 implicit* (x: float3x3 implicit; y: float3x3 implicit) : float3x3 <function-math__st__float3x3_implicit_float3x3_implicit>`
-  *  :ref:`float3x3 implicit* (x: float3x3 implicit; y: float3) : float3 <function-math__st__float3x3_implicit_float3>`
-  *  :ref:`float3x3 implicit== (x: float3x3 implicit; y: float3x3 implicit) : bool <function-math__eq__eq__float3x3_implicit_float3x3_implicit>`
-  *  :ref:`float3x4 implicit\!= (x: float3x4 implicit; y: float3x4 implicit) : bool <function-math__ex__eq__float3x4_implicit_float3x4_implicit>`
-  *  :ref:`float3x4 implicit* (x: float3x4 implicit; y: float3x4 implicit) : float3x4 <function-math__st__float3x4_implicit_float3x4_implicit>`
-  *  :ref:`float3x4 implicit* (x: float3x4 implicit; y: float3) : float3 <function-math__st__float3x4_implicit_float3>`
-  *  :ref:`float3x4 implicit== (x: float3x4 implicit; y: float3x4 implicit) : bool <function-math__eq__eq__float3x4_implicit_float3x4_implicit>`
-  *  :ref:`float4x4 implicit\!= (x: float4x4 implicit; y: float4x4 implicit) : bool <function-math__ex__eq__float4x4_implicit_float4x4_implicit>`
-  *  :ref:`float4x4 implicit* (x: float4x4 implicit; y: float4) : float4 <function-math__st__float4x4_implicit_float4>`
-  *  :ref:`float4x4 implicit* (x: float4x4 implicit; y: float4x4 implicit) : float4x4 <function-math__st__float4x4_implicit_float4x4_implicit>`
-  *  :ref:`float4x4 implicit== (x: float4x4 implicit; y: float4x4 implicit) : bool <function-math__eq__eq__float4x4_implicit_float4x4_implicit>`
+  *  :ref:`float3x3\!= (x: float3x3; y: float3x3) : bool <function-math__ex__eq__float3x3_float3x3>`
+  *  :ref:`float3x3* (x: float3x3; y: float3x3) : float3x3 <function-math__st__float3x3_float3x3>`
+  *  :ref:`float3x3* (x: float3x3; y: float3) : float3 <function-math__st__float3x3_float3>`
+  *  :ref:`float3x3== (x: float3x3; y: float3x3) : bool <function-math__eq__eq__float3x3_float3x3>`
+  *  :ref:`float3x4\!= (x: float3x4; y: float3x4) : bool <function-math__ex__eq__float3x4_float3x4>`
+  *  :ref:`float3x4* (x: float3x4; y: float3x4) : float3x4 <function-math__st__float3x4_float3x4>`
+  *  :ref:`float3x4* (x: float3x4; y: float3) : float3 <function-math__st__float3x4_float3>`
+  *  :ref:`float3x4== (x: float3x4; y: float3x4) : bool <function-math__eq__eq__float3x4_float3x4>`
+  *  :ref:`float4x4\!= (x: float4x4; y: float4x4) : bool <function-math__ex__eq__float4x4_float4x4>`
+  *  :ref:`float4x4* (x: float4x4; y: float4) : float4 <function-math__st__float4x4_float4>`
+  *  :ref:`float4x4* (x: float4x4; y: float4x4) : float4x4 <function-math__st__float4x4_float4x4>`
+  *  :ref:`float4x4== (x: float4x4; y: float4x4) : bool <function-math__eq__eq__float4x4_float4x4>`
 
-.. _function-math__ex__eq__float3x3_implicit_float3x3_implicit:
+.. _function-math__ex__eq__float3x3_float3x3:
 
-.. das:function:: float3x3 implicit!=(x: float3x3 implicit; y: float3x3 implicit) : bool
+.. das:function:: float3x3!=(x: float3x3; y: float3x3) : bool
 
 Returns true if two float3x3 matrices are not equal, comparing all elements component-wise.
 
@@ -2484,14 +2484,14 @@ Returns true if two float3x3 matrices are not equal, comparing all elements comp
             * **y** :  :ref:`float3x3 <handle-math-float3x3>` implicit
 
 
-float3x3 implicit*
-^^^^^^^^^^^^^^^^^^
+float3x3*
+^^^^^^^^^
 
-.. _function-math__st__float3x3_implicit_float3x3_implicit:
+.. _function-math__st__float3x3_float3x3:
 
-.. das:function:: float3x3 implicit*(x: float3x3 implicit; y: float3x3 implicit) : float3x3
+.. das:function:: float3x3*(x: float3x3; y: float3x3) : float3x3
 
-Multiplies two 3x3 matrices and returns the resulting 3x3 matrix.
+Transforms a float3 vector by a 3x3 matrix.
 
 
 
@@ -2499,15 +2499,15 @@ Multiplies two 3x3 matrices and returns the resulting 3x3 matrix.
 
             * **y** :  :ref:`float3x3 <handle-math-float3x3>` implicit
 
-.. _function-math__st__float3x3_implicit_float3:
+.. _function-math__st__float3x3_float3:
 
-.. das:function:: float3x3 implicit*(x: float3x3 implicit; y: float3) : float3
+.. das:function:: float3x3*(x: float3x3; y: float3) : float3
 
 ----
 
-.. _function-math__eq__eq__float3x3_implicit_float3x3_implicit:
+.. _function-math__eq__eq__float3x3_float3x3:
 
-.. das:function:: float3x3 implicit==(x: float3x3 implicit; y: float3x3 implicit) : bool
+.. das:function:: float3x3==(x: float3x3; y: float3x3) : bool
 
 Returns true if two float3x3 matrices are exactly equal, comparing all elements component-wise.
 
@@ -2516,9 +2516,9 @@ Returns true if two float3x3 matrices are exactly equal, comparing all elements 
 
             * **y** :  :ref:`float3x3 <handle-math-float3x3>` implicit
 
-.. _function-math__ex__eq__float3x4_implicit_float3x4_implicit:
+.. _function-math__ex__eq__float3x4_float3x4:
 
-.. das:function:: float3x4 implicit!=(x: float3x4 implicit; y: float3x4 implicit) : bool
+.. das:function:: float3x4!=(x: float3x4; y: float3x4) : bool
 
 Returns true if two float3x4 matrices are not equal, comparing all elements component-wise.
 
@@ -2528,14 +2528,14 @@ Returns true if two float3x4 matrices are not equal, comparing all elements comp
             * **y** :  :ref:`float3x4 <handle-math-float3x4>` implicit
 
 
-float3x4 implicit*
-^^^^^^^^^^^^^^^^^^
+float3x4*
+^^^^^^^^^
 
-.. _function-math__st__float3x4_implicit_float3x4_implicit:
+.. _function-math__st__float3x4_float3x4:
 
-.. das:function:: float3x4 implicit*(x: float3x4 implicit; y: float3x4 implicit) : float3x4
+.. das:function:: float3x4*(x: float3x4; y: float3x4) : float3x4
 
-Multiplies two 3x4 matrices and returns the resulting 3x4 matrix.
+Transforms a float3 vector by a 3x3 matrix.
 
 
 
@@ -2543,15 +2543,15 @@ Multiplies two 3x4 matrices and returns the resulting 3x4 matrix.
 
             * **y** :  :ref:`float3x4 <handle-math-float3x4>` implicit
 
-.. _function-math__st__float3x4_implicit_float3:
+.. _function-math__st__float3x4_float3:
 
-.. das:function:: float3x4 implicit*(x: float3x4 implicit; y: float3) : float3
+.. das:function:: float3x4*(x: float3x4; y: float3) : float3
 
 ----
 
-.. _function-math__eq__eq__float3x4_implicit_float3x4_implicit:
+.. _function-math__eq__eq__float3x4_float3x4:
 
-.. das:function:: float3x4 implicit==(x: float3x4 implicit; y: float3x4 implicit) : bool
+.. das:function:: float3x4==(x: float3x4; y: float3x4) : bool
 
 Returns true if two float3x4 matrices are exactly equal, comparing all elements component-wise.
 
@@ -2560,9 +2560,9 @@ Returns true if two float3x4 matrices are exactly equal, comparing all elements 
 
             * **y** :  :ref:`float3x4 <handle-math-float3x4>` implicit
 
-.. _function-math__ex__eq__float4x4_implicit_float4x4_implicit:
+.. _function-math__ex__eq__float4x4_float4x4:
 
-.. das:function:: float4x4 implicit!=(x: float4x4 implicit; y: float4x4 implicit) : bool
+.. das:function:: float4x4!=(x: float4x4; y: float4x4) : bool
 
 Returns true if two float4x4 matrices are not equal, comparing all elements component-wise.
 
@@ -2572,12 +2572,12 @@ Returns true if two float4x4 matrices are not equal, comparing all elements comp
             * **y** :  :ref:`float4x4 <handle-math-float4x4>` implicit
 
 
-float4x4 implicit*
-^^^^^^^^^^^^^^^^^^
+float4x4*
+^^^^^^^^^
 
-.. _function-math__st__float4x4_implicit_float4:
+.. _function-math__st__float4x4_float4:
 
-.. das:function:: float4x4 implicit*(x: float4x4 implicit; y: float4) : float4
+.. das:function:: float4x4*(x: float4x4; y: float4) : float4
 
 Transforms a float4 vector by a 4x4 matrix.
 
@@ -2587,15 +2587,15 @@ Transforms a float4 vector by a 4x4 matrix.
 
             * **y** : float4
 
-.. _function-math__st__float4x4_implicit_float4x4_implicit:
+.. _function-math__st__float4x4_float4x4:
 
-.. das:function:: float4x4 implicit*(x: float4x4 implicit; y: float4x4 implicit) : float4x4
+.. das:function:: float4x4*(x: float4x4; y: float4x4) : float4x4
 
 ----
 
-.. _function-math__eq__eq__float4x4_implicit_float4x4_implicit:
+.. _function-math__eq__eq__float4x4_float4x4:
 
-.. das:function:: float4x4 implicit==(x: float4x4 implicit; y: float4x4 implicit) : bool
+.. das:function:: float4x4==(x: float4x4; y: float4x4) : bool
 
 Returns true if two float4x4 matrices are exactly equal, comparing all elements component-wise.
 
@@ -2609,12 +2609,12 @@ Returns true if two float4x4 matrices are exactly equal, comparing all elements 
 Matrix initializers
 +++++++++++++++++++
 
-  *  :ref:`float3x3 (arg0: float3x4 implicit) : float3x3 <function-math_float3x3_float3x4_implicit>`
+  *  :ref:`float3x3 (arg0: float3x4) : float3x3 <function-math_float3x3_float3x4>`
   *  :ref:`float3x3 () : float3x3 <function-math_float3x3>`
-  *  :ref:`float3x3 (arg0: float4x4 implicit) : float3x3 <function-math_float3x3_float4x4_implicit>`
-  *  :ref:`float3x4 (arg0: float4x4 implicit) : float3x4 <function-math_float3x4_float4x4_implicit>`
+  *  :ref:`float3x3 (arg0: float4x4) : float3x3 <function-math_float3x3_float4x4>`
+  *  :ref:`float3x4 (arg0: float4x4) : float3x4 <function-math_float3x4_float4x4>`
   *  :ref:`float3x4 () : float3x4 <function-math_float3x4>`
-  *  :ref:`float4x4 (arg0: float3x4 implicit) : float4x4 <function-math_float4x4_float3x4_implicit>`
+  *  :ref:`float4x4 (arg0: float3x4) : float4x4 <function-math_float4x4_float3x4>`
   *  :ref:`float4x4 () : float4x4 <function-math_float4x4>`
   *  :ref:`identity3x3 () : float3x3 <function-math_identity3x3>`
   *  :ref:`identity3x4 () : float3x4 <function-math_identity3x4>`
@@ -2624,9 +2624,9 @@ Matrix initializers
 float3x3
 ^^^^^^^^
 
-.. _function-math_float3x3_float3x4_implicit:
+.. _function-math_float3x3_float3x4:
 
-.. das:function:: float3x3(arg0: float3x4 implicit) : float3x3
+.. das:function:: float3x3(arg0: float3x4) : float3x3
 
 Extracts the upper-left 3x3 rotation part from a float3x4 transformation matrix, returning it as a float3x3.
 
@@ -2637,9 +2637,9 @@ Extracts the upper-left 3x3 rotation part from a float3x4 transformation matrix,
 
 .. das:function:: float3x3() : float3x3
 
-.. _function-math_float3x3_float4x4_implicit:
+.. _function-math_float3x3_float4x4:
 
-.. das:function:: float3x3(arg0: float4x4 implicit) : float3x3
+.. das:function:: float3x3(arg0: float4x4) : float3x3
 
 ----
 
@@ -2647,9 +2647,9 @@ Extracts the upper-left 3x3 rotation part from a float3x4 transformation matrix,
 float3x4
 ^^^^^^^^
 
-.. _function-math_float3x4_float4x4_implicit:
+.. _function-math_float3x4_float4x4:
 
-.. das:function:: float3x4(arg0: float4x4 implicit) : float3x4
+.. das:function:: float3x4(arg0: float4x4) : float3x4
 
 Constructs a float3x4 transformation matrix from a float3x3 rotation matrix, with the translation component set to zero.
 
@@ -2666,9 +2666,9 @@ Constructs a float3x4 transformation matrix from a float3x3 rotation matrix, wit
 float4x4
 ^^^^^^^^
 
-.. _function-math_float4x4_float3x4_implicit:
+.. _function-math_float4x4_float3x4:
 
-.. das:function:: float4x4(arg0: float3x4 implicit) : float4x4
+.. das:function:: float4x4(arg0: float3x4) : float4x4
 
 Converts a float3x4 transformation matrix to a float4x4 matrix, filling the fourth row with [0, 0, 0, 1].
 
@@ -2708,23 +2708,23 @@ Matrix manipulation
 +++++++++++++++++++
 
   *  :ref:`compose (pos: float3; rot: float4; scale: float3) : float4x4 <function-math_compose_float3_float4_float3>`
-  *  :ref:`decompose (mat: float4x4 implicit; pos: float3& implicit; rot: float4& implicit; scale: float3& implicit) <function-math_decompose_float4x4_implicit_float3_ref__implicit_float4_ref__implicit_float3_ref__implicit>`
-  *  :ref:`determinant (x: float3x4 implicit) : float <function-math_determinant_float3x4_implicit>`
-  *  :ref:`determinant (x: float4x4 implicit) : float <function-math_determinant_float4x4_implicit>`
-  *  :ref:`determinant (x: float3x3 implicit) : float <function-math_determinant_float3x3_implicit>`
-  *  :ref:`identity (x: float3x4 implicit) <function-math_identity_float3x4_implicit>`
-  *  :ref:`identity (x: float4x4 implicit) <function-math_identity_float4x4_implicit>`
-  *  :ref:`identity (x: float3x3 implicit) <function-math_identity_float3x3_implicit>`
-  *  :ref:`inverse (x: float3x4 implicit) : float3x4 <function-math_inverse_float3x4_implicit>`
-  *  :ref:`inverse (m: float4x4 implicit) : float4x4 <function-math_inverse_float4x4_implicit>`
+  *  :ref:`decompose (mat: float4x4; pos: float3&; rot: float4&; scale: float3&) <function-math_decompose_float4x4_float3_ref__float4_ref__float3_ref_>`
+  *  :ref:`determinant (x: float3x4) : float <function-math_determinant_float3x4>`
+  *  :ref:`determinant (x: float4x4) : float <function-math_determinant_float4x4>`
+  *  :ref:`determinant (x: float3x3) : float <function-math_determinant_float3x3>`
+  *  :ref:`identity (x: float3x4) <function-math_identity_float3x4>`
+  *  :ref:`identity (x: float4x4) <function-math_identity_float4x4>`
+  *  :ref:`identity (x: float3x3) <function-math_identity_float3x3>`
+  *  :ref:`inverse (x: float3x4) : float3x4 <function-math_inverse_float3x4>`
+  *  :ref:`inverse (m: float4x4) : float4x4 <function-math_inverse_float4x4>`
   *  :ref:`look_at (eye: float3; at: float3; up: float3) : float4x4 <function-math_look_at_float3_float3_float3>`
-  *  :ref:`orthonormal_inverse (m: float3x3 implicit) : float3x3 <function-math_orthonormal_inverse_float3x3_implicit>`
-  *  :ref:`orthonormal_inverse (m: float3x4 implicit) : float3x4 <function-math_orthonormal_inverse_float3x4_implicit>`
+  *  :ref:`orthonormal_inverse (m: float3x3) : float3x3 <function-math_orthonormal_inverse_float3x3>`
+  *  :ref:`orthonormal_inverse (m: float3x4) : float3x4 <function-math_orthonormal_inverse_float3x4>`
   *  :ref:`persp_forward (wk: float; hk: float; zn: float; zf: float) : float4x4 <function-math_persp_forward_float_float_float_float>`
   *  :ref:`persp_reverse (wk: float; hk: float; zn: float; zf: float) : float4x4 <function-math_persp_reverse_float_float_float_float>`
-  *  :ref:`rotate (x: float3x4 implicit; y: float3) : float3 <function-math_rotate_float3x4_implicit_float3>`
+  *  :ref:`rotate (x: float3x4; y: float3) : float3 <function-math_rotate_float3x4_float3>`
   *  :ref:`translation (xyz: float3) : float4x4 <function-math_translation_float3>`
-  *  :ref:`transpose (x: float4x4 implicit) : float4x4 <function-math_transpose_float4x4_implicit>`
+  *  :ref:`transpose (x: float4x4) : float4x4 <function-math_transpose_float4x4>`
 
 .. _function-math_compose_float3_float4_float3:
 
@@ -2739,9 +2739,9 @@ Constructs a float4x4 transformation matrix from a float3 translation position, 
 
             * **scale** : float3
 
-.. _function-math_decompose_float4x4_implicit_float3_ref__implicit_float4_ref__implicit_float3_ref__implicit:
+.. _function-math_decompose_float4x4_float3_ref__float4_ref__float3_ref_:
 
-.. das:function:: decompose(mat: float4x4 implicit; pos: float3& implicit; rot: float4& implicit; scale: float3& implicit)
+.. das:function:: decompose(mat: float4x4; pos: float3&; rot: float4&; scale: float3&)
 
 Decomposes a float4x4 transformation matrix into its float3 translation position, float4 quaternion rotation, and float3 scale components., writing the results into the output arguments rot and pos.
 
@@ -2758,22 +2758,22 @@ Decomposes a float4x4 transformation matrix into its float3 translation position
 determinant
 ^^^^^^^^^^^
 
-.. _function-math_determinant_float3x4_implicit:
+.. _function-math_determinant_float3x4:
 
-.. das:function:: determinant(x: float3x4 implicit) : float
+.. das:function:: determinant(x: float3x4) : float
 
 Returns the determinant of a float3x4 matrix as a float scalar; a zero determinant indicates the matrix is singular and non-invertible.
 
 
 :Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>` implicit
 
-.. _function-math_determinant_float4x4_implicit:
+.. _function-math_determinant_float4x4:
 
-.. das:function:: determinant(x: float4x4 implicit) : float
+.. das:function:: determinant(x: float4x4) : float
 
-.. _function-math_determinant_float3x3_implicit:
+.. _function-math_determinant_float3x3:
 
-.. das:function:: determinant(x: float3x3 implicit) : float
+.. das:function:: determinant(x: float3x3) : float
 
 ----
 
@@ -2781,22 +2781,22 @@ Returns the determinant of a float3x4 matrix as a float scalar; a zero determina
 identity
 ^^^^^^^^
 
-.. _function-math_identity_float3x4_implicit:
+.. _function-math_identity_float3x4:
 
-.. das:function:: identity(x: float3x4 implicit)
+.. das:function:: identity(x: float3x4)
 
 Sets the given float3x4 matrix to the identity transformation (rotation part is the identity matrix, translation is zero) and returns it.
 
 
 :Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>` implicit
 
-.. _function-math_identity_float4x4_implicit:
+.. _function-math_identity_float4x4:
 
-.. das:function:: identity(x: float4x4 implicit)
+.. das:function:: identity(x: float4x4)
 
-.. _function-math_identity_float3x3_implicit:
+.. _function-math_identity_float3x3:
 
-.. das:function:: identity(x: float3x3 implicit)
+.. das:function:: identity(x: float3x3)
 
 ----
 
@@ -2804,18 +2804,18 @@ Sets the given float3x4 matrix to the identity transformation (rotation part is 
 inverse
 ^^^^^^^
 
-.. _function-math_inverse_float3x4_implicit:
+.. _function-math_inverse_float3x4:
 
-.. das:function:: inverse(x: float3x4 implicit) : float3x4
+.. das:function:: inverse(x: float3x4) : float3x4
 
 Returns the inverse of a matrix, such that multiplying the original by its inverse yields the identity; works with float3x4 and float4x4 matrix types.
 
 
 :Arguments: * **x** :  :ref:`float3x4 <handle-math-float3x4>` implicit
 
-.. _function-math_inverse_float4x4_implicit:
+.. _function-math_inverse_float4x4:
 
-.. das:function:: inverse(m: float4x4 implicit) : float4x4
+.. das:function:: inverse(m: float4x4) : float4x4
 
 ----
 
@@ -2836,18 +2836,18 @@ Constructs a float4x4 look-at view transformation matrix from eye position, targ
 orthonormal_inverse
 ^^^^^^^^^^^^^^^^^^^
 
-.. _function-math_orthonormal_inverse_float3x3_implicit:
+.. _function-math_orthonormal_inverse_float3x3:
 
-.. das:function:: orthonormal_inverse(m: float3x3 implicit) : float3x3
+.. das:function:: orthonormal_inverse(m: float3x3) : float3x3
 
 Returns the inverse of a float3x3 orthonormal matrix (each axis is unit length and mutually perpendicular), computed more efficiently than a general matrix inverse.
 
 
 :Arguments: * **m** :  :ref:`float3x3 <handle-math-float3x3>` implicit
 
-.. _function-math_orthonormal_inverse_float3x4_implicit:
+.. _function-math_orthonormal_inverse_float3x4:
 
-.. das:function:: orthonormal_inverse(m: float3x4 implicit) : float3x4
+.. das:function:: orthonormal_inverse(m: float3x4) : float3x4
 
 ----
 
@@ -2881,9 +2881,9 @@ Returns a reverse-depth perspective projection float4x4 matrix constructed from 
 
             * **zf** : float
 
-.. _function-math_rotate_float3x4_implicit_float3:
+.. _function-math_rotate_float3x4_float3:
 
-.. das:function:: rotate(x: float3x4 implicit; y: float3) : float3
+.. das:function:: rotate(x: float3x4; y: float3) : float3
 
 Rotates a float3 vector v by the 3x3 rotation part of the float3x4 matrix m, ignoring the translation component.
 
@@ -2901,9 +2901,9 @@ Constructs a float4x4 matrix representing a pure translation by the given float3
 
 :Arguments: * **xyz** : float3
 
-.. _function-math_transpose_float4x4_implicit:
+.. _function-math_transpose_float4x4:
 
-.. das:function:: transpose(x: float4x4 implicit) : float4x4
+.. das:function:: transpose(x: float4x4) : float4x4
 
 Returns the transpose of a float3x3 or float4x4 matrix, swapping rows and columns.
 
@@ -2916,9 +2916,9 @@ Quaternion operations
 +++++++++++++++++++++
 
   *  :ref:`euler_from_quat (angles: float4) : float3 <function-math_euler_from_quat_float4>`
-  *  :ref:`quat (m: float4x4 implicit) : float4 <function-math_quat_float4x4_implicit>`
-  *  :ref:`quat (m: float3x3 implicit) : float4 <function-math_quat_float3x3_implicit>`
-  *  :ref:`quat (m: float3x4 implicit) : float4 <function-math_quat_float3x4_implicit>`
+  *  :ref:`quat (m: float4x4) : float4 <function-math_quat_float4x4>`
+  *  :ref:`quat (m: float3x3) : float4 <function-math_quat_float3x3>`
+  *  :ref:`quat (m: float3x4) : float4 <function-math_quat_float3x4>`
   *  :ref:`quat_conjugate (q: float4) : float4 <function-math_quat_conjugate_float4>`
   *  :ref:`quat_from_euler (x: float; y: float; z: float) : float4 <function-math_quat_from_euler_float_float_float>`
   *  :ref:`quat_from_euler (angles: float3) : float4 <function-math_quat_from_euler_float3>`
@@ -2941,22 +2941,22 @@ Converts a float4 quaternion to Euler angles, returning a float3 representing ro
 quat
 ^^^^
 
-.. _function-math_quat_float4x4_implicit:
+.. _function-math_quat_float4x4:
 
-.. das:function:: quat(m: float4x4 implicit) : float4
+.. das:function:: quat(m: float4x4) : float4
 
 Extracts the rotation part of a float3x4 matrix and returns it as a float4 quaternion in (x, y, z, w) format.
 
 
 :Arguments: * **m** :  :ref:`float4x4 <handle-math-float4x4>` implicit
 
-.. _function-math_quat_float3x3_implicit:
+.. _function-math_quat_float3x3:
 
-.. das:function:: quat(m: float3x3 implicit) : float4
+.. das:function:: quat(m: float3x3) : float4
 
-.. _function-math_quat_float3x4_implicit:
+.. _function-math_quat_float3x4:
 
-.. das:function:: quat(m: float3x4 implicit) : float4
+.. das:function:: quat(m: float3x4) : float4
 
 ----
 

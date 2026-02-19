@@ -23,28 +23,27 @@ All functions and symbols are in "json_boost" module, use require to get access 
 Example:
 
 .. code-block:: das
-    :force:
 
     require daslib/json_boost
 
-    [export]
-    def main() {
-        let data = "\{ \"name\": \"Alice\", \"age\": 30 \}"
-        var error = ""
-        var js <- read_json(data, error)
-        if (error == "") {
-            let name = js?.name ?? "?"
-            print("name = {name}\n")
-            let age = js?.age ?? -1
-            print("age = {age}\n")
+        [export]
+        def main() {
+            let data = "\{ \"name\": \"Alice\", \"age\": 30 \}"
+            var error = ""
+            var js <- read_json(data, error)
+            if (error == "") {
+                let name = js?.name ?? "?"
+                print("name = {name}\n")
+                let age = js?.age ?? -1
+                print("age = {age}\n")
+            }
+            unsafe {
+                delete js
+            }
         }
-        unsafe {
-            delete js
-        }
-    }
-    // output:
-    // name = Alice
-    // age = 30
+        // output:
+        // name = Alice
+        // age = 30
 
 
 

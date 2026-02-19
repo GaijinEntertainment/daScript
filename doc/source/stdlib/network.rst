@@ -131,17 +131,17 @@ Constructs a new ``Server`` instance with default settings.
 Low level NetworkServer IO
 ++++++++++++++++++++++++++
 
-  *  :ref:`make_server (class: void? implicit; info: StructInfo const? implicit) : bool <function-network_make_server_void_q__implicit_StructInfo_const_q__implicit>`
-  *  :ref:`server_init (server: smart_ptr\<NetworkServer\> implicit; port: int) : bool <function-network_server_init_smart_ptr_ls_NetworkServer_gr__implicit_int>`
-  *  :ref:`server_is_connected (server: smart_ptr\<NetworkServer\> implicit) : bool <function-network_server_is_connected_smart_ptr_ls_NetworkServer_gr__implicit>`
-  *  :ref:`server_is_open (server: smart_ptr\<NetworkServer\> implicit) : bool <function-network_server_is_open_smart_ptr_ls_NetworkServer_gr__implicit>`
-  *  :ref:`server_restore (server: smart_ptr\<NetworkServer\> implicit; class: void? implicit; info: StructInfo const? implicit) <function-network_server_restore_smart_ptr_ls_NetworkServer_gr__implicit_void_q__implicit_StructInfo_const_q__implicit>`
-  *  :ref:`server_send (server: smart_ptr\<NetworkServer\> implicit; data: uint8? implicit; size: int) : bool <function-network_server_send_smart_ptr_ls_NetworkServer_gr__implicit_uint8_q__implicit_int>`
-  *  :ref:`server_tick (server: smart_ptr\<NetworkServer\> implicit) <function-network_server_tick_smart_ptr_ls_NetworkServer_gr__implicit>`
+  *  :ref:`make_server (class: void?; info: StructInfo const?) : bool <function-network_make_server_void_q__StructInfo_const_q_>`
+  *  :ref:`server_init (server: smart_ptr\<NetworkServer\>; port: int) : bool <function-network_server_init_smart_ptr_ls_NetworkServer_gr__int>`
+  *  :ref:`server_is_connected (server: smart_ptr\<NetworkServer\>) : bool <function-network_server_is_connected_smart_ptr_ls_NetworkServer_gr_>`
+  *  :ref:`server_is_open (server: smart_ptr\<NetworkServer\>) : bool <function-network_server_is_open_smart_ptr_ls_NetworkServer_gr_>`
+  *  :ref:`server_restore (server: smart_ptr\<NetworkServer\>; class: void?; info: StructInfo const?) <function-network_server_restore_smart_ptr_ls_NetworkServer_gr__void_q__StructInfo_const_q_>`
+  *  :ref:`server_send (server: smart_ptr\<NetworkServer\>; data: uint8?; size: int) : bool <function-network_server_send_smart_ptr_ls_NetworkServer_gr__uint8_q__int>`
+  *  :ref:`server_tick (server: smart_ptr\<NetworkServer\>) <function-network_server_tick_smart_ptr_ls_NetworkServer_gr_>`
 
-.. _function-network_make_server_void_q__implicit_StructInfo_const_q__implicit:
+.. _function-network_make_server_void_q__StructInfo_const_q_:
 
-.. das:function:: make_server(class: void? implicit; info: StructInfo const? implicit) : bool
+.. das:function:: make_server(class: void?; info: StructInfo const?) : bool
 
 Creates a new ``Server`` instance.
 
@@ -150,9 +150,9 @@ Creates a new ``Server`` instance.
 
             * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>`? implicit
 
-.. _function-network_server_init_smart_ptr_ls_NetworkServer_gr__implicit_int:
+.. _function-network_server_init_smart_ptr_ls_NetworkServer_gr__int:
 
-.. das:function:: server_init(server: smart_ptr<NetworkServer> implicit; port: int) : bool
+.. das:function:: server_init(server: smart_ptr<NetworkServer>; port: int) : bool
 
 Initializes the server to listen on the specified port.
 
@@ -161,27 +161,27 @@ Initializes the server to listen on the specified port.
 
             * **port** : int
 
-.. _function-network_server_is_connected_smart_ptr_ls_NetworkServer_gr__implicit:
+.. _function-network_server_is_connected_smart_ptr_ls_NetworkServer_gr_:
 
-.. das:function:: server_is_connected(server: smart_ptr<NetworkServer> implicit) : bool
+.. das:function:: server_is_connected(server: smart_ptr<NetworkServer>) : bool
 
 Returns ``true`` if the server has an active client connection.
 
 
 :Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>`> implicit
 
-.. _function-network_server_is_open_smart_ptr_ls_NetworkServer_gr__implicit:
+.. _function-network_server_is_open_smart_ptr_ls_NetworkServer_gr_:
 
-.. das:function:: server_is_open(server: smart_ptr<NetworkServer> implicit) : bool
+.. das:function:: server_is_open(server: smart_ptr<NetworkServer>) : bool
 
 Returns ``true`` if the server is listening on its bound port.
 
 
 :Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>`> implicit
 
-.. _function-network_server_restore_smart_ptr_ls_NetworkServer_gr__implicit_void_q__implicit_StructInfo_const_q__implicit:
+.. _function-network_server_restore_smart_ptr_ls_NetworkServer_gr__void_q__StructInfo_const_q_:
 
-.. das:function:: server_restore(server: smart_ptr<NetworkServer> implicit; class: void? implicit; info: StructInfo const? implicit)
+.. das:function:: server_restore(server: smart_ptr<NetworkServer>; class: void?; info: StructInfo const?)
 
 Restores a server from an orphaned or interrupted state.
 
@@ -192,9 +192,9 @@ Restores a server from an orphaned or interrupted state.
 
             * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>`? implicit
 
-.. _function-network_server_send_smart_ptr_ls_NetworkServer_gr__implicit_uint8_q__implicit_int:
+.. _function-network_server_send_smart_ptr_ls_NetworkServer_gr__uint8_q__int:
 
-.. das:function:: server_send(server: smart_ptr<NetworkServer> implicit; data: uint8? implicit; size: int) : bool
+.. das:function:: server_send(server: smart_ptr<NetworkServer>; data: uint8?; size: int) : bool
 
 Sends data from the server to the connected client.
 
@@ -205,9 +205,9 @@ Sends data from the server to the connected client.
 
             * **size** : int
 
-.. _function-network_server_tick_smart_ptr_ls_NetworkServer_gr__implicit:
+.. _function-network_server_tick_smart_ptr_ls_NetworkServer_gr_:
 
-.. das:function:: server_tick(server: smart_ptr<NetworkServer> implicit)
+.. das:function:: server_tick(server: smart_ptr<NetworkServer>)
 
 Processes pending network I/O; must be called periodically for the server to function.
 

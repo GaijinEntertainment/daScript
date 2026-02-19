@@ -42,23 +42,23 @@ Example:
 Split and join
 ++++++++++++++
 
-  *  :ref:`join (it: auto; separator: string implicit) : auto <function-strings_boost_join_auto_string_implicit_0x1d>`
+  *  :ref:`join (it: auto; separator: string) : auto <function-strings_boost_join_auto_string_0x1d>`
   *  :ref:`join (iterable: array\<auto(TT)\>; separator: string; blk: block\<(var writer:StringBuilderWriter;elem:TT):void\>) : string <function-strings_boost_join_array_ls_autoTT_gr__string_block_ls_var_writer_c_StringBuilderWriter;elem_c_TT_c_void_gr_>`
-  *  :ref:`join (var it: iterator\<auto(TT)\>; separator: string implicit) : auto <function-strings_boost_join_iterator_ls_autoTT_gr__string_implicit>`
+  *  :ref:`join (var it: iterator\<auto(TT)\>; separator: string) : auto <function-strings_boost_join_iterator_ls_autoTT_gr__string>`
   *  :ref:`join (var iterable: iterator\<auto(TT)\>; separator: string; blk: block\<(var writer:StringBuilderWriter;elem:TT):void\>) : string <function-strings_boost_join_iterator_ls_autoTT_gr__string_block_ls_var_writer_c_StringBuilderWriter;elem_c_TT_c_void_gr_>`
   *  :ref:`join (iterable: auto(TT)[]; separator: string; blk: block\<(var writer:StringBuilderWriter;elem:TT):void\>) : string <function-strings_boost_join_autoTT_lb__rb__string_block_ls_var_writer_c_StringBuilderWriter;elem_c_TT_c_void_gr__0x64>`
-  *  :ref:`split (text: string implicit; delim: string implicit) : array\<string\> <function-strings_boost_split_string_implicit_string_implicit>`
-  *  :ref:`split (text: string implicit; delim: string implicit; blk: block\<(arg:array\<string\>#):auto\>) : auto <function-strings_boost_split_string_implicit_string_implicit_block_ls_arg_c_array_ls_string_gr__hh__c_auto_gr_>`
-  *  :ref:`split_by_chars (text: string implicit; delim: string implicit) : array\<string\> <function-strings_boost_split_by_chars_string_implicit_string_implicit>`
-  *  :ref:`split_by_chars (text: string implicit; delim: string implicit; blk: block\<(arg:array\<string\>#):auto\>) : auto <function-strings_boost_split_by_chars_string_implicit_string_implicit_block_ls_arg_c_array_ls_string_gr__hh__c_auto_gr_>`
+  *  :ref:`split (text: string; delim: string) : array\<string\> <function-strings_boost_split_string_string>`
+  *  :ref:`split (text: string; delim: string; blk: block\<(arg:array\<string\>#):auto\>) : auto <function-strings_boost_split_string_string_block_ls_arg_c_array_ls_string_gr__hh__c_auto_gr_>`
+  *  :ref:`split_by_chars (text: string; delim: string) : array\<string\> <function-strings_boost_split_by_chars_string_string>`
+  *  :ref:`split_by_chars (text: string; delim: string; blk: block\<(arg:array\<string\>#):auto\>) : auto <function-strings_boost_split_by_chars_string_string_block_ls_arg_c_array_ls_string_gr__hh__c_auto_gr_>`
 
 
 join
 ^^^^
 
-.. _function-strings_boost_join_auto_string_implicit_0x1d:
+.. _function-strings_boost_join_auto_string_0x1d:
 
-.. das:function:: join(it: auto; separator: string implicit) : auto
+.. das:function:: join(it: auto; separator: string) : auto
 
 Joins the elements of an iterable into a single string using the specified separator.
 
@@ -71,9 +71,9 @@ Joins the elements of an iterable into a single string using the specified separ
 
 .. das:function:: join(iterable: array<auto(TT)>; separator: string; blk: block<(var writer:StringBuilderWriter;elem:TT):void>) : string
 
-.. _function-strings_boost_join_iterator_ls_autoTT_gr__string_implicit:
+.. _function-strings_boost_join_iterator_ls_autoTT_gr__string:
 
-.. das:function:: join(it: iterator<auto(TT)>; separator: string implicit) : auto
+.. das:function:: join(it: iterator<auto(TT)>; separator: string) : auto
 
 .. _function-strings_boost_join_iterator_ls_autoTT_gr__string_block_ls_var_writer_c_StringBuilderWriter;elem_c_TT_c_void_gr_:
 
@@ -89,20 +89,20 @@ Joins the elements of an iterable into a single string using the specified separ
 split
 ^^^^^
 
-.. _function-strings_boost_split_string_implicit_string_implicit:
+.. _function-strings_boost_split_string_string:
 
-.. das:function:: split(text: string implicit; delim: string implicit) : array<string>
+.. das:function:: split(text: string; delim: string) : array<string>
 
-Splits a string by the specified delimiter characters, invoking a block for each resulting substring.
+Splits a string by the specified delimiter string and returns an array of substrings.
 
 
 :Arguments: * **text** : string implicit
 
             * **delim** : string implicit
 
-.. _function-strings_boost_split_string_implicit_string_implicit_block_ls_arg_c_array_ls_string_gr__hh__c_auto_gr_:
+.. _function-strings_boost_split_string_string_block_ls_arg_c_array_ls_string_gr__hh__c_auto_gr_:
 
-.. das:function:: split(text: string implicit; delim: string implicit; blk: block<(arg:array<string>#):auto>) : auto
+.. das:function:: split(text: string; delim: string; blk: block<(arg:array<string>#):auto>) : auto
 
 ----
 
@@ -110,9 +110,9 @@ Splits a string by the specified delimiter characters, invoking a block for each
 split_by_chars
 ^^^^^^^^^^^^^^
 
-.. _function-strings_boost_split_by_chars_string_implicit_string_implicit:
+.. _function-strings_boost_split_by_chars_string_string:
 
-.. das:function:: split_by_chars(text: string implicit; delim: string implicit) : array<string>
+.. das:function:: split_by_chars(text: string; delim: string) : array<string>
 
 Splits a string by the specified delimiter characters and returns an array of substrings.
 
@@ -121,9 +121,9 @@ Splits a string by the specified delimiter characters and returns an array of su
 
             * **delim** : string implicit
 
-.. _function-strings_boost_split_by_chars_string_implicit_string_implicit_block_ls_arg_c_array_ls_string_gr__hh__c_auto_gr_:
+.. _function-strings_boost_split_by_chars_string_string_block_ls_arg_c_array_ls_string_gr__hh__c_auto_gr_:
 
-.. das:function:: split_by_chars(text: string implicit; delim: string implicit; blk: block<(arg:array<string>#):auto>) : auto
+.. das:function:: split_by_chars(text: string; delim: string; blk: block<(arg:array<string>#):auto>) : auto
 
 
 ++++++++++
@@ -133,7 +133,7 @@ Formatting
   *  :ref:`capitalize (str: string) : string <function-strings_boost_capitalize_string>`
   *  :ref:`pad_left (str: string; width: int; ch: int = 32) : string <function-strings_boost_pad_left_string_int_int>`
   *  :ref:`pad_right (str: string; width: int; ch: int = 32) : string <function-strings_boost_pad_right_string_int_int>`
-  *  :ref:`wide (text: string implicit; width: int) : string <function-strings_boost_wide_string_implicit_int>`
+  *  :ref:`wide (text: string; width: int) : string <function-strings_boost_wide_string_int>`
 
 .. _function-strings_boost_capitalize_string:
 
@@ -170,9 +170,9 @@ Pads the string with the character `ch` on the right to reach the specified mini
 
             * **ch** : int
 
-.. _function-strings_boost_wide_string_implicit_int:
+.. _function-strings_boost_wide_string_int:
 
-.. das:function:: wide(text: string implicit; width: int) : string
+.. das:function:: wide(text: string; width: int) : string
 
 Pads the string with trailing spaces to reach the specified minimum width.
 
@@ -188,8 +188,8 @@ Queries and comparisons
 
   *  :ref:`contains (str: string; sub: string) : bool <function-strings_boost_contains_string_string>`
   *  :ref:`count (str: string; sub: string) : int <function-strings_boost_count_string_string>`
-  *  :ref:`eq (b: das_string; a: string implicit) : auto <function-strings_boost_eq_das_string_string_implicit>`
-  *  :ref:`eq (a: string implicit; b: das_string) : auto <function-strings_boost_eq_string_implicit_das_string>`
+  *  :ref:`eq (b: das_string; a: string) : auto <function-strings_boost_eq_das_string_string>`
+  *  :ref:`eq (a: string; b: das_string) : auto <function-strings_boost_eq_string_das_string>`
   *  :ref:`is_character_at (foo: array\<uint8\>; idx: int; ch: int) : auto <function-strings_boost_is_character_at_array_ls_uint8_gr__int_int>`
   *  :ref:`is_null_or_whitespace (str: string) : bool <function-strings_boost_is_null_or_whitespace_string>`
 
@@ -219,9 +219,9 @@ Counts non-overlapping occurrences of `sub` in `str`. Returns 0 if `sub` is empt
 eq
 ^^
 
-.. _function-strings_boost_eq_das_string_string_implicit:
+.. _function-strings_boost_eq_das_string_string:
 
-.. das:function:: eq(b: das_string; a: string implicit) : auto
+.. das:function:: eq(b: das_string; a: string) : auto
 
 Compares a ``string`` with a ``das_string`` for equality, returning ``true`` if they match.
 
@@ -230,9 +230,9 @@ Compares a ``string`` with a ``das_string`` for equality, returning ``true`` if 
 
             * **a** : string implicit
 
-.. _function-strings_boost_eq_string_implicit_das_string:
+.. _function-strings_boost_eq_string_das_string:
 
-.. das:function:: eq(a: string implicit; b: das_string) : auto
+.. das:function:: eq(a: string; b: das_string) : auto
 
 ----
 
@@ -340,12 +340,12 @@ Removes `suffix` from the end of `str` if present. Returns the string unchanged 
 Levenshtein distance
 ++++++++++++++++++++
 
-  *  :ref:`levenshtein_distance (s: string implicit; t: string implicit) : int <function-strings_boost_levenshtein_distance_string_implicit_string_implicit>`
-  *  :ref:`levenshtein_distance_fast (s: string implicit; t: string implicit) : int <function-strings_boost_levenshtein_distance_fast_string_implicit_string_implicit>`
+  *  :ref:`levenshtein_distance (s: string; t: string) : int <function-strings_boost_levenshtein_distance_string_string>`
+  *  :ref:`levenshtein_distance_fast (s: string; t: string) : int <function-strings_boost_levenshtein_distance_fast_string_string>`
 
-.. _function-strings_boost_levenshtein_distance_string_implicit_string_implicit:
+.. _function-strings_boost_levenshtein_distance_string_string:
 
-.. das:function:: levenshtein_distance(s: string implicit; t: string implicit) : int
+.. das:function:: levenshtein_distance(s: string; t: string) : int
 
 Computes the Levenshtein edit distance between two strings.
 
@@ -354,9 +354,9 @@ Computes the Levenshtein edit distance between two strings.
 
             * **t** : string implicit
 
-.. _function-strings_boost_levenshtein_distance_fast_string_implicit_string_implicit:
+.. _function-strings_boost_levenshtein_distance_fast_string_string:
 
-.. das:function:: levenshtein_distance_fast(s: string implicit; t: string implicit) : int
+.. das:function:: levenshtein_distance_fast(s: string; t: string) : int
 
 Computes the Levenshtein edit distance between two strings using an optimized algorithm.
 

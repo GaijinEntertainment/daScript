@@ -240,7 +240,7 @@ Read and write
 ++++++++++++++
 
   *  :ref:`read_json (text: array\<uint8\>; var error: string&) : JsonValue? <function-json_read_json_array_ls_uint8_gr__string_ref_>`
-  *  :ref:`read_json (text: string implicit; var error: string&) : JsonValue? <function-json_read_json_string_implicit_string_ref_>`
+  *  :ref:`read_json (text: string; var error: string&) : JsonValue? <function-json_read_json_string_string_ref_>`
   *  :ref:`write_json (val: JsonValue?#) : string <function-json_write_json_JsonValue_q__hh_>`
   *  :ref:`write_json (val: JsonValue?) : string <function-json_write_json_JsonValue_q_>`
 
@@ -260,9 +260,9 @@ if `error` is not empty, it contains the parsing error message.
 
             * **error** : string\ &
 
-.. _function-json_read_json_string_implicit_string_ref_:
+.. _function-json_read_json_string_string_ref_:
 
-.. das:function:: read_json(text: string implicit; error: string&) : JsonValue?
+.. das:function:: read_json(text: string; error: string&) : JsonValue?
 
 ----
 

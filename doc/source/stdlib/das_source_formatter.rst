@@ -25,7 +25,7 @@ Formatting
 ++++++++++
 
   *  :ref:`format_source (file_data: array\<uint8\>) : string <function-das_source_formatter_format_source_array_ls_uint8_gr_>`
-  *  :ref:`format_source_string (file_data: string const& implicit) : string <function-das_source_formatter_format_source_string_string_const_ref__implicit>`
+  *  :ref:`format_source_string (file_data: string const&) : string <function-das_source_formatter_format_source_string_string_const_ref_>`
 
 .. _function-das_source_formatter_format_source_array_ls_uint8_gr_:
 
@@ -36,9 +36,9 @@ Formats daslang source code given as a byte array and returns the formatted resu
 
 :Arguments: * **file_data** : array<uint8> implicit
 
-.. _function-das_source_formatter_format_source_string_string_const_ref__implicit:
+.. _function-das_source_formatter_format_source_string_string_const_ref_:
 
-.. das:function:: format_source_string(file_data: string const& implicit) : string
+.. das:function:: format_source_string(file_data: string const&) : string
 
 Formats a daslang source code string and returns the formatted result.
 

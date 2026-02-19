@@ -1,1 +1,0 @@
-Returns the match ``range`` for the capturing group at the given integer index (1-based). An overload accepting a string name for named capturing groups ``(?P<name>...)`` is also available (returns ``range(0,0)`` if not found). Use with ``slice`` to extract the matched substring.

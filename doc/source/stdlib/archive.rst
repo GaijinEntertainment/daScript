@@ -98,9 +98,9 @@ last error code
 
 
 
-.. _function-archive_MemSerializer_rq_write_MemSerializer_void_q__implicit_int_0x3a:
+.. _function-archive_MemSerializer_rq_write_MemSerializer_void_q__int_0x3a:
 
-.. das:function:: MemSerializer.write(bytes: void? implicit; size: int) : bool
+.. das:function:: MemSerializer.write(bytes: void?; size: int) : bool
 
 Appends bytes at the end of the data.
 
@@ -109,9 +109,9 @@ Appends bytes at the end of the data.
 
             * **size** : int
 
-.. _function-archive_MemSerializer_rq_read_MemSerializer_void_q__implicit_int_0x43:
+.. _function-archive_MemSerializer_rq_read_MemSerializer_void_q__int_0x43:
 
-.. das:function:: MemSerializer.read(bytes: void? implicit; size: int) : bool
+.. das:function:: MemSerializer.read(bytes: void?; size: int) : bool
 
 Reads bytes from data, advances the reading position.
 

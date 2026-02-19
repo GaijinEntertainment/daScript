@@ -1,1 +1,0 @@
-Compiles a regular expression pattern string into a ``Regex`` object. When ``case_insensitive`` is true, matching ignores ASCII case. When ``dot_all`` is true, ``.`` also matches newline characters. Validity of the compiled expression is checked by ``is_valid``.

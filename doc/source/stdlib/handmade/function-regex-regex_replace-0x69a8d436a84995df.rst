@@ -1,1 +1,0 @@
-Replaces all matches of the regular expression in ``str`` with ``replacement``. Supports group references in the replacement string: ``$0`` or ``$&`` for whole match, ``$1``–``$9`` for numbered groups, ``${name}`` for named groups, ``$$`` for literal ``$``.
