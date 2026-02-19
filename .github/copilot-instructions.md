@@ -42,7 +42,7 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - **No `[[ ]]` for `new`** — `new` always uses parentheses: `new Foo(x=1)`
 - **Table literals:** `{ "k" => v, "k2" => v2 }` (single braces, commas) — NOT `{{ "k" => v; "k2" => v2 }}`
 - **Named arguments:** `foo([name = value])` with square brackets — NOT `foo(name=value)`
-- **Block arguments with `<|`:** use `$()` or `@()` prefix: `defer() <| $() { ... }` — NOT `defer <| { ... }` (bare `{ }` creates a table literal)
+- **Block arguments:** a block or lambda after `func()` is automatically piped as the last argument — no `<|` needed. Parameterless blocks need no `$`: `defer() { ... }`. Blocks with parameters use `$`: `build_string() $(var writer) { ... }`. Lambdas use `@`: `emplace() @(x : int) { ... }`
 - **Lambda:** `@(args) { body }` or `@@(args) { body }` (no-capture)
 - **Generator:** `$() { yield value; }` or `$ { yield value; }` — both are valid gen2 syntax
 - **Tuple `=>` operator:** `a => b` creates a `tuple<auto;auto>` — useful in LINQ, table construction, and ad-hoc pairs
@@ -73,10 +73,10 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 ### Move semantics (`<-` vs `move`)
 
 - **`<-` operator**: ALWAYS `memcpy(dest, src) + memset(src, 0)` — it is a raw memory operation, NOT smart_ptr-aware. It zeros the source regardless of type.
-- **`move` function**: Bound via C++ `builtin_smart_ptr_move*` family in `module_builtin_runtime.cpp` — proper smart pointer move with reference counting. Use `move(dest, src)` or `move(dest) <| src` for `smart_ptr<T>` transfers.
+- **`move` function**: Bound via C++ `builtin_smart_ptr_move*` family in `module_builtin_runtime.cpp` — proper smart pointer move with reference counting. Use `move(dest, src)` or `move(dest) src` for `smart_ptr<T>` transfers.
 - **`return <- expr`**: Moves value to return slot and zeroes `expr`. If `expr` is a `&` ref parameter, this zeroes the *caller's* variable since they share memory.
-- **Key subtlety**: When a function takes `var x : smart_ptr<T>&` (by reference) and internally calls a function that takes `var x : smart_ptr<T>` (by value/move), the `<-` inside `return` zeroes the `&` ref. Callers MUST capture the return value: `unsafe { expr <- apply_template(expr) <| ... }`
-- **Safe pattern**: `unsafe { variable <- function_returning_smart_ptr(variable) <| ... }` — captures return value back into the same variable
+- **Key subtlety**: When a function takes `var x : smart_ptr<T>&` (by reference) and internally calls a function that takes `var x : smart_ptr<T>` (by value/move), the `<-` inside `return` zeroes the `&` ref. Callers MUST capture the return value: `unsafe { expr <- apply_template(expr) $() { ... } }`
+- **Safe pattern**: `unsafe { variable <- function_returning_smart_ptr(variable) $() { ... } }` — captures return value back into the same variable
 
 ### Error handling
 
@@ -113,14 +113,13 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - `table |> insert(key, value)` — insert into `table<K;V>`; `table |> insert(key)` — insert into set `table<K>`
 - `table |> erase(key)` — remove a key
 - **Never use two `[]` lookups on the same table in one expression** (e.g. `tab[k1] = tab[k2]`) — tables are unboxed containers and re-hashing on insert can invalidate the first reference
-- `find(table, key) <| $(pval) { ... }` — block-based lookup; block receives pointer to value if found
-- `get(table, key, blk)` — similar block-based access (see `daslib/builtin.das`)
+- `get(table, key) $(pval) { ... }` — block-based lookup; block receives value reference if found
 
 ### Common gotchas
 
 - Lambda params can shadow function params — use distinct names (e.g., `$(lhs, rhs)` not `$(a, b)` when `a` is already in scope)
 - `struct Foo { ... }` requires braces in gen2 — empty struct is `struct Foo {}`
-- String builder: `build_string() <| $(var writer) { write(writer, "text") }` — requires `unsafe` or `options persistent_heap` if returned
+- String builder: `build_string() $(var writer) { write(writer, "text") }` — requires `unsafe` or `options persistent_heap` if returned
 - `options persistent_heap` — needed when returning strings built with `build_string`
 - Tuple field access uses underscore prefix: `t._0`, `t._1`, `t._2`
 - Annotations: `[export]` for entry points, `[private]` for private functions, `[test]` for test functions
@@ -129,10 +128,10 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - `require` uses forward slash paths: `require daslib/linq` — NOT `require daslib\linq`
 - `require foo public` — re-exports `foo` so that any module requiring the current module also sees `foo`'s symbols transitively. Example: `regex.das` has `require strings public`, so `require daslib/regex` automatically makes `slice`, `starts_with`, etc. visible without a separate `require strings`
 - `<-` is memcpy+memset(0), NOT a smart_ptr-aware move — see "Move semantics" section above
-- When calling `apply_template`, always capture the return value: `unsafe { expr <- apply_template(expr) <| ... }` — discarding the return loses the expression data
+- When calling `apply_template`, always capture the return value: `unsafe { expr <- apply_template(expr) $() { ... } }` — discarding the return loses the expression data
 - Iterator comprehension: `[iterator for(x in src); expression]` — semicolon separates generator from body
 - `to_array` (from `daslib/builtin`) converts any iterator to an array
-- Lambdas CAN be stored in arrays: `var fns : array<lambda<(x:int):int>>` + `fns |> emplace() <| @(x : int) : int { return x * 2; }` — move semantics, not copy
+- Lambdas CAN be stored in arrays: `var fns : array<lambda<(x:int):int>>` + `fns |> emplace() @(x : int) : int { return x * 2; }` — move semantics, not copy
 - Blocks CANNOT be stored in containers, returned from functions, or captured — use lambdas or function pointers for those use cases
 - `match`, `multi_match`, `static_match` macros (from `daslib/match.das`) handle side effects automatically — do NOT add `[sideeffects]` annotations to functions that only use match
 - `[export] def main()` returns `void` — do NOT `return true` or return other values from main

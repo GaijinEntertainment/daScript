@@ -431,4 +431,6 @@ Key techniques summary
 
    Previous tutorial: :ref:`tutorial_macro_function_macro`
 
+   Next tutorial: :ref:`tutorial_macro_tag_function_macro`
+
    Language reference: :ref:`Macros <macros>` — full macro system documentation
