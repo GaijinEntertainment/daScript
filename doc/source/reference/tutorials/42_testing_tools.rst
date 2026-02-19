@@ -223,3 +223,5 @@ Function                        Description
    Full source: :download:`tutorials/language/42_testing_tools.das <../../../../tutorials/language/42_testing_tools.das>`
 
    Previous tutorial: :ref:`tutorial_serialization`
+
+   Next tutorial: :ref:`tutorial_interfaces`

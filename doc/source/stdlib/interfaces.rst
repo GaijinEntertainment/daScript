@@ -12,6 +12,13 @@ It provides the ``[interface]`` annotation for defining abstract interfaces
 with virtual method tables, supporting multiple implementations and dynamic
 dispatch without class inheritance.
 
+**Features:**
+
+- Interface inheritance (``class IChild : IParent``)
+- Default method implementations (non-abstract methods)
+- Compile-time completeness checking (error 30111 on missing methods)
+- ``is``/``as``/``?as`` operators via the ``InterfaceAsIs`` variant macro
+
 All functions and symbols are in "interfaces" module, use require to get access to it.
 
 .. code-block:: das
@@ -24,27 +31,29 @@ Example:
 
     require daslib/interfaces
 
-        [interface]
-        class IGreeter {
-            def abstract greet(name : string) : string
-        }
+    [interface]
+    class IGreeter {
+        def abstract greet(name : string) : string
+    }
 
-        class MyGreeter {
-            def greet(name : string) : string {
-                return "Hello, {name}!"
-            }
+    [implements(IGreeter)]
+    class MyGreeter {
+        def MyGreeter() { pass }
+        def IGreeter`greet(name : string) : string {
+            return "Hello, {name}!"
         }
+    }
 
-        [export]
-        def main() {
-            var obj = new MyGreeter()
-            print("{obj->greet("world")}\n")
-            unsafe {
-                delete obj
-            }
-        }
-        // output:
-        // Hello, world!
+    [export]
+    def main() {
+        var obj = new MyGreeter()
+        var greeter = obj as IGreeter
+        print("{greeter->greet("world")}\n")
+    }
+    // output: Hello, world!
+
+See also: :ref:`Interfaces tutorial <tutorial_interfaces>` for a
+complete walkthrough.
 
 
 
@@ -85,5 +94,19 @@ Generates interface bindings for a struct. Creates a proxy class that delegates
 interface method calls to the struct's own methods, and adds a ``get`InterfaceName``
 method that lazily constructs the proxy. Applied via ``[implements(InterfaceName)]``.
 
+If the interface inherits from a parent interface (``class IChild : IParent``),
+ancestor getters are generated automatically so that ``is``/``as``/``?as`` work
+with all ancestor interfaces.
+
+At compile time, verifies that all abstract interface methods are implemented.
+Methods with default bodies in the interface class are optional — the proxy
+inherits them via class hierarchy.
 
 
++++++++++++++++++++
+Private helper
++++++++++++++++++++
+
+.. das:function:: is_interface_struct(st : Structure?)
+
+  Returns ``true`` when the structure carries the ``[interface]`` annotation.

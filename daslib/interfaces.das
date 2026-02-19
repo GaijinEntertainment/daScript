@@ -22,6 +22,8 @@ module interfaces shared private
 //!
 //! **Completeness checking**: at compile time the macro verifies that the implementing struct
 //! provides all abstract interface methods.  Missing methods produce a compile error.
+//!
+//! See :ref:`Interfaces tutorial <tutorial_interfaces>` for a complete walkthrough.
 
 require daslib/ast_boost
 require daslib/templates_boost
