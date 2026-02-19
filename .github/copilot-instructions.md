@@ -92,7 +92,14 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - **`clone_type(typeExpr)`** — deep-copies a `TypeDeclPtr`. Use when passing a type to a consuming function while keeping the original, or when the source is a `var inscope` variable.
 - **`clone_expression(expr)`** — deep-copies an `ExpressionPtr`. Same ownership rules as `clone_type`.
 - **Safe pattern for `add_structure_field`**: pass temporaries directly — `st |> add_structure_field("name", clone_type(qmacro_type(type<int>)), qmacro($v(val)))` — the `clone_type` result is a temporary safely consumed by the move.
+- **`move_new`**: `field |> move_new <| expr` — idiomatic way to assign a newly created `smart_ptr<T>` into a field. Equivalent to `field <- expr` but does not require `unsafe`. Preferred over `field := null; unsafe { field <- expr }` when setting AST node fields (e.g. `cm.init |> move_new <| qmacro(...)`).
 - **Rule of thumb**: if a function signature takes `var x : smart_ptr<T>` (not `&`), it **consumes** `x`. Pass a temporary, a clone, or accept that your variable will be null after the call.
+
+### `qmacro` vs `quote` (code generation)
+
+- **`qmacro(expr)`** — quasi-quote with reification splices (`$v()`, `$e()`, `$c()`, `$t()`, `$i()`, `$f()`, `$a()` etc.). Use when the generated code contains interpolated values.
+- **`quote(expr)`** — plain quote with NO reification. Use when the expression is a simple literal or constant with no splices — e.g. `quote(true)`, `quote(false)`, `quote(0)`.
+- **Rule**: if the expression contains no `$…()` reification operators, prefer `quote()` over `qmacro()` — it is simpler, clearer, and avoids unnecessary reification overhead.
 
 ### Error handling
 
@@ -170,6 +177,7 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - `tests/functional/` — Functional module tests
 - `tests/json/` — JSON module tests (4 test files, ~148 tests)
 - `tests/regex/` — Regex module tests (8 test files, 278 tests)
+- `tests/interfaces/` — Interface module tests (4 test files, 67 tests)
 - `modules/` — External plugin modules
 
 ## Keywords Reference

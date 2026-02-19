@@ -358,6 +358,8 @@ Key takeaways
 
    Previous tutorial: :ref:`tutorial_macro_structure_macro`
 
+   Next tutorial: :ref:`tutorial_macro_variant_macro`
+
    Standard library examples:
    ``daslib/decs_boost.das`` (``REQUIRE`` / ``REQUIRE_NOT`` — marker block annotations),
    ``daslib/defer.das`` (``finalList`` manipulation),
