@@ -508,6 +508,16 @@ private:
     #endif
 #endif
 
+// Workaround for https://github.com/google/sanitizers/issues/749
+#if DAS_ENABLE_EXCEPTIONS && defined(__clang__) && defined(_WIN32) && defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define WIN_EH_NO_ASAN __attribute__((no_sanitize_address))
+#endif
+#endif
+#ifndef WIN_EH_NO_ASAN
+#define WIN_EH_NO_ASAN
+#endif
+
 #include "daScript/misc/smart_ptr.h"
 
 

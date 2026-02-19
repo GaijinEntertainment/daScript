@@ -211,7 +211,6 @@ namespace das
         goto loopend; \
     } }
 
-#if DAS_ENABLE_EXCEPTIONS
     class dasException final : public std::exception {
     public:
         dasException ( const char * why, const LineInfo & at )
@@ -223,7 +222,6 @@ namespace das
         LineInfo exceptionAt;
         das::string exceptionWhat;
     };
-#endif
 
     struct DAS_API SimVisitor {
         virtual void preVisit ( SimNode * ) { }

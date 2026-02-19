@@ -36,10 +36,24 @@ class EachBitfieldMacro : AstFunctionAnnotation {
         macro_verify(call.arguments[0]._type != null, compiling_program(), call.at, "expecting argument type")
         macro_verify(call.arguments[0]._type.isBitfield, compiling_program(), call.at, "expecting a bitfield type")
         var inscope yields : array<ExpressionPtr>
-        for (name, bit in call.arguments[0]._type.argNames, count()) {
-            yields |> emplace_new <| qmacro_expr(${ yield $v(bitfield(1ul << uint64(bit))); })
+        if (call.arguments[0]._type.baseType == Type.tBitfield8) {
+            for (name, bit in call.arguments[0]._type.argNames, count()) {
+                yields |> emplace_new <| qmacro_expr(${ yield $v(bitfield8(1ul << uint64(bit))); })
+            }
+        } elif (call.arguments[0]._type.baseType == Type.tBitfield16) {
+            for (name, bit in call.arguments[0]._type.argNames, count()) {
+                yields |> emplace_new <| qmacro_expr(${ yield $v(bitfield16(1ul << uint64(bit))); })
+            }
+        } elif (call.arguments[0]._type.baseType == Type.tBitfield64) {
+            for (name, bit in call.arguments[0]._type.argNames, count()) {
+                yields |> emplace_new <| qmacro_expr(${ yield $v(bitfield64(1ul << uint64(bit))); })
+            }
+        } else {
+            for (name, bit in call.arguments[0]._type.argNames, count()) {
+                yields |> emplace_new <| qmacro_expr(${ yield $v(bitfield(1ul << uint64(bit))); })
+            }
         }
-        let call_name = "field`names"
+        let call_name = "field`values`{call.arguments[0]._type.get_mnh}"
         var inscope qfn <- qmacro_function(call_name) {
             return <- generator<$t(call.arguments[0]._type)>() <| $() {
                 $b(yields)
@@ -74,8 +88,8 @@ class EachBitNameBitfieldMacro : AstFunctionAnnotation {
         for (name in call.arguments[0]._type.argNames) {
             yields |> emplace_new <| qmacro_expr(${ yield $v(string(name)); })
         }
-        let call_name = "field`names"
-        var inscope qfn <- qmacro_function(call_name) {
+        let call_name = "field`names`{call.arguments[0]._type.get_mnh}"
+        var inscope qfn <- qmacro_function(call_name) <| $() {
             return <- generator<string>() <| $() {
                 $b(yields)
                 return false

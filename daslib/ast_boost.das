@@ -851,8 +851,11 @@ def private walk_and_convert_basic(data : uint8 const?; info : TypeDeclPtr; at :
             return new ExprConstURange64(at = at, value = *reinterpret<urange64?> data)
         } elif (info.baseType == Type.tString) {
             return new ExprConstString(at = at, value := *reinterpret<string?> data)
-        } elif (info.baseType == Type.tBitfield) {
-            return new ExprConstBitfield(at = at, value = *reinterpret<bitfield?> data)
+        } elif (info.baseType == Type.tBitfield8
+                || info.baseType == Type.tBitfield16
+                || info.baseType == Type.tBitfield
+                || info.baseType == Type.tBitfield64) {
+            return new ExprConstBitfield(at = at, value = *reinterpret<bitfield?> data, bitfieldType := info)
         } else {
             panic("unsupported {info.baseType}")
             return default<ExpressionPtr>
