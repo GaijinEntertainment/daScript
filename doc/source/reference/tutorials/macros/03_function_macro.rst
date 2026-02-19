@@ -660,10 +660,10 @@ This compiles — ``compute`` has no ``print`` calls.  Adding
 Extending with timing
 =====================
 
-The original ``hello_mod.das`` in the examples directory adds execution
-timing using ``ref_time_ticks()`` and ``get_time_nsec()``.  The pattern
-is the same — the only addition is a local timing variable in the
-generated body:
+A natural extension is to add execution timing using
+``ref_time_ticks()`` and ``get_time_nsec()``.  The pattern is the
+same — the only addition is a local timing variable in the generated
+body:
 
 .. code-block:: das
 

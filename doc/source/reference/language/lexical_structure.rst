@@ -260,6 +260,7 @@ results are inserted into the string:
 To include literal curly brackets in a string, escape them with a backslash:
 
 .. code-block:: das
+    :force:
 
     print("Use \{braces\} for interpolation")   // prints: Use {braces} for interpolation
 

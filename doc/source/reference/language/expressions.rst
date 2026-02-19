@@ -715,6 +715,7 @@ Format specifiers can be added after a colon:
 To include literal curly brackets, escape them with backslashes:
 
 .. code-block:: das
+    :force:
 
     print("Use \{curly\} brackets")     // Use {curly} brackets
 

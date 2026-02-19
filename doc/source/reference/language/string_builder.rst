@@ -110,6 +110,7 @@ Escaping Curly Brackets
 To include a literal ``{`` or ``}`` in a string, escape them with a backslash:
 
 .. code-block:: das
+    :force:
 
     print("Use \{curly\} brackets\n")   // prints: Use {curly} brackets
 
