@@ -480,8 +480,8 @@ namespace das {
         }
     };
 
-    string debug_value ( const void * pX, TypeInfo * info, PrintFlags flags );
-    string debug_value ( vec4f value, TypeInfo * info, PrintFlags flags );
-    string debug_json_value ( void * pX, TypeInfo * info, bool humanReadable );
-    string debug_json_value ( vec4f value, TypeInfo * info, bool humanReadable );
+    DAS_API string debug_value ( const void * pX, TypeInfo * info, PrintFlags flags );
+    DAS_API string debug_value ( vec4f value, TypeInfo * info, PrintFlags flags );
+    DAS_API string debug_json_value ( void * pX, TypeInfo * info, bool humanReadable );
+    DAS_API string debug_json_value ( vec4f value, TypeInfo * info, bool humanReadable );
 }

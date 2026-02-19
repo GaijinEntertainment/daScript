@@ -6,8 +6,8 @@
 MACRO(DAS_CPP_INTEGRATION_TUTORIAL target_name)
     add_executable(${target_name} ${ARGN})
     TARGET_COMPILE_DEFINITIONS(${target_name} PRIVATE DAS_MOD_EXPORTS)
-    TARGET_LINK_LIBRARIES(${target_name} libDaScript Threads::Threads)
-    ADD_DEPENDENCIES(${target_name} libDaScript)
+    TARGET_LINK_LIBRARIES(${target_name} libDaScriptDyn Threads::Threads)
+    ADD_DEPENDENCIES(${target_name} libDaScriptDyn)
     SETUP_CPP11(${target_name})
 ENDMACRO()
 
@@ -111,8 +111,8 @@ add_executable(integration_cpp_13
     ${INTEGRATION_13_AOT_GENERATED_SRC}
 )
 TARGET_COMPILE_DEFINITIONS(integration_cpp_13 PRIVATE DAS_MOD_EXPORTS)
-TARGET_LINK_LIBRARIES(integration_cpp_13 libDaScript Threads::Threads)
-ADD_DEPENDENCIES(integration_cpp_13 libDaScript integration_cpp_13_dasAotStub)
+TARGET_LINK_LIBRARIES(integration_cpp_13 libDaScriptDyn Threads::Threads)
+ADD_DEPENDENCIES(integration_cpp_13 libDaScriptDyn integration_cpp_13_dasAotStub)
 SETUP_CPP11(integration_cpp_13)
 
 #################################
@@ -180,8 +180,8 @@ add_executable(integration_cpp_20
     ${INTEGRATION_20_STANDALONE_CTX_GENERATED_SRC}
 )
 TARGET_COMPILE_DEFINITIONS(integration_cpp_20 PRIVATE DAS_MOD_EXPORTS)
-TARGET_LINK_LIBRARIES(integration_cpp_20 libDaScript Threads::Threads)
-ADD_DEPENDENCIES(integration_cpp_20 libDaScript integration_cpp_20_dasAotStubStandalone)
+TARGET_LINK_LIBRARIES(integration_cpp_20 libDaScriptDyn Threads::Threads)
+ADD_DEPENDENCIES(integration_cpp_20 libDaScriptDyn integration_cpp_20_dasAotStubStandalone)
 SETUP_CPP11(integration_cpp_20)
 
 # Install C++ integration tutorial source files
