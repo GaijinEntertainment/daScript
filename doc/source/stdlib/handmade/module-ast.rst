@@ -4,6 +4,8 @@ structures, enumerations, etc.), visitors for tree traversal, and utilities for 
 construction and manipulation. This module is the foundation for writing macros, code
 generators, and source-level program transformations.
 
-All functions and symbols are in "ast" module, use require to get access to it. ::
+All functions and symbols are in "ast" module, use require to get access to it.
+
+.. code-block:: das
 
     require ast

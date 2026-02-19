@@ -28,14 +28,18 @@ Invocation
 
 .. das:function:: invoke(block_or_function, arguments)
 
-    Calls a block, lambda, or function pointer with the provided arguments::
+    Calls a block, lambda, or function pointer with the provided arguments:
+
+    .. code-block:: das
 
         def apply(f : block<(x : int) : int>; value : int) : int {
             return invoke(f, value)
         }
 
     Blocks, lambdas, and function pointers can also be called using regular call syntax.
-    The compiler will expand ``f(value)`` into ``invoke(f, value)``::
+    The compiler will expand ``f(value)`` into ``invoke(f, value)``:
+
+    .. code-block:: das
 
         def apply(f : block<(x : int) : int>; value : int) : int {
             return f(value)     // equivalent to invoke(f, value)
@@ -51,7 +55,9 @@ Assertions
 
     Triggers an application-defined assert if ``x`` is ``false``.
     ``assert`` may be removed in release builds, so the expression ``x``
-    must have **no side effects** — the compiler will reject it otherwise::
+    must have **no side effects** — the compiler will reject it otherwise:
+
+    .. code-block:: das
 
         assert(index >= 0, "index must be non-negative")
 
@@ -60,7 +66,9 @@ Assertions
     Triggers an application-defined assert if ``x`` is ``false``.
     Unlike ``assert``, ``verify`` is **never removed** from release builds
     (it generates ``DAS_VERIFY`` in C++ rather than ``DAS_ASSERT``).
-    Additionally, the expression ``x`` is allowed to have side effects::
+    Additionally, the expression ``x`` is allowed to have side effects:
+
+    .. code-block:: das
 
         verify(initialize_system(), "initialization failed")
 
@@ -68,7 +76,9 @@ Assertions
 
     Causes a **compile-time** error if ``x`` is ``false``.
     ``x`` must be a compile-time constant.  ``static_assert`` expressions
-    are removed from the compiled program::
+    are removed from the compiled program:
+
+    .. code-block:: das
 
         static_assert(typeinfo(is_pod type<Foo>), "Foo must be POD")
 
@@ -76,7 +86,9 @@ Assertions
 
     Similar to ``static_assert``, but the error is reported
     **one level above** in the call stack.  This is useful for reporting
-    type-contract violations in generic functions::
+    type-contract violations in generic functions:
+
+    .. code-block:: das
 
         def sort_array(var a : auto(TT)[]) {
             concept_assert(typeinfo(is_numeric type<TT>), "sort_array requires numeric type")
@@ -90,14 +102,18 @@ Debug
 .. das:function:: debug(x, str)
 
     Prints the string ``str`` and the value of ``x`` (similar to ``print``), then
-    **returns** ``x``.  This makes it suitable for debugging inside expressions::
+    **returns** ``x``.  This makes it suitable for debugging inside expressions:
+
+    .. code-block:: das
 
         let mad = debug(x, "x") * debug(y, "y") + debug(z, "z")
 
 .. das:function:: print(str)
 
     Outputs the string ``str`` to the standard output.  ``print`` only accepts
-    strings — to print other types, use string interpolation::
+    strings — to print other types, use string interpolation:
+
+    .. code-block:: das
 
         print("hello\n")       // ok
         print("{13}\n")        // ok, integer is interpolated into the string
@@ -112,7 +128,9 @@ Panic
     Terminates execution with the given error message.
     Panic can be caught with a ``try``/``recover`` block, but unlike C++ exceptions,
     ``panic`` is intended for **fatal errors only**.  Recovery may have side effects,
-    and not everything on the stack is guaranteed to recover properly::
+    and not everything on the stack is guaranteed to recover properly:
+
+    .. code-block:: das
 
         try {
             panic("something went wrong")
@@ -126,7 +144,9 @@ Memory & Type Utilities
 
 .. das:function:: addr(x)
 
-    Returns a pointer to the value ``x``.  This is an **unsafe** operation::
+    Returns a pointer to the value ``x``.  This is an **unsafe** operation:
+
+    .. code-block:: das
 
         unsafe {
             var a = 42
@@ -136,14 +156,18 @@ Memory & Type Utilities
 .. das:function:: intptr(p)
 
     Converts a pointer (raw or smart) to a ``uint64`` integer value representing
-    its address::
+    its address:
+
+    .. code-block:: das
 
         let address = intptr(some_ptr)
 
 .. das:function:: typeinfo(trait expression)
 
     Provides compile-time type information about an expression or a ``type<T>`` argument.
-    Used extensively in generic programming::
+    Used extensively in generic programming:
+
+    .. code-block:: das
 
         typeinfo(sizeof type<float3>)       // 12
         typeinfo(typename type<int>)        // "int"
@@ -187,7 +211,9 @@ Push & Emplace
 
     Inserts a **copy** of ``value`` into the array at index ``at`` (or at the end
     if ``at`` is omitted).  Also accepts another ``array<T>`` or a fixed-size ``T[]``
-    to push all elements at once::
+    to push all elements at once:
+
+    .. code-block:: das
 
         var a : array<int>
         push(a, 1)
@@ -201,7 +227,9 @@ Push & Emplace
 .. das:function:: emplace(var arr : array<T>; var value : T& [; at : int])
 
     **Move-inserts** ``value`` into the array, zeroing the source.  Preferred for
-    types that own resources (e.g., other arrays, tables, smart pointers)::
+    types that own resources (e.g., other arrays, tables, smart pointers):
+
+    .. code-block:: das
 
         var inner : array<int>
         push(inner, 1)
@@ -222,7 +250,9 @@ Remove & Erase
 
 .. das:function:: erase_if(var arr : array<T>; blk : block<(element : T) : bool>)
 
-    Removes all elements for which ``blk`` returns ``true``::
+    Removes all elements for which ``blk`` returns ``true``:
+
+    .. code-block:: das
 
         erase_if(arr) <| $(x) { return x < 0 }
 
@@ -273,7 +303,9 @@ Sorting
 
 .. das:function:: sort(var arr)
 
-    Sorts the array in ascending order using the default ``<`` operator::
+    Sorts the array in ascending order using the default ``<`` operator:
+
+    .. code-block:: das
 
         var a <- array(3, 1, 2)
         sort(a)     // a is now [1, 2, 3]
@@ -281,7 +313,9 @@ Sorting
 .. das:function:: sort(var arr; cmp : block<(x, y : T) : bool>)
 
     Sorts the array using a custom comparator.  The comparator should return
-    ``true`` if ``x`` should come before ``y``::
+    ``true`` if ``x`` should come before ``y``:
+
+    .. code-block:: das
 
         sort(arr) <| $(a, b) { return a > b }  // descending order
 
@@ -308,7 +342,9 @@ Lookup
 .. das:function:: get(tab : table<K;V>; key : K; blk : block<(value : V&)>)
 
     Looks up ``key`` in the table.  If found, the table is locked and ``blk``
-    is invoked with a reference to the value.  Returns ``true`` if the key was found::
+    is invoked with a reference to the value.  Returns ``true`` if the key was found:
+
+    .. code-block:: das
 
         get(tab, "key") <| $(value) {
             print("found: {value}\n")
@@ -328,7 +364,9 @@ Insert & Emplace
 
 .. das:function:: insert(var tab : table<K;V>; key : K; value : V)
 
-    Inserts a key-value pair.  For key-only tables (sets), only the key is needed::
+    Inserts a key-value pair.  For key-only tables (sets), only the key is needed:
+
+    .. code-block:: das
 
         var seen : table<string>
         insert(seen, "hello")
@@ -384,7 +422,9 @@ Iterator Operations
 
 .. das:function:: each(iterable)
 
-    Creates an iterator from a range, array, fixed-size array, string, or lambda::
+    Creates an iterator from a range, array, fixed-size array, string, or lambda:
+
+    .. code-block:: das
 
         for (x in each(my_range)) {
             print("{x}\n")
@@ -418,7 +458,9 @@ Conversion Functions
 
 .. das:function:: to_array(source) : array<T>
 
-    Converts a fixed-size array or iterator to a dynamic ``array<T>``::
+    Converts a fixed-size array or iterator to a dynamic ``array<T>``:
+
+    .. code-block:: das
 
         let fixed = fixed_array(1, 2, 3)
         var dynamic <- to_array(fixed)
@@ -430,7 +472,9 @@ Conversion Functions
 .. das:function:: to_table(source) : table<K;V>
 
     Converts a fixed-size array of tuples to a ``table<K;V>``, or a fixed-size array
-    of keys to a key-only table (set)::
+    of keys to a key-only table (set):
+
+    .. code-block:: das
 
         var tab <- to_table(fixed_array(("one", 1), ("two", 2)))
 
@@ -445,7 +489,9 @@ Clone
 .. das:function:: clone(src) : T
 
     Creates a deep copy of any value. For arrays and tables, all elements are cloned
-    recursively::
+    recursively:
+
+    .. code-block:: das
 
         var a <- [1, 2, 3]
         var b := a          // equivalent to: clone(b, a)
@@ -464,7 +510,9 @@ Lock Operations
 
     Locks an array or table, invokes ``blk`` with a temporary handled reference,
     then unlocks.  While locked, the container cannot be resized or modified
-    structurally::
+    structurally:
+
+    .. code-block:: das
 
         lock(my_table) <| $(t) {
             for (key in keys(t)) {
@@ -527,7 +575,9 @@ Memory Mapping
 Vector Construction
 ---------------------
 
-Helper functions for constructing vector types from individual components::
+Helper functions for constructing vector types from individual components:
+
+.. code-block:: das
 
     let v2 = float2(1.0, 2.0)
     let v3 = float3(1.0, 2.0, 3.0)

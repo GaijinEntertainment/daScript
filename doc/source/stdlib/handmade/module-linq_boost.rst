@@ -5,11 +5,15 @@ syntax for inline predicates and selectors. Expressions like
 See also :doc:`linq` for the full set of query operations.
 See :ref:`tutorial_linq` for a hands-on tutorial.
 
-All functions and symbols are in "linq_boost" module, use require to get access to it. ::
+All functions and symbols are in "linq_boost" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/linq_boost
 
-Example: ::
+Example:
+
+.. code-block:: das
 
     require daslib/linq
         require daslib/linq_boost

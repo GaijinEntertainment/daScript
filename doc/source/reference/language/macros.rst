@@ -64,7 +64,9 @@ Invoking macros
 ---------------
 
 The ``[_macro]`` annotation is used to specify functions that should be evaluated at compilation time .
-Consider the following example from :ref:`daslib/ast_boost <stdlib_ast_boost>`::
+Consider the following example from :ref:`daslib/ast_boost <stdlib_ast_boost>`:
+
+.. code-block:: das
 
     [_macro,private]
     def setup {
@@ -83,7 +85,9 @@ Macros are invoked in the following fashion:
 #. Adapter is created
 #. Adapter is registered with the module
 
-For example, this is how this lifetime cycle is implemented for the reader macro::
+For example, this is how this lifetime cycle is implemented for the reader macro:
+
+.. code-block:: das
 
     def add_new_reader_macro ( name:string; someClassPtr ) {
         var ann <- make_reader_macro(name, someClassPtr)
@@ -103,7 +107,9 @@ Annotations can be added to regular or generic functions.
 ``add_new_function_annotation`` adds a function annotation to a module.
 There is additionally the ``[function_macro]`` annotation which accomplishes the same thing.
 
-``AstFunctionAnnotation`` allows several different manipulations::
+``AstFunctionAnnotation`` allows several different manipulations:
+
+.. code-block:: das
 
     class AstFunctionAnnotation {
         def abstract transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
@@ -149,7 +155,9 @@ If a function is not compatible, the errors field must be specified.
 ``appendToMangledName`` is called to append a mangled name to the function.
 That way multiple functions with the same type signature can exist and be differentiated between.
 
-Lets review the following example from ``ast_boost`` of how the ``macro`` annotation is implemented::
+Lets review the following example from ``ast_boost`` of how the ``macro`` annotation is implemented:
+
+.. code-block:: das
 
     class MacroMacro : AstFunctionAnnotation {
         def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool {
@@ -172,7 +180,9 @@ Functions annotated with ``[macro]`` are evaluated during module compilation.
 AstBlockAnnotation
 ------------------
 
-``AstBlockAnnotation`` is used to manipulate block expressions (blocks, lambdas, local functions)::
+``AstBlockAnnotation`` is used to manipulate block expressions (blocks, lambdas, local functions):
+
+.. code-block:: das
 
     class AstBlockAnnotation {
         def abstract apply ( var blk:smart_ptr<ExprBlock>; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
@@ -190,7 +200,9 @@ There is additionally the ``[block_macro]`` annotation which accomplishes the sa
 AstStructureAnnotation
 ----------------------
 
-The ``AstStructureAnnotation`` macro lets you manipulate structure or class definitions via annotation::
+The ``AstStructureAnnotation`` macro lets you manipulate structure or class definitions via annotation:
+
+.. code-block:: das
 
     class AstStructureAnnotation {
         def abstract apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
@@ -202,7 +214,9 @@ The ``AstStructureAnnotation`` macro lets you manipulate structure or class defi
 ``add_new_structure_annotation`` adds a structure annotation to a module.
 There is additionally the ``[structure_macro]`` annotation which accomplishes the same thing.
 
-``AstStructureAnnotation`` allows 4 different manipulations::
+``AstStructureAnnotation`` allows 4 different manipulations:
+
+.. code-block:: das
 
     class AstStructureAnnotation {
         def abstract apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
@@ -226,7 +240,9 @@ An example of such annotation is ``SetupAnyAnnotation`` from :ref:`daslib/ast_bo
 AstEnumerationAnnotation
 ------------------------
 
-The ``AstEnumerationAnnotation`` macro lets you manipulate enumerations via annotation::
+The ``AstEnumerationAnnotation`` macro lets you manipulate enumerations via annotation:
+
+.. code-block:: das
 
     class AstEnumerationAnnotation {
         def abstract apply ( var st:EnumerationPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
@@ -246,7 +262,9 @@ AstVariantMacro
 ``add_new_variant_macro`` adds a variant macro to a module.
 There is additionally the ``[variant_macro]`` annotation which accomplishes the same thing.
 
-Each of the 3 transformations are covered in the appropriate abstract function::
+Each of the 3 transformations are covered in the appropriate abstract function:
+
+.. code-block:: das
 
     class AstVariantMacro {
         def abstract visitExprIsVariant     ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprIsVariant> ) : ExpressionPtr
@@ -254,7 +272,9 @@ Each of the 3 transformations are covered in the appropriate abstract function::
         def abstract visitExprSafeAsVariant ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprSafeAsVariant> ) : ExpressionPtr
     }
 
-Let's review the following example from :ref:`daslib/ast_boost <stdlib_ast_boost>`::
+Let's review the following example from :ref:`daslib/ast_boost <stdlib_ast_boost>`:
+
+.. code-block:: das
 
     // replacing ExprIsVariant(value,name) => ExprOp2('==",value.__rtti,"name")
     // if value is ast::Expr*
@@ -292,7 +312,9 @@ AstReaderMacro
 ``add_new_reader_macro`` adds a reader macro to a module.
 There is additionally the ``[reader_macro]`` annotation, which essentially automates the same thing.
 
-Reader macros accept characters, collect them if necessary, and return an ``ast::Expression``::
+Reader macros accept characters, collect them if necessary, and return an ``ast::Expression``:
+
+.. code-block:: das
 
     class AstReaderMacro {
         def abstract accept ( prog:ProgramPtr; mod:Module?; expr:ExprReader?; ch:int; info:LineInfo ) : bool
@@ -300,11 +322,15 @@ Reader macros accept characters, collect them if necessary, and return an ``ast:
     }
 
 Reader macros are invoked via the ``% READER_MACRO_NAME ~ character_sequence`` syntax.
-The ``accept`` function notifies the correct terminator of the character sequence::
+The ``accept`` function notifies the correct terminator of the character sequence:
+
+.. code-block:: das
 
     var x = %arr~\{\}\w\x\y\n%% // invoking reader macro arr, %% is a terminator
 
-Consider the implementation for the example above::
+Consider the implementation for the example above:
+
+.. code-block:: das
 
     [reader_macro(name="arr")]
     class ArrayReader : AstReaderMacro {
@@ -346,7 +372,9 @@ AstCallMacro
 It occurs during the infer pass.
 
 ``add_new_call_macro`` adds a call macro to a module.
-The ``[call_macro]`` annotation automates the same thing::
+The ``[call_macro]`` annotation automates the same thing:
+
+    .. code-block:: das
 
         class AstCallMacro {
             def abstract preVisit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : void
@@ -354,7 +382,9 @@ The ``[call_macro]`` annotation automates the same thing::
             def abstract canVisitArguments ( expr:smart_ptr<ExprCallMacro> ) : bool
         }
 
-``apply`` from :ref:`daslib/apply <stdlib_apply>` is an example of such a macro::
+``apply`` from :ref:`daslib/apply <stdlib_apply>` is an example of such a macro:
+
+.. code-block:: das
 
     [call_macro(name="apply")]  // apply(value, block)
     class ApplyMacro : AstCallMacro {
@@ -376,7 +406,9 @@ AstPassMacro
 ------------
 
 ``AstPassMacro`` is one macro to rule them all. It gets entire module as an input,
-and can be invoked at numerous passes::
+and can be invoked at numerous passes:
+
+.. code-block:: das
 
     class AstPassMacro {
         def abstract apply ( prog:ProgramPtr; mod:Module? ) : bool
@@ -394,7 +426,9 @@ Typically, such macros create an ``AstVisitor`` which performs the necessary tra
 AstTypeInfoMacro
 ----------------
 
-``AstTypeInfoMacro`` is designed to implement custom type information inside a typeinfo expression::
+``AstTypeInfoMacro`` is designed to implement custom type information inside a typeinfo expression:
+
+.. code-block:: das
 
     class AstTypeInfoMacro {
         def abstract getAstChange ( expr:smart_ptr<ExprTypeInfo>; var errors:das_string ) : ExpressionPtr
@@ -414,7 +448,9 @@ In case of error, the errors string must be filled.
 AstForLoopMacro
 ---------------
 
-``AstForLoopMacro`` is designed to implement custom processing of for loop expressions::
+``AstForLoopMacro`` is designed to implement custom processing of for loop expressions:
+
+.. code-block:: das
 
     class AstForLoopMacro {
         def abstract visitExprFor ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprFor> ) : ExpressionPtr
@@ -429,7 +465,9 @@ There is additionally the ``[for_loop_macro]`` annotation, which essentially aut
 AstCaptureMacro
 ---------------
 
-``AstCaptureMacro`` is designed to implement custom capturing and finalization of lambda expressions::
+``AstCaptureMacro`` is designed to implement custom capturing and finalization of lambda expressions:
+
+.. code-block:: das
 
     class AstCaptureMacro {
         def abstract captureExpression ( prog:Program?; mod:Module?; expr:ExpressionPtr; etype:TypeDeclPtr ) : ExpressionPtr
@@ -447,7 +485,9 @@ There is additionally the ``[capture_macro]`` annotation, which essentially auto
 AstCommentReader
 ----------------
 
-``AstCommentReader`` is designed to implement custom processing of comment expressions::
+``AstCommentReader`` is designed to implement custom processing of comment expressions:
+
+.. code-block:: das
 
     class AstCommentReader {
         def abstract open ( prog:ProgramPtr; mod:Module?; cpp:bool; info:LineInfo ) : void
@@ -502,7 +542,9 @@ There is additionally the ``[comment_reader]`` annotation, which essentially aut
 AstSimulateMacro
 ----------------
 
-``AstSimulateMacro`` is designed to customize the simulation of the program::
+``AstSimulateMacro`` is designed to customize the simulation of the program:
+
+.. code-block:: das
 
     class AstSimulateMacro {
         def abstract preSimulate ( prog:Program?; ctx:Context? ) : bool
@@ -518,7 +560,9 @@ AstVisitor
 ----------
 
 ``AstVisitor`` implements the visitor pattern for the Daslang expression tree.
-It contains a callback for every single expression in prefix and postfix form, as well as some additional callbacks::
+It contains a callback for every single expression in prefix and postfix form, as well as some additional callbacks:
+
+.. code-block:: das
 
     class AstVisitor {
         ...
@@ -533,13 +577,17 @@ Postfix callbacks can return expressions to replace the ones passed to the callb
 PrintVisitor from the ``ast_print`` example implements the printing of every single expression in Daslang syntax.
 
 ``make_visitor`` creates a visitor adapter from the class, derived from ``AstVisitor``.
-The adapter then can be applied to a program via the ``visit`` function::
+The adapter then can be applied to a program via the ``visit`` function:
+
+.. code-block:: das
 
     var astVisitor = new PrintVisitor()
     var astVisitorAdapter <- make_visitor(*astVisitor)
     visit(this_program(), astVisitorAdapter)
 
-If an expression needs to be visited, and can potentially be fully substituted, the ``visit_expression`` function should be used::
+If an expression needs to be visited, and can potentially be fully substituted, the ``visit_expression`` function should be used:
+
+.. code-block:: das
 
     expr <- visit_expression(expr,astVisitorAdapter)
 

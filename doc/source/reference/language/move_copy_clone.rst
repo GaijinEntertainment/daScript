@@ -35,7 +35,9 @@ Copy (=)
 --------------------
 
 The copy operator performs a bitwise copy of the right-hand side into the left-hand side.
-The source value is not modified::
+The source value is not modified:
+
+.. code-block:: das
 
     var a = 10
     var b = a       // b is now 10, a is still 10
@@ -44,7 +46,9 @@ Copy works for all POD types (``int``, ``float``, ``bool``, ``string``, pointers
 structs whose fields are all copyable.
 
 Types that manage owned resources — ``array``, ``table``, ``lambda``, and ``iterator`` — cannot
-be copied. Attempting to copy them produces::
+be copied. Attempting to copy them produces:
+
+.. code-block:: das
 
     // error: this type can't be copied, use move (<-) or clone (:=) instead
 
@@ -57,7 +61,9 @@ By default, the compiler automatically promotes ``=`` to ``<-`` when:
 - The right-hand side is a temporary value (struct literal, function return value, ``new`` expression)
 - The type cannot be copied but can be moved
 
-This means you can often write ``=`` and the compiler will do the right thing::
+This means you can often write ``=`` and the compiler will do the right thing:
+
+.. code-block:: das
 
     var a : array<int>
     a = get_data()          // automatically becomes: a <- get_data()
@@ -70,7 +76,9 @@ Set ``options relaxed_assign = false`` to require explicit ``<-`` in all cases
 Move (<-)
 --------------------
 
-The move operator transfers ownership of a value. After a move, the source is zeroed::
+The move operator transfers ownership of a value. After a move, the source is zeroed:
+
+.. code-block:: das
 
     var a : array<int>
     a |> push(1)
@@ -105,7 +113,9 @@ Use ``<-`` when:
 Return by move
 ^^^^^^^^^^^^^^^^^^^
 
-Functions that return non-copyable types must use ``return <-``::
+Functions that return non-copyable types must use ``return <-``:
+
+.. code-block:: das
 
     def make_table() : table<string; int> {
         var t : table<string; int>
@@ -120,7 +130,9 @@ Clone (:=)
 --------------------
 
 The clone operator creates a deep copy of the right-hand side. Unlike ``=`` (which is a
-shallow bitwise copy), ``:=`` recursively clones all nested containers and non-POD fields::
+shallow bitwise copy), ``:=`` recursively clones all nested containers and non-POD fields:
+
+.. code-block:: das
 
     var a : array<int>
     a |> push(1)
@@ -147,14 +159,18 @@ Use ``:=`` when:
 Clone initialization
 ^^^^^^^^^^^^^^^^^^^^
 
-You can clone-initialize a variable at declaration::
+You can clone-initialize a variable at declaration:
+
+.. code-block:: das
 
     var a : array<int>
     a |> push(1)
 
     var b := a              // clone a into a new variable b
 
-This expands into::
+This expands into:
+
+.. code-block:: das
 
     var b <- clone_to_move(a)
 
@@ -235,14 +251,18 @@ A struct, tuple, or variant is copyable/moveable/cloneable only if **all** of it
 Variable Initialization
 -----------------------
 
-The three initialization forms correspond to the three operators::
+The three initialization forms correspond to the three operators:
+
+.. code-block:: das
 
     var x = expr            // copy initialization
     var x <- expr           // move initialization
     var x := expr           // clone initialization
 
 For local variable declarations, the compiler checks the type and reports an error if the
-chosen initialization mode is not supported::
+chosen initialization mode is not supported:
+
+.. code-block:: das
 
     var a = get_array()     // error if relaxed_assign is false:
                             // "local variable can only be move-initialized; use <- for that"
@@ -251,7 +271,9 @@ chosen initialization mode is not supported::
 Struct Initialization
 ---------------------
 
-In struct literals, each field can use a different initialization mode::
+In struct literals, each field can use a different initialization mode:
+
+.. code-block:: das
 
     struct Foo {
         name : string
@@ -265,7 +287,9 @@ In struct literals, each field can use a different initialization mode::
 
 Here ``name`` is copy-initialized and ``data`` is move-initialized. After this, ``items`` is empty.
 
-Clone initialization is also supported in struct literals::
+Clone initialization is also supported in struct literals:
+
+.. code-block:: das
 
     var f2 = Foo(name = "hello", data := items)
 
@@ -276,7 +300,9 @@ Lambda Captures
 --------------------
 
 Lambda capture lists support all three modes. The ``capture`` keyword introduces the capture
-list, with each entry specifying a mode and a variable name::
+list, with each entry specifying a mode and a variable name:
+
+.. code-block:: das
 
     def make_lambda(a : int) {
         var b = 13
@@ -316,13 +342,17 @@ Each capture entry uses an operator prefix to specify the mode:
      - Clone
      - Type must be cloneable.
 
-Multiple captures are separated by commas::
+Multiple captures are separated by commas:
+
+.. code-block:: das
 
     return @ capture(= a, <- arr, := table) () {
         // a is copied, arr is moved, table is cloned
     }
 
-Generators also support captures::
+Generators also support captures:
+
+.. code-block:: das
 
     var g <- generator<int> capture(= a) {
         for (x in range(1, a)) {
@@ -340,13 +370,17 @@ Containers
 ``array`` and ``table`` types cannot be copied. This is because a bitwise copy would create two
 variables pointing to the same underlying memory, leading to double-free errors.
 
-To transfer a container, use move::
+To transfer a container, use move:
+
+.. code-block:: das
 
     var a : array<int>
     a |> push(1)
     var b <- a              // a is now empty
 
-To duplicate a container, use clone::
+To duplicate a container, use clone:
+
+.. code-block:: das
 
     var a : array<int>
     a |> push(1)
@@ -360,7 +394,9 @@ clears the destination and re-inserts each key-value pair.
 Classes
 --------------------
 
-Copying or moving class values requires ``unsafe``::
+Copying or moving class values requires ``unsafe``:
+
+.. code-block:: das
 
     class Foo {
         x : int
@@ -376,7 +412,9 @@ Custom Clone
 --------------------
 
 You can define a custom clone function for any type. If a custom clone exists, it is called
-by the ``:=`` operator regardless of whether the type is natively cloneable::
+by the ``:=`` operator regardless of whether the type is natively cloneable:
+
+.. code-block:: das
 
     struct Connection {
         id : int
@@ -400,7 +438,9 @@ arrays, and tables).
 Quick Reference
 --------------------
 
-Here is a complete example showing all three operators::
+Here is a complete example showing all three operators:
+
+.. code-block:: das
 
     options gen2
 
@@ -435,7 +475,9 @@ Here is a complete example showing all three operators::
         print("moved = {moved}\n")
     }
 
-Expected output::
+Expected output:
+
+.. code-block:: text
 
     copy: a=10 b=10
     data = [[ 1; 2; 3]]

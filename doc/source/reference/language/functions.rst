@@ -18,13 +18,17 @@ Function declaration
 .. index::
     single: Function Declaration
 
-Functions are similar to those in most other typed languages::
+Functions are similar to those in most other typed languages:
+
+.. code-block:: das
 
     def twice(a: int): int {
         return a+a
     }
 
-Completely empty functions (without arguments) can be also declared::
+Completely empty functions (without arguments) can be also declared:
+
+.. code-block:: das
 
     def foo {
         print("foo")
@@ -36,7 +40,9 @@ Completely empty functions (without arguments) can be also declared::
     }
 
 Daslang can always infer a function's return type.
-Returning different types is a compilation error::
+Returning different types is a compilation error:
+
+.. code-block:: das
 
     def foo(a:bool) {
         if ( a ) {
@@ -46,7 +52,9 @@ Returning different types is a compilation error::
         }
     }
 
-The return type can be specified explicitly with ``:`` or ``->`` — both are equivalent::
+The return type can be specified explicitly with ``:`` or ``->`` — both are equivalent:
+
+.. code-block:: das
 
     def add(a, b : int) : int {
         return a + b
@@ -61,7 +69,9 @@ The return type can be specified explicitly with ``:`` or ``->`` — both are eq
 Publicity
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Functions can be ``private`` or ``public`` ::
+Functions can be ``private`` or ``public``
+
+.. code-block:: das
 
     def private foo(a:bool)
 
@@ -74,7 +84,9 @@ and in private modules functions are private).
 Function calls
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-You can call a function by using its name and passing in all its arguments (with the possible omission of the default arguments)::
+You can call a function by using its name and passing in all its arguments (with the possible omission of the default arguments):
+
+.. code-block:: das
 
     def foo(a, b: int) {
         return a + b
@@ -88,7 +100,9 @@ You can call a function by using its name and passing in all its arguments (with
 Named Arguments Function call
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-You can also call a function by using its name and passing all its arguments with explicit names (with the possible omission of the default arguments)::
+You can also call a function by using its name and passing all its arguments with explicit names (with the possible omission of the default arguments):
+
+.. code-block:: das
 
     def foo(a, b: int) {
         return a + b
@@ -98,14 +112,18 @@ You can also call a function by using its name and passing all its arguments wit
         foo([a = 1, b = 2])  // same as foo(1, 2)
     }
 
-Named arguments should be still in the same order::
+Named arguments should be still in the same order:
+
+.. code-block:: das
 
     def bar {
         foo([b = 1, a = 2])  // error, out of order
     }
 
 Named argument calls increase the readability of callee code and ensure correctness in refactorings of the existing functions.
-They also allow default values for arguments other than the last ones::
+They also allow default values for arguments other than the last ones:
+
+.. code-block:: das
 
     def foo(a:int=13, b: int) {
         return a + b
@@ -121,18 +139,24 @@ Function pointer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Pointers to a function use a similar declaration to that of a block or lambda.
-The type is written as ``function`` followed by an optional type signature in angle brackets::
+The type is written as ``function`` followed by an optional type signature in angle brackets:
+
+.. code-block:: das
 
     function < (arg1:int; arg2:float&) : bool >
 
-The ``->`` operator can be used instead of ``:`` for the return type::
+The ``->`` operator can be used instead of ``:`` for the return type:
+
+.. code-block:: das
 
     function < (arg1:int; arg2:float&) -> bool >   // equivalent
 
 If no type signature is specified, ``function`` alone represents a function pointer with
 an unspecified signature.
 
-Function pointers can be obtained by using the ``@@`` operator::
+Function pointers can be obtained by using the ``@@`` operator:
+
+.. code-block:: das
 
     def twice(a:int) {
         return a + a
@@ -140,7 +164,9 @@ Function pointers can be obtained by using the ``@@`` operator::
 
     let fn = @@twice
 
-When multiple functions have the same name, a pointer can be obtained by explicitly specifying signature::
+When multiple functions have the same name, a pointer can be obtained by explicitly specifying signature:
+
+.. code-block:: das
 
     def twice(a:int) {
         return a + a
@@ -152,7 +178,9 @@ When multiple functions have the same name, a pointer can be obtained by explici
 
     let fn = @@<(a:float):float> twice
 
-Function pointers can be called via ``invoke`` or via call notation::
+Function pointers can be called via ``invoke`` or via call notation:
+
+.. code-block:: das
 
     let t = invoke(fn, 1)   // t = 2
     let t = fn(1)           // t = 2, same as
@@ -162,20 +190,26 @@ Nameless functions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Pointers to nameless functions can be created with a syntax
-similar to that of lambdas or blocks (see :ref:`Blocks <blocks_declarations>`)::
+similar to that of lambdas or blocks (see :ref:`Blocks <blocks_declarations>`):
+
+.. code-block:: das
 
     let fn <- @@ ( a : int ) {
         return a + a
     }
 
-Nameless local functions do not capture variables at all::
+Nameless local functions do not capture variables at all:
+
+.. code-block:: das
 
     var count = 1
     let fn <- @@ ( a : int ) {
         return a + count            // compilation error, can't locate variable count
     }
 
-Internally, a regular function will be generated::
+Internally, a regular function will be generated:
+
+.. code-block:: das
 
     def _localfunction_thismodule_8_8_1`function ( a:int const ) : int {
             return a + a
@@ -188,7 +222,9 @@ Generic functions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Generic functions are similar to C++ templated functions.
-Daslang will instantiate them during the infer pass of compilation::
+Daslang will instantiate them during the infer pass of compilation:
+
+.. code-block:: das
 
     def twice(a) {
         return a + a
@@ -202,13 +238,17 @@ while still enjoying the performance and robustness of strong, static typing.
 
 You cannot take the address of a generic function.
 
-Unspecified types can also be written via ``auto`` notation::
+Unspecified types can also be written via ``auto`` notation:
+
+.. code-block:: das
 
     def twice(a:auto) {   // same as 'twice' above
         return a + a
     }
 
-Generic functions can specialize generic type aliases, and use them as part of the declaration::
+Generic functions can specialize generic type aliases, and use them as part of the declaration:
+
+.. code-block:: das
 
     def twice(a:auto(TT)) : TT {
         return a + a
@@ -216,7 +256,9 @@ Generic functions can specialize generic type aliases, and use them as part of t
 
 In the example above, alias ``TT`` is used to enforce the return type contract.
 
-Type aliases can be used before the corresponding ``auto``::
+Type aliases can be used before the corresponding ``auto``:
+
+.. code-block:: das
 
     def summ(base : TT; a:auto(TT)[] ) {
         var s = base
@@ -233,7 +275,9 @@ The return type is inferred from the type of ``s``, which is also ``TT``.
 Function overloading
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Functions can be specialized if their argument types are different::
+Functions can be specialized if their argument types are different:
+
+.. code-block:: das
 
     def twice(a: int) {
         print("int")
@@ -249,7 +293,9 @@ Functions can be specialized if their argument types are different::
 
 Declaring functions with the same exact argument list is a compilation-time error.
 
-Functions can be partially specialized::
+Functions can be partially specialized:
+
+.. code-block:: das
 
     def twice(a:int) {      // int
         return a + a
@@ -278,7 +324,9 @@ When matching functions, Daslang picks the ones which are most specialized and s
 Substitute distance is increased by 1 for each argument if a cast is required for the LSP (Liskov substitution principle).
 At the end, the function with the least distance is picked. If more than one function is left for picking, a compilation error is reported.
 
-Function specialization can be limited by contracts (contract macros)::
+Function specialization can be limited by contracts (contract macros):
+
+.. code-block:: das
 
     [expect_any_array(blah)]  // array<foo>, [], or dasvector`.... or similar
     def print_arr ( blah ) {
@@ -289,7 +337,9 @@ Function specialization can be limited by contracts (contract macros)::
 
 In the example above, only arrays will be matched.
 
-It is possible to use boolean logic operations on contracts::
+It is possible to use boolean logic operations on contracts:
+
+.. code-block:: das
 
     [expect_any_tuple(blah) || expect_any_variant(blah)]
     def print_blah ...
@@ -297,7 +347,9 @@ It is possible to use boolean logic operations on contracts::
 In the example above print_blah will accept any tuple or variant.
 Available logic operations are ``!``, ``&&``, ``||`` and ``^^``.
 
-LSP can be explicitly prohibited for a particular function argument via the ``explicit`` keyword::
+LSP can be explicitly prohibited for a particular function argument via the ``explicit`` keyword:
+
+.. code-block:: das
 
     def foo ( a : Foo explicit ) // will accept Foo, but not any subtype of Foo
 
@@ -310,7 +362,9 @@ Default Parameters
 
 Daslang's functions can have default parameters.
 
-A function with default parameters is declared as follows: ::
+A function with default parameters is declared as follows:
+
+.. code-block:: das
 
     def test(a, b: int, c: int = 1, d: int = 1) {
         return a + b + c + d
@@ -320,18 +374,24 @@ When the function *test* is invoked and the parameters ``c`` or ``d`` are not sp
 the compiler will generate a call with default value to the unspecified parameter. A default parameter can be
 any valid compile-time const Daslang expression. The expression is evaluated at compile-time.
 
-It is valid to declare default values for arguments other than the last one::
+It is valid to declare default values for arguments other than the last one:
+
+.. code-block:: das
 
     def test(c: int = 1, d: int = 1, a, b: int) { // valid!
         return a + b + c + d
     }
 
-Calling such functions with default arguments requires a named arguments call::
+Calling such functions with default arguments requires a named arguments call:
+
+.. code-block:: das
 
     test(2, 3)           // invalid call, a,b parameters are missing
     test([a = 2, b = 3]) // valid call
 
-Default arguments can be combined with overloading::
+Default arguments can be combined with overloading:
+
+.. code-block:: das
 
     def test(c: int = 1, d: int = 1, a, b: int) {
         return a + b + c + d
@@ -345,7 +405,9 @@ OOP-style calls
 ---------------
 
 There are no methods or function members of structs in Daslang.
-However, code can be easily written "OOP style" by using the right pipe operator ``|>``::
+However, code can be easily written "OOP style" by using the right pipe operator ``|>``:
+
+.. code-block:: das
 
     struct Foo {
         x, y: int = 0
@@ -382,7 +444,9 @@ Operator Overloading
 ---------------------------------------------
 
 Daslang allows you to overload operators, which means that you can define custom behavior for operators when used with your own data types.
-To overload an operator, you need to define a special function with the name of the operator you want to overload. Here's the syntax::
+To overload an operator, you need to define a special function with the name of the operator you want to overload. Here's the syntax:
+
+.. code-block:: das
 
     def operator <operator>(<arguments>) : <return_type>
         # Implementation here
@@ -390,7 +454,9 @@ To overload an operator, you need to define a special function with the name of 
 In this syntax, ``<operator>`` is the name of the operator you want to overload (e.g. ``+``, ``-``, ``*``, ``/``, ``==``, etc.),
 ``<arguments>`` are the parameters that the operator function takes, and ``<return_type>`` is the return type of the operator function.
 
-For example, here's how you could overload the == operator for a custom struct called iVec2::
+For example, here's how you could overload the == operator for a custom struct called iVec2:
+
+.. code-block:: das
 
     struct iVec2 {
         x, y: int
@@ -405,7 +471,9 @@ In this example, we define a structure called iVec2 with two integer fields (x a
 We then define an operator== function that takes two parameters (a and b) of type iVec2. This function returns a bool value indicating whether a and b are equal.
 The implementation checks whether the x and y components of a and b are equal using the == operator.
 
-With this operator overloaded, you can now use the == operator to compare iVec2 objects, like this::
+With this operator overloaded, you can now use the == operator to compare iVec2 objects, like this:
+
+.. code-block:: das
 
     let v1 = iVec2(1, 2)
     let v2 = iVec2(1, 2)
@@ -460,14 +528,18 @@ Operators can be defined as free functions or as struct methods.
 Unary operators
 ---------------------------------------------
 
-Unary operators take a single argument. To overload unary minus (negate)::
+Unary operators take a single argument. To overload unary minus (negate):
+
+.. code-block:: das
 
     def operator -(a : Vec2) : Vec2 {
         return Vec2(x = -a.x, y = -a.y)
     }
 
 Prefix increment (``++x``) and postfix increment (``x++``) are separate operators.
-In the parser, ``++operator`` is the prefix form and ``operator++`` is the postfix form::
+In the parser, ``++operator`` is the prefix form and ``operator++`` is the postfix form:
+
+.. code-block:: das
 
     struct Counter {
         value : int
@@ -485,7 +557,9 @@ Compound assignment operators
 ---------------------------------------------
 
 Compound assignment operators modify the left-hand operand in place.
-The first parameter must be a mutable reference (``var ... &``)::
+The first parameter must be a mutable reference (``var ... &``):
+
+.. code-block:: das
 
     def operator +=(var a : Vec2&; b : Vec2) {
         a.x += b.x
@@ -507,7 +581,9 @@ Index operators
 Index operators control how ``[]`` behaves on your types.
 
 ``operator []`` defines read access, ``operator []=`` defines write access, and
-compound variants like ``operator []+=`` define in-place index operations::
+compound variants like ``operator []+=`` define in-place index operations:
+
+.. code-block:: das
 
     struct Matrix2x2 {
         data : float[4]
@@ -535,7 +611,9 @@ index is out of range.
 Clone and finalize operators
 ---------------------------------------------
 
-``operator :=`` overloads clone behaviour::
+``operator :=`` overloads clone behaviour:
+
+.. code-block:: das
 
     struct Resource {
         name : string
@@ -547,7 +625,9 @@ Clone and finalize operators
         dst.refcount = src.refcount + 1
     }
 
-Custom finalization can be defined via a ``finalize`` function or ``operator delete``::
+Custom finalization can be defined via a ``finalize`` function or ``operator delete``:
+
+.. code-block:: das
 
     def finalize(var r : Resource) {
         print("releasing {r.name}\n")
@@ -558,7 +638,9 @@ is, as, and ?as operators
 ---------------------------------------------
 
 The ``is``, ``as``, and ``?as`` operators can be overloaded for custom type-checking
-and casting behaviour::
+and casting behaviour:
+
+.. code-block:: das
 
     def operator is(a : MyVariant; b : type<int>) : bool {
         // return true if MyVariant currently holds an int
@@ -580,7 +662,9 @@ Null-coalesce operator
 ---------------------------------------------
 
 ``operator ??`` can be overloaded to provide a default value when a nullable
-or optional type is null::
+or optional type is null:
+
+.. code-block:: das
 
     def operator ??(a : MyOptional; default_value : int) : int {
         // return contained value or default_value
@@ -590,7 +674,9 @@ or optional type is null::
 Struct method operators
 ---------------------------------------------
 
-Operators can be defined as struct methods instead of free functions::
+Operators can be defined as struct methods instead of free functions:
+
+.. code-block:: das
 
     struct Stack {
         items : array<int>
@@ -612,12 +698,16 @@ Overloading the '.' and '?.' operators
 ---------------------------------------------
 
 Daslang allows you to overload the dot . operator, which is used to access fields of structure or a class.
-To overload the dot . operator, you need to define a special function with the name operator `.` Here's the syntax::
+To overload the dot . operator, you need to define a special function with the name operator `.` Here's the syntax:
+
+.. code-block:: das
 
     def operator.(<object>: <type>, <name>: string) : <return_type>
         # Implementation here
 
-Alternatively you can specify field explicitly::
+Alternatively you can specify field explicitly:
+
+.. code-block:: das
 
     def operator.<name> (<object>: <type>) : <return_type>
         # Implementation here
@@ -626,7 +716,9 @@ In this syntax, <object> is the object you want to access, <type> is the type of
 
 Operator ?. works in a similar way.
 
-For example, here's how you could overload the dot . operator for a custom structure called Goo::
+For example, here's how you could overload the dot . operator for a custom structure called Goo:
+
+.. code-block:: das
 
     struct Goo {
         a: string
@@ -645,7 +737,9 @@ We then define two operator. functions:
 The first one takes two parameters (t and name) and returns a string value that contains the name of the field or method being accessed (name)
 and the value of the a field of the Goo object (t.a).
 The second one takes one parameter (t) and returns the length of the a field of the Goo object (t.a).
-With these operators overloaded, you can now use the dot . operator to access fields and methods of a Goo object, like this::
+With these operators overloaded, you can now use the dot . operator to access fields and methods of a Goo object, like this:
+
+.. code-block:: das
 
     var g = Goo(a ="hello")
     var field = g.a
@@ -663,7 +757,9 @@ Overloading accessors
 ---------------------------------------------
 
 Daslang allows you to overload accessors, which means that you can define custom behavior for accessing fields of your own data types.
-Here is an example of how to overload the accessor for a custom struct called Foo::
+Here is an example of how to overload the accessor for a custom struct called Foo:
+
+.. code-block:: das
 
     require math
 
@@ -684,14 +780,18 @@ Here is an example of how to overload the accessor for a custom struct called Fo
         print("magnitude = {f.magnitude} // {f}\n")
     }
 
-Expected output::
+Expected output:
+
+.. code-block:: text
 
     magnitude = 3.7416575 // [[ 1,2,3]]
     magnitude = 10 // [[ 2.6726124,5.345225,8.017837]]
 
 It now has accessor ``magnitude`` which can be used to get and set the magnitude of the ``dir`` field.
 
-Classes allow to overload accessors for properties as well::
+Classes allow to overload accessors for properties as well:
+
+.. code-block:: das
 
     class Foo {
         dir : float3

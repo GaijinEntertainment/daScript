@@ -2,11 +2,15 @@ The DEFER module implements the ``defer`` pattern — the ability to schedule cl
 code to run at scope exit, similar to Go's ``defer``. The deferred block is moved
 to the ``finally`` section of the enclosing scope at compile time.
 
-All functions and symbols are in "defer" module, use require to get access to it. ::
+All functions and symbols are in "defer" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/defer
 
-Example: ::
+Example:
+
+.. code-block:: das
 
     require daslib/defer
 

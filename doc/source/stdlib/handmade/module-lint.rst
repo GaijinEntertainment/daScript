@@ -4,6 +4,8 @@ violations, and potential bugs at compile time.
 
 See also :doc:`lint_everything` for applying lint diagnostics to all modules.
 
-All functions and symbols are in "lint" module, use require to get access to it. ::
+All functions and symbols are in "lint" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/lint

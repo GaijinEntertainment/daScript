@@ -3,6 +3,8 @@ Elements contain embedded next/prev pointers, avoiding separate node
 allocations. Useful for implementing queues, work lists, and other
 dynamic collections with O(1) insertion and removal.
 
-All functions and symbols are in "linked_list" module, use require to get access to it. ::
+All functions and symbols are in "linked_list" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/linked_list

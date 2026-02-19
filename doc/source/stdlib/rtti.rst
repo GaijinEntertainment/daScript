@@ -12,7 +12,9 @@ It allows querying module structure, type declarations, function signatures, ann
 and other compile-time metadata at runtime. Used primarily by macro libraries and
 code generation tools.
 
-All functions and symbols are in "rtti" module, use require to get access to it. ::
+All functions and symbols are in "rtti" module, use require to get access to it.
+
+.. code-block:: das
 
     require rtti
 
@@ -180,32 +182,32 @@ Flags which represent properties of the `AnnotationDeclaration` object.
 
 .. das:attribute:: bitfield SimFunctionFlags
 
-:Fields: * **aot** (0x1)
+properties of the `SimFunction` object.
 
-         * **fastcall** (0x2)
+:Fields: * **aot** (0x1) - Function is compiled ahead-of-time.
 
-         * **builtin** (0x4)
+         * **fastcall** (0x2) - Function uses fastcall calling convention.
 
-         * **jit** (0x8)
+         * **builtin** (0x4) - Function is a builtin.
 
-         * **unsafe** (0x10)
+         * **jit** (0x8) - Function is JIT-compiled.
 
-         * **cmres** (0x20)
+         * **unsafe** (0x10) - Function is unsafe.
 
-         * **pinvoke** (0x40)
+         * **cmres** (0x20) - Function returns via caller-managed return space.
 
-// stub
-bitfield<aot;fastcall;builtin;jit;unsafe;cmres;pinvoke> aka SimFunctionFlags
+         * **pinvoke** (0x40) - Function uses platform invoke for external calls.
+
 
 
 .. _alias-LocalVariableInfoFlags:
 
 .. das:attribute:: bitfield LocalVariableInfoFlags
 
-:Fields: * **cmres** (0x1)
+properties of the `LocalVariableInfo` object.
 
-// stub
-bitfield<cmres> aka LocalVariableInfoFlags
+:Fields: * **cmres** (0x1) - Variable is a caller-managed return space variable.
+
 
 
 .. _alias-RttiValue:

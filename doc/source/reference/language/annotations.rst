@@ -11,21 +11,27 @@ Annotations are metadata decorators attached to functions, structures, classes, 
 and variables. They control compiler behavior — export, initialization, safety, optimization,
 and macro registration.
 
-An annotation is written in square brackets before the declaration it applies to::
+An annotation is written in square brackets before the declaration it applies to:
+
+.. code-block:: das
 
     [export]
     def main {
         print("hello\n")
     }
 
-Multiple annotations can be combined with commas::
+Multiple annotations can be combined with commas:
+
+.. code-block:: das
 
     [export, no_aot]
     def main {
         print("hello\n")
     }
 
-Some annotations accept arguments::
+Some annotations accept arguments:
+
+.. code-block:: das
 
     [init(tag="db")]
     def init_database {
@@ -47,7 +53,9 @@ Lifecycle
 
 ``[export]``
     Marks a function as callable from the host application. The host invokes exported functions
-    by name through the context API::
+    by name through the context API:
+
+    .. code-block:: das
 
         [export]
         def main {
@@ -56,7 +64,9 @@ Lifecycle
 
 ``[init]``
     Marks a function to run automatically during context initialization. The function must
-    take no arguments and return ``void``::
+    take no arguments and return ``void``:
+
+    .. code-block:: das
 
         [init]
         def setup {
@@ -69,7 +79,9 @@ Lifecycle
     - ``before`` — runs before the named pass
     - ``after`` — runs after the named pass
 
-    All ordering attributes imply late initialization::
+    All ordering attributes imply late initialization:
+
+    .. code-block:: das
 
         [init(tag="db")]
         def init_database {
@@ -83,7 +95,9 @@ Lifecycle
 
 ``[finalize]``
     Marks a function to run automatically during context shutdown. Same constraints as
-    ``[init]`` — no arguments, no return value::
+    ``[init]`` — no arguments, no return value:
+
+    .. code-block:: das
 
         [finalize]
         def cleanup {
@@ -93,7 +107,9 @@ Lifecycle
     Supports a ``late`` attribute for ordering.
 
 ``[run]``
-    Marks a function to run at compile time::
+    Marks a function to run at compile time:
+
+    .. code-block:: das
 
         [run]
         def compile_time_check {
@@ -117,7 +133,9 @@ Safety
 ^^^^^^^^^^^^^^^^^^^^^
 
 ``[unsafe_deref]``
-    Marks a function as allowing unsafe dereferences inside its body::
+    Marks a function as allowing unsafe dereferences inside its body:
+
+    .. code-block:: das
 
         [unsafe_deref]
         def read_ptr(p : int?) {
@@ -125,7 +143,9 @@ Safety
         }
 
 ``[unsafe_operation]``
-    Marks a function as an unsafe operation. Calling it requires an ``unsafe`` block::
+    Marks a function as an unsafe operation. Calling it requires an ``unsafe`` block:
+
+    .. code-block:: das
 
         [unsafe_operation]
         def dangerous_thing {
@@ -144,7 +164,9 @@ Lint Control
 ^^^^^^^^^^^^^^^^^^^^^
 
 ``[unused_argument]``
-    Suppresses "unused argument" warnings for specific arguments::
+    Suppresses "unused argument" warnings for specific arguments:
+
+    .. code-block:: das
 
         [unused_argument(x)]
         def handler(x : int) {
@@ -154,7 +176,9 @@ Lint Control
     Multiple arguments can be listed: ``[unused_argument(x, y)]``.
 
 ``[nodiscard]``
-    Warns if the return value of the function is discarded::
+    Warns if the return value of the function is discarded:
+
+    .. code-block:: das
 
         [nodiscard]
         def compute : int {
@@ -164,7 +188,9 @@ Lint Control
         compute()       // warning: return value discarded
 
 ``[deprecated]``
-    Marks a function as deprecated. Produces a compile-time warning when called::
+    Marks a function as deprecated. Produces a compile-time warning when called:
+
+    .. code-block:: das
 
         [deprecated(message="use new_func instead")]
         def old_func {
@@ -187,7 +213,9 @@ Generics and Contracts
 
 ``[generic]``
     Marks a function as generic (a template that is instantiated for each unique set of
-    argument types)::
+    argument types):
+
+    .. code-block:: das
 
         [generic]
         def add(a, b : auto) {
@@ -197,7 +225,9 @@ Generics and Contracts
     (see :ref:`Generic Programming <generic_programming>`).
 
 ``[expect_ref]``
-    Specialization contract: requires named arguments to be references::
+    Specialization contract: requires named arguments to be references:
+
+    .. code-block:: das
 
         [expect_ref(arr)]
         def process(var arr : auto) {
@@ -213,7 +243,9 @@ Generics and Contracts
 ``[local_only]``
     Verifies that specific arguments are passed as local constructors. The argument value
     indicates the expected state — ``true`` means the argument must be a literal constructor,
-    ``false`` means it must not be::
+    ``false`` means it must not be:
+
+    .. code-block:: das
 
         [local_only(data=true)]
         def process(data : Foo) {
@@ -264,7 +296,9 @@ Macros
 
 ``[macro]``
     Defined in ``daslib/ast_boost``. Like ``[_macro]`` but wraps the function body in a
-    module-ready check. Requires ``require daslib/ast_boost``::
+    module-ready check. Requires ``require daslib/ast_boost``:
+
+    .. code-block:: das
 
         require daslib/ast_boost
 
@@ -275,7 +309,9 @@ Macros
 
 ``[tag_function]``
     Defined in ``daslib/ast_boost``. Tags a function with string tags for retrieval via
-    ``for_each_tag_function``::
+    ``for_each_tag_function``:
+
+    .. code-block:: das
 
         [tag_function(my_tag)]
         def tagged_func {
@@ -298,7 +334,9 @@ Structure and Class Annotations
 -------------------------------
 
 ``[cpp_layout]``
-    Uses C++ memory layout (matching C++ struct alignment rules)::
+    Uses C++ memory layout (matching C++ struct alignment rules):
+
+    .. code-block:: das
 
         [cpp_layout]
         struct CppInterop {
@@ -310,7 +348,9 @@ Structure and Class Annotations
 
 ``[safe_when_uninitialized]``
     Marks the struct as safe even when fields are uninitialized (zero-filled memory is
-    a valid state)::
+    a valid state):
+
+    .. code-block:: das
 
         [safe_when_uninitialized]
         struct Vec2 {
@@ -320,7 +360,9 @@ Structure and Class Annotations
 
 ``[persistent]``
     Makes a structure persistent (survives context reset). All fields must be POD unless
-    ``non_pod=true`` is specified::
+    ``non_pod=true`` is specified:
+
+    .. code-block:: das
 
         [persistent]
         struct Config {
@@ -417,7 +459,9 @@ All accept an optional ``name`` argument. If omitted, the class name is used.
      - ``AstGlobalLintMacro``
      - Runs after all modules are compiled
 
-Example::
+Example:
+
+.. code-block:: das
 
     require daslib/ast_boost
 
@@ -478,7 +522,9 @@ Requires ``require daslib/contracts``.
    * - ``[expect_value_handle(arg)]``
      - Argument must be a value handle type
 
-Example::
+Example:
+
+.. code-block:: das
 
     require daslib/contracts
 
@@ -491,21 +537,27 @@ Example::
 Annotation Syntax Details
 ------------------------------------------
 
-Annotations can be combined with logical operators for contract composition::
+Annotations can be combined with logical operators for contract composition:
+
+.. code-block:: das
 
     [expect_ref(a) && expect_dim(b)]
     def process(var a : auto; b : auto) {
         pass
     }
 
-Negation is also supported::
+Negation is also supported:
+
+.. code-block:: das
 
     [!expect_ref(a)]
     def no_ref(a : auto) {
         pass
     }
 
-Annotations on struct/class fields appear before the field name in the ``@`` metadata syntax::
+Annotations on struct/class fields appear before the field name in the ``@`` metadata syntax:
+
+.. code-block:: das
 
     class Foo {
         @big

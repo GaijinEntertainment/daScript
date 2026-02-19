@@ -12,7 +12,9 @@ Modules can be native to Daslang, as well as built-in.
 For an overview of how ``module``, ``require``, and ``options`` fit into the overall file layout,
 see :ref:`Program Structure <program_structure>`.
 
-To request a module, use the ``require`` keyword::
+To request a module, use the ``require`` keyword:
+
+.. code-block:: das
 
     require math
     require ast public
@@ -27,7 +29,9 @@ The project is responsible for resolving module names into file names (see :ref:
 Native modules
 --------------
 
-A native module is a separate Daslang file, with an optional ``module`` name::
+A native module is a separate Daslang file, with an optional ``module`` name:
+
+.. code-block:: das
 
     module custom       // specifies module name
     ...
@@ -36,7 +40,9 @@ A native module is a separate Daslang file, with an optional ``module`` name::
 
 If not specified, the module name defaults to that of the file name.
 
-Modules can be ``private`` or ``public``::
+Modules can be ``private`` or ``public``:
+
+.. code-block:: das
 
     module Foo private
 
@@ -46,7 +52,9 @@ The default publicity of functions, structures, and enumerations is that of the 
 (i.e. if the module is public and a function's publicity is not specified, that function is public).
 
 
-Module can be made visible to all modules in the project via the ``inscope`` modifier::
+Module can be made visible to all modules in the project via the ``inscope`` modifier:
+
+.. code-block:: das
 
     module Foo inscope
 
@@ -61,7 +69,9 @@ Shared modules
 --------------
 
 Shared modules are modules that are shared between compilation of multiple contexts.
-Typically, modules are compiled anew for each context, but when the 'shared' keyword is specified, the module gets promoted to a builtin module::
+Typically, modules are compiled anew for each context, but when the 'shared' keyword is specified, the module gets promoted to a builtin module:
+
+.. code-block:: das
 
     module Foo shared
 
@@ -72,7 +82,9 @@ Macros in shared modules can't expect the module to be unique, since sharing of 
 Module function visibility
 --------------------------
 
-When calling a function, the name of the module can be specified explicitly or implicitly::
+When calling a function, the name of the module can be specified explicitly or implicitly:
+
+.. code-block:: das
 
     let s1 = sin(0.0)           // implicit, assumed math::sin
     let s2 = math::sin(0.0)     // explicit, always math::sin
@@ -82,7 +94,9 @@ If the function is private or not directly visible, a compilation error will occ
 If multiple functions match an implicit function call, a compilation error will occur.
 
 Module names ``_`` and ``__`` are reserved to specify the `current module` and the `current module only`, respectively.
-It is particularly important for generic functions, which are always instanced as private functions in the current module::
+It is particularly important for generic functions, which are always instanced as private functions in the current module:
+
+.. code-block:: das
 
     module b
 

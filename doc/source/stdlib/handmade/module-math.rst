@@ -4,11 +4,15 @@ Floating point math in general is not bit-precise: the compiler may optimize
 permutations, replace divisions with multiplications, and some functions are
 not bit-exact. Use ``double`` precision types when exact results are required.
 
-All functions and symbols are in "math" module, use require to get access to it. ::
+All functions and symbols are in "math" module, use require to get access to it.
+
+.. code-block:: das
 
     require math
 
-Example: ::
+Example:
+
+.. code-block:: das
 
     require math
 

@@ -35,6 +35,22 @@ Functions in each module's RST are organized into named groups (e.g. "Compilatio
 3. Regenerate: `python doc/reflections/gen_module_examples.py`
 4. Validate: `bin/Release/daslang.exe doc/reflections/das2rst.das`
 
+### Checking for `// stub` files (REQUIRED after regeneration)
+
+When `das2rst.das` encounters a function, typedef, structure, or class that has no handmade doc file, it creates a stub file in `doc/source/stdlib/handmade/` starting with `// stub` followed by the signature. These stubs produce raw signature text in the generated docs instead of descriptions.
+
+**After every doc regeneration**, check for remaining stubs:
+```
+Select-String -Path "doc\source\stdlib\handmade\*.rst" -Pattern "// stub" -SimpleMatch
+```
+
+To fix a stub:
+1. Open the stub file (e.g., `function-strings_boost-capitalize-0x1747f4e995e14ba9.rst`)
+2. The second line contains the function signature — use it to locate the source
+3. Replace the **entire file content** with a plain-text description (1–2 sentences, no RST directives). For bitfield typedefs, use one line per flag (first line = type description, subsequent = per-flag descriptions)
+4. Regenerate: `bin/Release/daslang.exe doc/reflections/das2rst.das`
+5. Verify: `Select-String -Path "doc\source\stdlib\*.rst" -Pattern "// stub"` should return 0 matches
+
 ## RST Editing Conventions
 
 When editing RST files in `doc/source/reference/language/`:

@@ -17,7 +17,9 @@ layout of a file and the key declarations that control how it interacts with the
 File Layout
 --------------------
 
-A typical daslang file follows this layout::
+A typical daslang file follows this layout:
+
+.. code-block:: das
 
     options gen2                              // compilation options
 
@@ -64,7 +66,9 @@ followed by ``module``, then ``require``.
 Module Declaration
 --------------------
 
-The ``module`` declaration names the current file's module::
+The ``module`` declaration names the current file's module:
+
+.. code-block:: das
 
     module my_module
 
@@ -78,13 +82,17 @@ The ``module`` declaration supports several modifiers:
 
 ``shared``
     Promotes the module to a built-in module. Only one instance is created per compilation
-    environment, and it is shared across contexts::
+    environment, and it is shared across contexts:
+
+    .. code-block:: das
 
         module my_lib shared
 
 ``public`` / ``private``
     Sets the default visibility of all declarations in the module. Functions, structs,
-    enums, and globals inherit this default unless they specify their own visibility::
+    enums, and globals inherit this default unless they specify their own visibility:
+
+    .. code-block:: das
 
         module my_lib public          // all declarations are public by default
         module my_lib private         // all declarations are private by default
@@ -93,11 +101,15 @@ The ``module`` declaration supports several modifiers:
 
 ``inscope``
     Makes the module visible to all modules in the project without an explicit ``require``.
-    This uses the ``!inscope`` syntax::
+    This uses the ``!inscope`` syntax:
+
+    .. code-block:: das
 
         module my_lib !inscope
 
-Modifiers can be combined::
+Modifiers can be combined:
+
+.. code-block:: das
 
     module my_lib shared public
 
@@ -105,7 +117,9 @@ Modifiers can be combined::
 Require Declaration
 --------------------
 
-The ``require`` declaration imports another module::
+The ``require`` declaration imports another module:
+
+.. code-block:: das
 
     require math
     require daslib/ast_boost
@@ -119,7 +133,9 @@ Re-exporting
 
 By default, required modules are private — they are only visible within the current module.
 The ``public`` modifier re-exports the module, making it transitively visible to any module
-that requires the current one::
+that requires the current one:
+
+.. code-block:: das
 
     require dastest/testing_boost public
 
@@ -127,7 +143,9 @@ that requires the current one::
 Aliasing
 ^^^^^^^^^^^^^^^^^^^
 
-When two modules share the same name, the ``as`` keyword provides a local alias::
+When two modules share the same name, the ``as`` keyword provides a local alias:
+
+.. code-block:: das
 
     require event
     require sub/event as sub_event
@@ -143,16 +161,22 @@ module prefixes).
 Options Declaration
 --------------------
 
-The ``options`` declaration sets compiler options for the file::
+The ``options`` declaration sets compiler options for the file:
+
+.. code-block:: das
 
     options gen2
     options no_unused_block_arguments = false
 
-Multiple options can appear on one line, separated by commas::
+Multiple options can appear on one line, separated by commas:
+
+.. code-block:: das
 
     options no_aot = true, rtti = true
 
-A bare option name (without ``= value``) is shorthand for ``= true``::
+A bare option name (without ``= value``) is shorthand for ``= true``:
+
+.. code-block:: das
 
     options gen2          // equivalent to: options gen2 = true
 
@@ -180,7 +204,9 @@ All of these are peers in the grammar and can appear in any order, interleaved f
 Visibility
 --------------------
 
-Each top-level declaration can be marked ``public`` or ``private``::
+Each top-level declaration can be marked ``public`` or ``private``:
+
+.. code-block:: das
 
     def public helper(x : int) : int {     // visible to other modules
         return x * 2
@@ -192,7 +218,9 @@ Each top-level declaration can be marked ``public`` or ``private``::
 
 If no visibility is specified, the declaration inherits the module's default visibility.
 
-Shared global variables use the ``shared`` keyword and are shared across cloned contexts::
+Shared global variables use the ``shared`` keyword and are shared across cloned contexts:
+
+.. code-block:: das
 
     let shared GLOBAL_TABLE : table<string; int>
 
@@ -208,7 +236,9 @@ The host decides which functions to call. Several annotations mark functions wit
 ^^^^^^^^^^^^^^^^^^^
 
 Marks a function as callable from the host application. The host invokes exported functions
-by name through the context API::
+by name through the context API:
+
+.. code-block:: das
 
     [export]
     def main {
@@ -223,7 +253,9 @@ which exported function(s) to call and in what order.
 ^^^^^^^^^^^^^^^^^^^
 
 Marks a function to run automatically during context initialization. ``[init]`` functions
-cannot have arguments and cannot return a value::
+cannot have arguments and cannot return a value:
+
+.. code-block:: das
 
     [init]
     def setup {
@@ -231,7 +263,9 @@ cannot have arguments and cannot return a value::
     }
 
 Multiple ``[init]`` functions execute in declaration order. Ordering can be controlled with
-attributes::
+attributes:
+
+.. code-block:: das
 
     [init(tag="db")]
     def init_database {
@@ -255,7 +289,9 @@ The option ``no_init`` disables all ``[init]`` functions.
 ^^^^^^^^^^^^^^^^^^^
 
 Marks a function to run automatically during context shutdown. Same constraints as ``[init]`` —
-no arguments, no return value::
+no arguments, no return value:
+
+.. code-block:: das
 
     [finalize]
     def cleanup {
@@ -271,12 +307,16 @@ When present, the compiler treats the listed errors as intentional — the file 
 "successfully" only if exactly those errors (and no others) are produced.
 
 This is primarily used in negative test suites to verify that the compiler correctly
-rejects invalid code::
+rejects invalid code:
+
+.. code-block:: das
 
     expect 40214:3              // expect error 40214 exactly 3 times
     expect 30304, 30101         // expect each error once (count defaults to 1)
 
-The syntax is::
+The syntax is:
+
+.. code-block:: das
 
     expect <error_code> [: <count>] [, <error_code> [: <count>] ...]
 
@@ -309,7 +349,9 @@ identifiers organized by compilation phase:
 | ``40101–40214``  | Lint-time errors and warnings              |
 +------------------+--------------------------------------------+
 
-For example, a test that verifies the compiler rejects copying an array::
+For example, a test that verifies the compiler rejects copying an array:
+
+.. code-block:: das
 
     expect 30507    // cant_copy
 
@@ -356,7 +398,9 @@ Execution Lifecycle
 Complete Example
 --------------------
 
-The following example shows a complete program with all structural elements::
+The following example shows a complete program with all structural elements:
+
+.. code-block:: das
 
     options gen2
 
@@ -411,7 +455,9 @@ The following example shows a complete program with all structural elements::
         }
     }
 
-Expected output::
+Expected output:
+
+.. code-block:: text
 
     particles: 100
 

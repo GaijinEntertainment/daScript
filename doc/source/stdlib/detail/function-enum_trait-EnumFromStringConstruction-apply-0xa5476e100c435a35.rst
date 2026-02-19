@@ -1,0 +1,1 @@
+implements enum string constructor

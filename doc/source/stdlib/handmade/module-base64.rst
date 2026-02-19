@@ -2,11 +2,15 @@ The BASE64 module implements Base64 encoding and decoding.
 It provides ``base64_encode`` and ``base64_decode`` for converting between binary data
 (strings or ``array<uint8>``) and Base64 text representation.
 
-All functions and symbols are in "base64" module, use require to get access to it. ::
+All functions and symbols are in "base64" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/base64
 
-Example: ::
+Example:
+
+.. code-block:: das
 
     require daslib/base64
 

@@ -34,7 +34,9 @@ Array and Table lock checking
 
 Array and table lock checking extends to data structures that internally contain other arrays or tables.
 
-Consider the following example::
+Consider the following example:
+
+.. code-block:: das
 
     var a : array < array<int> >
     ...
@@ -43,7 +45,9 @@ Consider the following example::
     }
 
 The ``resize`` operation on the ``a`` array will cause ``panic`` because ``a[0]`` is locked during the iteration.
-This test, however, can only happen in runtime. The compiler generates custom ``resize`` code, which verifies locks::
+This test, however, can only happen in runtime. The compiler generates custom ``resize`` code, which verifies locks:
+
+.. code-block:: das
 
     def private builtin`resize ( var Arr:array<array<int> aka numT> explicit; newSize:int const ) {
         _builtin_verify_locks(Arr)
@@ -55,7 +59,10 @@ If any is locked, a ``panic`` occurs.
 
 Custom operations will only be generated, if the underlying type needs lock checks.
 
-The following operations perform lock checks on data structures::
+The following operations perform lock checks on data structures:
+
+.. code-block:: text
+
     * a <- b
     * return <- a
     * resize

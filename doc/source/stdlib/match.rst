@@ -14,11 +14,15 @@ at compile time.
 
 See :ref:`tutorial_pattern_matching` for a hands-on tutorial.
 
-All functions and symbols are in "match" module, use require to get access to it. ::
+All functions and symbols are in "match" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/match
 
-Example: ::
+Example:
+
+.. code-block:: das
 
     require daslib/match
 

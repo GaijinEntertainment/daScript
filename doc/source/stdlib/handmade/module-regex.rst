@@ -55,11 +55,15 @@ occurrence, or ``regex_foreach`` / ``regex_match_all`` to find all occurrences.
 
 See also :doc:`regex_boost` for compile-time regex construction via the ``%regex~`` reader macro.
 
-All functions and symbols are in "regex" module, use require to get access to it. ::
+All functions and symbols are in "regex" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/regex
 
-Example: ::
+Example:
+
+.. code-block:: das
 
     require daslib/regex
         require strings

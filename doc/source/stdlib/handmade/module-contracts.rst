@@ -5,11 +5,15 @@ can instantiate a generic parameter, producing clear error messages on mismatch.
 
 See :ref:`tutorial_contracts` for a hands-on tutorial.
 
-All functions and symbols are in "contracts" module, use require to get access to it. ::
+All functions and symbols are in "contracts" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/contracts
 
-Example: ::
+Example:
+
+.. code-block:: das
 
     require daslib/contracts
 

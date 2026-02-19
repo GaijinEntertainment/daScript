@@ -48,7 +48,9 @@ The topological sort order for the init functions is specified in the init annot
     * ``before`` attribute specifies that function will appear before the specified pass
     * ``after`` attribute specifies that function will appear after the specified pass
 
-Consider the following example::
+Consider the following example:
+
+.. code-block:: das
 
     [init(before="middle")]
     def a {
@@ -101,18 +103,24 @@ Memory allocation and garbage collection
 
 Memory allocation strategies for both the string heap and the regular heap are specified in the ``CodeOfPolicies`` and options.
 
-To allow garbage collection from inside the context, the following options are necessary::
+To allow garbage collection from inside the context, the following options are necessary:
+
+.. code-block:: das
 
     options persistent_heap // this one enables garbage-collectable heap
     options gc              // this one enables garbage collection for the variables on the stack
 
-To collect garbage, from the inside of the context::
+To collect garbage, from the inside of the context:
+
+.. code-block:: das
 
     var collect_string_heap = true
     var validate_after_collect = false
     heap_collect(collect_string_heap, validate_after_collect)
 
-To do the same from the C++ side::
+To do the same from the C++ side:
+
+.. code-block:: cpp
 
     context->collectHeap(dummy_line_info_ptr, collect_string_heap, validate_after_collect);
 

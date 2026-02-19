@@ -7,7 +7,9 @@ Class
 In Daslang, classes are an extension of structures designed to provide OOP capabilities.
 Classes provide single-parent inheritance, abstract and virtual methods, initializers, and finalizers.
 
-The basic class declaration is similar to that of a structure, but with the ``class`` keyword::
+The basic class declaration is similar to that of a structure, but with the ``class`` keyword:
+
+.. code-block:: das
 
     class Foo {
         x, y : int = 0
@@ -25,7 +27,9 @@ Member Visibility
 ----------------------------
 
 Class members can be ``private`` or ``public``. Private members are only accessible from
-inside the class::
+inside the class:
+
+.. code-block:: das
 
     class Account {
         private balance : int = 0
@@ -37,7 +41,9 @@ inside the class::
         }
     }
 
-Methods can also be declared ``private``::
+Methods can also be declared ``private``:
+
+.. code-block:: das
 
     class Processor {
         def private validate(x : int) : bool {
@@ -55,7 +61,9 @@ Initializers
 ----------------------------
 
 The initializer is a function with a name matching that of the class.
-Classes can have multiple initializers with different arguments::
+Classes can have multiple initializers with different arguments:
+
+.. code-block:: das
 
     class Foo {
         ...
@@ -69,7 +77,9 @@ Classes can have multiple initializers with different arguments::
 
 .. _classes_finalizer:
 
-Finalizers can be defined explicitly as void functions named ``finalize``::
+Finalizers can be defined explicitly as void functions named ``finalize``:
+
+.. code-block:: das
 
     class Foo {
         ...
@@ -78,7 +88,9 @@ Finalizers can be defined explicitly as void functions named ``finalize``::
         }
     }
 
-An alternative syntax for finalizers is::
+An alternative syntax for finalizers is:
+
+.. code-block:: das
 
     class Foo {
         ...
@@ -89,7 +101,9 @@ An alternative syntax for finalizers is::
 
 There are no guarantees that a finalizer is called implicitly (see :ref:`Finalizers <finalizers>`).
 
-Derived classes need to override methods explicitly, using the ``override`` keyword::
+Derived classes need to override methods explicitly, using the ``override`` keyword:
+
+.. code-block:: das
 
     class Foo3D : Foo {
         z : int = 13
@@ -107,7 +121,9 @@ Derived classes need to override methods explicitly, using the ``override`` keyw
 Calling Parent Methods
 ----------------------------
 
-Inside a derived class, ``super()`` calls the parent class constructor::
+Inside a derived class, ``super()`` calls the parent class constructor:
+
+.. code-block:: das
 
     class Derived : Base {
         def Derived {
@@ -116,7 +132,9 @@ Inside a derived class, ``super()`` calls the parent class constructor::
         }
     }
 
-``super.method(args)`` calls a specific parent method, bypassing the virtual dispatch::
+``super.method(args)`` calls a specific parent method, bypassing the virtual dispatch:
+
+.. code-block:: das
 
     class Derived : Base {
         def override process(x : int) {
@@ -131,11 +149,15 @@ Both forms are rewritten by the compiler into explicit calls to the parent class
 The option ``always_call_super`` can be enabled to require ``super()`` in every constructor
 (see :ref:`Options <options>`).
 
-Alternatively, the parent's method can be called directly using the backtick syntax::
+Alternatively, the parent's method can be called directly using the backtick syntax:
+
+.. code-block:: das
 
     Foo`set(self, X, Y)         // equivalent to super.set(X, Y) from within Foo3D
 
-Classes can define abstract methods using the ``abstract`` keyword::
+Classes can define abstract methods using the ``abstract`` keyword:
+
+.. code-block:: das
 
     class FooAbstract {
         def abstract set(X,Y:int) : void             // inline method
@@ -144,7 +166,9 @@ Classes can define abstract methods using the ``abstract`` keyword::
 Abstract method declarations must be fully qualified, including their return type.
 Class member functions are inferred in the same manner as regular functions.
 
-Sealed functions cannot be overridden. The ``sealed`` keyword is used to prevent overriding::
+Sealed functions cannot be overridden. The ``sealed`` keyword is used to prevent overriding:
+
+.. code-block:: das
 
     class Foo3D : Foo {
         def sealed set(X,Y:int ) { // subclasses of Foo3D can no longer override this method
@@ -152,14 +176,18 @@ Sealed functions cannot be overridden. The ``sealed`` keyword is used to prevent
         }
     }
 
-Sealed classes can not be inherited from. The ``sealed`` keyword is used to prevent inheritance::
+Sealed classes can not be inherited from. The ``sealed`` keyword is used to prevent inheritance:
+
+.. code-block:: das
 
     class sealed Foo3D : Foo        // Foo3D can no longer be inherited from
         ...
 
 A pointer named ``self`` is available inside any class method.
 Because the method body is wrapped in ``with(self)``, all fields and methods
-can be accessed directly — ``self.`` is not required::
+can be accessed directly — ``self.`` is not required:
+
+.. code-block:: das
 
     class Foo {
         x : int
@@ -168,29 +196,41 @@ can be accessed directly — ``self.`` is not required::
         }
     }
 
-Classes can be created via the ``new`` operator::
+Classes can be created via the ``new`` operator:
+
+.. code-block:: das
 
     var f = new Foo()
 
-Local class variables are unsafe::
+Local class variables are unsafe:
+
+.. code-block:: das
 
     unsafe {
         var f = Foo()       // unsafe
     }
 
-Class methods can be invoked using ``.`` syntax::
+Class methods can be invoked using ``.`` syntax:
+
+.. code-block:: das
 
     f.set(1,2)
 
-The ``->`` operator can also be used::
+The ``->`` operator can also be used:
+
+.. code-block:: das
 
     f->set(1,2)
 
-A specific version of the method can also be called explicitly::
+A specific version of the method can also be called explicitly:
+
+.. code-block:: das
 
     Foo`set(*f,1,2)
 
-Class methods can be constant::
+Class methods can be constant:
+
+.. code-block:: das
 
     class Foo {
         dir : float3
@@ -199,7 +239,9 @@ Class methods can be constant::
         }
     }
 
-Class methods can be operators::
+Class methods can be operators:
+
+.. code-block:: das
 
     class Foo {
         dir : float3
@@ -220,7 +262,9 @@ Class methods can be operators::
         }
     }
 
-Class fields can be declared static, i.e. shared between all instances of the class::
+Class fields can be declared static, i.e. shared between all instances of the class:
+
+.. code-block:: das
 
     class Foo {
         static count : int = 0
@@ -232,7 +276,9 @@ Class fields can be declared static, i.e. shared between all instances of the cl
         }
     }
 
-Class methods can be declared static. Static methods don't have access to 'self' but can access static fields::
+Class methods can be declared static. Static methods don't have access to 'self' but can access static fields:
+
+    .. code-block:: das
 
         class Foo {
             static count : int = 0
@@ -248,7 +294,9 @@ Runtime Type Checking (is)
 ----------------------------
 
 The ``is`` operator checks whether a class instance is of a given type or any type derived
-from it. This requires the ``daslib/dynamic_cast_rtti`` module::
+from it. This requires the ``daslib/dynamic_cast_rtti`` module:
+
+.. code-block:: das
 
     require daslib/dynamic_cast_rtti
 
@@ -284,13 +332,17 @@ Type Casting (as, ?as)
 The ``as`` and ``?as`` operators cast a class pointer to a more specific type.
 These also require ``daslib/dynamic_cast_rtti``.
 
-``as`` performs a forced cast — it panics if the cast fails::
+``as`` performs a forced cast — it panics if the cast fails:
+
+.. code-block:: das
 
     var a : Animal? = new Dog()
     var d = a as Dog            // succeeds: a is a Dog
     d.speak()                   // "woof"
 
-``?as`` performs a safe cast — it returns ``null`` if the cast fails::
+``?as`` performs a safe cast — it returns ``null`` if the cast fails:
+
+.. code-block:: das
 
     var a : Animal? = new Dog()
     var c = a ?as Cat           // returns null: a is not a Cat
@@ -309,7 +361,9 @@ Class Templates
 ----------------------------
 
 A ``class template`` declaration creates a parameterized class pattern. Template classes are
-not instantiated directly — they serve as blueprints for code generation via macros::
+not instantiated directly — they serve as blueprints for code generation via macros:
+
+.. code-block:: das
 
     [template_structure(KeyType, ValueType)]
     class template TCache {
@@ -350,7 +404,9 @@ Methods defined with ``[class_method]`` are called using dot syntax: ``obj.metho
 ``def static`` — mutable method
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The ``self`` parameter is mutable, so the method can modify fields::
+The ``self`` parameter is mutable, so the method can modify fields:
+
+.. code-block:: das
 
     require daslib/class_boost
 
@@ -371,7 +427,9 @@ The ``self`` parameter is mutable, so the method can modify fields::
 ``def static const`` — const method
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The ``self`` parameter is const, so the method cannot modify fields::
+The ``self`` parameter is const, so the method cannot modify fields:
+
+.. code-block:: das
 
     struct Counter {
         ...
@@ -387,7 +445,9 @@ The ``self`` parameter is const, so the method cannot modify fields::
 When both a const and a non-const overload of the same method are needed, use
 ``[explicit_const_class_method]`` instead of ``[class_method]``. This is common for
 methods like ``foreach`` or ``operator []`` that should work on both mutable and
-immutable instances::
+immutable instances:
+
+.. code-block:: das
 
     require daslib/class_boost
 
@@ -445,7 +505,9 @@ Complete ``[class_method]`` example
         print("after reset = {c.get_value()}\n")
     }
 
-Expected output::
+Expected output:
+
+.. code-block:: text
 
     value = 11
     after reset = 0
@@ -455,7 +517,9 @@ Stack-Allocated Classes (using)
 -------------------------------
 
 The ``using`` construct creates a stack-allocated handle instance that is automatically
-finalized at the end of the scope::
+finalized at the end of the scope:
+
+.. code-block:: das
 
     using() <| $(var s : das_string) {
         s := "hello"
@@ -472,7 +536,9 @@ Complete Example
 ----------------
 
 Here is a complete example demonstrating inheritance, abstract methods, custom initializers,
-and virtual dispatch::
+and virtual dispatch:
+
+.. code-block:: das
 
     class Shape {
         name : string
@@ -522,7 +588,9 @@ and virtual dispatch::
         }
     }
 
-Expected output::
+Expected output:
+
+.. code-block:: text
 
     Circle: area = 78.53975
     Rectangle: area = 12
@@ -533,7 +601,9 @@ Implementation details
 
 Class initializers are generated by adding a local ``self`` variable with ``construct`` syntax.
 The body of the method is prefixed via a ``with self`` expression.
-The final expression is a ``return <- self``::
+The final expression is a ``return <- self``:
+
+.. code-block:: das
 
     def Foo ( X:int const; Y:int const ) : Foo {
         var self:Foo <- Foo(uninitialized)
@@ -544,7 +614,9 @@ The final expression is a ``return <- self``::
     }
 
 Class methods and finalizers are generated by providing the extra argument ``self``.
-The body of the method is prefixed with a ``with self`` expression::
+The body of the method is prefixed with a ``with self`` expression:
+
+.. code-block:: das
 
     def Foo3D`set ( var self:Foo3D; X:int const; Y:int const ) {
         with ( self ) {
@@ -553,12 +625,16 @@ The body of the method is prefixed with a ``with self`` expression::
         }
     }
 
-Calling virtual methods is implemented via invoke::
+Calling virtual methods is implemented via invoke:
+
+.. code-block:: das
 
     invoke(f3d.set,cast<Foo> f3d,1,2)
 
 Every base class gets an ``__rtti`` pointer, and a ``__finalize`` function pointer.
-Additionally, a function pointer is added for each member function::
+Additionally, a function pointer is added for each member function:
+
+.. code-block:: das
 
     class Foo {
         __rtti : void? = typeinfo(rtti_classinfo type<Foo>)
@@ -569,7 +645,9 @@ Additionally, a function pointer is added for each member function::
     }
 
 ``__rtti`` contains rtti::TypeInfo for the specific class instance.
-There is helper function in the rtti module to access class_info safely::
+There is helper function in the rtti module to access class_info safely:
+
+.. code-block:: das
 
     def class_info ( cl ) : StructInfo const?
 

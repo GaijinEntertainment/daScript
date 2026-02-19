@@ -16,11 +16,15 @@ function utilities including ``filter``, ``map``, ``reduce``, ``fold``,
 
 See :ref:`tutorial_functional` for a hands-on tutorial.
 
-All functions and symbols are in "functional" module, use require to get access to it. ::
+All functions and symbols are in "functional" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/functional
 
-Example: ::
+Example:
+
+.. code-block:: das
 
     require daslib/functional
 

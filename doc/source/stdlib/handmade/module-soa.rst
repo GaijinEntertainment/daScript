@@ -3,6 +3,8 @@ into structure-of-arrays layouts for better cache performance. It provides macro
 that generate parallel arrays for each field of a structure, enabling SIMD-friendly
 data access patterns.
 
-All functions and symbols are in "soa" module, use require to get access to it. ::
+All functions and symbols are in "soa" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/soa

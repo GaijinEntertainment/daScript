@@ -14,7 +14,9 @@ Said functions are *instantiated* for specific types of arguments on the first c
 There are also ways to inspect the types of the provided arguments, in order to change the behavior of a function, or to provide meaningful errors during the compilation phase.
 
 Unlike C++ with its SFINAE, you can use common conditionals (if) in order to change the instance of the function depending on the type info of its arguments.
-Consider the following example::
+Consider the following example:
+
+.. code-block:: das
 
     def setSomeField(var obj; val) {
         if ( typeinfo has_field<someField>(obj) ) {
@@ -24,7 +26,9 @@ Consider the following example::
 
 This function sets ``someField`` in the provided argument *if* it is a struct with a ``someField`` member.
 
-We can do even more.  For example::
+We can do even more.  For example:
+
+.. code-block:: das
 
     def setSomeField(var obj; val: auto(valT)) {
         if ( typeinfo has_field<someField>(obj) ) {
@@ -42,7 +46,9 @@ typeinfo
 The ``typeinfo`` operator provides compile-time type reflection.
 It is the primary mechanism for inspecting types in generic functions.
 
-All ``typeinfo`` traits can operate on either an expression or a ``type<T>`` argument::
+All ``typeinfo`` traits can operate on either an expression or a ``type<T>`` argument:
+
+.. code-block:: das
 
     typeinfo(sizeof type<float3>)       // 12
     typeinfo(typename my_variable)      // type name of the variable
@@ -146,49 +152,65 @@ allowing user-defined typeinfo extensions (e.g., ``ast_typedecl``).
 auto and auto(named)
 --------------------
 
-Instead of omitting the type name in a generic, it is possible to use an explicit ``auto`` type or ``auto(name)`` to type it::
+Instead of omitting the type name in a generic, it is possible to use an explicit ``auto`` type or ``auto(name)`` to type it:
+
+.. code-block:: das
 
     def fn(a: auto): auto {
         return a
     }
 
-or ::
+or
+
+.. code-block:: das
 
     def fn(a: auto(some_name)): some_name {
         return a
     }
 
-This is the same as::
+This is the same as:
+
+.. code-block:: das
 
     def fn(a) {
         return a
     }
 
-This is very helpful if the function accepts numerous arguments, and some of them have to be of the same type::
+This is very helpful if the function accepts numerous arguments, and some of them have to be of the same type:
+
+.. code-block:: das
 
     def fn(a, b) { // a and b can be of different types
         return a + b
     }
 
-This is not the same as::
+This is not the same as:
+
+.. code-block:: das
 
     def fn(a, b: auto) { // a and b are one type
         return a + b
     }
 
-Also, consider the following::
+Also, consider the following:
+
+.. code-block:: das
 
     def set0(a, b; index: int) { // a is only supposed to be of array type, of same type as b
         return a[index] = b
     }
 
-If you call this function with an array of floats and an int, you would get a not-so-obvious compiler error message::
+If you call this function with an array of floats and an int, you would get a not-so-obvious compiler error message:
+
+.. code-block:: das
 
     def set0(a: array<auto(some)>; b: some; index: int) { // a is of array type, of same type as b
         return a[index] = b
     }
 
-Usage of named ``auto`` with ``typeinfo`` ::
+Usage of named ``auto`` with ``typeinfo``
+
+.. code-block:: das
 
     def fn(a: auto(some)) {
         print(typeinfo typename(type<some>))
@@ -196,7 +218,9 @@ Usage of named ``auto`` with ``typeinfo`` ::
 
     fn(1) // print "const int"
 
-You can also modify the type with delete syntax::
+You can also modify the type with delete syntax:
+
+.. code-block:: das
 
     def fn(a: auto(some)) {
         print(typeinfo typename(type<some -const>))
@@ -209,49 +233,69 @@ type contracts and type operations
 
 Generic function arguments, result, and inferred type aliases can be operated on during the inference.
 
-``const`` specifies, that constant and regular expressions will be matched::
+``const`` specifies, that constant and regular expressions will be matched:
+
+.. code-block:: das
 
     def foo ( a : Foo const )   // accepts Foo and Foo const
 
-``==const`` specifies, that const of the expression has to match const of the argument::
+``==const`` specifies, that const of the expression has to match const of the argument:
+
+.. code-block:: das
 
     def foo ( a : Foo const ==const )   // accepts Foo const only
     def foo ( var a : Foo ==const )     // accepts Foo only
 
-``-const`` will remove const from the matching type::
+``-const`` will remove const from the matching type:
+
+.. code-block:: das
 
     def foo ( a : array<auto -const> )  // matches any array, with non-const elements
 
-``#`` specifies that only temporary types are accepted::
+``#`` specifies that only temporary types are accepted:
+
+.. code-block:: das
 
     def foo ( a : Foo# )    // accepts Foo# only
 
-``-#`` will remove temporary type from the matching type::
+``-#`` will remove temporary type from the matching type:
+
+.. code-block:: das
 
     def foo ( a : auto(TT) ) {      // accepts any type
         var temp : TT -# := a       // TT -# is now a regular type, and when `a` is temporary, it can clone it into `temp`
     }
 
-``&`` specifies that argument is passed by reference::
+``&`` specifies that argument is passed by reference:
+
+.. code-block:: das
 
     def foo ( a : auto& )           // accepts any type, passed by reference
 
-``==&`` specifies that reference of the expression has to match reference of the argument::
+``==&`` specifies that reference of the expression has to match reference of the argument:
+
+.. code-block:: das
 
     def foo ( a : auto& ==& )   // accepts any type, passed by reference (for example variable i, even if its integer)
     def foo ( a : auto ==& )    // accepts any type, passed by value     (for example value 3)
 
-``-&`` will remove reference from the matching type::
+``-&`` will remove reference from the matching type:
+
+.. code-block:: das
 
     def foo ( a : auto(TT)& ) {     // accepts any type, passed by reference
         var temp : TT -& = a        // TT -& is not a local reference
     }
 
-``[]`` specifies that the argument is a static array of arbitrary dimension::
+``[]`` specifies that the argument is a static array of arbitrary dimension:
+
+.. code-block:: das
 
     def foo ( a : auto[] )          // accepts static array of any type of any size
 
-``-[]`` will remove static array dimension from the matching type::
+``-[]`` will remove static array dimension from the matching type:
+
+.. code-block:: das
 
     def take_dim( a : auto(TT) ) {
         var temp : TT -[]           // temp is type of element of a
@@ -259,12 +303,16 @@ Generic function arguments, result, and inferred type aliases can be operated on
     // if a is int[10] temp is int
     // if a is int[10][20][30] temp is still int
 
-``implicit`` specifies that both temporary and regular types can be matched, but the type will be treated as specified. ``implicit`` is _UNSAFE_::
+``implicit`` specifies that both temporary and regular types can be matched, but the type will be treated as specified. ``implicit`` is _UNSAFE_:
+
+.. code-block:: das
 
     def foo ( a : Foo implicit )    // accepts Foo and Foo#, a will be treated as Foo
     def foo ( a : Foo# implicit )   // accepts Foo and Foo#, a will be treated as Foo#
 
-``explicit`` specifies that LSP will not be applied, and only exact type match will be accepted::
+``explicit`` specifies that LSP will not be applied, and only exact type match will be accepted:
+
+.. code-block:: das
 
     def foo ( a : Foo )             // accepts Foo and any type that is inherited from Foo directly or indirectly
     def foo ( a : Foo explicit )    // accepts Foo only
@@ -272,17 +320,23 @@ Generic function arguments, result, and inferred type aliases can be operated on
 options
 -------
 
-Multiple options can be specified as a function argument::
+Multiple options can be specified as a function argument:
+
+.. code-block:: das
 
     def foo ( a : int | float )   // accepts int or float
 
 Optional types always make function generic.
 
-Generic options will be matched in the order listed::
+Generic options will be matched in the order listed:
+
+.. code-block:: das
 
     def foo ( a : Bar explicit | Foo )   // first will try to match exactly Bar, than anything else inherited from Foo
 
-``|#`` shortcat matches previous type, with temporary flipped::
+``|#`` shortcat matches previous type, with temporary flipped:
+
+.. code-block:: das
 
     def foo ( a : Foo |# )   // accepts Foo and Foo# in that order
     def foo ( a : Foo# |# )  // accepts Foo# and Foo in that order
@@ -290,7 +344,9 @@ Generic options will be matched in the order listed::
 typedecl
 --------
 
-Consider the following example::
+Consider the following example:
+
+.. code-block:: das
 
     struct A {
         id : string
@@ -313,7 +369,9 @@ Consider the following example::
         print("{typeinfo typename(bTable)}\n")
     }
 
-Expected output::
+Expected output:
+
+.. code-block:: text
 
     table<string const;A const>
     table<int const;B const>
@@ -324,7 +382,9 @@ This feature allows to create types based on the provided expression type.
 generic tuples and type<> expressions
 -------------------------------------
 
-Consider the following example::
+Consider the following example:
+
+.. code-block:: das
 
     tuple Handle {
         h : auto(HandleType)
@@ -346,7 +406,9 @@ Consider the following example::
         take_handle(h)
     }
 
-Expected output::
+Expected output:
+
+.. code-block:: text
 
     count = 0 of type int const
 

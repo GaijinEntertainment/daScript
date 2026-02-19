@@ -5,7 +5,9 @@ Values and Data Types
 =====================
 
 Daslang is a strong, statically typed language.  All variables have a type.
-Daslang's basic POD (plain old data) data types are::
+Daslang's basic POD (plain old data) data types are:
+
+.. code-block:: das
 
     int, uint, float, bool, double, int64, uint64
     int2, int3, int4, uint2, uint3, uint4, float2, float3, float4,
@@ -13,13 +15,17 @@ Daslang's basic POD (plain old data) data types are::
 
 All PODs are represented with machine register/word. All PODs are passed to functions by value.
 
-Daslang's storage types are::
+Daslang's storage types are:
+
+.. code-block:: das
 
     int8, uint8, int16, uint16 - 8/16-bits signed and unsigned integers
 
 They can't be manipulated, but can be used as storage type within structs, classes, etc.
 
-Daslang's other types are::
+Daslang's other types are:
+
+.. code-block:: das
 
     string, das_string, struct, pointers, references, block, lambda, function pointer,
     array, table, tuple, variant, iterator, bitfield
@@ -33,7 +39,9 @@ All Daslang's types are initialized with zeroed memory by default.
 Integer
 --------
 
-An integer represents a 32-bit (un)signed number::
+An integer represents a 32-bit (un)signed number:
+
+.. code-block:: das
 
     let a = 123    // decimal, integer
     let u = 123u   // decimal, unsigned integer
@@ -47,7 +55,9 @@ An integer represents a 32-bit (un)signed number::
 Float
 --------
 
-A float represents a 32-bit floating point number::
+A float represents a 32-bit floating point number:
+
+.. code-block:: das
 
     let a = 1.0
     let b = 0.234
@@ -59,7 +69,9 @@ Bool
 
 A bool is a double-valued (Boolean) data type. Its literals are ``true``
 and ``false``. A bool value expresses the validity of a condition
-(tells whether the condition is true or false)::
+(tells whether the condition is true or false):
+
+.. code-block:: das
 
     let a = true
     let b = false
@@ -77,7 +89,9 @@ Daslang's strings are similar to strings in C or C++.  They are
 delimited by quotation marks(``"``) and can contain escape
 sequences (``\t``, ``\a``, ``\b``, ``\n``, ``\r``, ``\v``, ``\f``,
 ``\\``, ``\"``, ``\'``, ``\0``, ``\x<hh>``, ``\u<hhhh>`` and
-``\U<hhhhhhhh>``)::
+``\U<hhhhhhhh>``):
+
+.. code-block:: das
 
     let a = "I'm a string\n"
     let a = "I'm also
@@ -102,7 +116,9 @@ Type Conversion and Casting
 
 Daslang is a strongly typed language with **no implicit type conversions**.
 All numeric operations require operands of the same type — for example, ``int + float``
-is a compilation error.  You must convert explicitly::
+is a compilation error.  You must convert explicitly:
+
+.. code-block:: das
 
     let i = 42
     let f = float(i) + 1.0     // explicit int -> float
@@ -112,7 +128,9 @@ Explicit numeric casts
 ^^^^^^^^^^^^^^^^^^^^^^
 
 Any numeric type can be explicitly converted to any other numeric type using
-the target type name as a function::
+the target type name as a function:
+
+.. code-block:: das
 
     float(42)           // int -> float              (42.0)
     int(3.7)            // float -> int, truncates   (3)
@@ -131,7 +149,9 @@ Float-to-integer conversion truncates toward zero (like C).
 Enumeration casts
 ^^^^^^^^^^^^^^^^^
 
-Enumerations can be converted to their underlying integer type::
+Enumerations can be converted to their underlying integer type:
+
+.. code-block:: das
 
     enum Color {
         red
@@ -142,7 +162,9 @@ Enumerations can be converted to their underlying integer type::
     let c = Color.green
     let i = int(c)              // 1
 
-Converting an integer back to an enumeration requires ``unsafe`` and ``reinterpret``::
+Converting an integer back to an enumeration requires ``unsafe`` and ``reinterpret``:
+
+.. code-block:: das
 
     unsafe {
         let c2 = reinterpret<Color>(1)  // Color.green
@@ -151,14 +173,18 @@ Converting an integer back to an enumeration requires ``unsafe`` and ``reinterpr
 String conversion
 ^^^^^^^^^^^^^^^^^
 
-Any type can be converted to a string via the ``string`` function::
+Any type can be converted to a string via the ``string`` function:
+
+.. code-block:: das
 
     let s = string(42)          // "42"
     let s2 = string(3.14)      // "3.14"
 
 String interpolation (``{expr}`` inside string literals) also converts expressions to text automatically.
 
-To parse strings into numbers, use the functions from ``require strings``::
+To parse strings into numbers, use the functions from ``require strings``:
+
+.. code-block:: das
 
     require strings
     let i = to_int("123")       // 123
@@ -178,7 +204,9 @@ What is NOT allowed
 Table
 --------
 
-Tables are associative containers implemented as a set of key/value pairs::
+Tables are associative containers implemented as a set of key/value pairs:
+
+.. code-block:: das
 
     var tab: table<string; int>
     tab["10"] = 10
@@ -192,7 +220,9 @@ Tables are associative containers implemented as a set of key/value pairs::
 Array
 --------
 
-Arrays are simple sequences of objects. There are static arrays (fixed size) and dynamic arrays (container, size is dynamic).  The index always starts from 0::
+Arrays are simple sequences of objects. There are static arrays (fixed size) and dynamic arrays (container, size is dynamic).  The index always starts from 0:
+
+.. code-block:: das
 
     var a = fixed_array(1, 2, 3, 4) // fixed size of array is 4, and content is [1, 2, 3, 4]
     var b: array<string>            // empty dynamic array
@@ -257,13 +287,17 @@ as well as binary logical operations.
 Function
 --------
 
-Functions are similar to those in most other languages::
+Functions are similar to those in most other languages:
+
+.. code-block:: das
 
     def twice(a: int): int {
         return a + a
     }
 
-However, there are generic (templated) functions, which will be 'instantiated' during function calls by type inference::
+However, there are generic (templated) functions, which will be 'instantiated' during function calls by type inference:
+
+.. code-block:: das
 
     def twice(a) {
         return a + a
@@ -278,7 +312,9 @@ However, there are generic (templated) functions, which will be 'instantiated' d
 Reference
 --------------
 
-References are types that 'reference' (point to) some other data::
+References are types that 'reference' (point to) some other data:
+
+.. code-block:: das
 
     def twice(var a: int&) {
         a = a + a
@@ -323,7 +359,9 @@ Smart pointers (``smart_ptr<T>``) are reference-counted pointers to C++-managed 
 They are **not** available for regular Daslang structs or classes — only for types registered
 as handled types from the C++ side (such as AST node types in ``daslib/ast``).
 
-Smart pointers are primarily used in the macro and AST manipulation context::
+Smart pointers are primarily used in the macro and AST manipulation context:
+
+.. code-block:: das
 
     require ast
 
@@ -337,7 +375,9 @@ The key properties of smart pointers:
 * Moving from a smart pointer value requires ``unsafe`` unless the value is a ``new`` expression
 
 Because ``strict_smart_pointers`` is enabled by default, smart pointer variables must be
-declared with ``inscope`` to ensure automatic cleanup::
+declared with ``inscope`` to ensure automatic cleanup:
+
+.. code-block:: das
 
     var inscope a <- new ExprConstInt(value=1)   // create — safe, no unsafe needed
     var inscope b <- a                           // move — safe, a becomes null
@@ -355,7 +395,9 @@ already hold a value:
 ``move(dest, src)``
     Transfers ownership from ``src`` into ``dest``. If ``dest`` already holds a value,
     its reference count is decremented. After the call, ``src`` becomes null.
-    Both arguments must be existing smart pointer variables::
+    Both arguments must be existing smart pointer variables:
+
+    .. code-block:: das
 
         var inscope a <- new ExprConstInt(value=1)
         var inscope b <- new ExprConstInt(value=2)
@@ -364,12 +406,16 @@ already hold a value:
 ``move_new(dest, src)``
     Transfers ownership from a newly created smart pointer into ``dest``. If ``dest``
     already holds a value, its reference count is decremented. This is the idiomatic
-    way to replace the contents of a smart pointer field or variable::
+    way to replace the contents of a smart pointer field or variable:
+
+    .. code-block:: das
 
         var inscope fn <- find_function("foo")
         fn |> move_new <| new Function(name := "bar")   // fn now holds the new Function
 
-    It can also be called in function-call style::
+    It can also be called in function-call style:
+
+    .. code-block:: das
 
         move_new(fn) <| new Function(name := "bar")
 

@@ -17,7 +17,9 @@ Reification is implemented in daslib/templates_boost.
 Simple example
 --------------
 
-Let's review the following example::
+Let's review the following example:
+
+.. code-block:: das
 
     var foo = "foo"
     var fun <- qmacro_function("madd") <| $ ( a, b ) {
@@ -25,7 +27,9 @@ Let's review the following example::
     }
     print(describe(fun))
 
-The output would be::
+The output would be:
+
+.. code-block:: text
 
     def public madd (  a:auto const;  b:auto const ) : auto {
         return (foo * a) + b
@@ -45,12 +49,16 @@ Instead, an ast tree is generated and operated on.
 qmacro
 ^^^^^^
 
-``qmacro`` is the simplest reification. The input is returned as is, after escape sequences are resolved::
+``qmacro`` is the simplest reification. The input is returned as is, after escape sequences are resolved:
+
+.. code-block:: das
 
     var expr <- qmacro(2+2)
     print(describe(expr))
 
-prints::
+prints:
+
+.. code-block:: text
 
     (2+2)
 
@@ -58,13 +66,17 @@ qmacro_block
 ^^^^^^^^^^^^
 
 ``qmacro_block`` takes a block as an input and returns unquoted block. To illustrate the difference between ``qmacro`` and ``qmacro_block``,
-let's review the following example::
+let's review the following example:
+
+.. code-block:: das
 
     var blk1 <- qmacro <| $ ( a, b ) { return a+b; }
     var blk2 <- qmacro_block <| $ ( a, b ) { return a+b; }
     print("{blk1.__rtti}\n{blk2.__rtti}\n")
 
-The output would be::
+The output would be:
+
+.. code-block:: text
 
     ExprMakeBlock
     ExprBlock
@@ -76,14 +88,18 @@ qmacro_expr
 
 ``qmacro_expr`` takes a block with a single expression as an input and returns that expression as the result.
 Certain expressions like ``return`` and such can't be an argument to a call, so they can't be passed to ``qmacro`` directly.
-The work around is to pass them as first line of a block::
+The work around is to pass them as first line of a block:
+
+.. code-block:: das
 
     var expr <- qmacro_block() {
         return 13
     }
     print(describe(expr))
 
-prints::
+prints:
+
+.. code-block:: text
 
     return 13
 
@@ -91,14 +107,18 @@ qmacro_type
 ^^^^^^^^^^^
 
 ``qmacro_type`` takes a type expression (type<...>) as an input and returns the subtype as a TypeDeclPtr, after resolving the escape sequences.
-Consider the following example::
+Consider the following example:
+
+.. code-block:: das
 
     var foo <- typeinfo ast_typedecl(type<int>)
     var typ <- qmacro_type <| type<$t(foo)?>
     print(describe(typ))
 
 TypeDeclPtr foo is passed as a reification sequence to ``qmacro_type``, and a new pointer type is generated.
-The output is::
+The output is:
+
+.. code-block:: text
 
     int?
 
@@ -112,12 +132,16 @@ qmacro_variable
 ^^^^^^^^^^^^^^^
 
 ``qmacro_variable`` takes a variable name and type expression as an input, and returns the variable as a VariableDeclPtr,
-after resolving the escape sequences::
+after resolving the escape sequences:
+
+.. code-block:: das
 
     var vdecl <- qmacro_variable("foo", type<int>)
     print(describe(vdecl))
 
-prints::
+prints:
+
+.. code-block:: text
 
     foo:int
 
@@ -131,7 +155,9 @@ $i(ident)
 ^^^^^^^^^
 
 ``$i`` takes a ``string`` or ``das_string`` as an argument and substitutes it with an identifier.
-An identifier can be substituted for the variable name in both the variable declaration and use::
+An identifier can be substituted for the variable name in both the variable declaration and use:
+
+.. code-block:: das
 
     var bus = "bus"
     var qb <- qmacro_block() {
@@ -140,7 +166,9 @@ An identifier can be substituted for the variable name in both the variable decl
     }
     print(describe(qb))
 
-prints::
+prints:
+
+.. code-block:: text
 
 	let  bus:auto const = "busbus"
 	let  t:auto const = bus
@@ -148,7 +176,9 @@ prints::
 $f(field-name)
 ^^^^^^^^^^^^^^
 
-``$f`` takes a ``string`` or ``das_string`` as an argument and substitutes it with a field name::
+``$f`` takes a ``string`` or ``das_string`` as an argument and substitutes it with a field name:
+
+.. code-block:: das
 
     var bar = "fieldname"
     var blk <- qmacro_block() {
@@ -156,7 +186,9 @@ $f(field-name)
     }
     print(describe(blk))
 
-prints::
+prints:
+
+.. code-block:: text
 
     foo.fieldname = 13
 
@@ -165,13 +197,17 @@ $v(value)
 
 ``$v`` takes any value as an argument and substitutes it with an expression which generates that value.
 The value does not have to be a constant expression, but the expression will be evaluated before its substituted.
-Appropriate ``make`` infrastructure will be generated::
+Appropriate ``make`` infrastructure will be generated:
+
+.. code-block:: das
 
     var t = (1,2.,"3")
     var expr <- qmacro($v(t))
     print(describe(expr))
 
-prints::
+prints:
+
+.. code-block:: text
 
     (1,2f,"3")
 
@@ -180,7 +216,9 @@ In the example above, a tuple is substituted with the expression that generates 
 $e(expression)
 ^^^^^^^^^^^^^^
 
-``$e`` takes any expression as an argument in form of an ``ExpressionPtr``. The expression will be substituted as-is::
+``$e`` takes any expression as an argument in form of an ``ExpressionPtr``. The expression will be substituted as-is:
+
+.. code-block:: das
 
     var expr <- quote(2+2)
     var qb <- qmacro_block() {
@@ -188,7 +226,9 @@ $e(expression)
     }
     print(describe(qb))
 
-prints::
+prints:
+
+.. code-block:: text
 
     let foo:auto const = (2 + 2)
 
@@ -196,7 +236,9 @@ $b(array-of-expr)
 ^^^^^^^^^^^^^^^^^
 
 ``$b`` takes an ``array<ExpressionPtr>`` or ``das::vector<ExpressionPtr>`` aka ``dasvector`smart_ptr`Expression`` as an argument
-and is replaced with each expression from the input array in sequential order::
+and is replaced with each expression from the input array in sequential order:
+
+.. code-block:: das
 
     var qqblk : array<ExpressionPtr>
     for ( i in range(3) ) {
@@ -207,7 +249,9 @@ and is replaced with each expression from the input array in sequential order::
     }
     print(describe(blk))
 
-prints::
+prints:
+
+.. code-block:: text
 
     print(string_builder(0, "\n"))
     print(string_builder(1, "\n"))
@@ -217,19 +261,25 @@ $a(arguments)
 ^^^^^^^^^^^^^
 
 ``$a`` takes an ``array<ExpressionPtr>`` or ``das::vector<ExpressionPtr>`` aka ``dasvector`smart_ptr`Expression`` as an argument
-and replaces call arguments with each expression from the input array in sequential order::
+and replaces call arguments with each expression from the input array in sequential order:
+
+.. code-block:: das
 
     var arguments <- [quote(1+2); quote("foo")]
     var blk <- qmacro <| somefunnycall(1,$a(arguments),2)
     print(describe(blk))
 
-prints::
+prints:
+
+.. code-block:: text
 
     somefunnycall(1,1 + 2,"foo",2)
 
 Note how the other arguments of the function are preserved, and multiple arguments can be substituted at the same time.
 
-Arguments can be substituted in the function declaration itself. In that case $a expects ``array<VariablePtr>``::
+Arguments can be substituted in the function declaration itself. In that case $a expects ``array<VariablePtr>``:
+
+.. code-block:: das
 
     var foo <- [
         new Variable(name:="v1", _type<-qmacro_type(type<int>)),
@@ -240,7 +290,9 @@ Arguments can be substituted in the function declaration itself. In that case $a
     }
     print(describe(fun))
 
-prints::
+prints:
+
+.. code-block:: text
 
     def public add ( a:int const; var v1:int; var v2:float = 1.2f; b:int const ) : int {
         return a + b
@@ -250,7 +302,9 @@ $t(type)
 ^^^^^^^^
 
 ``$t`` takes a ``TypeDeclPtr`` as an input and substitutes it with the type expression.
-In the following example::
+In the following example:
+
+.. code-block:: das
 
     var subtype <- typeinfo ast_typedecl(type<int>)
     var blk <- qmacro_block() {
@@ -258,20 +312,26 @@ In the following example::
     }
     print(describe(blk))
 
-we create pointer to a subtype::
+we create pointer to a subtype:
+
+.. code-block:: das
 
     var a:int? -const
 
 $c(call-name)
 ^^^^^^^^^^^^^
 
-``$c`` takes a ``string`` or ``das_string`` as an input, and substitutes the call expression name::
+``$c`` takes a ``string`` or ``das_string`` as an input, and substitutes the call expression name:
+
+.. code-block:: das
 
     var cll = "somefunnycall"
     var blk <- qmacro ( $c(cll)(1,2) )
     print(describe(blk))
 
-prints::
+prints:
+
+.. code-block:: text
 
     somefunnycall(1,2)
 

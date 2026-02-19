@@ -3,11 +3,15 @@ that persist across function calls, similar to C ``static`` variables. The
 variable is initialized once on first call and retains its value in subsequent
 invocations.
 
-All functions and symbols are in "static_let" module, use require to get access to it. ::
+All functions and symbols are in "static_let" module, use require to get access to it.
+
+.. code-block:: das
 
     require daslib/static_let
 
-Example: ::
+Example:
+
+.. code-block:: das
 
     require daslib/static_let
 
