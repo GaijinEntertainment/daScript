@@ -516,7 +516,7 @@ The check ``expr.func._module.name == "$"`` distinguishes the builtin
 
 
 Running the visitor from lint()
-==============================
+===============================
 
 The ``lint()`` method creates the visitor, adapts it with
 ``make_visitor``, and walks the function body with ``visit()``:
@@ -730,5 +730,7 @@ Expected output::
    :download:`03_function_macro.das <../../../../../tutorials/macros/03_function_macro.das>`
 
    Previous tutorial: :ref:`tutorial_macro_when_expression`
+
+   Next tutorial: :ref:`tutorial_macro_advanced_function_macro`
 
    Language reference: :ref:`Macros <macros>` — full macro system documentation
