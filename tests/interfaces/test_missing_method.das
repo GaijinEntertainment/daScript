@@ -17,8 +17,3 @@ class Incomplete {
         pass
     }
 }
-
-[export]
-def main() {
-    pass
-}

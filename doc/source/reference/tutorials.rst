@@ -153,3 +153,4 @@ Run any tutorial from the project root::
    tutorials/macros/06_structure_macro.rst
    tutorials/macros/07_block_macro.rst
    tutorials/macros/08_variant_macro.rst
+   tutorials/macros/09_for_loop_macro.rst
