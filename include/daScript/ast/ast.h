@@ -863,6 +863,7 @@ namespace das
             return this;
         }
         FunctionPtr arg_type ( int argIndex, const TypeDeclPtr & td ) {
+            DAS_ASSERTF(!module, "cannot change argument type after function is added to module, use makeExtern/addToModule instead");
             arguments[argIndex]->type = td;
             return this;
         }
