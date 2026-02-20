@@ -84,36 +84,52 @@ extern "C" {
         return context->callWithCopyOnReturn(fn, args, cmres, nullptr);
     }
 
-    DAS_API char * jit_string_builder ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+    DAS_API char * jit_string_builder ( Context & context, int32_t nArgs, TypeInfo ** types, LineInfoArg * at, vec4f * args ) {
         StringBuilderWriter writer;
         DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
-        for ( int i=0, is=call->nArguments; i!=is; ++i ) {
-            walker.walk(args[i], call->types[i]);
-        }
+        for ( int i = 0; i < nArgs; ++i )
+            walker.walk(args[i], types[i]);
         auto length = writer.tellp();
         if ( length ) {
-            return context.allocateString(writer.c_str(), uint32_t(length),&call->debugInfo);
+            return context.allocateString(writer.c_str(), uint32_t(length), at);
         } else {
             return nullptr;
         }
     }
 
-    DAS_API char * jit_string_builder_temp ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+    DAS_API char * jit_string_builder_temp ( Context & context, int32_t nArgs, TypeInfo ** types, LineInfoArg * at, vec4f * args ) {
         StringBuilderWriter writer;
         DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
-        for ( int i=0, is=call->nArguments; i!=is; ++i ) {
-            walker.walk(args[i], call->types[i]);
-        }
+        for ( int i = 0; i < nArgs; ++i )
+            walker.walk(args[i], types[i]);
         auto length = writer.tellp();
         if ( length ) {
-            auto str = context.allocateTempString(writer.c_str(), uint32_t(length),&call->debugInfo);
-            context.freeTempString(str,&call->debugInfo);
+            auto str = context.allocateTempString(writer.c_str(), uint32_t(length), at);
+            context.freeTempString(str, at);
             return str;
         } else {
             return nullptr;
         }
     }
 
+    DAS_API void jit_simnode_interop(void *ptr, int argCount, TypeInfo **types) {
+        auto res = new(ptr) SimNode_AotInteropBase();
+        res->argumentValues = nullptr;
+        res->nArguments = argCount;
+        res->types = types;
+    }
+
+    DAS_API void jit_free_simnode_interop(SimNode_AotInteropBase *ptr) {
+        ptr->~SimNode_AotInteropBase();
+    }
+
+    DAS_API void *das_get_jit_simnode_interop() {
+        return (void *) &jit_simnode_interop;
+    }
+
+    DAS_API void *das_get_jit_free_simnode_interop() {
+        return (void *) &jit_free_simnode_interop;
+    }
 
     DAS_API void * jit_get_global_mnh ( uint64_t mnh, Context & context ) {
         return context.globals + context.globalOffsetByMangledName(mnh);
@@ -282,6 +298,36 @@ extern "C" {
         reinterpret_cast<FileInfo*>(dummy)->~FileInfo();
     }
 
+    struct JitAnnotationArgPod {
+        const char * name;
+        const char * sValue;
+        int32_t      type;
+        int32_t      iValue;  // covers bool/int/float (union bit-cast)
+    };
+
+    DAS_API void jit_initialize_varinfo_annotations ( void * varinfo_ptr, int32_t nArgs, JitAnnotationArgPod * args ) {
+        auto vi = (VarInfo *) varinfo_ptr;
+        auto aa = new AnnotationArguments();
+        aa->reserve(nArgs);
+        for ( int32_t i = 0; i < nArgs; i++ ) {
+            AnnotationArgument arg;
+            arg.type   = (Type) args[i].type;
+            arg.name   = args[i].name   ? args[i].name   : "";
+            arg.sValue = args[i].sValue ? args[i].sValue : "";
+            arg.iValue = args[i].iValue;
+            aa->push_back(std::move(arg));
+        }
+        vi->annotation_arguments = aa;
+    }
+
+    DAS_API void jit_free_varinfo_annotations ( void * varinfo_ptr ) {
+        auto vi = (VarInfo *) varinfo_ptr;
+        if ( vi->annotation_arguments ) {
+            delete (AnnotationArguments *) vi->annotation_arguments;
+            vi->annotation_arguments = nullptr;
+        }
+    }
+
     DAS_API void * jit_ast_typedecl ( uint64_t hash, Context * context, LineInfoArg * at ) {
         if ( !context->thisProgram ) context->throw_error_at(at, "can't get ast_typeinfo, no program. is 'options rtti' missing?");
         auto ti = context->thisProgram->astTypeInfo.find(hash);
@@ -325,6 +371,8 @@ extern "C" {
     void *das_get_jit_debug_line() { return (void *)&jit_debug_line; }
     void *das_get_jit_initialize_fileinfo () { return (void*)&jit_initialize_fileinfo; }
     void *das_get_jit_free_fileinfo () { return (void*)&jit_free_fileinfo; }
+    void *jit_get_initialize_varinfo_annotations () { return (void*)&jit_initialize_varinfo_annotations; }
+    void *jit_get_free_varinfo_annotations () { return (void*)&jit_free_varinfo_annotations; }
     void *das_get_jit_ast_typedecl () { return (void*)&jit_ast_typedecl; }
 
     template <typename KeyType>
@@ -533,6 +581,10 @@ extern "C" {
                 SideEffects::none, "das_get_jit_string_builder");
             addExtern<DAS_BIND_FUN(das_get_jit_string_builder_temp)>(*this, lib, "get_jit_string_builder_temp",
                 SideEffects::none, "das_get_jit_string_builder_temp");
+            addExtern<DAS_BIND_FUN(das_get_jit_simnode_interop)>(*this, lib, "get_jit_simnode_interop",
+                SideEffects::none, "das_get_jit_simnode_interop");
+            addExtern<DAS_BIND_FUN(das_get_jit_free_simnode_interop)>(*this, lib, "get_jit_free_simnode_interop",
+                SideEffects::none, "das_get_jit_free_simnode_interop");
             addExtern<DAS_BIND_FUN(das_get_jit_get_global_mnh)>(*this, lib, "get_jit_get_global_mnh",
                 SideEffects::none, "das_get_jit_get_global_mnh");
             addExtern<DAS_BIND_FUN(das_get_jit_get_shared_mnh)>(*this, lib, "get_jit_get_shared_mnh",
@@ -582,12 +634,6 @@ extern "C" {
             addExtern<DAS_BIND_FUN(das_get_builtin_function_address)>(*this, lib,  "get_builtin_function_address",
                 SideEffects::none, "das_get_builtin_function_address")
                     ->args({"fn","context","at"});
-            addExtern<DAS_BIND_FUN(das_make_interop_node)>(*this, lib,  "make_interop_node",
-                SideEffects::none, "das_make_interop_node")
-                    ->args({"ctx","call","context","at"});
-            addExtern<DAS_BIND_FUN(das_sb_make_interop_node)>(*this, lib,  "make_interop_node",
-                SideEffects::none, "das_sb_make_interop_node")
-                    ->args({"ctx","builder","context","at"});
             addExtern<DAS_BIND_FUN(das_get_jit_new)>(*this, lib,  "get_jit_new",
                 SideEffects::none, "das_get_jit_new")
                     ->args({"type","context","at"});
@@ -604,6 +650,10 @@ extern "C" {
                 SideEffects::none, "das_get_jit_initialize_fileinfo");
             addExtern<DAS_BIND_FUN(das_get_jit_free_fileinfo)>(*this, lib,  "get_jit_free_fileinfo",
                 SideEffects::none, "das_get_jit_free_fileinfo");
+            addExtern<DAS_BIND_FUN(jit_get_initialize_varinfo_annotations)>(*this, lib,  "get_initialize_varinfo_annotations",
+                SideEffects::none, "jit_get_initialize_varinfo_annotations");
+            addExtern<DAS_BIND_FUN(jit_get_free_varinfo_annotations)>(*this, lib,  "get_free_varinfo_annotations",
+                SideEffects::none, "jit_get_free_varinfo_annotations");
             addExtern<DAS_BIND_FUN(das_recreate_fileinfo_name)>(*this, lib,  "recreate_fileinfo_name",
                 SideEffects::worstDefault, "das_recreate_fileinfo_name");
             addExtern<DAS_BIND_FUN(loadDynamicLibrary)>(*this, lib,  "load_dynamic_library",
@@ -625,6 +675,7 @@ extern "C" {
                 SideEffects::worstDefault, "jit_get_jit_state")
                     ->args({"block","context","at"});
             addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));
+            addConstant<uint32_t>(*this, "SIZE_OF_SIMNODE_INTEROP", uint32_t(sizeof(SimNode_AotInteropBase)));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_EVAL_TOP", uint32_t(uint32_t(offsetof(Context, stack) + offsetof(StackAllocator, evalTop))));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_GLOBALS", uint32_t(uint32_t(offsetof(Context, globals))));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_SHARED", uint32_t(uint32_t(offsetof(Context, shared))));
