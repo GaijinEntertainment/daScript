@@ -151,4 +151,6 @@ Running the tutorial::
 
    Previous tutorial: :ref:`tutorial_macro_pass_macro`
 
+   Next tutorial: :ref:`tutorial_macro_template_type_macro`
+
    Language reference: :ref:`Macros <macros>` — full macro system documentation
