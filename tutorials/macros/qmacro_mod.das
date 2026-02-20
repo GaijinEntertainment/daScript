@@ -233,7 +233,7 @@ class BuildDemoMacro : AstCallMacro {
         // ===============================================================
 
         var inscope pair_struct_type <- add_ptr_ref(pair_type.structType)
-        var inscope method <- qmacro_method("get_tuple", pair_struct_type) $(var self : $t(pair_type) ) {
+        var inscope method <- qmacro_method("get_tuple", pair_struct_type) $(var self : $t(pair_type)) {
             return (self.first, self.second)
         }
         add_function(compiling_module(), method)
