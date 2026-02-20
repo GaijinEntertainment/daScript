@@ -159,3 +159,4 @@ Run any tutorial from the project root::
    tutorials/macros/12_typeinfo_macro.rst
    tutorials/macros/13_enumeration_macro.rst
    tutorials/macros/14_pass_macro.rst
+   tutorials/macros/15_type_macro.rst

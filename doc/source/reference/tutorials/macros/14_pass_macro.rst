@@ -353,6 +353,8 @@ The standard library uses pass macros for several purposes:
 
    Previous tutorial: :ref:`tutorial_macro_enumeration_macro`
 
+   Next tutorial: :ref:`tutorial_macro_type_macro`
+
    Standard library: ``daslib/heartbeat.das``, ``daslib/coverage.das``,
    ``daslib/lint.das``
 

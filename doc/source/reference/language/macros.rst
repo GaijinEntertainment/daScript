@@ -473,6 +473,43 @@ transformations via ``visit(prog, adapter)``.
    :ref:`tutorial_macro_pass_macro` — step-by-step tutorial with lint and
    infer macro examples.
 
+------------
+AstTypeMacro
+------------
+
+``AstTypeMacro`` lets you define custom type expressions resolved during
+type inference.  It has a single method:
+
+.. code-block:: das
+
+    class AstTypeMacro {
+        def abstract visit ( prog:ProgramPtr; mod:Module?; td:TypeDeclPtr; passT:TypeDeclPtr ) : TypeDeclPtr
+    }
+
+``add_new_type_macro`` adds a type macro to a module.
+The ``[type_macro(name="…")]`` annotation automates registration.
+
+The compiler parses invocations like ``name(type<T>, N)`` in type position
+into a ``TypeDecl`` with ``baseType = Type.typeMacro``.  The arguments are
+stored in ``td.dimExpr``:
+
+- ``dimExpr[0]`` — ``ExprConstString`` with the macro name
+- ``dimExpr[1..]`` — user arguments (``ExprTypeDecl`` for types,
+  ``ExprConstInt`` for integers, etc.)
+
+``visit()`` is called in two contexts:
+
+- **Concrete** — all types are inferred; ``passT`` is null;
+  ``dimExpr[i]._type`` is the resolved type.
+- **Generic** — type parameters like ``auto(TT)`` are unresolved;
+  ``passT`` carries the actual argument type for matching;
+  ``dimExpr[i]._type`` is null.
+
+.. seealso::
+
+   :ref:`tutorial_macro_type_macro` — step-by-step tutorial showing
+   concrete and generic type-macro usage.
+
 ----------------
 AstTypeInfoMacro
 ----------------
