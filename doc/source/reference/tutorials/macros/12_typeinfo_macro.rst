@@ -334,6 +334,8 @@ The standard library provides several typeinfo macros:
 
    Previous tutorial: :ref:`tutorial_macro_reader_macro`
 
+   Next tutorial: :ref:`tutorial_macro_enumeration_macro`
+
    Standard library: ``daslib/type_traits.das``, ``daslib/enum_trait.das``
 
    Language reference: :ref:`Macros <macros>` — full macro system documentation
