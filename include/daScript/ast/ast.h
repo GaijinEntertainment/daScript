@@ -1413,6 +1413,7 @@ namespace das
         CaptureMacro ( const string & na = "" ) : name(na) {}
         virtual ExpressionPtr captureExpression ( Program *, Module *, Expression *, TypeDecl * ) { return nullptr; }
         virtual void captureFunction ( Program *, Module *, Structure *, Function * ) { }
+        virtual void releaseFunction ( Program *, Module *, Structure *, Function * ) { }
         string name;
     };
 

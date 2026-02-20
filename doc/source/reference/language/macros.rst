@@ -472,14 +472,29 @@ AstCaptureMacro
     class AstCaptureMacro {
         def abstract captureExpression ( prog:Program?; mod:Module?; expr:ExpressionPtr; etype:TypeDeclPtr ) : ExpressionPtr
         def abstract captureFunction ( prog:Program?; mod:Module?; var lcs:Structure?; var fun:FunctionPtr ) : void
+        def abstract releaseFunction ( prog:Program?; mod:Module?; var lcs:Structure?; var fun:FunctionPtr ) : void
     }
 
 ``add_new_capture_macro`` adds a reader macro to a module.
 There is additionally the ``[capture_macro]`` annotation, which essentially automates the same thing.
 
-``captureExpression`` is called when an expression is captured. It returns a new expression, or null if no changes are required.
+``captureExpression`` is called per captured variable when the lambda struct is being built.
+It returns a replacement expression to wrap the capture, or null if no changes are required.
 
-``captureFunction`` is called when a function is captured. This is where custom finalization can be added to the ``final`` section of the function body.
+``captureFunction`` is called once after the lambda function is generated.
+Use this to inspect captured fields (``lcs``) and append code to ``(fun.body as ExprBlock).finalList`` —
+which runs **after each invocation** (per-call finally), not on destruction.
+
+``releaseFunction`` is called once when the lambda **finalizer** is generated.
+``fun`` is the finalizer function (not the lambda call function).
+Code appended to ``(fun.body as ExprBlock).list`` runs on **destruction** —
+after the user-written ``finally {}`` block but before the compiler-generated
+field cleanup (``delete *__this``).
+
+.. seealso::
+
+   :ref:`Tutorial: Capture Macros <tutorial_macro_capture_macro>` — step-by-step example
+   using all three hooks with an ``[audited]`` tag annotation.
 
 ----------------
 AstCommentReader

@@ -206,7 +206,7 @@ namespace das {
                 ...block_finally...
      */
     DAS_API FunctionPtr generateLambdaFinalizer ( const string & lambdaName, ExprBlock * block,
-                                         const StructurePtr & ls );
+                                         const StructurePtr & ls, Program * thisProgram );
 
     /*
          [[__lambda_at_line_xxx

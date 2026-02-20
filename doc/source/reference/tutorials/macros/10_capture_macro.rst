@@ -13,10 +13,11 @@
 Previous tutorials transformed calls, functions, structures, blocks,
 variants, and for-loops.  Capture macros intercept **lambda capture** —
 they fire when a lambda (or generator) captures outer variables,
-letting you wrap capture expressions and inject per-invocation cleanup.
+letting you wrap capture expressions, inject per-invocation cleanup,
+and add destruction-time release logic.
 
 ``[capture_macro(name="X")]`` registers a class that extends
-``AstCaptureMacro``.  The compiler calls two methods during lambda
+``AstCaptureMacro``.  The compiler calls three methods during lambda
 code generation:
 
 ``captureExpression(prog, mod, expr, etype)``
@@ -33,13 +34,21 @@ code generation:
    append code to ``(fun.body as ExprBlock).finalList`` — which runs
    **after each invocation** (per-call finally), not on destruction.
 
+``releaseFunction(prog, mod, lcs, fun)``
+   Called **once** when the lambda **finalizer** is generated.  ``fun``
+   is the finalizer function (not the lambda call function).  Code
+   appended to ``(fun.body as ExprBlock).list`` runs on **destruction**
+   — after the user-written ``finally {}`` block but before the
+   compiler-generated field cleanup (``delete *__this``).
+
 .. note::
 
    Code added to ``(fun.body as ExprBlock).finalList`` by
-   ``captureFunction`` runs after **every** lambda invocation.  This
-   is different from a user-written ``finally {}`` on the lambda
-   literal, which goes into the **finalizer** and runs once on
-   destruction.
+   ``captureFunction`` runs after **every** lambda invocation.  Code
+   added to ``(fun.body as ExprBlock).list`` by ``releaseFunction``
+   runs **once** on destruction.  The user-written ``finally {}`` on
+   the lambda literal also runs on destruction (in the same finalizer),
+   *before* ``releaseFunction`` code.
 
    Generators are a special case — their function body's ``finalList``
    runs on every yield iteration, which is why the standard library's
@@ -70,11 +79,12 @@ reference counting.
 The module file
 ===============
 
-``capture_macro_mod.das`` defines three pieces:
+``capture_macro_mod.das`` defines four pieces:
 
 1. ``[audited]`` — a no-op structure annotation used as a tag
-2. Runtime helpers — ``audit_on_capture`` and ``audit_after_invoke``
-3. ``CaptureAuditMacro`` — the capture macro class
+2. Runtime helpers — ``audit_on_capture``, ``audit_after_invoke``, and
+   ``audit_on_finalize``
+3. ``CaptureAuditMacro`` — the capture macro class (three hooks)
 
 The tag annotation
 ~~~~~~~~~~~~~~~~~~
@@ -176,6 +186,44 @@ The ``if (true)`` wrapper is required because ``var inscope`` is not
 allowed directly inside a ``for`` loop — the extra scope satisfies
 the compiler.
 
+releaseFunction
+~~~~~~~~~~~~~~~
+
+For each ``[audited]`` field in the lambda struct, the macro appends
+a print call to the finalizer function's body — code that runs once
+on **destruction**, after the user-written ``finally {}`` block but
+before the compiler-generated ``delete *__this``:
+
+.. code-block:: das
+
+   def override releaseFunction(prog : Program?; mod : Module?;
+           var lcs : Structure?; var fun : FunctionPtr) : void {
+       for (fld in lcs.fields) {
+           if (!is_audited(fld._type)) {
+               continue
+           }
+           if (true) {   // scope needed for var inscope inside a loop
+               var inscope pCall <- new ExprCall(at = fld.at,
+                   name := "capture_macro_mod::audit_on_finalize")
+               pCall.arguments |> emplace_new <| new ExprConstString(
+                   at = fld.at, value := string(fld.name))
+               (fun.body as ExprBlock).list |> emplace(pCall)
+           }
+       }
+   }
+
+Note that ``releaseFunction`` appends to ``(fun.body as ExprBlock).list``
+(the finalizer body), **not** to ``finalList``.  The ``fun`` parameter
+here is the finalizer function — not the lambda call function received
+by ``captureFunction``.
+
+The finalizer execution order is:
+
+1. User-written ``finally {}`` block (from the lambda literal)
+2. ``releaseFunction`` code (this hook)
+3. ``delete *__this`` — compiler-generated field destructors
+4. ``delete __this`` — heap deallocation
+
 
 The usage file
 ==============
@@ -215,9 +263,11 @@ Output::
      body: res.name=texture.png, pl.x=42
    [audit] after-call: 'res' still captured
      about to delete fn...
+   [audit] releasing 'res'
 
 - ``[audit] captured 'res'`` — from ``captureExpression`` at lambda creation
 - ``[audit] after-call`` — from ``captureFunction``'s ``finalList`` after the call
+- ``[audit] releasing 'res'`` — from ``releaseFunction`` during destruction
 - No messages for ``pl`` (``Plain`` has no ``[audited]`` annotation)
 
 **Section 2** — two ``[audited]`` captures, two calls:
@@ -233,6 +283,7 @@ Output::
    fn()
 
 Each call produces after-call messages for both ``a`` and ``b``.
+On destruction, releasing messages appear once for each field.
 
 **Section 3** — only non-annotated types (``int``): completely silent.
 
@@ -241,12 +292,14 @@ Real-world usage
 ================
 
 The standard library's ``ChannelAndStatusCapture`` in
-``daslib/jobque_boost.das`` uses the same two-hook pattern:
+``daslib/jobque_boost.das`` uses the same hook pattern:
 
 - ``captureExpression``: calls ``add_ref`` on captured ``Channel`` or
   ``JobStatus`` pointers (increases reference count)
 - ``captureFunction``: appends a ``panic`` call that fires if the
   object was not properly released after each lambda invocation
+- ``releaseFunction``: could be used to call ``release`` on the
+  captured object during destruction (complementing ``add_ref``)
 
 This ensures that thread-communication objects are never leaked,
 without requiring any changes to user lambda code.

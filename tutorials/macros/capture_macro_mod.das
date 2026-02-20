@@ -5,9 +5,13 @@ options no_aot
 //
 // Provides:
 //   [audited]            — structure annotation (tag) marking a struct for audit
-//   CaptureAuditMacro    — [capture_macro] that logs capture and release of [audited] fields
+//   CaptureAuditMacro    — [capture_macro] with three hooks:
+//     captureExpression   — wraps capture value in audit_on_capture() (per variable)
+//     captureFunction     — appends audit_after_invoke() to per-call finally
+//     releaseFunction     — appends audit_on_finalize() to the finalizer (destruction)
 //   audit_on_capture()   — runtime helper: prints a message and returns the captured value
 //   audit_after_invoke() — runtime helper: prints a message after each lambda invocation
+//   audit_on_finalize()  — runtime helper: prints a message when a lambda is destroyed
 
 module capture_macro_mod
 
@@ -40,6 +44,13 @@ def audit_after_invoke(field_name : string) {
     print("[audit] after-call: '{field_name}' still captured\n")
 }
 
+def audit_on_finalize(field_name : string) {
+    //! Prints a release-audit message when the lambda is destroyed.
+    //! Called from the lambda FINALIZER body (runs once on destruction,
+    //! after the user-written finally{} block but before field cleanup).
+    print("[audit] releasing '{field_name}'\n")
+}
+
 // ---- Type check helper ------------------------------------------------------
 
 [macro_function]
@@ -66,6 +77,9 @@ class CaptureAuditMacro : AstCaptureMacro {
     //! captureFunction — appends audit_after_invoke() calls to the lambda
     //!   function's body finalList for each [audited] field.  This code runs
     //!   after EACH invocation (per-call finally), not on destruction.
+    //! releaseFunction — appends audit_on_finalize() calls to the lambda
+    //!   FINALIZER body for each [audited] field.  This code runs once on
+    //!   destruction (after the user-written finally{} but before field cleanup).
 
     def override captureExpression(prog : Program?; mod : Module?; expr : ExpressionPtr; etype : TypeDeclPtr) : ExpressionPtr {
         if (is_in_completion()) {
@@ -104,6 +118,22 @@ class CaptureAuditMacro : AstCaptureMacro {
                 var inscope pCall <- new ExprCall(at = fld.at, name := "capture_macro_mod::audit_after_invoke")
                 pCall.arguments |> emplace_new <| new ExprConstString(at = fld.at, value := string(fld.name))
                 (fun.body as ExprBlock).finalList |> emplace(pCall)
+            }
+        }
+    }
+
+    def override releaseFunction(prog : Program?; mod : Module?; var lcs : Structure?; var fun : FunctionPtr) : void {
+        // Called once per lambda FINALIZER function.  Code appended here
+        // runs on DESTRUCTION — after the user-written finally{} block but
+        // before the compiler-generated field cleanup (delete *__this).
+        for (fld in lcs.fields) {
+            if (!is_audited(fld._type)) {
+                continue
+            }
+            if (true) {
+                var inscope pCall <- new ExprCall(at = fld.at, name := "capture_macro_mod::audit_on_finalize")
+                pCall.arguments |> emplace_new <| new ExprConstString(at = fld.at, value := string(fld.name))
+                (fun.body as ExprBlock).list |> emplace(pCall)
             }
         }
     }

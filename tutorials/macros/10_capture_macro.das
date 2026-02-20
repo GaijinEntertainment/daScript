@@ -3,13 +3,14 @@ options gen2
 // Tutorial 10 — Capture macro
 //
 // Demonstrates AstCaptureMacro (registered via [capture_macro]).
-// A capture macro hooks into lambda creation at two points:
+// A capture macro hooks into lambda creation at three points:
 //   captureExpression — called per captured variable (can wrap/replace the value)
 //   captureFunction  — called once per lambda (can add per-invocation cleanup)
+//   releaseFunction  — called once per lambda finalizer (can add destruction cleanup)
 //
 // The companion module (capture_macro_mod) defines:
 //   [audited]          — tag annotation for structs that should be logged
-//   CaptureAuditMacro  — capture macro that logs capture and per-call audit
+//   CaptureAuditMacro  — capture macro that logs capture, per-call, and release
 //
 // TIMING of each hook:
 //   captureExpression  — fires at lambda CREATION (when the struct is built)
@@ -17,6 +18,9 @@ options gen2
 //                        which runs after EACH INVOCATION (per-call finally).
 //                        This is different from the user-written finally{} on the
 //                        lambda literal, which runs on DESTRUCTION (once).
+//   releaseFunction    — adds code to the lambda FINALIZER function's body,
+//                        which runs on DESTRUCTION (after user-written finally{}
+//                        but before field cleanup/delete).
 //
 // Non-[audited] types are silently ignored by the macro.
 
@@ -48,6 +52,7 @@ def section1() {
     fn()
     // captureExpression prints at creation (above).
     // captureFunction's after-call message runs after fn() returns.
+    // releaseFunction's releasing message runs when fn is destroyed (below).
     print("  about to delete fn...\n")
     unsafe { delete fn; }
     print("")
@@ -66,6 +71,7 @@ def section2() {
     fn()
     fn()
     // The after-call message appears twice — once per invocation.
+    // The releasing message appears once — on destruction.
     print("  about to delete fn...\n")
     unsafe { delete fn; }
     print("")
@@ -99,6 +105,7 @@ def main() {
 //   body: res.name=texture.png, pl.x=42
 // [audit] after-call: 'res' still captured
 //   about to delete fn...
+// [audit] releasing 'res'
 //
 // --- Section 2: multiple [audited] fields ---
 // [audit] captured 'a'
@@ -110,6 +117,8 @@ def main() {
 // [audit] after-call: 'a' still captured
 // [audit] after-call: 'b' still captured
 //   about to delete fn...
+// [audit] releasing 'a'
+// [audit] releasing 'b'
 //
 // --- Section 3: non-audited types are silent ---
 //   body: x + y = 30
