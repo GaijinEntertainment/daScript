@@ -313,6 +313,8 @@ without requiring any changes to user lambda code.
 
    Previous tutorial: :ref:`tutorial_macro_for_loop_macro`
 
+   Next tutorial: :ref:`tutorial_macro_reader_macro`
+
    Standard library: ``daslib/jobque_boost.das`` (``ChannelAndStatusCapture``)
 
    Language reference: :ref:`Macros <macros>` — full macro system documentation

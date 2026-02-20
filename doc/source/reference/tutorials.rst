@@ -155,3 +155,4 @@ Run any tutorial from the project root::
    tutorials/macros/08_variant_macro.rst
    tutorials/macros/09_for_loop_macro.rst
    tutorials/macros/10_capture_macro.rst
+   tutorials/macros/11_reader_macro.rst
