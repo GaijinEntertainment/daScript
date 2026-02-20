@@ -92,6 +92,10 @@ class PrimitiveTypes {
         return LLVMPointerType(t_int8, 0u)
     }
 
+    def ConstI1(val : bool) {
+        return LLVMConstInt(t_int1, uint64(val ? 1 : 0), 0);
+    }
+
     def ConstI8(val : int8) {
         return LLVMConstInt(t_int8, val |> uint64(), 0);
     }

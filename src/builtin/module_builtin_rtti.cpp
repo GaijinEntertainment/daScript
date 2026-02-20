@@ -802,9 +802,10 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(jit_debug_info)>("jit_debug_info");
             addField<DAS_BIND_MANAGED_FIELD(jit_opt_level)>("jit_opt_level");
             addField<DAS_BIND_MANAGED_FIELD(jit_size_level)>("jit_size_level");
-            addField<DAS_BIND_MANAGED_FIELD(jit_use_dll_mode)>("jit_use_dll_mode");
+            addField<DAS_BIND_MANAGED_FIELD(jit_dll_mode)>("jit_dll_mode");
+            addField<DAS_BIND_MANAGED_FIELD(jit_exe_mode)>("jit_exe_mode");
             addField<DAS_BIND_MANAGED_FIELD(jit_emit_prologue)>("emit_prologue");
-            addField<DAS_BIND_MANAGED_FIELD(jit_output_folder)>("jit_output_folder");
+            addField<DAS_BIND_MANAGED_FIELD(jit_output_path)>("jit_output_path");
             addField<DAS_BIND_MANAGED_FIELD(jit_path_to_shared_lib)>("jit_path_to_shared_lib");
             addField<DAS_BIND_MANAGED_FIELD(jit_path_to_linker)>("jit_path_to_linker");
         }

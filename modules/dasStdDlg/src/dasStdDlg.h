@@ -13,8 +13,8 @@ namespace das {
     DAS_MOD_API bool GetOkFromUser(const char * caption, const char * body);
 
     // C++ impl
-	DAS_MOD_API string GetSaveFileFromUser ( const char * initialFileName , const char * initialPath, const char * filter );
-	DAS_MOD_API string GetOpenFileFromUser ( const char * initialPath, const char * filter );
+	string GetSaveFileFromUser ( const char * initialFileName , const char * initialPath, const char * filter );
+	string GetOpenFileFromUser ( const char * initialPath, const char * filter );
 
     // and das bindings
     class Context;
