@@ -41,9 +41,10 @@ Five annotations control **when** the macro runs:
      - Runs during each **dirty inference** pass (the AST may be
        half-resolved).  All dirty macros fire on every pass.
    * - ``[lint_macro]``
-     - Runs after successful compilation in the **lint phase**.
-       Read-only — use it for analysis and diagnostics.  Only runs for
-       modules that directly require the macro module.
+     - Invoked for each module compiled after the macro module,
+       during the **lint phase**.  Read-only — use it for analysis and
+       diagnostics.  Use ``compiling_module()`` to get the module
+       currently being compiled.
    * - ``[global_lint_macro]``
      - Same as ``[lint_macro]`` but runs for **all** modules, not just
        the one that requires it.
@@ -64,7 +65,7 @@ The module file
 
 Full source: :download:`pass_macro_mod.das <../../../../../tutorials/macros/pass_macro_mod.das>`
 
-Both macros live in a single ``shared`` module that the user requires.
+Both macros live in a single module that the user requires.
 
 
 Section 1 — lint_macro (compile-time analysis)
@@ -75,12 +76,23 @@ Section 1 — lint_macro (compile-time analysis)
     [lint_macro]
     class CodeStatsLint : AstPassMacro {
         def override apply(prog : ProgramPtr; mod : Module?) : bool {
-            var nFunctions = 0
-            for_each_function(mod, "") <| $(func) {
-                nFunctions++
+            let WARN_THRESHOLD = 4
+            get_ptr(prog) |> for_each_module() $(var m : Module?) {
+                if (m.moduleFlags.builtIn) {
+                    return  // skip C++ built-in modules
+                }
+                m |> for_each_function("") <| $(var func : FunctionPtr) {
+                    if (func.body == null || !(func.body is ExprBlock)) {
+                        return
+                    }
+                    let body = func.body as ExprBlock
+                    let nStmts = length(body.list)
+                    if (nStmts > WARN_THRESHOLD) {
+                        print("[lint] '{func.name}' has {nStmts} statements (>{WARN_THRESHOLD})\n")
+                    }
+                }
             }
-            print("[lint] pass_macro_mod defines {nFunctions} function(s)\n")
-            return true
+            return false  // lint macros don't modify the AST
         }
     }
 
@@ -88,15 +100,20 @@ Key points:
 
 - ``[lint_macro]`` means this class runs **after inference succeeds**,
   during the read-only lint phase.
-- ``mod`` is the module that owns the macro — here, ``pass_macro_mod``.
-  ``for_each_function(mod, "")`` iterates the module's functions.
+- ``get_ptr(prog) |> for_each_module()`` walks the **entire compiled
+  program**.  ``m.moduleFlags.builtIn`` skips C++ built-in modules so
+  only user code is inspected.
+- ``for_each_function("")`` iterates each module's functions.  The
+  empty string means "all names".
+- The lint checks function body size: any function with more than
+  ``WARN_THRESHOLD`` top-level statements triggers a compile-time
+  warning via ``print``.
 - ``print(...)`` outputs at **compile time** — the message appears
   before any runtime output.
 - The return value of a lint macro is ignored; lint macros never trigger
   re-inference.
-- Real-world lint macros typically create an ``AstVisitor``, walk the
-  AST with ``visit(prog, adapter)`` or ``visit(func, adapter)``, and
-  report errors with ``compiling_program() |> macro_error(at, text)``.
+- In production code, use ``compiling_program() |> macro_error(at,
+  text)`` to emit **real compiler errors** instead of ``print``.
   See ``daslib/lint.das`` for a full example.
 
 
@@ -258,7 +275,7 @@ Output
 
 .. code-block:: text
 
-    [lint] pass_macro_mod defines 4 function(s)
+    [lint] 'main' has 5 top-level statements (>4)
     >>> main
     >>> greet
     Hello, world!
@@ -267,9 +284,12 @@ Output
     >>> countdown
     counted down from 3
 
-The first line is the lint macro's compile-time message.  The ``>>>``
-lines come from the infer macro's injected ``_trace_enter`` calls,
-proving that every user function was instrumented at compile time.
+The first line is the lint macro's compile-time message — when linting
+the user module, it found that ``main`` has 5 top-level statements (the
+infer macro already added a ``_trace_enter`` call, raising its count
+above the threshold).  The ``>>>`` lines come from the injected
+``_trace_enter`` calls, proving that every user function was
+instrumented at compile time.
 
 
 How it works — compilation pipeline
@@ -286,8 +306,10 @@ When the compiler processes the user's program:
    second pass, no new changes are made, so it returns ``false``.
 4. **Optimisation** — ``[optimization_macro]`` macros run in the
    optimisation loop (not used here).
-5. **Lint** — ``[lint_macro]`` and ``[global_lint_macro]`` macros run.
-   ``CodeStatsLint`` prints its summary.
+5. **Lint** — ``[lint_macro]`` macros run for each module compiled
+   after the macro module.  ``CodeStatsLint`` inspects the user module
+   via ``compiling_module()`` and warns about large function bodies.
+   (``[global_lint_macro]`` macros run once for the entire program.)
 6. **Execution** — the instrumented program runs.
 
 

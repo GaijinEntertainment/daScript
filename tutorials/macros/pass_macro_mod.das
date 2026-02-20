@@ -9,13 +9,13 @@ options no_aot
 // Five annotations control WHEN the macro runs:
 //   [infer_macro]        — after clean inference (returning true re-infers)
 //   [dirty_infer_macro]  — during each dirty inference pass
-//   [lint_macro]         — after successful compilation, read-only analysis
-//   [global_lint_macro]  — same as lint_macro but for ALL modules
+//   [lint_macro]         — after each module is compiled (per-module)
+//   [global_lint_macro]  — once after the entire program is compiled
 //   [optimization_macro] — during optimization passes
 //
-// Section 1 — [lint_macro]: runs after inference, prints a compile-time
-//   summary.  Lint macros are for read-only analysis; they cannot modify
-//   the AST.  `mod` is the module that registered the macro.
+// Section 1 — [lint_macro]: invoked for each module compiled after this
+//   macro module.  Uses `compiling_module()` to inspect the current
+//   module.  Read-only — cannot modify the AST.
 //
 // Section 2 — [infer_macro]: instruments every function body with a
 //   _trace_enter() call, following the heartbeat.das pattern.
@@ -27,20 +27,29 @@ require ast
 require daslib/ast_boost
 require daslib/templates_boost
 
-// ---- Section 1: lint_macro — compile-time analysis -------------------------
+// ---- Section 1: lint_macro — per-module analysis ---------------------------
 
 [lint_macro]
 class CodeStatsLint : AstPassMacro {
-    //! Lint pass that reports module statistics at compile time.
+    //! Lint pass invoked for each module compiled after this one.
+    //! Uses compiling_module() to inspect the current module only.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
-        // `mod` is the module that owns this macro (pass_macro_mod).
-        // for_each_function(mod, "") iterates its functions.
-        var nFunctions = 0
-        for_each_function(mod, "") <| $(func) {
-            nFunctions++
+        // compiling_module() returns the module being compiled right now.
+        // This is NOT the same as `mod`, which is the module that owns
+        // this macro (pass_macro_mod).
+        let cm = compiling_module()
+        let WARN_THRESHOLD = 4
+        cm |> for_each_function("") <| $(var func : FunctionPtr) {
+            if (func.body == null || !(func.body is ExprBlock)) {
+                return
+            }
+            let body = func.body as ExprBlock
+            let nStmts = length(body.list)
+            if (nStmts > WARN_THRESHOLD) {
+                print("[lint] '{func.name}' has {nStmts} top-level statements (>{WARN_THRESHOLD})\n")
+            }
         }
-        print("[lint] pass_macro_mod defines {nFunctions} function(s)\n")
-        return true
+        return false  // lint macros don't modify the AST
     }
 }
 
