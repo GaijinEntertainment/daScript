@@ -717,6 +717,7 @@ namespace das {
             }
             if ( isCaptureAsRef(var) || mode==CaptureMode::capture_by_reference ) {
                 td->ref = false;
+                td->constant = var->type->constant;
                 auto ptd = make_smart<TypeDecl>(Type::tPointer);
                 ptd->firstType = td;
                 td = ptd;
@@ -740,8 +741,8 @@ namespace das {
     }
 
     ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf, const FunctionPtr & lff,
-                                            const safe_var_set & capt, const vector<CaptureEntry> & capture, const LineInfo & at,
-                                            Program * thisProgram ) {
+                                            const safe_var_set & capt, const vector<CaptureEntry> & capture,
+                                            const LineInfo & at, const LineInfo & captureAt, Program * thisProgram ) {
         auto asc = make_smart<ExprAscend>();
         asc->at = at;
         asc->needTypeInfo = true;
@@ -766,10 +767,10 @@ namespace das {
                 mode = it->mode;
             }
             if ( isCaptureAsRef(cV) || mode==CaptureMode::capture_by_reference ) {
-                auto varV = make_smart<ExprVar>(cV->at, cV->name);
-                auto addrV = make_smart<ExprRef2Ptr>(cV->at, varV);
+                auto varV = make_smart<ExprVar>(captureAt, cV->name);
+                auto addrV = make_smart<ExprRef2Ptr>(captureAt, varV);
                 addrV->alwaysSafe = true;
-                auto mV = make_smart<MakeFieldDecl>(cV->at, cV->name, addrV, false, false);
+                auto mV = make_smart<MakeFieldDecl>(captureAt, cV->name, addrV, false, false);
                 ms->push_back(mV);
             } else {
                 bool moveS = false;
@@ -780,8 +781,8 @@ namespace das {
                     case CaptureMode::capture_any:          moveS = !cV->type->canCopy(); break;
                     default: ;
                 }
-                auto varV = make_smart<ExprVar>(cV->at, cV->name);
-                auto mV = make_smart<MakeFieldDecl>(cV->at, cV->name, varV, moveS, cloneS);
+                auto varV = make_smart<ExprVar>(captureAt, cV->name);
+                auto mV = make_smart<MakeFieldDecl>(captureAt, cV->name, varV, moveS, cloneS);
                 ms->push_back(mV);
             }
             auto & lexpr = ms->back();

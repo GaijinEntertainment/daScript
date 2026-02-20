@@ -867,8 +867,9 @@ namespace das {
 
 
     Expression * ast_makeBlock ( yyscan_t scanner, int bal, AnnotationList * annL, vector<CaptureEntry> * clist,
-        vector<VariableDeclaration*> * list, TypeDecl * result, Expression * block, const LineInfo & blockAt, const LineInfo & annLAt ) {
+        vector<VariableDeclaration*> * list, TypeDecl * result, Expression * block, const LineInfo & blockAt, const LineInfo & annLAt, const LineInfo & clistAt ) {
         auto mkb = new ExprMakeBlock(blockAt,block, bal==1, bal==2);
+        mkb->captureAt = clistAt;
         ExprBlock * closure = (ExprBlock *) block;
         closure->returnType = result;
         if ( list ) {
@@ -1222,9 +1223,10 @@ namespace das {
         }
     }
 
-    Expression * ast_makeGenerator ( yyscan_t, TypeDecl * typeDecl, vector<CaptureEntry> * clist, Expression * subexpr, const LineInfo & locAt ) {
+    Expression * ast_makeGenerator ( yyscan_t, TypeDecl * typeDecl, vector<CaptureEntry> * clist, Expression * subexpr, const LineInfo & locAt, const LineInfo & clistAt ) {
         auto gen = new ExprMakeGenerator(locAt, subexpr);
         gen->iterType = typeDecl;
+        gen->captureAt = clistAt;
         if ( clist ) {
             swap ( gen->capture, *clist );
             delete clist;
