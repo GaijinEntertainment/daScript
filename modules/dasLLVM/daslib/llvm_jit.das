@@ -6697,8 +6697,8 @@ class JIT_LLVM : AstSimulateMacro {
         // to `true` and fail in runtime on `jit_trap` if they turns
         // out to be reachable.
         let exe_strict = true
-        assume config_out_folder = string(prog.policies.jit_output_folder)
-        let output_folder = config_out_folder |> empty() ? "{get_das_root()}/jitted_scripts/" : config_out_folder
+        assume config_out_path = string(prog.policies.jit_output_path)
+        let output_path = config_out_path |> empty() ? "jitted_scripts/{prog.thisNamespace}" : config_out_path
         assume path_to_shared_lib = string(prog.policies.jit_path_to_shared_lib)
         assume path_to_linker = string(prog.policies.jit_path_to_linker)
 
@@ -6749,8 +6749,7 @@ class JIT_LLVM : AstSimulateMacro {
             var g_dynamic_lib_handle : DLLHandle? = null;
             var recompile_prog = true
             if (use_dll) {
-                let dll_object_path = "{output_folder}{prog.thisNamespace}"
-                g_dynamic_lib_handle = get_dll_by_path(dll_object_path)
+                g_dynamic_lib_handle = get_dll_by_path(output_path)
                 let (missing, disabling) = get_dll_missing(funcs, disabled, g_dynamic_lib_handle, uids)
                 let dll_changed = !(missing |> empty() && disabling |> empty())
                 recompile_prog = dll_changed
@@ -6812,15 +6811,15 @@ class JIT_LLVM : AstSimulateMacro {
                 }
                 active_filenames = table<string>();
                 if (gen_exe) {
-                    mkdir_rec(output_folder)
-                    let dll_object_path = "{output_folder}{prog.thisNamespace}"
-                    write_exe(g_mod, dll_object_path, path_to_shared_lib, path_to_linker)
+                    mkdir_rec(dir_name(output_path))
+                    write_exe(g_mod, output_path, path_to_shared_lib, path_to_linker)
                 } elif (use_dll) {
-                    mkdir_rec(output_folder)
-                    let dll_object_path = "{output_folder}{prog.thisNamespace}"
-                    write_dll(g_mod, dll_object_path, path_to_shared_lib, path_to_linker)
+                    mkdir_rec(dir_name(output_path))
+                    write_dll(g_mod, output_path, path_to_shared_lib, path_to_linker)
+
+                    // Open just stored DLL, so we can keep working.
                     g_dynamic_lib_handle.reset()
-                    g_dynamic_lib_handle = get_dll_by_path(dll_object_path)
+                    g_dynamic_lib_handle = get_dll_by_path(output_path)
                     let (missing, disabling) = get_dll_missing(funcs, disabled, g_dynamic_lib_handle, uids)
                     assert(missing |> empty() && disabling |> empty())
                 }

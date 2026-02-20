@@ -2229,7 +2229,7 @@ namespace das {
               << value.jit_opt_level
               << value.jit_size_level
               << value.jit_dll_mode
-              << value.jit_output_folder
+              << value.jit_output_path
               << value.jit_path_to_shared_lib
               << value.jit_path_to_linker
               << value.threadlock_context;
