@@ -157,3 +157,4 @@ Run any tutorial from the project root::
    tutorials/macros/10_capture_macro.rst
    tutorials/macros/11_reader_macro.rst
    tutorials/macros/12_typeinfo_macro.rst
+   tutorials/macros/13_enumeration_macro.rst

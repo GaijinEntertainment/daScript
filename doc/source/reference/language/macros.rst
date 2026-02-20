@@ -253,6 +253,31 @@ There is additionally the ``[enumeration_macro]`` annotation which accomplishes 
 
 ``apply`` is invoked before the infer pass. It is the best time to modify the enumeration, generate some code, etc.
 
+In gen2 syntax, register an enumeration macro and annotate enums with:
+
+.. code-block:: das
+
+    [enumeration_macro(name="enum_total")]
+    class EnumTotalAnnotation : AstEnumerationAnnotation {
+        def override apply(var enu : EnumerationPtr; var group : ModuleGroup;
+                           args : AnnotationArgumentList;
+                           var errors : das_string) : bool {
+            // modify enu.list or generate code
+            return true
+        }
+    }
+
+    [enum_total]
+    enum Direction { North; South; East; West }
+
+.. seealso::
+
+   Tutorial: :ref:`tutorial_macro_enumeration_macro` — step-by-step
+   enumeration macro examples (enum modification and code generation)
+
+   Standard library: ``daslib/enum_trait.das`` —
+   :ref:`enum_trait module reference <stdlib_enum_trait>`
+
 ---------------
 AstVariantMacro
 ---------------
