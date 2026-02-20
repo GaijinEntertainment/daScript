@@ -1585,6 +1585,13 @@ namespace das {
                 });
             }
         }
+        virtual void releaseFunction ( Program * prog, Module * mod, Structure * lcs, Function * fun ) override {
+            if ( auto fnReleaseFunction = get_releaseFunction(classPtr) ) {
+                runMacroFunction(context, "releaseFunction", [&]() {
+                    invoke_releaseFunction(context,fnReleaseFunction,classPtr,prog,mod,lcs,fun);
+                });
+            }
+        }
     protected:
         void *      classPtr;
         Context *   context;

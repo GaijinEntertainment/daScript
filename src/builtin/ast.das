@@ -133,6 +133,7 @@ class AstForLoopMacro {
 class AstCaptureMacro {
     def abstract captureExpression(prog : Program?; mod : Module?; expr : ExpressionPtr; etype : TypeDeclPtr) : ExpressionPtr
     def abstract captureFunction(prog : Program?; mod : Module?; var lcs : Structure?; var fun : FunctionPtr) : void
+    def abstract releaseFunction(prog : Program?; mod : Module?; var lcs : Structure?; var fun : FunctionPtr) : void
 }
 
 [macro_interface]

@@ -377,13 +377,15 @@ protected:
   enum {
     __fn_captureExpression = 0,
     __fn_captureFunction = 1,
+    __fn_releaseFunction = 2,
   };
 protected:
-  int _das_class_method_offset[2];
+  int _das_class_method_offset[3];
 public:
   AstCaptureMacro_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_captureExpression] = info->fields[2]->offset;
       _das_class_method_offset[__fn_captureFunction] = info->fields[3]->offset;
+      _das_class_method_offset[__fn_releaseFunction] = info->fields[4]->offset;
   }
   __forceinline Func get_captureExpression ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_captureExpression]);
@@ -398,6 +400,15 @@ public:
     return getDasClassMethod(self,_das_class_method_offset[__fn_captureFunction]);
   }
   __forceinline void invoke_captureFunction ( Context * __context__, Func __funcCall__, void * self, Program * const  prog, Module * const  mod, Structure * lcs, smart_ptr_raw<Function> fun ) const {
+    das_invoke_function<void>::invoke
+      <void *,Program * const ,Module * const ,Structure *,smart_ptr_raw<Function>>
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,lcs,fun);
+  }
+  __forceinline Func get_releaseFunction ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_releaseFunction]);
+  }
+  __forceinline void invoke_releaseFunction ( Context * __context__, Func __funcCall__, void * self, Program * const  prog, Module * const  mod, Structure * lcs, smart_ptr_raw<Function> fun ) const {
     das_invoke_function<void>::invoke
       <void *,Program * const ,Module * const ,Structure *,smart_ptr_raw<Function>>
         (__context__,nullptr,__funcCall__,

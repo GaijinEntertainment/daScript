@@ -8,6 +8,8 @@
 //   - Storing lambdas in variables (move semantics)
 //   - Simplified => syntax
 //   - Lambda vs block vs function
+//   - Finally blocks (cleanup on lambda destruction)
+//   - Lambda lifecycle: capture → invocations → destruction (finally + field cleanup)
 //
 // Run: daslang.exe tutorials/language/14_lambdas.das
 
@@ -137,6 +139,64 @@ def main {
     }
     var c1 <- invoke(make_counter)
     print("c1: {c1()}, {c1()}, {c1()}\n")   // 1, 2, 3
+
+    // === Lambda lifecycle ===
+    // A lambda is a heap-allocated struct with fields for each captured variable.
+    // The full lifecycle is:
+    //   1. CAPTURE  — variables are copied/moved/cloned into the lambda struct
+    //   2. INVOKE   — the lambda body runs (may be called many times)
+    //   3. DESTROY  — when the lambda is deleted or GC'd:
+    //                 a) finally{} block runs (user cleanup code)
+    //                 b) captured fields are finalized (compiler-generated delete)
+    //                 c) the struct memory is freed
+    //
+    // NOTE: lambda finally{} runs during DESTRUCTION, not after each call.
+    //       This is different from block finally{}, which runs after each invocation.
+
+    // === Captured field cleanup ===
+    // Captured fields are automatically deleted when the lambda is destroyed,
+    // UNLESS:
+    //   - The field was captured by reference (pointer to external data — not owned)
+    //   - The field was captured by move or clone (doNotDelete flag is set)
+    //   - The field type is POD (int, float, etc. — no cleanup needed)
+    //
+    // Example: an array captured by clone. The original stays intact;
+    // the cloned copy inside the lambda is cleaned up on destruction.
+    print("\n--- captured field cleanup ---\n")
+    var nums <- [100, 200, 300]
+    var sum_nums <- @capture(clone(nums)) () : int {
+        var s = 0
+        for (v in nums) {
+            s += v
+        }
+        return s
+    }
+    print("sum = {sum_nums()}\n")      // 600
+    print("original nums = {nums}\n")  // still [100, 200, 300]
+    // When sum_nums is deleted or goes out of scope, the cloned array
+    // inside the lambda struct is automatically finalized.
+
+    // === Finally blocks on lambdas ===
+    // A lambda's finally{} block runs ONCE when the lambda is DESTROYED
+    // (deleted or garbage collected) — NOT after each invocation.
+    //
+    // This is the opposite of block finally{}, which runs after every call.
+    //
+    // Use lambda finally{} for one-time destruction cleanup, such as
+    // releasing resources that the lambda owns.
+    print("\n--- finally on destruction ---\n")
+    var data2 <- [10, 20]
+    var demo <- @capture(clone(data2)) () {
+        print("  body: data2 has {length(data2)} items\n")
+    } finally {
+        // This runs once, when 'demo' is destroyed.
+        print("  finally: lambda destroyed\n")
+    }
+    demo()
+    demo()
+    print("  about to delete demo...\n")
+    unsafe { delete demo; }
+    // Output shows: body twice, then "about to delete", then finally once.
 }
 
 def apply_lambda(fn : lambda<(x : int) : int>; value : int) : int {
@@ -162,3 +222,13 @@ def apply_lambda(fn : lambda<(x : int) : int>; value : int) : int {
 // cloned items count = 3
 // original items still = 3
 // c1: 1, 2, 3
+//
+// --- captured field cleanup ---
+// sum = 600
+// original nums = [[ 100; 200; 300]]
+//
+// --- finally on destruction ---
+//   body: data2 has 2 items
+//   body: data2 has 2 items
+//   about to delete demo...
+//   finally: lambda destroyed

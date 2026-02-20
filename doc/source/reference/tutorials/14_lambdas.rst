@@ -103,6 +103,44 @@ A function can create and return a lambda that captures state::
 
 Each call creates an independent counter.
 
+Lambda lifecycle and finally blocks
+=====================================
+
+A lambda is a heap-allocated struct. The full lifecycle is:
+
+1. **Capture** — outer variables are copied/moved/cloned into the struct
+2. **Invoke** — the lambda body runs (may be called many times)
+3. **Destroy** — when the lambda is deleted or garbage collected:
+   a) The ``finally{}`` block runs (user cleanup code)
+   b) Captured fields are finalized (compiler-generated ``delete``)
+   c) The struct memory is freed
+
+Captured fields are automatically deleted on destruction unless:
+
+- The field was captured **by reference** (not owned)
+- The field was captured **by move/clone** with ``doNotDelete``
+- The field type is POD (int, float — no cleanup needed)
+
+Finally block
+~~~~~~~~~~~~~
+
+A lambda's ``finally{}`` block runs **once** when the lambda is
+**destroyed** — not after each invocation.  This is different from
+a *block* ``finally{}``, which runs after every call::
+
+  var demo <- @() {
+      print("body\n")
+  } finally {
+      print("destroyed\n")    // runs once, on deletion
+  }
+  demo()     // prints "body"
+  demo()     // prints "body"
+  unsafe { delete demo; }   // prints "destroyed"
+
+Use lambda ``finally{}`` for one-time destruction cleanup (releasing
+resources, closing handles).  For per-call cleanup, use scoped
+variables or ``defer`` inside the lambda body.
+
 Lambda vs block vs function pointer
 =====================================
 

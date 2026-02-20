@@ -116,7 +116,7 @@ namespace das {
                                 if (func && func->skipLockCheck)
                                     pFn->skipLockCheck = true; // we propagate skipLockCheck to the generator function
                                 if (program->addFunction(pFn)) {
-                                    auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls);
+                                    auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls, program);
                                     if (program->addFunction(pFnFin)) {
                                         if (func && func->isClassMethod) {
                                             // lambda, captured in the class is a method of that class - for the purposes of 'private'
@@ -246,7 +246,7 @@ namespace das {
                             if (func && func->skipLockCheck)
                                 pFn->skipLockCheck = true; // we propagate skipLockCheck to the lambda function
                             if (program->addFunction(pFn)) {
-                                auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls);
+                                auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls, program);
                                 if (program->addFunction(pFnFin)) {
                                     // lambda, captured in the class is a method of that class - for the purposes of 'private'
                                     if (func && func->isClassMethod) {

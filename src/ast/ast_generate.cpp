@@ -511,7 +511,7 @@ namespace das {
     }
 
     FunctionPtr generateLambdaFinalizer ( const string & lambdaName, ExprBlock * block,
-                                        const StructurePtr & ls ) {
+                                        const StructurePtr & ls, Program * thisProgram ) {
         auto lfn = lambdaName + "`finalizer";
         auto pFunc = make_smart<Function>();
         pFunc->privateFunction = true;
@@ -536,6 +536,15 @@ namespace das {
             }
             fb->list.push_back(with);
         }
+        // now, lets generate all release functions (after the original finally section is generated, but before deleting the lambda itself)
+        pFunc->body = fb;
+        thisProgram->library.foreach([&](Module * mod){
+            for ( auto & cm : mod->captureMacros ) {
+                cm->releaseFunction(thisProgram, thisProgram->thisModule.get(), ls.get(), pFunc.get());
+            }
+            return true;
+        },"*");
+
         // delete * this
         auto THISA = make_smart<ExprVar>(block->at, "__this");
         auto THISAP = make_smart<ExprPtr2Ref>(block->at, THISA);
@@ -548,7 +557,7 @@ namespace das {
         delit1->native = true;
         delit1->alwaysSafe = true;
         fb->list.push_back(delit1);
-        pFunc->body = fb;
+        // function goo
         pFunc->result = make_smart<TypeDecl>(Type::tVoid);
         auto cTHIS = make_smart<Variable>();
         cTHIS->at = ls->at;
