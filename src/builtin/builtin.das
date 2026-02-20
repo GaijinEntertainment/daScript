@@ -1922,6 +1922,13 @@ def get_const_ptr(src : smart_ptr<auto(TT)>) : TT? const {
     }
 }
 
+def add_ptr_ref(src : auto(TT)?) : smart_ptr<TT> {
+    unsafe {
+        var dst := reinterpret<smart_ptr<TT>> src
+        return <- dst
+    }
+}
+
 def add_ptr_ref(src : smart_ptr<auto(TT)>) : smart_ptr<TT> {
     unsafe {
         var dst := reinterpret<smart_ptr<TT>> src

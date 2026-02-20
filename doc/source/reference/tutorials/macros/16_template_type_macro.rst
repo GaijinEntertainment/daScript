@@ -146,6 +146,8 @@ Running the tutorial::
 
    Previous tutorial: :ref:`tutorial_macro_type_macro`
 
+   Next tutorial: :ref:`tutorial_macro_qmacro`
+
    Standard library: ``daslib/typemacro_boost.das`` — infrastructure for
    template type macros (``TypeMacroTemplateArgument``,
    ``infer_template_types``, ``add_structure_aliases``, etc.)
