@@ -597,7 +597,7 @@ class private ChannelAndStatusCapture : AstCaptureMacro {
         )
         return <- pCall
     }
-        //! This macro implements capturing of the `jobque::Channel` and `jobque::JobStatus` types.
+    //! This macro implements capturing of the `jobque::Channel` and `jobque::JobStatus` types.
     //! When captured reference counts are increased. When lambda is destroyed, reference counts are decreased.
     def override captureExpression(prog : Program?; mod : Module?; expr : ExpressionPtr; typ : TypeDeclPtr) : ExpressionPtr {
         //! Implementation details for the capture macro.

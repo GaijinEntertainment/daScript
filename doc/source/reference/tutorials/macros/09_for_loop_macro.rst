@@ -232,6 +232,8 @@ complex transformation but the same ``AstForLoopMacro`` pattern.
 
    Previous tutorial: :ref:`tutorial_macro_variant_macro`
 
+   Next tutorial: :ref:`tutorial_macro_capture_macro`
+
    Standard library: ``daslib/soa.das`` (``SoaForLoop`` macro)
 
    Language reference: :ref:`Macros <macros>` — full macro system documentation
