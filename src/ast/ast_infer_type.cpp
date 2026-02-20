@@ -4412,8 +4412,9 @@ namespace das {
                 if (pVar->type && !pVar->type->isTuple()) {
                     error("for loop iterator variable " + pVar->name + " is not a tuple", "", "",
                           expr->at, CompilationError::invalid_iteration_source);
+                } else {
+                    expandTupleName(pVar->name, pVar->at);
                 }
-                expandTupleName(pVar->name, pVar->at);
             }
             ++idx;
         }

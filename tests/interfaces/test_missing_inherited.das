@@ -24,8 +24,3 @@ class Partial {
         return "bar"
     }
 }
-
-[export]
-def main() {
-    pass
-}

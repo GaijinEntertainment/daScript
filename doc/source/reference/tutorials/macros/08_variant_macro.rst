@@ -342,6 +342,8 @@ Key takeaways
 
    Previous tutorial: :ref:`tutorial_macro_block_macro`
 
+   Next tutorial: :ref:`tutorial_macro_for_loop_macro`
+
    Standard library:
    ``daslib/interfaces.das`` (``InterfaceAsIs`` macro),
    ``daslib/ast_boost.das`` (``BetterRttiVisitor``),
