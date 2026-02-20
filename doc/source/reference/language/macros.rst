@@ -451,14 +451,26 @@ AstTypeInfoMacro
         def abstract getAstType ( var lib:ModuleLibrary; expr:smart_ptr<ExprTypeInfo>; var errors:das_string ) : TypeDeclPtr
     }
 
-``add_new_typeinfo_macro`` adds a reader macro to a module.
+``add_new_typeinfo_macro`` adds a typeinfo macro to a module.
 There is additionally the ``[typeinfo_macro]`` annotation, which essentially automates the same thing.
 
-``getAstChange`` returns a newly generated ast for the typeinfo expression.
+The ``typeinfo`` expression uses gen2 syntax with the trait name **outside** the
+parentheses::
+
+    typeinfo trait_name(type<T>)                // basic
+    typeinfo trait_name<subtrait>(type<T>)      // with subtrait
+    typeinfo trait_name<sub;extra>(type<T>)     // with subtrait and extratrait
+
+``getAstChange`` returns a newly generated AST node for the typeinfo expression.
 Alternatively, it returns null if no changes are required, or if there is an error.
 In case of error, the errors string must be filled.
 
 ``getAstType`` returns the type of the new typeinfo expression.
+
+.. seealso::
+
+   Tutorial: :ref:`tutorial_macro_typeinfo_macro` — step-by-step guide with three
+   ``getAstChange`` examples (struct description, enum names, method check).
 
 ---------------
 AstForLoopMacro
