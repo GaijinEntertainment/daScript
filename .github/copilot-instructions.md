@@ -55,7 +55,7 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - **Tuple `=>` operator:** `a => b` creates a `tuple<auto;auto>` — useful in LINQ, table construction, and ad-hoc pairs
 - **Bitfield variables** need explicit type for `.field` access and printing: `var f : MyBitfield`
 - **Bitfield dot access:** read with `f.flag` (returns bool), write with `f.flag = true/false`
-- **`typeinfo`** special syntax: `typeinfo enum_length(type<MyEnum>)` — NOT `typeinfo(enum_length type<MyEnum>)`
+- **`typeinfo`** gen2 syntax: trait name goes **outside** parentheses — `typeinfo trait_name(type<T>)`, NOT `typeinfo(trait_name type<T>)`. With subtrait: `typeinfo has_method<name>(type<T>)`. With two traits: `typeinfo trait<sub;extra>(type<T>)`
 - **`static_if`:** `static_if (condition) { ... }` — parentheses required in gen2
 
 ### Important defaults

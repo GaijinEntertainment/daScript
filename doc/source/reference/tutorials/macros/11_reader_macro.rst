@@ -306,6 +306,8 @@ The standard library includes several reader macros:
 
    Previous tutorial: :ref:`tutorial_macro_capture_macro`
 
+   Next tutorial: :ref:`tutorial_macro_typeinfo_macro`
+
    Standard library: ``daslib/regex_boost.das``, ``daslib/json_boost.das``,
    ``daslib/stringify.das``, ``daslib/spoof.das``
 
