@@ -69,10 +69,10 @@ Capture
 
 Unlike blocks, lambdas can specify their capture types explicitly. There are several available types of capture:
 
-    * by copy
-    * by move
-    * by clone
-    * by reference
+    * by copy (``=``)
+    * by move (``<-``)
+    * by clone (``:=``)
+    * by reference (``&``)
 
 Capturing by reference requires unsafe.
 
