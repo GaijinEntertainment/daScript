@@ -297,6 +297,8 @@ enumeration macro use cases:
 
    Previous tutorial: :ref:`tutorial_macro_typeinfo_macro`
 
+   Next tutorial: :ref:`tutorial_macro_pass_macro`
+
    Standard library: ``daslib/enum_trait.das`` —
    :ref:`enum_trait module reference <stdlib_enum_trait>`
 

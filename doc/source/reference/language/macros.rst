@@ -446,22 +446,32 @@ Note how the name is provided in the ``[call_macro]`` annotation.
 AstPassMacro
 ------------
 
-``AstPassMacro`` is one macro to rule them all. It gets entire module as an input,
-and can be invoked at numerous passes:
+``AstPassMacro`` is one macro to rule them all. It gets the entire program as
+input and can be invoked at numerous passes:
 
 .. code-block:: das
 
     class AstPassMacro {
-        def abstract apply ( prog:ProgramPtr; mod:Module? ) : bool
+        def abstract apply(prog : ProgramPtr; mod : Module?) : bool
     }
+
+Five annotations control when a pass macro runs:
+
+- ``[infer_macro]`` — after clean type inference.  Returning ``true`` re-infers.
+- ``[dirty_infer_macro]`` — during each dirty inference pass.
+- ``[lint_macro]`` — after successful compilation (lint phase, read-only).
+- ``[global_lint_macro]`` — same as ``[lint_macro]`` but for all modules.
+- ``[optimization_macro]`` — during the optimisation loop.
 
 ``make_pass_macro`` registers a class as a pass macro.
 
-``add_new_infer_macro`` adds a pass macro to the infer pass. The ``[infer]`` annotation accomplishes the same thing.
+Typically, such macros create an ``AstVisitor`` which performs the necessary
+transformations via ``visit(prog, adapter)``.
 
-``add_new_dirty_infer_macro`` adds a pass macro to the ``dirty`` section of infer pass. The ``[dirty_infer]`` annotation accomplishes the same thing.
+.. seealso::
 
-Typically, such macros create an ``AstVisitor`` which performs the necessary transformations.
+   :ref:`tutorial_macro_pass_macro` — step-by-step tutorial with lint and
+   infer macro examples.
 
 ----------------
 AstTypeInfoMacro
