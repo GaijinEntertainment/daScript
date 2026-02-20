@@ -312,13 +312,15 @@ AstReaderMacro
 ``add_new_reader_macro`` adds a reader macro to a module.
 There is additionally the ``[reader_macro]`` annotation, which essentially automates the same thing.
 
-Reader macros accept characters, collect them if necessary, and return an ``ast::Expression``:
+Reader macros accept characters, collect them if necessary, and produce output
+via one of two patterns:
 
 .. code-block:: das
 
     class AstReaderMacro {
         def abstract accept ( prog:ProgramPtr; mod:Module?; expr:ExprReader?; ch:int; info:LineInfo ) : bool
         def abstract visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprReader> ) : ExpressionPtr
+        def abstract suffix ( prog:ProgramPtr; mod:Module?; expr:ExprReader?; info:LineInfo; var outLine:int&; var outFile:FileInfo?& ) : string
     }
 
 Reader macros are invoked via the ``% READER_MACRO_NAME ~ character_sequence`` syntax.
@@ -363,6 +365,20 @@ Once the sequence ends with the terminator sequence %%, ``accept`` returns false
 In ``visit``, the collected sequence is converted into a make array ``[ch1,ch2,..]`` expression.
 
 More complex examples include the JsonReader macro in :ref:`daslib/json_boost <stdlib_json_boost>` or RegexReader in :ref:`daslib/regex_boost <stdlib_regex_boost>`.
+
+``suffix`` is an alternative to ``visit`` — it is called immediately after ``accept`` during parsing,
+before the AST is built.  Instead of returning an AST node, it returns a **string** of daScript source
+code that the parser re-parses.  This is useful for generating top-level declarations (functions,
+structs) from custom syntax.  When used at module level the ``ExprReader`` node is discarded,
+and the suffix text is the only output.  ``SpoofInstanceReader`` in ``daslib/spoof.das`` is an example.
+
+The ``outLine`` and ``outFile`` parameters allow remapping line information for error reporting in the
+injected code.
+
+.. seealso::
+
+   :ref:`Tutorial: Reader Macros <tutorial_macro_reader_macro>` — step-by-step example
+   of both visit and suffix patterns.
 
 ------------
 AstCallMacro
