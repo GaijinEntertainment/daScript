@@ -631,14 +631,13 @@ namespace das {
         return register_dynamic_module(path, mod_name, static_cast<int>(RegisterOnError::Nothing), context, at);
     }
 
-    void register_native_path(const char *mod_name, const char *src_path, const char *dst_path, Context * context, LineInfoArg * at ) {
+    void register_native_path(const char *mod_name, const char *src_path, const char *dst_path, Context * /*context*/, LineInfoArg * /*at*/ ) {
         // daScriptEnvironment::ensure() will help, but let's keep assertion.
         DAS_ASSERTF(daScriptEnvironment::getBound(), "When register_native_path called we expect that environment is already set.");
         auto &mod_resolve = daScriptEnvironment::getBound()->g_dyn_modules_resolve;
         if (mod_resolve == nullptr) {
             mod_resolve = new vector<DynamicModuleInfo>();
         }
-        size_t mod_id = 0;
         auto cur_mod = find_if(mod_resolve->begin(), mod_resolve->end(), [&mod_name](DynamicModuleInfo &mod) {
             return mod.name == mod_name;
         });

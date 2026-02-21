@@ -318,11 +318,14 @@ namespace das {
             expr->type->baseType = Type::tLambda;
             if (!expr->type->isAutoOrAlias()) {
                 if (auto unInferred = isFullyInferredBlock(block.get())) {
-                    TextWriter tt;
-                    if (verbose)
-                        tt << unInferred->at.describe() << ": " << unInferred->describe() << " is not fully inferred yet";
-                    error("block is not fully inferred yet", tt.str(), "",
-                          expr->at, CompilationError::invalid_block);
+                    // only report block inference error if there is no error inside the block, to avoid reporting multiple errors caused by the same issue
+                    if ( ((ExprBlock *)expr->block.get())->insideErrorCount==0 ) {
+                        TextWriter tt;
+                        if (verbose)
+                            tt << unInferred->at.describe() << ": " << unInferred->describe() << " is not fully inferred yet";
+                        error("block is not fully inferred yet", tt.str(), "",
+                            expr->at, CompilationError::invalid_block);
+                    }
                 } else {
                     if (auto btl = convertBlockToLambda(expr)) {
                         return btl;
@@ -333,11 +336,14 @@ namespace das {
             expr->type->baseType = Type::tFunction;
             if (!expr->type->isAutoOrAlias()) {
                 if (auto unInferred = isFullyInferredBlock(block.get())) {
-                    TextWriter tt;
-                    if (verbose)
-                        tt << unInferred->at.describe() << ": " << unInferred->describe() << " is not fully inferred yet";
-                    error("block is not fully inferred yet", tt.str(), "",
-                          expr->at, CompilationError::invalid_block);
+                    // only report block inference error if there is no error inside the block, to avoid reporting multiple errors caused by the same issue
+                    if ( ((ExprBlock *)expr->block.get())->insideErrorCount==0 ) {
+                        TextWriter tt;
+                        if (verbose)
+                            tt << unInferred->at.describe() << ": " << unInferred->describe() << " is not fully inferred yet";
+                        error("block is not fully inferred yet", tt.str(), "",
+                            expr->at, CompilationError::invalid_block);
+                    }
                 } else {
                     if (auto btl = convertBlockToLocalFunction(expr)) {
                         return btl;

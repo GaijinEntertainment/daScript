@@ -3043,6 +3043,7 @@ namespace das {
         }
         scopes.push_back(block);
         inFinally.push_back(false);
+        block->insideErrorCount = program->errors.size();
         pushVarStack();
         block->inFunction = func.get();
     }
@@ -3170,6 +3171,7 @@ namespace das {
     }
     ExpressionPtr InferTypes::visit(ExprBlock *block) {
         // to the rest of it
+        block->insideErrorCount = program->errors.size() - block->insideErrorCount;
         popVarStack();
         scopes.pop_back();
         inFinally.pop_back();
