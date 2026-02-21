@@ -109,7 +109,12 @@ class DASObject(ObjectDescription):
             if not arglist:
                 signode += addnodes.desc_parameterlist()
             else:
-                _pseudo_parse_arglist(signode, arglist, env=self.env)
+                import inspect as _inspect
+                _ppa_params = _inspect.signature(_pseudo_parse_arglist).parameters
+                if 'env' in _ppa_params:
+                    _pseudo_parse_arglist(signode, arglist, env=self.env)
+                else:
+                    _pseudo_parse_arglist(signode, arglist)
         return fullname, prefix
 
     def add_target_and_index(self, name_obj, sig, signode):
