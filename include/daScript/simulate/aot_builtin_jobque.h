@@ -12,13 +12,24 @@ namespace das {
         void *              data = nullptr;
         TypeInfo *          type = nullptr;
         Context *           from = nullptr;
+        shared_ptr<Context> fromShared;
         Feature() {}
-        __forceinline Feature ( void * d, TypeInfo * ti, Context * c) : data(d), type(ti), from(c) {
+        __forceinline Feature ( void * d, TypeInfo * ti, Context * c) : data(d), type(ti) {
+            setFrom(c);
+        }
+        __forceinline void setFrom ( Context * c ) {
+            from = c;
+            if ( c && c->sharedPtrContext ) {
+                fromShared = c->shared_from_this();
+            } else {
+                fromShared.reset();
+            }
         }
         __forceinline void clear() {
             data = nullptr;
             type = nullptr;
             from = nullptr;
+            fromShared.reset();
         }
     };
 

@@ -822,6 +822,7 @@ namespace das
         bool                            gcEnabled = false;
         bool                            failed = false;
         bool                            verySafeContext = false;    // when true, array and table reserves don't free memory
+        bool                            sharedPtrContext = false;   // there is a shared ptr to this context
     public:
         string                          name;
         Bitfield                        category = 0;

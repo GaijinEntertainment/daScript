@@ -1813,6 +1813,7 @@ namespace das
         context->persistent = true;
         forkContext.reset(get_clone_context(context, uint32_t(ContextCategory::debug_context)));
         context->persistent = realPersistent;
+        context->sharedPtrContext = true;
         *g_isInDebugAgentCreation = false;
         vec4f args[1];
         args[0] = cast<Context *>::from(context);

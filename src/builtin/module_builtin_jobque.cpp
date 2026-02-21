@@ -53,7 +53,7 @@ namespace das {
         void * oldData = box.data;
         box.data = das_invoke<void *>::invoke<void *>(context, at, blk, box.data);
         if ( oldData != box.data ) {
-            box.from = context;
+            box.setFrom(context);
             box.type = ti;
         }
     }
@@ -382,11 +382,11 @@ namespace das {
 das::Context* get_clone_context( das::Context * ctx, uint32_t category );//link time resolved dependencies
 
 namespace das {
-
     void new_job_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo ) {
         if ( !g_jobQue ) context->throw_error_at(lineinfo, "need to be in 'with_job_que' block");
         shared_ptr<Context> forkContext;
         forkContext.reset(get_clone_context(context, uint32_t(ContextCategory::job_clone)));
+        forkContext->sharedPtrContext = true;
         auto ptr = forkContext->allocate(lambdaSize + 16,lineinfo);
         forkContext->heap->mark_comment(ptr, "new [[ ]] in new_job");
         memset ( ptr, 0, lambdaSize + 16 );
@@ -412,6 +412,7 @@ namespace das {
     void new_thread_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo ) {
         shared_ptr<Context> forkContext;
         forkContext.reset(get_clone_context(context, uint32_t(ContextCategory::thread_clone)));
+        forkContext->sharedPtrContext = true;
         auto ptr = forkContext->allocate(lambdaSize + 16,lineinfo);
         forkContext->heap->mark_comment(ptr, "new [[ ]] in new_thread");
         memset ( ptr, 0, lambdaSize + 16 );
@@ -450,6 +451,7 @@ namespace das {
         debugger_started.store(true);
         shared_ptr<Context> forkContext;
         forkContext.reset(get_clone_context(context, uint32_t(ContextCategory::thread_clone)));
+        forkContext->sharedPtrContext = true;
         auto bound = daScriptEnvironment::getBound();
         thread([=]() mutable {
             daScriptEnvironment::setBound(bound);
