@@ -184,6 +184,13 @@ TARGET_LINK_LIBRARIES(integration_cpp_20 libDaScriptDyn Threads::Threads)
 ADD_DEPENDENCIES(integration_cpp_20 libDaScriptDyn integration_cpp_20_dasAotStubStandalone)
 SETUP_CPP11(integration_cpp_20)
 
+#################################
+# Tutorial 21 — Threading
+#################################
+DAS_CPP_INTEGRATION_TUTORIAL(integration_cpp_21
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/21_threading.cpp
+)
+
 # Install C++ integration tutorial source files
 file(GLOB CPP_INTEGRATION_TUTORIAL_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/*.cpp

@@ -164,4 +164,6 @@ Expected output::
 
    Previous tutorial: :ref:`tutorial_integration_cpp_class_adapters`
 
+   Next tutorial: :ref:`tutorial_integration_cpp_threading`
+
    Related: :ref:`tutorial_integration_cpp_aot`

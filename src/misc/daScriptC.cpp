@@ -5,6 +5,7 @@
 #include "daScript/ast/dyn_modules.h"
 #include "daScript/misc/sysos.h"
 #include "daScript/ast/ast_serializer.h"
+#include "daScript/misc/free_list.h"
 
 using namespace das;
 
@@ -107,6 +108,9 @@ DAS_API uint32_t SIDEEFFECTS_worstDefault = uint32_t(SideEffects::worstDefault);
 DAS_API uint32_t SIDEEFFECTS_accessGlobal = uint32_t(SideEffects::accessGlobal);
 DAS_API uint32_t SIDEEFFECTS_invoke =  uint32_t(SideEffects::invoke);
 DAS_API uint32_t SIDEEFFECTS_inferredSideEffects =  uint32_t(SideEffects::inferredSideEffects);
+
+DAS_API uint32_t DAS_CONTEXT_CATEGORY_THREAD_CLONE = uint32_t(ContextCategory::thread_clone);
+DAS_API uint32_t DAS_CONTEXT_CATEGORY_JOB_CLONE = uint32_t(ContextCategory::job_clone);
 
 void das_initialize() {
     das_initialize_modules();
@@ -652,6 +656,28 @@ das_program * das_program_deserialize ( const void * data, int64_t size ) {
 
 void das_serialized_data_release ( das_serialized_data * blob ) {
     if ( blob ) delete (SerializationStorageVector *) blob;
+}
+
+// --- Threading ---
+
+das_environment * das_environment_get_bound () {
+    return (das_environment *) daScriptEnvironment::getBound();
+}
+
+void das_environment_set_bound ( das_environment * env ) {
+    daScriptEnvironment::setBound((daScriptEnvironment *) env);
+}
+
+das_reuse_cache_guard * das_reuse_cache_guard_create () {
+    return (das_reuse_cache_guard *) new ReuseCacheGuard();
+}
+
+void das_reuse_cache_guard_release ( das_reuse_cache_guard * guard ) {
+    if ( guard ) delete (ReuseCacheGuard *) guard;
+}
+
+das_context * das_context_clone ( das_context * source, uint32_t category ) {
+    return (das_context *) new Context(*(Context *)source, category);
 }
 
 // --- Function info ---
