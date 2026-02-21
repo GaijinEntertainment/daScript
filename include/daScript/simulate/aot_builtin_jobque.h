@@ -11,13 +11,25 @@ namespace das {
     struct Feature {
         void *              data = nullptr;
         TypeInfo *          type = nullptr;
-        shared_ptr<Context> from;
+        Context *           from = nullptr;
+        shared_ptr<Context> fromShared;
         Feature() {}
-        __forceinline Feature ( void * d, TypeInfo * ti, Context * c) : data(d), type(ti), from(c ? c->shared_from_this() : nullptr) {}
+        __forceinline Feature ( void * d, TypeInfo * ti, Context * c) : data(d), type(ti) {
+            setFrom(c);
+        }
+        __forceinline void setFrom ( Context * c ) {
+            from = c;
+            if ( c && c->sharedPtrContext ) {
+                fromShared = c->shared_from_this();
+            } else {
+                fromShared.reset();
+            }
+        }
         __forceinline void clear() {
             data = nullptr;
             type = nullptr;
-            from.reset();
+            from = nullptr;
+            fromShared.reset();
         }
     };
 
@@ -33,7 +45,7 @@ namespace das {
         void peek ( TT && tt ) {
             lock_guard<mutex> guard(mCompleteMutex);
             if ( box.data ) {
-                tt(box.data, box.type, box.from.get());
+                tt(box.data, box.type, box.from);
             }
         }
     protected:
@@ -72,14 +84,14 @@ namespace das {
         void for_each_item ( TT && tt ) {
             lock_guard<mutex> guard(mCompleteMutex);
             for ( auto & f : pipe ) {
-                tt(f.data, f.type, f.from ? f.from.get() : owner);
+                tt(f.data, f.type, f.from ? f.from : owner);
             }
         }
         template <typename TT>
         void gather ( TT && tt ) {
             lock_guard<mutex> guard(mCompleteMutex);
             for ( auto & f : pipe ) {
-                tt(f.data, f.type, f.from ? f.from.get() : owner);
+                tt(f.data, f.type, f.from ? f.from : owner);
             }
             pipe.clear();
         }
@@ -87,7 +99,7 @@ namespace das {
         void gatherEx ( Context * ctx, TT && tt ) {
             lock_guard<mutex> guard(mCompleteMutex);
             for ( auto f = pipe.begin(); f != pipe.end(); ) {
-                auto itOwner = f->from ? f->from.get() : owner;
+                auto itOwner = f->from ? f->from : owner;
                 if ( itOwner == ctx ) {
                     tt(f->data, f->type, itOwner);
                     f = pipe.erase(f);
@@ -100,7 +112,7 @@ namespace das {
         void gather_and_forward ( Channel * that, TT && tt ) {
             lock_guard<mutex> guard(mCompleteMutex);
             for ( auto & f : pipe ) {
-                tt(f.data, f.type, f.from ? f.from.get() : owner);
+                tt(f.data, f.type, f.from ? f.from : owner);
             }
             lock_guard<mutex> guard2(that->mCompleteMutex);
             for ( auto & f : pipe ) {

@@ -71,6 +71,7 @@ introduced in earlier tutorials.
    tutorials/41_serialization.rst
    tutorials/42_testing_tools.rst
    tutorials/43_interfaces.rst
+   tutorials/44_compile_and_run.rst
 
 .. _tutorials_integration_c:
 
