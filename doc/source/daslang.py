@@ -109,7 +109,7 @@ class DASObject(ObjectDescription):
             if not arglist:
                 signode += addnodes.desc_parameterlist()
             else:
-                _pseudo_parse_arglist(signode, arglist)
+                _pseudo_parse_arglist(signode, arglist, env=self.env)
         return fullname, prefix
 
     def add_target_and_index(self, name_obj, sig, signode):

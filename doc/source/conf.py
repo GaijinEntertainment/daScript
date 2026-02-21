@@ -53,7 +53,7 @@ master_doc = 'index'
 # General information about the project.
 project = u'Daslang documentation'
 copyright = '2018-%s, Gaijin Entertainment' % time.strftime('%Y')
-author = u'Anton Yudintsev @* Boris Batkin'
+author = u'Boris Batkin @* Anton Yudintsev'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -246,7 +246,33 @@ latex_elements = {
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
-_stdauthor = r'Anton Yudintsev'
+_stdauthor = r'Boris Batkin'
+
+# -- Options for rinohtype (PDF without LaTeX) ----------------------------
+# Use RINOH_BUILD_MODE env var to select which PDF to build:
+#   'reference' -> reference manual only
+#   'stdlib'    -> standard library only
+#   (unset)     -> both
+import os as _os
+_rinoh_mode = _os.environ.get('RINOH_BUILD_MODE', 'all')
+if _rinoh_mode == 'reference':
+    rinoh_documents = [
+        dict(doc='reference/index', target='daslang',
+             title='Daslang Reference Manual', author=_stdauthor),
+    ]
+elif _rinoh_mode == 'stdlib':
+    rinoh_documents = [
+        dict(doc='stdlib/index', target='daslangstdlib',
+             title='Daslang Standard Library', author=_stdauthor),
+    ]
+else:
+    rinoh_documents = [
+        dict(doc='reference/index', target='daslang',
+             title='Daslang Reference Manual', author=_stdauthor),
+        dict(doc='stdlib/index', target='daslangstdlib',
+             title='Daslang Standard Library', author=_stdauthor),
+    ]
+
 latex_documents = [
     ('reference/index', 'daslang.tex',
      'Daslang Reference Manual', _stdauthor, 'manual'),

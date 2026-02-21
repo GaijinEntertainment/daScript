@@ -167,7 +167,6 @@ if "%1" == "latex" (
 )
 
 if "%1" == "latexpdf" (
-    %SPHINXBUILD% -b latex %ALLSPHINXOPTS% %BUILDDIR%/latex
 	if errorlevel 1 exit /b 1
     cd %BUILDDIR%/latex
     pdflatex daslang.tex
@@ -179,7 +178,13 @@ if "%1" == "latexpdf" (
     echo.Build finished; the PDF files are in %BUILDDIR%/latex.
     goto end
 )
-
+if "%1" == "rinohpdf" (
+    %SPHINXBUILD% -b rinoh %ALLSPHINXOPTS% %BUILDDIR%/rinoh
+    if errorlevel 1 exit /b 1
+    echo.
+    echo.Build finished; the PDF files are in %BUILDDIR%/rinoh.
+    goto end
+)
 if "%1" == "latexpdfja" (
     %SPHINXBUILD% -b latex %ALLSPHINXOPTS% %BUILDDIR%/latex
     cd %BUILDDIR%/latex
