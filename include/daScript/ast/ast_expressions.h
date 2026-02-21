@@ -1061,6 +1061,7 @@ namespace das
         virtual bool rtti_isMakeBlock() const override { return true; }
         virtual void serialize( AstSerializer & ser ) override;
         vector<CaptureEntry>    capture;
+        LineInfo                captureAt;
         ExpressionPtr block;
         uint32_t stackTop = 0;
         union {
@@ -1082,6 +1083,7 @@ namespace das
         virtual void serialize( AstSerializer & ser ) override;
         TypeDeclPtr iterType;
         vector<CaptureEntry> capture;
+        LineInfo captureAt;
     };
 
     struct DAS_API ExprYield : Expression {

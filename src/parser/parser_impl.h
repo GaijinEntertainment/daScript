@@ -100,7 +100,7 @@ namespace das {
             const LineInfo & fromBlock, const LineInfo & annLAt );
     Expression * ast_NameName ( yyscan_t scanner, string * ena, string * eni, const LineInfo & enaAt, const LineInfo & eniAt );
     Expression * ast_makeBlock ( yyscan_t scanner, int bal, AnnotationList * annL, vector<CaptureEntry> * clist,
-        vector<VariableDeclaration*> * list, TypeDecl * result, Expression * block, const LineInfo & blockAt, const LineInfo & annLAt );
+        vector<VariableDeclaration*> * list, TypeDecl * result, Expression * block, const LineInfo & blockAt, const LineInfo & annLAt, const LineInfo & clistAt );
     Expression * ast_Let ( yyscan_t scanner, bool kwd_let, bool inScope, VariableDeclaration * decl, const LineInfo & kwd_letAt, const LineInfo & declAt );
     Expression * ast_LetList ( yyscan_t scanner, bool kwd_let, bool inScope, vector<VariableDeclaration *> & decl, const LineInfo & kwd_letAt, const LineInfo & declAt );
     Function * ast_functionDeclarationHeader ( yyscan_t scanner, string * name, vector<VariableDeclaration*> * list,
@@ -112,7 +112,7 @@ namespace das {
     AnnotationArgumentList * ast_annotationArgumentListEntry ( yyscan_t, AnnotationArgumentList * argL, AnnotationArgument * arg );
     Expression * ast_lpipe ( yyscan_t scanner, Expression * fncall, Expression * arg, const LineInfo & locAt );
     Expression * ast_rpipe ( yyscan_t scanner, Expression * arg, Expression * fncall, const LineInfo & locAt );
-    Expression * ast_makeGenerator ( yyscan_t scanner, TypeDecl * typeDecl, vector<CaptureEntry> * clist, Expression * subexpr, const LineInfo & locAt );
+    Expression * ast_makeGenerator ( yyscan_t scanner, TypeDecl * typeDecl, vector<CaptureEntry> * clist, Expression * subexpr, const LineInfo & locAt, const LineInfo & clistAt );
     ExprBlock * ast_wrapInBlock ( Expression * expr );
     int skip_underscode ( char * tok, char * buf, char * bufend );
     Expression * ast_makeStructToMakeVariant ( MakeStruct * decl, const LineInfo & locAt );

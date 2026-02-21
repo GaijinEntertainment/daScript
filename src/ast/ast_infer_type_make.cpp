@@ -128,7 +128,7 @@ namespace das {
                                             DAS_ASSERT(pFnFin->classParent);
                                         }
                                         reportAstChanged();
-                                        auto ms = generateLambdaMakeStruct(ls, pFn, pFnFin, cl.capt, expr->capture, expr->at, program);
+                                        auto ms = generateLambdaMakeStruct(ls, pFn, pFnFin, cl.capt, expr->capture, expr->at, expr->captureAt, program);
                                         // each ( [[ ]]] )
                                         auto cEach = make_smart<ExprCall>(block->at, makeRef ? "each_ref" : "each");
                                         cEach->generated = true;
@@ -258,7 +258,7 @@ namespace das {
                                         DAS_ASSERT(pFnFin->classParent);
                                     }
                                     reportAstChanged();
-                                    auto ms = generateLambdaMakeStruct(ls, pFn, pFnFin, cl.capt, expr->capture, expr->at, program);
+                                    auto ms = generateLambdaMakeStruct(ls, pFn, pFnFin, cl.capt, expr->capture, expr->at, expr->captureAt, program);
                                     return ms;
                                 } else {
                                     error("lambda finalizer name mismatch", "", "",

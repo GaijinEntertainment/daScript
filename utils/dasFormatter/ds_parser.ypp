@@ -1433,7 +1433,7 @@ expr_call_pipe
         }
     }
     |   DAS_GENERATOR[loc] '<' type_declaration_no_options[typeDecl] '>' optional_capture_list[clist] expr_full_block_assumed_piped[subexpr] {
-        $$ = ast_makeGenerator(scanner,$typeDecl,$clist,$subexpr,tokAt(scanner,@loc));
+        $$ = ast_makeGenerator(scanner,$typeDecl,$clist,$subexpr,tokAt(scanner,@loc),tokAt(scanner,@clist));
     }
     ;
 
@@ -1485,7 +1485,7 @@ expr_keyword
         auto pCall = yyextra->g_Program->makeCall(tokAt(scanner,@kwd),*$kwd);
         pCall->arguments.push_back($subexpr);
         auto resT = new TypeDecl(Type::autoinfer);
-        auto blk = ast_makeBlock(scanner,0,nullptr,nullptr,nullptr,resT,$block,tokAt(scanner,@block),tokAt(scanner,@block));
+        auto blk = ast_makeBlock(scanner,0,nullptr,nullptr,nullptr,resT,$block,tokAt(scanner,@block),tokAt(scanner,@block),LineInfo());
         pCall->arguments.push_back(blk);
         delete $kwd;
         $$ = pCall;
@@ -2008,14 +2008,14 @@ expr_block
     }
     |   block_or_lambda[bal] optional_annotation_list[annL] optional_capture_list[clist] optional_function_argument_list[list]
                                 optional_function_type[result] block_or_simple_block[block] {
-        $$ = ast_makeBlock(scanner,$bal,$annL,$clist,$list,$result,$block,tokAt(scanner,@block),tokAt(scanner,@annL));
+        $$ = ast_makeBlock(scanner,$bal,$annL,$clist,$list,$result,$block,tokAt(scanner,@block),tokAt(scanner,@annL),tokAt(scanner,@clist));
     }
     ;
 
 expr_full_block
     :   block_or_lambda[bal] optional_annotation_list[annL] optional_capture_list[clist] optional_function_argument_list[list]
                                 optional_function_type[result] block_or_simple_block[block] {
-        $$ = ast_makeBlock(scanner,$bal,$annL,$clist,$list,$result,$block,tokAt(scanner,@block),tokAt(scanner,@annL));
+        $$ = ast_makeBlock(scanner,$bal,$annL,$clist,$list,$result,$block,tokAt(scanner,@block),tokAt(scanner,@annL),tokAt(scanner,@clist));
     }
     ;
 
@@ -2023,7 +2023,7 @@ expr_full_block_assumed_piped
     :   block_or_lambda[bal] {  yyextra->das_need_oxford_comma = false; }
             optional_annotation_list[annL] optional_capture_list[clist] optional_function_argument_list[list]
                                 optional_function_type[result] expression_block[block] {
-        $$ = ast_makeBlock(scanner,$bal,$annL,$clist,$list,$result,$block,tokAt(scanner,@block),tokAt(scanner,@annL));
+        $$ = ast_makeBlock(scanner,$bal,$annL,$clist,$list,$result,$block,tokAt(scanner,@block),tokAt(scanner,@annL),tokAt(scanner,@clist));
     }
     ;
 
@@ -2353,10 +2353,10 @@ expr2
     |   DAS_DEREF[loc] '(' expr2[subexpr] ')'       { $$ = new ExprPtr2Ref(tokAt(scanner,@loc),$subexpr); }
     |   DAS_ADDR[loc] '(' expr2[subexpr] ')'        { $$ = new ExprRef2Ptr(tokAt(scanner,@loc),$subexpr); }
     |   DAS_GENERATOR[loc] '<' type_declaration_no_options[typeDecl] '>' optional_capture_list[clist] '(' ')' {
-        $$ = ast_makeGenerator(scanner,$typeDecl,$clist,nullptr,tokAt(scanner,@loc));
+        $$ = ast_makeGenerator(scanner,$typeDecl,$clist,nullptr,tokAt(scanner,@loc),tokAt(scanner,@clist));
     }
     |   DAS_GENERATOR[loc] '<' type_declaration_no_options[typeDecl] '>' optional_capture_list[clist] '(' expr2[subexpr] ')' {
-        $$ = ast_makeGenerator(scanner,$typeDecl,$clist,$subexpr,tokAt(scanner,@loc));
+        $$ = ast_makeGenerator(scanner,$typeDecl,$clist,$subexpr,tokAt(scanner,@loc),tokAt(scanner,@clist));
     }
     |   expr2[subexpr] QQ[loc] expr2[dval]           { $$ = new ExprNullCoalescing(tokRangeAt(scanner,@subexpr, @dval),$subexpr,$dval); }
     |   expr2[subexpr] DAS_IS[loc] DAS_TYPE '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[decl] '>'[end] { yyextra->das_arrow_depth --; } {

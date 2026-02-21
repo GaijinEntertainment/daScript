@@ -1551,12 +1551,12 @@ namespace das {
 
     void ExprMakeBlock::serialize(AstSerializer & ser) {
         Expression::serialize(ser);
-        ser << capture << block << stackTop << mmFlags;
+        ser << capture << captureAt << block << stackTop << mmFlags;
     }
 
     void ExprMakeGenerator::serialize(AstSerializer & ser) {
         ExprLooksLikeCall::serialize(ser);
-        ser << iterType << capture;
+        ser << iterType << capture << captureAt;
     }
 
     void ExprYield::serialize(AstSerializer & ser) {
@@ -2330,7 +2330,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 76;
+        static constexpr uint32_t currentVersion = 77;
         return currentVersion;
     }
 

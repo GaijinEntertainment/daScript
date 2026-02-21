@@ -1336,6 +1336,7 @@ namespace das {
             cexpr->iterType = make_smart<TypeDecl>(*iterType);
         }
         cexpr->capture = capture;
+        cexpr->captureAt = captureAt;
         return cexpr;
     }
 
@@ -1375,6 +1376,7 @@ namespace das {
         cexpr->isLambda = isLambda;
         cexpr->isLocalFunction = isLocalFunction;
         cexpr->capture = capture;
+        cexpr->captureAt = captureAt;
         cexpr->aotFunctorName = aotFunctorName;
         return cexpr;
     }
