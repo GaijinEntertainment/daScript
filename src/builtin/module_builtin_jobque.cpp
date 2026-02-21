@@ -53,7 +53,7 @@ namespace das {
         void * oldData = box.data;
         box.data = das_invoke<void *>::invoke<void *>(context, at, blk, box.data);
         if ( oldData != box.data ) {
-            box.from = context->shared_from_this();
+            box.from = context;
             box.type = ti;
         }
     }

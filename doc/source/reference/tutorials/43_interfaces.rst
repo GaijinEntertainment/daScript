@@ -262,3 +262,5 @@ Syntax                                  Description
    Full source: :download:`tutorials/language/43_interfaces.das <../../../../tutorials/language/43_interfaces.das>`
 
    Previous tutorial: :ref:`tutorial_testing_tools`
+
+   Next tutorial: :ref:`tutorial_compile_and_run`

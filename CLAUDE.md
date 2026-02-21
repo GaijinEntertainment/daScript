@@ -30,7 +30,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 |---|---|
 | `skills/das_formatting.md` | Creating or modifying any `.das` file (tutorials, tests, daslib modules, utilities) |
 | `skills/writing_tests.md` | Writing or editing test files under `tests/` |
-| `skills/documentation_rst.md` | Editing RST files in `doc/source/`, editing `//!` doc-comments in `daslib/*.das`, or writing tutorial RST pages |
+| `skills/documentation_rst.md` | Editing RST files in `doc/source/`, editing `//!` doc-comments in `daslib/*.das`, writing tutorial RST pages, editing `doc/source/stdlib/handmade/` files, running `das2rst.das`, or regenerating stdlib module documentation |
 | `skills/cpp_integration.md` | Writing or editing C++ files in `src/`, `modules/`, or `tutorials/integration/cpp/` |
 | `skills/daslib_modules.md` | Working with `daslib/` modules (linq, json, regex, functional, match, etc.) or extending the standard library |
 
@@ -159,6 +159,16 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - Blocks CANNOT be stored in containers, returned from functions, or captured — use lambdas or function pointers for those use cases
 - `match`, `multi_match`, `static_match` macros (from `daslib/match.das`) handle side effects automatically — do NOT add `[sideeffects]` annotations to functions that only use match
 - `[export] def main()` returns `void` — do NOT `return true` or return other values from main
+
+### Channels and cross-context communication
+
+- `with_channel(N) $(ch) { ... }` — creates a channel expecting `N` notify calls before `for_each_clone` unblocks
+- **`notify` vs `notify_and_release`**: when a lambda captures a channel, the reference count is incremented; `notify_and_release` decrements the entry count AND releases that extra reference, setting the variable to `null`. When passing a channel as a plain argument (e.g. via `invoke_in_context`), no lambda capture occurs — no extra reference is added — so use plain `notify`
+- `notify_and_release` sets the channel/status variable to `null` after release
+- `push_clone(ch, value)` — push a clone of `value` into the channel
+- `for_each_clone(ch) $(val : T#) { ... }` — drain channel; data arrives as temporary type `T#`
+- `invoke_in_context(context, "func", ch)` — can pass `Channel?` directly to a child context
+- Child scripts that use channel operations need `require daslib/jobque_boost`; compile with `compile_file` + `make_file_access("")` so the child can resolve daslib modules from disk
 
 ## Key Directories
 
