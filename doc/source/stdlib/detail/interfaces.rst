@@ -6,6 +6,8 @@
 
 .. |detail/method-interfaces-ImplementsMacro.apply| replace:: to be documented in |detail/method-interfaces-ImplementsMacro.apply|.rst
 
+.. |detail/method-interfaces-ImplementsMacro.finish| replace:: to be documented in |detail/method-interfaces-ImplementsMacro.finish|.rst
+
 .. |detail/class-interfaces-InterfaceAsIs| replace:: to be documented in |detail/class-interfaces-InterfaceAsIs|.rst
 
 .. |detail/method-interfaces-InterfaceAsIs.visitExprIsVariant| replace:: to be documented in |detail/method-interfaces-InterfaceAsIs.visitExprIsVariant|.rst

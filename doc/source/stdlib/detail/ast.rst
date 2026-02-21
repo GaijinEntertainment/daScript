@@ -178,6 +178,8 @@
 
 .. |handmade/method-ast-AstCaptureMacro.captureFunction| replace:: to be documented in |handmade/method-ast-AstCaptureMacro.captureFunction|.rst
 
+.. |handmade/method-ast-AstCaptureMacro.releaseFunction| replace:: to be documented in |handmade/method-ast-AstCaptureMacro.releaseFunction|.rst
+
 .. |handmade/class-ast-AstTypeMacro| replace:: to be documented in |handmade/class-ast-AstTypeMacro|.rst
 
 .. |handmade/method-ast-AstTypeMacro.visit| replace:: to be documented in |handmade/method-ast-AstTypeMacro.visit|.rst

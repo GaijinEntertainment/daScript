@@ -736,7 +736,7 @@ Containers
   *  :ref:`lock_forever (var Tab: table\<auto(keyT);auto(valT)\>|table\<auto(keyT);auto(valT)\>#) : table\<keyT, valT\># <function-builtin_lock_forever_table_ls_autokeyT;autovalT_gr_table_ls_autokeyT;autovalT_gr__hh_>`
   *  :ref:`modify (var Tab: table\<auto(keyT), auto(valT)\>; at: keyT|keyT#; blk: block\<(p:valT):valT\>) <function-builtin_modify__table_ls_autokeyT,_autovalT_gr__keyTkeyT_hh__block_ls_p_c_valT_c_valT_gr_>`
   *  :ref:`move_to_local (var a: auto(TT)&) : TT <function-builtin_move_to_local_autoTT_ref__0x428>`
-  *  :ref:`move_to_ref (var a: auto&; var b: auto) : auto <function-builtin_move_to_ref_auto_ref__auto_0x80c>`
+  *  :ref:`move_to_ref (var a: auto&; var b: auto) : auto <function-builtin_move_to_ref_auto_ref__auto_0x813>`
   *  :ref:`next (var it: iterator\<auto(TT)\>; var value: TT&) : bool <function-builtin_next_iterator_ls_autoTT_gr__TT_ref_>`
   *  :ref:`nothing (var it: iterator\<auto(TT)\>) : iterator\<TT\> <function-builtin_nothing_iterator_ls_autoTT_gr_>`
   *  :ref:`pop (var Arr: array\<auto(numT)\>) : auto <function-builtin_pop_array_ls_autonumT_gr_>`
@@ -769,11 +769,11 @@ Containers
   *  :ref:`sort (var a: array\<auto(TT)\>|array\<auto(TT)\>#; cmp: block\<(x:TT;y:TT):bool\>) : auto <function-builtin_sort_array_ls_autoTT_gr_array_ls_autoTT_gr__hh__block_ls_x_c_TT;y_c_TT_c_bool_gr_>`
   *  :ref:`sort (var a: auto(TT)[]|auto(TT)[]#) : auto <function-builtin_sort_autoTT_lb__rb_autoTT_lb__rb__hh_>`
   *  :ref:`sort (var a: auto(TT)[]|auto(TT)[]#; cmp: block\<(x:TT;y:TT):bool\>) : auto <function-builtin_sort_autoTT_lb__rb_autoTT_lb__rb__hh__block_ls_x_c_TT;y_c_TT_c_bool_gr_>`
-  *  :ref:`subarray (a: auto(TT)[]; r: urange) : auto <function-builtin_subarray_autoTT_lb__rb__urange_0x7c2>`
+  *  :ref:`subarray (a: auto(TT)[]; r: urange) : auto <function-builtin_subarray_autoTT_lb__rb__urange_0x7c9>`
   *  :ref:`subarray (a: array\<auto(TT)\>; r: urange) : auto <function-builtin_subarray_array_ls_autoTT_gr__urange>`
   *  :ref:`subarray (a: array\<auto(TT)\>; r: range) : auto <function-builtin_subarray_array_ls_autoTT_gr__range>`
   *  :ref:`subarray (var a: array\<auto(TT)\>; r: range) : auto <function-builtin_subarray__array_ls_autoTT_gr__range>`
-  *  :ref:`subarray (a: auto(TT)[]; r: range) : auto <function-builtin_subarray_autoTT_lb__rb__range_0x7b1>`
+  *  :ref:`subarray (a: auto(TT)[]; r: range) : auto <function-builtin_subarray_autoTT_lb__rb__range_0x7b8>`
   *  :ref:`to_array (a: auto(TT)[]) : array\<TT\> <function-builtin_to_array_autoTT_lb__rb__0x5e9>`
   *  :ref:`to_array (var it: iterator\<auto(TT)\>) : array\<TT\> <function-builtin_to_array_iterator_ls_autoTT_gr_>`
   *  :ref:`to_array_move (var a: auto(TT) ==const) : array\<TT\> <function-builtin_to_array_move__autoTT__eq__eq_const_0x61a>`
@@ -1472,7 +1472,7 @@ Moves the value referenced by `a` onto the stack as a local copy and returns it,
 
 :Arguments: * **a** : auto(TT)\ &
 
-.. _function-builtin_move_to_ref_auto_ref__auto_0x80c:
+.. _function-builtin_move_to_ref_auto_ref__auto_0x813:
 
 .. das:function:: move_to_ref(a: auto&; b: auto) : auto
 
@@ -1718,7 +1718,7 @@ Sorts a dynamic array in place in ascending order using the default comparison f
 subarray
 ^^^^^^^^
 
-.. _function-builtin_subarray_autoTT_lb__rb__urange_0x7c2:
+.. _function-builtin_subarray_autoTT_lb__rb__urange_0x7c9:
 
 .. das:function:: subarray(a: auto(TT)[]; r: urange) : auto
 
@@ -1741,7 +1741,7 @@ Creates and returns a new dynamic array containing a copy of elements from fixed
 
 .. das:function:: subarray(a: array<auto(TT)>; r: range) : auto
 
-.. _function-builtin_subarray_autoTT_lb__rb__range_0x7b1:
+.. _function-builtin_subarray_autoTT_lb__rb__range_0x7b8:
 
 .. das:function:: subarray(a: auto(TT)[]; r: range) : auto
 
@@ -2068,6 +2068,7 @@ Stores a `smart_ptr<void>` `data` into gc0 storage under the specified `name`, a
 Smart ptr infrastructure
 ++++++++++++++++++++++++
 
+  *  :ref:`add_ptr_ref (src: auto(TT)?) : smart_ptr\<TT\> <function-builtin_add_ptr_ref_autoTT_q_>`
   *  :ref:`add_ptr_ref (src: smart_ptr\<auto(TT)\>) : smart_ptr\<TT\> <function-builtin_add_ptr_ref_smart_ptr_ls_autoTT_gr_>`
   *  :ref:`get_const_ptr (src: smart_ptr\<auto(TT)\>) : TT? <function-builtin_get_const_ptr_smart_ptr_ls_autoTT_gr_>`
   *  :ref:`get_ptr (var src: smart_ptr\<auto(TT)\> ==const) : TT? <function-builtin_get_ptr__smart_ptr_ls_autoTT_gr___eq__eq_const>`
@@ -2080,14 +2081,26 @@ Smart ptr infrastructure
   *  :ref:`smart_ptr_is_valid (dest: smart_ptr\<void\>) : bool <function-builtin_smart_ptr_is_valid_smart_ptr_ls_void_gr_>`
   *  :ref:`smart_ptr_use_count (ptr: smart_ptr\<void\>) : uint <function-builtin_smart_ptr_use_count_smart_ptr_ls_void_gr_>`
 
+
+add_ptr_ref
+^^^^^^^^^^^
+
+.. _function-builtin_add_ptr_ref_autoTT_q_:
+
+.. das:function:: add_ptr_ref(src: auto(TT)?) : smart_ptr<TT>
+
+Wraps a raw pointer ``src`` of type ``TT?`` into a ``smart_ptr<TT>`` by incrementing the reference count.
+Commonly used to bridge AST node fields (which are raw pointers like ``Structure?``, ``Enumeration?``) to API functions that expect ``smart_ptr<T>``.
+The overload accepting ``smart_ptr<auto(TT)>`` adds an additional reference to an existing smart pointer, returning a new ``smart_ptr<TT>`` that shares ownership.
+
+
+:Arguments: * **src** : auto(TT)?
+
 .. _function-builtin_add_ptr_ref_smart_ptr_ls_autoTT_gr_:
 
 .. das:function:: add_ptr_ref(src: smart_ptr<auto(TT)>) : smart_ptr<TT>
 
-Increments the reference count of the smart pointer `src` and returns a new smart_ptr that shares ownership of the same object.
-
-
-:Arguments: * **src** : smart_ptr<auto(TT)>
+----
 
 .. _function-builtin_get_const_ptr_smart_ptr_ls_autoTT_gr_:
 
@@ -2880,9 +2893,9 @@ Formats a `uint8` value as a string using the given `format` specifier (followin
 Argument consumption
 ++++++++++++++++++++
 
-  *  :ref:`consume_argument (var a: auto(TT)&) : TT& <function-builtin_consume_argument_autoTT_ref__0x843>`
+  *  :ref:`consume_argument (var a: auto(TT)&) : TT& <function-builtin_consume_argument_autoTT_ref__0x84a>`
 
-.. _function-builtin_consume_argument_autoTT_ref__0x843:
+.. _function-builtin_consume_argument_autoTT_ref__0x84a:
 
 .. das:function:: consume_argument(a: auto(TT)&) : TT&
 
@@ -3195,7 +3208,7 @@ Algorithms
 
   *  :ref:`count (start: int = 0; step: int = 1) : iterator\<int\> <function-builtin_count_int_int>`
   *  :ref:`iter_range (foo: auto) : auto <function-builtin_iter_range_auto_0x591>`
-  *  :ref:`swap (var a: auto(TT)&; var b: auto(TT)&) : auto <function-builtin_swap_autoTT_ref__autoTT_ref__0x7a9>`
+  *  :ref:`swap (var a: auto(TT)&; var b: auto(TT)&) : auto <function-builtin_swap_autoTT_ref__autoTT_ref__0x7b0>`
   *  :ref:`ucount (start: uint = 0x0; step: uint = 0x1) : iterator\<uint\> <function-builtin_ucount_uint_uint>`
 
 .. _function-builtin_count_int_int:
@@ -3218,7 +3231,7 @@ Creates a `range` from `0` to the length of the given iterable `foo`, useful for
 
 :Arguments: * **foo** : auto
 
-.. _function-builtin_swap_autoTT_ref__autoTT_ref__0x7a9:
+.. _function-builtin_swap_autoTT_ref__autoTT_ref__0x7b0:
 
 .. das:function:: swap(a: auto(TT)&; b: auto(TT)&) : auto
 
