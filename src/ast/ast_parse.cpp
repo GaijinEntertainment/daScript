@@ -822,11 +822,11 @@ namespace das {
                     mod->fromExtraDependency = true;
                 }
             }
-            for (auto &req : req) {
-                if (!count_if(prev_req.begin(), prev_req.end(), [&req](const ModuleInfo &mod) {
-                    return mod.moduleName == req.moduleName;
+            for (auto &reqR : req) {
+                if (!count_if(prev_req.begin(), prev_req.end(), [&reqR](const ModuleInfo &mod) {
+                    return mod.moduleName == reqR.moduleName;
                 })) {
-                    req.extraDepModule = true;
+                    reqR.extraDepModule = true;
                 }
             }
             auto finfo = access->getFileInfo(modFile);
