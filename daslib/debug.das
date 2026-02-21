@@ -714,7 +714,7 @@ class private DAStackWalker : DapiStackWalker {
         var global = DAVariable(uid = frame.varId++, name = vinfo.name, _type = describe(ti), address = intptr(value), size = ti.size, typeInfo = ti)
 
         if (ti != null) {
-            dataWalker->startWalk(frame, global) <| $ {
+            dataWalker->startWalk(frame, global) $ {
                 dataWalkerAdapter |> walk_data(value, *ti)
             }
         }
@@ -832,7 +832,7 @@ class private DAStackWalker : DapiStackWalker {
             var ti = type_info(vinfo)
             var variable = DAVariable(uid = frame.varId++, name = vinfo.name, _type = describe(ti), address = intptr(arg), size = ti.size, typeInfo = ti)
             if (ti != null) {
-                dataWalker->startWalk(frame, variable) <| $ {
+                dataWalker->startWalk(frame, variable) $ {
                     dataWalkerAdapter |> walk_data(arg, *ti)
                 }
             }
@@ -856,7 +856,7 @@ class private DAStackWalker : DapiStackWalker {
             let ti = type_info(vinfo)
             var variable = DAVariable(uid = frame.varId++, name = vinfo.name, _type = describe(ti), address = ti.isRef ? intptr(unsafe(reinterpret<void?> arg)) : 0ul, size = ti.size, typeInfo = ti, rawValue = arg)
             if (ti != null) {
-                dataWalker->startWalk(frame, variable) <| $ {
+                dataWalker->startWalk(frame, variable) $ {
                     dataWalkerAdapter |> walk_data(arg, *ti)
                 }
             }
@@ -1372,7 +1372,7 @@ class private DAgent : DapiDebugAgent {
             if (stackLen > 0) {
                 var frame & = unsafe(ctxData.stack[0])
                 var variable = DAVariable(uid = frame.varId++, name = name, _type = describe(info), address = intptr(data), size = info.size)
-                walker.dataWalker->startWalk(frame, variable) <| $ {
+                walker.dataWalker->startWalk(frame, variable) $ {
                     walker.dataWalkerAdapter |> walk_data(data, info)
                 }
                 if (variable.children == null) {
@@ -2216,7 +2216,7 @@ class private DAServer : Server {
                 while (!found && idx < length(ctxData.stack)) {
                     let line & = unsafe(ctxData.stack[idx])
                     if (first || line.spAddr == spAddr) {
-                        found = line |> find_child_var() <| $[unused_argument(varIdx)] (child, varIdx) {
+                        found = line |> find_child_var() $[unused_argument(varIdx)] (child, varIdx) {
                             if (child.name == ini.expression) {
                                 var inscope res = EvaluateResponse(
                                     result = child.value,
@@ -2240,7 +2240,7 @@ class private DAServer : Server {
                                 agent.walker.ctx = addr(ctxData)
                             }
                             agent.walker->collectGlobalAt(vinfo, ctxData.stack[frameId])
-                            found = ctxData.stack[frameId] |> find_child_var() <| $[unused_argument(varIdx)] (child, varIdx) {
+                            found = ctxData.stack[frameId] |> find_child_var() $[unused_argument(varIdx)] (child, varIdx) {
                                 if (child.name == ini.expression) {
                                     var inscope res = EvaluateResponse(
                                         result = child.value,
