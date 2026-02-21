@@ -72,6 +72,8 @@ introduced in earlier tutorials.
    tutorials/42_testing_tools.rst
    tutorials/43_interfaces.rst
    tutorials/44_compile_and_run.rst
+   tutorials/45_debug_agents.rst
+   tutorials/46_apply_in_context.rst
 
 .. _tutorials_integration_c:
 
