@@ -1322,7 +1322,7 @@ def document_classes(doc_file : file; mods : array<Module?>) {
 
             let staticFieldPrefix = "{value.name}`"
             for_each_global(mod) $(gVar) {
-                if (string(gVar.name).starts_with(staticFieldPrefix)) {
+                if (!gVar.flags.private_variable && string(gVar.name).starts_with(staticFieldPrefix)) {
                     var line : array<string>
                     push(line, "{value.name}.{string(gVar.name).slice(length(staticFieldPrefix))}")
                     push(line, describe_type(gVar._type))

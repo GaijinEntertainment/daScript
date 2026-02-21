@@ -1027,10 +1027,10 @@ Creates an ``AnnotationDeclaration`` for the named annotation (with optional typ
 Expression generation
 +++++++++++++++++++++
 
-  *  :ref:`convert_to_expression (var value: auto ==const) : auto <function-ast_boost_convert_to_expression__auto__eq__eq_const_0x3a5>`
-  *  :ref:`convert_to_expression (value: auto ==const; at: LineInfo) : auto <function-ast_boost_convert_to_expression_auto__eq__eq_const_LineInfo_0x39c>`
-  *  :ref:`convert_to_expression (var value: auto& ==const; at: LineInfo) : auto <function-ast_boost_convert_to_expression__auto_ref___eq__eq_const_LineInfo_0x393>`
-  *  :ref:`convert_to_expression (value: auto ==const) : auto <function-ast_boost_convert_to_expression_auto__eq__eq_const_0x3aa>`
+  *  :ref:`convert_to_expression (var value: auto ==const) : auto <function-ast_boost_convert_to_expression__auto__eq__eq_const_0x3a8>`
+  *  :ref:`convert_to_expression (value: auto ==const; at: LineInfo) : auto <function-ast_boost_convert_to_expression_auto__eq__eq_const_LineInfo_0x39f>`
+  *  :ref:`convert_to_expression (var value: auto& ==const; at: LineInfo) : auto <function-ast_boost_convert_to_expression__auto_ref___eq__eq_const_LineInfo_0x396>`
+  *  :ref:`convert_to_expression (value: auto ==const) : auto <function-ast_boost_convert_to_expression_auto__eq__eq_const_0x3ad>`
   *  :ref:`make_static_assert_false (text: string; at: LineInfo) : smart_ptr\<ExprStaticAssert\> <function-ast_boost_make_static_assert_false_string_LineInfo>`
   *  :ref:`override_method (var str: StructurePtr; name: string; funcName: string) : bool <function-ast_boost_override_method_StructurePtr_string_string>`
   *  :ref:`panic_expr_as () : void? <function-ast_boost_panic_expr_as>`
@@ -1039,7 +1039,7 @@ Expression generation
 convert_to_expression
 ^^^^^^^^^^^^^^^^^^^^^
 
-.. _function-ast_boost_convert_to_expression__auto__eq__eq_const_0x3a5:
+.. _function-ast_boost_convert_to_expression__auto__eq__eq_const_0x3a8:
 
 .. das:function:: convert_to_expression(value: auto ==const) : auto
 
@@ -1048,15 +1048,15 @@ Converts a runtime value of any supported type to an equivalent AST ``Expression
 
 :Arguments: * **value** : auto!
 
-.. _function-ast_boost_convert_to_expression_auto__eq__eq_const_LineInfo_0x39c:
+.. _function-ast_boost_convert_to_expression_auto__eq__eq_const_LineInfo_0x39f:
 
 .. das:function:: convert_to_expression(value: auto ==const; at: LineInfo) : auto
 
-.. _function-ast_boost_convert_to_expression__auto_ref___eq__eq_const_LineInfo_0x393:
+.. _function-ast_boost_convert_to_expression__auto_ref___eq__eq_const_LineInfo_0x396:
 
 .. das:function:: convert_to_expression(value: auto& ==const; at: LineInfo) : auto
 
-.. _function-ast_boost_convert_to_expression_auto__eq__eq_const_0x3aa:
+.. _function-ast_boost_convert_to_expression_auto__eq__eq_const_0x3ad:
 
 .. das:function:: convert_to_expression(value: auto ==const) : auto
 

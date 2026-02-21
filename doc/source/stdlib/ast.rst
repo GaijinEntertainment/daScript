@@ -5696,51 +5696,51 @@ Returns a new TypeInfo corresponding to the specified type.
 Adapter generation
 ++++++++++++++++++
 
-  *  :ref:`make_block_annotation (name: string; var someClassPtr: auto) : FunctionAnnotationPtr <function-ast_make_block_annotation_string_auto_0x287>`
+  *  :ref:`make_block_annotation (name: string; var someClassPtr: auto) : FunctionAnnotationPtr <function-ast_make_block_annotation_string_auto_0x288>`
   *  :ref:`make_block_annotation (name: string; class: void?; info: StructInfo const?) : smart_ptr\<FunctionAnnotation\> <function-ast_make_block_annotation_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_block_type (blk: ExprBlock?) : smart_ptr\<TypeDecl\> <function-ast_make_block_type_ExprBlock_q_>`
   *  :ref:`make_call_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<CallMacro\> <function-ast_make_call_macro_string_void_q__StructInfo_const_q_>`
-  *  :ref:`make_call_macro (name: string; var someClassPtr: auto) : CallMacroPtr <function-ast_make_call_macro_string_auto_0x2da>`
+  *  :ref:`make_call_macro (name: string; var someClassPtr: auto) : CallMacroPtr <function-ast_make_call_macro_string_auto_0x2db>`
   *  :ref:`make_capture_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<CaptureMacro\> <function-ast_make_capture_macro_string_void_q__StructInfo_const_q_>`
-  *  :ref:`make_capture_macro (name: string; var someClassPtr: auto) : CaptureMacroPtr <function-ast_make_capture_macro_string_auto_0x320>`
+  *  :ref:`make_capture_macro (name: string; var someClassPtr: auto) : CaptureMacroPtr <function-ast_make_capture_macro_string_auto_0x321>`
   *  :ref:`make_clone_structure (structure: Structure?) : smart_ptr\<Function\> <function-ast_make_clone_structure_Structure_q_>`
   *  :ref:`make_comment_reader (class: void?; info: StructInfo const?) : smart_ptr\<CommentReader\> <function-ast_make_comment_reader_void_q__StructInfo_const_q_>`
-  *  :ref:`make_comment_reader (name: string; var someClassPtr: auto) : CommentReaderPtr <function-ast_make_comment_reader_string_auto_0x2cc>`
+  *  :ref:`make_comment_reader (name: string; var someClassPtr: auto) : CommentReaderPtr <function-ast_make_comment_reader_string_auto_0x2cd>`
   *  :ref:`make_enum_debug_info (helper: smart_ptr\<DebugInfoHelper\>; en: Enumeration const?) : EnumInfo? <function-ast_make_enum_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Enumeration_const_q_>`
-  *  :ref:`make_enumeration_annotation (name: string; var someClassPtr: auto) : EnumerationAnnotationPtr <function-ast_make_enumeration_annotation_string_auto_0x2a3>`
+  *  :ref:`make_enumeration_annotation (name: string; var someClassPtr: auto) : EnumerationAnnotationPtr <function-ast_make_enumeration_annotation_string_auto_0x2a4>`
   *  :ref:`make_enumeration_annotation (name: string; class: void?; info: StructInfo const?) : smart_ptr\<EnumerationAnnotation\> <function-ast_make_enumeration_annotation_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_for_loop_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<ForLoopMacro\> <function-ast_make_for_loop_macro_string_void_q__StructInfo_const_q_>`
-  *  :ref:`make_for_loop_macro (name: string; var someClassPtr: auto) : ForLoopMacroPtr <function-ast_make_for_loop_macro_string_auto_0x312>`
-  *  :ref:`make_function_annotation (name: string; var someClassPtr: auto) : FunctionAnnotationPtr <function-ast_make_function_annotation_string_auto_0x279>`
+  *  :ref:`make_for_loop_macro (name: string; var someClassPtr: auto) : ForLoopMacroPtr <function-ast_make_for_loop_macro_string_auto_0x313>`
+  *  :ref:`make_function_annotation (name: string; var someClassPtr: auto) : FunctionAnnotationPtr <function-ast_make_function_annotation_string_auto_0x27a>`
   *  :ref:`make_function_annotation (name: string; class: void?; info: StructInfo const?) : smart_ptr\<FunctionAnnotation\> <function-ast_make_function_annotation_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_function_debug_info (helper: smart_ptr\<DebugInfoHelper\>; fn: Function const?) : FuncInfo? <function-ast_make_function_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Function_const_q_>`
   *  :ref:`make_invokable_type_debug_info (helper: smart_ptr\<DebugInfoHelper\>; blk: smart_ptr\<TypeDecl\>; at: LineInfo) : FuncInfo? <function-ast_make_invokable_type_debug_info_smart_ptr_ls_DebugInfoHelper_gr__smart_ptr_ls_TypeDecl_gr__LineInfo>`
   *  :ref:`make_pass_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<PassMacro\> <function-ast_make_pass_macro_string_void_q__StructInfo_const_q_>`
-  *  :ref:`make_pass_macro (name: string; var someClassPtr: auto) : PassMacroPtr <function-ast_make_pass_macro_string_auto_0x2f6>`
-  *  :ref:`make_reader_macro (name: string; var someClassPtr: auto) : ReaderMacroPtr <function-ast_make_reader_macro_string_auto_0x2be>`
+  *  :ref:`make_pass_macro (name: string; var someClassPtr: auto) : PassMacroPtr <function-ast_make_pass_macro_string_auto_0x2f7>`
+  *  :ref:`make_reader_macro (name: string; var someClassPtr: auto) : ReaderMacroPtr <function-ast_make_reader_macro_string_auto_0x2bf>`
   *  :ref:`make_reader_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<ReaderMacro\> <function-ast_make_reader_macro_string_void_q__StructInfo_const_q_>`
-  *  :ref:`make_simulate_macro (name: string; var someClassPtr: auto) : SimulateMacroPtr <function-ast_make_simulate_macro_string_auto_0x339>`
+  *  :ref:`make_simulate_macro (name: string; var someClassPtr: auto) : SimulateMacroPtr <function-ast_make_simulate_macro_string_auto_0x33a>`
   *  :ref:`make_simulate_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<SimulateMacro\> <function-ast_make_simulate_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_struct_debug_info (helper: smart_ptr\<DebugInfoHelper\>; st: Structure const?) : StructInfo? <function-ast_make_struct_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Structure_const_q_>`
   *  :ref:`make_struct_variable_debug_info (helper: smart_ptr\<DebugInfoHelper\>; st: Structure const?; var: FieldDeclaration const?) : VarInfo? <function-ast_make_struct_variable_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Structure_const_q__FieldDeclaration_const_q_>`
-  *  :ref:`make_structure_annotation (name: string; var someClassPtr: auto) : StructureAnnotationPtr <function-ast_make_structure_annotation_string_auto_0x295>`
+  *  :ref:`make_structure_annotation (name: string; var someClassPtr: auto) : StructureAnnotationPtr <function-ast_make_structure_annotation_string_auto_0x296>`
   *  :ref:`make_structure_annotation (name: string; class: void?; info: StructInfo const?) : smart_ptr\<StructureAnnotation\> <function-ast_make_structure_annotation_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_type_info (helper: smart_ptr\<DebugInfoHelper\>; info: TypeInfo?; type: smart_ptr\<TypeDecl\> const&) : TypeInfo? <function-ast_make_type_info_smart_ptr_ls_DebugInfoHelper_gr__TypeInfo_q__smart_ptr_ls_TypeDecl_gr__const_ref_>`
-  *  :ref:`make_type_macro (name: string; var someClassPtr: auto) : TypeMacroPtr <function-ast_make_type_macro_string_auto_0x32c>`
+  *  :ref:`make_type_macro (name: string; var someClassPtr: auto) : TypeMacroPtr <function-ast_make_type_macro_string_auto_0x32d>`
   *  :ref:`make_type_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<TypeMacro\> <function-ast_make_type_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_typeinfo_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<TypeInfoMacro\> <function-ast_make_typeinfo_macro_string_void_q__StructInfo_const_q_>`
-  *  :ref:`make_typeinfo_macro (name: string; var someClassPtr: auto) : TypeInfoMacroPtr <function-ast_make_typeinfo_macro_string_auto_0x2e8>`
+  *  :ref:`make_typeinfo_macro (name: string; var someClassPtr: auto) : TypeInfoMacroPtr <function-ast_make_typeinfo_macro_string_auto_0x2e9>`
   *  :ref:`make_variable_debug_info (helper: smart_ptr\<DebugInfoHelper\>; var: Variable?) : VarInfo? <function-ast_make_variable_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Variable_q_>`
-  *  :ref:`make_variant_macro (name: string; var someClassPtr: auto) : VariantMacroPtr <function-ast_make_variant_macro_string_auto_0x304>`
+  *  :ref:`make_variant_macro (name: string; var someClassPtr: auto) : VariantMacroPtr <function-ast_make_variant_macro_string_auto_0x305>`
   *  :ref:`make_variant_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<VariantMacro\> <function-ast_make_variant_macro_string_void_q__StructInfo_const_q_>`
-  *  :ref:`make_visitor (someClass: auto) : smart_ptr\<VisitorAdapter\> <function-ast_make_visitor_auto_0x2ae>`
+  *  :ref:`make_visitor (someClass: auto) : smart_ptr\<VisitorAdapter\> <function-ast_make_visitor_auto_0x2af>`
   *  :ref:`make_visitor (class: void?; info: StructInfo const?) : smart_ptr\<VisitorAdapter\> <function-ast_make_visitor_void_q__StructInfo_const_q_>`
 
 
 make_block_annotation
 ^^^^^^^^^^^^^^^^^^^^^
 
-.. _function-ast_make_block_annotation_string_auto_0x287:
+.. _function-ast_make_block_annotation_string_auto_0x288:
 
 .. das:function:: make_block_annotation(name: string; someClassPtr: auto) : FunctionAnnotationPtr
 
@@ -5783,7 +5783,7 @@ Creates an adapter for the AstCallMacro interface.
 
             * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>`? implicit
 
-.. _function-ast_make_call_macro_string_auto_0x2da:
+.. _function-ast_make_call_macro_string_auto_0x2db:
 
 .. das:function:: make_call_macro(name: string; someClassPtr: auto) : CallMacroPtr
 
@@ -5806,7 +5806,7 @@ Creates an adapter for the AstCaptureMacro interface.
 
             * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>`? implicit
 
-.. _function-ast_make_capture_macro_string_auto_0x320:
+.. _function-ast_make_capture_macro_string_auto_0x321:
 
 .. das:function:: make_capture_macro(name: string; someClassPtr: auto) : CaptureMacroPtr
 
@@ -5836,7 +5836,7 @@ Creates an adapter for the AstCommentReader interface.
 
             * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>`? implicit
 
-.. _function-ast_make_comment_reader_string_auto_0x2cc:
+.. _function-ast_make_comment_reader_string_auto_0x2cd:
 
 .. das:function:: make_comment_reader(name: string; someClassPtr: auto) : CommentReaderPtr
 
@@ -5857,7 +5857,7 @@ Generates an EnumInfo for the specified enumeration using the given DebugInfoHel
 make_enumeration_annotation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. _function-ast_make_enumeration_annotation_string_auto_0x2a3:
+.. _function-ast_make_enumeration_annotation_string_auto_0x2a4:
 
 .. das:function:: make_enumeration_annotation(name: string; someClassPtr: auto) : EnumerationAnnotationPtr
 
@@ -5891,7 +5891,7 @@ Creates an adapter for the AstForLoopMacro interface.
 
             * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>`? implicit
 
-.. _function-ast_make_for_loop_macro_string_auto_0x312:
+.. _function-ast_make_for_loop_macro_string_auto_0x313:
 
 .. das:function:: make_for_loop_macro(name: string; someClassPtr: auto) : ForLoopMacroPtr
 
@@ -5901,7 +5901,7 @@ Creates an adapter for the AstForLoopMacro interface.
 make_function_annotation
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. _function-ast_make_function_annotation_string_auto_0x279:
+.. _function-ast_make_function_annotation_string_auto_0x27a:
 
 .. das:function:: make_function_annotation(name: string; someClassPtr: auto) : FunctionAnnotationPtr
 
@@ -5959,7 +5959,7 @@ Creates an adapter for the AstPassMacro interface.
 
             * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>`? implicit
 
-.. _function-ast_make_pass_macro_string_auto_0x2f6:
+.. _function-ast_make_pass_macro_string_auto_0x2f7:
 
 .. das:function:: make_pass_macro(name: string; someClassPtr: auto) : PassMacroPtr
 
@@ -5969,7 +5969,7 @@ Creates an adapter for the AstPassMacro interface.
 make_reader_macro
 ^^^^^^^^^^^^^^^^^
 
-.. _function-ast_make_reader_macro_string_auto_0x2be:
+.. _function-ast_make_reader_macro_string_auto_0x2bf:
 
 .. das:function:: make_reader_macro(name: string; someClassPtr: auto) : ReaderMacroPtr
 
@@ -5990,7 +5990,7 @@ Creates an adapter for the AstReaderMacro interface.
 make_simulate_macro
 ^^^^^^^^^^^^^^^^^^^
 
-.. _function-ast_make_simulate_macro_string_auto_0x339:
+.. _function-ast_make_simulate_macro_string_auto_0x33a:
 
 .. das:function:: make_simulate_macro(name: string; someClassPtr: auto) : SimulateMacroPtr
 
@@ -6035,7 +6035,7 @@ Generates a VariableInfo for a structure field using the given DebugInfoHelper.
 make_structure_annotation
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. _function-ast_make_structure_annotation_string_auto_0x295:
+.. _function-ast_make_structure_annotation_string_auto_0x296:
 
 .. das:function:: make_structure_annotation(name: string; someClassPtr: auto) : StructureAnnotationPtr
 
@@ -6069,7 +6069,7 @@ Generates a TypeInfo for the specified type using the given DebugInfoHelper.
 make_type_macro
 ^^^^^^^^^^^^^^^
 
-.. _function-ast_make_type_macro_string_auto_0x32c:
+.. _function-ast_make_type_macro_string_auto_0x32d:
 
 .. das:function:: make_type_macro(name: string; someClassPtr: auto) : TypeMacroPtr
 
@@ -6103,7 +6103,7 @@ Creates an adapter for the AstTypeInfoMacro interface.
 
             * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>`? implicit
 
-.. _function-ast_make_typeinfo_macro_string_auto_0x2e8:
+.. _function-ast_make_typeinfo_macro_string_auto_0x2e9:
 
 .. das:function:: make_typeinfo_macro(name: string; someClassPtr: auto) : TypeInfoMacroPtr
 
@@ -6124,7 +6124,7 @@ Generates a VariableInfo for the specified variable using the given DebugInfoHel
 make_variant_macro
 ^^^^^^^^^^^^^^^^^^
 
-.. _function-ast_make_variant_macro_string_auto_0x304:
+.. _function-ast_make_variant_macro_string_auto_0x305:
 
 .. das:function:: make_variant_macro(name: string; someClassPtr: auto) : VariantMacroPtr
 
@@ -6145,7 +6145,7 @@ Creates an adapter for the AstVariantMacro interface.
 make_visitor
 ^^^^^^^^^^^^
 
-.. _function-ast_make_visitor_auto_0x2ae:
+.. _function-ast_make_visitor_auto_0x2af:
 
 .. das:function:: make_visitor(someClass: auto) : smart_ptr<VisitorAdapter>
 
@@ -6178,25 +6178,25 @@ Adapter application
   *  :ref:`add_infer_macro (module: Module?; annotation: smart_ptr\<PassMacro\>&) <function-ast_add_infer_macro_Module_q__smart_ptr_ls_PassMacro_gr__ref_>`
   *  :ref:`add_lint_macro (module: Module?; annotation: smart_ptr\<PassMacro\>&) <function-ast_add_lint_macro_Module_q__smart_ptr_ls_PassMacro_gr__ref_>`
   *  :ref:`add_module_option (module: Module?; option: string; type: Type) <function-ast_add_module_option_Module_q__string_Type>`
-  *  :ref:`add_new_block_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_block_annotation_string_auto_0x345>`
-  *  :ref:`add_new_call_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_call_macro_string_auto_0x38c>`
-  *  :ref:`add_new_capture_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_capture_macro_string_auto_0x36f>`
-  *  :ref:`add_new_comment_reader (name: string; var someClassPtr: auto) : auto <function-ast_add_new_comment_reader_string_auto_0x386>`
-  *  :ref:`add_new_contract_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_contract_annotation_string_auto_0x351>`
-  *  :ref:`add_new_dirty_infer_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_dirty_infer_macro_string_auto_0x39e>`
-  *  :ref:`add_new_enumeration_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_enumeration_annotation_string_auto_0x35d>`
-  *  :ref:`add_new_for_loop_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_for_loop_macro_string_auto_0x369>`
-  *  :ref:`add_new_function_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_function_annotation_string_auto_0x34b>`
-  *  :ref:`add_new_global_lint_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_global_lint_macro_string_auto_0x3aa>`
-  *  :ref:`add_new_infer_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_infer_macro_string_auto_0x398>`
-  *  :ref:`add_new_lint_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_lint_macro_string_auto_0x3a4>`
-  *  :ref:`add_new_optimization_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_optimization_macro_string_auto_0x3b0>`
-  *  :ref:`add_new_reader_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_reader_macro_string_auto_0x381>`
-  *  :ref:`add_new_simulate_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_simulate_macro_string_auto_0x37b>`
-  *  :ref:`add_new_structure_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_structure_annotation_string_auto_0x357>`
-  *  :ref:`add_new_type_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_type_macro_string_auto_0x375>`
-  *  :ref:`add_new_typeinfo_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_typeinfo_macro_string_auto_0x392>`
-  *  :ref:`add_new_variant_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_variant_macro_string_auto_0x363>`
+  *  :ref:`add_new_block_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_block_annotation_string_auto_0x346>`
+  *  :ref:`add_new_call_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_call_macro_string_auto_0x38d>`
+  *  :ref:`add_new_capture_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_capture_macro_string_auto_0x370>`
+  *  :ref:`add_new_comment_reader (name: string; var someClassPtr: auto) : auto <function-ast_add_new_comment_reader_string_auto_0x387>`
+  *  :ref:`add_new_contract_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_contract_annotation_string_auto_0x352>`
+  *  :ref:`add_new_dirty_infer_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_dirty_infer_macro_string_auto_0x39f>`
+  *  :ref:`add_new_enumeration_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_enumeration_annotation_string_auto_0x35e>`
+  *  :ref:`add_new_for_loop_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_for_loop_macro_string_auto_0x36a>`
+  *  :ref:`add_new_function_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_function_annotation_string_auto_0x34c>`
+  *  :ref:`add_new_global_lint_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_global_lint_macro_string_auto_0x3ab>`
+  *  :ref:`add_new_infer_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_infer_macro_string_auto_0x399>`
+  *  :ref:`add_new_lint_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_lint_macro_string_auto_0x3a5>`
+  *  :ref:`add_new_optimization_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_optimization_macro_string_auto_0x3b1>`
+  *  :ref:`add_new_reader_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_reader_macro_string_auto_0x382>`
+  *  :ref:`add_new_simulate_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_simulate_macro_string_auto_0x37c>`
+  *  :ref:`add_new_structure_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_structure_annotation_string_auto_0x358>`
+  *  :ref:`add_new_type_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_type_macro_string_auto_0x376>`
+  *  :ref:`add_new_typeinfo_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_typeinfo_macro_string_auto_0x393>`
+  *  :ref:`add_new_variant_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_variant_macro_string_auto_0x364>`
   *  :ref:`add_optimization_macro (module: Module?; annotation: smart_ptr\<PassMacro\>&) <function-ast_add_optimization_macro_Module_q__smart_ptr_ls_PassMacro_gr__ref_>`
   *  :ref:`add_reader_macro (module: Module?; annotation: smart_ptr\<ReaderMacro\>&) <function-ast_add_reader_macro_Module_q__smart_ptr_ls_ReaderMacro_gr__ref_>`
   *  :ref:`add_simulate_macro (module: Module?; annotation: smart_ptr\<SimulateMacro\>&) <function-ast_add_simulate_macro_Module_q__smart_ptr_ls_SimulateMacro_gr__ref_>`
@@ -6365,7 +6365,7 @@ Adds a module-specific option accessible via the `options` keyword.
 
             * **type** :  :ref:`Type <enum-rtti-Type>`
 
-.. _function-ast_add_new_block_annotation_string_auto_0x345:
+.. _function-ast_add_new_block_annotation_string_auto_0x346:
 
 .. das:function:: add_new_block_annotation(name: string; someClassPtr: auto) : auto
 
@@ -6376,7 +6376,7 @@ Creates an AstBlockAnnotation adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_call_macro_string_auto_0x38c:
+.. _function-ast_add_new_call_macro_string_auto_0x38d:
 
 .. das:function:: add_new_call_macro(name: string; someClassPtr: auto) : auto
 
@@ -6387,7 +6387,7 @@ Creates an AstCallMacro adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_capture_macro_string_auto_0x36f:
+.. _function-ast_add_new_capture_macro_string_auto_0x370:
 
 .. das:function:: add_new_capture_macro(name: string; someClassPtr: auto) : auto
 
@@ -6398,7 +6398,7 @@ Creates an AstCaptureMacro adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_comment_reader_string_auto_0x386:
+.. _function-ast_add_new_comment_reader_string_auto_0x387:
 
 .. das:function:: add_new_comment_reader(name: string; someClassPtr: auto) : auto
 
@@ -6409,7 +6409,7 @@ Creates an AstCommentReader adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_contract_annotation_string_auto_0x351:
+.. _function-ast_add_new_contract_annotation_string_auto_0x352:
 
 .. das:function:: add_new_contract_annotation(name: string; someClassPtr: auto) : auto
 
@@ -6420,7 +6420,7 @@ Creates an AstContractAnnotation adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_dirty_infer_macro_string_auto_0x39e:
+.. _function-ast_add_new_dirty_infer_macro_string_auto_0x39f:
 
 .. das:function:: add_new_dirty_infer_macro(name: string; someClassPtr: auto) : auto
 
@@ -6431,7 +6431,7 @@ Creates an AstPassMacro adapter and adds it to the current module's dirty infer 
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_enumeration_annotation_string_auto_0x35d:
+.. _function-ast_add_new_enumeration_annotation_string_auto_0x35e:
 
 .. das:function:: add_new_enumeration_annotation(name: string; someClassPtr: auto) : auto
 
@@ -6442,7 +6442,7 @@ Creates an AstEnumerationAnnotation adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_for_loop_macro_string_auto_0x369:
+.. _function-ast_add_new_for_loop_macro_string_auto_0x36a:
 
 .. das:function:: add_new_for_loop_macro(name: string; someClassPtr: auto) : auto
 
@@ -6453,7 +6453,7 @@ Creates an AstForLoopMacro adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_function_annotation_string_auto_0x34b:
+.. _function-ast_add_new_function_annotation_string_auto_0x34c:
 
 .. das:function:: add_new_function_annotation(name: string; someClassPtr: auto) : auto
 
@@ -6464,7 +6464,7 @@ Creates an AstFunctionAnnotation adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_global_lint_macro_string_auto_0x3aa:
+.. _function-ast_add_new_global_lint_macro_string_auto_0x3ab:
 
 .. das:function:: add_new_global_lint_macro(name: string; someClassPtr: auto) : auto
 
@@ -6475,7 +6475,7 @@ Creates an AstPassMacro adapter and adds it to the current module's global lint 
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_infer_macro_string_auto_0x398:
+.. _function-ast_add_new_infer_macro_string_auto_0x399:
 
 .. das:function:: add_new_infer_macro(name: string; someClassPtr: auto) : auto
 
@@ -6486,7 +6486,7 @@ Creates an AstPassMacro adapter and adds it to the current module's infer pass.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_lint_macro_string_auto_0x3a4:
+.. _function-ast_add_new_lint_macro_string_auto_0x3a5:
 
 .. das:function:: add_new_lint_macro(name: string; someClassPtr: auto) : auto
 
@@ -6497,7 +6497,7 @@ Creates an AstPassMacro adapter and adds it to the current module's lint pass.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_optimization_macro_string_auto_0x3b0:
+.. _function-ast_add_new_optimization_macro_string_auto_0x3b1:
 
 .. das:function:: add_new_optimization_macro(name: string; someClassPtr: auto) : auto
 
@@ -6508,7 +6508,7 @@ Creates an AstPassMacro adapter and adds it to the current module's optimization
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_reader_macro_string_auto_0x381:
+.. _function-ast_add_new_reader_macro_string_auto_0x382:
 
 .. das:function:: add_new_reader_macro(name: string; someClassPtr: auto) : auto
 
@@ -6519,7 +6519,7 @@ Creates an AstReaderMacro adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_simulate_macro_string_auto_0x37b:
+.. _function-ast_add_new_simulate_macro_string_auto_0x37c:
 
 .. das:function:: add_new_simulate_macro(name: string; someClassPtr: auto) : auto
 
@@ -6530,7 +6530,7 @@ Creates an AstSimulateMacro adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_structure_annotation_string_auto_0x357:
+.. _function-ast_add_new_structure_annotation_string_auto_0x358:
 
 .. das:function:: add_new_structure_annotation(name: string; someClassPtr: auto) : auto
 
@@ -6541,7 +6541,7 @@ Creates an AstStructureAnnotation adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_type_macro_string_auto_0x375:
+.. _function-ast_add_new_type_macro_string_auto_0x376:
 
 .. das:function:: add_new_type_macro(name: string; someClassPtr: auto) : auto
 
@@ -6552,7 +6552,7 @@ Creates an AstTypeMacro adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_typeinfo_macro_string_auto_0x392:
+.. _function-ast_add_new_typeinfo_macro_string_auto_0x393:
 
 .. das:function:: add_new_typeinfo_macro(name: string; someClassPtr: auto) : auto
 
@@ -6563,7 +6563,7 @@ Creates an AstTypeInfoMacro adapter and adds it to the current module.
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_new_variant_macro_string_auto_0x363:
+.. _function-ast_add_new_variant_macro_string_auto_0x364:
 
 .. das:function:: add_new_variant_macro(name: string; someClassPtr: auto) : auto
 

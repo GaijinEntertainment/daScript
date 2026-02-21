@@ -38,7 +38,6 @@ Example:
 
     [implements(IGreeter)]
     class MyGreeter {
-        def MyGreeter() { pass }
         def IGreeter`greet(name : string) : string {
             return "Hello, {name}!"
         }
@@ -98,15 +97,9 @@ If the interface inherits from a parent interface (``class IChild : IParent``),
 ancestor getters are generated automatically so that ``is``/``as``/``?as`` work
 with all ancestor interfaces.
 
-At compile time, verifies that all abstract interface methods are implemented.
+At ``finish`` time, verifies that all abstract interface methods are implemented.
 Methods with default bodies in the interface class are optional — the proxy
 inherits them via class hierarchy.
 
 
-+++++++++++++++++++
-Private helper
-+++++++++++++++++++
 
-.. das:function:: is_interface_struct(st : Structure?)
-
-  Returns ``true`` when the structure carries the ``[interface]`` annotation.

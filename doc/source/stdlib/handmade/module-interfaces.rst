@@ -3,6 +3,13 @@ It provides the ``[interface]`` annotation for defining abstract interfaces
 with virtual method tables, supporting multiple implementations and dynamic
 dispatch without class inheritance.
 
+**Features:**
+
+- Interface inheritance (``class IChild : IParent``)
+- Default method implementations (non-abstract methods)
+- Compile-time completeness checking (error 30111 on missing methods)
+- ``is``/``as``/``?as`` operators via the ``InterfaceAsIs`` variant macro
+
 All functions and symbols are in "interfaces" module, use require to get access to it.
 
 .. code-block:: das
@@ -15,24 +22,25 @@ Example:
 
     require daslib/interfaces
 
-        [interface]
-        class IGreeter {
-            def abstract greet(name : string) : string
-        }
+    [interface]
+    class IGreeter {
+        def abstract greet(name : string) : string
+    }
 
-        class MyGreeter {
-            def greet(name : string) : string {
-                return "Hello, {name}!"
-            }
+    [implements(IGreeter)]
+    class MyGreeter {
+        def IGreeter`greet(name : string) : string {
+            return "Hello, {name}!"
         }
+    }
 
-        [export]
-        def main() {
-            var obj = new MyGreeter()
-            print("{obj->greet("world")}\n")
-            unsafe {
-                delete obj
-            }
-        }
-        // output:
-        // Hello, world!
+    [export]
+    def main() {
+        var obj = new MyGreeter()
+        var greeter = obj as IGreeter
+        print("{greeter->greet("world")}\n")
+    }
+    // output: Hello, world!
+
+See also: :ref:`Interfaces tutorial <tutorial_interfaces>` for a
+complete walkthrough.
