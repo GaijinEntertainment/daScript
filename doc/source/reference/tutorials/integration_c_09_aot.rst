@@ -141,6 +141,8 @@ Expected output::
 
    Previous tutorial: :ref:`tutorial_integration_c_serialization`
 
+   Next tutorial: :ref:`tutorial_integration_c_threading`
+
    C++ equivalent: :ref:`tutorial_integration_cpp_aot`
 
    daScriptC.h API header: ``include/daScript/daScriptC.h``

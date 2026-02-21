@@ -80,6 +80,8 @@ typedef struct dasLambda das_lambda;
 typedef struct dasBlock das_block;
 typedef struct dasPolicies das_policies;
 typedef struct dasSerializedData das_serialized_data;
+typedef struct dasEnvironmentHandle das_environment;
+typedef struct dasReuseCacheGuardHandle das_reuse_cache_guard;
 
 typedef struct {
     float x, y, z, w;
@@ -236,6 +238,41 @@ DAS_API void das_context_release ( das_context * context );
 // Find an exported function by name in a simulated context.
 // Returns NULL if no function with that name exists.
 DAS_API das_function * das_context_find_function ( das_context * context, char * name );
+
+// --- Threading: environment ---
+// daScriptEnvironment is thread-local (TLS).  Every thread that touches
+// the daslang API must have a valid environment bound.  Use getBound/setBound
+// to share the main thread's environment with a worker that only executes
+// (Part A pattern), or call das_initialize()/das_shutdown() on the worker
+// for a fully independent environment (Part B pattern).
+
+// Return the environment bound to the current thread, or NULL.
+DAS_API das_environment * das_environment_get_bound ();
+// Bind an environment on the current thread.  The worker thread must call
+// this before any other daslang API call when sharing the main thread's env.
+DAS_API void das_environment_set_bound ( das_environment * env );
+
+// --- Threading: reuse cache guard ---
+// A thread-local free-list cache used by the daslang allocator.
+// Must be created first on any worker thread that uses daslang.
+
+// Create a reuse-cache guard (call at thread start).
+DAS_API das_reuse_cache_guard * das_reuse_cache_guard_create ();
+// Release a reuse-cache guard (call before thread exit).
+DAS_API void das_reuse_cache_guard_release ( das_reuse_cache_guard * guard );
+
+// --- Threading: context cloning ---
+// Clone a context for use on a worker thread.  The clone has its own
+// stack and heap but shares the simulated program.  Release with
+// das_context_release().
+
+// Context-category constants (bitmask flags).
+extern DAS_API uint32_t DAS_CONTEXT_CATEGORY_THREAD_CLONE;
+extern DAS_API uint32_t DAS_CONTEXT_CATEGORY_JOB_CLONE;
+
+// Clone 'source' with the given category flags.  Typically pass
+// DAS_CONTEXT_CATEGORY_THREAD_CLONE for threading.
+DAS_API das_context * das_context_clone ( das_context * source, uint32_t category );
 
 // --- Function evaluation (aligned, vec4f) ---
 // All arguments and return values are passed as vec4f (16-byte aligned SIMD registers).

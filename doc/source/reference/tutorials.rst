@@ -94,6 +94,7 @@ companion ``.das`` script in ``tutorials/integration/c/``.
    tutorials/integration_c_07_context_variables.rst
    tutorials/integration_c_08_serialization.rst
    tutorials/integration_c_09_aot.rst
+   tutorials/integration_c_10_threading.rst
 
 .. _tutorials_integration_cpp:
 
