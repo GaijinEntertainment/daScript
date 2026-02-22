@@ -131,3 +131,14 @@ def test_local_unchanged(t : T?) {
         t |> equal(invoke_counter, 0)
     }
 }
+
+[test]
+def test_cleanup(t : T?) {
+    t |> run("delete_debug_agent_context removes invoke_test agent") @(t : T?) {
+        ensure_invoke_agent()
+        t |> equal(has_debug_agent_context("invoke_test"), true)
+        delete_debug_agent_context("invoke_test")
+        t |> equal(has_debug_agent_context("invoke_test"), false)
+        invoke_agent_ready = false
+    }
+}

@@ -8,6 +8,7 @@
 //   - Calling agent class methods with invoke_debug_agent_method
 //   - Overriding DapiDebugAgent methods (onCollect, onVariable)
 //   - The auto-start module pattern with [_macro] guards
+//   - Shutting down agents with delete_debug_agent_context
 //
 // Prerequisites: Tutorial 44 (Compile and Run) for fork_debug_agent_context
 //
@@ -434,6 +435,41 @@ def demo_named_context() {
 }
 
 // ============================================================
+// Section 9: Shutting down a debug agent
+// ============================================================
+// `delete_debug_agent_context` removes an agent by name.  It
+// notifies all other agents via onUninstall, then safely
+// destroys the agent and its context.
+//
+// This is the clean way to remove an agent when it is no longer
+// needed — for example, when a profiling session ends or a
+// debug tool is closed.
+//
+// After deletion, `has_debug_agent_context` returns false and
+// `get_debug_agent_context` would panic.
+
+def demo_delete_agent() {
+    print("\n=== deleting a debug agent ===\n")
+
+    // The "data_host" agent from section 8 is still alive
+    print("  has 'data_host' (before) = {has_debug_agent_context("data_host")}\n")
+
+    // Remove it by name
+    delete_debug_agent_context("data_host")
+
+    print("  has 'data_host' (after)  = {has_debug_agent_context("data_host")}\n")
+
+    // Deleting a non-existent agent is a no-op
+    delete_debug_agent_context("data_host")
+    print("  double delete is safe    = true\n")
+
+    // output:
+    //   has 'data_host' (before) = true
+    //   has 'data_host' (after)  = false
+    //   double delete is safe    = true
+}
+
+// ============================================================
 // Main
 // ============================================================
 
@@ -447,4 +483,12 @@ def main() {
     demo_existence_checks()
     demo_auto_start()
     demo_named_context()
+    demo_delete_agent()
+
+    // Clean up all remaining agents
+    delete_debug_agent_context("counter")
+    delete_debug_agent_context("log_watcher")
+    delete_debug_agent_context("calc")
+    delete_debug_agent_context("my_state")
+    delete_debug_agent_context("service")
 }

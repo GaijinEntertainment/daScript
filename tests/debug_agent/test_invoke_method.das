@@ -105,3 +105,14 @@ def test_method_reads_agent_field(t : T?) {
         t |> equal(result, 100)
     }
 }
+
+[test]
+def test_cleanup(t : T?) {
+    t |> run("delete_debug_agent_context removes method_test agent") @(t : T?) {
+        ensure_method_agent()
+        t |> equal(has_debug_agent_context("method_test"), true)
+        delete_debug_agent_context("method_test")
+        t |> equal(has_debug_agent_context("method_test"), false)
+        method_agent_ready = false
+    }
+}

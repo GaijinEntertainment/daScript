@@ -63,3 +63,14 @@ def test_fork_idempotent(t : T?) {
         t |> equal(has_debug_agent_context("lifecycle"), true)
     }
 }
+
+[test]
+def test_delete_agent(t : T?) {
+    t |> run("delete_debug_agent_context removes agent by name") @(t : T?) {
+        ensure_lifecycle()
+        t |> equal(has_debug_agent_context("lifecycle"), true)
+        delete_debug_agent_context("lifecycle")
+        t |> equal(has_debug_agent_context("lifecycle"), false)
+        lifecycle_agent_installed = false
+    }
+}

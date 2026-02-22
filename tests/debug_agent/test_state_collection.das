@@ -84,3 +84,14 @@ def test_on_collect_increments(t : T?) {
         t |> equal(count >= 2, true)
     }
 }
+
+[test]
+def test_cleanup(t : T?) {
+    t |> run("delete_debug_agent_context removes collector agent") @(t : T?) {
+        ensure_collector()
+        t |> equal(has_debug_agent_context("collector"), true)
+        delete_debug_agent_context("collector")
+        t |> equal(has_debug_agent_context("collector"), false)
+        collector_ready = false
+    }
+}

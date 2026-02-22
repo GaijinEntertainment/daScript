@@ -10,6 +10,7 @@ Debug Agents
     single: Tutorial; fork_debug_agent_context
     single: Tutorial; invoke_in_context
     single: Tutorial; invoke_debug_agent_method
+    single: Tutorial; delete_debug_agent_context
     single: Tutorial; onLog
     single: Tutorial; Named Context
 
@@ -317,6 +318,27 @@ in that context become shared state accessible via
     //   shared_data (local)    = 0
 
 
+Shutting down a debug agent
+============================
+
+``delete_debug_agent_context`` removes an agent by name.  It notifies all other
+agents via ``onUninstall``, then safely destroys the agent and its context:
+
+.. code-block:: das
+
+    // Remove the agent
+    delete_debug_agent_context("data_host")
+
+    print("has 'data_host' = {has_debug_agent_context("data_host")}\n")
+    // output: has 'data_host' = false
+
+    // Deleting a non-existent agent is a safe no-op
+    delete_debug_agent_context("data_host")
+
+Use this when a profiling session ends, a debug tool is closed, or
+during test teardown to ensure agents do not leak across test files.
+
+
 Quick reference
 ===============
 
@@ -325,6 +347,7 @@ Quick reference
 ``install_new_debug_agent(agent, name)``        Register agent under a global name
 ``has_debug_agent_context(name)``               Check if named agent exists
 ``get_debug_agent_context(name)``               Get agent's Context for invoke_in_context
+``delete_debug_agent_context(name)``            Remove agent by name (safe no-op if missing)
 ``invoke_in_context(ctx, fn_name, ...)``        Call [export, pinvoke] function in agent context
 ``invoke_debug_agent_method(name, meth, ...)``  Call a method on the agent's class instance
 ``collect_debug_agent_state(ctx, line)``        Trigger onCollect on all agents

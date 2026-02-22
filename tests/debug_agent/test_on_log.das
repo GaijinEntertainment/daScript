@@ -98,3 +98,14 @@ def test_on_log_receives_level(t : T?) {
         t |> equal(level, int(LOG_WARNING))
     }
 }
+
+[test]
+def test_cleanup(t : T?) {
+    t |> run("delete_debug_agent_context removes log_test agent") @(t : T?) {
+        ensure_log_agent()
+        t |> equal(has_debug_agent_context("log_test"), true)
+        delete_debug_agent_context("log_test")
+        t |> equal(has_debug_agent_context("log_test"), false)
+        log_agent_ready = false
+    }
+}

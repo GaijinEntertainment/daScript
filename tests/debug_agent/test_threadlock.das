@@ -74,3 +74,14 @@ def test_threadlock_multiple(t : T?) {
         t |> equal(result, 5)
     }
 }
+
+[test]
+def test_cleanup(t : T?) {
+    t |> run("delete_debug_agent_context removes threadlock_test agent") @(t : T?) {
+        ensure_tl_agent()
+        t |> equal(has_debug_agent_context("threadlock_test"), true)
+        delete_debug_agent_context("threadlock_test")
+        t |> equal(has_debug_agent_context("threadlock_test"), false)
+        tl_agent_ready = false
+    }
+}
