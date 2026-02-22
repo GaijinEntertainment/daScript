@@ -996,7 +996,7 @@ namespace debugapi {
         return res;
     }
 
-    vec4f pinvoke_impl2 ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+    vec4f pinvoke_impl2_core ( Context & context, SimNode_CallBase * call, vec4f * args, int32_t nUserArgs ) {
         auto invCtx = cast<Context *>::to(args[0]);
         if ( !invCtx ) context.throw_error_at(call->debugInfo, "pinvoke with null context");
         auto fn = cast<Func>::to(args[1]);
@@ -1004,8 +1004,8 @@ namespace debugapi {
         auto simFn = fn.PTR;
         if ( !simFn ) context.throw_error_at(call->debugInfo, "pinvoke can't find function #%p", (void *)simFn);
         if ( !invCtx->contextMutex ) context.throw_error_at(call->debugInfo,"threadlock_context is not set");
-        if ( simFn->debugInfo->count!=uint32_t(call->nArguments-2) ) context.throw_error_at(call->debugInfo,
-            "pinvoke function expects %u arguments, but %u provided", simFn->debugInfo->count, call->nArguments-2);
+        if ( simFn->debugInfo->count!=uint32_t(nUserArgs) ) context.throw_error_at(call->debugInfo,
+            "pinvoke function expects %u arguments, but %u provided", simFn->debugInfo->count, nUserArgs);
         vec4f res = v_zero();
         LineInfo exAt;
         string exText;
@@ -1029,6 +1029,10 @@ namespace debugapi {
         });
         if ( !exText.empty() ) context.throw_error_at(exAt, "%s", exText.c_str());
         return res;
+    }
+
+    vec4f pinvoke_impl2 ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        return pinvoke_impl2_core(context, call, args, call->nArguments - 2);
     }
 
     vec4f pinvoke_impl3 ( Context & context, SimNode_CallBase * call, vec4f * args ) {
@@ -1105,7 +1109,7 @@ namespace debugapi {
                 for ( int32_t ai=2, ais=call->nArguments; ai!=ais; ++ai ) {
                     args2[ai + 1] = args[ai];
                 }
-                auto result = pinvoke_impl2(context, call, args2);
+                auto result = pinvoke_impl2_core(context, call, args2, call->nArguments - 1);
                 g_DebugAgentMutex.unlock();
                 return result;
             }
@@ -1149,7 +1153,7 @@ namespace debugapi {
         for ( int32_t ai=2, ais=call->nArguments; ai!=ais; ++ai ) {
             args2[ai + 1] = args[ai];
         }
-        auto result = pinvoke_impl2(context, call, args2);
+        auto result = pinvoke_impl2_core(context, call, args2, call->nArguments - 1);
         g_DebugAgentMutex.unlock();
         return result;
     }
@@ -1319,6 +1323,9 @@ namespace debugapi {
             addExtern<DAS_BIND_FUN(forkDebugAgentContext)>(*this, lib,  "fork_debug_agent_context",
                 SideEffects::modifyExternal, "forkDebugAgentContext")
                     ->args({"function","context","line"});;
+            addExtern<DAS_BIND_FUN(deleteDebugAgent)>(*this, lib,  "delete_debug_agent_context",
+                SideEffects::modifyExternal, "deleteDebugAgent")
+                    ->args({"category","line","context"});;
             addExtern<DAS_BIND_FUN(isInDebugAgentCreation)>(*this, lib, "is_in_debug_agent_creation",
                 SideEffects::accessExternal, "isInDebugAgentCreation");
             addExtern<DAS_BIND_FUN(debuggerSetContextSingleStep)>(*this, lib,  "set_single_step",

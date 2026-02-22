@@ -940,6 +940,7 @@ namespace das
         }
         std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
         for ( auto & it : g_DebugAgents ) {
+            if ( !it.second.debugAgent ) continue;
             lmbd ( it.second.debugAgent );
         }
     }
@@ -1701,8 +1702,8 @@ namespace das
             auto da = make_smart<CppOnlyDebugAgent>();
             agent = (CppOnlyDebugAgent *) da.get();
             g_DebugAgents[category] = {
-                da,
-                nullptr
+                nullptr,
+                da
             };
         }
         lmb(agent);
@@ -1730,19 +1731,28 @@ namespace das
         std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(category);
         if ( it != g_DebugAgents.end() ) {
+            DebugAgentInstance inst = das::move(it->second);
             g_DebugAgents.erase(it);
+            inst.debugAgent.reset();  // release agent before context
         }
     }
 
-    void logger ( int level, const char *prefix, const char * text, Context * context, LineInfo * at) {
-        bool any = false;
-        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
-            any |= pAgent->onLog(context, at, level, text);
-        });
-        if ( !any ) {
-            das_to_stdout_level_prefix_text(level, prefix, text);
+    void deleteDebugAgent ( const char * category, LineInfoArg * at, Context * context ) {
+        if ( !category ) context->throw_error_at(at, "need to specify category");
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        auto it = g_DebugAgents.find(category);
+        if ( it != g_DebugAgents.end() ) {
+            DebugAgent * oldAgentPtr = it->second.debugAgent.get();
+            for ( auto & ap : g_DebugAgents ) {
+                ap.second.debugAgent->onUninstall(oldAgentPtr);
+            }
+            DebugAgentInstance inst = das::move(it->second);
+            g_DebugAgents.erase(it);
+            inst.debugAgent.reset();  // release agent before context
         }
     }
+
+
 
     void installThreadLocalDebugAgent ( DebugAgentPtr newAgent, LineInfoArg * at, Context * context ) {
         if ( *daScriptEnvironment::g_threadLocalDebugAgent && (*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgent ) {
@@ -1750,8 +1760,8 @@ namespace das
         }
         std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
         (*daScriptEnvironment::g_threadLocalDebugAgent) = new DebugAgentInstance{
-            newAgent,
-            context->shared_from_this()
+            context->shared_from_this(),
+            newAgent
         };
         DebugAgent * newAgentPtr = newAgent.get();
         for_each_debug_agent([newAgentPtr](DebugAgentPtr agent){
@@ -1770,8 +1780,8 @@ namespace das
             });
         }
         g_DebugAgents[category] = {
-            newAgent,
-            context->shared_from_this()
+            context->shared_from_this(),
+            newAgent
         };
         DebugAgent * newAgentPtr = newAgent.get();
         for_each_debug_agent([&](const DebugAgentPtr & pAgent){
@@ -1833,7 +1843,9 @@ namespace das
                 threadLocalDebugAgent->onUninstall(pAgent.get());
             }
             for ( auto & ap : g_DebugAgents ) {
-                ap.second.debugAgent->onUninstall(pAgent.get());
+                if ( ap.second.debugAgent ) {
+                    ap.second.debugAgent->onUninstall(pAgent.get());
+                }
             }
         });
         das_safe_map<string,DebugAgentInstance> agents;
@@ -1842,6 +1854,11 @@ namespace das
             swap(agents, g_DebugAgents);
             delete (*daScriptEnvironment::g_threadLocalDebugAgent);
             (*daScriptEnvironment::g_threadLocalDebugAgent) = {};
+        }
+        // release agents before contexts to avoid use-after-free
+        // (agent objects live on the context heap)
+        for ( auto & ap : agents ) {
+            ap.second.debugAgent.reset();
         }
     }
 
@@ -1878,8 +1895,19 @@ namespace das
         os_debug_break();
     }
 
-    void Context::to_out ( const LineInfo *, int level, const char * message ) {
+    static DAS_THREAD_LOCAL(bool) g_inLogger;
+
+    void Context::to_out ( const LineInfo * at, int level, const char * message ) {
         if (message) {
+            if ( !*g_inLogger ) {
+                *g_inLogger = true;
+                bool any = false;
+                for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+                    any |= pAgent->onLog(this, at, level, message);
+                });
+                *g_inLogger = false;
+                if ( any ) return;
+            }
             const char * prefix = getLogMarker(level);
             das_to_stdout_level_prefix_text(level, prefix, message);
         }

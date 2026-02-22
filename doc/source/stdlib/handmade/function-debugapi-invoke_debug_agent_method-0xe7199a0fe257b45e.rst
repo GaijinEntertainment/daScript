@@ -1,0 +1,1 @@
+Calls a method on the debug agent's class instance by name.  The first argument is the agent category, the second is the method name, followed by up to 10 user arguments.  The agent's `self` is passed automatically.

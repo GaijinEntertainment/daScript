@@ -281,3 +281,5 @@ Quick reference
    Helper file: :download:`tutorials/language/44_helper.das <../../../../tutorials/language/44_helper.das>`
 
    Previous tutorial: :ref:`tutorial_interfaces`
+
+   Next tutorial: :ref:`tutorial_debug_agents`
