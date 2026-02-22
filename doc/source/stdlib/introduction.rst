@@ -117,7 +117,6 @@ Control flow macros
 * :doc:`assert_once <assert_once>` — ``assert_once`` — assertion that fires only on first failure
 * :doc:`unroll <unroll>` — compile-time loop unrolling macro
 * :doc:`instance_function <instance_function>` — ``[instance_function]`` annotation for struct method binding
-* :doc:`export_constructor <export_constructor>` — auto-export default constructors for annotated structs
 * :doc:`array_boost <array_boost>` — ``temp_array``, ``array_view``, and ``empty`` helpers
 * :doc:`heartbeat <heartbeat>` — periodic heartbeat callback injection
 

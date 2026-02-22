@@ -50,7 +50,6 @@ require daslib/decs_boost
 require daslib/utf8_utils
 require daslib/coroutines
 require daslib/interfaces
-require daslib/export_constructor
 require daslib/faker
 require daslib/fuzzer
 require daslib/match
@@ -709,13 +708,6 @@ def document_module_interfaces(root : string) {
     document("Interfaces", mod, "interfaces.rst", groups)
 }
 
-def document_module_export_constructor(root : string) {
-    var mod = find_module("export_constructor")
-    var groups <- array<DocGroup>(
-    )
-    document("Export constructor", mod, "export_constructor.rst", groups)
-}
-
 def document_module_faker(root : string) {
     var mod = find_module("faker")
     var groups <- array<DocGroup>(
@@ -1098,7 +1090,6 @@ def main {
     document_module_defer(root)
     document_module_dynamic_cast_rtti(root)
     document_module_enum_trait(root)
-    document_module_export_constructor(root)
     document_module_faker(root)
     document_module_flat_hash_table(root)
     document_module_functional(root)

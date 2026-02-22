@@ -938,13 +938,6 @@ on type mismatch, similar to C++ ``dynamic_cast``.""",
     "require daslib/dynamic_cast_rtti",
 )
 
-reg("export_constructor",
-    """The EXPORT_CONSTRUCTOR module provides the ``[export_constructor]`` annotation
-for struct types. Annotated structs automatically generate an exported
-constructor function that can be called from other modules or from C++ code.""",
-    "require daslib/export_constructor",
-)
-
 reg("faker",
     """Random test-data generator.
 
