@@ -3,6 +3,8 @@ and communicating with persistent debug agents that live in their own forked con
 It supports cross-context function invocation, agent method calls, log interception,
 data and stack walking, instrumentation, and breakpoint management.
 
+See :ref:`tutorial_debug_agents` for a hands-on tutorial.
+
 All functions and symbols are in "debugapi" module, use require to get access to it.
 
 .. code-block:: das
