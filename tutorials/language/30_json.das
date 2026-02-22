@@ -9,16 +9,19 @@
 //   - Struct serialization with JV and from_JV
 //   - Enum serialization
 //   - Modifying JSON values
-//   - Annotations: rename, optional, embed
+//   - Field annotations: optional, embed, unescape, enum_as_int
 //   - The %json~ reader macro for inline JSON
 //   - Writer settings: no_trailing_zeros, no_empty_arrays
 //   - Broken JSON repair with try_fixing_broken_json
+//   - sprint_json for serializing any value to JSON
+//   - Class serialization
 //
 // requires:  daslib/json, daslib/json_boost
 // Run: daslang.exe tutorials/language/30_json.das
 
 options gen2
 options persistent_heap
+options rtti
 
 require daslib/json_boost
 
@@ -355,6 +358,166 @@ def vectors_demo() {
     // output: back: (1, 2, 3)
 }
 
+// === sprint_json ===
+// sprint_json is a builtin function that serializes any daslang value
+// directly to a JSON string, without going through JsonValue?.
+// It handles structs, classes, variants, tuples, tables, arrays, enums,
+// pointers, and all basic types.
+
+variant Payload {
+    code : int
+    message : float
+}
+
+struct Record {
+    id : int
+    tag : string
+    notes : string
+    data : Payload
+    values : array<int>
+    meta : table<string; int>
+    coords : tuple<int; float>
+    ptr : void?
+}
+
+def sprint_json_demo() {
+    print("\n=== sprint_json ===\n")
+
+    // sprint_json serializes any value to JSON
+    // Second argument controls human-readable formatting
+    var r <- Record(uninitialized
+        id = 1,
+        tag = "test",
+        data = Payload(uninitialized code = 42),
+        values = [1, 2, 3],
+        meta <- { "x" => 10 },
+        coords = (7, 3.14),
+        ptr = null
+    )
+    let compact = sprint_json(r, false)
+    print("compact: {compact}\n")
+
+    let pretty = sprint_json(r, true)
+    print("pretty:\n{pretty}\n")
+
+    // Works with simple values too
+    print("int: {sprint_json(42, false)}\n")
+    // output: int: 42
+    print("string: {sprint_json("hello", false)}\n")
+    // output: string: "hello"
+    print("array: {sprint_json([10, 20, 30], false)}\n")
+    // output: array: [10,20,30]
+}
+
+// === Field annotations ===
+// Struct field annotations control how sprint_json serializes fields:
+//   @optional    — skip the field if it has a default/empty value
+//   @embed       — embed a string field as raw JSON (no extra quotes)
+//   @unescape    — don't escape special characters in the string
+//   @enum_as_int — serialize an enum as its integer value, not a string
+//   @rename="x"  — use "x" as the JSON key instead of the field name
+
+enum Priority {
+    low
+    medium
+    high
+}
+
+struct AnnotatedConfig {
+    name : string
+    @optional debug : bool              // omitted when false
+    @optional tags : array<string>      // omitted when empty
+    @embed raw_data : string            // embedded as raw JSON
+    @unescape raw_path : string         // no escaping of special chars
+    pri : Priority                      // serialized as string by default
+    @enum_as_int level : Priority       // serialized as integer
+    @rename = "type" _type : string     // appears as "type" in JSON
+}
+
+def annotations_demo() {
+    print("\n=== Field annotations ===\n")
+
+    // Field annotations are recognized by sprint_json
+    var c <- AnnotatedConfig(uninitialized
+        name = "app",
+        debug = false,
+        raw_data = "[1,2,3]",
+        raw_path = "C:\\Users\\test",
+        pri = Priority.high,
+        level = Priority.medium,
+        _type = "widget"
+    )
+    let json_str = sprint_json(c, false)
+    print("annotated: {json_str}\n")
+    // @optional: debug (false) and tags (empty) are skipped
+    // @embed: raw_data appears as raw JSON [1,2,3], not quoted "[1,2,3]"
+    // @unescape: raw_path preserves backslashes as-is
+    // @enum_as_int: level is 1 (integer), pri is "high" (string)
+    // @rename: _type field appears as "type" in the JSON output
+
+    // sprint_json with human-readable formatting
+    let pretty = sprint_json(c, true)
+    print("pretty:\n{pretty}\n")
+}
+
+// === @rename annotation ===
+// Use @rename="json_key" when the JSON key is a daScript reserved word
+// or doesn't follow daScript naming conventions. The field name in code
+// uses a safe prefix (e.g. _type), but serializes as the desired key.
+// Works with sprint_json, JV, and from_JV.
+
+struct ApiResponse {
+    @rename = "type" _type : string     // "type" is awkward as a daScript identifier
+    @rename = "class" _class : int      // "class" collides with daScript keyword
+    value : float
+}
+
+def rename_demo() {
+    print("\n=== @rename annotation ===\n")
+
+    // sprint_json uses the renamed key
+    var resp = ApiResponse(_type = "widget", _class = 3, value = 1.5)
+    let json_str = sprint_json(resp, false)
+    print("sprint_json: {json_str}\n")
+    // output: sprint_json: \{"type":"widget","class":3,"value":1.500000\}
+
+    // JV also respects @rename
+    var js = JV(resp)
+    print("via JV: {write_json(js)}\n")
+
+    // from_JV maps the renamed keys back to struct fields
+    var error : string
+    var parsed = read_json("\{ \"type\": \"button\", \"class\": 5, \"value\": 2.0 \}", error)
+    var result = from_JV(parsed, type<ApiResponse>)
+    print("from_JV: _type={result._type}, _class={result._class}\n")
+    // output: from_JV: _type=button, _class=5
+}
+
+// === Class serialization ===
+// Both JV/from_JV and sprint_json work with classes.
+// Classes serialize their fields just like structs.
+
+class Animal {
+    species : string
+    legs : int
+}
+
+def class_serialization() {
+    print("\n=== Class serialization ===\n")
+
+    var a = new Animal(species = "cat", legs = 4)
+    let json_str = sprint_json(*a, false)
+    print("class: {json_str}\n")
+
+    // JV also works with class instances
+    var js = JV(*a)
+    print("via JV: {write_json(js)}\n")
+
+    unsafe {
+        delete a
+    }
+}
+
 [export]
 def main() {
     parsing_basics()
@@ -371,4 +534,8 @@ def main() {
     broken_json_demo()
     tuples_and_variants()
     vectors_demo()
+    sprint_json_demo()
+    annotations_demo()
+    rename_demo()
+    class_serialization()
 }
