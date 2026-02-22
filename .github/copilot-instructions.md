@@ -96,11 +96,38 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - **`add_ptr_ref(raw_ptr)`** — wraps a raw pointer (`T?`) into a `smart_ptr<T>` by adding a reference. AST node fields are often raw pointers (e.g. `typeDecl.structType` is `Structure?`, `typeDecl.enumType` is `Enumeration?`), but many API functions expect `smart_ptr<T>`. Use `add_ptr_ref` to bridge: `var inscope st <- add_ptr_ref(pair_type.structType)` gives a `StructurePtr` from a `Structure?` field. Also accepts `smart_ptr<T>` input (adds a ref and returns a new smart_ptr). Always use `var inscope` for the result to manage lifetime.
 - **Rule of thumb**: if a function signature takes `var x : smart_ptr<T>` (not `&`), it **consumes** `x`. Pass a temporary, a clone, or accept that your variable will be null after the call.
 
+### Structure macros — generating types and functions
+
+- **`[structure_macro(name=foo)]`** — annotation on a class inheriting `AstStructureAnnotation`; the `apply` method runs at compile time when a struct has `[foo]`. Use to generate companion types, operators, and functions.
+- **`clone_structure(get_ptr(st))`** — deep-copies a `StructurePtr` for creating modified companion types (e.g., SOA layout where every field becomes `array<FieldType>`)
+- **`get_ptr(st)`** — extracts raw pointer from `smart_ptr<Structure>` for use in `TypeDecl.structType` fields
+- **`compiling_module() |> add_function(fn)`** — registers a concrete function in the current module
+- **`compiling_module() |> add_generic(fn)`** — registers a generic function (instanced per call site)
+- **`compiling_module() |> add_structure(st)`** — registers a generated struct
+- **`compiling_module() |> add_alias(tdef)`** — registers a type alias
+- **`fn.flags |= FunctionFlags.generated`** — marks a function as compiler-generated (suppresses "unused" warnings, enables special error messages)
+- **`ExprFieldFieldFlags.no_promotion`** / **`ExprAtFlags.no_promotion`** — prevent the compiler from promoting field access or index access to a different type; needed in generated AST to preserve exact types
+- **`[tag_function(tag_name)]`** on a function + **`[tag_function_macro(tag="tag_name")]`** on a class — intercepts calls to the tagged function and rewrites them in the `transform` method. Used for compile-time call rewriting (e.g., SOA `operator .` rewrites `soa[i].field` → `soa.field[i]`).
+- **`[for_loop_macro(name=foo)]`** on a class inheriting `AstForLoopMacro` — intercepts `for` loops whose source is a matching type. Override `visitExprFor` to rewrite the loop AST (e.g., SOA for-loop expands `for (it in soa)` into per-field array iteration).
+
 ### `qmacro` vs `quote` (code generation)
 
-- **`qmacro(expr)`** — quasi-quote with reification splices (`$v()`, `$e()`, `$c()`, `$t()`, `$i()`, `$f()`, `$a()` etc.). Use when the generated code contains interpolated values.
+- **`qmacro(expr)`** — quasi-quote with reification splices (`$v()`, `$e()`, `$c()`, `$t()`, `$i()`, `$f()`, `$a()`, `$b()` etc.). Use when the generated code contains interpolated values.
+- **`qmacro_function("name") $(args) { body }`** — generates an entire `FunctionPtr` with spliced arguments/body. The `$t(typeExpr)` splice in the signature sets parameter/return types from `TypeDeclPtr` variables. Example: `qmacro_function("push") $(var st : $t(stypeT); var arg : $t(argT)) : void { $b(bodyExprs) }` generates a function with dynamic types and spliced body.
+- **`qmacro_expr(${ statement; })`** — generates a statement-level expression (e.g., assignment). The `${ }` block allows semicolons. Example: `qmacro_expr(${ soa_elem.$f(fieldName) := st.$f(fieldName)[soa_idx]; })`.
 - **`quote(expr)`** — plain quote with NO reification. Use when the expression is a simple literal or constant with no splices — e.g. `quote(true)`, `quote(false)`, `quote(0)`.
 - **Rule**: if the expression contains no `$…()` reification operators, prefer `quote()` over `qmacro()` — it is simpler, clearer, and avoids unnecessary reification overhead.
+
+#### Reification operators (inside `qmacro`)
+
+- **`$v(daslangVar)`** — splice the runtime **value** of a variable into the generated code
+- **`$e(exprPtr)`** — splice an `ExpressionPtr` as a sub-expression
+- **`$c(stringVar)`** — splice a `string` as a **call name** (function name). Example: `$c(callName)(arr, val)` generates a call to whatever function name `callName` holds
+- **`$t(typeDeclPtr)`** — splice a `TypeDeclPtr` as a type annotation in signatures or declarations
+- **`$i(stringVar)`** — splice a string as an **identifier** (variable name)
+- **`$f(stringVar)`** — splice a string as a **field name**. Example: `st.$f(fieldName)` becomes `st.x` when `fieldName="x"`
+- **`$a(arrayOfExprPtr)`** — splice an `array<ExpressionPtr>` as function call **arguments**
+- **`$b(arrayOfExprPtr)`** — splice an `array<ExpressionPtr>` as a **block body** (sequence of statements). Build the array with `emplace_new`, then `$b(bodyExprs)` inlines all statements into the function body
 
 ### Error handling
 
@@ -159,6 +186,8 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - Blocks CANNOT be stored in containers, returned from functions, or captured — use lambdas or function pointers for those use cases
 - `match`, `multi_match`, `static_match` macros (from `daslib/match.das`) handle side effects automatically — do NOT add `[sideeffects]` annotations to functions that only use match
 - `[export] def main()` returns `void` — do NOT `return true` or return other values from main
+- **`push` vs `emplace` vs `push_clone`** for arrays: `push(arr, val)` copies `val` into the array (fails for non-copyable types like `array<int>`); `emplace(arr, val)` **moves** `val` into the array (source is zeroed/destroyed after); `push_clone(arr, val)` **clones** `val` into the array (works for any type, preserves source). When generating code that operates on user structs with potentially non-copyable fields, prefer `push_clone` (preserves source) or `emplace` (when source consumption is intentional).
+- **Non-copyable types**: `array<T>`, `table<K;V>`, lambdas, and any struct containing them cannot be copied with `=` or `push`. Use `:=` (clone-assign), `push_clone`, or `<-` (move) instead. The compiler error is clear: "can't copy non-copyable type"
 
 ### Channels and cross-context communication
 
@@ -189,6 +218,7 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - `tests/json/` — JSON module tests (4 test files, ~148 tests)
 - `tests/regex/` — Regex module tests (8 test files, 278 tests)
 - `tests/interfaces/` — Interface module tests (4 test files, 67 tests)
+- `tests/soa/` — SOA module tests (4 test files, 126 tests: basic, iteration, container ops, non-copyable fields)
 - `modules/` — External plugin modules
 
 ## Keywords Reference
