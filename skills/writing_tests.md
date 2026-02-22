@@ -47,6 +47,14 @@ When testing operations on types containing non-copyable fields (`array<T>`, `ta
 - **Test non-copyable fields explicitly**: include at least one struct with an `array<T>` or `table<K;V>` field to catch accidental copies
 - **Helper functions**: write `make_xxx()` factory helpers that construct test values — keeps test code concise and avoids repetition
 
+## Test index (`tests/README.md`)
+
+The file `tests/README.md` is a comprehensive index of every `.das` test file. **When you add, remove, or rename a test file, update `tests/README.md`** to keep it in sync:
+
+- Add a row to the correct directory table with the filename, a short description, and `**expect** <codes>` if the file uses `expect` directives.
+- If creating a new subdirectory, add a new section header and table.
+- Mark helper/module files (non-test) with *(helper)*.
+
 ## Test-first bug verification
 
 When fixing bugs, write the failing test BEFORE applying the fix:

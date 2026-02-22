@@ -205,7 +205,7 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - `include/daScript/` — C++ headers
 - `daslib/` — Standard library modules (86 .das files)
 - `dastest/` — Test framework
-- `tests/` — Test suite (with per-module subfolders: `tests/decs/`, `tests/match/`, `tests/json/`, etc.)
+- `tests/` — Test suite (35 subdirectories, ~226 `.das` files). See `tests/README.md` for a full index of every test file, what it tests, and whether it expects compile errors.
 - `doc/source/reference/language/` — RST language documentation (36 files)
 - `doc/source/stdlib/` — RST standard library documentation (auto-generated + handmade)
 - `doc/reflections/` — Documentation generation tools (das2rst.das, rst.das, gen_module_examples.py)
@@ -213,12 +213,6 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - `tutorials/integration/cpp/` — C++ integration tutorials (embedding daslang in C++ host applications)
 - `tutorials/macros/` — Macro tutorials (call macros, reader macros, etc.)
 - `doc/source/reference/tutorials/` — RST companion pages for each tutorial
-- `tests/linq/` — LINQ module tests (15 test files, ~500 tests)
-- `tests/functional/` — Functional module tests
-- `tests/json/` — JSON module tests (4 test files, ~148 tests)
-- `tests/regex/` — Regex module tests (8 test files, 278 tests)
-- `tests/interfaces/` — Interface module tests (4 test files, 67 tests)
-- `tests/soa/` — SOA module tests (4 test files, 126 tests: basic, iteration, container ops, non-copyable fields)
 - `modules/` — External plugin modules
 
 ## Keywords Reference
