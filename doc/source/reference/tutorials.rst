@@ -75,6 +75,7 @@ introduced in earlier tutorials.
    tutorials/45_debug_agents.rst
    tutorials/46_apply_in_context.rst
    tutorials/47_data_walker.rst
+   tutorials/48_apply.rst
 
 .. _tutorials_integration_c:
 

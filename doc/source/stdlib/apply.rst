@@ -42,6 +42,12 @@ Example:
         // b = 3.14
         // c = hello
 
+.. seealso::
+
+   :ref:`tutorial_apply` — comprehensive tutorial covering structs,
+   tuples, variants, ``static_if`` dispatch, mutation, generic
+   ``describe``, and the 3-argument annotation form.
+
 
 
 +++++++++++
@@ -52,16 +58,20 @@ Call macros
 
 .. das:attribute:: apply
 
-This macro implements the apply() pattern. The idea is that for each entry in the structure, variant, or tuple,
-the block will be invoked. Both element name, and element value are passed to the block.
-For example
+This macro implements the ``apply()`` pattern. For each field in a structure, variant, or tuple,
+the block is invoked with the field name and value. An optional third block argument receives
+per-field annotations as ``array<tuple<name:string; data:RttiValue>>``.
 
-    struct Bar
+.. code-block:: das
+
+    struct Bar {
         x, y : float
-    apply([[Bar x=1.,y=2.]]) <| $ ( name:string; field )
+    }
+    apply(Bar(x=1.0, y=2.0)) $(name, field) {
         print("{name} = {field} ")
+    }
 
-Would print x = 1.0 y = 2.0
+Would print ``x = 1 y = 2``
 
 
 

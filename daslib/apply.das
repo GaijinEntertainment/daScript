@@ -244,16 +244,20 @@ def clone_block_with_name(name : string; blk : ExpressionPtr; hasExtraArg : bool
 
 [call_macro(name="apply")]  // apply(value, block)
 class ApplyMacro : AstCallMacro {
-    //! This macro implements the apply() pattern. The idea is that for each entry in the structure, variant, or tuple,
-    //! the block will be invoked. Both element name, and element value are passed to the block.
-    //! For example
+    //! This macro implements the ``apply()`` pattern. For each field in a structure, variant, or tuple,
+    //! the block is invoked with the field name and value. An optional third block argument receives
+    //! per-field annotations as ``array<tuple<name:string; data:RttiValue>>``.
     //!
-    //!     struct Bar
+    //! .. code-block:: das
+    //!
+    //!     struct Bar {
     //!         x, y : float
-    //!     apply([[Bar x=1.,y=2.]]) <| $ ( name:string; field )
+    //!     }
+    //!     apply(Bar(x=1.0, y=2.0)) $(name, field) {
     //!         print("{name} = {field} ")
+    //!     }
     //!
-    //! Would print x = 1.0 y = 2.0
+    //! Would print ``x = 1 y = 2``
     def override visit(prog : ProgramPtr; mod : Module?; var expr : smart_ptr<ExprCallMacro>) : ExpressionPtr {
         macro_verify(expr.arguments |> length == 2, prog, expr.at, "expecting apply(value, block)")
         if (expr.arguments[0]._type != null) {// need value inferred
