@@ -5327,27 +5327,27 @@ Compilation time only expression which holds temporary information for the `AstR
 
 .. das:attribute:: ExprCallMacro
 
-Compilation time only expression which holds temporary information for the `AstCallMacro`.
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Compilation time only expression which holds temporary information for the `AstCallMacro`.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Location of the expression in source code
 
-         * **_type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> - Type of the expression
+         * **__rtti** : string - Type of the expression
 
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression generation flags
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression flags
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro being called
+         * **arguments** : vector<smart_ptr<Expression>> - Name of the macro being called
 
-         * **arguments** : vector<smart_ptr<Expression>> - List of argument expressions
+         * **argumentsFailedToInfer** : bool - List of argument expressions
 
-         * **argumentsFailedToInfer** : bool - If the arguments failed to infer their types
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - If the arguments failed to infer their types
 
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+         * **inFunction** :  :ref:`Function <handle-ast-Function>`? - Location of the expression in source code
 
          * **macro** :  :ref:`CallMacro <handle-ast-CallMacro>`? - Call macro, if resolved
 

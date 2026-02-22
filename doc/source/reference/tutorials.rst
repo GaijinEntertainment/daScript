@@ -76,6 +76,7 @@ introduced in earlier tutorials.
    tutorials/46_apply_in_context.rst
    tutorials/47_data_walker.rst
    tutorials/48_apply.rst
+   tutorials/49_async.rst
 
 .. _tutorials_integration_c:
 

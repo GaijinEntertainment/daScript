@@ -379,3 +379,35 @@ def public async_run_all(var a : array<iterator<auto>>) {
         }
     }
 }
+
+
+def public async_timeout(var a : iterator<auto>; max_frames : int) : bool {
+    //! This function runs an async function for at most `max_frames` frames.
+    //! Returns ``true`` if the async function completed within the limit,
+    //! ``false`` if it was terminated due to timeout.
+    var frames = 0
+    for (t in a) {
+        frames ++
+        if (frames >= max_frames) {
+            return false
+        }
+    }
+    return true
+}
+
+
+def public async_race(var a : iterator<auto>; var b : iterator<auto>) : int {
+    //! This function runs two async functions concurrently and returns the
+    //! index (0 or 1) of whichever finishes first. The other is abandoned.
+    var ta : bool
+    var tb : bool
+    while (true) {
+        if (!next(a, ta) || empty(a)) {
+            return 0
+        }
+        if (!next(b, tb) || empty(b)) {
+            return 1
+        }
+    }
+    return -1
+}

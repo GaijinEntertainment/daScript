@@ -8,15 +8,23 @@ Async/await coroutine macros
 .. das:module:: async_boost
 
 The ASYNC_BOOST module implements an async/await pattern for daslang using
-channels and coroutines. It provides ``async`` for launching concurrent tasks
-and ``await`` for waiting on their results, built on top of the job queue
-infrastructure.
+generator-based cooperative multitasking. It provides the ``[async]`` function
+annotation, ``await`` for waiting on results, and ``await_next_frame`` for
+suspending until the next step. Under the hood every ``[async]`` function is
+transformed into a state-machine generator — no threads, channels, or job
+queues are involved.
 
 All functions and symbols are in "async_boost" module, use require to get access to it.
 
 .. code-block:: das
 
     require daslib/async_boost
+
+.. seealso::
+
+   :ref:`tutorial_async` — Tutorial 49: Async / Await.
+
+   :ref:`stdlib_coroutines` — coroutines module (underlying generator framework).
 
 
 
@@ -113,5 +121,35 @@ This function runs all async function until they are finished (in parallel, star
 
 
 :Arguments: * **a** : array<iterator<auto>>
+
+
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-async_boost_async_timeout_iterator_ls_auto_gr__int:
+
+.. das:function:: async_timeout(a: iterator<auto>; max_frames: int) : bool
+
+This function runs an async function for at most `max_frames` frames.
+Returns ``true`` if the async function completed within the limit,
+``false`` if it was terminated due to timeout.
+
+
+:Arguments: * **a** : iterator<auto>
+
+            * **max_frames** : int
+
+.. _function-async_boost_async_race_iterator_ls_auto_gr__iterator_ls_auto_gr_:
+
+.. das:function:: async_race(a: iterator<auto>; b: iterator<auto>) : int
+
+This function runs two async functions concurrently and returns the
+index (0 or 1) of whichever finishes first. The other is abandoned.
+
+
+:Arguments: * **a** : iterator<auto>
+
+            * **b** : iterator<auto>
 
 

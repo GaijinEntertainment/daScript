@@ -15,7 +15,7 @@ struct, tuple, and variant fields at compile time.  Unlike runtime
 RTTI walkers, ``apply`` generates specialized code per field with
 zero reflection overhead.
 
-Prerequisites: basic daScript knowledge (structs, tuples, variants).
+Prerequisites: basic daslang knowledge (structs, tuples, variants).
 
 .. code-block:: das
 
@@ -251,3 +251,5 @@ Run it with::
    ``DapiDataWalker`` (Tutorial 47).
 
    Previous tutorial: :ref:`tutorial_data_walker`
+
+   Next tutorial: :ref:`tutorial_async`

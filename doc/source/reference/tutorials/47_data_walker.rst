@@ -11,11 +11,11 @@ Data Walking with DapiDataWalker
     single: Tutorial; Runtime Introspection
 
 This tutorial covers ``DapiDataWalker`` — a visitor-pattern class for
-inspecting and transforming daScript values at runtime.  You subclass
+inspecting and transforming daslang values at runtime.  You subclass
 it, override callbacks for the types you care about, and walk any data
 through RTTI type information.
 
-Prerequisites: basic daScript knowledge (structs, arrays, tables,
+Prerequisites: basic daslang knowledge (structs, arrays, tables,
 enumerations, bitfields).
 
 .. code-block:: das
@@ -249,7 +249,7 @@ containing value names.  Bitfields trigger ``Bitfield`` with a
 JSON serializer — putting it all together
 ===========================================
 
-A practical walker that serializes any daScript value to JSON.
+A practical walker that serializes any daslang value to JSON.
 This combines structure, array, table, tuple, and scalar callbacks
 into one coherent class.  The walker writes to a ``StringBuilderWriter``
 for efficiency — no intermediate string concatenation:

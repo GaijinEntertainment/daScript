@@ -199,6 +199,7 @@ namespace das {
         AstExprCallMacroAnnotation(ModuleLibrary & ml)
             :  AstExprLooksLikeCallAnnotation<ExprCallMacro> ("ExprCallMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(macro)>("macro");
+            addField<DAS_BIND_MANAGED_FIELD(inFunction)>("inFunction");
         }
     };
 

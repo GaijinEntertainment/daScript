@@ -174,7 +174,7 @@ Classes
 
 .. das:attribute:: DapiDataWalker
 
-Base class for walking daScript data structures.  Subclass and override per-type visitor methods (`Int`, `Float`, `String`, `Array`, `Table`, etc.) to inspect values. Create with `make_data_walker`.
+Base class for walking daslang data structures.  Subclass and override per-type visitor methods (`Int`, `Float`, `String`, `Array`, `Table`, etc.) to inspect values. Create with `make_data_walker`.
 
 
 
@@ -973,7 +973,7 @@ walk_data
 
 .. das:function:: walk_data(walker: smart_ptr<DataWalker>; data: void?; struct_info: StructInfo)
 
-Walks a daScript data structure using the provided `DataWalker`.  The walker receives typed callbacks for each value encountered.  Overloaded for raw data+`StructInfo`, `float4`+`TypeInfo`, and `void?`+`TypeInfo`.
+Walks a daslang data structure using the provided `DataWalker`.  The walker receives typed callbacks for each value encountered.  Overloaded for raw data+`StructInfo`, `float4`+`TypeInfo`, and `void?`+`TypeInfo`.
 
 
 :Arguments: * **walker** : smart_ptr< :ref:`DataWalker <handle-debugapi-DataWalker>`> implicit

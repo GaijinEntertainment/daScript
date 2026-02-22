@@ -60,7 +60,7 @@ The ``typeinfo`` keyword already provides many built-in traits:
 compile-time introspection — a description string for serialization, an
 array of enum names for UI dropdowns, or a boolean check for conditional
 compilation.  ``[typeinfo_macro]`` lets you add such traits using pure
-daScript code.
+daslang code.
 
 
 The module file
