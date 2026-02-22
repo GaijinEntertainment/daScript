@@ -1323,6 +1323,9 @@ namespace debugapi {
             addExtern<DAS_BIND_FUN(forkDebugAgentContext)>(*this, lib,  "fork_debug_agent_context",
                 SideEffects::modifyExternal, "forkDebugAgentContext")
                     ->args({"function","context","line"});;
+            addExtern<DAS_BIND_FUN(deleteDebugAgent)>(*this, lib,  "delete_debug_agent_context",
+                SideEffects::modifyExternal, "deleteDebugAgent")
+                    ->args({"category","line","context"});;
             addExtern<DAS_BIND_FUN(isInDebugAgentCreation)>(*this, lib, "is_in_debug_agent_creation",
                 SideEffects::accessExternal, "isInDebugAgentCreation");
             addExtern<DAS_BIND_FUN(debuggerSetContextSingleStep)>(*this, lib,  "set_single_step",

@@ -890,8 +890,13 @@ namespace das
     };
 
     struct DebugAgentInstance {
-        DebugAgentPtr   debugAgent;
         ContextPtr      debugAgentContext;
+        DebugAgentPtr   debugAgent;
+        ~DebugAgentInstance() {
+            // agent lives on the context heap, so it must be released before the context
+            debugAgent.reset();
+            debugAgentContext.reset();
+        }
     };
 
     DAS_API void tickDebugAgent ( );
@@ -902,6 +907,7 @@ namespace das
     DAS_API void installThreadLocalDebugAgent ( DebugAgentPtr newAgent, LineInfoArg * at, Context * context );
     DAS_API void shutdownDebugAgent();
     DAS_API void shutdownThreadLocalDebugAgent();
+    DAS_API void deleteDebugAgent ( const char * category, LineInfoArg * at, Context * context );
     DAS_API void forkDebugAgentContext ( Func exFn, Context * context, LineInfoArg * lineinfo );
     DAS_API bool isInDebugAgentCreation();
     DAS_API bool hasDebugAgentContext ( const char * category, LineInfoArg * at, Context * context );
