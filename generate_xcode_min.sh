@@ -9,8 +9,6 @@ time {
     CC=clang CXX=clang++ cmake -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" \
         -DDAS_GLFW_DISABLED:BOOL=TRUE           \
         -DDAS_IMGUI_DISABLED:BOOL=TRUE          \
-        -DDAS_BGFX_DISABLED:BOOL=TRUE           \
-        -DDAS_XBYAK_DISABLED:BOOL=TRUE          \
         -DDAS_CLANG_BIND_DISABLED:BOOL=TRUE     \
         -DDAS_LLVM_DISABLED:BOOL=TRUE           \
         -DDAS_MINFFT_DISABLED:BOOL=TRUE         \

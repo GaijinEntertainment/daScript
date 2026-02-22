@@ -6,7 +6,6 @@ from typing import List, Dict
 
 
 options_table = {
-    "dasBGFX":        "DAS_BGFX_DISABLED",
     "dasClangBind":   "DAS_CLANG_BIND_DISABLED",
     "dasGlfw":        "DAS_GLFW_DISABLED",
     "dasGlsl":        "",
@@ -16,12 +15,10 @@ options_table = {
     "dasMinfft":      "DAS_MINFFT_DISABLED",
     "dasOpenGL":      "",
     "dasQuirrel":     "DAS_QUIRREL_DISABLED",
-    "dasSFML":        "DAS_SFML_DISABLED",
     "dasAudio":       "DAS_AUDIO_DISABLED",
     "dasStbImage":    "DAS_STBIMAGE_DISABLED",
     "dasStbTrueType": "DAS_STBTRUETYPE_DISABLED",
-    "dasStdDlg":      "DAS_STDDLG_DISABLED",
-    "dasXbyak":       "DAS_XBYAK_DISABLED"
+    "dasStdDlg":      "DAS_STDDLG_DISABLED"
 }
 
 cmake_options_cache: Dict[str, str] = {}
