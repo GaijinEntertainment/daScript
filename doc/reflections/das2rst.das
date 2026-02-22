@@ -191,6 +191,22 @@ def document_module_network(root : string) {
     document("Network socket library", mod, "network.rst", groups)
 }
 
+def document_module_debugapi(root : string) {
+    var mod = get_module("debugapi")
+    var groups <- array<DocGroup>(
+        group_by_regex("Agent lifecycle", mod, %regex~(fork_debug_agent_context|install_debug_agent|install_debug_agent_thread_local|install_new_debug_agent|install_new_thread_local_debug_agent|has_debug_agent_context|get_debug_agent_context|delete_debug_agent_context|is_in_debug_agent_creation|lock_debug_agent)$%%),
+        group_by_regex("Cross-context invocation", mod, %regex~(invoke_in_context|invoke_debug_agent_method|invoke_debug_agent_function)$%%),
+        group_by_regex("Agent construction", mod, %regex~(make_debug_agent|make_data_walker|make_stack_walker)$%%),
+        group_by_regex("Agent tick and state collection", mod, %regex~(tick_debug_agent|collect_debug_agent_state|on_breakpoints_reset|report_context_state|debug_agent_command|debugger_stop_requested)$%%),
+        group_by_regex("Instrumentation", mod, %regex~(instrument_node|instrument_function|instrument_all_functions|instrument_all_functions_thread_local|instrument_context_allocations|clear_instruments|set_single_step)$%%),
+        group_by_regex("Data and stack walking", mod, %regex~(walk_data|walk_stack|stackwalk|stack_depth)$%%),
+        group_by_regex("Context inspection", mod, %regex~(get_context_global_variable|has_function|get_heap_stats)$%%),
+        group_by_regex("Breakpoints", mod, %regex~(set_hw_breakpoint|clear_hw_breakpoint)$%%),
+        group_by_regex("Memory", mod, %regex~(free_temp_string|temp_string_size|break_on_free|track_insane_pointer)$%%)
+    )
+    document("Debug agent API", mod, "debugapi.rst", groups)
+}
+
 def document_module_uriparser(root : string) {
     var mod = get_module("uriparser")
     var groups <- array<DocGroup>(
@@ -1043,6 +1059,7 @@ def main {
     document_module_fio(root)
     document_module_network(root)
     document_module_uriparser(root)
+    document_module_debugapi(root)
     document_module_rtti(root)
     document_module_ast(root)
     document_module_strings(root)

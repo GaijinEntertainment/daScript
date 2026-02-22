@@ -9,6 +9,7 @@ and debug adapter protocol support.
 
 .. toctree::
 
+   debugapi.rst
    coverage.rst
    profiler.rst
    profiler_boost.rst
