@@ -1,6 +1,6 @@
 // Shared helpers and data types for DapiDataWalker tests.
 //
-// Convention: test files `require _common` to access LogWalker,
+// Convention: test files `require dw_common` to access LogWalker,
 // walk_and_log, and all shared struct / enum / class definitions.
 
 options gen2
@@ -8,7 +8,7 @@ options indenting = 4
 options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
-module _common shared public
+module dw_common shared public
 
 require dastest/testing_boost public
 require rtti public
