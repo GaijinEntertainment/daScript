@@ -12,6 +12,8 @@ into structure-of-arrays layouts for better cache performance. It provides macro
 that generate parallel arrays for each field of a structure, enabling SIMD-friendly
 data access patterns.
 
+See :ref:`tutorial_soa` for a hands-on tutorial.
+
 All functions and symbols are in "soa" module, use require to get access to it.
 
 .. code-block:: das
@@ -61,7 +63,7 @@ For a struct ``Foo`` with fields ``x : float`` and ``y : float``, generates:
 
   * ``Foo`SOA`` — struct where every field is ``array<FieldType>``
   * ``operator []`` returning ``SOA_INDEX`` proxy
-  * ``length``, ``push``, ``emplace``, ``push_clone``, ``erase`` functions
+  * ``length``, ``capacity``, ``push``, ``push_clone``, ``emplace``, ``erase``, ``pop``, ``clear``, ``resize``, ``reserve``, ``swap``, ``from_array``, ``to_array`` functions
 
 
 

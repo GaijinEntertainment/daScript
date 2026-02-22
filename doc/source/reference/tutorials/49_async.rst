@@ -298,3 +298,5 @@ Run it with::
 
    Previous tutorial: :ref:`tutorial_apply`
 
+   Next tutorial: :ref:`tutorial_soa`
+

@@ -77,6 +77,7 @@ introduced in earlier tutorials.
    tutorials/47_data_walker.rst
    tutorials/48_apply.rst
    tutorials/49_async.rst
+   tutorials/50_soa.rst
 
 .. _tutorials_integration_c:
 
