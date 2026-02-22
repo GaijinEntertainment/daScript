@@ -59,6 +59,7 @@ Standalone examples that don't fit neatly into other categories.
 | File | Description |
 |------|-------------|
 | `base64_generators.das` | Base64 encoder built as a chain of composable generators (deliberately slow — demonstrates generator composition, not production encoding) |
+| `shader_like_validation.das` | Shader-like mode demo — shows how `options shader_like` rejects heap-allocating constructs (arrays, lambdas, `new`) at simulation time |
 
 ## test/ — Test Harness & Unit Tests
 
