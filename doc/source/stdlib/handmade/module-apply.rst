@@ -32,3 +32,9 @@ Example:
         // a = 42
         // b = 3.14
         // c = hello
+
+.. seealso::
+
+   :ref:`tutorial_apply` — comprehensive tutorial covering structs,
+   tuples, variants, ``static_if`` dispatch, mutation, generic
+   ``describe``, and the 3-argument annotation form.

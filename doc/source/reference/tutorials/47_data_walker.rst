@@ -426,3 +426,5 @@ Quick reference
    ``VarInfo``, ``EnumInfo``).
 
    Previous tutorial: :ref:`tutorial_apply_in_context`
+
+   Next tutorial: :ref:`tutorial_apply`
