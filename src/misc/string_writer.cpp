@@ -210,7 +210,7 @@ namespace das {
         auto newPos = tellp();
         if (newPos != pos) {
             string st(data() + pos, size_t(newPos - pos));
-            logger(logLevel, useMarker ? getLogMarker(logLevel) : "", st.c_str(), /*ctx*/nullptr, /*at*/nullptr);
+            das_to_stdout_level_prefix_text(logLevel, useMarker ? getLogMarker(logLevel) : "", st.c_str());
             useMarker = false;
             clear();
             pos = newPos = 0;

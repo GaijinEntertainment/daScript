@@ -3341,7 +3341,7 @@ namespace das
             }
         }
         // if there is anything pinvoke or the option is set
-        if ( !context.contextMutex && (anyPInvoke || policies.threadlock_context || policies.debugger) ) {
+        if ( !context.contextMutex && (anyPInvoke || policies.threadlock_context || options.getBoolOption("threadlock_context",false) || policies.debugger) ) {
             context.contextMutex = new recursive_mutex;
         }
         //

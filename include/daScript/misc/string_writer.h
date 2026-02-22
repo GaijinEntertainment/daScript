@@ -143,7 +143,6 @@ namespace das {
     };
 
     const char * getLogMarker(int level);
-    void logger ( int level, const char *marker, const char * text, Context * context, LineInfo * at );
 
     class DAS_API LOG : public TextWriter {
     public:

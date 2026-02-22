@@ -9,6 +9,8 @@ Debug Agents
     single: Tutorial; DapiDebugAgent
     single: Tutorial; fork_debug_agent_context
     single: Tutorial; invoke_in_context
+    single: Tutorial; invoke_debug_agent_method
+    single: Tutorial; onLog
     single: Tutorial; Named Context
 
 This tutorial covers **debug agents** — persistent objects that live
@@ -60,6 +62,57 @@ of the program that stays resident:
     //   has 'counter' = true
 
 
+Intercepting log output with onLog
+====================================
+
+``DapiDebugAgent`` has an ``onLog`` method called whenever any
+context prints or logs.  If ``onLog`` returns ``true``, the default
+output to stdout is suppressed.  If it returns ``false``, output
+proceeds normally.
+
+This is how profiling tools, IDE log panels, and custom loggers
+intercept program output:
+
+.. code-block:: das
+
+    var log_intercept_count : int = 0
+
+    class LogAgent : DapiDebugAgent {
+        def override onLog(context : Context?; at : LineInfo const?;
+                           level : int; text : string#) : bool {
+            log_intercept_count++
+            return false  // don't suppress — let output reach stdout
+        }
+    }
+
+    def install_log_agent(ctx : Context) {
+        install_new_debug_agent(new LogAgent(), "log_watcher")
+    }
+
+    [export, pinvoke]
+    def read_log_count(var result : int?) {
+        unsafe {
+            *result = log_intercept_count
+        }
+    }
+
+    // After forking + installing, each print/to_log triggers onLog
+    fork_debug_agent_context(@@install_log_agent)
+    print("  hello through agent\n")
+    to_log(LOG_INFO, "  info message\n")
+
+    var count = 0
+    unsafe {
+        invoke_in_context(get_debug_agent_context("log_watcher"),
+            "read_log_count", addr(count))
+    }
+    print("  log_intercept_count >= 2: {count >= 2}\n")
+    // output:
+    //   hello through agent
+    //   info message
+    //   log_intercept_count >= 2: true
+
+
 Calling functions in the agent context
 =======================================
 
@@ -104,6 +157,50 @@ To return values, pass a pointer to a result variable:
     // output:
     //   agent_counter (in agent) = 3
     //   agent_counter (local)    = 0
+
+
+Calling agent methods with invoke_debug_agent_method
+======================================================
+
+``invoke_debug_agent_method`` calls a method on the agent's class
+instance directly — no ``[export, pinvoke]`` helper functions needed.
+The agent's ``self`` is passed automatically.
+
+Syntax: ``invoke_debug_agent_method("agent_name", "method", args...)``
+
+.. code-block:: das
+
+    class CalcAgent : DapiDebugAgent {
+        accumulator : int = 0
+        def add(amount : int) {
+            self.accumulator += amount
+        }
+        def get_result(var result : int?) {
+            unsafe {
+                *result = self.accumulator
+            }
+        }
+    }
+
+    def install_calc_agent(ctx : Context) {
+        install_new_debug_agent(new CalcAgent(), "calc")
+    }
+
+    fork_debug_agent_context(@@install_calc_agent)
+
+    unsafe {
+        invoke_debug_agent_method("calc", "add", 10)
+        invoke_debug_agent_method("calc", "add", 20)
+        invoke_debug_agent_method("calc", "add", 12)
+    }
+
+    var result = 0
+    unsafe {
+        invoke_debug_agent_method("calc", "get_result", addr(result))
+    }
+    print("  accumulator = {result}\n")
+    // output:
+    //   accumulator = 42
 
 
 State collection — onCollect and onVariable
@@ -223,17 +320,19 @@ in that context become shared state accessible via
 Quick reference
 ===============
 
-==============================================  ==================================================
+==============================================  ====================================================
 ``fork_debug_agent_context(@@fn)``              Clone context and call setup function in clone
 ``install_new_debug_agent(agent, name)``        Register agent under a global name
 ``has_debug_agent_context(name)``               Check if named agent exists
 ``get_debug_agent_context(name)``               Get agent's Context for invoke_in_context
 ``invoke_in_context(ctx, fn_name, ...)``        Call [export, pinvoke] function in agent context
+``invoke_debug_agent_method(name, meth, ...)``  Call a method on the agent's class instance
 ``collect_debug_agent_state(ctx, line)``        Trigger onCollect on all agents
 ``report_context_state(ctx, cat, name, ...)``   Report variable from onCollect to onVariable
 ``is_in_debug_agent_creation()``                True during fork_debug_agent_context
+``to_log(level, text)``                         Log message — routed through onLog if agents exist
 ``[pinvoke]``                                   Annotation enabling context mutex
-==============================================  ==================================================
+==============================================  ====================================================
 
 
 .. seealso::

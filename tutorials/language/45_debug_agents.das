@@ -3,8 +3,10 @@
 // This tutorial covers:
 //   - What debug agents are and why they exist
 //   - Creating and installing a debug agent (fork + install pattern)
-//   - Overriding DapiDebugAgent methods (onCollect, onVariable)
+//   - Intercepting log output with onLog
 //   - Calling functions in the agent context with invoke_in_context
+//   - Calling agent class methods with invoke_debug_agent_method
+//   - Overriding DapiDebugAgent methods (onCollect, onVariable)
 //   - The auto-start module pattern with [_macro] guards
 //
 // Prerequisites: Tutorial 44 (Compile and Run) for fork_debug_agent_context
@@ -21,6 +23,7 @@
 //     breakpoints, context lifecycle events, allocations, etc.
 //   - `invoke_in_context` calls [export, pinvoke] functions in the
 //     agent context from any other context
+//   - `invoke_debug_agent_method` calls class methods on the agent
 //
 // Run: daslang.exe tutorials/language/45_debug_agents.das
 
@@ -70,7 +73,60 @@ def demo_create_agent() {
 }
 
 // ============================================================
-// Section 2: Calling functions in the agent context
+// Section 2: Intercepting log output with onLog
+// ============================================================
+// DapiDebugAgent has an `onLog` method called whenever any
+// context prints or logs.  If onLog returns true, the default
+// output to stdout is suppressed.  If it returns false, output
+// proceeds normally.
+//
+// This is how profiling tools, IDE log panels, and custom
+// loggers intercept program output.
+
+var log_intercept_count : int = 0
+
+class LogAgent : DapiDebugAgent {
+    def override onLog(context : Context?; at : LineInfo const?; level : int; text : string#) : bool {
+        log_intercept_count++
+        return false  // don't suppress  let output reach stdout
+    }
+}
+
+def install_log_agent(ctx : Context) {
+    install_new_debug_agent(new LogAgent(), "log_watcher")
+}
+
+[export, pinvoke]
+def read_log_count(var result : int?) {
+    unsafe {
+        *result = log_intercept_count
+    }
+}
+
+def demo_on_log() {
+    print("\n=== onLog interception ===\n")
+    fork_debug_agent_context(@@install_log_agent)
+
+    // Each print/to_log call now triggers our agent's onLog
+    print("  hello through agent\n")
+    to_log(LOG_INFO, "  info message\n")
+
+    // Read the count from the agent context
+    var count = 0
+    unsafe {
+        invoke_in_context(get_debug_agent_context("log_watcher"), "read_log_count", addr(count))
+    }
+    // count includes the prints above plus internal dastest output
+    print("  log_intercept_count >= 2: {count >= 2}\n")
+
+    // output:
+    //   hello through agent
+    //   info message
+    //   log_intercept_count >= 2: true
+}
+
+// ============================================================
+// Section 3: Calling functions in the agent context
 // ============================================================
 // To communicate with the agent, use `invoke_in_context` to call
 // [export, pinvoke] functions in the agent context.
@@ -124,7 +180,54 @@ def demo_invoke_in_context() {
 }
 
 // ============================================================
-// Section 3: State collection agent  onCollect & onVariable
+// Section 4: Calling agent methods with invoke_debug_agent_method
+// ============================================================
+// `invoke_debug_agent_method` calls a method on the agent's
+// class instance directly  no need for [export, pinvoke]
+// helper functions.  The agent's `self` is passed automatically.
+//
+// Syntax:  invoke_debug_agent_method("agent_name", "method", args...)
+//
+// Use `unsafe { ... }` around the call.
+
+class CalcAgent : DapiDebugAgent {
+    accumulator : int = 0
+    def add(amount : int) {
+        self.accumulator += amount
+    }
+    def get_result(var result : int?) {
+        unsafe {
+            *result = self.accumulator
+        }
+    }
+}
+
+def install_calc_agent(ctx : Context) {
+    install_new_debug_agent(new CalcAgent(), "calc")
+}
+
+def demo_invoke_method() {
+    print("\n=== invoke_debug_agent_method ===\n")
+    fork_debug_agent_context(@@install_calc_agent)
+
+    unsafe {
+        invoke_debug_agent_method("calc", "add", 10)
+        invoke_debug_agent_method("calc", "add", 20)
+        invoke_debug_agent_method("calc", "add", 12)
+    }
+
+    var result = 0
+    unsafe {
+        invoke_debug_agent_method("calc", "get_result", addr(result))
+    }
+    print("  accumulator = {result}\n")
+
+    // output:
+    //   accumulator = 42
+}
+
+// ============================================================
+// Section 5: State collection agent  onCollect & onVariable
 // ============================================================
 // `onCollect` is called when `collect_debug_agent_state` is
 // triggered.  The agent can inspect the calling context and
@@ -184,7 +287,7 @@ def demo_state_collection() {
 }
 
 // ============================================================
-// Section 4: Agent existence and context access
+// Section 6: Agent existence and context access
 // ============================================================
 // `has_debug_agent_context(name)` checks if a named agent exists.
 // `get_debug_agent_context(name)` returns the agent's Context.
@@ -208,7 +311,7 @@ def demo_existence_checks() {
 }
 
 // ============================================================
-// Section 5: Auto-start module pattern
+// Section 7: Auto-start module pattern
 // ============================================================
 // In modules (shared libraries), you often want the agent to be
 // installed automatically when the module is loaded  without
@@ -281,7 +384,7 @@ def demo_auto_start() {
 }
 
 // ============================================================
-// Section 6: Plain agent as named context host
+// Section 8: Plain agent as named context host
 // ============================================================
 // A common pattern is to create a plain DapiDebugAgent (no
 // overrides) just to own a named context.  Module-level variables
@@ -337,7 +440,9 @@ def demo_named_context() {
 [export]
 def main() {
     demo_create_agent()
+    demo_on_log()
     demo_invoke_in_context()
+    demo_invoke_method()
     demo_state_collection()
     demo_existence_checks()
     demo_auto_start()

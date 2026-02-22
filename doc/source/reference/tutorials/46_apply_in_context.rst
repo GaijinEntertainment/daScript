@@ -1,8 +1,8 @@
 .. _tutorial_apply_in_context:
 
-==========================================
+=============================================
 Cross-Context Services with apply_in_context
-==========================================
+=============================================
 
 .. index::
     single: Tutorial; apply_in_context

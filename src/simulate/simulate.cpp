@@ -1734,15 +1734,7 @@ namespace das
         }
     }
 
-    void logger ( int level, const char *prefix, const char * text, Context * context, LineInfo * at) {
-        bool any = false;
-        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
-            any |= pAgent->onLog(context, at, level, text);
-        });
-        if ( !any ) {
-            das_to_stdout_level_prefix_text(level, prefix, text);
-        }
-    }
+
 
     void installThreadLocalDebugAgent ( DebugAgentPtr newAgent, LineInfoArg * at, Context * context ) {
         if ( *daScriptEnvironment::g_threadLocalDebugAgent && (*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgent ) {
@@ -1878,8 +1870,19 @@ namespace das
         os_debug_break();
     }
 
-    void Context::to_out ( const LineInfo *, int level, const char * message ) {
+    static DAS_THREAD_LOCAL(bool) g_inLogger;
+
+    void Context::to_out ( const LineInfo * at, int level, const char * message ) {
         if (message) {
+            if ( !*g_inLogger ) {
+                *g_inLogger = true;
+                bool any = false;
+                for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+                    any |= pAgent->onLog(this, at, level, message);
+                });
+                *g_inLogger = false;
+                if ( any ) return;
+            }
             const char * prefix = getLogMarker(level);
             das_to_stdout_level_prefix_text(level, prefix, message);
         }
