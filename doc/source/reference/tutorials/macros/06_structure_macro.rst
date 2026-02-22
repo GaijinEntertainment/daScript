@@ -496,7 +496,6 @@ Key takeaways
 
    Standard library examples:
    ``daslib/interfaces.das`` (``apply`` + ``finish``),
-   ``daslib/export_constructor.das`` (``apply`` only),
    ``daslib/decs_boost.das`` (``apply`` with field iteration)
 
    Language reference: :ref:`Macros <macros>` — full macro system documentation
