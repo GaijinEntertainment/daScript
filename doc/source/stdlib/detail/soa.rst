@@ -10,6 +10,8 @@
 
 .. |detail/method-soa-SoaStructMacro.make_field_type| replace:: to be documented in |detail/method-soa-SoaStructMacro.make_field_type|.rst
 
+.. |detail/method-soa-SoaStructMacro.make_soa_type| replace:: to be documented in |detail/method-soa-SoaStructMacro.make_soa_type|.rst
+
 .. |detail/method-soa-SoaStructMacro.make_index_op| replace:: to be documented in |detail/method-soa-SoaStructMacro.make_index_op|.rst
 
 .. |detail/method-soa-SoaStructMacro.make_length| replace:: to be documented in |detail/method-soa-SoaStructMacro.make_length|.rst
@@ -19,6 +21,18 @@
 .. |detail/method-soa-SoaStructMacro.make_erase| replace:: to be documented in |detail/method-soa-SoaStructMacro.make_erase|.rst
 
 .. |detail/method-soa-SoaStructMacro.make_named_call| replace:: to be documented in |detail/method-soa-SoaStructMacro.make_named_call|.rst
+
+.. |detail/method-soa-SoaStructMacro.make_int_call| replace:: to be documented in |detail/method-soa-SoaStructMacro.make_int_call|.rst
+
+.. |detail/method-soa-SoaStructMacro.make_no_arg_call| replace:: to be documented in |detail/method-soa-SoaStructMacro.make_no_arg_call|.rst
+
+.. |detail/method-soa-SoaStructMacro.make_capacity| replace:: to be documented in |detail/method-soa-SoaStructMacro.make_capacity|.rst
+
+.. |detail/method-soa-SoaStructMacro.make_swap| replace:: to be documented in |detail/method-soa-SoaStructMacro.make_swap|.rst
+
+.. |detail/method-soa-SoaStructMacro.make_from_array| replace:: to be documented in |detail/method-soa-SoaStructMacro.make_from_array|.rst
+
+.. |detail/method-soa-SoaStructMacro.make_to_array| replace:: to be documented in |detail/method-soa-SoaStructMacro.make_to_array|.rst
 
 .. |detail/class-soa-CollectAndReplaceIteratorFields| replace:: to be documented in |detail/class-soa-CollectAndReplaceIteratorFields|.rst
 

@@ -3,6 +3,8 @@ into structure-of-arrays layouts for better cache performance. It provides macro
 that generate parallel arrays for each field of a structure, enabling SIMD-friendly
 data access patterns.
 
+See :ref:`tutorial_soa` for a hands-on tutorial.
+
 All functions and symbols are in "soa" module, use require to get access to it.
 
 .. code-block:: das
