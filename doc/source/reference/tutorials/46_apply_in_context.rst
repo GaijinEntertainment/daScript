@@ -241,3 +241,5 @@ Quick reference
    :ref:`Contexts <contexts>` — language reference for context semantics.
 
    Previous tutorial: :ref:`tutorial_debug_agents`
+
+   Next tutorial: :ref:`tutorial_data_walker`
