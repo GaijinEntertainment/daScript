@@ -436,7 +436,7 @@ def public parse_json_annotation(name : string; annotation : array<tuple<name : 
     var fieldState : JsonFieldState
     fieldState.argName = name
     for (ann in annotation) {
-        if (ann.name == "rename") {
+        if (ann.name == "rename" && ann.data is tString) {
             fieldState.argName = ann.data as tString
         } elif (ann.name == "enum_as_int" && ann.data is bool) {
             fieldState.enumAsInt = ann.data as tBool

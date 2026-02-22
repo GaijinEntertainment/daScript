@@ -9,6 +9,7 @@ JSON
     single: Tutorial; JSON Parsing
     single: Tutorial; JSON Serialization
     single: Tutorial; json_boost
+    single: Tutorial; sprint_json
 
 This tutorial covers ``daslib/json`` and ``daslib/json_boost`` — parsing,
 building, writing, and querying JSON data in daslang.
@@ -194,6 +195,129 @@ Broken JSON repair
   let bad = "{ \"msg\": \"hello\", }"
   let fixed = try_fixing_broken_json(bad)
   var js = read_json(fixed, error)
+
+sprint_json
+===========
+
+``sprint_json`` is a builtin function that serializes any daslang value
+directly to a JSON string — no ``JsonValue?`` intermediate. It handles
+structs, classes, variants, tuples, tables, arrays, enums, pointers,
+and all basic types::
+
+  struct Record {
+      id     : int
+      tag    : string
+      data   : Payload
+      values : array<int>
+      meta   : table<string; int>
+      coords : tuple<int; float>
+      ptr    : void?
+  }
+
+  var r <- Record(uninitialized
+      id = 1, tag = "test",
+      data = Payload(uninitialized code = 42),
+      values = [1, 2, 3],
+      meta <- { "x" => 10 },
+      coords = (7, 3.14),
+      ptr = null
+  )
+  let compact = sprint_json(r, false)
+  // {"id":1,"tag":"test","data":{"code":42},"values":[1,2,3],...}
+
+  let pretty = sprint_json(r, true)
+  // human-readable with indentation
+
+The second argument controls human-readable formatting. Works with
+simple values too::
+
+  sprint_json(42, false)          // 42
+  sprint_json("hello", false)     // "hello"
+  sprint_json([10, 20, 30], false) // [10,20,30]
+
+Field annotations
+=================
+
+Struct field annotations control how ``sprint_json`` serializes fields.
+These require ``options rtti`` to be enabled.
+
+- ``@optional`` — skip the field if it has a default or empty value
+- ``@embed`` — embed a string field as raw JSON (no extra quotes)
+- ``@unescape`` — don't escape special characters in the string
+- ``@enum_as_int`` — serialize an enum as its integer value, not a string
+- ``@rename="key"`` — use ``key`` as the JSON field name instead of the daslang field name
+
+::
+
+  struct AnnotatedConfig {
+      name : string
+      @optional debug : bool          // omitted when false
+      @optional tags : array<string>  // omitted when empty
+      @embed raw_data : string        // embedded as raw JSON
+      @unescape raw_path : string     // no escaping of special chars
+      pri : Priority                  // serialized as string
+      @enum_as_int level : Priority   // serialized as integer
+      @rename="type" _type : string   // appears as "type" in JSON
+  }
+
+  var c <- AnnotatedConfig(uninitialized
+      name = "app", debug = false,
+      raw_data = "[1,2,3]",
+      raw_path = "C:\\Users\\test",
+      pri = Priority.high,
+      level = Priority.medium,
+      _type = "widget"
+  )
+  let json_str = sprint_json(c, false)
+  // {"name":"app","raw_data":[1,2,3],"raw_path":"C:\Users\test","pri":"high","level":1,"type":"widget"}
+
+In this example: ``debug`` and ``tags`` are omitted (``@optional``),
+``raw_data`` is embedded as ``[1,2,3]`` not ``"[1,2,3]"`` (``@embed``),
+``raw_path`` keeps backslashes unescaped (``@unescape``), ``level``
+is ``1`` instead of ``"medium"`` (``@enum_as_int``), and ``_type``
+appears as ``"type"`` in the output (``@rename``).
+
+@rename annotation
+==================
+
+Use ``@rename="json_key"`` when the JSON key is a daslang reserved word
+or doesn't follow daslang naming conventions. The field keeps a safe name
+in code (e.g. ``_type``) but serializes as the desired key. ``@rename``
+works with ``sprint_json``, ``JV``, and ``from_JV``::
+
+  struct ApiResponse {
+      @rename="type" _type : string
+      @rename="class" _class : int
+      value : float
+  }
+
+  var resp = ApiResponse(_type = "widget", _class = 3, value = 1.5)
+  sprint_json(resp, false)
+  // {"type":"widget","class":3,"value":1.5}
+
+  // from_JV maps renamed keys back to struct fields
+  var js = read_json("{\"type\":\"button\",\"class\":5,\"value\":2.0}", error)
+  var result = from_JV(js, type<ApiResponse>)
+  // result._type == "button", result._class == 5
+
+Class serialization
+===================
+
+Both ``JV``/``from_JV`` and ``sprint_json`` work with classes.
+Classes serialize their fields just like structs::
+
+  class Animal {
+      species : string
+      legs : int
+  }
+
+  var a = new Animal(species = "cat", legs = 4)
+  let json_str = sprint_json(*a, false)
+  // {"species":"cat","legs":4}
+
+  var js = JV(*a)
+  print(write_json(js))
+  // {"legs":4,"species":"cat"}
 
 .. seealso::
 
