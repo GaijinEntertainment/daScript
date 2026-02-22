@@ -52,6 +52,14 @@ Requires the `stbimage` module and (for OpenGL variants) `dasGlfw` / `dasImgui`.
 A benchmark suite comparing daslang against C++ and other languages.
 Built as a C++ executable that compiles and runs `.das` benchmark scripts.
 
+## uncategorized/ — Miscellaneous Examples
+
+Standalone examples that don't fit neatly into other categories.
+
+| File | Description |
+|------|-------------|
+| `base64_generators.das` | Base64 encoder built as a chain of composable generators (deliberately slow — demonstrates generator composition, not production encoding) |
+
 ## test/ — Test Harness & Unit Tests
 
 The compiler/runtime test suite (`daScriptTest`). Contains unit tests,
