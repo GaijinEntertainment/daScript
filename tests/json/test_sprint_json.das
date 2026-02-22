@@ -200,7 +200,7 @@ def test_sprint_null(t : T?) {
 
 [test]
 def test_sprint_pretty(t : T?) {
-    if (!jit_enabled()) return ;
+    if (jit_enabled()) return ;
     t |> run("pretty has newlines") @(t : T?) {
         var s = SimpleStruct(x = 1, name = "a")
         let json = sprint_json(s, true)
