@@ -11,8 +11,8 @@ Compiling and Running Programs at Runtime
     single: Tutorial; Multiple Contexts
     single: Tutorial; Virtual File System
 
-This tutorial covers **compiling and running daScript programs from
-daScript** — dynamically compiling source code at runtime, simulating
+This tutorial covers **compiling and running daslang programs from
+daslang** — dynamically compiling source code at runtime, simulating
 it into a runnable context, and invoking exported functions across
 context boundaries.
 
@@ -32,7 +32,7 @@ section.
 Compile from string
 ===================
 
-The simplest way to compile daScript at runtime is ``compile``, which
+The simplest way to compile daslang at runtime is ``compile``, which
 takes a module name, source text, and ``CodeOfPolicies``.  The callback
 receives ``(ok : bool, program : smart_ptr<Program>, issues : string)``.
 

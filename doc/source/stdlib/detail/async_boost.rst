@@ -40,3 +40,7 @@
 
 .. |detail/function-async_boost-async_run_all| replace:: to be documented in |detail/function-async_boost-async_run_all|.rst
 
+.. |detail/function-async_boost-async_timeout| replace:: to be documented in |detail/function-async_boost-async_timeout|.rst
+
+.. |detail/function-async_boost-async_race| replace:: to be documented in |detail/function-async_boost-async_race|.rst
+

@@ -362,7 +362,7 @@ Key details:
 * **``ExprConstInt``** — one of the ``ExprConst*`` family of AST nodes
   (``ExprConstFloat``, ``ExprConstString``, ``ExprConstBool``, etc.).
   All have a ``.value`` field of the corresponding type.
-* **``is`` / ``as``** — daScript’s type-test and downcast operators work
+* **``is`` / ``as``** — daslang's type-test and downcast operators work
   on AST node types just like on classes.
 * **``[macro_function]``** — marks the function as available during
   compilation (macro expansion time).  Without this annotation, the
@@ -505,8 +505,8 @@ The check ``expr.func._module.name == "$"`` distinguishes the builtin
 ``print``:
 
 * **``_module``** — the field name uses an underscore prefix because
-  ``module`` is a reserved keyword in daScript.  In C++ the field is
-  ``Function::module``; in daScript macros it is ``func._module``.
+  ``module`` is a reserved keyword in daslang.  In C++ the field is
+  ``Function::module``; in daslang macros it is ``func._module``.
 * **``"$"``** — the builtin module name.  All built-in functions
   (``print``, ``assert``, ``length``, math functions, etc.) belong
   to module ``"$"``.
@@ -536,7 +536,7 @@ The ``lint()`` method creates the visitor, adapts it with
        return true
    }
 
-* **``make_visitor(*astVisitor)``** — wraps the daScript visitor object
+* **``make_visitor(*astVisitor)``** — wraps the daslang visitor object
   into an adapter that the C++ ``visit()`` function can call.  The
   ``*`` dereferences the smart pointer.
 * **``visit(func, adapter)``** — walks the function’s AST, calling

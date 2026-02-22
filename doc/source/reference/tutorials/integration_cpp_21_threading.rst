@@ -137,7 +137,7 @@ Key points:
 Part B — Compile on a worker thread
 ====================================
 
-Create a fully independent daScript environment on a new thread.
+Create a fully independent daslang environment on a new thread.
 This is the pattern used in ``test_threads.cpp`` for concurrent
 compilation benchmarks.
 

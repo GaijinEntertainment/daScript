@@ -12,7 +12,7 @@
 
 Previous tutorials intercepted calls, functions, structures, blocks,
 variants, for-loops, and lambda captures.  Reader macros go further —
-they embed **entirely custom syntax** inside daScript source code.
+they embed **entirely custom syntax** inside daslang source code.
 
 ``[reader_macro(name="X")]`` registers a class that extends
 ``AstReaderMacro``.  Reader macros are invoked with the syntax
@@ -31,9 +31,9 @@ they embed **entirely custom syntax** inside daScript source code.
 
 ``suffix(prog, mod, expr, info, outLine&, outFile?&) → string``
    Called immediately **after** ``accept()`` during parsing.  Returns
-   a string of daScript source code that is injected back into the
+   a string of daslang source code that is injected back into the
    parser's input stream.  This is the **suffix pattern** — used when
-   the macro appears at module level and generates top-level daScript
+   the macro appears at module level and generates top-level daslang
    declarations (functions, structs, etc.).  The ``ExprReader`` node is
    discarded.
 
@@ -47,7 +47,7 @@ they embed **entirely custom syntax** inside daScript source code.
 
    - **Suffix pattern**: the reader macro appears at **module level**
      as a standalone statement (not assigned to a variable).  ``suffix()``
-     returns daScript source text that the parser re-parses.  ``visit()``
+     returns daslang source text that the parser re-parses.  ``visit()``
      is never called because the parser discards the ``ExprReader`` node.
 
    All reader macros share the same ``accept()`` idiom for collecting
@@ -61,14 +61,14 @@ Motivation
 Embedding domain-specific notations — CSV data, regular expressions,
 JSON literals, template engines — is a common need.  Reader macros let
 you write these in their native syntax and transform them at compile time
-into efficient daScript code, without runtime parsing overhead.
+into efficient daslang code, without runtime parsing overhead.
 
 This tutorial builds both patterns:
 
 - ``%csv~`` — a **visit** reader macro that parses CSV text at compile
   time into a string array (constant embedded in the AST)
 - ``%basic~`` — a **suffix** reader macro that transpiles a toy BASIC
-  program into a daScript function definition
+  program into a daslang function definition
 
 .. note::
 
@@ -131,7 +131,7 @@ to embed the resulting string array in the AST:
        return <- convert_to_expression(items, expr.at)
    }
 
-``convert_to_expression`` takes any daScript value and converts it into
+``convert_to_expression`` takes any daslang value and converts it into
 AST nodes — here turning an ``array<string>`` into the equivalent of an
 array literal.  This is the same utility used by ``daslib/json_boost``
 to embed parsed JSON and by ``daslib/regex_boost`` to embed compiled
@@ -142,7 +142,7 @@ BasicReader — suffix pattern
 
 ``BasicReader`` is registered with ``[reader_macro(name=basic)]``.  It
 overrides ``suffix()`` instead of ``visit()``.  The method parses a
-tiny BASIC dialect and returns the equivalent daScript source code:
+tiny BASIC dialect and returns the equivalent daslang source code:
 
 .. code-block:: das
 
@@ -184,7 +184,7 @@ tiny BASIC dialect and returns the equivalent daScript source code:
        return result
    }
 
-The returned string is valid gen2 daScript code.  The parser receives
+The returned string is valid gen2 daslang code.  The parser receives
 this text and parses it as a normal function definition at module level.
 
 .. note::
@@ -268,7 +268,7 @@ Visit vs Suffix
 +------------------+--------------------------+---------------------------+
 | When called      | Type inference           | Parsing (after accept)    |
 +------------------+--------------------------+---------------------------+
-| Returns          | AST expression           | daScript source text      |
+| Returns          | AST expression           | daslang source text       |
 +------------------+--------------------------+---------------------------+
 | Usage context    | Expression position      | Module level              |
 +------------------+--------------------------+---------------------------+
@@ -294,7 +294,7 @@ The standard library includes several reader macros:
   Usage: ``%stringify~ text %%``
 - ``daslib/spoof.das`` — ``SpoofTemplateReader`` (visit) +
   ``SpoofInstanceReader`` (suffix): a template engine that stores
-  templates as strings and instantiates them by generating daScript
+  templates as strings and instantiates them by generating daslang
   source code at parse time.
 
 

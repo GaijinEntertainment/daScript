@@ -31,7 +31,7 @@ only one method:
 Motivation
 ==========
 
-Enumerations in daScript are simple value lists.  But real-world code
+Enumerations in daslang are simple value lists.  But real-world code
 often needs derived information:
 
 - **A "total" sentinel** — the number of values, for array sizing or
