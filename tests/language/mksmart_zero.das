@@ -1,5 +1,6 @@
 options gen2
 require UnitTest
+require dastest/testing_boost public
 
 typedef TestObjectSmartPtr = smart_ptr<TestObjectSmart>
 
@@ -9,9 +10,8 @@ def mks() {
     return <- default<TestObjectSmartPtr>
 }
 
-[export]
-def test {
+[test]
+def test_mksmart_zero(t : T?) {
     var inscope p <- mks()
-    verify(get_ptr(p) == null)
-    return true
+    t |> equal(get_ptr(p), null)
 }

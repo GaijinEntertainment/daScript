@@ -13,18 +13,48 @@ require daslib/module_under_test
 def test_something(t : T?) {
     t |> run("description") @(t : T?) {
         t |> equal(actual, expected)
-        t |> success()
+        t |> success(condition)
     }
 }
 ```
 
 ## Key test functions
 
-- `t |> equal(actual, expected)` — value equality assertion
-- `t |> success()` — mark subtest as passed
+- `t |> equal(actual, expected)` — value equality assertion (reports "values differ" with expected/got)
+- `t |> success(condition)` — boolean assertion (reports "expected success, got failure")
+- `t |> success(condition, "message")` — boolean assertion with custom message
+- `t |> failure("message")` — unconditional failure with message
 - `t |> run("name") @(t : T?) { ... }` — named subtest
-- `t |> equal(actual, true)` / `t |> equal(actual, false)` — boolean assertions (there is no `expect_true`/`expect_false`)
-- `t |> strictEqual(actual, expected)` — strict equality assertion
+- `t |> strictEqual(actual, expected)` — strict equality assertion (fatal on fail)
+- `t |> numericEqual(actual, expected)` — numeric equality handling NaN
+
+## NEVER use `assert` / `verify` in test files
+
+**Do NOT use `assert(...)` or `verify(...)` in `[test]` functions or their helpers.**
+Always use the dastest API (`t |> equal(...)`, `t |> success(...)`, `t |> failure("...")`) instead.
+
+- `assert(a == b)` → `t |> equal(a, b)`
+- `verify(a == b)` → `t |> equal(a, b)`
+- `assert(condition)` → `t |> success(condition)`
+- `assert(condition, "msg")` → `t |> success(condition, "msg")`
+- `assert(false)` (guard) → `t |> failure("reason")`
+
+**Why?** `assert`/`verify` crash the process on failure, giving no detailed report.
+The dastest API records failures with file/line info and continues running other tests.
+
+**Exception:** Files under `tests/` that use `expect` directives (compilation-failure tests)
+are designed to trigger compiler errors — these do NOT use `[test]` or `t : T?` at all.
+
+## Threading `t : T?` through helpers
+
+When a `[test]` function calls helper functions that need assertions:
+
+1. Add `t : T?` as the **first** parameter to the helper
+2. Use `t |> equal(...)` / `t |> success(...)` inside the helper
+3. Pass `t` from the test function: `my_helper(t, other_args)`
+
+Avoid naming local variables `t` in helpers — it shadows the test object parameter.
+Use `ii`, `idx`, `val`, `sptr` etc. instead.
 
 ## Common test options
 

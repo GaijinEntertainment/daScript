@@ -5,6 +5,7 @@ options gen2
 // options log_nodes=true
 
 require UnitTest
+require dastest/testing_boost public
 
 [sideeffects]
 def make_test_array(var a : array<int>; extra : int = 0) {
@@ -16,11 +17,11 @@ def make_test_array(var a : array<int>; extra : int = 0) {
 }
 
 [sideeffects]
-def verify_test_array(a : array<int>; extra : int = 0) {
-    assert(length(a) == 10)
+def verify_test_array(t : T?; a : array<int>; extra : int = 0) {
+    t |> equal(length(a), 10)
     var i = 0
     for (x in a) {
-        verify(x == (extra + i++))
+        t |> equal(x, extra + i++)
     }
 }
 
@@ -30,94 +31,94 @@ def pass_array(var arr : array<int>) {
 }
 
 [sideeffects]
-def verifyIntArray(a : array<int>; var s : int; c, tail : int) {
-    for (t in range(c)) {
-        verify(a[t] == s++)
+def verifyIntArray(t : T?; a : array<int>; var s : int; c, tail : int) {
+    for (idx in range(c)) {
+        t |> equal(a[idx], s++)
     }
-    for (t in range(c, c + tail)) {
-        assert(a[t] == 0)
+    for (idx in range(c, c + tail)) {
+        t |> equal(a[idx], 0)
     }
 }
 
 [sideeffects]
-def testIntArray {
+def testIntArray(t : T?) {
     var arr, arr2 : array<int>
     let val2 = 2
-    assert(length(arr) == 0, "array starts at 0 length")
+    t |> equal(length(arr), 0)
     push(arr, 1)
     push(arr, val2)
     push(arr, 3)
-    assert(length(arr) == 3, "array length is 3")
-    assert(capacity(arr) == 16, "its 2x, but no less than 16")
-    verifyIntArray(arr, 1, 3, 0)
+    t |> equal(length(arr), 3)
+    t |> equal(capacity(arr), 16)
+    verifyIntArray(t, arr, 1, 3, 0)
     pass_array(arr)
-    assert(length(arr) == 4, "array length is 4")
-    verifyIntArray(arr, 1, 4, 0)
+    t |> equal(length(arr), 4)
+    verifyIntArray(t, arr, 1, 4, 0)
     resize(arr, 6)
-    assert(length(arr) == 6, "array length is now 6")
-    verifyIntArray(arr, 1, 4, 2)
+    t |> equal(length(arr), 6)
+    verifyIntArray(t, arr, 1, 4, 2)
     resize(arr, 17)
-    verifyIntArray(arr, 1, 4, 13)
-    assert(capacity(arr) == 32, "now bigger")
+    verifyIntArray(t, arr, 1, 4, 13)
+    t |> equal(capacity(arr), 32)
     reserve(arr, 33)
-    verifyIntArray(arr, 1, 4, 13)
-    assert(capacity(arr) == 33, "now even bigger")
+    verifyIntArray(t, arr, 1, 4, 13)
+    t |> equal(capacity(arr), 33)
     resize(arr, 4)
-    assert(capacity(arr) == 33, "did not grow smaller")
-    assert(length(arr) == 4, "resized properly")
+    t |> equal(capacity(arr), 33)
+    t |> equal(length(arr), 4)
     arr2 <- arr
-    assert(length(arr) == 0)
-    assert(length(arr2) == 4)
+    t |> equal(length(arr), 0)
+    t |> equal(length(arr2), 4)
     var index = 0
     while (index < 4) {
         arr2[index++]++
     }
-    verifyIntArray(arr2, 2, 4, 0)
+    verifyIntArray(t, arr2, 2, 4, 0)
     arr <- arr2
-    verifyIntArray(arr, 2, 4, 0)
+    verifyIntArray(t, arr, 2, 4, 0)
     resize(arr, 3)
-    verifyIntArray(arr, 2, 3, 0)
+    verifyIntArray(t, arr, 2, 3, 0)
     resize(arr, 4)
-    assert(arr[3] == 0, "new element after resize is 0")
-    verifyIntArray(arr, 2, 3, 1)
+    t |> equal(arr[3], 0)
+    verifyIntArray(t, arr, 2, 3, 1)
     push(arr, 1, 0)
-    verifyIntArray(arr, 1, 4, 1)
+    verifyIntArray(t, arr, 1, 4, 1)
     resize(arr, 4)
     push(arr, 5, 4)
-    verifyIntArray(arr, 1, 5, 0)
+    verifyIntArray(t, arr, 1, 5, 0)
     push(arr, 7, 2)
     erase(arr, 2)
-    verifyIntArray(arr, 1, 5, 0)
+    verifyIntArray(t, arr, 1, 5, 0)
     erase(arr, 0)
     erase(arr, 3)
-    verifyIntArray(arr, 2, 3, 0)
+    verifyIntArray(t, arr, 2, 3, 0)
 }
 
-def testInterop {
+def testInterop(t : T?) {
     let res = temp_array_example([ "one" ]) <| $(arr) {
-        assert(length(arr) == 1)
-        assert(arr[0] == "one")
+        t |> equal(length(arr), 1)
+        t |> equal(arr[0], "one")
     }
-    assert(res)
+    t |> success(res)
 }
 
-[export]
-def test : bool {
+[test]
+def test_array(t : T?) {
     if (true) {
         var a : array<int>
         make_test_array(a)
-        verify_test_array(a)
+        verify_test_array(t, a)
         make_test_array(a, 13)
-        verify_test_array(a, 13)
+        verify_test_array(t, a, 13)
         make_test_array(a)
-        verify_test_array(a)
+        verify_test_array(t, a)
         if (true) {
             var b : array<int> <- a
-            assert(length(a) == 0)
-            verify_test_array(b)
+            t |> equal(length(a), 0)
+            verify_test_array(t, b)
             a <- b
         }
-        verify_test_array(a)
+        verify_test_array(t, a)
     }
     if (true) {
         var a, b : array<int>
@@ -129,21 +130,21 @@ def test : bool {
             r = i * 2 - 5
             i++
         }
-        verify_test_array(a)
+        verify_test_array(t, a)
         i = 0
         for (l, r in a, b) {
-            assert(l == i)
-            assert(r == i * 2 - 5)
+            t |> equal(l, i)
+            t |> equal(r, i * 2 - 5)
             i++
         }
         i = 0
         for (l, r in a, b) {
             if (l > r) {
-                assert(l > r)
+                t |> success(l > r)
                 i++
             }
         }
-        assert(i == 5)
+        t |> equal(i, 5)
     }
     if (true) {
         var a : array<int>[10]
@@ -153,14 +154,13 @@ def test : bool {
         }
         i = 0
         for (b in a) {
-            verify_test_array(b, i++)
+            verify_test_array(t, b, i++)
         }
     }
-    testIntArray()
+    testIntArray(t)
     testConstInArray()
-    testInterop()
-    testMultiPush()
-    return true
+    testInterop(t)
+    testMultiPush(t)
 }
 
 // this test bellow is only here to make sure AOT compiles and runs for array<blah const>
@@ -193,29 +193,29 @@ def testConstInArray {
 }
 
 [sideeffects]
-def testMultiPush() {
+def testMultiPush(t : T?) {
     var a : array<Foo>
     var b : array<Foo>
     push(b, a)
-    verify(length(a) == 0)
-    verify(length(b) == 0)
+    t |> equal(length(a), 0)
+    t |> equal(length(b), 0)
 
     a <- [Foo(bar=1), Foo(bar=2)]
     push(b, a)
-    verify(length(a) == 2)
-    verify(length(b) == 2)
-    verify(a[0].bar == 1)
-    verify(a[1].bar == 2)
-    verify(b[0].bar == 1)
-    verify(b[1].bar == 2)
+    t |> equal(length(a), 2)
+    t |> equal(length(b), 2)
+    t |> equal(a[0].bar, 1)
+    t |> equal(a[1].bar, 2)
+    t |> equal(b[0].bar, 1)
+    t |> equal(b[1].bar, 2)
 
     var c = fixed_array(Foo(bar = 3))
     push(b, c)
-    verify(length(b) == 3)
-    verify(b[2].bar == 3)
-    verify(c[0].bar == 3)
+    t |> equal(length(b), 3)
+    t |> equal(b[2].bar, 3)
+    t |> equal(c[0].bar, 3)
 
     push_clone(b, c)
-    verify(length(b) == 4)
-    verify(b[3].bar == 3)
+    t |> equal(length(b), 4)
+    t |> equal(b[3].bar, 3)
 }

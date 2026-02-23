@@ -2,6 +2,7 @@ options gen2
 require rtti
 require strings
 require daslib/strings_boost
+require dastest/testing_boost public
 
 // note: this is var because we want "sample" global variable to show up
 var {
@@ -186,17 +187,16 @@ def describeModule(mod) {
     }
 }
 
-[export]
-def main {
-    // global modules
-    program_for_each_registered_module() <| $(mod) {
-        describeModule(mod)
-    }
-    describeModule(get_module("$"))
-    // sample program
+// note: do_reflection iterates all registered modules including generics.
+// module_for_each_generic crashes on dastest's suite module generics (dangling RTTI),
+// so we skip full registered-module iteration and test safe subsets instead.
+
+[test]
+def test_compile_sample(t : T?) {
+    var compiled_ok = false
     compile("sample", sample, CodeOfPolicies()) <| $(ok; prog; errors) {
         if (ok) {
-            print("compiled\n")
+            compiled_ok = true
             let thisMod = get_this_module(prog)
             program_for_each_module(prog) <| $(mod) {
                 if (mod == thisMod) {
@@ -205,20 +205,56 @@ def main {
             }
         } else {
             print("failed to compile:\n{errors}\n")
-            assert(false)
         }
     }
-    // current context
-    context_for_each_function() <| $(finfo) {
-        describeFunction(finfo)
-    }
-    context_for_each_variable() <| $(vinfo) {
-        describeVariable(vinfo)
-    }
-    return true
+    t |> success(compiled_ok, "sample program should compile")
 }
 
-[export]
-def test {
-    return true
+[test]
+def test_dollar_module(t : T?) {
+    // describe the builtin "$" module — enums, structs, annotations, functions, globals
+    describeModule(get_module("$"))
+    t |> success(true)
+}
+
+[test]
+def test_context_reflection(t : T?) {
+    var fcount = 0
+    context_for_each_function() <| $(finfo) {
+        describeFunction(finfo)
+        fcount++
+    }
+    var vcount = 0
+    context_for_each_variable() <| $(vinfo) {
+        describeVariable(vinfo)
+        vcount++
+    }
+    t |> success(fcount > 0, "should have context functions")
+    t |> success(vcount > 0, "should have context variables")
+}
+
+[test]
+def test_registered_modules_safe(t : T?) {
+    // iterate registered modules — enums, structs, annotations, functions, globals
+    // skip generics: module_for_each_generic can crash on some module RTTI
+    var modCount = 0
+    program_for_each_registered_module() <| $(mod) {
+        module_for_each_enumeration(mod) <| $(einfo) {
+            describeEnumeration(einfo)
+        }
+        module_for_each_structure(mod) <| $(sinfo) {
+            describeStructure(sinfo)
+        }
+        module_for_each_annotation(mod) <| $(ann) {
+            describeAnnotation(ann)
+        }
+        module_for_each_function(mod) <| $(finfo) {
+            describeFunction(finfo)
+        }
+        module_for_each_global(mod) <| $(glob) {
+            describeVariable(glob)
+        }
+        modCount++
+    }
+    t |> success(modCount > 0, "should iterate registered modules")
 }

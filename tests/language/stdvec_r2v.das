@@ -1,14 +1,12 @@
 options gen2
 require UnitTest
+require dastest/testing_boost public
 
-[export]
-def test {
+[test]
+def test_stdvec_r2v(t : T?) {
     testFooArray() <| $(arr) {
         for (i in range(arr |> length)) {
-            if (arr[i].fooData != i) {
-                panic("bad")
-            }
+            t |> equal(arr[i].fooData, i)
         }
     }
-    return true
 }
