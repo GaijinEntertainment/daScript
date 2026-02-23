@@ -259,6 +259,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | assume.das | `assume` for deep field access | |
 | auto_infer.das | Auto type inference failures — missing overloads, wrong types | **expect** `31101` `31102:8` `30304:2` `30105:1` `30102:2` `30106` `30113` `31300` |
 | auto_infer_success.das | Successful auto type inference — generics, dim, static_if, variants | |
+| auto_ref_and_move_ret.das | Auto ref alias and move return of array | |
 | bitfields.das | Bitfield operations — 32-bit and 64-bit, operators, `typeinfo` | |
 | block.das | Block creation and invocation | |
 | block_access_function_arg.das | Nested block accessing outer lambda variable via helper | |
@@ -277,6 +278,10 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | capture_as_ref.das | Class lambda capturing `self` as ref | |
 | capture_string.das | String capture in lambdas and string builder (gen2=false, module) | |
 | cast.das | `cast<>` struct inheritance, `reinterpret<>` memory reinterpretation | |
+| clone_temp.das | Clone of temporary struct returned from function | |
+| clone_to_move.das | Clone-assign `:=` for arrays — global and local | |
+| copy_and_move_on_return.das | Copy on return + move on return + block return | |
+| ctor.das | Struct default initializer and custom constructor | |
 | chain_invoke_method.das | Chained `new Obj()->method1()->method2()` invocation | |
 | comment_eof.das | Unterminated comment at end of file | **expect** `10007` |
 | condition_must_be_bool.das | Non-bool condition in if/while | **expect** `30601:2` `30303` `30506` |
@@ -286,6 +291,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | containers_failed.das | Container compile-time failures | **expect** `30304:4` |
 | contracts.das | `daslib/contracts` — expect_dim, expect_any_tuple, expect_any_variant | |
 | coroutines.das | Typed coroutines — count_up, count_down, yield, co_continue | |
+| defer.das | Defer execution order, defer_delete, short pipe syntax | |
 | default_method_arguments.das | Default argument values in abstract/override methods | |
 | dim.das | Fixed-size 2D arrays — indexing, pointer arithmetic, string representation | |
 | div_by_zero.das | Division/modulo by zero — int, uint, int64, uint64 via try/recover | |
@@ -303,6 +309,9 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | for_continue.das | `continue` in while, for, and complex nested loops | |
 | for_loop.das | For-loop mechanics — range, collections, nested, iterators | |
 | for_single_element.das | For-loop over single-element dim array | |
+| if_not_null.das | `if_not_null` macro — null skips, non-null invokes block | |
+| ignore_deref.das | Pointer deref from array — by value and explicit type | |
+| inscope_return_inscope.das | Early return with `finally` delete of inscope pointers | |
 | function_already_declared.das | Duplicate function declaration | **expect** `30201` |
 | function_argument_already_declared.das | Duplicate function argument name | **expect** `30202` |
 | function_not_found_ambiguous.das | Ambiguous function call — same name in two modules | **expect** `30304` |
@@ -332,6 +341,10 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | lambda_capture.das | Lambda capturing const values, finalizer behavior | |
 | lambda_to_iter.das | Lambda as iterator via `each(lam)` for int& and struct | |
 | local_classes_failed.das | no_local_class_members restriction | **expect** `31300:1` |
+| loop_ret.das | Loop early return fills unique entries (random + tuple) | |
+| make_default.das | Default values for int, string, tuple, variant, struct, enum, array | |
+| make_local.das | Struct local construction — defaults, `uninitialized`, fixed_array | |
+| make_struct_with_clone.das | Struct construction with clone `:=` for array fields | |
 | memset.das | memset8, memset16, memset32, memset64, memset128 | |
 | method_semantic.das | Struct with `@@` function pointer fields — magnitude, dot product | |
 | mismatching_curly_bracers.das | Mismatched `{` `}` brackets | **expect** `20000` `10002` |
@@ -339,7 +352,9 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | module_vis_fail.das | Module visibility and scope errors | **expect** `30304:4` `30305:2` `30301:2` |
 | move_and_return_move.das | Move semantics — self-move, function move, struct with arrays | |
 | move_lambda_local_ref.das | `capture(<- arr)` moving array into lambda | |
+| move_on_return.das | Move with `finally` delete — pipeline array return | |
 | named_call.das | Named arguments — reordering, skipping, defaults, error cases | **expect** `30304:12` `30101:1` `30507:1` |
+| new_with_init.das | `new` with struct constructors — zeroed, defaults, custom, array | |
 | new_type_infer.das | `new` type inference failures | **expect** `30109` `30301` |
 | no_default_initializer.das | `[no_default_initializer]` annotation | |
 | no_init.das | `options no_init` preventing `[init]` functions | **expect** `40214:3` |
@@ -351,6 +366,8 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | override_field.das | Struct field `override` for function pointers in derived struct | |
 | pointers.das | Pointer operations — new, deref, safe navigation, null checks | |
 | partial_specialization.das | Generic function specialization dispatch | |
+| ptr_arithmetic.das | Pointer arithmetic — signed/unsigned int/int64/uint/uint64 | |
+| ptr_index.das | Pointer deref and index, default null pointer argument | |
 | properties.das | Property operators (.res :=, getter/setter) | |
 | random_numbers.das | Random seeding, distributions, reproducibility | |
 | reserved_names.das | Use of reserved identifier names | **expect** `30116:9` |
@@ -528,5 +545,5 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 ## Summary
 
 - **35** test directories
-- **251** `.das` files total (~13 helper/module files, ~238 test files)
+- **268** `.das` files total (~13 helper/module files, ~255 test files)
 - **21** files with `expect` directives (expected compile errors)
