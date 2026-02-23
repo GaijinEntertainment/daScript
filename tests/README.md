@@ -26,6 +26,12 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 |---|---|---|
 | test_archive.das | mem_archive_save/load for variants, tables, arrays, structs | |
 
+## assert_once/
+
+| File | Description | Expects errors |
+|---|---|---|
+| test_assert_once.das | `assert_once` fires only on first iteration (loop + try/recover) | |
+
 ## async/
 
 | File | Description | Expects errors |
@@ -262,6 +268,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | auto_infer.das | Auto type inference failures — missing overloads, wrong types | **expect** `31101` `31102:8` `30304:2` `30105:1` `30102:2` `30106` `30113` `31300` |
 | auto_infer_success.das | Successful auto type inference — generics, dim, static_if, variants | |
 | auto_ref_and_move_ret.das | Auto ref alias and move return of array | |
+| bin_serializer.das | `binary_save`/`binary_load` — struct with bool, int, float, array, fixed_array fields | |
 | bitfields.das | Bitfield operations — 32-bit and 64-bit, operators, `typeinfo` | |
 | block.das | Block creation and invocation | |
 | block_invoke.das | Block invocation — twice, nested chaining, value capture, ref passing | |
@@ -371,6 +378,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | make_handle.das | Handle construction — `TestObjectFoo(fooData=...)`, global/local/cmres/ascend | |
 | make_local.das | Struct local construction — defaults, `uninitialized`, fixed_array | |
 | make_struct_with_clone.das | Struct construction with clone `:=` for array fields | |
+| map_to_a.das | `map_to_array` — reinterpret raw memory as typed array via unsafe block | |
 | memset.das | memset8, memset16, memset32, memset64, memset128 | |
 | memzero.das | memzero for float and fixed_array | |
 | method_semantic.das | Struct with `@@` function pointer fields — magnitude, dot product | |
@@ -417,6 +425,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | sizeof_reference.das | `sizeof` on reference types | **expect** `39902:2` |
 | smart_ptr.das | `smart_ptr<TestObjectSmart>` — scope, move, ref count, clone, use_count | |
 | smart_ptr_move.das | Unsafe `<-` move on `smart_ptr<>` type | **expect** `31300:1` |
+| sort.das | Sort on arrays/fixed_arrays — int, uint, int64, float, double, string, custom struct, vector | |
 | static.das | Static class members and methods | |
 | static_assert_in_infer.das | Static assertion during type inference | **expect** `40100` |
 | static_if.das | `static_if` with `has_field`, const false elimination | |
@@ -508,6 +517,9 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | inf_and_nan.das | Infinity and NaN comparisons | |
 | math_matrix.das | Matrix operations — multiply, equality, transpose with fuzzing | |
 | math_numeric.das | Numeric math functions (sin, cos, tan, etc.) via fake_numeric macro | |
+| mat_ctors.das | Matrix constructors — float3x3, float3x4, float4x4, identity, sequence, row verification | |
+| mat_let_handle.das | Matrix let/handle — float3x4 element access, transpose folding | |
+| math_misc.das | Misc math — min, lerp, reflect, dot, length, cross, noise, ceili, saturate | |
 | math_pack_unpack.das | pack_float_to_byte / unpack_byte_to_float with fuzzing | |
 | math_quaternions.das | Quaternion operations with fuzzing | |
 
@@ -573,6 +585,12 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | test_new_string_functions.das | New string utilities — contains, count_chars, pad_left/right, trim_chars | |
 | test_strings_boost_extra.das | Extra strings_boost — wide, is_character_at, eq, join overloads | |
 
+## template/
+
+| File | Description | Expects errors |
+|---|---|---|
+| test_template.das | `[template]` annotation — `type<T>` and `decltype` as template arguments | |
+
 ## type_traits/
 
 | File | Description | Expects errors |
@@ -602,6 +620,6 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 
 ## Summary
 
-- **36** test directories
-- **320** `.das` files total (~13 helper/module files, ~307 test files)
+- **38** test directories
+- **328** `.das` files total (~13 helper/module files, ~315 test files)
 - **21** files with `expect` directives (expected compile errors)
