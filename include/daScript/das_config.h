@@ -115,6 +115,14 @@ using das_safe_set = std::set<K,C>;
 #endif
 
 
+#ifndef DAS_USE_BASE_CRASH_HANDLER
+#if defined(_WIN32) || ((defined(__linux__) || defined(__APPLE__)) && !defined(__EMSCRIPTEN__))
+#define DAS_USE_BASE_CRASH_HANDLER 1
+#else
+#define DAS_USE_BASE_CRASH_HANDLER 0
+#endif
+#endif
+
 #ifndef das_to_stdout_level_prefix_text
 #define das_to_stdout_level_prefix_text(level, prefix, text) { if (level >= LogLevel::error) { fprintf(stderr, "%s", text); fflush(stderr); } else { fprintf(stdout, "%s%s", prefix, text); fflush(stdout); } }
 #endif
