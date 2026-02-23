@@ -11,7 +11,6 @@ def test_temps_strings(t : T?) {
     t |> run("no heap allocations") @@(t) {
 
         temp_string("long str {payload}\n") $(s) {
-            print(s)
             t |> equal(s, "long str long str\n")
         }
 
@@ -21,7 +20,6 @@ def test_temps_strings(t : T?) {
             sb |> write("\n")
         }
         lpipe() $(s) {
-            print(s)
             t |> equal(s, "long builder str long str\n")
         }
 
@@ -29,7 +27,6 @@ def test_temps_strings(t : T?) {
 
         var arr <- [ uint8('h'), uint8('e'), uint8('l'), uint8('l'), uint8('o')]
         temp_string(arr) $(s) {
-            print(s)
             t |> equal(s, "hello")
         }
 
@@ -38,7 +35,7 @@ def test_temps_strings(t : T?) {
 
     t |> run("heap allocations") @@(t) {
 
-        print("long long str {payload}\n")
+        feint("long long str {payload}\n")
         t |> equal(string_heap_bytes_allocated(), 0x18ul)
 
         var str = build_string() $(sb) {
@@ -46,7 +43,7 @@ def test_temps_strings(t : T?) {
             sb |> write(payload)
             sb |> write("\n")
         }
-        print(str)
+        feint(str)
 
         t |> equal(string_heap_bytes_allocated(), 0x34ul)
     }

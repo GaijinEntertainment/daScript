@@ -49,17 +49,3 @@ def test_phi(t : T?) {
         t |> equal(test_min(a, b, c), a < b ? (a < c ? a : c) : (b < c ? b : c))
     }
 }
-
-
-[export]
-def main {
-    print("min(1,2) = {test_min(1,2)}\n")
-    print("min(2,1) = {test_min(2,1)}\n")
-
-    print("min(1,2,3) = {test_min(1,2,3)}\n")
-    print("min(1,3,2) = {test_min(1,3,2)}\n")
-    print("min(2,1,3) = {test_min(2,1,3)}\n")
-    print("min(2,3,1) = {test_min(2,3,1)}\n")
-    print("min(3,1,2) = {test_min(3,1,2)}\n")
-    print("min(3,2,1) = {test_min(3,2,1)}\n")
-}

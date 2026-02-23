@@ -9,7 +9,7 @@ require daslib/constant_expression
 
 [constexpr(a)]
 def foo(t : string; a : int) {
-    print("{t} = {a}\n")
+    feint("{t} = {a}\n")
 }
 
 var BOO = 13

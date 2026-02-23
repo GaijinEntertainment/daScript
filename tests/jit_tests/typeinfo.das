@@ -11,7 +11,7 @@ options rtti
 
 def take_it(t : auto(TT)) {
     let tt = typeinfo typename(type<TT>)
-    print("name is {tt}\n")
+    feint("name is {tt}\n")
 }
 
 def test_typeinfo {
@@ -79,7 +79,7 @@ def test_type_info(t : T?) {
     }
     t |> run("typeinfo nojits") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@test_rtti))
-        print("rtti = {test_rtti()}\n")
+        feint("rtti = {test_rtti()}\n")
     }
     t |> run("typeinfo ast_typedecl") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@test_ast_typedecl))

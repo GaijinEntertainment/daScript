@@ -74,6 +74,7 @@ def test_print_triggers_on_log(t : T?) {
         unsafe {
             invoke_in_context(get_debug_agent_context("log_test"), "reset_log_state")
         }
+        // this print is intentional. do not feint
         print("test print message\n")
         var count = 0
         unsafe {

@@ -787,6 +787,10 @@ namespace das
         context->to_out(at, text);
     }
 
+    void builtin_feint ( char *, Context *, LineInfoArg * ) {
+        // this function intentionally does nothing. its a fair replacement for the print, where we don't want print
+    }
+
     void builtin_error ( char * text, Context * context, LineInfoArg * at ) {
         context->to_err(at, text);
     }
@@ -1798,6 +1802,9 @@ namespace das
                 ->args({"text","context","at"});
         addExtern<DAS_BIND_FUN(builtin_print)>(*this, lib, "print",
             SideEffects::modifyExternal, "builtin_print")
+                ->args({"text","context","at"});
+        addExtern<DAS_BIND_FUN(builtin_feint)>(*this, lib, "feint",
+            SideEffects::modifyExternal, "builtin_feint")
                 ->args({"text","context","at"});
         addExtern<DAS_BIND_FUN(builtin_error)>(*this, lib, "error",
             SideEffects::modifyExternal, "builtin_error")

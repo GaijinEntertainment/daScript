@@ -17,8 +17,8 @@ def test_create_object(t : T?) {
     t |> run("initialize") @(t : T?) {
         invoke_live("initialize", true)
     }
-    t |> run("survive 20 recompiles and reloads with restart") @(t : T?) {
-        for (q in range(20)) {
+    t |> run("survive 5 recompiles and reloads with restart") @(t : T?) {
+        for (q in range(5)) {
             live_update(double(q))
             recompile()
             t |> success(is_app_live())

@@ -773,7 +773,7 @@ def test_tap(t : T?) {
 
     t |> run("tap passthrough") @(t : T?) {
         var src <- [iterator for(x in [10, 20, 30]); x]
-        var tapped <- tap(src, @(x : int) { print("{x}\n"); })
+        var tapped <- tap(src, @(x : int) { feint("{x}\n"); })
         var result : array<int>
         for (v in tapped) {
             result |> push(v)
@@ -787,7 +787,7 @@ def test_tap(t : T?) {
 
     t |> run("tap empty") @(t : T?) {
         var src <- [iterator for(x in range(0)); x]
-        var tapped <- tap(src, @(x : int) { print("{x}\n"); })
+        var tapped <- tap(src, @(x : int) { feint("{x}\n"); })
         var cnt = 0
         for (v in tapped) {
             cnt ++

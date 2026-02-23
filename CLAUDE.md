@@ -36,6 +36,10 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 
 Multiple skill files may apply to a single task. For example, creating a new daslib module requires reading `skills/das_formatting.md`, `skills/daslib_modules.md`, and possibly `skills/documentation_rst.md`.
 
+### Updating Instructions with New Knowledge
+
+When you discover something new about daslang syntax, semantics, or conventions — whether through compiler errors, user corrections, or experimentation — **update this file** (and its `.github/copilot-instructions.md` mirror) with the new knowledge. Add it to the appropriate section (gen2 syntax, common gotchas, etc.) so future sessions benefit. If it relates to a specific skill area, update the relevant `skills/*.md` file too.
+
 ## daslang Language — Gen2 Syntax (REQUIRED)
 
 All code examples and documentation MUST use gen2 syntax (add `options gen2` at the top of every file). Key rules:
@@ -57,6 +61,7 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - **Bitfield dot access:** read with `f.flag` (returns bool), write with `f.flag = true/false`
 - **`typeinfo`** gen2 syntax: trait name goes **outside** parentheses — `typeinfo trait_name(type<T>)`, NOT `typeinfo(trait_name type<T>)`. With subtrait: `typeinfo has_method<name>(type<T>)`. With two traits: `typeinfo trait<sub;extra>(type<T>)`
 - **`static_if`:** `static_if (condition) { ... }` — parentheses required in gen2
+- **Type function call:** `take(type<int>, 1, 2)` — NOT `take < int > (1, 2)`. The `type<T>` is passed as a regular argument
 
 ### Important defaults
 
@@ -186,6 +191,7 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - Blocks CANNOT be stored in containers, returned from functions, or captured — use lambdas or function pointers for those use cases
 - `match`, `multi_match`, `static_match` macros (from `daslib/match.das`) handle side effects automatically — do NOT add `[sideeffects]` annotations to functions that only use match
 - `[export] def main()` returns `void` — do NOT `return true` or return other values from main
+- **`feint` vs `print` in tests**: `feint` is a no-op with the same signature and `SideEffects::modifyExternal` as `print` — it won't be optimized out, but produces no output. Use `feint` in tests instead of `print` unless testing actual print/logging behavior
 - **`push` vs `emplace` vs `push_clone`** for arrays: `push(arr, val)` copies `val` into the array (fails for non-copyable types like `array<int>`); `emplace(arr, val)` **moves** `val` into the array (source is zeroed/destroyed after); `push_clone(arr, val)` **clones** `val` into the array (works for any type, preserves source). When generating code that operates on user structs with potentially non-copyable fields, prefer `push_clone` (preserves source) or `emplace` (when source consumption is intentional).
 - **Non-copyable types**: `array<T>`, `table<K;V>`, lambdas, and any struct containing them cannot be copied with `=` or `push`. Use `:=` (clone-assign), `push_clone`, or `<-` (move) instead. The compiler error is clear: "can't copy non-copyable type"
 
@@ -205,7 +211,7 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - `include/daScript/` — C++ headers
 - `daslib/` — Standard library modules (86 .das files)
 - `dastest/` — Test framework
-- `tests/` — Test suite (with per-module subfolders: `tests/decs/`, `tests/match/`, `tests/json/`, etc.)
+- `tests/` — Test suite (35 subdirectories, ~226 `.das` files). See `tests/README.md` for a full index of every test file, what it tests, and whether it expects compile errors.
 - `doc/source/reference/language/` — RST language documentation (36 files)
 - `doc/source/stdlib/` — RST standard library documentation (auto-generated + handmade)
 - `doc/reflections/` — Documentation generation tools (das2rst.das, rst.das, gen_module_examples.py)
@@ -213,12 +219,6 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - `tutorials/integration/cpp/` — C++ integration tutorials (embedding daslang in C++ host applications)
 - `tutorials/macros/` — Macro tutorials (call macros, reader macros, etc.)
 - `doc/source/reference/tutorials/` — RST companion pages for each tutorial
-- `tests/linq/` — LINQ module tests (15 test files, ~500 tests)
-- `tests/functional/` — Functional module tests
-- `tests/json/` — JSON module tests (4 test files, ~148 tests)
-- `tests/regex/` — Regex module tests (8 test files, 278 tests)
-- `tests/interfaces/` — Interface module tests (4 test files, 67 tests)
-- `tests/soa/` — SOA module tests (4 test files, 126 tests: basic, iteration, container ops, non-copyable fields)
 - `modules/` — External plugin modules
 
 ## Keywords Reference

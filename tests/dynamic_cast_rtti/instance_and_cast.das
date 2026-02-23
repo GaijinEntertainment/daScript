@@ -5,13 +5,13 @@ require daslib/dynamic_cast_rtti
 
 class Foo {
     def hello {
-        print("hello from Foo!\n")
+        return "hello from Foo!"
     }
 }
 
 class Bar : Foo {
     def override hello {
-        print("hello from Bar!\n")
+        return "hello from Bar!"
     }
 }
 
@@ -43,9 +43,9 @@ def test_is(t : T?) {
 [test]
 def test_dynamic_type_cast(t : T?) {
     var f = new Foo()
-    f->hello()
+    t |> equal(f->hello(), "hello from Foo!")
     var b = new Bar()
-    b->hello()
+    t |> equal(b->hello(), "hello from Bar!")
     var f2 = b |> dynamic_type_cast(type<Foo>)
     t |> equal(intptr(b), intptr(f2))
     var b2 = f |> dynamic_type_cast(type<Bar>)

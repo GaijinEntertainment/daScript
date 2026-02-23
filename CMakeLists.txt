@@ -909,17 +909,9 @@ SET(DAS_DASCRIPT_MAIN_SRC
     CACHE INTERNAL "DAS_DASCRIPT_MAIN_SRC"
 )
 
-# Test module
-
-
 # Tests
 if (NOT ${DAS_TESTS_DISABLED})
-    include(examples/test/CMakeLists.txt)
     include(examples/pathTracer/CMakeLists.txt)
-
-    FOREACH(_example ${DAS_ALL_EXAMPLES})
-        TARGET_LINK_LIBRARIES(${_example} libDaScriptTest)
-    ENDFOREACH()
 endif()
 
 # Profile module

@@ -7,7 +7,7 @@ class A {
     def A {
         onLog <- @ {            //  30508: can't move from a constant value, lambda<>& <- lambda<void> const
             y --                //  30124: can't capture variable self
-            print("onLog\n")
+            feint("onLog\n")
         }
     }
     def bang {

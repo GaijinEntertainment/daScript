@@ -34,6 +34,8 @@
 
 .. |handmade/function-builtin-print| replace:: to be documented in |handmade/function-builtin-print|.rst
 
+.. |handmade/function-builtin-feint| replace:: to be documented in |handmade/function-builtin-feint|.rst
+
 .. |handmade/function-builtin-error| replace:: to be documented in |handmade/function-builtin-error|.rst
 
 .. |handmade/function-builtin-sprint| replace:: to be documented in |handmade/function-builtin-sprint|.rst

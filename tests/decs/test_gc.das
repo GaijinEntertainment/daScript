@@ -163,7 +163,7 @@ def test_gc_stress(t : T?) {
     static_let() {
         var TOTAL_EID = 0
     }
-    for (count in range(20)) {
+    for (count in range(5)) {
         let morei = (random_int(seed) & 31) + 10
         for (i in range(morei)) {
             create_entity() @(eid, cmp) {

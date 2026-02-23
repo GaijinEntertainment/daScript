@@ -13,12 +13,12 @@ struct Foo {// 30101: structure Foo is too big
 
 [export]
 def argument_too_big(a : foo) {// 30108: argument variable a is too big
-    print("a = {a}\n")
+    feint("a = {a}\n")
     var b <- @(b : foo) { // 30108: argument variable b is too big
-        print("b = {b}\n")
+        feint("b = {b}\n")
     }
     invoke() $(c : foo) {// 30108: block argument variable c is too big
-        print("c = {c}\n")
+        feint("c = {c}\n")
     }
     lpipe(a)
 }
@@ -26,13 +26,13 @@ def argument_too_big(a : foo) {// 30108: argument variable a is too big
 [test]
 def test_invalid_types(t : T?) {
     var a : int[32767][32767]       // 30108: local variable a is too big
-    print("a = {a}\n")
+    feint("a = {a}\n")
     var p = new Foo()               // 30109: can't new to a type that is too big
     var pp = new Foo()            // 30109: can't ascend type which is too big
 }
 
     // this one happens during infer, and not lint. so we can't have it in the test
     // var sz = typeinfo(sizeof type<int[32767][32767]>)    // 30101: typeinfo(sizeof int[32767][32767]) is too big
-    // print("sz = {sz}\n")
+    // feint("sz = {sz}\n")
 
 

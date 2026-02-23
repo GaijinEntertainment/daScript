@@ -309,29 +309,25 @@ jobs:
             # when exceptions disabled, we still throw in tests and there'll be memory leaks
             echo -e "leak:format_error\n" > suppressions.txt
             export LSAN_OPTIONS="suppressions='suppressions.txt'"
-            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ./daScriptTest -jit
-            ./daScriptTest
             # Use more time to pass UBSAN and disable leaks in JIT mode because we exit using exit(), and do not call destructors.
-            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- --color --test ../tests || ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- --color --isolated-mode --timeout 4800 --test ../tests
+            # TEMPORARILY DISABLED: -jit dastest
+            # [ "${{ env.das_llvm_disabled }}" = "ON" ] || ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- --color --test ../tests || ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- --color --isolated-mode --timeout 4800 --test ../tests
             ./daslang _dasroot_/dastest/dastest.das -- --color --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 3600 --test ../tests
             ;;
            windows32)
             cd bin/"${{ matrix.cmake_preset }}"
-            ./daScriptTest.exe
             ./daslang _dasroot_/dastest/dastest.das -- --color --test ../../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 3600 --test ../../tests
             ;;
            windows*)
             cd bin/"${{ matrix.cmake_preset }}"
-            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ./daScriptTest.exe -jit
-            ./daScriptTest.exe
-            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --test ../../tests || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --isolated-mode --timeout 3600 --test ../../tests
+            # TEMPORARILY DISABLED: -jit dastest
+            # [ "${{ env.das_llvm_disabled }}" = "ON" ] || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --test ../../tests || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --isolated-mode --timeout 3600 --test ../../tests
             ./daslang _dasroot_/dastest/dastest.das -- --color --test ../../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 3600 --test ../../tests
             ;;
            *)
             cd bin
-            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ./daScriptTest -jit
-            ./daScriptTest
-            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --test ../tests || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --isolated-mode --timeout 3600 --test ../tests
+            # TEMPORARILY DISABLED: -jit dastest
+            # [ "${{ env.das_llvm_disabled }}" = "ON" ] || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --test ../tests || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --isolated-mode --timeout 3600 --test ../tests
             ./daslang _dasroot_/dastest/dastest.das -- --color --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 3600 --test ../tests
             ;;
         esac

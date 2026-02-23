@@ -17,6 +17,14 @@ options multiple_contexts
 
 let private jsonResultPrefix = "##dastest##\n"
 
+struct FileTiming {
+    uri : string
+    dt : int     // microseconds
+}
+
+var private fileTimings : array<FileTiming>
+var private timingOutliers : int = 0
+
 
 def private collect_input_paths(args : array<string>; var paths : array<string>) {
     for (i in range(length(args) - 1)) {
@@ -109,6 +117,8 @@ def main() {
         return
     }
 
+    timingOutliers = args |> get_int_arg("--timing-outliers", 0)
+
     let isolatedMode = args |> has_value("--isolated-mode")
     let ctx <- SuiteCtx(args)
     if (!isolatedMode) {
@@ -123,6 +133,9 @@ def main() {
                 }
             } else {
                 log::red("FAIL {uri} {time_dt_hr(fileDt)}")
+            }
+            if (timingOutliers > 0) {
+                fileTimings |> push(FileTiming(uri = clone_string(uri), dt = fileDt))
             }
             res += status
         }
@@ -202,6 +215,9 @@ def main() {
                         for (l in isoRes.log) {
                             log::info_raw(l)
                         }
+                        if (timingOutliers > 0) {
+                            fileTimings |> push(FileTiming(uri = clone_string(isoRes.uri), dt = isoRes.fileDt))
+                        }
                         if (isoRes.exitCode == 0 && isoRes.parsedResult && isoRes.status.failed + isoRes.status.errors == 0) {
                             log::green("PASS {isoRes.uri} {time_dt_hr(isoRes.fileDt)}")
                         } else {
@@ -238,10 +254,54 @@ def timeout_tests(var res : SuiteResult; start_time : int64; timeout_sec : float
 }
 
 
+def private print_timing_outliers() {
+    let n = length(fileTimings)
+    // compute mean
+    var sum = 0.0lf
+    for (ft in fileTimings) {
+        sum += double(ft.dt)
+    }
+    let mean = sum / double(n)
+    // compute stddev
+    var variance = 0.0lf
+    for (ft in fileTimings) {
+        let diff = double(ft.dt) - mean
+        variance += diff * diff
+    }
+    let stddev = sqrt(variance / double(n))
+    // sort descending by time
+    sort(fileTimings) <| $(a, b) {
+        return a.dt > b.dt
+    }
+    let count = min(timingOutliers, n)
+    let threshold = mean + 2.0lf * stddev
+    // only print if there are actual outliers (top entry above threshold) or if few files
+    var meanStr = ""
+    meanStr = fmt(":.3f", mean / 1000000.0lf)
+    var stddevStr = ""
+    stddevStr = fmt(":.3f", stddev / 1000000.0lf)
+    var thresholdStr = ""
+    thresholdStr = fmt(":.3f", threshold / 1000000.0lf)
+    log::info("Timing: mean {meanStr}s, stddev {stddevStr}s, threshold {thresholdStr}s")
+    log::info("Top {count} slowest files:")
+    for (i in range(count)) {
+        let dtSec = double(fileTimings[i].dt) / 1000000.0lf
+        let marker = double(fileTimings[i].dt) > threshold ? " [outlier]" : ""
+        var dtStr = ""
+        dtStr = fmt(":.3f", dtSec)
+        var line = "  {dtStr}s  {fileTimings[i].uri}{marker}"
+        log::info(line)
+    }
+}
+
+
 def finish_tests(res : SuiteResult; start_time : int64) {
     let resCode = res.failed + res.errors
     let totalDt = get_time_usec(start_time)
     log::info("\n{to_string(res)}")
+    if (resCode == 0 && timingOutliers > 0 && length(fileTimings) > 1) {
+        print_timing_outliers()
+    }
     if (resCode == 0) {
         log::green("SUCCESS! {time_dt_hr(totalDt)}")
     } else {

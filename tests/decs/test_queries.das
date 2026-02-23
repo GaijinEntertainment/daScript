@@ -217,9 +217,3 @@ def test_aka_query(t : T?) {
 }
 
 
-
-[export]
-def main {
-    pass
-}
-

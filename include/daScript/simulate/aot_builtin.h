@@ -20,6 +20,8 @@ namespace das {
     DAS_API void builtin_throw ( char * text, Context * context, LineInfoArg * at );
     DAS_API void builtin_print ( char * text, Context * context, LineInfoArg * at );
     DAS_API void builtin_error ( char * text, Context * context, LineInfoArg * at );
+    DAS_API void builtin_print ( char * text, Context * context, LineInfoArg * at );
+    DAS_API void builtin_feint ( char * text, Context * context, LineInfoArg * at );
     DAS_API vec4f builtin_sprint ( Context & context, SimNode_CallBase * call, vec4f * args );
     DAS_API vec4f builtin_json_sprint ( Context & context, SimNode_CallBase * call, vec4f * args );
     DAS_API char * builtin_print_data ( const void * data, const TypeInfo * typeInfo, Bitfield flags, Context * context, LineInfoArg * at );
