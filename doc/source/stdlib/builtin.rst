@@ -2310,6 +2310,7 @@ System infrastructure
   *  :ref:`breakpoint () <function-builtin_breakpoint>`
   *  :ref:`error (text: string) <function-builtin_error_string>`
   *  :ref:`eval_main_loop (block: block\<():void\>) <function-builtin_eval_main_loop_block_ls__c_void_gr_>`
+  *  :ref:`feint (text: string) <function-builtin_feint_string>`
   *  :ref:`get_das_root () : string <function-builtin_get_das_root>`
   *  :ref:`is_in_aot () : bool <function-builtin_is_in_aot>`
   *  :ref:`is_intern_strings () : bool <function-builtin_is_intern_strings>`
@@ -2353,6 +2354,15 @@ Executes the application main loop by repeatedly invoking `block` until it retur
 
 
 :Arguments: * **block** : block<void> implicit
+
+.. _function-builtin_feint_string:
+
+.. das:function:: feint(text: string)
+
+No-op replacement for `print`. Has the same signature and side-effect annotations as `print`, but intentionally does nothing. Use `feint` in tests where print-like behavior is needed to prevent the call from being optimized out, but no actual output is desired.
+
+
+:Arguments: * **text** : string implicit
 
 .. _function-builtin_get_das_root:
 

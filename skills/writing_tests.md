@@ -28,6 +28,22 @@ def test_something(t : T?) {
 - `t |> strictEqual(actual, expected)` — strict equality assertion (fatal on fail)
 - `t |> numericEqual(actual, expected)` — numeric equality handling NaN
 
+## Use `feint` instead of `print` in tests
+
+**Always use `feint` instead of `print`** in test code, unless the test is specifically verifying print/logging behavior.
+
+`feint` has the same signature and side-effect annotations as `print` (`SideEffects::modifyExternal`), so the compiler will not optimize it out. However, it produces no output, keeping test runs clean.
+
+```das
+// WRONG — produces noise in test output
+print("x = {x}\n")
+
+// RIGHT — same effect for testing, no output
+feint("x = {x}\n")
+```
+
+**When to use `print`:** Only when the test specifically validates logging, output redirection, or `context.to_out` behavior.
+
 ## NEVER use `assert` / `verify` in test files
 
 **Do NOT use `assert(...)` or `verify(...)` in `[test]` functions or their helpers.**

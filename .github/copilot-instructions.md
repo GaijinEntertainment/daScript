@@ -186,6 +186,7 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - Blocks CANNOT be stored in containers, returned from functions, or captured — use lambdas or function pointers for those use cases
 - `match`, `multi_match`, `static_match` macros (from `daslib/match.das`) handle side effects automatically — do NOT add `[sideeffects]` annotations to functions that only use match
 - `[export] def main()` returns `void` — do NOT `return true` or return other values from main
+- **`feint` vs `print` in tests**: `feint` is a no-op with the same signature and `SideEffects::modifyExternal` as `print` — it won't be optimized out, but produces no output. Use `feint` in tests instead of `print` unless testing actual print/logging behavior
 - **`push` vs `emplace` vs `push_clone`** for arrays: `push(arr, val)` copies `val` into the array (fails for non-copyable types like `array<int>`); `emplace(arr, val)` **moves** `val` into the array (source is zeroed/destroyed after); `push_clone(arr, val)` **clones** `val` into the array (works for any type, preserves source). When generating code that operates on user structs with potentially non-copyable fields, prefer `push_clone` (preserves source) or `emplace` (when source consumption is intentional).
 - **Non-copyable types**: `array<T>`, `table<K;V>`, lambdas, and any struct containing them cannot be copied with `=` or `push`. Use `:=` (clone-assign), `push_clone`, or `<-` (move) instead. The compiler error is clear: "can't copy non-copyable type"
 
