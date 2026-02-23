@@ -14,6 +14,17 @@ After creating or modifying any `.das` file that is part of the project (daslib 
 4. **Remove the backup** if formatting succeeded: delete `<filename>.das.bak`
 5. **Restore from backup** if formatting broke the file: copy `.das.bak` back over the `.das` file, delete the backup, and report the issue
 
+**Batch formatting (multiple files):**
+
+When formatting many files at once, use the `--files:` option to avoid paying the ~450ms process startup cost per file:
+
+1. Write a file list (one path per line, no BOM): `file_list.txt`
+2. Run: `bin/Release/daslang.exe utils/dasCodeFormatter/main.das -- --files:file_list.txt`
+
+This formats all files in a single process invocation. Example: 419 files in ~1.7s (batch) vs ~189s (one-by-one).
+
+**Important:** the file list must be UTF-8 without BOM. In PowerShell, use `[System.IO.File]::WriteAllLines("file_list.txt", $paths)` instead of `Set-Content -Encoding UTF8` (which adds a BOM).
+
 **When to format:**
 - New `.das` files: tutorials, tests, daslib modules, utilities
 - Modified `.das` files: after any edits to existing project files
