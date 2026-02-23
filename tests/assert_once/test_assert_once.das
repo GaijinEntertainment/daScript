@@ -4,22 +4,21 @@ options gen2
 options no_aot = true
 
 require daslib/assert_once
+require dastest/testing_boost public
 
-[export]
-def test {
-    var t = 0
+[test]
+def test_assert_once(t : T?) {
+    var ii = 0
     var count = 0
     label 0:
     try {
-        assert_once(t == 0)
+        assert_once(ii == 0)
     } recover {
-        count ++
+        count++
     }
-    t ++
-    if (t != 5) {
+    ii++
+    if (ii != 5) {
         goto 0
     }
-    assert(count == 1)
-    return true
+    t |> equal(count, 1)
 }
-

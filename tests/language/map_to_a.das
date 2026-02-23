@@ -1,6 +1,8 @@
 options gen2
-[export]
-def test {
+require dastest/testing_boost public
+
+[test]
+def test_map_to_a(t : T?) {
     unsafe {
         var arr : uint[10]
         var pdata : void? = addr(arr[0])
@@ -11,9 +13,8 @@ def test {
             }
         }
         for (x in range(0, 10)) {
-            let t = reinterpret<float>(arr[x])
-            assert(float(x) == t)
+            let val = reinterpret<float>(arr[x])
+            t |> equal(val, float(x))
         }
     }
-    return true
 }
