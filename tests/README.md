@@ -493,6 +493,13 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | all_matches.das | match/multi_match/static_match on enums, variants, structs, tuples | |
 | test_match_edge.das | Match edge cases — nested, empty struct, wildcard, bindings, guards | |
 
+## module_tests/
+
+| File | Description | Expects errors |
+|---|---|---|
+| test_modules.das | Module system integration — compiles and runs 7 module scenarios via compile_file + make_file_access | |
+| _modules/ | *(helper directory)* Module source files for test_modules.das (dastest skips `_`-prefixed dirs) | |
+
 ## math/
 
 | File | Description | Expects errors |
@@ -595,6 +602,6 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 
 ## Summary
 
-- **35** test directories
-- **319** `.das` files total (~13 helper/module files, ~306 test files)
+- **36** test directories
+- **320** `.das` files total (~13 helper/module files, ~307 test files)
 - **21** files with `expect` directives (expected compile errors)

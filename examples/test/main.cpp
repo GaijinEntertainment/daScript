@@ -404,62 +404,6 @@ bool run_exception_tests( const string & path, bool check_jit = false ) {
 }
 
 
-bool run_module_test ( const string & path, const string & main, bool usePak, bool useSer ) {
-    tout << "testing MODULE at " << path << " ";
-    auto fAccess = usePak ?
-            make_smart<FsFileAccess>( path + "/project.das_project", make_smart<FsFileAccess>()) :
-            make_smart<FsFileAccess>();
-    ModuleGroup dummyLibGroup;
-    if ( auto program = compileDaScript(path + "/" + main, fAccess, tout, dummyLibGroup) ) {
-        if ( program->failed() ) {
-            tout << "failed to compile\n";
-            for ( auto & err : program->errors ) {
-                tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
-            }
-            return false;
-        } else {
-            auto F = [&dummyLibGroup] ( ProgramPtr program ) {
-                Context ctx(program->getContextStackSize());
-                if ( !program->simulate(ctx, tout) ) {
-                    tout << "failed to simulate\n";
-                    for ( auto & err : program->errors ) {
-                        tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
-                    }
-                    return false;
-                }
-                if ( auto fnTest = ctx.findFunction("test") ) {
-                    if ( !verifyCall<bool>(fnTest->debugInfo, dummyLibGroup) ) {
-                        tout << "function 'test', call arguments do not match\n";
-                        return false;
-                    }
-                    ctx.restart();
-                    bool result = cast<bool>::to(ctx.eval(fnTest, nullptr));
-                    if ( auto ex = ctx.getException() ) {
-                        tout << "exception: " << ex << "\n";
-                        return false;
-                    }
-                    if ( !result ) {
-                        tout << "failed\n";
-                        return false;
-                    }
-                    tout << "ok\n";
-                    return true;
-                } else {
-                    tout << "function 'test' not found\n";
-                    return false;
-                }
-            };
-            if ( useSer ) {
-                return with_program_serialized(F, program);
-            } else {
-                return F(program);
-            }
-        }
-    } else {
-        return false;
-    }
-}
-
 namespace das { vector<void *> force_aot_stub(); }
 
 int main( int argc, char * argv[] ) {
@@ -610,12 +554,6 @@ int main( int argc, char * argv[] ) {
     ok = run_unit_tests(getDasRoot() +  "/examples/test/unit_tests",    true,  g_useSerialization, enable_jit) && ok;
     ok = run_unit_tests(getDasRoot() +  "/examples/test/optimizations", false, g_useSerialization, enable_jit) && ok;
     ok = run_exception_tests(getDasRoot() +  "/examples/test/runtime_errors", enable_jit) && ok;
-    ok = run_module_test(getDasRoot() +  "/examples/test/module", "main.das",        true, g_useSerialization) && ok;
-    ok = run_module_test(getDasRoot() +  "/examples/test/module", "main_inc.das",    true, g_useSerialization)  && ok;
-    ok = run_module_test(getDasRoot() +  "/examples/test/module", "main_default.das", false, g_useSerialization) && ok;
-    ok = run_module_test(getDasRoot() +  "/examples/test/module/alias",  "main.das", true, g_useSerialization) && ok;
-    ok = run_module_test(getDasRoot() +  "/examples/test/module/cdp",    "main.das", true, g_useSerialization) && ok;
-    ok = run_module_test(getDasRoot() +  "/examples/test/module/unsafe", "main.das", true, g_useSerialization) && ok;
     int usec = get_time_usec(timeStamp);
     tout << "TESTS " << (ok ? "PASSED " : "FAILED!!! ") << ((usec/1000)/1000.0) << "\n";
     // shutdown
