@@ -170,8 +170,4 @@ def test_save_and_load_manual(t : T?) {
     t |> equal(reference, 13)
 }
 
-[export]
-def main {
-    pass
-}
 

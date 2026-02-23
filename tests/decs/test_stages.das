@@ -77,8 +77,3 @@ def test_two_stage(t : T?) {
         }
     }
 }
-
-[export]
-def main {
-    pass
-}
