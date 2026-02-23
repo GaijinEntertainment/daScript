@@ -442,7 +442,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | type_loop.das | Recursive type definition loop | **expect** `41000` |
 | type_not_found.das | Unknown type name error | **expect** `30301` |
 | typeAlias.das | Type aliases — `Point3Array`, indexing, swizzle, array ops on aliased types | |
-| typefunction.das | `[type_function]` annotation (gen2=false) | |
+| typefunction.das | `[type_function]` annotation — `type<T>` argument syntax | |
 | typeinfo.das | typeinfo sizeof, has_field, struct_get_annotation_argument | |
 | typeinfo_annotations.das | Struct annotation queries — has_annotation, get_annotation_argument | |
 | typeinfo_traits.das | typeinfo trait queries — is_local, is_ref, is_numeric, etc. | |

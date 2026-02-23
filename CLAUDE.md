@@ -36,6 +36,10 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 
 Multiple skill files may apply to a single task. For example, creating a new daslib module requires reading `skills/das_formatting.md`, `skills/daslib_modules.md`, and possibly `skills/documentation_rst.md`.
 
+### Updating Instructions with New Knowledge
+
+When you discover something new about daslang syntax, semantics, or conventions — whether through compiler errors, user corrections, or experimentation — **update this file** (and its `.github/copilot-instructions.md` mirror) with the new knowledge. Add it to the appropriate section (gen2 syntax, common gotchas, etc.) so future sessions benefit. If it relates to a specific skill area, update the relevant `skills/*.md` file too.
+
 ## daslang Language — Gen2 Syntax (REQUIRED)
 
 All code examples and documentation MUST use gen2 syntax (add `options gen2` at the top of every file). Key rules:
@@ -57,6 +61,7 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - **Bitfield dot access:** read with `f.flag` (returns bool), write with `f.flag = true/false`
 - **`typeinfo`** gen2 syntax: trait name goes **outside** parentheses — `typeinfo trait_name(type<T>)`, NOT `typeinfo(trait_name type<T>)`. With subtrait: `typeinfo has_method<name>(type<T>)`. With two traits: `typeinfo trait<sub;extra>(type<T>)`
 - **`static_if`:** `static_if (condition) { ... }` — parentheses required in gen2
+- **Type function call:** `take(type<int>, 1, 2)` — NOT `take < int > (1, 2)`. The `type<T>` is passed as a regular argument
 
 ### Important defaults
 
