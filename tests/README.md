@@ -246,20 +246,37 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | File | Description | Expects errors |
 |---|---|---|
 | _glob.das | *(helper)* Shared module defining `AAA = 10` | |
+| _helper_foo.das | *(helper)* Module providing `TestObjectFoo` struct and `testFoo` function | |
+| _module_a.das | *(helper)* Module for module_vis_fail — globals, types, functions | |
+| _module_b.das | *(helper)* Module for module_vis_fail — requires _module_a | |
 | _operators_derived.das | *(helper)* Derived class BarOp | |
 | _operators_parent.das | *(helper)* Parent class FooOp with property operator | |
 | aka.das | `aka` variable aliasing in various contexts | |
 | aliasing.das | Aliasing behavior with `no_aliasing = false` | |
 | ascend_ctor.das | `new` with class constructors and fields | |
 | assume.das | `assume` for deep field access | |
+| auto_infer.das | Auto type inference failures — missing overloads, wrong types | **expect** `31101` `31102:8` `30304:2` `30105:1` `30102:2` `30106` `30113` `31300` |
 | bitfields.das | Bitfield operations — 32-bit and 64-bit, operators, `typeinfo` | |
 | block.das | Block creation and invocation | |
+| cant_access_private_members.das | Private member access violations | **expect** `30503:3` `30301:1` |
+| cant_dereference_mix.das | Invalid dereference operations | **expect** `30501:5` |
+| cant_derive_from_sealed_class.das | Sealed class derivation error | **expect** `30115` |
+| cant_get_field.das | Invalid field access on types | **expect** `30503:4` `30504` |
+| cant_have_local_variable.das | Non-local type as local variable (uses `ast::TypeDecl`) | **expect** `30108:4` `30101:2` `31300:3` |
+| cant_index.das | Invalid index operations | **expect** `30502:2` |
+| cant_override_sealed.das | Sealed method override errors | **expect** `30115:2` |
+| cant_write_to_constant_value.das | Const value write violations | **expect** `30504:3` |
 | capture_string.das | String capture in lambdas and string builder (gen2=false, module) | |
+| comment_eof.das | Unterminated comment at end of file | **expect** `10007` |
+| condition_must_be_bool.das | Non-bool condition in if/while | **expect** `30601:2` `30303` `30506` |
+| const_and_block_folding.das | Constant folding side-effect errors | **expect** `40209:2` |
+| const_ref.das | Const ref restrictions — write, move, copy, return | **expect** `30102` `30106` `30303:1` `30304:2` `30504:5` `30505:2` `30507:3` `30508:1` |
 | containers.das | Temporary container operations (with containers.inc) | |
 | containers_failed.das | Container compile-time failures | **expect** `30304:4` |
 | contracts.das | `daslib/contracts` — expect_dim, expect_any_tuple, expect_any_variant | |
 | coroutines.das | Typed coroutines — count_up, count_down, yield, co_continue | |
 | default_method_arguments.das | Default argument values in abstract/override methods | |
+| duplicate_keys.das | Duplicate table keys at compile time | **expect** `40300:4` |
 | dynamic_type_checking.das | dynamic_cast, is_instance_of with class hierarchies | |
 | enumerations.das | Enum conversion — to/from string, enum_trait | |
 | failed_aka.das | Global aka and typedef aka produce errors | **expect** `20000:1` |
@@ -267,34 +284,66 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | failed_block.das | Block variable initialization failures | **expect** `30108` `30113` |
 | failed_capture_self.das | Capturing `self` in lambda fails | **expect** `30508` `30124` |
 | failed_constants.das | Out-of-range numeric literal errors | **expect** `10006:12` `10010:4` |
+| function_already_declared.das | Duplicate function declaration | **expect** `30201` |
+| function_argument_already_declared.das | Duplicate function argument name | **expect** `30202` |
+| function_not_found_ambiguous.das | Ambiguous function call — same name in two modules | **expect** `30304` |
+| global_init_type_mismatch.das | Global variable type mismatch on init | **expect** `30113` |
+| global_variable_already_declared.das | Duplicate global variable declaration | **expect** `30204` |
 | global_variable_order.das | Global variable initialization ordering | **expect** `30305:1` |
 | global_variable_order_itself.das | Global variable self-initialization error | **expect** `30305:1` |
 | hash.das | Hash function for various types | |
 | init_order.das | `[init]` function ordering with before/tag | |
 | intrinsics.das | clz, ctz, popcnt for u32/u64 with fuzzing | |
+| invalid_argument_count_mix.das | Wrong argument count in function calls | **expect** `30107:4` |
+| invalid_array_type_mix.das | Invalid array element types | **expect** `30105:2` |
+| invalid_block.das | Invalid block usage — wrong types, missing args | **expect** `30801` `30304:4` `32102` `32101` `30102` |
+| invalid_escape_sequence.das | Invalid string escape sequence | **expect** `10008` |
+| invalid_index_type.das | Wrong index type for containers | **expect** `30110:3` `30106` |
+| invalid_infer_return_type.das | Return type inference failures | **expect** `30102` `32101` `32102` |
+| invalid_return_type_mix.das | Mismatched return types | **expect** `30102` `30102` |
+| invalid_structure_field_type_ref.das | Ref type in struct field | **expect** `30104` |
+| invalid_structure_field_type_void.das | Void type in struct field | **expect** `30104` |
+| invalid_table_type_mix.das | Invalid table key/value types | **expect** `30106:2` `30108` |
+| invalid_type_ref_in_table_value.das | Ref type as table value | **expect** `30106` |
 | invalid_types.das | Oversized types and arguments | **expect** `30101:2` `30108:4` `30109:2` |
 | lambda_capture.das | Lambda capturing const values, finalizer behavior | |
 | local_classes_failed.das | no_local_class_members restriction | **expect** `31300:1` |
 | memset.das | memset8, memset16, memset32, memset64, memset128 | |
+| mismatching_curly_bracers.das | Mismatched `{` `}` brackets | **expect** `20000` `10002` |
+| mismatching_parentheses.das | Mismatched `(` `)` parentheses | **expect** `20000` `10001` |
+| module_vis_fail.das | Module visibility and scope errors | **expect** `30304:4` `30305:2` `30301:2` |
 | move_and_return_move.das | Move semantics — self-move, function move, struct with arrays | |
 | named_call.das | Named arguments — reordering, skipping, defaults, error cases | **expect** `30304:12` `30101:1` `30507:1` |
+| new_type_infer.das | `new` type inference failures | **expect** `30109` `30301` |
 | no_default_initializer.das | `[no_default_initializer]` annotation | |
 | no_init.das | `options no_init` preventing `[init]` functions | **expect** `40214:3` |
+| not_all_paths_return_a_value.das | Missing return in some code paths | **expect** `40200` |
 | operators.das | Custom operators — `as`, `?as`, derived class operators | |
 | option_type.das | Option types (int& \| auto) ref preservation | |
 | pointers.das | Pointer operations — new, deref, safe navigation, null checks | |
 | properties.das | Property operators (.res :=, getter/setter) | |
 | random_numbers.das | Random seeding, distributions, reproducibility | |
+| reserved_names.das | Use of reserved identifier names | **expect** `30116:9` |
 | resize_locked.das | Locked array operations — resize-while-iterating protection | |
+| run_annotation_side_effects.das | `[run]` annotation side effects check | **expect** `40101` |
 | serialization.das | Archive serialization — structs, custom serialize, arrays, tables | |
+| sizeof_reference.das | `sizeof` on reference types | **expect** `39902:2` |
+| smart_ptr_move.das | Unsafe `<-` move on `smart_ptr<>` type | **expect** `31300:1` |
 | static.das | Static class members and methods | |
+| static_assert_in_infer.das | Static assertion during type inference | **expect** `40100` |
 | strict_smart_ptr.das | strict_smart_pointers — emplace, inscope, smart_ptr operations | |
+| structure_already_defined.das | Duplicate struct definition | **expect** `30206` |
+| structure_field_already_declared.das | Duplicate struct field name | **expect** `30115` |
+| structure_not_found_ambiguous.das | Ambiguous struct name — same name in two modules | **expect** `30302` |
 | table.das | Table tombstone handling and iteration | |
 | testing_tools.das | Faker, fuzzer, testing_boost tools | |
 | tuple_expansion.das | Tuple expansion — `let (i, s, f) = foo()` | |
+| type_loop.das | Recursive type definition loop | **expect** `41000` |
+| type_not_found.das | Unknown type name error | **expect** `30301` |
 | typefunction.das | `[type_function]` annotation (gen2=false) | |
 | typeinfo.das | typeinfo sizeof, has_field, struct_get_annotation_argument | |
 | typeinfo_traits.das | typeinfo trait queries — is_local, is_ref, is_numeric, etc. | |
+| unused_argument.das | Unused function argument warnings | **expect** `40206:2` |
 | utility_patterns.das | defer, static_let utility patterns | |
 | variants.das | Variant type — construction, match, access | |
 | vector_fields.das | float4 .r/.g/.b/.a fields and swizzle | |
