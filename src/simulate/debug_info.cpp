@@ -148,8 +148,11 @@ namespace das
             case tVariant:      return 0;
             case fakeContext:   return 0;
             case fakeLineInfo:  return 0;
+            case alias:         // sometimes its requestd by generic
+            case option:
+            case autoinfer:     return 0;
             default:
-                DAS_ASSERTF(0, "not implemented. likely new built-intype been added, and support has not been updated.");
+                DAS_VERIFYF(0, "not implemented. likely new built-intype been added, and support has not been updated.");
                 return 0;
         }
     }
@@ -205,8 +208,11 @@ namespace das
             case tVariant:      return 1;
             case fakeContext:   return 1;
             case fakeLineInfo:  return 1;
+            case alias:         // sometimes its requestd by generic
+            case option:
+            case autoinfer:     return 0;
             default:
-                DAS_ASSERTF(0, "not implemented. likely new built-intype been added, and support has not been updated.");
+                DAS_VERIFYF(0, "not implemented. likely new built-intype been added, and support has not been updated.");
                 return 1;
         }
     }

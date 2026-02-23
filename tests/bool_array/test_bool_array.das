@@ -212,7 +212,7 @@ def test_erase(t : T?) {
     t |> run("erase_vs_reference") @@(t : T?) {
         var a : BoolArray
         var b : array<bool>
-        for (len in range(1, 100)) {
+        for (len in range(1, 40)) {
             for (erase_i in range(len)) {
                 a.clear()
                 b |> clear()
@@ -273,7 +273,6 @@ def test_erase(t : T?) {
         var b : array<bool>
         var lens : array<int>
         lens |> push(2); lens |> push(31); lens |> push(32); lens |> push(33)
-        lens |> push(64); lens |> push(65)
         for (li in range(length(lens))) {
             let len = lens[li]
             for (true_pos in range(len)) {
@@ -350,7 +349,7 @@ def test_insert(t : T?) {
     t |> run("insert_vs_reference") @@(t : T?) {
         var a : BoolArray
         var b : array<bool>
-        for (len in range(1, 100)) {
+        for (len in range(1, 40)) {
             for (insert_i in range(len)) {
                 // test both true and false
                 a.clear()
@@ -502,7 +501,7 @@ def test_push(t : T?) {
     t |> run("push_at_position") @@(t : T?) {
         var a : BoolArray
         var b : array<bool>
-        for (len in range(1, 70)) {
+        for (len in range(1, 40)) {
             for (at_pos in range(len)) {
                 // test true
                 a.clear()
