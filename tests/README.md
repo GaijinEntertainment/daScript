@@ -256,6 +256,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | ascend_ctor.das | `new` with class constructors and fields | |
 | assume.das | `assume` for deep field access | |
 | auto_infer.das | Auto type inference failures — missing overloads, wrong types | **expect** `31101` `31102:8` `30304:2` `30105:1` `30102:2` `30106` `30113` `31300` |
+| auto_infer_success.das | Successful auto type inference — generics, dim, static_if, variants | |
 | bitfields.das | Bitfield operations — 32-bit and 64-bit, operators, `typeinfo` | |
 | block.das | Block creation and invocation | |
 | cant_access_private_members.das | Private member access violations | **expect** `30503:3` `30301:1` |
@@ -267,6 +268,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | cant_override_sealed.das | Sealed method override errors | **expect** `30115:2` |
 | cant_write_to_constant_value.das | Const value write violations | **expect** `30504:3` |
 | capture_string.das | String capture in lambdas and string builder (gen2=false, module) | |
+| cast.das | `cast<>` struct inheritance, `reinterpret<>` memory reinterpretation | |
 | comment_eof.das | Unterminated comment at end of file | **expect** `10007` |
 | condition_must_be_bool.das | Non-bool condition in if/while | **expect** `30601:2` `30303` `30506` |
 | const_and_block_folding.das | Constant folding side-effect errors | **expect** `40209:2` |
@@ -277,6 +279,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | coroutines.das | Typed coroutines — count_up, count_down, yield, co_continue | |
 | default_method_arguments.das | Default argument values in abstract/override methods | |
 | duplicate_keys.das | Duplicate table keys at compile time | **expect** `40300:4` |
+| dynamic_array.das | Dynamic array — push, resize, reserve, capacity, erase, move | |
 | dynamic_type_checking.das | dynamic_cast, is_instance_of with class hierarchies | |
 | enumerations.das | Enum conversion — to/from string, enum_trait | |
 | failed_aka.das | Global aka and typedef aka produce errors | **expect** `20000:1` |
@@ -284,9 +287,12 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | failed_block.das | Block variable initialization failures | **expect** `30108` `30113` |
 | failed_capture_self.das | Capturing `self` in lambda fails | **expect** `30508` `30124` |
 | failed_constants.das | Out-of-range numeric literal errors | **expect** `10006:12` `10010:4` |
+| finally.das | `finally` blocks — exceptions, loops, nested, return | |
+| for_loop.das | For-loop mechanics — range, collections, nested, iterators | |
 | function_already_declared.das | Duplicate function declaration | **expect** `30201` |
 | function_argument_already_declared.das | Duplicate function argument name | **expect** `30202` |
 | function_not_found_ambiguous.das | Ambiguous function call — same name in two modules | **expect** `30304` |
+| generators.das | Generator mechanics — yield, ranges, nested, early return | |
 | global_init_type_mismatch.das | Global variable type mismatch on init | **expect** `30113` |
 | global_variable_already_declared.das | Duplicate global variable declaration | **expect** `30204` |
 | global_variable_order.das | Global variable initialization ordering | **expect** `30305:1` |
@@ -294,6 +300,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | hash.das | Hash function for various types | |
 | init_order.das | `[init]` function ordering with before/tag | |
 | intrinsics.das | clz, ctz, popcnt for u32/u64 with fuzzing | |
+| invoke_cmres.das | CMRES invoke — functions, hybrid, pointers, blocks, lambdas | |
 | invalid_argument_count_mix.das | Wrong argument count in function calls | **expect** `30107:4` |
 | invalid_array_type_mix.das | Invalid array element types | **expect** `30105:2` |
 | invalid_block.das | Invalid block usage — wrong types, missing args | **expect** `30801` `30304:4` `32102` `32101` `30102` |
@@ -306,6 +313,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | invalid_table_type_mix.das | Invalid table key/value types | **expect** `30106:2` `30108` |
 | invalid_type_ref_in_table_value.das | Ref type as table value | **expect** `30106` |
 | invalid_types.das | Oversized types and arguments | **expect** `30101:2` `30108:4` `30109:2` |
+| labels.das | Labels and goto — control flow, nested loops, labeled break | |
 | lambda_capture.das | Lambda capturing const values, finalizer behavior | |
 | local_classes_failed.das | no_local_class_members restriction | **expect** `31300:1` |
 | memset.das | memset8, memset16, memset32, memset64, memset128 | |
@@ -319,24 +327,31 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | no_init.das | `options no_init` preventing `[init]` functions | **expect** `40214:3` |
 | not_all_paths_return_a_value.das | Missing return in some code paths | **expect** `40200` |
 | operators.das | Custom operators — `as`, `?as`, derived class operators | |
+| oop.das | Classes — constructors, finalizers, inheritance, RTTI, virtual dispatch | |
 | option_type.das | Option types (int& \| auto) ref preservation | |
 | pointers.das | Pointer operations — new, deref, safe navigation, null checks | |
+| partial_specialization.das | Generic function specialization dispatch | |
 | properties.das | Property operators (.res :=, getter/setter) | |
 | random_numbers.das | Random seeding, distributions, reproducibility | |
 | reserved_names.das | Use of reserved identifier names | **expect** `30116:9` |
 | resize_locked.das | Locked array operations — resize-while-iterating protection | |
 | run_annotation_side_effects.das | `[run]` annotation side effects check | **expect** `40101` |
+| safe_index.das | Safe index `?[]` on arrays, tables, vectors, strings | |
 | serialization.das | Archive serialization — structs, custom serialize, arrays, tables | |
+| shifts.das | Bit shift operators — <<, >>, <<<, >>> for int/uint/int64/uint64 | |
 | sizeof_reference.das | `sizeof` on reference types | **expect** `39902:2` |
 | smart_ptr_move.das | Unsafe `<-` move on `smart_ptr<>` type | **expect** `31300:1` |
 | static.das | Static class members and methods | |
 | static_assert_in_infer.das | Static assertion during type inference | **expect** `40100` |
 | strict_smart_ptr.das | strict_smart_pointers — emplace, inscope, smart_ptr operations | |
+| struct.das | Struct operations — pointers, null-safe chains, typeinfo, variants | |
 | structure_already_defined.das | Duplicate struct definition | **expect** `30206` |
 | structure_field_already_declared.das | Duplicate struct field name | **expect** `30115` |
 | structure_not_found_ambiguous.das | Ambiguous struct name — same name in two modules | **expect** `30302` |
 | table.das | Table tombstone handling and iteration | |
 | testing_tools.das | Faker, fuzzer, testing_boost tools | |
+| trailing_delimiters.das | Trailing commas — arrays, structs, tables, block syntax | |
+| tuple.das | Tuple — creation, named/positional fields, sizeof, clone, fixed_array | |
 | tuple_expansion.das | Tuple expansion — `let (i, s, f) = foo()` | |
 | type_loop.das | Recursive type definition loop | **expect** `41000` |
 | type_not_found.das | Unknown type name error | **expect** `30301` |
@@ -346,6 +361,10 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | unused_argument.das | Unused function argument warnings | **expect** `40206:2` |
 | utility_patterns.das | defer, static_let utility patterns | |
 | variants.das | Variant type — construction, match, access | |
+| vec_constructors.das | Vector constructors — float/int/uint 2/3/4, range, type conversions | |
+| vec_index.das | Vector indexing — [], ?[], out-of-range, array-of-vectors | |
+| vec_ops.das | Vector arithmetic — *=, /= with scalar for float/int/uint | |
+| vec_swizzle.das | Vector swizzle — .xy, .yx, .xyz, struct member vectors | |
 | vector_fields.das | float4 .r/.g/.b/.a fields and swizzle | |
 
 ## linq/
