@@ -20,5 +20,5 @@ class B : A {
 [export]
 def main {
     let b = new B()
-    print("b = {b.name}\n")
+    feint("b = {b.name}\n")
 }

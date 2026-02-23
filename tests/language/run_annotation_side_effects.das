@@ -1,6 +1,3 @@
-// [run] annotation side effects check
-// verifies compiler rejects [run] on a function that modifies
-// global state (side effects prevent compile-time execution)
 options gen2
 expect 40101
 
@@ -16,7 +13,7 @@ def add13(n) {
 
 [export]
 def test {
-    print("{add13(3)}\n")       //  40101: function did not run at compilation time because it has side-effects
+    feint("{add13(3)}\n")       //  40101: function did not run at compilation time because it has side-effects
     return true
 }
 

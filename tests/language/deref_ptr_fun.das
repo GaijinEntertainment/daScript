@@ -4,7 +4,7 @@ require dastest/testing_boost public
 
 [test]
 def test_deref_ptr_fun(t : T?) {
-    print("{deref(getPtr())}")
+    feint("{deref(getPtr())}")
     t |> equal("{deref(getPtr())}", "0")
 }
 

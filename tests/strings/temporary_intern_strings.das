@@ -13,7 +13,6 @@ def test_temps_strings(t : T?) {
     t |> run("keep intern strings") @@(t) {
 
         temp_string("long str {payload}\n") $(s) {
-            print(s)
             t |> equal(s, "long str long str\n")
         }
 
@@ -26,7 +25,6 @@ def test_temps_strings(t : T?) {
             sb |> write("\n")
         }
         lpipe() $(s) {
-            print(s)
             t |> equal(s, "long builder str long str\n")
         }
 

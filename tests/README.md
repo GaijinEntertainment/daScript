@@ -279,7 +279,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | cant_override_sealed.das | Sealed method override errors | **expect** `30115:2` |
 | cant_write_to_constant_value.das | Const value write violations | **expect** `30504:3` |
 | capture_as_ref.das | Class lambda capturing `self` as ref | |
-| capture_string.das | String capture in lambdas and string builder (gen2=false, module) | |
+| capture_string.das | String capture in lambdas and string builder (module) | |
 | cast.das | `cast<>` struct inheritance, `reinterpret<>` memory reinterpretation | |
 | check_eid.das | `CheckEid`/`CheckEid2` on `TestObjectFoo` with custom `unit_test` option | |
 | clone.das | Clone complex nested structs, arrays, tables — deep copy verification | |

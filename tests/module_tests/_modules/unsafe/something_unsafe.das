@@ -12,6 +12,6 @@
 options gen2
 module something_unsafe
 
-def public implicit_print(a : string implicit) {
-    print(a)
+def public implicit_feint(a : string implicit) {
+    feint(a)
 }

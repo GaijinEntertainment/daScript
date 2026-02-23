@@ -36,7 +36,7 @@ def bar ( blk : block<(a:int):float> )
 
 [export]
 def main
-    print(\"hello world!\n\")
+    feint(\"hello world!\n\")
     return true
 "
 }
@@ -103,15 +103,15 @@ def describeType(info) {
 }
 
 def describeFunction(finfo) {
-    print("def {finfo.name} ")
+    feint("def {finfo.name} ")
     if (finfo.count != 0u) {
         let argT = join([for (arg in finfo); "{arg.name}:{describeType(arg)}"], "; ")
-        print("( {argT} ) ")
+        feint("( {argT} ) ")
     }
     if (finfo.result != null) {
-        print(": {describeType(*(finfo.result))}")
+        feint(": {describeType(*(finfo.result))}")
     }
-    print("\n")
+    feint("\n")
 }
 
 def describeValue(value) {
@@ -125,25 +125,25 @@ def describeValue(value) {
 }
 
 def describeVariable(glob; extra = "") {
-    print("{extra}{glob.name} : {describeType(glob)}{describeValue(get_variable_value(glob))}\n")
+    feint("{extra}{glob.name} : {describeType(glob)}{describeValue(get_variable_value(glob))}\n")
 }
 
 def describeStructure(sinfo) {
     var anyAnn = false
     structure_for_each_annotation(sinfo) <| $(ann; annArgs) {
         let argT = join([for (arg in annArgs); "{arg.name}{describeValue(get_annotation_argument_value(arg))}"], ",")
-        print("[{ann.name}({argT})]\n")
+        feint("[{ann.name}({argT})]\n")
     }
-    print("struct {sinfo.name}\n")
+    feint("struct {sinfo.name}\n")
     for (sfield in sinfo) {
         describeVariable(sfield, "\t")
     }
 }
 
 def describeEnumeration(einfo) {
-    print("enum {einfo.name}\n")
+    feint("enum {einfo.name}\n")
     for (eitem in einfo) {
-        print("\t{eitem.name} = {eitem.value}\n")
+        feint("\t{eitem.name} = {eitem.value}\n")
     }
 }
 
@@ -151,18 +151,18 @@ def describeAnnotation(ann) {
     if (ann.isBasicStructureAnnotation) {
         unsafe {
             let sann & = reinterpret<BasicStructureAnnotation&>(ann)
-            print("struct {sann.name} // {sann.fieldCount} {sann.cppName}\n")
+            feint("struct {sann.name} // {sann.fieldCount} {sann.cppName}\n")
             basic_struct_for_each_field(sann) <| $(name, cppName, xtype, offset) {
-                print("\t{name}:{describeType(xtype)} // {cppName} at {offset}\n")
+                feint("\t{name}:{describeType(xtype)} // {cppName} at {offset}\n")
             }
         }
     } elif (ann.isTypeAnnotation) {
         unsafe {
             let tann & = reinterpret<TypeAnnotation&>(ann)
-            print("{tann.name} // {tann.cppName}\n")
+            feint("{tann.name} // {tann.cppName}\n")
         }
     } else {
-        print("{ann.name}\n")
+        feint("{ann.name}\n")
     }
 }
 
@@ -204,7 +204,7 @@ def test_compile_sample(t : T?) {
                 }
             }
         } else {
-            print("failed to compile:\n{errors}\n")
+            feint("failed to compile:\n{errors}\n")
         }
     }
     t |> success(compiled_ok, "sample program should compile")

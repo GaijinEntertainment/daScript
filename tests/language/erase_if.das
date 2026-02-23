@@ -26,12 +26,7 @@ def test_erase_if(t : T?; var arr : array<int>) {
         ok = false
     }
 
-    if (!ok) {
-        print("erase_if failed, input and output:\n")
-        debug(cloned)
-        debug(arr)
-        t |> failure("erase_if failed")
-    }
+    t |> success(ok)
 }
 
 [test]

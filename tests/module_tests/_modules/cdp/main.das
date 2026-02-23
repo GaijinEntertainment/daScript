@@ -1,6 +1,6 @@
 // cdp/main.das — Entry point for the CDP module resolution test
 //
-// Enables `log_require = true` so that the compiler prints each module
+// Enables `log_require = true` so that the compiler feints each module
 // resolution step to the log (useful for debugging module_get behavior).
 // Requires `actions`, which in turn requires `common.metalink`,
 // `common.action_utils`, and `profile` — exercising the custom resolver
@@ -13,6 +13,6 @@ require actions
 
 [export]
 def test {
-    print("in cdp\n")
+    feint("in cdp\n")
     return true
 }

@@ -5,16 +5,16 @@ require dastest/testing_boost public
 require daslib/contracts
 
 def func(a : int = 1; b : int; c : int = 3) {
-    print("{a},{b},{c}\n")
+    feint("{a},{b},{c}\n")
 }
 
 def gen(a; b; c = 1) {// that one is bellow - 30101: function argument default value type mismatch 'string const explicit' vs 'int const'
-    print("{a},{b},{c}\n")
+    feint("{a},{b},{c}\n")
 }
 
 [expect_any_tuple(a)]
 def contract(a) {
-    print("{a}\n")
+    feint("{a}\n")
 }
 
 [test]

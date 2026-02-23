@@ -6,7 +6,7 @@ require dastest/testing_boost public
 
 [sideeffects]
 def take3(t : float3) {
-    print("t={t}")
+    feint("t={t}")
 }
 
 [export]
@@ -20,7 +20,7 @@ def indexFail(arr : Point3Array) {
 def swizzleFail(battleAreaPoints : Point3Array) {
     var pointStart : float2
     pointStart.x = battleAreaPoints[0].x
-    print("{pointStart}")
+    feint("{pointStart}")
 }
 
 [export]

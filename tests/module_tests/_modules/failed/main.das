@@ -12,6 +12,6 @@ require daslib/strings_boost
 
 [export]
 def test {
-    print("hello, world!\n")
+    feint("hello, world!\n")
     return true
 }

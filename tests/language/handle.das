@@ -80,7 +80,7 @@ def test_handled(t : T?) {
 
 [export]
 def test_fancy_container(var a : array<FancyClass>) {
-    print("a = {a}\n")
+    feint("a = {a}\n")
 }
 
 def test_fancy(t : T?) {

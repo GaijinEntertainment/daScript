@@ -8,35 +8,35 @@ require daslib/validate_code
 [export, verify_completion]
 def bad_loop(var all : iterator<int>; cond_const : bool) {
     for (t in all) {                    // 40104: unbounded iterator loop
-        print("t = {t}\n")
+        feint("t = {t}\n")
     }
     for (t, r in all, range(100500)) {  // ok — has explicit range
-        print("t = {t}\n")
+        feint("t = {t}\n")
     }
     var cond = true
     while (cond) {                      // 40104: unbounded while loop
-        print("nop\n")
+        feint("nop\n")
         cond = false
     }
     var tab <- {1 => 1, 2 => 2, 3 => 3}
     for (x in tab |> keys()) {          // 40104: keys() is unbounded
-        print("x = {x}\n")
+        feint("x = {x}\n")
     }
 }
 
 [export, verify_completion]
 def simple_recursive() {
-    print("simple\n")
+    feint("simple\n")
     simple_recursive()                  // 40104: direct recursion
 }
 
 def rec_a() {
-    print("a\n")
+    feint("a\n")
     rec_b()                             // 40104: mutual recursion a->b->a
 }
 
 def rec_b() {
-    print("b\n")
+    feint("b\n")
     rec_a()                             // 40104: mutual recursion b->a->b
 }
 

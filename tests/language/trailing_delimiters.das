@@ -76,13 +76,13 @@ def test_trailing_delimiters(t : T?) {
         ${ ${}; }
         ${ ${ ${}; }
         }
-        ${print(""); }
-        if (true) {print(""); }
+        ${feint(""); }
+        if (true) {feint(""); }
     }
     t |> run("mixed blocks with lambdas") @(t : T?) {
-        let a0 <- { 1 => @(a : string) { print(a); } }
+        let a0 <- { 1 => @(a : string) { feint(a); } }
         t |> equal(length(a0), 1)
-        let a2 <- { 1 => @(a : string) { let a3 <- { 1 => @(aa : string) { print(aa); } }; } }
+        let a2 <- { 1 => @(a : string) { let a3 <- { 1 => @(aa : string) { feint(aa); } }; } }
         t |> equal(length(a2), 1)
     }
     t |> run("copy move return") @(t : T?) {

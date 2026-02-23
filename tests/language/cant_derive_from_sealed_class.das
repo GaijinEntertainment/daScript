@@ -16,5 +16,5 @@ class B : A {// 30115: can't derive from sealed class or structure A
 [export]
 def main {
     let b = new B()
-    print("b = {b.name}\n")
+    feint("b = {b.name}\n")
 }

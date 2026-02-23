@@ -4,7 +4,7 @@ require dastest/testing_boost public
 
 [test]
 def test_globals(t : T?) {
-    print("hello")
+    feint("hello")
 }
 
 [decs(stage = update_ecs)]

@@ -56,7 +56,7 @@ def getZenOne {
 
 [export]
 def testBindEnum(arg : SomeEnum) {
-    print("hello, world!\n")
+    feint("hello, world!\n")
 }
 
 [test]

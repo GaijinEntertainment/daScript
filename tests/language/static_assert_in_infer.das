@@ -1,6 +1,3 @@
-// static_assert during type inference
-// verifies that static_assert in a generic function triggers
-// when instantiated with a type that doesn't meet the requirement
 options gen2
 // options log=true,log_infer_passes=false,log_optimization_passes=true,optimize=true
 
@@ -26,7 +23,7 @@ def test(msg) {
 }
 
 def test : bool {
-    print(test("this"))
+    feint(test("this"))
     return true
 }
 

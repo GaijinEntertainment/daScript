@@ -10,7 +10,7 @@ class A {
         name = n
     }
     def private func() {
-        print("123")
+        feint("123")
     }
     def bang {
         func()
