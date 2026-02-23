@@ -412,6 +412,17 @@ namespace das {
         }
         // result type
         auto resT = make_smart<TypeDecl>(*expr->makeType);
+        if ( resT->isAlias() ) {
+            auto aT = inferAlias(resT);
+            if (aT) {
+                resT = aT;
+                reportAstChanged();
+            } else {
+                error("undefined variant type " + describeType(expr->makeType),
+                      reportInferAliasErrors(expr->makeType), "", expr->at, CompilationError::type_not_found);
+                return Visitor::visit(expr);
+            }
+        }
         uint32_t resDim = uint32_t(expr->variants.size());
         if (resDim == 0) {
             resT->dim.clear();
