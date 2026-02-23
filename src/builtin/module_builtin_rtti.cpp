@@ -1017,7 +1017,17 @@ namespace das {
             case Type::tFloat:  def.index = RttiFloat; break;
             case Type::tDouble: def.index = RttiDouble; break;
             case Type::tString: def.index = RttiString; break;
-            default: DAS_ASSERT(false); // I guess unreachable?
+            case Type::tFloat2:     case Type::tFloat3: case Type::tFloat4:
+            case Type::tRange:      case Type::tURange:
+            case Type::tRange64:    case Type::tURange64:
+            case Type::tInt2:       case Type::tInt3:   case Type::tInt4:   case Type::tInt8:   case Type::tInt16:
+            case Type::tUInt2:      case Type::tUInt3:  case Type::tUInt4:  case Type::tUInt8:  case Type::tUInt16:
+            case Type::tBitfield8:  case Type::tBitfield16:
+            case Type::tEnumeration:    case Type::tEnumeration8:   case Type::tEnumeration16:  case Type::tEnumeration64:
+                def.index = RttiAny;
+                break;
+            default:
+                DAS_VERIFYF(false,"unsupported type. i guess new Type::type has been added");
             }
             /*
              * Due to alignment we can't simply copy value.
