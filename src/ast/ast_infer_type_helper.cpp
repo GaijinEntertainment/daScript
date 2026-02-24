@@ -315,16 +315,12 @@ namespace das {
         return (!mtd || mtd->isAlias()) ? nullptr : mtd;
     }
 
-    bool InferTypes::isLoop(das_hash_set<string> & visited, const TypeDeclPtr &decl) const {
+    bool InferTypes::isLoop(vector<string> & visited, const TypeDeclPtr &decl) const {
         if ( decl->baseType == Type::alias ) {
-            if ( visited.find(decl->alias) != visited.end() ) {
+            if ( find(visited.begin(), visited.end(), decl->alias) != visited.end() ) {
                 return true;
             }
-            visited.insert(decl->alias);
-        }
-        if ( decl->baseType == Type::tPointer ) {
-            // its never pointer?
-            return false;
+            visited.push_back(decl->alias);
         }
         if ( decl->firstType ) {
             if ( isLoop(visited, decl->firstType) ) {
@@ -340,6 +336,9 @@ namespace das {
             if ( isLoop(visited, argType) ) {
                 return true;
             }
+        }
+        if ( decl->baseType == Type::alias ) {
+            visited.pop_back();
         }
         return false;
     }

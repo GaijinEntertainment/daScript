@@ -117,7 +117,7 @@ namespace das {
         TypeDeclPtr inferAlias(const TypeDeclPtr &decl, const FunctionPtr &fptr = nullptr, AliasMap *aliases = nullptr, OptionsMap *options = nullptr, bool autoToAlias = false) const;
 
         // get loop in type system
-        bool isLoop(das_hash_set<string> & visited, const TypeDeclPtr &decl) const;
+        bool isLoop(vector<string> & visited, const TypeDeclPtr &decl) const;
 
         string reportInferAliasErrors(const TypeDeclPtr &decl) const;
 

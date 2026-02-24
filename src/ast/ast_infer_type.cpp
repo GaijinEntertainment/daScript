@@ -73,8 +73,8 @@ namespace das {
     }
     TypeDeclPtr InferTypes::visitAlias(TypeDecl *td, const string &) {
         if (td->isAlias()) {
-            das_hash_set<string> visited;
-            visited.insert(saveAliasName);
+            vector<string> visited;
+            visited.push_back(saveAliasName);
             if ( isLoop(visited, td) ) {
                 fatalAliasLoop = true;
                 error("alias loop detected: '" + describeType(td) + "'", "", "",
