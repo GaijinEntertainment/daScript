@@ -167,7 +167,7 @@
 %destructor { delete $$; } <fa>
 %destructor { delete $$; } <faList>
 %destructor { delete $$; } <pMakeStruct>
-%destructor { $$->delRef(); } <pEnum>
+%destructor { /* $$->delRef(); // if enum rule returns, module already has the link */ } <pEnum>
 %destructor { delete $$; } <pEnumList>
 %destructor { delete $$; } <pEnumPair>
 %destructor { delete $$; } <pCapt>
