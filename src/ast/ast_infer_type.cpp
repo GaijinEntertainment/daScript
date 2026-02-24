@@ -4963,6 +4963,10 @@ namespace das {
                 return demoteCall(expr, generics.back());
             } else {
                 if (expr->methodCall) {
+                    if ( expr->nonNamedArguments.empty() ) {
+                        reportMissing(expr, nonNamedTypes, "no matching functions or generics: ", true);
+                        return Visitor::visit(expr);
+                    }
                     auto tp = expr->nonNamedArguments[0]->type.get();
                     auto vSelf = expr->nonNamedArguments[0];
                     if (tp->isPointer() && tp->firstType) {
