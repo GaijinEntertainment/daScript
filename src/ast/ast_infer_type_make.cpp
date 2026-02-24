@@ -723,6 +723,7 @@ namespace das {
             } else {
                 error("undefined [[ ]] expression type " + describeType(expr->makeType),
                       reportInferAliasErrors(expr->makeType), "", expr->makeType->at, CompilationError::type_not_found);
+                return Visitor::visit(expr);
             }
         }
         auto isClassCtor = !expr->nativeClassInitializer &&
