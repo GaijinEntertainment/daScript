@@ -7,6 +7,9 @@
 namespace das {
 
     bool InferTypes::finished() const { return !needRestart; }
+    bool InferTypes::canVisitGlobalVariable ( Variable * ) { return !fatalAliasLoop; }
+    bool InferTypes::canVisitEnumeration ( Enumeration * ) { return !fatalAliasLoop; }
+
     string InferTypes::generateNewLambdaName(const LineInfo &at) {
         string mod = thisModule->name;
         if (mod.empty())
@@ -215,6 +218,10 @@ namespace das {
                     error("tuple element can't be void", "", "",
                           argType->at, CompilationError::invalid_type);
                 }
+                if (!argType->canBePlacedInContainer()) {
+                    error("invalid tuple element type: '" + describeType(argType) + "'", "", "",
+                          argType->at, CompilationError::invalid_type);
+                }
                 verifyType(argType);
             }
         } else if (decl->baseType == Type::tVariant) {
@@ -225,6 +232,10 @@ namespace das {
                 }
                 if (argType->isVoid()) {
                     error("variant element can't be void", "", "",
+                          argType->at, CompilationError::invalid_type);
+                }
+                if (!argType->canBePlacedInContainer()) {
+                    error("invalid variant element type: '" + describeType(argType) + "'", "", "",
                           argType->at, CompilationError::invalid_type);
                 }
                 verifyType(argType);
@@ -303,6 +314,36 @@ namespace das {
         TypeDeclPtr mtd = program->makeTypeDeclaration(LineInfo(), name);
         return (!mtd || mtd->isAlias()) ? nullptr : mtd;
     }
+
+    bool InferTypes::isLoop(das_hash_set<string> & visited, const TypeDeclPtr &decl) const {
+        if ( decl->baseType == Type::alias ) {
+            if ( visited.find(decl->alias) != visited.end() ) {
+                return true;
+            }
+            visited.insert(decl->alias);
+        }
+        if ( decl->baseType == Type::tPointer ) {
+            // its never pointer?
+            return false;
+        }
+        if ( decl->firstType ) {
+            if ( isLoop(visited, decl->firstType) ) {
+                return true;
+            }
+        }
+        if ( decl->secondType ) {
+            if ( isLoop(visited, decl->secondType) ) {
+                return true;
+            }
+        }
+        for ( auto & argType : decl->argTypes ) {
+            if ( isLoop(visited, argType) ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     TypeDeclPtr InferTypes::inferAlias(const TypeDeclPtr &decl, const FunctionPtr &fptr, AliasMap *aliases, OptionsMap *options, bool autoToAlias) const {
         autoToAlias |= decl->autoToAlias;
         if (decl->baseType == Type::typeDecl || decl->baseType == Type::typeMacro) {

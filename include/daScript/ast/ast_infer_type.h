@@ -79,6 +79,8 @@ namespace das {
         size_t beforeFunctionErrors = 0;
         TextWriter *logs = nullptr;
         int32_t consumeDepth = 0;
+        bool   fatalAliasLoop = false;
+        bool   inArgumentInit = false;
 
     public:
         vector<FunctionPtr> extraFunctions;
@@ -113,6 +115,9 @@ namespace das {
 
         // infer alias type
         TypeDeclPtr inferAlias(const TypeDeclPtr &decl, const FunctionPtr &fptr = nullptr, AliasMap *aliases = nullptr, OptionsMap *options = nullptr, bool autoToAlias = false) const;
+
+        // get loop in type system
+        bool isLoop(das_hash_set<string> & visited, const TypeDeclPtr &decl) const;
 
         string reportInferAliasErrors(const TypeDeclPtr &decl) const;
 
@@ -252,6 +257,9 @@ namespace das {
 
         virtual EnumerationPtr visit(Enumeration *enu) override;
 
+        virtual bool canVisitGlobalVariable ( Variable * fun ) override;
+        virtual bool canVisitEnumeration ( Enumeration * en ) override;
+
         // strcuture
         virtual bool canVisitStructure(Structure *st) override;
         virtual void preVisit(Structure *that) override;
@@ -271,6 +279,7 @@ namespace das {
         virtual bool canVisitFunction(Function *fun) override;
         virtual void preVisit(Function *f) override;
         virtual void preVisitArgument(Function *fn, const VariablePtr &var, bool lastArg) override;
+        virtual void preVisitArgumentInit(Function *f, const VariablePtr &arg, Expression *that) override;
         virtual ExpressionPtr visitArgumentInit(Function *f, const VariablePtr &arg, Expression *that) override;
         virtual VariablePtr visitArgument(Function *fn, const VariablePtr &var, bool lastArg) override;
         virtual FunctionPtr visit(Function *that) override;

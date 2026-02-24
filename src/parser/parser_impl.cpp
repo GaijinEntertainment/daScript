@@ -1200,7 +1200,7 @@ namespace das {
         } else if ( fncall->rtti_isVar() ) {
             auto pVar = (ExprVar *) fncall;
             auto pCall = yyextra->g_Program->makeCall(pVar->at,pVar->name);
-            delete pVar;
+            if ( pVar->use_count()==0 ) delete pVar;
             pCall->arguments.insert(pCall->arguments.begin(),arg);
             return pCall;
         } else if (fncall->rtti_isNamedCall()) {
@@ -1209,18 +1209,12 @@ namespace das {
             return fncall;
         } else if (fncall->rtti_isField() ) {
             auto pField = (ExprField*)fncall;
-            if ( auto pipeto = ast_rpipe(scanner, arg, pField->value.get(), locAt) ) {
-                return pField;
-            } else {
-                return nullptr;
-            }
+            pField->value = ast_rpipe(scanner, arg, pField->value.get(), locAt);
+            return fncall;
         } else if (fncall->rtti_isSafeField() ) {
             auto pField = (ExprSafeField*)fncall;
-            if ( auto pipeto = ast_rpipe(scanner, arg, pField->value.get(), locAt) ) {
-                return pField;
-            } else {
-                return nullptr;
-            }
+            pField->value = ast_rpipe(scanner, arg, pField->value.get(), locAt);
+            return fncall;
         } else {
             das_yyerror(scanner,"can only rpipe into a function call",locAt,CompilationError::cant_pipe);
             return fncall;

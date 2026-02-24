@@ -1051,6 +1051,10 @@ namespace das {
             if (!ar->type) {
                 return false;
             }
+            if(ar->type->baseType==Type::tVoid) {
+                error("void type is not allowed as argument", "", "", ar->at);
+                return false;
+            }
             DAS_ASSERT(!ar->type->isExprType() && "if this happens, we are calling infer function call without checking for '[expr]'. do that from where we call up the stack.");
             // if its an auto or an alias
             // we only allow it, if its a block or lambda
@@ -1079,6 +1083,10 @@ namespace das {
         }
         if (functions.size() == 1) {
             auto funcC = functions.back();
+            if ( inArgumentInit && funcC==func ) {
+                error("recursive call in argument initializer is not allowed", "", "", expr->at);
+                return nullptr;
+            }
             if (funcC->firstArgReturnType) {
                 TypeDecl::clone(expr->type, expr->arguments[0]->type);
                 expr->type->ref = false;

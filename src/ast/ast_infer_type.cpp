@@ -73,6 +73,14 @@ namespace das {
     }
     TypeDeclPtr InferTypes::visitAlias(TypeDecl *td, const string &) {
         if (td->isAlias()) {
+            das_hash_set<string> visited;
+            visited.insert(saveAliasName);
+            if ( isLoop(visited, td) ) {
+                fatalAliasLoop = true;
+                error("alias loop detected: '" + describeType(td) + "'", "", "",
+                      td->at, CompilationError::invalid_type);
+                return td;
+            }
             if (auto ta = inferAlias(td)) {
                 if (ta->isAutoOrAlias()) {
                     error("internal compiler error: can't be inferred: '" + describeType(td) + "'", "", "",
@@ -190,6 +198,7 @@ namespace das {
         return Visitor::visit(enu);
     }
     bool InferTypes::canVisitStructure(Structure *st) {
+        if ( fatalAliasLoop ) return false;
         return !st->isTemplate; // we don't do a thing with templates
     }
     void InferTypes::preVisit(Structure *that) {
@@ -507,6 +516,7 @@ namespace das {
         return Visitor::visitGlobalLet(var);
     }
     bool InferTypes::canVisitFunction(Function *fun) {
+        if ( fatalAliasLoop ) return false;
         if (fun->stub)
             return false;
         if (verbose || debugInferFlag) { // it can be fully inferred, and fail concept assert
@@ -564,7 +574,12 @@ namespace das {
             }
         }
     }
+    void InferTypes::preVisitArgumentInit(Function *f, const VariablePtr &arg, Expression *that) {
+        Visitor::preVisitArgumentInit(f, arg, that);
+        inArgumentInit = true;
+    }
     ExpressionPtr InferTypes::visitArgumentInit(Function *f, const VariablePtr &arg, Expression *that) {
+        inArgumentInit = false;
         if (arg->type->isAuto() && arg->init->type) {
             auto varT = TypeDecl::inferGenericType(arg->type, arg->init->type, false, false, nullptr);
             if (!varT) {
@@ -4666,6 +4681,11 @@ namespace das {
             }
             if (expr->inScope) {
                 if (!var->inScope) {
+                    if ( inFinally.back() ) {
+                        error("in-scope variable " + var->name + " can't be declared in the finally block", "", "",
+                              var->at, CompilationError::invalid_variable_type);
+                        return Visitor::visitLet(expr, var, last);
+                    }
                     if (var->type->canDelete()) {
                         if (var->type->constant) {
                             error("variable " + var->name + " of type " + describeType(var->type) + " can't be in-scope const",
@@ -4953,6 +4973,10 @@ namespace das {
                 return demoteCall(expr, generics.back());
             } else {
                 if (expr->methodCall) {
+                    if ( expr->nonNamedArguments.empty() ) {
+                        reportMissing(expr, nonNamedTypes, "no matching functions or generics: ", true);
+                        return Visitor::visit(expr);
+                    }
                     auto tp = expr->nonNamedArguments[0]->type.get();
                     auto vSelf = expr->nonNamedArguments[0];
                     if (tp->isPointer() && tp->firstType) {
