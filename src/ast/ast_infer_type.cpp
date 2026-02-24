@@ -3978,11 +3978,11 @@ namespace das {
             }
             if (block->returnType && block->returnType->ref && !safeExpression(expr)) {
                 error("returning reference requires unsafe", "", "",
-                      func->result->at, CompilationError::invalid_return_type);
+                      expr->at, CompilationError::invalid_return_type);
             }
             if (block->returnType && block->returnType->isTemp() && !safeExpression(expr)) {
                 error("returning temporary value from block requires unsafe", "", "",
-                      func->result->at, CompilationError::invalid_return_type);
+                      expr->at, CompilationError::invalid_return_type);
             }
             if (strictSmartPointers && block->returnType && !expr->moveSemantics && !safeExpression(expr) && block->returnType->needInScope()) {
                 error("returning smart pointers without move semantics is unsafe", "use return <- instead", "",
