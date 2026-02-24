@@ -30,3 +30,6 @@ web/output/daScript.wasm
 web/output/.idea/
 
 yzg.code-workspace
+
+examples/wip.das
+
