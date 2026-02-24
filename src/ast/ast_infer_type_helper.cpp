@@ -7,8 +7,8 @@
 namespace das {
 
     bool InferTypes::finished() const { return !needRestart; }
-    bool InferTypes::canVisitGlobalVariable ( Variable * fun ) { return !fatalAliasLoop; }
-    bool InferTypes::canVisitEnumeration ( Enumeration * en ) { return !fatalAliasLoop; }
+    bool InferTypes::canVisitGlobalVariable ( Variable * ) { return !fatalAliasLoop; }
+    bool InferTypes::canVisitEnumeration ( Enumeration * ) { return !fatalAliasLoop; }
 
     string InferTypes::generateNewLambdaName(const LineInfo &at) {
         string mod = thisModule->name;
@@ -218,6 +218,10 @@ namespace das {
                     error("tuple element can't be void", "", "",
                           argType->at, CompilationError::invalid_type);
                 }
+                if (!argType->canBePlacedInContainer()) {
+                    error("invalid tuple element type: '" + describeType(argType) + "'", "", "",
+                          argType->at, CompilationError::invalid_type);
+                }
                 verifyType(argType);
             }
         } else if (decl->baseType == Type::tVariant) {
@@ -228,6 +232,10 @@ namespace das {
                 }
                 if (argType->isVoid()) {
                     error("variant element can't be void", "", "",
+                          argType->at, CompilationError::invalid_type);
+                }
+                if (!argType->canBePlacedInContainer()) {
+                    error("invalid variant element type: '" + describeType(argType) + "'", "", "",
                           argType->at, CompilationError::invalid_type);
                 }
                 verifyType(argType);
