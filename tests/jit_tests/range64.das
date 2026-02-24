@@ -68,3 +68,14 @@ def test_range64_urange64_intrinsics(t : T?) {
     }
 }
 
+[test]
+def test_urange64_vector_access(t : T?) {
+    t |> run("heap_allocation_stats index and swizzle") @(t : T?) {
+        let hpbs = heap_allocation_stats()
+        t |> equal(hpbs[0], heap_allocation_stats()[0])
+        t |> equal(hpbs[1], heap_allocation_stats()[1])
+        t |> equal(hpbs.x, heap_allocation_stats().x)
+        t |> equal(hpbs.y, heap_allocation_stats().y)
+    }
+}
+

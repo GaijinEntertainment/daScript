@@ -213,7 +213,7 @@ namespace das
         DAS_PROFILE_NODE
         union {
             vec4f   res;
-            int64_t val[4];
+            int64_t val[2];
         } R, S;
         S.res = value->eval(context);
         R.val[0] = S.val[fields[0]];

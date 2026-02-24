@@ -1668,11 +1668,15 @@ namespace das
                 }
             } else {
                 switch ( type->baseType ) {
-                    case tInt:      return context.code->makeNode<SimNode_AtVector<int32_t>>(at, prv, pidx, range, errorMessage);
+                    case tInt:      return (SimNode *) context.code->makeNode<SimNode_AtVector<int32_t>>(at, prv, pidx, range, errorMessage);
+                    case tInt64:    return (SimNode *) context.code->makeNode<SimNode_AtVector<int64_t>>(at, prv, pidx, range, errorMessage);
                     case tUInt:
                     case tBitfield:
-                                    return context.code->makeNode<SimNode_AtVector<uint32_t>>(at, prv, pidx, range, errorMessage);
-                    case tFloat:    return context.code->makeNode<SimNode_AtVector<float>>(at, prv, pidx, range, errorMessage);
+                                    return (SimNode *) context.code->makeNode<SimNode_AtVector<uint32_t>>(at, prv, pidx, range, errorMessage);
+                    case tUInt64:
+                    case tBitfield64:
+                                    return (SimNode *) context.code->makeNode<SimNode_AtVector<uint64_t>>(at, prv, pidx, range, errorMessage);
+                    case tFloat:    return (SimNode *) context.code->makeNode<SimNode_AtVector<float>>(at, prv, pidx, range, errorMessage);
                     default:
                         DAS_ASSERTF(0, "we should not even be here. infer type should have failed on unsupported_vector[blah]");
                         context.thisProgram->error("internal compilation error, generating vector at for unsupported vector type.", "", "", at);
@@ -1961,7 +1965,8 @@ namespace das
                 fs[2] = fsz >= 3 ? fields[2] : fields[0];
                 fs[3] = fsz >= 4 ? fields[3] : fields[0];
                 auto simV = value->simulate(context);
-                if ( type->baseType==Type::tRange64 || type->baseType==Type::tURange64 ) {
+                if ( type->baseType==Type::tInt64 || type->baseType==Type::tUInt64
+                    || type->baseType==Type::tRange64 || type->baseType==Type::tURange64 ) {
                     return context.code->makeNode<SimNode_Swizzle64>(at, simV, fs);
                 } else {
                     return context.code->makeNode<SimNode_Swizzle>(at, simV, fs);

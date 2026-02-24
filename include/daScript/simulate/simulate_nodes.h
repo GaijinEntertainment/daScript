@@ -686,6 +686,7 @@ namespace das {
                 fields[2] = fi[2];
                 fields[3] = fi[3];
             }
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
     };
 
@@ -988,6 +989,8 @@ namespace das {
 
 SIM_NODE_AT_VECTOR(Int,   int32_t)
 SIM_NODE_AT_VECTOR(UInt,  uint32_t)
+SIM_NODE_AT_VECTOR(Int64, int64_t)
+SIM_NODE_AT_VECTOR(UInt64,uint64_t)
 SIM_NODE_AT_VECTOR(Float, float)
 
     template <int nElem>
