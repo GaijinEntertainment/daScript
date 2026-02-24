@@ -4676,6 +4676,11 @@ namespace das {
             }
             if (expr->inScope) {
                 if (!var->inScope) {
+                    if ( inFinally.back() ) {
+                        error("in-scope variable " + var->name + " can't be declared in the finally block", "", "",
+                              var->at, CompilationError::invalid_variable_type);
+                        return Visitor::visitLet(expr, var, last);
+                    }
                     if (var->type->canDelete()) {
                         if (var->type->constant) {
                             error("variable " + var->name + " of type " + describeType(var->type) + " can't be in-scope const",
