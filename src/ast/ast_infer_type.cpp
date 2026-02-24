@@ -483,8 +483,8 @@ namespace das {
         if (var->type->isVoid())
             error("global variable can't be declared void", "", "",
                   var->at, CompilationError::invalid_variable_type);
-        if (var->type->isHandle() && !var->type->annotation->isLocal())
-            error("can't have a global variable of handled type " + var->type->annotation->name, "", "",
+        if (!var->type->isLocal())
+            error("can't have a global variable of type " + describeType(var->type), "", "",
                   var->at, CompilationError::invalid_variable_type);
         if (!var->type->constant && var->global_shared)
             error("shared global variable must be constant", "", "",

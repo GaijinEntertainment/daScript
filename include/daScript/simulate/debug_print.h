@@ -427,7 +427,8 @@ namespace das {
             ss << "]]";
         }
         virtual void WalkBlock ( struct Block * pa ) override {
-            ss << "block" << HEX << getSemanticHash(pa->body, context) << DEC;
+            ss << "block";
+            if ( pa->body ) ss << HEX << getSemanticHash(pa->body, context) << DEC;
         }
         virtual void WalkEnumeration ( int32_t & value, EnumInfo * info ) override {
             int64_t uvalue = uint64_t(value);
