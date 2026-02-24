@@ -692,6 +692,8 @@ include/daScript/misc/performance_time.h
 src/hal/debug_break.cpp
 src/hal/project_specific.cpp
 src/hal/project_specific_file_info.cpp
+src/hal/crash_handler.cpp
+include/daScript/misc/crash_handler.h
 include/daScript/misc/network.h
 src/misc/network.cpp
 src/simulate/hash.cpp
@@ -851,6 +853,9 @@ MACRO(SETUP_LIBDASCRIPT library shared_lib)
     ENDIF()
     IF(HAIKU)
         TARGET_LINK_LIBRARIES(${library} network uuid)
+    ENDIF()
+    IF(WIN32)
+        target_link_libraries(${library} dbghelp)
     ENDIF()
     SETUP_CPP11(${library})
     #target_precompile_headers(${library} PUBLIC include/daScript/misc/platform.h)

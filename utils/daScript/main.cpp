@@ -5,6 +5,7 @@
 #include "daScript/simulate/fs_file_info.h"
 #include "../dasFormatter/fmt.h"
 #include "daScript/ast/ast_aot_cpp.h"
+#include "daScript/misc/crash_handler.h"
 
 using namespace das;
 
@@ -532,6 +533,7 @@ namespace das {
 }
 
 int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
+    install_crash_handler();
     bool isArgAot = false;
     if (argc > 1) {
         isArgAot = strcmp(argv[1],"-aot")==0;

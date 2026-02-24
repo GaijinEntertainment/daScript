@@ -481,6 +481,8 @@ SET(SIMULATE_SRC
 ../src/hal/debug_break.cpp
 ../src/hal/project_specific.cpp
 ../src/hal/project_specific_file_info.cpp
+../src/hal/crash_handler.cpp
+../include/daScript/misc/crash_handler.h
 ../include/daScript/misc/network.h
 ../src/misc/network.cpp
 ../src/simulate/hash.cpp
