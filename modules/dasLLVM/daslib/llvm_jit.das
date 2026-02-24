@@ -3848,6 +3848,14 @@ class LlvmJitVisitor : AstVisitor {
             if (expr.arguments[0] is ExprField) {
                 var efield = expr.arguments[0] as ExprField
                 methodOffset = efield.field.offset
+            } elif (expr.arguments[0] is ExprRef2Value) {
+                var er2v = expr.arguments[0] as ExprRef2Value
+                if (er2v.subexpr is ExprField) {
+                    var efield = er2v.subexpr as ExprField
+                    methodOffset = efield.field.offset
+                } else {
+                    failed_E(expr, "method call expects field and got {describe(expr.arguments[0])}")
+                }
             } else {
                 failed_E(expr, "method call expects field and got {describe(expr.arguments[0])}")
             }
