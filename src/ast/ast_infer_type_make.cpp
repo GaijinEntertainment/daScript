@@ -1012,7 +1012,7 @@ namespace das {
                 ens->type->constant = true;
                 return ens;
             } else {
-                error("[[" + describeType(expr->makeType) + "() ]] enumeration is missing 0 value", "", "",
+                error("enumeration " + describeType(expr->type) + " is missing 0 value", "", "",
                       expr->at, CompilationError::invalid_type);
             }
         } else if (expr->type->isPointer()) {

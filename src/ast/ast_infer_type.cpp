@@ -740,13 +740,15 @@ namespace das {
         int64_t iou = getConstExprIntOrUInt(cfa.first);
         switch (expr->enumType->baseType) {
         case Type::tInt8:
-        case Type::tUInt8: {
+        case Type::tUInt8:
+        case Type::tBitfield8: {
             int8_t tv = int8_t(iou);
             memcpy(&envalue, &tv, sizeof(int8_t));
             break;
         }
         case Type::tInt16:
-        case Type::tUInt16: {
+        case Type::tUInt16:
+        case Type::tBitfield16: {
             int16_t tv = int16_t(iou);
             memcpy(&envalue, &tv, sizeof(int16_t));
             break;
@@ -759,7 +761,8 @@ namespace das {
             break;
         }
         case Type::tInt64:
-        case Type::tUInt64: {
+        case Type::tUInt64:
+        case Type::tBitfield64:{
             memcpy(&envalue, &iou, sizeof(int64_t));
             break;
         }

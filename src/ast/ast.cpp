@@ -188,7 +188,9 @@ namespace das {
 
     string Enumeration::find ( int64_t va, const string & def ) const {
         for ( const auto & it : list ) {
-            if ( it.value->rtti_isConstant() && getConstExprIntOrUInt(it.value)==va ) {
+            if (    it.value->rtti_isConstant()
+                &&  (!it.value->type || it.value->type->isInteger())
+                && getConstExprIntOrUInt(it.value)==va ) {
                 return it.name;
             }
         }
