@@ -6178,7 +6178,7 @@ yydestruct (const char *yymsg,
         break;
 
     case YYSYMBOL_enum_name: /* enum_name  */
-            { ((*yyvaluep).pEnum)->delRef(); }
+            { /* $$->delRef(); // if enum rule returns, module already has the link */ }
         break;
 
     case YYSYMBOL_optional_structure_parent: /* optional_structure_parent  */

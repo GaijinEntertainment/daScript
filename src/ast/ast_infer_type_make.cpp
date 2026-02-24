@@ -423,6 +423,15 @@ namespace das {
                 return Visitor::visit(expr);
             }
         }
+        if ( resT->isAuto() ) {
+            error("variant of undefined type " + describeType(expr->makeType), "", "",
+                  expr->at, CompilationError::type_not_found);
+            return Visitor::visit(expr);
+        } else if ( resT->isVoid() ) {
+            error("variant can't be void", "", "",
+                  expr->at, CompilationError::type_not_found);
+            return Visitor::visit(expr);
+        }
         uint32_t resDim = uint32_t(expr->variants.size());
         if (resDim == 0) {
             resT->dim.clear();
@@ -1003,7 +1012,7 @@ namespace das {
                 ens->type->constant = true;
                 return ens;
             } else {
-                error("[[" + describeType(expr->makeType) + "() ]] enumeration is missing 0 value", "", "",
+                error("enumeration " + describeType(expr->type) + " is missing 0 value", "", "",
                       expr->at, CompilationError::invalid_type);
             }
         } else if (expr->type->isPointer()) {
@@ -1026,7 +1035,7 @@ namespace das {
             expr->type->ref = true;
         }
         if (expr->type->isAutoOrAlias()) {
-            error("[[auto ]] needs to be fully inferred", "", "",
+            error("undefined type " + describeType(expr->type), "", "",
                   expr->at, CompilationError::invalid_type);
             return Visitor::visit(expr);
         } else if (expr->type->isClass() && !expr->usedInitializer && !safeExpression(expr)) {

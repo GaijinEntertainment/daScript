@@ -33,3 +33,6 @@ yzg.code-workspace
 
 examples/wip.das
 
+utils/dasFormatter/ds_parser.output
+src/parser/ds2_parser.output
+src/parser/ds_parser.output

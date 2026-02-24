@@ -253,13 +253,11 @@ SET(PARSER_GENERATED_SRC
 # parser 1
 ../src/parser/ds_parser.hpp
 ../src/parser/ds_parser.cpp
-../src/parser/ds_parser.output
 ../src/parser/ds_lexer.cpp
 ../src/parser/lex.yy.h
 # parser 2
 ../src/parser/ds2_parser.hpp
 ../src/parser/ds2_parser.cpp
-../src/parser/ds2_parser.output
 ../src/parser/ds2_lexer.cpp
 ../src/parser/lex2.yy.h
 )

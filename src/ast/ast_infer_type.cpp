@@ -73,8 +73,8 @@ namespace das {
     }
     TypeDeclPtr InferTypes::visitAlias(TypeDecl *td, const string &) {
         if (td->isAlias()) {
-            das_hash_set<string> visited;
-            visited.insert(saveAliasName);
+            vector<string> visited;
+            visited.push_back(saveAliasName);
             if ( isLoop(visited, td) ) {
                 fatalAliasLoop = true;
                 error("alias loop detected: '" + describeType(td) + "'", "", "",
@@ -483,8 +483,8 @@ namespace das {
         if (var->type->isVoid())
             error("global variable can't be declared void", "", "",
                   var->at, CompilationError::invalid_variable_type);
-        if (var->type->isHandle() && !var->type->annotation->isLocal())
-            error("can't have a global variable of handled type " + var->type->annotation->name, "", "",
+        if (!var->type->isLocal())
+            error("can't have a global variable of type " + describeType(var->type), "", "",
                   var->at, CompilationError::invalid_variable_type);
         if (!var->type->constant && var->global_shared)
             error("shared global variable must be constant", "", "",
@@ -740,13 +740,15 @@ namespace das {
         int64_t iou = getConstExprIntOrUInt(cfa.first);
         switch (expr->enumType->baseType) {
         case Type::tInt8:
-        case Type::tUInt8: {
+        case Type::tUInt8:
+        case Type::tBitfield8: {
             int8_t tv = int8_t(iou);
             memcpy(&envalue, &tv, sizeof(int8_t));
             break;
         }
         case Type::tInt16:
-        case Type::tUInt16: {
+        case Type::tUInt16:
+        case Type::tBitfield16: {
             int16_t tv = int16_t(iou);
             memcpy(&envalue, &tv, sizeof(int16_t));
             break;
@@ -759,7 +761,8 @@ namespace das {
             break;
         }
         case Type::tInt64:
-        case Type::tUInt64: {
+        case Type::tUInt64:
+        case Type::tBitfield64:{
             memcpy(&envalue, &iou, sizeof(int64_t));
             break;
         }
@@ -3978,11 +3981,11 @@ namespace das {
             }
             if (block->returnType && block->returnType->ref && !safeExpression(expr)) {
                 error("returning reference requires unsafe", "", "",
-                      func->result->at, CompilationError::invalid_return_type);
+                      expr->at, CompilationError::invalid_return_type);
             }
             if (block->returnType && block->returnType->isTemp() && !safeExpression(expr)) {
                 error("returning temporary value from block requires unsafe", "", "",
-                      func->result->at, CompilationError::invalid_return_type);
+                      expr->at, CompilationError::invalid_return_type);
             }
             if (strictSmartPointers && block->returnType && !expr->moveSemantics && !safeExpression(expr) && block->returnType->needInScope()) {
                 error("returning smart pointers without move semantics is unsafe", "use return <- instead", "",
