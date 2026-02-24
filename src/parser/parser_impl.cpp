@@ -1177,8 +1177,13 @@ namespace das {
         } else if ( pipeCall->rtti_isMakeStruct() ) {
             auto pMS = (ExprMakeStruct *) pipeCall;
             if ( pMS->block ) {
-                das_yyerror(scanner,"can't pipe into make " + pMS->type->describe() + ". it already has where closure",
-                    locAt,CompilationError::cant_pipe);
+                if ( pMS->type ) {
+                    das_yyerror(scanner,"can't pipe into make " + pMS->type->describe() + ". it already has where closure",
+                        locAt,CompilationError::cant_pipe);
+                } else {
+                    das_yyerror(scanner,"can't pipe into make struct. it already has where closure",
+                        locAt,CompilationError::cant_pipe);
+                }
                 delete arg;
             } else {
                 pMS->block = arg;
