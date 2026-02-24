@@ -6,7 +6,7 @@
 namespace das {
 
     inline bool saveToFile ( TextPrinter &tout, const string_view & fname, const string_view & str, bool quiet = false ) {
-        FILE * f = fopen ( fname.data(), "w" );
+        FILE * f = fopen ( fname.data(), "wb" );
         if ( !f ) {
             tout << "can't open " << fname.data() << "\n";
             return false;
