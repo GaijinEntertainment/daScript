@@ -3195,6 +3195,20 @@ namespace das {
                 reportAstChanged();
             }
             if (block->returnType) {
+                if (block->returnType->isAlias()) {
+                    if (auto aT = inferAlias(block->returnType)) {
+                        block->returnType = aT;
+                        block->returnType->sanitize();
+                        if (!block->returnType->ref && block->returnType->isWorkhorseType() && !block->returnType->isPointer()) {
+                            block->returnType->constant = true;
+                        }
+                        reportAstChanged();
+                    } else {
+                        error("undefined block result type '" + describeType(block->returnType) + "'",
+                            reportInferAliasErrors(block->returnType), "", block->at, CompilationError::type_not_found);
+                        return Visitor::visit(block);
+                    }
+                }
                 setBlockCopyMoveFlags(block);
                 verifyType(block->returnType);
             }

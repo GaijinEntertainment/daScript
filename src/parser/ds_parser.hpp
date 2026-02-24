@@ -328,6 +328,7 @@ union DAS_YYSTYPE
     AnnotationList *                faList;
     MakeStruct *                    pMakeStruct;
     Enumeration *                   pEnum;
+    Enumeration *                   pEnumList;
     Structure *                     pStructure;
     Function *                      pFuncDecl;
     CaptureEntry *                  pCapt;

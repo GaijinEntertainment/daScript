@@ -2105,7 +2105,7 @@ Nonterminals, with rules where they appear
     $@41 (401)
         on left: 661
         on right: 662
-    enum_list <pEnum> (402)
+    enum_list <pEnumList> (402)
         on left: 663 664 665 666
         on right: 664 665 666 683 686
     optional_public_or_private_alias <b> (403)

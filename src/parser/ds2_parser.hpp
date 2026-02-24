@@ -324,6 +324,7 @@ union DAS2_YYSTYPE
     AnnotationList *                faList;
     MakeStruct *                    pMakeStruct;
     Enumeration *                   pEnum;
+    Enumeration *                   pEnumList;
     EnumPair *                      pEnumPair;
     Structure *                     pStructure;
     Function *                      pFuncDecl;

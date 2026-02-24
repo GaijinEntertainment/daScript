@@ -412,6 +412,17 @@ namespace das {
         }
         // result type
         auto resT = make_smart<TypeDecl>(*expr->makeType);
+        if ( resT->isAlias() ) {
+            auto aT = inferAlias(resT);
+            if (aT) {
+                resT = aT;
+                reportAstChanged();
+            } else {
+                error("undefined variant type " + describeType(expr->makeType),
+                      reportInferAliasErrors(expr->makeType), "", expr->at, CompilationError::type_not_found);
+                return Visitor::visit(expr);
+            }
+        }
         uint32_t resDim = uint32_t(expr->variants.size());
         if (resDim == 0) {
             resT->dim.clear();
@@ -712,6 +723,7 @@ namespace das {
             } else {
                 error("undefined [[ ]] expression type " + describeType(expr->makeType),
                       reportInferAliasErrors(expr->makeType), "", expr->makeType->at, CompilationError::type_not_found);
+                return Visitor::visit(expr);
             }
         }
         auto isClassCtor = !expr->nativeClassInitializer &&
@@ -1050,6 +1062,11 @@ namespace das {
             return Visitor::visitMakeArrayIndex(expr, index, init, lastField);
         }
         if (expr->recordType && expr->recordType->baseType == Type::tTuple) {
+            if (expr->recordType->argTypes.size() <= index) {
+                error("tuple element _" + to_string(index) + " out of element range", "", "",
+                      init->at, CompilationError::invalid_type);
+                return Visitor::visitMakeArrayIndex(expr, index, init, lastField);
+            }
             if (!canCopyOrMoveType(expr->recordType->argTypes[index], init->type, TemporaryMatters::no, init,
                                    "can't initialize tuple element " + to_string(index), CompilationError::cant_copy, init->at)) {
             }
@@ -1081,8 +1098,9 @@ namespace das {
             }
             size_t argCount = expr->values.size();
             if (expr->recordType->argTypes.size() != argCount) {
-                error("expecting " + to_string(argCount) + " arguments in " + describeType(expr->recordType), "", "",
-                      expr->at, CompilationError::invalid_type);
+                error("declaring " + to_string(argCount) + " arguments in " + describeType(expr->recordType),
+                    "but it only has " + to_string(expr->recordType->argTypes.size()) + " elements", "",
+                        expr->at, CompilationError::invalid_type);
                 return Visitor::visit(expr);
             }
             auto mkt = make_smart<TypeDecl>(Type::tTuple);

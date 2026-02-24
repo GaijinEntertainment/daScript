@@ -2064,7 +2064,7 @@ Nonterminals, with rules where they appear
     commas (395)
         on left: 642 643
         on right: 643 646 660 737 738
-    enum_list <pEnum> (396)
+    enum_list <pEnumList> (396)
         on left: 644 645 646
         on right: 646 668
     optional_public_or_private_alias <b> (397)
