@@ -73,6 +73,14 @@ namespace das {
     }
     TypeDeclPtr InferTypes::visitAlias(TypeDecl *td, const string &) {
         if (td->isAlias()) {
+            das_hash_set<string> visited;
+            visited.insert(saveAliasName);
+            if ( isLoop(visited, td) ) {
+                fatalAliasLoop = true;
+                error("alias loop detected: '" + describeType(td) + "'", "", "",
+                      td->at, CompilationError::invalid_type);
+                return td;
+            }
             if (auto ta = inferAlias(td)) {
                 if (ta->isAutoOrAlias()) {
                     error("internal compiler error: can't be inferred: '" + describeType(td) + "'", "", "",
@@ -190,6 +198,7 @@ namespace das {
         return Visitor::visit(enu);
     }
     bool InferTypes::canVisitStructure(Structure *st) {
+        if ( fatalAliasLoop ) return false;
         return !st->isTemplate; // we don't do a thing with templates
     }
     void InferTypes::preVisit(Structure *that) {
@@ -507,6 +516,7 @@ namespace das {
         return Visitor::visitGlobalLet(var);
     }
     bool InferTypes::canVisitFunction(Function *fun) {
+        if ( fatalAliasLoop ) return false;
         if (fun->stub)
             return false;
         if (verbose || debugInferFlag) { // it can be fully inferred, and fail concept assert
