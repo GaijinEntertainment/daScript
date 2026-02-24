@@ -130,6 +130,7 @@
     AnnotationList *                faList;
     MakeStruct *                    pMakeStruct;
     Enumeration *                   pEnum;
+    Enumeration *                   pEnumList;
     Structure *                     pStructure;
     Function *                      pFuncDecl;
     CaptureEntry *                  pCapt;
@@ -152,7 +153,8 @@
 %destructor { delete $$; } <fa>
 %destructor { delete $$; } <faList>
 %destructor { delete $$; } <pMakeStruct>
-%destructor { if ( $$->use_count()==1 ) delete $$; } <pEnum>
+%destructor { $$->delRef(); } <pEnum>
+%destructor { delete $$; } <pEnumList>
 %destructor { delete $$; } <pCapt>
 %destructor { delete $$; } <pCaptList>
 %destructor { delete $$.firstType; delete $$.secondType; } <aTypePair>
@@ -455,7 +457,7 @@
 
 %type <i>               copy_or_move_or_clone
 
-%type <pEnum>           enum_list
+%type <pEnumList>       enum_list
 
 %type <pExpression>     expr
 %type <pExpression>     expr2

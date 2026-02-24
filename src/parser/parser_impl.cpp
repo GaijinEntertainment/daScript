@@ -490,6 +490,10 @@ namespace das {
     }
 
     void ast_enumDeclaration (  yyscan_t scanner, AnnotationList * annL, const LineInfo & atannL, bool pubE, Enumeration * pEnum, Enumeration * pE, Type ebt ) {
+        if ( !pEnum->module ) {
+            pEnum->delRef();
+            return;
+        }
         pEnum->baseType = ebt;
         pEnum->isPrivate = !pubE;
         pEnum->list = das::move(pE->list);
