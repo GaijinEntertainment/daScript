@@ -694,4 +694,5 @@ bool Module_UnitTest::appendCompiledFunctions() {
     return compileBuiltinModule("unit_test.das",unit_test_das, sizeof(unit_test_das));
 }
 
+REGISTER_DYN_MODULE(Module_UnitTest, Module_UnitTest);
 REGISTER_MODULE(Module_UnitTest);

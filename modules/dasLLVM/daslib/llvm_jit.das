@@ -1159,6 +1159,16 @@ class LlvmJitVisitor : AstVisitor {
                 var arg_cast_type = type_to_llvm_abi_type(a._type)
                 if (a._type.isRef) {
                     arg_val = LLVMBuildPointerCast(g_builder, arg_val, arg_cast_type, "call_arg_{ai}_cast")
+                } elif (need_z_or_s_ext(a._type) != null) {
+                    // types must be zero/sign-extended to i32 before
+                    // storing into the vec4f args slot to avoid garbage.
+                    // Garbage can lead to incorrect conversion to bool.
+                    if (a._type.isSignedInteger) {
+                        arg_val = LLVMBuildSExt(g_builder, arg_val, types.t_int32, "sext_{ai}")
+                    } else {
+                        arg_val = LLVMBuildZExt(g_builder, arg_val, types.t_int32, "zext_{ai}")
+                    }
+                    arg_cast_type = types.t_int32
                 }
                 LLVMBuildStore2(g_builder, types, arg_cast_type, arg_val, arg_ptr)
             }
@@ -3838,6 +3848,14 @@ class LlvmJitVisitor : AstVisitor {
             if (expr.arguments[0] is ExprField) {
                 var efield = expr.arguments[0] as ExprField
                 methodOffset = efield.field.offset
+            } elif (expr.arguments[0] is ExprRef2Value) {
+                var er2v = expr.arguments[0] as ExprRef2Value
+                if (er2v.subexpr is ExprField) {
+                    var efield = er2v.subexpr as ExprField
+                    methodOffset = efield.field.offset
+                } else {
+                    failed_E(expr, "method call expects field and got {describe(expr.arguments[0])}")
+                }
             } else {
                 failed_E(expr, "method call expects field and got {describe(expr.arguments[0])}")
             }

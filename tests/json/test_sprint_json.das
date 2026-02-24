@@ -521,23 +521,6 @@ def test_combined_annotations(t : T?) {
     }
 }
 
-// ============================================================
-//  JIT bug: sprint_json(struct, false) ignores compact mode
-// ============================================================
-// BUG: Under JIT (daslang -jit), sprint_json(struct, false) produces
-// pretty-printed JSON (with newlines and indentation) instead of compact
-// JSON for certain struct layouts.  Observed with CombinedAnnotations
-// (which has @rename, @optional, @enum_as_int, @embed, and @unescape
-// fields), but simpler structs like SimpleStruct or EmbedFields are
-// not affected.
-//
-// The humanReadable bool parameter appears to be mishandled by JIT for
-// the C++ sprint_json builtin when called with annotated structs.
-//
-// When this bug is fixed on the JIT side, this test should start passing
-// and can be changed from success("...") to an actual assertion.
-// ============================================================
-
 [test]
 def test_sprint_jit_compact_bug(t : T?) {
     t |> run("compact mode should not contain newlines") @(t : T?) {
@@ -549,11 +532,6 @@ def test_sprint_jit_compact_bug(t : T?) {
         )
         let json = sprint_json(s, false)
         let has_newlines = find(json, "\n") >= 0
-        // When the JIT bug is fixed, change this to:
-        //   t |> equal(has_newlines, false)
-        if (has_newlines) {
-            print("  [KNOWN JIT BUG] sprint_json(CombinedAnnotations, false) produced pretty output\n")
-        }
-        t |> success(true)
+        t |> equal(has_newlines, false)
     }
 }
