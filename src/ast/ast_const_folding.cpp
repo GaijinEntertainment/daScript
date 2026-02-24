@@ -368,7 +368,10 @@ namespace das {
         bool failed;
         vec4f value = eval(expr, failed);
         if ( !failed ) {
-            auto pTypeInfo = helper.makeTypeInfo(nullptr,expr->type);
+            auto b4ref = expr->type->ref;
+            expr->type->ref = false;
+            TypeInfo * pTypeInfo = helper.makeTypeInfo(nullptr,expr->type);
+            expr->type->ref = b4ref;
             auto res = debug_value(value, pTypeInfo, PrintFlags::string_builder);
             auto sim = make_smart<ExprConstString>(expr->at, res);
             sim->type = make_smart<TypeDecl>(Type::tString);
