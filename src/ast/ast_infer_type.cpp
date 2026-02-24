@@ -574,7 +574,12 @@ namespace das {
             }
         }
     }
+    void InferTypes::preVisitArgumentInit(Function *f, const VariablePtr &arg, Expression *that) {
+        Visitor::preVisitArgumentInit(f, arg, that);
+        inArgumentInit = true;
+    }
     ExpressionPtr InferTypes::visitArgumentInit(Function *f, const VariablePtr &arg, Expression *that) {
+        inArgumentInit = false;
         if (arg->type->isAuto() && arg->init->type) {
             auto varT = TypeDecl::inferGenericType(arg->type, arg->init->type, false, false, nullptr);
             if (!varT) {

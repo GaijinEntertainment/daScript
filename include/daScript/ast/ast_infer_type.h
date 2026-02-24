@@ -80,6 +80,7 @@ namespace das {
         TextWriter *logs = nullptr;
         int32_t consumeDepth = 0;
         bool   fatalAliasLoop = false;
+        bool   inArgumentInit = false;
 
     public:
         vector<FunctionPtr> extraFunctions;
@@ -278,6 +279,7 @@ namespace das {
         virtual bool canVisitFunction(Function *fun) override;
         virtual void preVisit(Function *f) override;
         virtual void preVisitArgument(Function *fn, const VariablePtr &var, bool lastArg) override;
+        virtual void preVisitArgumentInit(Function *f, const VariablePtr &arg, Expression *that) override;
         virtual ExpressionPtr visitArgumentInit(Function *f, const VariablePtr &arg, Expression *that) override;
         virtual VariablePtr visitArgument(Function *fn, const VariablePtr &var, bool lastArg) override;
         virtual FunctionPtr visit(Function *that) override;
