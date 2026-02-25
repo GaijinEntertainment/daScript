@@ -737,7 +737,11 @@ namespace das {
             return v_zero();
         }
         vec4f envalue = v_zero();
-        int64_t iou = getConstExprIntOrUInt(cfa.first);
+        auto eva = tryGetConstExprIntOrUInt(cfa.first);
+        if ( !eva.second ) {
+            return v_zero();
+        }
+        int64_t iou = eva.first;
         switch (expr->enumType->baseType) {
         case Type::tInt8:
         case Type::tUInt8:
