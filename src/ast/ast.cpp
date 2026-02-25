@@ -187,10 +187,12 @@ namespace das {
     }
 
     string Enumeration::find ( int64_t va, const string & def ) const {
+        auto vaRef = pair(va,true);
         for ( const auto & it : list ) {
-            if (    it.value->rtti_isConstant()
+            if (    it.value
+                &&  it.value->rtti_isConstant()
                 &&  (!it.value->type || it.value->type->isInteger())
-                && getConstExprIntOrUInt(it.value)==va ) {
+                && tryGetConstExprIntOrUInt(it.value)==vaRef ) {
                 return it.name;
             }
         }
@@ -3068,29 +3070,33 @@ namespace das {
         return res;
     }
 
-    int64_t getConstExprIntOrUInt ( const ExpressionPtr & expr ) {
+    pair<int64_t,bool> tryGetConstExprIntOrUInt ( const ExpressionPtr & expr ) {
         DAS_ASSERTF ( expr && expr->rtti_isConstant(),
                      "expecting constant. something in enumeration (or otherwise) did not fold.");
         auto econst = static_pointer_cast<ExprConst>(expr);
         switch (econst->baseType) {
-        case Type::tInt8:       return static_pointer_cast<ExprConstInt8>(expr)->getValue();
-        case Type::tUInt8:      return static_pointer_cast<ExprConstUInt8>(expr)->getValue();
-        case Type::tInt16:      return static_pointer_cast<ExprConstInt16>(expr)->getValue();
-        case Type::tUInt16:     return static_pointer_cast<ExprConstUInt16>(expr)->getValue();
-        case Type::tInt:        return static_pointer_cast<ExprConstInt>(expr)->getValue();
-        case Type::tUInt:       return static_pointer_cast<ExprConstUInt>(expr)->getValue();
-        case Type::tBitfield:   return static_pointer_cast<ExprConstBitfield>(expr)->getValue();
-        case Type::tBitfield8:  return static_pointer_cast<ExprConstBitfield>(expr)->getValue();
-        case Type::tBitfield16: return static_pointer_cast<ExprConstBitfield>(expr)->getValue();
-        case Type::tBitfield64: return static_pointer_cast<ExprConstBitfield>(expr)->getValue();
-        case Type::tInt64:      return static_pointer_cast<ExprConstInt64>(expr)->getValue();
-        case Type::tUInt64:     return static_pointer_cast<ExprConstUInt64>(expr)->getValue();
-        default:
-            DAS_ASSERTF ( 0,
-                "we should not even be here. there is an enumeration of unsupported type."
-                "something in enumeration (or otherwise) did not fold.");
-            return 0;
+        case Type::tInt8:       return make_pair(static_pointer_cast<ExprConstInt8>(expr)->getValue(), true);
+        case Type::tUInt8:      return make_pair(static_pointer_cast<ExprConstUInt8>(expr)->getValue(), true);
+        case Type::tInt16:      return make_pair(static_pointer_cast<ExprConstInt16>(expr)->getValue(), true);
+        case Type::tUInt16:     return make_pair(static_pointer_cast<ExprConstUInt16>(expr)->getValue(), true);
+        case Type::tInt:        return make_pair(static_pointer_cast<ExprConstInt>(expr)->getValue(), true);
+        case Type::tUInt:       return make_pair(static_pointer_cast<ExprConstUInt>(expr)->getValue(), true);
+        case Type::tBitfield:   return make_pair(static_pointer_cast<ExprConstBitfield>(expr)->getValue(), true);
+        case Type::tBitfield8:  return make_pair(static_pointer_cast<ExprConstBitfield>(expr)->getValue(), true);
+        case Type::tBitfield16: return make_pair(static_pointer_cast<ExprConstBitfield>(expr)->getValue(), true);
+        case Type::tBitfield64: return make_pair(static_pointer_cast<ExprConstBitfield>(expr)->getValue(), true);
+        case Type::tInt64:      return make_pair(static_pointer_cast<ExprConstInt64>(expr)->getValue(), true);
+        case Type::tUInt64:     return make_pair(static_pointer_cast<ExprConstUInt64>(expr)->getValue(), true);
+        default:                return make_pair(0, false);
         }
+    }
+
+    int64_t getConstExprIntOrUInt ( const ExpressionPtr & expr ) {
+        auto result = tryGetConstExprIntOrUInt(expr);
+        DAS_ASSERTF ( result.second,
+            "we should not even be here. there is an enumeration of unsupported type."
+            "something in enumeration (or otherwise) did not fold.");
+        return result.second ? result.first : 0;
     }
 
     ExpressionPtr Program::makeConst ( const LineInfo & at, const TypeDeclPtr & type, vec4f value ) {

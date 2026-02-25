@@ -975,6 +975,8 @@ namespace das {
             expr->makeType->ref = false;
             reportAstChanged();
         }
+        // if unresolved - but we still return.  cause sometimes we pass [], and then we want it resolved
+        bool isAutoOrAlias = expr->makeType->isAutoOrAlias();
         // result type
         auto resT = make_smart<TypeDecl>(*expr->makeType);
         uint32_t resDim = uint32_t(expr->structs.size());
@@ -1016,15 +1018,17 @@ namespace das {
                       expr->at, CompilationError::invalid_type);
             }
         } else if (expr->type->isPointer()) {
-            expr->type->ref = false;
-            reportAstChanged();
-            auto ews = make_smart<ExprConstPtr>(expr->at);
-            ews->type = make_smart<TypeDecl>(*expr->type);
-            ews->isSmartPtr = expr->type->smartPtr;
-            if (expr->type->firstType) {
-                ews->ptrType = make_smart<TypeDecl>(*expr->type->firstType);
+            if ( !isAutoOrAlias ) {
+                expr->type->ref = false;
+                reportAstChanged();
+                auto ews = make_smart<ExprConstPtr>(expr->at);
+                ews->type = make_smart<TypeDecl>(*expr->type);
+                ews->isSmartPtr = expr->type->smartPtr;
+                if (expr->type->firstType) {
+                    ews->ptrType = make_smart<TypeDecl>(*expr->type->firstType);
+                }
+                return ews;
             }
-            return ews;
         } else if (expr->type->isWorkhorseType()) {
             expr->type->ref = false;
             reportAstChanged();
@@ -1034,8 +1038,8 @@ namespace das {
         } else if (!expr->type->isRefType()) {
             expr->type->ref = true;
         }
-        if (expr->type->isAutoOrAlias()) {
-            error("undefined type " + describeType(expr->type), "", "",
+        if (isAutoOrAlias) {
+            error("undefined structure type " + describeType(expr->type), "", "",
                   expr->at, CompilationError::invalid_type);
             return Visitor::visit(expr);
         } else if (expr->type->isClass() && !expr->usedInitializer && !safeExpression(expr)) {
