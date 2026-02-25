@@ -793,6 +793,7 @@ namespace das
     };
 
     int64_t getConstExprIntOrUInt ( const ExpressionPtr & expr );
+    pair<int64_t,bool> tryGetConstExprIntOrUInt ( const ExpressionPtr & expr );
 
     struct DAS_API ExprConstUInt2 : ExprConstT<uint2,ExprConstUInt2> {
         ExprConstUInt2(uint2 i = uint2())
