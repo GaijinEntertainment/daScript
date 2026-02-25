@@ -27,7 +27,6 @@ option(DAS_SQLITE_DISABLED "Disable dasSQLITE (sqlite3 library)" ON)
 option(DAS_TELEGRAM_DISABLED "Disable dasTelegram (Telegram API bindings)" ON)
 option(DAS_TOOLS_DISABLED "Disable dasTools" OFF)
 option(DAS_AOT_EXAMPLES_DISABLED "Disable dasAOT examples" OFF)
-option(DAS_PROFILE_DISABLED "Disable dasProfile" OFF)
 option(DAS_TUTORIAL_DISABLED "Disable dasTutorial" OFF)
 option(DAS_TESTS_DISABLED "Disable dasTests" OFF)
 set(DAS_INSTALL_BINDIR bin CACHE STRING "Directory where to install binaries")
@@ -914,12 +913,6 @@ SET(DAS_DASCRIPT_MAIN_SRC
 # Tests
 if (NOT ${DAS_TESTS_DISABLED})
     include(examples/pathTracer/CMakeLists.txt)
-endif()
-
-# Profile module
-
-if (NOT ${DAS_PROFILE_DISABLED})
-    include(examples/profile/CMakeLists.txt)
 endif()
 
 if (NOT ${DAS_TUTORIAL_DISABLED})

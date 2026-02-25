@@ -1,1 +1,0 @@
-duktape 2.3.0 built as-is with MSVC2015.3 x64 "/Ox /Oy /MT /Oi /DNDEBUG "
