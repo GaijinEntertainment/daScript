@@ -14,7 +14,6 @@ options_table = {
     "dasLLVM":        "DAS_LLVM_DISABLED",
     "dasMinfft":      "DAS_MINFFT_DISABLED",
     "dasOpenGL":      "",
-    "dasQuirrel":     "DAS_QUIRREL_DISABLED",
     "dasAudio":       "DAS_AUDIO_DISABLED",
     "dasStbImage":    "DAS_STBIMAGE_DISABLED",
     "dasStbTrueType": "DAS_STBTRUETYPE_DISABLED",
