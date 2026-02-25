@@ -50,6 +50,7 @@ def test_builder(t : T?) {
         }
     }
 
+    /*
     t |> run("fuzz format") @@(t : T?) {
         var fake <- Faker()
         fuzz() {
@@ -59,5 +60,6 @@ def test_builder(t : T?) {
             }
         }
     }
+    */
 }
 

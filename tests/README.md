@@ -566,7 +566,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | delete_strings_persistent.das | Same as delete_strings but with persistent_heap option | |
 | strings_as_array.das | peek_data, modify_data — string as uint8 array | |
 | strings_boost_split_and_join.das | split, join, and related boost functions with fuzzing | |
-| strings_builder.das | String builder — write, write_char with fuzzing | |
+| strings_builder.das | String builder — write, write_char, write_escape_string with fuzzing (format fuzz disabled) | |
 | strings_charset.das | Charset operations — is_char_in_set, set_total, set_element | |
 | strings_convert.das | Numeric string conversions — int, float, out-of-range, errors | |
 | strings_distance.das | levenshtein_distance with fuzzing | |
