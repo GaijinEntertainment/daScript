@@ -1185,6 +1185,10 @@ namespace das {
                         locAt,CompilationError::cant_pipe);
                 }
                 delete arg;
+            } else if ( !arg->rtti_isMakeBlock() ) {
+                das_yyerror(scanner,"can't pipe into make struct. argument must be a block",
+                    locAt,CompilationError::cant_pipe);
+                delete arg;
             } else {
                 pMS->block = arg;
             }
