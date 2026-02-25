@@ -737,7 +737,11 @@ namespace das {
             return v_zero();
         }
         vec4f envalue = v_zero();
-        int64_t iou = getConstExprIntOrUInt(cfa.first);
+        auto eva = tryGetConstExprIntOrUInt(cfa.first);
+        if ( !eva.second ) {
+            return v_zero();
+        }
+        int64_t iou = eva.first;
         switch (expr->enumType->baseType) {
         case Type::tInt8:
         case Type::tUInt8:
@@ -5017,6 +5021,10 @@ namespace das {
                     }
                 } else if (func && func->isClassMethod && !func->isStaticClassMethod) { // if its a class method with 'self'
                     auto selfStruct = func->arguments[0]->type->structType;
+                    if (!selfStruct) {
+                        reportMissing(expr, nonNamedTypes, "no matching functions or generics: ", true);
+                        return Visitor::visit(expr);
+                    }
                     vector<TypeDeclPtr> nonNamedArgumentTypes;
                     for (auto &arg : expr->nonNamedArguments) {
                         nonNamedArgumentTypes.push_back(arg->type);
@@ -5047,6 +5055,10 @@ namespace das {
                     reportExcess(expr, nonNamedTypes, "too many matching functions or generics: ", functions, generics);
                     return Visitor::visit(expr);
                 }
+            }
+            if ( inArgumentInit && func==fun ) {
+                error("recursive call to " + func->name + " in argument initializer is not allowed", "", "",expr->at);
+                return Visitor::visit(expr);
             }
             reportAstChanged();
             return demoteCall(expr, fun);

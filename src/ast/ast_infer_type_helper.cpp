@@ -272,7 +272,7 @@ namespace das {
         if (rT)
             return rT;
         TypeDeclPtr mtd = program->makeTypeDeclaration(LineInfo(), name);
-        return mtd->isAlias() ? nullptr : mtd;
+        return (!mtd || mtd->isAlias()) ? nullptr : mtd;
     }
     TypeDeclPtr InferTypes::findAlias(const string &name) const {
         if (func) {
