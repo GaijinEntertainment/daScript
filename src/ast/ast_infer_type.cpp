@@ -3979,7 +3979,7 @@ namespace das {
                 TypeDecl::clone(block->returnType, block->type);
                 setBlockCopyMoveFlags(block);
             }
-            if (block->moveOnReturn && !expr->moveSemantics) {
+            if (block->moveOnReturn && !expr->moveSemantics && expr->subexpr) {
                 string details, suggestions;
                 getDetailsAndSuggests(expr, details, suggestions);
                 error(details + ": " + describeType(block->type), "", suggestions,
