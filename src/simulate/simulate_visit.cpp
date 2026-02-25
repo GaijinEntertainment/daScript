@@ -286,6 +286,16 @@ namespace das {
         V_END();
     }
 
+    SimNode * SimNode_Swizzle64::visit ( SimVisitor & vis ) {
+        const char * xyzw = "xyzw";
+        char swizzle[5] = { xyzw[fields[0]], xyzw[fields[1]], 0 };
+        V_BEGIN();
+        V_OP(Swizzle64);
+        V_SUB(value);
+        V_ARG(swizzle);
+        V_END();
+    }
+
     SimNode * SimNode_FieldDeref::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(FieldDeref);
