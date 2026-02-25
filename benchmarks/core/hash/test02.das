@@ -1,6 +1,11 @@
 options gen2
 options persistent_heap
 
+// Benchmark: sequential insert + read of 600K integer keys.
+// Compares builtin table, cuckoo hash map (with default and inline hash),
+// and flat hash map (with default, inline, and identity hash).
+// Ported from examples/profile/hash_test/test02.das.
+
 require dastest/testing_boost
 
 require daslib/flat_hash_table
