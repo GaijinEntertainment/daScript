@@ -4841,6 +4841,24 @@ class LlvmJitVisitor : AstVisitor {
             }
         }
 
+        // Make move (and copy), before finalize.
+        // So finalize won't have access to returned value.
+        if (isCmres) {
+            assert(!returnType.isVoid)
+            if (!expr.returnFlags.returnCMRES) {
+                if (any_afb) {
+                    var subPtrType = LLVMPointerType(type_to_llvm_type(returnType), 0u)
+                    var temp_load = LLVMBuildLoad2(g_builder, subPtrType, getE(expr.subexpr), "return_cmres_temp_load_")
+                    setE(expr.subexpr, temp_load)
+                }
+                if (expr.returnFlags.moveSemantics) {
+                    build_move(get_cmres_param(), expr.subexpr, true)
+                } else {
+                    build_copy(get_cmres_param(), expr.subexpr)
+                }
+            }
+        }
+
         call_all_finally_blocks("return", false)
         build_exit(expr.at)
 
@@ -4850,22 +4868,10 @@ class LlvmJitVisitor : AstVisitor {
 
         build_epilogue()
 
-        if (!returnType.isVoid) {
-            if (isCmres) {
-                if (!expr.returnFlags.returnCMRES) {
-                    if (isCmres && any_afb) {
-                        var subPtrType = LLVMPointerType(type_to_llvm_type(returnType), 0u)
-                        var temp_load = LLVMBuildLoad2(g_builder, subPtrType, getE(expr.subexpr), "return_cmres_temp_load_")
-                        setE(expr.subexpr, temp_load)
-                    }
-                    if (expr.returnFlags.moveSemantics) {
-                        build_move(get_cmres_param(), expr.subexpr, true)
-                    } else {
-                        build_copy(get_cmres_param(), expr.subexpr)
-                    }
-                }
-                LLVMBuildRetVoid(g_builder)
-            } elif (returnType.isPointer && (expr.subexpr is ExprConstPtr)) {// return null
+        if (returnType.isVoid || isCmres) {
+            LLVMBuildRetVoid(g_builder)
+        } else {
+            if (returnType.isPointer && (expr.subexpr is ExprConstPtr)) {// return null
                 LLVMBuildRet(g_builder, LLVMConstPointerNull(type_to_llvm_abi_type(returnType)))
             } elif (returnType.isPointer) {
                 LLVMBuildRet(g_builder, expr_res)
@@ -4874,8 +4880,6 @@ class LlvmJitVisitor : AstVisitor {
             } else {
                 LLVMBuildRet(g_builder, expr_res)
             }
-        } else {
-            LLVMBuildRetVoid(g_builder)
         }
     }
 
