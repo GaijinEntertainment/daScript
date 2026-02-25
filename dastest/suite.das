@@ -237,6 +237,9 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
                     if (mod != null && context != null) {
                         let module_result = test_module(*mod, *context, ctx, file_ctx)
                         if (module_result.failed + module_result.errors == 0) {
+                            unsafe {
+                                file_ctx.context = addr(*context)
+                            }
                             run_queued_benchmarks(ctx, file_ctx, res)
                         }
                         res += module_result
@@ -495,6 +498,87 @@ def private run_queued_benchmarks(var suite_ctx : SuiteCtx; var file_ctx : FileC
     }
 }
 
+[export]
+def private bench_on_start_impl(var suite_ctx : SuiteCtx; var benchmarking : B?; var file_ctx : FileCtx; func_type, name, sub_name : string) {
+    let is_first_bench = !benchmarking.started
+    benchmarking.started = true
+    benchmarking.current_sub_name = sub_name
+
+    if (suite_ctx.bench_format == BenchmarkOutputFormat.native) {
+        if (is_first_bench) {
+            log::info("{file_ctx.indenting}=== RUN BENCHMARK '{benchmarking.name}' [{blue_str(func_type)}]")
+        }
+        let full_name = "\t{sub_name}"
+        let padded_name = pad_right(full_name, 22, ' ')
+        info_raw("{file_ctx.indenting}{padded_name} ")
+        return
+    }
+
+    if (suite_ctx.bench_format == BenchmarkOutputFormat.go_export) {
+        var go_name = name
+        if (starts_with(name, "benchmark_")) {
+            go_name = slice(name, length("benchmark_"))
+        }
+        info_raw("BenchmarkDas_{go_name}/sub={sub_name}-1\t\t")
+        return
+    }
+}
+
+[export]
+def private bench_on_finished_impl(var suite_ctx : SuiteCtx; var benchmarking : B?; stats : BenchmarkRunStats) {
+    let n = stats.n
+    let time_ns = stats.time_ns
+    let allocs = stats.allocs
+    let heap_bytes = stats.heap_bytes
+
+    benchmarking.finished = true
+
+    let avg_time = double(time_ns) / double(n)
+    let avg_heap_bytes = double(ceil(float(heap_bytes) / float(n)))
+    let avg_num_allocs = double(ceil(float(allocs) / float(n)))
+    let avg_string_heap_bytes = double(ceil(float(stats.string_heap_bytes) / float(n)))
+    let avg_string_num_allocs = double(ceil(float(stats.string_allocs) / float(n)))
+
+    if (suite_ctx.bench_format == BenchmarkOutputFormat.native) {
+        let entries = [
+            (int64(avg_time), "ns/op", 18, false),
+            (int64(avg_heap_bytes), "B/op", 14, true),
+            (int64(avg_num_allocs), "allocs/op", 16, true),
+            (int64(avg_string_heap_bytes), "SB/op", 14, true),
+            (int64(avg_string_num_allocs), "strings/op", 16, true),
+        ]
+        let msg = build_string() $(var w) {
+            for (i, (val, measure, width, is_alloc) in range(length(entries)), entries) {
+                let val_s = "{val}"
+                let printed_width = length(val_s + " " + measure)
+                let sep = repeat(" ", max(width - printed_width, 1))
+                let is_last = i == length(entries) - 1
+                var colored_val = yellow_str(val_s)
+                if (is_alloc && val == 0l) {
+                    colored_val = green_str(val_s)
+                }
+                w |> write(colored_val + " " + measure)
+                if (!is_last) {
+                    w |> write(sep)
+                }
+            }
+        }
+        info_raw("{msg}\n")
+        return
+    }
+
+    if (suite_ctx.bench_format == BenchmarkOutputFormat.go_export) {
+        info_raw("{n}\t\t{avg_time:.1f} ns/op\t{avg_heap_bytes} B/op\t{avg_num_allocs} allocs/op\t{avg_string_heap_bytes} SB/op\t{avg_string_num_allocs} strings/op\n")
+        return
+    }
+
+    if (suite_ctx.bench_format == BenchmarkOutputFormat.json) {
+        var s = sprint_json(stats, false)
+        info_raw("{s}\n")
+        return
+    }
+}
+
 def private run_benchmark(var suite_ctx : SuiteCtx; var file_ctx : FileCtx; var res : SuiteResult&; name : string; func : function<(b : B?) : void>) {
     var benchmarking = new B(name = name)
 
@@ -509,106 +593,30 @@ def private run_benchmark(var suite_ctx : SuiteCtx; var file_ctx : FileCtx; var 
     }
 
     try {
-        unsafe { // needed to capture &benchmarking &file_ctx
+        unsafe {
+            var selfCtx & = this_context()
+
             benchmarking.on_fail <- @ capture(& benchmarking, & deliberateRecover) (now : bool) {
                 deliberateRecover = now
                 benchmarking.failed = true
             }
 
-            benchmarking.on_start <- @capture(& suite_ctx, & benchmarking, & file_ctx) (sub_name : string) {
-                let is_first_bench = !benchmarking.started
-                benchmarking.started = true
-                benchmarking.current_sub_name = sub_name
-
-                if (suite_ctx.bench_format == BenchmarkOutputFormat.native) {
-                    if (is_first_bench) {
-                        log::info("{file_ctx.indenting}=== RUN BENCHMARK '{benchmarking.name}' [{blue_str(func_type)}]")
-                    }
-                    let full_name = "\t{sub_name}"
-                    let padded_name = pad_right(full_name, 22, ' ')
-                    info_raw("{file_ctx.indenting}{padded_name} ")
-                    return
-                }
-
-                if (suite_ctx.bench_format == BenchmarkOutputFormat.go_export) {
-                    // This output format follows the https://golang.org/design/14313-benchmark-format
-                    // to allow 3rd-party tool usage.
-                    // One of such tools is https://pkg.go.dev/golang.org/x/perf/cmd/benchstat
-                    // The format requires a name like "^Benchmark[A-Z].*",
-                    // hence the somewhat artificial Das injection.
-                    var go_name = name
-                    if (starts_with(name, "benchmark_")) {
-                        // Avoid stutter.
-                        go_name = slice(name, length("benchmark_"))
-                    }
-                    info_raw("BenchmarkDas_{go_name}/sub={sub_name}-1\t\t")
-                    return
-                }
-
-                if (suite_ctx.bench_format == BenchmarkOutputFormat.go_export) {
-                    // Print the whole row once it's ready.
-                    // This format is not intended for interactive use.
-                    return
+            benchmarking.on_start <- @capture(& selfCtx, & suite_ctx, & benchmarking, & file_ctx) (sub_name : string) {
+                unsafe {
+                    selfCtx |> invoke_in_context("bench_on_start_impl", suite_ctx, benchmarking, file_ctx, func_type, name, sub_name)
                 }
             }
 
-            benchmarking.on_finished <- @capture(& suite_ctx, & benchmarking) (stats : BenchmarkRunStats) {
-                let n = stats.n
-                let time_ns = stats.time_ns
-                let allocs = stats.allocs
-                let heap_bytes = stats.heap_bytes
-
-                benchmarking.finished = true
-
-                // TODO(quasilyte): don't cast to float when ceil can work on doubles.
-                let avg_time = double(time_ns) / double(n)
-                let avg_heap_bytes = double(ceil(float(heap_bytes) / float(n)))
-                let avg_num_allocs = double(ceil(float(allocs) / float(n)))
-                let avg_string_heap_bytes = double(ceil(float(stats.string_heap_bytes) / float(n)))
-                let avg_string_num_allocs = double(ceil(float(stats.string_allocs) / float(n)))
-
-                if (suite_ctx.bench_format == BenchmarkOutputFormat.native) {
-                    let entries = [
-                        (int64(avg_time), "ns/op", 18, false),
-                        (int64(avg_heap_bytes), "B/op", 14, true),
-                        (int64(avg_num_allocs), "allocs/op", 16, true),
-                        (int64(avg_string_heap_bytes), "SB/op", 14, true),
-                        (int64(avg_string_num_allocs), "strings/op", 16, true),
-                    ]
-                    let msg = build_string() $(var w) {
-                        for (i, (val, measure, width, is_alloc) in range(length(entries)), entries) {
-                            let val_s = "{val}"
-                            let printed_width = length(val_s + " " + measure)
-                            let sep = repeat(" ", max(width - printed_width, 1))
-                            let is_last = i == length(entries) - 1
-                            var colored_val = yellow_str(val_s)
-                            if (is_alloc && val == 0l) {
-                                colored_val = green_str(val_s)
-                            }
-                            w |> write(colored_val + " " + measure)
-                            if (!is_last) {
-                                w |> write(sep)
-                            }
-                        }
-                    }
-                    info_raw("{msg}\n")
-                    return
-                }
-
-                if (suite_ctx.bench_format == BenchmarkOutputFormat.go_export) {
-                    info_raw("{n}\t\t{avg_time:.1f} ns/op\t{avg_heap_bytes} B/op\t{avg_num_allocs} allocs/op\t{avg_string_heap_bytes} SB/op\t{avg_string_num_allocs} strings/op\n")
-                    return
-                }
-
-                if (suite_ctx.bench_format == BenchmarkOutputFormat.json) {
-                    var s = sprint_json(stats, false)
-                    info_raw("{s}\n")
-                    return
+            benchmarking.on_finished <- @capture(& selfCtx, & suite_ctx, & benchmarking) (stats : BenchmarkRunStats) {
+                unsafe {
+                    selfCtx |> invoke_in_context("bench_on_finished_impl", suite_ctx, benchmarking, stats)
                 }
             }
         }
 
-        invoke(func, benchmarking)
+        unsafe {
+            *file_ctx.context |> invoke_in_context(func, benchmarking)
+        }
     } recover {
         benchmarking.failed = true
     }

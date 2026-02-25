@@ -21,3 +21,14 @@ Every `.das` benchmark file in this directory tree is listed below, grouped by s
 | `test10.das` | Pure insert of 1M unique random numbers — insert-only (no read, no clear) |
 | `test11.das` | SlotMap adapter insert of 1M random numbers — monotonic uint64 IDs, entity allocation pattern |
 | `test12.das` | Pathological key distribution — 8K sequential + random keys (100K total) with deliberately bad hash |
+
+## core/bool_array/
+
+| File | Description |
+|---|---|
+| `test01.das` | Push 1M alternating true/false — BoolArray vs array&lt;bool&gt; append performance |
+| `test02.das` | Index access — count trues via a[i] in 1M elements — BoolArray vs array&lt;bool&gt; |
+| `test03.das` | Iteration access — count trues via `for (e in a)` in 1M elements — BoolArray vs array&lt;bool&gt; |
+| `test04.das` | Compound XOR (^^=) bit flip on 1M elements — BoolArray compound vs simple vs array&lt;bool&gt; |
+| `test05.das` | Insert at index 0 — push 10K values at front — BoolArray vs array&lt;bool&gt; |
+| `test06.das` | Erase at index 0 — erase 10K values from front — BoolArray vs array&lt;bool&gt; |
