@@ -292,34 +292,54 @@ namespace das {
     }
 
     bool Structure::canCopy(bool tempMatters) const {
+        if ( circularGuard ) return true;
+        circularGuard = true;
         for ( const auto & fd : fields ) {
-            if ( !fd.type->canCopy(tempMatters) )
+            if ( !fd.type->canCopy(tempMatters) ) {
+                circularGuard = false;
                 return false;
+            }
         }
+        circularGuard = false;
         return true;
     }
 
     bool Structure::canMove() const {
+        if ( circularGuard ) return true;
+        circularGuard = true;
         for ( const auto & fd : fields ) {
-            if ( !fd.type->canMove() )
+            if ( !fd.type->canMove() ) {
+                circularGuard = false;
                 return false;
+            }
         }
+        circularGuard = false;
         return true;
     }
 
     bool Structure::canCloneFromConst() const {
+        if ( circularGuard ) return true;
+        circularGuard = true;
         for ( const auto & fd : fields ) {
-            if ( !fd.type->canCloneFromConst() )
+            if ( !fd.type->canCloneFromConst() ) {
+                circularGuard = false;
                 return false;
+            }
         }
+        circularGuard = false;
         return true;
     }
 
     bool Structure::canClone() const {
+        if ( circularGuard ) return true;
+        circularGuard = true;
         for ( const auto & fd : fields ) {
-            if ( !fd.type->canClone() )
+            if ( !fd.type->canClone() ) {
+                circularGuard = false;
                 return false;
+            }
         }
+        circularGuard = false;
         return true;
     }
 
