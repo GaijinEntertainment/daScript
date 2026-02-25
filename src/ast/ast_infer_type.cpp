@@ -5052,6 +5052,10 @@ namespace das {
                     return Visitor::visit(expr);
                 }
             }
+            if ( inArgumentInit && func==fun ) {
+                error("recursive call to " + func->name + " in argument initializer is not allowed", "", "",expr->at);
+                return Visitor::visit(expr);
+            }
             reportAstChanged();
             return demoteCall(expr, fun);
         }
