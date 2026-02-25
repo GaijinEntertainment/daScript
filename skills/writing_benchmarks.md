@@ -104,6 +104,20 @@ The `run` method:
 - `b->fail()` — mark as failed but continue
 - Helper functions that verify correctness should take `b : B?` as a parameter
 
+Most of the `T?` (testing) assertions can be used as well:
+
+```
+// Prefer this
+b |> stringEqual(x, y)
+
+// To this
+if (x != y) {
+    b->failNow()
+}
+```
+
+This is because `testing.B` shares the same base class as `testing.T` - `Asserter`.
+
 ### Porting from `profile_test` style
 
 Old benchmarks in `examples/profile/` use `_framework.das` with `profile_test()` and a `test()` function. To port:
