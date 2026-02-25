@@ -21,9 +21,7 @@ typedef FlatHashMap_test0 = $TFlatHashTable < int; int > (@@hash0)
 def read_map(b : B?; hmap : auto(HashMapType)) {
     for (i in range(hmap.length())) {
         let v = hmap?[i] ?? 0
-        if (v != -i) {
-            b->failNow()
-        }
+        b |> strictEqual(v, -i)
     }
 }
 

@@ -596,6 +596,10 @@ def private run_benchmark(var suite_ctx : SuiteCtx; var file_ctx : FileCtx; var 
         unsafe {
             var selfCtx & = this_context()
 
+            benchmarking.on_log <- @ capture(& context, & file_ctx, & suite_ctx) (msg : string; at : LineInfo) {
+                log::info("{file_ctx.indenting}{file_info_hr(at, suite_ctx.uriPaths)}: {msg}")
+            }
+
             benchmarking.on_fail <- @ capture(& benchmarking, & deliberateRecover) (now : bool) {
                 deliberateRecover = now
                 benchmarking.failed = true
@@ -609,7 +613,10 @@ def private run_benchmark(var suite_ctx : SuiteCtx; var file_ctx : FileCtx; var 
 
             benchmarking.on_finished <- @capture(& selfCtx, & suite_ctx, & benchmarking) (stats : BenchmarkRunStats) {
                 unsafe {
-                    selfCtx |> invoke_in_context("bench_on_finished_impl", suite_ctx, benchmarking, stats)
+                    // This extra info is useful for JSON serialization.
+                    var with_func_type = stats
+                    with_func_type.func_type = func_type
+                    selfCtx |> invoke_in_context("bench_on_finished_impl", suite_ctx, benchmarking, with_func_type)
                 }
             }
         }
