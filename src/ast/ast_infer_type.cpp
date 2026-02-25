@@ -2699,12 +2699,22 @@ namespace das {
                       expr->at, CompilationError::invalid_new_type);
             }
         } else if (expr->typeexpr->baseType == Type::tTuple) {
+            if ( expr->typeexpr->isAutoOrAlias() ) {
+                error("new expression cannot be auto or alias type '" + describeType(expr->typeexpr) + "'", "", "",
+                      expr->at, CompilationError::invalid_new_type);
+                return Visitor::visit(expr);
+            }
             expr->type = make_smart<TypeDecl>(Type::tPointer);
             expr->type->firstType = make_smart<TypeDecl>(*expr->typeexpr);
             expr->type->firstType->dim.clear();
             expr->type->dim = expr->typeexpr->dim;
             expr->name = expr->typeexpr->getMangledName();
         } else if (expr->typeexpr->baseType == Type::tVariant) {
+            if ( expr->typeexpr->isAutoOrAlias() ) {
+                error("new expression cannot be auto or alias type '" + describeType(expr->typeexpr) + "'", "", "",
+                      expr->at, CompilationError::invalid_new_type);
+                return Visitor::visit(expr);
+            }
             expr->type = make_smart<TypeDecl>(Type::tPointer);
             expr->type->firstType = make_smart<TypeDecl>(*expr->typeexpr);
             expr->type->firstType->dim.clear();
