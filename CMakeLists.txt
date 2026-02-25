@@ -291,7 +291,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${EXECUTABLE_OUTPUT_PATH})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 
-# All dynamic modules libraries will be added here (files like dasModuleAudio.das_module).
+# All dynamic modules libraries will be added here (files like dasModuleAudio.shared_module).
 SET(DAS_DYN_MODULES_LIBS)
 # All static modules libraries will be added here (files like libDasModuleAudio.a).
 SET(DAS_MODULES_LIBS)
@@ -314,7 +314,7 @@ MACRO(ADD_DAS_SHARED_MODULE_LIB module_name)
         RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${SHARED_OUTPUT_PATH}"
         RUNTIME_OUTPUT_DIRECTORY_RELEASE "${SHARED_OUTPUT_PATH}"
         RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${SHARED_OUTPUT_PATH}"
-        SUFFIX ".das_module"
+        SUFFIX ".shared_module"
         PREFIX ""
     )
     # Ignore tutorial, profile, test.
