@@ -120,7 +120,7 @@ def main() {
     timingOutliers = args |> get_int_arg("--timing-outliers", 0)
 
     let isolatedMode = args |> has_value("--isolated-mode")
-    let ctx <- SuiteCtx(args)
+    var ctx <- SuiteCtx(args)
     if (!isolatedMode) {
         for (file in files) {
             let uri = ctx.uriPaths ? file_name_to_uri(file) : file

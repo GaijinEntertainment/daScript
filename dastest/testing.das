@@ -7,6 +7,7 @@ require rtti
 require strings // to compare strings/das_strings
 require daslib/math_bits
 require math
+require daslib/unroll
 
 class T {
     name : string
@@ -82,6 +83,41 @@ class T {
     def const getTimeSec() : double {
         return double(getTimeUsec()) / 1000000.0lf
     }
+}
+
+class B {
+    name : string
+    current_sub_name : string
+    started : bool = false
+    finished : bool = false
+
+    on_fail : lambda<(now : bool) : void>
+    on_start : lambda<(sub_name : string) : void>
+    on_finished : lambda<(stats : BenchmarkRunStats) : void>
+
+    failed : bool = false
+
+    def const failNow() {
+        on_fail |> invoke(true)
+        panic("benchmark failed")
+    }
+
+    def const fail() {
+        on_fail |> invoke(false)
+    }
+}
+
+// BenchmarkRunStats is a structured result of a single benchmark executed.
+// A value of this type is serialized when json output format is used.
+struct BenchmarkRunStats {
+    name : string
+    sub_name : string
+    n : int
+    time_ns : int64
+    allocs : uint64
+    heap_bytes : uint64
+    string_allocs : uint64
+    string_heap_bytes : uint64
 }
 
 
@@ -292,4 +328,129 @@ def run(t : T?; name : string; var cb : lambda<(t : T?) : void>) {
 
 def run(t : T?; name : string; func : function<(t : T?) : void>) {
     t.onRun |> invoke(name, RunT(func1 = func))
+}
+
+
+def run(b : B?, name : string; op : block) {
+    //! run executes a benchmark of a given name and runs the block in the loop,
+    //! while collecting data like CPU time and heap allocations.
+    //! It assumes that every op invocation performs a single logical operation.
+    //! If op is a combined operation, consider using an overloaded version
+    //! with chunk_size parameter.
+    run_impl(b, name, 1l, op)
+}
+
+
+def run(b : B?, name : string; chunk_size : int; op : block) {
+    //! This overloading allows a custom chunk size configuration
+    //! to adjust the ns/op to it.
+    run_impl(b, name, int64(chunk_size), op)
+}
+
+
+def private run_impl(b : B?, name : string; chunk_size : int64; op : block) {
+    b.on_start(name)
+
+    let min_runs = 1
+    let max_runs = 1_000_000_000
+
+    // The first run serves two purposes: it will
+    // find the appropriate N (num_runs) for the op,
+    // plus it allows a warmup before we start measuring it.
+    let run1_start = ref_time_ticks()
+    op()
+    let op1_time_ns = max(double(get_time_nsec(run1_start)), 1.0lf)
+
+    let op_time_approx = op1_time_ns / 1000000000.0lf // In seconds
+
+    let n_probe = int64(1.0lf / op_time_approx)
+    var num_runs = int(clamp(n_probe, int64(min_runs), int64(max_runs)))
+
+    // We will unroll fast-running (small) benchmarks
+    // to decrease the loop's own time contribution.
+    // A value of 5 gives good results, 10 should be very safe.
+    let unroll_count = 10
+    let unroll_threshold = 100 * unroll_count
+
+    // Pre-compute all the stuff before the timer has started.
+    let do_unroll = num_runs > unroll_threshold
+    var loop_runs = num_runs
+    if (do_unroll) {
+        num_runs = int(round(float(num_runs) / float(unroll_count)) * float(unroll_count))
+        loop_runs = num_runs / unroll_count
+    }
+
+    // We could use a builtin profile() function here
+    // instead of doing loops in das directly.
+    // At any rate, the auto-inferred N (count) can be useful
+    // and even profile() can benefit from the unrolled statements.
+
+    let heap_stats_start = heap_allocation_stats()
+    let heap_bytes_start = heap_stats_start[0]
+    let num_allocs_start = heap_allocation_count()
+
+    let string_stats_start = string_heap_allocation_stats()
+    let string_bytes_start = string_stats_start[0]
+    let string_num_allocs_start = string_heap_allocation_count()
+
+    var time_total = 0l
+    if (do_unroll) {
+        // A fast/small benchmarking func - run the timers
+        // once, unroll the body to minimize the noise.
+        let start = ref_time_ticks()
+        for (i in range(loop_runs)) {
+            unroll <| $() {
+                for (_ in range(unroll_count)) {
+                    op()
+                }
+            }
+        }
+        time_total = get_time_nsec(start)
+    } else {
+        // A long-running benchmark that should not be unrolled.
+        // Its run time will not be dominated by the loop anyway.
+        for (i in range(loop_runs)) {
+            let start = ref_time_ticks()
+            op()
+            time_total += get_time_nsec(start)
+        }
+    }
+
+    let heap_stats_end = heap_allocation_stats()
+    let heap_bytes_end = heap_stats_end[0]
+    let num_allocs_end = heap_allocation_count()
+
+    let string_stats_end = string_heap_allocation_stats()
+    let string_bytes_end = string_stats_end[0]
+    let string_num_allocs_end = string_heap_allocation_count()
+
+    var stats = BenchmarkRunStats(
+        name = b.name,
+        sub_name = name,
+        n = num_runs,
+        time_ns = time_total,
+        allocs = num_allocs_end - num_allocs_start,
+        heap_bytes = heap_bytes_end - heap_bytes_start,
+        string_allocs = string_num_allocs_end - string_num_allocs_start,
+        string_heap_bytes = string_bytes_end - string_bytes_start,
+    )
+
+    if (chunk_size > 1l) {
+        stats.time_ns = max(stats.time_ns / chunk_size, 1l)
+        if (stats.allocs > 0ul) {
+            stats.allocs = max(stats.allocs / uint64(chunk_size), 1ul)
+        }
+        if (stats.heap_bytes > 0ul) {
+            stats.heap_bytes = max(stats.heap_bytes / uint64(chunk_size), 1ul)
+        }
+    }
+
+    b.on_finished(stats)
+}
+
+[sideeffects]
+def sink(v) {
+    //! Marks v as used, so the optimizer is not tempted
+    //! to remove the benchmark value evaluation.
+    return v
 }
