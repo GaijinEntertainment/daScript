@@ -721,6 +721,11 @@ namespace das {
                 cloneFn->arguments.push_back(expr->right->clone());
                 return make_smart<ExprCopy>(expr->at, expr->left->clone(), cloneFn);
             } else if (cloneType->isPointer() && cloneType->smartPtr) {
+                if ( !cloneType->firstType || !cloneType->firstType->annotation ) {
+                    error("can only clone smart pointer to handled type", "", "",
+                          expr->at, CompilationError::invalid_type);
+                    return Visitor::visit(expr);
+                }
                 auto fnClone = makeCloneSmartPtr(expr->at, cloneType, expr->right->type);
                 if (program->addFunction(fnClone)) {
                     reportAstChanged();
