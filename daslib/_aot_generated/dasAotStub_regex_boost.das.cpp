@@ -108,64 +108,7 @@ namespace regex { struct Regex; };
 // unused enumeration ConstMatters
 // unused enumeration RefMatters
 // unused enumeration TemporaryMatters
-#if 0 // external enum
-namespace rtti {
-
-enum class Type : int32_t {
-    none = int32_t(INT64_C(0)),
-    autoinfer = int32_t(INT64_C(1)),
-    alias = int32_t(INT64_C(2)),
-    option = int32_t(INT64_C(3)),
-    typeDecl = int32_t(INT64_C(4)),
-    typeMacro = int32_t(INT64_C(5)),
-    fakeContext = int32_t(INT64_C(6)),
-    fakeLineInfo = int32_t(INT64_C(7)),
-    anyArgument = int32_t(INT64_C(8)),
-    tVoid = int32_t(INT64_C(9)),
-    tBool = int32_t(INT64_C(10)),
-    tInt8 = int32_t(INT64_C(11)),
-    tUInt8 = int32_t(INT64_C(12)),
-    tInt16 = int32_t(INT64_C(13)),
-    tUInt16 = int32_t(INT64_C(14)),
-    tInt64 = int32_t(INT64_C(15)),
-    tUInt64 = int32_t(INT64_C(16)),
-    tInt = int32_t(INT64_C(17)),
-    tInt2 = int32_t(INT64_C(18)),
-    tInt3 = int32_t(INT64_C(19)),
-    tInt4 = int32_t(INT64_C(20)),
-    tUInt = int32_t(INT64_C(21)),
-    tUInt2 = int32_t(INT64_C(22)),
-    tUInt3 = int32_t(INT64_C(23)),
-    tUInt4 = int32_t(INT64_C(24)),
-    tFloat = int32_t(INT64_C(25)),
-    tFloat2 = int32_t(INT64_C(26)),
-    tFloat3 = int32_t(INT64_C(27)),
-    tFloat4 = int32_t(INT64_C(28)),
-    tDouble = int32_t(INT64_C(29)),
-    tRange = int32_t(INT64_C(30)),
-    tURange = int32_t(INT64_C(31)),
-    tRange64 = int32_t(INT64_C(32)),
-    tURange64 = int32_t(INT64_C(33)),
-    tString = int32_t(INT64_C(34)),
-    tStructure = int32_t(INT64_C(35)),
-    tHandle = int32_t(INT64_C(36)),
-    tEnumeration = int32_t(INT64_C(37)),
-    tEnumeration8 = int32_t(INT64_C(38)),
-    tEnumeration16 = int32_t(INT64_C(39)),
-    tEnumeration64 = int32_t(INT64_C(40)),
-    tBitfield = int32_t(INT64_C(41)),
-    tPointer = int32_t(INT64_C(45)),
-    tFunction = int32_t(INT64_C(46)),
-    tLambda = int32_t(INT64_C(47)),
-    tIterator = int32_t(INT64_C(48)),
-    tArray = int32_t(INT64_C(49)),
-    tTable = int32_t(INT64_C(50)),
-    tBlock = int32_t(INT64_C(51)),
-    tTuple = int32_t(INT64_C(52)),
-    tVariant = int32_t(INT64_C(53)),
-};
-}
-#endif // external enum
+// unused enumeration Type
 // unused enumeration ConversionResult
 // unused enumeration CaptureMode
 // unused enumeration SideEffects
@@ -187,6 +130,12 @@ struct AstReaderMacro {
     Func DAS_COMMENT((char *,ast::AstReaderMacro,smart_ptr_raw<Program> const ,Module * const ,ExprReader * const ,LineInfo const ,int32_t &,FileInfo * &)) suffix;
     Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstReaderMacro,smart_ptr_raw<Program> const ,Module * const ,smart_ptr_raw<ExprReader> const )) visit;
 };
+static_assert(sizeof(AstReaderMacro)==40,"structure size mismatch with DAS");
+static_assert(offsetof(AstReaderMacro,__rtti)==0,"structure field offset mismatch with DAS");
+static_assert(offsetof(AstReaderMacro,__finalize)==8,"structure field offset mismatch with DAS");
+static_assert(offsetof(AstReaderMacro,accept)==16,"structure field offset mismatch with DAS");
+static_assert(offsetof(AstReaderMacro,suffix)==24,"structure field offset mismatch with DAS");
+static_assert(offsetof(AstReaderMacro,visit)==32,"structure field offset mismatch with DAS");
 }
 // unused structure AstCommentReader
 // unused structure AstCallMacro
@@ -225,12 +174,18 @@ enum class ReOp : int32_t {
     Set = int32_t(1),
     Any = int32_t(2),
     Eos = int32_t(3),
-    Group = int32_t(4),
-    Plus = int32_t(5),
-    Star = int32_t(6),
-    Question = int32_t(7),
-    Concat = int32_t(8),
-    Union = int32_t(9),
+    Bos = int32_t(4),
+    Group = int32_t(5),
+    Plus = int32_t(6),
+    Star = int32_t(7),
+    Question = int32_t(8),
+    Concat = int32_t(9),
+    Union = int32_t(10),
+    Repeat = int32_t(11),
+    WordBoundary = int32_t(12),
+    NonWordBoundary = int32_t(13),
+    Lookahead = int32_t(14),
+    NegativeLookahead = int32_t(15),
 };
 }
 namespace regex {
@@ -250,18 +205,50 @@ struct ReNode {
     regex::ReNode * next;
     TDim<uint32_t,8> cset;
     int32_t index;
+    int32_t min_rep;
+    int32_t max_rep;
+    bool lazy;
     uint8_t const  * tail;
 };
+static_assert(sizeof(ReNode)==160,"structure size mismatch with DAS");
+static_assert(offsetof(ReNode,op)==0,"structure field offset mismatch with DAS");
+static_assert(offsetof(ReNode,id)==4,"structure field offset mismatch with DAS");
+static_assert(offsetof(ReNode,fun2)==8,"structure field offset mismatch with DAS");
+static_assert(offsetof(ReNode,gen2)==16,"structure field offset mismatch with DAS");
+static_assert(offsetof(ReNode,at)==24,"structure field offset mismatch with DAS");
+static_assert(offsetof(ReNode,text)==32,"structure field offset mismatch with DAS");
+static_assert(offsetof(ReNode,textLen)==40,"structure field offset mismatch with DAS");
+static_assert(offsetof(ReNode,all)==48,"structure field offset mismatch with DAS");
+static_assert(offsetof(ReNode,left)==72,"structure field offset mismatch with DAS");
+static_assert(offsetof(ReNode,right)==80,"structure field offset mismatch with DAS");
+static_assert(offsetof(ReNode,subexpr)==88,"structure field offset mismatch with DAS");
+static_assert(offsetof(ReNode,next)==96,"structure field offset mismatch with DAS");
+static_assert(offsetof(ReNode,cset)==104,"structure field offset mismatch with DAS");
+static_assert(offsetof(ReNode,index)==136,"structure field offset mismatch with DAS");
+static_assert(offsetof(ReNode,min_rep)==140,"structure field offset mismatch with DAS");
+static_assert(offsetof(ReNode,max_rep)==144,"structure field offset mismatch with DAS");
+static_assert(offsetof(ReNode,lazy)==148,"structure field offset mismatch with DAS");
+static_assert(offsetof(ReNode,tail)==152,"structure field offset mismatch with DAS");
 }
 namespace regex {
 
 struct Regex {
     regex::ReNode * root;
     uint8_t const  * match;
-    TArray<AutoTuple<range,char *>> groups;
+    TArray<TTuple<16,range,char *>> groups;
     TDim<uint32_t,8> earlyOut;
     bool canEarlyOut;
+    bool caseInsensitive;
+    bool dotAll;
 };
+static_assert(sizeof(Regex)==80,"structure size mismatch with DAS");
+static_assert(offsetof(Regex,root)==0,"structure field offset mismatch with DAS");
+static_assert(offsetof(Regex,match)==8,"structure field offset mismatch with DAS");
+static_assert(offsetof(Regex,groups)==16,"structure field offset mismatch with DAS");
+static_assert(offsetof(Regex,earlyOut)==40,"structure field offset mismatch with DAS");
+static_assert(offsetof(Regex,canEarlyOut)==72,"structure field offset mismatch with DAS");
+static_assert(offsetof(Regex,caseInsensitive)==73,"structure field offset mismatch with DAS");
+static_assert(offsetof(Regex,dotAll)==74,"structure field offset mismatch with DAS");
 }
 namespace regex_boost {
 
@@ -272,6 +259,12 @@ struct RegexReader {
     Func DAS_COMMENT((char *,ast::AstReaderMacro,smart_ptr_raw<Program> const ,Module * const ,ExprReader * const ,LineInfo const ,int32_t &,FileInfo * &)) suffix;
     Func DAS_COMMENT((smart_ptr_raw<Expression>,ast::AstReaderMacro,smart_ptr_raw<Program> const ,Module * const ,smart_ptr_raw<ExprReader> const )) visit;
 };
+static_assert(sizeof(RegexReader)==40,"structure size mismatch with DAS");
+static_assert(offsetof(RegexReader,__rtti)==0,"structure field offset mismatch with DAS");
+static_assert(offsetof(RegexReader,__finalize)==8,"structure field offset mismatch with DAS");
+static_assert(offsetof(RegexReader,accept)==16,"structure field offset mismatch with DAS");
+static_assert(offsetof(RegexReader,suffix)==24,"structure field offset mismatch with DAS");
+static_assert(offsetof(RegexReader,visit)==32,"structure field offset mismatch with DAS");
 }
 
 
@@ -284,25 +277,25 @@ static void resolveTypeInfoAnnotations()
 }
 
 
-inline void finalize_535564a980bb75dd ( Context * __context__, AutoTuple<range,char *> & ____this_rename_at_1340_0 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_81311f4693e92483 ( Context * __context__, TArray<regex::ReNode *> & __a_rename_at_1336_1 );
-inline void _FuncbuiltinTickpushTick10769833213962245646_fc015652edb50155 ( Context * __context__, TArray<ast::AstReaderMacro *> & __Arr_rename_at_193_3, ast::AstReaderMacro * __value_rename_at_193_4 );
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_74fead384ca289cc ( Context * __context__, regex_boost::RegexReader const  & __cl_rename_at_116_5 );
-inline void finalize_99414bba4f5acf94 ( Context * __context__, regex::ReNode & ____this_rename_at_29_6 );
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_a2cedef524d58dae ( Context * __context__, TArray<AutoTuple<range,char *>> & __a_rename_at_1336_7 );
-inline void finalize_8d4bbeab5e980efc ( Context * __context__, regex::ReNode * & ____this_rename_at_50_9 );
-inline void finalize_d89c2770b6879426 ( Context * __context__, regex::Regex & ____this_rename_at_48_10 );
+inline void finalize_535564a980bb75dd ( Context * __context__, TTuple<16,range,char *> & ____this_rename_at_1340_0 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_5461a1a6b287432c ( Context * __context__, TArray<regex::ReNode *> & __a_rename_at_1336_1 );
+inline void _FuncbuiltinTickpushTick10769833213962245646_ab4200c8fbb65024 ( Context * __context__, TArray<ast::AstReaderMacro *> & __Arr_rename_at_193_3, ast::AstReaderMacro * __value_rename_at_193_4 );
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_266cbb9170c1921f ( Context * __context__, regex_boost::RegexReader const  & __cl_rename_at_116_5 );
+inline void finalize_e83b23d3fbb7275a ( Context * __context__, regex::ReNode & ____this_rename_at_56_6 );
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_a2cedef524d58dae ( Context * __context__, TArray<TTuple<16,range,char *>> & __a_rename_at_1336_7 );
+inline void finalize_8014a570ddc08548 ( Context * __context__, regex::ReNode * & ____this_rename_at_80_9 );
+inline void finalize_abce4dc887b85003 ( Context * __context__, regex::Regex & ____this_rename_at_78_10 );
 
 void __init_script ( Context * __context__, bool __init_shared )
 {
 }
 
-inline void finalize_535564a980bb75dd ( Context * __context__, AutoTuple<range,char *> &  ____this_rename_at_1340_0 )
+inline void finalize_535564a980bb75dd ( Context * __context__, TTuple<16,range,char *> &  ____this_rename_at_1340_0 )
 {
-    memset((void*)&(____this_rename_at_1340_0), 0, TypeSize<AutoTuple<range,char *>>::size);
+    memset((void*)&(____this_rename_at_1340_0), 0, 16);
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_81311f4693e92483 ( Context * __context__, TArray<regex::ReNode *> &  __a_rename_at_1336_1 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_5461a1a6b287432c ( Context * __context__, TArray<regex::ReNode *> &  __a_rename_at_1336_1 )
 {
     {
         bool __need_loop_1338 = true;
@@ -312,103 +305,103 @@ inline void _FuncbuiltinTickfinalizeTick13836114024949725080_81311f4693e92483 ( 
         __need_loop_1338 = __aV_iterator.first(__context__,(__aV_rename_at_1338_2)) && __need_loop_1338;
         for ( ; __need_loop_1338 ; __need_loop_1338 = __aV_iterator.next(__context__,(__aV_rename_at_1338_2)) )
         {
-            finalize_8d4bbeab5e980efc(__context__,(*__aV_rename_at_1338_2));
+            finalize_8014a570ddc08548(__context__,(*__aV_rename_at_1338_2));
         }
         __aV_iterator.close(__context__,(__aV_rename_at_1338_2));
     };
     builtin_array_free(das_arg<TArray<regex::ReNode *>>::pass(__a_rename_at_1336_1),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void _FuncbuiltinTickpushTick10769833213962245646_fc015652edb50155 ( Context * __context__, TArray<ast::AstReaderMacro *> &  __Arr_rename_at_193_3, ast::AstReaderMacro * __value_rename_at_193_4 )
+inline void _FuncbuiltinTickpushTick10769833213962245646_ab4200c8fbb65024 ( Context * __context__, TArray<ast::AstReaderMacro *> &  __Arr_rename_at_193_3, ast::AstReaderMacro * __value_rename_at_193_4 )
 {
     das_copy(__Arr_rename_at_193_3(builtin_array_push_back(das_arg<TArray<ast::AstReaderMacro *>>::pass(__Arr_rename_at_193_3),8,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL))),__context__),__value_rename_at_193_4);
 }
 
-inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_74fead384ca289cc ( Context * __context__, regex_boost::RegexReader const  &  __cl_rename_at_116_5 )
+inline StructInfo const  * _FuncrttiTickclass_infoTick15801393167907430156_266cbb9170c1921f ( Context * __context__, regex_boost::RegexReader const  &  __cl_rename_at_116_5 )
 {
     return das_auto_cast<StructInfo const  *>::cast(das_cast<StructInfo const  *>::cast(((das_deref(__context__,das_cast<TypeInfo const  *>::cast(__cl_rename_at_116_5.__rtti),__FILE__,__LINE__)).getStructType())));
 }
 
-inline void finalize_99414bba4f5acf94 ( Context * __context__, regex::ReNode &  ____this_rename_at_29_6 )
+inline void finalize_e83b23d3fbb7275a ( Context * __context__, regex::ReNode &  ____this_rename_at_56_6 )
 {
-    _FuncbuiltinTickfinalizeTick13836114024949725080_81311f4693e92483(__context__,das_arg<TArray<regex::ReNode *>>::pass(____this_rename_at_29_6.all));
-    finalize_8d4bbeab5e980efc(__context__,____this_rename_at_29_6.left);
-    finalize_8d4bbeab5e980efc(__context__,____this_rename_at_29_6.right);
-    finalize_8d4bbeab5e980efc(__context__,____this_rename_at_29_6.subexpr);
-    memset((void*)&(____this_rename_at_29_6), 0, TypeSize<regex::ReNode>::size);
+    _FuncbuiltinTickfinalizeTick13836114024949725080_5461a1a6b287432c(__context__,das_arg<TArray<regex::ReNode *>>::pass(____this_rename_at_56_6.all));
+    finalize_8014a570ddc08548(__context__,____this_rename_at_56_6.left);
+    finalize_8014a570ddc08548(__context__,____this_rename_at_56_6.right);
+    finalize_8014a570ddc08548(__context__,____this_rename_at_56_6.subexpr);
+    memset((void*)&(____this_rename_at_56_6), 0, 160);
 }
 
-inline void _FuncbuiltinTickfinalizeTick13836114024949725080_a2cedef524d58dae ( Context * __context__, TArray<AutoTuple<range,char *>> &  __a_rename_at_1336_7 )
+inline void _FuncbuiltinTickfinalizeTick13836114024949725080_a2cedef524d58dae ( Context * __context__, TArray<TTuple<16,range,char *>> &  __a_rename_at_1336_7 )
 {
     {
         bool __need_loop_1338 = true;
         // aV: tuple<range;string> aka TT&
-        das_iterator<TArray<AutoTuple<range,char *>>> __aV_iterator(__a_rename_at_1336_7);
-        AutoTuple<range,char *> * __aV_rename_at_1338_8;
+        das_iterator<TArray<TTuple<16,range,char *>>> __aV_iterator(__a_rename_at_1336_7);
+        TTuple<16,range,char *> * __aV_rename_at_1338_8;
         __need_loop_1338 = __aV_iterator.first(__context__,(__aV_rename_at_1338_8)) && __need_loop_1338;
         for ( ; __need_loop_1338 ; __need_loop_1338 = __aV_iterator.next(__context__,(__aV_rename_at_1338_8)) )
         {
-            finalize_535564a980bb75dd(__context__,das_arg<AutoTuple<range,char *>>::pass((*__aV_rename_at_1338_8)));
+            finalize_535564a980bb75dd(__context__,das_arg<TTuple<16,range,char *>>::pass((*__aV_rename_at_1338_8)));
         }
         __aV_iterator.close(__context__,(__aV_rename_at_1338_8));
     };
-    builtin_array_free(das_arg<TArray<AutoTuple<range,char *>>>::pass(__a_rename_at_1336_7),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
+    builtin_array_free(das_arg<TArray<TTuple<16,range,char *>>>::pass(__a_rename_at_1336_7),16,__context__,((LineInfoArg *)(&LineInfo::g_LineInfoNULL)));
 }
 
-inline void finalize_8d4bbeab5e980efc ( Context * __context__, regex::ReNode * & ____this_rename_at_50_9 )
+inline void finalize_8014a570ddc08548 ( Context * __context__, regex::ReNode * & ____this_rename_at_80_9 )
 {
-    if ( ____this_rename_at_50_9 != nullptr )
+    if ( ____this_rename_at_80_9 != nullptr )
     {
-        finalize_99414bba4f5acf94(__context__,das_arg<regex::ReNode>::pass(das_deref(__context__,____this_rename_at_50_9,__FILE__,__LINE__)));
-        das_delete<regex::ReNode *>::clear(__context__,____this_rename_at_50_9);
-        das_copy(____this_rename_at_50_9,nullptr);
+        finalize_e83b23d3fbb7275a(__context__,das_arg<regex::ReNode>::pass(das_deref(__context__,____this_rename_at_80_9,__FILE__,__LINE__)));
+        das_delete<regex::ReNode *>::clear(__context__,____this_rename_at_80_9);
+        das_copy(____this_rename_at_80_9,nullptr);
     };
 }
 
-inline void finalize_d89c2770b6879426 ( Context * __context__, regex::Regex &  ____this_rename_at_48_10 )
+inline void finalize_abce4dc887b85003 ( Context * __context__, regex::Regex &  ____this_rename_at_78_10 )
 {
-    finalize_8d4bbeab5e980efc(__context__,____this_rename_at_48_10.root);
-    _FuncbuiltinTickfinalizeTick13836114024949725080_a2cedef524d58dae(__context__,das_arg<TArray<AutoTuple<range,char *>>>::pass(____this_rename_at_48_10.groups));
-    memset((void*)&(____this_rename_at_48_10), 0, TypeSize<regex::Regex>::size);
+    finalize_8014a570ddc08548(__context__,____this_rename_at_78_10.root);
+    _FuncbuiltinTickfinalizeTick13836114024949725080_a2cedef524d58dae(__context__,das_arg<TArray<TTuple<16,range,char *>>>::pass(____this_rename_at_78_10.groups));
+    memset((void*)&(____this_rename_at_78_10), 0, 80);
 }
 static vec4f __wrap_finalize_535564a980bb75dd ( Context * __context__ ) {
-    AutoTuple<range,char *> &  arg___this = cast_aot_arg<AutoTuple<range,char *> & >::to(*__context__,__context__->abiArguments()[0]);
+    TTuple<16,range,char *> &  arg___this = cast_aot_arg<TTuple<16,range,char *> & >::to(*__context__,__context__->abiArguments()[0]);
     finalize_535564a980bb75dd(__context__, arg___this);
     return v_zero();
 }
-static vec4f __wrap__FuncbuiltinTickfinalizeTick13836114024949725080_81311f4693e92483 ( Context * __context__ ) {
+static vec4f __wrap__FuncbuiltinTickfinalizeTick13836114024949725080_5461a1a6b287432c ( Context * __context__ ) {
     TArray<regex::ReNode *> &  arg_a = cast_aot_arg<TArray<regex::ReNode *> & >::to(*__context__,__context__->abiArguments()[0]);
-    _FuncbuiltinTickfinalizeTick13836114024949725080_81311f4693e92483(__context__, arg_a);
+    _FuncbuiltinTickfinalizeTick13836114024949725080_5461a1a6b287432c(__context__, arg_a);
     return v_zero();
 }
-static vec4f __wrap__FuncbuiltinTickpushTick10769833213962245646_fc015652edb50155 ( Context * __context__ ) {
+static vec4f __wrap__FuncbuiltinTickpushTick10769833213962245646_ab4200c8fbb65024 ( Context * __context__ ) {
     TArray<ast::AstReaderMacro *> &  arg_Arr = cast_aot_arg<TArray<ast::AstReaderMacro *> & >::to(*__context__,__context__->abiArguments()[0]);
     ast::AstReaderMacro * arg_value = cast_aot_arg<ast::AstReaderMacro *>::to(*__context__,__context__->abiArguments()[1]);
-    _FuncbuiltinTickpushTick10769833213962245646_fc015652edb50155(__context__, arg_Arr, arg_value);
+    _FuncbuiltinTickpushTick10769833213962245646_ab4200c8fbb65024(__context__, arg_Arr, arg_value);
     return v_zero();
 }
-static vec4f __wrap__FuncrttiTickclass_infoTick15801393167907430156_74fead384ca289cc ( Context * __context__ ) {
+static vec4f __wrap__FuncrttiTickclass_infoTick15801393167907430156_266cbb9170c1921f ( Context * __context__ ) {
     regex_boost::RegexReader const  &  arg_cl = cast_aot_arg<regex_boost::RegexReader const  & >::to(*__context__,__context__->abiArguments()[0]);
-    return cast<StructInfo const  *>::from(_FuncrttiTickclass_infoTick15801393167907430156_74fead384ca289cc(__context__, arg_cl));
+    return cast<StructInfo const  *>::from(_FuncrttiTickclass_infoTick15801393167907430156_266cbb9170c1921f(__context__, arg_cl));
 }
-static vec4f __wrap_finalize_99414bba4f5acf94 ( Context * __context__ ) {
+static vec4f __wrap_finalize_e83b23d3fbb7275a ( Context * __context__ ) {
     regex::ReNode &  arg___this = cast_aot_arg<regex::ReNode & >::to(*__context__,__context__->abiArguments()[0]);
-    finalize_99414bba4f5acf94(__context__, arg___this);
+    finalize_e83b23d3fbb7275a(__context__, arg___this);
     return v_zero();
 }
 static vec4f __wrap__FuncbuiltinTickfinalizeTick13836114024949725080_a2cedef524d58dae ( Context * __context__ ) {
-    TArray<AutoTuple<range,char *>> &  arg_a = cast_aot_arg<TArray<AutoTuple<range,char *>> & >::to(*__context__,__context__->abiArguments()[0]);
+    TArray<TTuple<16,range,char *>> &  arg_a = cast_aot_arg<TArray<TTuple<16,range,char *>> & >::to(*__context__,__context__->abiArguments()[0]);
     _FuncbuiltinTickfinalizeTick13836114024949725080_a2cedef524d58dae(__context__, arg_a);
     return v_zero();
 }
-static vec4f __wrap_finalize_8d4bbeab5e980efc ( Context * __context__ ) {
+static vec4f __wrap_finalize_8014a570ddc08548 ( Context * __context__ ) {
     regex::ReNode * & arg___this = cast_aot_arg<regex::ReNode * &>::to(*__context__,__context__->abiArguments()[0]);
-    finalize_8d4bbeab5e980efc(__context__, arg___this);
+    finalize_8014a570ddc08548(__context__, arg___this);
     return v_zero();
 }
-static vec4f __wrap_finalize_d89c2770b6879426 ( Context * __context__ ) {
+static vec4f __wrap_finalize_abce4dc887b85003 ( Context * __context__ ) {
     regex::Regex &  arg___this = cast_aot_arg<regex::Regex & >::to(*__context__,__context__->abiArguments()[0]);
-    finalize_d89c2770b6879426(__context__, arg___this);
+    finalize_abce4dc887b85003(__context__, arg___this);
     return v_zero();
 }
 
@@ -416,13 +409,13 @@ static vec4f __wrap_finalize_d89c2770b6879426 ( Context * __context__ ) {
 struct AotFunction { uint64_t hash; bool is_cmres; void * fn; vec4f (*wrappedFn)(Context*); };
 static AotFunction functions[] = {
     { 0x8a2fe33d370097ba, false, (void*)&finalize_535564a980bb75dd, &__wrap_finalize_535564a980bb75dd },
-    { 0xd0d77a877b11e7d7, false, (void*)&_FuncbuiltinTickfinalizeTick13836114024949725080_81311f4693e92483, &__wrap__FuncbuiltinTickfinalizeTick13836114024949725080_81311f4693e92483 },
-    { 0x6d7b12572dfbc07f, false, (void*)&_FuncbuiltinTickpushTick10769833213962245646_fc015652edb50155, &__wrap__FuncbuiltinTickpushTick10769833213962245646_fc015652edb50155 },
-    { 0xf7ef9aac74044128, false, (void*)&_FuncrttiTickclass_infoTick15801393167907430156_74fead384ca289cc, &__wrap__FuncrttiTickclass_infoTick15801393167907430156_74fead384ca289cc },
-    { 0x74e2e36c42439df0, false, (void*)&finalize_99414bba4f5acf94, &__wrap_finalize_99414bba4f5acf94 },
+    { 0xd4e898658b388ec2, false, (void*)&_FuncbuiltinTickfinalizeTick13836114024949725080_5461a1a6b287432c, &__wrap__FuncbuiltinTickfinalizeTick13836114024949725080_5461a1a6b287432c },
+    { 0x8c4eedb94286e01, false, (void*)&_FuncbuiltinTickpushTick10769833213962245646_ab4200c8fbb65024, &__wrap__FuncbuiltinTickpushTick10769833213962245646_ab4200c8fbb65024 },
+    { 0xfc009962a89566a9, false, (void*)&_FuncrttiTickclass_infoTick15801393167907430156_266cbb9170c1921f, &__wrap__FuncrttiTickclass_infoTick15801393167907430156_266cbb9170c1921f },
+    { 0xc8948e4879707b1f, false, (void*)&finalize_e83b23d3fbb7275a, &__wrap_finalize_e83b23d3fbb7275a },
     { 0xe5a23bfddf007caa, false, (void*)&_FuncbuiltinTickfinalizeTick13836114024949725080_a2cedef524d58dae, &__wrap__FuncbuiltinTickfinalizeTick13836114024949725080_a2cedef524d58dae },
-    { 0xce0cd34c2f4ccf64, false, (void*)&finalize_8d4bbeab5e980efc, &__wrap_finalize_8d4bbeab5e980efc },
-    { 0x17617c4070419877, false, (void*)&finalize_d89c2770b6879426, &__wrap_finalize_d89c2770b6879426 },
+    { 0x7f757c479c7e36d, false, (void*)&finalize_8014a570ddc08548, &__wrap_finalize_8014a570ddc08548 },
+    { 0xad1a6f6193d0451d, false, (void*)&finalize_abce4dc887b85003, &__wrap_finalize_abce4dc887b85003 },
 };
 #pragma optimize("", on)
 

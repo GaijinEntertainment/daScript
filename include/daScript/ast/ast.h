@@ -1347,6 +1347,7 @@ namespace das
         TypeDeclPtr makeHandleType ( const string & name ) const;
         TypeDeclPtr makeEnumType ( const string & name ) const;
         Module* front() const { return modules.front(); }
+        Module* back() const { return modules.back(); }
         vector<Module *> & getModules() { return modules; }
         Module* getThisModule() const { return thisModule; }
         void reset();
