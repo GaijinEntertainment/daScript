@@ -9,4 +9,23 @@ if(NOT TARGET DAS::DAS)
     include("${CMAKE_CURRENT_LIST_DIR}/DASTargets.cmake")
 endif()
 
+# Backward compatibility: DAS::daslang_dyn is now exported as DAS::daslang.
+# Create an alias so existing consumers using DAS::daslang_dyn still work.
+if(TARGET DAS::daslang AND NOT TARGET DAS::daslang_dyn)
+    add_executable(DAS::daslang_dyn IMPORTED GLOBAL)
+    foreach(_config "" _DEBUG _RELEASE _RELWITHDEBINFO _MINSIZEREL)
+        get_target_property(_loc DAS::daslang IMPORTED_LOCATION${_config})
+        if(_loc)
+            set_target_properties(DAS::daslang_dyn PROPERTIES IMPORTED_LOCATION${_config} "${_loc}")
+            if(NOT "${_config}" STREQUAL "")
+                string(SUBSTRING "${_config}" 1 -1 _cfg_name)
+                set_property(TARGET DAS::daslang_dyn APPEND PROPERTY IMPORTED_CONFIGURATIONS ${_cfg_name})
+            endif()
+        endif()
+    endforeach()
+    unset(_loc)
+    unset(_config)
+    unset(_cfg_name)
+endif()
+
 set(DAS_FOUND TRUE)

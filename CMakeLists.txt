@@ -857,6 +857,7 @@ MACRO(SETUP_LIBDASCRIPT library shared_lib)
         target_link_libraries(${library} dbghelp)
     ENDIF()
     SETUP_CPP11(${library})
+    target_compile_features(${library} PUBLIC cxx_std_17)
     #target_precompile_headers(${library} PUBLIC include/daScript/misc/platform.h)
 
     # Static modules generated include.
@@ -942,16 +943,16 @@ if (NOT ${DAS_TOOLS_DISABLED})
     ENDMACRO()
 
     SETUP_COMPILER_BINARY(daslang libDaScript DAS_MODULES_LIBS "")
-    # Export dasland target, so it can be found
-    # as a target (for example in aot).
-    INSTALL(
-        TARGETS daslang
-        EXPORT DASTargets
-        RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
-    )
+    # Rename the static build so it doesn't conflict with the dyn one.
+    SET_TARGET_PROPERTIES(daslang PROPERTIES OUTPUT_NAME daslang_static)
 
     # Add daslang-dyn target.
     SETUP_COMPILER_BINARY(daslang_dyn libDaScriptDyn "" DAS_DYN_MODULES_LIBS)
+    # Install as 'daslang' — the only compiler binary shipped.
+    SET_TARGET_PROPERTIES(daslang_dyn PROPERTIES
+        OUTPUT_NAME daslang
+        EXPORT_NAME daslang
+    )
     # relative RPATH from install location
     if(APPLE)
         SET_TARGET_PROPERTIES(daslang_dyn PROPERTIES
@@ -963,7 +964,7 @@ if (NOT ${DAS_TOOLS_DISABLED})
             INSTALL_RPATH "\$ORIGIN/../lib"
         )
     endif()
-    # Export dasland_dyn target, so it can be found
+    # Export daslang target, so it can be found
     # as a target (for example in aot).
     INSTALL(
         TARGETS daslang_dyn
