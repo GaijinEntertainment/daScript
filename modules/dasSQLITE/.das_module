@@ -4,6 +4,6 @@ require fio
 [export]
 def initialize(project_path : string) {
     if (das_is_dll_build()) {
-        register_dynamic_module("{project_path}/dasModuleSQLITE.das_module", "Module_dasSQLITE")
+        register_dynamic_module("{project_path}/dasModuleSQLITE.shared_module", "Module_dasSQLITE")
     }
 }
