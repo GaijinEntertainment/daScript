@@ -32,3 +32,9 @@ Every `.das` benchmark file in this directory tree is listed below, grouped by s
 | `test04.das` | Compound XOR (^^=) bit flip on 1M elements — BoolArray compound vs simple vs array&lt;bool&gt; |
 | `test05.das` | Insert at index 0 — push 10K values at front — BoolArray vs array&lt;bool&gt; |
 | `test06.das` | Erase at index 0 — erase 10K values from front — BoolArray vs array&lt;bool&gt; |
+
+## core/array_lock/
+
+| File | Description |
+|---|---|
+| `test01.das` | emplace, emplace_grow, move, and reserve on arrays of locked vs `[skip_field_lock_check]` struct elements — measures array lock overhead |
