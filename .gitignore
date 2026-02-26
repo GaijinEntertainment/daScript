@@ -8,9 +8,7 @@ build/                      # build artifacts
 bin/                        # All build binaries stored here
 jitted_scripts/             # JIT stores dll's here
 lib/                        # All build libraries stored here
-modules/**/*.das_module
 modules/**/*.shared_module
-examples/**/*.das_module
 examples/**/*.shared_module
 .vscode/
 .cache/
