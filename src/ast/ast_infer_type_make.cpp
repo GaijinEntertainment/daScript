@@ -1393,6 +1393,10 @@ namespace das {
         }
         expr->type = resT;
         verifyType(expr->type);
+        if ( resT->isAutoOrAlias() ) {
+            error("array element type is not resolved", "", "",
+                  expr->at, CompilationError::invalid_type);
+        }
         return Visitor::visit(expr);
     }
     void InferTypes::preVisitArrayComprehensionSubexpr(ExprArrayComprehension *expr, Expression *subexpr) {

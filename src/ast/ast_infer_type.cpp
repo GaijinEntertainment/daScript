@@ -1481,21 +1481,26 @@ namespace das {
                                         }
                                         if (fnAddr) {
                                             if (fnAddr->func) {
-                                                int fnArgSize = int(fnAddr->func->arguments.size());
-                                                int fromFnArgSize = int(expr->arguments.size() - 1);
-                                                bool allHaveInit = true;
-                                                for (int ai = fromFnArgSize; ai < fnArgSize; ++ai) {
-                                                    if (!fnAddr->func->arguments[ai]->init) {
-                                                        allHaveInit = false;
-                                                        break;
-                                                    }
-                                                }
-                                                if (allHaveInit) {
+                                                if ( inArgumentInit && fnAddr->func==func ) {
+                                                    error("recursive call in argument initializer", "", "",
+                                                        expr->at, CompilationError::invalid_argument_count);
+                                                } else {
+                                                    int fnArgSize = int(fnAddr->func->arguments.size());
+                                                    int fromFnArgSize = int(expr->arguments.size() - 1);
+                                                    bool allHaveInit = true;
                                                     for (int ai = fromFnArgSize; ai < fnArgSize; ++ai) {
-                                                        expr->arguments.emplace_back(fnAddr->func->arguments[ai]->init->clone());
+                                                        if (!fnAddr->func->arguments[ai]->init) {
+                                                            allHaveInit = false;
+                                                            break;
+                                                        }
                                                     }
-                                                    reportAstChanged();
-                                                    return Visitor::visit(expr);
+                                                    if (allHaveInit) {
+                                                        for (int ai = fromFnArgSize; ai < fnArgSize; ++ai) {
+                                                            expr->arguments.emplace_back(fnAddr->func->arguments[ai]->init->clone());
+                                                        }
+                                                        reportAstChanged();
+                                                        return Visitor::visit(expr);
+                                                    }
                                                 }
                                             } else {
                                                 error("'" + fnAddr->target + "' is not fully resolved yet", "", "",
