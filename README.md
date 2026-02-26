@@ -92,3 +92,8 @@ To embed daslang into your CMake application, simply call `find_package(DAS)`.
 This will provide the targets `libDaScript`
 and `libDaScriptDyn`. For an example of using daslang as an external project
 (including usage for dynamic modules) see [this demo](https://github.com/aleksisch/dascript-demo).
+
+## VS Code extensions
+
+- [daScript](https://marketplace.visualstudio.com/items?itemName=eguskov.dascript) — syntax highlighting for `.das` files
+- [daScript language support](https://marketplace.visualstudio.com/items?itemName=profelis.dascript-plugin) — language server, linting, debugging, and snippets
