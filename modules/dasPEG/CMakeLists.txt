@@ -12,4 +12,7 @@ IF(NOT DAS_PEG_INCLUDED)
         FILES_MATCHING
         PATTERN "*.das"
     )
+    install(FILES ${PROJECT_SOURCE_DIR}/modules/dasPEG/.das_module
+        DESTINATION ${DAS_INSTALL_MODULESDIR}/dasPEG
+    )
 ENDIF()

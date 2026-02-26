@@ -38,6 +38,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/cpp_integration.md` | Writing or editing C++ files in `src/`, `modules/`, or `tutorials/integration/cpp/` |
 | `skills/daslib_modules.md` | Working with `daslib/` modules (linq, json, regex, functional, match, etc.) or extending the standard library |
 | `skills/writing_benchmarks.md` | Writing or running benchmark files under `benchmarks/`, porting benchmarks from `examples/profile/` |
+| `skills/dynamic_modules.md` | Creating or editing `.das_module` descriptors, adding new modules under `modules/`, fixing module resolution for the dynamic binary |
 | `skills/install_instructions.md` | Creating or updating AI instruction files (`install/CLAUDE.md`, `install/skills/`) for the installed SDK |
 
 Multiple skill files may apply to a single task. For example, creating a new daslib module requires reading `skills/das_formatting.md`, `skills/daslib_modules.md`, and possibly `skills/documentation_rst.md`.
