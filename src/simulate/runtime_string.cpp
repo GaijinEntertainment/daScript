@@ -53,17 +53,25 @@ namespace das
         *head++ = '}'; *head = 0;
 #if DAS_ENABLE_EXCEPTIONS
         try {
-            auto result = fmt::format_to(buf, fmt::runtime(ffmt), value);
-            *result = 0;
-            writer.writeStr(buf, result - buf);
+            auto result = fmt::format_to_n(buf, sizeof(buf)-1, fmt::runtime(ffmt), value);
+            auto len = result.size < sizeof(buf) ? result.size : sizeof(buf)-1;
+            buf[len] = 0;
+            writer.writeStr(buf, len);
+            if ( result.size >= sizeof(buf) ) {
+                context->throw_error_at(at, "fmt overflow, output truncated to %d characters", int(sizeof(buf)-1));
+            }
         } catch ( const std::exception & e ) {
             context->throw_error_at(at, "fmt error: %s", e.what());
         }
 #else
         das_trycatch([&]{
-            auto result = fmt::format_to(buf, fmt::runtime(ffmt), value);
-            *result = 0;
-            writer.writeStr(buf, result - buf);
+            auto result = fmt::format_to_n(buf, sizeof(buf)-1, fmt::runtime(ffmt), value);
+            auto len = result.size < sizeof(buf) ? result.size : sizeof(buf)-1;
+            buf[len] = 0;
+            writer.writeStr(buf, len);
+            if ( result.size >= sizeof(buf) ) {
+                context->throw_error_at(at, "fmt overflow, output truncated to %d characters", int(sizeof(buf)-1));
+            }
         },[&](const char * e){
             context->throw_error_at(at, "fmt error: %s", e);
         });
@@ -114,9 +122,13 @@ namespace das
         *head++ = '}'; *head = 0;
 #if DAS_ENABLE_EXCEPTIONS
         try {
-            auto result = fmt::format_to(buf, fmt::runtime(ffmt), value);
-            *result= 0;
-            return context->allocateString(buf, uint32_t(result-buf), at);
+            auto result = fmt::format_to_n(buf, sizeof(buf)-1, fmt::runtime(ffmt), value);
+            auto len = result.size < sizeof(buf) ? result.size : sizeof(buf)-1;
+            buf[len] = 0;
+            if ( result.size >= sizeof(buf) ) {
+                context->throw_error_at(at, "fmt overflow, output truncated to %d characters", int(sizeof(buf)-1));
+            }
+            return context->allocateString(buf, uint32_t(len), at);
         } catch (const std::exception & e) {
             context->throw_error_at(at, "fmt error: %s", e.what());
             return nullptr;
@@ -124,9 +136,13 @@ namespace das
 #else
     char * return_value = nullptr;
     das_trycatch([&]{
-        auto result = fmt::format_to(buf, fmt::runtime(ffmt), value);
-        *result= 0;
-        return_value = context->allocateString(buf, uint32_t(result-buf), at);
+        auto result = fmt::format_to_n(buf, sizeof(buf)-1, fmt::runtime(ffmt), value);
+        auto len = result.size < sizeof(buf) ? result.size : sizeof(buf)-1;
+        buf[len] = 0;
+        if ( result.size >= sizeof(buf) ) {
+            context->throw_error_at(at, "fmt overflow, output truncated to %d characters", int(sizeof(buf)-1));
+        }
+        return_value = context->allocateString(buf, uint32_t(len), at);
     },[&](const char * e){
         context->throw_error_at(at, "fmt error: %s", e);
     });

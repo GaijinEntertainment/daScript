@@ -44,6 +44,7 @@ namespace das {
         vector<size_t> assumeStack;
         vector<size_t> assumeTypeStack;
         vector<bool> inFinally;
+        vector<Function *> inInfer;
         smart_ptr<ExprReturn> oneReturn;
         int32_t returnCount = 0;
         bool canFoldResult = true;

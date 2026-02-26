@@ -387,6 +387,8 @@ namespace das {
     }
 
     uint64_t Structure::getSizeOf64() const {
+        if ( circularGuard ) return 1;
+        circularGuard = true;
         uint64_t size = 0;
         const Structure * cppLayoutParent = nullptr;
         for ( const auto & fd : fields ) {
@@ -404,16 +406,20 @@ namespace das {
             size = (size + al) & ~al;
             size += fd.type->getSizeOf64();
         }
+        circularGuard = false;
         int al = getAlignOf() - 1;
         size = (size + al) & ~al;
         return size;
     }
 
     int Structure::getAlignOf() const {
+        if ( circularGuard ) return 1;
+        circularGuard = true;
         int align = 1;
         for ( const auto & fd : fields ) {
             align = das::max ( fd.type->getAlignOf(), align );
         }
+        circularGuard = false;
         return align;
     }
 

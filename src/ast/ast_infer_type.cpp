@@ -1502,7 +1502,7 @@ namespace das {
                                                       expr->at, CompilationError::invalid_argument_count);
                                             }
                                         } else {
-                                            error("'" + fnAddr->target + "' expecting class_ptr or cast<auto> class_ptr", "", "",
+                                            error("expecting class_ptr or cast<auto> class_ptr", "", "",
                                                   expr->at, CompilationError::invalid_argument_count);
                                         }
                                     } else {
@@ -4799,7 +4799,7 @@ namespace das {
                 varT->ref = false;
                 TypeDecl::applyAutoContracts(varT, var->type);
                 if (!relaxedPointerConst) { // var a = Foo? const -> var a : Foo const? = Foo? const
-                    if (varT->isPointer() && !varT->constant && var->init->type->constant) {
+                    if (varT->isPointer() && varT->firstType && !varT->constant && var->init->type->constant) {
                         varT->firstType->constant = true;
                     }
                 }
@@ -5020,7 +5020,7 @@ namespace das {
                         return Visitor::visit(expr);
                     }
                 } else if (func && func->isClassMethod && !func->isStaticClassMethod) { // if its a class method with 'self'
-                    auto selfStruct = func->arguments[0]->type->structType;
+                    auto selfStruct = func->arguments.size() > 0 ? func->arguments[0]->type->structType : nullptr;
                     if (!selfStruct) {
                         reportMissing(expr, nonNamedTypes, "no matching functions or generics: ", true);
                         return Visitor::visit(expr);
