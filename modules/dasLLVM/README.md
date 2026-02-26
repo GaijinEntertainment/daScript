@@ -1,4 +1,4 @@
-# dasLLVM 
+# dasLLVM
 LLVM-C Bindings for daScript
 
 This project provides LLVM-C bindings for daScript, generated for `LLVM 16.0.6`.
@@ -55,7 +55,7 @@ This module will create binaries on-the-fly for the `foo` and `main`
 functions, and use them instead of the interpreter at runtime.
 
 ## Caching System
-When using dynamic daslang (`./bin/daslang_dyn`) and `jit_use_dll_mode=true`
+When using daslang (`./bin/daslang`) and `jit_use_dll_mode=true`
 (default behaviour):
 - **First Run:** Compiles the code to `LLVM IR`, optimizes it, generates native
 code, and saves it as a dynamic (shared) library.

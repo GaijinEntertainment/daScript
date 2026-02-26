@@ -9,7 +9,7 @@ if(NOT TARGET DAS::DAS)
     include("${CMAKE_CURRENT_LIST_DIR}/DASTargets.cmake")
 endif()
 
-# Backward compatibility: DAS::daslang_dyn is now exported as DAS::daslang.
+# Backward compatibility: DAS::daslang_dyn is the old target name.
 # Create an alias so existing consumers using DAS::daslang_dyn still work.
 if(TARGET DAS::daslang AND NOT TARGET DAS::daslang_dyn)
     add_executable(DAS::daslang_dyn IMPORTED GLOBAL)
