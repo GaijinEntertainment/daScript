@@ -22,6 +22,7 @@ THE SOFTWARE.
    :numbered:
 
    introduction.rst
+   design_philosophy.rst
    language.rst
    embedding.rst
    tutorials.rst

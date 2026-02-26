@@ -1,16 +1,30 @@
 # Daslang
-Daslang - high-performance statically strongly typed programming language
 
-MacOS/linux/win32/win64 build status [![build](https://github.com/GaijinEntertainment/daScript/actions/workflows/build.yml/badge.svg)](https://github.com/GaijinEntertainment/daScript/actions/workflows/build.yml)\
-MacOS/linux/win64 wasm build status [![wasm_build](https://github.com/GaijinEntertainment/daScript/actions/workflows/wasm_build.yml/badge.svg)](https://github.com/GaijinEntertainment/daScript/actions/workflows/wasm_build.yml)
+Daslang (formerly daScript) is a high-performance, statically typed programming language built for games and real-time applications.
 
-Read my [BLOG](https://borisbat.github.io/dascf-blog)
+[![build](https://github.com/GaijinEntertainment/daScript/actions/workflows/build.yml/badge.svg)](https://github.com/GaijinEntertainment/daScript/actions/workflows/build.yml)
+[![wasm_build](https://github.com/GaijinEntertainment/daScript/actions/workflows/wasm_build.yml/badge.svg)](https://github.com/GaijinEntertainment/daScript/actions/workflows/wasm_build.yml)
 
-0.6 version is coming soon.
+[Website](https://dascript.org/) · [Documentation](https://dascript.org/doc/) · [Blog](https://borisbat.github.io/dascf-blog) · [Try Online](https://gaijinentertainment.github.io/try-dascript/)
 
-Serialization, JIT (via LLVM), and many more good language features are in.
-We are putting in last finishing touches, documentation, and all that jazz.
-See you soon...
+## Why Daslang?
+
+Daslang was created at [Gaijin Entertainment](https://gaijin.net/) to solve a real problem: **interop overhead** between scripting languages and C++ was eating the frame budget in their ECS game engine. Lua (via LuaJIT) and Squirrel both hit the same wall — marshaling data back and forth was too expensive.
+
+Daslang's data layout matches C++. There is no marshaling, no boxing, no conversion — script↔C++ calls are near-zero cost.
+
+**Core principles:**
+- **Iteration speed is king** — a full production game recompiles in ~5 seconds; hot reload is built in
+- **Explicit, not implicit** — no hidden type conversions, no silent allocations; `options log` shows exactly what the compiler produces
+- **99% safe, not 100%** — eliminates real-world C++ bugs pragmatically, without Rust-level restrictions
+- **If it gets slow, you can fix it** — manual `delete` to reduce GC pressure, AOT to C++ for native speed
+- **The language reflects the problem** — a compile-time macro system lets libraries reshape syntax to match the domain
+
+**Three execution tiers** (all planned from day one):
+fast tree-based **interpreter** → **AOT** compilation to C++ (required for consoles) → **JIT** via LLVM.
+Hybrid mode uses semantic hashing: unchanged functions stay AOT, changed ones fall back to the interpreter — ship a hotfix without a full rebuild.
+
+See the [design philosophy](doc/source/reference/design_philosophy.rst) for the full story.
 
 ## Installation
 

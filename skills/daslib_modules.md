@@ -75,3 +75,13 @@ When generating per-field operations on user structs, fields may be non-copyable
 
 - **`add_function`** — registers a concrete, fully-typed function. Used when all types are known at macro expansion time.
 - **`add_generic`** — registers a generic function template that gets instanced at each call site. Use when the function needs to participate in overload resolution or when type inference is needed (e.g., `push` may need to resolve to the correct clone/copy overload depending on field types).
+
+## Channels and cross-context communication
+
+- `with_channel(N) $(ch) { ... }` — creates a channel expecting `N` notify calls before `for_each_clone` unblocks
+- **`notify` vs `notify_and_release`**: when a lambda captures a channel, the reference count is incremented; `notify_and_release` decrements the entry count AND releases that extra reference, setting the variable to `null`. When passing a channel as a plain argument (e.g. via `invoke_in_context`), no lambda capture occurs — no extra reference is added — so use plain `notify`
+- `notify_and_release` sets the channel/status variable to `null` after release
+- `push_clone(ch, value)` — push a clone of `value` into the channel
+- `for_each_clone(ch) $(val : T#) { ... }` — drain channel; data arrives as temporary type `T#`
+- `invoke_in_context(context, "func", ch)` — can pass `Channel?` directly to a child context
+- Child scripts that use channel operations need `require daslib/jobque_boost`; compile with `compile_file` + `make_file_access("")` so the child can resolve daslib modules from disk
