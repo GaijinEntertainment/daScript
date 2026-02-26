@@ -396,6 +396,18 @@ FOREACH(_module ${_modules})
     INCLUDE(modules/${_module}/CMakeLists.txt OPTIONAL)
 ENDFOREACH()
 
+# Clean stale .shared_module files. When a module is disabled, its .shared_module
+# from a previous build may remain and cause crashes at startup (the dynamic module
+# loader tries to load them even though the module code is no longer linked).
+FILE(GLOB_RECURSE _all_shared_modules "${PROJECT_SOURCE_DIR}/modules/*.shared_module")
+FOREACH(_sm ${_all_shared_modules})
+    GET_FILENAME_COMPONENT(_sm_name "${_sm}" NAME_WE)
+    IF(NOT TARGET ${_sm_name})
+        MESSAGE(STATUS "Removing stale ${_sm}")
+        FILE(REMOVE "${_sm}")
+    ENDIF()
+ENDFOREACH()
+
 FOREACH(_example ${DAS_ALL_EXAMPLES})
     MESSAGE("adding to ${_example} ${DAS_MODULES_LIBS}")
     TARGET_LINK_LIBRARIES(${_example} ${DAS_MODULES_LIBS})
