@@ -11,6 +11,8 @@ C functions).  It is organized from simple to advanced:
 * **Quick Start** — minimal host program, compilation, and evaluation
 * **C++ API Reference** — modules, function/type/enum bindings, cast infrastructure
 * **C API Reference** — the ``daslang/c_api/c_api.h`` header for C-only hosts and FFI
+* **External Modules** — building and distributing modules outside the main
+  source tree, ``.das_module`` descriptors, ``find_package(DAS)``
 * **Advanced Topics** — AOT compilation, standalone contexts, class adapters
 
 For step-by-step walk-throughs with complete, compilable source code, see the
@@ -22,5 +24,6 @@ For step-by-step walk-throughs with complete, compilable source code, see the
    embedding/quickstart.rst
    embedding/cpp_api.rst
    embedding/c_api.rst
+   embedding/external_modules.rst
    embedding/advanced.rst
 

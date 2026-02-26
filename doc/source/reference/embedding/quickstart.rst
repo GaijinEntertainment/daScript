@@ -165,4 +165,5 @@ Next steps
 * **Bind C++ functions** → :ref:`tutorial_integration_cpp_binding_functions`
 * **Bind C++ types** → :ref:`tutorial_integration_cpp_binding_types`
 * **Create custom modules** → :ref:`tutorial_integration_cpp_custom_modules`
+* **External modules** → :ref:`embedding_external_modules`
 * **Full API reference** → :ref:`embedding_modules`

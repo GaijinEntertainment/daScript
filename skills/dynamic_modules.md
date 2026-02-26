@@ -179,16 +179,6 @@ install(FILES ${PROJECT_SOURCE_DIR}/modules/dasFoo/.das_module
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasFoo)
 ```
 
-## Git considerations
-
-`.das_module` files are gitignored by default (the extension is in `.gitignore`). When adding a NEW `.das_module` file to the repo, use:
-
-```
-git add -f modules/dasFoo/.das_module
-```
-
-Existing tracked `.das_module` files are not affected by `.gitignore`.
-
 ## When to create a `.das_module`
 
 | Module type | Has `.das_module`? | Registration calls |
