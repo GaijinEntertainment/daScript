@@ -1,54 +1,37 @@
-# daslang Project Instructions
+# daslang SDK Instructions
 
-> **Keep in sync:** This file and `CLAUDE.md` (repo root) share identical content. Both reference skill files in the `skills/` directory at repo root — skill files are shared, not duplicated.
+## Overview
 
-## Project Overview
+[daslang](https://daslang.io/) (formerly daScript) is a high-performance statically-typed programming language designed for games and real-time applications, standalone or embedded. Many C++ API names still use the old "daScript" spelling.
 
-This is the [daslang](https://dascript.org/) programming language repository (GaijinEntertainment/daScript). daslang (formerly daScript) is a high-performance statically-typed scripting language designed for games and real-time applications. The language has been renamed to **daslang**, but the repository and many C++ API names still use the old "daScript" spelling.
+## Running Scripts
 
-## Build & Run
-
-- **Build system:** CMake + MSVC (Visual Studio 2022)
-- **Generate:** `generate_msvc_2022.bat` → creates `build/DAS.sln`
-- **Build:** `cmake --build build --config Release`
-- **Compiler binary:** `bin/Release/daslang.exe`
-- **Run a script:** `bin/Release/daslang.exe path/to/script.das`
-- **Run tests:** `bin/Release/daslang.exe dastest/dastest.das -- --test path/to/test.das`
+- **Run a script:** `bin/daslang path/to/script.das`
+- **AOT generation:** `bin/daslang -aot input.das output.cpp`
+- **Example:** `bin/daslang examples/hello_world.das`
 
 ### Debugging
 
-- **Always check the exit code** after running `daslang.exe` — a crash may produce no output at all, looking like a silent success
+- **Always check the exit code** after running `daslang` — a crash may produce no output at all, looking like a silent success
 - On Windows, check `$LASTEXITCODE` in PowerShell after every run. Exit code `0` = success, non-zero = error
 - Exit code `-1073741819` (`0xC0000005`) = **Access Violation** — indicates a native crash (segfault), usually a dangling pointer or double-free in macro AST manipulation
 - If the program crashes with no error message, the bug is in native code (C++ bindings or smart pointer misuse), not in daScript logic — check exit code first before investigating script errors
 
-## GitHub Operations
-
-- **Use `gh` CLI** for all GitHub operations (creating PRs, listing issues, etc.) — NOT GitKraken MCP tools
-
 ## Skill Files (REQUIRED)
 
-Task-specific instructions are split into skill files under `skills/`. You MUST read the relevant skill file(s) before performing the corresponding task.
+Task-specific instructions are in skill files under `skills/`. Read the relevant skill file(s) before performing the corresponding task.
 
 | Skill file | Read BEFORE... |
 |---|---|
-| `skills/das_formatting.md` | Creating or modifying any `.das` file (tutorials, tests, daslib modules, utilities) |
-| `skills/writing_tests.md` | Writing or editing test files under `tests/` |
-| `skills/documentation_rst.md` | Editing RST files in `doc/source/`, editing `//!` doc-comments in `daslib/*.das`, writing tutorial RST pages, editing `doc/source/stdlib/handmade/` files, running `das2rst.das`, or regenerating stdlib module documentation |
-| `skills/cpp_integration.md` | Writing or editing C++ files in `src/`, `modules/`, or `tutorials/integration/cpp/` |
-| `skills/daslib_modules.md` | Working with `daslib/` modules (linq, json, regex, functional, match, etc.) or extending the standard library |
-| `skills/writing_benchmarks.md` | Writing or running benchmark files under `benchmarks/`, porting benchmarks from `examples/profile/` |
-| `skills/install_instructions.md` | Creating or updating AI instruction files (`install/CLAUDE.md`, `install/skills/`) for the installed SDK |
+| `skills/das_formatting.md` | Creating or modifying any `.das` file |
+| `skills/cpp_integration.md` | Embedding daslang in C++ host applications, binding types/functions/enums |
+| `skills/daslib_modules.md` | Using `daslib/` modules (linq, json, regex, functional, match, etc.) |
 
-Multiple skill files may apply to a single task. For example, creating a new daslib module requires reading `skills/das_formatting.md`, `skills/daslib_modules.md`, and possibly `skills/documentation_rst.md`.
-
-### Updating Instructions with New Knowledge
-
-When you discover something new about daslang syntax, semantics, or conventions — whether through compiler errors, user corrections, or experimentation — **update this file** (and its `.github/copilot-instructions.md` mirror) with the new knowledge. Add it to the appropriate section (gen2 syntax, common gotchas, etc.) so future sessions benefit. If it relates to a specific skill area, update the relevant `skills/*.md` file too.
+Multiple skill files may apply to a single task. For example, embedding daslang and calling its standard library requires reading both `skills/cpp_integration.md` and `skills/daslib_modules.md`.
 
 ## daslang Language — Gen2 Syntax (REQUIRED)
 
-All code examples and documentation MUST use gen2 syntax (add `options gen2` at the top of every file). Key rules:
+All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key rules:
 
 - **Parentheses** on control flow: `if (x > 0)`, `for (i in range(10))`, `while (running)`
 - **Braces** on all blocks — no indentation-based blocks: `def foo() { ... }`, `if (x) { ... }`
@@ -85,13 +68,13 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - daslang has garbage collection — `delete` is not required in most code
 - `delete` is available for explicit cleanup but requires `unsafe` for heap pointers
 - `var inscope` declares automatic cleanup in a `finally` block
-- Prefer omitting `delete` in tutorials and examples unless the topic is memory management
+- Prefer omitting `delete` unless the topic is memory management
 - Struct fields without initializers require defaults or `@safe_when_uninitialized`
 
 ### Move semantics (`<-` vs `move`)
 
 - **`<-` operator**: ALWAYS `memcpy(dest, src) + memset(src, 0)` — it is a raw memory operation, NOT smart_ptr-aware. It zeros the source regardless of type.
-- **`move` function**: Bound via C++ `builtin_smart_ptr_move*` family in `module_builtin_runtime.cpp` — proper smart pointer move with reference counting. Use `move(dest, src)` or `move(dest) src` for `smart_ptr<T>` transfers.
+- **`move` function**: Proper smart pointer move with reference counting. Use `move(dest, src)` or `move(dest) src` for `smart_ptr<T>` transfers.
 - **`return <- expr`**: Moves value to return slot and zeroes `expr`. If `expr` is a `&` ref parameter, this zeroes the *caller's* variable since they share memory.
 - **Key subtlety**: When a function takes `var x : smart_ptr<T>&` (by reference) and internally calls a function that takes `var x : smart_ptr<T>` (by value/move), the `<-` inside `return` zeroes the `&` ref. Callers MUST capture the return value: `unsafe { expr <- apply_template(expr) $() { ... } }`
 - **Safe pattern**: `unsafe { variable <- function_returning_smart_ptr(variable) $() { ... } }` — captures return value back into the same variable
@@ -185,7 +168,7 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - `options persistent_heap` — needed when returning strings built with `build_string`
 - Tuple field access uses underscore prefix: `t._0`, `t._1`, `t._2`
 - Annotations: `[export]` for entry points, `[private]` for private functions, `[test]` for test functions
-- `options no_aot` — disable ahead-of-time compilation (common in test files)
+- `options no_aot` — disable ahead-of-time compilation
 - `options rtti` — enable runtime type information (needed for some daslib features)
 - `require` uses forward slash paths: `require daslib/linq` — NOT `require daslib\linq`
 - `require foo public` — re-exports `foo` so that any module requiring the current module also sees `foo`'s symbols transitively. Example: `regex.das` has `require strings public`, so `require daslib/regex` automatically makes `slice`, `starts_with`, etc. visible without a separate `require strings`
@@ -197,7 +180,6 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - Blocks CANNOT be stored in containers, returned from functions, or captured — use lambdas or function pointers for those use cases
 - `match`, `multi_match`, `static_match` macros (from `daslib/match.das`) handle side effects automatically — do NOT add `[sideeffects]` annotations to functions that only use match
 - `[export] def main()` returns `void` — do NOT `return true` or return other values from main
-- **`feint` vs `print` in tests**: `feint` is a no-op with the same signature and `SideEffects::modifyExternal` as `print` — it won't be optimized out, but produces no output. Use `feint` in tests instead of `print` unless testing actual print/logging behavior
 - **`push` vs `emplace` vs `push_clone`** for arrays: `push(arr, val)` copies `val` into the array (fails for non-copyable types like `array<int>`); `emplace(arr, val)` **moves** `val` into the array (source is zeroed/destroyed after); `push_clone(arr, val)` **clones** `val` into the array (works for any type, preserves source). When generating code that operates on user structs with potentially non-copyable fields, prefer `push_clone` (preserves source) or `emplace` (when source consumption is intentional).
 - **Non-copyable types**: `array<T>`, `table<K;V>`, lambdas, and any struct containing them cannot be copied with `=` or `push`. Use `:=` (clone-assign), `push_clone`, or `<-` (move) instead. The compiler error is clear: "can't copy non-copyable type"
 
@@ -211,26 +193,19 @@ All code examples and documentation MUST use gen2 syntax (add `options gen2` at 
 - `invoke_in_context(context, "func", ch)` — can pass `Channel?` directly to a child context
 - Child scripts that use channel operations need `require daslib/jobque_boost`; compile with `compile_file` + `make_file_access("")` so the child can resolve daslib modules from disk
 
-## Key Directories
+## SDK Directory Layout
 
-- `src/` — C++ compiler/runtime source
-- `include/daScript/` — C++ headers
-- `daslib/` — Standard library modules (86 .das files)
-- `dastest/` — Test framework
-- `tests/` — Test suite (35 subdirectories, ~226 `.das` files). See `tests/README.md` for a full index of every test file, what it tests, and whether it expects compile errors.
-- `doc/source/reference/language/` — RST language documentation (36 files)
-- `doc/source/stdlib/` — RST standard library documentation (auto-generated + handmade)
-- `doc/reflections/` — Documentation generation tools (das2rst.das, rst.das, gen_module_examples.py)
-- `tutorials/language/` — Language tutorial `.das` files (42 progressive tutorials)
-- `tutorials/integration/cpp/` — C++ integration tutorials (embedding daslang in C++ host applications)
-- `tutorials/macros/` — Macro tutorials (call macros, reader macros, etc.)
-- `doc/source/reference/tutorials/` — RST companion pages for each tutorial
-- `modules/` — External plugin modules
+- `bin/` — Compiler binary (`daslang`)
+- `lib/` — Static libraries for C++ embedding
+- `include/daScript/` — C++ headers for embedding
+- `daslib/` — Standard library modules (.das files)
+- `examples/` — Example scripts
+- `dastest/` — Test framework (usable for testing your own code)
 
 ## Keywords Reference
 
 `aka` — variable name alias (`var a aka alpha = 42`, `for (x aka element in arr)`)
 `inscope` — declares variable owns smart_ptr lifetime (`var inscope p = ...`)
 `is type<T>` — compile-time type check (`a is type<int>` returns bool)
-`expect` — suppress specific compilation errors in test files (`expect 30507`)
+`expect` — suppress specific compilation errors (`expect 30507`)
 `template` — generic type constraint in function signatures
