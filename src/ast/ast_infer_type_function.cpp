@@ -1087,6 +1087,10 @@ namespace das {
                 error("recursive call in argument initializer is not allowed", "", "", expr->at);
                 return nullptr;
             }
+            if ( find(inInfer.begin(), inInfer.end(), funcC) != inInfer.end() ) {
+                error("recursive call in function is not allowed", "", "", expr->at);
+                return nullptr;
+            }
             if (funcC->firstArgReturnType) {
                 TypeDecl::clone(expr->type, expr->arguments[0]->type);
                 expr->type->ref = false;
@@ -1135,7 +1139,9 @@ namespace das {
                 auto newArg = funcC->arguments[iT]->init->clone();
                 if (!newArg->type) {
                     // recursive resolve???
+                    inInfer.push_back(funcC);
                     newArg = newArg->visit(*this);
+                    inInfer.pop_back();
                 }
                 if (newArg->type && newArg->type->baseType == Type::fakeLineInfo) {
                     newArg->at = expr->at;
