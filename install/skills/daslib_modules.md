@@ -33,3 +33,13 @@ Many daslib functions follow this convention for iterator-based operations:
 - `daslib/flat_hash_table.das` — template-based open-addressing hash table (`TFlatHashTable`) with methods: `empty`, `length`, `clear`, `grow`, `rehash`, `reserve`, `key_index`, `key_exists`, `get`, `erase`, `foreach`, `keys`, `values`, `operator[]`, `operator?[]`
 - `daslib/soa.das` — Structure-of-Arrays macro. Annotate a struct with `[soa]` to generate a parallel SOA layout (`Foo`SOA``) where every field becomes `array<FieldType>`. Provides `[]` indexing via `SOA_INDEX` proxy (rewrites `soa[i].field` → `soa.field[i]` at compile time). Generated functions: `length`, `capacity`, `push` (clone semantics, preserves source), `push_clone`, `emplace` (move semantics, destroys source), `erase`, `pop`, `clear`, `resize`, `reserve`, `swap`, `from_array`, `to_array`. Handles non-copyable fields (e.g. `array<int>`) correctly: `push`/`push_clone`/`from_array` use clone per-field, `emplace` uses move per-field. For-loop macro expands `for (it in soa)` into per-field array iteration.
 - `daslib/builtin.das` — core builtins like `to_array`, `to_table`
+
+## Channels and cross-context communication
+
+- `with_channel(N) $(ch) { ... }` — creates a channel expecting `N` notify calls before `for_each_clone` unblocks
+- **`notify` vs `notify_and_release`**: when a lambda captures a channel, the reference count is incremented; `notify_and_release` decrements the entry count AND releases that extra reference, setting the variable to `null`. When passing a channel as a plain argument (e.g. via `invoke_in_context`), no lambda capture occurs — no extra reference is added — so use plain `notify`
+- `notify_and_release` sets the channel/status variable to `null` after release
+- `push_clone(ch, value)` — push a clone of `value` into the channel
+- `for_each_clone(ch) $(val : T#) { ... }` — drain channel; data arrives as temporary type `T#`
+- `invoke_in_context(context, "func", ch)` — can pass `Channel?` directly to a child context
+- Child scripts that use channel operations need `require daslib/jobque_boost`; compile with `compile_file` + `make_file_access("")` so the child can resolve daslib modules from disk
