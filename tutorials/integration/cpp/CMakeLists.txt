@@ -171,7 +171,7 @@ SET(INTEGRATION_20_STANDALONE_CTX_GENERATED_SRC)
 add_custom_target(integration_cpp_20_dasAotStubStandalone)
 DAS_AOT_CTX("tutorials/integration/cpp/standalone_context.das"
             INTEGRATION_20_STANDALONE_CTX_GENERATED_SRC
-            integration_cpp_20_dasAotStubStandalone daslang_dyn)
+            integration_cpp_20_dasAotStubStandalone daslang)
 
 # Step 2: Build the tutorial executable with the generated files.
 add_executable(integration_cpp_20

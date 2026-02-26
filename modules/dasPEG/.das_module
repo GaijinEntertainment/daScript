@@ -1,0 +1,10 @@
+options gen2
+require fio
+
+[export]
+def initialize(project_path : string) {
+    let peg_paths = ["peg", "meta_ast", "parse_macro", "parser_generator"]
+    for (path in peg_paths) {
+        register_native_path("peg", "{path}", "{project_path}/peg/{path}.das")
+    }
+}

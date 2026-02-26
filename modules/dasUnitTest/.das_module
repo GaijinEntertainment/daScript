@@ -5,6 +5,6 @@ require fio
 [export]
 def initialize(project_path : string) {
     if (das_is_dll_build()) {
-        register_dynamic_module("{project_path}/dasModuleUnitTest.das_module", "Module_UnitTest")
+        register_dynamic_module("{project_path}/dasModuleUnitTest.shared_module", "Module_UnitTest")
     }
 }

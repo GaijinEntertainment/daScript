@@ -30,7 +30,7 @@
 
 | Directory    | Contents                                              |
 |--------------|-------------------------------------------------------|
-| `bin/`       | Compiler and tool binaries (`daslang`, `daslang_dyn`) |
+| `bin/`       | Compiler binary (`daslang`)                           |
 | `lib/`       | Static and shared libraries for embedding             |
 | `include/`   | C++ headers for integration                           |
 | `daslib/`    | Standard library modules (`.das` files)               |

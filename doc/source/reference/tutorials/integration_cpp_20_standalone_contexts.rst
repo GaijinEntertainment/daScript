@@ -75,7 +75,7 @@ The ``DAS_AOT_CTX`` CMake macro drives the generation:
    SET(STANDALONE_CTX_GENERATED_SRC)
    DAS_AOT_CTX("tutorials/integration/cpp/standalone_context.das"
                STANDALONE_CTX_GENERATED_SRC
-               integration_cpp_20_dasAotStubStandalone daslang_dyn)
+               integration_cpp_20_dasAotStubStandalone daslang)
 
    add_executable(integration_cpp_20
        20_standalone_context.cpp
@@ -83,7 +83,7 @@ The ``DAS_AOT_CTX`` CMake macro drives the generation:
        ${STANDALONE_CTX_GENERATED_SRC})
    TARGET_LINK_LIBRARIES(integration_cpp_20 libDaScript)
 
-This runs ``daslang_dyn`` with the ``-ctx`` flag, which invokes
+This runs ``daslang`` with the ``-ctx`` flag, which invokes
 ``daslib/aot_standalone.das`` to generate:
 
 * ``standalone_context.das.h`` — declares the ``Standalone`` class

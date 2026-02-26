@@ -34,6 +34,8 @@ Many daslib functions follow this convention for iterator-based operations:
 - `daslib/soa.das` — Structure-of-Arrays macro. Annotate a struct with `[soa]` to generate a parallel SOA layout (`Foo`SOA``) where every field becomes `array<FieldType>`. Provides `[]` indexing via `SOA_INDEX` proxy (rewrites `soa[i].field` → `soa.field[i]` at compile time). Generated functions: `length`, `capacity`, `push` (clone semantics, preserves source), `push_clone`, `emplace` (move semantics, destroys source), `erase`, `pop`, `clear`, `resize`, `reserve`, `swap`, `from_array`, `to_array`. Handles non-copyable fields (e.g. `array<int>`) correctly: `push`/`push_clone`/`from_array` use clone per-field, `emplace` uses move per-field. For-loop macro expands `for (it in soa)` into per-field array iteration. Tests: `tests/soa/` (4 files, 126 tests).
 - `daslib/builtin.das` — core builtins like `to_array`, `to_table`
 
+> **Modules under `modules/`** (as opposed to `daslib/`) need `.das_module` descriptors for the dynamic binary. Pure-das modules use `register_native_path`, C++ modules use `register_dynamic_module`. See `skills/dynamic_modules.md`.
+
 ## Structure macro development patterns
 
 When building `[structure_macro]` annotations that generate companion types and operations (like `[soa]`, `[decs]`):

@@ -131,7 +131,13 @@
         string normalizeFileName ( const char * fileName ) {
             char buffer[MAX_PATH ];
             auto ret = GetFullPathNameA(fileName,MAX_PATH,buffer,nullptr);
-            return ret ? buffer : "";
+            if ( !ret ) return "";
+            string result = buffer;
+            // GetFullPathNameA may leave a trailing backslash for directory
+            // paths (e.g. "./" -> "D:\foo\"). Trim it for consistency.
+            if ( result.size()>3 && (result.back()=='\\' || result.back()=='/') )
+                result.pop_back();
+            return result;
         }
         bool closeLibrary ( void * module ) {
             return FreeLibrary(HMODULE(module));

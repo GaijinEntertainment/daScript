@@ -51,6 +51,8 @@ REGISTER_MODULE(Module_MyMod);
 
 The host uses `NEED_MODULE(Module_MyMod)` before `Module::Initialize()`.  Scripts access it via `require my_module_name`.
 
+> **Dynamic binary support**: C++ modules also need a `.das_module` descriptor for the dynamic binary (`daslang`). See `skills/dynamic_modules.md` for the full pattern — you'll need `register_dynamic_module` to load the `.shared_module` DLL.
+
 ## Callbacks — `TBlock<>`, `TFunc<>`, `TLambda<>`, `das_invoke*`
 
 Three closure types exist, each with a typed template and an invocation helper:

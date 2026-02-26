@@ -12,7 +12,7 @@ struct public DllName {
     name : string
 
     def DllName(s : string) {
-        name = s |> replace_multiple([("@", "`At`"), ("=", "`Eq`")])
+        name = s |> replace_multiple([("@", "`At`"), ("=", "`Eq`"), ("<", "`Lt`"), (">", "`Gt`"), (",", "`C`")])
     }
 
     def const impl() {
@@ -202,7 +202,7 @@ def public create_uid_nodes(prog : Program?; funcs : array<FunctionPtr>) {
 }
 
 
-// All dll operations pass through this class 
+// All dll operations pass through this class
 class public DLLHandle {
     handle : void?
     created_fileinfos : table<FileInfo?; FileInfo?>

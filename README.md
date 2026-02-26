@@ -70,8 +70,8 @@ clang++ test_aot.cpp aot_main.cpp -Iinclude lib/liblibDaScript.a lib/liblibUriPa
 ```
 In a similar manner, you can link against a shared library instead of a static one:
 ```sh
-cmake --build build --target daslang_dyn
-./bin/daslang_dyn -aot main.das aot_main.cpp
+cmake --build build --target daslang
+./bin/daslang -aot main.das aot_main.cpp
 clang++ test_aot.cpp aot_main.cpp -Iinclude lib/liblibDaScriptDyn.so -o aot_example
 LD_LIBRARY_PATH=./lib ./aot_example
 ```
@@ -82,7 +82,7 @@ To use JIT, you need the `LLVM 16.0.6` shared library at the path
 
 Once you have `LLVM.dll`, all you need is:
 ```sh
-./bin/daslang_dyn -jit main.das
+./bin/daslang -jit main.das
 ```
 For more details on how JIT works and what can be configured, see the
 [JIT Readme](modules/dasLLVM/README.md).
