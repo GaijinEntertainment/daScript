@@ -35,6 +35,7 @@ var public {
     add_stub_header = true
     add_empty_topic = true
     strict_struct_fields = true
+    group_function_overloads = true
 }
 
 
@@ -200,20 +201,22 @@ def function_label_name(value : FunctionPtr | Function?) {
     let res = "function-{safe_function_name(mn)}"
     // For generic functions, append a line suffix to disambiguate overloads
     // that have the same short mangled name
-    var is_generic = false
-    for (arg in value.arguments) {
-        if (arg._type.baseType == Type.autoinfer) {
-            is_generic = true
-            break
+    if (group_function_overloads) {
+        var is_generic = false
+        for (arg in value.arguments) {
+            if (arg._type.baseType == Type.autoinfer) {
+                is_generic = true
+                break
+            }
         }
-    }
-    if (is_generic) {
-        return "{res}_{value.at.line}"
-    }
-    // For class/struct methods, operators like []=, []&&=, []||= collapse
-    // to the same safe name. Disambiguate with line number.
-    if (value.flags.isClassMethod) {
-        return "{res}_{value.at.line}"
+        if (is_generic) {
+            return "{res}_{value.at.line}"
+        }
+        // For class/struct methods, operators like []=, []&&=, []||= collapse
+        // to the same safe name. Disambiguate with line number.
+        if (value.flags.isClassMethod) {
+            return "{res}_{value.at.line}"
+        }
     }
     return res
 }
@@ -1063,6 +1066,14 @@ def document_global_constants(doc_file : file; mods : array<Module?>) {
     }
 }
 
+
+def short_enum_value(value : string) : string {
+    if (value.ends_with("u8")) {
+        return value.slice(0, -2)
+    }
+    return value
+}
+
 def public document_enumeration(doc_file : file; mod : Module?; value) {
     //! Writes RST documentation for a single enumeration to the doc file.
     fwrite(doc_file, make_label(enum_label_name(value)))
@@ -1073,7 +1084,7 @@ def public document_enumeration(doc_file : file; mod : Module?; value) {
     for (en in value.list) {
         var line : array<string>
         push(line, string(en.name))
-        push(line, describe(en.value))
+        push(line, short_enum_value(describe(en.value)))
         emplace(tab, line)
     }
     document_topic("Values", doc_file, topic("enumeration", mod, string(value.name)), "enum {value.name}", tab)
@@ -2032,46 +2043,57 @@ def document_functions(doc_file : file; mods : array<Module?>; var groups : arra
                     }
                 }
                 fwrite(doc_file, "\n")
-                // build set of names that have multiple overloads
-                var multi_overload : table<string>
-                var prev_count_name = ""
-                var count_run = 0
-                for (func in grp.func) {
-                    if (!tab.key_exists(func.fn)) {
-                        let cur_name = function_name(func.fn)
-                        if (cur_name == prev_count_name) {
-                            count_run += 1
-                            if (count_run == 2) {
-                                multi_overload |> insert(cur_name)
+                if (group_function_overloads) {
+                    // build set of names that have multiple overloads
+                    var multi_overload : table<string>
+                    var prev_count_name = ""
+                    var count_run = 0
+                    for (func in grp.func) {
+                        if (!tab.key_exists(func.fn)) {
+                            let cur_name = function_name(func.fn)
+                            if (cur_name == prev_count_name) {
+                                count_run += 1
+                                if (count_run == 2) {
+                                    multi_overload |> insert(cur_name)
+                                }
+                            } else {
+                                prev_count_name = cur_name
+                                count_run = 1
                             }
-                        } else {
-                            prev_count_name = cur_name
-                            count_run = 1
                         }
                     }
-                }
-                var prev_func_name = ""
-                var prev_was_overload_group = false
-                for (func in grp.func) {
-                    if (tab.key_exists(func.fn)) {
-                        continue
-                    }
-                    tab.insert(func.fn)
-                    let cur_name = function_name(func.fn)
-                    let is_overload = cur_name == prev_func_name
-                    if (!is_overload) {
-                        if (prev_was_overload_group) {
-                            fwrite(doc_file, "----\n\n")
+                    var prev_func_name = ""
+                    var prev_was_overload_group = false
+                    for (func in grp.func) {
+                        if (tab.key_exists(func.fn)) {
+                            continue
                         }
-                        if (multi_overload |> key_exists(cur_name)) {
-                            fwrite(doc_file, "\n{cur_name}\n{strings::repeat("^", length(cur_name))}\n\n")
-                            prev_was_overload_group = true
-                        } else {
-                            prev_was_overload_group = false
+                        tab.insert(func.fn)
+                        let cur_name = function_name(func.fn)
+                        let is_overload = cur_name == prev_func_name
+                        if (!is_overload) {
+                            if (prev_was_overload_group) {
+                                fwrite(doc_file, "----\n\n")
+                            }
+                            if (multi_overload |> key_exists(cur_name)) {
+                                fwrite(doc_file, "\n{cur_name}\n{strings::repeat("^", length(cur_name))}\n\n")
+                                prev_was_overload_group = true
+                            } else {
+                                prev_was_overload_group = false
+                            }
                         }
+                        document_function(doc_file, func.mod, func.fn, 0, "", "das:function", is_overload)
+                        prev_func_name = cur_name
                     }
-                    document_function(doc_file, func.mod, func.fn, 0, "", "das:function", is_overload)
-                    prev_func_name = cur_name
+                } else {
+                    // !group_function_overloads
+                    for (func in grp.func) {
+                        if (tab.key_exists(func.fn)) {
+                            continue
+                        }
+                        tab.insert(func.fn)
+                        document_function(doc_file, func.mod, func.fn)
+                    }
                 }
             }
         }
