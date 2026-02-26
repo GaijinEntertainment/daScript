@@ -22,6 +22,10 @@ This is the [daslang](https://dascript.org/) programming language repository (Ga
 - Exit code `-1073741819` (`0xC0000005`) = **Access Violation** — indicates a native crash (segfault), usually a dangling pointer or double-free in macro AST manipulation
 - If the program crashes with no error message, the bug is in native code (C++ bindings or smart pointer misuse), not in daScript logic — check exit code first before investigating script errors
 
+## GitHub Operations
+
+- **Use `gh` CLI** for all GitHub operations (creating PRs, listing issues, etc.) — NOT GitKraken MCP tools
+
 ## Skill Files (REQUIRED)
 
 Task-specific instructions are split into skill files under `skills/`. You MUST read the relevant skill file(s) before performing the corresponding task.

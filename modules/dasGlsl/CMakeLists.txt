@@ -10,5 +10,6 @@ IF(NOT DAS_GLSL_INCLUDED)
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasGlsl
         FILES_MATCHING
         PATTERN "*.das"
+        PATTERN "_aot_generated" EXCLUDE
     )
 ENDIF()

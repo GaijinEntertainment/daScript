@@ -12,7 +12,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(DAS_FLEX_BISON_DISABLED "Disable FLEX/BISON stage" OFF)
 option(DAS_CLANG_BIND_DISABLED "Disable dasClangBind (libclang bindings, C/C++ parsing)" ON)
 option(DAS_LLVM_DISABLED "Disable dasLLVM (llvm bindings)" ON)
-option(DAS_QUIRREL_DISABLED "Disable dasQuirrel (quirrel bindings)" ON)
 option(DAS_HV_DISABLED "Disable dasHV (websokets,http server and client)" ON)
 option(DAS_GLFW_DISABLED "Disable dasGLFW (GLFW window for graphics apps)" OFF)
 option(DAS_IMGUI_DISABLED "Disable dasIMGUI (IMGUI, IMNODES, IMGUI-NODE-EDITOR gui libraries)" ON)
@@ -29,6 +28,7 @@ option(DAS_TOOLS_DISABLED "Disable dasTools" OFF)
 option(DAS_AOT_EXAMPLES_DISABLED "Disable dasAOT examples" OFF)
 option(DAS_TUTORIAL_DISABLED "Disable dasTutorial" OFF)
 option(DAS_TESTS_DISABLED "Disable dasTests" OFF)
+option(DAS_BUILD_DOCUMENTATION "Build HTML documentation via Sphinx during install" OFF)
 set(DAS_INSTALL_BINDIR bin CACHE STRING "Directory where to install binaries")
 set(DAS_INSTALL_LIBDIR lib CACHE STRING "Directory where to install binaries")
 set(DAS_INSTALL_DOCDIR . CACHE STRING "Directory where to install documentation")
@@ -36,6 +36,7 @@ set(DAS_INSTALL_DASLIBDIR daslib CACHE STRING "Directory where to install daslib
 set(DAS_INSTALL_EXAMPLESDIR examples CACHE STRING "Directory where to install examples")
 set(DAS_INSTALL_MODULESDIR modules CACHE STRING "Directory where to install modules")
 set(DAS_INSTALL_TUTORIALSDIR tutorials CACHE STRING "Directory where to install tutorial sources")
+set(DAS_INSTALL_DASTESTDIR dastest CACHE STRING "Directory where to install dastest")
 
 IF(WIN32)
     IF(DAS_LLVM_DISABLED)
@@ -290,7 +291,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${EXECUTABLE_OUTPUT_PATH})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 
-# All dynamic modules libraries will be added here (files like dasModuleAudio.das_module).
+# All dynamic modules libraries will be added here (files like dasModuleAudio.shared_module).
 SET(DAS_DYN_MODULES_LIBS)
 # All static modules libraries will be added here (files like libDasModuleAudio.a).
 SET(DAS_MODULES_LIBS)
@@ -313,7 +314,7 @@ MACRO(ADD_DAS_SHARED_MODULE_LIB module_name)
         RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${SHARED_OUTPUT_PATH}"
         RUNTIME_OUTPUT_DIRECTORY_RELEASE "${SHARED_OUTPUT_PATH}"
         RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${SHARED_OUTPUT_PATH}"
-        SUFFIX ".das_module"
+        SUFFIX ".shared_module"
         PREFIX ""
     )
     # Ignore tutorial, profile, test.
@@ -975,6 +976,18 @@ if (NOT ${DAS_TOOLS_DISABLED})
         DESTINATION ${DAS_INSTALL_DASLIBDIR}
     )
 
+    file(GLOB DASTEST_SOURCES
+        ${PROJECT_SOURCE_DIR}/dastest/*.das
+    )
+    install(FILES ${DASTEST_SOURCES}
+        DESTINATION ${DAS_INSTALL_DASTESTDIR}
+    )
+    install(FILES
+        ${PROJECT_SOURCE_DIR}/dastest/LICENSE
+        ${PROJECT_SOURCE_DIR}/dastest/README.md
+        DESTINATION ${DAS_INSTALL_DASTESTDIR}
+    )
+
     add_executable(das-fmt ${PROJECT_SOURCE_DIR}/utils/dasFormatter/main.cpp)
     TARGET_LINK_LIBRARIES(das-fmt libDaScript ${SRC_LIBRARIES} ${DAS_MODULES_LIBS})
     target_include_directories(das-fmt PRIVATE ${NEED_MODULES_PATH})
@@ -1204,6 +1217,33 @@ install(FILES ${PROJECT_SOURCE_DIR}/include/dag_noise/LICENSE DESTINATION ${DAS_
 install(FILES ${PROJECT_SOURCE_DIR}/include/ska/LICENSE_1_0.txt DESTINATION ${DAS_INSTALL_DOCDIR} RENAME SKA.LICENSE)
 install(FILES ${PROJECT_SOURCE_DIR}/include/vecmath/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME VEC_MATH.LICENSE)
 
+# Install core example .das files
+install(FILES
+    ${PROJECT_SOURCE_DIR}/examples/hello_world.das
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}
+)
+
+file(GLOB DAS_DEBUGAPI_EXAMPLES
+    ${PROJECT_SOURCE_DIR}/examples/debugapi/*.das
+)
+install(FILES ${DAS_DEBUGAPI_EXAMPLES}
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/debugapi
+)
+
+file(GLOB DAS_GRAPHICS_EXAMPLES
+    ${PROJECT_SOURCE_DIR}/examples/graphics/*.das
+)
+install(FILES ${DAS_GRAPHICS_EXAMPLES}
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/graphics
+)
+
+file(GLOB DAS_UNCATEGORIZED_EXAMPLES
+    ${PROJECT_SOURCE_DIR}/examples/uncategorized/*.das
+)
+install(FILES ${DAS_UNCATEGORIZED_EXAMPLES}
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/uncategorized
+)
+
 # Install language tutorial .das files
 file(GLOB LANGUAGE_TUTORIAL_SOURCES
     ${PROJECT_SOURCE_DIR}/tutorials/language/*.das
@@ -1211,3 +1251,67 @@ file(GLOB LANGUAGE_TUTORIAL_SOURCES
 install(FILES ${LANGUAGE_TUTORIAL_SOURCES}
     DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/language
 )
+
+# Install macro tutorial .das files
+file(GLOB MACRO_TUTORIAL_SOURCES
+    ${PROJECT_SOURCE_DIR}/tutorials/macros/*.das
+)
+install(FILES ${MACRO_TUTORIAL_SOURCES}
+    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/macros
+)
+
+# ── Documentation build (optional) ──────────────────────────────────────────
+if(DAS_BUILD_DOCUMENTATION)
+    find_package(Python3 COMPONENTS Interpreter)
+    if(Python3_FOUND)
+        execute_process(
+            COMMAND ${Python3_EXECUTABLE} -c "import sphinx; print(sphinx.__version__)"
+            RESULT_VARIABLE SPHINX_CHECK_RESULT
+            OUTPUT_VARIABLE SPHINX_VERSION
+            ERROR_QUIET OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+    endif()
+    if(Python3_FOUND AND SPHINX_CHECK_RESULT EQUAL 0)
+        message(STATUS "Sphinx ${SPHINX_VERSION} found — documentation build enabled")
+        set(DAS_DOC_SOURCE_DIR  "${PROJECT_SOURCE_DIR}/doc/source")
+        set(DAS_DOC_BUILD_DIR   "${CMAKE_CURRENT_BINARY_DIR}/doc_html")
+        set(DAS_DOC_DOCTREE_DIR "${CMAKE_CURRENT_BINARY_DIR}/doc_doctrees")
+
+        # Step 1: regenerate stdlib RST from daslib source comments (requires daslang)
+        add_custom_command(
+            OUTPUT  ${CMAKE_CURRENT_BINARY_DIR}/das2rst.stamp
+            COMMAND $<TARGET_FILE:daslang> "${PROJECT_SOURCE_DIR}/doc/reflections/das2rst.das"
+            COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_CURRENT_BINARY_DIR}/das2rst.stamp
+            DEPENDS daslang
+            WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+            COMMENT "Generating stdlib RST documentation (das2rst)"
+        )
+
+        # Step 2: build HTML with Sphinx
+        add_custom_command(
+            OUTPUT  ${CMAKE_CURRENT_BINARY_DIR}/sphinx.stamp
+            COMMAND ${Python3_EXECUTABLE} -m sphinx
+                    -b html
+                    -d "${DAS_DOC_DOCTREE_DIR}"
+                    "${DAS_DOC_SOURCE_DIR}"
+                    "${DAS_DOC_BUILD_DIR}"
+            COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_CURRENT_BINARY_DIR}/sphinx.stamp
+            DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/das2rst.stamp
+            WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/doc
+            COMMENT "Building HTML documentation (Sphinx)"
+        )
+
+        add_custom_target(das_documentation ALL
+            DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/sphinx.stamp
+        )
+
+        install(DIRECTORY ${DAS_DOC_BUILD_DIR}/
+            DESTINATION ${DAS_INSTALL_DOCDIR}/doc
+            PATTERN ".buildinfo" EXCLUDE
+            PATTERN ".doctrees" EXCLUDE
+        )
+    else()
+        message(WARNING "DAS_BUILD_DOCUMENTATION is ON but Sphinx was not found. "
+                        "Install Python 3 and run: pip install sphinx sphinx-rtd-theme")
+    endif()
+endif()

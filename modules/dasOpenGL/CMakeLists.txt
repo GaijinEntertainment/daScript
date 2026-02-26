@@ -15,12 +15,14 @@ IF(NOT DAS_OPENGL_INCLUDED)
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasOpenGL
         FILES_MATCHING
         PATTERN "*.das"
+        PATTERN "_aot_generated" EXCLUDE
     )
 
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules/dasOpenGL/glsl
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasOpenGL
         FILES_MATCHING
         PATTERN "*.das"
+        PATTERN "_aot_generated" EXCLUDE
     )
 
     file(GLOB DAS_OPENGL_EXAMPLES
