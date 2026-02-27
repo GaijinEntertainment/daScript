@@ -101,6 +101,21 @@ Tables cannot be assigned, only cloned or moved.
         a <- b  // a now points to the same data as b, and b is empty
     }
 
+A table literal can also be move-assigned to an existing variable:
+
+.. code-block:: das
+
+    var tab <- { "one"=>1, "two"=>2 }
+    // ... use tab ...
+    tab <- { "three"=>3, "four"=>4 }    // replaces contents via move
+
+The same works with table comprehensions:
+
+.. code-block:: das
+
+    var tab <- { "one"=>1 }
+    tab <- { for(x in range(5)); x => x * x }  // move comprehension result into tab
+
 Table keys can be not only strings, but any other 'workhorse' type as well.
 
 Tables can be constructed inline:

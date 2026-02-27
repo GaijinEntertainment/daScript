@@ -36,6 +36,58 @@ Variables declared inside a visibility block are only visible within that block:
         // y is no longer visible
     }
 
+Bare blocks can be nested, and each nesting creates a new scope:
+
+.. code-block:: das
+
+    def bar {
+        var total = 0
+        {
+            var a = 1
+            {
+                var b = 2
+                total = a + b
+            }
+            // b is no longer visible
+        }
+        // a is no longer visible
+    }
+
+Sequential bare blocks allow reusing the same variable name with a different type:
+
+.. code-block:: das
+
+    def baz {
+        {
+            var x = 42          // x is int
+            print("{x}\n")
+        }
+        {
+            var x = "hello"     // x is string — no conflict
+            print("{x}\n")
+        }
+    }
+
+Bare blocks can have a ``finally`` clause that runs when the block exits:
+
+.. code-block:: das
+
+    def process {
+        var result = 0
+        {
+            var temp = acquire_resource()
+            result = compute(temp)
+        } finally {
+            print("block cleanup\n")
+        }
+    }
+
+.. note::
+
+    At the statement level, ``{`` starts a bare block, not a table literal.
+    Table literals such as ``{ "one"=>1, "two"=>2 }`` are expressions and appear on
+    the right-hand side of declarations or assignments (see :ref:`Tables <tables>`).
+
 -----------------------
 Control Flow Statements
 -----------------------
@@ -363,7 +415,7 @@ how it exits (normal flow, ``break``, ``continue``, or ``return``):
         print("search complete\n")
     }
 
-``finally`` can be attached to any block, including loops:
+``finally`` can be attached to any block, including loops and bare visibility blocks:
 
 .. code-block:: das
 
@@ -373,6 +425,15 @@ how it exits (normal flow, ``break``, ``continue``, or ``return``):
         }
     } finally {
         print("loop done\n")
+    }
+
+.. code-block:: das
+
+    {
+        var handle <- open_file("data.bin")
+        // ... work with handle ...
+    } finally {
+        close_file(handle)
     }
 
 A ``finally`` block cannot contain ``break``, ``continue``, or ``return`` statements.
