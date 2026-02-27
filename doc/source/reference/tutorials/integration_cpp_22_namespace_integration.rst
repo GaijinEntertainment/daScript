@@ -44,7 +44,7 @@ for ``MyApp::register_Module_BuiltIn()`` instead of the global
 
    namespace MyApp {
        void init() {
-           NEED_ALL_DEFAULT_MODULES;   // ❌ linker error!
+           NEED_ALL_DEFAULT_MODULES;   // FAILS: linker error!
            das::Module::Initialize();
        }
    }
