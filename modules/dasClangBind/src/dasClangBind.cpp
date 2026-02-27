@@ -30,6 +30,9 @@ bool Module_dasClangBind::initDependencies() {
 	initMain();
 	return true;
 }
+
+REGISTER_DYN_MODULE(Module_dasClangBind,Module_dasClangBind);
+
 }
 REGISTER_MODULE_IN_NAMESPACE(Module_dasClangBind,das);
 
