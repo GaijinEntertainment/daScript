@@ -332,20 +332,18 @@ def public init_jit(cg_opt_level : uint) {
     LLVMAddGlobalMapping(g_engine, jit_invoke_block_with_cmres, get_jit_invoke_block_with_cmres())
     LLVMAddAttributeToFunctionArgumentRange(jit_invoke_block_with_cmres, urange(0, 4), nocapture)
     LLVMAddAttributesToFunction(jit_invoke_block_with_cmres, fixed_array(nounwind, willreturn))
-    // jit_string_builder ( context *, node *, args * )
+    // jit_string_builder ( context *, int32 nArgs, TypeInfo ** types, LineInfoArg * at, vec4f * args )
     var jit_string_builder = LLVMAddFunctionWithType(g_mod, FN_JIT_STRING_BUILDER,
         LLVMFunctionType(g_prim_t.get_type_string(),
-            fixed_array<LLVMTypeRef>(g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType(), LLVMPointerType(g_prim_t.LLVMFloat4Type(), 0u))))
+            fixed_array<LLVMTypeRef>(g_prim_t.LLVMVoidPtrType(), g_prim_t.t_int32, g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType(), LLVMPointerType(g_prim_t.LLVMFloat4Type(), 0u))))
     LLVMAddGlobalMapping(g_engine, jit_string_builder, get_jit_string_builder())
     LLVMAddAttributesToFunction(jit_string_builder, fixed_array(nounwind, willreturn))
-    LLVMAddAttributeToFunctionArgumentRange(jit_string_builder, urange(0, 3), nocapture)
-    // jit_string_builder_temp ( context *, node *, args * )
+    // jit_string_builder_temp ( context *, int32 nArgs, TypeInfo ** types, LineInfoArg * at, vec4f * args )
     var jit_string_builder_temp = LLVMAddFunctionWithType(g_mod, FN_JIT_STRING_BUILDER_TEMP,
         LLVMFunctionType(g_prim_t.get_type_string(),
-            fixed_array<LLVMTypeRef>(g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType(), LLVMPointerType(g_prim_t.LLVMFloat4Type(), 0u))))
+            fixed_array<LLVMTypeRef>(g_prim_t.LLVMVoidPtrType(), g_prim_t.t_int32, g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType(), LLVMPointerType(g_prim_t.LLVMFloat4Type(), 0u))))
     LLVMAddGlobalMapping(g_engine, jit_string_builder_temp, get_jit_string_builder_temp())
     LLVMAddAttributesToFunction(jit_string_builder_temp, fixed_array(nounwind, willreturn))
-    LLVMAddAttributeToFunctionArgumentRange(jit_string_builder_temp, urange(0, 3), nocapture)
     // void * jit_get_global_mnh ( uint64_t mnh, context * )
     var jit_get_global_mnh = LLVMAddFunctionWithType(g_mod, FN_JIT_GET_GLOBAL_MNH,
         LLVMFunctionType(g_prim_t.LLVMVoidPtrType(),
@@ -500,6 +498,26 @@ def public init_jit(cg_opt_level : uint) {
     var jit_iterator_next = LLVMAddFunctionWithType(g_mod, FN_JIT_ITERATOR_NEXT,
         LLVMFunctionType(g_prim_t.t_int1,
             fixed_array<LLVMTypeRef>(LLVMPointerType(g_t_sequence, 0u), g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType())))
+    let simnode_interop_type = LLVMFunctionType(g_prim_t.LLVMVoidPtrType(),
+        fixed_array<LLVMTypeRef>(
+            g_prim_t.LLVMVoidPtrType(), // context
+            g_prim_t.t_int32,
+            g_prim_t.LLVMVoidPtrType() // argv
+        )
+    )
+    var jit_simnode_interop = LLVMAddFunctionWithType(
+        g_mod, "jit_simnode_interop", simnode_interop_type
+    )
+    LLVMAddGlobalMapping(g_engine, jit_simnode_interop, get_jit_simnode_interop())
+    let simnode_free_interop_type = LLVMFunctionType(g_prim_t.t_void,
+        fixed_array<LLVMTypeRef>(
+            g_prim_t.LLVMVoidPtrType(), // Node
+        )
+    )
+    var jit_free_simnode_interop = LLVMAddFunctionWithType(
+        g_mod, "jit_free_simnode_interop", simnode_free_interop_type
+    )
+    LLVMAddGlobalMapping(g_engine, jit_free_simnode_interop, get_jit_free_simnode_interop())
     LLVMAddGlobalMapping(g_engine, jit_iterator_next, get_jit_iterator_next())
     LLVMAddAttributesToFunction(jit_iterator_next, fixed_array(nounwind, willreturn))
     LLVMAddAttributeToFunctionArgumentRange(jit_iterator_next, urange(0, 4), nocapture)
@@ -641,7 +659,17 @@ def public write_dll(mod : LLVMOpaqueModule?; out_path : string; path_to_dascrip
         let file = add_obj_extension(out_path)
         let filetype = LLVMCodeGenFileType.LLVMObjectFile
         LLVMTargetMachineEmitToFile(targetMachine, mod, file, filetype, error)
-        create_shared_library(file, add_dll_extension(out_path), "{path_to_dascript_lib}", "{path_to_linker}")
+        create_shared_library(file, add_dll_extension(out_path), "{path_to_dascript_lib}", "{path_to_linker}", true)
+    }
+}
+
+def public write_exe(mod : LLVMOpaqueModule?; out_path : string; path_to_dascript_lib, path_to_linker : string) {
+    with_default_target_machine <| $(targetMachine : LLVMTargetMachineRef) {
+        let error : string?
+        let file = add_obj_extension(out_path)
+        let filetype = LLVMCodeGenFileType.LLVMObjectFile
+        LLVMTargetMachineEmitToFile(targetMachine, mod, file, filetype, error)
+        create_shared_library(file, add_exe_extension(out_path), "{path_to_dascript_lib}", "{path_to_linker}", false)
     }
 }
 
@@ -651,7 +679,8 @@ def public build_string_constant(message : string) {
     }
     let msg_size = uint(length(message))
     var strType = LLVMArrayType(g_prim_t.t_int8, msg_size + 1u)
-    var str = LLVMAddGlobal(g_mod, strType, "{message}")
+    // Prefix all string variable names to not intersect with function names.
+    var str = LLVMAddGlobal(g_mod, strType, ".str.{message}")
     LLVMSetInitializer(str, LLVMConstStringInContext(g_ctx, message, msg_size, 0))
     LLVMSetGlobalConstant(str, 1)
     LLVMSetLinkage(str, LLVMLinkage.LLVMPrivateLinkage)

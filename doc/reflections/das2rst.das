@@ -259,7 +259,6 @@ def document_module_ast(root : string) {
         group_by_regex("Evaluations", mod, %regex~(eval_single_expression)%%),
         group_by_regex("Error reporting", mod, %regex~(macro_error)%%),
         group_by_regex("Location and context", mod, %regex~(force_at|collect_dependencies|get_ast_context)%%),
-        // hide_group(group_by_regex("Jit support",mod,%regex~(make_interop_node|get_builtin_function_address)%%));
         group_by_regex("Use queries", mod, %regex~(get_use_global_variables|get_use_functions)%%),
         group_by_regex("Log", mod, %regex~(to_compilation_log)%%),
         group_by_regex("Removal", mod, %regex~(remove.*)%%),

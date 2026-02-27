@@ -623,49 +623,10 @@ namespace das {
         return ((BuiltInFunction *)fn)->getBuiltinAddress();
     }
 
-    void * das_make_interop_node ( Context & ctx, ExprCallFunc * call, Context * context, LineInfoArg * at ) {
-        if ( !call ) context->throw_error_at(at, "expecting function call");
-        auto fn = call->func;
-        if ( !fn ) context->throw_error_at(at, "expecting function");
-        if ( !fn->builtIn || !fn->interopFn ) context->throw_error_at(at, "expecting built-in interop function");
-        if ( !ctx.thisHelper ) context->throw_error_at(at, "missing debug info helper. get_aot_interop_node can only be called in the SimulateMacro");
-        auto node = ctx.code->makeNode<SimNode_AotInteropBase>();
-        node->debugInfo = call->at;
-        node->nArguments = (int) call->arguments.size();
-        node->argumentValues = nullptr;
-        if ( node->nArguments ) {
-            node->types = (TypeInfo **) ctx.code->allocate(node->nArguments * sizeof(TypeInfo*));
-            for ( int i=0, is=node->nArguments; i!=is; ++i ) {
-                node->types[i] = ctx.thisHelper->makeTypeInfo(nullptr, call->arguments[i]->type);
-            }
-        } else {
-            node->types = nullptr;
-        }
-        return node;
-    }
-
     TypeInfo * das_make_type_info_structure ( Context & ctx, TypeDeclPtr ptr, Context * context, LineInfoArg * at ) {
         if ( !ptr ) context->throw_error_at(at, "expecting type");
         if ( !ctx.thisHelper ) context->throw_error_at(at, "missing type-info helper. context allready fully compiled");
         return ctx.thisHelper->makeTypeInfo(nullptr, ptr);
-    }
-
-    void * das_sb_make_interop_node ( Context & ctx, ExprStringBuilder * call, Context * context, LineInfoArg * at ) {
-        if ( !call ) context->throw_error_at(at, "expecting string builder");
-        if ( !ctx.thisHelper ) context->throw_error_at(at, "missing debug info helper. get_aot_interop_node can only be called in the SimulateMacro");
-        auto node = ctx.code->makeNode<SimNode_AotInteropBase>();
-        node->debugInfo = call->at;
-        node->nArguments = (int) call->elements.size();
-        node->argumentValues = nullptr;
-        if ( node->nArguments ) {
-            node->types = (TypeInfo **) ctx.code->allocate(node->nArguments * sizeof(TypeInfo*));
-            for ( int i=0, is=node->nArguments; i!=is; ++i ) {
-                node->types[i] = ctx.thisHelper->makeTypeInfo(nullptr, call->elements[i]->type);
-            }
-        } else {
-            node->types = nullptr;
-        }
-        return node;
     }
 
     void das_comp_log ( const char * text, Context * context, LineInfoArg * at ) {

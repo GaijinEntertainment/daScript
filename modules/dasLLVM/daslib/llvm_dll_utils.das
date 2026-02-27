@@ -145,21 +145,12 @@ class public UidNodes {
         return get_base(get_ptr(expr), "tinfo_{expr.typeexpr.get_mnh}")
     }
 
-    def get_ascend_tinfo(expr : smart_ptr<ExprAscend>) {
-        assert(expr.ascendFlags.needTypeInfo)
-        return get_base(get_ptr(expr), "tinfo_{expr.subexpr._type.get_mnh}")
-    }
-
     def get_ctor(expr : smart_ptr<ExprMakeStruct>) {
         return get_base(get_ptr(expr), "ctor_{expr.constructor}")
     }
 
     def get_call(expr : smart_ptr<ExprCallFunc>) : DllName {
         return get_base(get_ptr(expr), "call_{get_mangled_name(expr.func)}")
-    }
-
-    def get_string_builder(expr : smart_ptr<ExprStringBuilder>) {
-        return get_base(get_ptr(expr), "string_builder")
     }
 
     def public get_block_name_ptr(blk : ExprBlock?) : DllName {
@@ -267,6 +258,10 @@ def public add_obj_extension(path : string) {
 }
 def public add_dll_extension(path : string) {
     return "{path}.dll"
+}
+
+def public add_exe_extension(path : string) {
+    return "{path}.exe"
 }
 
 def public get_dll_by_path(path : string) : DLLHandle? {

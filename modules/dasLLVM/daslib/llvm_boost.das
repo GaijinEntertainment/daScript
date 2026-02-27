@@ -92,6 +92,10 @@ class PrimitiveTypes {
         return LLVMPointerType(t_int8, 0u)
     }
 
+    def ConstI1(val : bool) {
+        return LLVMConstInt(t_int1, uint64(val ? 1 : 0), 0);
+    }
+
     def ConstI8(val : int8) {
         return LLVMConstInt(t_int8, val |> uint64(), 0);
     }
@@ -435,6 +439,26 @@ def describe(blk : LLVMOpaqueBasicBlock?) {
     return "null" if (blk == null)
     var st := LLVMGetBasicBlockName(blk)
     return st
+}
+
+def isExprOp2_Func(expr : smart_ptr<ExprOp2>) {
+    if (!expr.func.flags.builtIn) {
+        return true
+    }
+    if (expr.left._type.isHandle || expr.right._type.isHandle) {
+        return true
+    }
+    return false
+}
+
+def isExprOp1_Func(expr : smart_ptr<ExprOp1>) {
+    if (!expr.func.flags.builtIn) {
+        return true
+    }
+    if (expr.subexpr._type.isHandle) {
+        return true
+    }
+    return false
 }
 
 def LLVMSetFunctionCallConv(ofunc : LLVMOpaqueValue?; conv : LLVMCallConv) {

@@ -1,16 +1,27 @@
+#include "daScript/daScriptModule.h"
 #include "daScript/misc/platform.h"
 
 #include "daScript/misc/performance_time.h"
 #include "daScript/misc/sysos.h"
+
+#include "daScript/ast/ast.h"                     // astTypeInfo
+#include "daScript/ast/ast_handle.h"              // addConstant
+#include "daScript/ast/ast_interop.h"             // addExtern
+
 #include "daScript/simulate/aot.h"
 #include "daScript/simulate/aot_builtin_jit.h"
-#include "daScript/simulate/aot_builtin_ast.h"
-#include "daScript/ast/ast.h"
-#include "daScript/ast/ast_handle.h"
-#include "daScript/ast/ast_visitor.h"
+#include "daScript/simulate/aot_builtin.h"
+#include "daScript/simulate/debug_info.h"
+#include "daScript/simulate/debug_print.h"
+#include "daScript/simulate/hash.h"               // stringLength
+#include "daScript/simulate/heap.h"
+#include "daScript/simulate/simulate.h"
+#include "daScript/simulate/simulate_visit_op.h"
+
 #include "daScript/misc/fpe.h"
 #include "daScript/misc/sysos.h"
 #include "misc/include_fmt.h"
+
 #include "module_builtin_rtti.h"
 #include "module_builtin_ast.h"
 
@@ -19,6 +30,64 @@
 #include <inttypes.h>
 
 namespace das {
+    typedef vec4f ( * JitFunction ) ( Context * , vec4f *, void * );
+
+    struct SimNode_Jit : SimNode {
+        SimNode_Jit ( const LineInfo & at, JitFunction eval )
+            : SimNode(at), func(eval) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
+        virtual bool rtti_node_isJit() const override { return true; }
+        JitFunction func = nullptr;
+        // saved original node
+        SimNode * saved_code = nullptr;
+        bool saved_aot = false;
+        void * saved_aot_function = nullptr;
+    };
+
+    struct SimNode_JitBlock;
+
+    struct JitBlock : Block {
+        vec4f   node[10];
+    };
+
+    struct SimNode_JitBlock : SimNode_ClosureBlock {
+        SimNode_JitBlock ( const LineInfo & at, JitBlockFunction eval, Block * bptr, uint64_t ad )
+            : SimNode_ClosureBlock(at,false,false,ad), func(eval), blockPtr(bptr) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
+        JitBlockFunction func = nullptr;
+        Block * blockPtr = nullptr;
+    };
+    static_assert(sizeof(SimNode_JitBlock)<=sizeof(JitBlock().node),"jit block node must fit under node size");
+
+
+    DAS_SUPPRESS_UB vec4f SimNode_Jit::eval ( Context & context ) {
+        auto result = func(&context, context.abiArg, context.abiCMRES);
+        context.result = result;
+        return result;
+    }
+
+    SimNode * SimNode_JitBlock::visit ( SimVisitor & vis ) {
+        uint64_t fptr = (uint64_t) func;
+        V_BEGIN();
+        V_OP(JitBlock);
+        V_ARG(fptr);
+        V_END();
+    }
+
+    DAS_SUPPRESS_UB vec4f SimNode_JitBlock::eval ( Context & context ) {
+        auto ba = (BlockArguments *) ( context.stack.bottom() + blockPtr->argumentsOffset );
+        return func(&context, ba->arguments, ba->copyOrMoveResult, blockPtr );
+    }
+
+    SimNode * SimNode_Jit::visit ( SimVisitor & vis ) {
+        uint64_t fptr = (uint64_t) func;
+        V_BEGIN();
+        V_OP(Jit);
+        V_ARG(fptr);
+        V_END();
+    }
 
     float4 das_invoke_code ( void * pfun, vec4f anything, void * cmres, Context * context ) {
         vec4f * arguments = cast<vec4f *>::to(anything);
@@ -84,36 +153,176 @@ extern "C" {
         return context->callWithCopyOnReturn(fn, args, cmres, nullptr);
     }
 
-    DAS_API char * jit_string_builder ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+    DAS_API char * jit_string_builder ( Context & context, int32_t nArgs, TypeInfo ** types, LineInfoArg * at, vec4f * args ) {
         StringBuilderWriter writer;
         DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
-        for ( int i=0, is=call->nArguments; i!=is; ++i ) {
-            walker.walk(args[i], call->types[i]);
-        }
+        for ( int i = 0; i < nArgs; ++i )
+            walker.walk(args[i], types[i]);
         auto length = writer.tellp();
         if ( length ) {
-            return context.allocateString(writer.c_str(), uint32_t(length),&call->debugInfo);
+            return context.allocateString(writer.c_str(), uint32_t(length), at);
         } else {
             return nullptr;
         }
     }
 
-    DAS_API char * jit_string_builder_temp ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+    DAS_API char * jit_string_builder_temp ( Context & context, int32_t nArgs, TypeInfo ** types, LineInfoArg * at, vec4f * args ) {
         StringBuilderWriter writer;
         DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
-        for ( int i=0, is=call->nArguments; i!=is; ++i ) {
-            walker.walk(args[i], call->types[i]);
-        }
+        for ( int i = 0; i < nArgs; ++i )
+            walker.walk(args[i], types[i]);
         auto length = writer.tellp();
         if ( length ) {
-            auto str = context.allocateTempString(writer.c_str(), uint32_t(length),&call->debugInfo);
-            context.freeTempString(str,&call->debugInfo);
+            auto str = context.allocateTempString(writer.c_str(), uint32_t(length), at);
+            context.freeTempString(str, at);
             return str;
         } else {
             return nullptr;
         }
     }
 
+    DAS_API void jit_simnode_interop(void *ptr, int argCount, TypeInfo **types) {
+        auto res = new(ptr) SimNode_AotInteropBase();
+        res->argumentValues = nullptr;
+        res->nArguments = argCount;
+        res->types = types;
+    }
+
+    DAS_API void jit_free_simnode_interop(SimNode_AotInteropBase *ptr) {
+        ptr->~SimNode_AotInteropBase();
+    }
+
+    DAS_API void *das_get_jit_simnode_interop() {
+        return (void *) &jit_simnode_interop;
+    }
+
+    DAS_API void *das_get_jit_free_simnode_interop() {
+        return (void *) &jit_free_simnode_interop;
+    }
+
+    // We need it to bypass protected/private.
+    class JitContext : public Context {
+    public:
+        ~JitContext() = default;
+        JitContext(size_t totalVariables, size_t totalFunctions, size_t globalStringHeapSize, bool pinvoke) {
+            auto &context = *this;
+            CodeOfPolicies policies;
+            policies.debugger = false;
+            context.setup(totalVariables, globalStringHeapSize, policies, {});
+            context.globalsSize = 32000;
+            for (int i = 0; i < totalVariables; i++) {
+                globalVariables[i] = GlobalVariable{};
+            }
+            context.allocateGlobalsAndShared();
+            memset(context.globals, 0, context.globalsSize);
+            // Lock check is not supported yet in executable.
+            // Although it could be in the same way we support
+            // string formatting.
+            context.skipLockChecks = true;
+
+            // Instead of copying everything like in standalone contexts
+            // Let's add only things we really need.
+            // And apparently now we need nothing.
+        }
+
+        void allocFunctions ( uint64_t count ) {
+            functions = (SimFunction *) code->allocate(count * sizeof(SimFunction));
+            memset(functions, 0, count * sizeof(SimFunction));
+            totalFunctions = (int) count;
+            tabMnLookup = make_shared<das_hash_map<uint64_t,SimFunction *>>();
+            tabGMnLookup = make_shared<das_hash_map<uint64_t,uint32_t>>();
+        }
+
+        void *registerJitFunction ( uint64_t index, const char * name, const char * mangledName,
+                                   uint64_t mnh, uint32_t stackSize, void * fnPtr,
+                                   bool cmres, bool fastcall, bool pinvoke ) {
+            DAS_ASSERT(index < (uint64_t) totalFunctions);
+            auto & fn = functions[index];
+            fn.name = code->allocateName(name);
+            fn.mangledName = code->allocateName(mangledName);
+            fn.mangledNameHash = mnh;
+            fn.stackSize = stackSize;
+            fn.flags = 0;
+            fn.cmres = cmres;
+            fn.fastcall = fastcall;
+            fn.pinvoke = pinvoke;
+            fn.jit = true;
+            fn.debugInfo = nullptr;
+            auto node = code->makeNode<SimNode_Jit>(LineInfo{}, (JitFunction) fnPtr);
+            fn.code = node;
+            (*tabMnLookup)[mnh] = &fn;
+            return &fn;
+        }
+
+        void registerJitGlobalVariable(uint64_t mnh, size_t offset) {
+            (*tabGMnLookup)[mnh] = offset;
+        }
+
+        void initFunctionAddr ( uint64_t index, void * globPtr ) {
+            DAS_ASSERT(index < (uint64_t) totalFunctions);
+            *((SimFunction **) globPtr) = &functions[index];
+        }
+    };
+
+    // Note: this function called in runtime, before main.
+    // When we built executable from das.
+    DAS_API Context * jit_create_standalone_ctx ( uint64_t totalVariables,
+                                                  uint64_t totalFunctions,
+                                                  uint64_t globalStringHeapSize,
+                                                  bool pinvoke) {
+        // return nullptr;
+        Context *context = new JitContext(totalVariables, totalFunctions, globalStringHeapSize, pinvoke);
+        static_cast<JitContext *>(context)->allocFunctions(totalFunctions);
+        return context;
+    }
+
+    DAS_API void *jit_register_standalone_function ( Context * ctx, uint64_t index,
+                                             const char * name, const char * mangledName,
+                                             uint64_t mnh, uint32_t stackSize,
+                                             void * fnPtr,
+                                             bool cmres, bool fastcall, bool pinvoke ) {
+        return static_cast<JitContext *>(ctx)->registerJitFunction(index, name, mangledName, mnh, stackSize,
+                                                            fnPtr, cmres, fastcall, pinvoke);
+    }
+
+    DAS_API void jit_register_standalone_variable ( Context * ctx, uint64_t mangledNameHash, uint64_t offset ) {
+        static_cast<JitContext *>(ctx)->registerJitGlobalVariable(mangledNameHash, offset);
+    }
+
+    DAS_API void jit_init_function_addr ( Context * ctx, uint64_t index, void * globPtr ) {
+        static_cast<JitContext *>(ctx)->initFunctionAddr(index, globPtr);
+    }
+
+    DAS_API void jit_init_extern_function ( const char * moduleName,
+                                            const char * funcMangledName,
+                                            void ** dllGlobal ) {
+        bool found = false;
+        Module::foreach([&](Module * module) -> bool {
+            if ( module->name != moduleName ) return true;
+            auto fn = module->findFunction(funcMangledName);
+            if ( fn && fn->builtIn ) {
+                *dllGlobal = static_cast<BuiltInFunction *>(fn.get())->getBuiltinAddress();
+                found = true;
+                return false;
+            }
+            return true;
+        });
+        if (!found) {
+            DAS_FATAL_ERROR("Failed to find %s in module %s.", funcMangledName, moduleName);
+        }
+    }
+
+    DAS_API void jit_trap() {
+        DAS_FATAL_ERROR("FATAL: Unresolved dynamic function call in compiled code. This indicates a missing JIT symbol. Disable `strict` mode or remove this call.\n");
+    }
+
+    DAS_API void jit_set_command_line_arguments( int argc, char * argv[] ) {
+        setCommandLineArguments(argc, argv);
+    }
+
+    DAS_API void *das_get_jit_init_extern_function() {
+        return (void *) &jit_init_extern_function;
+    }
 
     DAS_API void * jit_get_global_mnh ( uint64_t mnh, Context & context ) {
         return context.globals + context.globalOffsetByMangledName(mnh);
@@ -282,6 +491,36 @@ extern "C" {
         reinterpret_cast<FileInfo*>(dummy)->~FileInfo();
     }
 
+    struct JitAnnotationArgPod {
+        const char * name;
+        const char * sValue;
+        int32_t      type;
+        int32_t      iValue;  // covers bool/int/float (union bit-cast)
+    };
+
+    DAS_API void jit_initialize_varinfo_annotations ( void * varinfo_ptr, int32_t nArgs, JitAnnotationArgPod * args ) {
+        auto vi = (VarInfo *) varinfo_ptr;
+        auto aa = new AnnotationArguments();
+        aa->reserve(nArgs);
+        for ( int32_t i = 0; i < nArgs; i++ ) {
+            AnnotationArgument arg;
+            arg.type   = (Type) args[i].type;
+            arg.name   = args[i].name   ? args[i].name   : "";
+            arg.sValue = args[i].sValue ? args[i].sValue : "";
+            arg.iValue = args[i].iValue;
+            aa->push_back(std::move(arg));
+        }
+        vi->annotation_arguments = aa;
+    }
+
+    DAS_API void jit_free_varinfo_annotations ( void * varinfo_ptr ) {
+        auto vi = (VarInfo *) varinfo_ptr;
+        if ( vi->annotation_arguments ) {
+            delete (AnnotationArguments *) vi->annotation_arguments;
+            vi->annotation_arguments = nullptr;
+        }
+    }
+
     DAS_API void * jit_ast_typedecl ( uint64_t hash, Context * context, LineInfoArg * at ) {
         if ( !context->thisProgram ) context->throw_error_at(at, "can't get ast_typeinfo, no program. is 'options rtti' missing?");
         auto ti = context->thisProgram->astTypeInfo.find(hash);
@@ -325,6 +564,8 @@ extern "C" {
     void *das_get_jit_debug_line() { return (void *)&jit_debug_line; }
     void *das_get_jit_initialize_fileinfo () { return (void*)&jit_initialize_fileinfo; }
     void *das_get_jit_free_fileinfo () { return (void*)&jit_free_fileinfo; }
+    void *jit_get_initialize_varinfo_annotations () { return (void*)&jit_initialize_varinfo_annotations; }
+    void *jit_get_free_varinfo_annotations () { return (void*)&jit_free_varinfo_annotations; }
     void *das_get_jit_ast_typedecl () { return (void*)&jit_ast_typedecl; }
 
     template <typename KeyType>
@@ -362,6 +603,28 @@ extern "C" {
         JIT_TABLE_FUNCTION(&jit_table_find);
     }
 
+
+    uint64_t das_get_global_variable_offset( const Context * ctx, int id ) {
+        return ctx->getGlobalVariable(id).offset;
+    }
+
+    uint64_t das_get_global_variable_mnh( const Context * ctx, int id ) {
+        return ctx->getGlobalVariable(id).mangledNameHash;
+    }
+
+    extern "C" {
+        void * get_jit_table_find ( int32_t baseType, Context * context, LineInfoArg * at ) {
+            return das_get_jit_table_find(baseType, context, at);
+        }
+        void * get_jit_table_at ( int32_t baseType, Context * context, LineInfoArg * at ) {
+            return das_get_jit_table_at(baseType, context, at);
+        }
+        void * get_jit_table_erase ( int32_t baseType, Context * context, LineInfoArg * at ) {
+            return das_get_jit_table_erase(baseType, context, at);
+        }
+
+    }
+
     void * das_get_jit_new ( TypeDeclPtr htype, Context * context, LineInfoArg * at ) {
         if ( !htype ) context->throw_error_at(at, "can't get `new`, type is null");
         if ( !htype->isHandle() ) context->throw_error_at(at, "can't get `new`, type is not a handle");
@@ -394,11 +657,9 @@ extern "C" {
         }
     }
 
-#if (defined(_MSC_VER) || defined(__linux__) || defined(__APPLE__)) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
-    void create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasSharedLibrary, const char * customLinker ) {
-        char cmd[1024];
+    static pair<string, string> get_real_lib_linker_paths(const char * dasLib, const char * customLinker) {
         string linker = customLinker != nullptr ? customLinker : "";
-        string dasLibrary = dasSharedLibrary != nullptr ? dasSharedLibrary : "";
+        string dasLibrary = dasLib != nullptr ? dasLib : "";
         if (linker.empty() || dasLibrary.empty()) {
             #if defined(_WIN32) || defined(_WIN64)
                 if (linker.empty()) {
@@ -412,17 +673,24 @@ extern "C" {
                 }
             #else
                 if (linker.empty()) {
-                    linker = "cc";
+                    linker = "c++";
                 }
                 if (dasLibrary.empty()) {
                 #if defined(__APPLE__)
                     dasLibrary = getDasRoot() + "/lib/liblibDaScriptDyn.dylib";
                 #else
-                    dasLibrary = getDasRoot() + "/lib/liblibDaScriptDyn.lib";
+                    dasLibrary = getDasRoot() + "/lib/liblibDaScriptDyn.so";
                 #endif
                 }
             #endif
         }
+        return {linker, dasLibrary};
+    }
+
+#if (defined(_MSC_VER) || defined(__linux__) || defined(__APPLE__)) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
+    void create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasLib, const char * customLinker, bool isShared ) {
+        char cmd[1024];
+        const auto [linker, dasLibrary] = get_real_lib_linker_paths(dasLib, customLinker);
 
         #if defined(_WIN32) || defined(_WIN64) || defined(__APPLE__)
         if (!check_file_present(dasLibrary.c_str())) {
@@ -435,12 +703,19 @@ extern "C" {
             return;
         }
 
+
         #if defined(_WIN32) || defined(_WIN64)
-            auto result = fmt::format_to(cmd, FMT_STRING("\"\"{}\" \"{}\" \"{}\" msvcrt.lib -link -DLL -OUT:\"{}\" 2>&1\""), linker, objFilePath, dasLibrary, libraryName);
+            const auto linkerParam = isShared ? "-DLL" : "";
+            auto result = fmt::format_to(cmd, FMT_STRING("\"\"{}\" \"{}\" \"{}\" msvcrt.lib -link {} -OUT:\"{}\" 2>&1\""), linker, objFilePath, dasLibrary, linkerParam, libraryName);
         #elif defined(__APPLE__)
-            auto result = fmt::format_to(cmd, FMT_STRING("\"{}\" -shared -o \"{}\" \"{}\" \"{}\" 2>&1"), linker, libraryName, dasLibrary, objFilePath);
+            const auto linkerParam = isShared ? "-shared " : "";
+            const auto rpath = "-Wl,-rpath," + get_prefix(dasLibrary);
+            auto result = fmt::format_to(cmd, FMT_STRING("\"{}\" {} \"{}\" -o \"{}\" \"{}\" \"{}\" 2>&1"), linker, linkerParam, rpath, libraryName, dasLibrary, objFilePath);
         #else
-            auto result = fmt::format_to(cmd, FMT_STRING("\"{}\" -shared -o \"{}\" \"{}\" 2>&1"), linker, libraryName, objFilePath);
+            const auto linkerParam = isShared ? "-shared" : "";
+            const auto rpath = "-Wl,-rpath," + get_prefix(dasLibrary);
+            auto result = fmt::format_to(cmd, FMT_STRING("\"{}\" {} \"{}\" -o \"{}\" \"{}\" \"{}\" 2>&1"), 
+                                        linker, linkerParam, rpath, libraryName, objFilePath, dasLibrary);
         #endif
             *result = '\0';
 
@@ -533,6 +808,12 @@ extern "C" {
                 SideEffects::none, "das_get_jit_string_builder");
             addExtern<DAS_BIND_FUN(das_get_jit_string_builder_temp)>(*this, lib, "get_jit_string_builder_temp",
                 SideEffects::none, "das_get_jit_string_builder_temp");
+            addExtern<DAS_BIND_FUN(das_get_jit_simnode_interop)>(*this, lib, "get_jit_simnode_interop",
+                SideEffects::none, "das_get_jit_simnode_interop");
+            addExtern<DAS_BIND_FUN(das_get_jit_free_simnode_interop)>(*this, lib, "get_jit_free_simnode_interop",
+                SideEffects::none, "das_get_jit_free_simnode_interop");
+            addExtern<DAS_BIND_FUN(das_get_jit_init_extern_function)>(*this, lib, "get_jit_init_extern_function",
+                SideEffects::none, "get_jit_init_extern_function");
             addExtern<DAS_BIND_FUN(das_get_jit_get_global_mnh)>(*this, lib, "get_jit_get_global_mnh",
                 SideEffects::none, "das_get_jit_get_global_mnh");
             addExtern<DAS_BIND_FUN(das_get_jit_get_shared_mnh)>(*this, lib, "get_jit_get_shared_mnh",
@@ -555,6 +836,10 @@ extern "C" {
                 SideEffects::none, "das_get_jit_table_erase");
             addExtern<DAS_BIND_FUN(das_get_jit_table_find)>(*this, lib, "get_jit_table_find",
                 SideEffects::none, "das_get_jit_table_find");
+            addExtern<DAS_BIND_FUN(das_get_global_variable_offset)>(*this, lib, "get_global_variable_offset",
+                SideEffects::none, "das_get_global_variable_offset");
+            addExtern<DAS_BIND_FUN(das_get_global_variable_mnh)>(*this, lib, "get_global_variable_mnh",
+                SideEffects::none, "das_get_global_variable_mnh");
             addExtern<DAS_BIND_FUN(das_get_jit_str_cmp)>(*this, lib, "get_jit_str_cmp",
                 SideEffects::none, "das_get_jit_str_cmp");
             addExtern<DAS_BIND_FUN(das_get_jit_str_cat)>(*this, lib, "get_jit_str_cat",
@@ -582,12 +867,6 @@ extern "C" {
             addExtern<DAS_BIND_FUN(das_get_builtin_function_address)>(*this, lib,  "get_builtin_function_address",
                 SideEffects::none, "das_get_builtin_function_address")
                     ->args({"fn","context","at"});
-            addExtern<DAS_BIND_FUN(das_make_interop_node)>(*this, lib,  "make_interop_node",
-                SideEffects::none, "das_make_interop_node")
-                    ->args({"ctx","call","context","at"});
-            addExtern<DAS_BIND_FUN(das_sb_make_interop_node)>(*this, lib,  "make_interop_node",
-                SideEffects::none, "das_sb_make_interop_node")
-                    ->args({"ctx","builder","context","at"});
             addExtern<DAS_BIND_FUN(das_get_jit_new)>(*this, lib,  "get_jit_new",
                 SideEffects::none, "das_get_jit_new")
                     ->args({"type","context","at"});
@@ -604,6 +883,10 @@ extern "C" {
                 SideEffects::none, "das_get_jit_initialize_fileinfo");
             addExtern<DAS_BIND_FUN(das_get_jit_free_fileinfo)>(*this, lib,  "get_jit_free_fileinfo",
                 SideEffects::none, "das_get_jit_free_fileinfo");
+            addExtern<DAS_BIND_FUN(jit_get_initialize_varinfo_annotations)>(*this, lib,  "get_initialize_varinfo_annotations",
+                SideEffects::none, "jit_get_initialize_varinfo_annotations");
+            addExtern<DAS_BIND_FUN(jit_get_free_varinfo_annotations)>(*this, lib,  "get_free_varinfo_annotations",
+                SideEffects::none, "jit_get_free_varinfo_annotations");
             addExtern<DAS_BIND_FUN(das_recreate_fileinfo_name)>(*this, lib,  "recreate_fileinfo_name",
                 SideEffects::worstDefault, "das_recreate_fileinfo_name");
             addExtern<DAS_BIND_FUN(loadDynamicLibrary)>(*this, lib,  "load_dynamic_library",
@@ -617,7 +900,7 @@ extern "C" {
                     ->args({"library"});
             addExtern<DAS_BIND_FUN(create_shared_library)>(*this, lib,  "create_shared_library",
                 SideEffects::worstDefault, "create_shared_library")
-                    ->args({"objFilePath","libraryName","dasSharedLibrary","customLinker"});
+                    ->args({"objFilePath","libraryName","dasLib","customLinker", "isShared"});
             addExtern<DAS_BIND_FUN(jit_set_jit_state)>(*this, lib,  "set_jit_state",
                 SideEffects::worstDefault, "jit_set_jit_state")
                     ->args({"context","shared_lib","llvm_ee","llvm_ctx"});
@@ -625,6 +908,7 @@ extern "C" {
                 SideEffects::worstDefault, "jit_get_jit_state")
                     ->args({"block","context","at"});
             addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));
+            addConstant<uint32_t>(*this, "SIZE_OF_SIMNODE_INTEROP", uint32_t(sizeof(SimNode_AotInteropBase)));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_EVAL_TOP", uint32_t(uint32_t(offsetof(Context, stack) + offsetof(StackAllocator, evalTop))));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_GLOBALS", uint32_t(uint32_t(offsetof(Context, globals))));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_SHARED", uint32_t(uint32_t(offsetof(Context, shared))));
@@ -640,3 +924,15 @@ extern "C" {
 }
 
 REGISTER_MODULE_IN_NAMESPACE(Module_Jit,das);
+
+static void init() {
+    NEED_ALL_DEFAULT_MODULES;
+    NEED_MODULE(Module_UriParser);
+    NEED_MODULE(Module_JobQue);
+}
+
+extern "C" {
+DAS_API void jit_initialize_modules () {
+    init();
+}
+}

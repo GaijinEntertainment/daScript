@@ -14,6 +14,7 @@ require llvm/daslib/llvm_boost
 require llvm/daslib/llvm_jit_intrin
 require llvm/daslib/llvm_jit_common
 require llvm/daslib/llvm_dll_utils
+require llvm/daslib/llvm_exe
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/macro_boost
@@ -35,6 +36,16 @@ require llvm/llvm_debug
 */
 
 var active_filenames : table<string>
+
+// VarInfo annotation type on c++ side is `vector`.
+// They cannot be allocated as global variable and require
+// Memory managment - ctors/dtors, same as FileInfo.
+struct AnnotationVarInfoEntry {
+    varinfo    : LLVMOpaqueValue?
+    ann_global : LLVMOpaqueValue?
+    count      : int
+}
+var annotation_varinfo_list : array<AnnotationVarInfoEntry>
 
 [macro_function]
 def private get_expr_ptr(expr : ExpressionPtr) {
@@ -61,26 +72,6 @@ struct private LoopBlock {
 struct SLabel {
     index : int
     blk : LLVMOpaqueBasicBlock?
-}
-
-def isExprOp2_Func(expr : smart_ptr<ExprOp2>) {
-    if (!expr.func.flags.builtIn) {
-        return true
-    }
-    if (expr.left._type.isHandle || expr.right._type.isHandle) {
-        return true
-    }
-    return false
-}
-
-def isExprOp1_Func(expr : smart_ptr<ExprOp1>) {
-    if (!expr.func.flags.builtIn) {
-        return true
-    }
-    if (expr.subexpr._type.isHandle) {
-        return true
-    }
-    return false
 }
 
 def set_private_linkage(value : LLVMOpaqueValue?) {
@@ -190,6 +181,52 @@ def generate_fileinfo_ctor_dtor(var types : PrimitiveTypes; names : table<string
 }
 
 [macro_function]
+def generate_annotations_ctor_dtor(var types : PrimitiveTypes; var entries : array<AnnotationVarInfoEntry>; dll_mode : bool) {
+    var ctor_builder = LLVMCreateBuilderInContext(g_ctx)
+    var dtor_builder = LLVMCreateBuilderInContext(g_ctx)
+    defer <| ${
+        LLVMDisposeBuilder(ctor_builder)
+        LLVMDisposeBuilder(dtor_builder)
+    }
+    let functionType = LLVMFunctionType(types.t_void, null, 0u, 0)
+    let constructor = LLVMAddFunctionWithType(g_mod, "annotations_constructor", functionType)
+    let destructor  = LLVMAddFunctionWithType(g_mod, "annotations_destructor",  functionType)
+    if (dll_mode) {
+        set_private_linkage(constructor)
+        set_private_linkage(destructor)
+    } else {
+        set_public_linkage(constructor)
+        set_public_linkage(destructor)
+    }
+    let entry_ctor = LLVMAppendBasicBlockInContext(g_ctx, constructor, "entry_ctor")
+    LLVMPositionBuilderAtEnd(ctor_builder, entry_ctor)
+    let entry_dtor = LLVMAppendBasicBlockInContext(g_ctx, destructor,  "entry_dtor")
+    LLVMPositionBuilderAtEnd(dtor_builder, entry_dtor)
+    let void_ptr = types.LLVMVoidPtrType()
+    var initFuncType = LLVMFunctionType(types.t_void,
+        fixed_array<LLVMTypeRef>(void_ptr, types.t_int32, void_ptr))
+    var freeFuncType = LLVMFunctionType(types.t_void,
+        fixed_array<LLVMTypeRef>(void_ptr))
+    var initFunc = LLVMAddFunctionWithType(g_mod, "jit_initialize_varinfo_annotations", initFuncType)
+    LLVMAddGlobalMapping(g_engine, initFunc, get_initialize_varinfo_annotations())
+    var freeFunc = LLVMAddFunctionWithType(g_mod, "jit_free_varinfo_annotations",       freeFuncType)
+    LLVMAddGlobalMapping(g_engine, freeFunc, get_free_varinfo_annotations())
+    for (entry in entries) {
+        var ctorArgs = array<LLVMValueRef>(
+            ctor_builder |> LLVMBuildPointerCast(entry.varinfo,    void_ptr, ""),
+            types.ConstI32(entry.count |> uint64()),
+            ctor_builder |> LLVMBuildPointerCast(entry.ann_global, void_ptr, ""))
+        LLVMBuildCall2(ctor_builder, initFuncType, initFunc, ctorArgs, "")
+        var dtorArgs = array<LLVMValueRef>(
+            dtor_builder |> LLVMBuildPointerCast(entry.varinfo,    void_ptr, ""))
+        LLVMBuildCall2(dtor_builder, freeFuncType, freeFunc, dtorArgs, "")
+    }
+    LLVMBuildRetVoid(ctor_builder)
+    LLVMBuildRetVoid(dtor_builder)
+    return (constructor, destructor)
+}
+
+[macro_function]
 def get_function_addr(var ctx : Context?; func : Function?) {
     let mangled_name = get_mangled_name(func)
     let MNH = hash(mangled_name)
@@ -203,6 +240,14 @@ def get_function_addr(var ctx : Context?; func : Function?) {
 
 
 
+bitfield LlvmJitFlags {
+    // Whether prologue should be forced for every function.
+    emit_prologue,
+    // Whether we generating executable. If so, all symbols will be private.
+    gen_exe,
+    // Is debug info needed. Debug info not fully supported and not tested yet.
+    need_di,
+}
 
 [macro]
 class LlvmJitVisitor : AstVisitor {
@@ -239,21 +284,21 @@ class LlvmJitVisitor : AstVisitor {
     option_no_range_check : bool = false
     option_no_alias : bool = false
     option_no_capture : bool = false
-    // If debug_build enabled we'll emit prologue for every function.
+    flags : LlvmJitFlags
     emit_prologue : bool = false
     own_di : bool = false
     ldu_hint : bool
     attributes : Attributes?
 
-    def LlvmJitVisitor(ctx : Context?; var types_ : PrimitiveTypes?; uids : UidNodes?; need_di : bool; emit_prologue_ : bool; dib : LLVMOpaqueDIBuilder?; attrs : Attributes?) {
+    def LlvmJitVisitor(ctx : Context?; var types_ : PrimitiveTypes?; uids : UidNodes?; flags_ : LlvmJitFlags; dib : LLVMOpaqueDIBuilder?; attrs : Attributes?) {
         jit_context = ctx
         types = types_
         g_builder = LLVMCreateBuilderInContext(g_ctx)
         g_di_builder = dib
-        emit_prologue = emit_prologue_
+        flags = flags_
         attributes = attrs
         uid = uids
-        if (need_di) {
+        if (flags.need_di) {
             own_di = true
             g_di_builder = LLVMCreateDIBuilder(g_mod)
             let producer = "daScript LLVM JIT"
@@ -540,7 +585,14 @@ class LlvmJitVisitor : AstVisitor {
             ))
         }
         wfunc = LLVMAddFunctionWithType(g_mod, fun_name.publ(), ret_type)
-        set_public_linkage(wfunc)
+        if (flags.gen_exe) {
+            // todo: we shouldn't generate public function `wfunc`
+            // at all when gen_exe enabled.
+            // But it requires some refactoring.
+            set_private_linkage(wfunc)
+        } else {
+            set_public_linkage(wfunc)
+        }
         LLVMSetParamAlignment(LLVMGetParam(wfunc, 0u), 16u)
         LLVMSetParamAlignment(LLVMGetParam(wfunc, 1u), 16u)
         if (isCmres) {
@@ -963,15 +1015,32 @@ class LlvmJitVisitor : AstVisitor {
         var args = build_array_of_arguments(expr.elements)
         var func = LLVMGetNamedFunction(g_mod, expr.stringBuilderFlags.isTempString ? FN_JIT_STRING_BUILDER_TEMP : FN_JIT_STRING_BUILDER)
         assert(func != null)
-        let NODE_PTR = make_interop_node(*jit_context, get_ptr(expr))
-        if (NODE_PTR == null) {
-            failed_E(expr, "missing interop function node pointer for String Builder")
+        // Evaluate all elements into a stack vec4f[] array
+        // Build a global array of TypeInfo* for each element
+        let nArgs = length(expr.elements) |> uint()
+        let void_ptr = types.LLVMVoidPtrType()
+        var types_arr_ptr : LLVMOpaqueValue?
+        if (nArgs > 0u) {
+            var tinfo_vals : array<LLVMValueRef>
+            for (elem in expr.elements) {
+                let tinfo = make_type_info_structure(*jit_context, elem._type)
+                let tinfo_global = create_type_info_global(tinfo)
+                tinfo_vals |> push <| unsafe(reinterpret<LLVMValueRef>(tinfo_global))
+            }
+            let arr_ty = LLVMArrayType(void_ptr, nArgs)
+            var ti_arr = LLVMAddGlobal(g_mod, arr_ty, "string_node_{expr.at.line:d}")
+            set_private_linkage(ti_arr)
+            ti_arr |> LLVMSetInitializer <| LLVMConstArray(void_ptr, unsafe(addr(tinfo_vals[0])), nArgs)
+            types_arr_ptr = ti_arr
+        } else {
+            types_arr_ptr = LLVMConstPointerNull(void_ptr)
         }
-        let global_var = save_address_global(uid.get_string_builder(expr), NODE_PTR)
         var params <- array<LLVMOpaqueValue?>(
             get_context_param(),
-            global_var, // Node *
-            args                                                   // args
+            types.ConstI32(nArgs |> uint64()),
+            types_arr_ptr,
+            get_line_info_ptr(expr.at),
+            args
         )
         var typ = g_fn_types[FN_JIT_STRING_BUILDER]
         setE(expr, LLVMBuildCall2(g_builder, typ, func, params, "string_builder"))
@@ -1338,7 +1407,11 @@ class LlvmJitVisitor : AstVisitor {
         var global_addr = LLVMGetNamedGlobal(g_mod, name.glob())
         if (global_addr == null) {
             global_addr = LLVMAddGlobal(g_mod, nonnull_type, name.glob())
-            set_public_linkage(global_addr)
+            if (flags.gen_exe) {
+                set_private_linkage(global_addr)
+            } else {
+                set_public_linkage(global_addr)
+            }
             LLVMSetInitializer(global_addr, types.ConstPtr(address |> intptr, nonnull_type))
         } else {
             failed("Name duplicate {name.glob()}\n")
@@ -1386,20 +1459,50 @@ class LlvmJitVisitor : AstVisitor {
                 var args = build_array_of_arguments(expr.arguments)
                 var func = register_interop_function(expr)
 
-                let NODE_PTR = make_interop_node(*jit_context, get_ptr(expr))
-                if (NODE_PTR == null) {
-                    failed_E(expr, "missing interop function node pointer for {expr.func.name}")
+                var types_arr_ptr : LLVMOpaqueValue?
+                let nArgs = expr.arguments |> length() |> uint
+                if (nArgs > 0u) {
+                    var tinfo_vals : array<LLVMValueRef>
+                    for (elem in expr.arguments) {
+                        let tinfo = make_type_info_structure(*jit_context, elem._type)
+                        let tinfo_global = create_type_info_global(tinfo)
+                        tinfo_vals |> push <| unsafe(reinterpret<LLVMValueRef>(tinfo_global))
+                    }
+                    let arr_ty = LLVMArrayType(types.LLVMVoidPtrType(), nArgs)
+                    var ti_arr = LLVMAddGlobal(g_mod, arr_ty, "string_node_{expr.at.line:d}")
+                    set_private_linkage(ti_arr)
+                    ti_arr |> LLVMSetInitializer <| LLVMConstArray(types.LLVMVoidPtrType(), unsafe(addr(tinfo_vals[0])), nArgs)
+                    types_arr_ptr = ti_arr
+                } else {
+                    types_arr_ptr = LLVMConstPointerNull(types.LLVMVoidPtrType())
                 }
-                var node_value = save_address_global(uid.get_call(expr), NODE_PTR)
+                var jit_simnode_interop = LLVMGetNamedFunction(g_mod, "jit_simnode_interop")
+                var simnode_interop_type = g_fn_types["jit_simnode_interop"]
+                var typeinfo_memory : LLVMOpaqueValue?
+                at_function_entry <| $() {
+                    typeinfo_memory = LLVMBuildAlloca(g_builder,
+                        LLVMArrayType(types.t_int8, SIZE_OF_SIMNODE_INTEROP), "SimNode")
+                }
+
+                LLVMBuildCall2(g_builder, simnode_interop_type,
+                    jit_simnode_interop, fixed_array(
+                        typeinfo_memory,
+                        types.ConstI32(nArgs |> uint64),
+                        types_arr_ptr
+                    ), "")
 
                 var params <- array<LLVMOpaqueValue?>(
                     get_context_param(),
-                    node_value,                         // Node *
+                    typeinfo_memory,                    // Node *
                     args                                // args
                 )
                 // Load the function pointer
                 var fn_type = types.LLVMInteropFunctionType()
                 var ccall = LLVMBuildCall2(g_builder, fn_type, func, params, "")
+                var jit_free_simnode_interop = LLVMGetNamedFunction(g_mod, "jit_free_simnode_interop")
+                var simnode_free_interop_type = g_fn_types["jit_free_simnode_interop"]
+                LLVMBuildCall2(g_builder, simnode_free_interop_type,
+                    jit_free_simnode_interop, fixed_array(typeinfo_memory), "")
                 if (expr.func.result.isVoid) {
                     setE(expr, ccall)
                 } else {
@@ -3546,12 +3649,21 @@ class LlvmJitVisitor : AstVisitor {
             types.t_int64)
     }
 
+    def get_llvm_type_for_annotation_arg_pod() : LLVMTypeRef {
+        let void_ptr = types.LLVMVoidPtrType()
+        return StructType(types) <| fixed_array(
+            void_ptr,       // const char * name
+            void_ptr,       // const char * sValue
+            types.t_int32,  // int32_t type
+            types.t_int32)  // int32_t iValue  (covers bool/int/float union)
+    }
+
     def get_llvm_type_for_enuminfo(len : uint) : LLVMTypeRef {
         let void_ptr = types.LLVMVoidPtrType()
         return StructType(types) <| fixed_array(
             void_ptr,        // const char* name
             void_ptr,        // const char* module_name
-            LLVMArrayType(get_llvm_type_for_enumvalueinfo(), len),        // EnumValueInfo **  fields
+            void_ptr,        // EnumValueInfo **  fields
             types.t_int32, // uint32_t count
             types.t_int64)
     }
@@ -3579,9 +3691,14 @@ class LlvmJitVisitor : AstVisitor {
                 get_string_constant_ptr(g_builder, evi.name),
                 LLVMConstInt(types.t_int64, evi.value  |> uint64(), 0)
             )
-            array_init |> push <| LLVMConstNamedStruct(ty, unsafe(addr(init_fields[0])), 2u)
+            let evi_global = LLVMAddGlobal(g_mod, ty, "enumvalueinfo")
+            evi_global |> LLVMSetInitializer <| LLVMConstNamedStruct(ty, unsafe(addr(init_fields[0])), 2u)
+            array_init |> push <| unsafe(reinterpret<LLVMValueRef>(evi_global))
         }
-        return LLVMConstArray(ty, unsafe(addr(array_init[0])), len)
+        let ptr_ty = LLVMPointerType(ty, 0u)
+        let arr_global = LLVMAddGlobal(g_mod, LLVMArrayType(ptr_ty, len), "enumvalueinfo_ptr_array")
+        arr_global |> LLVMSetInitializer <| LLVMConstArray(ptr_ty, unsafe(addr(array_init[0])), len)
+        return g_builder |> LLVMBuildPointerCast(arr_global, types.LLVMVoidPtrType(), "mycast")
     }
 
     def get_typeinfo_fields(ti : TypeInfo?) : array<LLVMValueRef> {
@@ -3623,8 +3740,31 @@ class LlvmJitVisitor : AstVisitor {
         let ty = get_llvm_type_for_varinfo()
         for (i in range(len)) {
             let varinfo = g_mod |> LLVMAddGlobal(ty, "varinfo")
-            varinfo |> LLVMSetInitializer <| get_value_for_varinfo(unsafe(ei[i]))
+            let vi = unsafe(ei[i])
+            varinfo |> LLVMSetInitializer <| get_value_for_varinfo(vi)
             array_init |> push <| unsafe(reinterpret<LLVMValueRef>(varinfo))
+            if (vi.annotation_arguments != null) {
+                let ann_ty = get_llvm_type_for_annotation_arg_pod()
+                var ann_vals : array<LLVMValueRef>
+                for (arg in *vi.annotation_arguments) {
+                    var fields = fixed_array(
+                        get_string_constant_ptr(g_builder, string(arg.name)),
+                        get_string_constant_ptr(g_builder, string(arg.sValue)),
+                        types.ConstI32(uint64(int(arg.basicType))),
+                        types.ConstI32(uint64(uint(arg.iValue))))
+                    ann_vals |> push <| LLVMConstNamedStruct(ann_ty, unsafe(addr(fields[0])), 4u)
+                }
+                if (!(ann_vals |> empty())) {
+                    let n = ann_vals |> length() |> uint()
+                    let ann_global = LLVMAddGlobal(g_mod, LLVMArrayType(ann_ty, n), "varinfo_annotations")
+                    set_private_linkage(ann_global)
+                    ann_global |> LLVMSetInitializer <| LLVMConstArray(ann_ty, unsafe(addr(ann_vals[0])), n)
+                    annotation_varinfo_list |> push <| AnnotationVarInfoEntry(
+                        varinfo = varinfo,
+                        ann_global = ann_global,
+                        count = int(n))
+                }
+            }
         }
         let my_struct_array_type = LLVMArrayType(LLVMPointerType(ty, 0u), len |> uint())
         let varinfo_array = LLVMAddGlobal(g_mod, my_struct_array_type, "varinfo_ptr_array")
@@ -3726,7 +3866,6 @@ class LlvmJitVisitor : AstVisitor {
         for (i in range(6)) {
             initValues[i] = LLVMConstPointerNull(types.LLVMVoidPtrType())
         }
-
         if (info.basicType == Type.tHandle) {
             let resolvent = "~{info.annotation._module.name}::{info.annotation.name}"
             var llvm_resolvent = g_builder |> get_string_constant_ptr(resolvent)
@@ -3743,7 +3882,8 @@ class LlvmJitVisitor : AstVisitor {
         } elif (info.basicType == Type.tStructure) {
             var t = create_struct_global_pointer(info.structType)
             initValues[0] = t
-        } elif (info.basicType == Type.tEnumeration || info.basicType == Type.tEnumeration8 || info.basicType == Type.tEnumeration16) {
+        } elif (info.basicType == Type.tEnumeration || info.basicType == Type.tEnumeration8 ||
+                info.basicType == Type.tEnumeration16 || info.basicType == Type.tEnumeration64) {
             initValues[0] = create_enum_global_pointer(info.enumType)
         } elif (info.basicType == Type.tPointer || info.basicType == Type.tArray) {
             initValues[1] = create_type_info_global(info.firstType)
@@ -3761,11 +3901,32 @@ class LlvmJitVisitor : AstVisitor {
             initValues[1] = create_type_info_global(info.firstType)
             initValues[3] = aa
             initValues[4] = an
+        } elif (info.basicType == Type.tBitfield || info.basicType == Type.tBitfield8 ||
+                info.basicType == Type.tBitfield16 || info.basicType == Type.tBitfield64) {
+            var an = create_argnames_array(info.argNames, info.argNames == null ? 0u : info.argCount)
+            initValues[4] = an
+        } elif (info.basicType == Type.tIterator) {
+            initValues[1] = create_type_info_global(info.firstType)
+        }
+        // Fill dim pointer (slot 5), needed for fixed-size arrays like int[3].
+        if (info.dimSize > 0u) {
+            var dim_vals : array<LLVMValueRef>
+            for (i in range(info.dimSize)) {
+                dim_vals |> push <| types.ConstI32(unsafe(info.dim[i]) |> uint64())
+            }
+            let dim_arr_ty = LLVMArrayType(types.t_int32, info.dimSize)
+            var dim_global = LLVMAddGlobal(g_mod, dim_arr_ty, "dim")
+            set_private_linkage(dim_global)
+            dim_global |> LLVMSetInitializer <| LLVMConstArray(types.t_int32, unsafe(addr(dim_vals[0])), info.dimSize)
+            initValues[5] = dim_global
         }
         return <- initValues
     }
 
     def create_type_info_global(ti : TypeInfo?) {
+        if (ti == null) {
+            return LLVMConstPointerNull(types.LLVMVoidPtrType())
+        }
         if (typeinfo_cache |> key_exists <| ti) {
             return typeinfo_cache[ti]
         }
@@ -4086,7 +4247,7 @@ class LlvmJitVisitor : AstVisitor {
         var memset_bytes = bytes
         if (needTypeInfo) {
             var tinfo = make_type_info_structure(*jit_context, expr.subexpr._type)
-            let tptr = save_address_global(uid.get_ascend_tinfo(expr), tinfo, types.LLVMVoidPtrType())
+            let tptr = create_type_info_global(tinfo)
             LLVMBuildStore2(g_builder, types, types.LLVMVoidPtrType(), tptr, mks_ptr)
             // skip 16 bytes in mks_ptr
             var p2int = LLVMBuildPtrToInt(g_builder, mks_ptr, types.LLVMIntPtrType(), "")
@@ -4942,7 +5103,7 @@ class LlvmJitVisitor : AstVisitor {
     }
 
     def make_block_function(expr : smart_ptr<ExprMakeBlock>; captured : array<CapturedVariable>; first_field_index : int; captureType : LLVMOpaqueType?) : tuple<func : LLVMOpaqueValue?; impl : LLVMOpaqueValue?> {
-        var astVisitor = new LlvmJitVisitor(jit_context, types, uid, false, emit_prologue, g_di_builder, attributes)
+        var astVisitor = new LlvmJitVisitor(jit_context, types, uid, flags, g_di_builder, attributes)
         unsafe {
             astVisitor.adapter <- make_visitor(*astVisitor)
         }
@@ -5739,33 +5900,52 @@ def private get_llvm_function_type(func : FunctionPtr; var types : PrimitiveType
 }
 
 [macro_function]
-def private add_ctor_dtor_function(ctor_dtor : tuple<LLVMOpaqueValue?, LLVMOpaqueValue?>; var types : PrimitiveTypes?) {
+def private add_ctor_dtor_function(ctor_dtor : array<tuple<LLVMOpaqueValue?, LLVMOpaqueValue?>>; var types : PrimitiveTypes?) {
+    let total_sz = ctor_dtor |> length() |> uint
     let priority = 0 |> uint64()
-    let (ctor, dtor) = ctor_dtor
     let dataPointerType = LLVMPointerType(types.t_int8, 0u)
-    var ctorTypes = fixed_array(types.t_int32, LLVMTypeOf(ctor), dataPointerType)
-    var dtorTypes = fixed_array(types.t_int32, LLVMTypeOf(dtor), dataPointerType)
-
-    var ctorFields = fixed_array(types.ConstI32(priority), ctor, LLVMConstPointerNull(dataPointerType))
-    var dtorFields = fixed_array(types.ConstI32(priority), dtor, LLVMConstPointerNull(dataPointerType))
+    let funcType = LLVMPointerType(LLVMFunctionType(types.t_void, null, 0u, 0), 0u)
+    var ctorTypes = fixed_array(types.t_int32, funcType, dataPointerType)
+    var dtorTypes = fixed_array(types.t_int32, funcType, dataPointerType)
 
 
     let ctorStructType = StructType(types, ctorTypes)
     let dtorStructType = StructType(types, dtorTypes)
 
+    var ctorFields : array<LLVMOpaqueValue?>
+    var dtorFields : array<LLVMOpaqueValue?>
+
+    var ctor_entries = array<LLVMOpaqueValue?>()
+    var dtor_entries = array<LLVMOpaqueValue?>()
+
+    var i = 0
+    for ((ctor, dtor) in ctor_dtor) {
+        ctorFields |> push(types.ConstI32(priority))
+        var c := ctor
+        ctorFields |> push(c)
+        ctorFields |> push(LLVMConstPointerNull(dataPointerType))
+        ctor_entries |> push(LLVMConstNamedStruct(ctorStructType, unsafe(addr(ctorFields[i])), 3u))
+
+        dtorFields |> push(types.ConstI32(priority))
+        var d := dtor
+        dtorFields |> push(d)
+        dtorFields |> push(LLVMConstPointerNull(dataPointerType))
+        dtor_entries |> push(LLVMConstNamedStruct(dtorStructType, unsafe(addr(dtorFields[i])), 3u))
+        i = i + 3
+    }
+
     var ctorStruct = LLVMConstNamedStruct(ctorStructType, unsafe(addr(ctorFields[0])), 3u)
     var dtorStruct = LLVMConstNamedStruct(dtorStructType, unsafe(addr(dtorFields[0])), 3u)
 
-    let ctorArray = LLVMAddGlobal(g_mod, LLVMArrayType(ctorStructType, 1u), "llvm.global_ctors")
-    let dtorArray = LLVMAddGlobal(g_mod, LLVMArrayType(dtorStructType, 1u), "llvm.global_dtors")
+    let ctorArray = LLVMAddGlobal(g_mod, LLVMArrayType(ctorStructType, total_sz), "llvm.global_ctors")
+    let dtorArray = LLVMAddGlobal(g_mod, LLVMArrayType(dtorStructType, total_sz), "llvm.global_dtors")
 
     LLVMSetLinkage(ctorArray, LLVMLinkage.LLVMAppendingLinkage)
     LLVMSetLinkage(dtorArray, LLVMLinkage.LLVMAppendingLinkage)
 
-    LLVMSetInitializer(ctorArray, LLVMConstArray(ctorStructType, unsafe(addr(ctorStruct)), 1u))
-    LLVMSetInitializer(dtorArray, LLVMConstArray(dtorStructType, unsafe(addr(dtorStruct)), 1u))
+    LLVMSetInitializer(ctorArray, LLVMConstArray(ctorStructType, unsafe(addr(ctor_entries[0])), total_sz))
+    LLVMSetInitializer(dtorArray, LLVMConstArray(dtorStructType, unsafe(addr(dtor_entries[0])), total_sz))
 }
-
 
 // We need to overwrite address-like dependencies in .dll before start.
 // It's best to just avoid all such dependencies
@@ -5803,13 +5983,6 @@ class ResolveExternVisitor : AstVisitor {
         }
 
         if (expr.func.flags.builtIn) {
-            if (expr.func.flags.interopFn) {
-                let NODE_PTR = make_interop_node(*jit_context, get_ptr(expr))
-                if (NODE_PTR == null) {
-                    failed_E(expr, "missing interop function node pointer for {expr.func.name}")
-                }
-                dll.set_glob_address(uid.get_call(expr), NODE_PTR)
-            }
             let FUNC_PTR = get_builtin_function_address(expr.func)
             if (FUNC_PTR == null) {
                 failed_E(expr, "missing interop function pointer for {expr.func._module.name}::{expr.func.name} // {get_mangled_name(expr.func)}")
@@ -5886,14 +6059,6 @@ class ResolveExternVisitor : AstVisitor {
         }
     }
 
-    def override preVisitExprStringBuilder(expr : smart_ptr<ExprStringBuilder>) {
-        let NODE_PTR = make_interop_node(*jit_context, get_ptr(expr))
-        if (NODE_PTR == null) {
-            failed_E(expr, "missing interop function node pointer for string builder at {get_mangled_name(thisFunc)}")
-        }
-        dll.set_glob_address(uid.get_string_builder(expr), NODE_PTR)
-    }
-
     def override preVisitExprAddr(expr : smart_ptr<ExprAddr>) {
         var MNH_ADDR = get_function_addr(jit_context, expr.func)
         dll.set_glob_address(uid.get_addr(expr), MNH_ADDR)
@@ -5916,13 +6081,6 @@ class ResolveExternVisitor : AstVisitor {
                 return
             }
             dll.set_glob_address(uid.get_ascend_new(expr), new_handle_ptr)
-        }
-
-        if (expr.ascendFlags.needTypeInfo) {
-            dll.set_glob_address(
-                uid.get_ascend_tinfo(expr),
-                make_type_info_structure(*jit_context, expr.subexpr._type)
-            )
         }
     }
 
@@ -6035,17 +6193,19 @@ def get_dll_missing(fns : array<FunctionPtr>; disabled : array<FunctionPtr>; var
 
 [macro_function]
 def private generate_llvm(ctx : Context?; var types : PrimitiveTypes?; uids : UidNodes?;
-                          attrs : Attributes?; fn : FunctionPtr;
-                          enable_debug_info : bool; emit_prologue : bool) {
+                          attrs : Attributes?; fn : FunctionPtr; flags : LlvmJitFlags) {
     verify(!(is_in_completion() || is_compiling_macros() || is_folding()))
 
     let dll_name = uids.get_dll_fn_name(fn)
-    let globalVar = LLVMAddGlobal(g_mod, types.t_int64, dll_name.id())
-    set_public_linkage(globalVar)
-    let aot_hash : uint64 = get_function_aot_hash(fn |> get_ptr)
-    // debug("initializer hash for {dll_name.publ()}: {aot_hash}")
-    globalVar |> LLVMSetInitializer(types.ConstI64(aot_hash))
-    var astVisitor = new LlvmJitVisitor(ctx, types, uids, enable_debug_info, emit_prologue, null, attrs)
+    if (!flags.gen_exe) {
+        // No need in public symbols when generating executable
+        let globalVar = LLVMAddGlobal(g_mod, types.t_int64, dll_name.id())
+        set_public_linkage(globalVar)
+        let aot_hash : uint64 = get_function_aot_hash(fn |> get_ptr)
+        // debug("initializer hash for {dll_name.publ()}: {aot_hash}")
+        globalVar |> LLVMSetInitializer(types.ConstI64(aot_hash))
+    }
+    var astVisitor = new LlvmJitVisitor(ctx, types, uids, flags, null, attrs)
     unsafe {
         astVisitor.adapter <- make_visitor(*astVisitor)
     }
@@ -6213,7 +6373,7 @@ def public free_jit_context {
 
 
 [macro_function]
-def finalize_jit(use_dll : bool; lib_handle : DLLHandle?) : JitState? {
+def finalize_jit(use_dll : bool; gen_exe : bool; lib_handle : DLLHandle?) : JitState? {
     verify(!(is_in_completion() || is_compiling_macros()))
     verify(!(g_mod == null))    // prevent double finalize
     if (LLVM_LOG_RESULT) {
@@ -6221,13 +6381,19 @@ def finalize_jit(use_dll : bool; lib_handle : DLLHandle?) : JitState? {
         fflush(fstderr())
     }
     var result : JitState? = null;
-    if (use_dll) {
+    if (use_dll || gen_exe) {
         // Note: ExecutionEngine is owner of the g_mod
         LLVMDisposeExecutionEngine(g_engine);
         LLVMContextDispose(g_ctx);
 
         // JitState is dll only.
-        result = new JitState(dll = lib_handle.handle, ee = null, ctx = null)
+        if (use_dll) {
+            result = new JitState(dll = lib_handle.handle, ee = null, ctx = null)
+        } else {
+            // Nothing to finalize.
+            result = new JitState(dll = null, ee = null, ctx = null)
+
+        }
     } else {
         g_engine |> LLVMRunStaticConstructors()
 
@@ -6242,7 +6408,6 @@ def finalize_jit(use_dll : bool; lib_handle : DLLHandle?) : JitState? {
     }
     return result
 }
-
 
 [simulate_macro(name="jit_llvm")]
 class JIT_LLVM : AstSimulateMacro {
@@ -6259,16 +6424,22 @@ class JIT_LLVM : AstSimulateMacro {
 
         assume jit_all_functions = prog.policies.jit_jit_all_functions
         assume debug_info = prog.policies.jit_debug_info
-        if (prog.policies.jit_use_dll_mode && !das_is_dll_build()) {
+        if (prog.policies.jit_dll_mode && !das_is_dll_build()) {
             to_log(LOG_WARNING, "LLVM JIT: dll mode is enabled, however " +
                 "daslang build is static, disabling dll mode.\n")
         }
-        let use_dll = prog.policies.jit_use_dll_mode && das_is_dll_build()
+        let gen_exe = prog.policies.jit_exe_mode
+        let exe_main = "main" // prog.policies.jit_entry_point |> empty() ? "main" : prog.policies.jit_entry_point
+        let use_dll = prog.policies.jit_dll_mode && das_is_dll_build() && !gen_exe
         let opt_level = prog.policies.jit_opt_level
         let size_level = prog.policies.jit_size_level
         let emit_prologue = true // prog.policies.emit_prologue
-        assume config_out_folder = string(prog.policies.jit_output_folder)
-        let output_folder = config_out_folder |> empty() ? "{get_das_root()}/jitted_scripts/" : config_out_folder
+        // If you're sure `dynamic` functions is not reachable set this flag
+        // to `true` and fail in runtime on `jit_trap` if they turns
+        // out to be reachable.
+        let exe_strict = true
+        assume config_out_path = string(prog.policies.jit_output_path)
+        let output_path = config_out_path |> empty() ? "jitted_scripts/{prog.thisNamespace}" : config_out_path
         assume path_to_shared_lib = string(prog.policies.jit_path_to_shared_lib)
         assume path_to_linker = string(prog.policies.jit_path_to_linker)
 
@@ -6301,9 +6472,15 @@ class JIT_LLVM : AstSimulateMacro {
         if (!empty(funcs)) {
             let totalTime = ref_time_ticks()
             init_jit(opt_level |> uint)
+
+            var jit_flags : LlvmJitFlags
+            jit_flags.emit_prologue = emit_prologue
+            jit_flags.gen_exe = gen_exe
+            jit_flags.need_di = debug_info
+
             let attrs = new Attributes(g_ctx)
             var uids = create_uid_nodes(prog, funcs)
-            var fake_visitor = new LlvmJitVisitor(ctx, g_prim_t, uids, false, emit_prologue, null, attrs)
+            var fake_visitor = new LlvmJitVisitor(ctx, g_prim_t, uids, jit_flags, null, attrs)
             for (fun in funcs) {
                 fake_visitor->add_llvm_functions(fun)
             }
@@ -6313,8 +6490,7 @@ class JIT_LLVM : AstSimulateMacro {
             var g_dynamic_lib_handle : DLLHandle? = null;
             var recompile_prog = true
             if (use_dll) {
-                let dll_object_path = "{output_folder}{prog.thisNamespace}"
-                g_dynamic_lib_handle = get_dll_by_path(dll_object_path)
+                g_dynamic_lib_handle = get_dll_by_path(output_path)
                 let (missing, disabling) = get_dll_missing(funcs, disabled, g_dynamic_lib_handle, uids)
                 let dll_changed = !(missing |> empty() && disabling |> empty())
                 recompile_prog = dll_changed
@@ -6324,11 +6500,10 @@ class JIT_LLVM : AstSimulateMacro {
             }
             if (recompile_prog) {
                 for (fun in funcs) {
-                    generate_llvm(ctx, g_prim_t, uids, attrs, fun, debug_info, emit_prologue)
+                    generate_llvm(ctx, g_prim_t, uids, attrs, fun, jit_flags)
                     let fnmna = uids.get_dll_fn_name(fun)
                     var fn_impl = LLVMGetNamedFunction(g_mod, fnmna.impl())
                     var fn = LLVMGetNamedFunction(g_mod, fnmna.publ())
-
                     assume maybe_mod = prog.thisModuleName |> length() == 0 ? "" : "in module {prog.thisModuleName}"
                     if (!LLVMVerifyFunction(fn_impl, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
                         // to_log(LOG_ERROR, "LLVM JIT: {LLVMPrintModuleToString(g_mod)}\n");
@@ -6339,6 +6514,15 @@ class JIT_LLVM : AstSimulateMacro {
                         panic("Internal jit error. Failed to get IR of '{fun.name}' in module {maybe_mod}.\n")
                     }
                 }
+                if (gen_exe) {
+                    let fn = inject_main(ctx, g_ctx, funcs, prog, exe_main, g_mod, g_prim_t, uids, exe_strict)
+                    if (fn == null) {
+                        finalize_jit(use_dll, gen_exe, g_dynamic_lib_handle)
+                        // JIT failed. Couldn't create executable.
+                        // Still return true, macro worked correctly.
+                        return true
+                    }
+                }
                 if (!LLVMVerifyModule(g_mod, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
                     g_failed = true
                 }
@@ -6346,7 +6530,10 @@ class JIT_LLVM : AstSimulateMacro {
                     var fn_names = join([ for (fn in funcs); "{fn.name}" ], ",")
                     panic("Internal jit error. Failed to get IR for functions {fn_names}.\n")
                 }
-                generate_fileinfo_ctor_dtor(*g_prim_t, active_filenames, use_dll) |> add_ctor_dtor_function(g_prim_t)
+                var ctor_dtor : array<tuple<LLVMOpaqueValue?, LLVMOpaqueValue?>>
+                ctor_dtor |> push(generate_fileinfo_ctor_dtor(*g_prim_t, active_filenames, use_dll))
+                ctor_dtor |> push(generate_annotations_ctor_dtor(*g_prim_t, annotation_varinfo_list, use_dll))
+                ctor_dtor |> add_ctor_dtor_function(g_prim_t)
                 optimize_llvm_module(opt_level |> uint(), size_level |> uint(), LLVM_INLINE_THRESHOLD)
                 if (false) {
                     // Let's remove unused attributes before we print IR.
@@ -6367,12 +6554,17 @@ class JIT_LLVM : AstSimulateMacro {
                     panic("Internal jit error. Failed to get IR for functions {fn_names}.\n")
                 }
                 active_filenames = table<string>();
-                if (use_dll) {
-                    mkdir_rec(output_folder)
-                    let dll_object_path = "{output_folder}{prog.thisNamespace}"
-                    write_dll(g_mod, dll_object_path, path_to_shared_lib, path_to_linker)
+                annotation_varinfo_list |> clear();
+                if (gen_exe) {
+                    mkdir_rec(dir_name(output_path))
+                    write_exe(g_mod, output_path, path_to_shared_lib, path_to_linker)
+                } elif (use_dll) {
+                    mkdir_rec(dir_name(output_path))
+                    write_dll(g_mod, output_path, path_to_shared_lib, path_to_linker)
+
+                    // Open just stored DLL, so we can keep working.
                     g_dynamic_lib_handle.reset()
-                    g_dynamic_lib_handle = get_dll_by_path(dll_object_path)
+                    g_dynamic_lib_handle = get_dll_by_path(output_path)
                     let (missing, disabling) = get_dll_missing(funcs, disabled, g_dynamic_lib_handle, uids)
                     assert(missing |> empty() && disabling |> empty())
                 }
@@ -6385,18 +6577,20 @@ class JIT_LLVM : AstSimulateMacro {
                     visit(fn, adapter_resolve)
                 }
             }
-            for (fun in funcs) {
-                var mangled_name = get_mangled_name(fun)
-                let MNH = hash(mangled_name)
-                var simfun = get_function_by_mangled_name_hash(MNH, *ctx)
-                var gen = generate_llvm_code(g_dynamic_lib_handle, uids.get_dll_fn_name(fun), use_dll)
-                if (gen != null) {
-                    gen |> unsafe(instrument_jit(simfun, fun.at, *ctx))
-                } else {
-                    unsafe(remove_jit(simfun))
+            if (!gen_exe) {
+                for (fun in funcs) {
+                    var mangled_name = get_mangled_name(fun)
+                    let MNH = hash(mangled_name)
+                    var simfun = get_function_by_mangled_name_hash(MNH, *ctx)
+                    var gen = generate_llvm_code(g_dynamic_lib_handle, uids.get_dll_fn_name(fun), use_dll)
+                    if (gen != null) {
+                        gen |> unsafe(instrument_jit(simfun, fun.at, *ctx))
+                    } else {
+                        unsafe(remove_jit(simfun))
+                    }
                 }
             }
-            var result = finalize_jit(use_dll, g_dynamic_lib_handle)
+            var result = finalize_jit(use_dll, gen_exe, g_dynamic_lib_handle)
 
             set_jit_state(*ctx, result.dll, result.ee, result.ctx)
 

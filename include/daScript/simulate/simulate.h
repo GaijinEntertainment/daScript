@@ -436,6 +436,10 @@ namespace das
             return (uint32_t(index)<uint32_t(totalVariables)) ? globalVariables[index].debugInfo  : nullptr;;
         }
 
+        __forceinline const GlobalVariable getGlobalVariable( int index ) const {
+            return globalVariables[index];
+        }
+
         __forceinline void simEnd() {
             thisHelper = nullptr;
         }
