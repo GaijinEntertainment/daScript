@@ -86,6 +86,12 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - **`static_if`:** `static_if (condition) { ... }` — parentheses required
 - **Type function call:** `take(type<int>, 1, 2)` — NOT `take < int > (1, 2)`
 
+### Type modifiers
+
+- **`==const`** on a parameter type — accepts both const and non-const arguments: `def foo(self : MyStruct ==const)` — callers can pass `MyStruct` or `MyStruct const`
+- **`-const`** strips constness in type expressions — used with `reinterpret` for interior mutability: `unsafe(reinterpret<MyStruct? -const>(addr(self)))`
+- **Function pointer with explicit type:** `@@<(var self : T) : RetT> funcName` — specifies the exact parameter/return types of a function pointer literal
+
 ### Important defaults
 
 - `strict_smart_pointers` is ON — smart_ptr variables require `var inscope`

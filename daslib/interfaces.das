@@ -107,13 +107,25 @@ class ImplementsMacro : AstStructureAnnotation {
         var inscope iface_ptr <- qmacro_type(type<$t(parent)?>)
         st |> add_structure_field(iface_var_name, clone_type(iface_ptr), default<ExpressionPtr>)
         // add function {st}::get`{Foo} : Foo?
-        var inscope fn_get_i <- qmacro_method(iface_get_name_func, st) $(var self : $t(st)) : $t(iface_ptr) {
+        var inscope fn_get_i <- qmacro_method(iface_get_name_func, st) $(var self : $t(st) ==const) : $t(iface_ptr) {
             if (self.$f(iface_var_name) == null) {
                 self.$f(iface_var_name) = new <$t(cls)>(unsafe(addr(self)))
             }
             return self.$f(iface_var_name)
         }
         add_function(st._module, fn_get_i)
+        // if all interface methods are const, also generate a const getter
+        // that uses interior mutability to lazily cache the proxy
+        if (is_const_interface(parent)) {
+            var inscope fn_get_i_const <- qmacro_method(iface_get_name_func, st) $(self : $t(st) ==const) : $t(iface_ptr) {
+                var pS = unsafe(reinterpret<$t(st)? -const>(addr(self)))
+                if (pS.$f(iface_var_name) == null) {
+                    pS.$f(iface_var_name) = new <$t(cls)>(pS)
+                }
+                return pS.$f(iface_var_name)
+            }
+            add_function(st._module, fn_get_i_const)
+        }
         // add {cls}::_self : {ST}?
         var inscope st_ptr <- qmacro_type(type<$t(st)?>)
         let fi = cls |> add_structure_field("_self", clone_type(st_ptr), default<ExpressionPtr>)
@@ -131,7 +143,7 @@ class ImplementsMacro : AstStructureAnnotation {
         st |> add_structure_field(
             iface_get_name,
             qmacro_type(type<function<(var self : $t(st)) : $t(iface_ptr)>>),
-            qmacro(@@$i(iface_get_name_func))
+            qmacro(@@ < (var self : $t(st)) : $t(iface_ptr) > $i(iface_get_name_func))
         )
         // ── Ancestor getters (interface inheritance) ──────────────
         // If the interface extends a parent interface (IChild : IParent),
@@ -166,6 +178,13 @@ class ImplementsMacro : AstStructureAnnotation {
                             return $c(iface_get_name_func)(self)
                         }
                         add_function(st._module, fn_anc)
+                        // const ancestor getter for const-only interfaces
+                        if (is_const_interface(anc_struct)) {
+                            var inscope fn_anc_const <- qmacro_method(anc_get_func, st) $(self : $t(st)) : $t(anc_ptr) {
+                                return $c(iface_get_name_func)(self)
+                            }
+                            add_function(st._module, fn_anc_const)
+                        }
                         st |> add_structure_field(
                             anc_get_name,
                             qmacro_type(type<function<(var self : $t(st)) : $t(anc_ptr)>>),
@@ -289,6 +308,34 @@ class ImplementsMacro : AstStructureAnnotation {
         }
         return true
     }
+}
+
+// Helper: check whether all methods of an [interface] class have const self.
+// This is used to decide whether to generate a const getter.
+def private is_const_interface(st : Structure?) : bool {
+    //! Returns ``true`` when every function field in the given [interface] struct
+    //! has a const ``self`` parameter (i.e. all methods are const).
+    if (st == null) {
+        return false
+    }
+    for (fld in st.fields) {
+        let fn = string(fld.name)
+        if (fn == "__rtti" || fn == "__finalize") {
+            continue
+        }
+        if (!fld._type.isFunction) {
+            continue
+        }
+        // Check if the first arg (self) is const.
+        // argTypes[0] is self for class methods.
+        if (length(fld._type.argTypes) == 0) {
+            continue
+        }
+        if (!fld._type.argTypes[0].isConst) {
+            return false
+        }
+    }
+    return true
 }
 
 // Helper: check whether a Structure carries the [interface] annotation.

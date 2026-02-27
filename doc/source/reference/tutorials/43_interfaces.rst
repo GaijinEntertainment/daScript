@@ -10,6 +10,7 @@ Interfaces
     single: Tutorial; is / as / ?as (interfaces)
     single: Tutorial; Interface Inheritance
     single: Tutorial; Default Methods
+    single: Tutorial; Const-only Interfaces
 
 This tutorial covers **interface-based polymorphism** using the
 ``daslib/interfaces`` module.  Interfaces let you define abstract
@@ -231,6 +232,41 @@ inherits the default from the interface class.  Only abstract
 methods (``def abstract``) are required.
 
 
+Const-only interfaces
+=====================
+
+When all methods in an interface are ``def abstract const``, the
+generated getter also works on ``const`` pointers.  This means
+``is``, ``as``, and ``?as`` work without requiring a mutable pointer:
+
+.. code-block:: das
+
+    [interface]
+    class IReadable {
+        def abstract const read() : string
+    }
+
+    [implements(IReadable)]
+    class Document {
+        text : string
+        def Document(t : string) { text = t }
+        def IReadable`read() : string { return text }
+    }
+
+Because ``IReadable`` is const-only, you can use ``as`` on a
+``const`` pointer:
+
+.. code-block:: das
+
+    def print_content(doc : Document? const) {
+        var reader = doc as IReadable
+        print("{reader->read()}\n")
+    }
+
+This is particularly useful for read-only interfaces where callers
+should not need a mutable reference to query an object's state.
+
+
 Quick reference
 ===============
 
@@ -240,6 +276,7 @@ Syntax                                  Description
 ``[interface]``                         Mark a class as an interface
 ``[implements(IFoo)]``                  Generate proxy and getter for ``IFoo``
 ``def abstract method(...) : T``        Declare an abstract method (required)
+``def abstract const method(...) : T``  Declare an abstract const method
 ``def method(...) : T { ... }``         Declare a default method (optional to override)
 ``def IFoo`method(...)``                Implement (or override) a method on a struct
 ``ptr is IFoo``                         Compile-time check (true/false)
@@ -247,6 +284,9 @@ Syntax                                  Description
 ``ptr ?as IFoo``                        Null-safe proxy access
 ``class IChild : IParent``              Interface inheritance
 ======================================  ================================================
+
+When all methods are ``const``, ``is``/``as``/``?as`` also work on
+``const`` pointers.
 
 
 .. seealso::
