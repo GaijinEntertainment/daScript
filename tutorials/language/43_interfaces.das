@@ -9,6 +9,7 @@
 //   - Default method implementations
 //   - Completeness checking (compile-time error on missing methods)
 //   - Polymorphic dispatch via interface pointers
+//   - Const-only interfaces (as/is/?as on const pointers)
 //
 // Prerequisites: Tutorial 39 (Dynamic Type Checking)
 //
@@ -298,6 +299,57 @@ def demo_completeness_note() {
 }
 
 // ============================================================
+// Section 8: Const-only interfaces
+// ============================================================
+// When all methods in an interface are `def abstract const`,
+// the generated getter also works on const pointers.
+// This means `is`, `as`, and `?as` work without requiring a
+// mutable (var) pointer.
+
+[interface]
+class IReadable {
+    def abstract const read() : string
+}
+
+[implements(IReadable)]
+class Document {
+    text : string
+    def Document(t : string) {
+        text = t
+    }
+    def IReadable`read() : string {
+        return text
+    }
+}
+
+def print_content(doc : Document? const) {
+    // `as` works on a const pointer because IReadable is const-only
+    var reader = doc as IReadable
+    print("  content: {reader->read()}\n")
+}
+
+def demo_const_interfaces() {
+    print("\n=== const-only interfaces ===\n")
+
+    var doc = new Document("Hello from a const pointer!")
+
+    // is / as / ?as all work on const pointers
+    let c : Document? const = doc
+    print("  c is IReadable = {c is IReadable}\n")
+
+    var reader = c as IReadable
+    print("  reader->read() = {reader->read()}\n")
+
+    // ?as with null const pointer
+    var nothing : Document? const
+    var safe = nothing ?as IReadable
+    print("  null const ?as IReadable = {safe}\n")
+
+    // Pass const pointer to a function
+    print_content(doc)
+}
+
+// ============================================================
 // Main
 // ============================================================
 
@@ -310,6 +362,7 @@ def main() {
     demo_interface_inheritance()
     demo_default_methods()
     demo_completeness_note()
+    demo_const_interfaces()
     print("\ndone\n")
 }
 
@@ -350,5 +403,11 @@ def main() {
 // === completeness checking ===
 //   (compile-time only — no demo output)
 //   Try removing a method to see error 30111
+//
+// === const-only interfaces ===
+//   c is IReadable = true
+//   reader->read() = Hello from a const pointer!
+//   null const ?as IReadable = null
+//   content: Hello from a const pointer!
 //
 // done
