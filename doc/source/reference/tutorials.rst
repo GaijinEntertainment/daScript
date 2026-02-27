@@ -135,6 +135,7 @@ and a companion ``.das`` script in ``tutorials/integration/cpp/``.
    tutorials/integration_cpp_19_class_adapters.rst
    tutorials/integration_cpp_20_standalone_contexts.rst
    tutorials/integration_cpp_21_threading.rst
+   tutorials/integration_cpp_22_namespace_integration.rst
 
 .. _tutorials_macros:
 

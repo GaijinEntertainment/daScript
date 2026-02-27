@@ -191,6 +191,13 @@ DAS_CPP_INTEGRATION_TUTORIAL(integration_cpp_21
     ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/21_threading.cpp
 )
 
+#################################
+# Tutorial 22 — Namespace Integration
+#################################
+DAS_CPP_INTEGRATION_TUTORIAL(integration_cpp_22
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/22_namespace_integration.cpp
+)
+
 # Install C++ integration tutorial source files
 file(GLOB CPP_INTEGRATION_TUTORIAL_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/*.cpp
