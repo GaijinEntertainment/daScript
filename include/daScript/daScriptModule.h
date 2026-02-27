@@ -24,3 +24,53 @@ namespace das
     NEED_MODULE(Module_DASBIND); \
     NEED_MODULE(Module_Network);
 
+// DECLARE_MODULE / PULL_MODULE — namespace-safe alternatives to NEED_MODULE.
+//
+// NEED_MODULE places an `extern` declaration at the current scope, which
+// fails inside a C++ namespace (the linker looks for Namespace::register_…
+// instead of the global-scope function).
+//
+// Use DECLARE_MODULE at global/file scope to forward-declare the register
+// function, then PULL_MODULE inside any namespace or function body to call it.
+//
+// Example:
+//   DECLARE_ALL_DEFAULT_MODULES;               // file scope
+//   namespace MyApp {
+//       void init() {
+//           PULL_ALL_DEFAULT_MODULES;           // OK — works inside namespace
+//           das::Module::Initialize();
+//       }
+//   }
+
+#define DECLARE_MODULE(ClassName) \
+    extern DAS_API das::Module * register_##ClassName ()
+
+#define PULL_MODULE(ClassName) \
+    *das::ModuleKarma += unsigned(intptr_t(::register_##ClassName()))
+
+#define DECLARE_ALL_DEFAULT_MODULES \
+    DECLARE_MODULE(Module_BuiltIn); \
+    DECLARE_MODULE(Module_Math); \
+    DECLARE_MODULE(Module_Raster); \
+    DECLARE_MODULE(Module_Strings); \
+    DECLARE_MODULE(Module_Rtti); \
+    DECLARE_MODULE(Module_Ast); \
+    DECLARE_MODULE(Module_Debugger); \
+    DECLARE_MODULE(Module_Jit); \
+    DECLARE_MODULE(Module_FIO); \
+    DECLARE_MODULE(Module_DASBIND); \
+    DECLARE_MODULE(Module_Network)
+
+#define PULL_ALL_DEFAULT_MODULES \
+    PULL_MODULE(Module_BuiltIn); \
+    PULL_MODULE(Module_Math); \
+    PULL_MODULE(Module_Raster); \
+    PULL_MODULE(Module_Strings); \
+    PULL_MODULE(Module_Rtti); \
+    PULL_MODULE(Module_Ast); \
+    PULL_MODULE(Module_Debugger); \
+    PULL_MODULE(Module_Jit); \
+    PULL_MODULE(Module_FIO); \
+    PULL_MODULE(Module_DASBIND); \
+    PULL_MODULE(Module_Network)
+

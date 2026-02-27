@@ -43,6 +43,16 @@ Derive from ``Module``, register bindings in the constructor, and use
 The host uses ``NEED_MODULE(Module_MyMod)`` before ``Module::Initialize()``.
 Scripts access it with ``require my_module_name``.
 
+.. note::
+
+   ``NEED_MODULE`` contains an ``extern`` declaration that binds to the
+   enclosing namespace.  If your initialization code lives inside a C++
+   namespace, use the namespace-safe pair ``DECLARE_MODULE`` (file scope)
+   and ``PULL_MODULE`` (inside the namespace) instead.  For external
+   modules, CMake also generates ``external_declare.inc`` and
+   ``external_pull.inc`` alongside the traditional ``external_need.inc``.
+   See :ref:`tutorial_integration_cpp_namespace_integration`.
+
 See :ref:`tutorial_integration_cpp_custom_modules` for a complete example.
 
 

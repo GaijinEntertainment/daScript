@@ -51,6 +51,12 @@ REGISTER_MODULE(Module_MyMod);
 
 The host uses `NEED_MODULE(Module_MyMod)` before `Module::Initialize()`.  Scripts access it via `require my_module_name`.
 
+> **Namespace caveat**: `NEED_MODULE` contains an `extern` declaration that binds to the enclosing C++ namespace.  If your initialization code lives inside a namespace, use the namespace-safe pair instead:
+> - `DECLARE_MODULE(ClassName)` / `DECLARE_ALL_DEFAULT_MODULES` — at file scope (outside namespaces)
+> - `PULL_MODULE(ClassName)` / `PULL_ALL_DEFAULT_MODULES` — inside the namespace
+>
+> See `tutorials/integration/cpp/22_namespace_integration.cpp` for a working example.
+
 > **Dynamic binary support**: C++ modules also need a `.das_module` descriptor for the dynamic binary (`daslang`). See `skills/dynamic_modules.md` for the full pattern — you'll need `register_dynamic_module` to load the `.shared_module` DLL.
 
 ## Callbacks — `TBlock<>`, `TFunc<>`, `TLambda<>`, `das_invoke*`
