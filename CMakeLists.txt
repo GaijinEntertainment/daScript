@@ -1019,6 +1019,19 @@ get_target_property(DAS_FMT_LIBS das-fmt LINK_LIBRARIES)
     #      MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/utils/daScript/MacOSXBundleInfo.plist.in)
     #ENDIF()
 
+    # Thread-safety test (issue #2027) — static link
+    add_executable(test_concurrent_init ${PROJECT_SOURCE_DIR}/tests/threading/test_concurrent_init.cpp)
+    TARGET_LINK_LIBRARIES(test_concurrent_init libDaScript ${SRC_LIBRARIES} ${DAS_MODULES_LIBS})
+    target_include_directories(test_concurrent_init PRIVATE ${NEED_MODULES_PATH})
+    SETUP_CPP11(test_concurrent_init)
+
+    # Thread-safety test (issue #2027) — dynamic link (DLL)
+    add_executable(test_concurrent_init_dyn ${PROJECT_SOURCE_DIR}/tests/threading/test_concurrent_init.cpp)
+    TARGET_LINK_LIBRARIES(test_concurrent_init_dyn libDaScriptDyn ${SRC_LIBRARIES})
+    ADD_DEPENDENCIES(test_concurrent_init_dyn libDaScriptDyn ${DAS_DYN_MODULES_LIBS})
+    target_include_directories(test_concurrent_init_dyn PRIVATE ${NEED_MODULES_PATH})
+    SETUP_CPP11(test_concurrent_init_dyn)
+
 endif()
 
 # This list should be significantly reduced, most of the files, except aot related should be private.
