@@ -474,7 +474,7 @@ namespace das {
 
         virtual ExpressionPtr visit(ExprAssume *expr) override;
         // ExprWith
-        virtual void preVisit(ExprWith *expr) override;
+        virtual void preVisitWithBody(ExprWith *expr, Expression *body) override;
         virtual ExpressionPtr visit(ExprWith *expr) override;
         // ExprWhile
         virtual void preVisit(ExprWhile *expr) override;
