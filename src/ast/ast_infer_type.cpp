@@ -407,7 +407,7 @@ namespace das {
                 varT->ref = false;
                 TypeDecl::applyAutoContracts(varT, var->type);
                 if (!relaxedPointerConst) { // var a = Foo? const -> var a : Foo const? = Foo? const
-                    if (varT->isPointer() && !varT->constant && var->init->type->constant) {
+                    if (varT->isPointer() && !varT->constant && var->init->type->constant && varT->firstType) {
                         varT->firstType->constant = true;
                     }
                 }
@@ -4290,8 +4290,8 @@ namespace das {
         }
         return expr;
     }
-    void InferTypes::preVisit(ExprWith *expr) {
-        Visitor::preVisit(expr);
+    void InferTypes::preVisitWithBody ( ExprWith * expr, Expression * body) {
+        Visitor::preVisitWithBody(expr, body);
         with.push_back(expr);
     }
     ExpressionPtr InferTypes::visit(ExprWith *expr) {

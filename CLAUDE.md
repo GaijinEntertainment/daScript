@@ -43,6 +43,10 @@ See `doc/source/reference/design_philosophy.rst` for the full design philosophy 
 ## GitHub Operations
 
 - **Use `gh` CLI** for all GitHub operations (creating PRs, listing issues, etc.) — NOT GitKraken MCP tools
+- **PowerShell escaping:** Backticks (`` ` ``) are PowerShell's escape character. Any `gh` command with backticks in arguments (e.g., PR/issue bodies with markdown code spans) will be corrupted. **Always use `gh api` with `-f` flag or `--body-file`** instead of `gh pr create --body` / `gh pr edit --body` when the text contains backticks:
+  - Write body to a temp `.md` file, then: `gh api repos/OWNER/REPO/pulls/N -X PATCH -f body="$(Get-Content -Raw body.md)"`
+  - Or: `gh pr create --body-file body.md`
+- **`gh pr edit` may fail** with `GraphQL: Projects (classic) is being deprecated` error — use `gh api` REST endpoint as workaround
 
 ## Skill Files (REQUIRED)
 
