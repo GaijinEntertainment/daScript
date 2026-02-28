@@ -1276,7 +1276,8 @@ namespace das
     #if DAS_ENABLE_DLL
         #define REGISTER_DYN_MODULE(ClassName, ExtName) \
         extern "C" { \
-            DAS_EXPORT_DLL das::Module * register_dyn_##ExtName () { \
+            DAS_EXPORT_DLL das::Module * register_dyn_##ExtName ( int buildId ) { \
+                if ( buildId != DAS_BUILD_ID ) return nullptr; \
                 das::daScriptEnvironment::ensure(); \
                 ClassName * module_##ClassName = new ClassName(); \
                 return module_##ClassName; \
