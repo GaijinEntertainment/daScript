@@ -16,8 +16,6 @@
 
 .. |detail/method-profiler-ProfilerDebugAgent.onInstrumentFunction| replace:: to be documented in |detail/method-profiler-ProfilerDebugAgent.onInstrumentFunction|.rst
 
-.. |detail/method-profiler-ProfilerDebugAgent.dependency| replace:: to be documented in |detail/method-profiler-ProfilerDebugAgent.dependency|.rst
-
 .. |detail/method-profiler-ProfilerDebugAgent.is_time_unit_correct| replace:: to be documented in |detail/method-profiler-ProfilerDebugAgent.is_time_unit_correct|.rst
 
 .. |detail/method-profiler-ProfilerDebugAgent.convert_ns_to_unit| replace:: to be documented in |detail/method-profiler-ProfilerDebugAgent.convert_ns_to_unit|.rst
@@ -25,6 +23,8 @@
 .. |detail/method-profiler-ProfilerDebugAgent.isProfileable| replace:: to be documented in |detail/method-profiler-ProfilerDebugAgent.isProfileable|.rst
 
 .. |detail/method-profiler-ProfilerDebugAgent.enable_profiler| replace:: to be documented in |detail/method-profiler-ProfilerDebugAgent.enable_profiler|.rst
+
+.. |detail/method-profiler-ProfilerDebugAgent.enable_profiler_log| replace:: to be documented in |detail/method-profiler-ProfilerDebugAgent.enable_profiler_log|.rst
 
 .. |detail/method-profiler-ProfilerDebugAgent.onInstrumentFunctionWithMemory| replace:: to be documented in |detail/method-profiler-ProfilerDebugAgent.onInstrumentFunctionWithMemory|.rst
 
@@ -45,4 +45,6 @@
 .. |detail/method-profiler-ProfilerDebugAgent.dump_context| replace:: to be documented in |detail/method-profiler-ProfilerDebugAgent.dump_context|.rst
 
 .. |detail/function-profiler-set_enable_profiler| replace:: to be documented in |detail/function-profiler-set_enable_profiler|.rst
+
+.. |detail/function-profiler-set_enable_profiler_log| replace:: to be documented in |detail/function-profiler-set_enable_profiler_log|.rst
 

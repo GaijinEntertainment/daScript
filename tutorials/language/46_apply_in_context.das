@@ -6,6 +6,7 @@
 //   - Argument constraints (implicit / temporary types)
 //   - Returning values from cross-context functions
 //   - Building a cache service shared across contexts
+//   - Named agents vs thread-local agents (when to use each)
 //
 // Prerequisites: Tutorial 45 (Debug Agents)
 //
@@ -218,7 +219,31 @@ def demo_cache() {
 }
 
 // ============================================================
-// Section 5: How it works under the hood
+// Section 5: Thread-local agents vs named agents
+// ============================================================
+// [apply_in_context] requires a named agent context.  For
+// modules that do not need a public name (e.g., the profiler),
+// the thread-local agent is preferred.  There can be only ONE
+// thread-local agent per thread — that is why it has no name.
+// It is installed with `install_new_thread_local_debug_agent`
+// and communicated with via `invoke_debug_agent_method("", ...)`.
+//
+// The thread-local path is faster because it skips the global
+// agent map lookup entirely.
+//
+// Choose based on your use case:
+//   - Named agent + [apply_in_context]:
+//       best for shared services (caches, registries) that
+//       multiple modules need to discover by name.
+//       There can be many named agents simultaneously
+//   - Thread-local agent + invoke_debug_agent_method("", ...):
+//       best for a single performance-critical module
+//       (profiler, logger). Only one per thread; fastest dispatch
+//
+// See Tutorial 45 (Section 9) for thread-local agent examples.
+
+// ============================================================
+// Section 6: How it works under the hood
 // ============================================================
 // The [apply_in_context] macro rewrites each annotated function
 // into three parts:

@@ -25,13 +25,25 @@ All functions and symbols are in "profiler" module, use require to get access to
 Profiler control
 ++++++++++++++++
 
-  *  :ref:`set_enable_profiler (var ctxId: uint64; enabled: bool) <function-profiler_set_enable_profiler_uint64_bool>`
+  *  :ref:`set_enable_profiler (ctxId: uint64; enabled: bool) <function-profiler_set_enable_profiler_uint64_bool>`
+  *  :ref:`set_enable_profiler_log (ctxId: uint64; enabled: bool) <function-profiler_set_enable_profiler_log_uint64_bool>`
 
 .. _function-profiler_set_enable_profiler_uint64_bool:
 
 .. das:function:: set_enable_profiler(ctxId: uint64; enabled: bool)
 
 Enables or disables the profiler for the given context ID.
+
+
+:Arguments: * **ctxId** : uint64
+
+            * **enabled** : bool
+
+.. _function-profiler_set_enable_profiler_log_uint64_bool:
+
+.. das:function:: set_enable_profiler_log(ctxId: uint64; enabled: bool)
+
+Enables or disables the profiler log for the given context ID.
 
 
 :Arguments: * **ctxId** : uint64

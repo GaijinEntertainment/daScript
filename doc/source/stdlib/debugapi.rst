@@ -253,7 +253,7 @@ Installs a low-level `smart_ptr<DebugAgent>` under the given category name.  Pre
 
 .. das:function:: install_debug_agent_thread_local(agent: smart_ptr<DebugAgent>)
 
-Installs a low-level `smart_ptr<DebugAgent>` as the thread-local debug agent.
+Installs a low-level ``smart_ptr<DebugAgent>`` as the thread-local debug agent.  There can be only one thread-local agent per thread — installing a new one replaces the previous.
 
 
 :Arguments: * **agent** : smart_ptr< :ref:`DebugAgent <handle-debugapi-DebugAgent>`> implicit
@@ -273,7 +273,7 @@ Creates and installs a debug agent from a `DapiDebugAgent` subclass instance.  T
 
 .. das:function:: install_new_thread_local_debug_agent(agentPtr: auto) : auto
 
-Creates and installs a thread-local debug agent from a `DapiDebugAgent` subclass instance.
+Creates and installs a thread-local debug agent from a ``DapiDebugAgent`` subclass instance.  There can be only one thread-local agent per thread — installing a new one replaces the previous.  Use ``invoke_debug_agent_method("", ...)`` to communicate with it.
 
 
 :Arguments: * **agentPtr** : auto
@@ -369,7 +369,9 @@ invoke_debug_agent_function
 .. warning::
   This is unsafe operation.
 
-Calls an `[export, pinvoke]` function in the named agent's context.  Similar to `invoke_in_context` but resolves the agent context automatically from the category name.
+Calls an ``[export, pinvoke]`` function in the named agent's context.  Similar to ``invoke_in_context`` but resolves the agent context automatically from the category name.
+
+When *category* is an empty string (``""``), the call targets the **thread-local** debug agent's context instead of a globally named one.  There can be only one thread-local agent per thread, so no name is needed.  The thread-local path is faster because it skips the global agent map lookup.
 
 
 :Arguments: * **arg0** : string
@@ -439,7 +441,9 @@ invoke_debug_agent_method
 .. warning::
   This is unsafe operation.
 
-Calls a method on the debug agent's class instance by name.  The first argument is the agent category, the second is the method name, followed by up to 10 user arguments.  The agent's `self` is passed automatically.
+Calls a method on the debug agent's class instance by name.  The first argument is the agent category, the second is the method name, followed by up to 10 user arguments.  The agent's ``self`` is passed automatically.
+
+When *category* is an empty string (``""``), the call targets the **thread-local** debug agent instead of a globally named one.  There can be only one thread-local agent per thread — that is why it needs no name.  The thread-local path is faster than a named agent lookup because it skips the global map search.
 
 
 :Arguments: * **arg0** : string

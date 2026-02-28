@@ -14,23 +14,25 @@ module profiler_boost shared private
 //! Requires the ``profiler`` module.
 
 require daslib/profiler
-require daslib/apply_in_context
-
-[apply_in_context(profiler)]
-def internal_enable_profiler(var ctxId : uint64; enabled : bool) {
-    unsafe {
-        lock_debug_agent() {
-            profiler::set_enable_profiler(ctxId, enabled)
-        }
-    }
-}
+require rtti public
 
 def public enable_profiler(var ctx : Context) {
     //! Enables the profiler for the given context.
-    internal_enable_profiler(intptr(unsafe(addr(ctx))), true)
+    profiler::set_enable_profiler(intptr(unsafe(addr(ctx))), true)
 }
 
 def public disable_profiler(var ctx : Context) {
     //! Disables the profiler for the given context.
-    internal_enable_profiler(intptr(unsafe(addr(ctx))), false)
+    profiler::set_enable_profiler(intptr(unsafe(addr(ctx))), false)
 }
+
+def public enable_profiler_log(var ctx : Context) {
+    //! Enables the profiler log for the given context.
+    profiler::set_enable_profiler_log(intptr(unsafe(addr(ctx))), true)
+}
+
+def public disable_profiler_log(var ctx : Context) {
+    //! Disables the profiler log for the given context.
+    profiler::set_enable_profiler_log(intptr(unsafe(addr(ctx))), false)
+}
+

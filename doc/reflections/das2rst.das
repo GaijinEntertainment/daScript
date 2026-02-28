@@ -953,7 +953,7 @@ def document_module_live(root : string) {
 def document_module_profiler(root : string) {
     var mod = find_module("profiler")
     var groups <- array<DocGroup>(
-        group_by_regex("Profiler control", mod, %regex~(set_enable_profiler)$%%)
+        group_by_regex("Profiler control", mod, %regex~(set_enable_profiler|set_enable_profiler_log)$%%)
     )
     document("Instrumenting profiler", mod, "profiler.rst", groups)
 }
@@ -961,7 +961,7 @@ def document_module_profiler(root : string) {
 def document_module_profiler_boost(root : string) {
     var mod = find_module("profiler_boost")
     var groups <- array<DocGroup>(
-        group_by_regex("Context profiler control", mod, %regex~(enable_profiler|disable_profiler)$%%)
+        group_by_regex("Context profiler control", mod, %regex~(enable_profiler|disable_profiler|enable_profiler_log|disable_profiler_log)$%%)
     )
     document("Profiler cross-context helpers", mod, "profiler_boost.rst", groups)
 }
@@ -1043,6 +1043,8 @@ def document_module_validate_code(root : string) {
 
 [export]
 def main {
+    disable_profiler(this_context())
+    disable_profiler_log(this_context())
     let root = get_das_root() + "/doc/source/stdlib"// todo: modify to output /temp so that we can merge changes
     // document embedded modules
     document_module_builtin(root)
