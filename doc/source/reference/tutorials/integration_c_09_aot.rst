@@ -102,6 +102,9 @@ Enum value                                CodeOfPolicies field
 Build & run
 ===========
 
+From the source tree
+--------------------
+
 Build::
 
    cmake --build build --config Release --target integration_c_09
@@ -110,7 +113,47 @@ Run::
 
    bin/Release/integration_c_09
 
-Expected output::
+From the installed SDK
+-----------------------
+
+The installed SDK includes a standalone ``CMakeLists.txt`` for all C
+integration tutorials.  Configure and build against the SDK:
+
+.. code-block:: bash
+
+   mkdir build_c && cd build_c
+   cmake -DCMAKE_PREFIX_PATH=/path/to/daslang /path/to/daslang/tutorials/integration/c
+   cmake --build . --config Release
+
+On Windows:
+
+.. code-block:: powershell
+
+   mkdir build_c; cd build_c
+   cmake -DCMAKE_PREFIX_PATH=D:\daslang D:\daslang\tutorials\integration\c
+   cmake --build . --config Release
+
+The standalone ``CMakeLists.txt`` handles AOT code generation automatically.
+It reuses the same ``13_aot.das`` script from the C++ tutorials:
+
+.. code-block:: cmake
+
+   set(AOT_C09_SRC)
+   DAS_TUTORIAL_AOT("${CPP_TUT_DIR}/13_aot.das" -aot AOT_C09_SRC integration_c_09)
+
+   DAS_C_TUTORIAL(integration_c_09
+       "${TUT_DIR}/09_aot.c"
+       "${AOT_C09_SRC}"
+   )
+
+See :ref:`tutorial_building_from_sdk` for the full guide on building your own
+projects with AOT support.
+
+
+Expected output
+----------------
+
+::
 
    === Interpreter mode ===
      test() is AOT: no
@@ -144,5 +187,7 @@ Expected output::
    Next tutorial: :ref:`tutorial_integration_c_threading`
 
    C++ equivalent: :ref:`tutorial_integration_cpp_aot`
+
+   Building from the SDK: :ref:`tutorial_building_from_sdk`
 
    daScriptC.h API header: ``include/daScript/daScriptC.h``
