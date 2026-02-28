@@ -1081,22 +1081,33 @@ namespace debugapi {
     vec4f invokeInDebugAgent ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         if ( call->nArguments>=MAX_DEBUG_AGENT_ARGS-3 ) context.throw_error_at(call->debugInfo, "too many arguments");
         const char * category = cast<char *>::to(args[0]);
-        if ( !category ) context.throw_error_at(call->debugInfo, "need to specify category");
         const char * function_name = cast<char *>::to(args[1]);
         if ( !function_name ) context.throw_error_at(call->debugInfo, "need to specify method name");
         g_DebugAgentMutex.lock();
-        auto it = g_DebugAgents.find(category);
-        if ( it == g_DebugAgents.end() ) {
-            g_DebugAgentMutex.unlock();
-            context.throw_error_at(call->debugInfo, "can't get debug agent '%s'", category);
+        Context * invCtx = nullptr;
+        DebugAgentAdapter * adapter = nullptr;
+        if ( !category || category[0] == '\0' ) {
+            if ( *daScriptEnvironment::g_threadLocalDebugAgent && (*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgent ) {
+                invCtx = (*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgentContext.get();
+                adapter = (DebugAgentAdapter *)(*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgent.get();
+            } else {
+                g_DebugAgentMutex.unlock();
+                context.throw_error_at(call->debugInfo, "no thread-local debug agent available");
+            }
+        } else {
+            auto it = g_DebugAgents.find(category);
+            if ( it == g_DebugAgents.end() ) {
+                g_DebugAgentMutex.unlock();
+                context.throw_error_at(call->debugInfo, "can't get debug agent '%s'", category);
+            }
+            invCtx = it->second.debugAgentContext.get();
+            adapter = (DebugAgentAdapter *) it->second.debugAgent.get();
         }
-        auto invCtx = it->second.debugAgentContext.get();
-        if ( !invCtx ) {
+        if ( !invCtx || !adapter ) {
             g_DebugAgentMutex.unlock();
             context.throw_error_at(call->debugInfo, "debug agent '%s' is a CPP-only agent", category);
         }
         Func * func = nullptr;
-        auto adapter = (DebugAgentAdapter *) it->second.debugAgent.get();
         auto sinfo = adapter->classInfo;
         for ( uint32_t fi=0, fis=sinfo->count; fi!=fis; ++fi ) {
             auto field = sinfo->fields[fi];
@@ -1125,17 +1136,29 @@ namespace debugapi {
     vec4f invokeInDebugAgent2 ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         if ( call->nArguments>=MAX_DEBUG_AGENT_ARGS-3 ) context.throw_error_at(call->debugInfo, "too many arguments");
         const char * category = cast<char *>::to(args[0]);
-        if ( !category ) context.throw_error_at(call->debugInfo, "need to specify category");
         const char * function_name = cast<char *>::to(args[1]);
-        if ( !function_name ) context.throw_error_at(call->debugInfo, "need to specify method name");
+        if ( !function_name ) context.throw_error_at(call->debugInfo, "need to specify function name");
         g_DebugAgentMutex.lock();
-        auto it = g_DebugAgents.find(category);
-        if ( it == g_DebugAgents.end() ) {
-            g_DebugAgentMutex.unlock();
-            context.throw_error_at(call->debugInfo, "can't get debug agent '%s'", category);
+        Context * invCtx = nullptr;
+        DebugAgentAdapter * adapter = nullptr;
+        if ( !category || category[0] == '\0' ) {
+            if ( *daScriptEnvironment::g_threadLocalDebugAgent && (*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgent ) {
+                invCtx = (*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgentContext.get();
+                adapter = (DebugAgentAdapter *)(*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgent.get();
+            } else {
+                g_DebugAgentMutex.unlock();
+                context.throw_error_at(call->debugInfo, "no thread-local debug agent available");
+            }
+        } else {
+            auto it = g_DebugAgents.find(category);
+            if ( it == g_DebugAgents.end() ) {
+                g_DebugAgentMutex.unlock();
+                context.throw_error_at(call->debugInfo, "can't get debug agent '%s'", category);
+            }
+            invCtx = it->second.debugAgentContext.get();
+            adapter = (DebugAgentAdapter *) it->second.debugAgent.get();
         }
-        auto invCtx = it->second.debugAgentContext.get();
-        if ( !invCtx ) {
+        if ( !invCtx || !adapter ) {
             g_DebugAgentMutex.unlock();
             context.throw_error_at(call->debugInfo, "debug agent '%s' is a CPP-only agent", category);
         }
@@ -1145,7 +1168,6 @@ namespace debugapi {
             g_DebugAgentMutex.unlock();
             context.throw_error_at(call->debugInfo, "function '%s' not found in debug agent '%s'", function_name, category);
         }
-        auto adapter = (DebugAgentAdapter *) it->second.debugAgent.get();
         vec4f args2[MAX_DEBUG_AGENT_ARGS];
         args2[0] = cast<Context *>::from(invCtx);
         args2[1] = cast<Func>::from(func);
