@@ -82,6 +82,7 @@
 
 #include <stdint.h>
 #include <float.h>
+#include <atomic>
 #include <daScript/das_config.h>
 #include <daScript/misc/hash.h>
 #include <daScript/misc/macro.h>
@@ -442,7 +443,7 @@ public:
     using SelfType = DasThreadLocal<T, TAG>;
 
     inline DasThreadLocal() {
-        if ( initCounter++ ) {
+        if ( initCounter.fetch_add(1, std::memory_order_relaxed) ) {
             DAS_ASSERTF(false, "Type with tag is already used, pls change tag!");
         }
     }
@@ -457,7 +458,7 @@ public:
 
 private:
     inline static thread_local T value_{};
-    inline static int initCounter = 0;
+    inline static std::atomic<int> initCounter{0};
 };
 
 #ifndef DAS_THREAD_LOCAL
