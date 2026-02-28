@@ -242,12 +242,17 @@ Expected output::
 
    Hello from daslang!
 
+You can also build all C++ integration tutorials from the installed SDK
+— see :ref:`tutorial_building_from_sdk`.
+
 
 .. seealso::
 
    Full source:
    :download:`01_hello_world.cpp <../../../../tutorials/integration/cpp/01_hello_world.cpp>`,
    :download:`01_hello_world.das <../../../../tutorials/integration/cpp/01_hello_world.das>`
+
+   Building from the SDK: :ref:`tutorial_building_from_sdk`
 
    Next tutorial: :ref:`tutorial_integration_cpp_calling_functions`
 

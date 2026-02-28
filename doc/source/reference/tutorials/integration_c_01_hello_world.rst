@@ -203,6 +203,9 @@ Expected output::
 
    Hello from daslang!
 
+You can also build all C integration tutorials from the installed SDK
+— see :ref:`tutorial_building_from_sdk`.
+
 
 .. seealso::
 
@@ -211,6 +214,8 @@ Expected output::
    :download:`01_hello_world.das <../../../../tutorials/integration/c/01_hello_world.das>`
 
    Next tutorial: :ref:`tutorial_integration_c_calling_functions`
+
+   Building from the SDK: :ref:`tutorial_building_from_sdk`
 
    :ref:`type_mangling` — how types are encoded as strings in the C API
 

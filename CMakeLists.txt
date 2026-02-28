@@ -1216,6 +1216,17 @@ install(FILES
     DESTINATION include/vecmath
 )
 
+# Install dag_noise header (referenced by aot_builtin_math.h).
+install(FILES include/dag_noise/dag_uint_noise.h
+    DESTINATION include/dag_noise
+)
+
+# Install internal builtin headers (needed by integration tutorials like class adapters).
+file(GLOB DAS_BUILTIN_HEADERS ${PROJECT_SOURCE_DIR}/src/builtin/*.h)
+install(FILES ${DAS_BUILTIN_HEADERS}
+    DESTINATION include/daScript/builtin
+)
+
 # Install all modules and main library.
 install(TARGETS
     libDaScript libDaScriptDyn libUriParser libUriParserDyn

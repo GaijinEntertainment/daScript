@@ -79,6 +79,19 @@ introduced in earlier tutorials.
    tutorials/49_async.rst
    tutorials/50_soa.rst
 
+.. _tutorials_building_from_sdk:
+
+Building from the Installed SDK
+================================
+
+Once daslang is installed, you can build the integration tutorials — or your
+own projects — against the SDK using CMake's ``find_package(DAS)``.
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/building_from_sdk.rst
+
 .. _tutorials_integration_c:
 
 C Integration Tutorials
@@ -87,6 +100,10 @@ C Integration Tutorials
 These tutorials show how to embed daslang in a C application using the
 ``daScriptC.h`` API.  Each tutorial comes with a ``.c`` source file and a
 companion ``.das`` script in ``tutorials/integration/c/``.
+
+The installed SDK ships with a standalone ``CMakeLists.txt`` that lets you
+build all C tutorials directly against the SDK — see
+:ref:`tutorial_building_from_sdk`.
 
 .. toctree::
    :maxdepth: 1
@@ -110,6 +127,10 @@ C++ Integration Tutorials
 These tutorials show how to embed daslang in a C++ application using the
 native ``daScript.h`` API.  Each tutorial comes with a ``.cpp`` source file
 and a companion ``.das`` script in ``tutorials/integration/cpp/``.
+
+The installed SDK ships with a standalone ``CMakeLists.txt`` that lets you
+build all C++ tutorials directly against the SDK — see
+:ref:`tutorial_building_from_sdk`.
 
 .. toctree::
    :maxdepth: 1

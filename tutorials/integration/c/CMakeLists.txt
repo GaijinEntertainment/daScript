@@ -112,3 +112,10 @@ file(GLOB C_INTEGRATION_TUTORIAL_SOURCES
 install(FILES ${C_INTEGRATION_TUTORIAL_SOURCES}
     DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/integration/c
 )
+
+# Install standalone CMakeLists.txt for building tutorials against the installed SDK.
+install(FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/c/CMakeLists.standalone.cmake
+    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/integration/c
+    RENAME CMakeLists.txt
+)

@@ -171,12 +171,57 @@ Key policies
 Building and running
 ====================
 
-::
+From the source tree
+~~~~~~~~~~~~~~~~~~~~~
+
+Build using the in-tree CMake target::
 
    cmake --build build --config Release --target integration_cpp_13
    bin\Release\integration_cpp_13.exe
 
-Expected output::
+From the installed SDK
+~~~~~~~~~~~~~~~~~~~~~~~
+
+The installed SDK includes a standalone ``CMakeLists.txt`` for all C++
+integration tutorials.  Configure and build against the SDK:
+
+.. code-block:: bash
+
+   mkdir build_cpp && cd build_cpp
+   cmake -DCMAKE_PREFIX_PATH=/path/to/daslang /path/to/daslang/tutorials/integration/cpp
+   cmake --build . --config Release
+
+On Windows:
+
+.. code-block:: powershell
+
+   mkdir build_cpp; cd build_cpp
+   cmake -DCMAKE_PREFIX_PATH=D:\daslang D:\daslang\tutorials\integration\cpp
+   cmake --build . --config Release
+
+The standalone ``CMakeLists.txt`` handles AOT code generation automatically.
+It defines a ``DAS_TUTORIAL_AOT`` macro that runs ``daslang`` with the AOT
+tool script during the build:
+
+.. code-block:: cmake
+
+   set(AOT_13_SRC)
+   DAS_TUTORIAL_AOT("${TUT_DIR}/13_aot.das" -aot AOT_13_SRC integration_cpp_13)
+
+   DAS_CPP_TUTORIAL(integration_cpp_13
+       "${TUT_DIR}/13_aot.cpp"
+       "${AOT_13_SRC}"
+   )
+
+The generated ``.cpp`` is compiled alongside the tutorial source — no manual
+steps involved.  See :ref:`tutorial_building_from_sdk` for the full guide on
+building your own projects with AOT support.
+
+
+Expected output
+~~~~~~~~~~~~~~~~~
+
+::
 
    === Interpreter mode ===
      test() is AOT: no
@@ -228,6 +273,56 @@ Without ``policies.aot``, the function runs through the interpreter
 is linked in (``test() is AOT: yes``) for near-native performance.
 
 
+AOT in your own projects
+========================
+
+To add AOT to your own CMake project built against the SDK, define a code
+generation macro using the ``DAS::daslang`` imported target:
+
+.. code-block:: cmake
+
+   get_filename_component(DAS_SDK_ROOT "${DAS_DIR}/../../.." ABSOLUTE)
+
+   macro(MY_AOT input out_var target_name)
+       get_filename_component(_abs "${input}" ABSOLUTE)
+       get_filename_component(_name "${input}" NAME)
+       set(_out_dir "${CMAKE_CURRENT_BINARY_DIR}/_aot_generated")
+       set(_out_src "${_out_dir}/${target_name}_${_name}.cpp")
+       file(MAKE_DIRECTORY "${_out_dir}")
+       add_custom_command(
+           OUTPUT  "${_out_src}"
+           DEPENDS "${_abs}"
+           COMMENT "AOT: ${_name}"
+           COMMAND $<TARGET_FILE:DAS::daslang>
+                   "${DAS_SDK_ROOT}/utils/aot/main.das"
+                   -- -aot "${_abs}" "${_out_src}"
+       )
+       set(${out_var} "${_out_src}")
+       set_source_files_properties("${_out_src}" PROPERTIES GENERATED TRUE)
+   endmacro()
+
+Then link the generated source into your executable:
+
+.. code-block:: cmake
+
+   set(AOT_SRC)
+   MY_AOT("my_script.das" AOT_SRC my_app)
+
+   add_executable(my_app main.cpp "${AOT_SRC}")
+   target_compile_definitions(my_app PRIVATE DAS_MOD_EXPORTS)
+   target_link_libraries(my_app PRIVATE DAS::libDaScriptDyn Threads::Threads)
+
+And enable AOT in your host code:
+
+.. code-block:: cpp
+
+   CodeOfPolicies policies;
+   policies.aot = true;
+   auto program = compileDaScript(scriptPath, fAccess, tout, libGroup, policies);
+
+See :ref:`tutorial_building_from_sdk` for the full SDK build guide.
+
+
 .. seealso::
 
    Full source:
@@ -237,3 +332,5 @@ is linked in (``test() is AOT: yes``) for near-native performance.
    Previous tutorial: :ref:`tutorial_integration_cpp_smart_pointers`
 
    Next tutorial: :ref:`tutorial_integration_cpp_serialization`
+
+   Building from the SDK: :ref:`tutorial_building_from_sdk`
