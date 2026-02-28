@@ -390,7 +390,7 @@ namespace das {
             Visitor::preVisitFunctionBody(fn,expr);
             if ( fn->arguments.size() ) ss << ")";
             if ( fn->result && !fn->result->isVoid() ) ss << " : " << fn->result->describe();
-            ss << "\n";
+            if ( !gen2 ) ss << "\n";
         }
         virtual void preVisitArgument ( Function * fn, const VariablePtr & arg, bool last ) override {
             Visitor::preVisitArgument(fn,arg,last);
@@ -466,6 +466,11 @@ namespace das {
             if ( that->rtti_isFor() ) return false;
             if ( that->rtti_isWhile() ) return false;
             if ( that->rtti_isWith() ) return false;
+            if ( gen2 ) {
+                if ( that->rtti_isBlock() ) return false;
+                if ( that->rtti_isUnsafe() ) return false;
+                if ( strcmp(that->__rtti,"ExprTryCatch")==0 ) return false;
+            }
             return true;
         }
         virtual ExpressionPtr visitBlockExpression ( ExprBlock * block, Expression * that ) override {
@@ -500,10 +505,24 @@ namespace das {
                     if ( block->returnType ) {
                         ss << ":" << block->returnType->describe();
                     }
-                    ss << "\n";
+                    if ( !gen2 ) ss << "\n";
                 }
             }
-            if ( printCStyle || block->isClosure ) ss << string(tab,'\t') << "{\n";
+            if ( printCStyle || block->isClosure ) {
+                if ( block->isClosure ) {
+                    if ( gen2 ) {
+                        ss << " {\n";
+                    } else {
+                        ss << string(tab,'\t') << "{\n";
+                    }
+                } else if ( block->topLevel ) {
+                    ss << "{\n";
+                } else if ( gen2 ) {
+                    ss << " {\n";
+                } else {
+                    ss << string(tab,'\t') << "{\n";
+                }
+            }
             tab ++;
         }
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
@@ -614,25 +633,35 @@ namespace das {
         virtual void preVisitIfBlock ( ExprIfThenElse * ifte, Expression * block ) override {
             Visitor::preVisitIfBlock(ifte,block);
             if ( gen2 ) ss <<  " )";
-            ss << "\n";
+            if ( !gen2 ) ss << "\n";
         }
         virtual void preVisitElseBlock ( ExprIfThenElse * ifte, Expression * block ) override {
             Visitor::preVisitElseBlock(ifte, block);
-            ss << "\n" << string(tab,'\t');
+            if ( gen2 ) {
+                ss << " ";
+            } else {
+                ss << "\n" << string(tab,'\t');
+            }
             if (block && block->rtti_isIfThenElse()) {
                 ss << (ifte->isStatic ? "static_el" : "el");
             } else {
-                ss << (ifte->isStatic ? "static_else\n" : "else\n");
+                ss << (ifte->isStatic ? "static_else" : "else");
+                if ( !gen2 ) ss << "\n";
             }
         }
     // try-catch
         virtual void preVisit ( ExprTryCatch * tc ) override {
             Visitor::preVisit(tc);
-            ss << "try\n";
+            ss << "try";
+            if ( !gen2 ) ss << "\n";
         }
         virtual void preVisitCatch ( ExprTryCatch * tc, Expression * block ) override {
             Visitor::preVisitCatch(tc, block);
-            ss << string(tab,'\t') << "recover\n";
+            if ( gen2 ) {
+                ss << " recover";
+            } else {
+                ss << string(tab,'\t') << "recover\n";
+            }
         }
     // for
         virtual void preVisit ( ExprFor * ffor ) override {
@@ -649,7 +678,7 @@ namespace das {
         virtual void preVisitForBody ( ExprFor * ffor, Expression * body ) override {
             Visitor::preVisitForBody(ffor, body);
             if ( gen2 ) ss << " )";
-            ss << "\n";
+            if ( !gen2 ) ss << "\n";
         }
         virtual ExpressionPtr visitForSource ( ExprFor * ffor, Expression * that , bool last ) override {
             if ( !last ) ss << ",";
@@ -664,7 +693,7 @@ namespace das {
         virtual void preVisitWithBody ( ExprWith * wh, Expression * body ) override {
             Visitor::preVisitWithBody(wh,body);
             if ( gen2 ) ss << " )";
-            ss << "\n";
+            if ( !gen2 ) ss << "\n";
         }
     // with alias
         virtual bool canVisitWithAliasSubexpression ( ExprAssume * ) override {
@@ -707,12 +736,13 @@ namespace das {
         virtual void preVisitWhileBody ( ExprWhile * wh, Expression * body ) override {
             Visitor::preVisitWhileBody(wh,body);
             if ( gen2 ) ss << " )";
-            ss << "\n";
+            if ( !gen2 ) ss << "\n";
         }
     // while
         virtual void preVisit ( ExprUnsafe * wh ) override {
             Visitor::preVisit(wh);
-            ss << "unsafe\n";
+            ss << "unsafe";
+            if ( !gen2 ) ss << "\n";
         }
     // call
         virtual void preVisit ( ExprCall * call ) override {
