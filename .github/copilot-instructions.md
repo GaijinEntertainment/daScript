@@ -1,26 +1,7 @@
 # daslang Project Instructions
 
-> **Keep in sync:** This file and `CLAUDE.md` (repo root) share identical content. Both reference skill files in the `skills/` directory at repo root — skill files are shared, not duplicated.
+All project instructions are in [CLAUDE.md](../CLAUDE.md). This file exists so that VS Code Copilot finds the instructions via its `.github/copilot-instructions.md` convention. Do not duplicate content here — read the file above.
 
-## Project Overview
-
-This is the [daslang](https://dascript.org/) programming language repository (GaijinEntertainment/daScript). daslang (formerly daScript) is a high-performance statically-typed scripting language designed for games and real-time applications. The language has been renamed to **daslang**, but the repository and many C++ API names still use the old "daScript" spelling.
-
-## What and Why
-
-daslang was created at Gaijin Entertainment to solve a concrete problem: **interop overhead** between scripting languages (Lua/LuaJIT, Squirrel) and C++ was killing frame budgets in their ECS game engine. The key insight is that daslang's data layout matches C++ — no marshaling, no boxing — making script↔C++ calls near-zero cost.
-
-**Core design principles:**
-- **Iteration speed is king** — full production game recompiles in ~5 sec; hot reload built in
-- **Explicit, not implicit** — no hidden conversions, no silent allocations; `options log` shows exactly what the compiler produces
-- **99% safe, not 100%** — eliminate real-world C++ bugs pragmatically, not at Rust-level cost; `unsafe` for the remaining 1%
-- **No data marshaling** — C++-compatible data layout; this is what makes ECS-scale scripting viable
-- **If it gets slow, you can fix it** — manual `delete` to reduce GC pressure, AOT compilation for native speed
-- **Language reflects the domain** — macros (FORTRAN+LISP inspiration) let libraries reshape syntax to match the problem
-
-**Three execution tiers** (all planned from day one): fast tree-based interpreter → AOT to C++ (required for consoles) → JIT via LLVM. Hybrid mode uses semantic hashing: unchanged functions stay AOT, changed ones fall back to the interpreter.
-
-**Audience:** game scripters (largest group — hot reload, fast compile, never rewrite to C++), engine/tools programmers (zero-cost interop, macros), and a growing standalone/ecosystem community (LLVM executables, package manager in development).
 
 See `doc/source/reference/design_philosophy.rst` for the full design philosophy document.
 
@@ -68,7 +49,7 @@ Multiple skill files may apply to a single task. For example, creating a new das
 
 ### Updating Instructions with New Knowledge
 
-When you discover something new about daslang syntax, semantics, or conventions — whether through compiler errors, user corrections, or experimentation — **update this file** (and its `CLAUDE.md` mirror) with the new knowledge. If it relates to a specific skill area, update the relevant `skills/*.md` file instead.
+When you discover something new about daslang syntax, semantics, or conventions — whether through compiler errors, user corrections, or experimentation — **update this file** with the new knowledge. If it relates to a specific skill area, update the relevant `skills/*.md` file instead.
 
 ## daslang Language — Gen2 Syntax (REQUIRED)
 

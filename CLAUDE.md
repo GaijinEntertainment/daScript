@@ -1,14 +1,12 @@
 # daslang Project Instructions
 
-> **Keep in sync:** This file and `.github/copilot-instructions.md` share identical content. Both reference skill files in the `skills/` directory at repo root — skill files are shared, not duplicated.
-
 ## Project Overview
 
 This is the [daslang](https://dascript.org/) programming language repository (GaijinEntertainment/daScript). daslang (formerly daScript) is a high-performance statically-typed scripting language designed for games and real-time applications. The language has been renamed to **daslang**, but the repository and many C++ API names still use the old "daScript" spelling.
 
 ## What and Why
 
-daslang was created at Gaijin Entertainment to solve a concrete problem: **interop overhead** between scripting languages (Lua/LuaJIT, Squirrel) and C++ was killing frame budgets in their ECS game engine. The key insight is that daslang's data layout matches C++ — no marshaling, no boxing — making script↔C++ calls near-zero cost.
+daslang was created at Gaijin Entertainment to solve a concrete problem: **interop overhead** between scripting languages (Lua/LuaJIT, Squirrel) and C++ was killing frame budgets in their ECS game engine. The key insight is that daslang’s data layout matches C++ — no marshaling, no boxing — making script↔C++ calls near-zero cost.
 
 **Core design principles:**
 - **Iteration speed is king** — full production game recompiles in ~5 sec; hot reload built in
@@ -43,7 +41,7 @@ See `doc/source/reference/design_philosophy.rst` for the full design philosophy 
 ## GitHub Operations
 
 - **Use `gh` CLI** for all GitHub operations (creating PRs, listing issues, etc.) — NOT GitKraken MCP tools
-- **PowerShell escaping:** Backticks (`` ` ``) are PowerShell's escape character. Any `gh` command with backticks in arguments (e.g., PR/issue bodies with markdown code spans) will be corrupted. **Always use `gh api` with `-f` flag or `--body-file`** instead of `gh pr create --body` / `gh pr edit --body` when the text contains backticks:
+- **PowerShell escaping:** Backticks (`` ` ``) are PowerShell’s escape character. Any `gh` command with backticks in arguments (e.g., PR/issue bodies with markdown code spans) will be corrupted. **Always use `gh api` with `-f` flag or `--body-file`** instead of `gh pr create --body` / `gh pr edit --body` when the text contains backticks:
   - Write body to a temp `.md` file, then: `gh api repos/OWNER/REPO/pulls/N -X PATCH -f body="$(Get-Content -Raw body.md)"`
   - Or: `gh pr create --body-file body.md`
 - **`gh pr edit` may fail** with `GraphQL: Projects (classic) is being deprecated` error — use `gh api` REST endpoint as workaround
@@ -68,7 +66,7 @@ Multiple skill files may apply to a single task. For example, creating a new das
 
 ### Updating Instructions with New Knowledge
 
-When you discover something new about daslang syntax, semantics, or conventions — whether through compiler errors, user corrections, or experimentation — **update this file** (and its `.github/copilot-instructions.md` mirror) with the new knowledge. If it relates to a specific skill area, update the relevant `skills/*.md` file instead.
+When you discover something new about daslang syntax, semantics, or conventions — whether through compiler errors, user corrections, or experimentation — **update this file** with the new knowledge. If it relates to a specific skill area, update the relevant `skills/*.md` file instead.
 
 ## daslang Language — Gen2 Syntax (REQUIRED)
 
@@ -118,8 +116,8 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 
 ### Generic function dispatch
 
-- **`_::foo(x)`**: resolves in the **calling** module — caller's overloads visible. Use in library generics.
-- **Unqualified** `foo(x)`: resolves in the **defining** module — caller's overloads NOT visible.
+- **`_::foo(x)`**: resolves in the **calling** module — caller’s overloads visible. Use in library generics.
+- **Unqualified** `foo(x)`: resolves in the **defining** module — caller’s overloads NOT visible.
 - This is why `:=` and `delete` emit `_::clone` / `_::finalize`
 
 ### Table operations
