@@ -55,7 +55,7 @@ def generateApplyVisitStruct(stype : TypeDeclPtr; frange : range; fnname : strin
     var inscope func_args : array<VariablePtr>
     // for fld in stype.structType.fields
     for (fldi in frange) {
-        if (true) {
+        {
             let fld & = unsafe(stype.structType.fields[fldi])
             names |> push(string(fld.name))
             if (hasExtraArg) {
@@ -126,7 +126,7 @@ def generateApplyVisitTuple(stype : TypeDeclPtr; frange : range; fnname : string
     var inscope blkList : array<ExpressionPtr>
     var inscope func_args : array<VariablePtr>
     for (fldi in frange) {
-        if (true) {
+        {
             assume flda = stype.argTypes[fldi]
             let fldname = length(stype.argNames) == length(stype.argTypes) ? string(stype.argNames[fldi]) : "_{fldi}"
             names |> push(fldname)
@@ -180,7 +180,7 @@ def generateApplyVisitVariant(stype : TypeDeclPtr; frange : range; fnname : stri
     var inscope blkList : array<ExpressionPtr>
     var inscope func_args : array<VariablePtr>
     for (fldi in frange) {
-        if (true) {
+        {
             assume flda = stype.argTypes[fldi]
             let fldname = length(stype.argNames) == length(stype.argTypes) ? string(stype.argNames[fldi]) : "_{fldi}"
             names |> push(fldname)

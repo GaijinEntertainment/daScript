@@ -422,7 +422,7 @@ def main {
     print("{g_botConfig.name} {g_userGodfather.username} ({g_userGodfather.id}) is listening...\n")
     while (true) {
         unsafe(heap_collect(true, true))
-        if (true) {
+        {
             var inscope res <- telegram_getupdates(getupdates(
                 offset = last_update,
                 limit = 100l,

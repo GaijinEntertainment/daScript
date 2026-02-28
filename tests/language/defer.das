@@ -30,7 +30,7 @@ def defer_check_del(var a : array<int>) : int {
 [sideeffects]
 def defer_check_short_pipe() {
     var x = 1
-    if (true) {
+    {
         x++
         defer <| $() {
             x--

@@ -1,4 +1,4 @@
-﻿options gen2
+options gen2
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
@@ -734,7 +734,7 @@ def private fold_linq_default(var expr : ExpressionPtr) : ExpressionPtr {
     var argIndex = 0
     let argMax = length(calls)
     while (argIndex < argMax) {
-        if (true) {
+        {
             var cll & = unsafe(calls[argIndex])
             let newArgName = "pass_{argIndex}"
             var callName = cll._1.name

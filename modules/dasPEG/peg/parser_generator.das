@@ -272,7 +272,7 @@ def generate_parser_class(var gen : ParserGenerator; parser_name : string) {
     // Add a field for every type of cache
 
     for (rule_name in keys(gen.rule_types)) {
-        if (true) {
+        {
             // Make cache table type: table<int; <result-type-for-rule>>
             var inscope t2 <- qmacro_type(type<table<int; int>>)
             var inscope type_value <- gen.return_types |> clone_value(rule_name)
@@ -334,7 +334,7 @@ def generate_result_types(var gen : ParserGenerator) {
     //!
 
     for (rule, type_ in keys(gen.rule_types), values(gen.rule_types)) {
-        if (true) {
+        {
             var inscope rule_res_type <- make_default_type_decl()
             rule_res_type.argTypes[1] |> move_new <| clone_type(type_)
 

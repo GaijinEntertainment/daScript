@@ -33,7 +33,7 @@ def inside_move_test(t : T?) {
 
 def move_test(t : T?) {
     t |> equal(getTotalTestObjectSmart(), 0)
-    if (true) {
+    {
         var inscope sptr <- inside_move_test(t)
         t |> equal(getTotalTestObjectSmart(), 1)
     }

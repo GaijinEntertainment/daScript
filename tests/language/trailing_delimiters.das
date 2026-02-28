@@ -77,7 +77,7 @@ def test_trailing_delimiters(t : T?) {
         ${ ${ ${}; }
         }
         ${feint(""); }
-        if (true) {feint(""); }
+        {feint(""); }
     }
     t |> run("mixed blocks with lambdas") @(t : T?) {
         let a0 <- { 1 => @(a : string) { feint(a); } }

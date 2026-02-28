@@ -839,7 +839,7 @@ def private update_entity_imm(eid : EntityId; blk : lambda<(eid : EntityId; var 
     let arch_index = unsafe(decsState.archetypeLookup[lookup.archetype]) - 1
     let eidx = decsState.entityLookup[eid.id].index
     var old_ahash = 0ul
-    if (true) {// note - this scope is for arch &
+    {// note - this scope is for arch &
         var arch & = unsafe(decsState.allArchetypes[arch_index])
         cmp |> reserve(length(arch.components))
         for (c in arch.components) {

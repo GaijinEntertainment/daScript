@@ -241,7 +241,7 @@ def draw_graph(color : float3) {
 def create_gl_objects {
     program = create_shader_program(@@vs_main, @@fs_main)
     // circle
-    if (true) {
+    {
         glGenVertexArrays(1, safe_addr(vao_circle))
         glBindVertexArray(vao_circle)
         glGenBuffers(1, safe_addr(vbo_circle))
@@ -255,7 +255,7 @@ def create_gl_objects {
         bind_vertex_buffer(null, type<Vertex>)
     }
     // arrow
-    if (true) {
+    {
         glGenVertexArrays(1, safe_addr(vao_arrow))
         glBindVertexArray(vao_arrow)
         glGenBuffers(1, safe_addr(vbo_arrow))

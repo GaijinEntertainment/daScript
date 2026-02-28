@@ -114,7 +114,7 @@ class CaptureAuditMacro : AstCaptureMacro {
             // runs after each invocation — like a per-call finally.  This is
             // different from the user-written finally{} block on the lambda
             // literal, which goes into the FINALIZER and runs on destruction.
-            if (true) {
+            {
                 var inscope pCall <- new ExprCall(at = fld.at, name := "capture_macro_mod::audit_after_invoke")
                 pCall.arguments |> emplace_new <| new ExprConstString(at = fld.at, value := string(fld.name))
                 (fun.body as ExprBlock).finalList |> emplace(pCall)
@@ -130,7 +130,7 @@ class CaptureAuditMacro : AstCaptureMacro {
             if (!is_audited(fld._type)) {
                 continue
             }
-            if (true) {
+            {
                 var inscope pCall <- new ExprCall(at = fld.at, name := "capture_macro_mod::audit_on_finalize")
                 pCall.arguments |> emplace_new <| new ExprConstString(at = fld.at, value := string(fld.name))
                 (fun.body as ExprBlock).list |> emplace(pCall)

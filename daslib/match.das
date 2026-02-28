@@ -162,7 +162,7 @@ def match_struct(what : TypeDeclPtr; wths : ExprMakeStruct?; access : Expression
     }
     for (i in range(wthsLength)) {
         for (mf in *wths.structs[i]) {
-            if (true) {// to create scope
+            {// to create scope
                 var inscope new_access <- whatDim == 1 ? qmacro($e(access).$f(mf.name)) : qmacro($e(access)[$v(i)].$f(mf.name))
                 new_access |> force_at(wths.at)
                 var inscope ftype <- get_field_type(what, string(mf.name), what.flags.constant)
@@ -221,7 +221,7 @@ def match_tuple(what : TypeDeclPtr; wths : ExprMakeTuple?; access : ExpressionPt
             continue
         }
         let ei = i <= tagIndex ? i : whatDim - (wthsLength - i)
-        if (true) {// to create scope for defer delete
+        {// to create scope for defer delete
             var inscope new_access <- qmacro($e(access).$f("_{ei}")); new_access |> force_at(wths.at)
             if (!match_any(what.argTypes[ei], get_ptr(wths.values[i]), new_access, to)) {
                 return false
@@ -322,7 +322,7 @@ def match_variant(what : TypeDeclPtr; wths : ExprMakeVariant?; access : Expressi
         return false
     }
     for (mf, i in wths.variants, count()) {
-        if (true) {// to create scope for defer delete
+        {// to create scope for defer delete
             var inscope new_access <- whatDim == 1 ? qmacro($e(access) as $f(mf.name)) : qmacro($e(access)[$v(i)] as $f(mf.name))
             new_access |> force_at(wths.at)
             var inscope ftype <- get_field_type(what, string(mf.name), what.flags.constant)
@@ -593,7 +593,7 @@ def join_conditions(var conditions : array<ExpressionPtr>; at : LineInfo) : Expr
     var inscope tail <- conditions |> back()
     conditions |> pop()
     while (length(conditions) > 0) {
-        if (true) {
+        {
             var inscope last <- conditions |> back()
             conditions |> pop()
             var inscope new_tail <- new ExprOp2(at = last.at, op := "&&", left <- last, right <- tail)
@@ -656,7 +656,7 @@ class MatchMacro : AstCallMacro {
         var any_errors = false
         var inscope prefix : array<ExpressionPtr>
         for (ei in range(eli)) {
-            if (true) {
+            {
                 var eto = (eblk.list[multi_match ? ei : eli - ei - 1]) as ExprIfThenElse
                 var inscope to : MatchTo
                 if (match_any(what._type, get_ptr(eto.cond), access, to)) {

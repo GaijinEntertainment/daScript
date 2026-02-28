@@ -60,6 +60,14 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 |---|---|---|
 | test_bool_array.das | BoolArray — push, index, clear, resize, iteration, operators | |
 
+## bare_block/
+
+| File | Description | Expects errors |
+|---|---|---|
+| test_bare_block.das | Bare lexical blocks — scoping, nesting, finally, control flow, name reuse | |
+| test_nested_data.das | Table `{}` literals as sub-data — structs, arrays, functions, tuples, variants, comprehensions, move semantics | |
+| _test_table_compat.das | Basic table literal compatibility tests | |
+
 ## constexpr/
 
 | File | Description | Expects errors |

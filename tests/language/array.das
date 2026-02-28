@@ -104,7 +104,7 @@ def testInterop(t : T?) {
 
 [test]
 def test_array(t : T?) {
-    if (true) {
+    {
         var a : array<int>
         make_test_array(a)
         verify_test_array(t, a)
@@ -112,7 +112,7 @@ def test_array(t : T?) {
         verify_test_array(t, a, 13)
         make_test_array(a)
         verify_test_array(t, a)
-        if (true) {
+        {
             var b : array<int> <- a
             t |> equal(length(a), 0)
             verify_test_array(t, b)
@@ -120,7 +120,7 @@ def test_array(t : T?) {
         }
         verify_test_array(t, a)
     }
-    if (true) {
+    {
         var a, b : array<int>
         var i = 0
         resize(a, 10)
@@ -146,7 +146,7 @@ def test_array(t : T?) {
         }
         t |> equal(i, 5)
     }
-    if (true) {
+    {
         var a : array<int>[10]
         var i = 0
         for (b in a) {

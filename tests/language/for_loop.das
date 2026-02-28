@@ -41,7 +41,7 @@ def test_from_gte_to(t : T?) {
 }
 
 def test_for64(t : T?) {
-    if (true) {
+    {
         var val = 0l
         for (x, y in range64(100), count()) {
             t |> equal(val, x)
@@ -50,7 +50,7 @@ def test_for64(t : T?) {
         }
         t |> equal(val, 100l)
     }
-    if (true) {
+    {
         var val = 0ul
         for (x in urange64(100)) {
             t |> equal(val, x)

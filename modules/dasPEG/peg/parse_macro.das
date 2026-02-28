@@ -275,7 +275,7 @@ def transform(var rule : MacroRule) : Definition {
     var inscope alternatives : array<Alternative>
 
     for (alt in rule.alternatives) {
-        if (true) {// creates scope for inscope
+        {// creates scope for inscope
             var inscope blk : ExpressionPtr <- clone_expression(alt.arguments |> back)
 
             var sequence : array<Rule_?>

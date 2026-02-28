@@ -94,7 +94,7 @@ class StaticLetMacro : AstFunctionAnnotation {
             }
             var lexpr = ex as ExprLet
             for (vvar in lexpr.variables) {
-                if (true) {
+                {
                     var inscope vclone <- clone_variable(vvar)
                     vclone.flags |= VariableFlags.private_variable
                     vclone.flags |= VariableFlags.generated

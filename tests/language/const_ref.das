@@ -59,21 +59,21 @@ def passThrough(a : int? const) : int? {
 }
 
 def test {
-    if (true) {
+    {
         var a : array<int> const
         a[0] = 5        // 30504: can't write to a constant value, int const& = int const
     }
-    if (true) {
+    {
         var an : Foo
         an.a = 1
         an.b = 2        // 30504: can't write to a constant value, int const& = int const
     }
-    if (true) {
+    {
         var ac : Foo const
         ac.a = 3        // 30504: can't write to a constant value, int const& = int const
         ac.b = 4        // 30504: can't write to a constant value, int const& = int const
     }
-    if (true) {
+    {
         var pa : Foo const?
         var pb : Foo?
         setFoo(deref(pa))    // 30304: no matching functions or generics setFoo ( Foo const& )
@@ -81,18 +81,18 @@ def test {
         setFooPtr(pa)        // 30304: no matching functions or generics setFooPtr ( Foo const?& -const )
         setFooPtr(pb)
     }
-    if (true) {
+    {
         var a : table<string; int>
         var b : table<string; int> const
         unsafe(a["key"])++
         unsafe(b["key"])++      // 30106: can't index in the constant table, use find instead
     }
-    if (true) {
+    {
         var a : int?
         var b : int const?
         a = b
     }
-    if (true) {
+    {
         var a, b : table<string; int>
         var c : table<string; int> const
         var d : int
@@ -102,12 +102,12 @@ def test {
         c <- a          // 30505: can't move to a constant value, table<string;int> const& -const <- table<string;int>& -const
         c <- d          // 30508: can't move compatible type, table<string;int> const& -const <- int& -const
     }
-    if (true) {
+    {
         var a, b : int
         a <- b
         a = b
     }
-    if (true) {
+    {
         var a : ::TestObjectFoo
         var b : _helper_foo::TestObjectFoo
         a = b           // 30303: can only copy compatible type, TestObjectFoo& -const = _helper_foo::TestObjectFoo& -const

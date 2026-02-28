@@ -57,6 +57,7 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - **Array literals:** `[1, 2, 3]` — NOT `[[int 1; 2; 3]]`. Creates `array<int>`; use `fixed_array(1, 2, 3)` for fixed-size
 - **Struct init:** `Foo(a=1, b=2)` — NOT `[[Foo() a=1, b=2]]`
 - **Table literals:** `{ "k" => v, "k2" => v2 }` — NOT `{{ "k" => v; "k2" => v2 }}`
+- **Bare blocks:** `{ var x = 1; ... }` at statement level creates a lexical scope (NOT a table literal). Supports `finally`: `{ ... } finally { ... }`
 - **Named arguments:** `foo([name = value])` with square brackets
 - **Block arguments:** block/lambda after `func()` pipes as last arg. No `$` for parameterless blocks: `defer() { ... }`. With params: `build_string() $(var writer) { ... }`. Lambdas: `emplace() @(x : int) { ... }`
 - **Lambda:** `@(args) { body }` or `@@(args) { body }` (no-capture)
@@ -103,6 +104,8 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - `key_exists(table, key)` — check without inserting
 - `table |> insert(key, value)` / `table |> erase(key)`
 - **Never use two `[]` lookups on the same table in one expression** — re-hashing can invalidate references
+- **Move-assign table literal:** `tab <- { "k" => v }` works for both `var tab <- { ... }` declarations and `tab <- { ... }` reassignment to existing variables
+- **Table comprehension move-assign:** `tab <- { for(x in range(5)); x => x*x }` — same move-assign rules apply
 
 ### Common gotchas
 

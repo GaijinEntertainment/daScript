@@ -206,7 +206,7 @@ def test_table_operations(t : T?) {
             assert(!found == (i % 7 == 0))
             i ++
         }
-        if (true) {
+        {
             var j = 0
             var k = 0
             i = 0

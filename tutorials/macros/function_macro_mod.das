@@ -44,10 +44,10 @@ var public LOG_DEPTH = 0
 // The macro rewrites the body to:
 //
 //   def add(a, b : int) : int {
-//       if (true) {
+//       {
 //           print("{repeat("  ", LOG_DEPTH++)}>> ")
 //           print("add({a}, {b})\n")
-//           if (true) {
+//           {
 //               return a + b       // ← original body
 //           }
 //       } finally {
@@ -76,10 +76,10 @@ class LogCallsMacro : AstFunctionAnnotation {
         // Step 2: Build the replacement body with entry logging,
         //         original body, and exit logging in a finally block
         var inscope new_body <- qmacro_block() {
-            if (true) {
+            {
                 print("{repeat("  ",LOG_DEPTH++)}>> ")
                 print($e(call_sb))
-                if (true) {
+                {
                     $e(func.body)
                 }
             } finally {
