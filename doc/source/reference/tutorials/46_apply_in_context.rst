@@ -9,6 +9,7 @@ Cross-Context Services with apply_in_context
     single: Tutorial; Cross-Context Services
     single: Tutorial; Named Context
     single: Tutorial; Shared State
+    single: Tutorial; Thread-Local Debug Agent
 
 This tutorial covers ``[apply_in_context]`` — a macro annotation that
 rewrites functions so their bodies execute in a named debug agent
@@ -176,6 +177,32 @@ without worrying about which context they're in:
     //   cache size = 2
     //   width = 1920
     //   local cache length = 0
+
+
+Thread-local agents vs named agents
+======================================
+
+``[apply_in_context]`` requires a **named** agent context.  For
+modules that do not need a public name (e.g., the profiler), the
+**thread-local** agent is preferred.  There can be only **one**
+thread-local agent per thread — that is why it needs no name.
+It is installed with ``install_new_thread_local_debug_agent`` and
+communicated with via ``invoke_debug_agent_method("", ...)``.
+
+The thread-local path is faster because it skips the global agent
+map lookup entirely.
+
+Choose based on your use case:
+
+- **Named agent + [apply_in_context]** — best for shared services
+  (caches, registries) that multiple modules discover by name.
+  There can be many named agents simultaneously.
+- **Thread-local agent + invoke_debug_agent_method("", ...)** — best
+  for a single performance-critical module (profiler, logger).
+  Only one per thread; fastest dispatch.
+
+See :ref:`tutorial_debug_agents` (Section: Thread-local debug agents)
+for examples.
 
 
 How it works under the hood

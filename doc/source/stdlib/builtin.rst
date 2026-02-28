@@ -318,7 +318,7 @@ Forces a function to be exported and retained in the final compiled context, eve
 
 .. das:attribute:: pinvoke
 
-Marks a function as a platform invoke (pinvoke) entry, routing its calls through the pinvoke interop machinery.
+Marks a function as a platform invoke (pinvoke) entry, enabling cross-context calls via ``invoke_in_context``, ``invoke_debug_agent_method``, and ``invoke_debug_agent_function``.  The annotation adds a context mutex so the function can be safely invoked from another context (including the single thread-local agent context when the category is ``""``).  Functions called cross-context must also be marked ``[export]``.
 
 
 .. _handle-builtin-no_lint:

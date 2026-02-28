@@ -9,6 +9,8 @@
 //   - Overriding DapiDebugAgent methods (onCollect, onVariable)
 //   - The auto-start module pattern with [_macro] guards
 //   - Shutting down agents with delete_debug_agent_context
+//   - Thread-local agents with install_new_thread_local_debug_agent
+//   - Using "" (empty category) for thread-local dispatch
 //
 // Prerequisites: Tutorial 44 (Compile and Run) for fork_debug_agent_context
 //
@@ -435,7 +437,69 @@ def demo_named_context() {
 }
 
 // ============================================================
-// Section 9: Shutting down a debug agent
+// Section 9: Thread-local debug agents
+// ============================================================
+// A thread-local agent is installed with
+// `install_new_thread_local_debug_agent` instead of
+// `install_new_debug_agent`.  There can be only ONE
+// thread-local agent per thread — that is why it has no
+// name: there is nothing to distinguish it from.
+//
+// Access it by passing an empty string `""` as the category
+// to `invoke_debug_agent_method` or
+// `invoke_debug_agent_function`.
+//
+// The thread-local agent exists for speed — dispatching
+// through it skips the global agent map lookup entirely.
+// The profiler module uses this pattern: it installs itself
+// as the thread-local agent and communicates via
+// `invoke_debug_agent_method("", ...)`.
+//
+// Advantages over named agents:
+//   - Faster dispatch — no global map lookup
+//   - Simpler API — no name needed (there is only one)
+
+class ThreadLocalAgent : DapiDebugAgent {
+    value : int = 0
+    def set_value(val : int) {
+        self.value = val
+    }
+    def get_value(var result : int?) {
+        unsafe {
+            *result = self.value
+        }
+    }
+}
+
+def install_thread_local_agent(ctx : Context) {
+    install_new_thread_local_debug_agent(new ThreadLocalAgent())
+}
+
+def demo_thread_local_agent() {
+    print("\n=== thread-local debug agent ===\n")
+    fork_debug_agent_context(@@install_thread_local_agent)
+
+    // Use "" (empty string) to target the thread-local agent
+    unsafe {
+        invoke_debug_agent_method("", "set_value", 42)
+    }
+
+    var result = 0
+    unsafe {
+        invoke_debug_agent_method("", "get_value", addr(result))
+    }
+    print("  thread-local value = {result}\n")
+
+    // invoke_debug_agent_function("", ...) also works with ""
+    // but the target function receives the agent's classPtr
+    // as its first argument (same as invoke_debug_agent_method)
+
+    // output:
+    //   thread-local value = 42
+}
+
+// ============================================================
+// Section 10: Shutting down a debug agent
 // ============================================================
 // `delete_debug_agent_context` removes an agent by name.  It
 // notifies all other agents via onUninstall, then safely
@@ -483,6 +547,7 @@ def main() {
     demo_existence_checks()
     demo_auto_start()
     demo_named_context()
+    demo_thread_local_agent()
     demo_delete_agent()
 
     // Clean up all remaining agents

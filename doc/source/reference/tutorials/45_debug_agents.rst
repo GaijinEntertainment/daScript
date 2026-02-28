@@ -10,9 +10,11 @@ Debug Agents
     single: Tutorial; fork_debug_agent_context
     single: Tutorial; invoke_in_context
     single: Tutorial; invoke_debug_agent_method
+    single: Tutorial; invoke_debug_agent_function
     single: Tutorial; delete_debug_agent_context
     single: Tutorial; onLog
     single: Tutorial; Named Context
+    single: Tutorial; Thread-Local Debug Agent
 
 This tutorial covers **debug agents** — persistent objects that live
 in their own separate context and can intercept runtime events,
@@ -339,23 +341,82 @@ Use this when a profiling session ends, a debug tool is closed, or
 during test teardown to ensure agents do not leak across test files.
 
 
+Thread-local debug agents
+==========================
+
+A **thread-local** agent is installed with
+``install_new_thread_local_debug_agent`` instead of
+``install_new_debug_agent``.  There can be only **one** thread-local
+agent per thread — that is why it needs no name: there is nothing
+to distinguish it from.  Access it by passing an **empty string**
+``""`` as the category to ``invoke_debug_agent_method`` or
+``invoke_debug_agent_function``.
+
+The thread-local agent exists for **speed** — dispatching through it
+skips the global agent map lookup entirely.  The ``profiler`` module
+uses this pattern: it installs itself as the thread-local agent and
+communicates via ``invoke_debug_agent_method("", ...)``.
+
+Advantages over named agents:
+
+- Faster dispatch — no global map lookup
+- Simpler API — no name needed (there is only one)
+
+.. code-block:: das
+
+    class ThreadLocalAgent : DapiDebugAgent {
+        value : int = 0
+        def set_value(val : int) {
+            self.value = val
+        }
+        def get_value(var result : int?) {
+            unsafe {
+                *result = self.value
+            }
+        }
+    }
+
+    def install_thread_local_agent(ctx : Context) {
+        install_new_thread_local_debug_agent(new ThreadLocalAgent())
+    }
+
+    fork_debug_agent_context(@@install_thread_local_agent)
+
+    // Use "" to target the thread-local agent
+    unsafe {
+        invoke_debug_agent_method("", "set_value", 42)
+    }
+
+    var result = 0
+    unsafe {
+        invoke_debug_agent_method("", "get_value", addr(result))
+    }
+    print("  thread-local value = {result}\n")
+    // output:
+    //   thread-local value = 42
+
+
 Quick reference
 ===============
 
-==============================================  ====================================================
-``fork_debug_agent_context(@@fn)``              Clone context and call setup function in clone
-``install_new_debug_agent(agent, name)``        Register agent under a global name
-``has_debug_agent_context(name)``               Check if named agent exists
-``get_debug_agent_context(name)``               Get agent's Context for invoke_in_context
-``delete_debug_agent_context(name)``            Remove agent by name (safe no-op if missing)
-``invoke_in_context(ctx, fn_name, ...)``        Call [export, pinvoke] function in agent context
-``invoke_debug_agent_method(name, meth, ...)``  Call a method on the agent's class instance
-``collect_debug_agent_state(ctx, line)``        Trigger onCollect on all agents
-``report_context_state(ctx, cat, name, ...)``   Report variable from onCollect to onVariable
-``is_in_debug_agent_creation()``                True during fork_debug_agent_context
-``to_log(level, text)``                         Log message — routed through onLog if agents exist
-``[pinvoke]``                                   Annotation enabling context mutex
-==============================================  ====================================================
+=======================================================  =====================================================
+``fork_debug_agent_context(@@fn)``                       Clone context and call setup function in clone
+``install_new_debug_agent(agent, name)``                 Register agent under a global name
+``install_new_thread_local_debug_agent(agent)``          Install agent on the current thread (no name)
+``has_debug_agent_context(name)``                        Check if named agent exists
+``get_debug_agent_context(name)``                        Get agent's Context for invoke_in_context
+``delete_debug_agent_context(name)``                     Remove agent by name (safe no-op if missing)
+``invoke_in_context(ctx, fn_name, ...)``                 Call [export, pinvoke] function in agent context
+``invoke_debug_agent_method(name, meth, ...)``           Call a method on the agent's class instance
+``invoke_debug_agent_method("", meth, ...)``             Call a method on the thread-local agent
+``invoke_debug_agent_function(name, fn, ...)``           Call a function in the agent's context
+``invoke_debug_agent_function("", fn, ...)``             Call a function in the thread-local agent
+``collect_debug_agent_state(ctx, line)``                 Trigger onCollect on all agents
+``report_context_state(ctx, cat, name, ...)``            Report variable from onCollect to onVariable
+``is_in_debug_agent_creation()``                         True during fork_debug_agent_context
+``to_log(level, text)``                                  Log message — routed through onLog if agents exist
+``[pinvoke]``                                            Annotation enabling context mutex
+=======================================================  =====================================================
 
 
 .. seealso::

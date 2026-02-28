@@ -1,1 +1,1 @@
-Creates and installs a thread-local debug agent from a `DapiDebugAgent` subclass instance.
+Creates and installs a thread-local debug agent from a ``DapiDebugAgent`` subclass instance.  There can be only one thread-local agent per thread — installing a new one replaces the previous.  Use ``invoke_debug_agent_method("", ...)`` to communicate with it.
