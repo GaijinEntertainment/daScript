@@ -76,6 +76,8 @@ JIT module - module loaded when -jit is specified.
 JIT all functions - if enabled, JIT will compile all functions in the module.
 JIT debug info - if enabled, JIT will generate debug info for JIT compiled code.
 JIT dll mode - if enabled, JIT will generate DLL's into JIT output folder and load them from there.
+JIT exe mode - if enabled, JIT will generate standalone executable.
+JIT will always emit function prologues, which allows call-stack in debuggers.
 JIT output folder (where JIT compiled code will be stored).
 JIT optimization level for compiled code (0-3).
 JIT size optimization level for compiled code (0-3).

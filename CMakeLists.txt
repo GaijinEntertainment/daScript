@@ -324,7 +324,9 @@ MACRO(ADD_DAS_SHARED_MODULE_LIB module_name)
     # Ignore tutorial, profile, test.
     if(NOT "${FOLDER_NAME}" STREQUAL "tutorial" AND
        NOT "${FOLDER_NAME}" STREQUAL "profile" AND
-       NOT "${FOLDER_NAME}" STREQUAL "test")
+       NOT "${FOLDER_NAME}" STREQUAL "test" AND
+       NOT ${module_name} STREQUAL "dasModuleUnitTest"
+       )
         install(TARGETS ${module_name}
             ARCHIVE DESTINATION ${DAS_INSTALL_MODULESDIR}/${FOLDER_NAME}
             RUNTIME DESTINATION ${DAS_INSTALL_MODULESDIR}/${FOLDER_NAME} OPTIONAL
