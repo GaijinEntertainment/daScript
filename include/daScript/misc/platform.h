@@ -7,6 +7,14 @@
 #define DAS_VERSION (DAS_VERSION_MAJOR*10000 + DAS_VERSION_MINOR*100 + DAS_VERSION_PATCH)
 #endif
 
+#ifndef DAS_BUILD_ID
+#ifdef NDEBUG
+#define DAS_BUILD_ID (DAS_VERSION * 100 + sizeof(void*))
+#else
+#define DAS_BUILD_ID (DAS_VERSION * 100 + 10 + sizeof(void*))
+#endif
+#endif
+
 #ifdef __HAIKU__
 #define _GNU_SOURCE 1
 #endif

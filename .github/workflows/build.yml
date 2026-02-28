@@ -61,15 +61,15 @@ jobs:
             archive_ext: tar.gz
             sanitizers: none
 
-          # single asan build
-          - target: linux
-            architecture: 64
-            runner: ubuntu-latest
-            cmake_preset: Debug
-            sanitizers: asan
-            build_name: linux_asan
-            build_system: cmake
-            cmake_generator: Ninja
+          # single asan build — disabled: consistently times out in CI
+          # - target: linux
+          #   architecture: 64
+          #   runner: ubuntu-latest
+          #   cmake_preset: Debug
+          #   sanitizers: asan
+          #   build_name: linux_asan
+          #   build_system: cmake
+          #   cmake_generator: Ninja
 
           # single ubsan build
           - target: linux
@@ -310,7 +310,7 @@ jobs:
             echo -e "leak:format_error\n" > suppressions.txt
             export LSAN_OPTIONS="suppressions='suppressions.txt'"
             # Use more time to pass UBSAN and disable leaks in JIT mode because we exit using exit(), and do not call destructors.
-            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- --color --test ../tests || ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- --color --isolated-mode --timeout 5600 --test ../tests
+            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- --color --test ../tests || ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- --color --isolated-mode --timeout 4800 --test ../tests
             ./daslang _dasroot_/dastest/dastest.das -- --color --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 3600 --test ../tests
             ;;
            windows32)

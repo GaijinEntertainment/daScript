@@ -588,43 +588,36 @@ namespace das {
     void *register_dynamic_module(const char *path, const char *mod_name, int on_error, Context * context, LineInfoArg * at ) {
         auto lib = loadDynamicLibrary(path);
         if (!lib) {
-            auto err_msg = "Couldn't find dynamic module library:" + string(path) + ".\n";
-            switch (static_cast<RegisterOnError>(on_error)) {
-                case RegisterOnError::Nothing: break;
-                case RegisterOnError::Fail: {
-                    context->throw_error(err_msg.c_str());
-                    break;
-                };
-                case RegisterOnError::ErrorMsg: {
-                    context->to_err(at, err_msg.c_str());
-                    break;
-                };
-                default: break;
+            auto err_msg = "dynamic module `" + string(mod_name) + "` — library not found: " + string(path) + "\n";
+            context->to_err(at, err_msg.c_str());
+            if (static_cast<RegisterOnError>(on_error) == RegisterOnError::Fail) {
+                context->throw_error(err_msg.c_str());
             }
             return nullptr;
         }
         const auto regName = getDynModuleRegistratorName(mod_name);
         auto rawFn = getFunctionAddress(lib, regName.c_str());
-        if (rawFn) {
-            auto fn = reinterpret_cast<Module*(*)(void)>(rawFn);
-            *ModuleKarma += unsigned(intptr_t(fn()));
-        } else {
-            auto err_msg = "Failed to find fn `" + regName + "` in `" + path + "`.\n";
-            switch (static_cast<RegisterOnError>(on_error)) {
-                case RegisterOnError::Nothing: break;
-                case RegisterOnError::Fail: {
-                    context->throw_error(err_msg.c_str());
-                    break;
-                };
-                case RegisterOnError::ErrorMsg: {
-                    context->to_err(at, err_msg.c_str());
-                    break;
-                };
-                default: break;
+        if (!rawFn) {
+            auto err_msg = "dynamic module `" + string(mod_name) + "` — function `" + regName + "` not found in `" + path + "`\n";
+            context->to_err(at, err_msg.c_str());
+            if (static_cast<RegisterOnError>(on_error) == RegisterOnError::Fail) {
+                context->throw_error(err_msg.c_str());
             }
             closeLibrary(lib);
-            lib = nullptr;
+            return nullptr;
         }
+        auto fn = reinterpret_cast<Module*(*)(int)>(rawFn);
+        auto mod = fn(DAS_BUILD_ID);
+        if (!mod) {
+            auto err_msg = "dynamic module `" + string(mod_name) + "` — build-id mismatch (host " + to_string(DAS_BUILD_ID) + "); rebuild the module for current configuration\n";
+            context->to_err(at, err_msg.c_str());
+            if (static_cast<RegisterOnError>(on_error) == RegisterOnError::Fail) {
+                context->throw_error(err_msg.c_str());
+            }
+            closeLibrary(lib);
+            return nullptr;
+        }
+        *ModuleKarma += unsigned(intptr_t(mod));
         return lib;
     }
     void *register_dynamic_module_silent(const char *path, const char *mod_name, Context * context, LineInfoArg * at ) {
