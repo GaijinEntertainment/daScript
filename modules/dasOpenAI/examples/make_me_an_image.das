@@ -24,7 +24,7 @@ def main {
         to_log(LOG_ERROR, "OpenAI key is not set. Please set the OPENAI_KEY environment variable.")
         return
     }
-    if (true) {
+    {
         var inscope image <- openai_create_image(Image(
             prompt = "Cartoony. A large stone wall with a wooden door in the center. The door is made of oak and has a simple iron handle. Above the door, there is a small carving of a dragon chiseled into the stone wall.",
             n = 1,
@@ -48,7 +48,7 @@ def main {
             to_log(LOG_ERROR, "image completion failed\n{openai_get_last_error()}\n")
         }
     }
-    if (true) {
+    {
         var inscope image <- openai_create_image_variation(ImageVariation(
             image = get_temp_file_name("image.png"),
             n = 1,

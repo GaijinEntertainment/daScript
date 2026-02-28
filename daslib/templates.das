@@ -93,7 +93,7 @@ class TemplateMacro : AstFunctionAnnotation {
                 errors := "can't find template argument {t.name} (or duplicate)"
                 return <- default<ExpressionPtr>
             }
-            if (true) {
+            {
                 var inscope argExpr := newcall.arguments[argidx]
                 if (argExpr is ExprRef2Value) {
                     let r2v = newcall.arguments[argidx] as ExprRef2Value

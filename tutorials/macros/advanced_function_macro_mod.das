@@ -185,7 +185,7 @@ class MemoizeMacro : AstFunctionAnnotation {
         // Combine hashes with XOR
         var inscope keyExpr <- hashExprs[0]
         for (i in range(1, length(hashExprs))) {
-            if (true) {
+            {
                 var inscope xorExpr <- qmacro($e(keyExpr) ^ $e(hashExprs[i]))
                 unsafe { keyExpr <- xorExpr; }
             }

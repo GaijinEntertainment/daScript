@@ -55,7 +55,7 @@ class UnrollMacro : AstFunctionAnnotation {
         let van = "{efor.iterators[0]}"
         var inscope nblk <- new ExprBlock(at = call.at)
         for (i in euc.value) {
-            if (true) {
+            {
                 var inscope iblk <- clone_expression(efor.body)
                 remove_deref(van, iblk)
                 var inscope rules : Template

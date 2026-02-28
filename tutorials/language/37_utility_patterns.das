@@ -82,7 +82,7 @@ def defer_in_condition() {
     print("\n=== defer in condition ===\n")
 
     print("before if\n")
-    if (true) {
+    {
         defer() {
             print("deferred inside if\n")
         }

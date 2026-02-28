@@ -9,7 +9,7 @@ def jit_test_abi_mad(a, b, c) {
 }
 
 def test_vec_abi(t : T?) {
-    if (true) {
+    {
         t |> success(!jit_enabled() || is_jit_function(@@ < (a, b, c : float2) : float2 > jit_test_abi_mad))
         let a = float2(1, 2)
         let b = float2(3, 4)
@@ -19,7 +19,7 @@ def test_vec_abi(t : T?) {
         t |> equal(tt, jt)
     }
 
-    if (true) {
+    {
         t |> success(!jit_enabled() || is_jit_function(@@ < (a, b, c : float3) : float3 > jit_test_abi_mad))
         let a = float3(1, 2, 3)
         let b = float3(4, 5, 6)
@@ -29,7 +29,7 @@ def test_vec_abi(t : T?) {
         t |> equal(tt, jt)
     }
 
-    if (true) {
+    {
         t |> success(!jit_enabled() || is_jit_function(@@ < (a, b, c : float4) : float4 > jit_test_abi_mad))
         let a = float4(1, 2, 3, 4)
         let b = float4(5, 6, 7, 8)

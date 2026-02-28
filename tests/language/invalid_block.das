@@ -13,7 +13,7 @@ def take_int(b : block<int>) : int {
 }
 
 def test : bool {
-    if (true) {
+    {
         var a : int
         var b : float
         take_any(${ a++; })

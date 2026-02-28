@@ -86,7 +86,7 @@ def main {
     // Think of it like RAII in C++ or 'defer' in Go.
 
     print("=== var inscope ===\n")
-    if (true) {
+    {
         var inscope r1 = acquire_resource("File", 2)
         var inscope r2 = acquire_resource("Socket", 3)
         print("  using r1 and r2...\n")

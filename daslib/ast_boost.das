@@ -263,7 +263,7 @@ def private apply_tag_annotation(tag : string; var ann : FunctionAnnotationPtr) 
         funcs |> push_clone(func)
     }
     for (func in funcs) {
-        if (true) {
+        {
             var inscope tagAnn := ann
             add_function_annotation(func, tagAnn)
         }

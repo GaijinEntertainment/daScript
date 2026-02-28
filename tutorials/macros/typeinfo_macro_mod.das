@@ -80,7 +80,7 @@ class TypeInfoGetEnumValueStrings : AstTypeInfoMacro {
         // Build ExprMakeArray of ExprConstString entries.
         var inscope arr <- new ExprMakeArray(at = expr.at, makeType <- typeinfo ast_typedecl(type<string>))
         for (i in iter_range(expr.typeexpr.enumType.list)) {
-            if (true) {
+            {
                 assume entry = expr.typeexpr.enumType.list[i]
                 var inscope nameExpr <- new ExprConstString(at = expr.at, value := entry.name)
                 arr.values |> emplace <| nameExpr

@@ -510,7 +510,7 @@ class TemplateStructure : AstStructureAnnotation {
         let makeFuncName = "make`template`{st.name}"
         var inscope ctxFnArguments : array<VariablePtr>
         for (arg in args) {
-            if (true) {
+            {
                 var inscope argVar <- new Variable(
                     name := string(arg.name),
                     at = st.at

@@ -131,7 +131,7 @@ class ImguiSubmoduleGen : ImguiGen {
 
 [export]
 def main {
-    if (true) {
+    {
         var cgb = new ImguiGen("dasIMGUI", "imgui", "imgui.h", "{get_das_root()}/modules/dasImgui/imgui/")
         defer <| $() {
             unsafe {
@@ -141,7 +141,7 @@ def main {
         cgb->generate()
         cgb->genCMakeDecl("DAS_IMGUI_BIND")
     }
-    if (true) {
+    {
         var cgb = new ImguiSubmoduleGen("dasIMNODES", "imnodes", "imnodes.h", "{get_das_root()}/modules/dasImgui/imnodes/")
         defer <| $() {
             unsafe {
@@ -157,7 +157,7 @@ def main {
         cgb->generate()
         cgb->genCMakeDecl("DAS_IMNODES_BIND")
     }
-    if (true) {
+    {
         var cgb = new ImguiSubmoduleGen("dasIMGUI_NODE_EDITOR", "imgui_node_editor", "imgui_node_editor.h", "{get_das_root()}/modules/dasImgui/imgui-node-editor/")
         defer <| $() {
             unsafe {

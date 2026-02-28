@@ -133,7 +133,7 @@ def public cvt_to_mks(var args) : smart_ptr<MakeStruct> {
     var inscope res <- new MakeStruct(uninitialized);
     *res |> resize(length(args))
     for (arg, i in args, count()) {
-        if (true) {
+        {
             move_new((*res)[i]) <| arg;
         }
     }
@@ -231,7 +231,7 @@ def private convert_vec_expr(mod : Module?; field_values : uint8 const?; xtype :
                                      makeStructFlags = ExprMakeStructFlags.canShadowBlock);
     }
     for (idx in range(get_vector_length(field_values, src_tp))) {
-        if (true) {
+        {
             var inscope arg_expr <- convert_quote_expr(mod, unsafe(reinterpret<uint8?>(get_vector_ptr_at_index(field_values, src_tp.get_ptr(), idx))), src_tp, at);
             if (dst_tp.baseType != Type.tString && dst_tp != src_tp) {
                 var inscope make_str <- unsafe(reinterpret<smart_ptr<ExprMakeStruct>>(arg_expr));
