@@ -326,19 +326,12 @@ Sets a custom error page file.
 :Arguments: * **filename** : string
 
 
-+++++++++++++
-Uncategorized
-+++++++++++++
+++++++++++++++++++++
+HTTP request helpers
+++++++++++++++++++++
 
-.. _function-dashv_boost_with_http_request_block_ls_var_req_c_HttpRequest_q__hh__c_void_gr_:
-
-.. das:function:: with_http_request(blk: block<(var req:HttpRequest?#):void>)
-
-Creates a temporary ``HttpRequest``, invokes the block, then cleans up.
-Use this to configure and send outbound HTTP requests.
-
-
-:Arguments: * **blk** : block<(req: :ref:`HttpRequest <handle-dashv-HttpRequest>`?\ #):void>
+  *  :ref:`get_body_bytes (resp: HttpResponse?) : array\<uint8\> <function-dashv_boost_get_body_bytes_HttpResponse_q_>`
+  *  :ref:`with_http_request (blk: block\<(var req:HttpRequest?#):void\>) <function-dashv_boost_with_http_request_block_ls_var_req_c_HttpRequest_q__hh__c_void_gr_>`
 
 .. _function-dashv_boost_get_body_bytes_HttpResponse_q_:
 
@@ -349,5 +342,15 @@ Returns an empty array if the response is null, non-OK, or has no content.
 
 
 :Arguments: * **resp** :  :ref:`HttpResponse <handle-dashv-HttpResponse>`?
+
+.. _function-dashv_boost_with_http_request_block_ls_var_req_c_HttpRequest_q__hh__c_void_gr_:
+
+.. das:function:: with_http_request(blk: block<(var req:HttpRequest?#):void>)
+
+Creates a temporary ``HttpRequest``, invokes the block, then cleans up.
+Use this to configure and send outbound HTTP requests.
+
+
+:Arguments: * **blk** : block<(req: :ref:`HttpRequest <handle-dashv-HttpRequest>`?\ #):void>
 
 

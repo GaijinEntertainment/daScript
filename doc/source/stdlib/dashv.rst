@@ -972,8 +972,18 @@ Returns the status message string for the given HTTP response.
 Message and header access
 +++++++++++++++++++++++++
 
+  *  :ref:`HttpResponse.content_length (self: HttpResponse) : int <function-dashv__dot__rq_content_length_HttpResponse>`
   *  :ref:`each_header (message: HttpMessage?; block: block\<(string;string):void\>) <function-dashv_each_header_HttpMessage_q__block_ls_string;string_c_void_gr_>`
   *  :ref:`get_header (message: HttpMessage?; key: string) : string <function-dashv_get_header_HttpMessage_q__string>`
+
+.. _function-dashv__dot__rq_content_length_HttpResponse:
+
+.. das:function:: HttpResponse.content_length(self: HttpResponse) : int
+
+Returns the content length of the HTTP response body.
+
+
+:Arguments: * **self** :  :ref:`HttpResponse <handle-dashv-HttpResponse>` implicit
 
 .. _function-dashv_each_header_HttpMessage_q__block_ls_string;string_c_void_gr_:
 
@@ -1203,10 +1213,24 @@ Returns the value of a cookie by name from a request.
 Form data
 +++++++++
 
+  *  :ref:`each_form_field (request: HttpRequest?; block: block\<(string;string;string):void\>) <function-dashv_each_form_field_HttpRequest_q__block_ls_string;string;string_c_void_gr_>`
   *  :ref:`get_form_data (request: HttpRequest?; name: string) : string <function-dashv_get_form_data_HttpRequest_q__string>`
+  *  :ref:`get_url_encoded (request: HttpRequest?; key: string) : string <function-dashv_get_url_encoded_HttpRequest_q__string>`
+  *  :ref:`save_form_file (request: HttpRequest?; name: string; path: string) : int <function-dashv_save_form_file_HttpRequest_q__string_string>`
   *  :ref:`set_form_data (request: HttpRequest?; name: string; value: string) <function-dashv_set_form_data_HttpRequest_q__string_string>`
   *  :ref:`set_form_file (request: HttpRequest?; name: string; filepath: string) <function-dashv_set_form_file_HttpRequest_q__string_string>`
   *  :ref:`set_url_encoded (request: HttpRequest?; key: string; value: string) <function-dashv_set_url_encoded_HttpRequest_q__string_string>`
+
+.. _function-dashv_each_form_field_HttpRequest_q__block_ls_string;string;string_c_void_gr_:
+
+.. das:function:: each_form_field(request: HttpRequest?; block: block<(string;string;string):void>)
+
+Iterates over all form fields of a server-side request, invoking the block with name, filename, and content type.
+
+
+:Arguments: * **request** :  :ref:`HttpRequest <handle-dashv-HttpRequest>`? implicit
+
+            * **block** : block<(string;string;string):void> implicit
 
 .. _function-dashv_get_form_data_HttpRequest_q__string:
 
@@ -1218,6 +1242,30 @@ Returns the value of a form field from a server-side request.
 :Arguments: * **request** :  :ref:`HttpRequest <handle-dashv-HttpRequest>`? implicit
 
             * **name** : string implicit
+
+.. _function-dashv_get_url_encoded_HttpRequest_q__string:
+
+.. das:function:: get_url_encoded(request: HttpRequest?; key: string) : string
+
+Returns the value of a URL-encoded form field from a server-side request.
+
+
+:Arguments: * **request** :  :ref:`HttpRequest <handle-dashv-HttpRequest>`? implicit
+
+            * **key** : string implicit
+
+.. _function-dashv_save_form_file_HttpRequest_q__string_string:
+
+.. das:function:: save_form_file(request: HttpRequest?; name: string; path: string) : int
+
+Saves an uploaded form file to disk. Returns 0 on success.
+
+
+:Arguments: * **request** :  :ref:`HttpRequest <handle-dashv-HttpRequest>`? implicit
+
+            * **name** : string implicit
+
+            * **path** : string implicit
 
 .. _function-dashv_set_form_data_HttpRequest_q__string_string:
 
@@ -1257,54 +1305,5 @@ Sets a URL-encoded form field on a request.
             * **key** : string implicit
 
             * **value** : string implicit
-
-
-+++++++++++++
-Uncategorized
-+++++++++++++
-
-.. _function-dashv__dot__rq_content_length_HttpResponse:
-
-.. das:function:: HttpResponse.content_length(self: HttpResponse) : int
-
-Returns the content length of the HTTP response body.
-
-
-:Arguments: * **self** :  :ref:`HttpResponse <handle-dashv-HttpResponse>` implicit
-
-.. _function-dashv_save_form_file_HttpRequest_q__string_string:
-
-.. das:function:: save_form_file(request: HttpRequest?; name: string; path: string) : int
-
-Saves an uploaded form file to disk. Returns 0 on success.
-
-
-:Arguments: * **request** :  :ref:`HttpRequest <handle-dashv-HttpRequest>`? implicit
-
-            * **name** : string implicit
-
-            * **path** : string implicit
-
-.. _function-dashv_each_form_field_HttpRequest_q__block_ls_string;string;string_c_void_gr_:
-
-.. das:function:: each_form_field(request: HttpRequest?; block: block<(string;string;string):void>)
-
-Iterates over all form fields of a server-side request, invoking the block with name, filename, and content type.
-
-
-:Arguments: * **request** :  :ref:`HttpRequest <handle-dashv-HttpRequest>`? implicit
-
-            * **block** : block<(string;string;string):void> implicit
-
-.. _function-dashv_get_url_encoded_HttpRequest_q__string:
-
-.. das:function:: get_url_encoded(request: HttpRequest?; key: string) : string
-
-Returns the value of a URL-encoded form field from a server-side request.
-
-
-:Arguments: * **request** :  :ref:`HttpRequest <handle-dashv-HttpRequest>`? implicit
-
-            * **key** : string implicit
 
 
