@@ -116,17 +116,14 @@ give full control over the response:
 Non-200 JSON Responses
 ''''''''''''''''''''''
 
-``JSON()`` always sets status 200.  For error responses with JSON
-bodies, set the content-type and status manually:
+``JSON()`` and ``TEXT_PLAIN()`` accept an optional status parameter
+(defaults to ``http_status.OK``):
 
 .. code-block:: das
 
    GET("/not-found") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        let payload : tuple<error:string; code:int> = ("resource not found", 404)
-       set_content_type(resp, "application/json")
-       resp.body := write_json(JV(payload))
-       set_status(resp, http_status.NOT_FOUND)
-       return int(http_status.NOT_FOUND)
+       return resp |> JSON(write_json(JV(payload)), http_status.NOT_FOUND)
    }
 
 201 Created with Location Header
@@ -135,12 +132,9 @@ bodies, set the content-type and status manually:
 .. code-block:: das
 
    POST("/items") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
-       set_status(resp, http_status.CREATED)
        set_header(resp, "Location", "/items/42")
-       set_content_type(resp, "application/json")
        let payload : tuple<id:int; body:string> = (42, string(req.body))
-       resp.body := write_json(JV(payload))
-       return int(http_status.CREATED)
+       return resp |> JSON(write_json(JV(payload)), http_status.CREATED)
    }
 
 204 No Content
@@ -156,19 +150,19 @@ bodies, set the content-type and status manually:
 Quick Reference
 ===============
 
-==========================================  ===============================================
-Function                                    Description
-==========================================  ===============================================
-``STATIC(server, path, dir)``               Serve static files from directory
-``allow_cors()``                            Enable CORS headers on all routes
-``REDIRECT(resp, location, status)``        Send 3xx redirect response
-``JSON(resp, json_str)``                    200 JSON response
-``TEXT_PLAIN(resp, text)``                  200 text response
-``DATA(resp, data, length)``                Binary response (octet-stream)
-``set_header(resp, key, value)``            Set response header
-``set_status(resp, status)``                Set HTTP status code
-``set_content_type(resp, type)``            Set Content-Type header
-==========================================  ===============================================
+=============================================  ===============================================
+Function                                       Description
+=============================================  ===============================================
+``STATIC(server, path, dir)``                  Serve static files from directory
+``allow_cors()``                               Enable CORS headers on all routes
+``REDIRECT(resp, location, status)``           Send 3xx redirect response
+``JSON(resp, json_str, status?)``              JSON response (default 200)
+``TEXT_PLAIN(resp, text, status?)``             text response (default 200)
+``DATA(resp, data, length, status?)``          Binary response (default 200)
+``set_header(resp, key, value)``               Set response header
+``set_status(resp, status)``                   Set HTTP status code
+``set_content_type(resp, type)``               Set Content-Type header
+=============================================  ===============================================
 
 .. seealso::
 

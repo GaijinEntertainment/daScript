@@ -112,8 +112,7 @@ class TutorialHttpServer : HvWebServer {
             var err : string
             var parsed = read_json(string(req.body), err)
             if (parsed == null) {
-                set_status(resp, http_status.BAD_REQUEST)
-                return resp |> TEXT_PLAIN("parse error: {err}")
+                return resp |> TEXT_PLAIN("parse error: {err}", http_status.BAD_REQUEST)
             }
             // Echo it back as-is
             return resp |> JSON(write_json(parsed))

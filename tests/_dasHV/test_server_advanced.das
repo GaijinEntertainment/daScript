@@ -57,18 +57,13 @@ class AdvancedTestServer : HvWebServer {
 
         // 404 JSON error
         GET("/not-found") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
-            set_content_type(resp, "application/json")
-            resp.body := "\{\"error\":\"not found\"\}"
-            set_status(resp, http_status.NOT_FOUND)
-            return int(http_status.NOT_FOUND)
+            return resp |> JSON("\{\"error\":\"not found\"\}", http_status.NOT_FOUND)
         }
 
         // 201 Created
         POST("/items") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             set_header(resp, "Location", "/items/42")
-            set_content_type(resp, "text/plain")
-            resp.body := "created"
-            return int(http_status.CREATED)
+            return resp |> TEXT_PLAIN("created", http_status.CREATED)
         }
 
         // 204 No Content

@@ -122,24 +122,18 @@ class AdvancedServer : HvWebServer {
         }
 
         // Error response with custom status
-        // Note: JSON() always sets 200. For non-200 JSON responses,
-        // set content-type and body manually, then return the status code.
+        // JSON() and TEXT_PLAIN() accept an optional status parameter
+        // (defaults to http_status.OK).
         GET("/not-found") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             let payload : tuple<error : string; code : int> = ("resource not found", 404)
-            set_content_type(resp, "application/json")
-            resp.body := write_json(JV(payload))
-            set_status(resp, http_status.NOT_FOUND)
-            return int(http_status.NOT_FOUND)
+            return resp |> JSON(write_json(JV(payload)), http_status.NOT_FOUND)
         }
 
         // 201 Created with Location header
         POST("/items") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
-            set_status(resp, http_status.CREATED)
             set_header(resp, "Location", "/items/42")
-            set_content_type(resp, "application/json")
             let payload : tuple<id : int; body : string> = (42, string(req.body))
-            resp.body := write_json(JV(payload))
-            return int(http_status.CREATED)
+            return resp |> JSON(write_json(JV(payload)), http_status.CREATED)
         }
 
         // 204 No Content

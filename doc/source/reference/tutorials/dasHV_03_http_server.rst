@@ -49,7 +49,8 @@ GET Route
        return resp |> TEXT_PLAIN("Hello, world!")
    }
 
-``TEXT_PLAIN`` sets ``Content-Type: text/plain`` and returns 200.
+``TEXT_PLAIN`` sets ``Content-Type: text/plain`` and returns ``http_status.OK`` by default.
+Pass an optional status to override: ``TEXT_PLAIN(resp, text, http_status.BAD_REQUEST)``.
 
 POST Route
 ==========
@@ -229,8 +230,8 @@ Function                              Description
 ``DEL(path) <| handler``              Register DELETE route
 ``HEAD(path) <| handler``             Register HEAD route
 ``ANY(path) <| handler``              Register handler for all methods
-``TEXT_PLAIN(resp, text)``            200 text/plain response
-``JSON(resp, json_str)``              200 application/json response
+``TEXT_PLAIN(resp, text, status?)``    text/plain response (default 200)
+``JSON(resp, json_str, status?)``      application/json response (default 200)
 ``get_param(addr(req), name)``        Read path/query parameter
 ``each_param(addr(req)) <| ...``      Iterate all query parameters
 ``set_header(resp, key, value)``      Set response header
