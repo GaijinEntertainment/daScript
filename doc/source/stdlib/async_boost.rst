@@ -101,8 +101,22 @@ This function is used to suspend coroutine until next frame.
 Running async tasks
 +++++++++++++++++++
 
+  *  :ref:`async_race (var a: iterator\<auto\>; var b: iterator\<auto\>) : int <function-async_boost_async_race_iterator_ls_auto_gr__iterator_ls_auto_gr_>`
   *  :ref:`async_run (var a: iterator\<auto\>) : auto <function-async_boost_async_run_iterator_ls_auto_gr_>`
   *  :ref:`async_run_all (var a: array\<iterator\<auto\>\>) : auto <function-async_boost_async_run_all_array_ls_iterator_ls_auto_gr__gr_>`
+  *  :ref:`async_timeout (var a: iterator\<auto\>; max_frames: int) : bool <function-async_boost_async_timeout_iterator_ls_auto_gr__int>`
+
+.. _function-async_boost_async_race_iterator_ls_auto_gr__iterator_ls_auto_gr_:
+
+.. das:function:: async_race(a: iterator<auto>; b: iterator<auto>) : int
+
+This function runs two async functions concurrently and returns the
+index (0 or 1) of whichever finishes first. The other is abandoned.
+
+
+:Arguments: * **a** : iterator<auto>
+
+            * **b** : iterator<auto>
 
 .. _function-async_boost_async_run_iterator_ls_auto_gr_:
 
@@ -122,11 +136,6 @@ This function runs all async function until they are finished (in parallel, star
 
 :Arguments: * **a** : array<iterator<auto>>
 
-
-+++++++++++++
-Uncategorized
-+++++++++++++
-
 .. _function-async_boost_async_timeout_iterator_ls_auto_gr__int:
 
 .. das:function:: async_timeout(a: iterator<auto>; max_frames: int) : bool
@@ -139,17 +148,5 @@ Returns ``true`` if the async function completed within the limit,
 :Arguments: * **a** : iterator<auto>
 
             * **max_frames** : int
-
-.. _function-async_boost_async_race_iterator_ls_auto_gr__iterator_ls_auto_gr_:
-
-.. das:function:: async_race(a: iterator<auto>; b: iterator<auto>) : int
-
-This function runs two async functions concurrently and returns the
-index (0 or 1) of whichever finishes first. The other is abandoned.
-
-
-:Arguments: * **a** : iterator<auto>
-
-            * **b** : iterator<auto>
 
 
