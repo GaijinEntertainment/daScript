@@ -89,15 +89,15 @@ class AdvancedServer : HvWebServer {
         allow_cors()
 
         // Section 3: redirect
-        GET("/old-path") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/old-path") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> REDIRECT("/new-path", http_status.MOVED_PERMANENTLY)
         }
-        GET("/new-path") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/new-path") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN("you arrived at /new-path")
         }
 
         // Section 5: custom headers and caching
-        GET("/cached") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/cached") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             set_header(resp, "Cache-Control", "max-age=3600, public")
             set_header(resp, "ETag", "\"v1.0\"")
             set_header(resp, "X-Server", "daslang-tutorial")
@@ -105,7 +105,7 @@ class AdvancedServer : HvWebServer {
         }
 
         // Section 6: binary data
-        GET("/binary") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/binary") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             // Create a simple 16-byte binary payload
             var payload = "BINARY\x00DATA1234"
             return resp |> DATA(payload, 16)
@@ -114,7 +114,7 @@ class AdvancedServer : HvWebServer {
         // Section 7: content-type and status codes
 
         // Custom HTML response
-        GET("/html") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/html") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             set_content_type(resp, "text/html")
             set_status(resp, http_status.OK)
             resp.body := "<h1>Hello from daslang!</h1>"
@@ -124,7 +124,7 @@ class AdvancedServer : HvWebServer {
         // Error response with custom status
         // Note: JSON() always sets 200. For non-200 JSON responses,
         // set content-type and body manually, then return the status code.
-        GET("/not-found") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/not-found") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             let payload : tuple<error : string; code : int> = ("resource not found", 404)
             set_content_type(resp, "application/json")
             resp.body := write_json(JV(payload))
@@ -133,7 +133,7 @@ class AdvancedServer : HvWebServer {
         }
 
         // 201 Created with Location header
-        POST("/items") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        POST("/items") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             set_status(resp, http_status.CREATED)
             set_header(resp, "Location", "/items/42")
             set_content_type(resp, "application/json")
@@ -143,7 +143,7 @@ class AdvancedServer : HvWebServer {
         }
 
         // 204 No Content
-        POST("/ack") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        POST("/ack") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             set_status(resp, http_status.NO_CONTENT)
             return int(http_status.NO_CONTENT)
         }

@@ -22,7 +22,7 @@ class FormTestServer : HvWebServer {
 
     def override onInit {
         // Echo form data fields
-        POST("/form-echo") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        POST("/form-echo") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             let name = get_form_data(req, "name")
             let value = get_form_data(req, "value")
             var n = !empty(name) ? string(name) : "missing"
@@ -31,7 +31,7 @@ class FormTestServer : HvWebServer {
         }
 
         // Iterate all form fields
-        POST("/form-fields") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        POST("/form-fields") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             var count = 0
             var result = ""
             each_form_field(req) <| $(name, content, filename) {
@@ -49,20 +49,20 @@ class FormTestServer : HvWebServer {
         }
 
         // Save uploaded file
-        POST("/upload") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        POST("/upload") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             var save_status = save_form_file(req, "file", upload_dir)
             return resp |> TEXT_PLAIN("status={save_status}")
         }
 
         // Missing form field
-        POST("/form-missing") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        POST("/form-missing") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             let missing = get_form_data(req, "nonexistent")
             let is_empty = empty(missing)
             return resp |> TEXT_PLAIN(is_empty ? "empty" : "found")
         }
 
         // URL-encoded form data
-        POST("/url-encoded") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        POST("/url-encoded") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             let username = get_url_encoded(req, "username")
             let password = get_url_encoded(req, "password")
             var u = !empty(username) ? string(username) : "missing"
@@ -71,7 +71,7 @@ class FormTestServer : HvWebServer {
         }
 
         // Missing URL-encoded field
-        POST("/url-encoded-missing") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        POST("/url-encoded-missing") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             let missing = get_url_encoded(req, "nonexistent")
             let is_empty = empty(missing)
             return resp |> TEXT_PLAIN(is_empty ? "empty" : "found")

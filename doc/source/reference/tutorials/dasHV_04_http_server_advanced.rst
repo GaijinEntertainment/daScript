@@ -61,7 +61,7 @@ HTTP Redirects
 
 .. code-block:: das
 
-   GET("/old-path") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
+   GET("/old-path") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        return resp |> REDIRECT("/new-path", http_status.MOVED_PERMANENTLY)
    }
 
@@ -78,7 +78,7 @@ custom application headers:
 
 .. code-block:: das
 
-   GET("/cached") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
+   GET("/cached") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        set_header(resp, "Cache-Control", "max-age=3600, public")
        set_header(resp, "ETag", "\"v1.0\"")
        set_header(resp, "X-Server", "daslang")
@@ -93,7 +93,7 @@ Binary Response
 
 .. code-block:: text
 
-   GET("/binary") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
+   GET("/binary") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        var payload = "BINARY\x00DATA1234"
        return resp |> DATA(payload, 16)
    }
@@ -107,7 +107,7 @@ give full control over the response:
 .. code-block:: das
 
    // HTML response
-   GET("/html") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
+   GET("/html") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        set_content_type(resp, "text/html")
        resp.body := "<h1>Hello from daslang!</h1>"
        return int(http_status.OK)
@@ -121,7 +121,7 @@ bodies, set the content-type and status manually:
 
 .. code-block:: das
 
-   GET("/not-found") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
+   GET("/not-found") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        let payload : tuple<error:string; code:int> = ("resource not found", 404)
        set_content_type(resp, "application/json")
        resp.body := write_json(JV(payload))
@@ -134,7 +134,7 @@ bodies, set the content-type and status manually:
 
 .. code-block:: das
 
-   POST("/items") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
+   POST("/items") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        set_status(resp, http_status.CREATED)
        set_header(resp, "Location", "/items/42")
        set_content_type(resp, "application/json")
@@ -148,7 +148,7 @@ bodies, set the content-type and status manually:
 
 .. code-block:: das
 
-   POST("/ack") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
+   POST("/ack") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        set_status(resp, http_status.NO_CONTENT)
        return int(http_status.NO_CONTENT)
    }

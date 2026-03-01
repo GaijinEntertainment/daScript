@@ -22,47 +22,47 @@ require strings
 class RouteTestServer : HvWebServer {
     def override onInit {
         // Basic GET
-        GET("/hello") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/hello") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN("Hello, world!")
         }
         // POST echo
-        POST("/echo") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        POST("/echo") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN(string(req.body))
         }
         // PUT
-        PUT("/resource") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        PUT("/resource") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN("PUT:{req.body}")
         }
         // PATCH
-        PATCH("/resource") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        PATCH("/resource") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN("PATCH:{req.body}")
         }
         // DELETE
-        DEL("/resource") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        DEL("/resource") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN("deleted")
         }
         // HEAD
-        HEAD("/resource") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        HEAD("/resource") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             set_header(resp, "X-Resource-Exists", "true")
             set_status(resp, http_status.OK)
             return int(http_status.OK)
         }
         // ANY
-        ANY("/any-method") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        ANY("/any-method") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN("method:{req.method}")
         }
         // Path parameters
-        GET("/users/:id") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/users/:id") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             let user_id = get_param(req, "id")
             return resp |> TEXT_PLAIN("user:{user_id}")
         }
-        GET("/users/:id/posts/:post_id") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/users/:id/posts/:post_id") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             let user_id = get_param(req, "id")
             let post_id = get_param(req, "post_id")
             return resp |> TEXT_PLAIN("user={user_id},post={post_id}")
         }
         // Query parameters
-        GET("/search") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/search") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             var result = "query:"
             each_param(req) <| $(key, value : string) {
                 result = "{result} {key}={value}"
@@ -70,13 +70,13 @@ class RouteTestServer : HvWebServer {
             return resp |> TEXT_PLAIN(result)
         }
         // Response headers
-        GET("/headers") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/headers") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             set_header(resp, "X-Custom", "test-value")
             set_header(resp, "X-Request-Id", "12345")
             return resp |> TEXT_PLAIN("with-headers")
         }
         // JSON response
-        GET("/api/status") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/api/status") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             let payload : tuple<status : string; version : int> = ("ok", 3)
             return resp |> JSON(write_json(JV(payload)))
         }

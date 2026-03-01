@@ -20,20 +20,20 @@ require strings
 class CookieTestServer : HvWebServer {
     def override onInit {
         // Set simple cookies on response
-        GET("/set-cookies") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/set-cookies") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             add_cookie(resp, "session", "abc123")
             add_cookie(resp, "theme", "dark")
             return resp |> TEXT_PLAIN("cookies set")
         }
 
         // Set extended cookie with attributes
-        GET("/set-extended-cookie") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/set-extended-cookie") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             add_cookie(resp, "prefs", "dark-mode", "", "/", 3600, false, true)
             return resp |> TEXT_PLAIN("extended cookie set")
         }
 
         // Read cookies from request
-        GET("/read-cookies") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/read-cookies") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             let session = get_cookie(req, "session")
             let theme = get_cookie(req, "theme")
             var s = !empty(session) ? string(session) : "missing"
@@ -42,14 +42,14 @@ class CookieTestServer : HvWebServer {
         }
 
         // Read a cookie that does not exist
-        GET("/read-missing-cookie") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/read-missing-cookie") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             let missing = get_cookie(req, "nonexistent")
             let is_empty = empty(missing)
             return resp |> TEXT_PLAIN(is_empty ? "empty" : "found")
         }
 
         // Iterate all cookies on the request
-        GET("/list-cookies") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/list-cookies") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             var result = ""
             each_cookie(req) <| $(name, value) {
                 if (!empty(result)) {

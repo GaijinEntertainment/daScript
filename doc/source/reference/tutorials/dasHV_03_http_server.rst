@@ -27,7 +27,7 @@ routes.  The four required WebSocket callbacks can be left empty:
 
    class MyServer : HvWebServer {
        def override onInit {
-           GET("/hello") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
+           GET("/hello") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
                return resp |> TEXT_PLAIN("Hello, world!")
            }
        }
@@ -45,7 +45,7 @@ GET Route
 
 .. code-block:: das
 
-   GET("/hello") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
+   GET("/hello") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        return resp |> TEXT_PLAIN("Hello, world!")
    }
 
@@ -56,7 +56,7 @@ POST Route
 
 .. code-block:: das
 
-   POST("/echo") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
+   POST("/echo") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        return resp |> TEXT_PLAIN(string(req.body))
    }
 
@@ -71,20 +71,20 @@ handlers for additional methods:
 
 .. code-block:: das
 
-   PUT("/data") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
+   PUT("/data") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        return resp |> TEXT_PLAIN("updated")
    }
-   PATCH("/data") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
+   PATCH("/data") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        return resp |> TEXT_PLAIN("patched")
    }
-   DEL("/data") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
+   DEL("/data") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        return resp |> TEXT_PLAIN("deleted")
    }
-   HEAD("/data") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
+   HEAD("/data") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        return int(http_status.OK)
    }
    // ANY registers a handler for all methods at once
-   ANY("/universal") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
+   ANY("/universal") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        return resp |> TEXT_PLAIN("method was {req.method}")
    }
 
@@ -101,7 +101,7 @@ Use ``:name`` in the route to capture path segments.  Read them with
 
 .. code-block:: das
 
-   GET("/users/:id") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
+   GET("/users/:id") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        let id = get_param(unsafe(addr(req)), "id")
        return resp |> TEXT_PLAIN("user {id}")
    }
@@ -116,7 +116,7 @@ Multiple path parameters work naturally:
 
 .. code-block:: das
 
-   GET("/users/:id/posts/:post_id") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
+   GET("/users/:id/posts/:post_id") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        let user_id = get_param(unsafe(addr(req)), "id")
        let post_id = get_param(unsafe(addr(req)), "post_id")
        return resp |> TEXT_PLAIN("user {user_id}, post {post_id}")
@@ -129,7 +129,7 @@ Iterate all query parameters with ``each_param``:
 
 .. code-block:: das
 
-   GET("/search") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
+   GET("/search") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        var parts : array<string>
        each_param(unsafe(addr(req))) <| $(key, value : string) {
            parts |> push("{key}={value}")
@@ -146,7 +146,7 @@ Response Headers
 
 .. code-block:: das
 
-   GET("/api/info") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
+   GET("/api/info") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        set_header(resp, "X-Request-Id", "42")
        set_header(resp, "X-Server", "daslang")
        return resp |> TEXT_PLAIN("ok")
@@ -164,7 +164,7 @@ string to ``JSON(resp, ...)``:
 
    require daslib/json_boost
 
-   GET("/api/data") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
+   GET("/api/data") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        let payload : tuple<message:string; count:int> = ("hello", 42)
        return resp |> JSON(write_json(JV(payload)))
    }

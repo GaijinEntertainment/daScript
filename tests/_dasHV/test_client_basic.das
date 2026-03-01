@@ -19,34 +19,34 @@ require strings
 
 class ClientTestServer : HvWebServer {
     def override onInit {
-        GET("/ping") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/ping") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN("pong")
         }
-        POST("/echo") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        POST("/echo") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN(string(req.body))
         }
-        PUT("/echo") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        PUT("/echo") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN("PUT:{req.body}")
         }
-        PATCH("/echo") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        PATCH("/echo") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN("PATCH:{req.body}")
         }
-        DEL("/resource") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        DEL("/resource") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN("deleted")
         }
-        HEAD("/ping") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        HEAD("/ping") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             set_header(resp, "X-Pong", "true")
             set_status(resp, http_status.OK)
             return int(http_status.OK)
         }
-        GET("/json") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/json") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> JSON("\{\"status\":\"ok\"\}")
         }
-        GET("/custom-header") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/custom-header") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             set_header(resp, "X-Custom", "test-value")
             return resp |> TEXT_PLAIN("with-header")
         }
-        GET("/echo-header") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/echo-header") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             let val = get_header(req, "X-Test")
             return resp |> TEXT_PLAIN(string(val))
         }

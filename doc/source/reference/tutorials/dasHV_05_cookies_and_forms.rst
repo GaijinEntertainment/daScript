@@ -30,7 +30,7 @@ max-age, secure, and httponly flags:
 
 .. code-block:: das
 
-   GET("/set-cookies") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
+   GET("/set-cookies") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        // Simple cookie
        add_cookie(resp, "session", "abc123")
        // Extended: domain, path, max_age, secure, httponly
@@ -47,7 +47,7 @@ is passed via ``unsafe(addr(req))`` (the handler receives
 
 .. code-block:: das
 
-   GET("/read-cookies") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
+   GET("/read-cookies") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        let session = get_cookie(unsafe(addr(req)), "session")
        let prefs   = get_cookie(unsafe(addr(req)), "prefs")
        // session and prefs are strings; empty if not found
@@ -116,7 +116,7 @@ iterates all fields (text and file):
 
 .. code-block:: das
 
-   POST("/upload") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
+   POST("/upload") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        let title = get_form_data(unsafe(addr(req)), "title")
        each_form_field(unsafe(addr(req))) <| $(name, content, filename) {
            if (!empty(filename)) {
@@ -157,7 +157,7 @@ For simple ``application/x-www-form-urlencoded`` submissions:
    }
 
    // Server side
-   POST("/login") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
+   POST("/login") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        let username = get_url_encoded(unsafe(addr(req)), "username")
        let password = get_url_encoded(unsafe(addr(req)), "password")
        ...

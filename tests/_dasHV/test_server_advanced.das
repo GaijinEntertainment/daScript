@@ -26,15 +26,15 @@ class AdvancedTestServer : HvWebServer {
         allow_cors()
 
         // Redirect
-        GET("/old-path") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/old-path") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> REDIRECT("/new-path", http_status.MOVED_PERMANENTLY)
         }
-        GET("/new-path") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/new-path") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN("arrived at new-path")
         }
 
         // Custom headers
-        GET("/cached") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/cached") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             set_header(resp, "Cache-Control", "max-age=3600")
             set_header(resp, "ETag", "\"v1\"")
             set_header(resp, "X-Server", "daslang-test")
@@ -42,13 +42,13 @@ class AdvancedTestServer : HvWebServer {
         }
 
         // Binary data
-        GET("/binary") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/binary") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             var payload = "BINARYDATA12"
             return resp |> DATA(payload, 12)
         }
 
         // HTML with custom content-type
-        GET("/html") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/html") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             set_content_type(resp, "text/html")
             set_status(resp, http_status.OK)
             resp.body := "<h1>Hello</h1>"
@@ -56,7 +56,7 @@ class AdvancedTestServer : HvWebServer {
         }
 
         // 404 JSON error
-        GET("/not-found") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/not-found") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             set_content_type(resp, "application/json")
             resp.body := "\{\"error\":\"not found\"\}"
             set_status(resp, http_status.NOT_FOUND)
@@ -64,7 +64,7 @@ class AdvancedTestServer : HvWebServer {
         }
 
         // 201 Created
-        POST("/items") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        POST("/items") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             set_header(resp, "Location", "/items/42")
             set_content_type(resp, "text/plain")
             resp.body := "created"
@@ -72,7 +72,7 @@ class AdvancedTestServer : HvWebServer {
         }
 
         // 204 No Content
-        POST("/ack") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        POST("/ack") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             set_status(resp, http_status.NO_CONTENT)
             return int(http_status.NO_CONTENT)
         }

@@ -65,7 +65,7 @@ class CookieFormServer : HvWebServer {
 
         // --- Section 1a: Set cookies ---
         // This route sets two cookies: a simple one and one with extended attributes
-        GET("/set-cookies") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/set-cookies") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             // Simple cookie (resp is HttpResponse& — direct call)
             add_cookie(resp, "session", "abc123")
             // Extended cookie with path, max-age, httponly
@@ -75,7 +75,7 @@ class CookieFormServer : HvWebServer {
 
         // --- Section 1b: Read cookies ---
         // The client sends cookies back; the server reads them
-        GET("/read-cookies") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/read-cookies") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             let session = get_cookie(req, "session")
             let prefs = get_cookie(req, "prefs")
             var s = !empty(session) ? string(session) : "not found"
@@ -85,7 +85,7 @@ class CookieFormServer : HvWebServer {
         }
 
         // --- Section 1c: Iterate all cookies ---
-        GET("/list-cookies") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/list-cookies") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             var result = ""
             each_cookie(req) <| $(name, value) {
                 if (!empty(result)) {
@@ -97,7 +97,7 @@ class CookieFormServer : HvWebServer {
         }
 
         // --- Section 2: Multipart form data ---
-        POST("/upload") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        POST("/upload") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             let title = get_form_data(req, "title")
             let description = get_form_data(req, "description")
 
@@ -123,7 +123,7 @@ class CookieFormServer : HvWebServer {
         }
 
         // --- Section 3: URL-encoded form data ---
-        POST("/login") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        POST("/login") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             let username = get_url_encoded(req, "username")
             let password = get_url_encoded(req, "password")
             var u = !empty(username) ? string(username) : ""

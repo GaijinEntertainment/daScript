@@ -37,19 +37,19 @@ require fio
 class TutorialServer : HvWebServer {
     def override onInit {
         // GET /ping — simple health-check, returns "pong"
-        GET("/ping") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/ping") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN("pong")
         }
         // POST /echo — returns whatever body was sent
-        POST("/echo") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        POST("/echo") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN(string(req.body))
         }
         // GET /data — a static resource
-        GET("/data") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/data") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN("resource state")
         }
         // GET /json — returns a JSON object
-        GET("/json") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/json") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN("\{\"status\":\"ok\",\"value\":42\}")
         }
     }

@@ -21,38 +21,38 @@ require strings
 
 class RequestBuilderServer : HvWebServer {
     def override onInit {
-        GET("/ping") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/ping") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN("pong")
         }
-        POST("/echo") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        POST("/echo") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN(string(req.body))
         }
         // Echo back a specific request header value
-        GET("/echo-header") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/echo-header") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             let val = get_header(req, "X-Custom")
             return resp |> TEXT_PLAIN(string(val))
         }
         // Echo back Content-Type from the request
-        POST("/echo-content-type") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        POST("/echo-content-type") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             let ct = get_header(req, "Content-Type")
             return resp |> TEXT_PLAIN(string(ct))
         }
         // Echo back query param
-        GET("/echo-param") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/echo-param") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             let page = get_param(req, "page")
             let limit = get_param(req, "limit")
             return resp |> TEXT_PLAIN("page={page},limit={limit}")
         }
         // Echo back Authorization header
-        GET("/check-auth") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/check-auth") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             let auth = get_header(req, "Authorization")
             return resp |> TEXT_PLAIN(string(auth))
         }
         // Redirect chain
-        GET("/redirect-src") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/redirect-src") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> REDIRECT("/redirect-dst", http_status.MOVED_PERMANENTLY)
         }
-        GET("/redirect-dst") <| @(req : HttpRequest?; var resp : HttpResponse) : int {
+        GET("/redirect-dst") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN("arrived")
         }
     }
