@@ -87,29 +87,27 @@ def with_form_test_server(port : int; blk : block<(base_url : string; upload_dir
     let up_dir = "{get_das_root()}/tests/_dasHV/_upload_test"
     mkdir_rec(up_dir)
 
-    with_job_que() {
-        with_job_status(1) $(started) {
-            with_job_status(1) $(finished) {
-                with_atomic32() $(stop_flag) {
-                    new_thread() @() {
-                        var server = new FormTestServer()
-                        server.upload_dir = up_dir
-                        server->init(port)
-                        server->start()
-                        started |> notify_and_release
-                        while (stop_flag |> get == 0) {
-                            server->tick()
-                            sleep(10u)
-                        }
-                        server->stop()
-                        finished |> notify_and_release
+    with_job_status(1) $(started) {
+        with_job_status(1) $(finished) {
+            with_atomic32() $(stop_flag) {
+                new_thread() @() {
+                    var server = new FormTestServer()
+                    server.upload_dir = up_dir
+                    server->init(port)
+                    server->start()
+                    started |> notify_and_release
+                    while (stop_flag |> get == 0) {
+                        server->tick()
+                        sleep(10u)
                     }
-                    started |> join
-                    let base_url = "http://127.0.0.1:{port}"
-                    invoke(blk, base_url, up_dir)
-                    stop_flag |> set(1)
-                    finished |> join
+                    server->stop()
+                    finished |> notify_and_release
                 }
+                started |> join
+                let base_url = "http://127.0.0.1:{port}"
+                invoke(blk, base_url, up_dir)
+                stop_flag |> set(1)
+                finished |> join
             }
         }
     }

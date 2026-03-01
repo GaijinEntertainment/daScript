@@ -164,32 +164,30 @@ def cleanup_upload_dir(dir : string) {
 // ──────────────────────────────────────────────────────────────────────────
 
 def with_cookie_form_server(port : int; upload_dir : string; blk : block<(base_url : string) : void>) {
-    with_job_que() {
-        with_job_status(1) $(started) {
-            with_job_status(1) $(finished) {
-                with_atomic32() $(stop_flag) {
-                    new_thread() @() {
-                        var server = new CookieFormServer()
-                        server.upload_dir = upload_dir
-                        server->init(port)
-                        server->start()
-                        started |> notify_and_release
-                        while (stop_flag |> get == 0) {
-                            server->tick()
-                            sleep(10u)
-                        }
-                        server->stop()
-                        unsafe {
-                            delete server
-                        }
-                        finished |> notify_and_release
+    with_job_status(1) $(started) {
+        with_job_status(1) $(finished) {
+            with_atomic32() $(stop_flag) {
+                new_thread() @() {
+                    var server = new CookieFormServer()
+                    server.upload_dir = upload_dir
+                    server->init(port)
+                    server->start()
+                    started |> notify_and_release
+                    while (stop_flag |> get == 0) {
+                        server->tick()
+                        sleep(10u)
                     }
-                    started |> join
-                    let base_url = "http://127.0.0.1:{port}"
-                    invoke(blk, base_url)
-                    stop_flag |> set(1)
-                    finished |> join
+                    server->stop()
+                    unsafe {
+                        delete server
+                    }
+                    finished |> notify_and_release
                 }
+                started |> join
+                let base_url = "http://127.0.0.1:{port}"
+                invoke(blk, base_url)
+                stop_flag |> set(1)
+                finished |> join
             }
         }
     }

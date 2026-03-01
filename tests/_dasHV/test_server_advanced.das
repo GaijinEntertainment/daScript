@@ -90,31 +90,29 @@ def with_advanced_test_server(port : int; blk : block<(base_url : string) : void
     write_test_file("{static_root}/index.html", "<h1>Test</h1>")
     write_test_file("{static_root}/data.json", "\{\"key\":\"value\"\}")
 
-    with_job_que() {
-        with_job_status(1) $(started) {
-            with_job_status(1) $(finished) {
-                with_atomic32() $(stop_flag) {
-                    new_thread() @() {
-                        var server = new AdvancedTestServer()
-                        server.static_dir = static_root
-                        server->init(port)
-                        // STATIC must be registered after init
-                        STATIC(server.server, "/static", static_root)
-                        server->start()
-                        started |> notify_and_release
-                        while (stop_flag |> get == 0) {
-                            server->tick()
-                            sleep(10u)
-                        }
-                        server->stop()
-                        finished |> notify_and_release
+    with_job_status(1) $(started) {
+        with_job_status(1) $(finished) {
+            with_atomic32() $(stop_flag) {
+                new_thread() @() {
+                    var server = new AdvancedTestServer()
+                    server.static_dir = static_root
+                    server->init(port)
+                    // STATIC must be registered after init
+                    STATIC(server.server, "/static", static_root)
+                    server->start()
+                    started |> notify_and_release
+                    while (stop_flag |> get == 0) {
+                        server->tick()
+                        sleep(10u)
                     }
-                    started |> join
-                    let base_url = "http://127.0.0.1:{port}"
-                    invoke(blk, base_url)
-                    stop_flag |> set(1)
-                    finished |> join
+                    server->stop()
+                    finished |> notify_and_release
                 }
+                started |> join
+                let base_url = "http://127.0.0.1:{port}"
+                invoke(blk, base_url)
+                stop_flag |> set(1)
+                finished |> join
             }
         }
     }

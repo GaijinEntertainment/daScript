@@ -74,31 +74,29 @@ class TutorialServer : HvWebServer {
 //   - Atomic32  `stop_flag`: main thread sets to 1 to request shutdown
 
 def with_tutorial_server(port : int; blk : block<(base_url : string) : void>) {
-    with_job_que() {
-        with_job_status(1) $(started) {
-            with_job_status(1) $(finished) {
-                with_atomic32() $(stop_flag) {
-                    new_thread() @() {
-                        var server = new TutorialServer()
-                        server->init(port)
-                        server->start()
-                        started |> notify_and_release   // signal: server is listening
-                        while (stop_flag |> get == 0) {
-                            server->tick()
-                            sleep(10u)
-                        }
-                        server->stop()
-                        unsafe {
-                            delete server
-                        }
-                        finished |> notify_and_release  // signal: thread is done
+    with_job_status(1) $(started) {
+        with_job_status(1) $(finished) {
+            with_atomic32() $(stop_flag) {
+                new_thread() @() {
+                    var server = new TutorialServer()
+                    server->init(port)
+                    server->start()
+                    started |> notify_and_release   // signal: server is listening
+                    while (stop_flag |> get == 0) {
+                        server->tick()
+                        sleep(10u)
                     }
-                    started |> join                      // wait until server is ready
-                    let base_url = "http://127.0.0.1:{port}"
-                    invoke(blk, base_url)
-                    stop_flag |> set(1)                  // request shutdown
-                    finished |> join                     // wait until thread exits
+                    server->stop()
+                    unsafe {
+                        delete server
+                    }
+                    finished |> notify_and_release  // signal: thread is done
                 }
+                started |> join                      // wait until server is ready
+                let base_url = "http://127.0.0.1:{port}"
+                invoke(blk, base_url)
+                stop_flag |> set(1)                  // request shutdown
+                finished |> join                     // wait until thread exits
             }
         }
     }
