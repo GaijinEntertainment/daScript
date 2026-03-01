@@ -49,8 +49,9 @@ struct PerfContext {
     //! Per-context profiling data with event history.
     events : array<PerfEvent>
     enabled : bool
-    silent : bool = false \
+    silent : bool = false
 }
+
 def public set_enable_profiler(ctxId : uint64, enabled : bool) {
     //! Enables or disables the profiler for the given context ID.
     unsafe {

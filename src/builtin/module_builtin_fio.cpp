@@ -579,19 +579,21 @@ namespace das {
     }
 
     enum class RegisterOnError {
-        Nothing = 0,
-        ErrorMsg,
-        Fail,
+        Quiet = 0,      // 'missing .shared_module' message is ignored
+        ErrorMsg,       // error message is displayed
+        Fail,           // error message is displayed and exception is thrown
     };
 
     // Returns DLL handle.
     void *register_dynamic_module(const char *path, const char *mod_name, int on_error, Context * context, LineInfoArg * at ) {
         auto lib = loadDynamicLibrary(path);
         if (!lib) {
-            auto err_msg = "dynamic module `" + string(mod_name) + "` — library not found: " + string(path) + "\n";
-            context->to_err(at, err_msg.c_str());
-            if (static_cast<RegisterOnError>(on_error) == RegisterOnError::Fail) {
-                context->throw_error(err_msg.c_str());
+            if (static_cast<RegisterOnError>(on_error) != RegisterOnError::Quiet) {
+                auto err_msg = "dynamic module `" + string(mod_name) + "` — library not found: " + string(path) + "\n";
+                context->to_err(at, err_msg.c_str());
+                if (static_cast<RegisterOnError>(on_error) == RegisterOnError::Fail) {
+                    context->throw_error(err_msg.c_str());
+                }
             }
             return nullptr;
         }
@@ -621,7 +623,7 @@ namespace das {
         return lib;
     }
     void *register_dynamic_module_silent(const char *path, const char *mod_name, Context * context, LineInfoArg * at ) {
-        return register_dynamic_module(path, mod_name, static_cast<int>(RegisterOnError::Nothing), context, at);
+        return register_dynamic_module(path, mod_name, static_cast<int>(RegisterOnError::Quiet), context, at);
     }
 
     void register_native_path(const char *mod_name, const char *src_path, const char *dst_path, Context * /*context*/, LineInfoArg * /*at*/ ) {
