@@ -4,6 +4,20 @@
 
 Every `.das` file in this directory tree is listed below, grouped by subdirectory. Files marked **expect** use `expect` directives and are expected to produce specific compile errors. Helper/module files that are not standalone tests are marked *(helper)*.
 
+## _dasHV/
+
+> **Note:** These tests require the dasHV module. They live under `_dasHV/` (underscore prefix) so the main test suite skips them. Run separately: `dastest -- --test tests/_dasHV/`
+
+| File | Description | Expects errors |
+|---|---|---|
+| _common.das | *(helper)* Shared module — port constants, `with_test_server` lifecycle, file helpers | |
+| test_client_basic.das | Fire-and-forget client API — GET, POST, PUT, PATCH, HTTP_DELETE, HEAD, headers, status_message, get_body_bytes | |
+| test_request_builder.das | Request builder — with_http_request, request(), set_header, timeouts, auth, params, redirect | |
+| test_server_routes.das | Server routing — GET/POST/PUT/DEL/PATCH/HEAD/ANY routes, path params, query params, JSON | |
+| test_server_advanced.das | Advanced server — STATIC, CORS, REDIRECT, DATA, custom content-type, status codes (201, 204, 404) | |
+| test_cookies.das | Cookie operations — add_cookie (simple + extended, req + resp), get_cookie, each_cookie | |
+| test_forms.das | Form data — set_form_data, set_form_file, get_form_data, save_form_file, each_form_field, URL-encoded | |
+
 ## algorithm/
 
 | File | Description | Expects errors |

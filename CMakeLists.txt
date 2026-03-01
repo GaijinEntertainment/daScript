@@ -1323,6 +1323,14 @@ install(FILES ${MACRO_TUTORIAL_SOURCES}
     DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/macros
 )
 
+# Install dasHV tutorial .das files
+file(GLOB DASHV_TUTORIAL_SOURCES
+    ${PROJECT_SOURCE_DIR}/tutorials/dasHV/*.das
+)
+install(FILES ${DASHV_TUTORIAL_SOURCES}
+    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/dasHV
+)
+
 # ── Documentation build (optional) ──────────────────────────────────────────
 if(DAS_BUILD_DOCUMENTATION)
     find_package(Python3 COMPONENTS Interpreter)
