@@ -1,6 +1,7 @@
 // Tests for cookie operations (Tutorial HV-05, Section 1)
 //
-// Covers: add_cookie (simple + extended), get_cookie, each_cookie
+// Covers: add_cookie (simple + extended), get_cookie, each_cookie,
+//         each_header includes Set-Cookie on responses
 //         on both HttpRequest* and HttpResponse&
 
 options gen2
@@ -72,7 +73,8 @@ def test_add_cookie_response_simple(t : T?) {
         t |> run("add_cookie sets cookies on response") @(t : T?) {
             GET("{base_url}/set-cookies") <| $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
-                // libhv parses Set-Cookie headers into cookies vector, not headers map
+                // each_cookie gives parsed name/value pairs;
+                // each_header also yields Set-Cookie with full serialized value
                 var found_session = false
                 var found_theme = false
                 each_cookie(resp) <| $(name, value) {
@@ -174,6 +176,30 @@ def test_each_cookie_empty(t : T?) {
                 request(req) <| $(resp) {
                     t |> equal(string(resp.body), "")
                 }
+            }
+        }
+    }
+}
+
+[test]
+def test_each_header_includes_set_cookie(t : T?) {
+    with_test_server(type<CookieTestServer>, PORT_COOKIES) <| $(base_url) {
+        t |> run("each_header sees Set-Cookie entries") @(t : T?) {
+            GET("{base_url}/set-cookies") <| $(resp) {
+                var found_session = false
+                var found_theme = false
+                each_header(resp) <| $(key, value) {
+                    if (key == "Set-Cookie") {
+                        if (find(value, "session=abc123") >= 0) {
+                            found_session = true
+                        }
+                        if (find(value, "theme=dark") >= 0) {
+                            found_theme = true
+                        }
+                    }
+                }
+                t |> success(found_session, "Set-Cookie session via each_header")
+                t |> success(found_theme, "Set-Cookie theme via each_header")
             }
         }
     }

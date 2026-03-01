@@ -88,7 +88,10 @@ Response Headers
 ================
 
 Read individual headers with ``get_header``, or iterate all with
-``each_header``. Both accept an ``HttpResponse?`` pointer:
+``each_header``.  Both accept an ``HttpResponse?`` pointer.
+``each_header`` includes ``Set-Cookie`` entries (on responses) and
+``Cookie`` entries (on requests) — see Tutorial 05 for the parsed
+``each_cookie`` alternative.
 
 .. code-block:: das
 
@@ -141,7 +144,7 @@ Function                              Description
 ``DELETE(url) <| ...``                DELETE request
 ``HEAD(url) <| ...``                  HEAD request
 ``get_header(resp, key)``             Read a single response header
-``each_header(resp) <| $(k, v) {}``   Iterate all response headers
+``each_header(resp) <| $(k, v) {}``   Iterate all headers (including Set-Cookie)
 ``status_message(resp)``              Human-readable status phrase
 ====================================  ==============================================
 

@@ -57,7 +57,11 @@ is passed via ``unsafe(addr(req))`` (the handler receives
 Iterating All Cookies
 ---------------------
 
-``each_cookie`` iterates every cookie on a message:
+``each_cookie`` iterates every cookie on a message, returning parsed
+name/value pairs.  ``each_header`` also yields cookies, but as
+serialized ``Set-Cookie`` (response) or ``Cookie`` (request) values.
+Use ``each_cookie`` when you need individual fields; use
+``each_header`` for a complete view of all HTTP headers.
 
 .. code-block:: das
 
