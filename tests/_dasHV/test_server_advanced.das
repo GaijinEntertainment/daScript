@@ -1,7 +1,7 @@
 // Tests for advanced HTTP server features (Tutorial HV-04)
 //
 // Covers: STATIC, allow_cors, REDIRECT, SERVE_FILE, DATA,
-//         set_content_type (on response), set_status, custom status codes
+//         set_content_type (on response), custom status codes
 //         (201, 204, 404)
 
 options gen2
@@ -26,15 +26,15 @@ class AdvancedTestServer : HvWebServer {
         allow_cors()
 
         // Redirect
-        GET("/old-path") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        GET("/old-path") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return resp |> REDIRECT("/new-path", http_status.MOVED_PERMANENTLY)
         }
-        GET("/new-path") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        GET("/new-path") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return resp |> TEXT_PLAIN("arrived at new-path")
         }
 
         // Custom headers
-        GET("/cached") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        GET("/cached") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             set_header(resp, "Cache-Control", "max-age=3600")
             set_header(resp, "ETag", "\"v1\"")
             set_header(resp, "X-Server", "daslang-test")
@@ -42,34 +42,32 @@ class AdvancedTestServer : HvWebServer {
         }
 
         // Binary data
-        GET("/binary") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        GET("/binary") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             var payload = "BINARYDATA12"
             return resp |> DATA(payload, 12)
         }
 
         // HTML with custom content-type
-        GET("/html") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        GET("/html") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             set_content_type(resp, "text/html")
-            set_status(resp, http_status.OK)
             resp.body := "<h1>Hello</h1>"
-            return int(http_status.OK)
+            return http_status.OK
         }
 
         // 404 JSON error
-        GET("/not-found") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        GET("/not-found") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return resp |> JSON("\{\"error\":\"not found\"\}", http_status.NOT_FOUND)
         }
 
         // 201 Created
-        POST("/items") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        POST("/items") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             set_header(resp, "Location", "/items/42")
             return resp |> TEXT_PLAIN("created", http_status.CREATED)
         }
 
         // 204 No Content
-        POST("/ack") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
-            set_status(resp, http_status.NO_CONTENT)
-            return int(http_status.NO_CONTENT)
+        POST("/ack") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return http_status.NO_CONTENT
         }
     }
 }

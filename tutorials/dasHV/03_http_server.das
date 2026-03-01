@@ -4,7 +4,7 @@
 //   - Subclassing HvWebServer to create an HTTP server
 //   - Registering routes for all HTTP methods (GET, POST, PUT, PATCH, DELETE, HEAD)
 //   - Path parameters (/users/:id) and query parameters (?key=value)
-//   - Response helpers: TEXT_PLAIN, JSON, set_header, set_status
+//   - Response helpers: TEXT_PLAIN, JSON, set_header
 //   - Reading request body and parsing JSON on the server side
 //   - The ANY route for catch-all handlers
 //
@@ -43,39 +43,38 @@ class TutorialHttpServer : HvWebServer {
     def override onInit {
 
         // --- Section 1: basic GET route ---
-        GET("/hello") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        GET("/hello") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return resp |> TEXT_PLAIN("Hello, world!")
         }
 
         // --- Section 2: POST route (echo body) ---
-        POST("/echo") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        POST("/echo") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return resp |> TEXT_PLAIN(string(req.body))
         }
 
         // --- Section 3: all HTTP methods ---
-        PUT("/resource") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        PUT("/resource") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return resp |> TEXT_PLAIN("PUT: {req.body}")
         }
-        PATCH("/resource") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        PATCH("/resource") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return resp |> TEXT_PLAIN("PATCH: {req.body}")
         }
-        DELETE("/resource") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        DELETE("/resource") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return resp |> TEXT_PLAIN("DELETE: ok")
         }
-        HEAD("/resource") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        HEAD("/resource") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             set_header(resp, "X-Resource-Exists", "true")
-            set_status(resp, http_status.OK)
-            return int(http_status.OK)
+            return http_status.OK
         }
 
         // --- Section 4: path parameters ---
         // libhv supports RESTful path params with :name syntax.
         // The captured values are available via get_param(req, "name").
-        GET("/users/:id") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        GET("/users/:id") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let user_id = get_param(req, "id")
             return resp |> TEXT_PLAIN("user: {user_id}")
         }
-        GET("/users/:id/posts/:post_id") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        GET("/users/:id/posts/:post_id") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let user_id = get_param(req, "id")
             let post_id = get_param(req, "post_id")
             return resp |> TEXT_PLAIN("user={user_id}, post={post_id}")
@@ -84,7 +83,7 @@ class TutorialHttpServer : HvWebServer {
         // --- Section 5: query parameters ---
         // Query params (?key=value&key2=value2) are also accessible via
         // get_param(req, key).  Use each_param to iterate all of them.
-        GET("/search") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        GET("/search") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             var result = "query:"
             each_param(req) <| $(key, value : string) {
                 result = "{result} {key}={value}"
@@ -93,7 +92,7 @@ class TutorialHttpServer : HvWebServer {
         }
 
         // --- Section 6: response headers ---
-        GET("/headers") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        GET("/headers") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             set_header(resp, "X-Custom", "tutorial-03")
             set_header(resp, "X-Request-Id", "12345")
             return resp |> TEXT_PLAIN("check headers")
@@ -103,11 +102,11 @@ class TutorialHttpServer : HvWebServer {
         // JSON(resp, json_string) sets Content-Type: application/json
         // and the body.  Combine with daslib/json_boost for structured data.
         // JV() accepts structs and named tuples — field names become JSON keys.
-        GET("/api/status") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        GET("/api/status") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let payload : tuple<status : string; version : int> = ("ok", 3)
             return resp |> JSON(write_json(JV(payload)))
         }
-        POST("/api/echo") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        POST("/api/echo") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             // Parse JSON from request body, add a field, return it
             var err : string
             var parsed = read_json(string(req.body), err)
@@ -120,7 +119,7 @@ class TutorialHttpServer : HvWebServer {
 
         // --- Section 8: ANY route (catch-all for a path) ---
         // ANY registers a handler for all HTTP methods at once.
-        ANY("/any-method") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        ANY("/any-method") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return resp |> TEXT_PLAIN("method: {req.method}")
         }
     }

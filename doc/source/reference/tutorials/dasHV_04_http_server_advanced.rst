@@ -61,7 +61,7 @@ HTTP Redirects
 
 .. code-block:: das
 
-   GET("/old-path") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+   GET("/old-path") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
        return resp |> REDIRECT("/new-path", http_status.MOVED_PERMANENTLY)
    }
 
@@ -78,7 +78,7 @@ custom application headers:
 
 .. code-block:: das
 
-   GET("/cached") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+   GET("/cached") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
        set_header(resp, "Cache-Control", "max-age=3600, public")
        set_header(resp, "ETag", "\"v1.0\"")
        set_header(resp, "X-Server", "daslang")
@@ -93,7 +93,7 @@ Binary Response
 
 .. code-block:: text
 
-   GET("/binary") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+   GET("/binary") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
        var payload = "BINARY\x00DATA1234"
        return resp |> DATA(payload, 16)
    }
@@ -101,16 +101,16 @@ Binary Response
 Content-Type and Status Codes
 =============================
 
-``set_content_type(resp, type)`` and ``set_status(resp, status)``
+``set_content_type(resp, type)``
 give full control over the response:
 
 .. code-block:: das
 
    // HTML response
-   GET("/html") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+   GET("/html") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
        set_content_type(resp, "text/html")
        resp.body := "<h1>Hello from daslang!</h1>"
-       return int(http_status.OK)
+       return http_status.OK
    }
 
 Non-200 JSON Responses
@@ -121,7 +121,7 @@ Non-200 JSON Responses
 
 .. code-block:: das
 
-   GET("/not-found") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+   GET("/not-found") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
        let payload : tuple<error:string; code:int> = ("resource not found", 404)
        return resp |> JSON(write_json(JV(payload)), http_status.NOT_FOUND)
    }
@@ -131,7 +131,7 @@ Non-200 JSON Responses
 
 .. code-block:: das
 
-   POST("/items") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+   POST("/items") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
        set_header(resp, "Location", "/items/42")
        let payload : tuple<id:int; body:string> = (42, string(req.body))
        return resp |> JSON(write_json(JV(payload)), http_status.CREATED)
@@ -142,9 +142,8 @@ Non-200 JSON Responses
 
 .. code-block:: das
 
-   POST("/ack") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
-       set_status(resp, http_status.NO_CONTENT)
-       return int(http_status.NO_CONTENT)
+   POST("/ack") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+       return http_status.NO_CONTENT
    }
 
 Quick Reference
@@ -160,7 +159,6 @@ Function                                       Description
 ``TEXT_PLAIN(resp, text, status?)``             text response (default 200)
 ``DATA(resp, data, length, status?)``          Binary response (default 200)
 ``set_header(resp, key, value)``               Set response header
-``set_status(resp, status)``                   Set HTTP status code
 ``set_content_type(resp, type)``               Set Content-Type header
 =============================================  ===============================================
 

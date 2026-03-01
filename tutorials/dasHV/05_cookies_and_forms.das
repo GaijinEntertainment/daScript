@@ -65,7 +65,7 @@ class CookieFormServer : HvWebServer {
 
         // --- Section 1a: Set cookies ---
         // This route sets two cookies: a simple one and one with extended attributes
-        GET("/set-cookies") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        GET("/set-cookies") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             // Simple cookie (resp is HttpResponse& — direct call)
             add_cookie(resp, "session", "abc123")
             // Extended cookie with path, max-age, httponly
@@ -75,7 +75,7 @@ class CookieFormServer : HvWebServer {
 
         // --- Section 1b: Read cookies ---
         // The client sends cookies back; the server reads them
-        GET("/read-cookies") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        GET("/read-cookies") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let session = get_cookie(req, "session")
             let prefs = get_cookie(req, "prefs")
             var s = !empty(session) ? string(session) : "not found"
@@ -85,7 +85,7 @@ class CookieFormServer : HvWebServer {
         }
 
         // --- Section 1c: Iterate all cookies ---
-        GET("/list-cookies") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        GET("/list-cookies") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             var result = ""
             each_cookie(req) <| $(name, value) {
                 if (!empty(result)) {
@@ -97,7 +97,7 @@ class CookieFormServer : HvWebServer {
         }
 
         // --- Section 2: Multipart form data ---
-        POST("/upload") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        POST("/upload") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let title = get_form_data(req, "title")
             let description = get_form_data(req, "description")
 
@@ -123,7 +123,7 @@ class CookieFormServer : HvWebServer {
         }
 
         // --- Section 3: URL-encoded form data ---
-        POST("/login") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        POST("/login") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let username = get_url_encoded(req, "username")
             let password = get_url_encoded(req, "password")
             var u = !empty(username) ? string(username) : ""
@@ -132,7 +132,7 @@ class CookieFormServer : HvWebServer {
             // (both would be tuple<string;string>, so JV would reuse field names)
             resp.body := "\{\"username\":\"{u}\",\"password\":\"{pw}\"\}"
             set_content_type(resp, "application/json")
-            return int(http_status.OK)
+            return http_status.OK
         }
     }
 }

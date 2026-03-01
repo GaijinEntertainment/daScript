@@ -77,8 +77,7 @@ let SERVER_PORT = 18083
 // ──────────────────────────────────────────────────────────────────────────
 //
 // set_content_type(resp, type) sets the Content-Type header.
-// set_status(resp, status) sets the HTTP status code.
-// Combine them for custom response types and error handling.
+// Combine with the handler return value for custom response types.
 
 class AdvancedServer : HvWebServer {
     static_dir : string
@@ -89,15 +88,15 @@ class AdvancedServer : HvWebServer {
         allow_cors()
 
         // Section 3: redirect
-        GET("/old-path") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        GET("/old-path") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return resp |> REDIRECT("/new-path", http_status.MOVED_PERMANENTLY)
         }
-        GET("/new-path") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        GET("/new-path") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return resp |> TEXT_PLAIN("you arrived at /new-path")
         }
 
         // Section 5: custom headers and caching
-        GET("/cached") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        GET("/cached") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             set_header(resp, "Cache-Control", "max-age=3600, public")
             set_header(resp, "ETag", "\"v1.0\"")
             set_header(resp, "X-Server", "daslang-tutorial")
@@ -105,7 +104,7 @@ class AdvancedServer : HvWebServer {
         }
 
         // Section 6: binary data
-        GET("/binary") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        GET("/binary") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             // Create a simple 16-byte binary payload
             var payload = "BINARY\x00DATA1234"
             return resp |> DATA(payload, 16)
@@ -114,32 +113,30 @@ class AdvancedServer : HvWebServer {
         // Section 7: content-type and status codes
 
         // Custom HTML response
-        GET("/html") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        GET("/html") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             set_content_type(resp, "text/html")
-            set_status(resp, http_status.OK)
             resp.body := "<h1>Hello from daslang!</h1>"
-            return int(http_status.OK)
+            return http_status.OK
         }
 
         // Error response with custom status
         // JSON() and TEXT_PLAIN() accept an optional status parameter
         // (defaults to http_status.OK).
-        GET("/not-found") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        GET("/not-found") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let payload : tuple<error : string; code : int> = ("resource not found", 404)
             return resp |> JSON(write_json(JV(payload)), http_status.NOT_FOUND)
         }
 
         // 201 Created with Location header
-        POST("/items") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        POST("/items") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             set_header(resp, "Location", "/items/42")
             let payload : tuple<id : int; body : string> = (42, string(req.body))
             return resp |> JSON(write_json(JV(payload)), http_status.CREATED)
         }
 
         // 204 No Content
-        POST("/ack") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
-            set_status(resp, http_status.NO_CONTENT)
-            return int(http_status.NO_CONTENT)
+        POST("/ack") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return http_status.NO_CONTENT
         }
     }
 }
@@ -227,7 +224,6 @@ def with_advanced_server(port : int; static_root : string; blk : block<(base_url
 //  TEXT_PLAIN(resp, text)                    Text response
 //  DATA(resp, data, length)                 Binary response
 //  set_header(resp, key, value)             Set response header
-//  set_status(resp, status)                 Set status code
 //  set_content_type(resp, content_type)     Set Content-Type header
 
 [export]
