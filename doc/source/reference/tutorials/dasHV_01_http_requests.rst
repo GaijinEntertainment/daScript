@@ -66,12 +66,17 @@ PUT and PATCH
 =============
 
 PUT and PATCH follow the same signature as POST — a URL, a body,
-and an optional headers table:
+and optional headers and form-data tables:
 
 .. code-block:: das
 
    PUT(url, "payload") <| $(resp) { ... }
+   PUT(url, "payload", headers) <| $(resp) { ... }
+   PUT(url, "", headers, form_data) <| $(resp) { ... }
+
    PATCH(url, "payload") <| $(resp) { ... }
+   PATCH(url, "payload", headers) <| $(resp) { ... }
+   PATCH(url, "", headers, form_data) <| $(resp) { ... }
 
 DELETE and HEAD
 ===============
@@ -140,9 +145,13 @@ Function                              Description
 ``POST(url, body) <| ...``            POST request
 ``POST(url, body, headers) <| ...``   POST with custom headers
 ``PUT(url, body) <| ...``             PUT request
+``PUT(url, body, headers) <| ...``    PUT with custom headers
 ``PATCH(url, body) <| ...``           PATCH request
+``PATCH(url, body, headers) <| ...``  PATCH with custom headers
 ``DELETE(url) <| ...``                DELETE request
+``DELETE(url, headers) <| ...``       DELETE with custom headers
 ``HEAD(url) <| ...``                  HEAD request
+``HEAD(url, headers) <| ...``         HEAD with custom headers
 ``get_header(resp, key)``             Read a single response header
 ``each_header(resp) <| $(k, v) {}``   Iterate all headers (including Set-Cookie)
 ``status_message(resp)``              Human-readable status phrase

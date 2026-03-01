@@ -113,13 +113,8 @@ def test_post_route(t : T?) {
 def test_put_route(t : T?) {
     with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
         t |> run("PUT route receives body") @(t : T?) {
-            with_http_request() <| $(var req) {
-                req.method = http_method.PUT
-                req.url := "{base_url}/resource"
-                req.body := "updated"
-                request(req) <| $(resp) {
-                    t |> equal(string(resp.body), "PUT:updated")
-                }
+            PUT("{base_url}/resource", "updated") <| $(resp) {
+                t |> equal(string(resp.body), "PUT:updated")
             }
         }
     }
@@ -129,13 +124,8 @@ def test_put_route(t : T?) {
 def test_patch_route(t : T?) {
     with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
         t |> run("PATCH route receives body") @(t : T?) {
-            with_http_request() <| $(var req) {
-                req.method = http_method.PATCH
-                req.url := "{base_url}/resource"
-                req.body := "partial"
-                request(req) <| $(resp) {
-                    t |> equal(string(resp.body), "PATCH:partial")
-                }
+            PATCH("{base_url}/resource", "partial") <| $(resp) {
+                t |> equal(string(resp.body), "PATCH:partial")
             }
         }
     }

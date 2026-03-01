@@ -76,6 +76,24 @@ class FormTestServer : HvWebServer {
             let is_empty = empty(missing)
             return resp |> TEXT_PLAIN(is_empty ? "empty" : "found")
         }
+
+        // PUT form echo (mirrors POST /form-echo)
+        PUT("/form-echo") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            let name = get_form_data(req, "name")
+            let value = get_form_data(req, "value")
+            var n = !empty(name) ? string(name) : "missing"
+            var v = !empty(value) ? string(value) : "missing"
+            return resp |> TEXT_PLAIN("PUT:name={n},value={v}")
+        }
+
+        // PATCH form echo (mirrors POST /form-echo)
+        PATCH("/form-echo") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            let name = get_form_data(req, "name")
+            let value = get_form_data(req, "value")
+            var n = !empty(name) ? string(name) : "missing"
+            var v = !empty(value) ? string(value) : "missing"
+            return resp |> TEXT_PLAIN("PATCH:name={n},value={v}")
+        }
     }
 }
 
@@ -271,6 +289,40 @@ def test_url_encoded_special_chars(t : T?) {
                     t |> success(find(body, "pass=p@ss w0rd!") >= 0, "password with special chars preserved")
                 }
             }
+        }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Tests — PUT/PATCH form-data overloads
+// ──────────────────────────────────────────────────────────────────────────
+
+[test]
+def test_put_form_data(t : T?) {
+    with_form_test_server(PORT_FORMS) <| $(base_url, upload_dir) {
+        t |> run("PUT with form data via convenience overload") @(t : T?) {
+            var headers <- { "X-Test" => "put-form" }
+            var form_data <- { "name" => "Alice", "value" => "42" }
+            PUT("{base_url}/form-echo", "", headers, form_data) <| $(resp) {
+                t |> equal(string(resp.body), "PUT:name=Alice,value=42")
+            }
+            delete headers
+            delete form_data
+        }
+    }
+}
+
+[test]
+def test_patch_form_data(t : T?) {
+    with_form_test_server(PORT_FORMS) <| $(base_url, upload_dir) {
+        t |> run("PATCH with form data via convenience overload") @(t : T?) {
+            var headers <- { "X-Test" => "patch-form" }
+            var form_data <- { "name" => "Bob", "value" => "99" }
+            PATCH("{base_url}/form-echo", "", headers, form_data) <| $(resp) {
+                t |> equal(string(resp.body), "PATCH:name=Bob,value=99")
+            }
+            delete headers
+            delete form_data
         }
     }
 }
