@@ -91,7 +91,7 @@ Binary Response
 ``DATA(resp, data, length)`` sends raw bytes with
 ``Content-Type: application/octet-stream``:
 
-.. code-block:: das
+.. code-block:: text
 
    GET("/binary") <| @(var req : HttpRequest; var resp : HttpResponse) : int {
        var payload = "BINARY\x00DATA1234"
@@ -156,19 +156,19 @@ bodies, set the content-type and status manually:
 Quick Reference
 ===============
 
-==========================================  ==============================================
+==========================================  ===============================================
 Function                                    Description
-==========================================  ==============================================
+==========================================  ===============================================
 ``STATIC(server, path, dir)``               Serve static files from directory
 ``allow_cors()``                            Enable CORS headers on all routes
 ``REDIRECT(resp, location, status)``        Send 3xx redirect response
 ``JSON(resp, json_str)``                    200 JSON response
 ``TEXT_PLAIN(resp, text)``                  200 text response
-``DATA(resp, data, length)``               Binary response (octet-stream)
+``DATA(resp, data, length)``                Binary response (octet-stream)
 ``set_header(resp, key, value)``            Set response header
-``set_status(resp, status)``               Set HTTP status code
+``set_status(resp, status)``                Set HTTP status code
 ``set_content_type(resp, type)``            Set Content-Type header
-==========================================  ==============================================
+==========================================  ===============================================
 
 .. seealso::
 
