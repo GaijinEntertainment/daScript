@@ -1,6 +1,6 @@
 // Tests for HTTP server routing (Tutorial HV-03)
 //
-// Covers: GET/POST/PUT/DEL/PATCH/HEAD/ANY routes, TEXT_PLAIN, JSON,
+// Covers: GET/POST/PUT/DELETE/PATCH/HEAD/ANY routes, TEXT_PLAIN, JSON,
 //         path params (:id), query params (get_param, each_param),
 //         set_status, set_header on response, get_header on request
 
@@ -38,7 +38,7 @@ class RouteTestServer : HvWebServer {
             return resp |> TEXT_PLAIN("PATCH:{req.body}")
         }
         // DELETE
-        DEL("/resource") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        DELETE("/resource") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN("deleted")
         }
         // HEAD
@@ -145,7 +145,7 @@ def test_patch_route(t : T?) {
 [test]
 def test_delete_route(t : T?) {
     with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
-        t |> run("DEL route works") @(t : T?) {
+        t |> run("DELETE route works") @(t : T?) {
             with_http_request() <| $(var req) {
                 req.method = http_method.DELETE
                 req.url := "{base_url}/resource"

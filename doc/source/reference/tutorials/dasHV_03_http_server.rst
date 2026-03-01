@@ -67,7 +67,7 @@ passing to functions that expect ``string``.
 All HTTP Methods
 ================
 
-Use ``PUT``, ``PATCH``, ``DEL``, ``HEAD``, and ``ANY`` to register
+Use ``PUT``, ``PATCH``, ``DELETE``, ``HEAD``, and ``ANY`` to register
 handlers for additional methods:
 
 .. code-block:: das
@@ -78,7 +78,7 @@ handlers for additional methods:
    PATCH("/data") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        return resp |> TEXT_PLAIN("patched")
    }
-   DEL("/data") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+   DELETE("/data") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        return resp |> TEXT_PLAIN("deleted")
    }
    HEAD("/data") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
@@ -88,11 +88,6 @@ handlers for additional methods:
    ANY("/universal") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
        return resp |> TEXT_PLAIN("method was {req.method}")
    }
-
-.. note::
-
-   The server-side DELETE route method is ``DEL`` (not ``DELETE``) to
-   avoid collision with the daslang ``delete`` keyword.
 
 Path Parameters
 ===============
@@ -227,7 +222,7 @@ Function                              Description
 ``POST(path) <| handler``             Register POST route
 ``PUT(path) <| handler``              Register PUT route
 ``PATCH(path) <| handler``            Register PATCH route
-``DEL(path) <| handler``              Register DELETE route
+``DELETE(path) <| handler``           Register DELETE route
 ``HEAD(path) <| handler``             Register HEAD route
 ``ANY(path) <| handler``              Register handler for all methods
 ``TEXT_PLAIN(resp, text, status?)``    text/plain response (default 200)

@@ -81,13 +81,8 @@ signature to GET but returns only the response headers (no body):
 
 .. code-block:: das
 
-   HTTP_DELETE(url) <| $(resp) { ... }
+   DELETE(url) <| $(resp) { ... }
    HEAD(url) <| $(resp) { ... }
-
-.. note::
-
-   The DELETE function is named ``HTTP_DELETE`` to avoid clashing with
-   the daslang ``delete`` keyword.
 
 Response Headers
 ================
@@ -143,7 +138,7 @@ Function                              Description
 ``POST(url, body, headers) <| ...``   POST with custom headers
 ``PUT(url, body) <| ...``             PUT request
 ``PATCH(url, body) <| ...``           PATCH request
-``HTTP_DELETE(url) <| ...``           DELETE request
+``DELETE(url) <| ...``                DELETE request
 ``HEAD(url) <| ...``                  HEAD request
 ``get_header(resp, key)``             Read a single response header
 ``each_header(resp) <| $(k, v) {}``   Iterate all response headers

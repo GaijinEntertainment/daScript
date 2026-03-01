@@ -59,7 +59,7 @@ class TutorialHttpServer : HvWebServer {
         PATCH("/resource") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN("PATCH: {req.body}")
         }
-        DEL("/resource") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        DELETE("/resource") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN("DELETE: ok")
         }
         HEAD("/resource") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {

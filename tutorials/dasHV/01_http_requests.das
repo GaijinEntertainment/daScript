@@ -91,10 +91,10 @@ def example_put_patch(base_url : string) {
 // 501 / 404.  The client API is the same pattern as GET and POST.
 
 def example_delete_head(base_url : string) {
-    HTTP_DELETE("{base_url}/data") <| $(resp) {
+    DELETE("{base_url}/data") <| $(resp) {
         print("DELETE /data -> {resp.status_code}\n")
     }
-    HTTP_DELETE("{base_url}/data", {"Authorization" => "Bearer token123"}) <| $(resp) {
+    DELETE("{base_url}/data", {"Authorization" => "Bearer token123"}) <| $(resp) {
         print("DELETE /data (auth) -> {resp.status_code}\n")
     }
     HEAD("{base_url}/ping") <| $(resp) {
@@ -171,8 +171,8 @@ def example_binary_response(base_url : string) {
 //  PUT(url, body, hdrs) <| ... PUT with headers
 //  PATCH(url, body) <| ...     PATCH request (partial update)
 //  PATCH(url, body, hdrs) <| . PATCH with headers
-//  HTTP_DELETE(url) <| ...     DELETE request
-//  HTTP_DELETE(url, hdrs) <| . DELETE with headers
+//  DELETE(url) <| ...          DELETE request
+//  DELETE(url, hdrs) <| ...    DELETE with headers
 //  HEAD(url) <| ...            HEAD request (headers only)
 //  HEAD(url, hdrs) <| ...      HEAD with headers
 //  get_header(resp, key)       Read a response header value

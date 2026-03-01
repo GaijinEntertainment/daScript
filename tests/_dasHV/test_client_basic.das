@@ -1,6 +1,6 @@
 // Tests for fire-and-forget HTTP client API (Tutorial HV-01)
 //
-// Covers: GET, POST, PUT, PATCH, HTTP_DELETE, HEAD (with and without headers),
+// Covers: GET, POST, PUT, PATCH, DELETE, HEAD (with and without headers),
 //         get_header, each_header, status_message, get_body_bytes
 
 options gen2
@@ -31,7 +31,7 @@ class ClientTestServer : HvWebServer {
         PATCH("/echo") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN("PATCH:{req.body}")
         }
-        DEL("/resource") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
+        DELETE("/resource") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
             return resp |> TEXT_PLAIN("deleted")
         }
         HEAD("/ping") <| @(var req : HttpRequest?; var resp : HttpResponse?) : int {
@@ -97,14 +97,14 @@ def test_client_basic(t : T?) {
                 t |> equal(string(resp.body), "PATCH:partial")
             }
         }
-        t |> run("HTTP_DELETE request") @(t : T?) {
-            HTTP_DELETE("{base_url}/resource") <| $(resp) {
+        t |> run("DELETE request") @(t : T?) {
+            DELETE("{base_url}/resource") <| $(resp) {
                 t |> equal(string(resp.body), "deleted")
                 t |> equal(int(resp.status_code), int(http_status.OK))
             }
         }
-        t |> run("HTTP_DELETE with headers") @(t : T?) {
-            HTTP_DELETE("{base_url}/resource", {"Authorization" => "Bearer tok"}) <| $(resp) {
+        t |> run("DELETE with headers") @(t : T?) {
+            DELETE("{base_url}/resource", {"Authorization" => "Bearer tok"}) <| $(resp) {
                 t |> equal(string(resp.body), "deleted")
             }
         }
