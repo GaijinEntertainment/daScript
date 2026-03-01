@@ -193,3 +193,25 @@ Run any tutorial from the project root::
    tutorials/macros/15_type_macro.rst
    tutorials/macros/16_template_type_macro.rst
    tutorials/macros/17_qmacro.rst
+
+.. _tutorials_dashv:
+
+dasHV (HTTP / WebSocket) Tutorials
+==================================
+
+These tutorials cover the ``dashv`` module — HTTP client and server
+bindings built on `libhv <https://github.com/ithewei/libhv>`_.  The
+companion ``.das`` files are in ``tutorials/dasHV/``.
+
+Run any tutorial from the project root::
+
+   daslang.exe tutorials/dasHV/01_http_requests.das
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/dasHV_01_http_requests.rst
+   tutorials/dasHV_02_http_requests_advanced.rst
+   tutorials/dasHV_03_http_server.rst
+   tutorials/dasHV_04_http_server_advanced.rst
+   tutorials/dasHV_05_cookies_and_forms.rst
