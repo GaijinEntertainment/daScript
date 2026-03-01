@@ -91,6 +91,7 @@ require daslib/temp_strings
 require daslib/type_traits
 require daslib/typemacro_boost
 require daslib/validate_code
+require dashv/dashv_boost
 
 def document_module_math(root : string) {
     var mod = get_module("math")
@@ -188,6 +189,31 @@ def document_module_network(root : string) {
         group_by_regex("Low level NetworkServer IO", mod, %regex~(make_server|server_init|server_is_open|server_is_connected|server_tick|server_send|server_restore)$%%)
     )
     document("Network socket library", mod, "network.rst", groups)
+}
+
+def document_module_dashv(root : string) {
+    var mod = get_module("dashv")
+    var groups <- array<DocGroup>(
+        group_by_regex("WebSocket client", mod, %regex~(make_web_socket_client|open|close|is_connected|tick|send)$%%),
+        group_by_regex("WebSocket server lifecycle", mod, %regex~(make_web_socket_server|start|stop)$%%),
+        group_by_regex("WebSocket channel send", mod, %regex~(send)$%%),
+        group_by_regex("HTTP route registration", mod, %regex~(GET|POST|PUT|DELETE|PATCH|HEAD|ANY)$%%),
+        group_by_regex("HTTP server configuration", mod, %regex~(STATIC|allow_cors|set_document_root|set_home_page|set_index_of|set_error_page)$%%),
+        group_by_regex("HTTP response helpers", mod, %regex~(TEXT_PLAIN|JSON|REDIRECT|SERVE_FILE|DATA|set_header|set_content_type)$%%),
+        group_by_regex("HTTP client requests", mod, %regex~(request|status_message)$%%),
+        group_by_regex("Message and header access", mod, %regex~(get_header|each_header)$%%),
+        group_by_regex("Request configuration", mod, %regex~(set_basic_auth|set_bearer_token_auth|set_timeout|set_connect_timeout|allow_redirect|set_param|get_param|each_param)$%%),
+        group_by_regex("Cookies", mod, %regex~(add_cookie|get_cookie|each_cookie)$%%),
+        group_by_regex("Form data", mod, %regex~(set_form_data|set_form_file|get_form_data|each_form_data|set_url_encoded)$%%)
+    )
+    document("HTTP and WebSocket library (libhv)", mod, "dashv.rst", groups)
+}
+
+def document_module_dashv_boost(root : string) {
+    var mod = find_module("dashv_boost")
+    var groups <- array<DocGroup>(
+    )
+    document("High-level HTTP and WebSocket wrappers", mod, "dashv_boost.rst", groups)
 }
 
 def document_module_debugapi(root : string) {
@@ -1051,6 +1077,7 @@ def main {
     document_module_math(root)
     document_module_fio(root)
     document_module_network(root)
+    document_module_dashv(root)
     document_module_uriparser(root)
     document_module_debugapi(root)
     document_module_rtti(root)
@@ -1083,6 +1110,7 @@ def main {
     document_module_dap(root)
     document_module_das_source_formatter(root)
     document_module_das_source_formatter_fio(root)
+    document_module_dashv_boost(root)
     // document_module_debug(root)                 // uses persistent_heap, complex deps
     document_module_debug_eval(root)
     document_module_decs(root)

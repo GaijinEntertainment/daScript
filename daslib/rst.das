@@ -832,7 +832,7 @@ def document_topic(header : string; doc_file : file; topic, content : string imp
             let expected = length(tab) - 1
             if (got < expected) {
                 if (strict_struct_fields) {
-                    error("{topic} has less documentation than values. Expected {expected} ({[for (it in tab); it[0]]}), got {got}\n")
+                    error("{topic} has less documentation than values. Expected at least {expected} lines ({[for (i in range(1, length(tab))); tab[i][0]]}), got {got}\n")
                     PANIC("invalid documentation")
                 }
 
