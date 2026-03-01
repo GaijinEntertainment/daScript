@@ -41,15 +41,14 @@ max-age, secure, and httponly flags:
 Reading Cookies from a Request
 ------------------------------
 
-On the server side, ``get_cookie`` reads a named cookie.  The request
-is passed via ``unsafe(addr(req))`` (the handler receives
-``HttpRequest&``):
+On the server side, ``get_cookie`` reads a named cookie from the
+request pointer:
 
 .. code-block:: das
 
    GET("/read-cookies") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-       let session = get_cookie(unsafe(addr(req)), "session")
-       let prefs   = get_cookie(unsafe(addr(req)), "prefs")
+       let session = get_cookie(req, "session")
+       let prefs   = get_cookie(req, "prefs")
        // session and prefs are strings; empty if not found
        ...
    }
@@ -65,7 +64,7 @@ Use ``each_cookie`` when you need individual fields; use
 
 .. code-block:: das
 
-   each_cookie(unsafe(addr(req))) <| $(name, value) {
+   each_cookie(req) <| $(name, value) {
        print("{name} = {value}\n")
    }
 
@@ -121,8 +120,8 @@ iterates all fields (text and file):
 .. code-block:: das
 
    POST("/upload") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-       let title = get_form_data(unsafe(addr(req)), "title")
-       each_form_field(unsafe(addr(req))) <| $(name, content, filename) {
+       let title = get_form_data(req, "title")
+       each_form_field(req) <| $(name, content, filename) {
            if (!empty(filename)) {
                print("file: {filename}\n")
            } else {
@@ -141,7 +140,7 @@ preserved:
 
 .. code-block:: das
 
-   let status = save_form_file(unsafe(addr(req)), "attachment", upload_dir)
+   let status = save_form_file(req, "attachment", upload_dir)
    // status == 200 on success, 400 on bad request, 500 on I/O error
 
 URL-Encoded Form Data
@@ -162,8 +161,8 @@ For simple ``application/x-www-form-urlencoded`` submissions:
 
    // Server side
    POST("/login") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-       let username = get_url_encoded(unsafe(addr(req)), "username")
-       let password = get_url_encoded(unsafe(addr(req)), "password")
+       let username = get_url_encoded(req, "username")
+       let password = get_url_encoded(req, "password")
        ...
    }
 

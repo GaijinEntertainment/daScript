@@ -98,23 +98,17 @@ Use ``:name`` in the route to capture path segments.  Read them with
 .. code-block:: das
 
    GET("/users/:id") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-       let id = get_param(unsafe(addr(req)), "id")
+       let id = get_param(req, "id")
        return resp |> TEXT_PLAIN("user {id}")
    }
-
-.. important::
-
-   Inside a handler, ``req`` is a reference, not a pointer.  Functions
-   like ``get_param`` and ``each_param`` take a pointer, so wrap the
-   call in ``unsafe(addr(req))``.
 
 Multiple path parameters work naturally:
 
 .. code-block:: das
 
    GET("/users/:id/posts/:post_id") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-       let user_id = get_param(unsafe(addr(req)), "id")
-       let post_id = get_param(unsafe(addr(req)), "post_id")
+       let user_id = get_param(req, "id")
+       let post_id = get_param(req, "post_id")
        return resp |> TEXT_PLAIN("user {user_id}, post {post_id}")
    }
 
@@ -127,7 +121,7 @@ Iterate all query parameters with ``each_param``:
 
    GET("/search") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
        var parts : array<string>
-       each_param(unsafe(addr(req))) <| $(key, value : string) {
+       each_param(req) <| $(key, value : string) {
            parts |> push("{key}={value}")
        }
        return resp |> TEXT_PLAIN(join(parts, ", "))
@@ -181,32 +175,27 @@ Start the server on a background thread, run your test code, then stop:
 
 .. code-block:: das
 
-   require daslib/jobque_boost
-
    // Helper: run server, call block, stop
    def with_test_server(port : int; blk : block<(base_url : string) : void>) {
-       with_job_que() {
-           with_job_status(1) $(started) {
-               with_job_status(1) $(finished) {
-                   with_atomic32() $(stop_flag) {
-                       new_thread() @() {
-                           var server = new MyServer()
-                           server->init(port)
-                           server->start()
-                           started |> notify_and_release
-                           while (stop_flag |> get == 0) {
-                               server->tick()
-                               sleep(10u)
-                           }
-                           server->stop()
-                           unsafe { delete server }
-                           finished |> notify_and_release
+       with_job_status(1) $(started) {
+           with_job_status(1) $(finished) {
+               with_atomic32() $(stop_flag) {
+                   new_thread() @() {
+                       var server = new MyServer()
+                       server->init(port)
+                       server->start()
+                       started |> notify_and_release
+                       while (stop_flag |> get == 0) {
+                           server->tick()
+                           sleep(10u)
                        }
-                       started |> join
-                       invoke(blk, "http://127.0.0.1:{port}")
-                       stop_flag |> set(1)
-                       finished |> join
+                       server->stop()
+                       finished |> notify_and_release
                    }
+                   started |> join
+                   invoke(blk, "http://127.0.0.1:{port}")
+                   stop_flag |> set(1)
+                   finished |> join
                }
            }
        }
@@ -227,8 +216,8 @@ Function                              Description
 ``ANY(path) <| handler``              Register handler for all methods
 ``TEXT_PLAIN(resp, text, status?)``    text/plain response (default 200)
 ``JSON(resp, json_str, status?)``      application/json response (default 200)
-``get_param(addr(req), name)``        Read path/query parameter
-``each_param(addr(req)) <| ...``      Iterate all query parameters
+``get_param(req, name)``              Read path/query parameter
+``each_param(req) <| ...``            Iterate all query parameters
 ``set_header(resp, key, value)``      Set response header
 ====================================  ====================================================
 
