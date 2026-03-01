@@ -68,8 +68,7 @@ class CookieTestServer : HvWebServer {
 
 [test]
 def test_add_cookie_response_simple(t : T?) {
-    var server = new CookieTestServer()
-    with_test_server(server, PORT_COOKIES) <| $(base_url) {
+    with_test_server(type<CookieTestServer>, PORT_COOKIES) <| $(base_url) {
         t |> run("add_cookie sets cookies on response") @(t : T?) {
             GET("{base_url}/set-cookies") <| $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
@@ -93,8 +92,7 @@ def test_add_cookie_response_simple(t : T?) {
 
 [test]
 def test_add_cookie_response_extended(t : T?) {
-    var server = new CookieTestServer()
-    with_test_server(server, PORT_COOKIES) <| $(base_url) {
+    with_test_server(type<CookieTestServer>, PORT_COOKIES) <| $(base_url) {
         t |> run("extended cookie is received") @(t : T?) {
             GET("{base_url}/set-extended-cookie") <| $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
@@ -115,8 +113,7 @@ def test_add_cookie_response_extended(t : T?) {
 
 [test]
 def test_add_cookie_request(t : T?) {
-    var server = new CookieTestServer()
-    with_test_server(server, PORT_COOKIES) <| $(base_url) {
+    with_test_server(type<CookieTestServer>, PORT_COOKIES) <| $(base_url) {
         t |> run("add_cookie on request (simple)") @(t : T?) {
             with_http_request() <| $(var req) {
                 req.method = http_method.GET
@@ -133,8 +130,7 @@ def test_add_cookie_request(t : T?) {
 
 [test]
 def test_get_cookie_missing(t : T?) {
-    var server = new CookieTestServer()
-    with_test_server(server, PORT_COOKIES) <| $(base_url) {
+    with_test_server(type<CookieTestServer>, PORT_COOKIES) <| $(base_url) {
         t |> run("get_cookie returns empty for missing cookie") @(t : T?) {
             with_http_request() <| $(var req) {
                 req.method = http_method.GET
@@ -149,8 +145,7 @@ def test_get_cookie_missing(t : T?) {
 
 [test]
 def test_each_cookie_iterates_all(t : T?) {
-    var server = new CookieTestServer()
-    with_test_server(server, PORT_COOKIES) <| $(base_url) {
+    with_test_server(type<CookieTestServer>, PORT_COOKIES) <| $(base_url) {
         t |> run("each_cookie iterates all cookies") @(t : T?) {
             with_http_request() <| $(var req) {
                 req.method = http_method.GET
@@ -171,8 +166,7 @@ def test_each_cookie_iterates_all(t : T?) {
 
 [test]
 def test_each_cookie_empty(t : T?) {
-    var server = new CookieTestServer()
-    with_test_server(server, PORT_COOKIES) <| $(base_url) {
+    with_test_server(type<CookieTestServer>, PORT_COOKIES) <| $(base_url) {
         t |> run("each_cookie with no cookies") @(t : T?) {
             with_http_request() <| $(var req) {
                 req.method = http_method.GET

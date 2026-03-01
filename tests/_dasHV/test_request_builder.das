@@ -64,8 +64,7 @@ class RequestBuilderServer : HvWebServer {
 
 [test]
 def test_with_http_request_basic(t : T?) {
-    var server = new RequestBuilderServer()
-    with_test_server(server, PORT_REQUEST_BUILDER) <| $(base_url) {
+    with_test_server(type<RequestBuilderServer>, PORT_REQUEST_BUILDER) <| $(base_url) {
         t |> run("basic GET via request builder") @(t : T?) {
             with_http_request() <| $(var req) {
                 req.method = http_method.GET
@@ -81,8 +80,7 @@ def test_with_http_request_basic(t : T?) {
 
 [test]
 def test_request_with_body(t : T?) {
-    var server = new RequestBuilderServer()
-    with_test_server(server, PORT_REQUEST_BUILDER) <| $(base_url) {
+    with_test_server(type<RequestBuilderServer>, PORT_REQUEST_BUILDER) <| $(base_url) {
         t |> run("POST with body via request builder") @(t : T?) {
             with_http_request() <| $(var req) {
                 req.method = http_method.POST
@@ -98,8 +96,7 @@ def test_request_with_body(t : T?) {
 
 [test]
 def test_set_header_on_request(t : T?) {
-    var server = new RequestBuilderServer()
-    with_test_server(server, PORT_REQUEST_BUILDER) <| $(base_url) {
+    with_test_server(type<RequestBuilderServer>, PORT_REQUEST_BUILDER) <| $(base_url) {
         t |> run("set_header adds header to request") @(t : T?) {
             with_http_request() <| $(var req) {
                 req.method = http_method.GET
@@ -115,8 +112,7 @@ def test_set_header_on_request(t : T?) {
 
 [test]
 def test_set_content_type_on_request(t : T?) {
-    var server = new RequestBuilderServer()
-    with_test_server(server, PORT_REQUEST_BUILDER) <| $(base_url) {
+    with_test_server(type<RequestBuilderServer>, PORT_REQUEST_BUILDER) <| $(base_url) {
         t |> run("set_content_type sets Content-Type header") @(t : T?) {
             with_http_request() <| $(var req) {
                 req.method = http_method.POST
@@ -133,8 +129,7 @@ def test_set_content_type_on_request(t : T?) {
 
 [test]
 def test_timeout_settings(t : T?) {
-    var server = new RequestBuilderServer()
-    with_test_server(server, PORT_REQUEST_BUILDER) <| $(base_url) {
+    with_test_server(type<RequestBuilderServer>, PORT_REQUEST_BUILDER) <| $(base_url) {
         t |> run("set_timeout and set_connect_timeout do not break request") @(t : T?) {
             with_http_request() <| $(var req) {
                 req.method = http_method.GET
@@ -151,8 +146,7 @@ def test_timeout_settings(t : T?) {
 
 [test]
 def test_query_params(t : T?) {
-    var server = new RequestBuilderServer()
-    with_test_server(server, PORT_REQUEST_BUILDER) <| $(base_url) {
+    with_test_server(type<RequestBuilderServer>, PORT_REQUEST_BUILDER) <| $(base_url) {
         t |> run("set_param adds query parameters") @(t : T?) {
             with_http_request() <| $(var req) {
                 req.method = http_method.GET
@@ -178,8 +172,7 @@ def test_query_params(t : T?) {
 
 [test]
 def test_basic_auth(t : T?) {
-    var server = new RequestBuilderServer()
-    with_test_server(server, PORT_REQUEST_BUILDER) <| $(base_url) {
+    with_test_server(type<RequestBuilderServer>, PORT_REQUEST_BUILDER) <| $(base_url) {
         t |> run("set_basic_auth sets Authorization header") @(t : T?) {
             with_http_request() <| $(var req) {
                 req.method = http_method.GET
@@ -195,8 +188,7 @@ def test_basic_auth(t : T?) {
 
 [test]
 def test_bearer_token_auth(t : T?) {
-    var server = new RequestBuilderServer()
-    with_test_server(server, PORT_REQUEST_BUILDER) <| $(base_url) {
+    with_test_server(type<RequestBuilderServer>, PORT_REQUEST_BUILDER) <| $(base_url) {
         t |> run("set_bearer_token_auth sets Authorization header") @(t : T?) {
             with_http_request() <| $(var req) {
                 req.method = http_method.GET
@@ -212,8 +204,7 @@ def test_bearer_token_auth(t : T?) {
 
 [test]
 def test_redirect_control(t : T?) {
-    var server = new RequestBuilderServer()
-    with_test_server(server, PORT_REQUEST_BUILDER) <| $(base_url) {
+    with_test_server(type<RequestBuilderServer>, PORT_REQUEST_BUILDER) <| $(base_url) {
         t |> run("allow_redirect(false) does not follow redirect") @(t : T?) {
             with_http_request() <| $(var req) {
                 req.method = http_method.GET

@@ -89,8 +89,7 @@ class RouteTestServer : HvWebServer {
 
 [test]
 def test_get_route(t : T?) {
-    var server = new RouteTestServer()
-    with_test_server(server, PORT_SERVER_ROUTES) <| $(base_url) {
+    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
         t |> run("GET route returns text") @(t : T?) {
             GET("{base_url}/hello") <| $(resp) {
                 t |> equal(string(resp.body), "Hello, world!")
@@ -102,8 +101,7 @@ def test_get_route(t : T?) {
 
 [test]
 def test_post_route(t : T?) {
-    var server = new RouteTestServer()
-    with_test_server(server, PORT_SERVER_ROUTES) <| $(base_url) {
+    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
         t |> run("POST route echoes body") @(t : T?) {
             POST("{base_url}/echo", "hello server") <| $(resp) {
                 t |> equal(string(resp.body), "hello server")
@@ -114,8 +112,7 @@ def test_post_route(t : T?) {
 
 [test]
 def test_put_route(t : T?) {
-    var server = new RouteTestServer()
-    with_test_server(server, PORT_SERVER_ROUTES) <| $(base_url) {
+    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
         t |> run("PUT route receives body") @(t : T?) {
             with_http_request() <| $(var req) {
                 req.method = http_method.PUT
@@ -131,8 +128,7 @@ def test_put_route(t : T?) {
 
 [test]
 def test_patch_route(t : T?) {
-    var server = new RouteTestServer()
-    with_test_server(server, PORT_SERVER_ROUTES) <| $(base_url) {
+    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
         t |> run("PATCH route receives body") @(t : T?) {
             with_http_request() <| $(var req) {
                 req.method = http_method.PATCH
@@ -148,8 +144,7 @@ def test_patch_route(t : T?) {
 
 [test]
 def test_delete_route(t : T?) {
-    var server = new RouteTestServer()
-    with_test_server(server, PORT_SERVER_ROUTES) <| $(base_url) {
+    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
         t |> run("DEL route works") @(t : T?) {
             with_http_request() <| $(var req) {
                 req.method = http_method.DELETE
@@ -164,8 +159,7 @@ def test_delete_route(t : T?) {
 
 [test]
 def test_head_route(t : T?) {
-    var server = new RouteTestServer()
-    with_test_server(server, PORT_SERVER_ROUTES) <| $(base_url) {
+    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
         t |> run("HEAD route sets headers, no body") @(t : T?) {
             with_http_request() <| $(var req) {
                 req.method = http_method.HEAD
@@ -182,8 +176,7 @@ def test_head_route(t : T?) {
 
 [test]
 def test_any_route(t : T?) {
-    var server = new RouteTestServer()
-    with_test_server(server, PORT_SERVER_ROUTES) <| $(base_url) {
+    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
         t |> run("ANY route handles GET") @(t : T?) {
             GET("{base_url}/any-method") <| $(resp) {
                 t |> success(find(string(resp.body), "method:") >= 0, "body contains method info")
@@ -199,8 +192,7 @@ def test_any_route(t : T?) {
 
 [test]
 def test_path_params(t : T?) {
-    var server = new RouteTestServer()
-    with_test_server(server, PORT_SERVER_ROUTES) <| $(base_url) {
+    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
         t |> run("single path param") @(t : T?) {
             GET("{base_url}/users/42") <| $(resp) {
                 t |> equal(string(resp.body), "user:42")
@@ -216,8 +208,7 @@ def test_path_params(t : T?) {
 
 [test]
 def test_query_params_server(t : T?) {
-    var server = new RouteTestServer()
-    with_test_server(server, PORT_SERVER_ROUTES) <| $(base_url) {
+    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
         t |> run("query params accessible via each_param") @(t : T?) {
             GET("{base_url}/search?q=daslang&page=1") <| $(resp) {
                 let body = string(resp.body)
@@ -230,8 +221,7 @@ def test_query_params_server(t : T?) {
 
 [test]
 def test_response_headers_server(t : T?) {
-    var server = new RouteTestServer()
-    with_test_server(server, PORT_SERVER_ROUTES) <| $(base_url) {
+    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
         t |> run("set_header on response") @(t : T?) {
             GET("{base_url}/headers") <| $(resp) {
                 let custom = get_header(resp, "X-Custom")
@@ -245,8 +235,7 @@ def test_response_headers_server(t : T?) {
 
 [test]
 def test_json_response_server(t : T?) {
-    var server = new RouteTestServer()
-    with_test_server(server, PORT_SERVER_ROUTES) <| $(base_url) {
+    with_test_server(type<RouteTestServer>, PORT_SERVER_ROUTES) <| $(base_url) {
         t |> run("JSON response with correct content-type") @(t : T?) {
             GET("{base_url}/api/status") <| $(resp) {
                 let ct = get_header(resp, "Content-Type")

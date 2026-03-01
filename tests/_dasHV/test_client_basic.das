@@ -59,8 +59,7 @@ class ClientTestServer : HvWebServer {
 
 [test]
 def test_client_basic(t : T?) {
-    var server = new ClientTestServer()
-    with_test_server(server, PORT_CLIENT_BASIC) <| $(base_url) {
+    with_test_server(type<ClientTestServer>, PORT_CLIENT_BASIC) <| $(base_url) {
         t |> run("PUT request") @(t : T?) {
             PUT("{base_url}/echo", "updated") <| $(resp) {
                 t |> equal(string(resp.body), "PUT:updated")

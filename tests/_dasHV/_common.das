@@ -33,28 +33,27 @@ let PORT_FORMS          = 19006
 // Starts a HvWebServer subclass on a dedicated thread, waits for it to be
 // ready, runs the user's block, then shuts down.
 
-def with_test_server(var server : HvWebServer?; port : int; blk : block<(base_url : string) : void>) {
-    with_job_que() {
-        with_job_status(1) $(started) {
-            with_job_status(1) $(finished) {
-                with_atomic32() $(stop_flag) {
-                    new_thread() @() {
-                        server->init(port)
-                        server->start()
-                        started |> notify_and_release
-                        while (stop_flag |> get == 0) {
-                            server->tick()
-                            sleep(10u)
-                        }
-                        server->stop()
-                        finished |> notify_and_release
+def with_test_server(server_type : auto(ServerType); port : int; blk : block<(base_url : string) : void>) {
+    with_job_status(1) $(started) {
+        with_job_status(1) $(finished) {
+            with_atomic32() $(stop_flag) {
+                new_thread() @() {
+                    var server = new ServerType()
+                    server->init(port)
+                    server->start()
+                    started |> notify_and_release
+                    while (stop_flag |> get == 0) {
+                        server->tick()
+                        sleep(10u)
                     }
-                    started |> join
-                    let base_url = "http://127.0.0.1:{port}"
-                    invoke(blk, base_url)
-                    stop_flag |> set(1)
-                    finished |> join
+                    server->stop()
+                    finished |> notify_and_release
                 }
+                started |> join
+                let base_url = "http://127.0.0.1:{port}"
+                invoke(blk, base_url)
+                stop_flag |> set(1)
+                finished |> join
             }
         }
     }
