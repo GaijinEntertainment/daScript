@@ -11,6 +11,7 @@ options stack = 4_194_304 // On huge files we need huge stack for jit
 module llvm_exe shared private
 
 require llvm/daslib/llvm_boost
+require llvm/daslib/llvm_jit
 require llvm/daslib/llvm_jit_intrin
 require llvm/daslib/llvm_jit_common
 require llvm/daslib/llvm_dll_utils
@@ -478,6 +479,26 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; funcs :
     var main_params = fixed_array<LLVMOpaqueValue?>(
         global_context
     )
+
+    {
+        // Init globals
+        var jit_flags : LlvmJitFlags
+        jit_flags.emit_prologue = true
+        jit_flags.gen_exe = true
+        jit_flags.need_di = false
+        let (init_glob, init_glob_type) = generate_globals_initialization_fn(program_context, prog, types, uids, jit_flags)
+        let init_globals = LLVMBuildCall2(builder, init_glob_type, init_glob, main_params, "")
+        // Register init_globals as jitInitScript so cloned contexts (jobque) can re-run it
+        let set_init_script_type = LLVMFunctionType(types.t_void,
+            fixed_array<LLVMTypeRef>(
+                types.LLVMVoidPtrType(),  // Context *
+                types.LLVMVoidPtrType(),  // JitInitScriptFn
+            )
+        )
+        let jit_set_init_script = LLVMAddFunctionWithType(g_mod, "jit_set_init_script", set_init_script_type)
+        LLVMBuildCall2(builder, set_init_script_type, jit_set_init_script,
+            fixed_array(global_context, LLVMBuildPointerCast(builder, init_glob, types.LLVMVoidPtrType(), "")), "")
+    }
     let main_ret = LLVMBuildCall2(builder, g_fn_types[start_fn_name], LLVMGetNamedFunction(g_mod, start_fn_name), main_params, "")
     if (no_return) {
         LLVMBuildRet(builder, types.ConstI32(uint64(0)))

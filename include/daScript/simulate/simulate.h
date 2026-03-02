@@ -854,6 +854,8 @@ namespace das
         bool    sharedOwner = true;
     public:
         SimNode * aotInitScript = nullptr;
+        typedef void ( * JitInitScriptFn ) ( void * context );
+        JitInitScriptFn jitInitScript = nullptr;
     protected:
         void *          hwBpAddress = nullptr;
         const LineInfo * singleStepAt = nullptr;

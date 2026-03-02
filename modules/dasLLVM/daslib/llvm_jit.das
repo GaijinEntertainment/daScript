@@ -109,7 +109,7 @@ def get_file_info_global(g_builder : LLVMOpaqueBuilder?; types : PrimitiveTypes?
  * @names for all names will be create FileInfo ptr with correct filename
  */
 [macro_function]
-def generate_fileinfo_ctor_dtor(types : PrimitiveTypes; names : table<string>; dll_mode : bool) {
+def generate_fileinfo_ctor_dtor(types : PrimitiveTypes; names : table<string>; jit_mode : bool) {
     var ctor_builder = LLVMCreateBuilderInContext(g_ctx)
     var dtor_builder = LLVMCreateBuilderInContext(g_ctx)
     defer <| ${
@@ -122,7 +122,7 @@ def generate_fileinfo_ctor_dtor(types : PrimitiveTypes; names : table<string>; d
     let constructor = LLVMAddFunctionWithType(g_mod, "fileinfo_constructor", functionType)
     let destructor = LLVMAddFunctionWithType(g_mod, "fileinfo_destructor", functionType)
 
-    if (dll_mode) {
+    if (!jit_mode) {
         set_private_linkage(constructor)
         set_private_linkage(destructor)
     } else {
@@ -180,7 +180,7 @@ def generate_fileinfo_ctor_dtor(types : PrimitiveTypes; names : table<string>; d
 }
 
 [macro_function]
-def generate_annotations_ctor_dtor(types : PrimitiveTypes; var entries : array<AnnotationVarInfoEntry>; dll_mode : bool) {
+def generate_annotations_ctor_dtor(types : PrimitiveTypes; var entries : array<AnnotationVarInfoEntry>; jit_mode : bool) {
     var ctor_builder = LLVMCreateBuilderInContext(g_ctx)
     var dtor_builder = LLVMCreateBuilderInContext(g_ctx)
     defer <| ${
@@ -190,7 +190,7 @@ def generate_annotations_ctor_dtor(types : PrimitiveTypes; var entries : array<A
     let functionType = LLVMFunctionType(types.t_void, null, 0u, 0)
     let constructor = LLVMAddFunctionWithType(g_mod, "annotations_constructor", functionType)
     let destructor  = LLVMAddFunctionWithType(g_mod, "annotations_destructor",  functionType)
-    if (dll_mode) {
+    if (!jit_mode) {
         set_private_linkage(constructor)
         set_private_linkage(destructor)
     } else {
@@ -3800,6 +3800,7 @@ class public LlvmJitVisitor : AstVisitor {
         }
         var ty = get_llvm_type_for_structinfo()
         var struct_info_global = LLVMAddGlobal(g_mod, ty, "si_{si.name}")
+        set_private_linkage(struct_info_global)
         structinfo_cache[si] = struct_info_global
         var void_ptr = types.LLVMVoidPtrType()
         var init_values <- [
@@ -6193,7 +6194,7 @@ def public get_dll_missing(fns : array<FunctionPtr>; disabled : array<FunctionPt
     return <- (missing, disabled_exists)
 }
 
-
+// Main function. Generates LLVM IR for `FunctionPtr`.
 [macro_function]
 def public generate_llvm(ctx : Context?; types : PrimitiveTypes?; uids : UidNodes?;
                          attrs : Attributes?; fn : FunctionPtr; flags : LlvmJitFlags) {
@@ -6226,6 +6227,71 @@ def public generate_llvm(ctx : Context?; types : PrimitiveTypes?; uids : UidNode
     return true
 }
 
+// Generates function to initialize all global variables.
+def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
+                                              var types : PrimitiveTypes?;
+                                              uids : UidNodes?;
+                                              flags : LlvmJitFlags;
+                                              fn_name : string = "init_globals") {
+    let attrs = new Attributes(g_ctx)
+    var visitor = new LlvmJitVisitor(ctx, types, uids, flags, null, attrs)
+    var inscope adapter = make_visitor(*visitor)
+    visitor.adapter := adapter
+
+    let globals_fn_type = LLVMFunctionType(types.t_void,
+        array<LLVMTypeRef>(types.LLVMVoidPtrType())
+    )
+    let globals_fn = LLVMAddFunctionWithType(g_mod, fn_name, globals_fn_type)
+    set_private_linkage(globals_fn)
+    visitor.ffunc = globals_fn
+    let entry = LLVMAppendBasicBlockInContext(g_ctx, globals_fn, "entry")
+    visitor.function_entry = entry
+    LLVMPositionBuilderAtEnd(visitor.g_builder, entry)
+    let ctx_param = LLVMGetParam(globals_fn, 0u)
+    prog |> for_each_module <| $(mod) {
+        mod |> for_each_global() <| $(glob) {
+            if (glob.init != null && glob.flags.used) {
+                visit_expression(glob.init, adapter)
+                let isSolidContext = glob._module.moduleFlags.isSolidContext
+                var vptr : LLVMOpaqueValue?
+                if (!isSolidContext) {
+                    let mnh = hash(get_mangled_name(glob))
+                    var params = fixed_array(
+                        LLVMConstInt(types.t_int64, mnh, 0),
+                        ctx_param
+                    )
+                    var func = LLVMGetNamedFunction(g_mod, glob.flags.global_shared ? FN_JIT_GET_SHARED_MNH : FN_JIT_GET_GLOBAL_MNH)
+                    var typ = g_fn_types[glob.flags.global_shared ? FN_JIT_GET_SHARED_MNH : FN_JIT_GET_GLOBAL_MNH]
+                    vptr = LLVMBuildCall2(visitor.g_builder, typ, func, params, "global_var_{glob.name}_mnh_ptr")
+                    vptr = LLVMBuildPointerCast(visitor.g_builder, vptr, get_type_pointer(glob._type), "global_var_{glob.name}")
+                    if (glob._type.isString) {
+                        vptr = LLVMBuildLoadData2Aligned(visitor.g_builder, type_to_llvm_type(glob._type), vptr, glob._type.alignOf, "global_var_r2v_{glob.name}")
+                    }
+
+                } else {
+                    var ctx_ptr = LLVMBuildPointerCast(visitor.g_builder, ctx_param, LLVMPointerType(types.t_int8, 0u), "")
+                    let coffset = glob.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
+                    var global_ptr = LLVMBuildGEP2(visitor.g_builder, types.t_int8, ctx_ptr, types.ConstI32(uint64(coffset)), "")
+                    global_ptr = LLVMBuildLoad2(visitor.g_builder, LLVMPointerType(types.t_int8, 0u), global_ptr, "")
+                    vptr = LLVMBuildGEP2(visitor.g_builder, types.t_int8, global_ptr, types.ConstI32(uint64(glob.stackTop)), "")
+                }
+                visitor.build_copy(vptr, glob.init)
+            }
+        }
+    }
+    LLVMBuildRetVoid(visitor.g_builder)
+    visitor.adapter := null
+    unsafe {
+        delete visitor
+    }
+    return (globals_fn, globals_fn_type)
+
+    // Visit global variables
+    // And generate their initialization
+}
+
+// Retrieves previously generated function address, from `dll`
+// or directly from LLVM.
 [macro_function]
 def public generate_llvm_code(var dll : DLLHandle?; fmna : DllName; dll_enabled : bool) {
     verify(!(is_in_completion() || is_compiling_macros() || is_folding()))
@@ -6255,14 +6321,18 @@ def public generate_llvm_code(var dll : DLLHandle?; fmna : DllName; dll_enabled 
 // This function creates single global constructor
 // that will be called at the startup of compiled
 // object file.
-def public generate_global_ctors_dtors(types : PrimitiveTypes?; use_dll : bool) {
+[macro_function]
+def public generate_global_ctors_dtors(types : PrimitiveTypes?; jit_mode : bool) {
     var ctor_dtor : array<tuple<LLVMOpaqueValue?, LLVMOpaqueValue?>>
 
     // FileInfo
-    ctor_dtor |> push(generate_fileinfo_ctor_dtor(*types, active_filenames, use_dll))
+    ctor_dtor |> push(generate_fileinfo_ctor_dtor(*types, active_filenames, jit_mode))
     // VarInfo
-    ctor_dtor |> push(generate_annotations_ctor_dtor(*types, annotation_varinfo_list, use_dll))
+    ctor_dtor |> push(generate_annotations_ctor_dtor(*types, annotation_varinfo_list, jit_mode))
     ctor_dtor |> add_ctor_dtor_function(types)
+
+    active_filenames = table<string>()
+    annotation_varinfo_list |> clear()
 }
 
 [macro_function]

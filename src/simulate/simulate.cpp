@@ -1223,6 +1223,8 @@ namespace das
         tabMnLookup = ctx.tabMnLookup;
         tabGMnLookup = ctx.tabGMnLookup;
         tabAdLookup = ctx.tabAdLookup;
+        // jit init script
+        jitInitScript = ctx.jitInitScript;
         // threadlock_context
         if ( ctx.contextMutex ) contextMutex = new recursive_mutex;
         // register
@@ -1408,6 +1410,8 @@ namespace das
         if (globals) memset(globals, 0, globalsSize);
         if ( aotInitScript ) {
             aotInitScript->eval(*this);
+        } else if ( jitInitScript ) {
+            jitInitScript(this);
         } else {
 #if DAS_ENABLE_STACK_WALK
             FuncInfo finfo;

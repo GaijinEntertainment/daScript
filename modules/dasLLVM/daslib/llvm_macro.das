@@ -103,7 +103,7 @@ class JIT_LLVM : AstSimulateMacro {
         let use_dll = prog.policies.jit_dll_mode && das_is_dll_build() && !gen_exe
         let opt_level = prog.policies.jit_opt_level
         let size_level = prog.policies.jit_size_level
-        let emit_prologue = true // prog.policies.emit_prologue
+        let emit_prologue = prog.policies.emit_prologue
         // If you're sure `dynamic` functions is not reachable set this flag
         // to `true` and fail in runtime on `jit_trap` if they turns
         // out to be reachable.
@@ -200,7 +200,7 @@ class JIT_LLVM : AstSimulateMacro {
                     var fn_names = join([ for (fn in funcs); "{fn.name}" ], ",")
                     panic("Internal jit error. Failed to get IR for functions {fn_names}.\n")
                 }
-                generate_global_ctors_dtors(g_prim_t, use_dll)
+                generate_global_ctors_dtors(g_prim_t, !(use_dll || gen_exe))
                 optimize_llvm_module(opt_level |> uint(), size_level |> uint(), LLVM_INLINE_THRESHOLD)
                 if (false) {
                     // Let's remove unused attributes before we print IR.
