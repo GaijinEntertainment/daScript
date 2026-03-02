@@ -7,7 +7,7 @@ def initialize(project_path : string) {
     let daslib_paths = [
         "llvm_boost", "llvm_debug", "llvm_jit", "llvm_targets",
         "llvm_jit_intrin", "llvm_jit_common", "llvm_dll_utils",
-        "llvm_exe"
+        "llvm_exe", "llvm_macro"
     ]
     let bindings_paths = [
         "llvm_const", "llvm_enum", "llvm_func", "llvm_struct",
