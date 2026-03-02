@@ -13,6 +13,10 @@ on:
       - 'doc/**'
       - 'daslib/**'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,6 +27,45 @@ jobs:
       run: |
         # Our bindings do not work on latest.
         pip install -r doc/requirements.txt
+
+    - name: "Install CMake and Ninja"
+      uses: lukka/get-cmake@latest
+
+    - name: "Build: Daslang (for das2rst)"
+      run: |
+        set -eux
+        mkdir build
+        cmake --no-warn-unused-cli -B./build \
+          -DCMAKE_BUILD_TYPE:STRING=Release \
+          -DDAS_HV_DISABLED=OFF \
+          -DDAS_LLVM_DISABLED=ON \
+          -DDAS_GLFW_DISABLED=ON \
+          -G Ninja
+        cmake --build ./build --target daslang
+
+    - name: "Run das2rst"
+      run: |
+        set -eux
+        ./bin/daslang doc/reflections/das2rst.das
+
+    - name: "Check for // `stub` in handmade docs"
+      run: |
+        set -eux
+        if grep -rl '// stub' doc/source/stdlib/handmade/; then
+          echo "ERROR: Found // stub entries in handmade docs. Please provide proper documentation."
+          exit 1
+        fi
+
+    - name: "Check for new untracked RST files"
+      run: |
+        set -eux
+        UNTRACKED=$(git ls-files --others --exclude-standard doc/source/stdlib/)
+        if [ -n "$UNTRACKED" ]; then
+          echo "ERROR: das2rst generated new files not tracked in git:"
+          echo "$UNTRACKED"
+          echo "Run das2rst locally and commit the new files."
+          exit 1
+        fi
 
     - name: "Build latex files"
       run: |
