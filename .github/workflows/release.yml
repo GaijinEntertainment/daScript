@@ -1,12 +1,10 @@
 name: Release
 
-# Run only on tags and release publish
+# Run on pre-release, full release, or manual trigger
 on:
-  # push:
-  # pull_request:
-  # workflow_dispatch:
+  workflow_dispatch:
   release:
-    types: prereleased
+    types: [prereleased, published]
 defaults:
   run:
     shell: bash
