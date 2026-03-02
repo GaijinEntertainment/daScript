@@ -862,7 +862,9 @@ namespace das
             int bytes = total * stride;
             SimNode * init0;
             if ( useCMRES ) {
-                if ( bytes <= 32 ) {
+                if ( bytes==0 ) {
+                    init0 = nullptr;
+                } else if ( bytes <= 32 ) {
                     init0 = context.code->makeNodeUnrollNZ<SimNode_InitLocalCMResN>(bytes, at,extraOffset);
                 } else {
                     init0 = context.code->makeNode<SimNode_InitLocalCMRes>(at,extraOffset,bytes);
@@ -872,7 +874,7 @@ namespace das
             } else {
                 init0 = context.code->makeNode<SimNode_InitLocal>(at,stackTop + extraOffset,stride * total);
             }
-            simlist.push_back(init0);
+            if ( init0 ) simlist.push_back(init0);
         }
         for ( int index=0; index != total; ++index ) {
             auto & val = values[index];
