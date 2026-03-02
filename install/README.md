@@ -70,6 +70,16 @@ cmake -Bbuild -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target daslang --config Release
 ```
 
+## macOS: Gatekeeper Quarantine
+
+If macOS blocks the downloaded SDK with errors like *"cannot be opened because the developer cannot be verified"* or *"is damaged and can't be opened"*, remove the quarantine attribute:
+
+```sh
+xattr -cr /path/to/daslang-sdk
+```
+
+Binaries produced by `cmake --install` are ad-hoc code signed automatically, which prevents this issue in most cases.
+
 ## License
 
 BSD 3-Clause License — Copyright (c) 2019-2026, Gaijin Entertainment.
