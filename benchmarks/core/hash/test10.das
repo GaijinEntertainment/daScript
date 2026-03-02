@@ -26,7 +26,7 @@ def fill_map(hmap : auto(HashMapType); randomNumbers : array<int>) {
 }
 
 def run_bench(b : B?; hmap : auto(HashMapType); randomNumbers : array<int>) {
-    b |> run("insert/{TOTAL_RANDOM_NUMBERS}", TOTAL_RANDOM_NUMBERS) <| $() {
+    b |> run("insert/{TOTAL_RANDOM_NUMBERS}", TOTAL_RANDOM_NUMBERS) {
         fill_map(hmap, randomNumbers)
     }
 }

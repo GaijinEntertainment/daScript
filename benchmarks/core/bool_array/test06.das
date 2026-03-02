@@ -22,7 +22,7 @@ def erase_from_front(dummy : auto(ArrayType)) {
 }
 
 def run_bench(b : B?; dummy : auto(ArrayType); name : string) {
-    b |> run("{name}/{TOTAL_ELEMENTS}", TOTAL_ELEMENTS) <| $() {
+    b |> run("{name}/{TOTAL_ELEMENTS}", TOTAL_ELEMENTS) {
         erase_from_front(dummy)
     }
 }

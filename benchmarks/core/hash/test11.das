@@ -34,7 +34,7 @@ def fill_slotmap(smap : auto(SlotMapType); randomNumbers : array<int>) {
 }
 
 def run_bench(b : B?; smap : auto(SlotMapType); randomNumbers : array<int>) {
-    b |> run("emplace/{TOTAL_RANDOM_NUMBERS}", TOTAL_RANDOM_NUMBERS) <| $() {
+    b |> run("emplace/{TOTAL_RANDOM_NUMBERS}", TOTAL_RANDOM_NUMBERS) {
         fill_slotmap(smap, randomNumbers)
     }
 }

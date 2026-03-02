@@ -40,7 +40,7 @@ def bool_array_iterate(b : B?) {
     for (i in 0 .. TOTAL_ELEMENTS) {
         a.push((i & 1) == 0)
     }
-    b |> run("iterate/{TOTAL_ELEMENTS}", TOTAL_ELEMENTS) <| $() {
+    b |> run("iterate/{TOTAL_ELEMENTS}", TOTAL_ELEMENTS) {
         let t = count_trues_iter_ba(a)
         if (t != TOTAL_ELEMENTS / 2) {
             b->failNow()
@@ -55,7 +55,7 @@ def array_bool_iterate(b : B?) {
     for (i in 0 .. TOTAL_ELEMENTS) {
         a.push((i & 1) == 0)
     }
-    b |> run("iterate/{TOTAL_ELEMENTS}", TOTAL_ELEMENTS) <| $() {
+    b |> run("iterate/{TOTAL_ELEMENTS}", TOTAL_ELEMENTS) {
         let t = count_trues_iter_bool(a)
         if (t != TOTAL_ELEMENTS / 2) {
             b->failNow()

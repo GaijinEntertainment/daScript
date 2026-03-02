@@ -65,7 +65,7 @@ require dastest/testing_boost
 
 [benchmark]
 def my_benchmark(b : B?) {
-    b |> run("sub_name", CHUNK_SIZE) <| $() {
+    b |> run("sub_name", CHUNK_SIZE) {
         // code to benchmark — this block runs in a loop
     }
 }
@@ -124,7 +124,7 @@ Old benchmarks in `examples/profile/` use `_framework.das` with `profile_test()`
 
 1. Replace `require _framework` with `require dastest/testing_boost`
 2. Replace `[export] def main` with `[benchmark] def benchmark_name(b : B?)`
-3. Convert `profile_test("name", default<Type>, args)` → `b |> run("name") <| $() { ... }`
+3. Convert `profile_test("name", default<Type>, args)` → `b |> run("name") { ... }`
 4. Move the benchmark loop body into the `run` block (dastest handles iteration automatically)
 5. Extract setup code (data generation, pre-filling) outside `run` — only the measured operation goes inside the block
 6. Use `b->failNow()` instead of `assert` for correctness checks
@@ -155,14 +155,14 @@ def fill_map(hmap : auto(HashMapType); size : int) : auto(HashMapType) {
 }
 
 def run_write_bench(b : B?; hmap : auto(HashMapType)) {
-    b |> run("insert/{HASH_SIZE}", HASH_SIZE) <| $() {
+    b |> run("insert/{HASH_SIZE}", HASH_SIZE) {
         fill_map(hmap, HASH_SIZE)
     }
 }
 
 def run_read_bench(b : B?; hmap : auto(HashMapType)) {
     let m = fill_map(hmap, HASH_SIZE)
-    b |> run("read/{HASH_SIZE}", HASH_SIZE) <| $() {
+    b |> run("read/{HASH_SIZE}", HASH_SIZE) {
         for (i in range(HASH_SIZE)) {
             let v = m?[i] ?? 0
             if (v != -i) {
