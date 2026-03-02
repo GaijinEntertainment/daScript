@@ -252,6 +252,12 @@ jobs:
                 cmake --build ./build --config ${{ matrix.cmake_preset }} --target daslang
                 cmake --build ./build --config ${{ matrix.cmake_preset }}
                 ;;
+              linux_arm*)
+                CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DDAS_GLFW_DISABLED=ON -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }} -G \
+                        "${{ matrix.cmake_generator }}"
+                cd build
+                ninja
+                ;;
               *)
                 CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture_string }}" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DDAS_LLVM_DISABLED=${{ env.das_llvm_disabled }} -G "${{ matrix.cmake_generator }}"
                 cd build
