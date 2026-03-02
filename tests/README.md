@@ -107,6 +107,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | File | Description | Expects errors |
 |---|---|---|
 | deval.das | debug_eval — expression evaluation in debug context | |
+| test_sprint_format.das | sprint/sprint_data gen2 output format for all types and fullTypeInfo flag | |
 
 ## debug_agent/
 
