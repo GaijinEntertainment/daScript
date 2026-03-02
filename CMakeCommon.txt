@@ -254,10 +254,12 @@ MACRO(CMAKE_TEXT_XXD project_name file_name)
 ENDMACRO()
 
 MACRO(ADD_TARGET_PROJECT_XXD_DEPENDS target project_name)
-	ADD_CUSTOM_TARGET(${target}_xxd ALL
-		DEPENDS ${XXD_DEPENDS_LIST_${project_name}}
-		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-	)
+	IF(NOT TARGET ${project_name}_xxd)
+		ADD_CUSTOM_TARGET(${project_name}_xxd ALL
+			DEPENDS ${XXD_DEPENDS_LIST_${project_name}}
+			WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+		)
+	ENDIF()
 	ADD_DEPENDENCIES(${target} ${project_name}_xxd)
 ENDMACRO()
 

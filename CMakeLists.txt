@@ -1307,6 +1307,15 @@ install(FILES ${DAS_UNCATEGORIZED_EXAMPLES}
     DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/uncategorized
 )
 
+file(GLOB DAS_HV_EXAMPLES
+    ${PROJECT_SOURCE_DIR}/examples/hv/*.das
+    ${PROJECT_SOURCE_DIR}/examples/hv/*.html
+    ${PROJECT_SOURCE_DIR}/examples/hv/*.md
+)
+install(FILES ${DAS_HV_EXAMPLES}
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/hv
+)
+
 # Install language tutorial .das files
 file(GLOB LANGUAGE_TUTORIAL_SOURCES
     ${PROJECT_SOURCE_DIR}/tutorials/language/*.das
