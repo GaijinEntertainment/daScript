@@ -94,6 +94,8 @@ class RstComment : AstCommentReader
     enum_comment : string
     enum_entry_comment : string
     alias_comment : string
+    pending_comment : string
+    pending_line : int = 0
     field_comments : array<tuple<kind:string;name:string;comment:string>>
     def override open ( prog:ProgramPtr; mod:Module?; cpp:bool; info:LineInfo ) : void
         if length(chars) > 0
@@ -135,13 +137,20 @@ class RstComment : AstCommentReader
         elif state==ParserState.type_alias
             alias_comment += comment
         else
-            debug_rst("uncategorized comment // {comment}")
+            if int(info.line) != pending_line + 1 && pending_comment != ""
+                pending_comment = ""
+            pending_comment += comment
+            pending_line = int(info.line)
+            debug_rst("pending comment // {comment}")
         comment = ""
     def override beforeAlias ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         debug_rst("beforeAlias")
         if state != ParserState.none
             panic_rst("expecting none, got {state}")
         state = ParserState.type_alias
+        alias_comment = pending_comment
+        pending_comment = ""
+        pending_line = 0
     def override afterAlias ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         debug_rst("afterAlias {name} // {alias_comment}")
         if state != ParserState.type_alias
@@ -154,6 +163,8 @@ class RstComment : AstCommentReader
         debug_rst("beforeEnumeration")
         if state != ParserState.none
             panic_rst("expecting none, got {state}")
+        pending_comment = ""
+        pending_line = 0
         state = ParserState.enum_decl
     def override beforeEnumerationEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         debug_rst("beforeEnumerationEntries")
@@ -182,6 +193,8 @@ class RstComment : AstCommentReader
         debug_rst("beforeBitfield")
         if state != ParserState.none
             panic_rst("expecting none, got {state}")
+        pending_comment = ""
+        pending_line = 0
         state = ParserState.bitfield_alias
     def override beforeBitfieldEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         debug_rst("beforeBitfieldEntries")
@@ -210,6 +223,8 @@ class RstComment : AstCommentReader
         debug_rst("beforeVariant")
         if state != ParserState.none
             panic_rst("expecting none, got {state}")
+        pending_comment = ""
+        pending_line = 0
         state = ParserState.variant_alias
     def override beforeVariantEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         debug_rst("beforeVariantEntries")
@@ -240,6 +255,8 @@ class RstComment : AstCommentReader
         debug_rst("beforeGlobalVariables")
         if state != ParserState.none
             panic_rst("expecting none, got {state}")
+        pending_comment = ""
+        pending_line = 0
         state = ParserState.global
     def override afterGlobalVariable ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         debug_rst("afterGlobalVariable {name} // {global_comment}")
@@ -255,6 +272,8 @@ class RstComment : AstCommentReader
         debug_rst("beforeStucture")
         if state != ParserState.none
             panic_rst("expecting none, got {state}")
+        pending_comment = ""
+        pending_line = 0
         state = ParserState.structure
     def override afterStructure ( st:StructurePtr; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         debug_rst("afterStucture {st._module.name}::{st.name} // {structure_comment}")
@@ -318,6 +337,8 @@ class RstComment : AstCommentReader
         debug_rst("beforeFunction")
         if state!=ParserState.none && state!=ParserState.structure && state!=ParserState.field
             panic_rst("expecting none, structure, or field got {state}")
+        pending_comment = ""
+        pending_line = 0
         state = state==ParserState.none ? ParserState.func : ParserState.method
     def override afterFunction ( fn:FunctionPtr; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         debug_rst("afterFunction {state} {get_module_name(prog, mod)}::{fn.name} // {function_comment}")
