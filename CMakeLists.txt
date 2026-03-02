@@ -1395,3 +1395,33 @@ if(DAS_BUILD_DOCUMENTATION)
                         "Install Python 3 and run: pip install sphinx sphinx-rtd-theme")
     endif()
 endif()
+
+# macOS: ad-hoc code sign all installed binaries and shared libraries.
+# This prevents Gatekeeper from quarantining downloaded SDK artifacts
+# ("cannot be opened because the developer cannot be verified").
+if(APPLE)
+    install(CODE [[
+        message(STATUS "Ad-hoc code signing installed binaries...")
+        file(GLOB_RECURSE _sign_targets
+            "${CMAKE_INSTALL_PREFIX}/*.dylib"
+            "${CMAKE_INSTALL_PREFIX}/*.shared_module"
+            "${CMAKE_INSTALL_PREFIX}/bin/*"
+        )
+        foreach(_f IN LISTS _sign_targets)
+            if(IS_SYMLINK "${_f}")
+                continue()
+            endif()
+            execute_process(
+                COMMAND codesign --force --sign - "${_f}"
+                RESULT_VARIABLE _sign_result
+                ERROR_VARIABLE  _sign_err
+                OUTPUT_QUIET
+            )
+            if(_sign_result EQUAL 0)
+                message(STATUS "  Signed: ${_f}")
+            else()
+                message(WARNING "  Failed to sign ${_f}: ${_sign_err}")
+            endif()
+        endforeach()
+    ]])
+endif()
