@@ -188,7 +188,32 @@ Parameterless blocks also do not need the ``$`` prefix:
 
     sort(arr) @(a, b) => a < b           // lambda — @ is still required
 
-This shorthand works with lambdas (``@``) and no-capture lambdas (``@@``) as well.
+This shorthand — called **assumed pipe** — works with all three call forms:
+
+* **Named function calls** — ``func()``
+* **Dot-method calls** — ``obj.method()``
+* **Arrow-method calls** — ``obj->fn()``
+
+.. code-block:: das
+
+    // dot-method call with assumed pipe
+    class Receiver {
+        def call_method(blk : block<() : int>) : int {
+            return invoke(blk)
+        }
+    }
+    var r = new Receiver()
+    let res = r.call_method() $ : int {    // same as r.call_method() <| $ : int { ... }
+        return 42
+    }
+
+    // arrow-method call with assumed pipe
+    var c : Callable                       // struct with a lambda field
+    c->fn() $ : int {                      // same as c->fn() <| $ : int { ... }
+        return 77
+    }
+
+It also works with lambdas (``@``) and no-capture lambdas (``@@``).
 The explicit ``<|`` is still needed when a block is passed to an expression
 (e.g. ``<| new ...``) or for generator bodies (``generator<T>() <| $() { ... }``).
 

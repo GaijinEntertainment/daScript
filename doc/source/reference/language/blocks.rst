@@ -61,13 +61,27 @@ Typeless blocks are typically declared via construction-like syntax:
 
 .. _blocks_declarations:
 
-Similarly typed blocks are typically declared via pipe syntax:
+Similarly typed blocks are typically declared via assumed pipe syntax — a block or
+lambda placed immediately after a function call is automatically passed as the last
+argument.  This works with named function calls, dot-method calls, and arrow-method
+calls (see :ref:`Pipe Operators <expressions>` for full details):
 
 .. code-block:: das
 
     var v1 = 1                              // block with arguments
     res = radd(v1) $(var a:int&):int {
         return a++
+    }
+
+    // dot-method call
+    var r = new Receiver()
+    r.call_method() $ {                     // block piped to obj.method()
+        print("called")
+    }
+
+    // arrow-method call
+    c->fn() $ {                             // block piped to obj->fn()
+        print("called")
     }
 
 Blocks can also be declared via inline syntax:
