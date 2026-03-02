@@ -34,15 +34,15 @@ struct BenchmarkSampleSet {
 }
 
 struct BenchmarkStats {
-    time_ns : SampleStats? = new SampleStats()
-    allocs : SampleStats? = new SampleStats()
-    heap_bytes : SampleStats? = new SampleStats()
-    string_allocs : SampleStats? = new SampleStats()
-    string_heap_bytes : SampleStats? = new SampleStats()
+    time_ns : SampleStats = SampleStats()
+    allocs : SampleStats = SampleStats()
+    heap_bytes : SampleStats = SampleStats()
+    string_allocs : SampleStats = SampleStats()
+    string_heap_bytes : SampleStats = SampleStats()
 }
 
-def as_list(var stats : BenchmarkStats?) : array<SampleStats?> {
-    return [
+def as_list(var stats : BenchmarkStats?) : array<SampleStats> {
+    return <- [
         stats.time_ns,
         stats.allocs,
         stats.heap_bytes,
@@ -105,7 +105,7 @@ def make_sample_sets(entries : array<BenchmarkEntry>) : table<string, BenchmarkS
 }
 
 // Fill the sample stats for the provided benchmark sample set.
-// It performs outlier fitlering and computes other metrics needed to compare
+// It performs outlier filtering and computes other metrics needed to compare
 // the sample sets later.
 def fill_sample_stats(var samples : BenchmarkSampleSet?) : string {
     var stats = new BenchmarkStats()
@@ -125,26 +125,32 @@ def fill_sample_stats(var samples : BenchmarkSampleSet?) : string {
         stats.string_allocs.values |> push(double(e.string_allocs) / n)
     }
 
-    var process_list <- [
-        (stats.time_ns, BenchmarkMetric(name = "ns", header = "time")),
-        (stats.heap_bytes, BenchmarkMetric(name = "B", header = "heap bytes", is_alloc = true)),
-        (stats.allocs, BenchmarkMetric(name = "allocs", header = "heap alloc count", is_alloc = true)),
-        (stats.string_heap_bytes, BenchmarkMetric(name = "SB", header = "string heap bytes", is_alloc = true)),
-        (stats.string_allocs, BenchmarkMetric(name = "strings", header = "string heap alloc count", is_alloc = true)),
-    ]
-    for ((s, metric) in process_list) {
+    let process_stat = @@(var s : SampleStats; metric : BenchmarkMetric) : string {
         let err = calc_sample_stats(s)
+        s.metric = metric
+        if (err != "") {
+            return "{metric.name}: {err}"
+        }
+        return ""
+    }
+    var errors = [
+        process_stat(stats.time_ns, BenchmarkMetric(name = "ns", header = "time")),
+        process_stat(stats.heap_bytes, BenchmarkMetric(name = "B", header = "heap bytes", is_alloc = true)),
+        process_stat(stats.allocs, BenchmarkMetric(name = "allocs", header = "heap alloc count", is_alloc = true)),
+        process_stat(stats.string_heap_bytes, BenchmarkMetric(name = "SB", header = "string heap bytes", is_alloc = true)),
+        process_stat(stats.string_allocs, BenchmarkMetric(name = "strings", header = "string heap alloc count", is_alloc = true)),
+    ]
+    for (err in errors) {
         if (err != "") {
             return err
         }
-        s.metric = metric
     }
 
     samples.stats <- stats
     return ""
 }
 
-def private calc_sample_stats(var dst : SampleStats?) : string {
+def private calc_sample_stats(var dst : SampleStats) : string {
     let min_sample_count = 5
 
     if (length(dst.values) < min_sample_count) {
@@ -246,7 +252,7 @@ def geomean(values : array<double>) : double {
     return exp(log_sum / double(length(values)))
 }
 
-def welch_p_value(stats_old : SampleStats?; stats_new : SampleStats?) : double {
+def welch_p_value(stats_old : SampleStats; stats_new : SampleStats) : double {
     let n1 = double(length(stats_old.values))
     let n2 = double(length(stats_new.values))
     if (n1 < 2.0lf || n2 < 2.0lf) {

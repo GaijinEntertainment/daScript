@@ -8,8 +8,10 @@ def cmd_exec(cmd : string) : string {
     var out = ""
     unsafe {
         popen(cmd) $(f) {
-            while (!feof(f)) {
-                out += fgets(f)
+            out = build_string() $(var w) {
+                while (!feof(f)) {
+                    w |> write(fgets(f))
+                }
             }
         }
     }

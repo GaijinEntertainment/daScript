@@ -115,7 +115,7 @@ def run_help_cmd() : string {
     print("  --select_new <cond>  SQL WHERE clause for new results\n")
     print("  --s <from=>to>       Regex rename: map old benchmark names to new names\n")
     print("  --old <cond>         --select_old alias\n")
-    print("  --new <cond>         --select_new aliass\n")
+    print("  --new <cond>         --select_new alias\n")
     return ""
 }
 
@@ -308,6 +308,9 @@ def run_compare_cmd(db : sqlite3?; flags : Flags) : string {
                 continue
             }
             if (stat_old.metric.is_alloc && abs(stat_old.mean_avg - stat_new.mean_avg) < 1.0lf) {
+                continue
+            }
+            if (length(stat_old.values) == 0 || length(stat_new.values) == 0) {
                 continue
             }
 
