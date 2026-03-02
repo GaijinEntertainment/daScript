@@ -12,6 +12,7 @@ jitted_scripts/             # JIT stores dll's here
 lib/                        # All build libraries stored here
 modules/**/*.shared_module
 examples/**/*.shared_module
+tests/aot/_aot_generated/
 .vscode/
 .cache/
 
