@@ -7,9 +7,11 @@ on:
   push:
     paths:
       - 'doc/**'
+      - 'daslib/**'
   pull_request:
     paths:
       - 'doc/**'
+      - 'daslib/**'
 
 jobs:
   build:
@@ -24,11 +26,11 @@ jobs:
 
     - name: "Build latex files"
       run: |
-        sphinx-build -b latex -d doc/sphinx-build doc/source build/latex
+        sphinx-build -W --keep-going -b latex -d doc/sphinx-build doc/source build/latex
     - name: "Build site"
       run: |
         # We do not upload site in release.
-        sphinx-build -b html -d doc/sphinx-build doc/source build/site
+        sphinx-build -W --keep-going -b html -d doc/sphinx-build doc/source build/site
 
     - name: Compile LaTeX document
       uses: xu-cheng/latex-action@v4
