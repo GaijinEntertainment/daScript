@@ -22,7 +22,7 @@ def fill_insert_at_0(dummy : auto(ArrayType)) {
 }
 
 def run_bench(b : B?; dummy : auto(ArrayType); name : string) {
-    b |> run("{name}/{TOTAL_ELEMENTS}", TOTAL_ELEMENTS) <| $() {
+    b |> run("{name}/{TOTAL_ELEMENTS}", TOTAL_ELEMENTS) {
         fill_insert_at_0(dummy)
     }
 }

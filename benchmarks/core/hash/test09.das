@@ -46,7 +46,7 @@ def lookup_and_sum(hashMap : auto(HashMapType); randomNumbers : array<int>) {
 
 def run_bench(b : B?; hmap : auto(HashMapType); randomNumbers : array<int>) {
     let hashMap = fill_map(hmap, randomNumbers)
-    b |> run("get_sum/{TOTAL_RANDOM_NUMBERS}", TOTAL_RANDOM_NUMBERS) <| $() {
+    b |> run("get_sum/{TOTAL_RANDOM_NUMBERS}", TOTAL_RANDOM_NUMBERS) {
         lookup_and_sum(hashMap, randomNumbers)
     }
 }

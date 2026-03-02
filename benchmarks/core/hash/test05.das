@@ -28,7 +28,7 @@ def overwrite_same_key(hmap : auto(HashMapType); count : int) {
 }
 
 def run_bench(b : B?; hmap : auto(HashMapType)) {
-    b |> run("overwrite_same_key/{OPS}", OPS) <| $() {
+    b |> run("overwrite_same_key/{OPS}", OPS) {
         overwrite_same_key(hmap, OPS)
     }
 }

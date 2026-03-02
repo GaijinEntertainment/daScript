@@ -47,7 +47,7 @@ def make_array_bool() : array<bool> {
 [benchmark]
 def bool_array_xor_compound(b : B?) {
     var a <- make_bool_array()
-    b |> run("flip_compound/{TOTAL_ELEMENTS}", TOTAL_ELEMENTS) <| $() {
+    b |> run("flip_compound/{TOTAL_ELEMENTS}", TOTAL_ELEMENTS) {
         flip_compound(a)
     }
     delete a
@@ -56,7 +56,7 @@ def bool_array_xor_compound(b : B?) {
 [benchmark]
 def bool_array_xor_simple(b : B?) {
     var a <- make_bool_array()
-    b |> run("flip_simple/{TOTAL_ELEMENTS}", TOTAL_ELEMENTS) <| $() {
+    b |> run("flip_simple/{TOTAL_ELEMENTS}", TOTAL_ELEMENTS) {
         flip_simple(a)
     }
     delete a
@@ -65,7 +65,7 @@ def bool_array_xor_simple(b : B?) {
 [benchmark]
 def array_bool_xor(b : B?) {
     var a <- make_array_bool()
-    b |> run("flip_compound/{TOTAL_ELEMENTS}", TOTAL_ELEMENTS) <| $() {
+    b |> run("flip_compound/{TOTAL_ELEMENTS}", TOTAL_ELEMENTS) {
         flip_compound(a)
     }
     delete a

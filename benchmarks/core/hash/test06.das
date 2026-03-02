@@ -31,7 +31,7 @@ def insert_and_increment(hmap : auto(HashMapType); randomNumbers : array<int>) {
 }
 
 def run_bench(b : B?; hmap : auto(HashMapType); randomNumbers : array<int>) {
-    b |> run("insert_increment/{TOTAL_RANDOM_NUMBERS}", TOTAL_RANDOM_NUMBERS) <| $() {
+    b |> run("insert_increment/{TOTAL_RANDOM_NUMBERS}", TOTAL_RANDOM_NUMBERS) {
         insert_and_increment(hmap, randomNumbers)
     }
 }

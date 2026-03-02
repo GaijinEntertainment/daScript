@@ -38,14 +38,14 @@ def fill_map(hmap : auto(HashMapType); size : int) : auto(HashMapType) {
 }
 
 def run_write_bench(b : B?; hmap : auto(HashMapType)) {
-    b |> run("insert/{HASH_SIZE}", HASH_SIZE) <| $() {
+    b |> run("insert/{HASH_SIZE}", HASH_SIZE) {
         fill_map(hmap, HASH_SIZE)
     }
 }
 
 def run_read_bench(b : B?; hmap : auto(HashMapType)) {
     let m = fill_map(hmap, HASH_SIZE)
-    b |> run("read/{HASH_SIZE}", HASH_SIZE) <| $() {
+    b |> run("read/{HASH_SIZE}", HASH_SIZE) {
         read_map(b, m)
     }
 }

@@ -37,7 +37,7 @@ def lookup_all(hashMap : auto(HashMapType); randomNumbers : array<int>) {
 
 def run_bench(b : B?; hmap : auto(HashMapType); randomNumbers : array<int>) {
     let hashMap = fill_map(hmap, randomNumbers)
-    b |> run("key_exists/{TOTAL_RANDOM_NUMBERS}", TOTAL_RANDOM_NUMBERS) <| $() {
+    b |> run("key_exists/{TOTAL_RANDOM_NUMBERS}", TOTAL_RANDOM_NUMBERS) {
         lookup_all(hashMap, randomNumbers)
     }
 }

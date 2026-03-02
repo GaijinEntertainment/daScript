@@ -30,7 +30,7 @@ def fill_then_erase(hmap : auto(HashMapType); randomNumbers : array<int>) {
 }
 
 def run_bench(b : B?; hmap : auto(HashMapType); randomNumbers : array<int>) {
-    b |> run("insert_erase/{TOTAL_RANDOM_NUMBERS}", TOTAL_RANDOM_NUMBERS) <| $() {
+    b |> run("insert_erase/{TOTAL_RANDOM_NUMBERS}", TOTAL_RANDOM_NUMBERS) {
         fill_then_erase(hmap, randomNumbers)
     }
 }

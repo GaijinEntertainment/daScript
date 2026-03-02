@@ -29,7 +29,7 @@ def bool_array_access(b : B?) {
     for (i in 0 .. TOTAL_ELEMENTS) {
         a.push((i & 1) == 0)
     }
-    b |> run("access/{TOTAL_ELEMENTS}", TOTAL_ELEMENTS) <| $() {
+    b |> run("access/{TOTAL_ELEMENTS}", TOTAL_ELEMENTS) {
         let t = count_trues(a)
         if (t != TOTAL_ELEMENTS / 2) {
             b->failNow()
@@ -44,7 +44,7 @@ def array_bool_access(b : B?) {
     for (i in 0 .. TOTAL_ELEMENTS) {
         a.push((i & 1) == 0)
     }
-    b |> run("access/{TOTAL_ELEMENTS}", TOTAL_ELEMENTS) <| $() {
+    b |> run("access/{TOTAL_ELEMENTS}", TOTAL_ELEMENTS) {
         let t = count_trues(a)
         if (t != TOTAL_ELEMENTS / 2) {
             b->failNow()
