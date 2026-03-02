@@ -50,10 +50,10 @@ def test_fixed_array_2d(t : T?) {
                 g_dim_a[y][x] = float(y * 10 + x)
             }
         }
-        t |> equal("{g_dim_a}", "[[ [[ 0; 1; 2]]; [[ 10; 11; 12]]]]")
+        t |> equal("{g_dim_a}", "[ [ 0, 1, 2], [ 10, 11, 12]]")
         var a0 = g_dim_a[0]
-        t |> equal("{a0}", "[[ 0; 1; 2]]")
+        t |> equal("{a0}", "[ 0, 1, 2]")
         var a1 = g_dim_a[1]
-        t |> equal("{a1}", "[[ 10; 11; 12]]")
+        t |> equal("{a1}", "[ 10, 11, 12]")
     }
 }

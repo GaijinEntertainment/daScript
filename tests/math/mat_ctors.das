@@ -44,7 +44,7 @@ def test_4x4(t : T?) {
     m[1] = float4(5, 6, 7, 8)
     m[2] = float4(9, 10, 11, 12)
     m[3] = float4(13, 14, 15, 16)
-    t |> equal("{m}", "[[ 1{VEC_SEP}2{VEC_SEP}3{VEC_SEP}4; 5{VEC_SEP}6{VEC_SEP}7{VEC_SEP}8; 9{VEC_SEP}10{VEC_SEP}11{VEC_SEP}12; 13{VEC_SEP}14{VEC_SEP}15{VEC_SEP}16]]")
+    t |> equal("{m}", "( 1{VEC_SEP}2{VEC_SEP}3{VEC_SEP}4, 5{VEC_SEP}6{VEC_SEP}7{VEC_SEP}8, 9{VEC_SEP}10{VEC_SEP}11{VEC_SEP}12, 13{VEC_SEP}14{VEC_SEP}15{VEC_SEP}16)")
     verifySequence(t, m)
     for (y in range(4)) {
         for (x in range(4)) {
@@ -57,7 +57,7 @@ def test_4x4(t : T?) {
     m.z = float4(9, 10, 11, 12)
     m.w = float4(13, 14, 15, 16)
     verifySequence(t, m)
-    t |> equal("{m}", "[[ 1{VEC_SEP}2{VEC_SEP}3{VEC_SEP}4; 5{VEC_SEP}6{VEC_SEP}7{VEC_SEP}8; 9{VEC_SEP}10{VEC_SEP}11{VEC_SEP}12; 13{VEC_SEP}14{VEC_SEP}15{VEC_SEP}16]]")
+    t |> equal("{m}", "( 1{VEC_SEP}2{VEC_SEP}3{VEC_SEP}4, 5{VEC_SEP}6{VEC_SEP}7{VEC_SEP}8, 9{VEC_SEP}10{VEC_SEP}11{VEC_SEP}12, 13{VEC_SEP}14{VEC_SEP}15{VEC_SEP}16)")
     identity(m)
     verifyIdentity(t, m)
     var ops = false

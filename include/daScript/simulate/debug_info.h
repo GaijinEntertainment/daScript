@@ -355,6 +355,50 @@ namespace das
         __forceinline bool isTemp() const { return flags & flag_isTemp; }
         __forceinline bool isImplicit() const { return flags & flag_isImplicit; }
         __forceinline bool isSmartPtr() const { return flags & flag_isSmartPtr; }
+        __forceinline static bool isSimpleBaseType(Type t) {
+            switch ( t ) {
+                case Type::tString:
+                case Type::tStructure:
+                case Type::tHandle:
+                case Type::tTuple:
+                case Type::tVariant:
+                case Type::tArray:
+                case Type::tTable:
+                case Type::tLambda:
+                case Type::tIterator:
+                case Type::tBlock:
+                case Type::tPointer:
+                    return false;
+                default:
+                    return true;
+            }
+        }
+        __forceinline bool isSimpleType() const {
+            return dimSize == 0 && isSimpleBaseType(type);
+        }
+        __forceinline bool isDimOfSimpleType() const {
+            return dimSize == 1 && isSimpleBaseType(type);
+        }
+        __forceinline bool isArrayOfSimpleType() const {
+            return firstType && firstType->isSimpleType();
+        }
+        __forceinline bool isTableOfSimpleTypes() const {
+            return firstType && secondType
+                && firstType->isSimpleType()
+                && secondType->isSimpleType();
+        }
+        __forceinline bool isTupleOfSimpleTypes() const {
+            for ( uint32_t i=0, is=argCount; i!=is; ++i ) {
+                if ( !argTypes[i]->isSimpleType() ) return false;
+            }
+            return true;
+        }
+        __forceinline bool isVariantOfSimpleTypes() const {
+            for ( uint32_t i=0, is=argCount; i!=is; ++i ) {
+                if ( !argTypes[i]->isSimpleType() ) return false;
+            }
+            return true;
+        }
         TypeAnnotation * getAnnotation() const;
         StructInfo * getStructType() const;
         EnumInfo * getEnumType() const;
@@ -509,6 +553,7 @@ namespace das
     ,   refAddresses =          (1<<3)
     ,   singleLine =            (1<<4)
     ,   fixedFloatingPoint =    (1<<5)
+    ,   fullTypeInfo =          (1<<6)
 
     ,   string_builder  =   PrintFlags::none
     ,   debugger        =   PrintFlags::escapeString | PrintFlags::namesAndDimensions

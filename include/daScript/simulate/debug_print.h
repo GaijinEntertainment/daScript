@@ -31,10 +31,19 @@ namespace das {
             }
             return false;
         }
+    // helpers
+        __forceinline bool hasFlag(PrintFlags f) const { return (int(flags) & int(f)) != 0; }
+        __forceinline string debug_type_no_dim(const TypeInfo * ti) {
+            TypeInfo tmp = *ti;
+            tmp.dimSize = 0;
+            tmp.dim = nullptr;
+            tmp.flags &= ~(TypeInfo::flag_isConst | TypeInfo::flag_ref | TypeInfo::flag_isTemp | TypeInfo::flag_isImplicit);
+            return debug_type(&tmp);
+        }
     // data structures
         __forceinline void br() {
-            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
-                if ( !(int(flags) & int(PrintFlags::singleLine)) ) {
+            if ( hasFlag(PrintFlags::namesAndDimensions) ) {
+                if ( !hasFlag(PrintFlags::singleLine) ) {
                     ss << "\n";
                 }
             }
@@ -49,154 +58,173 @@ namespace das {
             return false;
          }
         virtual void beforeStructure ( char * ps, StructInfo * info ) override {
-            ss << "[[";
-            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+            if ( hasFlag(PrintFlags::namesAndDimensions) ) {
                 ss << info->name;
             }
-            if ( int(flags) & int(PrintFlags::refAddresses) ) {
+            ss << "(";
+            if ( hasFlag(PrintFlags::refAddresses) ) {
                 ss << " at 0x" << HEX << intptr_t(ps) << DEC;
             }
             br();
         }
         virtual void afterStructure ( char *, StructInfo * ) override {
-            ss << "]]";
+            ss << ")";
             br();
         }
         virtual void beforeStructureField ( char *, StructInfo *, char *, VarInfo * vi, bool ) override {
             ss << " ";
-            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+            if ( hasFlag(PrintFlags::namesAndDimensions) ) {
                 ss << vi->name << " = ";
             }
         }
         virtual void afterStructureField ( char *, StructInfo *, char *, VarInfo *, bool last ) override {
             if ( !last ) {
-                ss << ";";
+                ss << ",";
             }
             br();
         }
 
-        virtual void beforeTuple ( char * ps, TypeInfo * ) override {
-            ss << "[[";
-            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
-                ss << "tuple";
+        virtual void beforeTuple ( char * ps, TypeInfo * ti ) override {
+            if ( hasFlag(PrintFlags::fullTypeInfo) ) {
+                ss << debug_type(ti);
             }
-            if ( int(flags) & int(PrintFlags::refAddresses) ) {
+            ss << "(";
+            if ( hasFlag(PrintFlags::refAddresses) ) {
                 ss << " at 0x" << HEX << intptr_t(ps) << DEC;
             }
-            br();
+            if ( !ti->isTupleOfSimpleTypes() ) br();
         }
-        virtual void afterTuple ( char *, TypeInfo * ) override {
-            ss << "]]";
-            br();
+        virtual void afterTuple ( char *, TypeInfo * ti ) override {
+            ss << ")";
+            if ( !ti->isTupleOfSimpleTypes() ) br();
         }
         virtual void beforeTupleEntry ( char *, TypeInfo *, char *, int, bool ) override {
             ss << " ";
         }
-        virtual void afterTupleEntry ( char *, TypeInfo *, char *, int, bool last ) override {
+        virtual void afterTupleEntry ( char *, TypeInfo * ti, char *, int, bool last ) override {
             if ( !last ) {
-                ss << ";";
+                ss << ",";
             }
-            br();
+            if ( !ti->isTupleOfSimpleTypes() ) br();
         }
 
         virtual void beforeVariant ( char * ps, TypeInfo * ti ) override {
-            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
-                ss << "[[variant ";
+            if ( hasFlag(PrintFlags::namesAndDimensions) ) {
+                ss << "variant(";
             }
-            if ( int(flags) & int(PrintFlags::refAddresses) ) {
+            if ( hasFlag(PrintFlags::refAddresses) ) {
                 ss << "at 0x" << HEX << intptr_t(ps) << DEC << " ";
             }
-            if ( (int(flags) & int(PrintFlags::namesAndDimensions)) && ti->argNames) {
+            if ( hasFlag(PrintFlags::namesAndDimensions) && ti->argNames) {
                 auto vindex = *(uint32_t *)ps;
                 if ( vindex < ti->argCount ) {
-                    ss << ti->argNames[vindex] << "=";
+                    ss << ti->argNames[vindex] << " = ";
                 } else {
-                    ss << "unknown=";
+                    ss << "unknown = ";
                 }
             }
-            br();
+            if ( !ti->isVariantOfSimpleTypes() ) br();
         }
-        virtual void afterVariant ( char *, TypeInfo * ) override {
-            if (int(flags) & int(PrintFlags::namesAndDimensions)) {
-                ss << "]]";
+        virtual void afterVariant ( char *, TypeInfo * ti ) override {
+            if ( hasFlag(PrintFlags::namesAndDimensions) ) {
+                ss << ")";
             }
-            br();
+            if ( !ti->isVariantOfSimpleTypes() ) br();
         }
 
         virtual void beforeArrayElement ( char *, TypeInfo *, char *, uint32_t, bool ) override {
             ss << " ";
         }
-        virtual void afterArrayElement ( char *, TypeInfo *, char *, uint32_t, bool last ) override {
+        virtual void afterArrayElement ( char *, TypeInfo * ti, char *, uint32_t, bool last ) override {
             if ( !last ) {
-                ss << ";";
+                ss << ",";
             }
-            br();
+            if ( !ti->isSimpleType() ) br();
         }
         virtual void beforeTableKey ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool ) override {
             ss << " ";
         }
         virtual void beforeTableValue ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool ) override {
-            ss << " : ";
+            ss << " => ";
         }
-        virtual void afterTableValue ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool last ) override {
+        virtual void afterTableValue ( Table *, TypeInfo * ti, char *, TypeInfo *, uint32_t, bool last ) override {
             if ( !last ) {
-                ss << ";";
+                ss << ",";
             }
-            br();
+            if ( !ti->isTableOfSimpleTypes() ) br();
         }
         virtual void beforeDim ( char *, TypeInfo * ti ) override {
-            ss << "[[";
-            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
-                ss << debug_type(ti);
+            if ( hasFlag(PrintFlags::fullTypeInfo) ) {
+                ss << "fixed_array<" << debug_type_no_dim(ti) << ">(";
+            } else {
+                ss << "[";
             }
-            br();
+            if ( !ti->isDimOfSimpleType() ) br();
         }
-        virtual void afterDim ( char *, TypeInfo * ) override {
-            ss << "]]";
-            br();
+        virtual void afterDim ( char *, TypeInfo * ti ) override {
+            if ( hasFlag(PrintFlags::fullTypeInfo) ) {
+                ss << ")";
+            } else {
+                ss << "]";
+            }
+            if ( !ti->isDimOfSimpleType() ) br();
         }
         virtual void beforeArray ( Array * arr, TypeInfo * ti ) override {
-            ss << "[[";
-            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
-                ss << debug_type(ti);
+            if ( hasFlag(PrintFlags::fullTypeInfo) ) {
+                ss << debug_type(ti) << "(";
+            } else {
+                ss << "[";
+            }
+            if ( hasFlag(PrintFlags::namesAndDimensions) ) {
                 if ( arr->shared ) ss << " /*shared*/ ";
             }
-            if ( int(flags) & int(PrintFlags::refAddresses) ) {
+            if ( hasFlag(PrintFlags::refAddresses) ) {
                 ss << " data at 0x" << HEX << intptr_t(arr->data) << DEC;
             }
-            br();
+            if ( !ti->isArrayOfSimpleType() ) br();
         }
-        virtual void afterArray ( Array *, TypeInfo * ) override {
-            ss << "]]";
-            br();
+        virtual void afterArray ( Array *, TypeInfo * ti ) override {
+            if ( hasFlag(PrintFlags::fullTypeInfo) ) {
+                ss << ")";
+            } else {
+                ss << "]";
+            }
+            if ( !ti->isArrayOfSimpleType() ) br();
         }
         virtual void beforeTable ( Table * tab, TypeInfo * ti ) override {
-            ss << "[[";
-            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
-                ss << debug_type(ti);
+            if ( hasFlag(PrintFlags::fullTypeInfo) ) {
+                ss << debug_type(ti) << "(";
+            } else {
+                ss << "{";
+            }
+            if ( hasFlag(PrintFlags::namesAndDimensions) ) {
                 if ( tab->shared ) ss << " /*shared*/ ";
             }
-            if ( int(flags) & int(PrintFlags::refAddresses) ) {
+            if ( hasFlag(PrintFlags::refAddresses) ) {
                 ss << " data at 0x" << HEX << intptr_t(tab->data) << DEC;
             }
-            br();
+            if ( !ti->isTableOfSimpleTypes() ) br();
         }
-        virtual void afterTable ( Table *, TypeInfo * ) override {
-            ss << "]]";
-            br();
+        virtual void afterTable ( Table *, TypeInfo * ti ) override {
+            if ( hasFlag(PrintFlags::fullTypeInfo) ) {
+                ss << ")";
+            } else {
+                ss << "}";
+            }
+            if ( !ti->isTableOfSimpleTypes() ) br();
         }
         virtual void beforeRef ( char * pa, TypeInfo * ti ) override {
-            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+            if ( hasFlag(PrintFlags::namesAndDimensions) ) {
                 ss << "(" << debug_type(ti) << " 0x" << HEX << intptr_t(pa) << DEC << " ref = ";
             }
         }
         virtual void afterRef ( char *, TypeInfo * ) override {
-            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+            if ( hasFlag(PrintFlags::namesAndDimensions) ) {
                 ss << ")";
             }
         }
         virtual void beforePtr ( char * pa, TypeInfo * ti ) override {
-            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+            if ( hasFlag(PrintFlags::namesAndDimensions) ) {
                 ss << "(" << debug_type(ti) << " 0x" << HEX << intptr_t(*(char**)pa) << DEC;
                 if ( ti->flags & TypeInfo::flag_isSmartPtr ) {
                     if ( ptr_ref_count * ps = *(ptr_ref_count**)pa) {
@@ -216,35 +244,35 @@ namespace das {
             }
         }
         virtual void afterPtr ( char *, TypeInfo * ) override {
-            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+            if ( hasFlag(PrintFlags::namesAndDimensions) ) {
                 ss << ")";
             }
         }
         virtual void beforeHandle ( char *, TypeInfo * ti ) override {
-            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
-                ss << "[[" << debug_type(ti) << " ";
+            if ( hasFlag(PrintFlags::namesAndDimensions) ) {
+                ss << debug_type(ti) << "(";
             }
             br();
         }
         virtual void afterHandle ( char *, TypeInfo * ) override {
-            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
-                ss << "]]";
+            if ( hasFlag(PrintFlags::namesAndDimensions) ) {
+                ss << ")";
             }
             br();
         }
         virtual void afterHandleCancel ( char *, TypeInfo * ) override {
-            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
-                ss << "]]";
+            if ( hasFlag(PrintFlags::namesAndDimensions) ) {
+                ss << ")";
             }
             br();
         }
         virtual void beforeLambda ( Lambda *, TypeInfo * ti ) override {
-            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+            if ( hasFlag(PrintFlags::namesAndDimensions) ) {
                 ss << "(" << debug_type(ti) << " ";
             }
         }
         virtual void afterLambda ( Lambda *, TypeInfo * ) override {
-            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+            if ( hasFlag(PrintFlags::namesAndDimensions) ) {
                 ss << ")";
             }
         }
@@ -269,42 +297,42 @@ namespace das {
         }
         virtual void Int64 ( int64_t & i ) override {
             ss << i;
-            if ( int(flags) & int(PrintFlags::typeQualifiers) ) {
+            if ( hasFlag(PrintFlags::typeQualifiers) ) {
                 ss << "l";
             }
         }
         virtual void UInt64 ( uint64_t & ui ) override {
             ss << "0x" << HEX << ui << DEC;
-            if ( int(flags) & int(PrintFlags::typeQualifiers) ) {
+            if ( hasFlag(PrintFlags::typeQualifiers) ) {
                 ss << "ul";
             }
         }
         virtual void VoidPtr ( void * & p ) override {
             uint64_t ui = uint64_t(intptr_t(p));
             ss << "0x" << HEX << ui << DEC;
-            if ( int(flags) & int(PrintFlags::typeQualifiers) ) {
+            if ( hasFlag(PrintFlags::typeQualifiers) ) {
                 ss << "p";
             }
         }
         virtual void String ( char * & str ) override {
             string text = str ? str : "";
-            if ( int(flags) & int(PrintFlags::escapeString) ) {
+            if ( hasFlag(PrintFlags::escapeString) ) {
                 ss << "\"" << escapeString(text) << "\"";
             } else {
                 ss << text;
             }
-            if ( int(flags) & int(PrintFlags::refAddresses) ) {
+            if ( hasFlag(PrintFlags::refAddresses) ) {
                 ss << " /*0x" << HEX << intptr_t(str) << DEC << "*/";
             }
         }
         virtual void Float ( float & f ) override {
-            bool typeQualifiers = int(flags) & int(PrintFlags::typeQualifiers);
+            bool typeQualifiers = hasFlag(PrintFlags::typeQualifiers);
             if ( typeQualifiers && isnan(f) ) {
                 ss << "nan";
             } else if ( typeQualifiers && isinf(f) ) {
                 ss << (f>0 ? "inf" : "-inf");
             } else {
-                if ( int(flags) & int(PrintFlags::fixedFloatingPoint) )
+                if ( hasFlag(PrintFlags::fixedFloatingPoint) )
                     ss << FIXEDFP << f << SCIENTIFIC;
                 else
                     ss << f;
@@ -314,13 +342,13 @@ namespace das {
             }
         }
         virtual void Double ( double & f ) override {
-            bool typeQualifiers = int(flags) & int(PrintFlags::typeQualifiers);
+            bool typeQualifiers = hasFlag(PrintFlags::typeQualifiers);
             if ( typeQualifiers && isnan(f) ) {
                 ss << "nan";
             } else if ( typeQualifiers && isinf(f) ) {
                 ss << (f>0 ? "inf" : "-inf");
             } else {
-                if ( int(flags) & int(PrintFlags::fixedFloatingPoint) )
+                if ( hasFlag(PrintFlags::fixedFloatingPoint) )
                     ss << FIXEDFP << f << SCIENTIFIC;
                 else
                     ss << f;
@@ -334,7 +362,7 @@ namespace das {
         }
         virtual void UInt ( uint32_t & ui ) override {
             ss << "0x" << HEX << ui << DEC;
-            if ( int(flags) & int(PrintFlags::typeQualifiers) ) {
+            if ( hasFlag(PrintFlags::typeQualifiers) ) {
                 ss << "u";
             }
         }
@@ -347,7 +375,7 @@ namespace das {
                         if ( ui & (1ull<<uint64_t(bit)) ) {
                             if ( any ) ss << "|"; else any = true;
                             ss << info->argNames[bit];
-                            if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
+                            if ( hasFlag(PrintFlags::namesAndDimensions) ) {
                                 ss << "(" << (1ull<<bit) << ")";
                             }
                         }
@@ -358,7 +386,7 @@ namespace das {
                 }
             } else {
                 ss << "0x" << HEX << ui << DEC;
-                if ( int(flags) & int(PrintFlags::typeQualifiers) ) {
+                if ( hasFlag(PrintFlags::typeQualifiers) ) {
                     ss << "u";
                 }
             }
@@ -420,20 +448,25 @@ namespace das {
         virtual void FakeLineInfo ( LineInfo * at ) override {
             ss << (at ? at->describe() : "lineinfo null)");
         }
-        virtual void beforeIterator ( Sequence *, TypeInfo * ) override {
-            ss << "iterator [[";
+        virtual void beforeIterator ( Sequence *, TypeInfo * ti ) override {
+            ss << "iterator<" << (ti && ti->firstType ? debug_type(ti->firstType) : "") << ">";
         }
         virtual void afterIterator ( Sequence *, TypeInfo * ) override {
-            ss << "]]";
         }
         virtual void WalkBlock ( struct Block * pa ) override {
             ss << "block";
             if ( pa->body ) ss << HEX << getSemanticHash(pa->body, context) << DEC;
         }
+        __forceinline void emitEnumName ( EnumInfo * info ) {
+            if ( hasFlag(PrintFlags::fullTypeInfo) && info->name ) {
+                ss << info->name << ".";
+            }
+        }
         virtual void WalkEnumeration ( int32_t & value, EnumInfo * info ) override {
             int64_t uvalue = uint64_t(value);
             for ( uint32_t t=0, ts=info->count; t!=ts; ++t ) {
                 if ( value == info->fields[t]->value || uvalue == info->fields[t]->value ) {
+                    emitEnumName(info);
                     ss << info->fields[t]->name;
                     return;
                 }
@@ -444,6 +477,7 @@ namespace das {
             int64_t uvalue = uint8_t(value);
             for ( uint32_t t=0, ts=info->count; t!=ts; ++t ) {
                 if ( value == info->fields[t]->value || uvalue == info->fields[t]->value ) {
+                    emitEnumName(info);
                     ss << info->fields[t]->name;
                     return;
                 }
@@ -454,6 +488,7 @@ namespace das {
             int64_t uvalue = uint16_t(value);
             for ( uint32_t t=0, ts=info->count; t!=ts; ++t ) {
                 if ( value == info->fields[t]->value || uvalue == info->fields[t]->value ) {
+                    emitEnumName(info);
                     ss << info->fields[t]->name;
                     return;
                 }
@@ -463,6 +498,7 @@ namespace das {
         virtual void WalkEnumeration64 ( int64_t & value, EnumInfo * info ) override {
             for ( uint32_t t=0, ts=info->count; t!=ts; ++t ) {
                 if ( value == info->fields[t]->value ) {
+                    emitEnumName(info);
                     ss << info->fields[t]->name;
                     return;
                 }
