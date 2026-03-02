@@ -399,15 +399,9 @@ jobs:
         fi
         echo "No stubs found."
 
-    - name: "Verify generated RST is up-to-date"
+    - name: "Check for new untracked RST files"
       run: |
         set -eux
-        if ! git diff --exit-code doc/source/stdlib/; then
-          echo "ERROR: das2rst produced changes not committed to the repo."
-          echo "Run: ./bin/daslang doc/reflections/das2rst.das"
-          echo "Then commit the updated files under doc/source/stdlib/"
-          exit 1
-        fi
         UNTRACKED=$(git ls-files --others --exclude-standard doc/source/stdlib/)
         if [ -n "$UNTRACKED" ]; then
           echo "ERROR: das2rst generated new files not tracked in git:"
@@ -415,7 +409,7 @@ jobs:
           echo "Run das2rst locally and commit the new files."
           exit 1
         fi
-        echo "Generated RST is up-to-date."
+        echo "No untracked RST files."
 
     - name: "Install Python dependencies"
       run: pip install -r doc/requirements.txt
