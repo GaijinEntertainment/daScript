@@ -1,6 +1,8 @@
 *.DS_Store
 .DS_Store
 
+benchdata.db
+
 *.output
 *.temp
 
