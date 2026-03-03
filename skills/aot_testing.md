@@ -181,9 +181,9 @@ The AOT test step runs in `.github/workflows/build.yml` after the regular test s
 
 ## _aot_generated Directories
 
-AOT-generated C++ files go into `_aot_generated/` subdirectories:
-- `daslib/_aot_generated/` — tracked in git (part of `libDaScriptAot`)
-- `tests/aot/_aot_generated/` — gitignored (build artifact)
-- `dastest/_aot_generated/` — gitignored (build artifact)
+AOT-generated C++ files go into `_aot_generated/` subdirectories — all are gitignored:
+- `daslib/_aot_generated/` — regenerated at build time by `DAS_AOT_LIB` (part of `libDaScriptAot`)
+- `tests/aot/_aot_generated/` — build artifact for `test_aot`
+- `dastest/_aot_generated/` — build artifact for `test_aot`
 
 When creating a new AOT target that generates into a new directory, add it to `.gitignore`.
