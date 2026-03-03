@@ -545,6 +545,38 @@ bool pugiTextSetBool ( pugi::xml_text & text, bool value ) {
     return text.set(value);
 }
 
+bool pugiTextSetInt8 ( pugi::xml_text & text, int8_t value ) {
+    return text.set((int)value);
+}
+
+bool pugiTextSetUint8 ( pugi::xml_text & text, uint8_t value ) {
+    return text.set((unsigned int)value);
+}
+
+bool pugiTextSetInt16 ( pugi::xml_text & text, int16_t value ) {
+    return text.set((int)value);
+}
+
+bool pugiTextSetUint16 ( pugi::xml_text & text, uint16_t value ) {
+    return text.set((unsigned int)value);
+}
+
+bool pugiTextSetInt64 ( pugi::xml_text & text, int64_t value ) {
+    return text.set((long long)value);
+}
+
+bool pugiTextSetUint64 ( pugi::xml_text & text, uint64_t value ) {
+    return text.set((unsigned long long)value);
+}
+
+int64_t pugiText_as_int64 ( const pugi::xml_text & text, int64_t def ) {
+    return text.as_llong(def);
+}
+
+uint64_t pugiText_as_uint64 ( const pugi::xml_text & text, uint64_t def ) {
+    return text.as_ullong(def);
+}
+
 pugi::xml_node pugiTextData ( const pugi::xml_text & text ) {
     return text.data();
 }
@@ -983,23 +1015,47 @@ public:
             SideEffects::none, "pugiText_as_bool")
                 ->args({"text","default_value"});
         addExtern<DAS_BIND_FUN(pugiTextSetString)> (*this, lib, "set",
-            SideEffects::modifyArgument, "pugiTextSetString")
+            SideEffects::modifyArgumentAndExternal, "pugiTextSetString")
                 ->args({"text","value"});
         addExtern<DAS_BIND_FUN(pugiTextSetInt)> (*this, lib, "set",
-            SideEffects::modifyArgument, "pugiTextSetInt")
+            SideEffects::modifyArgumentAndExternal, "pugiTextSetInt")
                 ->args({"text","value"});
         addExtern<DAS_BIND_FUN(pugiTextSetUint)> (*this, lib, "set",
-            SideEffects::modifyArgument, "pugiTextSetUint")
+            SideEffects::modifyArgumentAndExternal, "pugiTextSetUint")
                 ->args({"text","value"});
         addExtern<DAS_BIND_FUN(pugiTextSetDouble)> (*this, lib, "set",
-            SideEffects::modifyArgument, "pugiTextSetDouble")
+            SideEffects::modifyArgumentAndExternal, "pugiTextSetDouble")
                 ->args({"text","value"});
         addExtern<DAS_BIND_FUN(pugiTextSetFloat)> (*this, lib, "set",
-            SideEffects::modifyArgument, "pugiTextSetFloat")
+            SideEffects::modifyArgumentAndExternal, "pugiTextSetFloat")
                 ->args({"text","value"});
         addExtern<DAS_BIND_FUN(pugiTextSetBool)> (*this, lib, "set",
-            SideEffects::modifyArgument, "pugiTextSetBool")
+            SideEffects::modifyArgumentAndExternal, "pugiTextSetBool")
                 ->args({"text","value"});
+        addExtern<DAS_BIND_FUN(pugiTextSetInt8)> (*this, lib, "set",
+            SideEffects::modifyArgumentAndExternal, "pugiTextSetInt8")
+                ->args({"text","value"});
+        addExtern<DAS_BIND_FUN(pugiTextSetUint8)> (*this, lib, "set",
+            SideEffects::modifyArgumentAndExternal, "pugiTextSetUint8")
+                ->args({"text","value"});
+        addExtern<DAS_BIND_FUN(pugiTextSetInt16)> (*this, lib, "set",
+            SideEffects::modifyArgumentAndExternal, "pugiTextSetInt16")
+                ->args({"text","value"});
+        addExtern<DAS_BIND_FUN(pugiTextSetUint16)> (*this, lib, "set",
+            SideEffects::modifyArgumentAndExternal, "pugiTextSetUint16")
+                ->args({"text","value"});
+        addExtern<DAS_BIND_FUN(pugiTextSetInt64)> (*this, lib, "set",
+            SideEffects::modifyArgumentAndExternal, "pugiTextSetInt64")
+                ->args({"text","value"});
+        addExtern<DAS_BIND_FUN(pugiTextSetUint64)> (*this, lib, "set",
+            SideEffects::modifyArgumentAndExternal, "pugiTextSetUint64")
+                ->args({"text","value"});
+        addExtern<DAS_BIND_FUN(pugiText_as_int64)> (*this, lib, "as_int64",
+            SideEffects::none, "pugiText_as_int64")
+                ->args({"text","default_value"});
+        addExtern<DAS_BIND_FUN(pugiText_as_uint64)> (*this, lib, "as_uint64",
+            SideEffects::none, "pugiText_as_uint64")
+                ->args({"text","default_value"});
         addExtern<DAS_BIND_FUN(pugiTextData),SimNode_ExtFuncCallAndCopyOrMove> (*this, lib, ".`data",
             SideEffects::none, "pugiTextData")
                 ->args({"text"});

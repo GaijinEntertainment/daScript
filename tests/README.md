@@ -27,6 +27,16 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | test_pugixml_boost.das | PUGIXML_boost helpers — iteration, RAII, accessors, builders, serialization, operator is/as type conversions | |
 | test_pugixml_core.das | Core C++ bindings — node navigation, attribute/text properties, parse result, document ops, XPath evaluation | |
 | test_pugixml_mutation.das | XML mutation — node/attribute insert/remove/copy/move, text set, attribute set_value types | |
+| test_serial_struct.das | Struct serialization — XML()/from_XML()/to_XML() for simple, nested, and array-containing structs | |
+| test_serial_tuple.das | Tuple serialization — unnamed and named tuples, structs with tuple fields | |
+| test_serial_variant.das | Variant serialization — int/string variant cases, struct with variant field, _variant attribute | |
+| test_serial_dim.das | Fixed array (dim) serialization — int[N], string[N], struct with dim field | |
+| test_serial_table.das | Table and set serialization — table<string;int>, table<string>, key-only sets, empty tables | |
+| test_serial_enum.das | Enum serialization — string-based enum roundtrip, default values | |
+| test_serial_bitfield.das | Bitfield serialization — Perms (uint), Flags8 (uint8), Flags16 (uint16), Flags64 (uint64), high-bit test | |
+| test_serial_integers.das | Integer type serialization — int8, uint8, int16, uint16, int64, uint64, standalone and struct fields | |
+| test_serial_vectors.das | Vector/range serialization — float2/3/4, int2/3/4, uint4, range, urange, range64, urange64 | |
+| test_serial_annotations.das | Annotation support — @rename, @enum_as_int, mixed annotations, roundtrip with annotations | |
 
 ## algorithm/
 

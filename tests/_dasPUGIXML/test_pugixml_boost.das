@@ -78,7 +78,7 @@ def test_parse_xml(t : T?) {
 [test]
 def test_with_doc(t : T?) {
     with_doc() <| $(doc) {
-        var root = append_child(document_as_node(doc), "test")
+        var root = append_child(doc as xml_node, "test")
         add_child(root, "msg", "hello")
         let txt = node_text(root, "msg")
         t |> equal(txt, "hello")
@@ -113,7 +113,7 @@ def test_node_attr(t : T?) {
 [test]
 def test_add_child(t : T?) {
     with_doc() <| $(doc) {
-        var root = append_child(document_as_node(doc), "catalog")
+        var root = append_child(doc as xml_node, "catalog")
         add_child(root, "title", "My Book")
         add_child_ex(root, "item", "id", "42")
         t |> equal(node_text(root, "title"), "My Book")
@@ -125,7 +125,7 @@ def test_add_child(t : T?) {
 [test]
 def test_add_attr(t : T?) {
     with_doc() <| $(doc) {
-        var root = append_child(document_as_node(doc), "node")
+        var root = append_child(doc as xml_node, "node")
         add_attr(root, "name", "test")
         add_attr(root, "count", 42)
         add_attr(root, "ratio", 3.14)
@@ -140,7 +140,7 @@ def test_add_attr(t : T?) {
 [test]
 def test_to_string_doc(t : T?) {
     with_doc() <| $(doc) {
-        var root = append_child(document_as_node(doc), "root")
+        var root = append_child(doc as xml_node, "root")
         add_child(root, "msg", "hello")
         let s = to_string(doc)
         t |> success(length(s) > 0)
@@ -346,5 +346,155 @@ def test_node_as_string(t : T?) {
         let s = item as string
         t |> success(find(s, "item") >= 0)
         t |> success(find(s, "text") >= 0)
+    }
+}
+
+// ============ operator [] ============
+
+[test]
+def test_index_operator(t : T?) {
+    t |> run("node[name] returns attribute") <| @(t : T?) {
+        parse_xml("<item isbn=\"978\" price=\"29.99\" active=\"true\" count=\"5\"/>") <| $(doc, ok) {
+            t |> success(ok)
+            let item = doc.document_element
+            // basic access
+            t |> success(item["isbn"].ok)
+            t |> success(!item["missing"].ok)
+            // combined with as
+            t |> equal(item["isbn"] as string, "978")
+            t |> equal(item["count"] as int, 5)
+            t |> success(abs(item["price"] as float - 29.99) < 0.01)
+            t |> equal(item["active"] as bool, true)
+        }
+    }
+    t |> run("node[name] combined with is") <| @(t : T?) {
+        parse_xml("<item x=\"1\"/>") <| $(doc, ok) {
+            t |> success(ok)
+            let item = doc.document_element
+            t |> success(item["x"] is int)
+            t |> success(!(item["missing"] is int))
+        }
+    }
+}
+
+// ============ tag builder ============
+
+[test]
+def test_tag_with_block(t : T?) {
+    t |> run("tag with block creates nested structure") <| @(t : T?) {
+        with_doc() <| $(doc) {
+            doc |> tag("catalog") <| $(var catalog) {
+                catalog |> tag("book") <| $(var book) {
+                    book |> tag("title", "The C Programming Language")
+                    book |> tag("author", "K&R")
+                }
+            }
+            let root = doc.document_element
+            t |> equal(root.name, "catalog")
+            let book = child(root, "book")
+            t |> success(book.ok)
+            t |> equal(node_text(book, "title"), "The C Programming Language")
+            t |> equal(node_text(book, "author"), "K&R")
+        }
+    }
+}
+
+[test]
+def test_tag_leaf(t : T?) {
+    t |> run("tag with text creates leaf element") <| @(t : T?) {
+        with_doc() <| $(doc) {
+            var root = append_child(doc as xml_node, "root")
+            root |> tag("name", "Alice")
+            root |> tag("age", "30")
+            t |> equal(node_text(root, "name"), "Alice")
+            t |> equal(node_text(root, "age"), "30")
+        }
+    }
+}
+
+[test]
+def test_tag_bare(t : T?) {
+    t |> run("tag without text creates empty element") <| @(t : T?) {
+        with_doc() <| $(doc) {
+            var root = append_child(doc as xml_node, "root")
+            var ch = root |> tag("empty")
+            t |> success(ch.ok)
+            t |> equal(ch.name, "empty")
+            t |> success(!ch.first_child.ok)
+        }
+    }
+}
+
+[test]
+def test_tag_on_document(t : T?) {
+    t |> run("tag overloads work on xml_document?") <| @(t : T?) {
+        with_doc() <| $(doc) {
+            // block form directly on doc
+            doc |> tag("root") <| $(var root) {
+                root |> tag("child", "text")
+            }
+            t |> equal(doc.document_element.name, "root")
+            t |> equal(node_text(doc.document_element, "child"), "text")
+        }
+    }
+}
+
+// ============ attr builder ============
+
+[test]
+def test_attr_chaining(t : T?) {
+    t |> run("attr returns parent for chaining") <| @(t : T?) {
+        with_doc() <| $(doc) {
+            doc |> tag("item") <| $(var item) {
+                item |> attr("isbn", "978-0-13-110362-7") |> attr("price", 29.99) |> attr("edition", 2) |> attr("available", true)
+            }
+            let item = doc.document_element
+            t |> equal(item["isbn"] as string, "978-0-13-110362-7")
+            t |> success(abs(item["price"] as float - 29.99) < 0.01)
+            t |> equal(item["edition"] as int, 2)
+            t |> equal(item["available"] as bool, true)
+        }
+    }
+}
+
+// ============ Full builder pattern ============
+
+[test]
+def test_full_builder_pattern(t : T?) {
+    t |> run("complete XML built with tag + attr") <| @(t : T?) {
+        with_doc() <| $(doc) {
+            doc |> tag("library") <| $(var library) {
+                library |> tag("book") <| $(var book) {
+                    book |> attr("isbn", "978-0-13-110362-7") |> attr("lang", "en")
+                    book |> tag("title", "The C Programming Language")
+                    book |> tag("author", "Kernighan")
+                    book |> tag("author", "Ritchie")
+                    book |> tag("year", "1988")
+                }
+                library |> tag("book") <| $(var book) {
+                    book |> attr("isbn", "978-0-201-63361-0")
+                    book |> tag("title", "Design Patterns")
+                    book |> tag("year", "1994")
+                }
+            }
+            let root = doc.document_element
+            t |> equal(root.name, "library")
+            // First book
+            let b1 = root.first_child
+            t |> equal(b1["isbn"] as string, "978-0-13-110362-7")
+            t |> equal(b1["lang"] as string, "en")
+            t |> equal(node_text(b1, "title"), "The C Programming Language")
+            t |> equal(node_text(b1, "year"), "1988")
+            // Count authors
+            var author_count = 0
+            for_each_child(b1, "author") <| $(ch) {
+                author_count++
+            }
+            t |> equal(author_count, 2)
+            // Second book
+            let b2 = b1.next_sibling
+            t |> equal(b2["isbn"] as string, "978-0-201-63361-0")
+            t |> equal(node_text(b2, "title"), "Design Patterns")
+        }
     }
 }

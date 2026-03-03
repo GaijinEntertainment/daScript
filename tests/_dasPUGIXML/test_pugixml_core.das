@@ -367,7 +367,7 @@ def test_document_reset(t : T?) {
 def test_save_string(t : T?) {
     t |> run("save_string serializes document") <| @(t : T?) {
         with_doc() <| $(doc) {
-            var root = append_child(document_as_node(doc), "test")
+            var root = append_child(doc as xml_node, "test")
             add_child(root, "item", "value")
             let s = save_string(doc, "\t", format_default, xml_encoding.encoding_auto)
             t |> success(length(s) > 0)
