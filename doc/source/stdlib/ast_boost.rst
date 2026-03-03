@@ -1132,63 +1132,27 @@ Constructs a ``TypeDeclPtr`` of ``tFunction`` base type from a ``FunctionPtr``, 
 Type casts
 ++++++++++
 
-  *  :ref:`Annotation?`as`FunctionAnnotation (foo: Annotation?) : FunctionAnnotation? <function-ast_boost__rq_as_rq_FunctionAnnotation_Annotation_q_>`
-  *  :ref:`Annotation?`as`StructureAnnotation (foo: Annotation?) : StructureAnnotation? <function-ast_boost__rq_as_rq_StructureAnnotation_Annotation_q_>`
-  *  :ref:`Annotation?`is`FunctionAnnotation (foo: Annotation?) : bool <function-ast_boost__rq_is_rq_FunctionAnnotation_Annotation_q_>`
-  *  :ref:`Annotation?`is`StructureAnnotation (foo: Annotation?) : bool <function-ast_boost__rq_is_rq_StructureAnnotation_Annotation_q_>`
-  *  :ref:`Function?`as`BuiltInFunction (foo: Function?) : BuiltInFunction? <function-ast_boost__rq_as_rq_BuiltInFunction_Function_q_>`
-  *  :ref:`Function?`as`ExternalFnBase (foo: Function?) : ExternalFnBase? <function-ast_boost__rq_as_rq_ExternalFnBase_Function_q_>`
-  *  :ref:`Function?`is`BuiltInFunction (foo: Function?) : bool <function-ast_boost__rq_is_rq_BuiltInFunction_Function_q_>`
-  *  :ref:`Function?`is`ExternalFnBase (foo: Function?) : bool <function-ast_boost__rq_is_rq_ExternalFnBase_Function_q_>`
-  *  :ref:`auto`is`BuiltInFunction (anything: auto) : auto <function-ast_boost__rq_is_rq_BuiltInFunction_auto_0x26a>`
-  *  :ref:`auto`is`ExternalFnBase (anything: auto) : auto <function-ast_boost__rq_is_rq_ExternalFnBase_auto_0x27a>`
-  *  :ref:`auto`is`FunctionAnnotation (anything: auto) : auto <function-ast_boost__rq_is_rq_FunctionAnnotation_auto_0x28a>`
-  *  :ref:`auto`is`StructureAnnotation (anything: auto) : auto <function-ast_boost__rq_is_rq_StructureAnnotation_auto_0x2a6>`
-  *  :ref:`smart_ptr\<Annotation\>`as`FunctionAnnotation (foo: smart_ptr\<Annotation\>) : FunctionAnnotation? <function-ast_boost__rq_as_rq_FunctionAnnotation_smart_ptr_ls_Annotation_gr_>`
-  *  :ref:`smart_ptr\<Annotation\>`as`StructureAnnotation (foo: smart_ptr\<Annotation\>) : StructureAnnotation? <function-ast_boost__rq_as_rq_StructureAnnotation_smart_ptr_ls_Annotation_gr_>`
-  *  :ref:`smart_ptr\<Annotation\>`is`FunctionAnnotation (foo: smart_ptr\<Annotation\>) : bool <function-ast_boost__rq_is_rq_FunctionAnnotation_smart_ptr_ls_Annotation_gr_>`
-  *  :ref:`smart_ptr\<Annotation\>`is`StructureAnnotation (foo: smart_ptr\<Annotation\>) : bool <function-ast_boost__rq_is_rq_StructureAnnotation_smart_ptr_ls_Annotation_gr_>`
+  *  :ref:`operator as BuiltInFunction (foo: Function?) : BuiltInFunction? <function-ast_boost__rq_as_rq_BuiltInFunction_Function_q_>`
+  *  :ref:`operator as ExternalFnBase (foo: Function?) : ExternalFnBase? <function-ast_boost__rq_as_rq_ExternalFnBase_Function_q_>`
+  *  :ref:`operator as FunctionAnnotation (foo: smart_ptr\<Annotation\>) : FunctionAnnotation? <function-ast_boost__rq_as_rq_FunctionAnnotation_smart_ptr_ls_Annotation_gr_>`
+  *  :ref:`operator as FunctionAnnotation (foo: Annotation?) : FunctionAnnotation? <function-ast_boost__rq_as_rq_FunctionAnnotation_Annotation_q_>`
+  *  :ref:`operator as StructureAnnotation (foo: smart_ptr\<Annotation\>) : StructureAnnotation? <function-ast_boost__rq_as_rq_StructureAnnotation_smart_ptr_ls_Annotation_gr_>`
+  *  :ref:`operator as StructureAnnotation (foo: Annotation?) : StructureAnnotation? <function-ast_boost__rq_as_rq_StructureAnnotation_Annotation_q_>`
+  *  :ref:`operator is BuiltInFunction (anything: auto) : auto <function-ast_boost__rq_is_rq_BuiltInFunction_auto_0x26a>`
+  *  :ref:`operator is BuiltInFunction (foo: Function?) : bool <function-ast_boost__rq_is_rq_BuiltInFunction_Function_q_>`
+  *  :ref:`operator is ExternalFnBase (foo: Function?) : bool <function-ast_boost__rq_is_rq_ExternalFnBase_Function_q_>`
+  *  :ref:`operator is ExternalFnBase (anything: auto) : auto <function-ast_boost__rq_is_rq_ExternalFnBase_auto_0x27a>`
+  *  :ref:`operator is FunctionAnnotation (foo: smart_ptr\<Annotation\>) : bool <function-ast_boost__rq_is_rq_FunctionAnnotation_smart_ptr_ls_Annotation_gr_>`
+  *  :ref:`operator is FunctionAnnotation (foo: Annotation?) : bool <function-ast_boost__rq_is_rq_FunctionAnnotation_Annotation_q_>`
+  *  :ref:`operator is FunctionAnnotation (anything: auto) : auto <function-ast_boost__rq_is_rq_FunctionAnnotation_auto_0x28a>`
+  *  :ref:`operator is StructureAnnotation (foo: smart_ptr\<Annotation\>) : bool <function-ast_boost__rq_is_rq_StructureAnnotation_smart_ptr_ls_Annotation_gr_>`
+  *  :ref:`operator is StructureAnnotation (anything: auto) : auto <function-ast_boost__rq_is_rq_StructureAnnotation_auto_0x2a6>`
+  *  :ref:`operator is StructureAnnotation (foo: Annotation?) : bool <function-ast_boost__rq_is_rq_StructureAnnotation_Annotation_q_>`
   *  :ref:`walk_and_convert (data: uint8 const?; info: TypeDeclPtr; at: LineInfo) : ExpressionPtr <function-ast_boost_walk_and_convert_uint8_const_q__TypeDeclPtr_LineInfo>`
-
-.. _function-ast_boost__rq_as_rq_FunctionAnnotation_Annotation_q_:
-
-.. das:function:: Annotation?`as`FunctionAnnotation(foo: Annotation?) : FunctionAnnotation?
-
-Casts an ``Annotation?`` or ``smart_ptr<Annotation>`` to ``FunctionAnnotation?`` via ``reinterpret``, verifying the annotation kind first (panics otherwise).
-
-
-:Arguments: * **foo** :  :ref:`Annotation <handle-rtti-Annotation>`?
-
-.. _function-ast_boost__rq_as_rq_StructureAnnotation_Annotation_q_:
-
-.. das:function:: Annotation?`as`StructureAnnotation(foo: Annotation?) : StructureAnnotation?
-
-Casts an ``Annotation?`` or ``smart_ptr<Annotation>`` to ``StructureAnnotation?`` via ``reinterpret``, verifying the annotation kind first (panics otherwise).
-
-
-:Arguments: * **foo** :  :ref:`Annotation <handle-rtti-Annotation>`?
-
-.. _function-ast_boost__rq_is_rq_FunctionAnnotation_Annotation_q_:
-
-.. das:function:: Annotation?`is`FunctionAnnotation(foo: Annotation?) : bool
-
-Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a ``FunctionAnnotation`` according to its ``isFunctionAnnotation`` property.
-
-
-:Arguments: * **foo** :  :ref:`Annotation <handle-rtti-Annotation>`?
-
-.. _function-ast_boost__rq_is_rq_StructureAnnotation_Annotation_q_:
-
-.. das:function:: Annotation?`is`StructureAnnotation(foo: Annotation?) : bool
-
-Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a ``StructureAnnotation`` according to its ``isStructureAnnotation`` property.
-
-
-:Arguments: * **foo** :  :ref:`Annotation <handle-rtti-Annotation>`?
 
 .. _function-ast_boost__rq_as_rq_BuiltInFunction_Function_q_:
 
-.. das:function:: Function?`as`BuiltInFunction(foo: Function?) : BuiltInFunction?
+.. das:function:: operator as BuiltInFunction(foo: Function?) : BuiltInFunction?
 
 Casts a ``Function?`` to ``BuiltInFunction?`` via ``reinterpret``, verifying the target is a built-in function first (panics otherwise).
 
@@ -1197,102 +1161,134 @@ Casts a ``Function?`` to ``BuiltInFunction?`` via ``reinterpret``, verifying the
 
 .. _function-ast_boost__rq_as_rq_ExternalFnBase_Function_q_:
 
-.. das:function:: Function?`as`ExternalFnBase(foo: Function?) : ExternalFnBase?
+.. das:function:: operator as ExternalFnBase(foo: Function?) : ExternalFnBase?
 
 Casts a ``Function?`` to ``ExternalFnBase?`` via ``reinterpret``, verifying it is a property-flagged built-in function first (panics otherwise).
 
 
 :Arguments: * **foo** :  :ref:`Function <handle-ast-Function>`?
 
-.. _function-ast_boost__rq_is_rq_BuiltInFunction_Function_q_:
 
-.. das:function:: Function?`is`BuiltInFunction(foo: Function?) : bool
-
-Returns ``true`` if the given ``Function?`` has the ``builtIn`` flag set, indicating it is a ``BuiltInFunction``; returns ``false`` for any other type.
-
-
-:Arguments: * **foo** :  :ref:`Function <handle-ast-Function>`?
-
-.. _function-ast_boost__rq_is_rq_ExternalFnBase_Function_q_:
-
-.. das:function:: Function?`is`ExternalFnBase(foo: Function?) : bool
-
-Returns ``true`` if the given ``Function?`` is both ``builtIn`` and has the ``propertyFunction`` flag, indicating it is an ``ExternalFnBase``; returns ``false`` otherwise.
-
-
-:Arguments: * **foo** :  :ref:`Function <handle-ast-Function>`?
-
-.. _function-ast_boost__rq_is_rq_BuiltInFunction_auto_0x26a:
-
-.. das:function:: auto`is`BuiltInFunction(anything: auto) : auto
-
-Returns ``true`` if the given ``Function?`` has the ``builtIn`` flag set, indicating it is a ``BuiltInFunction``; returns ``false`` for any other type.
-
-
-:Arguments: * **anything** : auto
-
-.. _function-ast_boost__rq_is_rq_ExternalFnBase_auto_0x27a:
-
-.. das:function:: auto`is`ExternalFnBase(anything: auto) : auto
-
-Returns ``true`` if the given ``Function?`` is both ``builtIn`` and has the ``propertyFunction`` flag, indicating it is an ``ExternalFnBase``; returns ``false`` otherwise.
-
-
-:Arguments: * **anything** : auto
-
-.. _function-ast_boost__rq_is_rq_FunctionAnnotation_auto_0x28a:
-
-.. das:function:: auto`is`FunctionAnnotation(anything: auto) : auto
-
-Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a ``FunctionAnnotation`` according to its ``isFunctionAnnotation`` property.
-
-
-:Arguments: * **anything** : auto
-
-.. _function-ast_boost__rq_is_rq_StructureAnnotation_auto_0x2a6:
-
-.. das:function:: auto`is`StructureAnnotation(anything: auto) : auto
-
-Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a ``StructureAnnotation`` according to its ``isStructureAnnotation`` property.
-
-
-:Arguments: * **anything** : auto
+operator as FunctionAnnotation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. _function-ast_boost__rq_as_rq_FunctionAnnotation_smart_ptr_ls_Annotation_gr_:
 
-.. das:function:: smart_ptr<Annotation>`as`FunctionAnnotation(foo: smart_ptr<Annotation>) : FunctionAnnotation?
+.. das:function:: operator as FunctionAnnotation(foo: smart_ptr<Annotation>) : FunctionAnnotation?
 
 Casts an ``Annotation?`` or ``smart_ptr<Annotation>`` to ``FunctionAnnotation?`` via ``reinterpret``, verifying the annotation kind first (panics otherwise).
 
 
 :Arguments: * **foo** : smart_ptr< :ref:`Annotation <handle-rtti-Annotation>`>
 
+.. _function-ast_boost__rq_as_rq_FunctionAnnotation_Annotation_q_:
+
+.. das:function:: operator as FunctionAnnotation(foo: Annotation?) : FunctionAnnotation?
+
+----
+
+
+operator as StructureAnnotation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 .. _function-ast_boost__rq_as_rq_StructureAnnotation_smart_ptr_ls_Annotation_gr_:
 
-.. das:function:: smart_ptr<Annotation>`as`StructureAnnotation(foo: smart_ptr<Annotation>) : StructureAnnotation?
+.. das:function:: operator as StructureAnnotation(foo: smart_ptr<Annotation>) : StructureAnnotation?
 
 Casts an ``Annotation?`` or ``smart_ptr<Annotation>`` to ``StructureAnnotation?`` via ``reinterpret``, verifying the annotation kind first (panics otherwise).
 
 
 :Arguments: * **foo** : smart_ptr< :ref:`Annotation <handle-rtti-Annotation>`>
 
+.. _function-ast_boost__rq_as_rq_StructureAnnotation_Annotation_q_:
+
+.. das:function:: operator as StructureAnnotation(foo: Annotation?) : StructureAnnotation?
+
+----
+
+
+operator is BuiltInFunction
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. _function-ast_boost__rq_is_rq_BuiltInFunction_auto_0x26a:
+
+.. das:function:: operator is BuiltInFunction(anything: auto) : auto
+
+Returns ``true`` if the given ``Function?`` has the ``builtIn`` flag set, indicating it is a ``BuiltInFunction``; returns ``false`` for any other type.
+
+
+:Arguments: * **anything** : auto
+
+.. _function-ast_boost__rq_is_rq_BuiltInFunction_Function_q_:
+
+.. das:function:: operator is BuiltInFunction(foo: Function?) : bool
+
+----
+
+
+operator is ExternalFnBase
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. _function-ast_boost__rq_is_rq_ExternalFnBase_Function_q_:
+
+.. das:function:: operator is ExternalFnBase(foo: Function?) : bool
+
+Returns ``true`` if the given ``Function?`` is both ``builtIn`` and has the ``propertyFunction`` flag, indicating it is an ``ExternalFnBase``; returns ``false`` otherwise.
+
+
+:Arguments: * **foo** :  :ref:`Function <handle-ast-Function>`?
+
+.. _function-ast_boost__rq_is_rq_ExternalFnBase_auto_0x27a:
+
+.. das:function:: operator is ExternalFnBase(anything: auto) : auto
+
+----
+
+
+operator is FunctionAnnotation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 .. _function-ast_boost__rq_is_rq_FunctionAnnotation_smart_ptr_ls_Annotation_gr_:
 
-.. das:function:: smart_ptr<Annotation>`is`FunctionAnnotation(foo: smart_ptr<Annotation>) : bool
+.. das:function:: operator is FunctionAnnotation(foo: smart_ptr<Annotation>) : bool
 
 Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a ``FunctionAnnotation`` according to its ``isFunctionAnnotation`` property.
 
 
 :Arguments: * **foo** : smart_ptr< :ref:`Annotation <handle-rtti-Annotation>`>
 
+.. _function-ast_boost__rq_is_rq_FunctionAnnotation_Annotation_q_:
+
+.. das:function:: operator is FunctionAnnotation(foo: Annotation?) : bool
+
+.. _function-ast_boost__rq_is_rq_FunctionAnnotation_auto_0x28a:
+
+.. das:function:: operator is FunctionAnnotation(anything: auto) : auto
+
+----
+
+
+operator is StructureAnnotation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 .. _function-ast_boost__rq_is_rq_StructureAnnotation_smart_ptr_ls_Annotation_gr_:
 
-.. das:function:: smart_ptr<Annotation>`is`StructureAnnotation(foo: smart_ptr<Annotation>) : bool
+.. das:function:: operator is StructureAnnotation(foo: smart_ptr<Annotation>) : bool
 
 Returns ``true`` if the given ``Annotation?`` or ``smart_ptr<Annotation>`` is a ``StructureAnnotation`` according to its ``isStructureAnnotation`` property.
 
 
 :Arguments: * **foo** : smart_ptr< :ref:`Annotation <handle-rtti-Annotation>`>
+
+.. _function-ast_boost__rq_is_rq_StructureAnnotation_auto_0x2a6:
+
+.. das:function:: operator is StructureAnnotation(anything: auto) : auto
+
+.. _function-ast_boost__rq_is_rq_StructureAnnotation_Annotation_q_:
+
+.. das:function:: operator is StructureAnnotation(foo: Annotation?) : bool
+
+----
 
 .. _function-ast_boost_walk_and_convert_uint8_const_q__TypeDeclPtr_LineInfo:
 

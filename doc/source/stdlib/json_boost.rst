@@ -514,12 +514,12 @@ Returns the value of the JSON object, if it exists, otherwise returns the defaul
 Value extraction
 ++++++++++++++++
 
-  *  :ref:`JsonValue const? ==const?.`value (a: JsonValue const? ==const) : variant\<_object:table\<string;JsonValue?\>;_array:array\<JsonValue?\>;_string:string;_number:double;_longint:int64;_bool:bool;_null:void?\> const? <function-json_boost__q__dot__rq_value_JsonValue_const_q___eq__eq_const>`
-  *  :ref:`JsonValue? ==const?.`value (var a: JsonValue? ==const) : variant\<_object:table\<string;JsonValue?\>;_array:array\<JsonValue?\>;_string:string;_number:double;_longint:int64;_bool:bool;_null:void?\>? <function-json_boost__q__dot__rq_value__JsonValue_q___eq__eq_const>`
+  *  :ref:`JsonValue const? ==const?.value (a: JsonValue const? ==const) : variant\<_object:table\<string;JsonValue?\>;_array:array\<JsonValue?\>;_string:string;_number:double;_longint:int64;_bool:bool;_null:void?\> const? <function-json_boost__q__dot__rq_value_JsonValue_const_q___eq__eq_const>`
+  *  :ref:`JsonValue? ==const?.value (var a: JsonValue? ==const) : variant\<_object:table\<string;JsonValue?\>;_array:array\<JsonValue?\>;_string:string;_number:double;_longint:int64;_bool:bool;_null:void?\>? <function-json_boost__q__dot__rq_value__JsonValue_q___eq__eq_const>`
 
 .. _function-json_boost__q__dot__rq_value_JsonValue_const_q___eq__eq_const:
 
-.. das:function:: JsonValue const? ==const?.`value(a: JsonValue const? ==const) : variant<_object:table<string;JsonValue?>;_array:array<JsonValue?>;_string:string;_number:double;_longint:int64;_bool:bool;_null:void?> const?
+.. das:function:: JsonValue const? ==const?.value(a: JsonValue const? ==const) : variant<_object:table<string;JsonValue?>;_array:array<JsonValue?>;_string:string;_number:double;_longint:int64;_bool:bool;_null:void?> const?
 
 Returns the value of the JSON object, if it exists.
 
@@ -528,7 +528,7 @@ Returns the value of the JSON object, if it exists.
 
 .. _function-json_boost__q__dot__rq_value__JsonValue_q___eq__eq_const:
 
-.. das:function:: JsonValue? ==const?.`value(a: JsonValue? ==const) : variant<_object:table<string;JsonValue?>;_array:array<JsonValue?>;_string:string;_number:double;_longint:int64;_bool:bool;_null:void?>?
+.. das:function:: JsonValue? ==const?.value(a: JsonValue? ==const) : variant<_object:table<string;JsonValue?>;_array:array<JsonValue?>;_string:string;_number:double;_longint:int64;_bool:bool;_null:void?>?
 
 Returns the value of the JSON object, if it exists.
 

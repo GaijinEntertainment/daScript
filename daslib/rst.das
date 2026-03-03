@@ -1977,44 +1977,33 @@ def function_name(func : FunctionPtr | Function?) {
         let ch = character_at(name, 0)
         if (ch != '_' && !is_alpha(ch)) {
             var safeName = name
-            // `is`NAME / `as`NAME → operator is NAME / operator as NAME
-            if (safeName |> starts_with("`is`")) {
-                return "operator is {safeName |> slice(4)}"
-            }
-            if (safeName |> starts_with("`as`")) {
-                return "operator as {safeName |> slice(4)}"
-            }
-            // bare `is / `as → operator is / operator as
-            if (safeName == "`is") {
-                return "operator is"
-            }
-            if (safeName == "`as") {
-                return "operator as"
-            }
-            // ?as`NAME → operator ?as NAME
-            if (safeName |> starts_with("?as`")) {
-                return "operator ?as {safeName |> slice(4)}"
-            }
-            // bare ?as → operator ?as
-            if (safeName == "?as") {
-                return "operator ?as"
-            }
-            // ?.`NAME → safe navigation property (e.g. Type?.name)
-            if (safeName |> starts_with("?.`")) {
-                safeName = "?.{safeName |> slice(3)}"
-                return (length(func.arguments) == 0
-                    ? safeName
-                    : "{func.arguments[0]._type |> describe_type_short()}{safeName}"
-                )
-            }
-            // .`NAME → property accessor (e.g. Type.name)
-            if (safeName |> starts_with(".`")) {
-                safeName = ".{safeName |> slice(2)}"
-            }
+            // `is`NAME / `as`NAME → "operator is NAME" / "operator as NAME"
+            if (safeName |> starts_with("`is`")) { return "operator is {safeName |> slice(4)}"; }
+            if (safeName |> starts_with("`as`")) { return "operator as {safeName |> slice(4)}"; }
+            // bare `is / `as → "operator is" / "operator as"
+            if (safeName == "`is") { return "operator is"; }
+            if (safeName == "`as") { return "operator as"; }
+            // ?as`NAME → "operator ?as NAME"; bare ?as → "operator ?as"
+            if (safeName |> starts_with("?as`")) { return "operator ?as {safeName |> slice(4)}"; }
+            if (safeName == "?as") { return "operator ?as"; }
+            // ?.`NAME → Type?.name (safe navigation property)
+            if (safeName |> starts_with("?.`")) { safeName = "?.{safeName |> slice(3)}"; }
+            // .`NAME → Type.name (property accessor)
+            elif (safeName |> starts_with(".`")) { safeName = ".{safeName |> slice(2)}"; }
+            // .name`clone → ".name :="  (clone-assign on property)
             if (safeName |> ends_with("`clone")) {
-                safeName = "{safeName |> slice(0,-6)} ="
+                safeName = "{safeName |> slice(0,-6)} :="
             }
-            if (safeName |> ends_with("=") && length(safeName) > 3 && safeName.character_at(length(safeName) - 3) == '`') {
+            // .name`&&= / `||= / `^^= → ".name &&=" etc (double-char compound assign)
+            if (length(safeName) > 4 && safeName |> ends_with("=")) {
+                let p4 = safeName.character_at(length(safeName) - 4)
+                if (p4 == '`') {
+                    let op2 = safeName |> slice(length(safeName) - 3, length(safeName))
+                    safeName = "{safeName |> slice(0, length(safeName) - 4)} {op2}"
+                }
+            }
+            // .name`+= / `-= / `*= etc → ".name +=" (single-char compound assign)
+            if (length(safeName) > 3 && safeName |> ends_with("=") && safeName.character_at(length(safeName) - 3) == '`') {
                 let op = character_at(safeName, length(safeName) - 2)
                 safeName = "{safeName |> slice(0,-3)} {op.to_char()}="
             }
