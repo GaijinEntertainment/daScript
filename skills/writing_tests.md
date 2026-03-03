@@ -98,6 +98,15 @@ When testing operations on types containing non-copyable fields (`array<T>`, `ta
 The file `tests/README.md` is a comprehensive index of every `.das` test file. **When you add, remove, or rename a test file, update `tests/README.md`** to keep it in sync:
 
 - Add a row to the correct directory table with the filename, a short description, and `**expect** <codes>` if the file uses `expect` directives.
+
+## AOT tests (`tests/aot/`)
+
+Tests under `tests/aot/` are compiled ahead-of-time into the `test_aot` binary. They verify that daslang functions compile to C++ correctly and that AOT stubs link at runtime.
+
+- **Adding AOT tests**: see `skills/aot_testing.md` for full details
+- **Running**: `bin/Release/test_aot.exe dastest/dastest.das -- --test tests/aot`
+- AOT tests also run under the regular interpreter: `bin/Release/daslang.exe dastest/dastest.das -- --test tests/aot`
+- **Semantic hash pitfall**: avoid using `aot_enabled()` or `is_in_aot()` in assertion logic — these are constant-folded differently at AOT generation time vs runtime, causing hash mismatches (error 50101)
 - If creating a new subdirectory, add a new section header and table.
 - Mark helper/module files (non-test) with *(helper)*.
 
