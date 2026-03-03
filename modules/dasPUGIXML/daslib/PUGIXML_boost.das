@@ -186,6 +186,139 @@ def to_string(node : xml_node) : string {
     return print_to_string(node, "  ", format_default, xml_encoding.encoding_auto)
 }
 
+// ============ Type conversion operators (is/as) ============
+
+// -- xml_attribute conversions --
+
+def operator is int(a : xml_attribute) : bool {
+    //! Returns ``true`` if the attribute exists (has a value convertible to int).
+    return a.ok
+}
+
+def operator as int(a : xml_attribute) : int {
+    //! Converts an ``xml_attribute`` value to ``int`` (default ``0``).
+    return as_int(a, 0)
+}
+
+def operator is float(a : xml_attribute) : bool {
+    //! Returns ``true`` if the attribute exists.
+    return a.ok
+}
+
+def operator as float(a : xml_attribute) : float {
+    //! Converts an ``xml_attribute`` value to ``float`` (default ``0.0``).
+    return as_float(a, 0.0)
+}
+
+def operator is double(a : xml_attribute) : bool {
+    //! Returns ``true`` if the attribute exists.
+    return a.ok
+}
+
+def operator as double(a : xml_attribute) : double {
+    //! Converts an ``xml_attribute`` value to ``double`` (default ``0.0lf``).
+    return as_double(a, 0.0lf)
+}
+
+def operator is bool(a : xml_attribute) : bool {
+    //! Returns ``true`` if the attribute exists.
+    return a.ok
+}
+
+def operator as bool(a : xml_attribute) : bool {
+    //! Converts an ``xml_attribute`` value to ``bool`` (default ``false``).
+    return as_bool(a, false)
+}
+
+def operator is string(a : xml_attribute) : bool {
+    //! Returns ``true`` if the attribute exists.
+    return a.ok
+}
+
+def operator as string(a : xml_attribute) : string {
+    //! Converts an ``xml_attribute`` value to ``string`` (default ``""``).
+    return as_string(a, "")
+}
+
+def operator is uint(a : xml_attribute) : bool {
+    //! Returns ``true`` if the attribute exists.
+    return a.ok
+}
+
+def operator as uint(a : xml_attribute) : uint {
+    //! Converts an ``xml_attribute`` value to ``uint`` (default ``0u``).
+    return as_uint(a, 0u)
+}
+
+// -- xml_text conversions --
+
+def operator is int(t : xml_text) : bool {
+    //! Returns ``true`` if the text node is non-empty.
+    return !t.empty
+}
+
+def operator as int(t : xml_text) : int {
+    //! Converts ``xml_text`` content to ``int`` (default ``0``).
+    return as_int(t, 0)
+}
+
+def operator is float(t : xml_text) : bool {
+    //! Returns ``true`` if the text node is non-empty.
+    return !t.empty
+}
+
+def operator as float(t : xml_text) : float {
+    //! Converts ``xml_text`` content to ``float`` (default ``0.0``).
+    return as_float(t, 0.0)
+}
+
+def operator is double(t : xml_text) : bool {
+    //! Returns ``true`` if the text node is non-empty.
+    return !t.empty
+}
+
+def operator as double(t : xml_text) : double {
+    //! Converts ``xml_text`` content to ``double`` (default ``0.0lf``).
+    return as_double(t, 0.0lf)
+}
+
+def operator is bool(t : xml_text) : bool {
+    //! Returns ``true`` if the text node is non-empty.
+    return !t.empty
+}
+
+def operator as bool(t : xml_text) : bool {
+    //! Converts ``xml_text`` content to ``bool`` (default ``false``).
+    return as_bool(t, false)
+}
+
+def operator is string(t : xml_text) : bool {
+    //! Returns ``true`` if the text node is non-empty.
+    return !t.empty
+}
+
+def operator as string(t : xml_text) : string {
+    //! Converts ``xml_text`` content to ``string`` (default ``""``).
+    return as_string(t, "")
+}
+
+def operator is uint(t : xml_text) : bool {
+    //! Returns ``true`` if the text node is non-empty.
+    return !t.empty
+}
+
+def operator as uint(t : xml_text) : uint {
+    //! Converts ``xml_text`` content to ``uint`` (default ``0u``).
+    return as_uint(t, 0u)
+}
+
+// -- xml_node / xml_document serialization --
+
+def operator as string(node : xml_node) : string {
+    //! Serializes an ``xml_node`` (and its subtree) to an XML string.
+    return to_string(node)
+}
+
 // ============ XPath helpers ============
 
 def with_xpath(query_str : string; blk : block<(query : xpath_query?) : void>) {

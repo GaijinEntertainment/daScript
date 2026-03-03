@@ -212,3 +212,139 @@ def test_for_each_select(t : T?) {
         t |> equal(count, 3)
     }
 }
+
+// ============ operator is/as type tests ============
+
+[test]
+def test_attr_as_int(t : T?) {
+    parse_xml("<root count=\"42\"/>") <| $(doc, ok) {
+        t |> success(ok)
+        let a = attribute(doc.document_element, "count")
+        t |> success(a is int)
+        t |> equal(a as int, 42)
+    }
+}
+
+[test]
+def test_attr_as_float(t : T?) {
+    parse_xml("<root ratio=\"3.14\"/>") <| $(doc, ok) {
+        t |> success(ok)
+        let a = attribute(doc.document_element, "ratio")
+        t |> success(a is float)
+        t |> success(abs((a as float) - 3.14) < 0.01)
+    }
+}
+
+[test]
+def test_attr_as_bool(t : T?) {
+    parse_xml("<root flag=\"true\"/>") <| $(doc, ok) {
+        t |> success(ok)
+        let a = attribute(doc.document_element, "flag")
+        t |> success(a is bool)
+        t |> equal(a as bool, true)
+    }
+}
+
+[test]
+def test_attr_as_string(t : T?) {
+    parse_xml("<root name=\"hello\"/>") <| $(doc, ok) {
+        t |> success(ok)
+        let a = attribute(doc.document_element, "name")
+        t |> success(a is string)
+        t |> equal(a as string, "hello")
+    }
+}
+
+[test]
+def test_attr_as_uint(t : T?) {
+    parse_xml("<root val=\"100\"/>") <| $(doc, ok) {
+        t |> success(ok)
+        let a = attribute(doc.document_element, "val")
+        t |> success(a is uint)
+        t |> equal(a as uint, 100u)
+    }
+}
+
+[test]
+def test_attr_as_double(t : T?) {
+    parse_xml("<root val=\"2.718281828\"/>") <| $(doc, ok) {
+        t |> success(ok)
+        let a = attribute(doc.document_element, "val")
+        t |> success(a is double)
+        t |> success(abs((a as double) - 2.718281828lf) < 0.0001lf)
+    }
+}
+
+[test]
+def test_attr_missing_is_not(t : T?) {
+    parse_xml("<root/>") <| $(doc, ok) {
+        t |> success(ok)
+        let a = attribute(doc.document_element, "missing")
+        t |> success(!(a is int))
+        t |> success(!(a is float))
+        t |> success(!(a is bool))
+        t |> success(!(a is string))
+    }
+}
+
+[test]
+def test_text_as_int(t : T?) {
+    parse_xml("<root><val>99</val></root>") <| $(doc, ok) {
+        t |> success(ok)
+        let tx = child(doc.document_element, "val").text
+        t |> success(tx is int)
+        t |> equal(tx as int, 99)
+    }
+}
+
+[test]
+def test_text_as_float(t : T?) {
+    parse_xml("<root><val>1.5</val></root>") <| $(doc, ok) {
+        t |> success(ok)
+        let tx = child(doc.document_element, "val").text
+        t |> success(tx is float)
+        t |> success(abs((tx as float) - 1.5) < 0.01)
+    }
+}
+
+[test]
+def test_text_as_bool(t : T?) {
+    parse_xml("<root><val>true</val></root>") <| $(doc, ok) {
+        t |> success(ok)
+        let tx = child(doc.document_element, "val").text
+        t |> success(tx is bool)
+        t |> equal(tx as bool, true)
+    }
+}
+
+[test]
+def test_text_as_string(t : T?) {
+    parse_xml("<root><val>hello world</val></root>") <| $(doc, ok) {
+        t |> success(ok)
+        let tx = child(doc.document_element, "val").text
+        t |> success(tx is string)
+        t |> equal(tx as string, "hello world")
+    }
+}
+
+[test]
+def test_text_empty_is_not(t : T?) {
+    parse_xml("<root><val/></root>") <| $(doc, ok) {
+        t |> success(ok)
+        let tx = child(doc.document_element, "val").text
+        t |> success(!(tx is int))
+        t |> success(!(tx is float))
+        t |> success(!(tx is string))
+    }
+}
+
+[test]
+def test_node_as_string(t : T?) {
+    parse_xml("<root><item>text</item></root>") <| $(doc, ok) {
+        t |> success(ok)
+        let item = child(doc.document_element, "item")
+        let s = item as string
+        t |> success(find(s, "item") >= 0)
+        t |> success(find(s, "text") >= 0)
+    }
+}
