@@ -66,6 +66,8 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 
 Multiple skill files may apply to a single task. For example, creating a new daslib module requires reading `skills/das_formatting.md`, `skills/daslib_modules.md`, and possibly `skills/documentation_rst.md`.
 
+**Formatter reminder:** Always use `utils/dasCodeFormatter/main.das` for formatting `.das` files. Do NOT use `utils/dasFormatter/` (that is the v1→v2 syntax converter, not a code formatter).
+
 ### Updating Instructions with New Knowledge
 
 When you discover something new about daslang syntax, semantics, or conventions — whether through compiler errors, user corrections, or experimentation — **update this file** with the new knowledge. If it relates to a specific skill area, update the relevant `skills/*.md` file instead.
