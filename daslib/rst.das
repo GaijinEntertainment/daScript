@@ -1977,6 +1977,37 @@ def function_name(func : FunctionPtr | Function?) {
         let ch = character_at(name, 0)
         if (ch != '_' && !is_alpha(ch)) {
             var safeName = name
+            // `is`NAME / `as`NAME → operator is NAME / operator as NAME
+            if (safeName |> starts_with("`is`")) {
+                return "operator is {safeName |> slice(4)}"
+            }
+            if (safeName |> starts_with("`as`")) {
+                return "operator as {safeName |> slice(4)}"
+            }
+            // bare `is / `as → operator is / operator as
+            if (safeName == "`is") {
+                return "operator is"
+            }
+            if (safeName == "`as") {
+                return "operator as"
+            }
+            // ?as`NAME → operator ?as NAME
+            if (safeName |> starts_with("?as`")) {
+                return "operator ?as {safeName |> slice(4)}"
+            }
+            // bare ?as → operator ?as
+            if (safeName == "?as") {
+                return "operator ?as"
+            }
+            // ?.`NAME → safe navigation property (e.g. Type?.name)
+            if (safeName |> starts_with("?.`")) {
+                safeName = "?.{safeName |> slice(3)}"
+                return (length(func.arguments) == 0
+                    ? safeName
+                    : "{func.arguments[0]._type |> describe_type_short()}{safeName}"
+                )
+            }
+            // .`NAME → property accessor (e.g. Type.name)
             if (safeName |> starts_with(".`")) {
                 safeName = ".{safeName |> slice(2)}"
             }

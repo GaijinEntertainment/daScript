@@ -679,151 +679,275 @@ element named *root_name* (default ``"root"``).
 Type conversion operators
 +++++++++++++++++++++++++
 
-  *  :ref:`xml_attribute`as`bool (a: xml_attribute) : bool <function-PUGIXML_boost__rq_as_rq_bool_xml_attribute>`
-  *  :ref:`xml_attribute`as`double (a: xml_attribute) : double <function-PUGIXML_boost__rq_as_rq_double_xml_attribute>`
-  *  :ref:`xml_attribute`as`float (a: xml_attribute) : float <function-PUGIXML_boost__rq_as_rq_float_xml_attribute>`
-  *  :ref:`xml_attribute`as`int (a: xml_attribute) : int <function-PUGIXML_boost__rq_as_rq_int_xml_attribute>`
-  *  :ref:`xml_attribute`as`string (a: xml_attribute) : string <function-PUGIXML_boost__rq_as_rq_string_xml_attribute>`
-  *  :ref:`xml_attribute`as`uint (a: xml_attribute) : uint <function-PUGIXML_boost__rq_as_rq_uint_xml_attribute>`
-  *  :ref:`xml_attribute`is`bool (a: xml_attribute) : bool <function-PUGIXML_boost__rq_is_rq_bool_xml_attribute>`
-  *  :ref:`xml_attribute`is`double (a: xml_attribute) : bool <function-PUGIXML_boost__rq_is_rq_double_xml_attribute>`
-  *  :ref:`xml_attribute`is`float (a: xml_attribute) : bool <function-PUGIXML_boost__rq_is_rq_float_xml_attribute>`
-  *  :ref:`xml_attribute`is`int (a: xml_attribute) : bool <function-PUGIXML_boost__rq_is_rq_int_xml_attribute>`
-  *  :ref:`xml_attribute`is`string (a: xml_attribute) : bool <function-PUGIXML_boost__rq_is_rq_string_xml_attribute>`
-  *  :ref:`xml_attribute`is`uint (a: xml_attribute) : bool <function-PUGIXML_boost__rq_is_rq_uint_xml_attribute>`
-  *  :ref:`xml_document?`as`xml_node (doc: xml_document?) : xml_node <function-PUGIXML_boost__rq_as_rq_xml_node_xml_document_q_>`
+  *  :ref:`operator as bool (t: xml_text) : bool <function-PUGIXML_boost__rq_as_rq_bool_xml_text>`
+  *  :ref:`operator as bool (a: xml_attribute) : bool <function-PUGIXML_boost__rq_as_rq_bool_xml_attribute>`
+  *  :ref:`operator as double (a: xml_attribute) : double <function-PUGIXML_boost__rq_as_rq_double_xml_attribute>`
+  *  :ref:`operator as double (t: xml_text) : double <function-PUGIXML_boost__rq_as_rq_double_xml_text>`
+  *  :ref:`operator as float (t: xml_text) : float <function-PUGIXML_boost__rq_as_rq_float_xml_text>`
+  *  :ref:`operator as float (a: xml_attribute) : float <function-PUGIXML_boost__rq_as_rq_float_xml_attribute>`
+  *  :ref:`operator as int (t: xml_text) : int <function-PUGIXML_boost__rq_as_rq_int_xml_text>`
+  *  :ref:`operator as int (a: xml_attribute) : int <function-PUGIXML_boost__rq_as_rq_int_xml_attribute>`
+  *  :ref:`operator as string (a: xml_attribute) : string <function-PUGIXML_boost__rq_as_rq_string_xml_attribute>`
+  *  :ref:`operator as string (node: xml_node) : string <function-PUGIXML_boost__rq_as_rq_string_xml_node>`
+  *  :ref:`operator as string (t: xml_text) : string <function-PUGIXML_boost__rq_as_rq_string_xml_text>`
+  *  :ref:`operator as uint (a: xml_attribute) : uint <function-PUGIXML_boost__rq_as_rq_uint_xml_attribute>`
+  *  :ref:`operator as uint (t: xml_text) : uint <function-PUGIXML_boost__rq_as_rq_uint_xml_text>`
+  *  :ref:`operator as xml_node (doc: xml_document?) : xml_node <function-PUGIXML_boost__rq_as_rq_xml_node_xml_document_q_>`
+  *  :ref:`operator is bool (a: xml_attribute) : bool <function-PUGIXML_boost__rq_is_rq_bool_xml_attribute>`
+  *  :ref:`operator is bool (t: xml_text) : bool <function-PUGIXML_boost__rq_is_rq_bool_xml_text>`
+  *  :ref:`operator is double (a: xml_attribute) : bool <function-PUGIXML_boost__rq_is_rq_double_xml_attribute>`
+  *  :ref:`operator is double (t: xml_text) : bool <function-PUGIXML_boost__rq_is_rq_double_xml_text>`
+  *  :ref:`operator is float (a: xml_attribute) : bool <function-PUGIXML_boost__rq_is_rq_float_xml_attribute>`
+  *  :ref:`operator is float (t: xml_text) : bool <function-PUGIXML_boost__rq_is_rq_float_xml_text>`
+  *  :ref:`operator is int (t: xml_text) : bool <function-PUGIXML_boost__rq_is_rq_int_xml_text>`
+  *  :ref:`operator is int (a: xml_attribute) : bool <function-PUGIXML_boost__rq_is_rq_int_xml_attribute>`
+  *  :ref:`operator is string (t: xml_text) : bool <function-PUGIXML_boost__rq_is_rq_string_xml_text>`
+  *  :ref:`operator is string (a: xml_attribute) : bool <function-PUGIXML_boost__rq_is_rq_string_xml_attribute>`
+  *  :ref:`operator is uint (t: xml_text) : bool <function-PUGIXML_boost__rq_is_rq_uint_xml_text>`
+  *  :ref:`operator is uint (a: xml_attribute) : bool <function-PUGIXML_boost__rq_is_rq_uint_xml_attribute>`
   *  :ref:`xml_node[] (node: xml_node; attr_name: string) : xml_attribute <function-PUGIXML_boost__lb__rb__xml_node_string>`
-  *  :ref:`xml_node`as`string (node: xml_node) : string <function-PUGIXML_boost__rq_as_rq_string_xml_node>`
-  *  :ref:`xml_text`as`bool (t: xml_text) : bool <function-PUGIXML_boost__rq_as_rq_bool_xml_text>`
-  *  :ref:`xml_text`as`double (t: xml_text) : double <function-PUGIXML_boost__rq_as_rq_double_xml_text>`
-  *  :ref:`xml_text`as`float (t: xml_text) : float <function-PUGIXML_boost__rq_as_rq_float_xml_text>`
-  *  :ref:`xml_text`as`int (t: xml_text) : int <function-PUGIXML_boost__rq_as_rq_int_xml_text>`
-  *  :ref:`xml_text`as`string (t: xml_text) : string <function-PUGIXML_boost__rq_as_rq_string_xml_text>`
-  *  :ref:`xml_text`as`uint (t: xml_text) : uint <function-PUGIXML_boost__rq_as_rq_uint_xml_text>`
-  *  :ref:`xml_text`is`bool (t: xml_text) : bool <function-PUGIXML_boost__rq_is_rq_bool_xml_text>`
-  *  :ref:`xml_text`is`double (t: xml_text) : bool <function-PUGIXML_boost__rq_is_rq_double_xml_text>`
-  *  :ref:`xml_text`is`float (t: xml_text) : bool <function-PUGIXML_boost__rq_is_rq_float_xml_text>`
-  *  :ref:`xml_text`is`int (t: xml_text) : bool <function-PUGIXML_boost__rq_is_rq_int_xml_text>`
-  *  :ref:`xml_text`is`string (t: xml_text) : bool <function-PUGIXML_boost__rq_is_rq_string_xml_text>`
-  *  :ref:`xml_text`is`uint (t: xml_text) : bool <function-PUGIXML_boost__rq_is_rq_uint_xml_text>`
+
+
+operator as bool
+^^^^^^^^^^^^^^^^
+
+.. _function-PUGIXML_boost__rq_as_rq_bool_xml_text:
+
+.. das:function:: operator as bool(t: xml_text) : bool
+
+Converts ``xml_text`` content to ``bool`` (default ``false``).
+
+
+:Arguments: * **t** :  :ref:`xml_text <handle-pugixml-xml_text>`
 
 .. _function-PUGIXML_boost__rq_as_rq_bool_xml_attribute:
 
-.. das:function:: xml_attribute`as`bool(a: xml_attribute) : bool
+.. das:function:: operator as bool(a: xml_attribute) : bool
 
-Converts an ``xml_attribute`` value to ``bool`` (default ``false``).
+----
 
 
-:Arguments: * **a** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>`
+operator as double
+^^^^^^^^^^^^^^^^^^
 
 .. _function-PUGIXML_boost__rq_as_rq_double_xml_attribute:
 
-.. das:function:: xml_attribute`as`double(a: xml_attribute) : double
+.. das:function:: operator as double(a: xml_attribute) : double
 
 Converts an ``xml_attribute`` value to ``double`` (default ``0.0lf``).
 
 
 :Arguments: * **a** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>`
 
+.. _function-PUGIXML_boost__rq_as_rq_double_xml_text:
+
+.. das:function:: operator as double(t: xml_text) : double
+
+----
+
+
+operator as float
+^^^^^^^^^^^^^^^^^
+
+.. _function-PUGIXML_boost__rq_as_rq_float_xml_text:
+
+.. das:function:: operator as float(t: xml_text) : float
+
+Converts ``xml_text`` content to ``float`` (default ``0.0``).
+
+
+:Arguments: * **t** :  :ref:`xml_text <handle-pugixml-xml_text>`
+
 .. _function-PUGIXML_boost__rq_as_rq_float_xml_attribute:
 
-.. das:function:: xml_attribute`as`float(a: xml_attribute) : float
+.. das:function:: operator as float(a: xml_attribute) : float
 
-Converts an ``xml_attribute`` value to ``float`` (default ``0.0``).
+----
 
 
-:Arguments: * **a** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>`
+operator as int
+^^^^^^^^^^^^^^^
+
+.. _function-PUGIXML_boost__rq_as_rq_int_xml_text:
+
+.. das:function:: operator as int(t: xml_text) : int
+
+Converts ``xml_text`` content to ``int`` (default ``0``).
+
+
+:Arguments: * **t** :  :ref:`xml_text <handle-pugixml-xml_text>`
 
 .. _function-PUGIXML_boost__rq_as_rq_int_xml_attribute:
 
-.. das:function:: xml_attribute`as`int(a: xml_attribute) : int
+.. das:function:: operator as int(a: xml_attribute) : int
 
-Converts an ``xml_attribute`` value to ``int`` (default ``0``).
+----
 
 
-:Arguments: * **a** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>`
+operator as string
+^^^^^^^^^^^^^^^^^^
 
 .. _function-PUGIXML_boost__rq_as_rq_string_xml_attribute:
 
-.. das:function:: xml_attribute`as`string(a: xml_attribute) : string
+.. das:function:: operator as string(a: xml_attribute) : string
 
 Converts an ``xml_attribute`` value to ``string`` (default ``""``).
 
 
 :Arguments: * **a** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>`
 
+.. _function-PUGIXML_boost__rq_as_rq_string_xml_node:
+
+.. das:function:: operator as string(node: xml_node) : string
+
+.. _function-PUGIXML_boost__rq_as_rq_string_xml_text:
+
+.. das:function:: operator as string(t: xml_text) : string
+
+----
+
+
+operator as uint
+^^^^^^^^^^^^^^^^
+
 .. _function-PUGIXML_boost__rq_as_rq_uint_xml_attribute:
 
-.. das:function:: xml_attribute`as`uint(a: xml_attribute) : uint
+.. das:function:: operator as uint(a: xml_attribute) : uint
 
 Converts an ``xml_attribute`` value to ``uint`` (default ``0u``).
 
 
 :Arguments: * **a** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>`
 
-.. _function-PUGIXML_boost__rq_is_rq_bool_xml_attribute:
+.. _function-PUGIXML_boost__rq_as_rq_uint_xml_text:
 
-.. das:function:: xml_attribute`is`bool(a: xml_attribute) : bool
+.. das:function:: operator as uint(t: xml_text) : uint
 
-Returns ``true`` if the attribute exists.
-
-
-:Arguments: * **a** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>`
-
-.. _function-PUGIXML_boost__rq_is_rq_double_xml_attribute:
-
-.. das:function:: xml_attribute`is`double(a: xml_attribute) : bool
-
-Returns ``true`` if the attribute exists.
-
-
-:Arguments: * **a** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>`
-
-.. _function-PUGIXML_boost__rq_is_rq_float_xml_attribute:
-
-.. das:function:: xml_attribute`is`float(a: xml_attribute) : bool
-
-Returns ``true`` if the attribute exists.
-
-
-:Arguments: * **a** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>`
-
-.. _function-PUGIXML_boost__rq_is_rq_int_xml_attribute:
-
-.. das:function:: xml_attribute`is`int(a: xml_attribute) : bool
-
-Returns ``true`` if the attribute exists (has a value convertible to int).
-
-
-:Arguments: * **a** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>`
-
-.. _function-PUGIXML_boost__rq_is_rq_string_xml_attribute:
-
-.. das:function:: xml_attribute`is`string(a: xml_attribute) : bool
-
-Returns ``true`` if the attribute exists.
-
-
-:Arguments: * **a** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>`
-
-.. _function-PUGIXML_boost__rq_is_rq_uint_xml_attribute:
-
-.. das:function:: xml_attribute`is`uint(a: xml_attribute) : bool
-
-Returns ``true`` if the attribute exists.
-
-
-:Arguments: * **a** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>`
+----
 
 .. _function-PUGIXML_boost__rq_as_rq_xml_node_xml_document_q_:
 
-.. das:function:: xml_document?`as`xml_node(doc: xml_document?) : xml_node
+.. das:function:: operator as xml_node(doc: xml_document?) : xml_node
 
 Returns the document as an ``xml_node`` handle for mutation APIs
 that require a node (e.g. ``append_child``).
 
 
 :Arguments: * **doc** :  :ref:`xml_document <handle-pugixml-xml_document>`?
+
+
+operator is bool
+^^^^^^^^^^^^^^^^
+
+.. _function-PUGIXML_boost__rq_is_rq_bool_xml_attribute:
+
+.. das:function:: operator is bool(a: xml_attribute) : bool
+
+Returns ``true`` if the attribute exists.
+
+
+:Arguments: * **a** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>`
+
+.. _function-PUGIXML_boost__rq_is_rq_bool_xml_text:
+
+.. das:function:: operator is bool(t: xml_text) : bool
+
+----
+
+
+operator is double
+^^^^^^^^^^^^^^^^^^
+
+.. _function-PUGIXML_boost__rq_is_rq_double_xml_attribute:
+
+.. das:function:: operator is double(a: xml_attribute) : bool
+
+Returns ``true`` if the attribute exists.
+
+
+:Arguments: * **a** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>`
+
+.. _function-PUGIXML_boost__rq_is_rq_double_xml_text:
+
+.. das:function:: operator is double(t: xml_text) : bool
+
+----
+
+
+operator is float
+^^^^^^^^^^^^^^^^^
+
+.. _function-PUGIXML_boost__rq_is_rq_float_xml_attribute:
+
+.. das:function:: operator is float(a: xml_attribute) : bool
+
+Returns ``true`` if the attribute exists.
+
+
+:Arguments: * **a** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>`
+
+.. _function-PUGIXML_boost__rq_is_rq_float_xml_text:
+
+.. das:function:: operator is float(t: xml_text) : bool
+
+----
+
+
+operator is int
+^^^^^^^^^^^^^^^
+
+.. _function-PUGIXML_boost__rq_is_rq_int_xml_text:
+
+.. das:function:: operator is int(t: xml_text) : bool
+
+Returns ``true`` if the text node is non-empty.
+
+
+:Arguments: * **t** :  :ref:`xml_text <handle-pugixml-xml_text>`
+
+.. _function-PUGIXML_boost__rq_is_rq_int_xml_attribute:
+
+.. das:function:: operator is int(a: xml_attribute) : bool
+
+----
+
+
+operator is string
+^^^^^^^^^^^^^^^^^^
+
+.. _function-PUGIXML_boost__rq_is_rq_string_xml_text:
+
+.. das:function:: operator is string(t: xml_text) : bool
+
+Returns ``true`` if the text node is non-empty.
+
+
+:Arguments: * **t** :  :ref:`xml_text <handle-pugixml-xml_text>`
+
+.. _function-PUGIXML_boost__rq_is_rq_string_xml_attribute:
+
+.. das:function:: operator is string(a: xml_attribute) : bool
+
+----
+
+
+operator is uint
+^^^^^^^^^^^^^^^^
+
+.. _function-PUGIXML_boost__rq_is_rq_uint_xml_text:
+
+.. das:function:: operator is uint(t: xml_text) : bool
+
+Returns ``true`` if the text node is non-empty.
+
+
+:Arguments: * **t** :  :ref:`xml_text <handle-pugixml-xml_text>`
+
+.. _function-PUGIXML_boost__rq_is_rq_uint_xml_attribute:
+
+.. das:function:: operator is uint(a: xml_attribute) : bool
+
+----
 
 .. _function-PUGIXML_boost__lb__rb__xml_node_string:
 
@@ -840,122 +964,5 @@ operators for typed access:
 :Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>`
 
             * **attr_name** : string
-
-.. _function-PUGIXML_boost__rq_as_rq_string_xml_node:
-
-.. das:function:: xml_node`as`string(node: xml_node) : string
-
-Serializes an ``xml_node`` (and its subtree) to an XML string.
-
-
-:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>`
-
-.. _function-PUGIXML_boost__rq_as_rq_bool_xml_text:
-
-.. das:function:: xml_text`as`bool(t: xml_text) : bool
-
-Converts ``xml_text`` content to ``bool`` (default ``false``).
-
-
-:Arguments: * **t** :  :ref:`xml_text <handle-pugixml-xml_text>`
-
-.. _function-PUGIXML_boost__rq_as_rq_double_xml_text:
-
-.. das:function:: xml_text`as`double(t: xml_text) : double
-
-Converts ``xml_text`` content to ``double`` (default ``0.0lf``).
-
-
-:Arguments: * **t** :  :ref:`xml_text <handle-pugixml-xml_text>`
-
-.. _function-PUGIXML_boost__rq_as_rq_float_xml_text:
-
-.. das:function:: xml_text`as`float(t: xml_text) : float
-
-Converts ``xml_text`` content to ``float`` (default ``0.0``).
-
-
-:Arguments: * **t** :  :ref:`xml_text <handle-pugixml-xml_text>`
-
-.. _function-PUGIXML_boost__rq_as_rq_int_xml_text:
-
-.. das:function:: xml_text`as`int(t: xml_text) : int
-
-Converts ``xml_text`` content to ``int`` (default ``0``).
-
-
-:Arguments: * **t** :  :ref:`xml_text <handle-pugixml-xml_text>`
-
-.. _function-PUGIXML_boost__rq_as_rq_string_xml_text:
-
-.. das:function:: xml_text`as`string(t: xml_text) : string
-
-Converts ``xml_text`` content to ``string`` (default ``""``).
-
-
-:Arguments: * **t** :  :ref:`xml_text <handle-pugixml-xml_text>`
-
-.. _function-PUGIXML_boost__rq_as_rq_uint_xml_text:
-
-.. das:function:: xml_text`as`uint(t: xml_text) : uint
-
-Converts ``xml_text`` content to ``uint`` (default ``0u``).
-
-
-:Arguments: * **t** :  :ref:`xml_text <handle-pugixml-xml_text>`
-
-.. _function-PUGIXML_boost__rq_is_rq_bool_xml_text:
-
-.. das:function:: xml_text`is`bool(t: xml_text) : bool
-
-Returns ``true`` if the text node is non-empty.
-
-
-:Arguments: * **t** :  :ref:`xml_text <handle-pugixml-xml_text>`
-
-.. _function-PUGIXML_boost__rq_is_rq_double_xml_text:
-
-.. das:function:: xml_text`is`double(t: xml_text) : bool
-
-Returns ``true`` if the text node is non-empty.
-
-
-:Arguments: * **t** :  :ref:`xml_text <handle-pugixml-xml_text>`
-
-.. _function-PUGIXML_boost__rq_is_rq_float_xml_text:
-
-.. das:function:: xml_text`is`float(t: xml_text) : bool
-
-Returns ``true`` if the text node is non-empty.
-
-
-:Arguments: * **t** :  :ref:`xml_text <handle-pugixml-xml_text>`
-
-.. _function-PUGIXML_boost__rq_is_rq_int_xml_text:
-
-.. das:function:: xml_text`is`int(t: xml_text) : bool
-
-Returns ``true`` if the text node is non-empty.
-
-
-:Arguments: * **t** :  :ref:`xml_text <handle-pugixml-xml_text>`
-
-.. _function-PUGIXML_boost__rq_is_rq_string_xml_text:
-
-.. das:function:: xml_text`is`string(t: xml_text) : bool
-
-Returns ``true`` if the text node is non-empty.
-
-
-:Arguments: * **t** :  :ref:`xml_text <handle-pugixml-xml_text>`
-
-.. _function-PUGIXML_boost__rq_is_rq_uint_xml_text:
-
-.. das:function:: xml_text`is`uint(t: xml_text) : bool
-
-Returns ``true`` if the text node is non-empty.
-
-
-:Arguments: * **t** :  :ref:`xml_text <handle-pugixml-xml_text>`
 
 
