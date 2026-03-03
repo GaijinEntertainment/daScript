@@ -1,2 +1,1 @@
-// stub
-def append_child (node: xml_node; type: xml_node_type) : xml_node
+Appends a new child node of the given type (e.g. element, pcdata, comment) to the node.

@@ -1,2 +1,1 @@
-// stub
-def as_int (attribute: xml_attribute; default_value: int) : int
+Returns the attribute value as an int, or *default_value* if conversion fails.

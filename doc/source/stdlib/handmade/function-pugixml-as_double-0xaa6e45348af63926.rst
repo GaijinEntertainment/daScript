@@ -1,2 +1,1 @@
-// stub
-def as_double (text: xml_text; default_value: double) : double
+Returns the text content as a double, or *default_value* if conversion fails.

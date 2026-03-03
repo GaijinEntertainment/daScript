@@ -1,2 +1,1 @@
-// stub
-def remove_attribute (node: xml_node; attribute: xml_attribute) : bool
+Removes the specified attribute handle from the node. Returns true if the attribute was found and removed.

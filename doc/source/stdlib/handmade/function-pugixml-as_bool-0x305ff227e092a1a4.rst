@@ -1,2 +1,1 @@
-// stub
-def as_bool (text: xml_text; default_value: bool) : bool
+Returns the text content as a bool, or *default_value* if conversion fails.
