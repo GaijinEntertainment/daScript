@@ -25,6 +25,7 @@ struct SuiteCtx {
     uriPaths : bool = false
     verbose : bool = false
     compile_only : bool = false
+    use_aot : bool = false
 
     // Testing-related options.
     testNames : array<string>
@@ -89,6 +90,7 @@ def SuiteCtx(args : array<string>) : SuiteCtx {
     ctx.uriPaths = args |> has_value("--uri-paths")
     ctx.projectPath = args |> get_str_arg("--test-project", "")
     ctx.compile_only = args |> has_value("--compile-only")
+    ctx.use_aot = args |> has_value("--use-aot") || is_in_aot()
     collect_tests_names(args, ctx.testNames)
 
     ctx.bench_enabled = args |> has_value("--bench")
@@ -159,6 +161,8 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
         using() $(var cop : CodeOfPolicies) {
             ctx.queued_benchmarks |> clear
             cop.aot_module = true
+            cop.aot = ctx.use_aot
+            cop.fail_on_no_aot = ctx.use_aot
             cop.threadlock_context = true
             cop.jit_enabled = jit_enabled()
             cop.jit_module := "{get_das_root()}/daslib/just_in_time.das"

@@ -40,6 +40,7 @@ static JitMode jitEnabled = JitMode::None; // Disabled by default.
 static string jitOutPath = ""; // Empty, JIT module will choose default.
 
 static bool noDynamicModules = false;
+static bool useAot = false;
 
 static bool version2syntax = true;
 static bool gen2MakeSyntax = false;
@@ -401,7 +402,13 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
         policies.aot_result = aotResult;
         daScriptEnvironment::getBound()->g_isInAot = true;
     }
-    policies.fail_on_no_aot = false;
+    if ( useAot ) {
+        // don't set policies.aot here - the host program (e.g. dastest) doesn't need AOT linking
+        // the --use-aot flag (after --) tells dastest to enable AOT for test files it compiles
+        policies.fail_on_no_aot = false;
+    } else {
+        policies.fail_on_no_aot = false;
+    }
     policies.fail_on_lack_of_aot_export = false;
     policies.version_2_syntax = version2syntax;
     policies.gen2_make_syntax = gen2MakeSyntax;
@@ -509,6 +516,7 @@ void print_help() {
         << "    -v1syntax   enable version 1 syntax (uses Python-style indentation for code blocks)\n"
         << "    -v2makeSyntax enable version 1 syntax with version 2 constructors syntax (for arrays/structures)\n"
         << "    -jit        enable Just-In-Time compilation\n"
+        << "    -use-aot    enable AOT linking (requires AOT stubs linked into the binary)\n"
         << "    -project <path.das_project> path to project file\n"
         << "    -project_root optional path to root directory of the project (used for dyn modules)\n"
         << "    -run-fmt    <inplace/dry> <v2/v1> <semicolon> run formatter, requires 2 or more arguments\n"
@@ -611,6 +619,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 gen2MakeSyntax = true;
             } else if ( cmd=="jit") {
                 jitEnabled = JitMode::Direct;
+            } else if ( cmd=="use-aot") {
+                useAot = true;
             } else if ( cmd=="output") {
                 if ( i+1 > argc ) {
                     printf("output requires argument\n");

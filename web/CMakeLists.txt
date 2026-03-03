@@ -610,25 +610,28 @@ list(SORT DAS_LIB_SRC)
 
 add_custom_target(dasAotStub)
 SET(AOT_GENERATED_SRC)
-set(AotDaslibList
-        ../daslib/functional.das
-        ../daslib/json.das
-        ../daslib/json_boost.das
-        ../daslib/ast_boost.das
-        ../daslib/templates_boost.das
-        ../daslib/utf8_utils.das
-        ../daslib/regex.das
-        ../daslib/regex_boost.das
-        ../daslib/strings_boost.das
-        ../daslib/random.das
-        ../daslib/math_boost.das
-
-        # ../src/das/ast/printer_flags_visitor.das
-)
-SET(AOT_GENERATED_SRC)
-FOREACH(inF IN LISTS AotDaslibList)
-    ADD_AOT_EXT_FILE(AOT_GENERATED_SRC dasAotStub ${inF}) # No need to do aot, since these files already aot'ed
-ENDFOREACH()
+# AOT stubs are disabled for WASM builds — the pre-generated stubs in daslib/_aot_generated/
+# are built on x64 (64-bit pointers) and contain sizeof/offsetof static_asserts that fail
+# on wasm32 (32-bit pointers). WASM runs interpreter-only.
+#set(AotDaslibList
+#        ../daslib/functional.das
+#        ../daslib/json.das
+#        ../daslib/json_boost.das
+#        ../daslib/ast_boost.das
+#        ../daslib/templates_boost.das
+#        ../daslib/utf8_utils.das
+#        ../daslib/regex.das
+#        ../daslib/regex_boost.das
+#        ../daslib/strings_boost.das
+#        ../daslib/random.das
+#        ../daslib/math_boost.das
+#
+#        # ../src/das/ast/printer_flags_visitor.das
+#)
+#SET(AOT_GENERATED_SRC)
+#FOREACH(inF IN LISTS AotDaslibList)
+#    ADD_AOT_EXT_FILE(AOT_GENERATED_SRC dasAotStub ${inF}) # No need to do aot, since these files already aot'ed
+#ENDFOREACH()
 
 set(StandaloneFilesList
     # # aot das-mode temporary disabled

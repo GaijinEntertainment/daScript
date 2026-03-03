@@ -30,6 +30,7 @@ See `doc/source/reference/design_philosophy.rst` for the full design philosophy 
 - **Compiler binary:** `bin/Release/daslang.exe`
 - **Run a script:** `bin/Release/daslang.exe path/to/script.das`
 - **Run tests:** `bin/Release/daslang.exe dastest/dastest.das -- --test path/to/test.das`
+- **AOT tests:** `cmake --build build --config Release --target test_aot` then `bin/Release/test_aot.exe dastest/dastest.das -- --test tests/aot`
 
 ### Debugging
 
@@ -61,6 +62,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/writing_benchmarks.md` | Writing or running benchmark files under `benchmarks/` |
 | `skills/dynamic_modules.md` | Creating or editing `.das_module` descriptors, adding new modules under `modules/` |
 | `skills/install_instructions.md` | Creating or updating AI instruction files (`install/CLAUDE.md`, `install/skills/`) for the installed SDK |
+| `skills/aot_testing.md` | Adding AOT test files, working with the `test_aot` binary, `Module::aotRequire()`, CMake AOT macros |
 
 Multiple skill files may apply to a single task. For example, creating a new daslib module requires reading `skills/das_formatting.md`, `skills/daslib_modules.md`, and possibly `skills/documentation_rst.md`.
 
@@ -150,6 +152,7 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - `daslib/` — Standard library modules (86 .das files)
 - `dastest/` — Test framework
 - `tests/` — Test suite. See `tests/README.md` for full index
+- `tests/aot/` — AOT compilation tests (built into `test_aot` binary)
 - `doc/source/reference/language/` — RST language documentation
 - `tutorials/language/` — Language tutorial `.das` files
 - `tutorials/integration/cpp/` — C++ integration tutorials

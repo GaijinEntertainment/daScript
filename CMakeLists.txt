@@ -953,6 +953,9 @@ SET(DAS_DASCRIPT_MAIN_SRC
 # Tests
 if (NOT ${DAS_TESTS_DISABLED})
     include(examples/pathTracer/CMakeLists.txt)
+    if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
+        include(tests/aot/CMakeLists.txt)
+    endif()
 endif()
 
 if (NOT ${DAS_TUTORIAL_DISABLED})

@@ -264,6 +264,24 @@ addInterop<new_and_init, void *, vec4f>(*this, lib, "new_and_init",
 - Lexer: `src/parser/ds2_lexer.lpp`
 - Parser: `src/parser/ds2_parser.ypp`
 
+## Module::aotRequire() — AOT Header Declarations
+
+When a C++ module binds functions whose declarations live in specific headers, it must override `aotRequire()` so AOT-generated C++ can find those declarations:
+
+```cpp
+virtual ModuleAotType aotRequire(TextWriter & tw) const override {
+    tw << "#include \"daScript/simulate/bin_serializer.h\"\n";
+    tw << "#include \"daScript/misc/performance_time.h\"\n";
+    return ModuleAotType::cpp;
+}
+```
+
+**If you add `extern "C"` or `extern` functions via `addExtern` and the declaration lives in a header, you MUST add that header to `aotRequire()`**. Otherwise, AOT-generated C++ will fail to compile with "undeclared identifier" errors.
+
+Real example: `Module_BuiltIn::addTime()` binds `ref_time_ticks`, `get_time_usec`, `get_time_nsec` (declared in `performance_time.h`). The `aotRequire()` must emit `#include "daScript/misc/performance_time.h"` or AOT compilation of any script using these functions will fail.
+
+See `skills/aot_testing.md` for the full AOT pipeline and testing infrastructure.
+
 ### Key AST function flags
 
 - `func.flags.isClassMethod` — function is a struct/class method (set after inference)
