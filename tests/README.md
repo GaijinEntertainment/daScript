@@ -18,6 +18,16 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | test_cookies.das | Cookie operations — add_cookie (simple + extended, req + resp), get_cookie, each_cookie | |
 | test_forms.das | Form data — set_form_data, set_form_file, get_form_data, save_form_file, each_form_field, URL-encoded | |
 
+## _dasPUGIXML/
+
+> **Note:** These tests require the dasPUGIXML module. They live under `_dasPUGIXML/` (underscore prefix) so the main test suite skips them. Run separately: `dastest -- --test tests/_dasPUGIXML/`
+
+| File | Description | Expects errors |
+|---|---|---|
+| test_pugixml_boost.das | PUGIXML_boost helpers — iteration, RAII, accessors, builders, serialization, operator is/as type conversions | |
+| test_pugixml_core.das | Core C++ bindings — node navigation, attribute/text properties, parse result, document ops, XPath evaluation | |
+| test_pugixml_mutation.das | XML mutation — node/attribute insert/remove/copy/move, text set, attribute set_value types | |
+
 ## algorithm/
 
 | File | Description | Expects errors |

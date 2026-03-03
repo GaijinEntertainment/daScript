@@ -11,7 +11,7 @@ def test_for_each_child(t : T?) {
         let root = doc.document_element
         var names : array<string>
         for_each_child(root) <| $(ch) {
-            names |> push(string(ch.name))
+            names |> push(ch.name)
         }
         t |> equal(length(names), 3)
         t |> equal(names[0], "a")
@@ -41,7 +41,7 @@ def test_for_each_attribute(t : T?) {
         let root = doc.document_element
         var attrs : array<string>
         for_each_attribute(root) <| $(a) {
-            attrs |> push(string(a.name))
+            attrs |> push(a.name)
         }
         t |> equal(length(attrs), 3)
         t |> equal(attrs[0], "x")
@@ -70,8 +70,8 @@ def test_parse_xml(t : T?) {
     parse_xml("<hello>world</hello>") <| $(doc, ok) {
         t |> success(ok)
         let root = doc.document_element
-        t |> equal(string(root.name), "hello")
-        t |> equal(as_string(root.text, ""), "world")
+        t |> equal(root.name, "hello")
+        t |> equal(root.text as string, "world")
     }
 }
 
@@ -169,7 +169,7 @@ def test_with_xpath(t : T?) {
         with_xpath("//item") <| $(q) {
             t |> success(q.ok)
             let result = evaluate_node(q, root)
-            t |> equal(string(result.node.name), "item")
+            t |> equal(result.node.name, "item")
         }
     }
 }
