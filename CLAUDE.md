@@ -66,6 +66,8 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 
 Multiple skill files may apply to a single task. For example, creating a new daslib module requires reading `skills/das_formatting.md`, `skills/daslib_modules.md`, and possibly `skills/documentation_rst.md`.
 
+**Formatter reminder:** Always use `utils/dasCodeFormatter/main.das` for formatting `.das` files. Do NOT use `utils/dasFormatter/` (that is the v1→v2 syntax converter, not a code formatter).
+
 ### Updating Instructions with New Knowledge
 
 When you discover something new about daslang syntax, semantics, or conventions — whether through compiler errors, user corrections, or experimentation — **update this file** with the new knowledge. If it relates to a specific skill area, update the relevant `skills/*.md` file instead.
@@ -104,6 +106,8 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - No `bool(int)` cast — use `x != 0`; no `string(bool)` — use `"{flag}"`
 - `int("123")` does NOT work — use `to_int` from `require strings`
 - Hex literals are `uint` by default — use `int(0x3F)` for int
+- **Bitfield sizes**: `bitfield Name : uint8 { ... }`, `: uint16`, `: uint64`; default is `uint` (32-bit). Always unsigned.
+- **Bitfield from expression**: `bitfield64(1ul << 13ul)` — use the constructor to create a bitfield value from an integer expression. Similarly `bitfield8()`, `bitfield16()`.
 
 ### Memory and move semantics
 

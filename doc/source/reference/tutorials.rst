@@ -216,3 +216,25 @@ Run any tutorial from the project root::
    tutorials/dasHV_04_http_server_advanced.rst
    tutorials/dasHV_05_cookies_and_forms.rst
    tutorials/dasHV_06_websockets.rst
+
+.. _tutorials_daspugixml:
+
+dasPUGIXML (XML) Tutorials
+===========================
+
+These tutorials cover the ``dasPUGIXML`` module — XML parsing, building,
+XPath queries, and automatic struct serialization using
+`pugixml <https://pugixml.org/>`_.  The companion ``.das`` files are in
+``tutorials/dasPUGIXML/``.
+
+Run any tutorial from the project root::
+
+   daslang.exe tutorials/dasPUGIXML/01_parsing_and_navigation.das
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/dasPUGIXML_01_parsing.rst
+   tutorials/dasPUGIXML_02_building.rst
+   tutorials/dasPUGIXML_03_xpath.rst
+   tutorials/dasPUGIXML_04_serialization.rst

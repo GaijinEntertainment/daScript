@@ -4,6 +4,10 @@ After creating or modifying any `.das` file that is part of the project (daslib 
 
 **Formatter tool:** `utils/dasCodeFormatter/main.das`
 
+> **WARNING:** Do NOT confuse this with `utils/dasFormatter/` — that is a **v1→v2 syntax converter** (`das-fmt`), not a code formatter. Always use `utils/dasCodeFormatter/main.das` unless explicitly asked otherwise.
+
+**CI check:** The GitHub Actions CI workflow clones [profelis/das-fmt](https://github.com/profelis/das-fmt) and runs `dasfmt.das --path ./ --verify`, which internally calls `daslib/das_source_formatter` — the same formatter engine used by `dasCodeFormatter`. If CI reports `[E] Unformatted file`, it means the file was not formatted with `dasCodeFormatter`.
+
 **Procedure:**
 
 1. **Back up** the file before formatting: copy it to `<filename>.das.bak`

@@ -438,13 +438,13 @@ def public parse_json_annotation(name : string; annotation : array<tuple<name : 
     for (ann in annotation) {
         if (ann.name == "rename" && ann.data is tString) {
             fieldState.argName = ann.data as tString
-        } elif (ann.name == "enum_as_int" && ann.data is bool) {
+        } elif (ann.name == "enum_as_int" && ann.data is tBool) {
             fieldState.enumAsInt = ann.data as tBool
-        } elif (ann.name == "unescape" && ann.data is bool) {
+        } elif (ann.name == "unescape" && ann.data is tBool) {
             fieldState.unescape = ann.data as tBool
-        } elif (ann.name == "embed" && ann.data is bool) {
+        } elif (ann.name == "embed" && ann.data is tBool) {
             fieldState.embed = ann.data as tBool
-        } elif (ann.name == "optional" && ann.data is bool) {
+        } elif (ann.name == "optional" && ann.data is tBool) {
             fieldState.optional = ann.data as tBool
         }
     }
