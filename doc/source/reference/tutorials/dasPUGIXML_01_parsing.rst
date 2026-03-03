@@ -17,7 +17,9 @@ using ``pugixml/PUGIXML_boost``.
 Setup
 =====
 
-Import the module::
+Import the module:
+
+.. code-block:: das
 
    require pugixml/PUGIXML_boost
 
@@ -28,7 +30,9 @@ Parsing from a string
 =====================
 
 ``parse_xml`` parses an XML string inside a block.  The document is freed
-automatically when the block returns — no manual ``delete`` needed::
+automatically when the block returns — no manual ``delete`` needed:
+
+.. code-block:: das
 
    let xml = "<greeting lang=\"en\">Hello!</greeting>"
 
@@ -42,7 +46,9 @@ automatically when the block returns — no manual ``delete`` needed::
 Loading from a file
 ===================
 
-``open_xml`` loads a file with the same RAII pattern::
+``open_xml`` loads a file with the same RAII pattern:
+
+.. code-block:: das
 
    open_xml("data/books.xml") <| $(doc, ok) {
        if (!ok) { return; }
@@ -54,7 +60,9 @@ Iterating children
 ==================
 
 ``for_each_child`` iterates over all child elements of a node.
-Pass an optional name to filter by tag::
+Pass an optional name to filter by tag:
+
+.. code-block:: das
 
    // all children
    root |> for_each_child() <| $(ch) {
@@ -64,7 +72,9 @@ Pass an optional name to filter by tag::
    // only <setting> children
    root |> for_each_child("setting") <| $(ch) { ... }
 
-``for_each_attribute`` iterates attributes::
+``for_each_attribute`` iterates attributes:
+
+.. code-block:: das
 
    node |> for_each_attribute() <| $(a) {
        print("{a.name} = {a as string}\n")
@@ -86,7 +96,9 @@ Function                      Returns
 ``node_attr_bool(n, "key")``  Attribute as ``bool``
 ============================  =======================================
 
-All accept an optional default value::
+All accept an optional default value:
+
+.. code-block:: das
 
    let name  = node_text(node, "name", "unknown")
    let price = node_attr_float(node, "price", 0.0)
@@ -96,7 +108,9 @@ Typed access with ``is``/``as``
 
 ``operator []`` on ``xml_node`` returns an ``xml_attribute``.
 The ``is`` and ``as`` operators convert attributes and text values
-to typed values::
+to typed values:
+
+.. code-block:: das
 
    // Attribute access
    let x_attr = node["x"]           // xml_attribute
@@ -112,7 +126,9 @@ to typed values::
 Practical example
 =================
 
-Combining these tools to read a book catalog::
+Combining these tools to read a book catalog:
+
+.. code-block:: das
 
    open_xml("books.xml") <| $(doc, ok) {
        if (!ok) { return; }

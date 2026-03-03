@@ -17,7 +17,9 @@ Creating an empty document
 ==========================
 
 ``with_doc`` allocates a new ``xml_document``, invokes a block, and
-frees it automatically::
+frees it automatically:
+
+.. code-block:: das
 
    with_doc() <| $(doc) {
        var dnode = doc as xml_node
@@ -49,7 +51,9 @@ Three overloads:
        print(to_string(doc))
    }
 
-Output::
+Output:
+
+.. code-block:: xml
 
    <?xml version="1.0"?>
    <library>
@@ -86,7 +90,7 @@ Function                                Description
 ``add_attr(node, name, value)``         Append typed attribute (string/int/float/bool)
 ======================================  ================================================
 
-::
+.. code-block:: das
 
    add_child(root, "name", "Alice")
    add_child_ex(root, "skill", "name", "daslang")
