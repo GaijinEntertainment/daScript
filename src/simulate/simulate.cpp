@@ -1150,6 +1150,7 @@ namespace das
         freeGlobalsAndShared();
         globals = globalsSize ? (char *) das_aligned_alloc16(globalsSize) : nullptr;
         shared = (sharedOwner && sharedSize) ? (char *) das_aligned_alloc16(sharedSize) : nullptr;
+        if ( shared ) memset(shared, 0, sharedSize);
         globalsOwner = true;
         sharedOwner = true;
     }
@@ -1408,6 +1409,7 @@ namespace das
         };
         abiArg = args;
         abiCMRES = nullptr;
+        memset(globals, 0, globalsSize);
         if ( aotInitScript ) {
             aotInitScript->eval(*this);
         } else {
@@ -1417,16 +1419,6 @@ namespace das
             finfo.name = (char *) "Context::runInitScript";
             // TODO: init arguments?
 #endif
-            for ( int i=0, is=totalVariables; i!=is && !stopFlags; ++i ) {
-                auto & pv = globalVariables[i];
-                if ( pv.shared ) {
-                    if ( sharedOwner ) {
-                        memset ( shared + pv.offset, 0, pv.size );
-                    }
-                } else {
-                    memset ( globals + pv.offset, 0, pv.size );
-                }
-            }
             for ( int i=0, is=totalVariables; i!=is && !stopFlags; ++i ) {
                 auto & pv = globalVariables[i];
                 if ( pv.init ) {
