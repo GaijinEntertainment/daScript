@@ -103,7 +103,8 @@ Low-level XPath API
 ===================
 
 ``select_node`` returns the first match.  ``select_nodes`` returns all
-matches as an ``xpath_node_set`` (use ``.size`` and ``at()``):
+matches as an ``xpath_node_set``, which is directly iterable in a
+``for`` loop (via the ``each`` iterator):
 
 .. code-block:: das
 
@@ -113,12 +114,12 @@ matches as an ``xpath_node_set`` (use ``.size`` and ``at()``):
        print("first expensive: {result.node.text as string}\n")
    }
 
-   // All matches
+   // All matches — iterate directly
    var ns = select_nodes(root, "product[price < 40]/@id")
    print("cheap products: {ns.size}\n")
-   for (i in range(ns.size)) {
-       let xn = at(ns, i)
-       print("  {xn.attribute as string}\n")
+   for (xn in ns) {
+       let a = xn.attribute
+       print("  {a as string}\n")
    }
    unsafe { delete ns; }
 

@@ -92,6 +92,7 @@ require daslib/type_traits
 require daslib/typemacro_boost
 require daslib/validate_code
 require dashv/dashv_boost
+require pugixml/PUGIXML_boost
 
 def document_module_math(root : string) {
     var mod = get_module("math")
@@ -652,6 +653,41 @@ def document_module_uriparser_boost(root : string) {
     document("Boost package for the URI parser", mod, "uriparser_boost.rst", groups)
 }
 
+def document_module_pugixml(root : string) {
+    var mod = get_module("pugixml")
+    var groups <- array<DocGroup>(
+        group_by_regex("Document operations", mod, %regex~(document_as_node|load_document|load_string|save_file|save_string|reset)$%%),
+        group_by_regex("Node lookup", mod, %regex~(child|attribute|child_value|find_child_by_attribute|first_element_by_path)$%%),
+        group_by_regex("Node navigation and output", mod, %regex~(next_sibling|previous_sibling|path|print_to_string)$%%),
+        group_by_regex("Node mutation", mod, %regex~(set_name|set_value|append_child|prepend_child|insert_child_after|insert_child_before|remove_child|remove_children)$%%),
+        group_by_regex("Attribute modification", mod, %regex~(append_attribute|prepend_attribute|insert_attribute_after|insert_attribute_before|remove_attribute|remove_attributes)$%%),
+        group_by_regex("Copy and move", mod, %regex~(append_copy|prepend_copy|append_move|prepend_move)$%%),
+        group_by_regex("Value reading", mod, %regex~(as_string|as_int|as_uint|as_float|as_double|as_bool|as_int64|as_uint64)$%%),
+        group_by_regex("Value writing", mod, %regex~^set$%%),
+        group_by_regex("XPath compilation and evaluation", mod, %regex~(xpath_compile|evaluate_boolean|evaluate_number|evaluate_string|evaluate_node_set|evaluate_node)$%%),
+        group_by_regex("XPath selection", mod, %regex~(select_node|select_nodes)$%%),
+        group_by_regex("XPath node set operations", mod, %regex~(at|sort)$%%)
+    )
+    document("XML parser (pugixml)", mod, "pugixml.rst", groups)
+}
+
+def document_module_PUGIXML_boost(root : string) {
+    var mod = find_module("PUGIXML_boost")
+    var groups <- array<DocGroup>(
+        group_by_regex("Block-based iteration", mod, %regex~(for_each_child|for_each_attribute|for_each)$%%),
+        group_by_regex("Iterator-based iteration", mod, %regex~(each|each_child|each_attribute)$%%),
+        group_by_regex("RAII document handling", mod, %regex~(open_xml|parse_xml|with_doc)$%%),
+        group_by_regex("Quick accessors", mod, %regex~(node_text|node_attr|node_attr_int|node_attr_float|node_attr_bool)$%%),
+        group_by_regex("Builder helpers", mod, %regex~(add_child|add_child_ex|add_attr)$%%),
+        group_by_regex("Builder EDSL", mod, %regex~(tag|attr)$%%),
+        group_by_regex("String conversion", mod, %regex~(to_string)$%%),
+        group_by_regex("XPath helpers", mod, %regex~(with_xpath|select_text|select_value|for_each_select)$%%),
+        group_by_regex("Serialization", mod, %regex~(to_XML|from_XML|XML|XML_table)$%%),
+        group_by_regex("Type conversion operators", mod, %regex~(is |as )%%)
+    )
+    document("High-level XML helpers (pugixml boost)", mod, "PUGIXML_boost.rst", groups)
+}
+
 def document_module_sort_boost(root : string) {
     var mod = find_module("sort_boost")
     var groups <- array<DocGroup>(
@@ -1080,6 +1116,7 @@ def main {
     document_module_network(root)
     document_module_dashv(root)
     document_module_uriparser(root)
+    document_module_pugixml(root)
     document_module_debugapi(root)
     document_module_rtti(root)
     document_module_ast(root)
@@ -1146,6 +1183,7 @@ def main {
     document_module_math_boost(root)
     document_module_profiler(root)
     document_module_profiler_boost(root)
+    document_module_PUGIXML_boost(root)
     document_module_quote(root)
     document_module_random(root)
     document_module_refactor(root)
