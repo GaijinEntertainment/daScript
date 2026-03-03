@@ -253,7 +253,7 @@ def test_attribute_set_value_types(t : T?) {
             t |> equal(au as uint, 100u)
             var af = append_attribute(root, "f")
             set_value(af, 3.14)
-            t |> success(abs(af as float - 3.14) < 0.01)
+            t |> success(abs(af as float -3.14) < 0.01)
             var ad = append_attribute(root, "d")
             set_value(ad, 2.718lf)
             t |> success(abs(ad as double - 2.718lf) < 0.01lf)
@@ -296,7 +296,7 @@ def test_text_set_float(t : T?) {
         with_doc() <| $(doc) {
             var root = append_child(doc as xml_node, "root")
             set(root.text, 3.14)
-            t |> success(abs(root.text as float - 3.14) < 0.01)
+            t |> success(abs(root.text as float -3.14) < 0.01)
         }
     }
 }

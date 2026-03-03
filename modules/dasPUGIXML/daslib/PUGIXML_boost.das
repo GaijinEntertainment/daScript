@@ -94,7 +94,7 @@ def with_doc(blk : block<(doc : xml_document?) : void>) {
 
 // ============ Quick accessors ============
 
-def operator [](node : xml_node; attr_name : string) : xml_attribute {
+def operator [] (node : xml_node; attr_name : string) : xml_attribute {
     //! Returns the attribute named *attr_name*. Combine with ``is``/``as``
     //! operators for typed access:
     //!

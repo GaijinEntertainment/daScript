@@ -38,7 +38,7 @@ def test_xml_serialize_tuple_3(t : T?) {
             var root = append_child(dnode, "entry")
             XML(root, tup)
             t |> equal(node_text(root, "name"), "Alice")
-            t |> success(abs(child(root, "score").text as float - 9.5) < 0.01)
+            t |> success(abs(child(root, "score").text as float -9.5) < 0.01)
             t |> equal(child(root, "rank").text as int, 1)
         }
     }

@@ -42,7 +42,7 @@ struct Employee {
 [test]
 def test_xml_serialize_simple(t : T?) {
     t |> run("serialize simple struct fields to XML") <| @(t : T?) {
-        let p = Person(name="Alice", age=30, active=true)
+        let p = Person(name = "Alice", age = 30, active = true)
         with_doc() <| $(doc) {
             var dnode = doc as xml_node
             var root = append_child(dnode, "person")
@@ -57,13 +57,13 @@ def test_xml_serialize_simple(t : T?) {
 [test]
 def test_xml_serialize_floats(t : T?) {
     t |> run("serialize float fields") <| @(t : T?) {
-        let pt = Point(x=3.14, y=2.72)
+        let pt = Point(x = 3.14, y = 2.72)
         with_doc() <| $(doc) {
             var dnode = doc as xml_node
             var root = append_child(dnode, "point")
             XML(root, pt)
-            t |> success(abs(child(root, "x").text as float - 3.14) < 0.01)
-            t |> success(abs(child(root, "y").text as float - 2.72) < 0.01)
+            t |> success(abs(child(root, "x").text as float -3.14) < 0.01)
+            t |> success(abs(child(root, "y").text as float -2.72) < 0.01)
         }
     }
 }
@@ -71,7 +71,7 @@ def test_xml_serialize_floats(t : T?) {
 [test]
 def test_xml_serialize_nested(t : T?) {
     t |> run("serialize nested struct") <| @(t : T?) {
-        let emp = Employee(name="Bob", address=Address(city="NYC", zip=10001))
+        let emp = Employee(name = "Bob", address = Address(city = "NYC", zip = 10001))
         with_doc() <| $(doc) {
             var dnode = doc as xml_node
             var root = append_child(dnode, "employee")
@@ -90,8 +90,8 @@ def test_xml_serialize_array(t : T?) {
     t |> run("serialize struct with array field") <| @(t : T?) {
         var lib : Library
         lib.name = "City Library"
-        lib.books |> push_clone(Book(title="Book A", year=2000, price=19.99))
-        lib.books |> push_clone(Book(title="Book B", year=2010, price=29.99))
+        lib.books |> push_clone(Book(title = "Book A", year = 2000, price = 19.99))
+        lib.books |> push_clone(Book(title = "Book B", year = 2010, price = 29.99))
         with_doc() <| $(doc) {
             var dnode = doc as xml_node
             var root = append_child(dnode, "library")
@@ -115,14 +115,14 @@ def test_xml_serialize_array(t : T?) {
 [test]
 def test_xml_convenience_string(t : T?) {
     t |> run("to_XML(value, root) returns XML string") <| @(t : T?) {
-        let p = Point(x=1.0, y=2.0)
+        let p = Point(x = 1.0, y = 2.0)
         let xml_str = to_XML(p, "point")
         parse_xml(xml_str) <| $(doc, ok) {
             t |> success(ok)
             let root = doc.document_element
             t |> equal(root.name, "point")
-            t |> success(abs(child(root, "x").text as float - 1.0) < 0.01)
-            t |> success(abs(child(root, "y").text as float - 2.0) < 0.01)
+            t |> success(abs(child(root, "x").text as float -1.0) < 0.01)
+            t |> success(abs(child(root, "y").text as float -2.0) < 0.01)
         }
     }
 }
@@ -130,7 +130,7 @@ def test_xml_convenience_string(t : T?) {
 [test]
 def test_xml_convenience_default_root(t : T?) {
     t |> run("to_XML(value) uses 'root' as default element name") <| @(t : T?) {
-        let p = Person(name="Test", age=1, active=false)
+        let p = Person(name = "Test", age = 1, active = false)
         let xml_str = to_XML(p)
         parse_xml(xml_str) <| $(doc, ok) {
             t |> success(ok)
@@ -227,7 +227,7 @@ def test_from_xml_empty_array(t : T?) {
 [test]
 def test_roundtrip_simple(t : T?) {
     t |> run("roundtrip struct -> XML -> struct") <| @(t : T?) {
-        let original = Person(name="Diana", age=42, active=true)
+        let original = Person(name = "Diana", age = 42, active = true)
         let xml_str = to_XML(original, "person")
         parse_xml(xml_str) <| $(doc, ok) {
             t |> success(ok)
@@ -242,7 +242,7 @@ def test_roundtrip_simple(t : T?) {
 [test]
 def test_roundtrip_nested(t : T?) {
     t |> run("roundtrip nested struct") <| @(t : T?) {
-        let original = Employee(name="Eve", address=Address(city="SF", zip=94102))
+        let original = Employee(name = "Eve", address = Address(city = "SF", zip = 94102))
         let xml_str = to_XML(original, "employee")
         parse_xml(xml_str) <| $(doc, ok) {
             t |> success(ok)
@@ -259,8 +259,8 @@ def test_roundtrip_with_array(t : T?) {
     t |> run("roundtrip struct with array field") <| @(t : T?) {
         var original : Library
         original.name = "Round Lib"
-        original.books |> push_clone(Book(title="Gamma", year=2020, price=39.99))
-        original.books |> push_clone(Book(title="Delta", year=2021, price=49.99))
+        original.books |> push_clone(Book(title = "Gamma", year = 2020, price = 39.99))
+        original.books |> push_clone(Book(title = "Delta", year = 2021, price = 49.99))
         let xml_str = to_XML(original, "library")
         parse_xml(xml_str) <| $(doc, ok) {
             t |> success(ok)
@@ -279,7 +279,7 @@ def test_roundtrip_with_array(t : T?) {
 [test]
 def test_roundtrip_floats(t : T?) {
     t |> run("roundtrip preserves float precision") <| @(t : T?) {
-        let original = Point(x=1.5, y=-3.25)
+        let original = Point(x = 1.5, y = -3.25)
         let xml_str = to_XML(original, "point")
         parse_xml(xml_str) <| $(doc, ok) {
             t |> success(ok)
@@ -317,7 +317,7 @@ def test_from_xml_string_nested(t : T?) {
 [test]
 def test_from_xml_string_roundtrip(t : T?) {
     t |> run("to_XML then from_XML(string) roundtrip") <| @(t : T?) {
-        let original = Person(name="Diana", age=42, active=true)
+        let original = Person(name = "Diana", age = 42, active = true)
         let xml_str = to_XML(original, "person")
         let restored = from_XML(xml_str, type<Person>)
         t |> equal(restored.name, original.name)
@@ -331,8 +331,8 @@ def test_from_xml_string_with_array(t : T?) {
     t |> run("from_XML(string) struct with array") <| @(t : T?) {
         var original : Library
         original.name = "Test Lib"
-        original.books |> push_clone(Book(title="A", year=2020, price=10.0))
-        original.books |> push_clone(Book(title="B", year=2021, price=20.0))
+        original.books |> push_clone(Book(title = "A", year = 2020, price = 10.0))
+        original.books |> push_clone(Book(title = "B", year = 2021, price = 20.0))
         let xml_str = to_XML(original, "lib")
         let restored = from_XML(xml_str, type<Library>)
         t |> equal(restored.name, "Test Lib")

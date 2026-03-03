@@ -363,7 +363,7 @@ def test_index_operator(t : T?) {
             // combined with as
             t |> equal(item["isbn"] as string, "978")
             t |> equal(item["count"] as int, 5)
-            t |> success(abs(item["price"] as float - 29.99) < 0.01)
+            t |> success(abs(item["price"] as float -29.99) < 0.01)
             t |> equal(item["active"] as bool, true)
         }
     }
@@ -450,7 +450,7 @@ def test_attr_chaining(t : T?) {
             }
             let item = doc.document_element
             t |> equal(item["isbn"] as string, "978-0-13-110362-7")
-            t |> success(abs(item["price"] as float - 29.99) < 0.01)
+            t |> success(abs(item["price"] as float -29.99) < 0.01)
             t |> equal(item["edition"] as int, 2)
             t |> equal(item["available"] as bool, true)
         }
