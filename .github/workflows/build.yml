@@ -338,6 +338,24 @@ jobs:
             ./daslang _dasroot_/dastest/dastest.das -- --color --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 3600 --test ../tests
             ;;
         esac
+    - name: "AOT Test"
+      if: matrix.cmake_preset == 'Release'
+      run: |
+        set -eux
+        case "${{ matrix.target }}${{ matrix.architecture }}" in
+           windows32)
+            echo "Skipping AOT tests on 32-bit Windows"
+            ;;
+           windows*)
+            cd bin/"${{ matrix.cmake_preset }}"
+            ./test_aot -use-aot _dasroot_/dastest/dastest.das -- --use-aot --color --test ../../tests/aot
+            ;;
+           *)
+            cd bin
+            ./test_aot -use-aot _dasroot_/dastest/dastest.das -- --use-aot --color --test ../tests/aot
+            ;;
+        esac
+
     - name: "Install binaries"
       if: matrix.cmake_preset == 'Release'
       shell: bash
