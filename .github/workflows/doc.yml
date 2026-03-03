@@ -38,6 +38,7 @@ jobs:
         cmake --no-warn-unused-cli -B./build \
           -DCMAKE_BUILD_TYPE:STRING=Release \
           -DDAS_HV_DISABLED=OFF \
+          -DDAS_PUGIXML_DISABLED=OFF \
           -DDAS_LLVM_DISABLED=ON \
           -DDAS_GLFW_DISABLED=ON \
           -G Ninja
