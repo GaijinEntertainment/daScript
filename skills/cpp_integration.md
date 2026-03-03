@@ -101,7 +101,9 @@ addExtern<DAS_BIND_FUN(cpp_function)>(*this, lib, "das_name",
         ->args({"param1", "param2"});
 ```
 
-`SideEffects` flags: `none` (pure), `modifyExternal` (stdout/files), `modifyArgument` (mutates ref params), `accessGlobal` (reads shared state), `invoke` (calls daslang), `worstDefault` (safe fallback).
+`SideEffects` flags: `none` (pure), `modifyExternal` (stdout/files), `modifyArgument` (mutates ref params), `modifyArgumentAndExternal` (mutates ref params AND has external side effects), `accessGlobal` (reads shared state), `invoke` (calls daslang), `worstDefault` (safe fallback).
+
+**`modifyArgument` vs `modifyArgumentAndExternal`**: Use `modifyArgumentAndExternal` when a function mutates state reachable *through* an argument but the argument itself is a temporary (returned by value from a property). With plain `modifyArgument` the optimizer sees the temporary is unused after the call and may **eliminate the call entirely**. Classic example: `node.text` returns `xml_text` by value — calling `set(node.text, value)` with `modifyArgument` gets optimized away; `modifyArgumentAndExternal` prevents this.
 
 ## Binding C++ types — `MAKE_TYPE_FACTORY` + `ManagedStructureAnnotation`
 

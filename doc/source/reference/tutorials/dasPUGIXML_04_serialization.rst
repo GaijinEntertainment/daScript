@@ -22,11 +22,12 @@ parses an XML string back into a struct:
 
 .. code-block:: das
 
-   struct Player
+   struct Player {
        name : string
        hp : int
        speed : float
        alive : bool
+   }
 
    let p = Player(name = "Hero", hp = 100, speed = 5.5, alive = true)
    let xml_str = to_XML(p)
@@ -52,15 +53,17 @@ Nested structs serialize as child elements and round-trip correctly:
 
 .. code-block:: das
 
-   struct Address
+   struct Address {
        street : string
        city : string
        zip : string
+   }
 
-   struct Person
+   struct Person {
        name : string
        age : int
        address : Address
+   }
 
    let p = Person(
        name = "Alice", age = 30,
@@ -79,15 +82,17 @@ field to serialize as the integer value instead:
 
 .. code-block:: das
 
-   enum Weapon
+   enum Weapon {
        sword
        bow
        staff
+   }
 
-   struct Warrior
+   struct Warrior {
        name : string
        weapon : Weapon             // serializes as "sword"
        @enum_as_int backup : Weapon  // serializes as "1"
+   }
 
    let w = Warrior(name = "Knight", weapon = Weapon.sword, backup = Weapon.bow)
    let xml_str = to_XML(w, "warrior")
@@ -102,10 +107,11 @@ Bitfields serialize as their unsigned integer value:
 
 .. code-block:: das
 
-   bitfield Permissions
+   bitfield Permissions {
        read
        write
        execute
+   }
 
    let perms = Permissions.read | Permissions.execute
    let xml_str = to_XML(perms, "permissions")
@@ -122,9 +128,10 @@ entries become ``<entry>`` children with ``<_key>`` and ``<_val>``:
 
 .. code-block:: das
 
-   struct Inventory
+   struct Inventory {
        items : array<string>
        counts : table<string; int>
+   }
 
    var inv <- Inventory(
        items <- ["sword", "shield", "potion"],
@@ -143,9 +150,10 @@ the active index in a ``_variant`` attribute:
 
 .. code-block:: das
 
-   variant Shape
+   variant Shape {
        circle : float
        rectangle : float2
+   }
 
    // Tuple roundtrip
    let t = (42, "hello", 3.14)
@@ -168,8 +176,9 @@ Fixed-size arrays serialize as sequential ``<item>`` children:
 
 .. code-block:: das
 
-   struct Matrix2x2
+   struct Matrix2x2 {
        data : int[4]
+   }
 
    var m = Matrix2x2(data = fixed_array(1, 0, 0, 1))
    let xml_str = to_XML(m, "matrix")
@@ -199,10 +208,11 @@ field without changing the daslang field name:
 
 .. code-block:: das
 
-   struct Config
+   struct Config {
        @rename = "type" _type : string
        @enum_as_int level : Priority
        name : string
+   }
 
 The low-level ``XML()`` builder
 ===============================
@@ -241,12 +251,13 @@ A full game-state roundtrip with nested struct, array, and vector:
 
 .. code-block:: das
 
-   struct GameState
+   struct GameState {
        level : int
        score : int
        player : Player
        weapons : array<string>
        position : float3
+   }
 
    var state <- GameState(
        level = 3, score = 42000,

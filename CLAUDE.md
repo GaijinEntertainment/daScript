@@ -104,6 +104,8 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - No `bool(int)` cast — use `x != 0`; no `string(bool)` — use `"{flag}"`
 - `int("123")` does NOT work — use `to_int` from `require strings`
 - Hex literals are `uint` by default — use `int(0x3F)` for int
+- **Bitfield sizes**: `bitfield Name : uint8 { ... }`, `: uint16`, `: uint64`; default is `uint` (32-bit). Always unsigned.
+- **Bitfield from expression**: `bitfield64(1ul << 13ul)` — use the constructor to create a bitfield value from an integer expression. Similarly `bitfield8()`, `bitfield16()`.
 
 ### Memory and move semantics
 
