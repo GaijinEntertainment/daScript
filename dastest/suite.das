@@ -162,7 +162,7 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
             ctx.queued_benchmarks |> clear
             cop.aot_module = true
             cop.aot = ctx.use_aot
-            cop.fail_on_no_aot = false  // dastest framework (testing.das) doesn't AOT-compile yet
+            cop.fail_on_no_aot = ctx.use_aot
             cop.threadlock_context = true
             cop.jit_enabled = jit_enabled()
             cop.jit_module := "{get_das_root()}/daslib/just_in_time.das"

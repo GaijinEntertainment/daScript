@@ -13,6 +13,7 @@ lib/                        # All build libraries stored here
 modules/**/*.shared_module
 examples/**/*.shared_module
 tests/aot/_aot_generated/
+dastest/_aot_generated/
 .vscode/
 .cache/
 

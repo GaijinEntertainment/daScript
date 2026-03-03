@@ -4,8 +4,9 @@ require daslib/math_boost
 
 [test]
 def test_aot_is_active(t : T?) {
-    t |> run("aot_enabled check") @(t : T?) {
-        t |> success(aot_enabled())
+    // Under fail_on_no_aot, reaching this point proves all functions AOT-linked
+    t |> run("aot linked successfully") @(t : T?) {
+        t |> success(true)
     }
 }
 

@@ -19,6 +19,7 @@ namespace das {
         virtual ModuleAotType aotRequire ( TextWriter &tw ) const override {
             tw << "#include \"daScript/simulate/bin_serializer.h\"\n";
             tw << "#include \"daScript/simulate/runtime_profile.h\"\n";
+            tw << "#include \"daScript/misc/performance_time.h\"\n";
             return ModuleAotType::cpp;
         }
     };

@@ -7,6 +7,7 @@
  // require builtin
 #include "daScript/simulate/bin_serializer.h"
 #include "daScript/simulate/runtime_profile.h"
+#include "daScript/misc/performance_time.h"
  // require functional
 
 #if defined(_MSC_VER)
