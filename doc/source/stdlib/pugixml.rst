@@ -552,6 +552,7 @@ Document operations
   *  :ref:`reset (document: xml_document?) <function-pugixml_reset_xml_document_q_>`
   *  :ref:`save_file (document: xml_document const?; filename: string; indent: string; flags: uint; encoding: xml_encoding) : bool <function-pugixml_save_file_xml_document_const_q__string_string_uint_xml_encoding>`
   *  :ref:`save_string (document: xml_document const?; indent: string; flags: uint; encoding: xml_encoding) : string <function-pugixml_save_string_xml_document_const_q__string_uint_xml_encoding>`
+  *  :ref:`xml_document const?.document_element (document: xml_document const?) : xml_node <function-pugixml__dot__rq_document_element_xml_document_const_q_>`
 
 .. _function-pugixml_document_as_node_xml_document_q_:
 
@@ -631,45 +632,60 @@ Serializes the entire document to a string with the specified formatting.
 
             * **encoding** :  :ref:`xml_encoding <enum-pugixml-xml_encoding>`
 
+.. _function-pugixml__dot__rq_document_element_xml_document_const_q_:
+
+.. das:function:: xml_document const?.document_element(document: xml_document const?) : xml_node
+
+Returns the root element of the document (i.e. the outermost element).
+
+
+:Arguments: * **document** :  :ref:`xml_document <handle-pugixml-xml_document>`? implicit
+
 
 +++++++++++
 Node lookup
 +++++++++++
 
-  *  :ref:`attribute (node: xml_node; name: string) : xml_attribute <function-pugixml_attribute_xml_node_string>`
+  *  :ref:`append_child (node: xml_node; type: xml_node_type) : xml_node <function-pugixml_append_child_xml_node_xml_node_type>`
+  *  :ref:`append_child (node: xml_node; name: string) : xml_node <function-pugixml_append_child_xml_node_string>`
   *  :ref:`child (node: xml_node; name: string) : xml_node <function-pugixml_child_xml_node_string>`
-  *  :ref:`child_value (node: xml_node; name: string) : string <function-pugixml_child_value_xml_node_string>`
   *  :ref:`find_child_by_attribute (node: xml_node; element_name: string; attr_name: string; attr_value: string) : xml_node <function-pugixml_find_child_by_attribute_xml_node_string_string_string>`
   *  :ref:`find_child_by_attribute (node: xml_node; attr_name: string; attr_value: string) : xml_node <function-pugixml_find_child_by_attribute_xml_node_string_string>`
   *  :ref:`first_element_by_path (node: xml_node; path: string) : xml_node <function-pugixml_first_element_by_path_xml_node_string>`
+  *  :ref:`prepend_child (node: xml_node; name: string) : xml_node <function-pugixml_prepend_child_xml_node_string>`
+  *  :ref:`prepend_child (node: xml_node; type: xml_node_type) : xml_node <function-pugixml_prepend_child_xml_node_xml_node_type>`
+  *  :ref:`remove_child (node: xml_node; child: xml_node) : bool <function-pugixml_remove_child_xml_node_xml_node>`
+  *  :ref:`remove_child (node: xml_node; name: string) : bool <function-pugixml_remove_child_xml_node_string>`
+  *  :ref:`xml_node.first_child (node: xml_node) : xml_node <function-pugixml__dot__rq_first_child_xml_node>`
+  *  :ref:`xml_node.last_child (node: xml_node) : xml_node <function-pugixml__dot__rq_last_child_xml_node>`
 
-.. _function-pugixml_attribute_xml_node_string:
 
-.. das:function:: attribute(node: xml_node; name: string) : xml_attribute
+append_child
+^^^^^^^^^^^^
 
-Returns the attribute with the given name, or an empty attribute handle if not found.
+.. _function-pugixml_append_child_xml_node_xml_node_type:
+
+.. das:function:: append_child(node: xml_node; type: xml_node_type) : xml_node
+
+// stub
+def append_child (node: xml_node; type: xml_node_type) : xml_node
 
 
 :Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
 
-            * **name** : string implicit
+            * **type** :  :ref:`xml_node_type <enum-pugixml-xml_node_type>`
+
+.. _function-pugixml_append_child_xml_node_string:
+
+.. das:function:: append_child(node: xml_node; name: string) : xml_node
+
+----
 
 .. _function-pugixml_child_xml_node_string:
 
 .. das:function:: child(node: xml_node; name: string) : xml_node
 
 Returns the first child element with the given name, or an empty node handle if not found.
-
-
-:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
-
-            * **name** : string implicit
-
-.. _function-pugixml_child_value_xml_node_string:
-
-.. das:function:: child_value(node: xml_node; name: string) : string
-
-Returns the text content of the first child element with the given name.
 
 
 :Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
@@ -713,14 +729,79 @@ Navigates a slash-separated element path (e.g. `a/b/c`) and returns the target n
             * **path** : string implicit
 
 
-++++++++++++++++++++++++++
-Node navigation and output
-++++++++++++++++++++++++++
+prepend_child
+^^^^^^^^^^^^^
+
+.. _function-pugixml_prepend_child_xml_node_string:
+
+.. das:function:: prepend_child(node: xml_node; name: string) : xml_node
+
+Prepends a new child element with the given name to the node.
+
+
+:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
+
+            * **name** : string implicit
+
+.. _function-pugixml_prepend_child_xml_node_xml_node_type:
+
+.. das:function:: prepend_child(node: xml_node; type: xml_node_type) : xml_node
+
+----
+
+
+remove_child
+^^^^^^^^^^^^
+
+.. _function-pugixml_remove_child_xml_node_xml_node:
+
+.. das:function:: remove_child(node: xml_node; child: xml_node) : bool
+
+Removes the given child node from this node.
+
+
+:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
+
+            * **child** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
+
+.. _function-pugixml_remove_child_xml_node_string:
+
+.. das:function:: remove_child(node: xml_node; name: string) : bool
+
+----
+
+.. _function-pugixml__dot__rq_first_child_xml_node:
+
+.. das:function:: xml_node.first_child(node: xml_node) : xml_node
+
+Returns the first child node of this element.
+
+
+:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
+
+.. _function-pugixml__dot__rq_last_child_xml_node:
+
+.. das:function:: xml_node.last_child(node: xml_node) : xml_node
+
+Returns the last child node of this element.
+
+
+:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
+
+
++++++++++++++++
+Node navigation
++++++++++++++++
 
   *  :ref:`next_sibling (node: xml_node; name: string) : xml_node <function-pugixml_next_sibling_xml_node_string>`
   *  :ref:`path (node: xml_node; delimiter: string) : string <function-pugixml_path_xml_node_string>`
   *  :ref:`previous_sibling (node: xml_node; name: string) : xml_node <function-pugixml_previous_sibling_xml_node_string>`
   *  :ref:`print_to_string (node: xml_node; indent: string; flags: uint; encoding: xml_encoding) : string <function-pugixml_print_to_string_xml_node_string_uint_xml_encoding>`
+  *  :ref:`xml_node.next_sibling (node: xml_node) : xml_node <function-pugixml__dot__rq_next_sibling_xml_node>`
+  *  :ref:`xml_node.parent (node: xml_node) : xml_node <function-pugixml__dot__rq_parent_xml_node>`
+  *  :ref:`xml_node.previous_sibling (node: xml_node) : xml_node <function-pugixml__dot__rq_previous_sibling_xml_node>`
+  *  :ref:`xml_node.root (node: xml_node) : xml_node <function-pugixml__dot__rq_root_xml_node>`
+  *  :ref:`xpath_node.parent (xpath_node: xpath_node) : xml_node <function-pugixml__dot__rq_parent_xpath_node>`
 
 .. _function-pugixml_next_sibling_xml_node_string:
 
@@ -770,19 +851,58 @@ Serializes the node (and its subtree) to an XML string with the specified format
 
             * **encoding** :  :ref:`xml_encoding <enum-pugixml-xml_encoding>`
 
+.. _function-pugixml__dot__rq_next_sibling_xml_node:
+
+.. das:function:: xml_node.next_sibling(node: xml_node) : xml_node
+
+Returns the next sibling node in document order.
+
+
+:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
+
+.. _function-pugixml__dot__rq_parent_xml_node:
+
+.. das:function:: xml_node.parent(node: xml_node) : xml_node
+
+Returns the parent node of this element.
+
+
+:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
+
+.. _function-pugixml__dot__rq_previous_sibling_xml_node:
+
+.. das:function:: xml_node.previous_sibling(node: xml_node) : xml_node
+
+Returns the previous sibling node in document order.
+
+
+:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
+
+.. _function-pugixml__dot__rq_root_xml_node:
+
+.. das:function:: xml_node.root(node: xml_node) : xml_node
+
+Returns the root node of the document this node belongs to.
+
+
+:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
+
+.. _function-pugixml__dot__rq_parent_xpath_node:
+
+.. das:function:: xpath_node.parent(xpath_node: xpath_node) : xml_node
+
+Returns the parent element of this XPath result node.
+
+
+:Arguments: * **xpath_node** :  :ref:`xpath_node <handle-pugixml-xpath_node>` implicit
+
 
 +++++++++++++
 Node mutation
 +++++++++++++
 
-  *  :ref:`append_child (node: xml_node; name: string) : xml_node <function-pugixml_append_child_xml_node_string>`
-  *  :ref:`append_child (node: xml_node; type: xml_node_type) : xml_node <function-pugixml_append_child_xml_node_xml_node_type>`
   *  :ref:`insert_child_after (node: xml_node; name: string; after: xml_node) : xml_node <function-pugixml_insert_child_after_xml_node_string_xml_node>`
   *  :ref:`insert_child_before (node: xml_node; name: string; before: xml_node) : xml_node <function-pugixml_insert_child_before_xml_node_string_xml_node>`
-  *  :ref:`prepend_child (node: xml_node; name: string) : xml_node <function-pugixml_prepend_child_xml_node_string>`
-  *  :ref:`prepend_child (node: xml_node; type: xml_node_type) : xml_node <function-pugixml_prepend_child_xml_node_xml_node_type>`
-  *  :ref:`remove_child (node: xml_node; child: xml_node) : bool <function-pugixml_remove_child_xml_node_xml_node>`
-  *  :ref:`remove_child (node: xml_node; name: string) : bool <function-pugixml_remove_child_xml_node_string>`
   *  :ref:`remove_children (node: xml_node) : bool <function-pugixml_remove_children_xml_node>`
   *  :ref:`set_name (node: xml_node; name: string) : bool <function-pugixml_set_name_xml_node_string>`
   *  :ref:`set_name (attribute: xml_attribute; name: string) : bool <function-pugixml_set_name_xml_attribute_string>`
@@ -793,27 +913,6 @@ Node mutation
   *  :ref:`set_value (attribute: xml_attribute; value: double) : bool <function-pugixml_set_value_xml_attribute_double>`
   *  :ref:`set_value (attribute: xml_attribute; value: uint) : bool <function-pugixml_set_value_xml_attribute_uint>`
   *  :ref:`set_value (attribute: xml_attribute; value: bool) : bool <function-pugixml_set_value_xml_attribute_bool>`
-
-
-append_child
-^^^^^^^^^^^^
-
-.. _function-pugixml_append_child_xml_node_string:
-
-.. das:function:: append_child(node: xml_node; name: string) : xml_node
-
-Appends a new child element with the given name to the node.
-
-
-:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
-
-            * **name** : string implicit
-
-.. _function-pugixml_append_child_xml_node_xml_node_type:
-
-.. das:function:: append_child(node: xml_node; type: xml_node_type) : xml_node
-
-----
 
 .. _function-pugixml_insert_child_after_xml_node_string_xml_node:
 
@@ -840,48 +939,6 @@ Inserts a new child element with the given name before the specified sibling.
             * **name** : string implicit
 
             * **before** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
-
-
-prepend_child
-^^^^^^^^^^^^^
-
-.. _function-pugixml_prepend_child_xml_node_string:
-
-.. das:function:: prepend_child(node: xml_node; name: string) : xml_node
-
-Prepends a new child element with the given name to the node.
-
-
-:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
-
-            * **name** : string implicit
-
-.. _function-pugixml_prepend_child_xml_node_xml_node_type:
-
-.. das:function:: prepend_child(node: xml_node; type: xml_node_type) : xml_node
-
-----
-
-
-remove_child
-^^^^^^^^^^^^
-
-.. _function-pugixml_remove_child_xml_node_xml_node:
-
-.. das:function:: remove_child(node: xml_node; child: xml_node) : bool
-
-Removes the given child node from this node.
-
-
-:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
-
-            * **child** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
-
-.. _function-pugixml_remove_child_xml_node_string:
-
-.. das:function:: remove_child(node: xml_node; name: string) : bool
-
-----
 
 .. _function-pugixml_remove_children_xml_node:
 
@@ -953,23 +1010,40 @@ Sets the value of the node or attribute. Accepts string, int, uint, float, doubl
 .. das:function:: set_value(attribute: xml_attribute; value: bool) : bool
 
 
-++++++++++++++++++++++
-Attribute modification
-++++++++++++++++++++++
+++++++++++++++++
+Attribute access
+++++++++++++++++
 
   *  :ref:`append_attribute (node: xml_node; name: string) : xml_attribute <function-pugixml_append_attribute_xml_node_string>`
+  *  :ref:`attribute (node: xml_node; name: string) : xml_attribute <function-pugixml_attribute_xml_node_string>`
   *  :ref:`insert_attribute_after (node: xml_node; name: string; after: xml_attribute) : xml_attribute <function-pugixml_insert_attribute_after_xml_node_string_xml_attribute>`
   *  :ref:`insert_attribute_before (node: xml_node; name: string; before: xml_attribute) : xml_attribute <function-pugixml_insert_attribute_before_xml_node_string_xml_attribute>`
   *  :ref:`prepend_attribute (node: xml_node; name: string) : xml_attribute <function-pugixml_prepend_attribute_xml_node_string>`
-  *  :ref:`remove_attribute (node: xml_node; name: string) : bool <function-pugixml_remove_attribute_xml_node_string>`
   *  :ref:`remove_attribute (node: xml_node; attribute: xml_attribute) : bool <function-pugixml_remove_attribute_xml_node_xml_attribute>`
+  *  :ref:`remove_attribute (node: xml_node; name: string) : bool <function-pugixml_remove_attribute_xml_node_string>`
   *  :ref:`remove_attributes (node: xml_node) : bool <function-pugixml_remove_attributes_xml_node>`
+  *  :ref:`xml_attribute.next_attribute (attribute: xml_attribute) : xml_attribute <function-pugixml__dot__rq_next_attribute_xml_attribute>`
+  *  :ref:`xml_attribute.previous_attribute (attribute: xml_attribute) : xml_attribute <function-pugixml__dot__rq_previous_attribute_xml_attribute>`
+  *  :ref:`xml_node.first_attribute (node: xml_node) : xml_attribute <function-pugixml__dot__rq_first_attribute_xml_node>`
+  *  :ref:`xml_node.last_attribute (node: xml_node) : xml_attribute <function-pugixml__dot__rq_last_attribute_xml_node>`
+  *  :ref:`xpath_node.attribute (xpath_node: xpath_node) : xml_attribute <function-pugixml__dot__rq_attribute_xpath_node>`
 
 .. _function-pugixml_append_attribute_xml_node_string:
 
 .. das:function:: append_attribute(node: xml_node; name: string) : xml_attribute
 
 Adds a new attribute with the given name at the end of the node's attribute list.
+
+
+:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
+
+            * **name** : string implicit
+
+.. _function-pugixml_attribute_xml_node_string:
+
+.. das:function:: attribute(node: xml_node; name: string) : xml_attribute
+
+Returns the attribute with the given name, or an empty attribute handle if not found.
 
 
 :Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
@@ -1017,20 +1091,21 @@ Adds a new attribute with the given name at the beginning of the node's attribut
 remove_attribute
 ^^^^^^^^^^^^^^^^
 
-.. _function-pugixml_remove_attribute_xml_node_string:
+.. _function-pugixml_remove_attribute_xml_node_xml_attribute:
 
-.. das:function:: remove_attribute(node: xml_node; name: string) : bool
+.. das:function:: remove_attribute(node: xml_node; attribute: xml_attribute) : bool
 
-Removes the attribute with the given name or handle from the node.
+// stub
+def remove_attribute (node: xml_node; attribute: xml_attribute) : bool
 
 
 :Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
 
-            * **name** : string implicit
+            * **attribute** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>` implicit
 
-.. _function-pugixml_remove_attribute_xml_node_xml_attribute:
+.. _function-pugixml_remove_attribute_xml_node_string:
 
-.. das:function:: remove_attribute(node: xml_node; attribute: xml_attribute) : bool
+.. das:function:: remove_attribute(node: xml_node; name: string) : bool
 
 ----
 
@@ -1042,6 +1117,51 @@ Removes all attributes from the node.
 
 
 :Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
+
+.. _function-pugixml__dot__rq_next_attribute_xml_attribute:
+
+.. das:function:: xml_attribute.next_attribute(attribute: xml_attribute) : xml_attribute
+
+Returns the next attribute in the element's attribute list.
+
+
+:Arguments: * **attribute** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>` implicit
+
+.. _function-pugixml__dot__rq_previous_attribute_xml_attribute:
+
+.. das:function:: xml_attribute.previous_attribute(attribute: xml_attribute) : xml_attribute
+
+Returns the previous attribute in the element's attribute list.
+
+
+:Arguments: * **attribute** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>` implicit
+
+.. _function-pugixml__dot__rq_first_attribute_xml_node:
+
+.. das:function:: xml_node.first_attribute(node: xml_node) : xml_attribute
+
+Returns the first attribute of this element node.
+
+
+:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
+
+.. _function-pugixml__dot__rq_last_attribute_xml_node:
+
+.. das:function:: xml_node.last_attribute(node: xml_node) : xml_attribute
+
+Returns the last attribute of this element node.
+
+
+:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
+
+.. _function-pugixml__dot__rq_attribute_xpath_node:
+
+.. das:function:: xpath_node.attribute(xpath_node: xpath_node) : xml_attribute
+
+Returns the attribute associated with this XPath result node, if any.
+
+
+:Arguments: * **xpath_node** :  :ref:`xpath_node <handle-pugixml-xpath_node>` implicit
 
 
 +++++++++++++
@@ -1124,39 +1244,44 @@ Moves the given node to become the first child of this node.
 Value reading
 +++++++++++++
 
-  *  :ref:`as_bool (attribute: xml_attribute; default_value: bool) : bool <function-pugixml_as_bool_xml_attribute_bool>`
   *  :ref:`as_bool (text: xml_text; default_value: bool) : bool <function-pugixml_as_bool_xml_text_bool>`
-  *  :ref:`as_double (attribute: xml_attribute; default_value: double) : double <function-pugixml_as_double_xml_attribute_double>`
+  *  :ref:`as_bool (attribute: xml_attribute; default_value: bool) : bool <function-pugixml_as_bool_xml_attribute_bool>`
   *  :ref:`as_double (text: xml_text; default_value: double) : double <function-pugixml_as_double_xml_text_double>`
+  *  :ref:`as_double (attribute: xml_attribute; default_value: double) : double <function-pugixml_as_double_xml_attribute_double>`
   *  :ref:`as_float (text: xml_text; default_value: float) : float <function-pugixml_as_float_xml_text_float>`
   *  :ref:`as_float (attribute: xml_attribute; default_value: float) : float <function-pugixml_as_float_xml_attribute_float>`
-  *  :ref:`as_int (text: xml_text; default_value: int) : int <function-pugixml_as_int_xml_text_int>`
   *  :ref:`as_int (attribute: xml_attribute; default_value: int) : int <function-pugixml_as_int_xml_attribute_int>`
+  *  :ref:`as_int (text: xml_text; default_value: int) : int <function-pugixml_as_int_xml_text_int>`
   *  :ref:`as_int64 (text: xml_text; default_value: int64) : int64 <function-pugixml_as_int64_xml_text_int64>`
   *  :ref:`as_string (text: xml_text; default_value: string) : string <function-pugixml_as_string_xml_text_string>`
   *  :ref:`as_string (attribute: xml_attribute; default_value: string) : string <function-pugixml_as_string_xml_attribute_string>`
   *  :ref:`as_uint (attribute: xml_attribute; default_value: uint) : uint <function-pugixml_as_uint_xml_attribute_uint>`
   *  :ref:`as_uint (text: xml_text; default_value: uint) : uint <function-pugixml_as_uint_xml_text_uint>`
   *  :ref:`as_uint64 (text: xml_text; default_value: uint64) : uint64 <function-pugixml_as_uint64_xml_text_uint64>`
+  *  :ref:`child_value (node: xml_node; name: string) : string <function-pugixml_child_value_xml_node_string>`
+  *  :ref:`xml_node.child_value (node: xml_node) : string <function-pugixml__dot__rq_child_value_xml_node>`
+  *  :ref:`xml_node.text (node: xml_node) : xml_text <function-pugixml__dot__rq_text_xml_node>`
+  *  :ref:`xml_text.data (text: xml_text) : xml_node <function-pugixml__dot__rq_data_xml_text>`
 
 
 as_bool
 ^^^^^^^
 
-.. _function-pugixml_as_bool_xml_attribute_bool:
-
-.. das:function:: as_bool(attribute: xml_attribute; default_value: bool) : bool
-
-Returns the attribute or text value as a bool, or *default_value* if conversion fails.
-
-
-:Arguments: * **attribute** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>` implicit
-
-            * **default_value** : bool
-
 .. _function-pugixml_as_bool_xml_text_bool:
 
 .. das:function:: as_bool(text: xml_text; default_value: bool) : bool
+
+// stub
+def as_bool (text: xml_text; default_value: bool) : bool
+
+
+:Arguments: * **text** :  :ref:`xml_text <handle-pugixml-xml_text>` implicit
+
+            * **default_value** : bool
+
+.. _function-pugixml_as_bool_xml_attribute_bool:
+
+.. das:function:: as_bool(attribute: xml_attribute; default_value: bool) : bool
 
 ----
 
@@ -1164,20 +1289,21 @@ Returns the attribute or text value as a bool, or *default_value* if conversion 
 as_double
 ^^^^^^^^^
 
-.. _function-pugixml_as_double_xml_attribute_double:
-
-.. das:function:: as_double(attribute: xml_attribute; default_value: double) : double
-
-Returns the attribute or text value as a double, or *default_value* if conversion fails.
-
-
-:Arguments: * **attribute** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>` implicit
-
-            * **default_value** : double
-
 .. _function-pugixml_as_double_xml_text_double:
 
 .. das:function:: as_double(text: xml_text; default_value: double) : double
+
+// stub
+def as_double (text: xml_text; default_value: double) : double
+
+
+:Arguments: * **text** :  :ref:`xml_text <handle-pugixml-xml_text>` implicit
+
+            * **default_value** : double
+
+.. _function-pugixml_as_double_xml_attribute_double:
+
+.. das:function:: as_double(attribute: xml_attribute; default_value: double) : double
 
 ----
 
@@ -1206,20 +1332,21 @@ Returns the attribute or text value as a float, or *default_value* if conversion
 as_int
 ^^^^^^
 
-.. _function-pugixml_as_int_xml_text_int:
-
-.. das:function:: as_int(text: xml_text; default_value: int) : int
-
-Returns the attribute or text value as an int, or *default_value* if conversion fails.
-
-
-:Arguments: * **text** :  :ref:`xml_text <handle-pugixml-xml_text>` implicit
-
-            * **default_value** : int
-
 .. _function-pugixml_as_int_xml_attribute_int:
 
 .. das:function:: as_int(attribute: xml_attribute; default_value: int) : int
+
+// stub
+def as_int (attribute: xml_attribute; default_value: int) : int
+
+
+:Arguments: * **attribute** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>` implicit
+
+            * **default_value** : int
+
+.. _function-pugixml_as_int_xml_text_int:
+
+.. das:function:: as_int(text: xml_text; default_value: int) : int
 
 ----
 
@@ -1286,6 +1413,44 @@ Returns the text value as a 64-bit unsigned integer, or *default_value* if conve
 :Arguments: * **text** :  :ref:`xml_text <handle-pugixml-xml_text>` implicit
 
             * **default_value** : uint64
+
+.. _function-pugixml_child_value_xml_node_string:
+
+.. das:function:: child_value(node: xml_node; name: string) : string
+
+Returns the text content of the first child element with the given name.
+
+
+:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
+
+            * **name** : string implicit
+
+.. _function-pugixml__dot__rq_child_value_xml_node:
+
+.. das:function:: xml_node.child_value(node: xml_node) : string
+
+Returns the text content of the first PCDATA/CDATA child of this node.
+
+
+:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
+
+.. _function-pugixml__dot__rq_text_xml_node:
+
+.. das:function:: xml_node.text(node: xml_node) : xml_text
+
+Returns an xml_text accessor for the text content of this element.
+
+
+:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
+
+.. _function-pugixml__dot__rq_data_xml_text:
+
+.. das:function:: xml_text.data(text: xml_text) : xml_node
+
+Returns the data node that holds the actual character data for this xml_text.
+
+
+:Arguments: * **text** :  :ref:`xml_text <handle-pugixml-xml_text>` implicit
 
 
 +++++++++++++
@@ -1391,6 +1556,9 @@ XPath compilation and evaluation
   *  :ref:`evaluate_string (query: xpath_query const?; node: xml_node) : string <function-pugixml_evaluate_string_xpath_query_const_q__xml_node>`
   *  :ref:`xpath_compile (query: string; variables: xpath_variable_set?) : xpath_query? <function-pugixml_xpath_compile_string_xpath_variable_set_q_>`
   *  :ref:`xpath_compile (query: string) : xpath_query? <function-pugixml_xpath_compile_string>`
+  *  :ref:`xpath_query const?.result_description (query: xpath_query const?) : string <function-pugixml__dot__rq_result_description_xpath_query_const_q_>`
+  *  :ref:`xpath_query const?.result_offset (query: xpath_query const?) : int <function-pugixml__dot__rq_result_offset_xpath_query_const_q_>`
+  *  :ref:`xpath_query const?.return_type (query: xpath_query const?) : xpath_value_type <function-pugixml__dot__rq_return_type_xpath_query_const_q_>`
 
 .. _function-pugixml_evaluate_boolean_xpath_query_const_q__xml_node:
 
@@ -1466,6 +1634,35 @@ Compiles an XPath expression string into an xpath_query. Optionally accepts an x
 
 .. das:function:: xpath_compile(query: string) : xpath_query?
 
+----
+
+.. _function-pugixml__dot__rq_result_description_xpath_query_const_q_:
+
+.. das:function:: xpath_query const?.result_description(query: xpath_query const?) : string
+
+Returns a human-readable error description if the XPath query failed to compile.
+
+
+:Arguments: * **query** :  :ref:`xpath_query <handle-pugixml-xpath_query>`? implicit
+
+.. _function-pugixml__dot__rq_result_offset_xpath_query_const_q_:
+
+.. das:function:: xpath_query const?.result_offset(query: xpath_query const?) : int
+
+Returns the character offset in the query string where the compilation error occurred.
+
+
+:Arguments: * **query** :  :ref:`xpath_query <handle-pugixml-xpath_query>`? implicit
+
+.. _function-pugixml__dot__rq_return_type_xpath_query_const_q_:
+
+.. das:function:: xpath_query const?.return_type(query: xpath_query const?) : xpath_value_type
+
+Returns the XPath result type (node_set, number, string, or boolean).
+
+
+:Arguments: * **query** :  :ref:`xpath_query <handle-pugixml-xpath_query>`? implicit
+
 
 +++++++++++++++
 XPath selection
@@ -1475,6 +1672,7 @@ XPath selection
   *  :ref:`select_node (node: xml_node; query: string) : xpath_node <function-pugixml_select_node_xml_node_string>`
   *  :ref:`select_nodes (node: xml_node; query: xpath_query const?) : xpath_node_set? <function-pugixml_select_nodes_xml_node_xpath_query_const_q_>`
   *  :ref:`select_nodes (node: xml_node; query: string) : xpath_node_set? <function-pugixml_select_nodes_xml_node_string>`
+  *  :ref:`xpath_node.node (xpath_node: xpath_node) : xml_node <function-pugixml__dot__rq_node_xpath_node>`
 
 
 select_node
@@ -1516,6 +1714,17 @@ Selects all nodes matching the XPath query and returns them as an xpath_node_set
 
 .. das:function:: select_nodes(node: xml_node; query: string) : xpath_node_set?
 
+----
+
+.. _function-pugixml__dot__rq_node_xpath_node:
+
+.. das:function:: xpath_node.node(xpath_node: xpath_node) : xml_node
+
+Returns the xml_node associated with this XPath result, if any.
+
+
+:Arguments: * **xpath_node** :  :ref:`xpath_node <handle-pugixml-xpath_node>` implicit
+
 
 +++++++++++++++++++++++++
 XPath node set operations
@@ -1523,6 +1732,9 @@ XPath node set operations
 
   *  :ref:`at (set: xpath_node_set const?; index: int) : xpath_node <function-pugixml_at_xpath_node_set_const_q__int>`
   *  :ref:`sort (set: xpath_node_set?; reverse: bool) <function-pugixml_sort_xpath_node_set_q__bool>`
+  *  :ref:`xpath_node_set const?.empty (set: xpath_node_set const?) : bool <function-pugixml__dot__rq_empty_xpath_node_set_const_q_>`
+  *  :ref:`xpath_node_set const?.first (set: xpath_node_set const?) : xpath_node <function-pugixml__dot__rq_first_xpath_node_set_const_q_>`
+  *  :ref:`xpath_node_set const?.size (set: xpath_node_set const?) : int <function-pugixml__dot__rq_size_xpath_node_set_const_q_>`
 
 .. _function-pugixml_at_xpath_node_set_const_q__int:
 
@@ -1546,364 +1758,6 @@ Sorts the xpath_node_set in document order (or reverse document order if *revers
 
             * **reverse** : bool
 
-
-+++++++++++++
-Uncategorized
-+++++++++++++
-
-.. _function-pugixml_xml_document:
-
-.. das:function:: xml_document() : xml_document
-
-Constructs a new empty xml_document.
-
-
-.. _function-pugixml_using_block_ls_xml_document_c_void_gr_:
-
-.. das:function:: using(arg0: block<(xml_document):void>)
-
-Constructs an xml_document, passes it to the block, then destroys it automatically.
-
-
-:Arguments: * **arg0** : block<( :ref:`xml_document <handle-pugixml-xml_document>`):void> implicit
-
-.. _function-pugixml_xpath_node_set:
-
-.. das:function:: xpath_node_set() : xpath_node_set
-
-Constructs a new empty xpath_node_set.
-
-
-.. _function-pugixml_using_block_ls_xpath_node_set_c_void_gr_:
-
-.. das:function:: using(arg0: block<(xpath_node_set):void>)
-
-Constructs an xpath_node_set, passes it to the block, then destroys it automatically.
-
-
-:Arguments: * **arg0** : block<( :ref:`xpath_node_set <handle-pugixml-xpath_node_set>`):void> implicit
-
-.. _function-pugixml_xpath_variable_set:
-
-.. das:function:: xpath_variable_set() : xpath_variable_set
-
-Constructs a new empty xpath_variable_set.
-
-
-.. _function-pugixml_using_block_ls_xpath_variable_set_c_void_gr_:
-
-.. das:function:: using(arg0: block<(xpath_variable_set):void>)
-
-Constructs an xpath_variable_set, passes it to the block, then destroys it automatically.
-
-
-:Arguments: * **arg0** : block<( :ref:`xpath_variable_set <handle-pugixml-xpath_variable_set>`):void> implicit
-
-.. _function-pugixml__dot__rq_document_element_xml_document_const_q_:
-
-.. das:function:: xml_document const?.document_element(document: xml_document const?) : xml_node
-
-Returns the root element of the document (i.e. the outermost element).
-
-
-:Arguments: * **document** :  :ref:`xml_document <handle-pugixml-xml_document>`? implicit
-
-.. _function-pugixml__dot__rq_ok_xml_node:
-
-.. das:function:: xml_node.ok(node: xml_node) : bool
-
-Returns true if the node handle is valid (non-null).
-
-
-:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
-
-.. _function-pugixml__dot__rq_first_child_xml_node:
-
-.. das:function:: xml_node.first_child(node: xml_node) : xml_node
-
-Returns the first child node of this element.
-
-
-:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
-
-.. _function-pugixml__dot__rq_last_child_xml_node:
-
-.. das:function:: xml_node.last_child(node: xml_node) : xml_node
-
-Returns the last child node of this element.
-
-
-:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
-
-.. _function-pugixml__dot__rq_next_sibling_xml_node:
-
-.. das:function:: xml_node.next_sibling(node: xml_node) : xml_node
-
-Returns the next sibling node in document order.
-
-
-:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
-
-.. _function-pugixml__dot__rq_previous_sibling_xml_node:
-
-.. das:function:: xml_node.previous_sibling(node: xml_node) : xml_node
-
-Returns the previous sibling node in document order.
-
-
-:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
-
-.. _function-pugixml__dot__rq_parent_xml_node:
-
-.. das:function:: xml_node.parent(node: xml_node) : xml_node
-
-Returns the parent node of this element.
-
-
-:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
-
-.. _function-pugixml__dot__rq_root_xml_node:
-
-.. das:function:: xml_node.root(node: xml_node) : xml_node
-
-Returns the root node of the document this node belongs to.
-
-
-:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
-
-.. _function-pugixml__dot__rq_first_attribute_xml_node:
-
-.. das:function:: xml_node.first_attribute(node: xml_node) : xml_attribute
-
-Returns the first attribute of this element node.
-
-
-:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
-
-.. _function-pugixml__dot__rq_last_attribute_xml_node:
-
-.. das:function:: xml_node.last_attribute(node: xml_node) : xml_attribute
-
-Returns the last attribute of this element node.
-
-
-:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
-
-.. _function-pugixml__dot__rq_text_xml_node:
-
-.. das:function:: xml_node.text(node: xml_node) : xml_text
-
-Returns an xml_text accessor for the text content of this element.
-
-
-:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
-
-.. _function-pugixml__dot__rq_child_value_xml_node:
-
-.. das:function:: xml_node.child_value(node: xml_node) : string
-
-Returns the text content of the first PCDATA/CDATA child of this node.
-
-
-:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
-
-.. _function-pugixml__dot__rq_offset_debug_xml_node:
-
-.. das:function:: xml_node.offset_debug(node: xml_node) : int
-
-Returns the byte offset of this node in the original parsed XML source.
-
-
-:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
-
-.. _function-pugixml__dot__rq_hash_value_xml_node:
-
-.. das:function:: xml_node.hash_value(node: xml_node) : uint64
-
-Returns a hash value for the node handle, usable as a table key.
-
-
-:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
-
-.. _function-pugixml__eq__eq__xml_node_xml_node:
-
-.. das:function:: xml_node==(node_a: xml_node; node_b: xml_node) : bool
-
-Returns true if two xml_node handles refer to the same DOM node.
-
-
-:Arguments: * **node_a** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
-
-            * **node_b** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
-
-.. _function-pugixml__ex__eq__xml_node_xml_node:
-
-.. das:function:: xml_node!=(node_a: xml_node; node_b: xml_node) : bool
-
-Returns true if two xml_node handles refer to different DOM nodes.
-
-
-:Arguments: * **node_a** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
-
-            * **node_b** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
-
-.. _function-pugixml__dot__rq_ok_xml_attribute:
-
-.. das:function:: xml_attribute.ok(attribute: xml_attribute) : bool
-
-Returns true if the attribute handle is valid (non-null).
-
-
-:Arguments: * **attribute** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>` implicit
-
-.. _function-pugixml__dot__rq_next_attribute_xml_attribute:
-
-.. das:function:: xml_attribute.next_attribute(attribute: xml_attribute) : xml_attribute
-
-Returns the next attribute in the element's attribute list.
-
-
-:Arguments: * **attribute** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>` implicit
-
-.. _function-pugixml__dot__rq_previous_attribute_xml_attribute:
-
-.. das:function:: xml_attribute.previous_attribute(attribute: xml_attribute) : xml_attribute
-
-Returns the previous attribute in the element's attribute list.
-
-
-:Arguments: * **attribute** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>` implicit
-
-.. _function-pugixml__dot__rq_hash_value_xml_attribute:
-
-.. das:function:: xml_attribute.hash_value(attribute: xml_attribute) : uint64
-
-Returns a hash value for the attribute handle, usable as a table key.
-
-
-:Arguments: * **attribute** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>` implicit
-
-.. _function-pugixml__eq__eq__xml_attribute_xml_attribute:
-
-.. das:function:: xml_attribute==(attr_a: xml_attribute; attr_b: xml_attribute) : bool
-
-Returns true if two xml_attribute handles refer to the same attribute.
-
-
-:Arguments: * **attr_a** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>` implicit
-
-            * **attr_b** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>` implicit
-
-.. _function-pugixml__ex__eq__xml_attribute_xml_attribute:
-
-.. das:function:: xml_attribute!=(attr_a: xml_attribute; attr_b: xml_attribute) : bool
-
-Returns true if two xml_attribute handles refer to different attributes.
-
-
-:Arguments: * **attr_a** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>` implicit
-
-            * **attr_b** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>` implicit
-
-.. _function-pugixml__dot__rq_ok_xml_text:
-
-.. das:function:: xml_text.ok(text: xml_text) : bool
-
-Returns true if the text handle is valid (non-null).
-
-
-:Arguments: * **text** :  :ref:`xml_text <handle-pugixml-xml_text>` implicit
-
-.. _function-pugixml__dot__rq_data_xml_text:
-
-.. das:function:: xml_text.data(text: xml_text) : xml_node
-
-Returns the data node that holds the actual character data for this xml_text.
-
-
-:Arguments: * **text** :  :ref:`xml_text <handle-pugixml-xml_text>` implicit
-
-.. _function-pugixml__dot__rq_ok_xpath_query_const_q_:
-
-.. das:function:: xpath_query const?.ok(query: xpath_query const?) : bool
-
-Returns true if the XPath query compiled successfully.
-
-
-:Arguments: * **query** :  :ref:`xpath_query <handle-pugixml-xpath_query>`? implicit
-
-.. _function-pugixml__dot__rq_return_type_xpath_query_const_q_:
-
-.. das:function:: xpath_query const?.return_type(query: xpath_query const?) : xpath_value_type
-
-Returns the XPath result type (node_set, number, string, or boolean).
-
-
-:Arguments: * **query** :  :ref:`xpath_query <handle-pugixml-xpath_query>`? implicit
-
-.. _function-pugixml__dot__rq_result_description_xpath_query_const_q_:
-
-.. das:function:: xpath_query const?.result_description(query: xpath_query const?) : string
-
-Returns a human-readable error description if the XPath query failed to compile.
-
-
-:Arguments: * **query** :  :ref:`xpath_query <handle-pugixml-xpath_query>`? implicit
-
-.. _function-pugixml__dot__rq_result_offset_xpath_query_const_q_:
-
-.. das:function:: xpath_query const?.result_offset(query: xpath_query const?) : int
-
-Returns the character offset in the query string where the compilation error occurred.
-
-
-:Arguments: * **query** :  :ref:`xpath_query <handle-pugixml-xpath_query>`? implicit
-
-.. _function-pugixml__dot__rq_node_xpath_node:
-
-.. das:function:: xpath_node.node(xpath_node: xpath_node) : xml_node
-
-Returns the xml_node associated with this XPath result, if any.
-
-
-:Arguments: * **xpath_node** :  :ref:`xpath_node <handle-pugixml-xpath_node>` implicit
-
-.. _function-pugixml__dot__rq_attribute_xpath_node:
-
-.. das:function:: xpath_node.attribute(xpath_node: xpath_node) : xml_attribute
-
-Returns the attribute associated with this XPath result node, if any.
-
-
-:Arguments: * **xpath_node** :  :ref:`xpath_node <handle-pugixml-xpath_node>` implicit
-
-.. _function-pugixml__dot__rq_parent_xpath_node:
-
-.. das:function:: xpath_node.parent(xpath_node: xpath_node) : xml_node
-
-Returns the parent element of this XPath result node.
-
-
-:Arguments: * **xpath_node** :  :ref:`xpath_node <handle-pugixml-xpath_node>` implicit
-
-.. _function-pugixml__dot__rq_ok_xpath_node:
-
-.. das:function:: xpath_node.ok(xpath_node: xpath_node) : bool
-
-Returns true if the xpath_node result is valid (non-null).
-
-
-:Arguments: * **xpath_node** :  :ref:`xpath_node <handle-pugixml-xpath_node>` implicit
-
-.. _function-pugixml__dot__rq_size_xpath_node_set_const_q_:
-
-.. das:function:: xpath_node_set const?.size(set: xpath_node_set const?) : int
-
-Returns the number of xpath_node entries in the node set.
-
-
-:Arguments: * **set** :  :ref:`xpath_node_set <handle-pugixml-xpath_node_set>`? implicit
-
 .. _function-pugixml__dot__rq_empty_xpath_node_set_const_q_:
 
 .. das:function:: xpath_node_set const?.empty(set: xpath_node_set const?) : bool
@@ -1921,5 +1775,204 @@ Returns the first xpath_node in the set (in document order).
 
 
 :Arguments: * **set** :  :ref:`xpath_node_set <handle-pugixml-xpath_node_set>`? implicit
+
+.. _function-pugixml__dot__rq_size_xpath_node_set_const_q_:
+
+.. das:function:: xpath_node_set const?.size(set: xpath_node_set const?) : int
+
+Returns the number of xpath_node entries in the node set.
+
+
+:Arguments: * **set** :  :ref:`xpath_node_set <handle-pugixml-xpath_node_set>`? implicit
+
+
++++++++++++++++++++++
+Construction and RAII
++++++++++++++++++++++
+
+  *  :ref:`using (arg0: block\<(xml_document):void\>) <function-pugixml_using_block_ls_xml_document_c_void_gr_>`
+  *  :ref:`using (arg0: block\<(xpath_variable_set):void\>) <function-pugixml_using_block_ls_xpath_variable_set_c_void_gr_>`
+  *  :ref:`using (arg0: block\<(xpath_node_set):void\>) <function-pugixml_using_block_ls_xpath_node_set_c_void_gr_>`
+  *  :ref:`xml_document () : xml_document <function-pugixml_xml_document>`
+  *  :ref:`xpath_node_set () : xpath_node_set <function-pugixml_xpath_node_set>`
+  *  :ref:`xpath_variable_set () : xpath_variable_set <function-pugixml_xpath_variable_set>`
+
+
+using
+^^^^^
+
+.. _function-pugixml_using_block_ls_xml_document_c_void_gr_:
+
+.. das:function:: using(arg0: block<(xml_document):void>)
+
+Constructs an xml_document, passes it to the block, then destroys it automatically.
+
+
+:Arguments: * **arg0** : block<( :ref:`xml_document <handle-pugixml-xml_document>`):void> implicit
+
+.. _function-pugixml_using_block_ls_xpath_variable_set_c_void_gr_:
+
+.. das:function:: using(arg0: block<(xpath_variable_set):void>)
+
+.. _function-pugixml_using_block_ls_xpath_node_set_c_void_gr_:
+
+.. das:function:: using(arg0: block<(xpath_node_set):void>)
+
+----
+
+.. _function-pugixml_xml_document:
+
+.. das:function:: xml_document() : xml_document
+
+Constructs a new empty xml_document.
+
+
+.. _function-pugixml_xpath_node_set:
+
+.. das:function:: xpath_node_set() : xpath_node_set
+
+Constructs a new empty xpath_node_set.
+
+
+.. _function-pugixml_xpath_variable_set:
+
+.. das:function:: xpath_variable_set() : xpath_variable_set
+
+Constructs a new empty xpath_variable_set.
+
+
+
+++++++++++++++++++++++++++++++
+Handle validity and comparison
+++++++++++++++++++++++++++++++
+
+  *  :ref:`xml_attribute\!= (attr_a: xml_attribute; attr_b: xml_attribute) : bool <function-pugixml__ex__eq__xml_attribute_xml_attribute>`
+  *  :ref:`xml_attribute.hash_value (attribute: xml_attribute) : uint64 <function-pugixml__dot__rq_hash_value_xml_attribute>`
+  *  :ref:`xml_attribute.ok (attribute: xml_attribute) : bool <function-pugixml__dot__rq_ok_xml_attribute>`
+  *  :ref:`xml_attribute== (attr_a: xml_attribute; attr_b: xml_attribute) : bool <function-pugixml__eq__eq__xml_attribute_xml_attribute>`
+  *  :ref:`xml_node\!= (node_a: xml_node; node_b: xml_node) : bool <function-pugixml__ex__eq__xml_node_xml_node>`
+  *  :ref:`xml_node.hash_value (node: xml_node) : uint64 <function-pugixml__dot__rq_hash_value_xml_node>`
+  *  :ref:`xml_node.offset_debug (node: xml_node) : int <function-pugixml__dot__rq_offset_debug_xml_node>`
+  *  :ref:`xml_node.ok (node: xml_node) : bool <function-pugixml__dot__rq_ok_xml_node>`
+  *  :ref:`xml_node== (node_a: xml_node; node_b: xml_node) : bool <function-pugixml__eq__eq__xml_node_xml_node>`
+  *  :ref:`xml_text.ok (text: xml_text) : bool <function-pugixml__dot__rq_ok_xml_text>`
+  *  :ref:`xpath_node.ok (xpath_node: xpath_node) : bool <function-pugixml__dot__rq_ok_xpath_node>`
+  *  :ref:`xpath_query const?.ok (query: xpath_query const?) : bool <function-pugixml__dot__rq_ok_xpath_query_const_q_>`
+
+.. _function-pugixml__ex__eq__xml_attribute_xml_attribute:
+
+.. das:function:: xml_attribute!=(attr_a: xml_attribute; attr_b: xml_attribute) : bool
+
+Returns true if two xml_attribute handles refer to different attributes.
+
+
+:Arguments: * **attr_a** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>` implicit
+
+            * **attr_b** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>` implicit
+
+.. _function-pugixml__dot__rq_hash_value_xml_attribute:
+
+.. das:function:: xml_attribute.hash_value(attribute: xml_attribute) : uint64
+
+Returns a hash value for the attribute handle, usable as a table key.
+
+
+:Arguments: * **attribute** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>` implicit
+
+.. _function-pugixml__dot__rq_ok_xml_attribute:
+
+.. das:function:: xml_attribute.ok(attribute: xml_attribute) : bool
+
+Returns true if the attribute handle is valid (non-null).
+
+
+:Arguments: * **attribute** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>` implicit
+
+.. _function-pugixml__eq__eq__xml_attribute_xml_attribute:
+
+.. das:function:: xml_attribute==(attr_a: xml_attribute; attr_b: xml_attribute) : bool
+
+Returns true if two xml_attribute handles refer to the same attribute.
+
+
+:Arguments: * **attr_a** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>` implicit
+
+            * **attr_b** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>` implicit
+
+.. _function-pugixml__ex__eq__xml_node_xml_node:
+
+.. das:function:: xml_node!=(node_a: xml_node; node_b: xml_node) : bool
+
+Returns true if two xml_node handles refer to different DOM nodes.
+
+
+:Arguments: * **node_a** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
+
+            * **node_b** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
+
+.. _function-pugixml__dot__rq_hash_value_xml_node:
+
+.. das:function:: xml_node.hash_value(node: xml_node) : uint64
+
+Returns a hash value for the node handle, usable as a table key.
+
+
+:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
+
+.. _function-pugixml__dot__rq_offset_debug_xml_node:
+
+.. das:function:: xml_node.offset_debug(node: xml_node) : int
+
+Returns the byte offset of this node in the original parsed XML source.
+
+
+:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
+
+.. _function-pugixml__dot__rq_ok_xml_node:
+
+.. das:function:: xml_node.ok(node: xml_node) : bool
+
+Returns true if the node handle is valid (non-null).
+
+
+:Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
+
+.. _function-pugixml__eq__eq__xml_node_xml_node:
+
+.. das:function:: xml_node==(node_a: xml_node; node_b: xml_node) : bool
+
+Returns true if two xml_node handles refer to the same DOM node.
+
+
+:Arguments: * **node_a** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
+
+            * **node_b** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
+
+.. _function-pugixml__dot__rq_ok_xml_text:
+
+.. das:function:: xml_text.ok(text: xml_text) : bool
+
+Returns true if the text handle is valid (non-null).
+
+
+:Arguments: * **text** :  :ref:`xml_text <handle-pugixml-xml_text>` implicit
+
+.. _function-pugixml__dot__rq_ok_xpath_node:
+
+.. das:function:: xpath_node.ok(xpath_node: xpath_node) : bool
+
+Returns true if the xpath_node result is valid (non-null).
+
+
+:Arguments: * **xpath_node** :  :ref:`xpath_node <handle-pugixml-xpath_node>` implicit
+
+.. _function-pugixml__dot__rq_ok_xpath_query_const_q_:
+
+.. das:function:: xpath_query const?.ok(query: xpath_query const?) : bool
+
+Returns true if the XPath query compiled successfully.
+
+
+:Arguments: * **query** :  :ref:`xpath_query <handle-pugixml-xpath_query>`? implicit
 
 
