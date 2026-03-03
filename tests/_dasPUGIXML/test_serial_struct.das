@@ -289,3 +289,55 @@ def test_roundtrip_floats(t : T?) {
         }
     }
 }
+
+// ============ from_XML(string) convenience tests ============
+
+[test]
+def test_from_xml_string_simple(t : T?) {
+    t |> run("from_XML(string) one-step deserialize") <| @(t : T?) {
+        let xml_str = "<person><name>Alice</name><age>30</age><active>true</active></person>"
+        let p = from_XML(xml_str, type<Person>)
+        t |> equal(p.name, "Alice")
+        t |> equal(p.age, 30)
+        t |> equal(p.active, true)
+    }
+}
+
+[test]
+def test_from_xml_string_nested(t : T?) {
+    t |> run("from_XML(string) nested struct") <| @(t : T?) {
+        let xml_str = "<e><name>Bob</name><address><city>NYC</city><zip>10001</zip></address></e>"
+        let emp = from_XML(xml_str, type<Employee>)
+        t |> equal(emp.name, "Bob")
+        t |> equal(emp.address.city, "NYC")
+        t |> equal(emp.address.zip, 10001)
+    }
+}
+
+[test]
+def test_from_xml_string_roundtrip(t : T?) {
+    t |> run("to_XML then from_XML(string) roundtrip") <| @(t : T?) {
+        let original = Person(name="Diana", age=42, active=true)
+        let xml_str = to_XML(original, "person")
+        let restored = from_XML(xml_str, type<Person>)
+        t |> equal(restored.name, original.name)
+        t |> equal(restored.age, original.age)
+        t |> equal(restored.active, original.active)
+    }
+}
+
+[test]
+def test_from_xml_string_with_array(t : T?) {
+    t |> run("from_XML(string) struct with array") <| @(t : T?) {
+        var original : Library
+        original.name = "Test Lib"
+        original.books |> push_clone(Book(title="A", year=2020, price=10.0))
+        original.books |> push_clone(Book(title="B", year=2021, price=20.0))
+        let xml_str = to_XML(original, "lib")
+        let restored = from_XML(xml_str, type<Library>)
+        t |> equal(restored.name, "Test Lib")
+        t |> equal(length(restored.books), 2)
+        t |> equal(restored.books[0].title, "A")
+        t |> equal(restored.books[1].title, "B")
+    }
+}

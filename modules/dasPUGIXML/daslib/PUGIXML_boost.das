@@ -851,3 +851,14 @@ def to_XML(value : auto(TT); root_name : string = "root") : string {
     unsafe { delete doc; }
     return result
 }
+
+def from_XML(xml_str : string; anything : auto(TT)) {
+    //! Parses an XML string and deserializes the document element into
+    //! a native value in one step. Symmetric with ``to_XML``.
+    var doc = new xml_document()
+    var result : xml_parse_result
+    load_string(doc, xml_str, result, parse_default)
+    var ret <- _::from_XML(doc.document_element, type<TT>)
+    unsafe { delete doc; }
+    return <- ret
+}
