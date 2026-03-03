@@ -1750,11 +1750,17 @@ namespace das {
         if (expr->typeexpr->isExprType()) {
             return Visitor::visit(expr);
         }
-        if (!expr->subexpr->type) {
+        if (!expr->subexpr->type || expr->subexpr->type->isAutoOrAlias()) {
             return Visitor::visit(expr);
         }
-        // TODO: verify
-        if (expr->typeexpr->isAutoOrAlias()) {
+        // generic operator
+        if ( !expr->typeexpr->isAutoOrAlias() ) {
+            auto tname = das_to_string(expr->typeexpr->baseType);
+            if (auto opE = inferGenericOperator("`is`" + tname, expr->at, expr->subexpr, nullptr))
+                return opE;
+            if (auto opE = inferGenericOperatorWithName("`is", expr->at, expr->subexpr, tname))
+                return opE;
+        } else {
             error("is " + (expr->typeexpr ? describeType(expr->typeexpr) : "...") + " can't be inferred", "", "",
                   expr->at, CompilationError::type_not_found);
             return Visitor::visit(expr);
