@@ -82,13 +82,13 @@ Builder helpers
 
 Lower-level helpers for when you don't need the pipe+block pattern:
 
-======================================  ================================================
-Function                                Description
-======================================  ================================================
-``add_child(node, name, text)``         Append element with text content
-``add_child_ex(node, name, attr, val)`` Append element with one attribute
-``add_attr(node, name, value)``         Append typed attribute (string/int/float/bool)
-======================================  ================================================
+=========================================  ================================================
+Function                                   Description
+=========================================  ================================================
+``add_child(node, name, text)``            Append element with text content
+``add_child_ex(node, name, attr, val)``    Append element with one attribute
+``add_attr(node, name, value)``            Append typed attribute (string/int/float/bool)
+=========================================  ================================================
 
 .. code-block:: das
 

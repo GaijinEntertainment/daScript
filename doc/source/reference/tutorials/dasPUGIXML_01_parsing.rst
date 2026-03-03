@@ -86,15 +86,15 @@ Quick accessors
 Helper functions read child text and attribute values with defaults
 for missing data:
 
-============================  =======================================
-Function                      Returns
-============================  =======================================
-``node_text(n, "tag")``       Text of child ``<tag>`` as ``string``
-``node_attr(n, "key")``       Attribute value as ``string``
-``node_attr_int(n, "key")``   Attribute as ``int``
-``node_attr_float(n, "key")`` Attribute as ``float``
-``node_attr_bool(n, "key")``  Attribute as ``bool``
-============================  =======================================
+================================  =======================================
+Function                          Returns
+================================  =======================================
+``node_text(n, "tag")``           Text of child ``<tag>`` as ``string``
+``node_attr(n, "key")``           Attribute value as ``string``
+``node_attr_int(n, "key")``       Attribute as ``int``
+``node_attr_float(n, "key")``     Attribute as ``float``
+``node_attr_bool(n, "key")``      Attribute as ``bool``
+================================  =======================================
 
 All accept an optional default value:
 
