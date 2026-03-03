@@ -28,6 +28,24 @@ Functions in each module's RST are organized into named groups (e.g. "Compilatio
 3. Regenerate: `bin/Release/daslang.exe doc/reflections/das2rst.das`
 4. Verify no "Uncategorized" section remains: search for `Uncategorized` in the generated `doc/source/stdlib/*.rst`
 
+#### `regex_match` is start-anchored — use `.*` prefix
+
+`group_by_regex` uses `regex_match` (from `daslib/regex`), which matches **only from the start of the string** (offset 0). It does NOT scan/search the full string like `regex_search`. This means:
+
+- A pattern like `(ok|parent)$` will match `"ok"` but **NOT** `".`ok"` (dot-backtick property name)
+- C++ modules that register property-style functions (`.`name`) need `.*` prefix: `%regex~.*(ok|parent)$%%`
+- **Always prefix patterns with `.*`** unless you are certain all function names in the module start directly with the matched text
+
+#### Backtick function names need `regex_compile`
+
+The `%regex~...%%` reader macro cannot contain literal backtick characters (`` ` ``). For function names that contain backticks (e.g. `` `is`int ``, `` `as`float ``), use `regex_compile` with a string pattern:
+
+```das
+var r_type_conv : Regex
+regex_compile(r_type_conv, ".*(`is`|`as`|\\\\[\\\\])")
+group_by_regex("Type conversion operators", mod, r_type_conv)
+```
+
 ### Adding a module example
 
 1. Add `example="""..."""` to the `reg()` call in `gen_module_examples.py`

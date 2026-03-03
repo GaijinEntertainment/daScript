@@ -61,6 +61,73 @@ def for_each(node_set : xpath_node_set?; blk : block<(xn : xpath_node) : void>) 
     }
 }
 
+[unsafe_outside_of_for]
+def each(node_set : xpath_node_set?) : iterator<xpath_node> {
+    //! Returns a lazy iterator over all ``xpath_node`` entries in an
+    //! ``xpath_node_set``. Intended for use in ``for`` loops.
+    //! Because the iterator is named ``each``, the call can be omitted:
+    //!
+    //!   ``for (xn in node_set) { ... }``
+    return <- generator<xpath_node>() <| $ {
+        let n = node_set.size
+        for (i in range(n)) {
+            yield at(node_set, i)
+        }
+        return false
+    }
+}
+
+[unsafe_outside_of_for]
+def each_child(node : xml_node) : iterator<xml_node> {
+    //! Returns a lazy iterator over all child elements of *node*.
+    //! Intended for use in ``for`` loops:
+    //!
+    //!   ``for (ch in each_child(node)) { ... }``
+    return <- generator<xml_node>() <| $ {
+        var ch = node.first_child
+        while (ch.ok) {
+            var next = ch.next_sibling   // capture before yield (user may mutate)
+            yield ch
+            ch = next
+        }
+        return false
+    }
+}
+
+[unsafe_outside_of_for]
+def each_child(node : xml_node; name : string) : iterator<xml_node> {
+    //! Returns a lazy iterator over child elements of *node* whose tag
+    //! matches *name*. Intended for use in ``for`` loops:
+    //!
+    //!   ``for (ch in each_child(node, "item")) { ... }``
+    return <- generator<xml_node>() <| $ {
+        var ch = child(node, name)
+        while (ch.ok) {
+            var next = next_sibling(ch, name)   // capture before yield
+            yield ch
+            ch = next
+        }
+        return false
+    }
+}
+
+[unsafe_outside_of_for]
+def each_attribute(node : xml_node) : iterator<xml_attribute> {
+    //! Returns a lazy iterator over all attributes of *node*.
+    //! Intended for use in ``for`` loops:
+    //!
+    //!   ``for (a in each_attribute(node)) { ... }``
+    return <- generator<xml_attribute>() <| $ {
+        var a = node.first_attribute
+        while (a.ok) {
+            var next = a.next_attribute   // capture before yield
+            yield a
+            a = next
+        }
+        return false
+    }
+}
+
 // ============ RAII document management ============
 
 def open_xml(filename : string; blk : block<(doc : xml_document?; success : bool) : void>) {

@@ -209,7 +209,7 @@ Read-only string constant used as the separator between vector components when p
 
 .. _global-builtin-print_flags_debugger:
 
-.. das:attribute:: print_flags_debugger = bitfield(0x2f)
+.. das:attribute:: print_flags_debugger = bitfield(0xf)
 
 Predefined set of print_flags configured to match the output formatting used by the `debug` function.
 

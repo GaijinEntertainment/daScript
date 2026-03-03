@@ -59,8 +59,8 @@ Loading from a file
 Iterating children
 ==================
 
-``for_each_child`` iterates over all child elements of a node.
-Pass an optional name to filter by tag:
+``for_each_child`` iterates over all child elements of a node using a
+block callback.  Pass an optional name to filter by tag:
 
 .. code-block:: das
 
@@ -72,11 +72,30 @@ Pass an optional name to filter by tag:
    // only <setting> children
    root |> for_each_child("setting") <| $(ch) { ... }
 
-``for_each_attribute`` iterates attributes:
+``each_child`` returns a lazy iterator for use in ``for`` loops — same
+traversal, different syntax:
+
+.. code-block:: das
+
+   for (ch in each_child(root)) {
+       print("<{ch.name}>\n")
+   }
+
+   for (ch in each_child(root, "setting")) { ... }
+
+``for_each_attribute`` iterates attributes with a block callback:
 
 .. code-block:: das
 
    node |> for_each_attribute() <| $(a) {
+       print("{a.name} = {a as string}\n")
+   }
+
+``each_attribute`` is the iterator alternative:
+
+.. code-block:: das
+
+   for (a in each_attribute(node)) {
        print("{a.name} = {a as string}\n")
    }
 
