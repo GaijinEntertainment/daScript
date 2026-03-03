@@ -1419,7 +1419,13 @@ namespace das
 #endif
             for ( int i=0, is=totalVariables; i!=is && !stopFlags; ++i ) {
                 auto & pv = globalVariables[i];
-                memset ( globals + pv.offset, 0, pv.size );
+                if ( pv.shared ) {
+                    if ( sharedOwner ) {
+                        memset ( shared + pv.offset, 0, pv.size );
+                    }
+                } else {
+                    memset ( globals + pv.offset, 0, pv.size );
+                }
             }
             for ( int i=0, is=totalVariables; i!=is && !stopFlags; ++i ) {
                 auto & pv = globalVariables[i];
