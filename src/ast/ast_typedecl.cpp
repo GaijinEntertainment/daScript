@@ -213,6 +213,7 @@ namespace das
     }
 
     void TypeDecl::applyAutoContracts ( const TypeDeclPtr & TT, const TypeDeclPtr & autoT ) {
+        if ( !TT || !autoT ) return;
         if ( !autoT->isAuto() ) return;
         TT->ref = (TT->ref || autoT->ref) && !autoT->removeRef && !TT->removeRef;
         TT->constant = (TT->constant || autoT->constant) && !autoT->removeConstant && !TT->removeConstant;
@@ -238,7 +239,7 @@ namespace das
             if ( TT->firstType ) {
                 applyAutoContracts(TT->firstType, autoT->firstType);
             }
-            for ( size_t i=0, is=autoT->argTypes.size(); i!=is; ++i ) {
+            for ( size_t i=0, is=min(TT->argTypes.size(),autoT->argTypes.size()); i!=is; ++i ) {
                 applyAutoContracts(TT->argTypes[i], autoT->argTypes[i]);
             }
         }

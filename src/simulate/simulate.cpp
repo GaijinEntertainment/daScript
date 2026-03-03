@@ -1419,6 +1419,10 @@ namespace das
 #endif
             for ( int i=0, is=totalVariables; i!=is && !stopFlags; ++i ) {
                 auto & pv = globalVariables[i];
+                memset ( globals + pv.offset, 0, pv.size );
+            }
+            for ( int i=0, is=totalVariables; i!=is && !stopFlags; ++i ) {
+                auto & pv = globalVariables[i];
                 if ( pv.init ) {
                     if ( sharedOwner || !pv.shared ) {
 #if DAS_ENABLE_STACK_WALK
@@ -1434,8 +1438,6 @@ namespace das
                         pp->info = nullptr;
 #endif
                     }
-                } else {
-                    memset ( globals + pv.offset, 0, pv.size );
                 }
             }
         }
