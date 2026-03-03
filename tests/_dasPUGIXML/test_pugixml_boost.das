@@ -66,6 +66,146 @@ def test_for_each_xpath(t : T?) {
 }
 
 [test]
+def test_each_xpath(t : T?) {
+    t |> run("basic iteration") <| @(t : T?) {
+        parse_xml("<root><a>1</a><b>2</b><c>3</c></root>") <| $(doc, ok) {
+            t |> success(ok)
+            var ns = select_nodes(doc.document_element, "*")
+            var names : array<string>
+            for (xn in ns) {
+                names |> push(xn.node.name)
+            }
+            t |> equal(length(names), 3)
+            t |> equal(names[0], "a")
+            t |> equal(names[1], "b")
+            t |> equal(names[2], "c")
+            unsafe { delete ns; }
+        }
+    }
+    t |> run("empty node set") <| @(t : T?) {
+        parse_xml("<root/>") <| $(doc, ok) {
+            t |> success(ok)
+            var ns = select_nodes(doc.document_element, "missing")
+            var count = 0
+            for (xn in ns) {
+                count++
+            }
+            t |> equal(count, 0)
+            unsafe { delete ns; }
+        }
+    }
+    t |> run("attribute access via each") <| @(t : T?) {
+        parse_xml("<root><item key=\"x\"/><item key=\"y\"/><item key=\"z\"/></root>") <| $(doc, ok) {
+            t |> success(ok)
+            var ns = select_nodes(doc.document_element, "item")
+            var keys : array<string>
+            for (xn in ns) {
+                keys |> push(node_attr(xn.node, "key"))
+            }
+            t |> equal(length(keys), 3)
+            t |> equal(keys[0], "x")
+            t |> equal(keys[1], "y")
+            t |> equal(keys[2], "z")
+            unsafe { delete ns; }
+        }
+    }
+}
+
+[test]
+def test_each_child(t : T?) {
+    t |> run("all children") <| @(t : T?) {
+        parse_xml("<root><a>1</a><b>2</b><c>3</c></root>") <| $(doc, ok) {
+            t |> success(ok)
+            let root = doc.document_element
+            var names : array<string>
+            for (ch in each_child(root)) {
+                names |> push(ch.name)
+            }
+            t |> equal(length(names), 3)
+            t |> equal(names[0], "a")
+            t |> equal(names[1], "b")
+            t |> equal(names[2], "c")
+        }
+    }
+    t |> run("empty node") <| @(t : T?) {
+        parse_xml("<root/>") <| $(doc, ok) {
+            t |> success(ok)
+            var count = 0
+            for (ch in each_child(doc.document_element)) {
+                count++
+            }
+            t |> equal(count, 0)
+        }
+    }
+}
+
+[test]
+def test_each_child_named(t : T?) {
+    t |> run("filtered iteration") <| @(t : T?) {
+        parse_xml("<root><item>1</item><other/><item>2</item><item>3</item></root>") <| $(doc, ok) {
+            t |> success(ok)
+            let root = doc.document_element
+            var texts : array<string>
+            for (ch in each_child(root, "item")) {
+                texts |> push(ch.text as string)
+            }
+            t |> equal(length(texts), 3)
+            t |> equal(texts[0], "1")
+            t |> equal(texts[1], "2")
+            t |> equal(texts[2], "3")
+        }
+    }
+    t |> run("no matching children") <| @(t : T?) {
+        parse_xml("<root><a/><b/></root>") <| $(doc, ok) {
+            t |> success(ok)
+            var count = 0
+            for (ch in each_child(doc.document_element, "item")) {
+                count++
+            }
+            t |> equal(count, 0)
+        }
+    }
+}
+
+[test]
+def test_each_attribute(t : T?) {
+    t |> run("all attributes") <| @(t : T?) {
+        parse_xml("<root x=\"1\" y=\"2\" z=\"3\"/>") <| $(doc, ok) {
+            t |> success(ok)
+            let root = doc.document_element
+            var attrs : array<string>
+            for (a in each_attribute(root)) {
+                attrs |> push(a.name)
+            }
+            t |> equal(length(attrs), 3)
+            t |> equal(attrs[0], "x")
+            t |> equal(attrs[1], "y")
+            t |> equal(attrs[2], "z")
+        }
+    }
+    t |> run("attribute values via iterator") <| @(t : T?) {
+        parse_xml("<point x=\"10\" y=\"20\"/>") <| $(doc, ok) {
+            t |> success(ok)
+            var total = 0
+            for (a in each_attribute(doc.document_element)) {
+                total += a as int
+            }
+            t |> equal(total, 30)
+        }
+    }
+    t |> run("no attributes") <| @(t : T?) {
+        parse_xml("<empty/>") <| $(doc, ok) {
+            t |> success(ok)
+            var count = 0
+            for (a in each_attribute(doc.document_element)) {
+                count++
+            }
+            t |> equal(count, 0)
+        }
+    }
+}
+
+[test]
 def test_parse_xml(t : T?) {
     parse_xml("<hello>world</hello>") <| $(doc, ok) {
         t |> success(ok)

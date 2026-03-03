@@ -24,7 +24,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 
 | File | Description | Expects errors |
 |---|---|---|
-| test_pugixml_boost.das | PUGIXML_boost helpers — iteration, RAII, accessors, builders, serialization, operator is/as type conversions | |
+| test_pugixml_boost.das | PUGIXML_boost helpers — iteration (for_each, each, each_child, each_attribute), RAII, accessors, builders, serialization, operator is/as type conversions | |
 | test_pugixml_core.das | Core C++ bindings — node navigation, attribute/text properties, parse result, document ops, XPath evaluation | |
 | test_pugixml_mutation.das | XML mutation — node/attribute insert/remove/copy/move, text set, attribute set_value types | |
 | test_serial_struct.das | Struct serialization — XML()/from_XML()/to_XML() for simple, nested, and array-containing structs | |

@@ -3,8 +3,8 @@
 // This tutorial covers:
 //   - Parsing XML from a string with parse_xml
 //   - Loading XML from a file with open_xml
-//   - Iterating child elements with for_each_child
-//   - Iterating attributes with for_each_attribute
+//   - Iterating child elements with for_each_child and each_child
+//   - Iterating attributes with for_each_attribute and each_attribute
 //   - Quick accessors: node_text, node_attr, node_attr_int, node_attr_float, node_attr_bool
 //   - Attribute access with operator [] and is/as type operators
 //   - Text content access with xml_text is/as
@@ -80,9 +80,9 @@ def loading_from_file() {
 // Section 3 — Iterating children and attributes
 // ──────────────────────────────────────────────────────────────────────────
 //
-// for_each_child iterates over child elements. With a name argument it
-// filters to children with that tag. for_each_attribute iterates over
-// all attributes on a node.
+// Block-based: for_each_child, for_each_attribute — invoke a block per
+// element. Iterator-based: each_child, each_attribute — return lazy
+// iterators for use in for loops.
 
 def iterating() {
     print("\n=== Iterating children and attributes ===\n")
@@ -93,38 +93,65 @@ def iterating() {
         if (!ok) { return ; }
         let root = doc.document_element
 
-        // Iterate all children
-        print("All children:\n")
+        // Block-based — for_each_child with a callback
+        print("All children (for_each_child):\n")
         root |> for_each_child() <| $(ch) {
             print("  <{ch.name}>\n")
         }
-        // output: All children:
+        // output: All children (for_each_child):
         // output:   <setting>
         // output:   <setting>
         // output:   <setting>
 
-        // Iterate attributes of the first child
+        // Iterator-based — each_child in a for loop
+        print("All children (each_child):\n")
+        for (ch in each_child(root)) {
+            print("  <{ch.name}>\n")
+        }
+        // output: All children (each_child):
+        // output:   <setting>
+        // output:   <setting>
+        // output:   <setting>
+
+        // Block-based — for_each_attribute
         let first = root.first_child
-        print("Attributes of first <setting>:\n")
+        print("Attributes (for_each_attribute):\n")
         first |> for_each_attribute() <| $(a) {
             print("  {a.name} = {a as string}\n")
         }
-        // output: Attributes of first <setting>:
+        // output: Attributes (for_each_attribute):
+        // output:   name = width
+        // output:   value = 1920
+
+        // Iterator-based — each_attribute
+        print("Attributes (each_attribute):\n")
+        for (a in each_attribute(first)) {
+            print("  {a.name} = {a as string}\n")
+        }
+        // output: Attributes (each_attribute):
         // output:   name = width
         // output:   value = 1920
     }
 
-    // Named child iteration
+    // Named child iteration — both styles
     let xml2 = "<root><a>1</a><b>2</b><a>3</a><b>4</b></root>"
     parse_xml(xml2) <| $(doc, ok) {
         if (!ok) { return ; }
         let root = doc.document_element
 
-        print("Only <a> children:\n")
+        print("Only <a> (for_each_child):\n")
         root |> for_each_child("a") <| $(ch) {
             print("  {ch.text as string}\n")
         }
-        // output: Only <a> children:
+        // output: Only <a> (for_each_child):
+        // output:   1
+        // output:   3
+
+        print("Only <a> (each_child):\n")
+        for (ch in each_child(root, "a")) {
+            print("  {ch.text as string}\n")
+        }
+        // output: Only <a> (each_child):
         // output:   1
         // output:   3
     }
