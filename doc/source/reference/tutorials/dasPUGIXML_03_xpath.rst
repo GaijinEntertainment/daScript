@@ -12,85 +12,138 @@ PUGIXML-03 — XPath Queries
 This tutorial demonstrates querying XML documents with XPath, using both
 convenience wrappers and compiled queries in ``pugixml/PUGIXML_boost``.
 
-Quick text selection
-====================
+The tutorial uses an inline catalog XML for most examples, then queries
+``books.xml`` at the end.
 
-``select_text`` returns the first matching node's text content:
+``select_text`` — first match text
+====================================
 
-.. code-block:: das
-
-   var doc = open_xml("books.xml")
-   let title = select_text(doc, "//book[1]/title")
-   print("First book: {title}\n")
-
-``select_value`` returns string/int/float/bool from XPath expressions:
+``select_text`` runs an XPath query and returns the text content of the
+first matching node.  Returns a default string if nothing matches:
 
 .. code-block:: das
 
-   let total = select_value(doc, "count(//book)", 0.0)
-   let cheapest = select_value(doc, "//book[price < 40]/title", "none")
+   parse_xml(CATALOG_XML) <| $(doc, ok) {
+       if (!ok) { return; }
+       let root = doc.document_element
 
-Iterating matches
-=================
+       let first_name = select_text(root, "product[1]/name")
+       print("first product: {first_name}\n")
+       // first product: Wireless Mouse
 
-``for_each_select`` invokes a block for each matching node:
-
-.. code-block:: das
-
-   for_each_select(doc, "//book") <| $(book) {
-       let title = book.child("title") |> node_text("")
-       let price = book.child("price") |> node_text(0.0)
-       print("  {title}: ${price}\n")
+       let missing = select_text(root, "product/description", "N/A")
+       print("description: {missing}\n")
+       // description: N/A
    }
 
-This is the most common pattern for processing multiple results.
+``select_value`` — attribute or text
+======================================
 
-Compiled XPath queries
-======================
-
-For repeated queries, ``with_xpath`` pre-compiles the expression:
+``select_value`` returns the string value of the first XPath match —
+either an attribute's value or an element's text content:
 
 .. code-block:: das
 
-   with_xpath("//book[@lang='en']") <| $(query) {
-       for_each_select(doc, query) <| $(book) {
-           print("English: {book.child(\"title\") |> node_text(\"\")}\n")
+   let id = select_value(root, "product[1]/@id")
+   // "A1"
+
+   let cat = select_value(root, "product[@id='B1']/@category")
+   // "books"
+
+   let price = select_value(root, "product[@id='A2']/price")
+   // "79.99"
+
+   let missing = select_value(root, "product/@color", "none")
+   // "none"
+
+``for_each_select`` — iterate matches
+========================================
+
+``for_each_select`` invokes a block for every matching ``xpath_node``.
+Use ``.node`` or ``.attribute`` to access the underlying XML node or
+attribute:
+
+.. code-block:: das
+
+   // Iterate element results
+   root |> for_each_select("product/name") <| $(xn) {
+       let n = xn.node
+       print("  {n.text as string}\n")
+   }
+
+   // Iterate attribute results
+   root |> for_each_select("product/@id") <| $(xn) {
+       let a = xn.attribute
+       print("  {a as string}\n")
+   }
+
+This is the most common pattern for processing multiple XPath results.
+
+Compiled XPath with ``with_xpath``
+====================================
+
+``with_xpath`` pre-compiles an XPath expression once and frees it
+when the block ends.  Use ``evaluate_node_set`` to run the compiled
+query:
+
+.. code-block:: das
+
+   with_xpath("product/name") <| $(query) {
+       var ns = evaluate_node_set(query, root)
+       print("Product count: {ns.size}\n")
+
+       ns |> for_each() <| $(xn) {
+           let n = xn.node
+           print("  {n.text as string}\n")
        }
+       unsafe { delete ns; }
    }
-
-This avoids reparsing the XPath string on each call.
 
 Low-level XPath API
 ===================
 
-Direct access to pugixml XPath types:
+``select_node`` returns the first match.  ``select_nodes`` returns all
+matches as an ``xpath_node_set`` (use ``.size`` and ``at()``):
 
 .. code-block:: das
 
-   let node = select_node(doc, "//book[1]")
-   // Access the matched node via node.node
-
-   var nodes <- select_nodes(doc, "//book[@lang='en']")
-   for (i in range(length(nodes))) {
-       let n = nodes[i]
-       print("{n.node.child(\"title\") |> node_text(\"\")}\n")
+   // First match
+   let result = select_node(root, "product[price > 40]/name")
+   if (result.ok) {
+       print("first expensive: {result.node.text as string}\n")
    }
 
-Practical example
-=================
+   // All matches
+   var ns = select_nodes(root, "product[price < 40]/@id")
+   print("cheap products: {ns.size}\n")
+   for (i in range(ns.size)) {
+       let xn = at(ns, i)
+       print("  {xn.attribute as string}\n")
+   }
+   unsafe { delete ns; }
 
-Querying the sample ``books.xml`` for specific data:
+Practical example — querying ``books.xml``
+===========================================
+
+The tutorial ends by querying the real ``books.xml`` sample file:
 
 .. code-block:: das
 
-   // Find books under $40
-   for_each_select(doc, "//book[price < 40]") <| $(book) {
-       print("{book.child(\"title\") |> node_text(\"\")}\n")
-   }
+   open_xml("tutorials/dasPUGIXML/books.xml") <| $(doc, ok) {
+       if (!ok) { return; }
+       let root = doc.document_element
 
-   // Get average price
-   let avg = select_value(doc, "sum(//book/price) div count(//book)", 0.0)
-   print("Average price: ${avg}\n")
+       var en_books = select_nodes(root, "book[@lang='en']")
+       print("English books: {en_books.size}\n")
+       unsafe { delete en_books; }
+
+       let cheapest = select_text(root, "book[not(price > ../book/price)]/title")
+       print("cheapest: {cheapest}\n")
+
+       root |> for_each_select("book/author") <| $(xn) {
+           print("  {xn.node.text as string}\n")
+       }
+   }
 
 .. seealso::
 

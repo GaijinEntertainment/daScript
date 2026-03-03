@@ -50,7 +50,7 @@ Loading from a file
 
 .. code-block:: das
 
-   open_xml("data/books.xml") <| $(doc, ok) {
+   open_xml("tutorials/dasPUGIXML/books.xml") <| $(doc, ok) {
        if (!ok) { return; }
        let root = doc.document_element
        print("root: {root.name}\n")
