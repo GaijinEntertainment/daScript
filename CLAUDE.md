@@ -135,6 +135,12 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - **Move-assign table literal:** `tab <- { "k" => v }` works for both `var tab <- { ... }` declarations and `tab <- { ... }` reassignment to existing variables
 - **Table comprehension move-assign:** `tab <- { for(x in range(5)); x => x*x }` — same move-assign rules apply
 
+### Iterators and `each`
+
+- `[unsafe_outside_of_for] def each(x) : iterator<T>` makes a type iterable in `for` loops
+- When the iterator is named `each`, the call can be omitted: `for (v in each(x))` is identical to `for (v in x)`
+- Other iterator names (e.g. `filter`, `map`) cannot be omitted
+
 ### Common gotchas
 
 - Lambda params can shadow function params — use distinct names

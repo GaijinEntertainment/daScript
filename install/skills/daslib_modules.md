@@ -19,6 +19,12 @@ Many daslib functions follow this convention for iterator-based operations:
 - `foo_to_array` — convenience wrapper returning `array<T>` (pipes through `to_array`)
 - Inplace `foo` on arrays — overload taking `var arr : array<T>` and modifying in place
 
+### The `each` iterator convention
+
+- `[unsafe_outside_of_for] def each(x) : iterator<T>` makes a type usable in `for` loops
+- When the iterator is named **`each`**, the compiler allows omitting the call: `for (v in each(x))` is identical to `for (v in x)`. This does NOT apply to other iterator names.
+- Prefer the short form `for (v in x)` over `for (v in each(x))` in user-facing code
+
 ## Key daslib modules
 
 - `daslib/linq.das` — LINQ-style queries (where, select, order_by, group_by, zip, etc.)

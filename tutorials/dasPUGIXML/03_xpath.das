@@ -5,7 +5,7 @@
 //   - Selecting values with select_value (attributes and text)
 //   - Iterating XPath results with for_each_select
 //   - Compiled XPath queries with with_xpath
-//   - Low-level XPath: select_node, select_nodes
+//   - Low-level XPath: select_node, select_nodes, each iterator
 //
 // requires: daslib/PUGIXML_boost (re-exports pugixml)
 // Run: daslang.exe tutorials/dasPUGIXML/03_xpath.das
@@ -187,11 +187,12 @@ def compiled_xpath_demo() {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Section 5 — Low-level XPath: select_node, select_nodes
+// Section 5 — Low-level XPath: select_node, select_nodes, each
 // ──────────────────────────────────────────────────────────────────────────
 //
 // For more control, use select_node (first match) and select_nodes
-// (all matches) directly on an xml_node.
+// (all matches) directly on an xml_node.  The `each` iterator makes
+// xpath_node_set? directly usable in `for` loops.
 
 def low_level_xpath() {
     print("\n=== Low-level XPath ===\n")
@@ -208,12 +209,10 @@ def low_level_xpath() {
         }
         // output: first expensive: Keyboard
 
-        // select_nodes — all matches
+        // select_nodes — iterate directly with a for loop
         var ns = select_nodes(root, "product[price < 40]/@id")
-        let count = ns.size
-        print("cheap products: {count}\n")
-        for (i in range(count)) {
-            let xn = at(ns, i)
+        print("cheap products: {ns.size}\n")
+        for (xn in ns) {
             let a = xn.attribute
             print("  {a as string}\n")
         }
