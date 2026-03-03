@@ -1409,7 +1409,7 @@ namespace das
         };
         abiArg = args;
         abiCMRES = nullptr;
-        memset(globals, 0, globalsSize);
+        if (globals) memset(globals, 0, globalsSize);
         if ( aotInitScript ) {
             aotInitScript->eval(*this);
         } else {
