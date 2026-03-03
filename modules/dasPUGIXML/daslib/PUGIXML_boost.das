@@ -858,7 +858,13 @@ def from_XML(xml_str : string; anything : auto(TT)) {
     var doc = new xml_document()
     var result : xml_parse_result
     load_string(doc, xml_str, result, parse_default)
-    var ret <- _::from_XML(doc.document_element, type<TT>)
-    unsafe { delete doc; }
-    return <- ret
+    static_if (typeinfo can_copy(type<TT>)) {
+        let ret = _::from_XML(doc.document_element, type<TT>)
+        unsafe { delete doc; }
+        return ret
+    } else {
+        var ret <- _::from_XML(doc.document_element, type<TT>)
+        unsafe { delete doc; }
+        return <- ret
+    }
 }
