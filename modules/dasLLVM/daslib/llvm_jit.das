@@ -109,7 +109,7 @@ def get_file_info_global(g_builder : LLVMOpaqueBuilder?; types : PrimitiveTypes?
  * @names for all names will be create FileInfo ptr with correct filename
  */
 [macro_function]
-def generate_fileinfo_ctor_dtor(var types : PrimitiveTypes; names : table<string>; dll_mode : bool) {
+def generate_fileinfo_ctor_dtor(types : PrimitiveTypes; names : table<string>; dll_mode : bool) {
     var ctor_builder = LLVMCreateBuilderInContext(g_ctx)
     var dtor_builder = LLVMCreateBuilderInContext(g_ctx)
     defer <| ${
@@ -180,7 +180,7 @@ def generate_fileinfo_ctor_dtor(var types : PrimitiveTypes; names : table<string
 }
 
 [macro_function]
-def generate_annotations_ctor_dtor(var types : PrimitiveTypes; var entries : array<AnnotationVarInfoEntry>; dll_mode : bool) {
+def generate_annotations_ctor_dtor(types : PrimitiveTypes; var entries : array<AnnotationVarInfoEntry>; dll_mode : bool) {
     var ctor_builder = LLVMCreateBuilderInContext(g_ctx)
     var dtor_builder = LLVMCreateBuilderInContext(g_ctx)
     defer <| ${
@@ -289,7 +289,7 @@ class public LlvmJitVisitor : AstVisitor {
     ldu_hint : bool
     attributes : Attributes?
 
-    def LlvmJitVisitor(ctx : Context?; var types_ : PrimitiveTypes?; uids : UidNodes?; flags_ : LlvmJitFlags; dib : LLVMOpaqueDIBuilder?; attrs : Attributes?) {
+    def LlvmJitVisitor(ctx : Context?; types_ : PrimitiveTypes?; uids : UidNodes?; flags_ : LlvmJitFlags; dib : LLVMOpaqueDIBuilder?; attrs : Attributes?) {
         jit_context = ctx
         types = types_
         g_builder = LLVMCreateBuilderInContext(g_ctx)
@@ -5880,7 +5880,7 @@ class public LlvmJitVisitor : AstVisitor {
 
 
 [macro_function]
-def private get_llvm_function_type(func : FunctionPtr; var types : PrimitiveTypes?) {
+def private get_llvm_function_type(func : FunctionPtr; types : PrimitiveTypes?) {
     var arg_types : array<LLVMOpaqueType?>
     var res_type : LLVMOpaqueType?
     res_type = type_to_llvm_type(func.result)
@@ -5903,7 +5903,7 @@ def private get_llvm_function_type(func : FunctionPtr; var types : PrimitiveType
 }
 
 [macro_function]
-def private add_ctor_dtor_function(ctor_dtor : array<tuple<LLVMOpaqueValue?, LLVMOpaqueValue?>>; var types : PrimitiveTypes?) {
+def private add_ctor_dtor_function(ctor_dtor : array<tuple<LLVMOpaqueValue?, LLVMOpaqueValue?>>; types : PrimitiveTypes?) {
     let total_sz = ctor_dtor |> length() |> uint
     let priority = 0 |> uint64()
     let dataPointerType = LLVMPointerType(types.t_int8, 0u)
@@ -6195,7 +6195,7 @@ def public get_dll_missing(fns : array<FunctionPtr>; disabled : array<FunctionPt
 
 
 [macro_function]
-def public generate_llvm(ctx : Context?; var types : PrimitiveTypes?; uids : UidNodes?;
+def public generate_llvm(ctx : Context?; types : PrimitiveTypes?; uids : UidNodes?;
                          attrs : Attributes?; fn : FunctionPtr; flags : LlvmJitFlags) {
     verify(!(is_in_completion() || is_compiling_macros() || is_folding()))
 
@@ -6255,7 +6255,7 @@ def public generate_llvm_code(var dll : DLLHandle?; fmna : DllName; dll_enabled 
 // This function creates single global constructor
 // that will be called at the startup of compiled
 // object file.
-def public generate_global_ctors_dtors(var types : PrimitiveTypes?; use_dll : bool) {
+def public generate_global_ctors_dtors(types : PrimitiveTypes?; use_dll : bool) {
     var ctor_dtor : array<tuple<LLVMOpaqueValue?, LLVMOpaqueValue?>>
 
     // FileInfo

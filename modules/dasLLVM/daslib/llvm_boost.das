@@ -44,39 +44,39 @@ class PrimitiveTypes {
         return LLVMPointerType(typ, 0u)
     }
 
-    def StructType(var fields : LLVMOpaqueType ??; len : uint; packed : int = 0) {
+    def const StructType(var fields : LLVMOpaqueType ??; len : uint; packed : int = 0) {
         return LLVMStructTypeInContext(ctx, fields, len, packed)
     }
 
-    def LLVMFloat4Type {
+    def const LLVMFloat4Type {
         return LLVMVectorType(t_float, 4u)
     }
 
-    def LLVMFloat3Type {
+    def const LLVMFloat3Type {
         return LLVMVectorType(t_float, 3u)
     }
 
-    def LLVMFloat2Type {
+    def const LLVMFloat2Type {
         return LLVMVectorType(t_float, 2u)
     }
 
-    def LLVMInt4Type {
+    def const LLVMInt4Type {
         return LLVMVectorType(t_int32, 4u)
     }
 
-    def LLVMInt3Type {
+    def const LLVMInt3Type {
         return LLVMVectorType(t_int32, 3u)
     }
 
-    def LLVMInt2Type {
+    def const LLVMInt2Type {
         return LLVMVectorType(t_int32, 2u)
     }
 
-    def LLVMRange64Type {
+    def const LLVMRange64Type {
         return LLVMVectorType(t_int64, 2u)
     }
 
-    def get_type_string : LLVMOpaqueType ? {
+    def const get_type_string : LLVMOpaqueType ? {
         return LLVMPointerType(t_int8, 0u)
     }
 
@@ -88,39 +88,39 @@ class PrimitiveTypes {
         }
     }
 
-    def LLVMVoidPtrType : LLVMOpaqueType ? {
+    def const LLVMVoidPtrType : LLVMOpaqueType ? {
         return LLVMPointerType(t_int8, 0u)
     }
 
-    def ConstI1(val : bool) {
+    def const ConstI1(val : bool) {
         return LLVMConstInt(t_int1, uint64(val ? 1 : 0), 0);
     }
 
-    def ConstI8(val : int8) {
+    def const ConstI8(val : int8) {
         return LLVMConstInt(t_int8, val |> uint64(), 0);
     }
 
-    def ConstI16(val : int16) {
+    def const ConstI16(val : int16) {
         return LLVMConstInt(t_int16, val |> uint64, 0);
     }
 
-    def ConstI32(val : uint64) {
+    def const ConstI32(val : uint64) {
         return LLVMConstInt(t_int32, val, 0);
     }
 
-    def ConstI64(val : uint64) {
+    def const ConstI64(val : uint64) {
         return LLVMConstInt(t_int64, val, 0);
     }
 
-    def ConstPtr(val : uint64; tp : LLVMOpaqueType?) {
+    def const ConstPtr(val : uint64; tp : LLVMOpaqueType?) {
         return LLVMConstIntToPtr(LLVMConstInt(t_int64, val, 0), tp);
     }
 
-    def ConstReal(value : double) {
+    def const ConstReal(value : double) {
         return LLVMConstReal(t_float, value)
     }
 
-    def ConstDouble(value : double) {
+    def const ConstDouble(value : double) {
         return LLVMConstReal(t_double, value)
     }
 
@@ -143,11 +143,11 @@ class PrimitiveTypes {
 
 }
 
-def StructType(var types : PrimitiveTypes?; var fields : LLVMOpaqueType? []) {
+def StructType(types : PrimitiveTypes?; var fields : LLVMOpaqueType? []) {
     return types.StructType(unsafe(addr(fields[0])), uint(length(fields)))
 }
 
-def StructType(var types : PrimitiveTypes?; var fields : array<LLVMOpaqueType?>) {
+def StructType(types : PrimitiveTypes?; var fields : array<LLVMOpaqueType?>) {
     return types.StructType(unsafe(addr(fields[0])), uint(length(fields)))
 }
 
@@ -280,11 +280,11 @@ def LLVMBuildGEP2(builder : LLVMOpaqueBuilder?; ty : LLVMOpaqueType?; ptr : LLVM
     return gep
 }
 
-def LLVMFunctionType(var ret_type : LLVMTypeRef; var param_types : LLVMTypeRef[]; isVariadic : bool = false) {
+def LLVMFunctionType(ret_type : LLVMTypeRef; var param_types : LLVMTypeRef[]; isVariadic : bool = false) {
     return LLVMFunctionType(ret_type, unsafe(addr(param_types[0])), uint(length(param_types)), isVariadic ? 1 : 0)
 }
 
-def LLVMFunctionType(var ret_type : LLVMTypeRef; var param_types : array<LLVMTypeRef>; isVariadic : bool = false) {
+def LLVMFunctionType(ret_type : LLVMTypeRef; var param_types : array<LLVMTypeRef>; isVariadic : bool = false) {
     let nparam = length(param_types)
     if (nparam == 0) {
         return LLVMFunctionType(ret_type, null, 0u, isVariadic ? 1 : 0)
@@ -293,7 +293,7 @@ def LLVMFunctionType(var ret_type : LLVMTypeRef; var param_types : array<LLVMTyp
     }
 }
 
-def LLVMFunctionType(var ret_type : LLVMTypeRef; isVariadic : bool = false) {
+def LLVMFunctionType(ret_type : LLVMTypeRef; isVariadic : bool = false) {
     return LLVMFunctionType(ret_type, null, 0u, isVariadic ? 1 : 0)
 }
 
