@@ -1207,14 +1207,10 @@ def document_struct_method(doc_file : file; mod : Module?; value; var func) {
     // For structs (not classes), methods become module-level functions with isClassMethod flag.
     // Static methods get names like "BoolArray`clear"; non-static keep names like "[]", "finalize".
     // We use moreFlags.isStaticClassMethod to distinguish them and rebuild the detail file key.
-    let fname = string(func.name)
+    var fname = string(func.name)
     let is_static = func.moreFlags.isStaticClassMethod
-    var method_name : string
     if (is_static) {
-        let structPrefix = "{value.name}`"
-        method_name = fname |> slice(length(structPrefix))
-    } else {
-        method_name = fname
+        fname = fname.slice(length(value.name) + 1)
     }
 
     fwrite(doc_file, make_label(function_label_name(func)))
@@ -1222,7 +1218,7 @@ def document_struct_method(doc_file : file; mod : Module?; value; var func) {
     let argNames <- [for (arg in func.arguments); string(arg.name)]
     let argTypes <- [for (arg in func.arguments); get_ptr(arg._type)]
     let argInits <- [for (arg in func.arguments); get_ptr(arg.init)]
-    (document_function_declaration(doc_file, "das:function", "{value.name}.{method_name}",
+    (document_function_declaration(doc_file, "das:function", "{value.name}.{fname}",
         argNames, argTypes, argInits, func.result, /*drop args*/1))
 
     if (func.flags.unsafeOperation) {
@@ -1239,7 +1235,7 @@ def document_struct_method(doc_file : file; mod : Module?; value; var func) {
     //   non-static methods (isStaticClassMethod=false): self NOT in args (added during inference) → skip 1 for hash
     //   static methods (isStaticClassMethod=true): self IS in args (explicit) → skip 0 for hash
     let hash_drop = is_static ? 0 : 1
-    var mn = method_name
+    var mn = fname
     var drop = hash_drop
     for (arg in func.arguments) {
         if (drop-- > 0) {
@@ -1248,8 +1244,8 @@ def document_struct_method(doc_file : file; mod : Module?; value; var func) {
         let prefix = arg._type.flags.removeConstant ? "var " : ""
         mn += "{prefix}{describe_type_short(arg._type)}"
     }
-    let file_label = "{safe_function_name(method_name)}-{hash(mn)}"
-    document_function_topic(doc_file, func.result, topic("function", mod, "{value.name}-{file_label}"), "def {value.name}.{method_name}", args)
+    let file_label = "{safe_function_name(fname)}-{hash(mn)}"
+    document_function_topic(doc_file, func.result, topic("function", mod, "{value.name}-{file_label}"), "def {value.name}.{fname}", args)
 }
 
 def make_requirements_list(value : smart_ptr<ast::Structure>) {
@@ -1366,7 +1362,8 @@ def document_classes(doc_file : file; mods : array<Module?>) {
             var first = true
             var inscope annT <- new TypeDecl(baseType = Type.tStructure, structType = get_ptr(value))
             for_each_function(mod, "") $(func) {
-                if (func.flags.isClassMethod && func.classParent == value && func.name == value.name && !is_trivial_ctor(func)) {// ctor
+                if (func.flags.isClassMethod && func.classParent == value && func.name == value.name && !is_trivial_ctor(func)) {
+                    // ctor
                     document_function(doc_file, mod, func, /*drop first arg*/0, "{value.name}-", "das:function")
                     return
                 }
@@ -1492,7 +1489,7 @@ def document_structure(doc_file : file; mod : Module?; var value : StructurePtr)
     document_topic("Fields", doc_file, topic("structure", mod, string(value.name)), "struct {value.name}", tab)
 
     for (fld in value.fields) {
-        if (is_class_method(value, fld) && !(fld.flags.generated) && !fld.flags.privateField && !(fld.flags.parentType) && (fld.flags.implemented)) {
+        if (is_class_method(value, fld) && !fld.flags.generated && !fld.flags.privateField && !fld.flags.parentType && fld.flags.implemented) {
             document_class_method(doc_file, mod, value, fld)
         }
     }
@@ -1513,6 +1510,18 @@ def document_structure(doc_file : file; mod : Module?; var value : StructurePtr)
         // Skip property functions (handled below)
         if (string(func.name) |> starts_with(".`")) {
             return
+        }
+        if (!func.moreFlags.isStaticClassMethod) {
+            if (func.name == "{value.name}`{value.name}") {
+                // Foo`Foo == generated ctor
+                return
+            }
+            for (fld in value.fields) {
+                // exclude instantiated struct fields
+                if (fld.flags.classMethod && fld.flags.implemented && func.name == "{value.name}`{fld.name}") {
+                    return
+                }
+            }
         }
         document_struct_method(doc_file, mod, value, func)
     }

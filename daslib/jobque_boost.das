@@ -454,14 +454,14 @@ class private ParallelForJobMacro : AstFunctionAnnotation {
     def override transform(var call : smart_ptr<ExprCallFunc>; var errors : das_string) : ExpressionPtr {
         let last_index = call.arguments.length() - 1
         macro_verify(call.arguments[last_index] is ExprMakeBlock, compiling_program(), call.at, "expecting block as {last_index} argument")
-        var inscope _newCall <- clone_expression(call)
-        assume newCall = (_newCall as ExprCall)
-        newCall.name := function_name
+        var inscope newCall <- clone_expression(call)
+        assume newCallCall = (newCall as ExprCall)
+        newCallCall.name := function_name
         var inscope new_body <- qmacro(new_job(@ {$b(((call.arguments[last_index] as ExprMakeBlock)._block as ExprBlock).list); }))
-        var new_block = ((newCall.arguments[last_index] as ExprMakeBlock)._block as ExprBlock)
+        var new_block = ((newCallCall.arguments[last_index] as ExprMakeBlock)._block as ExprBlock)
         new_block.list.clear()
         new_block.list.emplace(new_body)
-        return <- _newCall
+        return <- newCall
     }
 }
 
