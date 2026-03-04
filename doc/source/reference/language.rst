@@ -48,6 +48,7 @@ The Runtime
 .. toctree::
    language/contexts.rst
    language/locks.rst
+   language/very_safe_context.rst
    language/type_mangling.rst
 
 
