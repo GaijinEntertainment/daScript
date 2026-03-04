@@ -37,19 +37,19 @@ class EachBitfieldMacro : AstFunctionAnnotation {
         macro_verify(call.arguments[0]._type.isBitfield, compiling_program(), call.at, "expecting a bitfield type")
         var inscope yields : array<ExpressionPtr>
         if (call.arguments[0]._type.baseType == Type.tBitfield8) {
-            for (name, bit in call.arguments[0]._type.argNames, count()) {
+            for (bit in iter_range(call.arguments[0]._type.argNames)) {
                 yields |> emplace_new <| qmacro_expr(${ yield $v(bitfield8(1ul << uint64(bit))); })
             }
         } elif (call.arguments[0]._type.baseType == Type.tBitfield16) {
-            for (name, bit in call.arguments[0]._type.argNames, count()) {
+            for (bit in iter_range(call.arguments[0]._type.argNames)) {
                 yields |> emplace_new <| qmacro_expr(${ yield $v(bitfield16(1ul << uint64(bit))); })
             }
         } elif (call.arguments[0]._type.baseType == Type.tBitfield64) {
-            for (name, bit in call.arguments[0]._type.argNames, count()) {
+            for (bit in iter_range(call.arguments[0]._type.argNames)) {
                 yields |> emplace_new <| qmacro_expr(${ yield $v(bitfield64(1ul << uint64(bit))); })
             }
         } else {
-            for (name, bit in call.arguments[0]._type.argNames, count()) {
+            for (bit in iter_range(call.arguments[0]._type.argNames)) {
                 yields |> emplace_new <| qmacro_expr(${ yield $v(bitfield(1ul << uint64(bit))); })
             }
         }
