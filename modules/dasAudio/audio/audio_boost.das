@@ -346,7 +346,6 @@ class AudioSourcePCM : AudioSource {
     }
 }
 
-[skip_field_lock_check]
 struct StreamChunk {
     samples : array<float>
 }

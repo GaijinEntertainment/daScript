@@ -223,7 +223,7 @@ namespace das {
         ft->argNames = {
             "builtIn", "promoted", "isPublic", "isModule", "isSolidContext",
             "fromExtraDependency", "doNotAllowUnsafe",
-            "wasParsedNameless", "visibleEverywhere", "skipLockCheck", "allowPodInscope"
+            "wasParsedNameless", "visibleEverywhere", "allowPodInscope"
         };
         return ft;
     }
@@ -570,7 +570,7 @@ namespace das {
     TypeDeclPtr makeStructInfoFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "StructInfoFlags";
-        ft->argNames = { "_class", "_lambda", "heapGC", "stringHeapGC", "lockCheck" };
+        ft->argNames = { "_class", "_lambda", "heapGC", "stringHeapGC" };
         return ft;
     }
 
@@ -604,7 +604,7 @@ namespace das {
         ft->alias = "TypeInfoFlags";
         ft->argNames = { "ref", "refType", "canCopy", "isPod", "isRawPod", "isConst", "isTemp", "isImplicit",
             "refValue", "hasInitValue", "isSmartPtr", "isSmartPtrNative", "isHandled",
-            "heapGC", "stringHeapGC", "lockCheck", "isPrivate" };
+            "heapGC", "stringHeapGC", "isPrivate" };
         return ft;
     }
 

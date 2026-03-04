@@ -688,7 +688,6 @@ def private fold_select_where(argIndex : int; var topValue : ExpressionPtr; var 
     }
     var inscope comprehension <- qmacro(invoke($($i(srcName) : typedecl($e(topValue)) - const) {
             var $i(arrName) : array<$t(iterType)>
-            unsafe(set_verify_array_locks($i(arrName), false))
             for ($i(itName) in $i(srcName)) {
                 static_if (typeinfo is_workhorse($e(selectExpr))) {
                     var $i(valName) = $e(selectExpr)
@@ -702,7 +701,6 @@ def private fold_select_where(argIndex : int; var topValue : ExpressionPtr; var 
                     }
                 }
             }
-            unsafe(set_verify_array_locks($i(arrName), true))
             return <- $i(arrName)
         }, $e(topValue)))
     return <- append_comprehension(argIndex, topValue, comprehension, blk, calls[0]._0.at)

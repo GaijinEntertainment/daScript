@@ -215,10 +215,6 @@ extern "C" {
             }
             context.allocateGlobalsAndShared();
             memset(context.globals, 0, context.globalsSize);
-            // Lock check is not supported yet in executable.
-            // Although it could be in the same way we support
-            // string formatting.
-            context.skipLockChecks = true;
 
             // Instead of copying everything like in standalone contexts
             // Let's add only things we really need.
@@ -714,7 +710,7 @@ extern "C" {
         #else
             const auto linkerParam = isShared ? "-shared" : "";
             const auto rpath = "-Wl,-rpath," + get_prefix(dasLibrary);
-            auto result = fmt::format_to(cmd, FMT_STRING("\"{}\" {} \"{}\" -o \"{}\" \"{}\" \"{}\" 2>&1"), 
+            auto result = fmt::format_to(cmd, FMT_STRING("\"{}\" {} \"{}\" -o \"{}\" \"{}\" \"{}\" 2>&1"),
                                         linker, linkerParam, rpath, libraryName, objFilePath, dasLibrary);
         #endif
             *result = '\0';

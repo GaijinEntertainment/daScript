@@ -7,11 +7,11 @@
 namespace das {
 
     class Context;
-    class LineInfo;
-    class LineInfoArg;
+    struct LineInfo;
+    struct LineInfoArg;
     class Function;
-    class ExprCallFunc;
-    class ExprStringBuilder;
+    struct ExprCallFunc;
+    struct ExprStringBuilder;
 
     struct TypeDecl;
     typedef smart_ptr<TypeDecl> TypeDeclPtr;

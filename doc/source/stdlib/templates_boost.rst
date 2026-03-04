@@ -769,7 +769,7 @@ Type pointer helpers
   *  :ref:`add_type_ptr_ref (var st: StructurePtr; flags: TypeDeclFlags) : TypeDeclPtr <function-templates_boost_add_type_ptr_ref_StructurePtr_TypeDeclFlags>`
   *  :ref:`add_type_ptr_ref (var st: EnumerationPtr; flags: TypeDeclFlags) : TypeDeclPtr <function-templates_boost_add_type_ptr_ref_EnumerationPtr_TypeDeclFlags>`
   *  :ref:`add_type_ptr_ref (a: TypeDeclPtr; flags: TypeDeclFlags) : TypeDeclPtr <function-templates_boost_add_type_ptr_ref_TypeDeclPtr_TypeDeclFlags>`
-  *  :ref:`add_type_ptr_ref (anything: auto(TT); flags: TypeDeclFlags) : TypeDeclPtr <function-templates_boost_add_type_ptr_ref_autoTT_TypeDeclFlags_0x299>`
+  *  :ref:`add_type_ptr_ref (anything: auto(TT); flags: TypeDeclFlags) : TypeDeclPtr <function-templates_boost_add_type_ptr_ref_autoTT_TypeDeclFlags_0x29a>`
   *  :ref:`add_type_ptr_ref (var st: Structure?; flags: TypeDeclFlags) : TypeDeclPtr <function-templates_boost_add_type_ptr_ref_Structure_q__TypeDeclFlags>`
   *  :ref:`add_type_ptr_ref (var st: Enumeration?; flags: TypeDeclFlags) : TypeDeclPtr <function-templates_boost_add_type_ptr_ref_Enumeration_q__TypeDeclFlags>`
 
@@ -805,7 +805,7 @@ Implementation details for the reification. Creates a type declaration from a st
 
 .. das:function:: add_type_ptr_ref(a: TypeDeclPtr; flags: TypeDeclFlags) : TypeDeclPtr
 
-.. _function-templates_boost_add_type_ptr_ref_autoTT_TypeDeclFlags_0x299:
+.. _function-templates_boost_add_type_ptr_ref_autoTT_TypeDeclFlags_0x29a:
 
 .. das:function:: add_type_ptr_ref(anything: auto(TT); flags: TypeDeclFlags) : TypeDeclPtr
 
@@ -844,14 +844,14 @@ Adds a field to the structure.
 Class generation
 ++++++++++++++++
 
-  *  :ref:`enum_class_type (st: auto) : auto <function-templates_boost_enum_class_type_auto_0x277>`
+  *  :ref:`enum_class_type (st: auto) : auto <function-templates_boost_enum_class_type_auto_0x278>`
   *  :ref:`make_class (name: string; var baseClass: StructurePtr; mod: Module?) : smart_ptr\<Structure\> <function-templates_boost_make_class_string_StructurePtr_Module_q_>`
   *  :ref:`make_class (name: string; mod: Module?) : smart_ptr\<Structure\> <function-templates_boost_make_class_string_Module_q_>`
   *  :ref:`make_class (name: string; var baseClass: Structure?; mod: Module?) : smart_ptr\<Structure\> <function-templates_boost_make_class_string_Structure_q__Module_q_>`
   *  :ref:`make_class_constructor (cls: StructurePtr; ctor: FunctionPtr) : smart_ptr\<Function\> <function-templates_boost_make_class_constructor_StructurePtr_FunctionPtr>`
   *  :ref:`modify_to_class_member (cls: StructurePtr; fun: FunctionPtr; isExplicit: bool; Constant: bool) <function-templates_boost_modify_to_class_member_StructurePtr_FunctionPtr_bool_bool>`
 
-.. _function-templates_boost_enum_class_type_auto_0x277:
+.. _function-templates_boost_enum_class_type_auto_0x278:
 
 .. das:function:: enum_class_type(st: auto) : auto
 

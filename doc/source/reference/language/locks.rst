@@ -77,11 +77,9 @@ The following operations perform lock checks on data structures:
     * for the ``Table``
 
 Lock checking can be explicitly disabled:
-    * for a specific ``Array`` or ``Table`` by using the ``set_verify_array_locks`` and ``set_verify_table_locks`` functions
     * for a structure type with the ``[skip_field_lock_check]`` annotation
     * for an entire function with the ``[skip_lock_check]`` annotation
     * for the entire context with ``options skip_lock_checks``
-    * for the entire context with the ``set_verify_context_locks`` function
 
 .. seealso::
 

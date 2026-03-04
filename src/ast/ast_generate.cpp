@@ -146,12 +146,6 @@ namespace das {
         pLet->visibility = static_pointer_cast<ExprFor>(expr->exprFor)->visibility;
         pLet->variables.push_back(pVar);
         pClosure->list.push_back(pLet);
-        // disable lock check
-        auto pSetLockCheck = make_smart<ExprCall>(expr->at, "set_verify_array_locks");
-        pSetLockCheck->alwaysSafe = true;
-        pSetLockCheck->arguments.push_back(make_smart<ExprVar>(expr->at,compName));
-        pSetLockCheck->arguments.push_back(make_smart<ExprConstBool>(false));
-        pClosure->list.push_back(pSetLockCheck);
         // push(temp, subexpr)
         auto pPushVal = make_smart<ExprVar>();
         pPushVal->at = expr->at;
@@ -184,12 +178,6 @@ namespace das {
         auto pFor = static_pointer_cast<ExprFor>(expr->exprFor->clone());
         pFor->body = pForBlock;
         pClosure->list.push_back(pFor);
-        // enable lock check
-        auto pResetLockCheck = make_smart<ExprCall>(expr->at, "set_verify_array_locks");
-        pResetLockCheck->alwaysSafe = true;
-        pResetLockCheck->arguments.push_back(make_smart<ExprVar>(expr->at,compName));
-        pResetLockCheck->arguments.push_back(make_smart<ExprConstBool>(true));
-        pClosure->list.push_back(pResetLockCheck);
         // return temp
         auto pVal = make_smart<ExprVar>();
         pVal->at = expr->at;
@@ -205,7 +193,6 @@ namespace das {
         }
         pRet->moveSemantics = true;
         pRet->fromComprehension = true;
-        pRet->skipLockCheck = true;
         pClosure->list.push_back(pRet);
         // make block
         auto pMakeBlock = make_smart<ExprMakeBlock>(expr->at,pClosure);
@@ -230,7 +217,6 @@ namespace das {
         auto pYield = make_smart<ExprYield>(expr->at, expr->subexpr->clone());
         if ( !expr->subexpr->type->canCopy() ) {
             pYield->moveSemantics = true;
-            pYield->skipLockCheck = true;
         }
         // for ...
         auto pForBlock = make_smart<ExprBlock>();
@@ -320,7 +306,6 @@ namespace das {
         makeT->structs.push_back(make_smart<MakeStruct>());
         auto returnDecl = make_smart<ExprReturn>(str->at,makeT);
         returnDecl->moveSemantics = true;
-        returnDecl->skipLockCheck = true;
         block->list.push_back(returnDecl);
         fn->body = block;
         verifyGenerated(fn->body);
@@ -983,7 +968,6 @@ namespace das {
             auto mto = make_smart<ExprVar>(expr->at, yarg->name);
             auto mfr = expr->subexpr->clone();
             auto mve = make_smart<ExprMove>(expr->at, mto, mfr);
-            mve->skipLockCheck = expr->skipLockCheck;
             blk->list.push_back(mve);
         } else {
             // result = a
@@ -1837,7 +1821,6 @@ namespace das {
         auto returnDecl = make_smart<ExprReturn>(baseClass->at,selfV);
         returnDecl->at = func->at;
         returnDecl->moveSemantics = true;
-        returnDecl->skipLockCheck = true; // this is a constructor, there is no need lock-check
         block->list.push_back(returnDecl);
         // and done
         func->body = block;

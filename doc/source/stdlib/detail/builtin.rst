@@ -86,12 +86,6 @@
 
 .. |handmade/function-builtin-hash| replace:: to be documented in |handmade/function-builtin-hash|.rst
 
-.. |handmade/function-builtin-set_verify_array_locks| replace:: to be documented in |handmade/function-builtin-set_verify_array_locks|.rst
-
-.. |handmade/function-builtin-set_verify_table_locks| replace:: to be documented in |handmade/function-builtin-set_verify_table_locks|.rst
-
-.. |handmade/function-builtin-set_verify_context_locks| replace:: to be documented in |handmade/function-builtin-set_verify_context_locks|.rst
-
 .. |handmade/function-builtin-builtin_collect_local_and_zero| replace:: to be documented in |handmade/function-builtin-builtin_collect_local_and_zero|.rst
 
 .. |handmade/function-builtin-move_new| replace:: to be documented in |handmade/function-builtin-move_new|.rst
@@ -218,10 +212,6 @@
 
 .. |handmade/function-builtin-intptr| replace:: to be documented in |handmade/function-builtin-intptr|.rst
 
-.. |handmade/function-builtin-_move_with_lockcheck| replace:: to be documented in |handmade/function-builtin-_move_with_lockcheck|.rst
-
-.. |handmade/function-builtin-_return_with_lockcheck| replace:: to be documented in |handmade/function-builtin-_return_with_lockcheck|.rst
-
 .. |handmade/function-builtin-resize| replace:: to be documented in |handmade/function-builtin-resize|.rst
 
 .. |handmade/function-builtin-resize_and_init| replace:: to be documented in |handmade/function-builtin-resize_and_init|.rst
@@ -251,8 +241,6 @@
 .. |handmade/function-builtin-get_value| replace:: to be documented in |handmade/function-builtin-get_value|.rst
 
 .. |handmade/function-builtin-clone_value| replace:: to be documented in |handmade/function-builtin-clone_value|.rst
-
-.. |handmade/function-builtin-_at_with_lockcheck| replace:: to be documented in |handmade/function-builtin-_at_with_lockcheck|.rst
 
 .. |handmade/function-builtin-insert| replace:: to be documented in |handmade/function-builtin-insert|.rst
 

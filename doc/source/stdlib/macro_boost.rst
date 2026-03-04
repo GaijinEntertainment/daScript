@@ -53,18 +53,6 @@ This macro convert macro_verify(expr,message,prog,at) to the following code::
 
 
 
-+++++++++++
-Call macros
-+++++++++++
-
-.. _call-macro-macro_boost-return_skip_lockcheck:
-
-.. das:attribute:: return_skip_lockcheck
-
-this is similar to regular return <-, but it does not check for locks
-
-
-
 ++++++++++++++++++++++
 Implementation details
 ++++++++++++++++++++++

@@ -102,46 +102,45 @@ properties of the `FieldDeclaration` object.
 .. das:attribute:: bitfield StructureFlags
 
 properties of the `Structure` object.
+The structure is a class.
 
-:Fields: * **isClass** (0x1) - The structure is a class.
+:Fields: * **isClass** (0x1) - Generate constructor.
 
-         * **genCtor** (0x2) - Generate constructor.
+         * **genCtor** (0x2) - C++ data layout.
 
-         * **cppLayout** (0x4) - C++ data layout.
+         * **cppLayout** (0x4) - C++ layout not POD type, i.e. has alignment to accommodate for inheritance.
 
-         * **cppLayoutNotPod** (0x8) - C++ layout not POD type, i.e. has alignment to accommodate for inheritance.
+         * **cppLayoutNotPod** (0x8) - This structure is compiler-generated.
 
-         * **generated** (0x10) - This structure is compiler-generated.
+         * **generated** (0x10) - This structure is using persistent heap (C++ heap).
 
-         * **persistent** (0x20) - This structure is using persistent heap (C++ heap).
+         * **persistent** (0x20) - This structure is a lambda.
 
-         * **isLambda** (0x40) - This structure is a lambda.
+         * **isLambda** (0x40) - This structure is private.
 
-         * **privateStructure** (0x80) - This structure is private.
+         * **privateStructure** (0x80) - This structure is a macro interface.
 
-         * **macroInterface** (0x100) - This structure is a macro interface.
+         * **macroInterface** (0x100) - This structure is sealed. It cannot be inherited.
 
-         * **_sealed** (0x200) - This structure is sealed. It cannot be inherited.
+         * **_sealed** (0x200) - Skip lock check.
 
-         * **skipLockCheck** (0x400) - Skip lock check.
+         * **circular** (0x400) - This structure has circular references (and is invalid).
 
-         * **circular** (0x800) - This structure has circular references (and is invalid).
+         * **_generator** (0x800) - This structure is a generator.
 
-         * **_generator** (0x1000) - This structure is a generator.
+         * **hasStaticMembers** (0x1000) - This structure has static members.
 
-         * **hasStaticMembers** (0x2000) - This structure has static members.
+         * **hasStaticFunctions** (0x2000) - This structure has static functions.
 
-         * **hasStaticFunctions** (0x4000) - This structure has static functions.
+         * **hasInitFields** (0x4000) - This structure has initialized fields.
 
-         * **hasInitFields** (0x8000) - This structure has initialized fields.
+         * **safeWhenUninitialized** (0x8000) - This structure is safe when uninitialized.
 
-         * **safeWhenUninitialized** (0x10000) - This structure is safe when uninitialized.
+         * **isTemplate** (0x10000) - This structure is a template.
 
-         * **isTemplate** (0x20000) - This structure is a template.
+         * **hasDefaultInitializer** (0x20000) - This structure has a default initializer.
 
-         * **hasDefaultInitializer** (0x40000) - This structure has a default initializer.
-
-         * **noGenCtor** (0x80000) - This structure does not generate a default constructor.
+         * **noGenCtor** (0x40000) - This structure does not generate a default constructor.
 
 
 
@@ -282,66 +281,65 @@ properties of the `Function` object.
 .. das:attribute:: bitfield MoreFunctionFlags
 
 additional properties of the `Function` object.
+Function is a macro function.
 
-:Fields: * **macroFunction** (0x1) - Function is a macro function.
+:Fields: * **macroFunction** (0x1) - Converts das string arguments to C++ ``char *``. Empty string, which is null in das, is converted to "".
 
-         * **needStringCast** (0x2) - Converts das string arguments to C++ ``char *``. Empty string, which is null in das, is converted to "".
+         * **needStringCast** (0x2) - Function hash depends on arguments.
 
-         * **aotHashDeppendsOnArguments** (0x4) - Function hash depends on arguments.
+         * **aotHashDeppendsOnArguments** (0x4) - Function is late initialized.
 
-         * **lateInit** (0x8) - Function is late initialized.
+         * **lateInit** (0x8) - Function is requested to be JIT compiled.
 
-         * **requestJit** (0x10) - Function is requested to be JIT compiled.
+         * **requestJit** (0x10) - Function is unsafe outside of for loop sources.
 
-         * **unsafeOutsideOfFor** (0x20) - Function is unsafe outside of for loop sources.
+         * **unsafeOutsideOfFor** (0x20) - Skip lock check for this function.
 
-         * **skipLockCheck** (0x40) - Skip lock check for this function.
+         * **safeImplicit** (0x40) - Function is safe for implicit calls. Otherwise temp values are to be specialized for in the generic.
 
-         * **safeImplicit** (0x80) - Function is safe for implicit calls. Otherwise temp values are to be specialized for in the generic.
+         * **deprecated** (0x80) - Function is deprecated.
 
-         * **deprecated** (0x100) - Function is deprecated.
+         * **aliasCMRES** (0x100) - Function aliases CMRES (Copy or Move return result).
 
-         * **aliasCMRES** (0x200) - Function aliases CMRES (Copy or Move return result).
+         * **neverAliasCMRES** (0x200) - Function never aliases CMRES.
 
-         * **neverAliasCMRES** (0x400) - Function never aliases CMRES.
+         * **addressTaken** (0x400) - Function address is taken.
 
-         * **addressTaken** (0x800) - Function address is taken.
+         * **propertyFunction** (0x800) - Function is a property function.
 
-         * **propertyFunction** (0x1000) - Function is a property function.
+         * **pinvoke** (0x1000) - Function is a P/Invoke function, i.e. cross-context call.
 
-         * **pinvoke** (0x2000) - Function is a P/Invoke function, i.e. cross-context call.
+         * **jitOnly** (0x2000) - Function is JIT only.
 
-         * **jitOnly** (0x4000) - Function is JIT only.
+         * **isStaticClassMethod** (0x4000) - Function is a static class method.
 
-         * **isStaticClassMethod** (0x8000) - Function is a static class method.
+         * **requestNoJit** (0x8000) - Function is requested to not be JIT compiled.
 
-         * **requestNoJit** (0x10000) - Function is requested to not be JIT compiled.
+         * **jitContextAndLineInfo** (0x10000) - Function requires JIT context and line info.
 
-         * **jitContextAndLineInfo** (0x20000) - Function requires JIT context and line info.
+         * **nodiscard** (0x20000) - Discarding the return value of the function is unsafe.
 
-         * **nodiscard** (0x40000) - Discarding the return value of the function is unsafe.
+         * **captureString** (0x40000) - Function captures string arguments.
 
-         * **captureString** (0x80000) - Function captures string arguments.
+         * **callCaptureString** (0x80000) - Function calls capture string arguments.
 
-         * **callCaptureString** (0x100000) - Function calls capture string arguments.
+         * **hasStringBuilder** (0x100000) - Function has a string builder.
 
-         * **hasStringBuilder** (0x200000) - Function has a string builder.
+         * **recursive** (0x200000) - Function is recursive.
 
-         * **recursive** (0x400000) - Function is recursive.
+         * **isTemplate** (0x400000) - Function is a template function.
 
-         * **isTemplate** (0x800000) - Function is a template function.
+         * **unsafeWhenNotCloneArray** (0x800000) - Function is unsafe, when its not used to clone arrays.
 
-         * **unsafeWhenNotCloneArray** (0x1000000) - Function is unsafe, when its not used to clone arrays.
+         * **stub** (0x1000000) - This flag is a stub.
 
-         * **stub** (0x2000000) - This flag is a stub.
+         * **lateShutdown** (0x2000000) - Function will shutdown after all other shutdonws are done.
 
-         * **lateShutdown** (0x4000000) - Function will shutdown after all other shutdonws are done.
+         * **hasTryRecover** (0x4000000) - Function has try\recover blocks.
 
-         * **hasTryRecover** (0x8000000) - Function has try\recover blocks.
+         * **hasUnsafe** (0x8000000) - Function has unsafe operations made by user.
 
-         * **hasUnsafe** (0x10000000) - Function has unsafe operations made by user.
-
-         * **isConstClassMethod** (0x20000000) - Function is a const class method.
+         * **isConstClassMethod** (0x10000000) - Function is a const class method.
 
 
 
@@ -660,10 +658,9 @@ properties of the `ExprSwizzle` object.
 .. das:attribute:: bitfield ExprYieldFlags
 
 properties of the `ExprYield` object.
+Its 'yield <- ...'.
 
-:Fields: * **moveSemantics** (0x1) - Its 'yield <- ...'.
-
-         * **skipLockCheck** (0x2) - Skip lock checks.
+:Fields: * **moveSemantics** (0x1) - Skip lock checks.
 
 
 
@@ -672,24 +669,23 @@ properties of the `ExprYield` object.
 .. das:attribute:: bitfield ExprReturnFlags
 
 properties of the `ExprReturn` object.
+Its 'return <- ...'.
 
-:Fields: * **moveSemantics** (0x1) - Its 'return <- ...'.
+:Fields: * **moveSemantics** (0x1) - Return a reference. Function result is a reference.
 
-         * **returnReference** (0x2) - Return a reference. Function result is a reference.
+         * **returnReference** (0x2) - Return in block, not in function.
 
-         * **returnInBlock** (0x4) - Return in block, not in function.
+         * **returnInBlock** (0x4) - Take over right stack, i.e its 'return [MakeLocal]' and temp stack value is allocated by return expression.
 
-         * **takeOverRightStack** (0x8) - Take over right stack, i.e its 'return [MakeLocal]' and temp stack value is allocated by return expression.
+         * **takeOverRightStack** (0x8) - Return call CMRES, i.e. 'return call(...)'.
 
-         * **returnCallCMRES** (0x10) - Return call CMRES, i.e. 'return call(...)'.
+         * **returnCallCMRES** (0x10) - Return CMRES, i.e. 'return [MakeLocal]' or 'return [CmresVariable]'
 
-         * **returnCMRES** (0x20) - Return CMRES, i.e. 'return [MakeLocal]' or 'return [CmresVariable]'
+         * **returnCMRES** (0x20) - From yield.
 
-         * **fromYield** (0x40) - From yield.
+         * **fromYield** (0x40) - From comprehension.
 
-         * **fromComprehension** (0x80) - From comprehension.
-
-         * **skipLockCheck** (0x100) - Skip lock checks.
+         * **fromComprehension** (0x80) - Skip lock checks.
 
 
 
@@ -724,14 +720,13 @@ properties of the `ExprCopy` object.
 .. das:attribute:: bitfield MoveFlags
 
 Properties of the `ExprMove` object.
+Skip lock checks.
 
-:Fields: * **skipLockCheck** (0x1) - Skip lock checks.
+:Fields: * **takeOverRightStack** (0x1) - Its 'foo <- [MakeLocal]' and temp stack value is allocated by move expression.
 
-         * **takeOverRightStack** (0x2) - Its 'foo <- [MakeLocal]' and temp stack value is allocated by move expression.
+         * **allowConstantLValue** (0x2) - Move is allowed for constant lvalue, for example x <- 5
 
-         * **allowConstantLValue** (0x4) - Move is allowed for constant lvalue, for example x <- 5
-
-         * **podDelete** (0x8) - Move is a POD delete.
+         * **podDelete** (0x4) - Move is a POD delete.
 
 
 

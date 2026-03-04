@@ -199,8 +199,7 @@ namespace das
 
     struct SkipLockCheckFunctionAnnotation : MarkFunctionAnnotation {
         SkipLockCheckFunctionAnnotation() : MarkFunctionAnnotation("skip_lock_check") { }
-        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
-            func->skipLockCheck = true;
+        virtual bool apply(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string &) override {
             return true;
         };
     };
@@ -474,7 +473,6 @@ namespace das
         SkipLockCheckStructureAnnotation() : StructureAnnotation("skip_field_lock_check") {}
         virtual bool touch(const StructurePtr & ps, ModuleGroup &,
                            const AnnotationArgumentList &, string & ) override {
-            ps->skipLockCheck = true;
             return true;
         }
         virtual bool look ( const StructurePtr &, ModuleGroup &,
@@ -1912,19 +1910,6 @@ namespace das
         addExtern<DAS_BIND_FUN(_builtin_hash_float)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_float")->arg("value");
         addExtern<DAS_BIND_FUN(_builtin_hash_double)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_double")->arg("value");
         addExtern<DAS_BIND_FUN(_builtin_hash_das_string)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_string")->arg("value");
-        // locks
-        addInterop<builtin_verify_locks,void,vec4f,char *>(*this, lib, "_builtin_verify_locks",
-            SideEffects::modifyArgumentAndExternal, "builtin_verify_locks")
-                ->args({"anything","errorMessage"});
-        addExtern<DAS_BIND_FUN(builtin_set_verify_array_locks)>(*this, lib, "set_verify_array_locks",
-            SideEffects::modifyArgument, "builtin_set_verify_array_locks")
-                ->args({"array","check"})->unsafeOperation = true;
-        addExtern<DAS_BIND_FUN(builtin_set_verify_table_locks)>(*this, lib, "set_verify_table_locks",
-            SideEffects::modifyArgument, "builtin_set_verify_table_locks")
-                ->args({"table","check"})->unsafeOperation = true;
-        addExtern<DAS_BIND_FUN(builtin_set_verify_context)>(*this, lib, "set_verify_context_locks",
-            SideEffects::modifyExternal, "builtin_set_verify_context")
-                ->args({"check","context"})->unsafeOperation = true;
         // table functions
         addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "_builtin_table_clear",
             SideEffects::modifyArgument, "builtin_table_clear")

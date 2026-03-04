@@ -16,7 +16,7 @@ require daslib/templates_boost
 require daslib/typemacro_boost
 require daslib/macro_boost
 
-[skip_field_lock_check, template_structure(HashMapType)]
+[template_structure(HashMapType)]
 struct template SlotMap {
     id : uint64
     hashMap : HashMapType

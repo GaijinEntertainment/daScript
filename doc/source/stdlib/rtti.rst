@@ -83,40 +83,39 @@ Flags which specify type of the `Context`.
 .. das:attribute:: bitfield TypeInfoFlags
 
 Flags which specify properties of the `TypeInfo` object (any rtti type).
+indicates that the type is a reference value.
 
-:Fields: * **ref** (0x1) - indicates that the type is a reference value.
+:Fields: * **ref** (0x1) - indicates that the type is a reference type.
 
-         * **refType** (0x2) - indicates that the type is a reference type.
+         * **refType** (0x2) - indicates that the type can be copied.
 
-         * **canCopy** (0x4) - indicates that the type can be copied.
+         * **canCopy** (0x4) - indicates that the type is a plain old data type.
 
-         * **isPod** (0x8) - indicates that the type is a plain old data type.
+         * **isPod** (0x8) - indicates that the type is a raw plain old data type (without pointers or strings).
 
-         * **isRawPod** (0x10) - indicates that the type is a raw plain old data type (without pointers or strings).
+         * **isRawPod** (0x10) - indicates that the type is a const type.
 
-         * **isConst** (0x20) - indicates that the type is a const type.
+         * **isConst** (0x20) - indicates that the type is a temporary type.
 
-         * **isTemp** (0x40) - indicates that the type is a temporary type.
+         * **isTemp** (0x40) - indicates that the type is an implicit type.
 
-         * **isImplicit** (0x80) - indicates that the type is an implicit type.
+         * **isImplicit** (0x80) - indicates that the type is a reference value.
 
-         * **refValue** (0x100) - indicates that the type is a reference value.
+         * **refValue** (0x100) - indicates that the type has an initial value.
 
-         * **hasInitValue** (0x200) - indicates that the type has an initial value.
+         * **hasInitValue** (0x200) - indicates that the type is a smart pointer.
 
-         * **isSmartPtr** (0x400) - indicates that the type is a smart pointer.
+         * **isSmartPtr** (0x400) - indicates that the type is a smart pointer native (smart_ptr_raw)
 
-         * **isSmartPtrNative** (0x800) - indicates that the type is a smart pointer native (smart_ptr_raw)
+         * **isSmartPtrNative** (0x800) - indicates that the type is a handled type (annotation)
 
-         * **isHandled** (0x1000) - indicates that the type is a handled type (annotation)
+         * **isHandled** (0x1000) - indicates that the type needs marking by the garbage collector.
 
-         * **heapGC** (0x2000) - indicates that the type needs marking by the garbage collector.
+         * **heapGC** (0x2000) - indicates that the type needs marking of strings by the garbage collector.
 
-         * **stringHeapGC** (0x4000) - indicates that the type needs marking of strings by the garbage collector.
+         * **stringHeapGC** (0x4000) - indicates that the type needs lock checking.
 
-         * **lockCheck** (0x8000) - indicates that the type needs lock checking.
-
-         * **isPrivate** (0x10000) - indicates that the type is private.
+         * **isPrivate** (0x8000) - indicates that the type is private.
 
 
 
@@ -125,16 +124,15 @@ Flags which specify properties of the `TypeInfo` object (any rtti type).
 .. das:attribute:: bitfield StructInfoFlags
 
 Flags which represent properties of the `StructInfo` object (rtti object which represents structure type).
+This structure is a class.
 
-:Fields: * **_class** (0x1) - This structure is a class.
+:Fields: * **_class** (0x1) - This structure is a lambda.
 
-         * **_lambda** (0x2) - This structure is a lambda.
+         * **_lambda** (0x2) - This structure needs marking by the garbage collector.
 
-         * **heapGC** (0x4) - This structure needs marking by the garbage collector.
+         * **heapGC** (0x4) - This structure needs marking of strings by the garbage collector.
 
-         * **stringHeapGC** (0x8) - This structure needs marking of strings by the garbage collector.
-
-         * **lockCheck** (0x10) - This structure needs lock checking.
+         * **stringHeapGC** (0x8) - This structure needs lock checking.
 
 
 
@@ -143,28 +141,27 @@ Flags which represent properties of the `StructInfo` object (rtti object which r
 .. das:attribute:: bitfield ModuleFlags
 
 Flags which represent the module's state.
+This module is built-in.
 
-:Fields: * **builtIn** (0x1) - This module is built-in.
+:Fields: * **builtIn** (0x1) - This module is promoted to a builtin module.
 
-         * **promoted** (0x2) - This module is promoted to a builtin module.
+         * **promoted** (0x2) - This module is public.
 
-         * **isPublic** (0x4) - This module is public.
+         * **isPublic** (0x4) - This module is a module.
 
-         * **isModule** (0x8) - This module is a module.
+         * **isModule** (0x8) - This module is a solid context (can't be called from other contexts via pinvoke, global variables are cemented at locations)
 
-         * **isSolidContext** (0x10) - This module is a solid context (can't be called from other contexts via pinvoke, global variables are cemented at locations)
+         * **isSolidContext** (0x10) - This module is from an extra dependency.
 
-         * **fromExtraDependency** (0x20) - This module is from an extra dependency.
+         * **fromExtraDependency** (0x20) - This module does not allow unsafe code.
 
-         * **doNotAllowUnsafe** (0x40) - This module does not allow unsafe code.
+         * **doNotAllowUnsafe** (0x40) - This module was parsed nameless.
 
-         * **wasParsedNameless** (0x80) - This module was parsed nameless.
+         * **wasParsedNameless** (0x80) - This module is visible everywhere.
 
-         * **visibleEverywhere** (0x100) - This module is visible everywhere.
+         * **visibleEverywhere** (0x100) - This module skips lock checking.
 
-         * **skipLockCheck** (0x200) - This module skips lock checking.
-
-         * **allowPodInscope** (0x400) - This module allows pod inscope.
+         * **allowPodInscope** (0x200) - This module allows pod inscope.
 
 
 

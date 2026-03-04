@@ -61,7 +61,7 @@ def public to_enum(ent : auto(EnumT), name : string; defaultValue : EnumT) : Enu
     return defaultValue
 }
 
-[template(ent), unused_argument(ent), skip_lock_check]
+[template(ent), unused_argument(ent)]
 def public enum_to_table(ent : auto(EnumT)) : table<string, EnumT -const -&> {
     //! converts enum type to a table of name => value pairs
     //!  usage: let t = enum_to_table(type<EnumType>)

@@ -42,7 +42,6 @@ def main {
 }
 
 
-[skip_lock_check]
 def into_table(var src : array<tuple<auto(K); auto(V)>>) : table<K; V> {
     var result : table<K; V>
     for (elem in src) {

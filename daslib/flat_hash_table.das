@@ -19,7 +19,7 @@ require daslib/macro_boost
 require daslib/class_boost
 
 //! TFlatHashTable is a hash map that uses open addressing with linear probing.
-[skip_field_lock_check, template_structure(KeyType, ValueType, hashFunctionName=@@hash)]
+[template_structure(KeyType, ValueType, hashFunctionName=@@hash)]
 struct template TFlatHashTable {
     //! Open-addressing hash table with linear probing.
     key_data   : array<KeyType>

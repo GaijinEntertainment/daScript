@@ -3,6 +3,7 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options strict_smart_pointers
+options unsafe_table_lookup = false
 
 module templates_boost shared public
 

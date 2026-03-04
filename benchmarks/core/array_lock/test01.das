@@ -15,7 +15,6 @@ struct Locked {
     xs : array<int>
 }
 
-[skip_field_lock_check]
 struct Unlocked {
     xs : array<int>
 }
@@ -26,9 +25,10 @@ struct Unlocked {
 // In a real world, this would cause arrays with Locked elements
 // behave even slower (due to the need to lock here too).
 def reserve_unlocked(var arr : array<auto(T)>; n : int) {
-    unsafe(set_verify_array_locks(arr, false))
+    // BBATKIN: this is no longer relevant
+    // unsafe(set_verify_array_locks(arr, false))
     reserve(arr, n)
-    unsafe(set_verify_array_locks(arr, true))
+    // unsafe(set_verify_array_locks(arr, true))
 }
 
 [template(typ1), unused_argument(typ1), sideeffects]

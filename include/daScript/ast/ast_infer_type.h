@@ -353,7 +353,6 @@ namespace das {
         virtual ExpressionPtr visit(ExprTypeDecl *expr) override;
 
         // ExprTypeInfo
-        bool skipLockCheck() const;
         virtual ExpressionPtr visit(ExprTypeInfo *expr) override;
         // ExprDelete
         void reportMissingFinalizer(const string &message, const LineInfo &at, const TypeDeclPtr &ftype);

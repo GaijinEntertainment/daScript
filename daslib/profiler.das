@@ -21,7 +21,6 @@ require strings
 require uriparser
 require ast
 
-[skip_field_lock_check]
 struct PerfNode {
     //! Performance tree node with timing data.
     fun : SimFunction?
@@ -44,7 +43,6 @@ struct PerfEvent {
     stringHeapBytes : uint64
 }
 
-[skip_field_lock_check]
 struct PerfContext {
     //! Per-context profiling data with event history.
     events : array<PerfEvent>

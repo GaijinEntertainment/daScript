@@ -854,7 +854,6 @@ namespace das
         bool    sharedOwner = true;
     public:
         SimNode * aotInitScript = nullptr;
-        bool skipLockChecks = false;
     protected:
         void *          hwBpAddress = nullptr;
         const LineInfo * singleStepAt = nullptr;

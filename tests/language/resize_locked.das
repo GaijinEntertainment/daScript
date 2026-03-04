@@ -4,6 +4,12 @@ options gc
 
 require dastest/testing_boost public
 
+// BBATKIN: TODO(LOCKCHECK)
+//  THIS SET OF TESTS IS RELATED TO LOCK CHECKS AND NOT RELEVANT ANYMORE
+//  THIS NEEDS TO BE REPLACED WITH TESTS, WHICH FIND USE AFTER MOVE FOR ARRAYS
+
+/*
+
 struct Foo {
     a : array<int>
 }
@@ -115,3 +121,5 @@ def test_resize_table(t : T?) {
         t |> success(failed)
     }
 }
+
+*/

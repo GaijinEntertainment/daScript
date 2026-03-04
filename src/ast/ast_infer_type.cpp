@@ -47,7 +47,6 @@ namespace das {
         checkNoGlobalVariablesAtAll = prog->options.getBoolOption("no_global_variables_at_all", prog->policies.no_global_variables_at_all);
         strictSmartPointers = prog->options.getBoolOption("strict_smart_pointers", prog->policies.strict_smart_pointers);
         disableInit = prog->options.getBoolOption("no_init", prog->policies.no_init);
-        prog->thisModule->skipLockCheck = prog->options.getBoolOption("skip_module_lock_checks", false);
         strictUnsafeDelete = prog->options.getBoolOption("strict_unsafe_delete", prog->policies.strict_unsafe_delete);
         reportInvisibleFunctions = prog->options.getBoolOption("report_invisible_functions", prog->policies.report_invisible_functions);
         reportPrivateFunctions = prog->options.getBoolOption("report_private_functions", prog->policies.report_private_functions);
@@ -690,14 +689,6 @@ namespace das {
                     ExprVar *exprVar = nullptr;
                     if (oneReturn->subexpr->rtti_isVar()) {
                         exprVar = (ExprVar *)oneReturn->subexpr.get();
-                    } else if (oneReturn->subexpr->rtti_isCallFunc()) {
-                        auto callExpr = (ExprCallFunc *)oneReturn->subexpr.get();
-                        if (
-                            callExpr->func && callExpr->func->fromGeneric && callExpr->func->fromGeneric->module->name == "$" && callExpr->func->fromGeneric->name == "_return_with_lockcheck") {
-                            if (callExpr->arguments.size() == 1 && callExpr->arguments[0]->rtti_isVar()) {
-                                exprVar = (ExprVar *)callExpr->arguments[0].get();
-                            }
-                        }
                     }
                     if (exprVar && exprVar->variable) {
                         exprVar->variable->single_return_via_move = true;
@@ -1821,25 +1812,6 @@ namespace das {
         TypeDecl::clone(expr->type, expr->typeexpr);
         return Visitor::visit(expr);
     }
-    bool InferTypes::skipLockCheck() const {
-        if (program->policies.skip_lock_check)
-            return true; // if code of policy we should skip
-        if (program->thisModule->skipLockCheck)
-            return true; // if this module has options skip_lock_check - we skip
-        if (func) {
-            if (func->skipLockCheck)
-                return true; // if this function is [skip_lock_check] - we skip
-            if (func->module->skipLockCheck)
-                return true; // if this function is from the module, with options skip_lock_check - we skip
-            if (auto fromGeneric = func->getOriginPtr()) {
-                if (fromGeneric->skipLockCheck)
-                    return true; // if this function is from generic function, with options skip_lock_check - we skip
-                if (fromGeneric->module->skipLockCheck)
-                    return true; // if this function is from generic function, from the module, with options skip_lock_check - we skip
-            }
-        }
-        return false;
-    }
     ExpressionPtr InferTypes::visit(ExprTypeInfo *expr) {
         expr->macro = nullptr;
         if (expr->typeexpr && expr->typeexpr->isExprType()) {
@@ -2198,9 +2170,6 @@ namespace das {
             } else if (expr->trait == "has_nontrivial_copy") {
                 reportAstChanged();
                 return make_smart<ExprConstBool>(expr->at, expr->typeexpr->hasNonTrivialCopy());
-            } else if (expr->trait == "need_lock_check") {
-                reportAstChanged();
-                return make_smart<ExprConstBool>(expr->at, skipLockCheck() ? false : expr->typeexpr->lockCheck());
             } else if (expr->trait == "has_field" || expr->trait == "safe_has_field") {
                 auto etype = expr->typeexpr;
                 if (etype->isPointer() && etype->firstType)
@@ -2822,15 +2791,6 @@ namespace das {
                 error("table<...; void> cannot be accessed by index", "", "",
                       expr->index->at, CompilationError::invalid_index_type);
                 return Visitor::visit(expr);
-            }
-            if (seT->secondType && seT->secondType->lockCheck()) {
-                if (!(expr->at.fileInfo && expr->at.fileInfo->name == "builtin.das") && !skipLockCheck()) { // we always skip at lockchecks in builtin
-                    reportAstChanged();                                                                     // we promote tab[index] into _at_with_lockcheck(tab,index)
-                    auto pCall = make_smart<ExprCall>(expr->at, "_at_with_lockcheck");
-                    pCall->arguments.push_back(expr->subexpr->clone());
-                    pCall->arguments.push_back(expr->index->clone());
-                    return pCall;
-                }
             }
             if (unsafeTableLookup && !safeExpression(expr)) {
                 error("table index requires unsafe", "use 'get_value', 'insert', 'insert_clone' or 'emplace' instead. consider 'get'", "",
@@ -4058,28 +4018,6 @@ namespace das {
             }
             if (func->result) {
                 TypeDecl::clone(expr->returnType, func->result);
-            }
-        }
-        if (expr->moveSemantics && expr->subexpr && expr->subexpr->type && expr->subexpr->type->lockCheck()) {
-            if (!(expr->at.fileInfo && expr->at.fileInfo->name == "builtin.das")) { // we always skip lock check in builtin.das
-                if (!expr->skipLockCheck && !skipLockCheck()) {
-                    bool checkIt = true;
-                    if (expr->subexpr->rtti_isCall()) {
-                        auto ccall = static_pointer_cast<ExprCall>(expr->subexpr);
-                        if (ccall->name == "_return_with_lockcheck" || starts_with(ccall->name, "__::builtin`_return_with_lockcheck`"))
-                            checkIt = false;
-                    }
-                    if (checkIt) {
-                        reportAstChanged();
-                        auto pCall = make_smart<ExprCall>(expr->at, "_return_with_lockcheck");
-                        pCall->arguments.push_back(expr->subexpr->clone());
-                        auto pRet = static_pointer_cast<ExprReturn>(expr->clone());
-                        pRet->subexpr = pCall;
-                        if (forceInscopePod && func)
-                            returnCount++; // ast changed, so we don't really care
-                        return pRet;
-                    }
-                }
             }
         }
         expr->type = make_smart<TypeDecl>();

@@ -107,7 +107,6 @@ def split(text, delim : string implicit; blk : block< (arg : array<string>#) >) 
     builtin_string_split(text, delim, blk)
 }
 
-[skip_lock_check]
 def split(text, delim : string implicit) : array<string> {
     //! splits text by delimiter and returns the resulting array
     var res : array<string>
@@ -122,7 +121,6 @@ def split_by_chars(text, delim : string implicit; blk : block< (arg : array<stri
     builtin_string_split_by_char(text, delim, blk)
 }
 
-[skip_lock_check]
 def split_by_chars(text, delim : string implicit) : array<string> {
     //! splits text by any of the characters in delim and returns the resulting array
     var res : array<string>

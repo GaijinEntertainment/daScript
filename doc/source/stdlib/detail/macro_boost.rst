@@ -26,10 +26,6 @@
 
 .. |detail/method-macro_boost-ColletLabels.canVisitMakeBlockBody| replace:: to be documented in |detail/method-macro_boost-ColletLabels.canVisitMakeBlockBody|.rst
 
-.. |detail/class-macro_boost-ReturnSkipLockcheck| replace:: to be documented in |detail/class-macro_boost-ReturnSkipLockcheck|.rst
-
-.. |detail/method-macro_boost-ReturnSkipLockcheck.visit| replace:: to be documented in |detail/method-macro_boost-ReturnSkipLockcheck.visit|.rst
-
 .. |detail/function-macro_boost-macro_verify| replace:: to be documented in |detail/function-macro_boost-macro_verify|.rst
 
 .. |detail/function-macro_boost-capture_block| replace:: to be documented in |detail/function-macro_boost-capture_block|.rst

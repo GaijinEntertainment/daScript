@@ -29,61 +29,16 @@ def intptr(p : smart_ptr<auto>) : uint64 {
     }
 }
 
-def _move_with_lockcheck(var a : auto(valA)&; var b : auto(valB)&) {
-    static_if (typeinfo need_lock_check(type<valA>)) {
-        _builtin_verify_locks(a, "object can't be moved to because it is locked")
-    }
-    static_if (typeinfo need_lock_check(type<valB>)) {
-        _builtin_verify_locks(b, "object can't be moved from because it is locked")
-    }
-    static_if (typeinfo is_class(a)) {
-        unsafe {
-            a <- b
-        }
-    } else {
-        unsafe {
-            a <- b
-        }
-    }
-}
-
-def _return_with_lockcheck(var a : auto(valT)& ==const) : auto& {
-    static_if (typeinfo need_lock_check(type<valT>)) {
-        _builtin_verify_locks(a, "object can't be returned because it is locked")
-    }
-    unsafe {
-        return a
-    }
-}
-
-def _return_with_lockcheck(a : auto(valT)& ==const) : auto& {
-    static_if (typeinfo need_lock_check(type<valT>)) {
-        _builtin_verify_locks(a, "object can't be returned because it is locked")
-    }
-    unsafe {
-        return a
-    }
-}
-
 def resize(var Arr : array<auto(numT)>; newSize : int) {
     static_if (typeinfo is_unsafe_when_uninitialized(type<numT>)) {
         make_function_unsafe()
-    }
-    static_if (typeinfo need_lock_check(type<numT>)) {
-        _builtin_verify_locks(Arr, "array can't be resized because it contains locked elements")
     }
     __builtin_array_resize(Arr, newSize, typeinfo sizeof(Arr[0]))
 }
 
 def resize_and_init(var Arr : array<auto(numT)>; newSize : int) {
-    static_if (typeinfo need_lock_check(type<numT>)) {
-        _builtin_verify_locks(Arr, "array can't be resized because it contains locked elements")
-    }
     let oldSize = length(Arr)
     __builtin_array_resize(Arr, newSize, typeinfo sizeof(Arr[0]))
-    static_if (typeinfo need_lock_check(type<numT>)) {
-        unsafe(set_verify_array_locks(Arr, false))
-    }
     for (i in range(oldSize, newSize)) {
         static_if (typeinfo is_workhorse(type<numT>)) {
             Arr[i] = numT()
@@ -95,20 +50,11 @@ def resize_and_init(var Arr : array<auto(numT)>; newSize : int) {
             Arr[i] := default<numT>
         }
     }
-    static_if (typeinfo need_lock_check(type<numT>)) {
-        unsafe(set_verify_array_locks(Arr, true))
-    }
 }
 
 def resize_and_init(var Arr : array<auto(numT)>; newSize : int; initValue : numT) {
-    static_if (typeinfo need_lock_check(type<numT>)) {
-        _builtin_verify_locks(Arr, "array can't be resized because it contains locked elements")
-    }
     let oldSize = length(Arr)
     __builtin_array_resize(Arr, newSize, typeinfo sizeof(Arr[0]))
-    static_if (typeinfo need_lock_check(type<numT>)) {
-        unsafe(set_verify_array_locks(Arr, false))
-    }
     for (i in range(oldSize, newSize)) {
         static_if (typeinfo can_copy(initValue)) {
             Arr[i] = initValue
@@ -116,18 +62,12 @@ def resize_and_init(var Arr : array<auto(numT)>; newSize : int; initValue : numT
             Arr[i] := initValue
         }
     }
-    static_if (typeinfo need_lock_check(type<numT>)) {
-        unsafe(set_verify_array_locks(Arr, true))
-    }
 }
 
 
 [unused_argument(Arr, newSize)]
 def resize_no_init(var Arr : array<auto(numT)>; newSize : int) {
     static_if (typeinfo is_raw(type<numT>)) {
-        static_if (typeinfo need_lock_check(type<numT>)) {
-            concept_assert(false, "internal error: raw array with lock check")
-        }
         __builtin_array_resize_no_init(Arr, newSize, typeinfo sizeof(Arr[0]))
     } else {
         concept_assert(false, "can't resize_no_init non-raw array")
@@ -135,9 +75,6 @@ def resize_no_init(var Arr : array<auto(numT)>; newSize : int) {
 }
 
 def reserve(var Arr : array<auto(numT)>; newSize : int) {
-    static_if (typeinfo need_lock_check(type<numT>)) {
-        _builtin_verify_locks(Arr, "array can't be reserved because it contains locked elements")
-    }
     __builtin_array_reserve(Arr, newSize, typeinfo sizeof(Arr[0]))
 }
 
@@ -148,9 +85,6 @@ def pop(var Arr : array<auto(numT)>) {
 [unused_argument(Arr, value)]
 def push(var Arr : array<auto(numT)>; value : numT -# const ==const; at : int) {
     static_if (typeinfo can_copy(value)) {
-        static_if (typeinfo need_lock_check(type<numT>)) {
-            _builtin_verify_locks(Arr, "array can't be pushed to because it contains locked elements")
-        }
         static_if (typeinfo can_clone_from_const(value)) {
             Arr[__builtin_array_push(Arr, at, typeinfo sizeof(Arr[0]))] = value
         } else {
@@ -164,9 +98,6 @@ def push(var Arr : array<auto(numT)>; value : numT -# const ==const; at : int) {
 [unused_argument(Arr, value)]
 def push(var Arr : array<auto(numT)>; var value : numT -# ==const; at : int) {
     static_if (typeinfo can_copy(value)) {
-        static_if (typeinfo need_lock_check(type<numT>)) {
-            _builtin_verify_locks(Arr, "array can't be pushed to because it contains locked elements")
-        }
         Arr[__builtin_array_push(Arr, at, typeinfo sizeof(Arr[0]))] = value
     } else {
         concept_assert(false, "can't push value, which can't be copied")
@@ -176,9 +107,6 @@ def push(var Arr : array<auto(numT)>; var value : numT -# ==const; at : int) {
 [unused_argument(Arr, value)]
 def push(var Arr : array<auto(numT)>; value : numT -# const ==const) {
     static_if (typeinfo can_copy(value)) {
-        static_if (typeinfo need_lock_check(type<numT>)) {
-            _builtin_verify_locks(Arr, "array can't be pushed to because it contains locked elements")
-        }
         static_if (typeinfo can_clone_from_const(value)) {
             Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] = value
         } else {
@@ -192,9 +120,6 @@ def push(var Arr : array<auto(numT)>; value : numT -# const ==const) {
 [unused_argument(Arr, value)]
 def push(var Arr : array<auto(numT)>; var value : numT -# ==const) {
     static_if (typeinfo can_copy(value)) {
-        static_if (typeinfo need_lock_check(type<numT>)) {
-            _builtin_verify_locks(Arr, "array can't be pushed to because it contains locked elements")
-        }
         Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] = value
     } else {
         concept_assert(false, "can't push value, which can't be copied")
@@ -204,9 +129,6 @@ def push(var Arr : array<auto(numT)>; var value : numT -# ==const) {
 [unused_argument(Arr, value)]
 def push(var Arr : array<auto(numT)>; varr : array<numT -#> ==const) {
     static_if (typeinfo can_copy(type<numT>)) {
-        static_if (typeinfo need_lock_check(type<numT>)) {
-            _builtin_verify_locks(Arr, "array can't be pushed to because it contains locked elements")
-        }
         static_if (typeinfo can_clone_from_const(varr[0])) {
             for (t in varr) {
                 Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] = t
@@ -222,9 +144,6 @@ def push(var Arr : array<auto(numT)>; varr : array<numT -#> ==const) {
 [unused_argument(Arr, value)]
 def push(var Arr : array<auto(numT)>; var varr : array<numT -#> ==const) {
     static_if (typeinfo can_copy(type<numT>)) {
-        static_if (typeinfo need_lock_check(type<numT>)) {
-            _builtin_verify_locks(Arr, "array can't be pushed to because it contains locked elements")
-        }
         for (t in varr) {
             Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] = t
         }
@@ -236,9 +155,6 @@ def push(var Arr : array<auto(numT)>; var varr : array<numT -#> ==const) {
 [unused_argument(Arr, value)]
 def push(var Arr : array<auto(numT)>; varr : numT[] -#) {
     static_if (typeinfo can_copy(type<numT>)) {
-        static_if (typeinfo need_lock_check(type<numT>)) {
-            _builtin_verify_locks(Arr, "array can't be pushed to because it contains locked elements")
-        }
         for (t in varr) {
             Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] = t
         }
@@ -251,9 +167,6 @@ def push(var Arr : array<auto(numT)>; varr : numT[] -#) {
 def push(var Arr : array<auto(numT)[]>; varr : numT[] -# ==const) {
     static_if (typeinfo can_copy(type<numT>)) {
         static_if (typeinfo sizeof(Arr[0]) == typeinfo sizeof(varr)) {
-            static_if (typeinfo need_lock_check(type<numT>)) {
-                _builtin_verify_locks(Arr, "array can't be pushed to because it contains locked elements")
-            }
             static_if (typeinfo can_clone_from_const(varr)) {
                 Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] = varr
             } else {
@@ -271,9 +184,6 @@ def push(var Arr : array<auto(numT)[]>; varr : numT[] -# ==const) {
 def push(var Arr : array<auto(numT)[]>; var varr : numT[] -# ==const) {
     static_if (typeinfo can_copy(type<numT>)) {
         static_if (typeinfo sizeof(Arr[0]) == typeinfo sizeof(varr)) {
-            static_if (typeinfo need_lock_check(type<numT>)) {
-                _builtin_verify_locks(Arr, "array can't be pushed to because it contains locked elements")
-            }
             Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] = varr
         } else {
             concept_assert(false, "can't push array of different size")
@@ -286,9 +196,6 @@ def push(var Arr : array<auto(numT)[]>; var varr : numT[] -# ==const) {
 [unused_argument(Arr, value)]
 def emplace(var Arr : array<auto(numT)>; var value : numT -#&; at : int) {
     static_if (typeinfo can_move(value)) {
-        static_if (typeinfo need_lock_check(type<numT>)) {
-            _builtin_verify_locks(Arr, "array can't be emplaced to because it contains locked elements")
-        }
         unsafe {
             Arr[__builtin_array_push(Arr, at, typeinfo sizeof(Arr[0]))] <- value
         }
@@ -300,9 +207,6 @@ def emplace(var Arr : array<auto(numT)>; var value : numT -#&; at : int) {
 [unused_argument(Arr, value)]
 def emplace(var Arr : array<auto(numT)>; var value : numT -#&) {
     static_if (typeinfo can_move(value)) {
-        static_if (typeinfo need_lock_check(type<numT>)) {
-            _builtin_verify_locks(Arr, "array can't be emplaced to because it contains locked elements")
-        }
         unsafe {
             Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] <- value
         }
@@ -314,9 +218,6 @@ def emplace(var Arr : array<auto(numT)>; var value : numT -#&) {
 [unused_argument(Arr, value)]
 def emplace(var Arr : array<auto(numT)>; var value : numT[] -#) {
     static_if (typeinfo can_move(value)) {
-        static_if (typeinfo need_lock_check(type<numT>)) {
-            _builtin_verify_locks(Arr, "array can't be emplaced to because it contains locked elements")
-        }
         for (t in value) {
             unsafe {
                 Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] <- t
@@ -331,9 +232,6 @@ def emplace(var Arr : array<auto(numT)>; var value : numT[] -#) {
 def emplace(var Arr : array<auto(numT)[]>; var value : numT[] -#) {
     static_if (typeinfo can_move(value)) {
         static_if (typeinfo sizeof(Arr[0]) == typeinfo sizeof(value)) {
-            static_if (typeinfo need_lock_check(type<numT>)) {
-                _builtin_verify_locks(Arr, "array can't be emplaced to because it contains locked elements")
-            }
             unsafe {
                 Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] <- value
             }
@@ -348,9 +246,6 @@ def emplace(var Arr : array<auto(numT)[]>; var value : numT[] -#) {
 [unused_argument(Arr, value, at)]
 def push_clone(var Arr : array<auto(numT)>; value : numT ==const | #; at : int) {
     static_if (typeinfo can_clone(value)) {
-        static_if (typeinfo need_lock_check(type<numT>)) {
-            _builtin_verify_locks(Arr, "array can't be pushed to because it contains locked elements")
-        }
         static_if (typeinfo can_clone_from_const(value)) {
             Arr[__builtin_array_push_zero(Arr, at, typeinfo sizeof(Arr[0]))] := value
         } else {
@@ -364,9 +259,6 @@ def push_clone(var Arr : array<auto(numT)>; value : numT ==const | #; at : int) 
 [unused_argument(Arr, value, at)]
 def push_clone(var Arr : array<auto(numT)>; var value : numT ==const | #; at : int) {
     static_if (typeinfo can_clone(value)) {
-        static_if (typeinfo need_lock_check(type<numT>)) {
-            _builtin_verify_locks(Arr, "array can't be pushed to because it contains locked elements")
-        }
         Arr[__builtin_array_push_zero(Arr, at, typeinfo sizeof(Arr[0]))] := value
     } else {
         concept_assert(false, "can't push-clone value, which can't be cloned")
@@ -376,9 +268,6 @@ def push_clone(var Arr : array<auto(numT)>; var value : numT ==const | #; at : i
 [unused_argument(Arr, value)]
 def push_clone(var Arr : array<auto(numT)>; value : numT ==const | #) {
     static_if (typeinfo can_clone(value)) {
-        static_if (typeinfo need_lock_check(type<numT>)) {
-            _builtin_verify_locks(Arr, "array can't be pushed to because it contains locked elements")
-        }
         static_if (typeinfo can_clone_from_const(value)) {
             Arr[__builtin_array_push_back_zero(Arr, typeinfo sizeof(Arr[0]))] := value
         } else {
@@ -392,9 +281,6 @@ def push_clone(var Arr : array<auto(numT)>; value : numT ==const | #) {
 [unused_argument(Arr, value)]
 def push_clone(var Arr : array<auto(numT)>; var value : numT ==const | #) {
     static_if (typeinfo can_clone(value)) {
-        static_if (typeinfo need_lock_check(type<numT>)) {
-            _builtin_verify_locks(Arr, "array can't be pushed to because it contains locked elements")
-        }
         Arr[__builtin_array_push_back_zero(Arr, typeinfo sizeof(Arr[0]))] := value
     } else {
         concept_assert(false, "can't push-clone value, which can't be cloned")
@@ -404,9 +290,6 @@ def push_clone(var Arr : array<auto(numT)>; var value : numT ==const | #) {
 [unused_argument(Arr, value)]
 def push_clone(var Arr : array<auto(numT)>; varr : numT[] ==const) {
     static_if (typeinfo can_clone(type<numT>)) {
-        static_if (typeinfo need_lock_check(type<numT>)) {
-            _builtin_verify_locks(Arr, "array can't be pushed to because it contains locked elements")
-        }
         static_if (typeinfo can_clone_from_const(varr[0])) {
             for (t in varr) {
                 Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] := t
@@ -422,9 +305,6 @@ def push_clone(var Arr : array<auto(numT)>; varr : numT[] ==const) {
 [unused_argument(Arr, value)]
 def push_clone(var Arr : array<auto(numT)>; var varr : numT[] ==const) {
     static_if (typeinfo can_clone(type<numT>)) {
-        static_if (typeinfo need_lock_check(type<numT>)) {
-            _builtin_verify_locks(Arr, "array can't be pushed to because it contains locked elements")
-        }
         for (t in varr) {
             Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] := t
         }
@@ -437,9 +317,6 @@ def push_clone(var Arr : array<auto(numT)>; var varr : numT[] ==const) {
 def push_clone(var Arr : array<auto(numT)[]>; varr : numT[] ==const) {
     static_if (typeinfo can_copy(type<numT>)) {
         static_if (typeinfo sizeof(Arr[0]) == typeinfo sizeof(varr)) {
-            static_if (typeinfo need_lock_check(type<numT>)) {
-                _builtin_verify_locks(Arr, "array can't be pushed to because it contains locked elements")
-            }
             if (typeinfo can_clone_from_const(varr)) {
                 for (t in varr) {
                     Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] := t
@@ -459,9 +336,6 @@ def push_clone(var Arr : array<auto(numT)[]>; varr : numT[] ==const) {
 def push_clone(var Arr : array<auto(numT)[]>; var varr : numT[]) {
     static_if (typeinfo can_copy(type<numT>)) {
         static_if (typeinfo sizeof(Arr[0]) == typeinfo sizeof(varr)) {
-            static_if (typeinfo need_lock_check(type<numT>)) {
-                _builtin_verify_locks(Arr, "array can't be pushed to because it contains locked elements")
-            }
             Arr[__builtin_array_push_back(Arr, typeinfo sizeof(Arr[0]))] := varr
         } else {
             concept_assert(false, "can't push_clone array of different size")
@@ -550,25 +424,15 @@ def back(arr : auto(TT) ==const) : auto& const {
 }
 
 def erase(var Arr : array<auto(numT)>; at : int) {
-    static_if (typeinfo need_lock_check(type<numT>)) {
-        _builtin_verify_locks(Arr, "array can't be erased from because it contains locked elements")
-    }
     __builtin_array_erase(Arr, at, typeinfo sizeof(Arr[0]))
 }
 
 def erase(var Arr : array<auto(numT)>; at : int; count : int) {
-    static_if (typeinfo need_lock_check(type<numT>)) {
-        _builtin_verify_locks(Arr, "array can't be erased from because it contains locked elements")
-    }
     __builtin_array_erase_range(Arr, at, count, typeinfo sizeof(Arr[0]))
 }
 
 
 def erase_if(var arr : array<auto(TT)>; blk : block<(key : TT) : bool> | block<(var key : TT&) : bool>) {
-    static_if (typeinfo need_lock_check(type<TT>)) {
-        _builtin_verify_locks(arr, "array can't be erased from because it contains locked elements")
-    }
-
     var i = length(arr)
     while (--i >= 0) {
         if (invoke(blk, arr[i])) {
@@ -610,9 +474,6 @@ def empty(a : table<auto; auto> | #) : bool {
 }
 
 def reserve(var Tab : table<auto(keyT); auto>; newSize : int) {
-    static_if (typeinfo need_lock_check(type<keyT>)) {
-        _builtin_verify_locks(Tab, "table can't be reserved because it contains locked elements")
-    }
     __builtin_table_reserve(Tab, uint(newSize))
 }
 
@@ -784,27 +645,12 @@ def clone_value(var Tab : table<auto(keyT); smart_ptr<auto(valT)>>; at : keyT | 
     }
 }
 
-def _at_with_lockcheck(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #) : valT& {
-    static_if (typeinfo need_lock_check(type<valT>)) {
-        _builtin_verify_locks(Tab, "table can't be indexed at because it contains locked elements")
-    }
-    unsafe {
-        return Tab[at]
-    }
-}
-
 def erase(var Tab : table<auto(keyT); auto(valT)>; at : string#) : bool {
-    if (typeinfo need_lock_check(type<valT>)) {
-        _builtin_verify_locks(Tab, "table can't be erased from because it contains locked elements")
-    }
     let at_nt := at
     return __builtin_table_erase(Tab, at_nt)
 }
 
 def erase(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #) : bool {
-    if (typeinfo need_lock_check(type<valT>)) {
-        _builtin_verify_locks(Tab, "table can't be erased from because it contains locked elements")
-    }
     return __builtin_table_erase(Tab, at)
 }
 
@@ -1051,7 +897,6 @@ def binary_load(var obj; data : array<uint8> implicit) {
     _builtin_binary_load(obj, data)
 }
 
-[skip_lock_check]
 def copy_to_local(a : auto(TT)) : TT -const {
     static_if (typeinfo can_copy(a)) {
         return unsafe(reinterpret<TT -const> a)
@@ -1060,7 +905,6 @@ def copy_to_local(a : auto(TT)) : TT -const {
     }
 }
 
-[skip_lock_check]
 def move_to_local(var a : auto(TT)&) : TT -const -& {
     static_if (typeinfo can_move(a)) {
         return <- a
@@ -1069,7 +913,6 @@ def move_to_local(var a : auto(TT)&) : TT -const -& {
     }
 }
 
-[skip_lock_check]
 def clone(clone_src : auto(TT) ==const | #) : TT -const -# {
     unsafe {
         var clone_dest : TT -#
@@ -1078,7 +921,6 @@ def clone(clone_src : auto(TT) ==const | #) : TT -const -# {
     }
 }
 
-[skip_lock_check]
 def clone(var clone_src : auto(TT) ==const | #) : TT -const -# {
     unsafe {
         var clone_dest : TT -#
@@ -1087,7 +929,6 @@ def clone(var clone_src : auto(TT) ==const | #) : TT -const -# {
     }
 }
 
-[skip_lock_check]
 def clone(clone_src : auto(TT)[] ==const | #) : TT[typeinfo dim(clone_src)] -const -# {
     unsafe {
         var clone_dest : TT[typeinfo dim(clone_src)] -#
@@ -1096,7 +937,6 @@ def clone(clone_src : auto(TT)[] ==const | #) : TT[typeinfo dim(clone_src)] -con
     }
 }
 
-[skip_lock_check]
 def clone(var clone_src : auto(TT)[] ==const | #) : TT[typeinfo dim(clone_src)] -const -# {
     unsafe {
         var clone_dest : TT[typeinfo dim(clone_src)] -#
@@ -1105,7 +945,6 @@ def clone(var clone_src : auto(TT)[] ==const | #) : TT[typeinfo dim(clone_src)] 
     }
 }
 
-[skip_lock_check]
 def clone_to_move(clone_src : auto(TT) ==const | #) : TT -const -# {
     unsafe {
         var clone_dest : TT -#
@@ -1114,7 +953,6 @@ def clone_to_move(clone_src : auto(TT) ==const | #) : TT -const -# {
     }
 }
 
-[skip_lock_check]
 def clone_to_move(var clone_src : auto(TT) ==const | #) : TT -const -# {
     unsafe {
         var clone_dest : TT -#
@@ -1225,7 +1063,7 @@ def clone(var a : table<string; auto(VT)[]>; b : table<string; VT[]> | #) {
     }
 }
 
-[expect_any_vector(args), skip_lock_check]
+[expect_any_vector(args)]
 def clone(var args; var nargs : array<string>) {
     let tot = _::length(nargs)
     _::resize(args, tot)
@@ -1235,7 +1073,7 @@ def clone(var args; var nargs : array<string>) {
     // delete nargs // we can make this unsafe_when_not_clone_array, or just let GC deal with it
 }
 
-[expect_any_vector(args), skip_lock_check]
+[expect_any_vector(args)]
 def clone(var args; var nargs : array<int>) {
     let tot = _::length(nargs)
     _::resize(args, tot)
@@ -1244,7 +1082,7 @@ def clone(var args; var nargs : array<int>) {
     }
 }
 
-[expect_any_vector(args), skip_lock_check]
+[expect_any_vector(args)]
 def clone(var args; var nargs : array<uint8>) {
     let tot = _::length(nargs)
     _::resize(args, tot)
@@ -1253,7 +1091,7 @@ def clone(var args; var nargs : array<uint8>) {
     }
 }
 
-[expect_any_vector(args), skip_lock_check]
+[expect_any_vector(args)]
 def clone(var args; var nargs : array<tuple<uint; uint>>) {
     let tot = _::length(nargs)
     _::resize(args, tot)
@@ -1262,7 +1100,7 @@ def clone(var args; var nargs : array<tuple<uint; uint>>) {
     }
 }
 
-[expect_any_vector(args), skip_lock_check, unsafe_when_not_clone_array]
+[expect_any_vector(args), unsafe_when_not_clone_array]
 def clone(var args; var nargs : array<smart_ptr<auto(TT)>>) {
     _::clear(args)
     for (narg in nargs) {
@@ -1494,22 +1332,14 @@ def nothing(var it : iterator<auto(TT)>) : iterator<TT> {
     return <- it
 }
 
-[skip_lock_check]
 def to_array(var it : iterator<auto(TT)>) : array<TT -const -&> {
     var arr : array<TT -const -&>
-    static_if (typeinfo need_lock_check(type<TT>)) {
-        unsafe(set_verify_array_locks(arr, false))
-    }
     for (x in it) {
         push_clone(arr, x)
-    }
-    static_if (typeinfo need_lock_check(type<TT>)) {
-        unsafe(set_verify_array_locks(arr, true))
     }
     return <- arr
 }
 
-[skip_lock_check]
 def to_array(a : auto(TT)[]) : array<TT -const> {
     var arr : array<TT -const>
     unsafe(resize(arr, length(a)))  // TODO: is this safe? do we actually need to init first???
@@ -1519,7 +1349,6 @@ def to_array(a : auto(TT)[]) : array<TT -const> {
     return <- arr
 }
 
-[skip_lock_check]
 def to_array_move(var a : auto(TT)[]) : array<TT -const> {
     unsafe {
         var arr : array<TT -const>
@@ -1540,7 +1369,6 @@ def to_array_move(var a : auto(TT)[]) : array<TT -const> {
     }
 }
 
-[skip_lock_check]
 def to_array_move(a : auto(TT) ==const) : array<TT -const> {
     unsafe {
         var arr : array<TT -const>
@@ -1558,7 +1386,6 @@ def to_array_move(a : auto(TT) ==const) : array<TT -const> {
     }
 }
 
-[skip_lock_check]
 def to_array_move(var a : auto(TT) ==const) : array<TT -const> {
     unsafe {
         var arr : array<TT -const>
@@ -1576,7 +1403,6 @@ def to_array_move(var a : auto(TT) ==const) : array<TT -const> {
     }
 }
 
-[skip_lock_check]
 def to_table(a : tuple<auto(keyT); auto(valT)>[]) : table<keyT -const; valT> {
     var tab : table<keyT -const; valT>
     for (x in a) {
@@ -1585,7 +1411,6 @@ def to_table(a : tuple<auto(keyT); auto(valT)>[]) : table<keyT -const; valT> {
     return <- tab
 }
 
-[skip_lock_check]
 def to_table(a : auto(keyT)[]) : table<keyT -const> {
     var tab : table<keyT -const>
     for (at in a) {
@@ -1594,7 +1419,6 @@ def to_table(a : auto(keyT)[]) : table<keyT -const> {
     return <- tab
 }
 
-[skip_lock_check]
 def to_table_move(a : auto(keyT)[]) : table<keyT -const> {
     var tab : table<keyT -const>
     for (at in a) {
@@ -1603,7 +1427,6 @@ def to_table_move(a : auto(keyT)[]) : table<keyT -const> {
     return <- tab
 }
 
-[skip_lock_check]
 def to_table_move(a : array<auto(keyT)>) : table<keyT -const> {
     var tab : table<keyT -const>
     for (at in a) {
@@ -1612,14 +1435,12 @@ def to_table_move(a : array<auto(keyT)>) : table<keyT -const> {
     return <- tab
 }
 
-[skip_lock_check]
 def to_table_move(a : auto(keyT)) : table<keyT -const> {
     var tab : table<keyT -const>
     __builtin_table_set_insert(tab, a)
     return <- tab
 }
 
-[skip_lock_check]
 def to_table_move(var a : tuple<auto(keyT); auto(valT)>) : table<keyT -const; valT> {
     var tab : table<keyT -const; valT>
     static_if (typeinfo can_copy(type<valT>)) {
@@ -1632,7 +1453,6 @@ def to_table_move(var a : tuple<auto(keyT); auto(valT)>) : table<keyT -const; va
     return <- tab
 }
 
-[skip_lock_check]
 def to_table_move(var a : tuple<auto(keyT); auto(valT)>[]) : table<keyT -const; valT> {
     var tab : table<keyT -const; valT>
     static_if (typeinfo can_copy(type<valT>)) {
@@ -1649,7 +1469,6 @@ def to_table_move(var a : tuple<auto(keyT); auto(valT)>[]) : table<keyT -const; 
     return <- tab
 }
 
-[skip_lock_check]
 def to_table_move(var a : array<tuple<auto(keyT); auto(valT)>>) : table<keyT -const; valT> {
     var tab : table<keyT -const; valT>
     static_if (typeinfo can_copy(type<valT>)) {
@@ -1977,14 +1796,8 @@ def subarray(a : auto(TT)[]; r : range) {
     var ra : array<TT -const -&>
     if (r.x < r.y) {
         ra |> reserve(r.y - r.x)
-        static_if (typeinfo need_lock_check(type<TT>)) {
-            unsafe(set_verify_array_locks(ra, false))
-        }
         for (t in r) {
             ra |> push_clone(a[t])
-        }
-        static_if (typeinfo need_lock_check(type<TT>)) {
-            unsafe(set_verify_array_locks(ra, true))
         }
     }
     return <- ra
@@ -1994,14 +1807,8 @@ def subarray(a : auto(TT)[]; r : urange) {
     var ra : array<TT -const -&>
     if (r.x < r.y) {
         ra |> reserve(int(r.y - r.x))
-        static_if (typeinfo need_lock_check(type<TT>)) {
-            unsafe(set_verify_array_locks(ra, false))
-        }
         for (t in r) {
             ra |> push_clone(a[t])
-        }
-        static_if (typeinfo need_lock_check(type<TT>)) {
-            unsafe(set_verify_array_locks(ra, true))
         }
     }
     return <- ra
@@ -2011,16 +1818,8 @@ def subarray(a : array<auto(TT)> ==const; r : range) {
     var ra : array<TT -const -&>
     if (r.x < r.y) {
         ra |> reserve(r.y - r.x)
-        static_if (typeinfo need_lock_check(type<TT>)) {
-            unsafe(set_verify_array_locks(ra, false))
-            unsafe(set_verify_array_locks(a, false))
-        }
         for (t in r) {
             ra |> push_clone(a[t])
-        }
-        static_if (typeinfo need_lock_check(type<TT>)) {
-            unsafe(set_verify_array_locks(ra, true))
-            unsafe(set_verify_array_locks(a, true))
         }
     }
     return <- ra
@@ -2030,16 +1829,8 @@ def subarray(var a : array<auto(TT)> ==const; r : range) {
     var ra : array<TT -const -&>
     if (r.x < r.y) {
         ra |> reserve(r.y - r.x)
-        static_if (typeinfo need_lock_check(type<TT>)) {
-            unsafe(set_verify_array_locks(ra, false))
-            unsafe(set_verify_array_locks(a, false))
-        }
         for (t in r) {
             ra |> push_clone(a[t])
-        }
-        static_if (typeinfo need_lock_check(type<TT>)) {
-            unsafe(set_verify_array_locks(ra, true))
-            unsafe(set_verify_array_locks(a, true))
         }
     }
     return <- ra
@@ -2049,16 +1840,8 @@ def subarray(a : array<auto(TT)>; r : urange) {
     var ra : array<TT -const -&>
     if (r.x < r.y) {
         ra |> reserve(int(r.y - r.x))
-        static_if (typeinfo need_lock_check(type<TT>)) {
-            unsafe(set_verify_array_locks(ra, false))
-            unsafe(set_verify_array_locks(a, false))
-        }
         for (t in r) {
             ra |> push_clone(a[t])
-        }
-        static_if (typeinfo need_lock_check(type<TT>)) {
-            unsafe(set_verify_array_locks(ra, true))
-            unsafe(set_verify_array_locks(a, true))
         }
     }
     return <- ra
@@ -2077,9 +1860,6 @@ def move_to_ref(var a : auto&; var b) {
 }
 
 def clear(var t : table<auto(KT); auto(VT)>) {
-    static_if (typeinfo need_lock_check(type<VT>)) {
-        _builtin_verify_locks(t, "table can't be cleared because it contains locked elements")
-    }
     _builtin_table_clear(t)
 }
 
