@@ -122,6 +122,7 @@ enum public JIT_ARRAY {
     SIZE
     CAPACITY
     LOOK
+    MAGIC
     FLAGS
 }
 
@@ -130,6 +131,7 @@ enum public JIT_TABLE {
     SIZE
     CAPACITY
     LOOK
+    MAGIC
     FLAGS
     KEYS
     HASHES
@@ -836,6 +838,7 @@ def public type_to_llvm_type(t : TypeDeclPtr) {
             g_prim_t.t_int32,                    // uint32_t size
             g_prim_t.t_int32,                    // uint32_t capacity
             g_prim_t.t_int32,                    // uint32_t lock
+            g_prim_t.t_int32,                    // uint32_t magic
             g_prim_t.t_int32                     // uint32_t flags
         )
         if (t.firstType != null) {
@@ -850,6 +853,7 @@ def public type_to_llvm_type(t : TypeDeclPtr) {
             g_prim_t.t_int32,                    // uint32_t capacity
             g_prim_t.t_int32,                    // uint32_t lock
             g_prim_t.t_int32,                    // uint32_t flags
+            g_prim_t.t_int32,                    // uint32_t magic
             g_prim_t.LLVMVoidPtrType(),// char * keys
             g_prim_t.LLVMVoidPtrType(),// char * hashes
             g_prim_t.t_int32)

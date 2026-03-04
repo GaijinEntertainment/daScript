@@ -45,17 +45,10 @@ The following operations perform lock checks on data structures:
     * insert
     * for the ``Table``
 
-Lock checking can be explicitly disabled:
-    * for a structure type with the ``[skip_field_lock_check]`` annotation
-    * for an entire function with the ``[skip_lock_check]`` annotation
-    * for the entire context with ``options skip_lock_checks``
-
 .. seealso::
 
     :ref:`Arrays <arrays>` and :ref:`Tables <tables>` for the container types that support locking,
     :ref:`Iterators <iterators>` for iteration patterns that lock containers,
-    :ref:`Annotations <annotations>` for ``[skip_lock_check]`` and ``[skip_field_lock_check]``,
-    :ref:`Options <options>` for ``skip_lock_checks``,
     :ref:`Contexts <contexts>` for context-level locking.
 
 

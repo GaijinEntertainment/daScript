@@ -175,6 +175,10 @@ namespace das
 
         bool reserveInternal(Table & tab, uint32_t newCapacity, LineInfo * at) {
             DAS_VERIFYF((newCapacity & (newCapacity) - 1) == 0, "newCapacity must be power of 2, and not %i", int(newCapacity));
+            if ( tab.magic!=0 || tab.lock!=0 ) {
+                context->throw_error_at(at, "can't grow a locked table");
+                return false;
+            }
             Table newTab;
             uint64_t memSize64 = uint64_t(newCapacity) * (uint64_t(valueTypeSize) + uint64_t(sizeof(KeyType)) + uint64_t(sizeof(TableHashKey)));
             if ( memSize64>=0xffffffff ) {
@@ -190,6 +194,7 @@ namespace das
             newTab.size = tab.size;
             newTab.capacity = newCapacity;
             newTab.lock = tab.lock;
+            newTab.magic = 0;
             newTab.flags = tab.flags;
             newTab.tombstones = 0;
             if ( valueTypeSize ) memset(newTab.data, 0, size_t(newCapacity)*size_t(valueTypeSize));

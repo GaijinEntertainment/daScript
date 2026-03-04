@@ -9,16 +9,52 @@ namespace das
         arr.size = 0;
     }
 
+    void array_mark_locked ( Array & arr, void * data, uint32_t capacity ) {
+        arr.data = (char *)data;
+        arr.size = arr.capacity = capacity;
+        arr.lock = 1;
+        arr.magic = DAS_ARRAY_MAGIC;
+    }
+
+    void array_mark_locked ( Array & arr, void * data, uint32_t size, uint32_t capacity ) {
+        arr.data = (char *)data;
+        arr.size = size;
+        arr.capacity = capacity;
+        arr.lock = 1;
+        arr.magic = DAS_ARRAY_MAGIC;
+    }
+
     void array_lock ( Context & context, Array & arr, LineInfo * at ) {
         if ( arr.shared || arr.hopeless ) return;
-        arr.lock ++;
-        if ( arr.lock==0 ) context.throw_error_at(at, "array lock overflow");
+        if ( arr.lock==0 ) {
+            if ( arr.magic != 0 ) {
+                context.throw_error_at(at, "array magic mismatch on first lock, was it moved or overwritten?");
+            }
+            arr.lock = 1;
+            arr.magic = DAS_ARRAY_MAGIC;
+        } else {
+            if ( arr.magic != DAS_ARRAY_MAGIC ) {
+                context.throw_error_at(at, "array magic mismatch on lock, was it moved or overwritten?");
+            }
+            arr.lock ++;
+            if ( arr.lock==0 ) {
+                context.throw_error_at(at, "array lock overflow, was it moved or overwritten?");
+            }
+        }
     }
 
     void array_unlock ( Context & context, Array & arr, LineInfo * at ) {
         if ( arr.shared || arr.hopeless ) return;
-        if ( arr.lock==0 ) context.throw_error_at(at, "array lock underflow");
+        if ( arr.magic != DAS_ARRAY_MAGIC ) {
+            context.throw_error_at(at, "array magic mismatch on unlock, was it moved or overwritten?");
+        }
+        if ( arr.lock==0 ) {
+            context.throw_error_at(at, "array lock underflow, was it moved or overwritten?");
+        }
         arr.lock --;
+        if ( arr.lock==0 ) {
+            arr.magic = 0;
+        }
     }
 
     void array_reserve(Context & context, Array & arr, uint32_t newCapacity, uint32_t stride, LineInfo * at) {
