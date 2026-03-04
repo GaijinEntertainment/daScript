@@ -28,37 +28,6 @@ Accessing a locked ``Table``'s elements via the ``[]`` operator will also cause 
 Arrays are locked when iterated over, preventing modification during iteration.
 The ``keys`` and ``values`` iterators lock a ``Table`` as well. Tables are also locked during ``find*`` operations.
 
-------------------------------
-Array and Table lock checking
-------------------------------
-
-Array and table lock checking extends to data structures that internally contain other arrays or tables.
-
-Consider the following example:
-
-.. code-block:: das
-
-    var a : array < array<int> >
-    ...
-    for ( b in a[0] ) {
-        a |> resize(100500)
-    }
-
-The ``resize`` operation on the ``a`` array will cause ``panic`` because ``a[0]`` is locked during the iteration.
-This test, however, can only happen in runtime. The compiler generates custom ``resize`` code, which verifies locks:
-
-.. code-block:: das
-
-    def private builtin`resize ( var Arr:array<array<int> aka numT> explicit; newSize:int const ) {
-        _builtin_verify_locks(Arr)
-        __builtin_array_resize(Arr,newSize,24,__context__)
-    }
-
-The ``_builtin_verify_locks`` function iterates over the provided data and verifies that each ``Array`` or ``Table`` is not locked.
-If any is locked, a ``panic`` occurs.
-
-Custom operations will only be generated, if the underlying type needs lock checks.
-
 The following operations perform lock checks on data structures:
 
 .. code-block:: text

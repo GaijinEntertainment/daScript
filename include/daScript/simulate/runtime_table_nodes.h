@@ -186,6 +186,7 @@ namespace das
         const Table *   table;
         uint32_t        stride = 0;
         char *          data = nullptr;
+        char *          originData = nullptr;
         char *          table_end = nullptr;
     };
 

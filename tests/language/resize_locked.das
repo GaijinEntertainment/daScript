@@ -4,11 +4,8 @@ options gc
 
 require dastest/testing_boost public
 
-// BBATKIN: TODO(LOCKCHECK)
-//  THIS SET OF TESTS IS RELATED TO LOCK CHECKS AND NOT RELEVANT ANYMORE
-//  THIS NEEDS TO BE REPLACED WITH TESTS, WHICH FIND USE AFTER MOVE FOR ARRAYS
-
-/*
+options very_safe_context
+options unsafe_table_lookup = false
 
 struct Foo {
     a : array<int>
@@ -54,15 +51,22 @@ def test_resize_array(t : T?) {
         var failed = false
         try {
             for (x in a[0].foo.a) {
-                a |> emplace(Bar())   // exception: object contains locked elements and can't be resized
+                a |> emplace(Bar()) // this is fine, memory after 'resize' stays allocated in the very safe context
             }
+        } recover {
+            failed = true
+        }
+        t |> success(!failed)
+        failed = false
+        try {
+            delete a        // this would be deleting locked array, since resize moved old one out of the way
+                            // so a[0].foo.a stayed locked
         } recover {
             failed = true
         }
         t |> success(failed)
     }
 }
-
 struct Goo {
     a : table<int; int>
 }
@@ -88,7 +92,7 @@ def test_resize_table(t : T?) {
         }
         t |> success(failed)
     }
-    t |> run("nested locked table") @(t_ : T?) {
+    t |> run("nested locked table") @(t : T?) {
         var a : table<int; array<int>>
         for (tt in range(10)) {
             a[tt] <- [for (x in range(tt + 1)); x]
@@ -96,12 +100,19 @@ def test_resize_table(t : T?) {
         var failed = false
         try {
             for (x in a[3]) {
-                a[13] <- [for (q in range(3)); x]       // object contains locked elements and can't be resized
+                a[13] <- [for (q in range(3)); x]   // this is fine in the very safe context, afaik
             }
         } recover {
             failed = true
-            t_ |> success(failed)
         }
+        t |> success(!failed)
+        failed = false
+        try {
+            delete a
+        } recover {
+            failed = true
+        }
+        t |> success(!failed)
     }
     t |> run("nested complicated table") @(t : T?) {
         var a : table< int; Bag >
@@ -112,7 +123,8 @@ def test_resize_table(t : T?) {
         )
         var failed = false
         try {
-            for (x in values(a[10].foo.a)) {
+            for (x in values(a[10].foo.a)) {    // this fails on exit of the loop, since element gets erased
+                                                // 'table was modified during iteration'
                 a |> erase(10)
             }
         } recover {
@@ -122,4 +134,3 @@ def test_resize_table(t : T?) {
     }
 }
 
-*/
