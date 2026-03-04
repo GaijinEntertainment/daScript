@@ -1150,20 +1150,24 @@ __forceinline void profileNode ( SimNode * node ) {
         uint32_t    totalLabels = 0;
     };
 
+#if DAS_DEBUGGER
     struct SimNodeDebug_Block : SimNode_Block {
         SimNodeDebug_Block ( const LineInfo & at ) : SimNode_Block(at) {}
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
     };
+#endif
 
     struct DAS_API SimNode_BlockNF : SimNode_Block {
         SimNode_BlockNF ( const LineInfo & at ) : SimNode_Block(at) {}
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
     };
 
+#if DAS_DEBUGGER
     struct DAS_API SimNodeDebug_BlockNF : SimNode_BlockNF {
         SimNodeDebug_BlockNF ( const LineInfo & at ) : SimNode_BlockNF(at) {}
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
     };
+#endif
 
     struct DAS_API SimNode_BlockWithLabels : SimNode_Block {
         SimNode_BlockWithLabels ( const LineInfo & at ) : SimNode_Block(at) {}
@@ -1171,10 +1175,12 @@ __forceinline void profileNode ( SimNode * node ) {
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
     };
 
+#if DAS_DEBUGGER
     struct DAS_API SimNodeDebug_BlockWithLabels : SimNode_BlockWithLabels {
         SimNodeDebug_BlockWithLabels ( const LineInfo & at ) : SimNode_BlockWithLabels(at) {}
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
     };
+#endif
 
     struct DAS_API SimNode_ForBase : SimNode_Block {
         SimNode_ForBase ( const LineInfo & at ) : SimNode_Block(at) {}
@@ -1214,11 +1220,13 @@ __forceinline void profileNode ( SimNode * node ) {
         };
     };
 
+#if DAS_DEBUGGER
     struct DAS_API SimNodeDebug_ClosureBlock : SimNode_ClosureBlock {
         SimNodeDebug_ClosureBlock ( const LineInfo & at, bool nr, bool c0, uint64_t ad )
             : SimNode_ClosureBlock(at,nr,c0,ad) { }
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
     };
+#endif
 
 #ifdef _MSC_VER
 #pragma warning(push)
