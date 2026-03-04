@@ -584,12 +584,6 @@ namespace das {
             if ( expr->func->fromGeneric && expr->func->fromGeneric->module->name=="$" ) {
                 if ( expr->func->fromGeneric->name=="to_table_move" ) {
                     verifyToTableMove(expr);
-                } else if ( expr->func->fromGeneric->name=="_move_with_lockcheck" ) {
-                    if ( noWritingToNameless && expr->arguments[0]->rtti_isMakeLocal() ) {
-                        program->error("dead move to a temporary value, which is prohibited by CodeOfPolicies",
-                            getNamelessHint(expr->arguments[0], expr->arguments[1], "<-"), "",
-                                expr->arguments[0]->at, CompilationError::no_writing_to_nameless);
-                    }
                 }
             }
             if ( isClassCtor ) {
@@ -985,11 +979,10 @@ namespace das {
         "disable_run",                  Type::tBool,
         "indenting",                    Type::tInt,
         "no_unsafe_uninitialized_structures", Type::tBool,
-    // runtime checks
-        "skip_lock_checks",             Type::tBool,
-        "skip_module_lock_checks",      Type::tBool,
     // version_2_syntax
         "gen2",                         Type::tBool,
+    // depricated
+        "skip_lock_checks",             Type::tBool,
     };
 
     void verifyOptions() {

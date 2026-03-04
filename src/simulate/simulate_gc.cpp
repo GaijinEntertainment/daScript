@@ -8,7 +8,7 @@
 namespace das
 {
     static TypeInfo lambda_type_info (Type::tLambda, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr,
-        TypeInfo::flag_stringHeapGC | TypeInfo::flag_heapGC | TypeInfo::flag_lockCheck, sizeof(Lambda), 0 );
+        TypeInfo::flag_stringHeapGC | TypeInfo::flag_heapGC, sizeof(Lambda), 0 );
 
     char * presentStr ( char * buf, char * ch, int size );
 

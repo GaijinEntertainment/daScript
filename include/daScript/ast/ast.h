@@ -311,7 +311,6 @@ namespace das
                 bool    privateStructure : 1;
                 bool    macroInterface : 1;
                 bool    sealed : 1;
-                bool    skipLockCheck : 1;
                 bool    circular : 1;
                 bool    generator : 1;
                 bool    hasStaticMembers : 1;
@@ -952,7 +951,7 @@ namespace das
                 bool    lateInit : 1;
                 bool    requestJit : 1;
                 bool    unsafeOutsideOfFor : 1;
-                bool    skipLockCheck : 1;
+                // empty spot
                 bool    safeImplicit : 1;
 
                 bool    deprecated : 1;
@@ -1255,7 +1254,6 @@ namespace das
                 bool    doNotAllowUnsafe : 1;
                 bool    wasParsedNameless : 1;
                 bool    visibleEverywhere : 1;
-                bool    skipLockCheck : 1;
                 bool    allowPodInscope : 1;
             };
             uint32_t        moduleFlags = 0;
@@ -1514,7 +1512,6 @@ namespace das
         /*option*/ bool rtti = false;                              // create extended RTTI
     // language
         /*option*/ bool unsafe_table_lookup = true;                // table lookup (tab[key]) to be unsafe
-        /*option*/ bool skip_lock_check = false;                   // skip all lock check
         /*option*/ bool relaxed_pointer_const = false;             // allow const correctness to be relaxed on pointers
         bool version_2_syntax = false;                  // use syntax version 2
         bool gen2_make_syntax = false;                  // only new make syntax is allowed (no [[...]] or [{...}])

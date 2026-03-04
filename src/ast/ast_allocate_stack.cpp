@@ -69,22 +69,7 @@ namespace das {
             if ( !func->result->isRefType() ) return;
             else if ( expr->subexpr->rtti_isInvoke() ) return;
             else if ( expr->subexpr->rtti_isMakeLocal() ) return;
-            // if its _return_with_lockcheck(X)
-            else if ( expr->subexpr->rtti_isCall() ) {
-                auto ecall = ((ExprCall *)(expr->subexpr.get()));
-                if ( ecall->func && ecall->func->fromGeneric &&
-                     ecall->arguments.size()==1 &&
-                     ecall->func->fromGeneric->module->name=="$" &&
-                     ecall->func->fromGeneric->name == "_return_with_lockcheck" ) {
-                    if ( ecall->arguments[0]->rtti_isVar() ) {
-                        evar = (ExprVar *)(ecall->arguments[0].get());
-                    } else {
-                        return;
-                    }
-                } else {
-                    return;
-                }
-            } // if its return X
+            // if its return X
             else if ( expr->subexpr->rtti_isVar() ) {
                 evar = (ExprVar *)(expr->subexpr.get());
             } else {

@@ -178,8 +178,6 @@ def generate_wrapper(var gen : ParserGenerator) {
         return <- result
     }
 
-    wrapper_fun.moreFlags |= MoreFunctionFlags.skipLockCheck
-
     return <- wrapper_fun
 }
 
@@ -254,8 +252,6 @@ def generate_wrapper_leftrec(var gen : ParserGenerator) {
         }
     }
 
-    wrapper_fun.moreFlags |= MoreFunctionFlags.skipLockCheck
-
     return <- wrapper_fun
 }
 
@@ -294,8 +290,6 @@ def generate_parser_class(var gen : ParserGenerator; parser_name : string) {
     // Supress errors flag is set when entering modifier like MB or *
     s |> add_structure_field_new("suppress_errors", qmacro_type(type<array<bool>>))
     s |> add_structure_field_new("errors", qmacro_type(type<array<ParsingError>>))
-
-    s.flags |= StructureFlags.skipLockCheck
 
     // Save constructed parser type for later
     gen.parser_type |> move_new <| new TypeDecl(baseType = Type.tStructure, structType = s |> get_ptr)
@@ -524,7 +518,6 @@ def generate(var gen : ParserGenerator; var rule_ : Rule) : array<ExpressionPtr>
             var inscope t  <- qmacro_block <| $() {
                 var $i(varname) <- $c(parse_fun)(parser)
                 if (!$i(varname).success) {// Here we don't output an error, unless we impl. quiet or something
-                    return_skip_lockcheck <| default<$t(return_type)>
                     return <- default<$t(return_type)>
                 }
             }
@@ -545,7 +538,6 @@ def generate(var gen : ParserGenerator; var rule_ : Rule) : array<ExpressionPtr>
             var inscope t <- qmacro_block <| $() {
                 var $i(varname) <- $c(parse_fun)(parser)
                 if (!$i(varname).success) {
-                    return_skip_lockcheck <| default<$t(return_type)>
                     return <- default<$t(return_type)>
                 }
                 var $i(result_name) <- $i(varname).value
@@ -634,7 +626,6 @@ def generate_maybe_repeat(var gen : ParserGenerator; var rule_ : Rule_?) : array
         }
 
         rule_code |> append_block_new <| (qmacro_block <| $ {
-            return_skip_lockcheck <|  (true, 0, parser.index);
             return <-  (true, 0, parser.index);
         })
 
@@ -663,7 +654,6 @@ def generate_maybe_repeat(var gen : ParserGenerator; var rule_ : Rule_?) : array
 
     rule_code |> append_block_new <| (qmacro_block <| $ {
         $i(result_handle) |> emplace <| temp_name;
-        return_skip_lockcheck <|  (true, 0, 0);
         return <-  (true, 0, 0);
     })
 
@@ -692,7 +682,6 @@ def generate_not(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expressi
     }
 
     rule_code |> append_block_new <| (qmacro_block <| $ {
-        return_skip_lockcheck <|  (true, 0, parser.index);
         return <-  (true, 0, parser.index);
     })
 
@@ -718,7 +707,6 @@ def generate_not(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expressi
                 parser |> log_fail <| "Assertion successful; failing"
             }
 
-            return_skip_lockcheck <| default<$t(return_type)>
             return <- default<$t(return_type)>
 
             if ($v(gen.tracing)) {
@@ -740,7 +728,6 @@ def generate_and(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expressi
     }
 
     rule_code |> append_block_new <| (qmacro_block <| $ {
-        return_skip_lockcheck <|  (true, 0, parser.index);
         return <-  (true, 0, parser.index);
     })
 
@@ -758,7 +745,6 @@ def generate_and(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expressi
                 parser |> log_fail <| "Assertion failed; failing"
             }
 
-            return_skip_lockcheck <| default<$t(return_type)>
             return <- default<$t(return_type)>
         }
 
@@ -783,7 +769,6 @@ def generate_repeat(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expre
         }
 
         rule_code |> append_block_new <| (qmacro_block <| $ {
-            return_skip_lockcheck <|  (true, 0, parser.index);
             return <-  (true, 0, parser.index);
         })
 
@@ -801,7 +786,6 @@ def generate_repeat(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expre
                     parser.errors |> push <| ParsingError(text = complete_message, index = parser.index)
                 }
 
-                return_skip_lockcheck <| default<$t(return_type)>
                 return <- default<$t(return_type)>
             }
 
@@ -828,7 +812,6 @@ def generate_repeat(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expre
 
     rule_code |> append_block_new <| (qmacro_block <| $ {
         $i(result_handle) |> emplace <| temp_name;
-        return_skip_lockcheck <|  (true, 0, parser.index);
         return <-  (true, 0, parser.index);
     })
 
@@ -849,7 +832,6 @@ def generate_repeat(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expre
                 parser.errors |> push <| ParsingError(text = complete_message, index = parser.index)
             }
 
-            return_skip_lockcheck <| default<$t(return_type)>
             return <- default<$t(return_type)>
         }
 
@@ -1004,7 +986,6 @@ def generate_option(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expre
             parser.suppress_errors |> push <| true
             invoke <| $() {
                 $b(rule_code)
-                return_skip_lockcheck <|  (false, 0, 0)
                 return <-  (false, 0, 0)
             }
             parser.suppress_errors |> pop
@@ -1025,7 +1006,6 @@ def generate_option(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expre
 
     rule_code |> append_block_new <| (qmacro_block <| $ {
         $i(result_handle) |> emplace <| temp_name;
-        return_skip_lockcheck <|  (false, 0, 0);
         return <-  (false, 0, 0);
     })
 
@@ -1095,7 +1075,6 @@ def generate_one_alternative(var gen : ParserGenerator; var alt : Alternative; i
             if ($v(gen.debug) && !$v(only)) {
                 parser |> log_plain <|  "State: index: {parser.index}, current: {parser.current}"
             }
-            return_skip_lockcheck($i(result))
             return <- $i(result)
         }
         parser.tabs--
@@ -1107,7 +1086,6 @@ def generate_one_alternative(var gen : ParserGenerator; var alt : Alternative; i
         parser.index = parse_pos
 
         if (cut) {// Committed but failed; let's fail, too
-            return_skip_lockcheck <| default<$t(return_type)>
             return <- default<$t(return_type)>
         }
     }
@@ -1139,7 +1117,6 @@ def alternative_add_epilogue(var block_contents : array<ExpressionPtr>; var gen 
         }
 
         var result : $t(return_type) <-  (true, val, parser.index)
-        return_skip_lockcheck <| result
         return <- result
     }
 
@@ -1175,8 +1152,6 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
                         parser.errors |> push <| ParsingError(text = complete_message, index = parser.index)
                     }
 
-
-                    return_skip_lockcheck <| default<$t(return_type)>
                     return <- default<$t(return_type)>
                 }
 
@@ -1217,7 +1192,6 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
                         parser.errors |> push <| ParsingError(text = complete_message, index = parser.index)
                     }
 
-                    return_skip_lockcheck <| default<$t(return_type)>
                     return <- default<$t(return_type)>
                 }
                 parser |> move(1)
@@ -1251,7 +1225,6 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
                         parser.errors |> push <| ParsingError(text = complete_message, index = parser.index)
                     }
 
-                    return_skip_lockcheck <| default<$t(return_type)>
                     return <- default<$t(return_type)>
                 }
 
@@ -1290,7 +1263,6 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
                         parser.errors |> push <| ParsingError(text = complete_message, index = parser.index)
                     }
 
-                    return_skip_lockcheck <| default<$t(return_type)>
                     return <- default<$t(return_type)>
                 }
             }
@@ -1309,7 +1281,6 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
                         parser.errors |> push <| ParsingError(text = complete_message, index = parser.index)
                     }
 
-                    return_skip_lockcheck <| default<$t(return_type)>
                     return <- default<$t(return_type)>
                 }
             }
@@ -1328,7 +1299,6 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
                         parser.errors |> push <| ParsingError(text = complete_message, index = parser.index)
                     }
 
-                    return_skip_lockcheck <| default<$t(return_type)>
                     return <- default<$t(return_type)>
                 }
 
@@ -1362,7 +1332,6 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
                         parser.errors |> push <| ParsingError(text = complete_message, index = parser.index)
                     }
 
-                    return_skip_lockcheck <| default<$t(return_type)>
                     return <- default<$t(return_type)>
                 }
 
@@ -1388,7 +1357,6 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
                         parser.errors |> push <| ParsingError(text = complete_message, index = parser.index)
                     }
 
-                    return_skip_lockcheck <| default<$t(return_type)>
                     return <- default<$t(return_type)>
                 }
 

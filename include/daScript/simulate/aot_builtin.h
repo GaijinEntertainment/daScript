@@ -76,11 +76,6 @@ namespace das {
     DAS_API void toLog ( int level, const char * text, Context * context, LineInfoArg * at );
     void toCompilerLog ( const char * text, Context * context, LineInfoArg * at );
 
-    DAS_API vec4f builtin_verify_locks ( Context & context, SimNode_CallBase * node, vec4f * args );
-    DAS_API bool builtin_set_verify_array_locks ( Array & arr, bool value );
-    DAS_API bool builtin_set_verify_table_locks ( Table & tab, bool value );
-    DAS_API bool builtin_set_verify_context ( bool slc, Context * context );
-
     DAS_API bool builtin_iterator_first ( Sequence & it, void * data, Context * context, LineInfoArg * at );
     DAS_API bool builtin_iterator_next  ( Sequence & it, void * data, Context * context, LineInfoArg * at );
     DAS_API void builtin_iterator_close ( Sequence & it, void * data, Context * context );

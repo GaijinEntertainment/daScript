@@ -1131,8 +1131,6 @@ namespace das
         tabMnLookup = ctx.tabMnLookup;
         tabGMnLookup = ctx.tabGMnLookup;
         tabAdLookup = ctx.tabAdLookup;
-        // lockcheck
-        skipLockChecks = ctx.skipLockChecks;
     }
 
     void Context::freeGlobalsAndShared() {
@@ -1225,8 +1223,6 @@ namespace das
         tabMnLookup = ctx.tabMnLookup;
         tabGMnLookup = ctx.tabGMnLookup;
         tabAdLookup = ctx.tabAdLookup;
-        // lockcheck
-        skipLockChecks = ctx.skipLockChecks;
         // threadlock_context
         if ( ctx.contextMutex ) contextMutex = new recursive_mutex;
         // register

@@ -1,6 +1,12 @@
 options gen2
 require dastest/testing_boost public
 
+// BBATKIN: TODO(LOCKCHECK)
+//  THIS SET OF TESTS IS RELATED TO LOCK CHECKS AND NOT RELEVANT ANYMORE
+//  THIS NEEDS TO BE REPLACED WITH TESTS, WHICH FIND USE AFTER MOVE FOR ARRAYS
+
+/*
+
 def iliketomoveitmoveit(var a) {
     return <- a
 }
@@ -79,3 +85,5 @@ def test_failed_moves(t : T?) {
         t |> success(failed)
     }
 }
+
+*/

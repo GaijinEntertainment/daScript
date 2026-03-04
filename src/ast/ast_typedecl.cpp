@@ -1429,43 +1429,6 @@ namespace das
         return false;
     }
 
-    bool TypeDecl::lockCheck() const {
-        das_set<Structure *> dep;
-        return lockCheck(dep);
-    }
-
-    bool TypeDecl::lockCheck(das_set<Structure *> & dep) const {
-        // logic is 'OR'
-        if ( baseType==Type::tStructure ) {
-            if ( structType ) {
-                if (dep.find(structType) != dep.end()) return false;
-                if ( structType->skipLockCheck ) return false;
-                dep.insert(structType);
-                for ( auto fld : structType->fields ) {
-                    bool checkLocks = true;
-                    for ( auto & ann : fld.annotation ) {
-                        if ( ann.name=="skip_field_lock_check" ) {
-                            checkLocks = false;
-                            break;
-                        }
-                    }
-                    if ( checkLocks && fld.type->lockCheck(dep) ) {
-                        return true;
-                    }
-                }
-            }
-        } else if ( baseType==Type::tTuple || baseType==Type::tVariant || baseType == Type::option ) {
-            for ( const auto & arg : argTypes ) {
-                if ( arg->lockCheck(dep) ) {
-                    return true;
-                }
-            }
-        } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
-            return true;
-        }
-        return false;
-    }
-
     int32_t TypeDecl::gcFlags() const {
         das_set<Structure *> dep;
         das_set<Annotation *> depA;

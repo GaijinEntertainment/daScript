@@ -529,14 +529,6 @@ namespace das {
             pBlock->list.push_back(pCall);
             pBlock->list.push_back(pMove);
             return pBlock;
-        } else if (expr->left->type->lockCheck() || expr->right->type->lockCheck()) {
-            if (!expr->skipLockCheck && !(expr->at.fileInfo && expr->at.fileInfo->name == "builtin.das") && !skipLockCheck()) { // we always skip lock check in builtin.das
-                reportAstChanged();
-                auto pCall = make_smart<ExprCall>(expr->at, "_move_with_lockcheck");
-                pCall->arguments.push_back(expr->left->clone());
-                pCall->arguments.push_back(expr->right->clone());
-                return pCall;
-            }
         }
         expr->type = make_smart<TypeDecl>(); // we return nothing
         return Visitor::visit(expr);

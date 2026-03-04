@@ -3492,8 +3492,6 @@ namespace das
         } else {
             context.initFunctions = nullptr;
         }
-        // lockchecking
-        context.skipLockChecks = options.getBoolOption("skip_lock_checks",false);
         // run init script and restart
         if ( !folding ) {
             auto time1 = ref_time_ticks();

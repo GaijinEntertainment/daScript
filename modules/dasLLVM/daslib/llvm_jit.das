@@ -272,7 +272,7 @@ class LlvmJitVisitor : AstVisitor {
     labels : table<int; LLVMOpaqueBasicBlock?>
     sortedLabels : array<SLabel>
     finallyBlocks : table<ExprBlock?; LLVMOpaqueBasicBlock?>
-    @skip_field_lock_check afterFinallyBlocks : table<ExprBlock?; array<LLVMOpaqueBasicBlock?>>
+    afterFinallyBlocks : table<ExprBlock?; array<LLVMOpaqueBasicBlock?>>
     skipCall : table<ExprCall?>
     range2 : table<Expression?; LLVMOpaqueValue?>       // for loop - range - where to
     callBlock : LLVMOpaqueValue?

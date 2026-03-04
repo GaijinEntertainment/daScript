@@ -667,8 +667,7 @@ append_child
 
 .. das:function:: append_child(node: xml_node; type: xml_node_type) : xml_node
 
-// stub
-def append_child (node: xml_node; type: xml_node_type) : xml_node
+Appends a new child node of the given type (e.g. element, pcdata, comment) to the node.
 
 
 :Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
@@ -1095,8 +1094,7 @@ remove_attribute
 
 .. das:function:: remove_attribute(node: xml_node; attribute: xml_attribute) : bool
 
-// stub
-def remove_attribute (node: xml_node; attribute: xml_attribute) : bool
+Removes the specified attribute handle from the node. Returns true if the attribute was found and removed.
 
 
 :Arguments: * **node** :  :ref:`xml_node <handle-pugixml-xml_node>` implicit
@@ -1271,8 +1269,7 @@ as_bool
 
 .. das:function:: as_bool(text: xml_text; default_value: bool) : bool
 
-// stub
-def as_bool (text: xml_text; default_value: bool) : bool
+Returns the text content as a bool, or *default_value* if conversion fails.
 
 
 :Arguments: * **text** :  :ref:`xml_text <handle-pugixml-xml_text>` implicit
@@ -1293,8 +1290,7 @@ as_double
 
 .. das:function:: as_double(text: xml_text; default_value: double) : double
 
-// stub
-def as_double (text: xml_text; default_value: double) : double
+Returns the text content as a double, or *default_value* if conversion fails.
 
 
 :Arguments: * **text** :  :ref:`xml_text <handle-pugixml-xml_text>` implicit
@@ -1336,8 +1332,7 @@ as_int
 
 .. das:function:: as_int(attribute: xml_attribute; default_value: int) : int
 
-// stub
-def as_int (attribute: xml_attribute; default_value: int) : int
+Returns the attribute value as an int, or *default_value* if conversion fails.
 
 
 :Arguments: * **attribute** :  :ref:`xml_attribute <handle-pugixml-xml_attribute>` implicit
