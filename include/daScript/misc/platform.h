@@ -8,7 +8,7 @@
 #endif
 
 #ifndef DAS_BUILD_ID
-#ifdef NDEBUG
+#ifdef DAS_NO_ASSERTIONS
 #define DAS_BUILD_ID (DAS_VERSION * 100 + sizeof(void*))
 #else
 #define DAS_BUILD_ID (DAS_VERSION * 100 + 10 + sizeof(void*))
@@ -295,7 +295,7 @@ void DAS_API os_debug_break();
 #endif
 
 #ifndef DAS_ASSERT
-    #ifdef NDEBUG
+    #ifdef DAS_NO_ASSERTIONS
         #define DAS_ASSERT(cond)
     #else
         #define DAS_ASSERT(cond) { \
@@ -308,7 +308,7 @@ void DAS_API os_debug_break();
 #endif
 
 #ifndef DAS_ASSERTF
-    #ifdef NDEBUG
+    #ifdef DAS_NO_ASSERTIONS
         #define DAS_ASSERTF(cond,...)
     #else
         #define DAS_ASSERTF(cond,...) { \
@@ -323,7 +323,7 @@ void DAS_API os_debug_break();
 
 
 #ifndef DAS_VERIFY
-    #ifdef NDEBUG
+    #ifdef DAS_NO_ASSERTIONS
         #define DAS_VERIFY(cond) { \
             if ( !(cond) ) { \
                 DAS_FATAL_LOG("verify failed: %s, %s:%d\n", #cond, __FILE__, __LINE__); \
@@ -341,7 +341,7 @@ void DAS_API os_debug_break();
 #endif
 
 #ifndef DAS_VERIFYF
-    #ifdef NDEBUG
+    #ifdef DAS_NO_ASSERTIONS
         #define DAS_VERIFYF(cond,...) { \
             if ( !(cond) ) { \
                 DAS_FATAL_LOG("verify failed: %s, %s:%d\n", #cond, __FILE__, __LINE__); \
@@ -472,7 +472,7 @@ private:
 #endif
 
 #ifndef DAS_SMART_PTR_TRACKER
-    #ifdef NDEBUG
+    #ifdef DAS_NO_ASSERTIONS
         #define DAS_SMART_PTR_TRACKER   0
     #else
         #define DAS_SMART_PTR_TRACKER   1
@@ -480,7 +480,7 @@ private:
 #endif
 
 #ifndef DAS_SMART_PTR_MAGIC
-    #ifdef NDEBUG
+    #ifdef DAS_NO_ASSERTIONS
         #define DAS_SMART_PTR_MAGIC     0
     #else
         #define DAS_SMART_PTR_MAGIC     1
