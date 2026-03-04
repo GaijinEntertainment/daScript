@@ -309,14 +309,6 @@ Safety and Strictness
      - bool
      - true
      - Struct and class members cannot be class types.
-   * - ``skip_lock_checks``
-     - bool
-     - false
-     - Skips all lock safety checks at runtime.
-   * - ``skip_module_lock_checks``
-     - bool
-     - false
-     - Skips lock checks for this module specifically.
 
 --------------------
 Multiple Contexts
@@ -531,7 +523,6 @@ If the option exists but you provide the wrong value type, the compiler reports:
 
     :ref:`Contexts <contexts>` for memory and stack allocation options,
     :ref:`Annotations <annotations>` for annotation-based equivalents,
-    :ref:`Locks <locks>` for ``skip_lock_checks`` option,
     :ref:`Unsafe <unsafe>` for ``unsafe_table_lookup`` option,
     :ref:`Program structure <program_structure>` for overall file layout and ``options`` placement.
 

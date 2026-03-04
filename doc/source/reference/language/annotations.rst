@@ -200,9 +200,6 @@ Lint Control
 ``[no_lint]``
     Disables all lint checks for this function.
 
-``[skip_lock_check]``
-    Skips array/table lock safety checks inside this function.
-
 ``[sideeffects]``
     Declares that the function has side effects, even if the compiler cannot detect any.
     Prevents the optimizer from removing calls to this function.
@@ -374,9 +371,6 @@ Structure and Class Annotations
 
 ``[macro_interface]``
     Marks a structure as a macro interface (for the macro system).
-
-``[skip_field_lock_check]``
-    Skips field-level lock checking on array/table fields of this structure.
 
 ``[comment]``
     A dummy annotation for attaching comment metadata to a structure.

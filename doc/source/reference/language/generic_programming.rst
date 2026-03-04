@@ -119,7 +119,6 @@ All ``typeinfo`` traits can operate on either an expression or a ``type<T>`` arg
 * ``typeinfo(can_be_placed_in_container expr)`` — true if valid for arrays/tables
 * ``typeinfo(need_delete expr)`` — true if requires explicit deletion
 * ``typeinfo(need_inscope expr)`` — true if needs ``inscope`` lifetime management
-* ``typeinfo(need_lock_check expr)`` — true if needs lock checking
 * ``typeinfo(has_nontrivial_ctor expr)`` — true if has non-trivial constructor
 * ``typeinfo(has_nontrivial_dtor expr)`` — true if has non-trivial destructor
 * ``typeinfo(has_nontrivial_copy expr)`` — true if has non-trivial copy semantics

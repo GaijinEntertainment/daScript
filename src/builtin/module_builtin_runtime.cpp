@@ -197,13 +197,6 @@ namespace das
         };
     };
 
-    struct SkipLockCheckFunctionAnnotation : MarkFunctionAnnotation {
-        SkipLockCheckFunctionAnnotation() : MarkFunctionAnnotation("skip_lock_check") { }
-        virtual bool apply(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string &) override {
-            return true;
-        };
-    };
-
     struct GenericFunctionAnnotation : MarkFunctionAnnotation {
         GenericFunctionAnnotation() : MarkFunctionAnnotation("generic") { }
         virtual bool isGeneric() const override {
@@ -460,19 +453,6 @@ namespace das
         virtual bool touch(const StructurePtr & ps, ModuleGroup &,
                            const AnnotationArgumentList &, string & ) override {
             ps->macroInterface = true;
-            return true;
-        }
-        virtual bool look ( const StructurePtr &, ModuleGroup &,
-                           const AnnotationArgumentList &, string & ) override {
-            return true;
-        }
-    };
-
-
-    struct SkipLockCheckStructureAnnotation : StructureAnnotation {
-        SkipLockCheckStructureAnnotation() : StructureAnnotation("skip_field_lock_check") {}
-        virtual bool touch(const StructurePtr & ps, ModuleGroup &,
-                           const AnnotationArgumentList &, string & ) override {
             return true;
         }
         virtual bool look ( const StructurePtr &, ModuleGroup &,
@@ -1663,7 +1643,6 @@ namespace das
         addAnnotation(make_smart<CommentAnnotation>());
         addAnnotation(make_smart<NoDefaultCtorAnnotation>());
         addAnnotation(make_smart<MacroInterfaceAnnotation>());
-        addAnnotation(make_smart<SkipLockCheckStructureAnnotation>());
         addAnnotation(make_smart<MarkFunctionOrBlockAnnotation>());
         addAnnotation(make_smart<CppAlignmentAnnotation>());
         addAnnotation(make_smart<SafeWhenUninitializedAnnotation>());
@@ -1690,7 +1669,6 @@ namespace das
         addAnnotation(make_smart<FinalizeFunctionAnnotation>());
         addAnnotation(make_smart<HybridFunctionAnnotation>());
         addAnnotation(make_smart<UnsafeDerefFunctionAnnotation>());
-        addAnnotation(make_smart<SkipLockCheckFunctionAnnotation>());
         addAnnotation(make_smart<MarkUsedFunctionAnnotation>());
         addAnnotation(make_smart<LocalOnlyFunctionAnnotation>());
         addAnnotation(make_smart<PersistentStructureAnnotation>());
