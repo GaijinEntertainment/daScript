@@ -265,6 +265,7 @@ ENDIF()
 # It sets required properties for shared libraries.
 MACRO(SETUP_DAS_SHARED_LIBRARY lib)
     ADD_LIBRARY(${lib} SHARED ${ARGN})
+    SETUP_LIB_DEFINITIONS(${lib})
     if(WIN32)
         # We export a lot of structures, some of them has not exported internals.
         # Instead of marking everything as exported let's disable
@@ -277,6 +278,7 @@ ENDMACRO()
 
 MACRO(ADD_DAS_STATIC_LIBRARY lib)
     ADD_LIBRARY(${lib} STATIC ${ARGN})
+    SETUP_LIB_DEFINITIONS(${lib})
 ENDMACRO()
 
 
@@ -859,7 +861,7 @@ MACRO(SETUP_LIBDASCRIPT library shared_lib)
         TARGET_COMPILE_DEFINITIONS(${library} PUBLIC DAS_ENABLE_DLL=1)
         # Set DAS_EXPORTS to export all MOD symbols from libDaScript
     ELSE()
-        ADD_LIBRARY(${library} STATIC ${PARSER_GENERATED_SRC}
+        ADD_DAS_STATIC_LIBRARY(${library} ${PARSER_GENERATED_SRC}
                 ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${SIMULATE_SRC} ${BUILTIN_SRC}
                 ${MISC_SRC} ${SIMULATE_FUSION_SRC} ${MAIN_SRC}
                 ${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC} ${DASCRIPT_FMT_SRC})

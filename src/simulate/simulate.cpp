@@ -61,7 +61,7 @@ namespace das
 
     SimNode * SimNode::copyNode ( Context &, NodeAllocator * code ) {
         auto prefix = ((NodePrefix *)this) - 1;
-#ifndef NDEBUG
+#ifndef DAS_NO_ASSERTIONS
         DAS_ASSERTF(prefix->magic==0xdeadc0de,"node was allocated on the heap without prefix");
 #endif
         char * newNode;
@@ -257,7 +257,7 @@ namespace das
                 if ( message )
                     error_message = error_message + ", " + message;
                 string error = reportError(debugInfo, error_message, "", "");
-#ifdef NDEBUG
+#ifdef DAS_NO_ASSERTIONS
                 error = context.getStackWalk(&debugInfo, false, false) + error;
 #else
                 error = context.getStackWalk(&debugInfo, true, true) + error;
