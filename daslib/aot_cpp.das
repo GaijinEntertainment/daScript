@@ -16,6 +16,7 @@ require daslib/ast_print_flags
 require daslib/aot_constants
 
 options strict_smart_pointers = false
+options unsafe_table_lookup = false
 
 def aotModuleName(pm : Module?) {
     if (pm.name.empty()) {
