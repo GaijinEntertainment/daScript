@@ -124,7 +124,7 @@ def test_resize_table(t : T?) {
         var failed = false
         try {
             for (x in values(a[10].foo.a)) {    // this fails on exit of the loop, since element gets erased
-                                                // via table lock underflow
+                                                // 'table was modified during iteration'
                 a |> erase(10)
             }
         } recover {

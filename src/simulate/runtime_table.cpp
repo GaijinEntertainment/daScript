@@ -91,6 +91,7 @@ namespace das
         char ** value = (char **)_value;
         table_lock(context, *(Table *)table, nullptr);
         data  = getData();
+        originData = data;
         table_end = data + table->capacity*stride;
         size_t index = nextValid(0);
         data += index * stride;
@@ -100,10 +101,9 @@ namespace das
 
     bool TableIterator::next  ( Context &, char * _value ) {
         char ** value = (char **) _value;
-        char * tableData = getData();
-        size_t index = (data-tableData)/stride;
+        size_t index = (data-originData)/stride;
         index = nextValid(index + 1);
-        data = tableData + index * stride;
+        data = originData + index * stride;
         *value = data;
         return data != table_end;
     }
@@ -112,6 +112,9 @@ namespace das
         if ( _value ) {
             char ** value = (char **) _value;
             *value = nullptr;
+        }
+        if ( getData()!=originData ) {
+            context.throw_error_at(debugInfo, "table was modified during iteration");
         }
         table_unlock(context, *(Table *)table, nullptr);
         context.freeIterator((char *)this, debugInfo);
@@ -128,6 +131,7 @@ namespace das
         virtual bool first ( Context & context, char * _value ) override {
             table_lock(context, *(Table *)table, nullptr);
             data  = getData();
+            originData = data;
             table_end = data + table->capacity*stride;
             size_t index = nextValid(0);
             data += index * stride;
@@ -135,14 +139,16 @@ namespace das
             return (bool) table->size;
         }
         virtual bool next  ( Context &, char * _value ) override {
-            char * tableData = getData();
-            size_t index = (data-tableData)/stride;
+            size_t index = (data-originData)/stride;
             index = nextValid(index + 1);
-            data = tableData + index * stride;
+            data = originData + index * stride;
             *(KeyType *)_value = *(KeyType *)data;
             return data != table_end;
         }
         virtual void close ( Context & context, char * ) override {
+            if ( getData()!=originData ) {
+                context.throw_error_at(debugInfo, "table was modified during iteration");
+            }
             table_unlock(context, *(Table *)table, nullptr);
             context.freeIterator((char *)this, debugInfo);
         }
