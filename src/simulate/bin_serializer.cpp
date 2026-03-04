@@ -298,11 +298,7 @@ namespace das {
         writer.walk(args[0], info);
         writer.close();
         Array arr;
-        arr.data = writer.bytesAt;
-        arr.size = writer.bytesWritten;
-        arr.capacity = writer.bytesWritten;
-        arr.lock = 1;
-        arr.flags = 0;
+        array_mark_locked(arr, writer.bytesAt, writer.bytesWritten);
         vec4f arg = cast<char *>::from((char *)&arr);
         context.invoke(*block, &arg, nullptr, &call->debugInfo);
         return v_zero();

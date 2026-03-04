@@ -178,10 +178,7 @@ namespace das {
             return true;
         },moduleName);
         Array arr;
-        arr.data = (char *) result.data();
-        arr.size = arr.capacity = (int32_t) result.size();
-        arr.lock = 1;
-        arr.flags = 0;
+        array_mark_locked(arr, (char *)result.data(), (int32_t)result.size());
         das_invoke<void>::invoke<Array&>(context,arg,block,arr);
     }
 

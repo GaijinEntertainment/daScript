@@ -66,14 +66,35 @@ namespace das
 
     void table_lock ( Context & context, Table & arr, LineInfo * at ) {
         if ( arr.shared || arr.hopeless ) return;
-        arr.lock ++;
-        if ( arr.lock==0 ) context.throw_error_at(at, "table lock overflow");
+        if ( arr.lock==0 ) {
+            if ( arr.magic != 0 ) {
+                context.throw_error_at(at, "table magic mismatch on first lock, was it moved or overwritten?");
+            }
+            arr.lock = 1;
+            arr.magic = DAS_ARRAY_MAGIC;
+        } else {
+            if ( arr.magic != DAS_ARRAY_MAGIC ) {
+                context.throw_error_at(at, "table magic mismatch on lock, was it moved or overwritten?");
+            }
+            arr.lock ++;
+            if ( arr.lock==0 ) {
+                context.throw_error_at(at, "table lock overflow, was it moved or overwritten?");
+            }
+        }
     }
 
     void table_unlock ( Context & context, Table & arr, LineInfo * at ) {
         if ( arr.shared || arr.hopeless ) return;
-        if ( arr.lock==0 ) context.throw_error_at(at, "table lock underflow");
+        if ( arr.magic != DAS_ARRAY_MAGIC ) {
+            context.throw_error_at(at, "table magic mismatch on unlock, was it moved or overwritten?");
+        }
+        if ( arr.lock==0 ) {
+            context.throw_error_at(at, "table lock underflow, was it moved or overwritten?");
+        }
         arr.lock --;
+        if ( arr.lock==0 ) {
+            arr.magic = 0;
+        }
     }
 
     // TableIterator

@@ -904,6 +904,7 @@ namespace das {
             size = arr.size; arr.size = 0;
             capacity = arr.capacity; arr.capacity = 0;
             lock = arr.lock; arr.lock = 0;
+            magic = arr.magic; arr.magic = 0;
             flags = arr.flags; arr.flags = 0;
         }
         __forceinline TT & operator [] ( int32_t index ) {
@@ -972,6 +973,7 @@ namespace das {
             size = arr.size; arr.size = 0;
             capacity = arr.capacity; arr.capacity = 0;
             lock = arr.lock; arr.lock = 0;
+            magic = arr.magic; arr.magic = 0;
             flags = arr.flags; arr.flags = 0;
             keys = arr.keys; arr.keys = 0;
             hashes = arr.hashes; arr.hashes = 0;

@@ -1411,11 +1411,7 @@ namespace das
     Array  g_CommandLineArguments;
 
     void setCommandLineArguments ( int argc, char * argv[] ) {
-        g_CommandLineArguments.data = (char *) argv;
-        g_CommandLineArguments.capacity = argc;
-        g_CommandLineArguments.size = argc;
-        g_CommandLineArguments.lock = 1;
-        g_CommandLineArguments.flags = 0;
+        array_mark_locked(g_CommandLineArguments, (char *)argv, uint32_t(argc));
     }
 
     void getCommandLineArguments( Array & arr ) {
@@ -1462,20 +1458,14 @@ namespace das
 
     void builtin_temp_array ( void * data, int size, const Block & block, Context * context, LineInfoArg * at ) {
         Array arr;
-        arr.data = (char *) data;
-        arr.size = arr.capacity = size;
-        arr.lock = 1;
-        arr.flags = 0;
+        array_mark_locked(arr, (char *)data, uint32_t(size));
         vec4f args[1];
         args[0] = cast<Array &>::from(arr);
         context->invoke(block, args, nullptr, at);
     }
 
     void builtin_make_temp_array ( Array & arr, void * data, int size ) {
-        arr.data = (char *) data;
-        arr.size = arr.capacity = size;
-        arr.lock = 0;
-        arr.flags = 0;
+        array_mark_locked(arr, (char *)data, uint32_t(size));
     }
 
     void toLog ( int level, const char * text, Context * context, LineInfoArg * at ) {
