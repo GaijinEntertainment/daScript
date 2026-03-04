@@ -225,6 +225,15 @@ extern "C" {
             functions = (SimFunction *) code->allocate(count * sizeof(SimFunction));
             memset(functions, 0, count * sizeof(SimFunction));
             totalFunctions = (int) count;
+            // Allocate stub debugInfo for all function slots so that
+            // runShutdownScript can safely iterate them.
+            auto stubInfo = (FuncInfo *) code->allocate(count * sizeof(FuncInfo));
+            memset(stubInfo, 0, count * sizeof(FuncInfo));
+            for ( uint64_t i = 0; i < count; i++ ) {
+                stubInfo[i].name = (char *) "unimplemented";
+                functions[i].name = (char *) "unimplemented";
+                functions[i].debugInfo = &stubInfo[i];
+            }
             tabMnLookup = make_shared<das_hash_map<uint64_t,SimFunction *>>();
             tabGMnLookup = make_shared<das_hash_map<uint64_t,uint32_t>>();
         }
@@ -243,7 +252,11 @@ extern "C" {
             fn.fastcall = fastcall;
             fn.pinvoke = pinvoke;
             fn.jit = true;
-            fn.debugInfo = nullptr;
+            auto finfo = (FuncInfo *) code->allocate(sizeof(FuncInfo));
+            memset(finfo, 0, sizeof(FuncInfo));
+            finfo->name = fn.name;
+            finfo->stackSize = stackSize;
+            fn.debugInfo = finfo;
             auto node = code->makeNode<SimNode_Jit>(LineInfo{}, (JitFunction) fnPtr);
             fn.code = node;
             (*tabMnLookup)[mnh] = &fn;
@@ -283,6 +296,10 @@ extern "C" {
 
     DAS_API void jit_register_standalone_variable ( Context * ctx, uint64_t mangledNameHash, uint64_t offset ) {
         static_cast<JitContext *>(ctx)->registerJitGlobalVariable(mangledNameHash, offset);
+    }
+
+    DAS_API void jit_set_init_script ( Context * ctx, Context::JitInitScriptFn fn ) {
+        ctx->jitInitScript = fn;
     }
 
     DAS_API void jit_init_function_addr ( Context * ctx, uint64_t index, void * globPtr ) {
