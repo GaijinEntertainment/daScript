@@ -98,6 +98,8 @@ SET(AOT_TEST_FILES
 
 4. Rebuild: `cmake --build build --config Release --target test_aot`
 
+> **Build timing**: Always use `timeout: 0` when running CMake builds — they can take 15-25 minutes for clean builds and 2-10 minutes for incremental builds. Never assume the build is stuck just because there's no output; MSVC is silent during compilation.
+
 ## How -use-aot / --use-aot Works
 
 The AOT flag flows through three layers:
@@ -187,3 +189,4 @@ AOT-generated C++ files go into `_aot_generated/` subdirectories — all are git
 - `dastest/_aot_generated/` — build artifact for `test_aot`
 
 When creating a new AOT target that generates into a new directory, add it to `.gitignore`.
+All `_aot_generated/` directories are covered by a single broad pattern in `.gitignore` — no need to add per-directory entries.

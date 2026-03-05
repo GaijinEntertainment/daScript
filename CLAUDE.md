@@ -32,6 +32,14 @@ See `doc/source/reference/design_philosophy.rst` for the full design philosophy 
 - **Run tests:** `bin/Release/daslang.exe dastest/dastest.das -- --test path/to/test.das`
 - **AOT tests:** `cmake --build build --config Release --target test_aot` then `bin/Release/test_aot.exe dastest/dastest.das -- --test tests/aot`
 
+### Build Timing
+
+- **Builds are slow** — clean builds take **15-25 minutes**, incremental builds take **2-10 minutes** depending on what changed
+- **Always use `timeout: 0`** (no timeout) when running `cmake --build` commands in the terminal. Never set a short timeout on build commands — a build that hasn't finished is not stuck or broken, it's just compiling
+- **Do not assume build failure** from lack of output — MSVC is silent during compilation and only prints when there are warnings/errors or when it finishes
+- **Wait for the build to complete** before drawing any conclusions. If a terminal command times out, check the output — it likely just needed more time
+- For incremental builds after editing a single `.cpp` file, expect ~2-5 minutes. For changes touching headers, expect longer
+
 ### Debugging
 
 - **Always check the exit code** after running `daslang.exe` — a crash may produce no output at all, looking like a silent success

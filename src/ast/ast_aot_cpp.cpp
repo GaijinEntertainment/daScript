@@ -667,7 +667,7 @@ namespace das {
             ss << ", \"" << info->name << "\", ";
             if (crossPlatform) {
                 ss << "offsetof(";
-                ss << structName.data() << "," << info->name << ")";
+                ss << structName.data() << "," << aotFunctionName(info->name) << ")";
             } else {
                 ss << info->offset;
             }
@@ -1179,7 +1179,7 @@ namespace das {
             const auto typeStr = describeCppType(decl.type, CpptSubstitureRef::no,
                 CpptSkipRef::no, CpptSkipConst::yes);
             // We can't have const fields in aot due to absence of default ctor for such classes.
-            ss << "    " << typeStr << " " << decl.name << ";";
+            ss << "    " << typeStr << " " << aotFunctionName(decl.name) << ";";
             if ( decl.parentType ) {
                 ss << " /* from " << from->name << " */";
             }
@@ -1193,7 +1193,7 @@ namespace das {
             if ( !cross_platform && that->fields.size() ) {
                 ss << "static_assert(sizeof(" << aotStructName(that) << ")==" << that->getSizeOf() << ",\"structure size mismatch with DAS\");\n";
                 for ( auto & tf : that->fields ) {
-                    ss << "static_assert(offsetof(" << aotStructName(that) << "," << tf.name << ")=="
+                    ss << "static_assert(offsetof(" << aotStructName(that) << "," << aotFunctionName(tf.name) << ")=="
                         << tf.offset << ",\"structure field offset mismatch with DAS\");\n";
                 }
             }
@@ -1290,6 +1290,10 @@ namespace das {
             if ( fn->aotNeedPrologue || prologue ) {
                 ss << " ) { das_stack_prologue __prologue(__context__," << fn->totalStackSize
                     << ",\"" << fn->name << " \" DAS_FILE_LINE);\n";
+            } else if ( !expr->rtti_isBlock() ) {
+                ss << " ) {\n";
+                tab ++;
+                ss << tabs();
             } else {
                 ss << " )\n";
             }
@@ -1320,6 +1324,10 @@ namespace das {
         }
         virtual FunctionPtr visit ( Function * fn ) override {
             if ( fn->aotNeedPrologue || prologue ) {
+                ss << "}\n";
+            } else if ( fn->body && !fn->body->rtti_isBlock() ) {
+                ss << ";\n";
+                tab --;
                 ss << "}\n";
             } else {
                 ss << "\n";
@@ -1505,6 +1513,11 @@ namespace das {
             }
             if ( needPtrCast(var->type, expr->type, expr) ) {
                 ss << "das_auto_cast<" << describeCppType(var->type) << ">::cast(";
+            } else if ( var->type->isPointer() && expr->type->isPointer()
+                    && var->type->firstType && expr->type->firstType
+                    && !var->type->firstType->isSameType(*expr->type->firstType, RefMatters::no, ConstMatters::no,
+                        TemporaryMatters::no, AllowSubstitute::no, true, false) ) {
+                ss << "das_auto_cast<" << describeCppType(var->type) << ">::cast(";
             }
             if ( expr->type->isString() ) {
                 auto maybeRef = var->type->ref ? " &" : "";
@@ -1516,6 +1529,11 @@ namespace das {
                 ss << ")";
             }
             if ( needPtrCast(var->type, expr->type, expr) ) {
+                ss << ")";
+            } else if ( var->type->isPointer() && expr->type->isPointer()
+                    && var->type->firstType && expr->type->firstType
+                    && !var->type->firstType->isSameType(*expr->type->firstType, RefMatters::no, ConstMatters::no,
+                        TemporaryMatters::no, AllowSubstitute::no, true, false) ) {
                 ss << ")";
             }
             if ( var->type->ref ) {
@@ -2050,7 +2068,7 @@ namespace das {
                     <<  ">::get(";
             } else {
                 ss  << ",&" << (vtype->structType->module->name.empty() ? "" : vtype->structType->module->name + "::")
-                    << vtype->structType->name << "::" << field->name << ">::get(";
+                    << vtype->structType->name << "::" << aotFunctionName(field->name) << ">::get(";
             }
         }
         virtual ExpressionPtr visit ( ExprSafeField * field ) override {
@@ -2116,6 +2134,9 @@ namespace das {
                 field->value->type->annotation->aotPreVisitGetField(ss, field->name);
             } else if ( field->value->type->baseType==Type::tPointer ) {
                 if ( field->value->type->firstType->isHandle() ) {
+                    if (field->type->isString()) {
+                        ss << "((" << describeCppType(field->type) << ")(";  // c-cast const char * etc string casts to char * or char * const
+                    }
                     field->value->type->firstType->annotation->aotPreVisitGetFieldPtr(ss, field->name);
                 } else if ( field->value->type->firstType->isTuple() ) {
                     auto baseType = field->value->type->firstType;
@@ -2168,15 +2189,18 @@ namespace das {
                 if ( field->value->type->firstType->isHandle() ) {
                     field->value->type->firstType->annotation->aotVisitGetFieldPtr(ss, field->name);
                     ss << " /*" << field->name << "*/";
+                    if (field->type->isString()) {
+                        ss << "))";
+                    }
                 } else if ( field->value->type->firstType->isTuple() ) {
                     ss << ")";
                 } else if ( field->value->type->firstType->isVariant() ) {
                     ss << ")";
                 } else {
-                    ss << "->" << field->name;
+                    ss << "->" << aotFunctionName(field->name);
                 }
             } else {
-                ss << "." << field->name;
+                ss << "." << aotFunctionName(field->name);
             }
             if ( field->type->aotAlias ) {
                 ss << ")";
@@ -2307,7 +2331,15 @@ namespace das {
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstBitfield * c ) override {
-            ss << "0x" << HEX << c->getValue() << DEC << "u";
+            if ( c->type && c->type->baseType == Type::tBitfield64 ) {
+                ss << "UINT64_C(0x" << HEX << c->getValue() << DEC << ")";
+            } else if ( c->type && c->type->baseType == Type::tBitfield16 ) {
+                ss << "uint16_t(0x" << HEX << uint32_t(c->getValue()) << DEC << ")";
+            } else if ( c->type && c->type->baseType == Type::tBitfield8 ) {
+                ss << "uint8_t(0x" << HEX << uint32_t(c->getValue()) << DEC << ")";
+            } else {
+                ss << "0x" << HEX << c->getValue() << DEC << "u";
+            }
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstBool * c ) override {
@@ -2497,12 +2529,38 @@ namespace das {
         }
         virtual void preVisitIfBlock ( ExprIfThenElse * ifte, Expression * block ) override {
             Visitor::preVisitIfBlock(ifte,block);
-            ss << " )\n";
-            ss << tabs();
+            if ( !block->rtti_isBlock() ) {
+                ss << " ) {\n";
+                tab ++;
+                ss << tabs();
+            } else {
+                ss << " )\n";
+                ss << tabs();
+            }
         }
         virtual void preVisitElseBlock ( ExprIfThenElse * ifte, Expression * block ) override {
             Visitor::preVisitElseBlock(ifte, block);
-            ss << " else ";
+            if ( ifte->if_true && !ifte->if_true->rtti_isBlock() ) {
+                ss << ";\n";
+                tab --;
+                ss << tabs() << "} else ";
+            } else {
+                ss << " else ";
+            }
+            if ( !block->rtti_isBlock() ) {
+                ss << "{\n";
+                tab ++;
+                ss << tabs();
+            }
+        }
+        virtual ExpressionPtr visit ( ExprIfThenElse * ifte ) override {
+            auto lastBlock = ifte->if_false ? ifte->if_false : ifte->if_true;
+            if ( lastBlock && !lastBlock->rtti_isBlock() ) {
+                ss << ";\n";
+                tab --;
+                ss << tabs() << "}";
+            }
+            return Visitor::visit(ifte);
         }
     // swizzle
         virtual void preVisit ( ExprSwizzle * expr ) override {
@@ -2901,8 +2959,23 @@ namespace das {
             ss << mkvName(expr);
             if ( expr->variants.size()!=1 ) ss << "(" << index << ",__context__)";
             ss <<  ") = ";
+            auto variantFieldType = expr->type->argTypes[variantIndex];
+            if ( variantFieldType->isPointer() && decl->value->type->isPointer()
+                    && variantFieldType->firstType && decl->value->type->firstType
+                    && !variantFieldType->firstType->isSameType(*decl->value->type->firstType,
+                        RefMatters::no, ConstMatters::no, TemporaryMatters::no, AllowSubstitute::no, true, false) ) {
+                ss << "das_auto_cast<" << describeCppType(variantFieldType) << ">::cast(";
+            }
         }
         virtual MakeFieldDeclPtr visitMakeVariantField ( ExprMakeVariant * expr, int index, MakeFieldDecl * decl, bool last ) override {
+            auto variantIndex = expr->type->findArgumentIndex(decl->name);
+            auto variantFieldType = expr->type->argTypes[variantIndex];
+            if ( variantFieldType->isPointer() && decl->value->type->isPointer()
+                    && variantFieldType->firstType && decl->value->type->firstType
+                    && !variantFieldType->firstType->isSameType(*decl->value->type->firstType,
+                        RefMatters::no, ConstMatters::no, TemporaryMatters::no, AllowSubstitute::no, true, false) ) {
+                ss << ")";
+            }
             ss << ";\n";
             return Visitor::visitMakeVariantField(expr,index,decl,last);
         }
@@ -2985,7 +3058,7 @@ namespace das {
                 expr->makeType->annotation->aotVisitGetField(ss, decl->name);
                 ss << " /*" << decl->name << "*/";
             } else {
-                ss << "." << decl->name;
+                ss << "." << aotFunctionName(decl->name);
             }
             ss << "),(";
         }
@@ -3175,9 +3248,9 @@ namespace das {
             } else if (call->name == "assert" || call->name=="verify") {
                 auto ea = static_cast<ExprAssert *>(call);
                 if ( call->arguments.size()==1 ) {
-                    ss << (ea->isVerify ? "DAS_VERIFY" : "DAS_ASSERT") << "((";
+                    ss << (ea->isVerify ? "das_verify" : "das_assert") << "(";
                 } else {
-                    ss << (ea->isVerify ? "DAS_VERIFYF" : "DAS_ASSERTF") << "((";
+                    ss << (ea->isVerify ? "das_verifyf" : "das_assertf") << "(";
                 }
             } else if (call->name == "erase") {
                 ss << "__builtin_table_erase(__context__,";
@@ -3199,8 +3272,12 @@ namespace das {
                 if ( bt==Type::tFunction ) {
                     auto einv = static_cast<ExprInvoke *>(call);
                     if ( einv->isInvokeMethod ) {
-                        if ( call->arguments[0]->rtti_isField() ) {
-                            auto field = static_pointer_cast<ExprField>(call->arguments[0]);
+                        auto firstArg = call->arguments[0].get();
+                        if ( firstArg->rtti_isR2V() ) {
+                            firstArg = static_cast<ExprRef2Value *>(firstArg)->subexpr.get();
+                        }
+                        if ( firstArg->rtti_isField() ) {
+                            auto field = static_cast<ExprField *>(firstArg);
                             methodOffset = field->field()->offset;
                             methodName = field->field()->name;
                         } else {
@@ -3221,7 +3298,7 @@ namespace das {
                         ss << ",offsetof(" << describeCppType(argType->argTypes.at(0),
                                                               CpptSubstitureRef::no,
                                                               CpptSkipRef::yes,
-                                                              CpptSkipConst::yes) << "," << methodName.value() << ")";
+                                                              CpptSkipConst::yes) << "," << aotFunctionName(methodName.value()) << ")";
                     } else {
                         ss << "," << methodOffset << "/*" << methodName.value() << "*/";
                     }
@@ -3280,8 +3357,10 @@ namespace das {
                 }
             }
             if ( !last ) {
-                if (call->name == "assert" || call->name=="verify" || call->name=="debug") {
+                if (call->name == "debug") {
                     ss << "),(";
+                } else if (call->name == "assert" || call->name=="verify") {
+                    ss << ",";
                 } else {
                     ss << ",";
                 }
@@ -3289,8 +3368,10 @@ namespace das {
             return Visitor::visitLooksLikeCallArg(call, arg, last);
         }
         virtual ExpressionPtr visit ( ExprLooksLikeCall * call ) override {
-            if ( call->name=="assert" || call->name=="verify" || call->name=="debug" ) {
+            if ( call->name=="debug" ) {
                 ss << "))";
+            } else if ( call->name=="assert" || call->name=="verify" ) {
+                ss << ",__context__)";
             } else if ( call->name=="memzero" ) {
                 const auto type = call->arguments[0]->type;
                 if (cross_platform) {
@@ -3567,7 +3648,7 @@ namespace das {
                     ss << ")." << efn->cppName << "())";    // we skip .` part of the deal
                 } else {
                     DAS_ASSERT(call->func->name[0]=='.' && call->func->name[1]=='`');
-                    ss << ")." << (call->func->name.c_str()+2) << "())";    // we skip .` part of the deal
+                    ss << ")." << aotFunctionName(call->func->name.c_str()+2) << "())";    // we skip .` part of the deal
                 }
                 if ( call->func->result->isString() ) {
                     ss << "))";  // c-cast const char * etc string casts to char * or char * const

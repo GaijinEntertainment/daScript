@@ -1,7 +1,4 @@
 options gen2
-// note: AOT is disabled for this sample
-//  this is due to the fact, that in AOT mode assert does not cause panic, and does C++ assert instead
-options no_aot = true
 
 require daslib/assert_once
 require dastest/testing_boost public

@@ -32,6 +32,12 @@ class Square : Rectangle {
     }
 }
 
+struct ShapeHolder {
+    shape : Shape?
+}
+
+// -- original tests --
+
 [test]
 def test_is_instance_of(t : T?) {
     t |> run("circle is Circle") @(t : T?) {
@@ -115,6 +121,121 @@ def test_polymorphic_area(t : T?) {
         unsafe {
             var inscope sq : Shape? = new Square(4.0)
             t |> equal(sq->area(), 16.0)
+        }
+    }
+}
+
+// -- pointer type coercion in data structures --
+
+[test]
+def test_array_of_base_pointers(t : T?) {
+    t |> run("array push derived into base array") @(t : T?) {
+        unsafe {
+            var arr : array<Shape?>
+            arr |> push(new Circle())
+            arr |> push(new Rectangle())
+            arr |> push(new Square(2.0))
+            t |> equal(length(arr), 3)
+            t |> equal(arr[0]->area() > 3.14, true)
+            t |> equal(arr[1]->area(), 1.0)
+            t |> equal(arr[2]->area(), 4.0)
+            for (s in arr) {
+                delete s
+            }
+        }
+    }
+}
+
+[test]
+def test_copy_derived_to_base(t : T?) {
+    t |> run("copy assign derived to base pointer") @(t : T?) {
+        unsafe {
+            var s : Shape?
+            s = new Circle()
+            t |> equal(s != null, true)
+            t |> equal(s->area() > 3.14, true)
+            delete s
+        }
+    }
+    t |> run("move assign derived to base pointer") @(t : T?) {
+        unsafe {
+            var c : Circle? = new Circle()
+            var s : Shape?
+            s <- c
+            t |> equal(s != null, true)
+            t |> equal(c == null, true)
+            delete s
+        }
+    }
+}
+
+[test]
+def test_struct_field_init(t : T?) {
+    t |> run("struct field with derived pointer") @(t : T?) {
+        unsafe {
+            var h = ShapeHolder(shape = new Circle())
+            t |> equal(h.shape != null, true)
+            t |> equal(h.shape->area() > 3.14, true)
+            delete h.shape
+        }
+    }
+}
+
+[test]
+def test_tuple_with_base_pointers(t : T?) {
+    t |> run("tuple of base pointers via assignment") @(t : T?) {
+        unsafe {
+            var tup : tuple<Shape?; Shape?>
+            tup._0 = new Circle()
+            tup._1 = new Rectangle()
+            t |> equal(tup._0 != null, true)
+            t |> equal(tup._1 != null, true)
+            t |> equal(tup._0->area() > 3.14, true)
+            t |> equal(tup._1->area(), 1.0)
+            delete tup._0
+            delete tup._1
+        }
+    }
+}
+
+variant ShapeOrName {
+    shape : Shape?
+    name : string
+}
+
+[test]
+def test_variant_with_base_pointers(t : T?) {
+    t |> run("variant holding base pointer") @(t : T?) {
+        unsafe {
+            var v = ShapeOrName(shape = new Circle())
+            t |> equal(v is shape, true)
+            t |> equal((v as shape)->area() > 3.14, true)
+            delete v as shape
+        }
+    }
+}
+
+def take_shape(s : Shape?) : float {
+    return s->area()
+}
+
+[test]
+def test_pass_derived_to_function(t : T?) {
+    t |> run("pass derived pointer as base arg") @(t : T?) {
+        unsafe {
+            var inscope c = new Circle()
+            t |> equal(take_shape(c) > 3.14, true)
+        }
+    }
+}
+
+[test]
+def test_return_derived_as_base(t : T?) {
+    t |> run("return derived pointer as base") @(t : T?) {
+        unsafe {
+            var inscope s : Shape? = new Circle()
+            var a = s->area()
+            t |> equal(a > 3.14, true)
         }
     }
 }
