@@ -1090,14 +1090,8 @@ namespace das {
             preqT = get_time_usec(time0);
             disableSerializationOnDebugger(req);
             bool allGood = true;
-            if ( policies.debugger ) {
-                allGood = addExtraDependency("debug", policies.debug_module, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs) && allGood;
-            } else if ( policies.profiler ) {
-                allGood = addExtraDependency("profiler", policies.profile_module, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs) && allGood;
-            } /* else */ if ( !policies.aot_module_path.empty() ) {
-                allGood = addExtraDependency("ast_aot_macro", policies.aot_module_path, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs) && allGood;
-            } /* else */ if ( policies.jit_enabled ) {
-                allGood = addExtraDependency("just_in_time", policies.jit_module, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs) && allGood;
+            for ( const auto & em : access->getExtraModules() ) {
+                allGood = addExtraDependency(em.first, em.second, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs) && allGood;
             }
             if ( !allGood ) {
                 auto res = make_smart<Program>();
