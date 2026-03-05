@@ -457,9 +457,6 @@ class CoveragePass : AstPassMacro {
     //! Pass macro that instruments modules with code coverage.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         //! Applies the coverage instrumentation visitor to the program.
-        if (prog.getThisModule.moduleFlags.isModule) {
-            return false
-        }
         if (mod.name == "coverage" || (prog._options |> find_arg("no_coverage") ?as tBool ?? false)) {
             return false
         }
@@ -482,8 +479,8 @@ class CoveragePass : AstPassMacro {
         add_module_require(mod, covModule, false)
         var astVisitor = new CoverageMacro()
         var inscope astVisitorAdapter <- make_visitor(*astVisitor)
-        visit(prog, astVisitorAdapter)
-        var result = true
+        visit_module(prog, astVisitorAdapter, mod)
+        var result = astVisitor.astChanged
         if (result) {
             // generate [init] function that registers all instrumented lines with 0 hits
             var inscope initFn <- qmacro_function("__coverage_init") <| $() {

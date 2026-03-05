@@ -338,7 +338,7 @@ jobs:
             ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --isolated-mode --timeout 3600 --test ../tests
             ;;
         esac
-    - name: "AOT Test"
+    - name: "Slow Release Tests"
       if: matrix.cmake_preset == 'Release'
       run: |
         set -eux
@@ -352,6 +352,10 @@ jobs:
            *)
             cd bin
             ./test_aot -use-aot _dasroot_/dastest/dastest.das -- --use-aot --color --failures-only --test ../tests
+
+            # Run coverage only in Release since it is slow.
+            ./daslang _dasroot_/dastest/dastest.das -- --cov-path coverage.lcov --color --test ../tests --timeout 900
+            ./daslang _dasroot_/utils/dascov/main.das -- coverage.lcov --exclude tests/
             ;;
         esac
 

@@ -1,4 +1,5 @@
 options gen2
+options no_coverage
 
 module foobar
 
