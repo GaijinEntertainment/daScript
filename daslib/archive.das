@@ -210,7 +210,7 @@ def public serialize(var arch : Archive; var value : array<auto(TT)>) {
             delete value
         }
         arch |> read_raw(len)
-        value |> resize(len)
+        unsafe(value |> resize(len))
         for (element in value) {
             arch |> _::serialize(element)
         }

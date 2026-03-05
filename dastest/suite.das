@@ -26,6 +26,7 @@ struct SuiteCtx {
     verbose : bool = false
     compile_only : bool = false
     use_aot : bool = false
+    cov_path : string = ""
 
     // Testing-related options.
     testNames : array<string>
@@ -91,6 +92,7 @@ def SuiteCtx(args : array<string>) : SuiteCtx {
     ctx.projectPath = args |> get_str_arg("--test-project", "")
     ctx.compile_only = args |> has_value("--compile-only")
     ctx.use_aot = args |> has_value("--use-aot") || is_in_aot()
+    ctx.cov_path = args |> get_str_arg("--cov-path", "")
     collect_tests_names(args, ctx.testNames)
 
     ctx.bench_enabled = args |> has_value("--bench")
@@ -168,6 +170,11 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
             if (jit_enabled()) {
                 access |> add_extra_module("just_in_time", "{get_das_root()}/daslib/just_in_time.das")
             }
+            if (!ctx.cov_path |> empty()) {
+                cop.export_all = true
+                cop.rtti = true
+                access |> add_extra_module("coverage", "{get_das_root()}/daslib/coverage.das")
+            }
             compile_file(file_name, access, unsafe(addr(mg)), cop) $(ok, program, output) {
                 var expectedErrors : table<CompilationError; int>
                 if (program != null) {
@@ -242,6 +249,21 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
                     var mod = program |> get_this_module()
                     if (mod != null && context != null) {
                         let module_result = test_module(*mod, *context, ctx, file_ctx)
+                        if (module_result.total > 0 && !ctx.cov_path |> empty()) {
+                            var report = ""
+                            unsafe(invoke_in_context(*context, "fill_report", unsafe(addr(report)), ""))
+                            // Clone to current context.
+                            report := report
+                            fopen(ctx.cov_path, "ab") <| $(fw) {
+                                if (fw != null) {
+                                    to_log(LOG_INFO, "Coverage to {ctx.cov_path}\n")
+                                    fwrite(fw, report)
+                                } else {
+                                    to_log(LOG_ERROR, "Couldn't create output file {ctx.cov_path}\n")
+                                }
+                            }
+
+                        }
                         if (module_result.failed + module_result.errors == 0) {
                             unsafe {
                                 file_ctx.context = addr(*context)

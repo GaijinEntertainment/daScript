@@ -322,6 +322,10 @@ jobs:
             # Use more time to pass UBSAN and disable leaks in JIT mode because we exit using exit(), and do not call destructors.
             [ "${{ env.das_llvm_disabled }}" = "ON" ] || ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- --color --test ../tests || ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- --color --isolated-mode --timeout 4800 --test ../tests
             ./daslang _dasroot_/dastest/dastest.das -- --color --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 3600 --test ../tests
+
+            # Run tests with coverage and print report.
+            ./daslang _dasroot_/dastest/dastest.das -- --cov-path coverage.txt --color --test ../tests
+            lcov --summary cov --rc lcov_branch_coverage=1
             ;;
            windows32)
             cd bin/"${{ matrix.cmake_preset }}"
