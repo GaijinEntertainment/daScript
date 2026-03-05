@@ -379,7 +379,7 @@ namespace das {
         }
     };
 
-    template <typename ResT,typename VecT, int f0, int f1, int f2 = 0, int f3 = 0>
+    template <typename ResT,typename VecT, int f0, int f1, int f2 = -1, int f3 = -1>
     struct das_swizzle {
         static __forceinline ResT swizzle ( const VecT & val ) {
             ResT res;
@@ -395,7 +395,7 @@ namespace das {
     };
 
     template <typename ResT,typename VecT, int f0, int f1, int f2>
-    struct das_swizzle<ResT,VecT,f0,f1,f2,0> {
+    struct das_swizzle<ResT,VecT,f0,f1,f2,-1> {
         static __forceinline ResT swizzle ( const VecT & val ) {
             ResT res;
             res.x = *((&val.x) + f0);
@@ -409,7 +409,7 @@ namespace das {
     };
 
     template <typename ResT,typename VecT, int f0, int f1>
-    struct das_swizzle<ResT,VecT,f0,f1,0,0> {
+    struct das_swizzle<ResT,VecT,f0,f1,-1,-1> {
         static __forceinline ResT swizzle ( const VecT & val ) {
             ResT res;
             res.x = *((&val.x) + f0);

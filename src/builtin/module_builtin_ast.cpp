@@ -467,6 +467,11 @@ namespace das {
         return context->allocateString(func->getMangledName(),at);
     }
 
+    char * get_aot_hash_comment_fn ( const Function * func, Context * context, LineInfoArg * at ) {
+        if ( !func ) context->throw_error_at(at,"expecting function");
+        return context->allocateString(getAotHashComment(func),at);
+    }
+
     char * get_mangled_name_t ( smart_ptr_raw<TypeDecl> typ, Context * context, LineInfoArg * at ) {
         if ( !typ ) context->throw_error_at(at,"expecting function");
         return context->allocateString(typ->getMangledName(),at);
@@ -1321,6 +1326,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(getFunctionAotHash)>(*this, lib,  "get_function_aot_hash",
             SideEffects::none, "getFunctionAotHash")
                 ->args({"fun"});
+        addExtern<DAS_BIND_FUN(get_aot_hash_comment_fn)>(*this, lib,  "get_aot_hash_comment",
+            SideEffects::none, "get_aot_hash_comment_fn")
+                ->args({"fun","context","line"});
         // infer
         addExtern<DAS_BIND_FUN(inferGenericTypeEx)>(*this, lib,  "infer_generic_type",
             SideEffects::none, "inferGenericTypeEx")

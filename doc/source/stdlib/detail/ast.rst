@@ -1176,6 +1176,8 @@
 
 .. |handmade/function-ast-get_function_aot_hash| replace:: to be documented in |handmade/function-ast-get_function_aot_hash|.rst
 
+.. |handmade/function-ast-get_aot_hash_comment| replace:: to be documented in |handmade/function-ast-get_aot_hash_comment|.rst
+
 .. |handmade/function-ast-infer_generic_type| replace:: to be documented in |handmade/function-ast-infer_generic_type|.rst
 
 .. |handmade/function-ast-update_alias_map| replace:: to be documented in |handmade/function-ast-update_alias_map|.rst

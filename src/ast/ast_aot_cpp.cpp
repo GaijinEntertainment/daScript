@@ -267,7 +267,7 @@ namespace das {
             }
         } else if ( baseType==Type::tTable ) {
             if ( type->firstType && type->secondType ) {
-                stream << "TTable<" << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias, chooseSmartPtr)
+                stream << "TTable<" << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::yes,CpptRedundantConst::yes,useAlias, chooseSmartPtr)
                 << "," << describeCppTypeEx(type->secondType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias, chooseSmartPtr) << ">";
             } else {
                 stream << "Table";
@@ -3974,6 +3974,7 @@ namespace das {
             logs << "struct AotFunction { uint64_t hash; bool is_cmres; void * fn; vec4f (*wrappedFn)(Context*); };\n";
             logs << "static AotFunction functions[] = {\n";
             for ( const auto fn : fnn ) {
+                logs << "    // " << getAotHashComment(fn) << "\n";
                 logs << "    { 0x" << HEX << fn->aotHash << DEC << ", "
                      << ( fn->copyOnReturn || fn->moveOnReturn ? "true" : "false") << ", "
                      << "(void*)&" << aotFuncName(fn) << ", &__wrap_" << aotFuncName(fn) << " },\n";

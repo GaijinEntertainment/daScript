@@ -126,6 +126,107 @@ virtual ModuleAotType aotRequire(TextWriter & tw) const override {
 
 **Forgetting a header here causes AOT compilation failures** — the generated C++ calls the function but the compiler can't find the declaration. This was a latent bug with `performance_time.h` (needed for `ref_time_ticks`, `get_time_usec`, `get_time_nsec` bound in `Module_BuiltIn::addTime()`).
 
+## Semantic Hash Architecture
+
+AOT linking works by **semantic hash matching**. The AOT tool generates C++ stubs keyed by a hash; at runtime the simulator computes the same hash and looks up the stub. If hashes don't match → error 50101 "AOT link failed".
+
+### Two-level hashing
+
+Every function has two hash values (see `src/simulate/simulate_fn_hash.cpp`):
+
+1. **`hash`** (own hash) — the function's **SIM node tree** hash. Computed by `getFunctionHash()` which walks the simulated node tree and hashes every node type, constant value, and type descriptor. This captures the function's own behavior.
+
+2. **`aotHash`** (AOT hash) — computed by `getFunctionAotHash()`:
+   ```
+   aotHash = hash_block64([own_hash, dep1_hash, dep2_hash, ...])
+   ```
+   Collects all **transitive non-builtin, non-noAot dependencies** via `DependencyCollector`, sorts them by mangled name for stability, then hashes the concatenation of all their `hash` values together with the function's own `hash`.
+
+The registration table in generated C++ is keyed by `aotHash`. At runtime, `linkCppAot()` recomputes `aotHash` and does a lookup.
+
+### What goes into `hash` (own hash)
+
+`getFunctionHash()` hashes (via `SimHashVisitor`):
+- The function's **result type** descriptor string
+- Each **argument type** descriptor string
+- The entire **SIM node tree** — every node class name, every constant value, every string literal, every field offset
+
+**Any difference in the SIM tree causes a different `hash`**. This includes:
+- Different constant values (e.g., different file path strings embedded in structs)
+- Different field offsets (struct layout changes)
+- Different node types (optimization differences)
+
+### What goes into `aotHash`
+
+`getFunctionAotHash()` adds dependency hashes:
+- Collects transitive function dependencies (calls, lambda captures, etc.)
+- Filters: skips `builtIn` and `noAot` functions
+- Sorts by mangled name (deterministic ordering)
+- Hashes: `[own_hash, dep1_hash, dep2_hash, ...]`
+
+**A dependency's `hash` changing causes all callers' `aotHash` to change**, even if the callers themselves are unchanged.
+
+### Hash comment diagnostics
+
+Every AOT-generated C++ file includes a **hash comment** before each registration entry, showing the function's own hash and all dependency hashes with names:
+
+```cpp
+// my_function hash=0xabc123..., dep_func_1=0xdef456..., dep_func_2=0x789...
+{ 0x<aotHash>, false, (void*)&my_function_abc123, &__wrap_my_function_abc123 },
+```
+
+When `linkCppAot()` fails to find a match, the error output includes the same hash comment for the runtime-computed values:
+
+```
+error[50101]: AOT link failed on my_function
+semantic hash is <runtime_aotHash>
+// my_function hash=0x<runtime_own_hash>, dep1=0x<runtime_dep1_hash>, ...
+```
+
+**To diagnose a mismatch**, compare the two hash comments:
+1. Open the generated `.cpp` file in `_aot_generated/` and find the comment for the failing function
+2. Compare with the runtime hash comment in the error output
+3. If `hash` (own hash) differs → the SIM tree is different (see below)
+4. If a dependency hash differs → that dependency's SIM tree changed
+
+### C++ API for hash debugging
+
+| Function | Location | Purpose |
+|---|---|---|
+| `getFunctionHash(fun, code, ctx)` | `simulate_fn_hash.cpp` | Compute own SIM hash |
+| `getFunctionAotHash(fun)` | `simulate_fn_hash.cpp` | Compute AOT hash (own + deps) |
+| `getAotHashComment(fun)` | `simulate_fn_hash.cpp` | Format diagnostic string with all dep hashes |
+| `get_aot_hash_comment(fun)` | das binding in `module_builtin_ast.cpp` | Same, callable from das |
+
+### Debug printf macros
+
+In `src/simulate/simulate_fn_hash.cpp`, two macros control debug output:
+
+```cpp
+#if 1          // change to 0 to enable
+#define debug_hash(...)           // per-SIM-node hash contributions
+#else
+#define debug_hash  printf
+#endif
+
+#if 1          // change to 0 to enable
+#define debug_aot_hash(...)       // dependency list and final aotHash
+#else
+#define debug_aot_hash  printf
+#endif
+```
+
+- **`debug_aot_hash`**: prints each dependency name + hash, then the final `aotHash`. Useful to see which dependencies are included and their hash values.
+- **`debug_hash`**: prints every SIM node's hash contribution. Very verbose — use only when you need to find exactly which node differs.
+
+To use: change `#if 1` to `#if 0` for the desired macro, rebuild daslang/test_aot.
+
+### Printing the SIM tree
+
+`options log_nodes` in a `.das` file prints the full SIM node tree at compile time. `options log_nodes_aot_hash` additionally prints each node's hash contribution. Useful for comparing trees between AOT generation and runtime.
+
+**Warning**: `options log*` lines change the compilation (they set options that may affect code generation). Always remove them before generating final AOT stubs, or the generated hashes will be stale.
+
 ## Semantic Hash Stability — Critical Pitfall
 
 Functions with `SideEffects::none` can be **constant-folded** at compile time. If a function's result depends on `CodeOfPolicies` fields that differ between AOT generation and runtime, the folded constant will differ → different AST → different semantic hash → AOT link failure (error 50101).
@@ -139,6 +240,29 @@ Functions with `SideEffects::none` can be **constant-folded** at compile time. I
 - Don't use `aot_enabled()` or `is_in_aot()` in test assertion logic that needs hash stability
 - If `fail_on_no_aot = true` and tests pass, AOT is working — no need to check `aot_enabled()` explicitly
 - Any compile-time-evaluable expression that depends on `cop.aot`, `cop.jit`, etc. is a hash stability risk
+
+## Common AOT Hash Mismatch Causes
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Own hash differs, path strings in SIM tree | File path separator mismatch (`/` vs `\`) between CMake and runtime | Normalize paths at the point they enter the SIM tree (e.g., `replace(path, "\\", "/")`) |
+| Own hash differs, constant values differ | `SideEffects::none` function folded with different `CodeOfPolicies` | Remove the policy-dependent call, or mark function `SideEffects::modifyExternal` |
+| Dependency hash differs | A dependency function's SIM tree changed (different module state in batch) | Compare dep hashes in the hash comment; inspect the specific dependency |
+| AOT hash differs but own + all deps match | Dependency list differs (extra or missing deps) | Check if batch processing adds/removes function instantiations |
+| All hashes match but still fails | Stale generated C++ — `.cpp` file wasn't regenerated | Delete `_aot_generated/*.cpp` and rebuild |
+
+### Batch AOT processing
+
+The AOT tool (`utils/aot/main.das`) can process multiple `.das` files in one invocation. CMake's `DAS_AOT_EXT` macro batches files this way for efficiency. **Batch processing can cause hash divergence** if:
+
+- A macro in file A instantiates generic functions that share names/mangled names with instantiations from file B
+- Module-level state from processing file A leaks into file B's compilation context
+
+**Diagnosing batch issues**: If single-file AOT generation produces matching hashes but batch doesn't, use the hash comment diagnostics to find the diverging function. You can test single-file generation with:
+
+```bash
+daslang.exe utils/aot/main.das -- -aot path/to/test.das path/to/output.cpp
+```
 
 ## libDaScriptAot — Standard Library AOT
 
@@ -170,6 +294,15 @@ cmake --build build --config Release --target libDaScriptAot
 ```
 
 The generated files in `daslib/_aot_generated/` are tracked in git. Commit any changes.
+
+## AOT Link Failures Are Real Failures
+
+`test_aot` exists specifically to catch AOT failures, including **link failures** (error 50101). When a file like `_module_a.das` fails with "AOT link failed", that IS a real failure — it means the AOT stubs could not be linked at simulation time. Do NOT dismiss these as "not real tests" or "helper modules". If a `.das` file is picked up by dastest and fails under AOT, it needs to be fixed or excluded from the AOT test set.
+
+Common causes of AOT link failures:
+- Missing `Module::aotRequire()` headers
+- Semantic hash mismatch (see below)
+- Helper modules without `[test]` functions that weren't meant to run standalone — these should be excluded from the test directory or the CMake file list
 
 ## CI Integration
 
