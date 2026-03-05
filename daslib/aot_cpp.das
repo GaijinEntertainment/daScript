@@ -310,7 +310,7 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
             }
         } elif (baseType == Type.tTable) {
             if (typeDecl.firstType != null && typeDecl.secondType != null) {
-                let first_type = describeCppTypeEx(typeDecl.firstType, DescribeConfig(cross_platform = cfg.cross_platform), useAlias);
+                let first_type = describeCppTypeEx(typeDecl.firstType, DescribeConfig(skip_const = true, cross_platform = cfg.cross_platform), useAlias);
                 let second_type = describeCppTypeEx(typeDecl.secondType, DescribeConfig(cross_platform = cfg.cross_platform), useAlias);
                 write(writer, "TTable<{first_type},{second_type}>");
             } else {
@@ -3833,6 +3833,7 @@ def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var co
         for (fn in fnn) {
             let is_cmres = fn.flags.copyOnReturn || fn.flags.moveOnReturn ? "true" : "false";
             let fn_name = aotFuncName(fn);
+            write(*logs, "    // {get_aot_hash_comment(fn)}\n");
             write(*logs, "    \{ {fn.aotHash}, {is_cmres}, (void*)&{fn_name}, &__wrap_{fn_name} \},\n");
         }
         write(*logs, "};\n");

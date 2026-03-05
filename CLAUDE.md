@@ -47,6 +47,10 @@ See `doc/source/reference/design_philosophy.rst` for the full design philosophy 
 - Exit code `-1073741819` (`0xC0000005`) = **Access Violation** — indicates a native crash (segfault)
 - If the program crashes with no error message, the bug is in native code (C++ bindings or smart pointer misuse) — check exit code first
 
+### AOT Hash Debugging
+
+When AOT fails with `error[50101]: AOT link failed`, the issue is a **semantic hash mismatch** between the generated C++ stubs and runtime. Each generated `.cpp` file has hash comments showing function hashes and dependency hashes. The runtime error also prints the same breakdown. Compare them to find the diverging function or dependency. See `skills/aot_testing.md` for the full debugging guide (hash architecture, debug macros, common causes).
+
 ## GitHub Operations
 
 - **Use `gh` CLI** for all GitHub operations (creating PRs, listing issues, etc.) — NOT GitKraken MCP tools
@@ -70,7 +74,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/writing_benchmarks.md` | Writing or running benchmark files under `benchmarks/` |
 | `skills/dynamic_modules.md` | Creating or editing `.das_module` descriptors, adding new modules under `modules/` |
 | `skills/install_instructions.md` | Creating or updating AI instruction files (`install/CLAUDE.md`, `install/skills/`) for the installed SDK |
-| `skills/aot_testing.md` | Adding AOT test files, working with the `test_aot` binary, `Module::aotRequire()`, CMake AOT macros |
+| `skills/aot_testing.md` | Adding AOT test files, working with the `test_aot` binary, `Module::aotRequire()`, CMake AOT macros, **debugging AOT hash mismatches** |
 
 Multiple skill files may apply to a single task. For example, creating a new daslib module requires reading `skills/das_formatting.md`, `skills/daslib_modules.md`, and possibly `skills/documentation_rst.md`.
 

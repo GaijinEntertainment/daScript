@@ -7794,6 +7794,7 @@ Properties
   *  :ref:`can_access_global_variable (variable: smart_ptr\<Variable\> const&; module: Module?; thisModule: Module?) : bool <function-ast_can_access_global_variable_smart_ptr_ls_Variable_gr__const_ref__Module_q__Module_q_>`
   *  :ref:`get_aot_arg_prefix (func: Function?; call: ExprCallFunc?; argIndex: int) : string <function-ast_get_aot_arg_prefix_Function_q__ExprCallFunc_q__int>`
   *  :ref:`get_aot_arg_suffix (func: Function?; call: ExprCallFunc?; argIndex: int) : string <function-ast_get_aot_arg_suffix_Function_q__ExprCallFunc_q__int>`
+  *  :ref:`get_aot_hash_comment (fun: Function const?) : string <function-ast_get_aot_hash_comment_Function_const_q_>`
   *  :ref:`get_aot_name (func: Function?; call: ExprCallFunc?) : string <function-ast_get_aot_name_Function_q__ExprCallFunc_q_>`
   *  :ref:`get_current_search_module (program: Program?; function: Function?; moduleName: string) : Module? <function-ast_get_current_search_module_Program_q__Function_q__string>`
   *  :ref:`get_field_type (type: smart_ptr\<TypeDecl\>; fieldName: string; constant: bool) : smart_ptr\<TypeDecl\> <function-ast_get_field_type_smart_ptr_ls_TypeDecl_gr__string_bool>`
@@ -7811,8 +7812,8 @@ Properties
   *  :ref:`has_field (type: smart_ptr\<TypeDecl\>; fieldName: string; constant: bool) : bool <function-ast_has_field_smart_ptr_ls_TypeDecl_gr__string_bool>`
   *  :ref:`is_expr_const (expression: smart_ptr\<Expression\> const&) : bool <function-ast_is_expr_const_smart_ptr_ls_Expression_gr__const_ref_>`
   *  :ref:`is_expr_like_call (expression: smart_ptr\<Expression\> const&) : bool <function-ast_is_expr_like_call_smart_ptr_ls_Expression_gr__const_ref_>`
-  *  :ref:`is_same_type (leftType: smart_ptr\<TypeDecl\>; rightType: smart_ptr\<TypeDecl\>; refMatters: RefMatters; constMatters: ConstMatters; tempMatters: TemporaryMatters) : bool <function-ast_is_same_type_smart_ptr_ls_TypeDecl_gr__smart_ptr_ls_TypeDecl_gr__RefMatters_ConstMatters_TemporaryMatters>`
   *  :ref:`is_same_type (argType: smart_ptr\<TypeDecl\>; passType: smart_ptr\<TypeDecl\>; refMatters: bool; constMatters: bool; temporaryMatters: bool; allowSubstitute: bool) : bool <function-ast_is_same_type_smart_ptr_ls_TypeDecl_gr__smart_ptr_ls_TypeDecl_gr__bool_bool_bool_bool>`
+  *  :ref:`is_same_type (leftType: smart_ptr\<TypeDecl\>; rightType: smart_ptr\<TypeDecl\>; refMatters: RefMatters; constMatters: ConstMatters; tempMatters: TemporaryMatters) : bool <function-ast_is_same_type_smart_ptr_ls_TypeDecl_gr__smart_ptr_ls_TypeDecl_gr__RefMatters_ConstMatters_TemporaryMatters>`
   *  :ref:`is_temp_type (type: smart_ptr\<TypeDecl\>; refMatters: bool) : bool <function-ast_is_temp_type_smart_ptr_ls_TypeDecl_gr__bool>`
   *  :ref:`is_visible_directly (from_module: Module?; which_module: Module?) : bool <function-ast_is_visible_directly_Module_q__Module_q_>`
 
@@ -7854,6 +7855,15 @@ Returns the AOT argument suffix string for the specified function.
             * **call** :  :ref:`ExprCallFunc <handle-ast-ExprCallFunc>`? implicit
 
             * **argIndex** : int
+
+.. _function-ast_get_aot_hash_comment_Function_const_q_:
+
+.. das:function:: get_aot_hash_comment(fun: Function const?) : string
+
+Returns a diagnostic string containing the function's own semantic hash and all non-builtin dependency hashes with their mangled names. Used for comparing AOT-generated hash comments with runtime-computed values to diagnose AOT link failures (error 50101).
+
+
+:Arguments: * **fun** :  :ref:`Function <handle-ast-Function>`? implicit
 
 .. _function-ast_get_aot_name_Function_q__ExprCallFunc_q_:
 
@@ -8058,26 +8068,30 @@ Returns true if the expression is or inherits from ExprLooksLikeCall.
 is_same_type
 ^^^^^^^^^^^^
 
-.. _function-ast_is_same_type_smart_ptr_ls_TypeDecl_gr__smart_ptr_ls_TypeDecl_gr__RefMatters_ConstMatters_TemporaryMatters:
-
-.. das:function:: is_same_type(leftType: smart_ptr<TypeDecl>; rightType: smart_ptr<TypeDecl>; refMatters: RefMatters; constMatters: ConstMatters; tempMatters: TemporaryMatters) : bool
-
-Compares two types using the given comparison parameters and returns true if they match.
-
-
-:Arguments: * **leftType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
-
-            * **rightType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
-
-            * **refMatters** :  :ref:`RefMatters <enum-rtti-RefMatters>`
-
-            * **constMatters** :  :ref:`ConstMatters <enum-rtti-ConstMatters>`
-
-            * **tempMatters** :  :ref:`TemporaryMatters <enum-rtti-TemporaryMatters>`
-
 .. _function-ast_is_same_type_smart_ptr_ls_TypeDecl_gr__smart_ptr_ls_TypeDecl_gr__bool_bool_bool_bool:
 
 .. das:function:: is_same_type(argType: smart_ptr<TypeDecl>; passType: smart_ptr<TypeDecl>; refMatters: bool; constMatters: bool; temporaryMatters: bool; allowSubstitute: bool) : bool
+
+Compares two type declarations for structural equality. Boolean flags control whether reference, const, and temporary qualifiers affect the comparison, and whether type substitution (e.g. auto inference) is allowed. Returns true if the types are considered the same under the specified criteria.
+
+def is_same_type (argType: smart_ptr<TypeDecl>; passType: smart_ptr<TypeDecl>; refMatters: bool; constMatters: bool; temporaryMatters: bool; allowSubstitute: bool) : bool
+
+
+:Arguments: * **argType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
+
+            * **passType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
+
+            * **refMatters** : bool
+
+            * **constMatters** : bool
+
+            * **temporaryMatters** : bool
+
+            * **allowSubstitute** : bool
+
+.. _function-ast_is_same_type_smart_ptr_ls_TypeDecl_gr__smart_ptr_ls_TypeDecl_gr__RefMatters_ConstMatters_TemporaryMatters:
+
+.. das:function:: is_same_type(leftType: smart_ptr<TypeDecl>; rightType: smart_ptr<TypeDecl>; refMatters: RefMatters; constMatters: ConstMatters; tempMatters: TemporaryMatters) : bool
 
 ----
 

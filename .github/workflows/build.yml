@@ -360,6 +360,7 @@ jobs:
               --test ../../tests/bitfields \
               --test ../../tests/bool_array \
               --test ../../tests/data_walker \
+              --test ../../tests/decs \
               --test ../../tests/debug \
               --test ../../tests/debug_agent \
               --test ../../tests/dynamic_cast_rtti \
@@ -368,7 +369,10 @@ jobs:
               --test ../../tests/handle_types \
               --test ../../tests/hash_map \
               --test ../../tests/interfaces \
-              --test ../../tests/jobque
+              --test ../../tests/jobque \
+              --test ../../tests/language \
+              --test ../../tests/linq \
+              --test ../../tests/lpipe
             ;;
            *)
             cd bin
@@ -384,6 +388,7 @@ jobs:
               --test ../tests/bitfields \
               --test ../tests/bool_array \
               --test ../tests/data_walker \
+              --test ../tests/decs \
               --test ../tests/debug \
               --test ../tests/debug_agent \
               --test ../tests/dynamic_cast_rtti \
@@ -392,7 +397,10 @@ jobs:
               --test ../tests/handle_types \
               --test ../tests/hash_map \
               --test ../tests/interfaces \
-              --test ../tests/jobque
+              --test ../tests/jobque \
+              --test ../tests/language \
+              --test ../tests/linq \
+              --test ../tests/lpipe
             ;;
         esac
 

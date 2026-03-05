@@ -92,9 +92,30 @@ struct EcsRequestPos {
     line : uint             //! line number
 }
 
+def private normalize_file_name(name : string) : string {
+    //! Strips directory path, keeping only filename and extension.
+    //! This ensures the same canonical name regardless of working directory,
+    //! which is critical for AOT hash stability.
+    var s = replace(name, "\\", "/")
+    var lastSlash = -1
+    var pos = 0
+    while (true) {
+        let idx = find(s, "/", pos)
+        if (idx < 0) {
+            break
+        }
+        lastSlash = idx
+        pos = idx + 1
+    }
+    if (lastSlash >= 0) {
+        return slice(s, lastSlash + 1)
+    }
+    return s
+}
+
 def EcsRequestPos(at : rtti::LineInfo) : EcsRequestPos {
     //! Constructs EcsRequestPos from rtti::LineInfo.
-    return EcsRequestPos(file = at.fileInfo != null ? string(at.fileInfo.name) : "", line = at.line)
+    return EcsRequestPos(file = at.fileInfo != null ? normalize_file_name(string(at.fileInfo.name)) : "", line = at.line)
 }
 
 struct public EcsRequest {

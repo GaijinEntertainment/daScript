@@ -3660,6 +3660,7 @@ namespace das
                     if ( logIt ) logs << "NOT FOUND " << fn.mangledName << " AOT=0x" << HEX << semHash << DEC << "\n";
                     TextWriter tp;
                     tp << "semantic hash is " << HEX << semHash << DEC << "\n";
+                    tp << "// " << getAotHashComment(fnn[fni]) << "\n";
                     printSimFunction(tp, &context, indexToFunction[fni], fn.code, true);
                     linkError(string(fn.mangledName), tp.str() );
                 }

@@ -400,13 +400,6 @@ Marks a function as a hybrid call target so that AOT generates indirect calls to
 Optimization annotation that removes null-pointer checks, bounds checks on array and string indexing, and similar safety validations.
 
 
-.. _handle-builtin-skip_lock_check:
-
-.. das:attribute:: skip_lock_check
-
-Optimization annotation that disables runtime lock-check validation for the annotated function.
-
-
 .. _handle-builtin-unused_argument:
 
 .. das:attribute:: unused_argument
@@ -612,13 +605,6 @@ Prevents the compiler from generating a default initializer for the annotated st
 .. das:attribute:: macro_interface
 
 Marks a class hierarchy as a macro interface, preventing it and its descendants from being exported by default.
-
-
-.. _handle-builtin-skip_field_lock_check:
-
-.. das:attribute:: skip_field_lock_check
-
-Optimization annotation that disables runtime lock checks when accessing fields of the annotated structure.
 
 
 .. _handle-builtin-cpp_layout:

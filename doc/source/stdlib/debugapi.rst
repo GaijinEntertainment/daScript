@@ -30,15 +30,15 @@ Structures
 
 .. das:attribute:: DapiArray
 
-Lightweight descriptor for an array encountered during data walking.
+:Fields: * **data** : void? - Lightweight descriptor for an array encountered during data walking.
 
-:Fields: * **data** : void? - Pointer to the array data.
+         * **size** : uint - Pointer to the array data.
 
-         * **size** : uint - Number of elements currently in the array.
+         * **capacity** : uint - Number of elements currently in the array.
 
-         * **capacity** : uint - Allocated capacity of the array.
+         * **lock** : uint - Allocated capacity of the array.
 
-         * **lock** : uint - Reference count lock for the array.
+         * **magic** : uint - Reference count lock for the array.
 
          * **flags** : bitfield<_shared;_hopeless> - Bitfield flags (`_shared`, `_hopeless`).
 
@@ -684,10 +684,10 @@ Agent construction
 ++++++++++++++++++
 
   *  :ref:`make_data_walker (class: void?; info: StructInfo const?) : smart_ptr\<DataWalker\> <function-debugapi_make_data_walker_void_q__StructInfo_const_q_>`
-  *  :ref:`make_data_walker (classPtr: auto) : smart_ptr\<DataWalker\> <function-debugapi_make_data_walker_auto_0xbf>`
+  *  :ref:`make_data_walker (classPtr: auto) : smart_ptr\<DataWalker\> <function-debugapi_make_data_walker_auto_0xc0>`
   *  :ref:`make_debug_agent (class: void?; info: StructInfo const?) : smart_ptr\<DebugAgent\> <function-debugapi_make_debug_agent_void_q__StructInfo_const_q_>`
   *  :ref:`make_stack_walker (class: void?; info: StructInfo const?) : smart_ptr\<StackWalker\> <function-debugapi_make_stack_walker_void_q__StructInfo_const_q_>`
-  *  :ref:`make_stack_walker (classPtr: auto) : smart_ptr\<StackWalker\> <function-debugapi_make_stack_walker_auto_0xda>`
+  *  :ref:`make_stack_walker (classPtr: auto) : smart_ptr\<StackWalker\> <function-debugapi_make_stack_walker_auto_0xdb>`
 
 
 make_data_walker
@@ -704,7 +704,7 @@ Wraps a `DapiDataWalker` class pointer into a `smart_ptr<DataWalker>` for use wi
 
             * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>`? implicit
 
-.. _function-debugapi_make_data_walker_auto_0xbf:
+.. _function-debugapi_make_data_walker_auto_0xc0:
 
 .. das:function:: make_data_walker(classPtr: auto) : smart_ptr<DataWalker>
 
@@ -736,7 +736,7 @@ Wraps a `DapiStackWalker` class pointer into a `smart_ptr<StackWalker>` for use 
 
             * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>`? implicit
 
-.. _function-debugapi_make_stack_walker_auto_0xda:
+.. _function-debugapi_make_stack_walker_auto_0xdb:
 
 .. das:function:: make_stack_walker(classPtr: auto) : smart_ptr<StackWalker>
 

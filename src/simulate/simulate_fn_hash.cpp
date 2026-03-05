@@ -238,12 +238,27 @@ namespace das {
                 DAS_ASSERTF(fn.first->hash,"%s has dependency on %s, which hash hash of 0",
                     fun->getMangledName().c_str(), fn.first->getMangledName().c_str());
                 uvec.push_back(fn.first->hash);
-                debug_aot_hash("\t%s " PRIx64 "\n", fn.second.c_str(), fn.first->hash);
+                debug_aot_hash("\t%s %" PRIx64 "\n", fn.second.c_str(), fn.first->hash);
             }
         }
         uint64_t res = hash_block64((const uint8_t *)uvec.data(), uint32_t(uvec.size()*sizeof(uint64_t)));
         debug_aot_hash("AOT HASH %" PRIx64 "\n", res);
         return res;
+    }
+
+    string getAotHashComment ( const Function * fun ) {
+        DependencyCollector collector;
+        collector.collect(fun);
+        auto vec = collector.getStableDependencies();
+        TextWriter tw;
+        tw << fun->getMangledName() << " hash=0x" << HEX << fun->hash;
+        for ( const auto & fn : vec ) {
+            if ( !fn.first->noAot && !fn.first->builtIn && fn.first != fun ) {
+                tw << ", " << fn.second << "=0x" << fn.first->hash;
+            }
+        }
+        tw << DEC;
+        return tw.str();
     }
 
     uint64_t getVariableListAotHash ( const vector<const Variable *> & globs, uint64_t initHash ) {
