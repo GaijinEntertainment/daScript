@@ -1037,6 +1037,7 @@ namespace das {
             size = arr.size; arr.size = 0;
             capacity = arr.capacity; arr.capacity = 0;
             lock = arr.lock; arr.lock = 0;
+            magic = arr.magic; arr.magic = 0;
             flags = arr.flags; arr.flags = 0;
             keys = arr.keys; arr.keys = 0;
             hashes = arr.hashes; arr.hashes = 0;
@@ -1379,8 +1380,8 @@ namespace das {
         }
         template <typename QQ>
         __forceinline void close(Context * __context__, QQ * & i) {
-            array_unlock(*__context__, *that, /*at*/nullptr);
             context = nullptr;
+            array_unlock(*__context__, *that, /*at*/nullptr);
             i = nullptr;
         }
         ~das_iterator() {
@@ -1412,8 +1413,8 @@ namespace das {
         }
         template <typename QQ>
         __forceinline void close ( Context * __context__, const QQ * & i ) {
-            array_unlock(*__context__, *(Array *)(that), /*at*/nullptr);  // technically we don't need for the const array, but...
             context = nullptr;
+            array_unlock(*__context__, *(Array *)(that), /*at*/nullptr);  // technically we don't need for the const array, but...
             i = nullptr;
         }
         ~das_iterator() {
@@ -1774,6 +1775,19 @@ namespace das {
     __forceinline TT & das_deref ( Context * __context__, const TT * ptr, const char * file = "", int line = 0 ) {
         if ( !ptr ) __context__->throw_error_ex("dereferencing null pointer at %s:%d", file, line);
         return *((TT *)ptr);
+    }
+
+    struct das_null_deref {
+        Context * ctx; const char * file; int line;
+        template <typename TT>
+        __forceinline operator TT & () const {
+            ctx->throw_error_ex("dereferencing null pointer at %s:%d", file, line);
+            return *(TT *)nullptr;
+        }
+    };
+
+    __forceinline das_null_deref das_deref ( Context * __context__, nullptr_t, const char * file = "", int line = 0 ) {
+        return das_null_deref { __context__, file, line };
     }
 
     template <typename TT>
@@ -2715,8 +2729,8 @@ namespace das {
         }
         template <typename TT>
         __forceinline void close ( Context * __context__, TT & i ) {
-            that->close(*__context__,(char *)&i);
             context = nullptr;
+            that->close(*__context__,(char *)&i);
         }
         ~das_iterator() {
             if (context) that->close(*context, nullptr);

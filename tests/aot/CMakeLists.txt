@@ -10,6 +10,29 @@ add_custom_target(test_aot_testing)
 SET(TESTING_AOT_GENERATED_SRC)
 DAS_AOT_LIB("${AOT_TESTING_FILES}" TESTING_AOT_GENERATED_SRC test_aot_testing daslang)
 
+# AOT for daslib modules (library dependencies used by test files)
+SET(AOT_DASLIB_MODULE_FILES
+    daslib/archive.das
+    daslib/ast_boost.das
+    daslib/base64.das
+    daslib/bool_array.das
+    daslib/coroutines.das
+    daslib/debug_eval.das
+    daslib/decs.das
+    daslib/faker.das
+    daslib/fuzzer.das
+    daslib/json.das
+    daslib/json_boost.das
+    daslib/live.das
+    daslib/math_bits.das
+    daslib/random.das
+    daslib/regex.das
+)
+
+add_custom_target(test_aot_daslib_modules)
+SET(DASLIB_MODULES_AOT_GENERATED_SRC)
+DAS_AOT_LIB("${AOT_DASLIB_MODULE_FILES}" DASLIB_MODULES_AOT_GENERATED_SRC test_aot_daslib_modules daslang)
+
 # AOT for individual test files
 FILE(GLOB AOT_TEST_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/aot/*.das")
 
@@ -52,7 +75,13 @@ FILE(GLOB AOT_DEBUG_AGENT_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/debug_agen
 # AOT for decs test files
 FILE(GLOB AOT_DECS_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/decs/*.das")
 # Exclude expect-error tests (they intentionally fail to compile)
-list(FILTER AOT_DECS_FILES EXCLUDE REGEX "failed_")
+# Exclude test_stages_extra (it is a module, compiled via DAS_AOT_LIB below)
+list(FILTER AOT_DECS_FILES EXCLUDE REGEX "failed_|test_stages_extra")
+
+# Decs test module files (libraries required by decs tests)
+SET(AOT_DECS_MODULE_FILES
+    tests/decs/test_stages_extra.das
+)
 
 # AOT for dynamic_cast_rtti test files
 FILE(GLOB AOT_DYNAMIC_CAST_RTTI_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/dynamic_cast_rtti/*.das")
@@ -147,6 +176,10 @@ add_custom_target(test_aot_decs)
 SET(DECS_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_DECS_FILES}" DECS_AOT_GENERATED_SRC test_aot_decs daslang)
 
+add_custom_target(test_aot_decs_modules)
+SET(DECS_MODULES_AOT_GENERATED_SRC)
+DAS_AOT_LIB("${AOT_DECS_MODULE_FILES}" DECS_MODULES_AOT_GENERATED_SRC test_aot_decs_modules daslang)
+
 add_custom_target(test_aot_dynamic_cast_rtti)
 SET(DYNAMIC_CAST_RTTI_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_DYNAMIC_CAST_RTTI_FILES}" DYNAMIC_CAST_RTTI_AOT_GENERATED_SRC test_aot_dynamic_cast_rtti daslang)
@@ -216,6 +249,8 @@ SOURCE_GROUP_FILES("aot generated" JOBQUE_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" JSON_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LANGUAGE_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LANGUAGE_MODULES_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" DASLIB_MODULES_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" DECS_MODULES_AOT_GENERATED_SRC)
 
 # Build the test_aot executable using the same main.cpp as daslang
 add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
@@ -244,6 +279,8 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${JSON_AOT_GENERATED_SRC}
     ${LANGUAGE_AOT_GENERATED_SRC}
     ${LANGUAGE_MODULES_AOT_GENERATED_SRC}
+    ${DASLIB_MODULES_AOT_GENERATED_SRC}
+    ${DECS_MODULES_AOT_GENERATED_SRC}
 )
 TARGET_LINK_LIBRARIES(test_aot libDaScriptAot ${SRC_LIBRARIES} ${DAS_MODULES_LIBS})
 ADD_DEPENDENCIES(test_aot libDaScriptAot
@@ -258,6 +295,7 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_interfaces
     test_aot_jobque test_aot_json
     test_aot_language test_aot_language_modules
+    test_aot_daslib_modules test_aot_decs_modules
 )
 target_include_directories(test_aot PRIVATE ${NEED_MODULES_PATH} ${PROJECT_SOURCE_DIR}/modules/dasUnitTest)
 SETUP_CPP11(test_aot)

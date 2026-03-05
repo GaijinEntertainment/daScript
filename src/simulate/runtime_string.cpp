@@ -522,7 +522,7 @@ namespace das
         else if ( val==-DBL_MAX ) return "(-DBL_MAX)";
         else {
             char buf[256];
-            auto result = fmt::format_to(buf, FMT_STRING("{:e}"), val);
+            auto result = fmt::format_to(buf, FMT_STRING("{:.17e}"), val);
             *result = 0;
             return buf;
         }

@@ -3109,10 +3109,18 @@ namespace das {
         }
         virtual void preVisitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool lastField ) override {
             Visitor::preVisitMakeArrayIndex(expr, index, init, lastField);
-            ss << tabs() << mkaName(expr) << "(" << index << ",__context__) = ";
+            if ( init->type->canCopy() ) {
+                ss << tabs() << mkaName(expr) << "(" << index << ",__context__) = ";
+            } else {
+                ss << tabs() << "das_move(" << mkaName(expr) << "(" << index << ",__context__),";
+            }
         }
         virtual ExpressionPtr visitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool lastField ) override {
-            ss << ";\n";
+            if ( init->type->canCopy() ) {
+                ss << ";\n";
+            } else {
+                ss << ");\n";
+            }
             return Visitor::visitMakeArrayIndex(expr, index, init, lastField);
         }
         virtual ExpressionPtr visit ( ExprMakeArray * expr ) override {
@@ -3145,6 +3153,9 @@ namespace das {
         virtual void preVisitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool lastField ) override {
             Visitor::preVisitMakeTupleIndex(expr, index, init, lastField);
             ss << tabs();
+            if ( !init->type->canCopy() ) {
+                ss << "das_move(";
+            }
             if (cross_platform) {
                 ss << "das_get_auto_tuple_field<"
                    << describeCppType(expr->makeType->argTypes[index])
@@ -3157,10 +3168,18 @@ namespace das {
                    << ","
                    << expr->makeType->getTupleFieldOffset(index);
             }
-            ss << ">::get(" << mktName(expr) << ") = ";
+            if ( init->type->canCopy() ) {
+                ss << ">::get(" << mktName(expr) << ") = ";
+            } else {
+                ss << ">::get(" << mktName(expr) << "),";
+            }
         }
         virtual ExpressionPtr visitMakeTupleIndex ( ExprMakeTuple * expr, int index, Expression * init, bool lastField ) override {
-            ss << ";\n";
+            if ( init->type->canCopy() ) {
+                ss << ";\n";
+            } else {
+                ss << ");\n";
+            }
             return Visitor::visitMakeTupleIndex(expr, index, init, lastField);
         }
         virtual ExpressionPtr visit ( ExprMakeTuple * expr ) override {

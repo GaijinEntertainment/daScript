@@ -2262,7 +2262,7 @@ class public CppAot : AstVisitor {
     }
 
     def to_cpp_double(val : double) {
-        return "{val:e}";
+        return "{val:.17e}";
     }
 
     def writeOutDouble(val : double) {
@@ -2979,10 +2979,18 @@ class public CppAot : AstVisitor {
         }
     }
     def override preVisitExprMakeArrayIndex(expr : smart_ptr<ExprMakeArray>; index : int; init : ExpressionPtr; last : bool) {
-        write(*ss, "{tabs()}{mkaName(expr)}({index},__context__) = ");
+        if (init._type.canCopy) {
+            write(*ss, "{tabs()}{mkaName(expr)}({index},__context__) = ");
+        } else {
+            write(*ss, "{tabs()}das_move({mkaName(expr)}({index},__context__),");
+        }
     }
     def override visitExprMakeArrayIndex(expr : smart_ptr<ExprMakeArray>; index : int; init : ExpressionPtr; last : bool) {
-        write(*ss, ";\n");
+        if (init._type.canCopy) {
+            write(*ss, ";\n");
+        } else {
+            write(*ss, ");\n");
+        }
         return init;
     }
     def override visitExprMakeArray(var expr : smart_ptr<ExprMakeArray>) : ExpressionPtr {
@@ -3012,10 +3020,18 @@ class public CppAot : AstVisitor {
         }
     }
     def override preVisitExprMakeTupleIndex(expr : smart_ptr<ExprMakeTuple>; index : int; init : ExpressionPtr; last : bool) {
-        write(*ss, "{tabs()}{get_tuple_field(expr.makeType, index)}::get({mktName(expr)}) = ");
+        if (init._type.canCopy) {
+            write(*ss, "{tabs()}{get_tuple_field(expr.makeType, index)}::get({mktName(expr)}) = ");
+        } else {
+            write(*ss, "{tabs()}das_move({get_tuple_field(expr.makeType, index)}::get({mktName(expr)}),");
+        }
     }
     def override visitExprMakeTupleIndex(expr : smart_ptr<ExprMakeTuple>; index : int; var init : ExpressionPtr; last : bool) {
-        write(*ss, ";\n");
+        if (init._type.canCopy) {
+            write(*ss, ";\n");
+        } else {
+            write(*ss, ");\n");
+        }
         return init;
     }
     def override visitExprMakeTuple(var expr : smart_ptr<ExprMakeTuple>) : ExpressionPtr {

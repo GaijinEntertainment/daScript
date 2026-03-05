@@ -348,11 +348,51 @@ jobs:
             ;;
            windows*)
             cd bin/"${{ matrix.cmake_preset }}"
-            ./test_aot -use-aot _dasroot_/dastest/dastest.das -- --use-aot --color --test ../../tests/aot
+            ./test_aot -use-aot _dasroot_/dastest/dastest.das -- --use-aot --color \
+              --test ../../tests/algorithm \
+              --test ../../tests/aot \
+              --test ../../tests/apply \
+              --test ../../tests/archive \
+              --test ../../tests/assert_once \
+              --test ../../tests/async \
+              --test ../../tests/bare_block \
+              --test ../../tests/base64 \
+              --test ../../tests/bitfields \
+              --test ../../tests/bool_array \
+              --test ../../tests/data_walker \
+              --test ../../tests/debug \
+              --test ../../tests/debug_agent \
+              --test ../../tests/dynamic_cast_rtti \
+              --test ../../tests/fio \
+              --test ../../tests/functional \
+              --test ../../tests/handle_types \
+              --test ../../tests/hash_map \
+              --test ../../tests/interfaces \
+              --test ../../tests/jobque
             ;;
            *)
             cd bin
-            ./test_aot -use-aot _dasroot_/dastest/dastest.das -- --use-aot --color --test ../tests/aot
+            ./test_aot -use-aot _dasroot_/dastest/dastest.das -- --use-aot --color \
+              --test ../tests/algorithm \
+              --test ../tests/aot \
+              --test ../tests/apply \
+              --test ../tests/archive \
+              --test ../tests/assert_once \
+              --test ../tests/async \
+              --test ../tests/bare_block \
+              --test ../tests/base64 \
+              --test ../tests/bitfields \
+              --test ../tests/bool_array \
+              --test ../tests/data_walker \
+              --test ../tests/debug \
+              --test ../tests/debug_agent \
+              --test ../tests/dynamic_cast_rtti \
+              --test ../tests/fio \
+              --test ../tests/functional \
+              --test ../tests/handle_types \
+              --test ../tests/hash_map \
+              --test ../tests/interfaces \
+              --test ../tests/jobque
             ;;
         esac
 
