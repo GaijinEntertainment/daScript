@@ -18,6 +18,10 @@ require daslib/aot_constants
 options strict_smart_pointers = false
 options unsafe_table_lookup = false
 
+def aotFieldName(name : string) : string {
+    return replace(name, "`", "__");
+}
+
 def aotModuleName(pm : Module?) {
     if (pm.name.empty()) {
         return "";
@@ -673,7 +677,7 @@ class public AotDebugInfoHelper {
         return build_string() $(writer) {
             write(writer, "{describeCppTypeInfo(info, suffix)}, \"{info.name}\", ");
             if (cross_platform) {
-                write(writer, "offsetof({struct_name},{info.name}), {info.nextGcField:d}");
+                write(writer, "offsetof({struct_name},{aotFieldName(info.name)}), {info.nextGcField:d}");
             } else {
                 write(writer, "{info.offset:d}, {info.nextGcField:d}")
             }
@@ -1174,7 +1178,7 @@ class public CppAot : AstVisitor {
         if (that.flags.cppLayout && from != unsafe(reinterpret<Structure const?>(that.get_ptr()))) {
             write(*ss, "    /* skipping {decl.name}, from {from.name} */");
         } else {
-            write(*ss, "    {describeCppType(decl._type, DescribeConfig(cross_platform=cross_platform,skip_const = true))} {decl.name};");
+            write(*ss, "    {describeCppType(decl._type, DescribeConfig(cross_platform=cross_platform,skip_const = true))} {aotFieldName(string(decl.name))};");
             if (decl.flags.parentType) {
                 write(*ss, " /* from {from.name} */");
             }
@@ -1189,7 +1193,7 @@ class public CppAot : AstVisitor {
             let s_name = aotStructName(that.get_ptr())
             write(*ss, "static_assert(sizeof({s_name})=={that.sizeOf},\"structure size mismatch with DAS\");\n");
             for (tf in that.fields) {
-                write(*ss, "static_assert(offsetof({s_name},{tf.name})=={tf.offset},\"structure field offset mismatch with DAS\");\n");
+                write(*ss, "static_assert(offsetof({s_name},{aotFieldName(string(tf.name))})=={tf.offset},\"structure field offset mismatch with DAS\");\n");
             }
         }
         for (ann in that.annotations) {
@@ -1275,6 +1279,10 @@ class public CppAot : AstVisitor {
     def override preVisitFunctionBody(fn : FunctionPtr; expr : ExpressionPtr) {
         if (fn.flags.aotNeedPrologue || prologue) {
             write(*ss, " ) \{ das_stack_prologue __prologue(__context__,{fn.totalStackSize:d},\"{fn.name} \" DAS_FILE_LINE);\n");
+        } elif (!(expr is ExprBlock)) {
+            write(*ss, " ) \{\n");
+            tab ++;
+            write(*ss, tabs());
         } else {
             write(*ss, " )\n");
         }
@@ -1303,6 +1311,10 @@ class public CppAot : AstVisitor {
     }
     def override visitFunction(fn : FunctionPtr) {
         if (fn.flags.aotNeedPrologue || prologue) {
+            write(*ss, "}\n");
+        } elif (fn.body != null && !(fn.body is ExprBlock)) {
+            write(*ss, ";\n");
+            tab --;
             write(*ss, "}\n");
         } else {
             write(*ss, "\n");
@@ -1493,6 +1505,10 @@ class public CppAot : AstVisitor {
         }
         if (needPtrCast(variable._type, expr._type, expr)) {
             write(*ss, "das_auto_cast<{describeCppType(variable._type, DescribeConfig(cross_platform=cross_platform))}>::cast(");
+        } elif (variable._type.isPointer && expr._type.isPointer
+                && variable._type.firstType != null && expr._type.firstType != null
+                && !is_same_type(variable._type.firstType, expr._type.firstType, false, false, false, false)) {
+            write(*ss, "das_auto_cast<{describeCppType(variable._type, DescribeConfig(cross_platform=cross_platform))}>::cast(");
         }
         if (expr._type.isString) {
             let maybeRef = variable._type.flags.ref ? " &" : "";
@@ -1504,6 +1520,10 @@ class public CppAot : AstVisitor {
             write(*ss, ")");
         }
         if (needPtrCast(variable._type, expr._type, expr)) {
+            write(*ss, ")");
+        } elif (variable._type.isPointer && expr._type.isPointer
+                && variable._type.firstType != null && expr._type.firstType != null
+                && !is_same_type(variable._type.firstType, expr._type.firstType, false, false, false, false)) {
             write(*ss, ")");
         }
         if (variable._type.flags.ref) {
@@ -2006,7 +2026,7 @@ class public CppAot : AstVisitor {
             write(*ss, ", {vtype.get_variant_field_offset(field.fieldIndex)}, {field.fieldIndex}>::get(");
         } else {
             let mod_name = (vtype.structType._module.name.empty() ? "" : string(vtype.structType._module.name) + "::");
-            write(*ss, ",&{mod_name}{vtype.structType.name}::{field.name}>::get(");
+            write(*ss, ",&{mod_name}{vtype.structType.name}::{aotFieldName(string(field.name))}>::get(");
         }
     }
     def override visitExprSafeField(var field : smart_ptr<ExprSafeField>) : ExpressionPtr {
@@ -2056,6 +2076,9 @@ class public CppAot : AstVisitor {
             aot_previsit_get_field(field_type.annotation, ss, string(field.name));
         } elif (field_type.baseType == Type.tPointer) {
             if (field_type.firstType.isHandle) {
+                if (field._type.isString) {
+                    write(*ss, "(({describeCppType(field._type, DescribeConfig(cross_platform=cross_platform))})(")
+                }
                 aot_previsit_get_field_ptr(field_type.firstType.annotation, ss, string(field.name));
             } elif (field.value._type.firstType.isTuple) {
                 write(*ss, "{get_tuple_field(field_type.firstType, field.fieldIndex, true)}::get(")
@@ -2081,15 +2104,18 @@ class public CppAot : AstVisitor {
             if (field.value._type.firstType.isHandle) {
                 aot_type_ann_get_field_ptr(field.value._type.firstType.annotation, ss, string(field.name));
                 write(*ss, " /*{field.name}*/");
+                if (field._type.isString) {
+                    write(*ss, "))")
+                }
             } elif (field.value._type.firstType.isTuple) {
                 write(*ss, ")");
             } elif (field.value._type.firstType.isVariant) {
                 write(*ss, ")");
             } else {
-                write(*ss, "->{field.name}");
+                write(*ss, "->{aotFieldName(string(field.name))}");
             }
         } else {
-            write(*ss, ".{field.name}");
+            write(*ss, ".{aotFieldName(string(field.name))}");
         }
         if (field._type.flags.aotAlias) {
             write(*ss, ")");
@@ -2219,7 +2245,15 @@ class public CppAot : AstVisitor {
         return c;
     }
     def override visitExprConstBitfield(var c : smart_ptr<ExprConstBitfield>) : ExpressionPtr {
-        write(*ss, "0x{c.getValue:x}u");
+        if (c._type.baseType == Type.tBitfield64) {
+            write(*ss, "UINT64_C(0x{c.getValue:x})");
+        } elif (c._type.baseType == Type.tBitfield16) {
+            write(*ss, "uint16_t(0x{uint(c.getValue):x})");
+        } elif (c._type.baseType == Type.tBitfield8) {
+            write(*ss, "uint8_t(0x{uint(c.getValue):x})");
+        } else {
+            write(*ss, "0x{c.getValue:x}u");
+        }
         return c;
     }
     def override visitExprConstBool(var c : smart_ptr<ExprConstBool>) : ExpressionPtr {
@@ -2406,11 +2440,44 @@ class public CppAot : AstVisitor {
         write(*ss, "if ( ");
     }
     def override preVisitExprIfThenElseIfBlock(ifte : smart_ptr<ExprIfThenElse>; blk : ExpressionPtr) {
-        write(*ss, " )\n");
-        write(*ss, tabs());
+        if (!(blk is ExprBlock)) {
+            write(*ss, " ) \{\n");
+            tab ++;
+            write(*ss, tabs());
+        } else {
+            write(*ss, " )\n");
+            write(*ss, tabs());
+        }
     }
     def override preVisitExprIfThenElseElseBlock(ifte : smart_ptr<ExprIfThenElse>; blk : ExpressionPtr) {
-        write(*ss, " else ");
+        if (ifte.if_true != null && !(ifte.if_true is ExprBlock)) {
+            write(*ss, ";\n");
+            tab --;
+            write(*ss, tabs());
+            write(*ss, "} else ");
+        } else {
+            write(*ss, " else ");
+        }
+        if (!(blk is ExprBlock)) {
+            write(*ss, "\{\n");
+            tab ++;
+            write(*ss, tabs());
+        }
+    }
+    def override visitExprIfThenElse(var ifte : smart_ptr<ExprIfThenElse>) : ExpressionPtr {
+        var isNotBlock : bool
+        if (ifte.if_false != null) {
+            isNotBlock = !(ifte.if_false is ExprBlock)
+        } else {
+            isNotBlock = !(ifte.if_true is ExprBlock)
+        }
+        if (isNotBlock) {
+            write(*ss, ";\n");
+            tab --;
+            write(*ss, tabs());
+            write(*ss, "\}");
+        }
+        return ifte;
     }
 // swizzle
     def override preVisitExprSwizzle(expr : smart_ptr<ExprSwizzle>) {
@@ -2771,8 +2838,15 @@ class public CppAot : AstVisitor {
         write(*ss, "{mkvName(expr)}");
         if (length(expr.variants) != 1) write(*ss, "({index},__context__)");
         write(*ss, ") = ");
+        if (expr._type.argTypes[variantIndex].isPointer && decl.value._type.isPointer && expr._type.argTypes[variantIndex].firstType != null && decl.value._type.firstType != null && !is_same_type(expr._type.argTypes[variantIndex].firstType, decl.value._type.firstType, false, false, false, false)) {
+            write(*ss, "das_auto_cast<{type_str}>::cast(");
+        }
     }
     def override visitExprMakeVariantField(expr : smart_ptr<ExprMakeVariant>; index : int; decl : MakeFieldDeclPtr; last : bool) {
+        let variantIndex = find_argument_index(expr._type, string(decl.name))
+        if (expr._type.argTypes[variantIndex].isPointer && decl.value._type.isPointer && expr._type.argTypes[variantIndex].firstType != null && decl.value._type.firstType != null && !is_same_type(expr._type.argTypes[variantIndex].firstType, decl.value._type.firstType, false, false, false, false)) {
+            write(*ss, ")");
+        }
         write(*ss, ";\n");
         return decl;
     }
@@ -2856,7 +2930,7 @@ class public CppAot : AstVisitor {
             aot_visit_get_field(expr.makeType.annotation, ss, string(decl.name));
             write(*ss, " /*{decl.name}*/");
         } else {
-            write(*ss, ".{decl.name}");
+            write(*ss, ".{aotFieldName(string(decl.name))}");
         }
         write(*ss, "),(");
     }
@@ -3028,9 +3102,9 @@ class public CppAot : AstVisitor {
         } elif (call.name == "assert" || call.name == "verify") {
             let ea = call as ExprAssert;
             if (length(call.arguments) == 1) {
-                write(*ss, "{ea.isVerify ? "DAS_VERIFY" : "DAS_ASSERT"}((");
+                write(*ss, "{ea.isVerify ? "das_verify" : "das_assert"}(");
             } else {
-                write(*ss, "{ea.isVerify ? "DAS_VERIFYF" : "DAS_ASSERTF"}((");
+                write(*ss, "{ea.isVerify ? "das_verifyf" : "das_assertf"}(");
             }
         } elif (call.name == "erase") {
             write(*ss, "__builtin_table_erase(__context__,");
@@ -3051,7 +3125,11 @@ class public CppAot : AstVisitor {
             if (bt == Type.tFunction) {
                 let einv = call as ExprInvoke;
                 if (einv.isInvokeMethod) {
-                    if (call.arguments[0] is ExprField) {
+                    if (call.arguments[0] is ExprRef2Value && (call.arguments[0] as ExprRef2Value).subexpr is ExprField) {
+                        let field = (call.arguments[0] as ExprRef2Value).subexpr as ExprField;
+                        methodOffset = field.field.offset;
+                        methodName = string(field.field.name);
+                    } elif (call.arguments[0] is ExprField) {
                         let field = call.arguments[0] as ExprField;
                         methodOffset = field.field.offset;
                         methodName = string(field.field.name);
@@ -3079,7 +3157,7 @@ class public CppAot : AstVisitor {
                 assume argType = call.arguments[0]._type;
                 if (cross_platform) {
                     let cfg = DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform)
-                    write(*ss, ",offsetof({describeCppType(argType.argTypes[0], cfg)},{methodName})");
+                    write(*ss, ",offsetof({describeCppType(argType.argTypes[0], cfg)},{aotFieldName(methodName)})");
                 } else {
                     write(*ss, ",{methodOffset}/*{methodName}*/");
                 }
@@ -3137,8 +3215,10 @@ class public CppAot : AstVisitor {
             }
         }
         if (!last) {
-            if (call.name == "assert" || call.name == "verify" || call.name == "debug") {
+            if (call.name == "debug") {
                 write(*ss, "),(");
+            } elif (call.name == "assert" || call.name == "verify") {
+                write(*ss, ",");
             } else {
                 write(*ss, ",");
             }
@@ -3146,8 +3226,10 @@ class public CppAot : AstVisitor {
         return arg;
     }
     def override visitExprLooksLikeCall(var call : smart_ptr<ExprLooksLikeCall>) : ExpressionPtr {
-        if (call.name == "assert" || call.name == "verify" || call.name == "debug") {
+        if (call.name == "debug") {
             write(*ss, "))");
+        } elif (call.name == "assert" || call.name == "verify") {
+            write(*ss, ",__context__)");
         } elif (call.name == "memzero") {
             assume cur_type = call.arguments[0]._type;
             if (cross_platform) {
@@ -3432,7 +3514,7 @@ class public CppAot : AstVisitor {
                 write(*ss, ").{efn.cppName}())");
             } else {
                 assert(starts_with(string(call.func.name), ".`"));
-                write(*ss, ").{string(call.func.name).chop(2, length(call.func.name))}())");    // we skip .` part of the deal
+                write(*ss, ").{aotFieldName(string(call.func.name).chop(2, length(call.func.name)))}())");    // we skip .` part of the deal
             }
             if (call.func.result.isString) {
                 write(*ss, "))");  // c-cast const char * etc string casts to char * or char * const

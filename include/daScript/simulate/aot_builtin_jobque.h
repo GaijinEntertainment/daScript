@@ -65,6 +65,8 @@ namespace das {
 
     typedef AtomicTT<int32_t> AtomicInt;
     typedef AtomicTT<int64_t> AtomicInt64;
+    using Atomic32 = AtomicTT<int32_t>;
+    using Atomic64 = AtomicTT<int64_t>;
 
     class DAS_API Channel : public JobStatus {
     public:

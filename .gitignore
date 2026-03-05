@@ -16,9 +16,7 @@ jitted_scripts/
 lib/
 modules/**/*.shared_module
 examples/**/*.shared_module
-tests/aot/_aot_generated/
-dastest/_aot_generated/
-daslib/_aot_generated/
+_aot_generated/
 .vscode/
 .cache/
 

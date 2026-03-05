@@ -35,6 +35,30 @@ namespace das {
 
     DAS_API void das_debug ( Context * context, TypeInfo * typeInfo, const char * FILE, int LINE, vec4f res, const char * message = nullptr );
 
+    __forceinline void das_assert ( bool cond, Context * __context__ ) {
+        if ( !cond ) {
+            __context__->throw_error("assert failed");
+        }
+    }
+
+    __forceinline void das_assertf ( bool cond, const char * message, Context * __context__ ) {
+        if ( !cond ) {
+            __context__->throw_error_ex("assert failed, %s", message ? message : "");
+        }
+    }
+
+    __forceinline void das_verify ( bool cond, Context * __context__ ) {
+        if ( !cond ) {
+            __context__->throw_error("assert failed");
+        }
+    }
+
+    __forceinline void das_verifyf ( bool cond, const char * message, Context * __context__ ) {
+        if ( !cond ) {
+            __context__->throw_error_ex("assert failed, %s", message ? message : "");
+        }
+    }
+
 #if (!defined(DAS_ENABLE_EXCEPTIONS)) || (!DAS_ENABLE_EXCEPTIONS)
     void das_throw(const char * msg);
     void das_trycatch(callable<void()> tryBody, callable<void(const char * msg)> catchBody);
@@ -893,7 +917,6 @@ namespace das {
     template <typename TT>
     struct TArray : Array {
         using THIS_TYPE = TArray<TT>;
-        enum { stride = sizeof(TT) };
         TArray()  {}
         TArray(TArray & arr) { moveA(arr); }
         TArray(TArray && arr ) { moveA(arr); }
