@@ -520,6 +520,8 @@ namespace das
         else if ( val==-DBL_MIN ) return "(-DBL_MIN)";
         else if ( val==DBL_MAX ) return "DBL_MAX";
         else if ( val==-DBL_MAX ) return "(-DBL_MAX)";
+        else if ( isinf(val) ) return val > 0 ? "((double)INFINITY)" : "((double)(-INFINITY))";
+        else if ( isnan(val) ) return "((double)NAN)";
         else {
             char buf[256];
             auto result = fmt::format_to(buf, FMT_STRING("{:.17e}"), val);
@@ -552,6 +554,8 @@ namespace das
         else if ( val==-FLT_MIN ) return "(-FLT_MIN)";
         else if ( val==FLT_MAX ) return "FLT_MAX";
         else if ( val==-FLT_MAX ) return "(-FLT_MAX)";
+        else if ( isinf(val) ) return val > 0 ? "INFINITY" : "(-INFINITY)";
+        else if ( isnan(val) ) return "NAN";
         else {
             char buf[256];
             auto result = fmt::format_to(buf, FMT_STRING("{:e}f"), val);

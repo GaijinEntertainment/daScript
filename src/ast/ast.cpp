@@ -3231,13 +3231,82 @@ namespace das {
         vis.visitProgram(this);
     }
 
-    void Program::visit(Visitor & vis, bool visitGenerics ) {
+    void Program::visit(Visitor & vis, bool visitGenerics, bool sortStructures ) {
         vis.preVisitProgram(this);
-        visitModule(vis, thisModule.get(), visitGenerics);
+        visitModule(vis, thisModule.get(), visitGenerics, sortStructures);
         vis.visitProgram(this);
     }
 
-    void Program::visitModule(Visitor & vis, Module * thatModule, bool visitGenerics) {
+    static void collectStructDeps ( const TypeDeclPtr & type, Structure * owner, das_hash_set<Structure *> & deps ) {
+        if ( !type ) return;
+        if ( type->baseType == Type::tStructure && type->structType && type->structType != owner ) {
+            if ( type->isPointer() ) return;   // pointers don't need full definition
+            if ( !deps.insert(type->structType).second ) return;   // already visited
+            // recurse into the struct's own fields
+            for ( auto & field : type->structType->fields ) {
+                collectStructDeps(field.type, owner, deps);
+            }
+        }
+        // recurse into firstType / secondType for containers
+        if ( type->firstType ) collectStructDeps(type->firstType, owner, deps);
+        if ( type->secondType ) collectStructDeps(type->secondType, owner, deps);
+        // recurse into argTypes (e.g. tuple, variant element types)
+        for ( auto & argType : type->argTypes ) {
+            collectStructDeps(argType, owner, deps);
+        }
+    }
+
+    static void topoSortStructures ( vector<StructurePtr> & structs ) {
+        if ( structs.size() <= 1 ) return;
+        // build adjacency: struct -> set of structs it depends on (by value)
+        das_hash_map<Structure *, das_hash_set<Structure *>> deps;
+        das_hash_set<Structure *> allSet;
+        for ( auto & sp : structs ) {
+            allSet.insert(sp.get());
+        }
+        for ( auto & sp : structs ) {
+            auto & d = deps[sp.get()];
+            for ( auto & field : sp->fields ) {
+                collectStructDeps(field.type, sp.get(), d);
+            }
+            // only keep deps that are in our set
+            das_hash_set<Structure *> filtered;
+            for ( auto dep : d ) {
+                if ( allSet.count(dep) ) filtered.insert(dep);
+            }
+            d = das::move(filtered);
+        }
+        // Kahn's algorithm using vector as queue
+        das_hash_map<Structure *, int> inDegree;
+        for ( auto & [s, dd] : deps ) {
+            inDegree[s] = (int)dd.size();
+        }
+        vector<Structure *> sorted;
+        sorted.reserve(structs.size());
+        // seed with zero-dependency structs
+        for ( auto & sp : structs ) {
+            if ( inDegree[sp.get()] == 0 ) sorted.push_back(sp.get());
+        }
+        // process in FIFO order
+        for ( size_t qi = 0; qi < sorted.size(); qi++ ) {
+            auto s = sorted[qi];
+            for ( auto & [other, dd] : deps ) {
+                if ( dd.erase(s) ) {
+                    inDegree[other]--;
+                    if ( inDegree[other] == 0 ) sorted.push_back(other);
+                }
+            }
+        }
+        if ( sorted.size() != structs.size() ) return; // cycle - keep original order
+        // reorder structs to match sorted order
+        das_hash_map<Structure *, StructurePtr> byPtr;
+        for ( auto & sp : structs ) byPtr[sp.get()] = sp;
+        for ( size_t i = 0; i < sorted.size(); i++ ) {
+            structs[i] = byPtr[sorted[i]];
+        }
+    }
+
+    void Program::visitModule(Visitor & vis, Module * thatModule, bool visitGenerics, bool sortStructures) {
         vis.preVisitModule(thatModule);
         // enumerations
         thatModule->enumerations.foreach([&](auto & penum){
@@ -3250,16 +3319,34 @@ namespace das {
             }
         });
         // structures
-        thatModule->structures.foreach([&](auto & spst){
-            Structure * pst = spst.get();
-            if ( vis.canVisitStructure(pst) ) {
+        if ( sortStructures ) {
+            // collect, topologically sort, then visit
+            vector<StructurePtr> allStructs;
+            thatModule->structures.foreach([&](auto & spst){
+                if ( vis.canVisitStructure(spst.get()) ) {
+                    allStructs.push_back(spst);
+                }
+            });
+            topoSortStructures(allStructs);
+            for ( auto & spst : allStructs ) {
+                Structure * pst = spst.get();
                 StructurePtr pstn = visitStructure(vis, pst);
                 if ( pstn.get() != pst ) {
                     thatModule->structures.replace(pst->name, pstn);
-                    spst = pstn;
                 }
             }
-        });
+        } else {
+            thatModule->structures.foreach([&](auto & spst){
+                Structure * pst = spst.get();
+                if ( vis.canVisitStructure(pst) ) {
+                    StructurePtr pstn = visitStructure(vis, pst);
+                    if ( pstn.get() != pst ) {
+                        thatModule->structures.replace(pst->name, pstn);
+                        spst = pstn;
+                    }
+                }
+            });
+        }
         // aliases
         thatModule->aliasTypes.foreach([&](auto & alsv){
             vis.preVisitAlias(alsv.get(), alsv->alias);

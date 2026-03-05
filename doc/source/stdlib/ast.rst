@@ -5535,8 +5535,9 @@ Creates the appropriate call expression for a given function name in the program
 Visitor pattern
 +++++++++++++++
 
-  *  :ref:`visit (expression: smart_ptr\<TypeDecl\>; adapter: smart_ptr\<VisitorAdapter\>) : smart_ptr\<TypeDecl\> <function-ast_visit_smart_ptr_ls_TypeDecl_gr__smart_ptr_ls_VisitorAdapter_gr_>`
+  *  :ref:`visit (program: smart_ptr\<Program\>; adapter: smart_ptr\<VisitorAdapter\>; sortStructures: bool) <function-ast_visit_smart_ptr_ls_Program_gr__smart_ptr_ls_VisitorAdapter_gr__bool>`
   *  :ref:`visit (program: smart_ptr\<Program\>; adapter: smart_ptr\<VisitorAdapter\>) <function-ast_visit_smart_ptr_ls_Program_gr__smart_ptr_ls_VisitorAdapter_gr_>`
+  *  :ref:`visit (expression: smart_ptr\<TypeDecl\>; adapter: smart_ptr\<VisitorAdapter\>) : smart_ptr\<TypeDecl\> <function-ast_visit_smart_ptr_ls_TypeDecl_gr__smart_ptr_ls_VisitorAdapter_gr_>`
   *  :ref:`visit (function: smart_ptr\<Function\>; adapter: smart_ptr\<VisitorAdapter\>) <function-ast_visit_smart_ptr_ls_Function_gr__smart_ptr_ls_VisitorAdapter_gr_>`
   *  :ref:`visit (expression: smart_ptr\<Expression\>; adapter: smart_ptr\<VisitorAdapter\>) : smart_ptr\<Expression\> <function-ast_visit_smart_ptr_ls_Expression_gr__smart_ptr_ls_VisitorAdapter_gr_>`
   *  :ref:`visit_enumeration (program: smart_ptr\<Program\>; enumeration: smart_ptr\<Enumeration\>; adapter: smart_ptr\<VisitorAdapter\>) <function-ast_visit_enumeration_smart_ptr_ls_Program_gr__smart_ptr_ls_Enumeration_gr__smart_ptr_ls_VisitorAdapter_gr_>`
@@ -5549,20 +5550,26 @@ Visitor pattern
 visit
 ^^^^^
 
-.. _function-ast_visit_smart_ptr_ls_TypeDecl_gr__smart_ptr_ls_VisitorAdapter_gr_:
+.. _function-ast_visit_smart_ptr_ls_Program_gr__smart_ptr_ls_VisitorAdapter_gr__bool:
 
-.. das:function:: visit(expression: smart_ptr<TypeDecl>; adapter: smart_ptr<VisitorAdapter>) : smart_ptr<TypeDecl>
+.. das:function:: visit(program: smart_ptr<Program>; adapter: smart_ptr<VisitorAdapter>; sortStructures: bool)
 
-Invokes an AST visitor on the given object.
+Visit the program with the given visitor adapter. When sortStructures is true, struct declarations are visited in topological (dependency) order, ensuring that structs used by value in fields are visited before the structs that contain them.
 
 
-:Arguments: * **expression** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>`> implicit
+:Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>`> implicit
 
             * **adapter** : smart_ptr< :ref:`VisitorAdapter <handle-ast-VisitorAdapter>`> implicit
+
+            * **sortStructures** : bool
 
 .. _function-ast_visit_smart_ptr_ls_Program_gr__smart_ptr_ls_VisitorAdapter_gr_:
 
 .. das:function:: visit(program: smart_ptr<Program>; adapter: smart_ptr<VisitorAdapter>)
+
+.. _function-ast_visit_smart_ptr_ls_TypeDecl_gr__smart_ptr_ls_VisitorAdapter_gr_:
+
+.. das:function:: visit(expression: smart_ptr<TypeDecl>; adapter: smart_ptr<VisitorAdapter>) : smart_ptr<TypeDecl>
 
 .. _function-ast_visit_smart_ptr_ls_Function_gr__smart_ptr_ls_VisitorAdapter_gr_:
 
