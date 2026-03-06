@@ -126,6 +126,7 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - Non-copyable types (`array<T>`, `table<K;V>`, lambdas): use `:=`, `push_clone`, or `<-`
 - Blocks cannot be stored/returned/captured — use lambdas or function pointers
 - Class methods: `def const`, `def abstract const`, `def static`; call syntax `obj.method()`, `obj->method()`, `obj |> method()`
+- **`is`/`as` on handled types checks EXACT type**, not C++ inheritance — `expr is ExprField` is `false` when `expr` is `ExprSafeField`. `as` on wrong type crashes. Must handle each concrete type explicitly.
 
 ## SDK Directory Layout
 
@@ -155,6 +156,9 @@ If the SDK was built with dasHV enabled, `utils/mcp/` contains a [Model Context 
 | `run_script` | Running scripts via shell and capturing output |
 | `run_test` | Running dastest via shell and parsing results |
 | `format_file` | Running the formatter script manually |
+| `convert_to_gen2` | Running `das-fmt` manually to convert gen1→gen2 syntax |
+| `goto_definition` | Manually tracing symbol definitions across files |
+| `type_of` | Manually inspecting expression types |
 | `list_requires` | Grepping for `require` statements and guessing transitive deps |
 
 **Starting the server:** `bin/daslang utils/mcp/main.das` (port 9500 by default)

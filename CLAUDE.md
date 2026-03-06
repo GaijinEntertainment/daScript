@@ -187,6 +187,7 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - Non-copyable types (`array<T>`, `table<K;V>`, lambdas): use `:=`, `push_clone`, or `<-`
 - Blocks cannot be stored/returned/captured — use lambdas or function pointers
 - Class methods: `def const`, `def abstract const`, `def static`; call syntax `obj.method()`, `obj->method()`, `obj |> method()`
+- **`is`/`as` on handled types checks EXACT type**, not C++ inheritance — `expr is ExprField` is `false` when `expr` is `ExprSafeField`. `as` on wrong type crashes. Must handle each concrete type explicitly.
 
 ## Key Directories
 
