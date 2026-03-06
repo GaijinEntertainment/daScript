@@ -70,6 +70,13 @@ def fix_path(path : string) : string {
 
 
 def scan_dir(path : string; var cache : table<string; void?>; var res : array<string>; suffix = ".das") : bool {
+    return scan_dir(path, cache, res, suffix) $(n) {
+        return true
+    }
+}
+
+def scan_dir(path : string; var cache : table<string; void?>; var res : array<string>; suffix = ".das";
+             dir_filter : block<(name : string) : bool>) : bool {
     let dirStat = stat(path)
     if (!dirStat.is_dir) {
         return false
@@ -84,10 +91,10 @@ def scan_dir(path : string; var cache : table<string; void?>; var res : array<st
             return
         }
         if (fStat.is_dir) {
-            if (n |> starts_with("_")) {
+            if (n |> starts_with("_") || !invoke(dir_filter, n)) {
                 return
             }
-            f |> scan_dir(cache, res, suffix)
+            f |> scan_dir(cache, res, suffix, dir_filter)
         } elif (fStat.is_reg && f |> ends_with(suffix) && !(n |> starts_with("_")) && !cache |> key_exists(f)) {
             cache |> insert(f, null)
             res |> push(f)

@@ -954,6 +954,10 @@ namespace das {
         return Module::require(name);
     }
 
+    bool rtti_has_module ( const char * name ) {
+        return Module::require(name) != nullptr;
+    }
+
     void rtti_builtin_program_for_each_module ( smart_ptr_raw<Program> program, const TBlock<void,Module *> & block, Context * context, LineInfoArg * at ) {
         program->library.foreach([&](Module * pm) -> bool {
             vec4f args[1] = { cast<Module *>::from(pm) };
@@ -1538,6 +1542,9 @@ namespace das {
                     ->arg("program");
             addExtern<DAS_BIND_FUN(rtti_get_builtin_module)>(*this, lib, "get_module",
                 SideEffects::modifyExternal, "rtti_get_builtin_module")
+                    ->arg("name");
+            addExtern<DAS_BIND_FUN(rtti_has_module)>(*this, lib, "has_module",
+                SideEffects::modifyExternal, "rtti_has_module")
                     ->arg("name");
             addExtern<DAS_BIND_FUN(rtti_builtin_compile)>(*this, lib, "compile",
                 SideEffects::modifyExternal, "rtti_builtin_compile")
