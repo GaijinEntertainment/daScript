@@ -4428,7 +4428,7 @@ namespace das {
         visit(collector);
         dumpDependencies(this, aotVisitor);
         // now to the main body
-        visit(aotVisitor);
+        visit(aotVisitor, false, true);
         logs << aotVisitor.str();
     }
 }

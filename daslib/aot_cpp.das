@@ -4010,7 +4010,7 @@ def public run_aot(prog : Program?; var pctx : Context?; cop : CodeOfPolicies) :
                 var inscope adapter <- make_visitor(*cpp_aot)
                 cpp_aot.adapter := adapter
                 dumpDependencies(program, cpp_aot);
-                visit(program, cpp_aot.adapter)
+                visit(program, cpp_aot.adapter, true)
                 write(writer, "{cpp_aot.str()}");
                 delete cpp_aot.helper.helper
                 unsafe {

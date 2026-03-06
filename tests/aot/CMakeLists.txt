@@ -27,6 +27,7 @@ SET(AOT_DASLIB_MODULE_FILES
     daslib/linq_boost.das
     daslib/live.das
     daslib/lpipe.das
+    daslib/match.das
     daslib/math_bits.das
     daslib/random.das
     daslib/regex.das
@@ -121,6 +122,22 @@ list(FILTER AOT_LINQ_FILES EXCLUDE REGEX "/_")
 SET(AOT_LINQ_MODULE_FILES
     tests/linq/_common.das
 )
+
+# AOT for match test files
+FILE(GLOB AOT_MATCH_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/match/*.das")
+
+# AOT for math test files
+FILE(GLOB AOT_MATH_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/math/*.das")
+# Exclude module file (macro module, not a test)
+list(FILTER AOT_MATH_FILES EXCLUDE REGEX "fake_numeric")
+
+# Math test module files (libraries required by math tests)
+SET(AOT_MATH_MODULE_FILES
+    tests/math/fake_numeric.das
+)
+
+# AOT for module_tests test files
+FILE(GLOB AOT_MODULE_TESTS_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/module_tests/*.das")
 
 # AOT for lpipe test files
 FILE(GLOB AOT_LPIPE_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/lpipe/*.das")
@@ -236,6 +253,22 @@ add_custom_target(test_aot_linq_modules)
 SET(LINQ_MODULES_AOT_GENERATED_SRC)
 DAS_AOT_LIB("${AOT_LINQ_MODULE_FILES}" LINQ_MODULES_AOT_GENERATED_SRC test_aot_linq_modules daslang)
 
+add_custom_target(test_aot_match)
+SET(MATCH_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_MATCH_FILES}" MATCH_AOT_GENERATED_SRC test_aot_match daslang)
+
+add_custom_target(test_aot_math)
+SET(MATH_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_MATH_FILES}" MATH_AOT_GENERATED_SRC test_aot_math daslang)
+
+add_custom_target(test_aot_math_modules)
+SET(MATH_MODULES_AOT_GENERATED_SRC)
+DAS_AOT_LIB("${AOT_MATH_MODULE_FILES}" MATH_MODULES_AOT_GENERATED_SRC test_aot_math_modules daslang)
+
+add_custom_target(test_aot_module_tests)
+SET(MODULE_TESTS_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_MODULE_TESTS_FILES}" MODULE_TESTS_AOT_GENERATED_SRC test_aot_module_tests daslang)
+
 add_custom_target(test_aot_lpipe)
 SET(LPIPE_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_LPIPE_FILES}" LPIPE_AOT_GENERATED_SRC test_aot_lpipe daslang)
@@ -277,6 +310,10 @@ SOURCE_GROUP_FILES("aot generated" JOBQUE_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" JSON_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LINQ_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LINQ_MODULES_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" MATCH_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" MATH_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" MATH_MODULES_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" MODULE_TESTS_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LPIPE_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LANGUAGE_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LANGUAGE_MODULES_AOT_GENERATED_SRC)
@@ -310,6 +347,10 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${JSON_AOT_GENERATED_SRC}
     ${LINQ_AOT_GENERATED_SRC}
     ${LINQ_MODULES_AOT_GENERATED_SRC}
+    ${MATCH_AOT_GENERATED_SRC}
+    ${MATH_AOT_GENERATED_SRC}
+    ${MATH_MODULES_AOT_GENERATED_SRC}
+    ${MODULE_TESTS_AOT_GENERATED_SRC}
     ${LPIPE_AOT_GENERATED_SRC}
     ${LANGUAGE_AOT_GENERATED_SRC}
     ${LANGUAGE_MODULES_AOT_GENERATED_SRC}
@@ -328,7 +369,10 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_handle_types test_aot_hash_map
     test_aot_interfaces
     test_aot_jobque test_aot_json
-    test_aot_linq test_aot_linq_modules test_aot_lpipe
+    test_aot_linq test_aot_linq_modules
+    test_aot_match
+    test_aot_math test_aot_math_modules test_aot_module_tests
+    test_aot_lpipe
     test_aot_language test_aot_language_modules
     test_aot_daslib_modules test_aot_decs_modules
 )

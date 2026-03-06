@@ -372,7 +372,10 @@ jobs:
               --test ../../tests/jobque \
               --test ../../tests/language \
               --test ../../tests/linq \
-              --test ../../tests/lpipe
+              --test ../../tests/lpipe \
+              --test ../../tests/match \
+              --test ../../tests/math \
+              --test ../../tests/module_tests
             ;;
            *)
             cd bin
@@ -400,7 +403,10 @@ jobs:
               --test ../tests/jobque \
               --test ../tests/language \
               --test ../tests/linq \
-              --test ../tests/lpipe
+              --test ../tests/lpipe \
+              --test ../tests/match \
+              --test ../tests/math \
+              --test ../tests/module_tests
             ;;
         esac
 

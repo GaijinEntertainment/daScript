@@ -1690,10 +1690,10 @@ namespace das
         TypeDecl * makeTypeDeclaration ( const LineInfo & at, const string & name );
         StructurePtr visitStructure(Visitor & vis, Structure *);
         EnumerationPtr visitEnumeration(Visitor & vis, Enumeration *);
-        void visitModule(Visitor & vis, Module * thatModule, bool visitGenerics = false);
+        void visitModule(Visitor & vis, Module * thatModule, bool visitGenerics = false, bool sortStructures = false);
         void visitModulesInOrder(Visitor & vis, bool visitGenerics = false);
         void visitModules(Visitor & vis, bool visitGenerics = false);
-        void visit(Visitor & vis, bool visitGenerics = false);
+        void visit(Visitor & vis, bool visitGenerics = false, bool sortStructures = false);
         void setPrintFlags();
         void aotCpp ( Context & context, TextWriter & logs, bool cross_platform = false );
         void registerAotCpp ( TextWriter & logs, Context & context, bool headers = true, bool allModules = false );
