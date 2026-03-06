@@ -99,11 +99,14 @@ def write_func_signature(var w : StringBuilderWriter; func) {
 
 def write_handled_type(var w : StringBuilderWriter; value : Annotation const) {
     write(w, "  handled {value.name}")
+    var ann = unsafe(reinterpret<BasicStructureAnnotation?> value)
+    basic_struct_for_each_parent(*ann) <| $(parent) {
+        write(w, " : {parent.name}")
+    }
     if (!empty(value.cppName)) {
         write(w, "  // C++ {value.cppName}")
     }
     write(w, "\n")
-    var ann = unsafe(reinterpret<BasicStructureAnnotation?> value)
     for_each_field(*ann) <| $(name, cppName, xtype, offset) {
         if (!empty(cppName) && cppName != name) {
             write(w, "    {name} : {describe(xtype)}  // C++ {cppName}\n")
