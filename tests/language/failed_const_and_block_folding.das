@@ -7,26 +7,31 @@ expect 40209:2
 //options log_optimization_passes=true
 // options log=true
 
+[marker(no_coverage)]
 def two_plus_two : int {
     return 2 + 2
 }
 
+[marker(no_coverage)]
 def var_two_plus_two : int {
     let x, y : int = 2
     return x + y
 }
 
+[marker(no_coverage)]
 def var_op3_two_plus_two(cond : bool) : int {
     let x, y : int = 2
     return (cond ? x : y) + 2
 }
 
+[marker(no_coverage)]
 def var_op3_arg_two_plus_two(cond : bool) : int {
     let x, y : int = 2
     let cc : bool = cond
     return (cc ? x : y) + 2
 }
 
+[marker(no_coverage)]
 def test_dead_code(X : int) : int {
     var x : int = X
     while (x < 5) {
@@ -42,6 +47,7 @@ def test_dead_code(X : int) : int {
     }
 }
 
+[marker(no_coverage)]
 def test_empty_if(cond : bool) {
     if (cond) {
         assert(false)
@@ -50,7 +56,7 @@ def test_empty_if(cond : bool) {
     }
 }
 
-[export]
+[export, marker(no_coverage)]
 def test : bool {
     if ((3 + (2 > 3 ? 0 : 1)) != 4) {
         3 + (2 > 3 ? 0 : 1)
