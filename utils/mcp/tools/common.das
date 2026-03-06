@@ -35,12 +35,19 @@ def make_tool_result(text : string; is_error : bool = false) : string {
 }
 
 def compile_and_simulate(file : string; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
+    return compile_program(file, false) <| blk
+}
+
+def compile_program(file : string; _export_all : bool; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
     var inscope access <- make_file_access("")
     var result : string
     var had_error = false
     using() <| $(var mg : ModuleGroup) {
         using() <| $(var cop : CodeOfPolicies) {
             cop.threadlock_context = true
+            if (_export_all) {
+                cop.export_all = true
+            }
             compile_file(file, access, unsafe(addr(mg)), cop) <| $(ok; program; issues) {
                 if (!ok) {
                     result = "Compilation failed:\n{issues}"

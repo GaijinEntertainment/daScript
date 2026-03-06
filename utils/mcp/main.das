@@ -157,11 +157,12 @@ def handle_tools_list(id_json : string) : string {
     ))
     result.tools |> emplace(make_tool(
         "ast_dump",
-        "Dump AST structure of a daslang expression or function. Returns S-expression showing node types and fields.",
+        "Dump AST of a daslang expression or function. mode='source' shows post-macro daslang code (via describe), mode='ast' (default) shows S-expression with node types.",
         {
             "expression" => PropertySchema(_type = "string", description = "A daslang expression to dump (e.g. 'a.b[0]', 'foo(x, y + 1)')"),
             "file" => PropertySchema(_type = "string", description = "Path to a .das file — dumps AST of compiled functions"),
-            "function" => PropertySchema(_type = "string", description = "Function name to dump (optional, defaults to all functions)")
+            "function" => PropertySchema(_type = "string", description = "Function name to dump (optional, defaults to all functions)"),
+            "mode" => PropertySchema(_type = "string", description = "Output mode: 'ast' (default) for S-expression, 'source' for post-macro daslang code")
         },
         []
     ))
@@ -211,7 +212,7 @@ def get_string_arg(args : JsonValue?; name : string) : string {
     return v.value as _string
 }
 
-def dispatch_tool(tool_name, arg1, arg2, arg3 : string) : string {
+def dispatch_tool(tool_name, arg1, arg2, arg3, arg4 : string) : string {
     if (tool_name == "compile_check") {
         return do_compile_check(arg1)
     } elif (tool_name == "list_functions") {
@@ -225,7 +226,7 @@ def dispatch_tool(tool_name, arg1, arg2, arg3 : string) : string {
     } elif (tool_name == "run_script") {
         return do_run_script(arg1, arg2)
     } elif (tool_name == "ast_dump") {
-        return do_ast_dump(arg1, arg2, arg3)
+        return do_ast_dump(arg1, arg2, arg3, arg4)
     } elif (tool_name == "list_modules") {
         return do_list_modules()
     } elif (tool_name == "find_symbol") {
@@ -237,11 +238,11 @@ def dispatch_tool(tool_name, arg1, arg2, arg3 : string) : string {
     }
 }
 
-def run_tool(tool_name, arg1, arg2, arg3 : string) : string {
+def run_tool(tool_name, arg1, arg2, arg3, arg4 : string) : string {
     var result : string
     with_channel(1) <| $(ch) {
         new_thread() <| @() {
-            let tool_result = dispatch_tool(tool_name, arg1, arg2, arg3)
+            let tool_result = dispatch_tool(tool_name, arg1, arg2, arg3, arg4)
             ch |> push_clone(ToolMessage(text = tool_result))
             ch |> notify_and_release()
         }
@@ -259,7 +260,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         return json_rpc_error(id_json, -32602, "missing tool name")
     }
     let name = tool_name_val.value as _string
-    var arg1, arg2, arg3 : string
+    var arg1, arg2, arg3, arg4 : string
     if (name == "compile_check" || name == "list_functions" || name == "list_types" || name == "run_test" || name == "format_file") {
         arg1 = get_string_arg(args, "file")
         if (empty(arg1)) {
@@ -272,6 +273,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         arg1 = get_string_arg(args, "expression")
         arg2 = get_string_arg(args, "file")
         arg3 = get_string_arg(args, "function")
+        arg4 = get_string_arg(args, "mode")
     } elif (name == "find_symbol") {
         arg1 = get_string_arg(args, "query")
         if (empty(arg1)) {
@@ -291,7 +293,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
     } else {
         return json_rpc_error(id_json, -32602, "unknown tool: {name}")
     }
-    return json_rpc_response(id_json, run_tool(name, arg1, arg2, arg3))
+    return json_rpc_response(id_json, run_tool(name, arg1, arg2, arg3, arg4))
 }
 
 // ── HTTP server ───────────────────────────────────────────────────────

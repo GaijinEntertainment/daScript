@@ -46,8 +46,16 @@ def do_ast_dump_expression(expression : string) : string {
     return make_tool_result(output)
 }
 
-def do_ast_dump_file(file, func_name : string) : string {
-    return compile_and_simulate(file) <| $(program, issues) {
+def format_func_body(func; use_source_mode : bool) : string {
+    if (use_source_mode) {
+        return describe_expression(func.body)
+    } else {
+        return debug_expression(get_ptr(func.body))
+    }
+}
+
+def do_ast_dump_file(file, func_name : string; use_source_mode : bool) : string {
+    return compile_program(file, true) <| $(program, issues) {
         let thisMod = get_this_module(program)
         var result = ""
         var found = false
@@ -60,7 +68,6 @@ def do_ast_dump_file(file, func_name : string) : string {
             }
             found = true
             result += "def {func.name}"
-            // args
             var has_args = false
             for (i in range(length(func.arguments))) {
                 if (!arg_needs_documenting(func.arguments[i]._type)) {
@@ -81,7 +88,7 @@ def do_ast_dump_file(file, func_name : string) : string {
                 result += " : {describe(func.result)}"
             }
             result += "\n"
-            result += debug_expression(get_ptr(func.body))
+            result += format_func_body(func, use_source_mode)
             result += "\n\n"
         }
         if (!found) {
@@ -97,11 +104,12 @@ def do_ast_dump_file(file, func_name : string) : string {
     }
 }
 
-def do_ast_dump(expression, file, func_name : string) : string {
+def do_ast_dump(expression, file, func_name, mode : string) : string {
     if (!empty(expression)) {
         return do_ast_dump_expression(expression)
     } elif (!empty(file)) {
-        return do_ast_dump_file(file, func_name)
+        let use_source_mode = mode == "source"
+        return do_ast_dump_file(file, func_name, use_source_mode)
     } else {
         return make_tool_result("Provide either 'expression' or 'file' argument", true)
     }
