@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "daslang": {
+      "type": "http",
+      "url": "http://localhost:9500/mcp"
+    }
+  }
+}
