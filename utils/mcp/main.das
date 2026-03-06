@@ -25,6 +25,8 @@ require tools/list_functions public
 require tools/list_types public
 require tools/run_test public
 require tools/list_module_api public
+require tools/list_modules public
+require tools/find_symbol public
 
 let MCP_PORT = 9500
 
@@ -138,12 +140,28 @@ def handle_tools_list(id_json : string) : string {
     result.tools |> emplace(make_file_tool("list_types", "Compile a daScript file and list all structs, classes, enums, and type aliases"))
     result.tools |> emplace(make_file_tool("run_test", "Run dastest on a .das test file and return pass/fail results"))
     result.tools |> emplace(make_tool(
+        "list_modules",
+        "List all available daslang modules (builtin and daslib)",
+        {},
+        []
+    ))
+    result.tools |> emplace(make_tool(
+        "find_symbol",
+        "Search for a symbol (function, struct, enum, global) across all registered modules by substring match",
+        {
+            "query" => PropertySchema(_type = "string", description = "Substring to search for in symbol names"),
+            "kind" => PropertySchema(_type = "string", description = "Limit to kind: 'function', 'generic', 'struct', 'handled', 'field', 'enum', 'global'"),
+            "file" => PropertySchema(_type = "string", description = "Optional .das file — if provided, searches all modules loaded by that file (including daslib)")
+        },
+        ["query"]
+    ))
+    result.tools |> emplace(make_tool(
         "list_module_api",
         "List all functions, types, enums, and globals exported by a daslang module (e.g. 'math', 'strings', 'fio', 'ast', 'daslib/json')",
         {
             "module" => PropertySchema(_type = "string", description = "Module name (e.g. 'math', 'strings', 'fio', 'ast', 'daslib/json')"),
             "filter" => PropertySchema(_type = "string", description = "Substring filter on names (e.g. 'for_each', 'json')"),
-            "section" => PropertySchema(_type = "string", description = "Limit to section: 'functions', 'generics', 'structs', 'enums', 'globals'")
+            "section" => PropertySchema(_type = "string", description = "Limit to section: 'functions', 'generics', 'operators', 'structs', 'handled', 'enums', 'globals'")
         },
         ["module"]
     ))
@@ -181,6 +199,18 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
             return json_rpc_error(id_json, -32602, "missing 'file' argument")
         }
         return json_rpc_response(id_json, do_run_test(file_arg.value as _string))
+    } elif (name == "list_modules") {
+        return json_rpc_response(id_json, do_list_modules())
+    } elif (name == "find_symbol") {
+        let query_arg = (args != null && args.value is _object) ? (args.value as _object)?["query"] ?? null : null
+        if (query_arg == null || !(query_arg.value is _string)) {
+            return json_rpc_error(id_json, -32602, "missing 'query' argument")
+        }
+        let kind_arg = (args != null && args.value is _object) ? (args.value as _object)?["kind"] ?? null : null
+        let file_arg = (args != null && args.value is _object) ? (args.value as _object)?["file"] ?? null : null
+        let kind_str = kind_arg != null && kind_arg.value is _string ? kind_arg.value as _string : ""
+        let file_str = file_arg != null && file_arg.value is _string ? file_arg.value as _string : ""
+        return json_rpc_response(id_json, do_find_symbol(query_arg.value as _string, kind_str, file_str))
     } elif (name == "list_module_api") {
         let mod_arg = (args != null && args.value is _object) ? (args.value as _object)?["module"] ?? null : null
         if (mod_arg == null || !(mod_arg.value is _string)) {

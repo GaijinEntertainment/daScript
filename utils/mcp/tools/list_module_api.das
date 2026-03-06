@@ -11,83 +11,28 @@ def do_list_module_api(module_name : string; filter : string = ""; section : str
     fopen(stub_path, "w") <| $(f) {
         fwrite(f, stub)
     }
-    var inscope access <- make_file_access("")
-    var result : string
-    var had_error = false
-    using() <| $(var mg : ModuleGroup) {
-        using() <| $(var cop : CodeOfPolicies) {
-            cop.threadlock_context = true
-            compile_file(stub_path, access, unsafe(addr(mg)), cop) <| $(ok; program; issues) {
-                if (!ok) {
-                    result = "Failed to compile stub requiring '{module_name}':\n{issues}"
-                    had_error = true
-                } else {
-                    simulate(program) <| $(sok; ctx; serrors) {
-                        if (!sok) {
-                            result = "Simulation failed:\n{serrors}"
-                            had_error = true
-                            return
-                        }
-                        // find the target module
-                        var target_mod : Module?
-                        program_for_each_module(program) <| $(mod) {
-                            let mname = string(mod.name)
-                            if (mname == module_name || "{module_name}" |> ends_with("/{mname}")) {
-                                target_mod = mod
-                            }
-                        }
-                        if (target_mod == null) {
-                            result = "Module '{module_name}' not found after compilation"
-                            had_error = true
-                            return
-                        }
-                        result = build_string() <| $(var writer) {
-                            write_module_api(writer, target_mod, filter, section)
-                        }
-                        if (empty(result)) {
-                            result = "(empty module)"
-                        }
-                    }
-                }
+    return compile_and_simulate(stub_path) <| $(program; issues) {
+        // find the target module
+        var target_mod : Module?
+        program_for_each_module(program) <| $(mod) {
+            let mname = string(mod.name)
+            if (mname == module_name || "{module_name}" |> ends_with("/{mname}")) {
+                target_mod = mod
             }
         }
+        if (target_mod == null) {
+            return "Module '{module_name}' not found after compilation"
+        }
+        var res = build_string() <| $(var writer) {
+            write_module_api(writer, target_mod, filter, section)
+        }
+        return empty(res) ? "(empty module)" : res
     }
-    return make_tool_result(result, had_error)
 }
 
 def is_operator_function(name : string) : bool {
     let ch = character_at(name, 0)
     return !is_alpha(ch) && !is_number(ch) && ch != '_'
-}
-
-def arg_needs_documenting(tt) : bool {
-    return tt.baseType != Type.fakeContext && tt.baseType != Type.fakeLineInfo
-}
-
-def write_module_func(var w : StringBuilderWriter; func) {
-    write(w, "  def {func.name}")
-    var has_args = false
-    for (i in range(length(func.arguments))) {
-        if (!arg_needs_documenting(func.arguments[i]._type)) {
-            continue
-        }
-        if (!has_args) {
-            write(w, "(")
-            has_args = true
-        } else {
-            write(w, "; ")
-        }
-        write(w, "{func.arguments[i].name} : {describe(func.arguments[i]._type)}")
-    }
-    if (has_args) {
-        write(w, ")")
-    }
-    if (func.result != null && !func.result.isVoid) {
-        write(w, " : {describe(func.result)}")
-    }
-    if (int(func.at.line) > 0) {
-        write(w, "  // line {int(func.at.line)}")
-    }
 }
 
 def name_matches_filter(name : string; filter : string) : bool {
@@ -102,43 +47,51 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
     write(writer, "Module: {mod.name}\n")
     var funcs : array<string>
     var generics : array<string>
+    var operators : array<string>
     var structs : array<string>
+    var handled : array<string>
     var enums : array<string>
     var globals : array<string>
     // functions via AST
-    if (want_section(section, "functions")) {
+    if (want_section(section, "functions") || want_section(section, "operators")) {
         for_each_function(mod, "") <| $(func) {
             if (func.flags.privateFunction || func.flags._lambda || func.flags.generated) {
                 return
             }
-            if (is_operator_function(string(func.name))) {
-                return
-            }
-            if (!name_matches_filter(string(func.name), filter)) {
+            let fname = string(func.name)
+            if (!name_matches_filter(fname, filter)) {
                 return
             }
             var entry = build_string() <| $(var w) {
-                write_module_func(w, func)
+                write(w, "  def {func.name}")
+                write_func_signature(w, func)
             }
-            funcs |> push(entry)
+            if (is_operator_function(fname) && want_section(section, "operators")) {
+                operators |> push(entry)
+            } elif (!is_operator_function(fname) && want_section(section, "functions")) {
+                funcs |> push(entry)
+            }
         }
     }
     // generics via AST
-    if (want_section(section, "generics")) {
+    if (want_section(section, "generics") || want_section(section, "operators")) {
         for_each_generic(mod) <| $(func) {
             if (func.flags.privateFunction || func.flags.generated || string(func.name) |> starts_with("```")) {
                 return
             }
-            if (is_operator_function(string(func.name))) {
-                return
-            }
-            if (!name_matches_filter(string(func.name), filter)) {
+            let fname = string(func.name)
+            if (!name_matches_filter(fname, filter)) {
                 return
             }
             var entry = build_string() <| $(var w) {
-                write_module_func(w, func)
+                write(w, "  def {func.name}")
+                write_func_signature(w, func)
             }
-            generics |> push(entry)
+            if (is_operator_function(fname) && want_section(section, "operators")) {
+                operators |> push(entry)
+            } elif (!is_operator_function(fname) && want_section(section, "generics")) {
+                generics |> push(entry)
+            }
         }
     }
     // structures via AST
@@ -165,6 +118,21 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
             }
         }
         structs |> push(entry)
+        }
+    }
+    // handled types via annotations
+    if (want_section(section, "handled")) {
+        module_for_each_annotation(mod) <| $(value) {
+            if (!value.isBasicStructureAnnotation) {
+                return
+            }
+            if (!name_matches_filter(string(value.name), filter)) {
+                return
+            }
+            var entry = build_string() <| $(var w) {
+                write_handled_type(w, value)
+            }
+            handled |> push(entry)
         }
     }
     // enumerations via AST
@@ -217,10 +185,22 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
             write(writer, "{g}\n")
         }
     }
+    if (!empty(operators)) {
+        write(writer, "Operators ({length(operators)}):\n")
+        for (o in operators) {
+            write(writer, "{o}\n")
+        }
+    }
     if (!empty(structs)) {
         write(writer, "Structs/Classes:\n")
         for (s in structs) {
             write(writer, s)
+        }
+    }
+    if (!empty(handled)) {
+        write(writer, "Handled types ({length(handled)}):\n")
+        for (h in handled) {
+            write(writer, h)
         }
     }
     if (!empty(enums)) {
