@@ -31,6 +31,7 @@ require tools/find_symbol public
 require tools/format_file public
 require tools/run_script public
 require tools/ast_dump public
+require tools/list_requires public
 
 let MCP_PORT = 9500
 let HEAP_COLLECT_THRESHOLD = 1024ul * 1024ul  // 1 MB
@@ -182,6 +183,7 @@ def handle_tools_list(id_json : string) : string {
         },
         ["query"]
     ))
+    result.tools |> emplace(make_file_tool("list_requires", "Compile a .das file and list all require dependencies (direct and transitive)"))
     result.tools |> emplace(make_tool(
         "list_module_api",
         "List all functions, types, enums, and globals exported by a daslang module (e.g. 'math', 'strings', 'fio', 'ast', 'daslib/json')",
@@ -227,6 +229,8 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4 : string) : string {
         return do_run_script(arg1, arg2)
     } elif (tool_name == "ast_dump") {
         return do_ast_dump(arg1, arg2, arg3, arg4)
+    } elif (tool_name == "list_requires") {
+        return do_list_requires(arg1)
     } elif (tool_name == "list_modules") {
         return do_list_modules()
     } elif (tool_name == "find_symbol") {
@@ -261,7 +265,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
     }
     let name = tool_name_val.value as _string
     var arg1, arg2, arg3, arg4 : string
-    if (name == "compile_check" || name == "list_functions" || name == "list_types" || name == "run_test" || name == "format_file") {
+    if (name == "compile_check" || name == "list_functions" || name == "list_types" || name == "run_test" || name == "format_file" || name == "list_requires") {
         arg1 = get_string_arg(args, "file")
         if (empty(arg1)) {
             return json_rpc_error(id_json, -32602, "missing 'file' argument")

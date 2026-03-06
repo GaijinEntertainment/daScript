@@ -220,6 +220,7 @@ The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics and p
 | `run_script` | Running scripts via shell and capturing output |
 | `run_test` | Running dastest via shell and parsing results |
 | `format_file` | Running the formatter script manually |
+| `list_requires` | Grepping for `require` statements and guessing transitive deps |
 
 **Starting the server:** `bin/Release/daslang.exe utils/mcp/main.das` (port 9500 by default)
 

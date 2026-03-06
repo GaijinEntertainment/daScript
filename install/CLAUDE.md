@@ -155,6 +155,7 @@ If the SDK was built with dasHV enabled, `utils/mcp/` contains a [Model Context 
 | `run_script` | Running scripts via shell and capturing output |
 | `run_test` | Running dastest via shell and parsing results |
 | `format_file` | Running the formatter script manually |
+| `list_requires` | Grepping for `require` statements and guessing transitive deps |
 
 **Starting the server:** `bin/daslang utils/mcp/main.das` (port 9500 by default)
 

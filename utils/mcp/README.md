@@ -15,6 +15,7 @@ A minimal [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) serve
 | `ast_dump` | Dump AST of an expression or compiled function. `mode=ast` returns S-expression (node types/fields), `mode=source` returns post-macro daslang code |
 | `list_modules` | List all available daslang modules (builtin C++ modules and daslib) |
 | `find_symbol` | Cross-module symbol search (functions, generics, structs, handled types, enums, globals, fields). Case-insensitive substring by default; `=query` for exact match |
+| `list_requires` | Compile a `.das` file and list all `require` dependencies (direct and transitive), with source file paths and builtin annotations |
 | `list_module_api` | List all functions, types, enums, and globals exported by a builtin or daslib module (e.g. `math`, `strings`, `fio`, `daslib/json`) |
 
 ## Prerequisites
@@ -87,6 +88,7 @@ Optionally, allow the MCP tools without prompting by adding to `.claude/settings
       "mcp__daslang__ast_dump",
       "mcp__daslang__list_modules",
       "mcp__daslang__find_symbol",
+      "mcp__daslang__list_requires",
       "mcp__daslang__list_module_api"
     ]
   }

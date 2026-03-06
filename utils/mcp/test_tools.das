@@ -16,6 +16,7 @@ require tools/ast_dump public
 require tools/list_modules public
 require tools/find_symbol public
 require tools/list_module_api public
+require tools/list_requires public
 
 // helper: parse tool result JSON, return (text, isError)
 def parse_result(result : string; var text : string&; var is_error : bool&) : bool {
@@ -273,5 +274,38 @@ def test_format_file(t : T?) {
         t |> success(!is_error, "should not be error")
         // might be "already formatted" or "Formatted" depending on state
         t |> success(find(text, "ormatted") >= 0, "should mention formatting result")
+    }
+}
+
+// ── list_requires ────────────────────────────────────────────────────
+
+[test]
+def test_list_requires(t : T?) {
+    t |> run("lists direct requires") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_list_requires(fixture_path("_fixture_requires.das")), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "Direct requires") >= 0, "should have Direct requires section")
+        t |> success(find(text, "require math") >= 0, "should list math")
+        t |> success(find(text, "require strings") >= 0, "should list strings")
+    }
+    t |> run("marks public requires") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_list_requires(fixture_path("_fixture_requires.das")), text, is_error)
+        t |> success(find(text, "strings public") >= 0, "should mark strings as public")
+    }
+    t |> run("annotates builtin modules") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_list_requires(fixture_path("_fixture_requires.das")), text, is_error)
+        t |> success(find(text, "// builtin") >= 0, "should annotate builtin modules")
+    }
+    t |> run("file with no explicit requires") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_list_requires(fixture_path("_fixture_valid.das")), text, is_error)
+        t |> success(!is_error, "should not be error")
     }
 }
