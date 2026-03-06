@@ -222,6 +222,7 @@ The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics and p
 | `format_file` | Running the formatter script manually |
 | `convert_to_gen2` | Running `das-fmt` manually to convert gen1→gen2 syntax |
 | `goto_definition` | Manually tracing symbol definitions across files |
+| `type_of` | Manually inspecting expression types |
 | `list_requires` | Grepping for `require` statements and guessing transitive deps |
 
 **Starting the server:** `bin/Release/daslang.exe utils/mcp/main.das` (port 9500 by default)

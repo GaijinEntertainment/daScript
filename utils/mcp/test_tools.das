@@ -19,6 +19,7 @@ require tools/list_module_api public
 require tools/list_requires public
 require tools/convert_to_gen2 public
 require tools/goto_definition public
+require tools/type_of public
 
 // helper: parse tool result JSON, return (text, isError)
 def parse_result(result : string; var text : string&; var is_error : bool&) : bool {
@@ -417,5 +418,57 @@ def test_goto_definition_snippet(t : T?) {
         parse_result(do_goto_definition(fixture_path("_fixture_goto.das"), "24", "13"), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "def distance") >= 0, "snippet should contain function definition")
+    }
+}
+
+// ── type_of ──────────────────────────────────────────────────────────
+
+[test]
+def test_type_of_call(t : T?) {
+    t |> run("function call returns result type") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // distance() call at line 24 col 13
+        parse_result(do_type_of(fixture_path("_fixture_goto.das"), "24", "13"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "ExprCall(distance)") >= 0, "should show ExprCall")
+        t |> success(find(text, "float") >= 0, "should return float type")
+    }
+}
+
+[test]
+def test_type_of_variable(t : T?) {
+    t |> run("variable reference shows struct type with location") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // p1 at line 24 col 22
+        parse_result(do_type_of(fixture_path("_fixture_goto.das"), "24", "22"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "ExprVar(p1)") >= 0, "should show ExprVar")
+        t |> success(find(text, "Point") >= 0, "should show Point type")
+    }
+}
+
+[test]
+def test_type_of_field(t : T?) {
+    t |> run("field access shows field type") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // a.x at line 15 col 14
+        parse_result(do_type_of(fixture_path("_fixture_goto.das"), "15", "14"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "ExprField(x)") >= 0, "should show ExprField")
+        t |> success(find(text, "float") >= 0, "should return float type")
+    }
+}
+
+[test]
+def test_type_of_no_expression(t : T?) {
+    t |> run("reports no expression at empty position") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_type_of(fixture_path("_fixture_goto.das"), "1", "1"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "No expression found") >= 0, "should report no expression")
     }
 }
