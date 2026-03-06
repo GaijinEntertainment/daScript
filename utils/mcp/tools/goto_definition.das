@@ -112,27 +112,42 @@ def resolve_definition(hit : CursorHit) : DefinitionResult {
         }
     }
     // ExprField / ExprSafeField → struct field declaration
-    if (expr is ExprField) {
-        let f = expr as ExprField
-        if (f.value != null && f.value._type != null) {
-            let td = get_ptr(f.value._type)
-            if (td.structType != null) {
-                let st = td.structType
-                let field_name = string(f.name)
-                for (fld in st.fields) {
-                    if (string(fld.name) == field_name) {
-                        let file = lineinfo_file(fld.at)
-                        let line = int(fld.at.line)
-                        return DefinitionResult(
-                            found = true,
-                            kind = "field",
-                            name = "{st.name}.{field_name}",
-                            file = file,
-                            line = line,
-                            column = int(fld.at.column),
-                            snippet = read_source_snippet(file, line)
-                        )
-                    }
+    // Note: `is` checks exact type, not inheritance — must handle both
+    if (expr is ExprField || expr is ExprSafeField) {
+        var field_name : string
+        var value_type : TypeDecl const?
+        if (expr is ExprField) {
+            let f = expr as ExprField
+            field_name = string(f.name)
+            if (f.value != null && f.value._type != null) {
+                value_type = get_ptr(f.value._type)
+            }
+        } else {
+            let f = expr as ExprSafeField
+            field_name = string(f.name)
+            if (f.value != null && f.value._type != null) {
+                value_type = get_ptr(f.value._type)
+            }
+        }
+        // unwrap pointer types (Foo? → Foo)
+        if (value_type != null && value_type.structType == null && value_type.firstType != null) {
+            value_type = get_ptr(value_type.firstType)
+        }
+        if (value_type != null && value_type.structType != null) {
+            let st = value_type.structType
+            for (fld in st.fields) {
+                if (string(fld.name) == field_name) {
+                    let file = lineinfo_file(fld.at)
+                    let line = int(fld.at.line)
+                    return DefinitionResult(
+                        found = true,
+                        kind = "field",
+                        name = "{st.name}.{field_name}",
+                        file = file,
+                        line = line,
+                        column = int(fld.at.column),
+                        snippet = read_source_snippet(file, line)
+                    )
                 }
             }
         }
