@@ -18,6 +18,7 @@ options no_unused_block_arguments = false
 require dashv/dashv_boost
 require daslib/json
 require daslib/json_boost public
+require daslib/jobque_boost
 require strings
 
 require tools/compile_check public
@@ -25,8 +26,15 @@ require tools/list_functions public
 require tools/list_types public
 require tools/run_test public
 require tools/list_module_api public
+require tools/list_modules public
+require tools/find_symbol public
+require tools/format_file public
+require tools/run_script public
+require tools/ast_dump public
 
 let MCP_PORT = 9500
+let HEAP_COLLECT_THRESHOLD = 1024ul * 1024ul  // 1 MB
+let HEAP_LOG_INTERVAL = 60000l                // log heap stats every 60 seconds
 
 // ── MCP protocol structs ─────────────────────────────────────────────
 
@@ -137,63 +145,155 @@ def handle_tools_list(id_json : string) : string {
     result.tools |> emplace(make_file_tool("list_functions", "Compile a daScript file and list all functions (after macro expansion)"))
     result.tools |> emplace(make_file_tool("list_types", "Compile a daScript file and list all structs, classes, enums, and type aliases"))
     result.tools |> emplace(make_file_tool("run_test", "Run dastest on a .das test file and return pass/fail results"))
+    result.tools |> emplace(make_file_tool("format_file", "Format a .das source file in place using the daslang code formatter"))
+    result.tools |> emplace(make_tool(
+        "run_script",
+        "Run a daslang script and return its stdout output. Provide either a file path or inline code.",
+        {
+            "file" => PropertySchema(_type = "string", description = "Path to the .das file to run"),
+            "code" => PropertySchema(_type = "string", description = "Inline daslang code to run (written to temp file and executed)")
+        },
+        []
+    ))
+    result.tools |> emplace(make_tool(
+        "ast_dump",
+        "Dump AST of a daslang expression or function. mode='source' shows post-macro daslang code (via describe), mode='ast' (default) shows S-expression with node types.",
+        {
+            "expression" => PropertySchema(_type = "string", description = "A daslang expression to dump (e.g. 'a.b[0]', 'foo(x, y + 1)')"),
+            "file" => PropertySchema(_type = "string", description = "Path to a .das file — dumps AST of compiled functions"),
+            "function" => PropertySchema(_type = "string", description = "Function name to dump (optional, defaults to all functions)"),
+            "mode" => PropertySchema(_type = "string", description = "Output mode: 'ast' (default) for S-expression, 'source' for post-macro daslang code")
+        },
+        []
+    ))
+    result.tools |> emplace(make_tool(
+        "list_modules",
+        "List all available daslang modules (builtin and daslib)",
+        {},
+        []
+    ))
+    result.tools |> emplace(make_tool(
+        "find_symbol",
+        "Search for a symbol (function, struct, enum, global) across all registered modules by substring match",
+        {
+            "query" => PropertySchema(_type = "string", description = "Case-insensitive substring search. Prefix with '=' for exact case-sensitive match (e.g. '=print')"),
+            "kind" => PropertySchema(_type = "string", description = "Limit to kind: 'function', 'generic', 'struct', 'handled', 'field', 'enum', 'global'"),
+            "file" => PropertySchema(_type = "string", description = "Optional .das file — if provided, searches all modules loaded by that file (including daslib)")
+        },
+        ["query"]
+    ))
     result.tools |> emplace(make_tool(
         "list_module_api",
         "List all functions, types, enums, and globals exported by a daslang module (e.g. 'math', 'strings', 'fio', 'ast', 'daslib/json')",
         {
             "module" => PropertySchema(_type = "string", description = "Module name (e.g. 'math', 'strings', 'fio', 'ast', 'daslib/json')"),
             "filter" => PropertySchema(_type = "string", description = "Substring filter on names (e.g. 'for_each', 'json')"),
-            "section" => PropertySchema(_type = "string", description = "Limit to section: 'functions', 'generics', 'structs', 'enums', 'globals'")
+            "section" => PropertySchema(_type = "string", description = "Limit to section: 'functions', 'generics', 'operators', 'structs', 'handled', 'enums', 'globals'")
         },
         ["module"]
     ))
     return json_rpc_response(id_json, sprint_json(result, false))
 }
 
+// ── Tool dispatch (runs in cloned context via new_thread) ────────────
+
+struct ToolMessage {
+    text : string
+}
+
+def get_string_arg(args : JsonValue?; name : string) : string {
+    if (args == null || !(args.value is _object)) {
+        return ""
+    }
+    let v = (args.value as _object)?[name] ?? null
+    if (v == null || !(v.value is _string)) {
+        return ""
+    }
+    return v.value as _string
+}
+
+def dispatch_tool(tool_name, arg1, arg2, arg3, arg4 : string) : string {
+    if (tool_name == "compile_check") {
+        return do_compile_check(arg1)
+    } elif (tool_name == "list_functions") {
+        return do_list_functions(arg1)
+    } elif (tool_name == "list_types") {
+        return do_list_types(arg1)
+    } elif (tool_name == "run_test") {
+        return do_run_test(arg1)
+    } elif (tool_name == "format_file") {
+        return do_format_file(arg1)
+    } elif (tool_name == "run_script") {
+        return do_run_script(arg1, arg2)
+    } elif (tool_name == "ast_dump") {
+        return do_ast_dump(arg1, arg2, arg3, arg4)
+    } elif (tool_name == "list_modules") {
+        return do_list_modules()
+    } elif (tool_name == "find_symbol") {
+        return do_find_symbol(arg1, arg2, arg3)
+    } elif (tool_name == "list_module_api") {
+        return do_list_module_api(arg1, arg2, arg3)
+    } else {
+        return make_tool_result("unknown tool: {tool_name}", true)
+    }
+}
+
+def run_tool(tool_name, arg1, arg2, arg3, arg4 : string) : string {
+    var result : string
+    with_channel(1) <| $(ch) {
+        new_thread() <| @() {
+            let tool_result = dispatch_tool(tool_name, arg1, arg2, arg3, arg4)
+            ch |> push_clone(ToolMessage(text = tool_result))
+            ch |> notify_and_release()
+        }
+        for_each_clone(ch) <| $(msg : ToolMessage#) {
+            result = clone_string(msg.text)
+        }
+    }
+    return result
+}
+
 def handle_tools_call(id_json : string; params : JsonValue?) : string {
-    let tool_name = params?.name
+    let tool_name_val = params?.name
     let args = params?.arguments
-    if (tool_name == null) {
+    if (tool_name_val == null) {
         return json_rpc_error(id_json, -32602, "missing tool name")
     }
-    let name = tool_name.value as _string
-    if (name == "compile_check") {
-        let file_arg = args?.file
-        if (file_arg == null || !(file_arg.value is _string)) {
+    let name = tool_name_val.value as _string
+    var arg1, arg2, arg3, arg4 : string
+    if (name == "compile_check" || name == "list_functions" || name == "list_types" || name == "run_test" || name == "format_file") {
+        arg1 = get_string_arg(args, "file")
+        if (empty(arg1)) {
             return json_rpc_error(id_json, -32602, "missing 'file' argument")
         }
-        return json_rpc_response(id_json, do_compile_check(file_arg.value as _string))
-    } elif (name == "list_functions") {
-        let file_arg = args?.file
-        if (file_arg == null || !(file_arg.value is _string)) {
-            return json_rpc_error(id_json, -32602, "missing 'file' argument")
+    } elif (name == "run_script") {
+        arg1 = get_string_arg(args, "file")
+        arg2 = get_string_arg(args, "code")
+    } elif (name == "ast_dump") {
+        arg1 = get_string_arg(args, "expression")
+        arg2 = get_string_arg(args, "file")
+        arg3 = get_string_arg(args, "function")
+        arg4 = get_string_arg(args, "mode")
+    } elif (name == "find_symbol") {
+        arg1 = get_string_arg(args, "query")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'query' argument")
         }
-        return json_rpc_response(id_json, do_list_functions(file_arg.value as _string))
-    } elif (name == "list_types") {
-        let file_arg = args?.file
-        if (file_arg == null || !(file_arg.value is _string)) {
-            return json_rpc_error(id_json, -32602, "missing 'file' argument")
-        }
-        return json_rpc_response(id_json, do_list_types(file_arg.value as _string))
-    } elif (name == "run_test") {
-        let file_arg = args?.file
-        if (file_arg == null || !(file_arg.value is _string)) {
-            return json_rpc_error(id_json, -32602, "missing 'file' argument")
-        }
-        return json_rpc_response(id_json, do_run_test(file_arg.value as _string))
+        arg2 = get_string_arg(args, "kind")
+        arg3 = get_string_arg(args, "file")
     } elif (name == "list_module_api") {
-        let mod_arg = (args != null && args.value is _object) ? (args.value as _object)?["module"] ?? null : null
-        if (mod_arg == null || !(mod_arg.value is _string)) {
+        arg1 = get_string_arg(args, "module")
+        if (empty(arg1)) {
             return json_rpc_error(id_json, -32602, "missing 'module' argument")
         }
-        let filter_arg = (args != null && args.value is _object) ? (args.value as _object)?["filter"] ?? null : null
-        let section_arg = (args != null && args.value is _object) ? (args.value as _object)?["section"] ?? null : null
-        let filter_str = filter_arg != null && filter_arg.value is _string ? filter_arg.value as _string : ""
-        let section_str = section_arg != null && section_arg.value is _string ? section_arg.value as _string : ""
-        return json_rpc_response(id_json, do_list_module_api(mod_arg.value as _string, filter_str, section_str))
+        arg2 = get_string_arg(args, "filter")
+        arg3 = get_string_arg(args, "section")
+    } elif (name == "list_modules") {
+        // no args needed
     } else {
         return json_rpc_error(id_json, -32602, "unknown tool: {name}")
     }
+    return json_rpc_response(id_json, run_tool(name, arg1, arg2, arg3, arg4))
 }
 
 // ── HTTP server ───────────────────────────────────────────────────────
@@ -274,8 +374,27 @@ def main() {
     server->init(port)
     server->start()
     print("Server running. Press Ctrl+C to stop.\n")
+    var log_ref_time = ref_time_ticks()
     while (true) {
         server->tick()
         sleep(10u)
+        // periodic heap stats logging
+        let elapsed = get_time_usec(log_ref_time) / 1000
+        if (elapsed > int(HEAP_LOG_INTERVAL)) {
+            log_ref_time = ref_time_ticks()
+            let heap_used = heap_bytes_allocated()
+            let str_used = string_heap_bytes_allocated()
+            print("[MCP] heap: {int(heap_used)} bytes ({heap_depth()} depth), string heap: {int(str_used)} bytes ({string_heap_depth()} depth)\n")
+        }
+        // collect if over threshold
+        let heap_used = heap_bytes_allocated()
+        let str_used = string_heap_bytes_allocated()
+        if (heap_used > HEAP_COLLECT_THRESHOLD || str_used > HEAP_COLLECT_THRESHOLD) {
+            print("[MCP] collecting — heap: {int(heap_used)}, string heap: {int(str_used)}\n")
+            unsafe {
+                heap_collect(str_used > HEAP_COLLECT_THRESHOLD, false)
+            }
+            print("[MCP] after collect — heap: {int(heap_bytes_allocated())}, string heap: {int(string_heap_bytes_allocated())}\n")
+        }
     }
 }

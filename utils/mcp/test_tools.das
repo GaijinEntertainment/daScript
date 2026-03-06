@@ -1,0 +1,277 @@
+options gen2
+options no_unused_function_arguments = false
+options no_unused_block_arguments = false
+
+require dastest/testing_boost public
+require daslib/json
+require daslib/json_boost
+require strings
+
+require tools/compile_check public
+require tools/list_functions public
+require tools/list_types public
+require tools/run_script public
+require tools/format_file public
+require tools/ast_dump public
+require tools/list_modules public
+require tools/find_symbol public
+require tools/list_module_api public
+
+// helper: parse tool result JSON, return (text, isError)
+def parse_result(result : string; var text : string&; var is_error : bool&) : bool {
+    var err : string
+    var parsed = read_json(result, err)
+    if (parsed == null) {
+        return false
+    }
+    // result is {"content":[{"type":"text","text":"..."}],"isError":false}
+    // access content[0].text via JSON path
+    let content = parsed?["content"]
+    if (content == null) {
+        unsafe { delete parsed; }
+        return false
+    }
+    let first = content?[0]
+    if (first == null) {
+        unsafe { delete parsed; }
+        return false
+    }
+    let text_val = first?["text"]
+    if (text_val != null) {
+        text = text_val.value as _string
+    }
+    let err_val = parsed?["isError"]
+    if (err_val != null) {
+        is_error = err_val.value as _bool
+    }
+    unsafe { delete parsed; }
+    return true
+}
+
+def fixture_path(name : string) : string {
+    return "utils/mcp/tests/{name}"
+}
+
+// ── compile_check ────────────────────────────────────────────────────
+
+[test]
+def test_compile_check_valid(t : T?) {
+    t |> run("valid file compiles") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_compile_check(fixture_path("_fixture_valid.das")), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "Compilation OK") >= 0, "should contain 'Compilation OK'")
+    }
+    t |> run("lists functions") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_compile_check(fixture_path("_fixture_valid.das")), text, is_error)
+        t |> success(find(text, "def greet") >= 0, "should list greet function")
+        t |> success(find(text, "def main") >= 0, "should list main function")
+    }
+}
+
+[test]
+def test_compile_check_error(t : T?) {
+    t |> run("invalid file reports error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_compile_check(fixture_path("_fixture_error.das")), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(is_error, "should be error")
+        t |> success(find(text, "Compilation failed") >= 0, "should contain 'Compilation failed'")
+    }
+}
+
+[test]
+def test_compile_check_missing(t : T?) {
+    t |> run("missing file reports error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_compile_check("nonexistent_file_12345.das"), text, is_error)
+        t |> success(is_error, "should be error")
+        t |> success(find(text, "not found") >= 0, "should mention file not found")
+    }
+}
+
+// ── list_functions ───────────────────────────────────────────────────
+
+[test]
+def test_list_functions(t : T?) {
+    t |> run("lists user functions") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_list_functions(fixture_path("_fixture_valid.das")), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "def greet") >= 0, "should list greet")
+        t |> success(find(text, "def main") >= 0, "should list main")
+    }
+}
+
+// ── list_types ───────────────────────────────────────────────────────
+
+[test]
+def test_list_types(t : T?) {
+    t |> run("lists structs, enums, classes") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_list_types(fixture_path("_fixture_valid.das")), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "Point") >= 0, "should list Point struct")
+        t |> success(find(text, "Color") >= 0, "should list Color enum")
+        t |> success(find(text, "Animal") >= 0, "should list Animal class")
+    }
+}
+
+// ── run_script ───────────────────────────────────────────────────────
+
+[test]
+def test_run_script_inline(t : T?) {
+    t |> run("inline code executes") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        let code = "options gen2\n[export]\ndef main() \{\n    print(\"hello_mcp_test\\n\")\n\}\n"
+        parse_result(do_run_script("", code), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "hello_mcp_test") >= 0, "should contain output")
+    }
+}
+
+[test]
+def test_run_script_error(t : T?) {
+    t |> run("bad code reports error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        let code = "options gen2\ndef broken() : int \{\n    return \"nope\"\n\}\n"
+        parse_result(do_run_script("", code), text, is_error)
+        t |> success(is_error, "should be error")
+    }
+}
+
+// ── ast_dump ─────────────────────────────────────────────────────────
+
+[test]
+def test_ast_dump_expression(t : T?) {
+    t |> run("expression mode returns S-expression") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_ast_dump("a + b", "", "", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "ExprOp2") >= 0, "should contain ExprOp2")
+        t |> success(find(text, "ExprVar") >= 0, "should contain ExprVar")
+    }
+}
+
+[test]
+def test_ast_dump_file_ast_mode(t : T?) {
+    t |> run("file ast mode returns S-expression") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_ast_dump("", fixture_path("_fixture_valid.das"), "add", "ast"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "def add") >= 0, "should contain function header")
+        t |> success(find(text, "ExprReturn") >= 0, "should contain ExprReturn node")
+    }
+}
+
+[test]
+def test_ast_dump_file_source_mode(t : T?) {
+    t |> run("file source mode returns describe output") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_ast_dump("", fixture_path("_fixture_valid.das"), "add", "source"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "def add") >= 0, "should contain function header")
+        t |> success(find(text, "return") >= 0, "should contain return statement")
+        // source mode should NOT have ExprOp2 etc.
+        t |> success(find(text, "ExprOp2") < 0, "should not contain S-expression nodes")
+    }
+}
+
+[test]
+def test_ast_dump_export_all(t : T?) {
+    t |> run("export_all preserves non-main functions") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_ast_dump("", fixture_path("_fixture_valid.das"), "greet", "source"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "def greet") >= 0, "greet should be preserved by export_all")
+    }
+}
+
+// ── list_modules ─────────────────────────────────────────────────────
+
+[test]
+def test_list_modules(t : T?) {
+    t |> run("lists builtin modules") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_list_modules(), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "math") >= 0, "should list math module")
+        t |> success(find(text, "strings") >= 0, "should list strings module")
+    }
+    t |> run("lists daslib modules") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_list_modules(), text, is_error)
+        t |> success(find(text, "json") >= 0, "should list json module")
+    }
+}
+
+// ── find_symbol ──────────────────────────────────────────────────────
+
+[test]
+def test_find_symbol(t : T?) {
+    t |> run("finds builtin function") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_find_symbol("print", "", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "print") >= 0, "should find print")
+    }
+    t |> run("case-insensitive search") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_find_symbol("PRINT", "", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "print") >= 0, "should find print case-insensitively")
+    }
+    t |> run("exact match with = prefix") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_find_symbol("=print", "", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "print") >= 0, "should find exact 'print'")
+    }
+}
+
+// ── list_module_api ──────────────────────────────────────────────────
+
+[test]
+def test_list_module_api(t : T?) {
+    t |> run("lists math module functions") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_list_module_api("math", "", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "sin") >= 0, "should list sin function")
+        t |> success(find(text, "cos") >= 0, "should list cos function")
+    }
+}
+
+// ── format_file ──────────────────────────────────────────────────────
+
+[test]
+def test_format_file(t : T?) {
+    t |> run("formats already-formatted file") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_format_file(fixture_path("_fixture_valid.das")), text, is_error)
+        t |> success(!is_error, "should not be error")
+        // might be "already formatted" or "Formatted" depending on state
+        t |> success(find(text, "ormatted") >= 0, "should mention formatting result")
+    }
+}

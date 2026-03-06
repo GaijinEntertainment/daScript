@@ -12,6 +12,7 @@ Source files live under `install/` in the repo; CMake installs them to the SDK r
 | `install/skills/das_formatting.md` | `skills/das_formatting.md` | Code formatter usage |
 | `install/skills/cpp_integration.md` | `skills/cpp_integration.md` | C++ embedding patterns |
 | `install/skills/daslib_modules.md` | `skills/daslib_modules.md` | Standard library module reference |
+| `utils/mcp/` (whole dir) | `utils/mcp/` | MCP server for AI assistants (gated on dasHV) |
 
 ## What belongs in install instructions
 
@@ -28,6 +29,7 @@ Source files live under `install/` in the repo; CMake installs them to the SDK r
 - C++ integration (embedding, binding types/functions/enums)
 - Code formatting tool usage
 - Install directory layout (bin/, lib/, daslib/, include/, examples/)
+- MCP server usage (starting, configuring, available tools)
 - Keywords reference
 
 **Exclude (repo-dev-only):**
@@ -56,6 +58,7 @@ The install CLAUDE.md derives from the repo CLAUDE.md but is NOT a copy. When up
 3. **New daslib module docs** — update BOTH `skills/daslib_modules.md` AND `install/skills/daslib_modules.md`
 4. **New C++ integration patterns** — update BOTH `skills/cpp_integration.md` AND `install/skills/cpp_integration.md`; omit repo-internal codebase notes from the install version
 5. **Formatter changes** — update BOTH `skills/das_formatting.md` AND `install/skills/das_formatting.md`; use `bin/daslang` paths in the install version
+6. **MCP tool changes** (new tools, API changes) — update BOTH repo `CLAUDE.md` MCP section AND `install/CLAUDE.md` MCP section; use `bin/daslang` paths in install version. The MCP source files (`utils/mcp/`) are installed directly by CMake (gated on `NOT DAS_HV_DISABLED`)
 
 ## CMake install rules
 
@@ -80,4 +83,6 @@ After modifying install instructions:
    - `D:/daslang/skills/das_formatting.md`
    - `D:/daslang/skills/cpp_integration.md`
    - `D:/daslang/skills/daslib_modules.md`
+   - `D:/daslang/utils/mcp/main.das` (only if built with `DAS_HV_DISABLED=OFF`)
+   - `D:/daslang/utils/mcp/tools/common.das` (only if built with `DAS_HV_DISABLED=OFF`)
 4. Spot-check that no repo-internal paths leaked into install files

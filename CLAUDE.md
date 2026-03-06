@@ -200,6 +200,32 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - `tutorials/language/` — Language tutorial `.das` files
 - `tutorials/integration/cpp/` — C++ integration tutorials
 - `modules/` — External plugin modules
+- `utils/mcp/` — MCP server for AI coding assistants (requires dasHV)
+
+## MCP Server (AI Tool Integration)
+
+The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics and program introspection to AI coding assistants via the [Model Context Protocol](https://modelcontextprotocol.io/). It requires dasHV (`DAS_HV_DISABLED=OFF`).
+
+**When MCP tools are available**, prefer them over manual compilation and grep-based exploration:
+
+| Tool | Use instead of... |
+|---|---|
+| `compile_check` | Running `daslang.exe` manually and parsing errors |
+| `list_functions` | Grepping for `def ` in `.das` files |
+| `list_types` | Grepping for `struct`/`class`/`enum` definitions |
+| `find_symbol` | Searching across modules for function/type names |
+| `list_module_api` | Reading daslib source to find available functions |
+| `list_modules` | Guessing module names or scanning `daslib/` directory |
+| `ast_dump` | Manually inspecting AST or post-macro output |
+| `run_script` | Running scripts via shell and capturing output |
+| `run_test` | Running dastest via shell and parsing results |
+| `format_file` | Running the formatter script manually |
+
+**Starting the server:** `bin/Release/daslang.exe utils/mcp/main.das` (port 9500 by default)
+
+**Configuration:** See `utils/mcp/README.md` for `.mcp.json` setup and Claude Code permissions.
+
+**Tests:** `bin/Release/daslang.exe dastest/dastest.das -- --test utils/mcp/test_tools.das`
 
 ## Keywords Reference
 
