@@ -247,7 +247,7 @@ def run_tool(tool_name, arg1, arg2, arg3, arg4 : string) : string {
             ch |> notify_and_release()
         }
         for_each_clone(ch) <| $(msg : ToolMessage#) {
-            result := msg.text
+            result = clone_string(msg.text)
         }
     }
     return result

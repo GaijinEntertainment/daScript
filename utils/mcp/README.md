@@ -10,6 +10,11 @@ A minimal [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) serve
 | `list_functions` | Compile a `.das` file and list all user functions, class methods, and generic instances (after macro expansion) |
 | `list_types` | Compile a `.das` file and list all structs, classes (with fields), enums (with values), and type aliases |
 | `run_test` | Run dastest on a `.das` test file and return pass/fail results |
+| `format_file` | Format a `.das` file using `daslib/das_source_formatter` |
+| `run_script` | Run a `.das` file or inline code snippet and return stdout/stderr |
+| `ast_dump` | Dump AST of an expression or compiled function. `mode=ast` returns S-expression (node types/fields), `mode=source` returns post-macro daslang code |
+| `list_modules` | List all available daslang modules (builtin C++ modules and daslib) |
+| `find_symbol` | Cross-module symbol search (functions, generics, structs, handled types, enums, globals, fields). Case-insensitive substring by default; `=query` for exact match |
 | `list_module_api` | List all functions, types, enums, and globals exported by a builtin or daslib module (e.g. `math`, `strings`, `fio`, `daslib/json`) |
 
 ## Prerequisites
@@ -44,6 +49,12 @@ Configure Claude Code with: "url": "http://localhost:9500/mcp"
 Server running. Press Ctrl+C to stop.
 ```
 
+## Architecture
+
+- Each tool invocation runs in a **separate thread** (`new_thread`) with its own context/heap — when the thread ends, its memory is freed without GC
+- The main loop periodically logs heap stats (every 60s) and auto-collects when the string heap exceeds 1 MB
+- Tool handlers are modular: each tool lives in `tools/*.das`, shared utilities in `tools/common.das`
+
 ## Configuring Claude Code
 
 Create a `.mcp.json` file in your **project root** (the directory where you run Claude Code):
@@ -71,6 +82,11 @@ Optionally, allow the MCP tools without prompting by adding to `.claude/settings
       "mcp__daslang__list_functions",
       "mcp__daslang__list_types",
       "mcp__daslang__run_test",
+      "mcp__daslang__format_file",
+      "mcp__daslang__run_script",
+      "mcp__daslang__ast_dump",
+      "mcp__daslang__list_modules",
+      "mcp__daslang__find_symbol",
       "mcp__daslang__list_module_api"
     ]
   }
