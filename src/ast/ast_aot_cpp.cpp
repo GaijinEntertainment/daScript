@@ -635,8 +635,20 @@ namespace das {
             ss << "};\n";
             ss << "    for (auto& ann : annotations) {\n"
                   "        ann.resolveAnnotation();\n"
-                  "    }\n"
-                  "}\n\n";
+                  "    }\n";
+            // link annotation_arguments for VarInfo fields
+            for ( const auto & [_, sinfo] : ordered(smn2s) ) {
+                if ( !sinfo->fields ) continue;
+                for ( uint32_t fi=0, fis=sinfo->count; fi!=fis; ++fi ) {
+                    auto fld = sinfo->fields[fi];
+                    if ( !fld->annotation_arguments ) continue;
+                    auto aa = (AnnotationArguments *) fld->annotation_arguments;
+                    if ( aa->empty() ) continue;
+                    ss << "    " << structInfoName(sinfo) << "_field_" << fi
+                       << ".annotation_arguments = &" << structInfoName(sinfo) << "_field_" << fi << "_ann;\n";
+                }
+            }
+            ss << "}\n\n";
             info2Name.clear();
             info2TypeName.clear();
             return ss.str();
@@ -690,6 +702,34 @@ namespace das {
                 auto prefix = info->module_name != nullptr ? string(info->module_name) + "::" : "";
                 describeCppVarInfo(ss, (prefix + info->name), info->fields[fi],suffix);
                 ss << " };\n";
+                auto fld = info->fields[fi];
+                if ( fld->annotation_arguments ) {
+                    auto aa = (AnnotationArguments *) fld->annotation_arguments;
+                    if ( !aa->empty() ) {
+                        ss << "static AnnotationArguments " << structInfoName(info) << "_field_" << fi << "_ann = { ";
+                        bool first = true;
+                        for ( const auto & arg : *aa ) {
+                            if ( !first ) ss << ", ";
+                            first = false;
+                            if ( arg.type==Type::tBool ) {
+                                ss << "AnnotationArgument(\"" << arg.name << "\", " << (arg.bValue ? "true" : "false") << ")";
+                            } else if ( arg.type==Type::tString ) {
+                                ss << "AnnotationArgument(\"" << arg.name << "\", string(\"";
+                                for ( auto ch : arg.sValue ) {
+                                    if ( ch=='"' ) ss << "\\\"";
+                                    else if ( ch=='\\' ) ss << "\\\\";
+                                    else ss << ch;
+                                }
+                                ss << "\"))";
+                            } else if ( arg.type==Type::tInt ) {
+                                ss << "AnnotationArgument(\"" << arg.name << "\", " << arg.iValue << ")";
+                            } else if ( arg.type==Type::tFloat ) {
+                                ss << "AnnotationArgument(\"" << arg.name << "\", " << arg.fValue << "f)";
+                            }
+                        }
+                        ss << " };\n";
+                    }
+                }
             }
             ss << "VarInfo * " << structInfoName(info) << "_fields[" << info->count << "] =  { ";
             for ( uint32_t fi=0, fis=info->count; fi!=fis; ++fi ) {

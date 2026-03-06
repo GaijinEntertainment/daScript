@@ -375,7 +375,16 @@ jobs:
               --test ../../tests/lpipe \
               --test ../../tests/match \
               --test ../../tests/math \
-              --test ../../tests/module_tests
+              --test ../../tests/module_tests \
+              --test ../../tests/regex \
+              --test ../../tests/json \
+              --test ../../tests/safe_addr \
+              --test ../../tests/soa \
+              --test ../../tests/spoof \
+              --test ../../tests/strings \
+              --test ../../tests/template \
+              --test ../../tests/type_traits \
+              --test ../../tests/uri
             ;;
            *)
             cd bin
@@ -406,7 +415,16 @@ jobs:
               --test ../tests/lpipe \
               --test ../tests/match \
               --test ../tests/math \
-              --test ../tests/module_tests
+              --test ../tests/module_tests \
+              --test ../tests/regex \
+              --test ../tests/json \
+              --test ../tests/safe_addr \
+              --test ../tests/soa \
+              --test ../tests/spoof \
+              --test ../tests/strings \
+              --test ../tests/template \
+              --test ../tests/type_traits \
+              --test ../tests/uri
             ;;
         esac
 
