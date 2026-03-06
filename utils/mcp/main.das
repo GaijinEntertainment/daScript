@@ -32,6 +32,8 @@ require tools/format_file public
 require tools/run_script public
 require tools/ast_dump public
 require tools/list_requires public
+require tools/convert_to_gen2 public
+require tools/goto_definition public
 
 let MCP_PORT = 9500
 let HEAP_COLLECT_THRESHOLD = 1024ul * 1024ul  // 1 MB
@@ -185,6 +187,25 @@ def handle_tools_list(id_json : string) : string {
     ))
     result.tools |> emplace(make_file_tool("list_requires", "Compile a .das file and list all require dependencies (direct and transitive)"))
     result.tools |> emplace(make_tool(
+        "convert_to_gen2",
+        "Convert a daslang source file from v1 (indentation-based) syntax to gen2 (braces, parentheses) syntax using das-fmt. Returns converted code or writes in place.",
+        {
+            "file" => PropertySchema(_type = "string", description = "Path to the .das file to convert"),
+            "inplace" => PropertySchema(_type = "string", description = "If 'true', overwrite the file in place. Otherwise return converted code to stdout.")
+        },
+        ["file"]
+    ))
+    result.tools |> emplace(make_tool(
+        "goto_definition",
+        "Given a cursor position (file, line, column), resolve the definition of the symbol under the cursor. Returns the definition location, kind, and source snippet.",
+        {
+            "file" => PropertySchema(_type = "string", description = "Path to the .das file"),
+            "line" => PropertySchema(_type = "string", description = "Line number (1-based)"),
+            "column" => PropertySchema(_type = "string", description = "Column number (1-based)")
+        },
+        ["file", "line", "column"]
+    ))
+    result.tools |> emplace(make_tool(
         "list_module_api",
         "List all functions, types, enums, and globals exported by a daslang module (e.g. 'math', 'strings', 'fio', 'ast', 'daslib/json')",
         {
@@ -231,6 +252,10 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4 : string) : string {
         return do_ast_dump(arg1, arg2, arg3, arg4)
     } elif (tool_name == "list_requires") {
         return do_list_requires(arg1)
+    } elif (tool_name == "convert_to_gen2") {
+        return do_convert_to_gen2(arg1, arg2 == "true")
+    } elif (tool_name == "goto_definition") {
+        return do_goto_definition(arg1, arg2, arg3)
     } elif (tool_name == "list_modules") {
         return do_list_modules()
     } elif (tool_name == "find_symbol") {
@@ -270,6 +295,19 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         if (empty(arg1)) {
             return json_rpc_error(id_json, -32602, "missing 'file' argument")
         }
+    } elif (name == "convert_to_gen2") {
+        arg1 = get_string_arg(args, "file")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'file' argument")
+        }
+        arg2 = get_string_arg(args, "inplace")
+    } elif (name == "goto_definition") {
+        arg1 = get_string_arg(args, "file")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'file' argument")
+        }
+        arg2 = get_string_arg(args, "line")
+        arg3 = get_string_arg(args, "column")
     } elif (name == "run_script") {
         arg1 = get_string_arg(args, "file")
         arg2 = get_string_arg(args, "code")

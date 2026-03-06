@@ -17,6 +17,8 @@ A minimal [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) serve
 | `find_symbol` | Cross-module symbol search (functions, generics, structs, handled types, enums, globals, fields). Case-insensitive substring by default; `=query` for exact match |
 | `list_requires` | Compile a `.das` file and list all `require` dependencies (direct and transitive), with source file paths and builtin annotations |
 | `list_module_api` | List all functions, types, enums, and globals exported by a builtin or daslib module (e.g. `math`, `strings`, `fio`, `daslib/json`) |
+| `convert_to_gen2` | Convert a `.das` file from gen1 (indentation-based) syntax to gen2 (braces/parentheses) using `das-fmt`. Optional `inplace` flag to modify the file directly |
+| `goto_definition` | Given a cursor position (file, line, column), resolve the definition of the symbol under the cursor. Returns location, kind (variable/function/field/builtin/struct/enum), and source snippet |
 
 ## Prerequisites
 
@@ -89,7 +91,9 @@ Optionally, allow the MCP tools without prompting by adding to `.claude/settings
       "mcp__daslang__list_modules",
       "mcp__daslang__find_symbol",
       "mcp__daslang__list_requires",
-      "mcp__daslang__list_module_api"
+      "mcp__daslang__list_module_api",
+      "mcp__daslang__convert_to_gen2",
+      "mcp__daslang__goto_definition"
     ]
   }
 }

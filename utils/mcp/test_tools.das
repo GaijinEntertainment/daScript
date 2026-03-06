@@ -17,6 +17,8 @@ require tools/list_modules public
 require tools/find_symbol public
 require tools/list_module_api public
 require tools/list_requires public
+require tools/convert_to_gen2 public
+require tools/goto_definition public
 
 // helper: parse tool result JSON, return (text, isError)
 def parse_result(result : string; var text : string&; var is_error : bool&) : bool {
@@ -307,5 +309,113 @@ def test_list_requires(t : T?) {
         var is_error = false
         parse_result(do_list_requires(fixture_path("_fixture_valid.das")), text, is_error)
         t |> success(!is_error, "should not be error")
+    }
+}
+
+// ── convert_to_gen2 ─────────────────────────────────────────────────
+
+[test]
+def test_convert_to_gen2(t : T?) {
+    t |> run("converts gen1 to gen2 stdout") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_convert_to_gen2(fixture_path("_fixture_gen1.das"), false), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "options gen2") >= 0, "should add options gen2")
+        t |> success(find(text, "def add(") >= 0, "should contain add function")
+        t |> success(find(text, "\{") >= 0, "should contain braces")
+    }
+    t |> run("adds parentheses to control flow") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_convert_to_gen2(fixture_path("_fixture_gen1.das"), false), text, is_error)
+        t |> success(find(text, "if (") >= 0, "should add parens to if")
+    }
+    t |> run("missing file reports error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_convert_to_gen2("nonexistent_file_12345.das", false), text, is_error)
+        t |> success(is_error, "should be error for missing file")
+    }
+}
+
+// ── goto_definition ──────────────────────────────────────────────────
+
+[test]
+def test_goto_definition_function(t : T?) {
+    t |> run("resolves function call to definition") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // distance() call at line 24, col 13
+        parse_result(do_goto_definition(fixture_path("_fixture_goto.das"), "24", "13"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "Kind: function") >= 0, "should be function kind")
+        t |> success(find(text, "Symbol: distance") >= 0, "should resolve to distance")
+        t |> success(find(text, "Line: 14") >= 0, "should point to line 14")
+    }
+}
+
+[test]
+def test_goto_definition_variable(t : T?) {
+    t |> run("resolves variable reference to declaration") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // p1 variable at line 24, col 22
+        parse_result(do_goto_definition(fixture_path("_fixture_goto.das"), "24", "22"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "Kind: variable") >= 0, "should be variable kind")
+        t |> success(find(text, "Symbol: p1") >= 0, "should resolve to p1")
+        t |> success(find(text, "Line: 22") >= 0, "should point to line 22")
+    }
+}
+
+[test]
+def test_goto_definition_field(t : T?) {
+    t |> run("resolves field access to struct field") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // a.x field at line 15, col 14
+        parse_result(do_goto_definition(fixture_path("_fixture_goto.das"), "15", "14"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "Kind: field") >= 0, "should be field kind")
+        t |> success(find(text, "Point.x") >= 0, "should resolve to Point.x")
+        t |> success(find(text, "Line: 10") >= 0, "should point to line 10")
+    }
+}
+
+[test]
+def test_goto_definition_builtin(t : T?) {
+    t |> run("resolves builtin function") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // print() at line 25, col 5
+        parse_result(do_goto_definition(fixture_path("_fixture_goto.das"), "25", "5"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "Kind: builtin") >= 0, "should be builtin kind")
+        t |> success(find(text, "print") >= 0, "should resolve to print")
+    }
+}
+
+[test]
+def test_goto_definition_no_expression(t : T?) {
+    t |> run("reports no expression at empty position") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // line 1 col 1 — options gen2, no expression
+        parse_result(do_goto_definition(fixture_path("_fixture_goto.das"), "1", "1"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "No expression found") >= 0, "should report no expression")
+    }
+}
+
+[test]
+def test_goto_definition_snippet(t : T?) {
+    t |> run("includes source snippet") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // distance() at line 24
+        parse_result(do_goto_definition(fixture_path("_fixture_goto.das"), "24", "13"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "def distance") >= 0, "snippet should contain function definition")
     }
 }
