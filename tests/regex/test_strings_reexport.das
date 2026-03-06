@@ -1,7 +1,6 @@
 options gen2
 options no_unused_function_arguments = false
 options no_unused_block_arguments = false
-
 require dastest/testing_boost public
 require daslib/regex
 // NOTE: no explicit "require strings" — should be visible via regex's "require strings public"

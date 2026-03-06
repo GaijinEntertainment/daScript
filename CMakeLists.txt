@@ -93,8 +93,10 @@ SETUP_COMPILER()
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
+FILE(GLOB DAS_AOT_DASLIB_DEPENDS "${PROJECT_SOURCE_DIR}/daslib/*.das")
+
 MACRO(DAS_AOT_EXT input_files genList mainTarget dasAotTool dasAotToolArg)
-    set(all_depends ${dasAotTool})
+    set(all_depends ${dasAotTool} ${PROJECT_SOURCE_DIR}/utils/aot/main.das ${DAS_AOT_DASLIB_DEPENDS})
     set(all_outputs "")
     set(command_args "")
     list(LENGTH input_files num_files)

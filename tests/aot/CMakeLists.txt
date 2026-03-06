@@ -31,6 +31,18 @@ SET(AOT_DASLIB_MODULE_FILES
     daslib/math_bits.das
     daslib/random.das
     daslib/regex.das
+    daslib/regex_boost.das
+    daslib/safe_addr.das
+    daslib/soa.das
+    daslib/spoof.das
+    daslib/linked_list.das
+    daslib/strings_boost.das
+    daslib/temp_strings.das
+    daslib/templates.das
+    daslib/type_traits.das
+    daslib/bitfield_trait.das
+    daslib/defer.das
+    daslib/uriparser_boost.das
 )
 
 add_custom_target(test_aot_daslib_modules)
@@ -138,6 +150,32 @@ SET(AOT_MATH_MODULE_FILES
 
 # AOT for module_tests test files
 FILE(GLOB AOT_MODULE_TESTS_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/module_tests/*.das")
+
+# AOT for regex test files
+FILE(GLOB AOT_REGEX_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/regex/*.das")
+
+# AOT for safe_addr test files
+FILE(GLOB AOT_SAFE_ADDR_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/safe_addr/*.das")
+
+# AOT for soa test files
+FILE(GLOB AOT_SOA_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/soa/*.das")
+
+# AOT for spoof test files
+FILE(GLOB AOT_SPOOF_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/spoof/*.das")
+
+# AOT for strings test files
+FILE(GLOB AOT_STRINGS_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/strings/*.das")
+# Exclude expect-error tests
+list(FILTER AOT_STRINGS_FILES EXCLUDE REGEX "_failed")
+
+# AOT for template test files
+FILE(GLOB AOT_TEMPLATE_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/template/*.das")
+
+# AOT for type_traits test files
+FILE(GLOB AOT_TYPE_TRAITS_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/type_traits/*.das")
+
+# AOT for uri test files
+FILE(GLOB AOT_URI_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/uri/*.das")
 
 # AOT for lpipe test files
 FILE(GLOB AOT_LPIPE_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/lpipe/*.das")
@@ -269,6 +307,38 @@ add_custom_target(test_aot_module_tests)
 SET(MODULE_TESTS_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_MODULE_TESTS_FILES}" MODULE_TESTS_AOT_GENERATED_SRC test_aot_module_tests daslang)
 
+add_custom_target(test_aot_regex)
+SET(REGEX_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_REGEX_FILES}" REGEX_AOT_GENERATED_SRC test_aot_regex daslang)
+
+add_custom_target(test_aot_safe_addr)
+SET(SAFE_ADDR_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_SAFE_ADDR_FILES}" SAFE_ADDR_AOT_GENERATED_SRC test_aot_safe_addr daslang)
+
+add_custom_target(test_aot_soa)
+SET(SOA_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_SOA_FILES}" SOA_AOT_GENERATED_SRC test_aot_soa daslang)
+
+add_custom_target(test_aot_spoof)
+SET(SPOOF_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_SPOOF_FILES}" SPOOF_AOT_GENERATED_SRC test_aot_spoof daslang)
+
+add_custom_target(test_aot_strings)
+SET(STRINGS_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_STRINGS_FILES}" STRINGS_AOT_GENERATED_SRC test_aot_strings daslang)
+
+add_custom_target(test_aot_template)
+SET(TEMPLATE_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_TEMPLATE_FILES}" TEMPLATE_AOT_GENERATED_SRC test_aot_template daslang)
+
+add_custom_target(test_aot_type_traits)
+SET(TYPE_TRAITS_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_TYPE_TRAITS_FILES}" TYPE_TRAITS_AOT_GENERATED_SRC test_aot_type_traits daslang)
+
+add_custom_target(test_aot_uri)
+SET(URI_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_URI_FILES}" URI_AOT_GENERATED_SRC test_aot_uri daslang)
+
 add_custom_target(test_aot_lpipe)
 SET(LPIPE_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_LPIPE_FILES}" LPIPE_AOT_GENERATED_SRC test_aot_lpipe daslang)
@@ -314,6 +384,14 @@ SOURCE_GROUP_FILES("aot generated" MATCH_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" MATH_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" MATH_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" MODULE_TESTS_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" REGEX_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" SAFE_ADDR_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" SOA_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" SPOOF_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" STRINGS_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" TEMPLATE_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" TYPE_TRAITS_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" URI_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LPIPE_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LANGUAGE_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LANGUAGE_MODULES_AOT_GENERATED_SRC)
@@ -351,6 +429,14 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${MATH_AOT_GENERATED_SRC}
     ${MATH_MODULES_AOT_GENERATED_SRC}
     ${MODULE_TESTS_AOT_GENERATED_SRC}
+    ${REGEX_AOT_GENERATED_SRC}
+    ${SAFE_ADDR_AOT_GENERATED_SRC}
+    ${SOA_AOT_GENERATED_SRC}
+    ${SPOOF_AOT_GENERATED_SRC}
+    ${STRINGS_AOT_GENERATED_SRC}
+    ${TEMPLATE_AOT_GENERATED_SRC}
+    ${TYPE_TRAITS_AOT_GENERATED_SRC}
+    ${URI_AOT_GENERATED_SRC}
     ${LPIPE_AOT_GENERATED_SRC}
     ${LANGUAGE_AOT_GENERATED_SRC}
     ${LANGUAGE_MODULES_AOT_GENERATED_SRC}
@@ -372,6 +458,9 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_linq test_aot_linq_modules
     test_aot_match
     test_aot_math test_aot_math_modules test_aot_module_tests
+    test_aot_regex
+    test_aot_safe_addr test_aot_soa test_aot_spoof test_aot_strings
+    test_aot_template test_aot_type_traits test_aot_uri
     test_aot_lpipe
     test_aot_language test_aot_language_modules
     test_aot_daslib_modules test_aot_decs_modules

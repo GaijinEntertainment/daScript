@@ -666,6 +666,15 @@ class public AotDebugInfoHelper {
             write(writer, "    for (auto& ann : annotations) \{\n")
             write(writer, "        ann.resolveAnnotation();\n")
             write(writer, "    \}\n")
+            helper |> debug_helper_iter_structs($(name, si) {
+                if (si.fields == null) { return ; }
+                for (fi in range(si.count)) {
+                    let fld & = unsafe(si.fields[fi])
+                    if (fld.annotation_arguments == null) { continue; }
+                    if (length(*fld.annotation_arguments) == 0) { continue; }
+                    write(writer, "    {structInfoName(si)}_field_{fi}.annotation_arguments = &{structInfoName(si)}_field_{fi}_ann;\n")
+                }
+            })
             write(writer, "\}\n\n")
             info2Name.clear();
             info2TypeName.clear();
@@ -702,6 +711,27 @@ class public AotDebugInfoHelper {
             writeArgNames(writer, fld, suffix);
             let prefix = (info.module_name |> length() > 0) ? "{info.module_name}::" : "";
             write(*writer, "VarInfo {structInfoName(info)}_field_{fi} =  \{ {describeCppVarInfo(prefix + info.name, fld,suffix)} \};\n");
+            if (fld.annotation_arguments != null) {
+                if (length(*fld.annotation_arguments) > 0) {
+                    let annArgs = build_string() $(var sb) {
+                        var first = true
+                        for (arg in *fld.annotation_arguments) {
+                            if (!first) { write(sb, ", "); }
+                            first = false
+                            if (arg.basicType == Type.tBool) {
+                                write(sb, "AnnotationArgument(\"{arg.name}\", {arg.bValue})")
+                            } elif (arg.basicType == Type.tString) {
+                                write(sb, "AnnotationArgument(\"{arg.name}\", string(\"{arg.sValue}\"))")
+                            } elif (arg.basicType == Type.tInt) {
+                                write(sb, "AnnotationArgument(\"{arg.name}\", {arg.iValue})")
+                            } elif (arg.basicType == Type.tFloat) {
+                                write(sb, "AnnotationArgument(\"{arg.name}\", {arg.fValue}f)")
+                            }
+                        }
+                    }
+                    write(*writer, "static AnnotationArguments {structInfoName(info)}_field_{fi}_ann = \{ {annArgs} \};\n")
+                }
+            }
         }
         let fields = (info.count |> range()
                                  |> each()
