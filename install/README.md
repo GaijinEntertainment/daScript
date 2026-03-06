@@ -37,6 +37,7 @@
 | `modules/`   | Optional plugin modules                               |
 | `examples/`  | Example scripts                                       |
 | `tutorials/` | Language and integration tutorials                    |
+| `utils/mcp/` | MCP server for AI coding assistants (requires dasHV)  |
 
 ## Quick Start
 
