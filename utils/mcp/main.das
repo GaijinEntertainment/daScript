@@ -27,6 +27,7 @@ require tools/run_test public
 require tools/list_module_api public
 require tools/list_modules public
 require tools/find_symbol public
+require tools/format_file public
 
 let MCP_PORT = 9500
 
@@ -139,6 +140,7 @@ def handle_tools_list(id_json : string) : string {
     result.tools |> emplace(make_file_tool("list_functions", "Compile a daScript file and list all functions (after macro expansion)"))
     result.tools |> emplace(make_file_tool("list_types", "Compile a daScript file and list all structs, classes, enums, and type aliases"))
     result.tools |> emplace(make_file_tool("run_test", "Run dastest on a .das test file and return pass/fail results"))
+    result.tools |> emplace(make_file_tool("format_file", "Format a .das source file in place using the daslang code formatter"))
     result.tools |> emplace(make_tool(
         "list_modules",
         "List all available daslang modules (builtin and daslib)",
@@ -199,6 +201,12 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
             return json_rpc_error(id_json, -32602, "missing 'file' argument")
         }
         return json_rpc_response(id_json, do_run_test(file_arg.value as _string))
+    } elif (name == "format_file") {
+        let file_arg = args?.file
+        if (file_arg == null || !(file_arg.value is _string)) {
+            return json_rpc_error(id_json, -32602, "missing 'file' argument")
+        }
+        return json_rpc_response(id_json, do_format_file(file_arg.value as _string))
     } elif (name == "list_modules") {
         return json_rpc_response(id_json, do_list_modules())
     } elif (name == "find_symbol") {
