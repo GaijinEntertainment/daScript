@@ -8,6 +8,9 @@ A minimal [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) serve
 |---|---|
 | `compile_check` | Compile a `.das` file and return errors/warnings plus a categorized function listing on success |
 | `list_functions` | Compile a `.das` file and list all user functions, class methods, and generic instances (after macro expansion) |
+| `list_types` | Compile a `.das` file and list all structs, classes (with fields), enums (with values), and type aliases |
+| `run_test` | Run dastest on a `.das` test file and return pass/fail results |
+| `list_module_api` | List all functions, types, enums, and globals exported by a builtin or daslib module (e.g. `math`, `strings`, `fio`, `daslib/json`) |
 
 ## Prerequisites
 
@@ -65,7 +68,10 @@ Optionally, allow the MCP tools without prompting by adding to `.claude/settings
   "permissions": {
     "allow": [
       "mcp__daslang__compile_check",
-      "mcp__daslang__list_functions"
+      "mcp__daslang__list_functions",
+      "mcp__daslang__list_types",
+      "mcp__daslang__run_test",
+      "mcp__daslang__list_module_api"
     ]
   }
 }

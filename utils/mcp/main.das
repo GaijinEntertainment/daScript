@@ -23,6 +23,8 @@ require strings
 require tools/compile_check public
 require tools/list_functions public
 require tools/list_types public
+require tools/run_test public
+require tools/list_module_api public
 
 let MCP_PORT = 9500
 
@@ -117,11 +119,34 @@ def make_file_tool(name, description : string) : MakeFileTool {
     )
 }
 
+def make_tool(name, description : string; var props : table<string; PropertySchema>; var req : array<string>) : MakeFileTool {
+    return MakeFileTool(
+        name = name,
+        description = description,
+        inputSchema = InputSchema(
+            _type = "object",
+            properties <- props,
+            required <- req
+        )
+    )
+}
+
 def handle_tools_list(id_json : string) : string {
     var result : ToolsListResult
     result.tools |> emplace(make_file_tool("compile_check", "Compile a daScript file and return errors or success"))
     result.tools |> emplace(make_file_tool("list_functions", "Compile a daScript file and list all functions (after macro expansion)"))
     result.tools |> emplace(make_file_tool("list_types", "Compile a daScript file and list all structs, classes, enums, and type aliases"))
+    result.tools |> emplace(make_file_tool("run_test", "Run dastest on a .das test file and return pass/fail results"))
+    result.tools |> emplace(make_tool(
+        "list_module_api",
+        "List all functions, types, enums, and globals exported by a daslang module (e.g. 'math', 'strings', 'fio', 'ast', 'daslib/json')",
+        {
+            "module" => PropertySchema(_type = "string", description = "Module name (e.g. 'math', 'strings', 'fio', 'ast', 'daslib/json')"),
+            "filter" => PropertySchema(_type = "string", description = "Substring filter on names (e.g. 'for_each', 'json')"),
+            "section" => PropertySchema(_type = "string", description = "Limit to section: 'functions', 'generics', 'structs', 'enums', 'globals'")
+        },
+        ["module"]
+    ))
     return json_rpc_response(id_json, sprint_json(result, false))
 }
 
@@ -150,6 +175,22 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
             return json_rpc_error(id_json, -32602, "missing 'file' argument")
         }
         return json_rpc_response(id_json, do_list_types(file_arg.value as _string))
+    } elif (name == "run_test") {
+        let file_arg = args?.file
+        if (file_arg == null || !(file_arg.value is _string)) {
+            return json_rpc_error(id_json, -32602, "missing 'file' argument")
+        }
+        return json_rpc_response(id_json, do_run_test(file_arg.value as _string))
+    } elif (name == "list_module_api") {
+        let mod_arg = (args != null && args.value is _object) ? (args.value as _object)?["module"] ?? null : null
+        if (mod_arg == null || !(mod_arg.value is _string)) {
+            return json_rpc_error(id_json, -32602, "missing 'module' argument")
+        }
+        let filter_arg = (args != null && args.value is _object) ? (args.value as _object)?["filter"] ?? null : null
+        let section_arg = (args != null && args.value is _object) ? (args.value as _object)?["section"] ?? null : null
+        let filter_str = filter_arg != null && filter_arg.value is _string ? filter_arg.value as _string : ""
+        let section_str = section_arg != null && section_arg.value is _string ? section_arg.value as _string : ""
+        return json_rpc_response(id_json, do_list_module_api(mod_arg.value as _string, filter_str, section_str))
     } else {
         return json_rpc_error(id_json, -32602, "unknown tool: {name}")
     }
