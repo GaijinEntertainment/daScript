@@ -149,7 +149,7 @@ def handle_tools_list(id_json : string) : string {
         "find_symbol",
         "Search for a symbol (function, struct, enum, global) across all registered modules by substring match",
         {
-            "query" => PropertySchema(_type = "string", description = "Substring to search for in symbol names"),
+            "query" => PropertySchema(_type = "string", description = "Case-insensitive substring search. Prefix with '=' for exact case-sensitive match (e.g. '=print')"),
             "kind" => PropertySchema(_type = "string", description = "Limit to kind: 'function', 'generic', 'struct', 'handled', 'field', 'enum', 'global'"),
             "file" => PropertySchema(_type = "string", description = "Optional .das file — if provided, searches all modules loaded by that file (including daslib)")
         },

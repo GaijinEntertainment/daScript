@@ -36,7 +36,7 @@ def is_operator_function(name : string) : bool {
 }
 
 def name_matches_filter(name : string; filter : string) : bool {
-    return empty(filter) || find(name, filter) >= 0
+    return empty(filter) || symbol_matches(name, filter)
 }
 
 def want_section(section : string; name : string) : bool {

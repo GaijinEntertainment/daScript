@@ -19,6 +19,14 @@ struct ToolResult {
     isError : bool
 }
 
+// query matching: case-insensitive substring by default, "=foo" for exact case-sensitive
+def symbol_matches(name, query : string) : bool {
+    if (length(query) > 0 && character_at(query, 0) == '=') {
+        return name == slice(query, 1)
+    }
+    return find(to_lower(name), to_lower(query)) >= 0
+}
+
 def make_tool_result(text : string; is_error : bool = false) : string {
     var result : ToolResult
     result.isError = is_error

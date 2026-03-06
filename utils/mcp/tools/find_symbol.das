@@ -36,7 +36,7 @@ def get_func_cpp_name(func) : string {
 
 def struct_has_matching_field(value; query : string) : bool {
     for (fld in value.fields) {
-        if (find(string(fld.name), query) >= 0) {
+        if (symbol_matches(string(fld.name), query)) {
             return true
         }
     }
@@ -47,7 +47,7 @@ def handled_has_matching_field(value : Annotation const; query : string) : bool 
     var found = false
     var ann = unsafe(reinterpret<BasicStructureAnnotation?> value)
     for_each_field(*ann) <| $(name, cppName, xtype, offset) {
-        if (find(name, query) >= 0) {
+        if (symbol_matches(name, query)) {
             found = true
         }
     }
@@ -56,8 +56,7 @@ def handled_has_matching_field(value : Annotation const; query : string) : bool 
 
 def write_struct_fields_highlighted(var w : StringBuilderWriter; value; query : string; field_search : bool) {
     for (fld in value.fields) {
-        let fname = string(fld.name)
-        if (field_search && find(fname, query) >= 0) {
+        if (field_search && symbol_matches(string(fld.name), query)) {
             write(w, "  > {fld.name} : {describe(fld._type)}\n")
         } else {
             write(w, "    {fld.name} : {describe(fld._type)}\n")
@@ -68,7 +67,7 @@ def write_struct_fields_highlighted(var w : StringBuilderWriter; value; query : 
 def write_handled_fields_highlighted(var w : StringBuilderWriter; value : Annotation const; query : string; field_search : bool) {
     var ann = unsafe(reinterpret<BasicStructureAnnotation?> value)
     for_each_field(*ann) <| $(name, cppName, xtype, offset) {
-        let prefix = field_search && find(name, query) >= 0 ? "  > " : "    "
+        let prefix = field_search && symbol_matches(name, query) ? "  > " : "    "
         if (!empty(cppName) && cppName != name) {
             write(w, "{prefix}{name} : {describe(xtype)}  // C++ {cppName}\n")
         } else {
@@ -89,7 +88,7 @@ def search_module(var results : array<string>; var total_found : int&; mname : s
                 return
             }
             let fname = string(func.name)
-            if (find(fname, query) < 0) {
+            if (!symbol_matches(fname, query)) {
                 return
             }
             var entry = build_string() <| $(var w) {
@@ -111,7 +110,7 @@ def search_module(var results : array<string>; var total_found : int&; mname : s
                 return
             }
             let fname = string(func.name)
-            if (fname |> starts_with("```") || find(fname, query) < 0) {
+            if (fname |> starts_with("```") || !symbol_matches(fname, query)) {
                 return
             }
             var entry = build_string() <| $(var w) {
@@ -132,7 +131,7 @@ def search_module(var results : array<string>; var total_found : int&; mname : s
             if (value.flags.isLambda || value.flags._generator || value.flags.generated || value.flags.privateStructure) {
                 return
             }
-            let name_match = find(string(value.name), query) >= 0
+            let name_match = symbol_matches(string(value.name), query)
             let field_match = struct_has_matching_field(value, query)
             if (kind == "field" && !field_match) {
                 return
@@ -163,7 +162,7 @@ def search_module(var results : array<string>; var total_found : int&; mname : s
             if (!value.isBasicStructureAnnotation) {
                 return
             }
-            let name_match = find(string(value.name), query) >= 0
+            let name_match = symbol_matches(string(value.name), query)
             let field_match = handled_has_matching_field(value, query)
             if (kind == "field" && !field_match) {
                 return
@@ -190,7 +189,7 @@ def search_module(var results : array<string>; var total_found : int&; mname : s
             if (value.isPrivate) {
                 return
             }
-            if (find(string(value.name), query) < 0) {
+            if (!symbol_matches(string(value.name), query)) {
                 return
             }
             var entry = build_string() <| $(var w) {
@@ -214,7 +213,7 @@ def search_module(var results : array<string>; var total_found : int&; mname : s
             if (value.flags.private_variable) {
                 return
             }
-            if (find(string(value.name), query) < 0) {
+            if (!symbol_matches(string(value.name), query)) {
                 return
             }
             var entry = build_string() <| $(var w) {
