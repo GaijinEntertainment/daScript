@@ -5,6 +5,7 @@ require fio
 require strings
 require uriparser
 require debugapi
+require ast
 require daslib/json_boost
 require daslib/jobque_boost
 
@@ -35,6 +36,40 @@ def private collect_input_paths(args : array<string>; var paths : array<string>)
 }
 
 
+def private collect_files_filtered(path, das_test_path : string; var cache : table<string; void?>; var files : array<string>) : bool {
+    var success = false
+    var inscope access <- make_file_access("")
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
+            cop.threadlock_context = true
+            compile_file(das_test_path, access, unsafe(addr(mg)), cop) $(ok, program, output) {
+                if (!ok) {
+                    log::error("Failed to compile {das_test_path}\n{output}")
+                    return
+                }
+                simulate(program) $(sok, context, serrors) {
+                    if (!sok) {
+                        log::error("Failed to simulate {das_test_path}\n{serrors}")
+                        return
+                    }
+                    success = fs::scan_dir(path, cache, files, ".das") $(n) {
+                        var result = true
+                        unsafe {
+                            *context |> invoke_in_context("can_visit_folder", n, addr(result))
+                        }
+                        return result
+                    }
+                    if (!success) {
+                        log::error("Unable to scan given path '{path}'")
+                    }
+                }
+            }
+        }
+    }
+    return success
+}
+
+
 def private collect_files(input_paths : array<string>; var files : array<string>) : bool {
     var inscope cache : table<string; void?>
     for (path in input_paths) {
@@ -44,9 +79,17 @@ def private collect_files(input_paths : array<string>; var files : array<string>
                 files |> push <| path
             }
         } else {
-            if (!fs::scan_dir(path, cache, files, ".das")) {
-                log::error("Unable to scan given path '{path}'")
-                return false
+            let das_test_path = path |> fs::join_path(".das_test")
+            let das_test_stat = stat(das_test_path)
+            if (das_test_stat.is_reg) {
+                if (!collect_files_filtered(path, das_test_path, cache, files)) {
+                    return false
+                }
+            } else {
+                if (!fs::scan_dir(path, cache, files, ".das")) {
+                    log::error("Unable to scan given path '{path}'")
+                    return false
+                }
             }
         }
     }

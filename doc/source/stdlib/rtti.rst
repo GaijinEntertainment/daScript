@@ -2172,6 +2172,7 @@ Program access
 
   *  :ref:`get_module (name: string) : Module? <function-rtti_get_module_string>`
   *  :ref:`get_this_module (program: smart_ptr\<Program\>) : Module? <function-rtti_get_this_module_smart_ptr_ls_Program_gr_>`
+  *  :ref:`has_module (name: string) : bool <function-rtti_has_module_string>`
   *  :ref:`program_for_each_module (program: smart_ptr\<Program\>; block: block\<(Module?):void\>) <function-rtti_program_for_each_module_smart_ptr_ls_Program_gr__block_ls_Module_q__c_void_gr_>`
   *  :ref:`program_for_each_registered_module (block: block\<(Module?):void\>) <function-rtti_program_for_each_registered_module_block_ls_Module_q__c_void_gr_>`
 
@@ -2192,6 +2193,15 @@ Returns the ``Module`` pointer for the module currently being compiled or inferr
 
 
 :Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>`> implicit
+
+.. _function-rtti_has_module_string:
+
+.. das:function:: has_module(name: string) : bool
+
+Returns ``true`` if a module with the given name is registered, ``false`` otherwise.
+
+
+:Arguments: * **name** : string implicit
 
 .. _function-rtti_program_for_each_module_smart_ptr_ls_Program_gr__block_ls_Module_q__c_void_gr_:
 

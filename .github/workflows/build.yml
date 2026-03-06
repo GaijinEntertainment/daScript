@@ -348,83 +348,11 @@ jobs:
             ;;
            windows*)
             cd bin/"${{ matrix.cmake_preset }}"
-            ./test_aot -use-aot _dasroot_/dastest/dastest.das -- --use-aot --color \
-              --test ../../tests/algorithm \
-              --test ../../tests/aot \
-              --test ../../tests/apply \
-              --test ../../tests/archive \
-              --test ../../tests/assert_once \
-              --test ../../tests/async \
-              --test ../../tests/bare_block \
-              --test ../../tests/base64 \
-              --test ../../tests/bitfields \
-              --test ../../tests/bool_array \
-              --test ../../tests/data_walker \
-              --test ../../tests/decs \
-              --test ../../tests/debug \
-              --test ../../tests/debug_agent \
-              --test ../../tests/dynamic_cast_rtti \
-              --test ../../tests/fio \
-              --test ../../tests/functional \
-              --test ../../tests/handle_types \
-              --test ../../tests/hash_map \
-              --test ../../tests/interfaces \
-              --test ../../tests/jobque \
-              --test ../../tests/language \
-              --test ../../tests/linq \
-              --test ../../tests/lpipe \
-              --test ../../tests/match \
-              --test ../../tests/math \
-              --test ../../tests/module_tests \
-              --test ../../tests/regex \
-              --test ../../tests/json \
-              --test ../../tests/safe_addr \
-              --test ../../tests/soa \
-              --test ../../tests/spoof \
-              --test ../../tests/strings \
-              --test ../../tests/template \
-              --test ../../tests/type_traits \
-              --test ../../tests/uri
+            ./test_aot -use-aot _dasroot_/dastest/dastest.das -- --use-aot --color --test ../../tests
             ;;
            *)
             cd bin
-            ./test_aot -use-aot _dasroot_/dastest/dastest.das -- --use-aot --color \
-              --test ../tests/algorithm \
-              --test ../tests/aot \
-              --test ../tests/apply \
-              --test ../tests/archive \
-              --test ../tests/assert_once \
-              --test ../tests/async \
-              --test ../tests/bare_block \
-              --test ../tests/base64 \
-              --test ../tests/bitfields \
-              --test ../tests/bool_array \
-              --test ../tests/data_walker \
-              --test ../tests/decs \
-              --test ../tests/debug \
-              --test ../tests/debug_agent \
-              --test ../tests/dynamic_cast_rtti \
-              --test ../tests/fio \
-              --test ../tests/functional \
-              --test ../tests/handle_types \
-              --test ../tests/hash_map \
-              --test ../tests/interfaces \
-              --test ../tests/jobque \
-              --test ../tests/language \
-              --test ../tests/linq \
-              --test ../tests/lpipe \
-              --test ../tests/match \
-              --test ../tests/math \
-              --test ../tests/module_tests \
-              --test ../tests/regex \
-              --test ../tests/json \
-              --test ../tests/safe_addr \
-              --test ../tests/soa \
-              --test ../tests/spoof \
-              --test ../tests/strings \
-              --test ../tests/template \
-              --test ../tests/type_traits \
-              --test ../tests/uri
+            ./test_aot -use-aot _dasroot_/dastest/dastest.das -- --use-aot --color --test ../tests
             ;;
         esac
 

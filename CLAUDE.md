@@ -47,6 +47,27 @@ See `doc/source/reference/design_philosophy.rst` for the full design philosophy 
 - Exit code `-1073741819` (`0xC0000005`) = **Access Violation** — indicates a native crash (segfault)
 - If the program crashes with no error message, the bug is in native code (C++ bindings or smart pointer misuse) — check exit code first
 
+### Build Configurations (Module Flags)
+
+Optional modules are controlled by CMake flags (`DAS_*_DISABLED`). The active configuration lives in `.vscode/settings.json` under `cmake.configureSettings` (the "WIP" block is the active one; others are commented-out presets).
+
+Key flags (all default to `ON` = disabled in CMakeLists.txt):
+- `DAS_HV_DISABLED` — dasHV (HTTP/WebSocket via libhv)
+- `DAS_PUGIXML_DISABLED` — dasPUGIXML (XML parsing)
+- `DAS_GLFW_DISABLED` — GLFW (OpenGL windowing)
+- `DAS_IMGUI_DISABLED` — ImGui
+- `DAS_LLVM_DISABLED` — LLVM JIT
+- `DAS_CLANG_BIND_DISABLED` — Clang bindings
+- `DAS_AUDIO_DISABLED`, `DAS_MINFFT_DISABLED`, `DAS_STBIMAGE_DISABLED`, `DAS_STBTRUETYPE_DISABLED`, `DAS_STDDLG_DISABLED`, `DAS_SQLITE_DISABLED`
+
+**To change modules:** Edit the active `cmake.configureSettings` in `.vscode/settings.json`, then reconfigure:
+```
+cmake --no-warn-unused-cli -B./build -G "Visual Studio 17 2022" -A x64 -DFLAG=VALUE ...
+```
+Or let VSCode CMake Tools pick up the settings change automatically.
+
+**Documentation generation** (`doc/reflections/das2rst.das`) requires `DAS_HV_DISABLED=OFF` and `DAS_PUGIXML_DISABLED=OFF` because it documents all modules. Temporarily enable them, rebuild `daslang`, run das2rst, then revert settings.
+
 ### AOT Hash Debugging
 
 When AOT fails with `error[50101]: AOT link failed`, the issue is a **semantic hash mismatch** between the generated C++ stubs and runtime. Each generated `.cpp` file has hash comments showing function hashes and dependency hashes. The runtime error also prints the same breakdown. Compare them to find the diverging function or dependency. See `skills/aot_testing.md` for the full debugging guide (hash architecture, debug macros, common causes).

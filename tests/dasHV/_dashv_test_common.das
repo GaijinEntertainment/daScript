@@ -9,7 +9,7 @@ options gen2
 options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
-module _common shared public
+module _dashv_test_common shared public
 
 require dashv/dashv_boost public
 require daslib/jobque_boost public

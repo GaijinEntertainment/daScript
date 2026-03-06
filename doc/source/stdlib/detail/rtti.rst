@@ -48,6 +48,8 @@
 
 .. |handmade/function-rtti-get_module| replace:: to be documented in |handmade/function-rtti-get_module|.rst
 
+.. |handmade/function-rtti-has_module| replace:: to be documented in |handmade/function-rtti-has_module|.rst
+
 .. |handmade/function-rtti-compile| replace:: to be documented in |handmade/function-rtti-compile|.rst
 
 .. |handmade/function-rtti-compile_file| replace:: to be documented in |handmade/function-rtti-compile_file|.rst
