@@ -1,0 +1,34 @@
+id: outline-structures
+language: daslang
+rule:
+  kind: structure_declaration
+---
+id: outline-functions
+language: daslang
+rule:
+  kind: function_declaration
+---
+id: outline-enums
+language: daslang
+rule:
+  kind: enum_declaration
+---
+id: outline-globals
+language: daslang
+rule:
+  kind: global_variable_declaration
+---
+id: outline-typedefs
+language: daslang
+rule:
+  kind: typedef_statement
+---
+id: outline-bitfields
+language: daslang
+rule:
+  kind: bitfield_alias_declaration
+---
+id: outline-variants
+language: daslang
+rule:
+  kind: variant_alias_declaration

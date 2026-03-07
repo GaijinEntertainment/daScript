@@ -41,6 +41,7 @@ require tools/program_log public
 require tools/eval_expression public
 require tools/describe_type public
 require tools/grep_usage public
+require tools/outline public
 
 let MCP_PORT = 9500
 let HEAP_COLLECT_THRESHOLD = 1024ul * 1024ul  // 1 MB
@@ -354,6 +355,7 @@ def handle_tools_list(id_json : string) : string {
             "module" => PropertySchema(_type = "string", description = "Module name (e.g. 'math', 'strings', 'fio', 'ast', 'daslib/json')"),
             "filter" => PropertySchema(_type = "string", description = "Substring filter on names (e.g. 'for_each', 'json')"),
             "section" => PropertySchema(_type = "string", description = "Limit to section: 'functions', 'generics', 'operators', 'structs', 'handled', 'enums', 'globals', 'annotations'"),
+            "compact" => PropertySchema(_type = "string", description = "Set to 'true' for compact output: function signatures show types only (no arg names), structs/enums omit fields/values. Use with large modules like 'ast', then drill down with describe_type or filter"),
             "project" => PROJECT_PROP
         },
         ["module"]
@@ -370,6 +372,15 @@ def handle_tools_list(id_json : string) : string {
             },
             ["symbol"]
         ))
+        result.tools |> emplace(make_tool(
+            "outline",
+            "List all declarations (functions, structs, classes, enums, globals, typedefs) in a file or set of files using tree-sitter. Works on broken/incomplete code — no compilation needed.",
+            {
+                "file" => PropertySchema(_type = "string", description = "Path to a .das file (relative to project root)"),
+                "glob" => PropertySchema(_type = "string", description = "Glob pattern to scan multiple files (e.g. 'daslib/*.das')")
+            },
+            ["file"]
+        ))
     }
     return json_rpc_response(id_json, sprint_json(result, false))
 }
@@ -385,10 +396,16 @@ def get_string_arg(args : JsonValue?; name : string) : string {
         return ""
     }
     let v = (args.value as _object)?[name] ?? null
-    if (v == null || !(v.value is _string)) {
+    if (v == null) {
         return ""
     }
-    return v.value as _string
+    if (v.value is _string) {
+        return v.value as _string
+    }
+    if (v.value is _bool) {
+        return v.value as _bool ? "true" : "false"
+    }
+    return ""
 }
 
 def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : string {
@@ -427,9 +444,11 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : s
     } elif (tool_name == "find_symbol") {
         return do_find_symbol(arg1, arg2, arg3, project)
     } elif (tool_name == "list_module_api") {
-        return do_list_module_api(arg1, arg2, arg3, project)
+        return do_list_module_api(arg1, arg2, arg3, arg4, project)
     } elif (tool_name == "grep_usage") {
         return do_grep_usage(arg1, arg2, arg3, arg4)
+    } elif (tool_name == "outline") {
+        return do_outline(arg1, arg2)
     } else {
         return make_tool_result("unknown tool: {tool_name}", true)
     }
@@ -526,6 +545,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         }
         arg2 = get_string_arg(args, "filter")
         arg3 = get_string_arg(args, "section")
+        arg4 = get_string_arg(args, "compact")
     } elif (name == "program_log") {
         arg1 = get_string_arg(args, "file")
         if (empty(arg1)) {
@@ -540,6 +560,12 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         arg2 = get_string_arg(args, "directory")
         arg3 = get_string_arg(args, "context_lines")
         arg4 = get_string_arg(args, "glob")
+    } elif (name == "outline") {
+        arg1 = get_string_arg(args, "file")
+        arg2 = get_string_arg(args, "glob")
+        if (empty(arg1) && empty(arg2)) {
+            return json_rpc_error(id_json, -32602, "missing 'file' or 'glob' argument")
+        }
     } elif (name == "list_modules") {
         // no args needed
     } else {

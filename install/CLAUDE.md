@@ -165,6 +165,7 @@ If the SDK was built with dasHV enabled, `utils/mcp/` contains a [Model Context 
 | `eval_expression` | Evaluating expressions by writing throwaway scripts |
 | `describe_type` | Reading source to understand type fields, methods, and values |
 | `grep_usage` | Grepping for symbol names across files (parse-aware via ast-grep + tree-sitter) |
+| `outline` | Manually scanning files for function/struct/enum declarations |
 
 Cursor-based tools (`goto_definition`, `type_of`, `find_references`) support a `no_opt` parameter that disables compiler optimizations to preserve the full AST — useful when globals, enum values, or bitfield constants get constant-folded away.
 

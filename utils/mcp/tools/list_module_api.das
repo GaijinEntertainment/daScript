@@ -4,7 +4,8 @@ options no_unused_block_arguments = false
 
 require common public
 
-def do_list_module_api(module_name : string; filter : string = ""; section : string = ""; project : string = "") : string {
+def do_list_module_api(module_name : string; filter : string = ""; section : string = ""; compact_str : string = ""; project : string = "") : string {
+    let compact = compact_str == "true"
     // write a temp stub file that requires the module
     let stub_path = "{get_das_root()}/_mcp_stub.das"
     let stub = "require {module_name}\n[export]\ndef main\n    pass\n"
@@ -24,7 +25,7 @@ def do_list_module_api(module_name : string; filter : string = ""; section : str
             return "Module '{module_name}' not found after compilation"
         }
         var res = build_string() <| $(var writer) {
-            write_module_api(writer, target_mod, filter, section)
+            write_module_api(writer, target_mod, filter, section, compact)
         }
         return empty(res) ? "(empty module)" : res
     }
@@ -43,7 +44,29 @@ def want_section(section : string; name : string) : bool {
     return empty(section) || section == name
 }
 
-def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : string = ""; section : string = "") {
+def write_compact_func_signature(var w : StringBuilderWriter; func) {
+    var has_args = false
+    for (i in range(length(func.arguments))) {
+        if (!arg_needs_documenting(func.arguments[i]._type)) {
+            continue
+        }
+        if (!has_args) {
+            write(w, "(")
+            has_args = true
+        } else {
+            write(w, "; ")
+        }
+        write(w, "{describe(func.arguments[i]._type)}")
+    }
+    if (has_args) {
+        write(w, ")")
+    }
+    if (func.result != null && !func.result.isVoid) {
+        write(w, " : {describe(func.result)}")
+    }
+}
+
+def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : string = ""; section : string = ""; compact : bool = false) {
     write(writer, "Module: {mod.name}\n")
     var funcs : array<string>
     var generics : array<string>
@@ -72,7 +95,11 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
             }
             var entry = build_string() <| $(var w) {
                 write(w, "  def {func.name}")
-                write_func_signature(w, func)
+                if (compact) {
+                    write_compact_func_signature(w, func)
+                } else {
+                    write_func_signature(w, func)
+                }
             }
             if (is_operator_function(fname) && want_section(section, "operators")) {
                 operators |> push(entry)
@@ -93,7 +120,11 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
             }
             var entry = build_string() <| $(var w) {
                 write(w, "  def {func.name}")
-                write_func_signature(w, func)
+                if (compact) {
+                    write_compact_func_signature(w, func)
+                } else {
+                    write_func_signature(w, func)
+                }
             }
             if (is_operator_function(fname) && want_section(section, "operators")) {
                 operators |> push(entry)
@@ -120,12 +151,14 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
             if (value.parent != null) {
                 write(w, " : {value.parent.name}")
             }
-            if (int(value.at.line) > 0) {
+            if (!compact && int(value.at.line) > 0) {
                 write(w, "  // line {int(value.at.line)}")
             }
             write(w, "\n")
-            for (fld in value.fields) {
-                write(w, "    {fld.name} : {describe(fld._type)}\n")
+            if (!compact) {
+                for (fld in value.fields) {
+                    write(w, "    {fld.name} : {describe(fld._type)}\n")
+                }
             }
         }
         structs |> push(entry)
@@ -141,7 +174,11 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
                 return
             }
             var entry = build_string() <| $(var w) {
-                write_handled_type(w, value)
+                if (compact) {
+                    write(w, "  handled {value.name}\n")
+                } else {
+                    write_handled_type(w, value)
+                }
             }
             handled |> push(entry)
         }
@@ -157,12 +194,14 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
             }
             var entry = build_string() <| $(var w) {
                 write(w, "  enum {value.name}")
-                if (int(value.at.line) > 0) {
+                if (!compact && int(value.at.line) > 0) {
                     write(w, "  // line {int(value.at.line)}")
                 }
                 write(w, "\n")
-                for (en in value.list) {
-                    write(w, "    {en.name}\n")
+                if (!compact) {
+                    for (en in value.list) {
+                        write(w, "    {en.name}\n")
+                    }
                 }
             }
             enums |> push(entry)
