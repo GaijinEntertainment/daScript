@@ -2,16 +2,16 @@
 
 Future tools for the daslang MCP server, organized by priority and difficulty.
 
-## Current Tools (v0.3)
+## Current Tools (v0.4)
 
 | Tool | Description |
 |---|---|
-| `compile_check` | Compile a file, return errors or success + function list |
+| `compile_check` | Compile file(s), return errors or success. Supports single file, comma-separated list, or glob pattern |
 | `list_functions` | List all functions after macro expansion |
 | `list_types` | List structs, classes, enums, type aliases |
 | `list_requires` | List direct and transitive require dependencies |
 | `list_modules` | List all available modules (builtin + daslib) |
-| `list_module_api` | List functions, types, enums, globals exported by a module (shows parent types for structs and handled types) |
+| `list_module_api` | List functions, types, enums, globals, and annotations exported by a module (shows parent types for structs and handled types) |
 | `find_symbol` | Cross-module symbol search by substring (functions, generics, structs, handled types, enums, globals, typedefs/aliases) |
 | `ast_dump` | Dump AST of expression or function (S-expression or source mode). Optional `lineinfo` for source locations and `atEnclosure` |
 | `program_log` | Full post-compilation program text (like `options log`) with optional function filter |
@@ -22,6 +22,7 @@ Future tools for the daslang MCP server, organized by priority and difficulty.
 | `goto_definition` | Resolve symbol at cursor to its definition (variable, function, field, struct, enum, typedef, builtin). Optional `no_opt` |
 | `type_of` | Return resolved type of expression at cursor position. Optional `no_opt` |
 | `find_references` | Find all references to symbol at cursor (calls, variables, fields, type refs, addr, enum/bitfield values, aliases, global declarations). Scope: `file` or `all`. Optional `no_opt` |
+| `eval_expression` | Evaluate a daslang expression and return printed result. Supports comma-separated module imports via `require` parameter |
 
 ### Cross-cutting features
 
@@ -91,64 +92,17 @@ The `no_opt` parameter disables compiler optimizations (`CodeOfPolicies.no_optim
 
 **Difficulty:** Easy-medium. Text scanning with comment/string filtering. Full compilation-verified mode is medium.
 
-### batch_compile
+### ~~batch_compile~~ ✅
 
-**What:** Compile multiple `.das` files and report which ones succeed and which fail, with error details.
+Merged into `compile_check` — supports comma-separated file lists and glob patterns (e.g., `utils/mcp/tools/*.das`). Reports per-file pass/fail with summary.
 
-**Why:** After changing a function signature or adding a parameter, you need to verify all downstream files still compile. Currently you either compile them one by one or hope `main.das` transitively pulls everything in. A batch check catches breakage immediately — like the missing default value on `do_ast_dump`'s `project` parameter that slipped through until tests ran.
+### ~~list_annotations~~ ✅
 
-**Implementation approach:**
-- Accept a list of files or a glob pattern
-- Compile each file independently
-- Return a summary: pass/fail counts and error details per file
-- Support `project` parameter for `.das_project` files
+Merged into `list_module_api` as the `annotations` section. Lists function annotations, structure annotations, call macros, reader macros, variant macros, typeinfo macros, for-loop macros, and type macros.
 
-**Parameters:**
-- `files` (required) — comma-separated file paths or a glob pattern (e.g., `utils/mcp/tools/*.das`)
-- `project` (optional) — `.das_project` file
+### ~~eval_expression~~ ✅
 
-**Output:** Per-file pass/fail status with errors. Summary line at top.
-
-**Difficulty:** Easy. Just loops over `compile_check`.
-
-### list_annotations
-
-**What:** List all available annotations (function, struct, block annotations) from registered modules.
-
-**Why:** Annotations like `[export]`, `[private]`, `[test]`, `[persistent]`, `@safe_when_uninitialized` are critical for daslang development but undiscoverable through existing tools. `list_module_api` shows functions but not annotations. When writing code that uses `[sideeffects]` or `[unsafe_operation]`, there's no way to check what annotations exist or what arguments they accept.
-
-**Implementation approach:**
-- Use `module_for_each_annotation` across all registered modules
-- Categorize by annotation type: function, struct, block, etc.
-- Show annotation name, module, and argument info where available
-
-**Parameters:**
-- `module` (optional) — limit to a specific module
-- `filter` (optional) — substring filter on annotation name
-
-**Output:** List of annotations with module, type, and description.
-
-**Difficulty:** Easy-medium. `module_for_each_annotation` exists; the question is how much metadata is available per annotation.
-
-### eval_expression
-
-**What:** Evaluate a daslang expression or short snippet and return the result and its type, without needing to write a file.
-
-**Why:** Quick type-checking and experimentation. "What type is `int(0x3F)`?", "Does `bitfield64(1ul << 13ul)` work?", "What does `typeinfo(sizeof type<ExprCall>)` return?" Currently requires writing a temp `.das` file and running it. A REPL-like tool for one-off queries.
-
-**Implementation approach:**
-- Wrap the expression in a minimal `def main() { print("{expr}\n"); }` scaffold
-- Compile and simulate
-- Return the output and the expression's type (via `type_of` on the generated code)
-- Support `require` statements in the snippet for accessing library types
-
-**Parameters:**
-- `expression` (required) — daslang expression or short code block
-- `requires` (optional) — comma-separated modules to require (e.g., `strings,math`)
-
-**Output:** Result value (if printable), expression type, any compilation errors.
-
-**Difficulty:** Easy. Wrapping in a scaffold and compiling is straightforward. Edge cases around non-printable types.
+Evaluates a daslang expression via `let _res_ = <expr>; print("{_res_}\n")` scaffold. Supports comma-separated `require` parameter for module imports. Works with `typeinfo`, complex expressions, and library functions.
 
 ---
 
@@ -367,9 +321,9 @@ Recommended order based on value/effort ratio:
 7. ~~**.das_project support**~~ ✅ Implemented (per-tool `project` parameter)
 8. **describe_type** — 🔴 urgent, easy, most common lookup during development
 9. **grep_usage** — 🔴 urgent, easy-medium, cross-file usage search without compilation
-10. **batch_compile** — 🔴 urgent, easy, catch signature breakage immediately
-11. **list_annotations** — 🔴 urgent, easy-medium, annotations are undiscoverable
-12. **eval_expression** — 🔴 urgent, easy, REPL-like quick checks
+10. ~~**batch_compile**~~ ✅ Implemented (merged into `compile_check` with comma-separated and glob support)
+11. ~~**list_annotations**~~ ✅ Implemented (merged into `list_module_api` as `annotations` section)
+12. ~~**eval_expression**~~ ✅ Implemented (expression eval with `require` support)
 13. **explain_error** — high value, relatively easy
 14. **dependency_graph** — medium value, easy (extends `list_requires`)
 15. **type_search** — high value for API discovery, medium-hard effort
