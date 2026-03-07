@@ -92,13 +92,13 @@ bool tree_sitter_daslang_external_scanner_scan(void *payload,
                                                 TSLexer *lexer,
                                                 const bool *valid_symbols) {
   // Float with trailing dot: 2. but not 2.. (which is range)
-  if (valid_symbols[FLOAT_TRAILING_DOT] &&
-      !valid_symbols[AUTOMATIC_SEMICOLON]) {
-    // Skip whitespace (external scanner sees raw input including extras)
+  // Try this whenever FLOAT_TRAILING_DOT is valid, even alongside ASI.
+  // Tree-sitter restores lexer position when we return false.
+  if (valid_symbols[FLOAT_TRAILING_DOT]) {
+    // Skip horizontal whitespace only — preserve newlines for ASI
     while (lexer->lookahead == ' ' || lexer->lookahead == '\t' ||
-           lexer->lookahead == '\n' || lexer->lookahead == '\r' ||
            lexer->lookahead == '\f') {
-      lexer->advance(lexer, true);  // skip = true (whitespace)
+      lexer->advance(lexer, true);
     }
     if (lexer->lookahead >= '0' && lexer->lookahead <= '9') {
       lexer->advance(lexer, false);
@@ -121,8 +121,7 @@ bool tree_sitter_daslang_external_scanner_scan(void *payload,
         }
       }
     }
-    // Don't fall through — scanner consumed chars that can't be returned
-    return false;
+    // No trailing-dot float found — fall through to other token types
   }
 
   // In error recovery, all symbols are valid — don't emit ASI
