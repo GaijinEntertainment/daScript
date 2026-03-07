@@ -702,6 +702,8 @@ Search substrings
   *  :ref:`find (str: string; substr: string; start: int) : int <function-strings_find_string_string_int>`
   *  :ref:`find (str: string; substr: int; start: int) : int <function-strings_find_string_int_int>`
   *  :ref:`find (str: string; substr: int) : int <function-strings_find_string_int>`
+  *  :ref:`rfind (str: string; substr: string) : int <function-strings_rfind_string_string>`
+  *  :ref:`rfind (str: string; substr: string; start: int) : int <function-strings_rfind_string_string_int>`
 
 
 find
@@ -729,6 +731,27 @@ Returns the first index at which `substr` (string or character code) occurs in `
 .. _function-strings_find_string_int:
 
 .. das:function:: find(str: string; substr: int) : int
+
+----
+
+
+rfind
+^^^^^
+
+.. _function-strings_rfind_string_string:
+
+.. das:function:: rfind(str: string; substr: string) : int
+
+Returns the index of the last occurrence of ``substr`` in ``str``, or -1 if not found. Searches backwards from the end of the string.
+
+
+:Arguments: * **str** : string implicit
+
+            * **substr** : string implicit
+
+.. _function-strings_rfind_string_string_int:
+
+.. das:function:: rfind(str: string; substr: string; start: int) : int
 
 
 +++++++++++++++++

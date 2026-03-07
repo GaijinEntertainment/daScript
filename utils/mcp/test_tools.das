@@ -21,6 +21,8 @@ require tools/convert_to_gen2 public
 require tools/goto_definition public
 require tools/type_of public
 require tools/find_references public
+require tools/eval_expression public
+require tools/describe_type public
 
 // helper: parse tool result JSON, return (text, isError)
 def parse_result(result : string; var text : string&; var is_error : bool&) : bool {
@@ -98,6 +100,46 @@ def test_compile_check_missing(t : T?) {
         parse_result(do_compile_check("nonexistent_file_12345.das"), text, is_error)
         t |> success(is_error, "should be error")
         t |> success(find(text, "not found") >= 0, "should mention file not found")
+    }
+}
+
+// ── compile_check batch ──────────────────────────────────────────────
+
+[test]
+def test_compile_check_batch_comma(t : T?) {
+    t |> run("batch compile with comma-separated files") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        let files = "{fixture_path("_fixture_valid.das")},{fixture_path("_fixture_error.das")}"
+        parse_result(do_compile_check(files), text, is_error)
+        t |> success(is_error, "batch with error file should report error")
+        t |> success(find(text, "1 passed") >= 0, "should have 1 passed")
+        t |> success(find(text, "1 failed") >= 0, "should have 1 failed")
+        t |> success(find(text, "PASS") >= 0, "should have PASS line")
+        t |> success(find(text, "FAIL") >= 0, "should have FAIL line")
+    }
+}
+
+[test]
+def test_compile_check_batch_glob(t : T?) {
+    t |> run("batch compile with glob pattern") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_compile_check("utils/mcp/tests/*.das"), text, is_error)
+        // At least the valid and error fixtures should be found
+        t |> success(find(text, "PASS") >= 0, "should have at least one PASS")
+        t |> success(find(text, "files") >= 0, "should have summary line")
+    }
+}
+
+[test]
+def test_compile_check_glob_no_match(t : T?) {
+    t |> run("glob with no matches reports error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_compile_check("nonexistent_dir_xyz/*.das"), text, is_error)
+        t |> success(is_error, "should be error when no files match")
+        t |> success(find(text, "no files matched") >= 0, "should mention no files matched")
     }
 }
 
@@ -273,6 +315,51 @@ def test_list_module_api(t : T?) {
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "sin") >= 0, "should list sin function")
         t |> success(find(text, "cos") >= 0, "should list cos function")
+    }
+}
+
+// ── list_module_api annotations ──────────────────────────────────────
+
+[test]
+def test_list_module_api_annotations(t : T?) {
+    t |> run("lists function annotations from ast_boost") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_list_module_api("daslib/ast_boost", "", "annotations"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "[macro]") >= 0, "should list [macro] function annotation")
+        t |> success(find(text, "Function annotations") >= 0, "should have Function annotations section")
+    }
+    t |> run("lists structure annotations from ast_boost") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_list_module_api("daslib/ast_boost", "", "annotations"), text, is_error)
+        t |> success(find(text, "[function_macro]") >= 0, "should list [function_macro]")
+        t |> success(find(text, "Structure annotations") >= 0, "should have Structure annotations section")
+    }
+    t |> run("lists call macros from ast") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_list_module_api("ast", "", "annotations"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "quote") >= 0, "should list quote call macro")
+        t |> success(find(text, "Call macros") >= 0, "should have Call macros section")
+    }
+    t |> run("lists reader macros from regex_boost") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_list_module_api("daslib/regex_boost", "", "annotations"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "regex") >= 0, "should list regex reader macro")
+        t |> success(find(text, "Reader macros") >= 0, "should have Reader macros section")
+    }
+    t |> run("filter works on annotations") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_list_module_api("daslib/ast_boost", "macro", "annotations"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "[macro]") >= 0, "should match macro")
+        t |> success(find(text, "[contract]") < 0, "should not match contract")
     }
 }
 
@@ -626,5 +713,83 @@ def test_find_references_no_expression(t : T?) {
         parse_result(do_find_references(fixture_path("_fixture_refs.das"), "2", "1", "file"), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "No expression or declaration found") >= 0, "should report nothing found")
+    }
+}
+
+// ── eval_expression ─────────────────────────────────────────────────
+
+[test]
+def test_eval_expression(t : T?) {
+    t |> run("evaluates simple arithmetic") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_eval_expression("1 + 2", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> equal(text, "3")
+    }
+    t |> run("evaluates with require") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_eval_expression("float(42) + sin(1.0)", "math"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "42.84") >= 0, "should contain 42.84")
+    }
+    t |> run("evaluates with multiple requires") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_eval_expression("to_int(\"10\") + 5", "math, strings"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> equal(text, "15")
+    }
+    t |> run("reports compile error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_eval_expression("undefined_func()", ""), text, is_error)
+        t |> success(is_error, "should be error")
+        t |> success(find(text, "Evaluation failed") >= 0, "should report failure")
+    }
+    t |> run("missing expression is error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_eval_expression("", ""), text, is_error)
+        t |> success(is_error, "should be error")
+    }
+}
+
+// ── describe_type ───────────────────────────────────────────────────
+
+[test]
+def test_describe_type(t : T?) {
+    t |> run("describes handled type fields") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_describe_type("TypeDecl", "ast"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "handled TypeDecl") >= 0, "should be handled type")
+        t |> success(find(text, "baseType") >= 0, "should have baseType field")
+        t |> success(find(text, "structType") >= 0, "should have structType field")
+    }
+    t |> run("describes enum values") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_describe_type("Type", "ast"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "enum Type") >= 0, "should be enum")
+        t |> success(find(text, "tInt") >= 0, "should have tInt value")
+    }
+    t |> run("describes bitfield flags") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_describe_type("FunctionFlags", "ast"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "bitfield FunctionFlags") >= 0, "should be bitfield")
+        t |> success(find(text, "builtIn") >= 0, "should have builtIn flag")
+    }
+    t |> run("type not found") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_describe_type("NonExistentType", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "not found") >= 0, "should report not found")
     }
 }

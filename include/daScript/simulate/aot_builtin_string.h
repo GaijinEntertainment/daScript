@@ -41,6 +41,8 @@ namespace das {
     DAS_API char* builtin_string_strip_right ( const char *str, Context * context, LineInfoArg * at );
     DAS_API int builtin_string_find1 ( const char *str, const char *substr, int start, Context * context );
     DAS_API int builtin_string_find2 (const char *str, const char *substr);
+    DAS_API int builtin_string_rfind1 ( const char *str, const char *substr, int start, Context * context );
+    DAS_API int builtin_string_rfind2 (const char *str, const char *substr);
     DAS_API int builtin_find_first_of ( const char * str, const char * substr, Context * context );
     DAS_API int builtin_find_first_char_of ( const char * str, int Ch, Context * context );
     DAS_API int builtin_find_first_char_of2 ( const char * str, int Ch, int start, Context * context );

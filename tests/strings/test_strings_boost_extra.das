@@ -122,3 +122,51 @@ def test_join_iterator(t : T?) {
         t |> equal(join(arr, "+"), "1+2+3")
     }
 }
+
+
+[test]
+def test_glob_match(t : T?) {
+    // exact match
+    t |> equal(glob_match("hello", "hello"), true)
+    t |> equal(glob_match("hello", "world"), false)
+
+    // ? matches single character
+    t |> equal(glob_match("h?llo", "hello"), true)
+    t |> equal(glob_match("h?llo", "hallo"), true)
+    t |> equal(glob_match("h?llo", "hllo"), false)
+    t |> equal(glob_match("?", "a"), true)
+    t |> equal(glob_match("?", ""), false)
+
+    // * matches any sequence
+    t |> equal(glob_match("*.das", "foo.das"), true)
+    t |> equal(glob_match("*.das", "bar.das"), true)
+    t |> equal(glob_match("*.das", "foo.txt"), false)
+    t |> equal(glob_match("*", "anything"), true)
+    t |> equal(glob_match("*", ""), true)
+    t |> equal(glob_match("foo*", "foobar"), true)
+    t |> equal(glob_match("foo*", "foo"), true)
+    t |> equal(glob_match("foo*", "fo"), false)
+
+    // combined * and ?
+    t |> equal(glob_match("t?st*.das", "test_foo.das"), true)
+    t |> equal(glob_match("t?st*.das", "tast.das"), true)
+    t |> equal(glob_match("t?st*.das", "test.txt"), false)
+
+    // multiple *
+    t |> equal(glob_match("*foo*bar*", "xxxfooYYYbar"), true)
+    t |> equal(glob_match("*foo*bar*", "foobar"), true)
+    t |> equal(glob_match("*foo*bar*", "foobaz"), false)
+
+    // empty strings
+    t |> equal(glob_match("", ""), true)
+    t |> equal(glob_match("", "a"), false)
+    t |> equal(glob_match("*", ""), true)
+    t |> equal(glob_match("**", ""), true)
+    t |> equal(glob_match("?", ""), false)
+
+    // all wildcards
+    t |> equal(glob_match("***", "abc"), true)
+    t |> equal(glob_match("???", "abc"), true)
+    t |> equal(glob_match("???", "ab"), false)
+    t |> equal(glob_match("???", "abcd"), false)
+}

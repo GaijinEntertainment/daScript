@@ -2,25 +2,33 @@
 
 Future tools for the daslang MCP server, organized by priority and difficulty.
 
-## Current Tools (v0.2)
+## Current Tools (v0.4)
 
 | Tool | Description |
 |---|---|
-| `compile_check` | Compile a file, return errors or success + function list |
+| `compile_check` | Compile file(s), return errors or success. Supports single file, comma-separated list, or glob pattern |
 | `list_functions` | List all functions after macro expansion |
 | `list_types` | List structs, classes, enums, type aliases |
 | `list_requires` | List direct and transitive require dependencies |
 | `list_modules` | List all available modules (builtin + daslib) |
-| `list_module_api` | List functions, types, enums, globals exported by a module |
+| `list_module_api` | List functions, types, enums, globals, and annotations exported by a module (shows parent types for structs and handled types) |
 | `find_symbol` | Cross-module symbol search by substring (functions, generics, structs, handled types, enums, globals, typedefs/aliases) |
-| `ast_dump` | Dump AST of expression or function (S-expression or source mode) |
+| `ast_dump` | Dump AST of expression or function (S-expression or source mode). Optional `lineinfo` for source locations and `atEnclosure` |
+| `program_log` | Full post-compilation program text (like `options log`) with optional function filter |
 | `run_script` | Run inline code or a .das file, capture stdout |
 | `run_test` | Run dastest on a test file |
 | `format_file` | Format a .das file in place |
 | `convert_to_gen2` | Convert gen1 (indentation) syntax to gen2 (braces/parens) |
-| `goto_definition` | Resolve symbol at cursor to its definition (variable, function, field, struct, enum, typedef, builtin). Optional `no_opt` to preserve pre-optimization AST |
+| `goto_definition` | Resolve symbol at cursor to its definition (variable, function, field, struct, enum, typedef, builtin). Optional `no_opt` |
 | `type_of` | Return resolved type of expression at cursor position. Optional `no_opt` |
-| `find_references` | Find all references to symbol at cursor (calls, variables, fields, type refs, addr, enum/bitfield values, aliases). Scope: `file` or `all`. Optional `no_opt` |
+| `find_references` | Find all references to symbol at cursor (calls, variables, fields, type refs, addr, enum/bitfield values, aliases, global declarations). Scope: `file` or `all`. Optional `no_opt` |
+| `eval_expression` | Evaluate a daslang expression and return printed result. Supports comma-separated module imports via `require` parameter |
+| `describe_type` | Describe a type's fields, methods, values, and base type. Supports structs, classes, handled types, enums, bitfields, variants, tuples, typedefs |
+
+### Cross-cutting features
+
+- **`.das_project` support** — all file-based tools accept an optional `project` parameter pointing to a `.das_project` file for custom module resolution and sandboxing
+- **Request logging** — file-based logging with timestamps for debugging
 
 ### Cursor-based tools implementation notes
 
@@ -41,54 +49,45 @@ The `no_opt` parameter disables compiler optimizations (`CodeOfPolicies.no_optim
 
 ---
 
-## Urgent: Diagnostics & Debugging
+## Urgent: Developer Experience Gaps
 
-### program_log
+### ~~describe_type~~ ✅
 
-**What:** Produce the `options log` output — the full post-compilation program text after all macro expansions, template instantiations, inference, and optimizations.
+Implemented as a standalone tool. Searches all modules for a type by name and describes its fields, methods, values, base type. Supports structs, classes, handled types, enums, bitfields, variants, tuples, and typedefs. Optional `module` parameter to limit search scope.
 
-**Why:** This is the single most useful debugging view for understanding what the compiler actually produces. When macros or templates generate unexpected code, `options log` shows the ground truth. Currently `ast_dump mode=source` shows individual functions, but there's no way to see the complete picture: all requires, all structs, all functions, all globals — as the compiler sees them after every transformation pass.
+### grep_usage
 
-**Implementation approach:**
-- Use `describe_program(program)` or the C++ `Program::operator<<` (same as `options log`)
-- Filter to the user's module by default, with an optional `all_modules` flag
-- Support optional `function` parameter to limit output to a single function (like `ast_dump mode=source` but with struct/global context)
+**What:** Find all `.das` files in a directory that contain calls to / references of a given symbol name, without requiring compilation or a cursor position.
 
-**Parameters:**
-- `file` (required) — file to compile
-- `function` (optional) — limit to a specific function
-- `all_modules` (optional, default false) — include all loaded modules, not just the user's
-
-**Output:** Complete post-compilation daslang source text.
-
-**Difficulty:** Easy. The infrastructure (`describe_program`, `describe_function`) already exists. Mostly wiring.
-
-### ast_dump with LineInfo
-
-**What:** Add optional LineInfo output to `ast_dump` — show `at=line:col-lastline:lastcol` and `file=filename` on each expression node in the S-expression output.
-
-**Why:** Essential for debugging cursor-based tools (`goto_definition`, `type_of`, `find_references`). When a cursor query fails to find an expression, the only way to diagnose it is to see the actual LineInfo spans on each AST node. This is how we discovered that template-instantiated dot-calls have collapsed `ExprCall` spans (e.g., `t.key_exists("hello")` gets `12:15-12:16` instead of the full expression range).
+**Why:** `find_references` requires compiling a specific file and pointing at a cursor position — great for precision, but too heavy when you just want "which files call `compile_program`?" or "show me how `for_each_global` is used across daslib/". This is the question you ask *before* you know which file to open. Text-level grep catches comments, strings, and partial matches; this tool should be smarter — parse-aware or at least filter out obvious false positives.
 
 **Implementation approach:**
-- Add a `lineinfo` boolean parameter to `ast_dump`
-- In `format_func_body` / `debug_expression`, append `at=L:C-L:C` after each expression node when enabled
-- Optionally show `file=` when the expression points to a different file than the input (common with template-instantiated code)
+- Scan `.das` files in a directory (recursively)
+- For each file, search for the symbol name in function call positions, variable references, type annotations
+- Could use simple heuristics (not inside comments `//` or strings `"..."`) or light parsing
+- Return file paths with matching line numbers and context
+- Optional: compile each matching file and verify the symbol resolves to the expected definition
 
 **Parameters:**
-- Extends existing `ast_dump` tool
-- `lineinfo` (optional, default false) — include LineInfo on each node
+- `symbol` (required) — name to search for
+- `directory` (optional, default `.`) — root directory to scan
+- `context_lines` (optional, default 1) — lines of context around each match
 
-**Output:** Same S-expression as `ast_dump mode=ast`, but each node annotated with its source location.
+**Output:** List of `(file, line, context)` matches, grouped by file.
 
-**Difficulty:** Easy-medium. The `debug_expression` visitor in C++ would need a flag, or we write a custom daslang visitor that wraps `debug_expression` output with LineInfo. Could also be a new `mode=ast_lineinfo`.
+**Difficulty:** Easy-medium. Text scanning with comment/string filtering. Full compilation-verified mode is medium.
 
-### Known issue: narrow LineInfo on dot-call expressions
+### ~~batch_compile~~ ✅
 
-Template-instantiated and dot-call expressions (`expr.method(args)`) can have collapsed `ExprCall` LineInfo spans. For example, `t.key_exists("hello")` compiles to `ExprCall` with span `12:15-12:16` (just the `.` portion) instead of spanning the full expression. This affects all cursor-based tools — they may fail to find expressions at certain column positions.
+Merged into `compile_check` — supports comma-separated file lists and glob patterns (e.g., `utils/mcp/tools/*.das`). Reports per-file pass/fail with summary.
 
-**Root cause:** During type inference, dot-call syntax transforms `ExprField` into `ExprCall`, but the resulting `ExprCall` inherits the narrow field-access span. Template instantiation via `force_at` in `templates_boost.das` can also collapse spans, though method bodies already use `forceAt=false`.
+### ~~list_annotations~~ ✅
 
-**Fix location:** C++ compiler type inference — the dot-call transformation should widen `ExprCall` LineInfo to span the full expression including arguments. Alternatively, `ast_cursor` could use line-only matching as a fallback when exact column matching fails.
+Merged into `list_module_api` as the `annotations` section. Lists function annotations, structure annotations, call macros, reader macros, variant macros, typeinfo macros, for-loop macros, and type macros.
+
+### ~~eval_expression~~ ✅
+
+Evaluates a daslang expression via `let _res_ = <expr>; print("{_res_}\n")` scaffold. Supports comma-separated `require` parameter for module imports. Works with `typeinfo`, complex expressions, and library functions.
 
 ---
 
@@ -101,7 +100,7 @@ Template-instantiated and dot-call expressions (`expr.method(args)`) can have co
 **Why:** Safe mechanical renaming is tedious and error-prone by hand. The compiler knows all references.
 
 **Implementation approach:**
-- First, use `go_to_definition` to find the definition.
+- First, use `goto_definition` to find the definition.
 - Then, use `find_references` to find all usages.
 - Apply text replacements at each location.
 - Re-compile to verify the rename didn't break anything.
@@ -122,7 +121,7 @@ Template-instantiated and dot-call expressions (`expr.method(args)`) can have co
 
 **Output:** List of changes `(file, line, old_text, new_text)` and compilation check result.
 
-**Difficulty:** Hard. Depends on `go_to_definition` and `find_references`. Safe renaming across files is complex.
+**Difficulty:** Hard. Depends on `goto_definition` and `find_references`. Safe renaming across files is complex.
 
 ### extract_function
 
@@ -298,20 +297,27 @@ Template-instantiated and dot-call expressions (`expr.method(args)`) can have co
 
 Recommended order based on value/effort ratio:
 
-1. ~~**go_to_definition**~~ ✅ Implemented
+1. ~~**goto_definition**~~ ✅ Implemented
 2. ~~**type_of**~~ ✅ Implemented
-3. ~~**find_references**~~ ✅ Implemented (file + all-modules scope)
-4. **program_log** — 🔴 urgent, easy (wiring only), critical for macro/template debugging
-5. **ast_dump with LineInfo** — 🔴 urgent, easy-medium, critical for cursor-tool debugging
-6. **explain_error** — high value, relatively easy
-7. **dependency_graph** — medium value, easy (extends `list_requires`)
-8. **type_search** — high value for API discovery, medium-hard effort
-9. **rename_symbol** — high value, depends on goto_definition + find_references (both done)
-10. **try_fix** — medium-high value, hard
-11. **extract_function** — medium value, very hard
-12. **workspace_index** — enabler for cross-file tools at scale
-13. **scaffold** — low priority (AI already generates good code)
-14. **package_search** — deferred until package manager exists
+3. ~~**find_references**~~ ✅ Implemented (file + all-modules scope, declaration lookup)
+4. ~~**program_log**~~ ✅ Implemented (full program text, optional function filter)
+5. ~~**ast_dump with LineInfo**~~ ✅ Implemented (`lineinfo` parameter, shows `atEnclosure`)
+6. ~~**dot-call LineInfo fix**~~ ✅ Fixed (`atEnclosure` on dot-call/arrow-call expressions in parser + inference)
+7. ~~**.das_project support**~~ ✅ Implemented (per-tool `project` parameter)
+8. ~~**describe_type**~~ ✅ Implemented (fields, methods, values, base types for all type kinds)
+9. **grep_usage** — 🔴 urgent, easy-medium, cross-file usage search without compilation
+10. ~~**batch_compile**~~ ✅ Implemented (merged into `compile_check` with comma-separated and glob support)
+11. ~~**list_annotations**~~ ✅ Implemented (merged into `list_module_api` as `annotations` section)
+12. ~~**eval_expression**~~ ✅ Implemented (expression eval with `require` support)
+13. **explain_error** — high value, relatively easy
+14. **dependency_graph** — medium value, easy (extends `list_requires`)
+15. **type_search** — high value for API discovery, medium-hard effort
+16. **rename_symbol** — high value, depends on goto_definition + find_references (both done)
+17. **try_fix** — medium-high value, hard
+18. **extract_function** — medium value, very hard
+19. **workspace_index** — enabler for cross-file tools at scale
+20. **scaffold** — low priority (AI already generates good code)
+21. **package_search** — deferred until package manager exists
 
 ## Architecture Notes
 
@@ -321,7 +327,7 @@ Cursor-based tools (goto_definition, type_of, find_references) use `daslib/ast_c
 
 - `find_at_cursor(program, file, line, col)` returns an array of `CursorHit` from innermost to outermost expression
 - Each `CursorHit` has: `expr` (the expression), `func` (enclosing function), `rtti` (node type name), `name` (symbol name if applicable)
-- `compile_program(file, export_all, no_opt)` in `tools/common.das` wraps compilation with proper CodeOfPolicies
+- `compile_program(file, export_all, no_opt, project)` in `tools/common.das` wraps compilation with proper CodeOfPolicies
 
 ### Cross-File Compilation
 
@@ -333,8 +339,8 @@ For project-level tools, we need to compile multiple files. Options:
 ### Tool Composition
 
 Many complex tools are compositions of simpler ones:
-- `rename_symbol` = `go_to_definition` + `find_references` + text replacement + `compile_check`
+- `rename_symbol` = `goto_definition` + `find_references` + text replacement + `compile_check`
 - `try_fix` = `compile_check` + error pattern matching + text edit + `compile_check`
 - `extract_function` = AST analysis + code generation + `compile_check`
 
-Building the Phase 1 tools well creates a foundation for everything else.
+Building the foundational tools well creates a platform for everything else.

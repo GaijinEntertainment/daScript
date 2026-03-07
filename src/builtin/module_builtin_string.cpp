@@ -137,6 +137,39 @@ namespace das
         return ret ? int(ret-str) : -1;
     }
 
+    int builtin_string_rfind1 ( const char *str, const char *substr, int start, Context * context ) {
+        if (!str || !substr)
+            return -1;
+        const uint32_t strLen = stringLengthSafe ( *context, str );
+        if (!strLen)
+            return -1;
+        const uint32_t subLen = uint32_t(strlen(substr));
+        if (!subLen)
+            return clamp_int(start, 0, strLen);
+        int from = clamp_int(start, 0, strLen);
+        if ( from + int(subLen) > int(strLen) )
+            from = int(strLen) - int(subLen);
+        for ( int i = from; i >= 0; --i ) {
+            if ( memcmp(str + i, substr, subLen) == 0 )
+                return i;
+        }
+        return -1;
+    }
+
+    int builtin_string_rfind2 (const char *str, const char *substr) {
+        if (!str || !substr)
+            return -1;
+        const uint32_t strLen = uint32_t(strlen(str));
+        const uint32_t subLen = uint32_t(strlen(substr));
+        if (!strLen || !subLen || subLen > strLen)
+            return -1;
+        for ( int i = int(strLen) - int(subLen); i >= 0; --i ) {
+            if ( memcmp(str + i, substr, subLen) == 0 )
+                return i;
+        }
+        return -1;
+    }
+
     int builtin_string_length ( const char *str, Context * context ) {
         return stringLengthSafe ( *context, str );
     }
@@ -925,6 +958,10 @@ namespace das
                 SideEffects::none, "builtin_find_first_char_of")->args({"str","substr","context"});
             addExtern<DAS_BIND_FUN(builtin_find_first_char_of2)>(*this, lib, "find",
                 SideEffects::none, "builtin_find_first_char_of2")->args({"str","substr", "start", "context"});
+            addExtern<DAS_BIND_FUN(builtin_string_rfind1)>(*this, lib, "rfind",
+                SideEffects::none, "builtin_string_rfind1")->args({"str","substr","start","context"});
+            addExtern<DAS_BIND_FUN(builtin_string_rfind2)>(*this, lib, "rfind",
+                SideEffects::none, "builtin_string_rfind2")->args({"str","substr"});
             addExtern<DAS_BIND_FUN(builtin_string_length)>(*this, lib, "length",
                 SideEffects::none, "builtin_string_length")->args({"str","context"});
             addExtern<DAS_BIND_FUN(builtin_string_reverse)>(*this, lib, "reverse",

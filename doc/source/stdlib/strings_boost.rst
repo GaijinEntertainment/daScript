@@ -263,8 +263,20 @@ Returns true if the string is null, empty, or contains only whitespace character
 Search
 ++++++
 
+  *  :ref:`glob_match (pattern: string; text: string) : bool <function-strings_boost_glob_match_string_string>`
   *  :ref:`last_index_of (str: string; sub: string; start: int) : int <function-strings_boost_last_index_of_string_string_int>`
   *  :ref:`last_index_of (str: string; sub: string) : int <function-strings_boost_last_index_of_string_string>`
+
+.. _function-strings_boost_glob_match_string_string:
+
+.. das:function:: glob_match(pattern: string; text: string) : bool
+
+Matches ``text`` against a shell-style glob ``pattern``. Supports ``*`` (any sequence of characters, including empty) and ``?`` (exactly one character). Returns true if the entire text matches the pattern.
+
+
+:Arguments: * **pattern** : string
+
+            * **text** : string
 
 
 last_index_of

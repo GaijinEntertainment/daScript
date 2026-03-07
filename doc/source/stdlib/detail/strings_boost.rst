@@ -28,6 +28,8 @@
 
 .. |handmade/function-strings_boost-is_null_or_whitespace| replace:: to be documented in |handmade/function-strings_boost-is_null_or_whitespace|.rst
 
+.. |handmade/function-strings_boost-glob_match| replace:: to be documented in |handmade/function-strings_boost-glob_match|.rst
+
 .. |handmade/function-strings_boost-join| replace:: to be documented in |handmade/function-strings_boost-join|.rst
 
 .. |handmade/function-strings_boost-is_character_at| replace:: to be documented in |handmade/function-strings_boost-is_character_at|.rst
