@@ -959,7 +959,7 @@ SET(DAS_DASCRIPT_MAIN_SRC
 # Tests
 if (NOT ${DAS_TESTS_DISABLED})
     include(examples/pathTracer/CMakeLists.txt)
-    if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
+    if(NOT ${DAS_AOT_EXAMPLES_DISABLED} AND NOT WIN32)
         include(tests/aot/CMakeLists.txt)
     endif()
 endif()
