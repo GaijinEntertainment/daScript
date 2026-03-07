@@ -20,6 +20,7 @@ A minimal [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) serve
 | `convert_to_gen2` | Convert a `.das` file from gen1 (indentation-based) syntax to gen2 (braces/parentheses) using `das-fmt`. Optional `inplace` flag to modify the file directly |
 | `goto_definition` | Given a cursor position (file, line, column), resolve the definition of the symbol under the cursor. Returns location, kind (variable/function/field/builtin/struct/enum), and source snippet |
 | `type_of` | Given a cursor position (file, line, column), return the resolved type of the expression under the cursor. Shows all expressions at position from innermost to outermost |
+| `find_references` | Find all references to the symbol under the cursor (function calls, variable uses, field accesses, type refs). Scope: `file` (default) or `all` (all loaded modules) |
 
 ## Prerequisites
 
@@ -95,7 +96,8 @@ Optionally, allow the MCP tools without prompting by adding to `.claude/settings
       "mcp__daslang__list_module_api",
       "mcp__daslang__convert_to_gen2",
       "mcp__daslang__goto_definition",
-      "mcp__daslang__type_of"
+      "mcp__daslang__type_of",
+      "mcp__daslang__find_references"
     ]
   }
 }

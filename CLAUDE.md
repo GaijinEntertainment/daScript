@@ -225,6 +225,7 @@ The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics and p
 | `goto_definition` | Manually tracing symbol definitions across files |
 | `type_of` | Manually inspecting expression types |
 | `list_requires` | Grepping for `require` statements and guessing transitive deps |
+| `find_references` | Manually searching for all usages of a symbol across files |
 
 **Starting the server:** `bin/Release/daslang.exe utils/mcp/main.das` (port 9500 by default)
 

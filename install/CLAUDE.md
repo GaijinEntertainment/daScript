@@ -160,6 +160,7 @@ If the SDK was built with dasHV enabled, `utils/mcp/` contains a [Model Context 
 | `goto_definition` | Manually tracing symbol definitions across files |
 | `type_of` | Manually inspecting expression types |
 | `list_requires` | Grepping for `require` statements and guessing transitive deps |
+| `find_references` | Manually searching for all usages of a symbol across files |
 
 **Starting the server:** `bin/daslang utils/mcp/main.das` (port 9500 by default)
 

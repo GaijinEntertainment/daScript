@@ -35,6 +35,7 @@ require tools/list_requires public
 require tools/convert_to_gen2 public
 require tools/goto_definition public
 require tools/type_of public
+require tools/find_references public
 
 let MCP_PORT = 9500
 let HEAP_COLLECT_THRESHOLD = 1024ul * 1024ul  // 1 MB
@@ -217,6 +218,17 @@ def handle_tools_list(id_json : string) : string {
         ["file", "line", "column"]
     ))
     result.tools |> emplace(make_tool(
+        "find_references",
+        "Find all references to the symbol under the cursor. Returns locations where the symbol is used.",
+        {
+            "file" => PropertySchema(_type = "string", description = "Path to the .das file"),
+            "line" => PropertySchema(_type = "string", description = "Line number (1-based)"),
+            "column" => PropertySchema(_type = "string", description = "Column number (1-based)"),
+            "scope" => PropertySchema(_type = "string", description = "Search scope: 'file' (default) for current file only, 'all' for all loaded modules")
+        },
+        ["file", "line", "column"]
+    ))
+    result.tools |> emplace(make_tool(
         "list_module_api",
         "List all functions, types, enums, and globals exported by a daslang module (e.g. 'math', 'strings', 'fio', 'ast', 'daslib/json')",
         {
@@ -269,6 +281,8 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4 : string) : string {
         return do_goto_definition(arg1, arg2, arg3)
     } elif (tool_name == "type_of") {
         return do_type_of(arg1, arg2, arg3)
+    } elif (tool_name == "find_references") {
+        return do_find_references(arg1, arg2, arg3, arg4)
     } elif (tool_name == "list_modules") {
         return do_list_modules()
     } elif (tool_name == "find_symbol") {
@@ -321,6 +335,14 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         }
         arg2 = get_string_arg(args, "line")
         arg3 = get_string_arg(args, "column")
+    } elif (name == "find_references") {
+        arg1 = get_string_arg(args, "file")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'file' argument")
+        }
+        arg2 = get_string_arg(args, "line")
+        arg3 = get_string_arg(args, "column")
+        arg4 = get_string_arg(args, "scope")
     } elif (name == "run_script") {
         arg1 = get_string_arg(args, "file")
         arg2 = get_string_arg(args, "code")

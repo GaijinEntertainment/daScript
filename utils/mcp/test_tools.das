@@ -20,6 +20,7 @@ require tools/list_requires public
 require tools/convert_to_gen2 public
 require tools/goto_definition public
 require tools/type_of public
+require tools/find_references public
 
 // helper: parse tool result JSON, return (text, isError)
 def parse_result(result : string; var text : string&; var is_error : bool&) : bool {
@@ -470,5 +471,114 @@ def test_type_of_no_expression(t : T?) {
         parse_result(do_type_of(fixture_path("_fixture_goto.das"), "1", "1"), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "No expression found") >= 0, "should report no expression")
+    }
+}
+
+// ── find_references ──────────────────────────────────────────────────
+
+[test]
+def test_find_references_function(t : T?) {
+    t |> run("finds function call and addr references") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // cursor on add_points call at line 30 col 14
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "30", "14", "file"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "func") >= 0, "should identify as function")
+        t |> success(find(text, "add_points") >= 0, "should name add_points")
+        t |> success(find(text, "[call]") >= 0, "should find call reference")
+        t |> success(find(text, "[addr]") >= 0, "should find addr reference (@@add_points)")
+    }
+}
+
+[test]
+def test_find_references_variable(t : T?) {
+    t |> run("finds variable references") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // cursor on p1 variable usage at line 30 col 25
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "30", "25", "file"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "variable") >= 0, "should identify as variable")
+        t |> success(find(text, "p1") >= 0, "should name p1")
+        t |> success(find(text, "Found 2 reference") >= 0, "should find 2 references")
+    }
+}
+
+[test]
+def test_find_references_field(t : T?) {
+    t |> run("finds field references including safe field") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // cursor on a.x field at line 15 col 22
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "15", "22", "file"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "Point.x") >= 0, "should identify as Point.x field")
+        t |> success(find(text, "[field]") >= 0, "should find field references")
+        t |> success(find(text, "[safe field]") >= 0, "should find safe field reference (?.x)")
+        t |> success(find(text, "Found 5 reference") >= 0, "should find 5 references")
+    }
+}
+
+[test]
+def test_find_references_addr(t : T?) {
+    t |> run("finds function from @@addr expression") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // cursor on @@add_points at line 32 col 30
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "32", "30", "file"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "func") >= 0, "should identify as function")
+        t |> success(find(text, "add_points") >= 0, "should name add_points")
+        t |> success(find(text, "[call]") >= 0, "should find call reference")
+        t |> success(find(text, "[addr]") >= 0, "should find addr reference")
+    }
+}
+
+[test]
+def test_find_references_invoke(t : T?) {
+    t |> run("invoke resolves to function pointer variable") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // cursor on invoke(f, a, b) at line 23 col 12
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "23", "12", "file"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "variable") >= 0, "should identify as variable")
+        t |> success(find(text, "'f'") >= 0, "should name f")
+    }
+}
+
+[test]
+def test_find_references_from_declaration(t : T?) {
+    t |> run("finds references from function definition") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // cursor on 'def add_points' at line 14
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "14", "5", "file"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "func") >= 0, "should identify as function")
+        t |> success(find(text, "add_points") >= 0, "should name add_points")
+        t |> success(find(text, "[call]") >= 0, "should find call reference")
+    }
+    t |> run("finds references from struct definition") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // cursor on 'struct Point' at line 9
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "9", "1", "file"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "structure") >= 0, "should identify as structure")
+        t |> success(find(text, "Point") >= 0, "should name Point")
+        t |> success(find(text, "[type ref]") >= 0, "should find type references")
+    }
+}
+
+[test]
+def test_find_references_no_expression(t : T?) {
+    t |> run("reports no expression at empty position") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "2", "1", "file"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "No expression or declaration found") >= 0, "should report nothing found")
     }
 }
