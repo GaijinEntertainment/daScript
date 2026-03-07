@@ -391,6 +391,21 @@ def identify_declaration_target(program : smart_ptr<Program>; file : string; lin
             }
         }
     }
+    if (result.kind != RefTargetKind.none) {
+        return result
+    }
+    // check global variable declarations
+    ast::for_each_global(thisMod) <| $(var value : VariablePtr) {
+        if (result.kind != RefTargetKind.none) {
+            return
+        }
+        let v = get_ptr(value)
+        if (int(v.at.line) == line && v.at.fileInfo != null) {
+            if (find(string(v.at.fileInfo.name), file) >= 0) {
+                result = RefTarget(kind = RefTargetKind.variable, target_ptr = to_void(v), name = string(v.name))
+            }
+        }
+    }
     return result
 }
 

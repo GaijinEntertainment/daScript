@@ -490,8 +490,8 @@ def test_find_references_function(t : T?) {
     t |> run("finds function call and addr references") <| @(t : T?) {
         var text : string
         var is_error = false
-        // cursor on add_points call at line 44 col 14
-        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "44", "14", "file"), text, is_error)
+        // cursor on add_points call at line 46 col 14
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "46", "14", "file"), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "func") >= 0, "should identify as function")
         t |> success(find(text, "add_points") >= 0, "should name add_points")
@@ -505,8 +505,8 @@ def test_find_references_variable(t : T?) {
     t |> run("finds variable references") <| @(t : T?) {
         var text : string
         var is_error = false
-        // cursor on p1 variable usage at line 44 col 25
-        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "44", "25", "file"), text, is_error)
+        // cursor on p1 variable usage at line 46 col 25
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "46", "25", "file"), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "variable") >= 0, "should identify as variable")
         t |> success(find(text, "p1") >= 0, "should name p1")
@@ -525,7 +525,7 @@ def test_find_references_field(t : T?) {
         t |> success(find(text, "Point.x") >= 0, "should identify as Point.x field")
         t |> success(find(text, "[field]") >= 0, "should find field references")
         t |> success(find(text, "[safe field]") >= 0, "should find safe field reference (?.x)")
-        t |> success(find(text, "Found 5 reference") >= 0, "should find 5 references")
+        t |> success(find(text, "Found 6 reference") >= 0, "should find 6 references")
     }
 }
 
@@ -534,8 +534,8 @@ def test_find_references_addr(t : T?) {
     t |> run("finds function from @@addr expression") <| @(t : T?) {
         var text : string
         var is_error = false
-        // cursor on @@add_points at line 46 col 30
-        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "46", "30", "file"), text, is_error)
+        // cursor on @@add_points at line 48 col 30
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "48", "30", "file"), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "func") >= 0, "should identify as function")
         t |> success(find(text, "add_points") >= 0, "should name add_points")
@@ -596,11 +596,25 @@ def test_find_references_alias(t : T?) {
     t |> run("finds alias references from variant usage") <| @(t : T?) {
         var text : string
         var is_error = false
-        // cursor on Value(i = 10) at line 49 col 13
-        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "49", "13", "file"), text, is_error)
+        // cursor on Value(i = 10) at line 51 col 13
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "51", "13", "file"), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "alias") >= 0, "should identify as alias")
         t |> success(find(text, "Value") >= 0, "should name Value")
+    }
+}
+
+[test]
+def test_find_references_global_variable(t : T?) {
+    t |> run("finds global variable references from declaration") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // cursor on 'let GLOBAL_SCALE' declaration at line 36 col 5, need no_opt to preserve ExprVar
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "36", "5", "file", "true"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "variable") >= 0, "should identify as variable")
+        t |> success(find(text, "GLOBAL_SCALE") >= 0, "should name GLOBAL_SCALE")
+        t |> success(find(text, "Found 1 reference") >= 0, "should find 1 reference (usage in main)")
     }
 }
 

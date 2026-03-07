@@ -33,6 +33,8 @@ variant Value {
     f : float
 }
 
+let GLOBAL_SCALE = 2.0
+
 def use_flags(f : Flags) : bool {
     return (f & Flags.readable) != bitfield(0u)
 }
@@ -48,5 +50,6 @@ def main() {
     let fl = Flags.readable
     let v = Value(i = 10)
     let has_r = use_flags(fl)
-    print("{p3.x} {p3.y} {safe_x} {via_invoke.x} {c} {fl} {v} {has_r}\n")
+    let scaled = p3.x * GLOBAL_SCALE
+    print("{p3.x} {p3.y} {safe_x} {via_invoke.x} {c} {fl} {v} {has_r} {scaled}\n")
 }
