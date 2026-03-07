@@ -75,6 +75,10 @@
         {
           "type": "SYMBOL",
           "name": "pass_statement"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "reader_macro"
         }
       ]
     },

@@ -131,6 +131,7 @@ module.exports = grammar({
       $.label_statement,
       $.goto_statement,
       $.pass_statement,
+      $.reader_macro,
     ),
 
     _declaration: $ => choice(

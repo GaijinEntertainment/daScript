@@ -3184,6 +3184,10 @@
           "named": true
         },
         {
+          "type": "reader_macro",
+          "named": true
+        },
+        {
           "type": "return_statement",
           "named": true
         },
