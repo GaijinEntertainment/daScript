@@ -16,6 +16,16 @@ class Animal {
     def abstract speak() : string
 }
 
+bitfield Access {
+    readable
+    writable
+}
+
+variant Value {
+    i : int
+    f : float
+}
+
 def add(a, b : int) : int {
     return a + b
 }

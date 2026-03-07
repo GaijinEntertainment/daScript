@@ -2,7 +2,7 @@
 
 Future tools for the daslang MCP server, organized by priority and difficulty.
 
-## Current Tools (v0.5)
+## Current Tools (v0.6)
 
 | Tool | Description |
 |---|---|
@@ -25,6 +25,7 @@ Future tools for the daslang MCP server, organized by priority and difficulty.
 | `eval_expression` | Evaluate a daslang expression and return printed result. Supports comma-separated module imports via `require` parameter |
 | `describe_type` | Describe a type's fields, methods, values, and base type. Supports structs, classes, handled types, enums, bitfields, variants, tuples, typedefs |
 | `grep_usage` | Parse-aware symbol search across .das files using ast-grep + tree-sitter. Conditional on `sg` CLI being installed |
+| `outline` | List all declarations (functions, structs, classes, enums, globals, typedefs) in a file or set of files using tree-sitter. No compilation needed. Conditional on `sg` CLI |
 
 ### Cross-cutting features
 
@@ -292,6 +293,7 @@ Recommended order based on value/effort ratio:
 7. ~~**.das_project support**~~ ✅ Implemented (per-tool `project` parameter)
 8. ~~**describe_type**~~ ✅ Implemented (fields, methods, values, base types for all type kinds)
 9. ~~**grep_usage**~~ ✅ Implemented (ast-grep + tree-sitter, conditional on `sg` CLI)
+9b. ~~**outline**~~ ✅ Implemented (tree-sitter kind-based rules, conditional on `sg` CLI)
 10. ~~**batch_compile**~~ ✅ Implemented (merged into `compile_check` with comma-separated and glob support)
 11. ~~**list_annotations**~~ ✅ Implemented (merged into `list_module_api` as `annotations` section)
 12. ~~**eval_expression**~~ ✅ Implemented (expression eval with `require` support)

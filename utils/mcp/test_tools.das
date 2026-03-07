@@ -24,6 +24,7 @@ require tools/find_references public
 require tools/eval_expression public
 require tools/describe_type public
 require tools/grep_usage public
+require tools/outline public
 
 // helper: parse tool result JSON, return (text, isError)
 def parse_result(result : string; var text : string&; var is_error : bool&) : bool {
@@ -861,6 +862,68 @@ def test_grep_usage_glob_exclude(t : T?) {
         // only common.das should appear
         t |> success(find(text, "common.das") >= 0, "should find in common.das")
         t |> success(find(text, "compile_check.das") < 0, "should not find in other files")
+    }
+}
+
+[test]
+def test_outline(t : T?) {
+    t |> run("lists functions and structs") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_outline("utils/mcp/tests/_fixture_valid.das", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "[function]") >= 0, "should find functions")
+        t |> success(find(text, "[struct]") >= 0, "should find structs")
+        t |> success(find(text, "add") >= 0, "should find 'add' function")
+        t |> success(find(text, "Point") >= 0, "should find 'Point' struct")
+    }
+    t |> run("lists enums") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_outline("utils/mcp/tests/_fixture_valid.das", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "[enum]") >= 0, "should find enums")
+        t |> success(find(text, "Color") >= 0, "should find 'Color' enum")
+    }
+    t |> run("lists bitfields and variants") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_outline("utils/mcp/tests/_fixture_valid.das", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "[bitfield]") >= 0, "should find bitfields")
+        t |> success(find(text, "Access") >= 0, "should find 'Access' bitfield")
+        t |> success(find(text, "[variant]") >= 0, "should find variants")
+        t |> success(find(text, "Value") >= 0, "should find 'Value' variant")
+    }
+    t |> run("sorted by line number") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_outline("utils/mcp/tests/_fixture_valid.das", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        // Point is defined before Color, which is before add
+        let point_pos = find(text, "Point")
+        let color_pos = find(text, "Color")
+        let add_pos = find(text, "add")
+        t |> success(point_pos < color_pos, "Point should come before Color")
+        t |> success(color_pos < add_pos, "Color should come before add")
+    }
+    t |> run("missing args is error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_outline("", ""), text, is_error)
+        t |> success(is_error, "should be error")
+    }
+}
+
+[test]
+def test_outline_glob(t : T?) {
+    t |> run("glob scans multiple files") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_outline("", "utils/mcp/tests/_fixture_*.das"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        // Should find declarations from multiple fixture files
+        t |> success(find(text, "_fixture_valid.das") >= 0, "should include _fixture_valid.das")
     }
 }
 
