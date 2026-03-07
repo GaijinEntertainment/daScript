@@ -146,6 +146,7 @@ module.exports = grammar({
       $.tuple_alias_declaration,
       $.variant_alias_declaration,
       $.bitfield_alias_declaration,
+      $.include_declaration,
     ),
 
     // ========================================================================
@@ -191,6 +192,13 @@ module.exports = grammar({
       $.integer_literal,
       optional(seq(':', $.integer_literal)),
     ),
+
+    include_declaration: $ => seq(
+      'include',
+      field('file', $.include_path),
+    ),
+
+    include_path: $ => /[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z0-9_]+)*/,
 
     // ========================================================================
     // Annotations
@@ -286,17 +294,17 @@ module.exports = grammar({
         '++', '--',  // prefix (shown as +++ --- in AST)
         '<<', '>>', '<<=', '>>=',
         '<<<', '>>>', '<<<=', '>>>=',
-        seq('[', ']'),
         seq('[', ']', choice('=', '<-', ':=', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '&&=', '||=', '^^=')),
+        seq('[', ']'),
         seq('?', '[', ']'),
-        '.', '?.',
+        // Property operators — longer matches first
         seq('.', $.identifier, ':='),
         seq('.', $.identifier),
         seq('?.', $.identifier),
+        '.', '?.',
         ':=',
         'delete',
         '??',
-        // Longer matches first for greedy matching
         seq('is', choice($.identifier, $.basic_type)),
         seq('as', choice($.identifier, $.basic_type)),
         seq('?', 'as', choice($.identifier, $.basic_type)),
@@ -315,6 +323,7 @@ module.exports = grammar({
       optional($.metadata_argument_list),
       optional(choice('let', 'var')),
       field('name', $._variable_name_list),
+      optional('&'),  // reference modifier (var name &; or var name & : type)
       optional(seq(':', field('type', $._type))),
       optional(seq(choice('=', '<-'), field('default', $._expression))),
     ),
@@ -386,7 +395,7 @@ module.exports = grammar({
       'typedef',
       field('name', $.identifier),
       '=',
-      field('type', $._type),
+      field('type', choice($._type, $.template_type)),
       $._semicolon,
     ),
 
@@ -461,7 +470,7 @@ module.exports = grammar({
         optional(choice('public', 'private')),
         field('name', $.identifier),
         '=',
-        field('type', $._type),
+        field('type', choice($._type, $.template_type)),
         $._semicolon,
       ),
     ),
@@ -930,7 +939,11 @@ module.exports = grammar({
     field_expression: $ => prec.left(PREC.DOT, seq(
       field('object', $._expression),
       '.',
-      field('field', choice($.identifier, $.quote_expression)),
+      field('field', choice(
+        $.identifier,
+        $.quote_expression,
+        seq('.', $.identifier),  // a . . b — double-dot bypass for property overloads
+      )),
     )),
 
     safe_field_expression: $ => prec.left(PREC.DOT, seq(
@@ -1342,6 +1355,14 @@ module.exports = grammar({
 
     named_type: $ => $._name_in_namespace,
 
+    // $TName<type;type> or $TName<type;type>(@@func, @@func) — template struct instantiation
+    template_type: $ => seq(
+      '$',
+      token.immediate(/[a-zA-Z_][a-zA-Z0-9_]*/),
+      optional(seq('<', sep1($._type, choice(',', ';')), '>')),
+      optional(seq('(', sep1(seq('@@', $.identifier), ','), ')')),
+    ),
+
     auto_type: $ => prec.left(seq(
       'auto',
       optional(seq('(', $.identifier, ')')),
@@ -1498,13 +1519,13 @@ module.exports = grammar({
       ))),
     )),
 
-    // Float literals: 3.14, 3.14f, 3.14d, 3.14lf, 1e10, 1.5e-3
-    // Note: `0.` without digits after dot requires a suffix (d/f/lf) to avoid ambiguity with `..`
+    // Float literals: 3.14, 3.14f, 3.14d, 3.14lf, 1e10, 1.5e-3, .5
     float_literal: $ => token(choice(
       seq(/[0-9][0-9_]*\.[0-9][0-9_]*/, optional(/[eE][+-]?[0-9]+/), optional(choice(/[dD]/, /[fF]/, /[lL][fF]/))),
       seq(/[0-9][0-9_]*[eE][+-]?[0-9]+/, optional(choice(/[dD]/, /[fF]/, /[lL][fF]/))),
       seq(/[0-9][0-9_]*\./, choice(/[dD]/, /[fF]/, /[lL][fF]/)),
       seq(/[0-9][0-9_]*/, choice(/[dD]/, /[fF]/, /[lL][fF]/)),
+      seq(/\.[0-9][0-9_]*/, optional(/[eE][+-]?[0-9]+/), optional(choice(/[dD]/, /[fF]/, /[lL][fF]/))),  // .5, .1e10
     )),
 
     // Character literals: 'a', '\n', 'a'u, 'a'u8

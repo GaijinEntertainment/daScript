@@ -24,6 +24,10 @@
         "named": true
       },
       {
+        "type": "include_declaration",
+        "named": true
+      },
+      {
         "type": "module_declaration",
         "named": true
       },
@@ -1713,9 +1717,13 @@
     "named": true,
     "fields": {
       "field": {
-        "multiple": false,
+        "multiple": true,
         "required": true,
         "types": [
+          {
+            "type": ".",
+            "named": false
+          },
           {
             "type": "identifier",
             "named": true
@@ -2290,6 +2298,22 @@
           "named": true
         }
       ]
+    }
+  },
+  {
+    "type": "include_declaration",
+    "named": true,
+    "fields": {
+      "file": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "include_path",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {
@@ -3495,6 +3519,10 @@
           {
             "type": "_type",
             "named": true
+          },
+          {
+            "type": "template_type",
+            "named": true
           }
         ]
       }
@@ -3613,6 +3641,25 @@
       "types": [
         {
           "type": "_type",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "template_type",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "_type",
+          "named": true
+        },
+        {
+          "type": "identifier",
           "named": true
         }
       ]
@@ -3887,6 +3934,10 @@
         "types": [
           {
             "type": "_type",
+            "named": true
+          },
+          {
+            "type": "template_type",
             "named": true
           }
         ]
@@ -4683,6 +4734,14 @@
   {
     "type": "in",
     "named": false
+  },
+  {
+    "type": "include",
+    "named": false
+  },
+  {
+    "type": "include_path",
+    "named": true
   },
   {
     "type": "inscope",
