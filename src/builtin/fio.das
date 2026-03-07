@@ -134,3 +134,28 @@ def mkdir_rec(path : string) : bool {
     mkdir_rec(dir_name(path))
     return mkdir(path)
 }
+
+// convenience: read entire file by path, returns empty string on failure
+[generic]
+def fread(path : string) : string {
+    var result : string
+    fopen(path, "rb") <| $(f) {
+        if (f != null) {
+            result = fread(f)
+        }
+    }
+    return result
+}
+
+// convenience: write string to file by path, returns true on success
+[generic]
+def fwrite(path : string; text : string) : bool {
+    var ok = false
+    fopen(path, "wb") <| $(f) {
+        if (f != null) {
+            fwrite(f, text)
+            ok = true
+        }
+    }
+    return ok
+}

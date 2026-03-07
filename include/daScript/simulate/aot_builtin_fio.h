@@ -75,6 +75,9 @@ namespace das {
     DAS_API char * get_full_file_name ( const char * path, Context * context, LineInfoArg * );
     DAS_API bool builtin_remove_file ( const char * path );
     DAS_API bool builtin_rename_file ( const char * old_path, const char * new_path );
+    DAS_API bool builtin_rmdir ( const char * path );
+    DAS_API bool builtin_fexist ( const char * path );
+    DAS_API bool builtin_rmdir_rec ( const char * path );
     DAS_API bool has_env_variable ( const char * var, Context * context, LineInfoArg * at );
     DAS_API char * get_env_variable ( const char * var, Context * context, LineInfoArg * at );
     DAS_API char * sanitize_command_line ( const char * cmd, Context * context, LineInfoArg * at );

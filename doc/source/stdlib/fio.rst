@@ -190,6 +190,7 @@ File manipulation
 
   *  :ref:`fclose (file: FILE const?) <function-fio_fclose_FILE_const_q_>`
   *  :ref:`feof (file: FILE const?) : bool <function-fio_feof_FILE_const_q_>`
+  *  :ref:`fexist (path: string) : bool <function-fio_fexist_string>`
   *  :ref:`fflush (file: FILE const?) <function-fio_fflush_FILE_const_q_>`
   *  :ref:`fgets (file: FILE const?) : string <function-fio_fgets_FILE_const_q_>`
   *  :ref:`fload (file: file; size: int; blk: block\<(data:array\<uint8\>):void\>) <function-fio_fload_file_int_block_ls_data_c_array_ls_uint8_gr__c_void_gr_>`
@@ -198,9 +199,10 @@ File manipulation
   *  :ref:`fopen (name: string; mode: string; blk: block\<(f:file):void\>) : auto <function-fio_fopen_string_string_block_ls_f_c_file_c_void_gr_>`
   *  :ref:`fopen (name: string; mode: string) : FILE const? <function-fio_fopen_string_string>`
   *  :ref:`fprint (file: FILE const?; text: string) <function-fio_fprint_FILE_const_q__string>`
+  *  :ref:`fread (f: file; buf: array\<auto(BufType)\>) : auto <function-fio_fread_file_array_ls_autoBufType_gr_>`
   *  :ref:`fread (f: file; buf: auto(BufType)) : auto <function-fio_fread_file_autoBufType_0x66>`
   *  :ref:`fread (file: FILE const?) : string <function-fio_fread_FILE_const_q_>`
-  *  :ref:`fread (f: file; buf: array\<auto(BufType)\>) : auto <function-fio_fread_file_array_ls_autoBufType_gr_>`
+  *  :ref:`fread (path: string) : string <function-fio_fread_string>`
   *  :ref:`fread (f: file; blk: block\<(data:string#):auto\>) : auto <function-fio_fread_file_block_ls_data_c_string_hh__c_auto_gr_>`
   *  :ref:`fsave (f: file; buf: auto(BufType)) : auto <function-fio_fsave_file_autoBufType_0x53>`
   *  :ref:`fseek (file: FILE const?; offset: int64; mode: int) : int64 <function-fio_fseek_FILE_const_q__int64_int>`
@@ -210,9 +212,10 @@ File manipulation
   *  :ref:`fstdin () : FILE const? <function-fio_fstdin>`
   *  :ref:`fstdout () : FILE const? <function-fio_fstdout>`
   *  :ref:`ftell (file: FILE const?) : int64 <function-fio_ftell_FILE_const_q_>`
-  *  :ref:`fwrite (f: file; buf: array\<auto(BufType)\>) : auto <function-fio_fwrite_file_array_ls_autoBufType_gr_>`
-  *  :ref:`fwrite (file: FILE const?; text: string) <function-fio_fwrite_FILE_const_q__string>`
   *  :ref:`fwrite (f: file; buf: auto(BufType)) : auto <function-fio_fwrite_file_autoBufType_0x74>`
+  *  :ref:`fwrite (file: FILE const?; text: string) <function-fio_fwrite_FILE_const_q__string>`
+  *  :ref:`fwrite (path: string; text: string) : bool <function-fio_fwrite_string_string>`
+  *  :ref:`fwrite (f: file; buf: array\<auto(BufType)\>) : auto <function-fio_fwrite_file_array_ls_autoBufType_gr_>`
   *  :ref:`getchar () : int <function-fio_getchar>`
   *  :ref:`remove (name: string) : bool <function-fio_remove_string>`
   *  :ref:`rename (old_name: string; new_name: string) : bool <function-fio_rename_string_string>`
@@ -236,6 +239,15 @@ Returns true if the end-of-file indicator has been set on the given FILE pointer
 
 
 :Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>`? implicit
+
+.. _function-fio_fexist_string:
+
+.. das:function:: fexist(path: string) : bool
+
+Returns true if a file or directory exists at the given path.
+
+
+:Arguments: * **path** : string implicit
 
 .. _function-fio_fflush_FILE_const_q_:
 
@@ -327,24 +339,28 @@ Writes the given text string to the specified FILE pointer, equivalent to print 
 fread
 ^^^^^
 
-.. _function-fio_fread_file_autoBufType_0x66:
+.. _function-fio_fread_file_array_ls_autoBufType_gr_:
 
-.. das:function:: fread(f: file; buf: auto(BufType)) : auto
+.. das:function:: fread(f: file; buf: array<auto(BufType)>) : auto
 
-Reads data from a file into a buffer, an array, or returns the full contents as a string, with block-based overloads available.
+Reads raw binary data from a file into an array of POD elements. Returns the number of bytes read.
 
 
 :Arguments: * **f** :  :ref:`file <alias-file>`
 
-            * **buf** : auto(BufType) implicit
+            * **buf** : array<auto(BufType)> implicit
+
+.. _function-fio_fread_file_autoBufType_0x66:
+
+.. das:function:: fread(f: file; buf: auto(BufType)) : auto
 
 .. _function-fio_fread_FILE_const_q_:
 
 .. das:function:: fread(file: FILE const?) : string
 
-.. _function-fio_fread_file_array_ls_autoBufType_gr_:
+.. _function-fio_fread_string:
 
-.. das:function:: fread(f: file; buf: array<auto(BufType)>) : auto
+.. das:function:: fread(path: string) : string
 
 .. _function-fio_fread_file_block_ls_data_c_string_hh__c_auto_gr_:
 
@@ -431,24 +447,28 @@ Returns the current byte offset of the file pointer for the given FILE, equivale
 fwrite
 ^^^^^^
 
-.. _function-fio_fwrite_file_array_ls_autoBufType_gr_:
+.. _function-fio_fwrite_file_autoBufType_0x74:
 
-.. das:function:: fwrite(f: file; buf: array<auto(BufType)>) : auto
+.. das:function:: fwrite(f: file; buf: auto(BufType)) : auto
 
-Writes a string, typed buffer, or array of data to the specified file handle.
+Writes raw binary data from a POD value to a file. Returns the number of bytes written.
 
 
 :Arguments: * **f** :  :ref:`file <alias-file>`
 
-            * **buf** : array<auto(BufType)> implicit
+            * **buf** : auto(BufType) implicit
 
 .. _function-fio_fwrite_FILE_const_q__string:
 
 .. das:function:: fwrite(file: FILE const?; text: string)
 
-.. _function-fio_fwrite_file_autoBufType_0x74:
+.. _function-fio_fwrite_string_string:
 
-.. das:function:: fwrite(f: file; buf: auto(BufType)) : auto
+.. das:function:: fwrite(path: string; text: string) : bool
+
+.. _function-fio_fwrite_file_array_ls_autoBufType_gr_:
+
+.. das:function:: fwrite(f: file; buf: array<auto(BufType)>) : auto
 
 ----
 
@@ -542,6 +562,8 @@ Directory manipulation
   *  :ref:`getcwd () : string <function-fio_getcwd>`
   *  :ref:`mkdir (path: string) : bool <function-fio_mkdir_string>`
   *  :ref:`mkdir_rec (path: string) : bool <function-fio_mkdir_rec_string>`
+  *  :ref:`rmdir (path: string) : bool <function-fio_rmdir_string>`
+  *  :ref:`rmdir_rec (path: string) : bool <function-fio_rmdir_rec_string>`
 
 .. _function-fio_chdir_string:
 
@@ -587,6 +609,24 @@ Recursively creates the directory at the specified path along with any missing p
 
 
 :Arguments: * **path** : string
+
+.. _function-fio_rmdir_string:
+
+.. das:function:: rmdir(path: string) : bool
+
+Removes an empty directory. Returns true on success.
+
+
+:Arguments: * **path** : string implicit
+
+.. _function-fio_rmdir_rec_string:
+
+.. das:function:: rmdir_rec(path: string) : bool
+
+Recursively removes a directory and all its contents (files and subdirectories). Returns true on success.
+
+
+:Arguments: * **path** : string implicit
 
 
 ++++++++++++++++++++

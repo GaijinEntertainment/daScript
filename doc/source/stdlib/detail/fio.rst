@@ -6,6 +6,10 @@
 
 .. |handmade/function-fio-rename| replace:: to be documented in |handmade/function-fio-rename|.rst
 
+.. |handmade/function-fio-fexist| replace:: to be documented in |handmade/function-fio-fexist|.rst
+
+.. |handmade/function-fio-rmdir_rec| replace:: to be documented in |handmade/function-fio-rmdir_rec|.rst
+
 .. |handmade/function-fio-fopen| replace:: to be documented in |handmade/function-fio-fopen|.rst
 
 .. |handmade/function-fio-fclose| replace:: to be documented in |handmade/function-fio-fclose|.rst
@@ -39,6 +43,8 @@
 .. |handmade/function-fio-builtin_dir| replace:: to be documented in |handmade/function-fio-builtin_dir|.rst
 
 .. |handmade/function-fio-mkdir| replace:: to be documented in |handmade/function-fio-mkdir|.rst
+
+.. |handmade/function-fio-rmdir| replace:: to be documented in |handmade/function-fio-rmdir|.rst
 
 .. |handmade/function-fio-chdir| replace:: to be documented in |handmade/function-fio-chdir|.rst
 

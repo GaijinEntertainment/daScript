@@ -99,24 +99,36 @@ After creating or modifying any RST files, stdlib documentation, or `daslib/*.da
 2. **Clean Sphinx build** — MUST delete cache; cached builds hide errors:
    ```
    cd doc
-   Remove-Item -Recurse -Force sphinx-build    # delete doctree cache
-   Remove-Item -Recurse -Force ../site/doc     # delete HTML output
-   sphinx-build -b html -d sphinx-build source ../site/doc
-   ```
-   On Linux/Mac:
-   ```
-   cd doc
    rm -rf sphinx-build ../site/doc
-   sphinx-build -b html -d sphinx-build source ../site/doc
+   sphinx-build -b html -d sphinx-build source ../site/doc 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | tee /tmp/sphinx_out.txt
    ```
+   Sphinx is installed in the project venv (`.venv/Scripts/sphinx-build`).
 
-3. **Verify no new errors or warnings**: Check the build output for `ERROR` and `WARNING`. The build must introduce **no new** Sphinx errors or warnings compared to the baseline.
+3. **Verify no new errors or warnings**: Strip ANSI codes and check the build output:
+   ```
+   grep -iE "warning:|error:" /tmp/sphinx_out.txt
+   ```
+   The build must introduce **no new** Sphinx errors or warnings. The final summary line should say `build succeeded.` with no warning count.
+
+   Common issues:
+   - **Duplicate label**: Two RST files define the same `.. _label:` — rename one
+   - **Unknown target**: `:ref:\`label\`` points to a nonexistent label — check spelling
+   - **Malformed table**: Grid/simple table column widths don't align — see RST table rules below
+   - **Unexpected indentation**: Content after a directive must be indented consistently
 
 **When to run the workflow:**
 - New or modified RST files (language docs, tutorials, stdlib docs)
 - New or modified `//!` doc-comments in `daslib/*.das` files
 - Changes to `doc/reflections/das2rst.das` or `doc/reflections/rst.das`
-- New public functions added to any `daslib/*.das` module (also update `group_by_regex` in `das2rst.das`)
+- New public functions added to any module (C++ builtins or `daslib/*.das`) — also update `group_by_regex` in `das2rst.das`
+
+**Full checklist when adding new public functions:**
+1. Add the function name to the correct `group_by_regex` in `das2rst.das` (prevents "Uncategorized")
+2. `bin/Release/daslang.exe doc/reflections/das2rst.das` — generates RST and creates stub doc files
+3. Check for stubs: `grep -rl "// stub" doc/source/stdlib/handmade/` — fill in descriptions
+4. Regenerate: `bin/Release/daslang.exe doc/reflections/das2rst.das` (picks up filled stubs)
+5. Verify no "Uncategorized": `grep -c Uncategorized doc/source/stdlib/*.rst | grep -v ':0$'`
+6. Clean Sphinx build (step 2 above) — verify `build succeeded.` with no new warnings
 
 ## Tutorial RST conventions
 
