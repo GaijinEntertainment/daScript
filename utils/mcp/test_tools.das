@@ -21,6 +21,7 @@ require tools/convert_to_gen2 public
 require tools/goto_definition public
 require tools/type_of public
 require tools/find_references public
+require tools/eval_expression public
 
 // helper: parse tool result JSON, return (text, isError)
 def parse_result(result : string; var text : string&; var is_error : bool&) : bool {
@@ -711,5 +712,45 @@ def test_find_references_no_expression(t : T?) {
         parse_result(do_find_references(fixture_path("_fixture_refs.das"), "2", "1", "file"), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "No expression or declaration found") >= 0, "should report nothing found")
+    }
+}
+
+// ── eval_expression ─────────────────────────────────────────────────
+
+[test]
+def test_eval_expression(t : T?) {
+    t |> run("evaluates simple arithmetic") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_eval_expression("1 + 2", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> equal(text, "3")
+    }
+    t |> run("evaluates with require") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_eval_expression("float(42) + sin(1.0)", "math"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "42.84") >= 0, "should contain 42.84")
+    }
+    t |> run("evaluates with multiple requires") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_eval_expression("to_int(\"10\") + 5", "math, strings"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> equal(text, "15")
+    }
+    t |> run("reports compile error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_eval_expression("undefined_func()", ""), text, is_error)
+        t |> success(is_error, "should be error")
+        t |> success(find(text, "Evaluation failed") >= 0, "should report failure")
+    }
+    t |> run("missing expression is error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_eval_expression("", ""), text, is_error)
+        t |> success(is_error, "should be error")
     }
 }

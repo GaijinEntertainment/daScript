@@ -38,6 +38,7 @@ require tools/goto_definition public
 require tools/type_of public
 require tools/find_references public
 require tools/program_log public
+require tools/eval_expression public
 
 let MCP_PORT = 9500
 let HEAP_COLLECT_THRESHOLD = 1024ul * 1024ul  // 1 MB
@@ -238,6 +239,15 @@ def handle_tools_list(id_json : string) : string {
         []
     ))
     result.tools |> emplace(make_tool(
+        "eval_expression",
+        "Evaluate a daslang expression and return its printed result. Wraps the expression in a string builder print statement. Use 'require' to add module imports (comma-separated).",
+        {
+            "expression" => PropertySchema(_type = "string", description = "daslang expression to evaluate (e.g. 'to_float(42) + 1.0', 'length(\"hello\")')"),
+            "require" => PropertySchema(_type = "string", description = "Comma-separated module imports (e.g. 'math', 'strings, daslib/json')")
+        },
+        ["expression"]
+    ))
+    result.tools |> emplace(make_tool(
         "ast_dump",
         "Dump AST of a daslang expression or function. mode='source' shows post-macro daslang code (via describe), mode='ast' (default) shows S-expression with node types.",
         {
@@ -368,6 +378,8 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : s
         return do_format_file(arg1)
     } elif (tool_name == "run_script") {
         return do_run_script(arg1, arg2)
+    } elif (tool_name == "eval_expression") {
+        return do_eval_expression(arg1, arg2)
     } elif (tool_name == "ast_dump") {
         return do_ast_dump(arg1, arg2, arg3, arg4, arg5, project)
     } elif (tool_name == "list_requires") {
@@ -452,6 +464,12 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
     } elif (name == "run_script") {
         arg1 = get_string_arg(args, "file")
         arg2 = get_string_arg(args, "code")
+    } elif (name == "eval_expression") {
+        arg1 = get_string_arg(args, "expression")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'expression' argument")
+        }
+        arg2 = get_string_arg(args, "require")
     } elif (name == "ast_dump") {
         arg1 = get_string_arg(args, "expression")
         arg2 = get_string_arg(args, "file")
