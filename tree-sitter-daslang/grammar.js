@@ -116,6 +116,7 @@ module.exports = grammar({
     [$.function_return_type, $.remove_modifier],
     [$.expression_statement, $.table_literal],
     [$.func_addr_expression, $.lambda_expression],
+    [$.annotation_name, $._expression],
   ],
 
   rules: {
@@ -125,7 +126,28 @@ module.exports = grammar({
 
     source_file: $ => repeat($._top_level_item),
 
-    _top_level_item: $ => $._declaration,
+    _top_level_item: $ => choice(
+      $._declaration,
+      // Statement types allowed at top level for ast-grep pattern matching.
+      // Excludes variable_declaration_statement and typedef_statement
+      // to avoid ambiguity with top-level declarations.
+      $.expression_statement,
+      $.if_statement,
+      $.for_statement,
+      $.while_statement,
+      $.with_statement,
+      $.unsafe_block,
+      $.try_recover_statement,
+      $.return_statement,
+      $.yield_statement,
+      $.break_statement,
+      $.continue_statement,
+      $.delete_statement,
+      $.assume_statement,
+      $.label_statement,
+      $.goto_statement,
+      $.pass_statement,
+    ),
 
     _declaration: $ => choice(
       $.module_declaration,
@@ -1521,7 +1543,7 @@ module.exports = grammar({
     // ========================================================================
 
     // Identifiers can contain backticks
-    identifier: $ => /[a-zA-Z_][a-zA-Z0-9_`]*/,
+    identifier: $ => /[#a-zA-Z_][a-zA-Z0-9_`]*/,
 
     _name_in_namespace: $ => choice(
       $.identifier,

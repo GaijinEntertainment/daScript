@@ -10,8 +10,77 @@
       }
     },
     "_top_level_item": {
-      "type": "SYMBOL",
-      "name": "_declaration"
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "_declaration"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "expression_statement"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "if_statement"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "for_statement"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "while_statement"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "with_statement"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "unsafe_block"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "try_recover_statement"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "return_statement"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "yield_statement"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "break_statement"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "continue_statement"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "delete_statement"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "assume_statement"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "label_statement"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "goto_statement"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "pass_statement"
+        }
+      ]
     },
     "_declaration": {
       "type": "CHOICE",
@@ -9310,7 +9379,7 @@
     },
     "identifier": {
       "type": "PATTERN",
-      "value": "[a-zA-Z_][a-zA-Z0-9_`]*"
+      "value": "[#a-zA-Z_][a-zA-Z0-9_`]*"
     },
     "_name_in_namespace": {
       "type": "CHOICE",
@@ -9496,6 +9565,10 @@
     [
       "func_addr_expression",
       "lambda_expression"
+    ],
+    [
+      "annotation_name",
+      "_expression"
     ]
   ],
   "precedences": [],
