@@ -48,7 +48,8 @@
       "file-types": [
         "das"
       ],
-      "injection-regex": "^daslang$"
+      "injection-regex": "^daslang$",
+      "highlights": "queries/highlights.scm"
     }
   ]
 }
