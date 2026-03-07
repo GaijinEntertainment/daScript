@@ -397,7 +397,7 @@ module.exports = grammar({
       'typedef',
       field('name', $.identifier),
       '=',
-      field('type', choice($._type, $.template_type)),
+      field('type', $._type),
       $._semicolon,
     ),
 
@@ -472,7 +472,7 @@ module.exports = grammar({
         optional(choice('public', 'private')),
         field('name', $.identifier),
         '=',
-        field('type', choice($._type, $.template_type)),
+        field('type', $._type),
         $._semicolon,
       ),
     ),
@@ -814,10 +814,21 @@ module.exports = grammar({
 
     uninitialized_expression: $ => prec(-1, 'uninitialized'),
 
-    // $v(expr), $t(type), $e(expr), $b(block), $i(name), $c(expr), $a(arr), $f(field), $_(anon) — macro quote interpolation
+    // Macro quote interpolation — split by context:
+    //   $t(type)  — type splice, only in _type positions
+    //   all others ($v/$e/$b/$i/$c/$f/$a/$_) — can appear in expressions and name positions
+
+    // $t(type) — only in type positions (separate to avoid conflict with $TName template_type)
+    quote_type: $ => prec(PREC.CALL, seq(
+      '$', token.immediate('t'), token.immediate('('),
+      $._expression,
+      ')',
+    )),
+
+    // $v/$e/$b/$i/$c/$f/$a/$_ — general quote interpolation
     quote_expression: $ => prec(PREC.CALL, seq(
       '$',
-      token.immediate(/[vtebicaf_]/),
+      token.immediate(/[vebicaf_]/),
       token.immediate('('),
       choice($._expression, seq($.identifier, ':', $._type)),  // $(_ : type) anonymous typed parameter
       ')',
@@ -929,7 +940,8 @@ module.exports = grammar({
         seq('type', '<', $._type, '>'),
         $.basic_type,
         $.identifier,
-        $.quote_expression,
+        $.quote_type,
+        $.quote_expression,  // $f(name) in macro quotes
       )),
     )),
 
@@ -1381,8 +1393,9 @@ module.exports = grammar({
       $.typedecl_type,
       $.option_type,
       $._type_modifier,
-      $.quote_expression,  // $t(type) in macro quotes
+      $.quote_type,        // $t(type) in macro quotes
       $.type_macro,        // padded(type<T>, N) — type macros
+      $.template_type,     // $TName<type;type> — template struct instantiation
     ),
 
     basic_type: $ => choice(...basic_types),
@@ -1390,9 +1403,10 @@ module.exports = grammar({
     named_type: $ => $._name_in_namespace,
 
     // $TName<type;type> or $TName<type;type>(@@func, @@func) — template struct instantiation
+    // Identifier must start with uppercase to avoid conflict with quote expressions ($t, $v, etc.)
     template_type: $ => seq(
       '$',
-      token.immediate(/[a-zA-Z_][a-zA-Z0-9_]*/),
+      token.immediate(/[A-Z][a-zA-Z0-9_]*/),
       optional(seq('<', sep1($._type, choice(',', ';')), '>')),
       optional(seq('(', sep1(seq('@@', $.identifier), ','), ')')),
     ),

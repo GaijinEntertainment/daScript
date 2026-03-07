@@ -454,7 +454,7 @@
         "named": true
       },
       {
-        "type": "quote_expression",
+        "type": "quote_type",
         "named": true
       },
       {
@@ -475,6 +475,10 @@
       },
       {
         "type": "temp_type",
+        "named": true
+      },
+      {
+        "type": "template_type",
         "named": true
       },
       {
@@ -875,6 +879,10 @@
           },
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "quote_expression",
             "named": true
           },
           {
@@ -2966,6 +2974,21 @@
     }
   },
   {
+    "type": "quote_type",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "_expression",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "range_expression",
     "named": true,
     "fields": {
@@ -3595,10 +3618,6 @@
           {
             "type": "_type",
             "named": true
-          },
-          {
-            "type": "template_type",
-            "named": true
           }
         ]
       }
@@ -4040,10 +4059,6 @@
         "types": [
           {
             "type": "_type",
-            "named": true
-          },
-          {
-            "type": "template_type",
             "named": true
           }
         ]
@@ -5030,6 +5045,10 @@
   },
   {
     "type": "struct",
+    "named": false
+  },
+  {
+    "type": "t",
     "named": false
   },
   {
