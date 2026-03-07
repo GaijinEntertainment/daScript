@@ -20,6 +20,7 @@ require daslib/json
 require daslib/json_boost public
 require daslib/jobque_boost
 require strings
+require fio
 
 require tools/compile_check public
 require tools/list_functions public
@@ -41,6 +42,70 @@ require tools/program_log public
 let MCP_PORT = 9500
 let HEAP_COLLECT_THRESHOLD = 1024ul * 1024ul  // 1 MB
 let HEAP_LOG_INTERVAL = 60000l                // log heap stats every 60 seconds
+let LOG_FILE = "utils/mcp/mcp_server.log"
+
+// ── Logging ───────────────────────────────────────────────────────────
+
+var log_path : string
+var log_start_clock : clock
+
+def log_open() {
+    log_start_clock = get_clock()
+    // write a separator to mark server restart
+    fopen(log_path, "ab") <| $(f) {
+        if (f != null) {
+            fprint(f, "\n--- server start ---\n")
+        }
+    }
+}
+
+def log_timestamp() : string {
+    let elapsed = get_clock() - log_start_clock
+    let total_sec = int(elapsed)
+    let h = total_sec / 3600
+    let m = (total_sec % 3600) / 60
+    let s = total_sec % 60
+    return build_string() <| $(var w) {
+        if (h > 0) {
+            write(w, "{h}h")
+        }
+        write(w, "{m}m{s}s")
+    }
+}
+
+def log_write(msg : string) {
+    let line = "[{log_timestamp()}] {msg}\n"
+    print(line)
+    fopen(log_path, "ab") <| $(f) {
+        if (f != null) {
+            fprint(f, line)
+        }
+    }
+}
+
+def log_request(method, body : string) {
+    let truncated = length(body) > 500 ? slice(body, 0, 500) + "..." : body
+    log_write("REQ {method} {truncated}")
+}
+
+def log_response(method : string; elapsed_sec : double) {
+    let ms = int(elapsed_sec * 1000.0lf)
+    log_write("RES {method} ({ms}ms)")
+}
+
+def log_tool(tool_name : string; args : string) {
+    log_write("TOOL {tool_name} {args}")
+}
+
+def log_tool_done(tool_name : string; elapsed_sec : double; is_error : bool) {
+    let ms = int(elapsed_sec * 1000.0lf)
+    let status = is_error ? "ERR" : "OK"
+    log_write("TOOL {tool_name} {status} ({ms}ms)")
+}
+
+def log_error(msg : string) {
+    log_write("ERROR {msg}")
+}
 
 // ── MCP protocol structs ─────────────────────────────────────────────
 
@@ -311,6 +376,8 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5 : string) : string {
 }
 
 def run_tool(tool_name, arg1, arg2, arg3, arg4, arg5 : string) : string {
+    log_tool(tool_name, "{arg1} {arg2} {arg3} {arg4} {arg5}")
+    let t0 = get_clock()
     var result : string
     with_channel(1) <| $(ch) {
         new_thread() <| @() {
@@ -322,6 +389,8 @@ def run_tool(tool_name, arg1, arg2, arg3, arg4, arg5 : string) : string {
             result = clone_string(msg.text)
         }
     }
+    let is_error = find(result, "\"isError\":true") >= 0
+    log_tool_done(tool_name, get_clock() - t0, is_error)
     return result
 }
 
@@ -404,16 +473,20 @@ def dispatch_jsonrpc(body : string) : string {
     var err : string
     var parsed = read_json(body, err)
     if (parsed == null) {
+        log_error("JSON parse error: {err}")
         return json_rpc_error("null", -32700, "parse error: {err}")
     }
     let id_json = json_value_to_string(parsed?.id)
     let method_val = parsed?.method
     let params_val = parsed?.params
     if (method_val == null || !(method_val.value is _string)) {
+        log_error("missing method in request")
         unsafe { delete parsed; }
         return json_rpc_error(id_json, -32600, "invalid request: missing method")
     }
     let method = method_val.value as _string
+    log_request(method, body)
+    let t0 = get_clock()
     var result : string
     if (method == "initialize") {
         result = handle_initialize(id_json)
@@ -427,8 +500,10 @@ def dispatch_jsonrpc(body : string) : string {
     } elif (method == "ping") {
         result = json_rpc_response(id_json, "\{\}")
     } else {
+        log_error("method not found: {method}")
         result = json_rpc_error(id_json, -32601, "method not found: {method}")
     }
+    log_response(method, get_clock() - t0)
     unsafe { delete parsed; }
     return result
 }
@@ -438,7 +513,6 @@ class McpServer : HvWebServer {
         allow_cors()
         POST("/mcp") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let body = string(req.body)
-            print("[MCP] POST /mcp: {body}\n")
             let response = dispatch_jsonrpc(body)
             if (empty(response)) {
                 return http_status.NO_CONTENT
@@ -470,33 +544,35 @@ def main() {
             port = maybe_port
         }
     }
-    print("Starting daslang MCP server on port {port}...\n")
+    log_path = "{get_das_root()}/{LOG_FILE}"
+    log_open()
+    log_write("Starting daslang MCP server on port {port}")
     print("Configure Claude Code with: \"url\": \"http://localhost:{port}/mcp\"\n")
     var server = new McpServer()
     server->init(port)
     server->start()
-    print("Server running. Press Ctrl+C to stop.\n")
-    var log_ref_time = ref_time_ticks()
+    log_write("Server running. Press Ctrl+C to stop.")
+    var heap_log_ref = get_clock()
     while (true) {
         server->tick()
         sleep(10u)
         // periodic heap stats logging
-        let elapsed = get_time_usec(log_ref_time) / 1000
-        if (elapsed > int(HEAP_LOG_INTERVAL)) {
-            log_ref_time = ref_time_ticks()
+        let elapsed = get_clock() - heap_log_ref
+        if (elapsed > double(HEAP_LOG_INTERVAL) / 1000.0lf) {
+            heap_log_ref = get_clock()
             let heap_used = heap_bytes_allocated()
             let str_used = string_heap_bytes_allocated()
-            print("[MCP] heap: {int(heap_used)} bytes ({heap_depth()} depth), string heap: {int(str_used)} bytes ({string_heap_depth()} depth)\n")
+            log_write("HEAP heap: {int(heap_used)} bytes ({heap_depth()} depth), string heap: {int(str_used)} bytes ({string_heap_depth()} depth)")
         }
         // collect if over threshold
         let heap_used = heap_bytes_allocated()
         let str_used = string_heap_bytes_allocated()
         if (heap_used > HEAP_COLLECT_THRESHOLD || str_used > HEAP_COLLECT_THRESHOLD) {
-            print("[MCP] collecting — heap: {int(heap_used)}, string heap: {int(str_used)}\n")
+            log_write("HEAP collecting — heap: {int(heap_used)}, string heap: {int(str_used)}")
             unsafe {
                 heap_collect(str_used > HEAP_COLLECT_THRESHOLD, false)
             }
-            print("[MCP] after collect — heap: {int(heap_bytes_allocated())}, string heap: {int(string_heap_bytes_allocated())}\n")
+            log_write("HEAP after collect — heap: {int(heap_bytes_allocated())}, string heap: {int(string_heap_bytes_allocated())}")
         }
     }
 }
