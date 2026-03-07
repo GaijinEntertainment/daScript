@@ -203,7 +203,8 @@ def handle_tools_list(id_json : string) : string {
         {
             "file" => PropertySchema(_type = "string", description = "Path to the .das file"),
             "line" => PropertySchema(_type = "string", description = "Line number (1-based)"),
-            "column" => PropertySchema(_type = "string", description = "Column number (1-based)")
+            "column" => PropertySchema(_type = "string", description = "Column number (1-based)"),
+            "no_opt" => PropertySchema(_type = "string", description = "If 'true', disable optimizations to preserve original AST (constant folding, inlining)")
         },
         ["file", "line", "column"]
     ))
@@ -213,7 +214,8 @@ def handle_tools_list(id_json : string) : string {
         {
             "file" => PropertySchema(_type = "string", description = "Path to the .das file"),
             "line" => PropertySchema(_type = "string", description = "Line number (1-based)"),
-            "column" => PropertySchema(_type = "string", description = "Column number (1-based)")
+            "column" => PropertySchema(_type = "string", description = "Column number (1-based)"),
+            "no_opt" => PropertySchema(_type = "string", description = "If 'true', disable optimizations to preserve original AST (constant folding, inlining)")
         },
         ["file", "line", "column"]
     ))
@@ -224,7 +226,8 @@ def handle_tools_list(id_json : string) : string {
             "file" => PropertySchema(_type = "string", description = "Path to the .das file"),
             "line" => PropertySchema(_type = "string", description = "Line number (1-based)"),
             "column" => PropertySchema(_type = "string", description = "Column number (1-based)"),
-            "scope" => PropertySchema(_type = "string", description = "Search scope: 'file' (default) for current file only, 'all' for all loaded modules")
+            "scope" => PropertySchema(_type = "string", description = "Search scope: 'file' (default) for current file only, 'all' for all loaded modules"),
+            "no_opt" => PropertySchema(_type = "string", description = "If 'true', disable optimizations to preserve original AST (constant folding, inlining)")
         },
         ["file", "line", "column"]
     ))
@@ -258,7 +261,7 @@ def get_string_arg(args : JsonValue?; name : string) : string {
     return v.value as _string
 }
 
-def dispatch_tool(tool_name, arg1, arg2, arg3, arg4 : string) : string {
+def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5 : string) : string {
     if (tool_name == "compile_check") {
         return do_compile_check(arg1)
     } elif (tool_name == "list_functions") {
@@ -278,11 +281,11 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4 : string) : string {
     } elif (tool_name == "convert_to_gen2") {
         return do_convert_to_gen2(arg1, arg2 == "true")
     } elif (tool_name == "goto_definition") {
-        return do_goto_definition(arg1, arg2, arg3)
+        return do_goto_definition(arg1, arg2, arg3, arg4)
     } elif (tool_name == "type_of") {
-        return do_type_of(arg1, arg2, arg3)
+        return do_type_of(arg1, arg2, arg3, arg4)
     } elif (tool_name == "find_references") {
-        return do_find_references(arg1, arg2, arg3, arg4)
+        return do_find_references(arg1, arg2, arg3, arg4, arg5)
     } elif (tool_name == "list_modules") {
         return do_list_modules()
     } elif (tool_name == "find_symbol") {
@@ -294,11 +297,11 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4 : string) : string {
     }
 }
 
-def run_tool(tool_name, arg1, arg2, arg3, arg4 : string) : string {
+def run_tool(tool_name, arg1, arg2, arg3, arg4, arg5 : string) : string {
     var result : string
     with_channel(1) <| $(ch) {
         new_thread() <| @() {
-            let tool_result = dispatch_tool(tool_name, arg1, arg2, arg3, arg4)
+            let tool_result = dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5)
             ch |> push_clone(ToolMessage(text = tool_result))
             ch |> notify_and_release()
         }
@@ -316,7 +319,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         return json_rpc_error(id_json, -32602, "missing tool name")
     }
     let name = tool_name_val.value as _string
-    var arg1, arg2, arg3, arg4 : string
+    var arg1, arg2, arg3, arg4, arg5 : string
     if (name == "compile_check" || name == "list_functions" || name == "list_types" || name == "run_test" || name == "format_file" || name == "list_requires") {
         arg1 = get_string_arg(args, "file")
         if (empty(arg1)) {
@@ -335,6 +338,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         }
         arg2 = get_string_arg(args, "line")
         arg3 = get_string_arg(args, "column")
+        arg4 = get_string_arg(args, "no_opt")
     } elif (name == "find_references") {
         arg1 = get_string_arg(args, "file")
         if (empty(arg1)) {
@@ -343,6 +347,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         arg2 = get_string_arg(args, "line")
         arg3 = get_string_arg(args, "column")
         arg4 = get_string_arg(args, "scope")
+        arg5 = get_string_arg(args, "no_opt")
     } elif (name == "run_script") {
         arg1 = get_string_arg(args, "file")
         arg2 = get_string_arg(args, "code")
@@ -370,7 +375,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
     } else {
         return json_rpc_error(id_json, -32602, "unknown tool: {name}")
     }
-    return json_rpc_response(id_json, run_tool(name, arg1, arg2, arg3, arg4))
+    return json_rpc_response(id_json, run_tool(name, arg1, arg2, arg3, arg4, arg5))
 }
 
 // ── HTTP server ───────────────────────────────────────────────────────
