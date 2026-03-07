@@ -11,16 +11,24 @@ void *tree_sitter_daslang_external_scanner_create(void) {
   return NULL;
 }
 
-void tree_sitter_daslang_external_scanner_destroy(void *payload) {}
+void tree_sitter_daslang_external_scanner_destroy(void *payload) {
+  (void)payload;
+}
 
 unsigned tree_sitter_daslang_external_scanner_serialize(void *payload,
                                                         char *buffer) {
+  (void)payload;
+  (void)buffer;
   return 0;
 }
 
 void tree_sitter_daslang_external_scanner_deserialize(void *payload,
                                                        const char *buffer,
-                                                       unsigned length) {}
+                                                       unsigned length) {
+  (void)payload;
+  (void)buffer;
+  (void)length;
+}
 
 static bool scan_automatic_semicolon(TSLexer *lexer) {
   lexer->mark_end(lexer);  // zero-width token
@@ -91,6 +99,7 @@ done:
 bool tree_sitter_daslang_external_scanner_scan(void *payload,
                                                 TSLexer *lexer,
                                                 const bool *valid_symbols) {
+  (void)payload;
   // Float with trailing dot: 2. but not 2.. (which is range)
   // Try this whenever FLOAT_TRAILING_DOT is valid, even alongside ASI.
   // Tree-sitter restores lexer position when we return false.
