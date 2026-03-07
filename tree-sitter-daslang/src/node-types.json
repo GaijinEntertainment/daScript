@@ -82,6 +82,10 @@
         "named": true
       },
       {
+        "type": "basic_type",
+        "named": true
+      },
+      {
         "type": "binary_expression",
         "named": true
       },
@@ -166,10 +170,6 @@
         "named": true
       },
       {
-        "type": "named_call_expression",
-        "named": true
-      },
-      {
         "type": "new_expression",
         "named": true
       },
@@ -195,6 +195,10 @@
       },
       {
         "type": "postfix_expression",
+        "named": true
+      },
+      {
+        "type": "quote_expression",
         "named": true
       },
       {
@@ -263,6 +267,10 @@
       },
       {
         "type": "unary_expression",
+        "named": true
+      },
+      {
+        "type": "uninitialized_expression",
         "named": true
       },
       {
@@ -426,6 +434,10 @@
         "named": true
       },
       {
+        "type": "quote_expression",
+        "named": true
+      },
+      {
         "type": "ref_type",
         "named": true
       },
@@ -510,6 +522,10 @@
           },
           {
             "type": ",",
+            "named": false
+          },
+          {
+            "type": "@@",
             "named": false
           },
           {
@@ -625,6 +641,10 @@
       "types": [
         {
           "type": "_expression",
+          "named": true
+        },
+        {
+          "type": "named_argument_block",
           "named": true
         }
       ]
@@ -1171,7 +1191,18 @@
   {
     "type": "break_statement",
     "named": true,
-    "fields": {}
+    "fields": {
+      "condition": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "_expression",
+            "named": true
+          }
+        ]
+      }
+    }
   },
   {
     "type": "call_expression",
@@ -1187,6 +1218,10 @@
           },
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "quote_expression",
             "named": true
           },
           {
@@ -1235,6 +1270,10 @@
       "required": true,
       "types": [
         {
+          "type": "arrow_call_expression",
+          "named": true
+        },
+        {
           "type": "call_expression",
           "named": true
         },
@@ -1244,6 +1283,10 @@
         },
         {
           "type": "method_call_expression",
+          "named": true
+        },
+        {
+          "type": "pipe_expression",
           "named": true
         }
       ]
@@ -1341,7 +1384,18 @@
   {
     "type": "continue_statement",
     "named": true,
-    "fields": {}
+    "fields": {
+      "condition": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "_expression",
+            "named": true
+          }
+        ]
+      }
+    }
   },
   {
     "type": "default_expression",
@@ -1665,6 +1719,10 @@
           {
             "type": "identifier",
             "named": true
+          },
+          {
+            "type": "quote_expression",
+            "named": true
           }
         ]
       },
@@ -1769,6 +1827,10 @@
         {
           "type": "identifier",
           "named": true
+        },
+        {
+          "type": "quote_expression",
+          "named": true
         }
       ]
     }
@@ -1797,6 +1859,10 @@
         "types": [
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "quote_expression",
             "named": true
           },
           {
@@ -1872,6 +1938,10 @@
           {
             "type": "identifier",
             "named": true
+          },
+          {
+            "type": "quote_expression",
+            "named": true
           }
         ]
       },
@@ -1907,6 +1977,10 @@
       "types": [
         {
           "type": "function_argument",
+          "named": true
+        },
+        {
+          "type": "quote_expression",
           "named": true
         }
       ]
@@ -2517,32 +2591,13 @@
     }
   },
   {
-    "type": "named_call_expression",
+    "type": "named_argument_block",
     "named": true,
-    "fields": {
-      "function": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "identifier",
-            "named": true
-          },
-          {
-            "type": "scoped_identifier",
-            "named": true
-          }
-        ]
-      }
-    },
+    "fields": {},
     "children": {
-      "multiple": true,
+      "multiple": false,
       "required": true,
       "types": [
-        {
-          "type": "argument_list",
-          "named": true
-        },
         {
           "type": "make_struct_fields",
           "named": true
@@ -2796,6 +2851,25 @@
     }
   },
   {
+    "type": "quote_expression",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "_expression",
+          "named": true
+        },
+        {
+          "type": "_type",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "range_expression",
     "named": true,
     "fields": {
@@ -2921,7 +2995,18 @@
   {
     "type": "return_statement",
     "named": true,
-    "fields": {},
+    "fields": {
+      "condition": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "_expression",
+            "named": true
+          }
+        ]
+      }
+    },
     "children": {
       "multiple": false,
       "required": false,
@@ -3052,10 +3137,6 @@
         },
         {
           "type": "delete_statement",
-          "named": true
-        },
-        {
-          "type": "expression_statement",
           "named": true
         },
         {
@@ -3286,6 +3367,10 @@
           },
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "quote_expression",
             "named": true
           }
         ]
@@ -3910,6 +3995,11 @@
     }
   },
   {
+    "type": "uninitialized_expression",
+    "named": true,
+    "fields": {}
+  },
+  {
     "type": "unsafe_block",
     "named": true,
     "fields": {},
@@ -3967,6 +4057,10 @@
           },
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "quote_expression",
             "named": true
           }
         ]

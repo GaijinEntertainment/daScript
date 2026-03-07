@@ -99,24 +99,9 @@ module.exports = grammar({
   ],
 
   conflicts: $ => [
-    [$.call_expression, $.struct_constructor, $.named_call_expression],
-    [$.global_variable_binding, $.dim_type],
-    [$.global_variable_binding, $.remove_modifier],
-    [$.variable_binding, $.dim_type],
-    [$.variable_binding, $.remove_modifier],
-    [$.typedef_declaration, $.dim_type],
-    [$.typedef_declaration, $.remove_modifier],
-    [$.typedef_statement, $.dim_type],
-    [$.typedef_statement, $.remove_modifier],
-    [$.structure_typedef, $.dim_type],
-    [$.structure_typedef, $.remove_modifier],
-    [$.structure_field, $.dim_type],
-    [$.structure_field, $.remove_modifier],
     [$.function_return_type, $.dim_type],
-    [$.function_return_type, $.remove_modifier],
-    [$.expression_statement, $.table_literal],
     [$.func_addr_expression, $.lambda_expression],
-    [$.annotation_name, $._expression],
+    [$.function_argument_list, $._variable_name],
   ],
 
   rules: {
@@ -129,9 +114,8 @@ module.exports = grammar({
     _top_level_item: $ => choice(
       $._declaration,
       // Statement types allowed at top level for ast-grep pattern matching.
-      // Excludes variable_declaration_statement and typedef_statement
-      // to avoid ambiguity with top-level declarations.
-      $.expression_statement,
+      // Excludes variable_declaration_statement, typedef_statement, and
+      // expression_statement to avoid ambiguity with top-level declarations.
       $.if_statement,
       $.for_statement,
       $.while_statement,
@@ -254,6 +238,7 @@ module.exports = grammar({
       $.float_literal,
       'true',
       'false',
+      seq('@@', $.identifier),  // function pointer value (e.g., @@hash)
       seq('(', sep1($._annotation_argument_value, ','), ')'),
     ),
 
@@ -307,6 +292,7 @@ module.exports = grammar({
         '.', '?.',
         seq('.', $.identifier, ':='),
         seq('.', $.identifier),
+        seq('?.', $.identifier),
         ':=',
         'delete',
         '??',
@@ -321,7 +307,7 @@ module.exports = grammar({
 
     function_argument_list: $ => seq(
       '(',
-      optional(sep1($.function_argument, choice(';', ','))),
+      optional(sep1(choice($.function_argument, $.quote_expression), choice(';', ','))),
       ')',
     ),
 
@@ -357,6 +343,7 @@ module.exports = grammar({
       '{',
       repeat($.structure_member),
       '}',
+      optional(';'),
     ),
 
     structure_member: $ => choice(
@@ -416,6 +403,7 @@ module.exports = grammar({
       '{',
       repeat(seq($.enum_entry, optional(choice(',', ';')))),
       '}',
+      optional(';'),
     ),
 
     enum_base_type: $ => choice(
@@ -614,9 +602,9 @@ module.exports = grammar({
 
     _variable_name_list: $ => prec.left(sep1($._variable_name, ',')),
 
-    _variable_name: $ => seq(
-      $.identifier,
-      optional(seq('aka', field('alias', $.identifier))),
+    _variable_name: $ => choice(
+      seq($.identifier, optional(seq('aka', field('alias', $.identifier)))),
+      $.quote_expression,  // $i(name) in macro quotes
     ),
 
     // ---- Control flow ----
@@ -667,6 +655,7 @@ module.exports = grammar({
     for_variable: $ => choice(
       seq($.identifier, optional(seq('aka', $.identifier))),
       seq('(', sep1($.identifier, ','), ')'),  // tuple expansion
+      $.quote_expression,  // $i(name) in macro quotes
     ),
 
     while_statement: $ => seq(
@@ -700,6 +689,7 @@ module.exports = grammar({
     return_statement: $ => prec.right(seq(
       'return',
       optional(seq(optional('<-'), $._expression)),
+      optional(seq('if', '(', field('condition', $._expression), ')')),
       $._semicolon,
     )),
 
@@ -710,8 +700,8 @@ module.exports = grammar({
       $._semicolon,
     )),
 
-    break_statement: $ => seq('break', $._semicolon),
-    continue_statement: $ => seq('continue', $._semicolon),
+    break_statement: $ => seq('break', optional(seq('if', '(', field('condition', $._expression), ')')), $._semicolon),
+    continue_statement: $ => seq('continue', optional(seq('if', '(', field('condition', $._expression), ')')), $._semicolon),
     pass_statement: $ => seq('pass', $._semicolon),
 
     delete_statement: $ => seq(
@@ -770,7 +760,6 @@ module.exports = grammar({
       $.as_expression,
       $.call_expression,
       $.struct_constructor,
-      $.named_call_expression,
       $.method_call_expression,
       $.arrow_call_expression,
       $.pipe_expression,
@@ -803,7 +792,21 @@ module.exports = grammar({
       $.call_with_block_expression,
       $.oneliner_if_expression,
       $.reader_macro,
+      $.basic_type,  // basic types can appear as expressions (e.g., x |> float)
+      $.quote_expression,
+      $.uninitialized_expression,
     ),
+
+    uninitialized_expression: $ => prec(-1, 'uninitialized'),
+
+    // $v(expr), $t(type), $e(expr), $b(block), $i(name), $c(expr), $a(arr), $f(field), $_(anon) — macro quote interpolation
+    quote_expression: $ => prec(PREC.CALL, seq(
+      '$',
+      token.immediate(/[vtebicaf_]/),
+      token.immediate('('),
+      choice($._expression, seq($.identifier, ':', $._type)),  // $(_ : type) anonymous typed parameter
+      ')',
+    )),
 
     // Wrap expressions that start with '{' (table literal, table comprehension)
     // vs bare blocks at statement level — tree-sitter handles by context
@@ -911,6 +914,7 @@ module.exports = grammar({
         seq('type', '<', $._type, '>'),
         $.basic_type,
         $.identifier,
+        $.quote_expression,
       )),
     )),
 
@@ -926,12 +930,12 @@ module.exports = grammar({
     field_expression: $ => prec.left(PREC.DOT, seq(
       field('object', $._expression),
       '.',
-      field('field', $.identifier),
+      field('field', choice($.identifier, $.quote_expression)),
     )),
 
     safe_field_expression: $ => prec.left(PREC.DOT, seq(
       field('object', $._expression),
-      '?.',
+      choice('?.', seq('.', '?.')),  // a?.field or a . ?. field (bypass safe navigation)
       field('field', $.identifier),
     )),
 
@@ -961,27 +965,19 @@ module.exports = grammar({
     // ---- Calls ----
 
     call_expression: $ => prec(PREC.CALL, seq(
-      field('function', choice($._name_in_namespace, $.basic_type)),
+      field('function', choice($._name_in_namespace, $.basic_type, $.quote_expression)),
       '(',
       optional($.argument_list),
       ')',
     )),
+
+    // named_call_expression is handled via named_argument_block inside argument_list
 
     struct_constructor: $ => prec(PREC.CALL, seq(
       field('type', $._name_in_namespace),
       '(',
       optional('uninitialized'),
       $.make_struct_fields,
-      ')',
-    )),
-
-    named_call_expression: $ => prec(PREC.CALL, seq(
-      field('function', $._name_in_namespace),
-      '(',
-      optional($.argument_list),
-      '[',
-      $.make_struct_fields,
-      ']',
       ')',
     )),
 
@@ -1010,6 +1006,8 @@ module.exports = grammar({
       choice(
         $.call_expression,
         $.method_call_expression,
+        $.arrow_call_expression,
+        $.pipe_expression,
         $.field_expression,
       ),
       field('block', choice($.block_expression, $.lambda_expression, $.block)),
@@ -1021,9 +1019,15 @@ module.exports = grammar({
       optional(','),
     )),
 
-    _argument: $ => seq(
-      optional('<-'),
-      $._expression,
+    _argument: $ => choice(
+      seq(optional('<-'), $._expression),
+      $.named_argument_block,
+    ),
+
+    named_argument_block: $ => seq(
+      '[',
+      $.make_struct_fields,
+      ']',
     ),
 
     // ---- Cast / typeinfo / type ----
@@ -1056,8 +1060,12 @@ module.exports = grammar({
 
     new_expression: $ => prec.right(PREC.UNARY, seq(
       'new',
+      optional('default'),
       field('type', choice(
         seq('<', $._type, '>'),
+        $.array_type,
+        $.table_type,
+        $.iterator_type,
         $._name_in_namespace,
       )),
       optional(seq(
@@ -1081,7 +1089,7 @@ module.exports = grammar({
           $._type,
           seq(optional($.function_argument_list), optional($.function_return_type)),
         ), '>')),
-        field('function', $._name_in_namespace),
+        field('function', choice($._name_in_namespace, $.quote_expression)),
       ),
       // @@(params) : ret { body } — anonymous function (no capture)
       seq(
@@ -1277,13 +1285,13 @@ module.exports = grammar({
     ),
 
     // default<Type>
-    default_expression: $ => seq(
+    default_expression: $ => prec.right(seq(
       'default',
       '<',
       $._type,
       '>',
       optional('uninitialized'),
-    ),
+    )),
 
     // unsafe(expr) — expression form
     unsafe_expression: $ => seq(
@@ -1327,6 +1335,7 @@ module.exports = grammar({
       $.typedecl_type,
       $.option_type,
       $._type_modifier,
+      $.quote_expression,  // $t(type) in macro quotes
     ),
 
     basic_type: $ => choice(...basic_types),
@@ -1495,7 +1504,7 @@ module.exports = grammar({
       seq(/[0-9][0-9_]*\.[0-9][0-9_]*/, optional(/[eE][+-]?[0-9]+/), optional(choice(/[dD]/, /[fF]/, /[lL][fF]/))),
       seq(/[0-9][0-9_]*[eE][+-]?[0-9]+/, optional(choice(/[dD]/, /[fF]/, /[lL][fF]/))),
       seq(/[0-9][0-9_]*\./, choice(/[dD]/, /[fF]/, /[lL][fF]/)),
-      seq(/[0-9][0-9_]*/, choice(/[dD]/, /[lL][fF]/)),
+      seq(/[0-9][0-9_]*/, choice(/[dD]/, /[fF]/, /[lL][fF]/)),
     )),
 
     // Character literals: 'a', '\n', 'a'u, 'a'u8
@@ -1526,7 +1535,7 @@ module.exports = grammar({
     ),
 
     escape_sequence: $ => token.immediate(
-      /\\([\\"{}'nrtbf0]|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4})/,
+      /\\([\\"{}'nrtbf0\/]|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4})/,
     ),
 
     string_interpolation: $ => seq(

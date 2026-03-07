@@ -108,9 +108,13 @@ bool tree_sitter_daslang_external_scanner_scan(void *payload,
       }
       if (lexer->lookahead == '.') {
         lexer->advance(lexer, false);
-        // Check next char is NOT '.' (range) or digit (normal float like 3.14)
+        // Check next char is NOT '.', digit, or float suffix letter (d/f/l/e)
         if (lexer->lookahead != '.' &&
-            !(lexer->lookahead >= '0' && lexer->lookahead <= '9')) {
+            !(lexer->lookahead >= '0' && lexer->lookahead <= '9') &&
+            lexer->lookahead != 'd' && lexer->lookahead != 'D' &&
+            lexer->lookahead != 'f' && lexer->lookahead != 'F' &&
+            lexer->lookahead != 'l' && lexer->lookahead != 'L' &&
+            lexer->lookahead != 'e' && lexer->lookahead != 'E') {
           lexer->mark_end(lexer);
           lexer->result_symbol = FLOAT_TRAILING_DOT;
           return true;
