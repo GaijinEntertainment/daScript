@@ -78,6 +78,10 @@
         "named": true
       },
       {
+        "type": "array_struct_expression",
+        "named": true
+      },
+      {
         "type": "arrow_call_expression",
         "named": true
       },
@@ -99,6 +103,10 @@
       },
       {
         "type": "boolean_literal",
+        "named": true
+      },
+      {
+        "type": "bypass_index_expression",
         "named": true
       },
       {
@@ -226,6 +234,10 @@
         "named": true
       },
       {
+        "type": "spread_expression",
+        "named": true
+      },
+      {
         "type": "string_literal",
         "named": true
       },
@@ -279,6 +291,10 @@
       },
       {
         "type": "unsafe_expression",
+        "named": true
+      },
+      {
+        "type": "variant_constructor",
         "named": true
       }
     ]
@@ -463,6 +479,10 @@
       },
       {
         "type": "tuple_type",
+        "named": true
+      },
+      {
+        "type": "type_macro",
         "named": true
       },
       {
@@ -737,6 +757,32 @@
       "types": [
         {
           "type": "_expression",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "array_struct_expression",
+    "named": true,
+    "fields": {
+      "type": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "_type",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "make_struct_fields",
           "named": true
         }
       ]
@@ -1199,6 +1245,32 @@
       "condition": {
         "multiple": false,
         "required": false,
+        "types": [
+          {
+            "type": "_expression",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "bypass_index_expression",
+    "named": true,
+    "fields": {
+      "index": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "_expression",
+            "named": true
+          }
+        ]
+      },
+      "object": {
+        "multiple": false,
+        "required": true,
         "types": [
           {
             "type": "_expression",
@@ -3904,6 +3976,36 @@
     }
   },
   {
+    "type": "type_macro",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "_expression",
+          "named": true
+        },
+        {
+          "type": "_type",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "typedecl_type",
     "named": true,
     "fields": {},
@@ -4182,6 +4284,25 @@
       "types": [
         {
           "type": "variant_entry",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "variant_constructor",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "argument_list",
+          "named": true
+        },
+        {
+          "type": "variant_type",
           "named": true
         }
       ]
@@ -4886,6 +5007,10 @@
   {
     "type": "smart_ptr",
     "named": false
+  },
+  {
+    "type": "spread_expression",
+    "named": true
   },
   {
     "type": "static",

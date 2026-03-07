@@ -102,6 +102,7 @@ module.exports = grammar({
     [$.function_return_type, $.dim_type],
     [$.func_addr_expression, $.lambda_expression],
     [$.function_argument_list, $._variable_name],
+    [$.type_expression, $._type_macro_arg],
   ],
 
   rules: {
@@ -298,10 +299,10 @@ module.exports = grammar({
         seq('[', ']', choice('=', '<-', ':=', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '&&=', '||=', '^^=')),
         seq('[', ']'),
         seq('?', '[', ']'),
-        // Property operators — longer matches first
-        seq('.', $.identifier, ':='),
-        seq('.', $.identifier),
-        seq('?.', $.identifier),
+        // Property operators — prefer longer matches via precedence
+        prec(2, seq('.', $.identifier, ':=')),
+        prec(1, seq('.', $.identifier)),
+        prec(1, seq('?.', $.identifier)),
         '.', '?.',
         ':=',
         'delete',
@@ -805,6 +806,10 @@ module.exports = grammar({
       $.basic_type,  // basic types can appear as expressions (e.g., x |> float)
       $.quote_expression,
       $.uninitialized_expression,
+      $.bypass_index_expression,
+      $.spread_expression,
+      $.array_struct_expression,
+      $.variant_constructor,
     ),
 
     uninitialized_expression: $ => prec(-1, 'uninitialized'),
@@ -966,6 +971,25 @@ module.exports = grammar({
       field('index', $._expression),
       ']',
     )),
+
+    // arr.[ind] — bypass index (direct access, no operator overloading)
+    bypass_index_expression: $ => prec.left(PREC.INDEX, seq(
+      field('object', $._expression),
+      '.',
+      '[',
+      field('index', $._expression),
+      ']',
+    )),
+
+    // ... — spread/rest (used in match patterns)
+    spread_expression: $ => '...',
+
+    // array struct<Type>((field=val), (field=val))
+    array_struct_expression: $ => seq(
+      'array', 'struct',
+      '<', field('type', $._type), '>',
+      '(', sep1(seq('(', optional($.make_struct_fields), ')'), ','), ')',
+    ),
 
     deref_expression: $ => choice(
       prec.right(PREC.DEREF, seq('*', $._expression)),
@@ -1283,6 +1307,14 @@ module.exports = grammar({
       ')',
     ),
 
+    // variant<name:type; ...>() — variant default constructor
+    variant_constructor: $ => seq(
+      $.variant_type,
+      '(',
+      optional($.argument_list),
+      ')',
+    ),
+
     // struct<Type>(field=val) or class<Type>(...)
     struct_make_expression: $ => seq(
       choice('struct', 'class', 'variant'),
@@ -1350,6 +1382,7 @@ module.exports = grammar({
       $.option_type,
       $._type_modifier,
       $.quote_expression,  // $t(type) in macro quotes
+      $.type_macro,        // padded(type<T>, N) — type macros
     ),
 
     basic_type: $ => choice(...basic_types),
@@ -1362,6 +1395,19 @@ module.exports = grammar({
       token.immediate(/[a-zA-Z_][a-zA-Z0-9_]*/),
       optional(seq('<', sep1($._type, choice(',', ';')), '>')),
       optional(seq('(', sep1(seq('@@', $.identifier), ','), ')')),
+    ),
+
+    // name(type<T>, expr) — type macro invocation
+    type_macro: $ => seq(
+      field('name', $.identifier),
+      '(',
+      sep1(choice($._type_macro_arg), ','),
+      ')',
+    ),
+
+    _type_macro_arg: $ => choice(
+      seq('type', '<', $._type, '>'),
+      $._expression,
     ),
 
     auto_type: $ => prec.left(seq(
