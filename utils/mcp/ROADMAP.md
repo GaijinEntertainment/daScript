@@ -23,6 +23,7 @@ Future tools for the daslang MCP server, organized by priority and difficulty.
 | `type_of` | Return resolved type of expression at cursor position. Optional `no_opt` |
 | `find_references` | Find all references to symbol at cursor (calls, variables, fields, type refs, addr, enum/bitfield values, aliases, global declarations). Scope: `file` or `all`. Optional `no_opt` |
 | `eval_expression` | Evaluate a daslang expression and return printed result. Supports comma-separated module imports via `require` parameter |
+| `describe_type` | Describe a type's fields, methods, values, and base type. Supports structs, classes, handled types, enums, bitfields, variants, tuples, typedefs |
 
 ### Cross-cutting features
 
@@ -50,25 +51,9 @@ The `no_opt` parameter disables compiler optimizations (`CodeOfPolicies.no_optim
 
 ## Urgent: Developer Experience Gaps
 
-### describe_type
+### ~~describe_type~~ ✅
 
-**What:** Given a type name (struct, class, enum, bitfield, handled type), return its fields, methods, and base type. Like `list_module_api` but focused on a single type.
-
-**Why:** When working with AST types like `ExprCall`, `TypeDecl`, `CodeOfPolicies`, or `FunctionFlags`, you need to know their fields. `list_module_api` dumps the entire module (hundreds of entries). A targeted "show me the fields of `CodeOfPolicies`" is the most common lookup when writing daslang code that interacts with the compiler or any non-trivial library.
-
-**Implementation approach:**
-- Use `find_symbol` infrastructure to locate the type (struct, handled type, enum, bitfield)
-- For structs/classes: list fields with types, methods
-- For enums: list values
-- For bitfields: list flags
-- For handled types: list fields via `for_each_field`
-- For typedefs/aliases: resolve and describe the underlying type
-
-**Parameters:**
-- `name` (required) — type name (e.g., `CodeOfPolicies`, `ExprCall`, `FunctionFlags`)
-- `module` (optional) — limit search to a specific module
-
-**Difficulty:** Easy. All the infrastructure exists in `find_symbol` and `list_module_api`.
+Implemented as a standalone tool. Searches all modules for a type by name and describes its fields, methods, values, base type. Supports structs, classes, handled types, enums, bitfields, variants, tuples, and typedefs. Optional `module` parameter to limit search scope.
 
 ### grep_usage
 
@@ -319,7 +304,7 @@ Recommended order based on value/effort ratio:
 5. ~~**ast_dump with LineInfo**~~ ✅ Implemented (`lineinfo` parameter, shows `atEnclosure`)
 6. ~~**dot-call LineInfo fix**~~ ✅ Fixed (`atEnclosure` on dot-call/arrow-call expressions in parser + inference)
 7. ~~**.das_project support**~~ ✅ Implemented (per-tool `project` parameter)
-8. **describe_type** — 🔴 urgent, easy, most common lookup during development
+8. ~~**describe_type**~~ ✅ Implemented (fields, methods, values, base types for all type kinds)
 9. **grep_usage** — 🔴 urgent, easy-medium, cross-file usage search without compilation
 10. ~~**batch_compile**~~ ✅ Implemented (merged into `compile_check` with comma-separated and glob support)
 11. ~~**list_annotations**~~ ✅ Implemented (merged into `list_module_api` as `annotations` section)
