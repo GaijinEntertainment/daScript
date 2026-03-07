@@ -1,0 +1,13 @@
+name = "daslang"
+grammar = "daslang"
+path_suffixes = ["das"]
+line_comments = ["// "]
+block_comment = ["/* ", " */"]
+brackets = [
+  { start = "{", end = "}", close = true, newline = true },
+  { start = "[", end = "]", close = true, newline = false },
+  { start = "(", end = ")", close = true, newline = false },
+  { start = "\"", end = "\"", close = true, newline = false, not_in = ["string"] },
+]
+autoclose_before = ";:.,=}])> \n\t"
+word_characters = ["_", "`"]
