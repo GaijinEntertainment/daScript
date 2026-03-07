@@ -1,0 +1,196 @@
+================================================================================
+If statement
+================================================================================
+
+def test() {
+  if (x > 0) {
+    return 1;
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list)
+    body: (block
+      (if_statement
+        condition: (binary_expression
+          (identifier)
+          (integer_literal))
+        consequence: (block
+          (return_statement
+            (integer_literal)))))))
+
+================================================================================
+If-elif-else
+================================================================================
+
+def test() {
+  if (x > 0) {
+    return 1;
+  } elif (x < 0) {
+    return -1;
+  } else {
+    return 0;
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list)
+    body: (block
+      (if_statement
+        condition: (binary_expression
+          (identifier)
+          (integer_literal))
+        consequence: (block
+          (return_statement
+            (integer_literal)))
+        (elif_clause
+          condition: (binary_expression
+            (identifier)
+            (integer_literal))
+          body: (block
+            (return_statement
+              (unary_expression
+                (integer_literal)))))
+        (else_clause
+          body: (block
+            (return_statement
+              (integer_literal))))))))
+
+================================================================================
+For loop
+================================================================================
+
+def test() {
+  for (i in range(10)) {
+    print("{i}\n")
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list)
+    body: (block
+      (for_statement
+        variables: (for_variable
+          (identifier))
+        iterators: (call_expression
+          function: (basic_type)
+          (argument_list
+            (integer_literal)))
+        body: (block
+          (expression_statement
+            (call_expression
+              function: (identifier)
+              (argument_list
+                (string_literal
+                  (string_interpolation
+                    (identifier))
+                  (escape_sequence))))))))))
+
+================================================================================
+While loop
+================================================================================
+
+def test() {
+  while (x > 0) {
+    x -= 1
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list)
+    body: (block
+      (while_statement
+        condition: (binary_expression
+          (identifier)
+          (integer_literal))
+        body: (block
+          (expression_statement
+            (assignment_expression
+              left: (identifier)
+              right: (integer_literal))))))))
+
+================================================================================
+Try-recover
+================================================================================
+
+def test() {
+  try {
+    dangerous()
+  } recover {
+    print("error\n")
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list)
+    body: (block
+      (try_recover_statement
+        body: (block
+          (expression_statement
+            (call_expression
+              function: (identifier))))
+        handler: (block
+          (expression_statement
+            (call_expression
+              function: (identifier)
+              (argument_list
+                (string_literal
+                  (escape_sequence))))))))))
+
+================================================================================
+Variable declaration
+================================================================================
+
+def test() {
+  var x = 42
+  let y : float = 3.14
+  var inscope z <- create_something()
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list)
+    body: (block
+      (variable_declaration_statement
+        (variable_binding
+          name: (identifier)
+          value: (integer_literal)))
+      (variable_declaration_statement
+        (variable_binding
+          name: (identifier)
+          type: (basic_type)
+          value: (float_literal)))
+      (variable_declaration_statement
+        (variable_binding
+          name: (identifier)
+          value: (call_expression
+            function: (identifier)))))))
