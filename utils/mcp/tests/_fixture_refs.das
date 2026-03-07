@@ -23,6 +23,20 @@ def apply(f : function<(a : Point; b : Point) : Point>; a, b : Point) : Point {
     return invoke(f, a, b)
 }
 
+bitfield Flags : uint {
+    readable
+    writable
+}
+
+variant Value {
+    i : int
+    f : float
+}
+
+def use_flags(f : Flags) : bool {
+    return (f & Flags.readable) != bitfield(0u)
+}
+
 [export]
 def main() {
     var p1 = Point(x = 1.0, y = 2.0)
@@ -31,5 +45,8 @@ def main() {
     let safe_x = use_point(new Point(x = 5.0))
     let via_invoke = apply(@@add_points, p1, p2)
     let c = Color.Red
-    print("{p3.x} {p3.y} {safe_x} {via_invoke.x} {c}\n")
+    let fl = Flags.readable
+    let v = Value(i = 10)
+    let has_r = use_flags(fl)
+    print("{p3.x} {p3.y} {safe_x} {via_invoke.x} {c} {fl} {v} {has_r}\n")
 }

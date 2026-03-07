@@ -251,6 +251,15 @@ def test_find_symbol(t : T?) {
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "print") >= 0, "should find exact 'print'")
     }
+    t |> run("finds typedef aliases") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_find_symbol("Flags", "typedef", fixture_path("_fixture_refs.das")), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "typedef") >= 0, "should find typedef")
+        t |> success(find(text, "Flags") >= 0, "should name Flags")
+        t |> success(find(text, "bitfield") >= 0, "should show bitfield type")
+    }
 }
 
 // ── list_module_api ──────────────────────────────────────────────────
@@ -348,8 +357,8 @@ def test_goto_definition_function(t : T?) {
     t |> run("resolves function call to definition") <| @(t : T?) {
         var text : string
         var is_error = false
-        // distance() call at line 24, col 13
-        parse_result(do_goto_definition(fixture_path("_fixture_goto.das"), "24", "13"), text, is_error)
+        // distance() call at line 33, col 13
+        parse_result(do_goto_definition(fixture_path("_fixture_goto.das"), "33", "13"), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "Kind: function") >= 0, "should be function kind")
         t |> success(find(text, "Symbol: distance") >= 0, "should resolve to distance")
@@ -362,12 +371,12 @@ def test_goto_definition_variable(t : T?) {
     t |> run("resolves variable reference to declaration") <| @(t : T?) {
         var text : string
         var is_error = false
-        // p1 variable at line 24, col 22
-        parse_result(do_goto_definition(fixture_path("_fixture_goto.das"), "24", "22"), text, is_error)
+        // p1 variable at line 33, col 22
+        parse_result(do_goto_definition(fixture_path("_fixture_goto.das"), "33", "22"), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "Kind: variable") >= 0, "should be variable kind")
         t |> success(find(text, "Symbol: p1") >= 0, "should resolve to p1")
-        t |> success(find(text, "Line: 22") >= 0, "should point to line 22")
+        t |> success(find(text, "Line: 31") >= 0, "should point to line 31")
     }
 }
 
@@ -390,8 +399,8 @@ def test_goto_definition_builtin(t : T?) {
     t |> run("resolves builtin function") <| @(t : T?) {
         var text : string
         var is_error = false
-        // print() at line 25, col 5
-        parse_result(do_goto_definition(fixture_path("_fixture_goto.das"), "25", "5"), text, is_error)
+        // print() at line 34, col 5
+        parse_result(do_goto_definition(fixture_path("_fixture_goto.das"), "34", "5"), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "Kind: builtin") >= 0, "should be builtin kind")
         t |> success(find(text, "print") >= 0, "should resolve to print")
@@ -415,8 +424,8 @@ def test_goto_definition_snippet(t : T?) {
     t |> run("includes source snippet") <| @(t : T?) {
         var text : string
         var is_error = false
-        // distance() at line 24
-        parse_result(do_goto_definition(fixture_path("_fixture_goto.das"), "24", "13"), text, is_error)
+        // distance() at line 33
+        parse_result(do_goto_definition(fixture_path("_fixture_goto.das"), "33", "13"), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "def distance") >= 0, "snippet should contain function definition")
     }
@@ -429,8 +438,8 @@ def test_type_of_call(t : T?) {
     t |> run("function call returns result type") <| @(t : T?) {
         var text : string
         var is_error = false
-        // distance() call at line 24 col 13
-        parse_result(do_type_of(fixture_path("_fixture_goto.das"), "24", "13"), text, is_error)
+        // distance() call at line 33 col 13
+        parse_result(do_type_of(fixture_path("_fixture_goto.das"), "33", "13"), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "ExprCall(distance)") >= 0, "should show ExprCall")
         t |> success(find(text, "float") >= 0, "should return float type")
@@ -442,8 +451,8 @@ def test_type_of_variable(t : T?) {
     t |> run("variable reference shows struct type with location") <| @(t : T?) {
         var text : string
         var is_error = false
-        // p1 at line 24 col 22
-        parse_result(do_type_of(fixture_path("_fixture_goto.das"), "24", "22"), text, is_error)
+        // p1 at line 33 col 22
+        parse_result(do_type_of(fixture_path("_fixture_goto.das"), "33", "22"), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "ExprVar(p1)") >= 0, "should show ExprVar")
         t |> success(find(text, "Point") >= 0, "should show Point type")
@@ -481,8 +490,8 @@ def test_find_references_function(t : T?) {
     t |> run("finds function call and addr references") <| @(t : T?) {
         var text : string
         var is_error = false
-        // cursor on add_points call at line 30 col 14
-        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "30", "14", "file"), text, is_error)
+        // cursor on add_points call at line 44 col 14
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "44", "14", "file"), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "func") >= 0, "should identify as function")
         t |> success(find(text, "add_points") >= 0, "should name add_points")
@@ -496,8 +505,8 @@ def test_find_references_variable(t : T?) {
     t |> run("finds variable references") <| @(t : T?) {
         var text : string
         var is_error = false
-        // cursor on p1 variable usage at line 30 col 25
-        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "30", "25", "file"), text, is_error)
+        // cursor on p1 variable usage at line 44 col 25
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "44", "25", "file"), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "variable") >= 0, "should identify as variable")
         t |> success(find(text, "p1") >= 0, "should name p1")
@@ -525,8 +534,8 @@ def test_find_references_addr(t : T?) {
     t |> run("finds function from @@addr expression") <| @(t : T?) {
         var text : string
         var is_error = false
-        // cursor on @@add_points at line 32 col 30
-        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "32", "30", "file"), text, is_error)
+        // cursor on @@add_points at line 46 col 30
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "46", "30", "file"), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "func") >= 0, "should identify as function")
         t |> success(find(text, "add_points") >= 0, "should name add_points")
@@ -569,6 +578,29 @@ def test_find_references_from_declaration(t : T?) {
         t |> success(find(text, "structure") >= 0, "should identify as structure")
         t |> success(find(text, "Point") >= 0, "should name Point")
         t |> success(find(text, "[type ref]") >= 0, "should find type references")
+    }
+}
+
+[test]
+def test_find_references_alias(t : T?) {
+    t |> run("finds alias references from bitfield declaration") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // cursor on 'bitfield Flags' declaration at line 26
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "26", "1", "file"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "alias") >= 0, "should identify as alias")
+        t |> success(find(text, "Flags") >= 0, "should name Flags")
+        t |> success(find(text, "[alias ref]") >= 0, "should find alias references")
+    }
+    t |> run("finds alias references from variant usage") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // cursor on Value(i = 10) at line 49 col 13
+        parse_result(do_find_references(fixture_path("_fixture_refs.das"), "49", "13", "file"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "alias") >= 0, "should identify as alias")
+        t |> success(find(text, "Value") >= 0, "should name Value")
     }
 }
 

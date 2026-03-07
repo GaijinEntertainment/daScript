@@ -17,6 +17,15 @@ def distance(a, b : Point) : float {
     return dx * dx + dy * dy
 }
 
+bitfield Perms : uint {
+    read
+    write
+}
+
+struct FileInfo {
+    perm : Perms
+}
+
 [export]
 def main() {
     var p1 = Point(x = 1.0, y = 2.0)
@@ -25,4 +34,6 @@ def main() {
     print("{d}\n")
     let c = Color.Green
     print("{c}\n")
+    var fi = FileInfo(perm = Perms.read)
+    print("{fi.perm}\n")
 }

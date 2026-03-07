@@ -23,6 +23,7 @@ enum RefTargetKind {
     structure
     field
     enumeration
+    alias
 }
 
 struct RefTarget {
@@ -32,6 +33,8 @@ struct RefTarget {
     // for fields: struct identity + name
     field_struct_ptr : void?
     field_name : string
+    // for aliases: the alias name string
+    alias_name : string
     // display name
     name : string
 }
@@ -134,6 +137,22 @@ def identify_target(hit : CursorHit) : RefTarget {
         if (e.enumType != null) {
             let en = get_ptr(e.enumType)
             return RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(en), name = string(en.name))
+        }
+    }
+    // ExprConstBitfield → alias (bitfield type)
+    if (expr is ExprConstBitfield) {
+        if (expr._type != null) {
+            let td = get_ptr(expr._type)
+            if (!empty(td.alias)) {
+                return RefTarget(kind = RefTargetKind.alias, alias_name = string(td.alias), name = string(td.alias))
+            }
+        }
+    }
+    // Type alias reference (typedef, bitfield, variant, tuple)
+    if (expr._type != null) {
+        let td = get_ptr(expr._type)
+        if (!empty(td.alias)) {
+            return RefTarget(kind = RefTargetKind.alias, alias_name = string(td.alias), name = string(td.alias))
         }
     }
     // Fallback: type reference
@@ -266,7 +285,17 @@ class RefVisitor : AstVisitor {
         }
     }
 
-    // TypeDecl → struct/enum type references (in variable types, return types, etc.)
+    // ExprConstBitfield → bitfield value reference
+    def override preVisitExprConstBitfield(expr : smart_ptr<ExprConstBitfield>) : void {
+        if (target.kind == RefTargetKind.alias) {
+            let e = get_ptr(expr)
+            if (e._type != null && !empty(e._type.alias) && string(e._type.alias) == target.alias_name) {
+                add_ref(e.at, "bitfield value")
+            }
+        }
+    }
+
+    // TypeDecl → struct/enum/alias type references (in variable types, return types, etc.)
     def override preVisitTypeDecl(typ : TypeDeclPtr) : void {
         let td = get_ptr(typ)
         if (target.kind == RefTargetKind.structure && td.structType != null) {
@@ -277,6 +306,11 @@ class RefVisitor : AstVisitor {
         if (target.kind == RefTargetKind.enumeration && td.enumType != null) {
             if (to_void(td.enumType) == target.target_ptr) {
                 add_ref(td.at, "type ref")
+            }
+        }
+        if (target.kind == RefTargetKind.alias && !empty(td.alias)) {
+            if (string(td.alias) == target.alias_name) {
+                add_ref(td.at, "alias ref")
             }
         }
     }
@@ -339,6 +373,21 @@ def identify_declaration_target(program : smart_ptr<Program>; file : string; lin
         if (int(e.at.line) == line && e.at.fileInfo != null) {
             if (find(string(e.at.fileInfo.name), file) >= 0) {
                 result = RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(e), name = string(e.name))
+            }
+        }
+    }
+    if (result.kind != RefTargetKind.none) {
+        return result
+    }
+    // check typedef declarations (typedef, bitfield, variant, tuple)
+    ast::for_each_typedef(thisMod) <| $(name : string#; var value : TypeDeclPtr) {
+        if (result.kind != RefTargetKind.none) {
+            return
+        }
+        let td = get_ptr(value)
+        if (int(td.at.line) == line && td.at.fileInfo != null) {
+            if (find(string(td.at.fileInfo.name), file) >= 0) {
+                result = RefTarget(kind = RefTargetKind.alias, alias_name = string(name), name = string(name))
             }
         }
     }

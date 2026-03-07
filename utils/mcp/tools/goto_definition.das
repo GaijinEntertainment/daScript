@@ -170,6 +170,23 @@ def resolve_definition(hit : CursorHit) : DefinitionResult {
             )
         }
     }
+    // Type alias → resolve to typedef declaration
+    if (expr._type != null) {
+        let td = get_ptr(expr._type)
+        if (!empty(td.alias)) {
+            let file = lineinfo_file(td.at)
+            let line = int(td.at.line)
+            return DefinitionResult(
+                found = true,
+                kind = "typedef",
+                name = string(td.alias),
+                file = file,
+                line = line,
+                column = int(td.at.column),
+                snippet = read_source_snippet(file, line)
+            )
+        }
+    }
     // Fallback: resolve type reference from _type
     if (expr._type != null) {
         let td = get_ptr(expr._type)
