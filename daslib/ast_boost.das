@@ -1233,7 +1233,8 @@ def public isCMRESType(blockT : TypeDeclPtr) {
 
 bitfield DebugExpressionFlags {
     //! Flags controlling debug expression output formatting.
-    refCount
+    refCount,
+    lineInfo
 }
 
 def private debug_expression_impl(var writer : StringBuilderWriter; expr : ExpressionPtr; deFlags : DebugExpressionFlags; tabs : int) {
@@ -1248,6 +1249,19 @@ def private debug_expression_impl(var writer : StringBuilderWriter; expr : Expre
     writer |> write("({expr.__rtti}")
     if (deFlags.refCount) {
         writer |> write("<{smart_ptr_use_count(expr)}>")
+    }
+    if (deFlags.lineInfo) {
+        let e = get_ptr(expr)
+        writer |> write(" at={int(e.at.line)}:{int(e.at.column)}-{int(e.at.last_line)}:{int(e.at.last_column)}")
+        if (e.at.fileInfo != null) {
+            writer |> write(" file=\"{e.at.fileInfo.name}\"")
+        }
+        if (string(e.__rtti) == "ExprCall" || string(e.__rtti) == "ExprInvoke") {
+            let enc = unsafe(reinterpret<ExprLooksLikeCall?> e)
+            if (int(enc.atEnclosure.line) != 0 || int(enc.atEnclosure.last_line) != 0) {
+                writer |> write(" atEnclosure={int(enc.atEnclosure.line)}:{int(enc.atEnclosure.column)}-{int(enc.atEnclosure.last_line)}:{int(enc.atEnclosure.last_column)}")
+            }
+        }
     }
     if (string(expr.__rtti) |> starts_with("ExprConst")) {
         writer |> write(" {describe(expr)})")

@@ -109,6 +109,9 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
             } else {
                 write(w, "  struct {value.name}")
             }
+            if (value.parent != null) {
+                write(w, " : {value.parent.name}")
+            }
             if (int(value.at.line) > 0) {
                 write(w, "  // line {int(value.at.line)}")
             }

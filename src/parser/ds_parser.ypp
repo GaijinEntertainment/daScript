@@ -2019,11 +2019,13 @@ expr_named_call
 expr_method_call
     :   expr[left] RARROW[loc] NAME[method_name] '(' ')' {
         auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, *$method_name);
+        pInvoke->atEnclosure = tokRangeAt(scanner,@left,@$);
         delete $method_name;
         $$ = pInvoke;
     }
     |   expr[left] RARROW[loc] NAME[method_name] '(' expr_list[arguments] ')' {
         auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, *$method_name);
+        pInvoke->atEnclosure = tokRangeAt(scanner,@left,@$);
         auto callArgs = sequenceToList($arguments);
         pInvoke->arguments.insert ( pInvoke->arguments.end(), callArgs.begin(), callArgs.end() );
         delete $method_name;
@@ -2074,11 +2076,13 @@ expr_field
     }
     |   expr[left] '.'[loc] NAME[method_name] '(' ')' {
         auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, *$method_name);
+        pInvoke->atEnclosure = tokRangeAt(scanner,@left,@$);
         delete $method_name;
         $$ = pInvoke;
     }
     |   expr[left] '.'[loc] NAME[method_name] '(' expr_list[arguments] ')' {
         auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, *$method_name);
+        pInvoke->atEnclosure = tokRangeAt(scanner,@left,@$);
         auto callArgs = sequenceToList($arguments);
         pInvoke->arguments.insert ( pInvoke->arguments.end(), callArgs.begin(), callArgs.end() );
         delete $method_name;
@@ -2096,11 +2100,13 @@ expr_field
     |   expr[left] '.'[loc] basic_type_declaration[method_type] '(' ')' {
         auto method_name = das_to_string($method_type);
         auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, method_name);
+        pInvoke->atEnclosure = tokRangeAt(scanner,@left,@$);
         $$ = pInvoke;
     }
     |   expr[left] '.'[loc] basic_type_declaration[method_type] '(' expr_list[arguments] ')' {
         auto method_name = das_to_string($method_type);
         auto pInvoke = makeInvokeMethod(tokAt(scanner,@loc), $left, method_name);
+        pInvoke->atEnclosure = tokRangeAt(scanner,@left,@$);
         auto callArgs = sequenceToList($arguments);
         pInvoke->arguments.insert ( pInvoke->arguments.end(), callArgs.begin(), callArgs.end() );
         $$ = pInvoke;

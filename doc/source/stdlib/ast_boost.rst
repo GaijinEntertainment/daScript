@@ -34,7 +34,11 @@ Type alias for ``smart_ptr<AnnotationDeclaration>``, used when constructing or a
 
 .. das:attribute:: bitfield DebugExpressionFlags
 
-:Fields: * **refCount** (0x1) - Bitfield controlling ``debug_expression`` output — currently has a single ``refCount`` flag that includes smart pointer reference counts in the dump.
+Bitfield controlling ``debug_expression`` output formatting.
+
+:Fields: * **refCount** (0x1) - ``refCount`` — include smart pointer reference counts in the dump.
+
+         * **lineInfo** (0x2) - ``lineInfo`` — include source file and line:column spans on each AST node. For call expressions, also shows ``atEnclosure`` when set.
 
 
 

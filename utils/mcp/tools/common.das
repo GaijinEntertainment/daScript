@@ -39,6 +39,10 @@ def compile_and_simulate(file : string; blk : block<(program : smart_ptr<Program
 }
 
 def compile_program(file : string; _export_all : bool; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
+    return compile_program(file, _export_all, false) <| blk
+}
+
+def compile_program(file : string; _export_all : bool; _no_opt : bool; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
     var inscope access <- make_file_access("")
     var result : string
     var had_error = false
@@ -47,6 +51,9 @@ def compile_program(file : string; _export_all : bool; blk : block<(program : sm
             cop.threadlock_context = true
             if (_export_all) {
                 cop.export_all = true
+            }
+            if (_no_opt) {
+                cop.no_optimizations = true
             }
             compile_file(file, access, unsafe(addr(mg)), cop) <| $(ok; program; issues) {
                 if (!ok) {
@@ -99,11 +106,14 @@ def write_func_signature(var w : StringBuilderWriter; func) {
 
 def write_handled_type(var w : StringBuilderWriter; value : Annotation const) {
     write(w, "  handled {value.name}")
+    var ann = unsafe(reinterpret<BasicStructureAnnotation?> value)
+    basic_struct_for_each_parent(*ann) <| $(parent) {
+        write(w, " : {parent.name}")
+    }
     if (!empty(value.cppName)) {
         write(w, "  // C++ {value.cppName}")
     }
     write(w, "\n")
-    var ann = unsafe(reinterpret<BasicStructureAnnotation?> value)
     for_each_field(*ann) <| $(name, cppName, xtype, offset) {
         if (!empty(cppName) && cppName != name) {
             write(w, "    {name} : {describe(xtype)}  // C++ {cppName}\n")

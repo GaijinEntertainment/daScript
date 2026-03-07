@@ -204,6 +204,28 @@ def search_module(var results : array<string>; var total_found : int&; mname : s
             total_found++
         }
     }
+    // type aliases (typedef, bitfield, variant, tuple)
+    if (total_found < MAX_FIND_RESULTS && (empty(kind) || kind == "typedef" || kind == "alias")) {
+        for_each_typedef(mod) <| $(name : string#; var value : TypeDeclPtr) {
+            if (total_found >= MAX_FIND_RESULTS) {
+                return
+            }
+            let td = get_ptr(value)
+            if (td.flags.isPrivateAlias) {
+                return
+            }
+            let sname = string(name)
+            if (!symbol_matches(sname, query)) {
+                return
+            }
+            var entry = build_string() <| $(var w) {
+                write(w, "  [{dname}] typedef {sname} = {describe(value)}")
+                write_location(w, td.at)
+            }
+            results |> push(entry)
+            total_found++
+        }
+    }
     // globals
     if (total_found < MAX_FIND_RESULTS && (empty(kind) || kind == "global")) {
         for_each_global(mod) <| $(value) {

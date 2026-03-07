@@ -1052,6 +1052,8 @@
 
 .. |handmade/function-ast-describe_function| replace:: to be documented in |handmade/function-ast-describe_function|.rst
 
+.. |handmade/function-ast-describe_program| replace:: to be documented in |handmade/function-ast-describe_program|.rst
+
 .. |handmade/function-ast-find_bitfield_name| replace:: to be documented in |handmade/function-ast-find_bitfield_name|.rst
 
 .. |handmade/function-ast-find_enum_name| replace:: to be documented in |handmade/function-ast-find_enum_name|.rst

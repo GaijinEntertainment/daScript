@@ -55,6 +55,11 @@ def describe(expr : smart_ptr<Function>) {
 }
 
 [generic]
+def describe(prog : smart_ptr<Program>) {
+    return describe_program(prog)
+}
+
+[generic]
 def clone_function(fn : Function?) : FunctionPtr {
     return <- clone_function(unsafe(reinterpret<FunctionPtr> fn))
 }

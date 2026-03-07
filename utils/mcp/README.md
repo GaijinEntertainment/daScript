@@ -12,10 +12,16 @@ A minimal [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) serve
 | `run_test` | Run dastest on a `.das` test file and return pass/fail results |
 | `format_file` | Format a `.das` file using `daslib/das_source_formatter` |
 | `run_script` | Run a `.das` file or inline code snippet and return stdout/stderr |
-| `ast_dump` | Dump AST of an expression or compiled function. `mode=ast` returns S-expression (node types/fields), `mode=source` returns post-macro daslang code |
+| `ast_dump` | Dump AST of an expression or compiled function. `mode=ast` returns S-expression (node types/fields), `mode=source` returns post-macro daslang code. Optional `lineinfo` to include file and line:col spans on each node |
+| `program_log` | Produce full post-compilation program text (like `options log`). Shows all types, globals, and functions after macro expansion, template instantiation, and inference. Optional `function` filter |
 | `list_modules` | List all available daslang modules (builtin C++ modules and daslib) |
-| `find_symbol` | Cross-module symbol search (functions, generics, structs, handled types, enums, globals, fields). Case-insensitive substring by default; `=query` for exact match |
+| `find_symbol` | Cross-module symbol search (functions, generics, structs, handled types, enums, globals, typedefs/aliases, fields). Case-insensitive substring by default; `=query` for exact match |
+| `list_requires` | Compile a `.das` file and list all `require` dependencies (direct and transitive), with source file paths and builtin annotations |
 | `list_module_api` | List all functions, types, enums, and globals exported by a builtin or daslib module (e.g. `math`, `strings`, `fio`, `daslib/json`) |
+| `convert_to_gen2` | Convert a `.das` file from gen1 (indentation-based) syntax to gen2 (braces/parentheses) using `das-fmt`. Optional `inplace` flag to modify the file directly |
+| `goto_definition` | Given a cursor position (file, line, column), resolve the definition of the symbol under the cursor. Returns location, kind (variable/function/field/builtin/struct/enum/typedef), and source snippet. Optional `no_opt` to preserve pre-optimization AST |
+| `type_of` | Given a cursor position (file, line, column), return the resolved type of the expression under the cursor. Shows all expressions at position from innermost to outermost. Optional `no_opt` |
+| `find_references` | Find all references to the symbol under the cursor (function calls, variable uses, field accesses, type refs, enum/bitfield values, aliases). Works from both usage and declaration sites. Scope: `file` (default) or `all` (all loaded modules). Optional `no_opt` |
 
 ## Prerequisites
 
@@ -87,7 +93,13 @@ Optionally, allow the MCP tools without prompting by adding to `.claude/settings
       "mcp__daslang__ast_dump",
       "mcp__daslang__list_modules",
       "mcp__daslang__find_symbol",
-      "mcp__daslang__list_module_api"
+      "mcp__daslang__list_requires",
+      "mcp__daslang__list_module_api",
+      "mcp__daslang__convert_to_gen2",
+      "mcp__daslang__goto_definition",
+      "mcp__daslang__type_of",
+      "mcp__daslang__find_references",
+      "mcp__daslang__program_log"
     ]
   }
 }

@@ -917,6 +917,7 @@ if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
 
     set(AotDaslibList
         daslib/ast_boost.das
+        daslib/ast_cursor.das
         daslib/functional.das
         daslib/json_boost.das
         daslib/json.das

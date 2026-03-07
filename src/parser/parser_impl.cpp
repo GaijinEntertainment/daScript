@@ -561,6 +561,7 @@ namespace das {
     void ast_globalBitfieldConst ( yyscan_t scanner, const TypeDeclPtr & bType, bool pub_var, const string & name, Expression * expr ) {
         auto pVar = make_smart<Variable>();
         pVar->name = "`" + bType->alias + "`" + name;
+        pVar->at = expr->at;
         pVar->type = make_smart<TypeDecl>(*bType);
         pVar->type->constant = true;
         pVar->init = expr;
