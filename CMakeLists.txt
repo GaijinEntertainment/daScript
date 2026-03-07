@@ -1484,4 +1484,8 @@ if(NOT ${DAS_TREE_SITTER_DISABLED})
         tree-sitter-daslang/package.json
         DESTINATION tree-sitter-daslang
     )
+    install(FILES
+        tree-sitter-daslang/queries/highlights.scm
+        DESTINATION tree-sitter-daslang/queries
+    )
 endif()
