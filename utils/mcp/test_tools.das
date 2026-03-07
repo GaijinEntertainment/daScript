@@ -316,6 +316,51 @@ def test_list_module_api(t : T?) {
     }
 }
 
+// ── list_module_api annotations ──────────────────────────────────────
+
+[test]
+def test_list_module_api_annotations(t : T?) {
+    t |> run("lists function annotations from ast_boost") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_list_module_api("daslib/ast_boost", "", "annotations"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "[macro]") >= 0, "should list [macro] function annotation")
+        t |> success(find(text, "Function annotations") >= 0, "should have Function annotations section")
+    }
+    t |> run("lists structure annotations from ast_boost") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_list_module_api("daslib/ast_boost", "", "annotations"), text, is_error)
+        t |> success(find(text, "[function_macro]") >= 0, "should list [function_macro]")
+        t |> success(find(text, "Structure annotations") >= 0, "should have Structure annotations section")
+    }
+    t |> run("lists call macros from ast") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_list_module_api("ast", "", "annotations"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "quote") >= 0, "should list quote call macro")
+        t |> success(find(text, "Call macros") >= 0, "should have Call macros section")
+    }
+    t |> run("lists reader macros from regex_boost") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_list_module_api("daslib/regex_boost", "", "annotations"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "regex") >= 0, "should list regex reader macro")
+        t |> success(find(text, "Reader macros") >= 0, "should have Reader macros section")
+    }
+    t |> run("filter works on annotations") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_list_module_api("daslib/ast_boost", "macro", "annotations"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "[macro]") >= 0, "should match macro")
+        t |> success(find(text, "[contract]") < 0, "should not match contract")
+    }
+}
+
 // ── format_file ──────────────────────────────────────────────────────
 
 [test]

@@ -52,6 +52,14 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
     var handled : array<string>
     var enums : array<string>
     var globals : array<string>
+    var func_annotations : array<string>
+    var struct_annotations : array<string>
+    var call_macros : array<string>
+    var reader_macros : array<string>
+    var variant_macros : array<string>
+    var typeinfo_macros : array<string>
+    var for_loop_macros : array<string>
+    var type_macros : array<string>
     // functions via AST
     if (want_section(section, "functions") || want_section(section, "operators")) {
         for_each_function(mod, "") <| $(func) {
@@ -160,6 +168,83 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
             enums |> push(entry)
         }
     }
+    // annotations (function annotations, structure macros)
+    if (want_section(section, "annotations")) {
+        module_for_each_annotation(mod) <| $(value) {
+            if (value.isBasicStructureAnnotation || value.isEnumerationAnnotation) {
+                return  // already in handled/enums sections
+            }
+            let aname = string(value.name)
+            if (!name_matches_filter(aname, filter)) {
+                return
+            }
+            if (value.isFunctionAnnotation) {
+                func_annotations |> push("  [{aname}]\n")
+            } elif (!value.isTypeAnnotation) {
+                struct_annotations |> push("  [{aname}]\n")
+            }
+        }
+    }
+    // call macros
+    if (want_section(section, "annotations")) {
+        for_each_call_macro(mod) <| $(value) {
+            let mname = string(value)
+            if (!name_matches_filter(mname, filter)) {
+                return
+            }
+            call_macros |> push("  {mname}\n")
+        }
+    }
+    // reader macros
+    if (want_section(section, "annotations")) {
+        for_each_reader_macro(mod) <| $(value) {
+            let mname = string(value)
+            if (!name_matches_filter(mname, filter)) {
+                return
+            }
+            reader_macros |> push("  {mname}\n")
+        }
+    }
+    // variant macros
+    if (want_section(section, "annotations")) {
+        for_each_variant_macro(mod) <| $(value) {
+            let mname = string(value.name)
+            if (!name_matches_filter(mname, filter)) {
+                return
+            }
+            variant_macros |> push("  {mname}\n")
+        }
+    }
+    // typeinfo macros
+    if (want_section(section, "annotations")) {
+        for_each_typeinfo_macro(mod) <| $(value) {
+            let mname = string(value.name)
+            if (!name_matches_filter(mname, filter)) {
+                return
+            }
+            typeinfo_macros |> push("  {mname}\n")
+        }
+    }
+    // for loop macros
+    if (want_section(section, "annotations")) {
+        for_each_for_loop_macro(mod) <| $(value) {
+            let mname = string(value.name)
+            if (!name_matches_filter(mname, filter)) {
+                return
+            }
+            for_loop_macros |> push("  {mname}\n")
+        }
+    }
+    // type macros
+    if (want_section(section, "annotations")) {
+        for_each_typemacro(mod) <| $(value) {
+            let mname = string(value.name)
+            if (!name_matches_filter(mname, filter)) {
+                return
+            }
+            type_macros |> push("  {mname}\n")
+        }
+    }
     // globals via AST
     if (want_section(section, "globals")) {
         for_each_global(mod) <| $(value) {
@@ -216,6 +301,54 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
         write(writer, "Globals:\n")
         for (g in globals) {
             write(writer, g)
+        }
+    }
+    if (!empty(func_annotations)) {
+        write(writer, "Function annotations ({length(func_annotations)}):\n")
+        for (a in func_annotations) {
+            write(writer, a)
+        }
+    }
+    if (!empty(struct_annotations)) {
+        write(writer, "Structure annotations ({length(struct_annotations)}):\n")
+        for (a in struct_annotations) {
+            write(writer, a)
+        }
+    }
+    if (!empty(call_macros)) {
+        write(writer, "Call macros ({length(call_macros)}):\n")
+        for (m in call_macros) {
+            write(writer, m)
+        }
+    }
+    if (!empty(reader_macros)) {
+        write(writer, "Reader macros ({length(reader_macros)}):\n")
+        for (m in reader_macros) {
+            write(writer, m)
+        }
+    }
+    if (!empty(variant_macros)) {
+        write(writer, "Variant macros ({length(variant_macros)}):\n")
+        for (m in variant_macros) {
+            write(writer, m)
+        }
+    }
+    if (!empty(typeinfo_macros)) {
+        write(writer, "Typeinfo macros ({length(typeinfo_macros)}):\n")
+        for (m in typeinfo_macros) {
+            write(writer, m)
+        }
+    }
+    if (!empty(for_loop_macros)) {
+        write(writer, "For-loop macros ({length(for_loop_macros)}):\n")
+        for (m in for_loop_macros) {
+            write(writer, m)
+        }
+    }
+    if (!empty(type_macros)) {
+        write(writer, "Type macros ({length(type_macros)}):\n")
+        for (m in type_macros) {
+            write(writer, m)
         }
     }
 }
