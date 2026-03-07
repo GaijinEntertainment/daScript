@@ -58,8 +58,8 @@ def format_func_body(func; use_source_mode : bool; use_lineinfo : bool = false) 
     }
 }
 
-def do_ast_dump_file(file, func_name : string; use_source_mode, use_lineinfo : bool) : string {
-    return compile_program(file, true) <| $(program, issues) {
+def do_ast_dump_file(file, func_name : string; use_source_mode, use_lineinfo : bool; project : string = "") : string {
+    return compile_program(file, true, false, project) <| $(program, issues) {
         let thisMod = get_this_module(program)
         var result = ""
         var found = false
@@ -108,13 +108,13 @@ def do_ast_dump_file(file, func_name : string; use_source_mode, use_lineinfo : b
     }
 }
 
-def do_ast_dump(expression, file, func_name, mode, lineinfo : string) : string {
+def do_ast_dump(expression, file, func_name, mode, lineinfo, project : string) : string {
     if (!empty(expression)) {
         return do_ast_dump_expression(expression)
     } elif (!empty(file)) {
         let use_source_mode = mode == "source"
         let use_lineinfo = lineinfo == "true"
-        return do_ast_dump_file(file, func_name, use_source_mode, use_lineinfo)
+        return do_ast_dump_file(file, func_name, use_source_mode, use_lineinfo, project)
     } else {
         return make_tool_result("Provide either 'expression' or 'file' argument", true)
     }

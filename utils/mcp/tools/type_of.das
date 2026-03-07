@@ -6,14 +6,14 @@ require common public
 require daslib/ast_cursor
 require daslib/ast_boost
 
-def public do_type_of(file : string; line_str, col_str : string; no_opt_str : string = "") : string {
+def public do_type_of(file : string; line_str, col_str : string; no_opt_str : string = ""; project : string = "") : string {
     let line = to_int(line_str)
     let col = to_int(col_str)
     if (line <= 0 || col <= 0) {
         return make_tool_result("Invalid line or column (must be >= 1)", true)
     }
     let no_opt = no_opt_str == "true"
-    return compile_program(file, true, no_opt) <| $(program; issues) {
+    return compile_program(file, true, no_opt, project) <| $(program; issues) {
         var hits <- find_at_cursor(program, file, line, col)
         if (empty(hits)) {
             return "No expression found at {file}:{line}:{col}"

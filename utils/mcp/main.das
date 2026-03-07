@@ -181,6 +181,8 @@ struct ToolsListResult {
     tools : array<MakeFileTool>
 }
 
+let PROJECT_PROP = PropertySchema(_type = "string", description = "Path to a .das_project file for custom module resolution")
+
 def make_file_tool(name, description : string) : MakeFileTool {
     return MakeFileTool(
         name = name,
@@ -191,7 +193,8 @@ def make_file_tool(name, description : string) : MakeFileTool {
                 "file" => PropertySchema(
                     _type = "string",
                     description = "Path to the .das file"
-                )
+                ),
+                "project" => PROJECT_PROP
             },
             required = ["file"]
         )
@@ -234,7 +237,8 @@ def handle_tools_list(id_json : string) : string {
             "file" => PropertySchema(_type = "string", description = "Path to a .das file — dumps AST of compiled functions"),
             "function" => PropertySchema(_type = "string", description = "Function name to dump (optional, defaults to all functions)"),
             "mode" => PropertySchema(_type = "string", description = "Output mode: 'ast' (default) for S-expression, 'source' for post-macro daslang code"),
-            "lineinfo" => PropertySchema(_type = "string", description = "If 'true', include LineInfo (file, line:col spans) on each AST node. Only for mode='ast'")
+            "lineinfo" => PropertySchema(_type = "string", description = "If 'true', include LineInfo (file, line:col spans) on each AST node. Only for mode='ast'"),
+            "project" => PROJECT_PROP
         },
         []
     ))
@@ -250,7 +254,8 @@ def handle_tools_list(id_json : string) : string {
         {
             "query" => PropertySchema(_type = "string", description = "Case-insensitive substring search. Prefix with '=' for exact case-sensitive match (e.g. '=print')"),
             "kind" => PropertySchema(_type = "string", description = "Limit to kind: 'function', 'generic', 'struct', 'handled', 'field', 'enum', 'global'"),
-            "file" => PropertySchema(_type = "string", description = "Optional .das file — if provided, searches all modules loaded by that file (including daslib)")
+            "file" => PropertySchema(_type = "string", description = "Optional .das file — if provided, searches all modules loaded by that file (including daslib)"),
+            "project" => PROJECT_PROP
         },
         ["query"]
     ))
@@ -271,7 +276,8 @@ def handle_tools_list(id_json : string) : string {
             "file" => PropertySchema(_type = "string", description = "Path to the .das file"),
             "line" => PropertySchema(_type = "string", description = "Line number (1-based)"),
             "column" => PropertySchema(_type = "string", description = "Column number (1-based)"),
-            "no_opt" => PropertySchema(_type = "string", description = "If 'true', disable optimizations to preserve original AST (constant folding, inlining)")
+            "no_opt" => PropertySchema(_type = "string", description = "If 'true', disable optimizations to preserve original AST (constant folding, inlining)"),
+            "project" => PROJECT_PROP
         },
         ["file", "line", "column"]
     ))
@@ -282,7 +288,8 @@ def handle_tools_list(id_json : string) : string {
             "file" => PropertySchema(_type = "string", description = "Path to the .das file"),
             "line" => PropertySchema(_type = "string", description = "Line number (1-based)"),
             "column" => PropertySchema(_type = "string", description = "Column number (1-based)"),
-            "no_opt" => PropertySchema(_type = "string", description = "If 'true', disable optimizations to preserve original AST (constant folding, inlining)")
+            "no_opt" => PropertySchema(_type = "string", description = "If 'true', disable optimizations to preserve original AST (constant folding, inlining)"),
+            "project" => PROJECT_PROP
         },
         ["file", "line", "column"]
     ))
@@ -294,7 +301,8 @@ def handle_tools_list(id_json : string) : string {
             "line" => PropertySchema(_type = "string", description = "Line number (1-based)"),
             "column" => PropertySchema(_type = "string", description = "Column number (1-based)"),
             "scope" => PropertySchema(_type = "string", description = "Search scope: 'file' (default) for current file only, 'all' for all loaded modules"),
-            "no_opt" => PropertySchema(_type = "string", description = "If 'true', disable optimizations to preserve original AST (constant folding, inlining)")
+            "no_opt" => PropertySchema(_type = "string", description = "If 'true', disable optimizations to preserve original AST (constant folding, inlining)"),
+            "project" => PROJECT_PROP
         },
         ["file", "line", "column"]
     ))
@@ -303,7 +311,8 @@ def handle_tools_list(id_json : string) : string {
         "Produce post-compilation program text (like 'options log'). Shows all types, globals, and functions after macro expansion, template instantiation, and inference.",
         {
             "file" => PropertySchema(_type = "string", description = "Path to the .das file to compile"),
-            "function" => PropertySchema(_type = "string", description = "Limit output to a specific function name (optional)")
+            "function" => PropertySchema(_type = "string", description = "Limit output to a specific function name (optional)"),
+            "project" => PROJECT_PROP
         },
         ["file"]
     ))
@@ -313,7 +322,8 @@ def handle_tools_list(id_json : string) : string {
         {
             "module" => PropertySchema(_type = "string", description = "Module name (e.g. 'math', 'strings', 'fio', 'ast', 'daslib/json')"),
             "filter" => PropertySchema(_type = "string", description = "Substring filter on names (e.g. 'for_each', 'json')"),
-            "section" => PropertySchema(_type = "string", description = "Limit to section: 'functions', 'generics', 'operators', 'structs', 'handled', 'enums', 'globals'")
+            "section" => PropertySchema(_type = "string", description = "Limit to section: 'functions', 'generics', 'operators', 'structs', 'handled', 'enums', 'globals'"),
+            "project" => PROJECT_PROP
         },
         ["module"]
     ))
@@ -337,13 +347,13 @@ def get_string_arg(args : JsonValue?; name : string) : string {
     return v.value as _string
 }
 
-def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5 : string) : string {
+def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : string {
     if (tool_name == "compile_check") {
-        return do_compile_check(arg1)
+        return do_compile_check(arg1, project)
     } elif (tool_name == "list_functions") {
-        return do_list_functions(arg1)
+        return do_list_functions(arg1, project)
     } elif (tool_name == "list_types") {
-        return do_list_types(arg1)
+        return do_list_types(arg1, project)
     } elif (tool_name == "run_test") {
         return do_run_test(arg1)
     } elif (tool_name == "format_file") {
@@ -351,37 +361,37 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5 : string) : string {
     } elif (tool_name == "run_script") {
         return do_run_script(arg1, arg2)
     } elif (tool_name == "ast_dump") {
-        return do_ast_dump(arg1, arg2, arg3, arg4, arg5)
+        return do_ast_dump(arg1, arg2, arg3, arg4, arg5, project)
     } elif (tool_name == "list_requires") {
-        return do_list_requires(arg1)
+        return do_list_requires(arg1, project)
     } elif (tool_name == "convert_to_gen2") {
         return do_convert_to_gen2(arg1, arg2 == "true")
     } elif (tool_name == "goto_definition") {
-        return do_goto_definition(arg1, arg2, arg3, arg4)
+        return do_goto_definition(arg1, arg2, arg3, arg4, project)
     } elif (tool_name == "type_of") {
-        return do_type_of(arg1, arg2, arg3, arg4)
+        return do_type_of(arg1, arg2, arg3, arg4, project)
     } elif (tool_name == "find_references") {
-        return do_find_references(arg1, arg2, arg3, arg4, arg5)
+        return do_find_references(arg1, arg2, arg3, arg4, arg5, project)
     } elif (tool_name == "program_log") {
-        return do_program_log(arg1, arg2)
+        return do_program_log(arg1, arg2, project)
     } elif (tool_name == "list_modules") {
         return do_list_modules()
     } elif (tool_name == "find_symbol") {
-        return do_find_symbol(arg1, arg2, arg3)
+        return do_find_symbol(arg1, arg2, arg3, project)
     } elif (tool_name == "list_module_api") {
-        return do_list_module_api(arg1, arg2, arg3)
+        return do_list_module_api(arg1, arg2, arg3, project)
     } else {
         return make_tool_result("unknown tool: {tool_name}", true)
     }
 }
 
-def run_tool(tool_name, arg1, arg2, arg3, arg4, arg5 : string) : string {
+def run_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : string {
     log_tool(tool_name, "{arg1} {arg2} {arg3} {arg4} {arg5}")
     let t0 = get_clock()
     var result : string
     with_channel(1) <| $(ch) {
         new_thread() <| @() {
-            let tool_result = dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5)
+            let tool_result = dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project)
             ch |> push_clone(ToolMessage(text = tool_result))
             ch |> notify_and_release()
         }
@@ -402,6 +412,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
     }
     let name = tool_name_val.value as _string
     var arg1, arg2, arg3, arg4, arg5 : string
+    let project = get_string_arg(args, "project")
     if (name == "compile_check" || name == "list_functions" || name == "list_types" || name == "run_test" || name == "format_file" || name == "list_requires") {
         arg1 = get_string_arg(args, "file")
         if (empty(arg1)) {
@@ -464,7 +475,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
     } else {
         return json_rpc_error(id_json, -32602, "unknown tool: {name}")
     }
-    return json_rpc_response(id_json, run_tool(name, arg1, arg2, arg3, arg4, arg5))
+    return json_rpc_response(id_json, run_tool(name, arg1, arg2, arg3, arg4, arg5, project))
 }
 
 // ── HTTP server ───────────────────────────────────────────────────────

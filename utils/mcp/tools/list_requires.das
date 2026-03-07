@@ -14,8 +14,8 @@ def module_kind(mod : Module?) : string {
     return "builtin"
 }
 
-def do_list_requires(file : string) : string {
-    return compile_program(file, true) <| $(program; issues) {
+def do_list_requires(file : string; project : string = "") : string {
+    return compile_program(file, true, false, project) <| $(program; issues) {
         // direct requires from allRequireDecl
         var direct : array<string>
         var direct_modules : array<string>

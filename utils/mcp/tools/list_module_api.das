@@ -4,14 +4,14 @@ options no_unused_block_arguments = false
 
 require common public
 
-def do_list_module_api(module_name : string; filter : string = ""; section : string = "") : string {
+def do_list_module_api(module_name : string; filter : string = ""; section : string = ""; project : string = "") : string {
     // write a temp stub file that requires the module
     let stub_path = "{get_das_root()}/_mcp_stub.das"
     let stub = "require {module_name}\n[export]\ndef main\n    pass\n"
     fopen(stub_path, "w") <| $(f) {
         fwrite(f, stub)
     }
-    return compile_and_simulate(stub_path) <| $(program; issues) {
+    return compile_and_simulate(stub_path, project) <| $(program; issues) {
         // find the target module
         var target_mod : Module?
         program_for_each_module(program) <| $(mod) {
