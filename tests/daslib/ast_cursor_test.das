@@ -1,5 +1,4 @@
 options gen2
-options no_aot
 options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
@@ -10,7 +9,7 @@ require rtti
 require strings
 
 def fixture_path() : string {
-    return "tests/daslib/ast_cursor_fixture.das"
+    return "{get_das_root()}/tests/daslib/ast_cursor_fixture.das"
 }
 
 def compile_fixture(blk : block<(program : smart_ptr<Program>) : void>) {
