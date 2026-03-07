@@ -283,7 +283,7 @@ def do_outline(file, glob_filter : string) : string {
             }
             let display_path = make_relative_path(file_path, das_root)
             let idx = length(entries)
-            entries |> emplace(OutlineEntry(kind=kind, name=name, line=line_num, text=get_first_line(text)))
+            entries |> emplace(OutlineEntry(kind = kind, name = name, line = line_num, text = get_first_line(text)))
             if (!key_exists(by_file, display_path)) {
                 file_order |> push(display_path)
             }

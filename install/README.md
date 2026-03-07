@@ -37,7 +37,7 @@
 | `modules/`   | Optional plugin modules                               |
 | `examples/`  | Example scripts                                       |
 | `tutorials/` | Language and integration tutorials                    |
-| `utils/mcp/` | MCP server for AI coding assistants (requires dasHV)  |
+| `utils/mcp/` | MCP server for AI coding assistants (stdio transport) |
 | `tree-sitter-daslang/` | Tree-sitter grammar, shared library, and highlighting queries |
 
 ## Quick Start
@@ -76,14 +76,21 @@ A full tree-sitter grammar for daslang is included in `tree-sitter-daslang/`. Us
 
 ## MCP Server (AI Tool Integration)
 
-If the SDK was built with dasHV enabled, `utils/mcp/` contains an [MCP](https://modelcontextprotocol.io/) server exposing 19 compiler-backed tools to AI coding assistants: compilation diagnostics, type inspection, go-to-definition, find-references, AST dump, expression evaluation, parse-aware grep, and more.
+`utils/mcp/` contains an [MCP](https://modelcontextprotocol.io/) server exposing 19 compiler-backed tools to AI coding assistants: compilation diagnostics, type inspection, go-to-definition, find-references, AST dump, expression evaluation, parse-aware grep, and more. Uses stdio transport — no extra build dependencies.
 
-Start the server:
-```sh
-bin/daslang utils/mcp/main.das
+Configure in `.mcp.json`:
+```json
+{
+  "mcpServers": {
+    "daslang": {
+      "command": "bin/daslang",
+      "args": ["utils/mcp/main.das"]
+    }
+  }
+}
 ```
 
-See `utils/mcp/README.md` for configuration and the full tool list.
+See `utils/mcp/README.md` for the full tool list and permissions setup.
 
 ## Building from Source
 

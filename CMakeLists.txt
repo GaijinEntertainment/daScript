@@ -1290,21 +1290,23 @@ install(FILES ${PROJECT_SOURCE_DIR}/include/vecmath/LICENSE DESTINATION ${DAS_IN
 install(FILES ${PROJECT_SOURCE_DIR}/utils/aot/main.das DESTINATION utils/aot)
 install(FILES ${PROJECT_SOURCE_DIR}/utils/dasCodeFormatter/main.das DESTINATION utils/dasCodeFormatter)
 
-# Install MCP server (requires dasHV)
-if(NOT DAS_HV_DISABLED)
-    install(FILES ${PROJECT_SOURCE_DIR}/utils/mcp/main.das DESTINATION utils/mcp)
-    install(FILES ${PROJECT_SOURCE_DIR}/utils/mcp/README.md DESTINATION utils/mcp)
-    file(GLOB DAS_MCP_TOOLS ${PROJECT_SOURCE_DIR}/utils/mcp/tools/*.das)
-    install(FILES ${DAS_MCP_TOOLS} DESTINATION utils/mcp/tools)
-    install(FILES
-        ${PROJECT_SOURCE_DIR}/utils/mcp/test_tools.das
-        DESTINATION utils/mcp
-    )
-    install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/mcp/tests/
-        DESTINATION utils/mcp/tests
-        FILES_MATCHING PATTERN "*.das"
-    )
-endif()
+# Install MCP server (stdio transport, no dasHV dependency)
+install(FILES
+    ${PROJECT_SOURCE_DIR}/utils/mcp/main.das
+    ${PROJECT_SOURCE_DIR}/utils/mcp/protocol.das
+    ${PROJECT_SOURCE_DIR}/utils/mcp/README.md
+    DESTINATION utils/mcp
+)
+file(GLOB DAS_MCP_TOOLS ${PROJECT_SOURCE_DIR}/utils/mcp/tools/*.das)
+install(FILES ${DAS_MCP_TOOLS} DESTINATION utils/mcp/tools)
+install(FILES
+    ${PROJECT_SOURCE_DIR}/utils/mcp/test_tools.das
+    DESTINATION utils/mcp
+)
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/mcp/tests/
+    DESTINATION utils/mcp/tests
+    FILES_MATCHING PATTERN "*.das"
+)
 
 # Install core example .das files
 install(FILES
@@ -1493,6 +1495,10 @@ if(NOT ${DAS_TREE_SITTER_DISABLED})
         tree-sitter-daslang/queries/highlights.scm
         DESTINATION tree-sitter-daslang/queries
     )
-    # sgconfig.yml for ast-grep (used by grep_usage MCP tool)
+    # ast-grep config and rules (used by grep_usage and outline MCP tools)
     install(FILES ${PROJECT_SOURCE_DIR}/sgconfig.yml DESTINATION ${DAS_INSTALL_DOCDIR})
+    install(FILES
+        tree-sitter-daslang/outline_rules.yml
+        DESTINATION tree-sitter-daslang
+    )
 endif()

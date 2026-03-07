@@ -136,11 +136,11 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - `daslib/` — Standard library modules (.das files)
 - `examples/` — Example scripts
 - `dastest/` — Test framework (usable for testing your own code)
-- `utils/mcp/` — MCP server for AI coding assistants (if dasHV was enabled at build time)
+- `utils/mcp/` — MCP server for AI coding assistants (stdio transport, no extra deps)
 
 ## MCP Server (AI Tool Integration)
 
-If the SDK was built with dasHV enabled, `utils/mcp/` contains a [Model Context Protocol](https://modelcontextprotocol.io/) server that exposes compiler diagnostics and program introspection to AI coding assistants.
+`utils/mcp/` contains a [Model Context Protocol](https://modelcontextprotocol.io/) server that exposes compiler diagnostics and program introspection to AI coding assistants. Uses stdio transport — no extra build dependencies.
 
 **When MCP tools are available**, prefer them over manual compilation and grep-based exploration:
 
@@ -169,9 +169,7 @@ If the SDK was built with dasHV enabled, `utils/mcp/` contains a [Model Context 
 
 Cursor-based tools (`goto_definition`, `type_of`, `find_references`) support a `no_opt` parameter that disables compiler optimizations to preserve the full AST — useful when globals, enum values, or bitfield constants get constant-folded away.
 
-**Starting the server:** `bin/daslang utils/mcp/main.das` (port 9500 by default)
-
-**Configuration:** See `utils/mcp/README.md` for `.mcp.json` setup and permissions.
+**Configuration:** Configure `.mcp.json` with `"command": "bin/daslang", "args": ["utils/mcp/main.das"]`. See `utils/mcp/README.md` for details and permissions.
 
 ## Keywords Reference
 

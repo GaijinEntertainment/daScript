@@ -87,7 +87,7 @@ cmake --build build --target tree_sitter_daslang
 
 An [MCP](https://modelcontextprotocol.io/) server in [`utils/mcp/`](utils/mcp/) exposes 19 compiler-backed tools to AI coding assistants (Claude Code, etc.): compilation diagnostics, type inspection, go-to-definition, find-references, AST dump, expression evaluation, parse-aware grep, and more.
 
-Requires dasHV (`-DDAS_HV_DISABLED=OFF`). See [`utils/mcp/README.md`](utils/mcp/README.md) for setup and configuration.
+No extra build dependencies (stdio transport). See [`utils/mcp/README.md`](utils/mcp/README.md) for setup and configuration.
 
 ## VS Code extensions
 
