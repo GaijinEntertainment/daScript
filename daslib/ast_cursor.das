@@ -47,53 +47,34 @@ def public cursor_inside(line, col : int; at : LineInfo) : bool {
     return true
 }
 
-// Extract a human-readable name from an expression based on its __rtti.
-def expression_name(expr : Expression const?) : string {
-    let rtti = expr.__rtti
-    if (rtti == "ExprVar") {
-        unsafe {
-            let v = reinterpret<ExprVar const?> expr
-            return string(v.name)
-        }
+// Extract a human-readable name from an expression using is/as type checks.
+def expression_name(expr : ExpressionPtr) : string {
+    if (expr is ExprVar) {
+        return string((expr as ExprVar).name)
     }
-    if (rtti == "ExprCall") {
-        unsafe {
-            let c = reinterpret<ExprCall const?> expr
-            return string(c.name)
-        }
+    if (expr is ExprCall) {
+        return string((expr as ExprCall).name)
     }
-    if (rtti == "ExprField" || rtti == "ExprSafeField") {
-        unsafe {
-            let f = reinterpret<ExprField const?> expr
-            return string(f.name)
-        }
+    if (expr is ExprField) {
+        return string((expr as ExprField).name)
     }
-    if (rtti == "ExprOp1") {
-        unsafe {
-            let o = reinterpret<ExprOp1 const?> expr
-            return string(o.op)
-        }
+    if (expr is ExprSafeField) {
+        return string((expr as ExprSafeField).name)
     }
-    if (rtti == "ExprOp2") {
-        unsafe {
-            let o = reinterpret<ExprOp2 const?> expr
-            return string(o.op)
-        }
+    if (expr is ExprOp1) {
+        return string((expr as ExprOp1).op)
     }
-    if (rtti == "ExprOp3") {
+    if (expr is ExprOp2) {
+        return string((expr as ExprOp2).op)
+    }
+    if (expr is ExprOp3) {
         return "?"
     }
-    if (rtti == "ExprLooksLikeCall") {
-        unsafe {
-            let c = reinterpret<ExprLooksLikeCall const?> expr
-            return string(c.name)
-        }
+    if (expr is ExprLooksLikeCall) {
+        return string((expr as ExprLooksLikeCall).name)
     }
-    if (rtti == "ExprNamedCall") {
-        unsafe {
-            let c = reinterpret<ExprNamedCall const?> expr
-            return string(c.name)
-        }
+    if (expr is ExprNamedCall) {
+        return string((expr as ExprNamedCall).name)
     }
     return ""
 }
@@ -134,7 +115,7 @@ class CursorVisitor : AstVisitor {
             hits |> emplace(CursorHit(
                 expr = e,
                 func = currentFunc,
-                name = expression_name(e),
+                name = expression_name(expr),
                 rtti = string(e.__rtti)
             ))
         }
