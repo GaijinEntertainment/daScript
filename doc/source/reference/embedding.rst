@@ -13,6 +13,7 @@ C functions).  It is organized from simple to advanced:
 * **C API Reference** — the ``daslang/c_api/c_api.h`` header for C-only hosts and FFI
 * **External Modules** — building and distributing modules outside the main
   source tree, ``.das_module`` descriptors, ``find_package(DAS)``
+* **Project Files** — ``.das_project`` files for custom module resolution and sandboxing
 * **Advanced Topics** — AOT compilation, standalone contexts, class adapters
 
 For step-by-step walk-throughs with complete, compilable source code, see the
@@ -25,5 +26,6 @@ For step-by-step walk-throughs with complete, compilable source code, see the
    embedding/cpp_api.rst
    embedding/c_api.rst
    embedding/external_modules.rst
+   embedding/project_files.rst
    embedding/advanced.rst
 

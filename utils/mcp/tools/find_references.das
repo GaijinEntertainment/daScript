@@ -413,7 +413,7 @@ def public do_find_references(file : string; line_str, col_str, scope_str : stri
     return do_find_references(file, line_str, col_str, scope_str, "")
 }
 
-def public do_find_references(file : string; line_str, col_str, scope_str, no_opt_str : string) : string {
+def public do_find_references(file : string; line_str, col_str, scope_str, no_opt_str : string; project : string = "") : string {
     let line = to_int(line_str)
     let col = to_int(col_str)
     if (line <= 0 || col <= 0) {
@@ -421,7 +421,7 @@ def public do_find_references(file : string; line_str, col_str, scope_str, no_op
     }
     let all_modules = scope_str == "all"
     let no_opt = no_opt_str == "true"
-    return compile_program(file, true, no_opt) <| $(program; issues) {
+    return compile_program(file, true, no_opt, project) <| $(program; issues) {
         // Step 1: identify the target from cursor (expression-based)
         var target : RefTarget
         var hits <- find_at_cursor(program, file, line, col)

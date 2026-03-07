@@ -4,22 +4,33 @@ options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options strict_smart_pointers = true
 
+//! ast_cursor provides position-based AST queries — given a file, line, and column,
+//! it finds all expression nodes at that cursor position. Results are returned
+//! innermost-first, with enclosing function context and extracted names.
+//!
+//! Typical use is implementing IDE features like goto-definition, type-of, and
+//! find-references on top of the compiled AST.
+
 module ast_cursor shared public
 
 require daslib/ast_boost
 require strings
 
-// A single hit at the cursor position — one AST expression node.
-// Innermost (most specific) expressions come first in the result array.
+//! A single hit at the cursor position — one AST expression node.
+//! Innermost (most specific) expressions come first in the result array.
 struct public CursorHit {
-    expr : Expression const?    // raw ptr to expression node (valid while program lives)
-    func : Function const?      // enclosing function, or null for global scope
-    name : string               // extracted name for named nodes (variable, call, field, op)
-    rtti : string               // expression type: "ExprVar", "ExprCall", etc.
+    //! Raw pointer to the expression node (valid while the program lives).
+    expr : Expression const?
+    //! Enclosing function, or null for expressions in global scope.
+    func : Function const?
+    //! Extracted name for named nodes (variable name, call name, field name, operator).
+    name : string
+    //! Expression RTTI type string: "ExprVar", "ExprCall", "ExprField", etc.
+    rtti : string
 }
 
-// Check whether point (line, col) is inside the span described by `at`.
-// Follows the same logic as C++ LineInfo::inside.
+//! Check whether a point (line, col) is inside the span described by `at`.
+//! Follows the same logic as C++ ``LineInfo::inside``.
 def public cursor_inside(line, col : int; at : LineInfo) : bool {
     if (int(at.line) == 0 && int(at.last_line) == 0) {
         return false
@@ -48,7 +59,7 @@ def public cursor_inside(line, col : int; at : LineInfo) : bool {
 }
 
 // Extract a human-readable name from an expression using is/as type checks.
-def expression_name(expr : ExpressionPtr) : string {
+def private expression_name(expr : ExpressionPtr) : string {
     if (expr is ExprVar) {
         return string((expr as ExprVar).name)
     }
@@ -122,7 +133,7 @@ class CursorVisitor : AstVisitor {
     }
 }
 
-def reverse_hits(var src : array<CursorHit>) : array<CursorHit> {
+def private reverse_hits(var src : array<CursorHit>) : array<CursorHit> {
     var result : array<CursorHit>
     var i = length(src) - 1
     while (i >= 0) {
@@ -132,8 +143,8 @@ def reverse_hits(var src : array<CursorHit>) : array<CursorHit> {
     return <- result
 }
 
-// Find all expression nodes at the given cursor position, innermost first.
-// `file` is a substring matched against FileInfo.name (use "" to match any file).
+//! Find all expression nodes at the given cursor position, innermost first.
+//! `file` is a substring matched against ``FileInfo.name`` (use "" to match any file).
 def public find_at_cursor(program : smart_ptr<Program>; file : string; line, col : int) : array<CursorHit> {
     var visitor = new CursorVisitor(file, line, col)
     var inscope adapter <- make_visitor(*visitor)
@@ -146,7 +157,8 @@ def public find_at_cursor(program : smart_ptr<Program>; file : string; line, col
     return <- result
 }
 
-// Convenience: find at cursor in a single function's body.
+//! Find all expression nodes at the given cursor position within a single function body.
+//! `file` is a substring matched against ``FileInfo.name`` (use "" to match any file).
 def public find_at_cursor_in_function(func : FunctionPtr; file : string; line, col : int) : array<CursorHit> {
     var visitor = new CursorVisitor(file, line, col)
     visitor.currentFunc = get_ptr(func)
@@ -159,7 +171,7 @@ def public find_at_cursor_in_function(func : FunctionPtr; file : string; line, c
     return <- result
 }
 
-// Pretty-print a CursorHit for debugging.
+//! Pretty-print a CursorHit for debugging. Includes RTTI type, name, resolved type, source location, and enclosing function.
 def public describe(hit : CursorHit) : string {
     return build_string() <| $(var w) {
         write(w, hit.rtti)

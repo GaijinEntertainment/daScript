@@ -34,16 +34,16 @@ def make_tool_result(text : string; is_error : bool = false) : string {
     return sprint_json(result, false)
 }
 
-def compile_and_simulate(file : string; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
-    return compile_program(file, false) <| blk
+def compile_and_simulate(file : string; project : string = ""; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
+    return compile_program(file, false, false, project) <| blk
 }
 
 def compile_program(file : string; _export_all : bool; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
-    return compile_program(file, _export_all, false) <| blk
+    return compile_program(file, _export_all, false, "") <| blk
 }
 
-def compile_program(file : string; _export_all : bool; _no_opt : bool; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
-    var inscope access <- make_file_access("")
+def compile_program(file : string; _export_all : bool; _no_opt : bool; project : string = ""; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
+    var inscope access <- make_file_access(project)
     var result : string
     var had_error = false
     using() <| $(var mg : ModuleGroup) {

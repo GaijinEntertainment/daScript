@@ -20,6 +20,7 @@ require daslib/json
 require daslib/json_boost public
 require daslib/jobque_boost
 require strings
+require fio
 
 require tools/compile_check public
 require tools/list_functions public
@@ -41,6 +42,70 @@ require tools/program_log public
 let MCP_PORT = 9500
 let HEAP_COLLECT_THRESHOLD = 1024ul * 1024ul  // 1 MB
 let HEAP_LOG_INTERVAL = 60000l                // log heap stats every 60 seconds
+let LOG_FILE = "utils/mcp/mcp_server.log"
+
+// ── Logging ───────────────────────────────────────────────────────────
+
+var log_path : string
+var log_start_clock : clock
+
+def log_open() {
+    log_start_clock = get_clock()
+    // write a separator to mark server restart
+    fopen(log_path, "ab") <| $(f) {
+        if (f != null) {
+            fprint(f, "\n--- server start ---\n")
+        }
+    }
+}
+
+def log_timestamp() : string {
+    let elapsed = get_clock() - log_start_clock
+    let total_sec = int(elapsed)
+    let h = total_sec / 3600
+    let m = (total_sec % 3600) / 60
+    let s = total_sec % 60
+    return build_string() <| $(var w) {
+        if (h > 0) {
+            write(w, "{h}h")
+        }
+        write(w, "{m}m{s}s")
+    }
+}
+
+def log_write(msg : string) {
+    let line = "[{log_timestamp()}] {msg}\n"
+    print(line)
+    fopen(log_path, "ab") <| $(f) {
+        if (f != null) {
+            fprint(f, line)
+        }
+    }
+}
+
+def log_request(method, body : string) {
+    let truncated = length(body) > 500 ? slice(body, 0, 500) + "..." : body
+    log_write("REQ {method} {truncated}")
+}
+
+def log_response(method : string; elapsed_sec : double) {
+    let ms = int(elapsed_sec * 1000.0lf)
+    log_write("RES {method} ({ms}ms)")
+}
+
+def log_tool(tool_name : string; args : string) {
+    log_write("TOOL {tool_name} {args}")
+}
+
+def log_tool_done(tool_name : string; elapsed_sec : double; is_error : bool) {
+    let ms = int(elapsed_sec * 1000.0lf)
+    let status = is_error ? "ERR" : "OK"
+    log_write("TOOL {tool_name} {status} ({ms}ms)")
+}
+
+def log_error(msg : string) {
+    log_write("ERROR {msg}")
+}
 
 // ── MCP protocol structs ─────────────────────────────────────────────
 
@@ -116,6 +181,8 @@ struct ToolsListResult {
     tools : array<MakeFileTool>
 }
 
+let PROJECT_PROP = PropertySchema(_type = "string", description = "Path to a .das_project file for custom module resolution")
+
 def make_file_tool(name, description : string) : MakeFileTool {
     return MakeFileTool(
         name = name,
@@ -126,7 +193,8 @@ def make_file_tool(name, description : string) : MakeFileTool {
                 "file" => PropertySchema(
                     _type = "string",
                     description = "Path to the .das file"
-                )
+                ),
+                "project" => PROJECT_PROP
             },
             required = ["file"]
         )
@@ -169,7 +237,8 @@ def handle_tools_list(id_json : string) : string {
             "file" => PropertySchema(_type = "string", description = "Path to a .das file — dumps AST of compiled functions"),
             "function" => PropertySchema(_type = "string", description = "Function name to dump (optional, defaults to all functions)"),
             "mode" => PropertySchema(_type = "string", description = "Output mode: 'ast' (default) for S-expression, 'source' for post-macro daslang code"),
-            "lineinfo" => PropertySchema(_type = "string", description = "If 'true', include LineInfo (file, line:col spans) on each AST node. Only for mode='ast'")
+            "lineinfo" => PropertySchema(_type = "string", description = "If 'true', include LineInfo (file, line:col spans) on each AST node. Only for mode='ast'"),
+            "project" => PROJECT_PROP
         },
         []
     ))
@@ -185,7 +254,8 @@ def handle_tools_list(id_json : string) : string {
         {
             "query" => PropertySchema(_type = "string", description = "Case-insensitive substring search. Prefix with '=' for exact case-sensitive match (e.g. '=print')"),
             "kind" => PropertySchema(_type = "string", description = "Limit to kind: 'function', 'generic', 'struct', 'handled', 'field', 'enum', 'global'"),
-            "file" => PropertySchema(_type = "string", description = "Optional .das file — if provided, searches all modules loaded by that file (including daslib)")
+            "file" => PropertySchema(_type = "string", description = "Optional .das file — if provided, searches all modules loaded by that file (including daslib)"),
+            "project" => PROJECT_PROP
         },
         ["query"]
     ))
@@ -206,7 +276,8 @@ def handle_tools_list(id_json : string) : string {
             "file" => PropertySchema(_type = "string", description = "Path to the .das file"),
             "line" => PropertySchema(_type = "string", description = "Line number (1-based)"),
             "column" => PropertySchema(_type = "string", description = "Column number (1-based)"),
-            "no_opt" => PropertySchema(_type = "string", description = "If 'true', disable optimizations to preserve original AST (constant folding, inlining)")
+            "no_opt" => PropertySchema(_type = "string", description = "If 'true', disable optimizations to preserve original AST (constant folding, inlining)"),
+            "project" => PROJECT_PROP
         },
         ["file", "line", "column"]
     ))
@@ -217,7 +288,8 @@ def handle_tools_list(id_json : string) : string {
             "file" => PropertySchema(_type = "string", description = "Path to the .das file"),
             "line" => PropertySchema(_type = "string", description = "Line number (1-based)"),
             "column" => PropertySchema(_type = "string", description = "Column number (1-based)"),
-            "no_opt" => PropertySchema(_type = "string", description = "If 'true', disable optimizations to preserve original AST (constant folding, inlining)")
+            "no_opt" => PropertySchema(_type = "string", description = "If 'true', disable optimizations to preserve original AST (constant folding, inlining)"),
+            "project" => PROJECT_PROP
         },
         ["file", "line", "column"]
     ))
@@ -229,7 +301,8 @@ def handle_tools_list(id_json : string) : string {
             "line" => PropertySchema(_type = "string", description = "Line number (1-based)"),
             "column" => PropertySchema(_type = "string", description = "Column number (1-based)"),
             "scope" => PropertySchema(_type = "string", description = "Search scope: 'file' (default) for current file only, 'all' for all loaded modules"),
-            "no_opt" => PropertySchema(_type = "string", description = "If 'true', disable optimizations to preserve original AST (constant folding, inlining)")
+            "no_opt" => PropertySchema(_type = "string", description = "If 'true', disable optimizations to preserve original AST (constant folding, inlining)"),
+            "project" => PROJECT_PROP
         },
         ["file", "line", "column"]
     ))
@@ -238,7 +311,8 @@ def handle_tools_list(id_json : string) : string {
         "Produce post-compilation program text (like 'options log'). Shows all types, globals, and functions after macro expansion, template instantiation, and inference.",
         {
             "file" => PropertySchema(_type = "string", description = "Path to the .das file to compile"),
-            "function" => PropertySchema(_type = "string", description = "Limit output to a specific function name (optional)")
+            "function" => PropertySchema(_type = "string", description = "Limit output to a specific function name (optional)"),
+            "project" => PROJECT_PROP
         },
         ["file"]
     ))
@@ -248,7 +322,8 @@ def handle_tools_list(id_json : string) : string {
         {
             "module" => PropertySchema(_type = "string", description = "Module name (e.g. 'math', 'strings', 'fio', 'ast', 'daslib/json')"),
             "filter" => PropertySchema(_type = "string", description = "Substring filter on names (e.g. 'for_each', 'json')"),
-            "section" => PropertySchema(_type = "string", description = "Limit to section: 'functions', 'generics', 'operators', 'structs', 'handled', 'enums', 'globals'")
+            "section" => PropertySchema(_type = "string", description = "Limit to section: 'functions', 'generics', 'operators', 'structs', 'handled', 'enums', 'globals'"),
+            "project" => PROJECT_PROP
         },
         ["module"]
     ))
@@ -272,13 +347,13 @@ def get_string_arg(args : JsonValue?; name : string) : string {
     return v.value as _string
 }
 
-def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5 : string) : string {
+def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : string {
     if (tool_name == "compile_check") {
-        return do_compile_check(arg1)
+        return do_compile_check(arg1, project)
     } elif (tool_name == "list_functions") {
-        return do_list_functions(arg1)
+        return do_list_functions(arg1, project)
     } elif (tool_name == "list_types") {
-        return do_list_types(arg1)
+        return do_list_types(arg1, project)
     } elif (tool_name == "run_test") {
         return do_run_test(arg1)
     } elif (tool_name == "format_file") {
@@ -286,35 +361,37 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5 : string) : string {
     } elif (tool_name == "run_script") {
         return do_run_script(arg1, arg2)
     } elif (tool_name == "ast_dump") {
-        return do_ast_dump(arg1, arg2, arg3, arg4, arg5)
+        return do_ast_dump(arg1, arg2, arg3, arg4, arg5, project)
     } elif (tool_name == "list_requires") {
-        return do_list_requires(arg1)
+        return do_list_requires(arg1, project)
     } elif (tool_name == "convert_to_gen2") {
         return do_convert_to_gen2(arg1, arg2 == "true")
     } elif (tool_name == "goto_definition") {
-        return do_goto_definition(arg1, arg2, arg3, arg4)
+        return do_goto_definition(arg1, arg2, arg3, arg4, project)
     } elif (tool_name == "type_of") {
-        return do_type_of(arg1, arg2, arg3, arg4)
+        return do_type_of(arg1, arg2, arg3, arg4, project)
     } elif (tool_name == "find_references") {
-        return do_find_references(arg1, arg2, arg3, arg4, arg5)
+        return do_find_references(arg1, arg2, arg3, arg4, arg5, project)
     } elif (tool_name == "program_log") {
-        return do_program_log(arg1, arg2)
+        return do_program_log(arg1, arg2, project)
     } elif (tool_name == "list_modules") {
         return do_list_modules()
     } elif (tool_name == "find_symbol") {
-        return do_find_symbol(arg1, arg2, arg3)
+        return do_find_symbol(arg1, arg2, arg3, project)
     } elif (tool_name == "list_module_api") {
-        return do_list_module_api(arg1, arg2, arg3)
+        return do_list_module_api(arg1, arg2, arg3, project)
     } else {
         return make_tool_result("unknown tool: {tool_name}", true)
     }
 }
 
-def run_tool(tool_name, arg1, arg2, arg3, arg4, arg5 : string) : string {
+def run_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : string {
+    log_tool(tool_name, "{arg1} {arg2} {arg3} {arg4} {arg5}")
+    let t0 = get_clock()
     var result : string
     with_channel(1) <| $(ch) {
         new_thread() <| @() {
-            let tool_result = dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5)
+            let tool_result = dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project)
             ch |> push_clone(ToolMessage(text = tool_result))
             ch |> notify_and_release()
         }
@@ -322,6 +399,8 @@ def run_tool(tool_name, arg1, arg2, arg3, arg4, arg5 : string) : string {
             result = clone_string(msg.text)
         }
     }
+    let is_error = find(result, "\"isError\":true") >= 0
+    log_tool_done(tool_name, get_clock() - t0, is_error)
     return result
 }
 
@@ -333,6 +412,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
     }
     let name = tool_name_val.value as _string
     var arg1, arg2, arg3, arg4, arg5 : string
+    let project = get_string_arg(args, "project")
     if (name == "compile_check" || name == "list_functions" || name == "list_types" || name == "run_test" || name == "format_file" || name == "list_requires") {
         arg1 = get_string_arg(args, "file")
         if (empty(arg1)) {
@@ -395,7 +475,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
     } else {
         return json_rpc_error(id_json, -32602, "unknown tool: {name}")
     }
-    return json_rpc_response(id_json, run_tool(name, arg1, arg2, arg3, arg4, arg5))
+    return json_rpc_response(id_json, run_tool(name, arg1, arg2, arg3, arg4, arg5, project))
 }
 
 // ── HTTP server ───────────────────────────────────────────────────────
@@ -404,16 +484,20 @@ def dispatch_jsonrpc(body : string) : string {
     var err : string
     var parsed = read_json(body, err)
     if (parsed == null) {
+        log_error("JSON parse error: {err}")
         return json_rpc_error("null", -32700, "parse error: {err}")
     }
     let id_json = json_value_to_string(parsed?.id)
     let method_val = parsed?.method
     let params_val = parsed?.params
     if (method_val == null || !(method_val.value is _string)) {
+        log_error("missing method in request")
         unsafe { delete parsed; }
         return json_rpc_error(id_json, -32600, "invalid request: missing method")
     }
     let method = method_val.value as _string
+    log_request(method, body)
+    let t0 = get_clock()
     var result : string
     if (method == "initialize") {
         result = handle_initialize(id_json)
@@ -427,8 +511,10 @@ def dispatch_jsonrpc(body : string) : string {
     } elif (method == "ping") {
         result = json_rpc_response(id_json, "\{\}")
     } else {
+        log_error("method not found: {method}")
         result = json_rpc_error(id_json, -32601, "method not found: {method}")
     }
+    log_response(method, get_clock() - t0)
     unsafe { delete parsed; }
     return result
 }
@@ -438,7 +524,6 @@ class McpServer : HvWebServer {
         allow_cors()
         POST("/mcp") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let body = string(req.body)
-            print("[MCP] POST /mcp: {body}\n")
             let response = dispatch_jsonrpc(body)
             if (empty(response)) {
                 return http_status.NO_CONTENT
@@ -470,33 +555,35 @@ def main() {
             port = maybe_port
         }
     }
-    print("Starting daslang MCP server on port {port}...\n")
+    log_path = "{get_das_root()}/{LOG_FILE}"
+    log_open()
+    log_write("Starting daslang MCP server on port {port}")
     print("Configure Claude Code with: \"url\": \"http://localhost:{port}/mcp\"\n")
     var server = new McpServer()
     server->init(port)
     server->start()
-    print("Server running. Press Ctrl+C to stop.\n")
-    var log_ref_time = ref_time_ticks()
+    log_write("Server running. Press Ctrl+C to stop.")
+    var heap_log_ref = get_clock()
     while (true) {
         server->tick()
         sleep(10u)
         // periodic heap stats logging
-        let elapsed = get_time_usec(log_ref_time) / 1000
-        if (elapsed > int(HEAP_LOG_INTERVAL)) {
-            log_ref_time = ref_time_ticks()
+        let elapsed = get_clock() - heap_log_ref
+        if (elapsed > double(HEAP_LOG_INTERVAL) / 1000.0lf) {
+            heap_log_ref = get_clock()
             let heap_used = heap_bytes_allocated()
             let str_used = string_heap_bytes_allocated()
-            print("[MCP] heap: {int(heap_used)} bytes ({heap_depth()} depth), string heap: {int(str_used)} bytes ({string_heap_depth()} depth)\n")
+            log_write("HEAP heap: {int(heap_used)} bytes ({heap_depth()} depth), string heap: {int(str_used)} bytes ({string_heap_depth()} depth)")
         }
         // collect if over threshold
         let heap_used = heap_bytes_allocated()
         let str_used = string_heap_bytes_allocated()
         if (heap_used > HEAP_COLLECT_THRESHOLD || str_used > HEAP_COLLECT_THRESHOLD) {
-            print("[MCP] collecting — heap: {int(heap_used)}, string heap: {int(str_used)}\n")
+            log_write("HEAP collecting — heap: {int(heap_used)}, string heap: {int(str_used)}")
             unsafe {
                 heap_collect(str_used > HEAP_COLLECT_THRESHOLD, false)
             }
-            print("[MCP] after collect — heap: {int(heap_bytes_allocated())}, string heap: {int(string_heap_bytes_allocated())}\n")
+            log_write("HEAP after collect — heap: {int(heap_bytes_allocated())}, string heap: {int(string_heap_bytes_allocated())}")
         }
     }
 }

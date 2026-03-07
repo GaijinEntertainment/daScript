@@ -1034,6 +1034,7 @@ if (NOT ${DAS_TOOLS_DISABLED})
 
     SETUP_CPP11(das-fmt)
     SETUP_LTO(das-fmt)
+    install(TARGETS das-fmt RUNTIME DESTINATION ${DAS_INSTALL_BINDIR})
 get_target_property(DAS_FMT_INCLUDES libDaScriptDyn INCLUDE_DIRECTORIES)
 get_target_property(DAS_FMT_DEFS das-fmt COMPILE_DEFINITIONS)
 get_target_property(DAS_FMT_LIBS das-fmt LINK_LIBRARIES)

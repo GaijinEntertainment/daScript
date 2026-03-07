@@ -4,8 +4,8 @@ options no_unused_block_arguments = false
 
 require common public
 
-def do_compile_check(file : string) : string {
-    return compile_and_simulate(file) <| $(program; issues) {
+def do_compile_check(file : string; project : string = "") : string {
+    return compile_and_simulate(file, project) <| $(program; issues) {
         var warnings = ""
         if (!empty(issues)) {
             warnings = "Warnings:\n{issues}\n"

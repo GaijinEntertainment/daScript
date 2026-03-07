@@ -159,11 +159,9 @@ def search_module(var results : array<string>; var total_found : int&; mname : s
             if (total_found >= MAX_FIND_RESULTS) {
                 return
             }
-            if (!value.isBasicStructureAnnotation) {
-                return
-            }
+            let is_basic = value.isBasicStructureAnnotation
             let name_match = symbol_matches(string(value.name), query)
-            let field_match = handled_has_matching_field(value, query)
+            let field_match = is_basic && handled_has_matching_field(value, query)
             if (kind == "field" && !field_match) {
                 return
             }
@@ -174,7 +172,9 @@ def search_module(var results : array<string>; var total_found : int&; mname : s
                 write(w, "  [{dname}] handled {value.name}")
                 write_cpp_name(w, string(value.cppName))
                 write(w, "\n")
-                write_handled_fields_highlighted(w, value, query, field_match && !name_match)
+                if (is_basic) {
+                    write_handled_fields_highlighted(w, value, query, field_match && !name_match)
+                }
             }
             results |> push(entry)
             total_found++
@@ -248,13 +248,13 @@ def search_module(var results : array<string>; var total_found : int&; mname : s
     }
 }
 
-def do_find_symbol(query : string; kind : string = ""; file : string = "") : string {
+def do_find_symbol(query : string; kind : string = ""; file : string = ""; project : string = "") : string {
     if (empty(query)) {
         return make_tool_result("'query' must not be empty", true)
     }
     if (!empty(file)) {
         // compile the file and search all its modules (including builtin $)
-        return compile_and_simulate(file) <| $(program; issues) {
+        return compile_and_simulate(file, project) <| $(program; issues) {
             var results : array<string>
             var total_found = 0
             program_for_each_module(program) <| $(mod) {

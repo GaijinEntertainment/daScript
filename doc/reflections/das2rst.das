@@ -39,6 +39,7 @@ require daslib/archive
 require daslib/unroll
 require daslib/assert_once
 require daslib/ast_block_to_loop
+require daslib/ast_cursor
 require daslib/ast_used
 require daslib/constant_expression
 require daslib/uriparser_boost
@@ -626,6 +627,15 @@ def document_module_ast_block_to_loop(root : string) {
     document("DECS, AST block to loop", mod, "ast_block_to_loop.rst", groups)
 }
 
+def document_module_ast_cursor(root : string) {
+    var mod = find_module("ast_cursor")
+    var groups <- array<DocGroup>(
+        group_by_regex("Cursor queries", mod, %regex~.*(find_at_cursor|find_at_cursor_in_function|cursor_inside)$%%),
+        group_by_regex("Result inspection", mod, %regex~.*(describe)$%%)
+    )
+    document("Position-based AST queries", mod, "ast_cursor.rst", groups)
+}
+
 def document_module_ast_used(root : string) {
     var mod = find_module("ast_used")
     var groups <- array<DocGroup>(
@@ -1137,6 +1147,7 @@ def main {
     document_module_assert_once(root)
     document_module_ast_block_to_loop(root)
     document_module_ast_boost(root)
+    document_module_ast_cursor(root)
     document_module_ast_used(root)
     document_module_async_boost(root)
     document_module_base64(root)
