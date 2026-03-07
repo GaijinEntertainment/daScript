@@ -18,5 +18,6 @@ templates, quoting, and macro infrastructure.
    macro_boost.rst
    typemacro_boost.rst
    ast_block_to_loop.rst
+   ast_cursor.rst
    ast_used.rst
    constexpr.rst
