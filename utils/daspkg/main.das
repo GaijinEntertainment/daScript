@@ -12,12 +12,10 @@ require lockfile
 require commands
 
 // daspkg — daslang package manager
-//
-// Usage: daslang utils/daspkg/main.das -- <command> [args...]
 
 def print_usage() {
     print("daspkg — daslang package manager\n\n")
-    print("Usage: daslang utils/daspkg/main.das -- <command> [args...]\n\n")
+    print("Usage: daspkg <command> [args...]\n\n")
     print("Commands:\n")
     print("  install <url|name|path>[@version]  Install a package\n")
     print("  remove <name>                      Remove a package\n")
@@ -29,40 +27,6 @@ def print_usage() {
     print("\nOptions:\n")
     print("  --root <path>   Project root (default: current directory)\n")
     print("  --force         Force reinstall\n")
-}
-
-struct ParsedArgs {
-    root : string
-    command : string
-    command_arg : string
-    force : bool
-}
-
-def parse_args(args : array<string>) : ParsedArgs {
-    var result = ParsedArgs(root = ".")
-    // args: [exe, script.das, --, command, ...]
-    var i = 0
-    while (i < length(args)) {
-        if (args[i] == "--") {
-            i++
-            break
-        }
-        i++
-    }
-    while (i < length(args)) {
-        if (args[i] == "--root" && i + 1 < length(args)) {
-            i++
-            result.root := args[i]
-        } elif (args[i] == "--force") {
-            result.force = true
-        } elif (empty(result.command)) {
-            result.command := args[i]
-        } elif (empty(result.command_arg)) {
-            result.command_arg := args[i]
-        }
-        i++
-    }
-    return result
 }
 
 [export]
@@ -106,7 +70,7 @@ def main() {
         if (empty(parsed.command_arg)) {
             print("Error: search requires a query\n")
         } else {
-            cmd_search(parsed.command_arg)
+            cmd_search(root, parsed.command_arg)
         }
     } else {
         print("Unknown command: {command}\n\n")
