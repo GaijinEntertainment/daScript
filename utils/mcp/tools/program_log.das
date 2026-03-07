@@ -5,7 +5,7 @@ options no_unused_block_arguments = false
 require common public
 require daslib/ast_boost
 
-def do_program_log(file, func_name, project : string) : string {
+def do_program_log(file, func_name : string; project : string = "") : string {
     if (!empty(func_name)) {
         // filter to specific function — use ast_dump source mode approach
         return compile_program(file, true, false, project) <| $(program, issues) {

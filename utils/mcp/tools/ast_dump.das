@@ -108,7 +108,7 @@ def do_ast_dump_file(file, func_name : string; use_source_mode, use_lineinfo : b
     }
 }
 
-def do_ast_dump(expression, file, func_name, mode, lineinfo, project : string) : string {
+def do_ast_dump(expression, file, func_name, mode, lineinfo : string; project : string = "") : string {
     if (!empty(expression)) {
         return do_ast_dump_expression(expression)
     } elif (!empty(file)) {
