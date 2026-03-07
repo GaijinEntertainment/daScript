@@ -22,6 +22,7 @@ require tools/goto_definition public
 require tools/type_of public
 require tools/find_references public
 require tools/eval_expression public
+require tools/describe_type public
 
 // helper: parse tool result JSON, return (text, isError)
 def parse_result(result : string; var text : string&; var is_error : bool&) : bool {
@@ -752,5 +753,43 @@ def test_eval_expression(t : T?) {
         var is_error = false
         parse_result(do_eval_expression("", ""), text, is_error)
         t |> success(is_error, "should be error")
+    }
+}
+
+// ── describe_type ───────────────────────────────────────────────────
+
+[test]
+def test_describe_type(t : T?) {
+    t |> run("describes handled type fields") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_describe_type("TypeDecl", "ast"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "handled TypeDecl") >= 0, "should be handled type")
+        t |> success(find(text, "baseType") >= 0, "should have baseType field")
+        t |> success(find(text, "structType") >= 0, "should have structType field")
+    }
+    t |> run("describes enum values") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_describe_type("Type", "ast"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "enum Type") >= 0, "should be enum")
+        t |> success(find(text, "tInt") >= 0, "should have tInt value")
+    }
+    t |> run("describes bitfield flags") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_describe_type("FunctionFlags", "ast"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "bitfield FunctionFlags") >= 0, "should be bitfield")
+        t |> success(find(text, "builtIn") >= 0, "should have builtIn flag")
+    }
+    t |> run("type not found") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_describe_type("NonExistentType", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "not found") >= 0, "should report not found")
     }
 }
