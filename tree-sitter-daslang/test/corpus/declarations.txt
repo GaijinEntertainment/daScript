@@ -1,0 +1,224 @@
+================================================================================
+Module declaration
+================================================================================
+
+module my_module public
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    name: (identifier)))
+
+================================================================================
+Module declaration with shared
+================================================================================
+
+module my_module shared public
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    name: (identifier)))
+
+================================================================================
+Require declaration
+================================================================================
+
+require daslib/strings;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (require_declaration
+    module: (require_module_name
+      (identifier)
+      (identifier))))
+
+================================================================================
+Require declaration with alias
+================================================================================
+
+require daslib/json as json public;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (require_declaration
+    module: (require_module_name
+      (identifier)
+      (identifier))
+    alias: (identifier)))
+
+================================================================================
+Options declaration
+================================================================================
+
+options gen2;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (options_declaration
+    (annotation_argument_list
+      (annotation_argument
+        name: (identifier)))))
+
+================================================================================
+Simple function
+================================================================================
+
+def foo() {
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list)
+    body: (block)))
+
+================================================================================
+Function with arguments and return type
+================================================================================
+
+def add(a : int, b : int) : int {
+  return a + b;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list
+      (function_argument
+        name: (identifier)
+        type: (basic_type))
+      (function_argument
+        name: (identifier)
+        type: (basic_type)))
+    (function_return_type
+      type: (basic_type))
+    body: (block
+      (return_statement
+        (binary_expression
+          (identifier)
+          (identifier))))))
+
+================================================================================
+Struct declaration
+================================================================================
+
+struct Foo {
+  x : int;
+  y : float;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (structure_declaration
+    name: (identifier)
+    (structure_member
+      (structure_field
+        name: (identifier)
+        type: (basic_type)))
+    (structure_member
+      (structure_field
+        name: (identifier)
+        type: (basic_type)))))
+
+================================================================================
+Enum declaration
+================================================================================
+
+enum Color {
+  red,
+  green,
+  blue
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (enum_declaration
+    name: (identifier)
+    (enum_entry
+      name: (identifier))
+    (enum_entry
+      name: (identifier))
+    (enum_entry
+      name: (identifier))))
+
+================================================================================
+Enum with base type and values
+================================================================================
+
+enum Flags : uint8 {
+  none = 0u8,
+  read = 1u8,
+  write = 2u8
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (enum_declaration
+    name: (identifier)
+    base_type: (enum_base_type)
+    (enum_entry
+      name: (identifier)
+      value: (integer_literal))
+    (enum_entry
+      name: (identifier)
+      value: (integer_literal))
+    (enum_entry
+      name: (identifier)
+      value: (integer_literal))))
+
+================================================================================
+Global variable
+================================================================================
+
+let x = 42;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_variable_declaration
+    (global_variable_binding
+      name: (identifier)
+      value: (integer_literal))))
+
+================================================================================
+Global variable with type
+================================================================================
+
+var y : int = 10;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_variable_declaration
+    (global_variable_binding
+      name: (identifier)
+      type: (basic_type)
+      value: (integer_literal))))
+
+================================================================================
+Typedef
+================================================================================
+
+typedef MyInt = int;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (typedef_declaration
+    name: (identifier)
+    type: (basic_type)))

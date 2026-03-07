@@ -1,0 +1,166 @@
+================================================================================
+Binary arithmetic
+================================================================================
+
+def test() {
+  var x = a + b * c;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list)
+    body: (block
+      (variable_declaration_statement
+        (variable_binding
+          name: (identifier)
+          value: (binary_expression
+            (identifier)
+            (binary_expression
+              (identifier)
+              (identifier))))))))
+
+================================================================================
+Function call
+================================================================================
+
+def test() {
+  foo(1, 2, 3);
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list)
+    body: (block
+      (expression_statement
+        (call_expression
+          function: (identifier)
+          (argument_list
+            (integer_literal)
+            (integer_literal)
+            (integer_literal)))))))
+
+================================================================================
+Pipe expression
+================================================================================
+
+def test() {
+  x |> foo();
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list)
+    body: (block
+      (expression_statement
+        (pipe_expression
+          (identifier)
+          (call_expression
+            function: (identifier)))))))
+
+================================================================================
+Ternary expression
+================================================================================
+
+def test() {
+  var x = a ? b : c;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list)
+    body: (block
+      (variable_declaration_statement
+        (variable_binding
+          name: (identifier)
+          value: (ternary_expression
+            condition: (identifier)
+            consequence: (identifier)
+            alternative: (identifier)))))))
+
+================================================================================
+Field access
+================================================================================
+
+def test() {
+  var x = a.b.c;
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list)
+    body: (block
+      (variable_declaration_statement
+        (variable_binding
+          name: (identifier)
+          value: (field_expression
+            object: (field_expression
+              object: (identifier)
+              field: (identifier))
+            field: (identifier)))))))
+
+================================================================================
+Index expression
+================================================================================
+
+def test() {
+  var x = a[0];
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list)
+    body: (block
+      (variable_declaration_statement
+        (variable_binding
+          name: (identifier)
+          value: (index_expression
+            object: (identifier)
+            index: (integer_literal)))))))
+
+================================================================================
+Array literal
+================================================================================
+
+def test() {
+  var x = [1, 2, 3];
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list)
+    body: (block
+      (variable_declaration_statement
+        (variable_binding
+          name: (identifier)
+          value: (array_literal
+            (integer_literal)
+            (integer_literal)
+            (integer_literal)))))))
