@@ -1467,7 +1467,7 @@ if(NOT ${DAS_TREE_SITTER_DISABLED})
     set_target_properties(tree_sitter_daslang PROPERTIES
         C_STANDARD 11
         PREFIX ""
-        OUTPUT_NAME "tree_sitter_daslang"
+        OUTPUT_NAME "daslang"
     )
     if(MSVC)
         target_compile_options(tree_sitter_daslang PRIVATE /W3)
@@ -1477,6 +1477,11 @@ if(NOT ${DAS_TREE_SITTER_DISABLED})
     install(TARGETS tree_sitter_daslang
         RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
         LIBRARY DESTINATION ${DAS_INSTALL_LIBDIR}
+    )
+    # Also install DLL into tree-sitter-daslang/ for ast-grep (sgconfig.yml references it there)
+    install(TARGETS tree_sitter_daslang
+        RUNTIME DESTINATION tree-sitter-daslang
+        LIBRARY DESTINATION tree-sitter-daslang
     )
     install(FILES
         tree-sitter-daslang/src/node-types.json
@@ -1488,4 +1493,6 @@ if(NOT ${DAS_TREE_SITTER_DISABLED})
         tree-sitter-daslang/queries/highlights.scm
         DESTINATION tree-sitter-daslang/queries
     )
+    # sgconfig.yml for ast-grep (used by grep_usage MCP tool)
+    install(FILES ${PROJECT_SOURCE_DIR}/sgconfig.yml DESTINATION ${DAS_INSTALL_DOCDIR})
 endif()

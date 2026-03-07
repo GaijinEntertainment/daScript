@@ -3,8 +3,6 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
 require common public
-require daslib/strings_boost
-require math
 
 def compile_check_single(file : string; project : string = "") : string {
     return compile_and_simulate(file, project) <| $(program; issues) {
@@ -16,59 +14,6 @@ def compile_check_single(file : string; project : string = "") : string {
             write_function_list(writer, program)
         }
         return "{warnings}Compilation OK.\n{funcs}"
-    }
-}
-
-// Expand a glob pattern (e.g. "utils/mcp/tools/*.das") into a list of file paths
-def expand_glob(pattern : string; var result : array<string>) {
-    // Split into directory and filename pattern
-    let last_slash = max(rfind(pattern, "/"), rfind(pattern, "\\"))
-    var dir_part = "."
-    var file_pattern = pattern
-    if (last_slash >= 0) {
-        dir_part = slice(pattern, 0, last_slash)
-        file_pattern = slice(pattern, last_slash + 1)
-    }
-    dir(dir_part) <| $(fname) {
-        if (fname == "." || fname == "..") {
-            return
-        }
-        if (glob_match(file_pattern, fname)) {
-            if (dir_part == ".") {
-                result |> push(fname)
-            } else {
-                result |> push("{dir_part}/{fname}")
-            }
-        }
-    }
-    sort(result)
-}
-
-// Parse file argument into a list of files: glob pattern, comma-separated, or single file
-def parse_file_list(file : string; var result : array<string>) {
-    if (find(file, "*") >= 0 || find(file, "?") >= 0) {
-        expand_glob(file, result)
-    } elif (find(file, ",") >= 0) {
-        // Split on commas, trim whitespace
-        var rest = file
-        while (!empty(rest)) {
-            let comma = find(rest, ",")
-            if (comma >= 0) {
-                let part = strip(slice(rest, 0, comma))
-                if (!empty(part)) {
-                    result |> push(part)
-                }
-                rest = slice(rest, comma + 1)
-            } else {
-                let part = strip(rest)
-                if (!empty(part)) {
-                    result |> push(part)
-                }
-                break
-            }
-        }
-    } else {
-        result |> push(file)
     }
 }
 

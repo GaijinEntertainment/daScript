@@ -41,54 +41,16 @@ cmake -Bbuild -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build --target daslang --config RelWithDebInfo
 ```
 
-## Aot usage
-For detailed usage see [integration_cpp_13.cpp](tutorials/integration/cpp/integration_cpp_13.cpp) and the [AOT tutorial](doc/source/reference/tutorials/integration_cpp_13_aot.rst).
-Here's a short version:
-First compile `daslang`:
-```sh
-cmake -Bbuild
-cmake --build build --target daslang
-```
-Now let's create a `main.das` file with the following content:
-```sh
-[export]
-def main() { print("Hello world\n"); }
-```
-Create a `C++` application, called `test_aot.cpp`. For simplicity we don't
-use error checking here (based on the [AOT integration tutorial](tutorials/integration/cpp/integration_cpp_13.cpp)):
-```cpp
-#include "daScript/daScript.h"
-int main(int argc, char **argv) {
-    using namespace das;
-    NEED_ALL_DEFAULT_MODULES;
-    Module::Initialize();
-    TextPrinter tout;
-    ModuleGroup dummyLibGroup;
-    CodeOfPolicies policies = {.aot = true, .version_2_syntax=true};
-    auto fAccess = make_smart<FsFileAccess>();
-    auto program = compileDaScript("main.das", fAccess, tout, dummyLibGroup, policies);
-    assert(!program->failed());
-    Context ctx(program->getContextStackSize());
-    program->simulate(ctx, tout);
-    auto fnTest = ctx.findFunction("main");
-    assert(fnTest != nullptr);
-    ctx.evalWithCatch(fnTest, nullptr);
-    Module::Shutdown();
-}
-```
-Perform AOT compilation, then compile and run the binary:
+## AOT usage
+
+AOT compiles daslang scripts to C++ for native performance. Generate the C++ stub, then compile and link it with your host application:
+
 ```sh
 ./bin/daslang -aot main.das aot_main.cpp
-clang++ test_aot.cpp aot_main.cpp -Iinclude lib/liblibDaScript.a lib/liblibUriParser.a -o aot_example
-./aot_example
+clang++ host.cpp aot_main.cpp -Iinclude lib/liblibDaScript.a lib/liblibUriParser.a -o app
 ```
-In a similar manner, you can link against a shared library instead of a static one:
-```sh
-cmake --build build --target daslang
-./bin/daslang -aot main.das aot_main.cpp
-clang++ test_aot.cpp aot_main.cpp -Iinclude lib/liblibDaScriptDyn.so -o aot_example
-LD_LIBRARY_PATH=./lib ./aot_example
-```
+
+For a complete walkthrough, see the [AOT tutorial](doc/source/reference/tutorials/integration_cpp_13_aot.rst) and [integration_cpp_13.cpp](tutorials/integration/cpp/integration_cpp_13.cpp).
 
 ## JIT usage
 To use JIT, you need the `LLVM 16.0.6` shared library at the path
@@ -106,6 +68,26 @@ To embed daslang into your CMake application, simply call `find_package(DAS)`.
 This will provide the targets `libDaScript`
 and `libDaScriptDyn`. For an example of using daslang as an external project
 (including usage for dynamic modules) see [this demo](https://github.com/aleksisch/dascript-demo).
+
+## Tree-sitter grammar
+
+A full tree-sitter grammar for daslang lives in [`tree-sitter-daslang/`](tree-sitter-daslang/). It parses 99.4% of the codebase (all valid files) and is built automatically by CMake as a shared library.
+
+Use it for:
+- **Syntax highlighting** — `queries/highlights.scm` included, works in editors that support tree-sitter (Neovim, Helix, Zed)
+- **Parse-aware search** — via [ast-grep](https://ast-grep.github.io/) (`sg`) for structural code search across `.das` files
+- **Editor extensions** — `tree-sitter-daslang/editors/zed/` includes a Zed extension
+
+Build the grammar:
+```sh
+cmake --build build --target tree_sitter_daslang
+```
+
+## MCP server (AI tool integration)
+
+An [MCP](https://modelcontextprotocol.io/) server in [`utils/mcp/`](utils/mcp/) exposes 18 compiler-backed tools to AI coding assistants (Claude Code, etc.): compilation diagnostics, type inspection, go-to-definition, find-references, AST dump, expression evaluation, parse-aware grep, and more.
+
+Requires dasHV (`-DDAS_HV_DISABLED=OFF`). See [`utils/mcp/README.md`](utils/mcp/README.md) for setup and configuration.
 
 ## VS Code extensions
 

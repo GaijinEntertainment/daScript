@@ -227,6 +227,9 @@ The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics and p
 | `type_of` | Manually inspecting expression types |
 | `list_requires` | Grepping for `require` statements and guessing transitive deps |
 | `find_references` | Manually searching for all usages of a symbol across files |
+| `eval_expression` | Evaluating expressions by writing throwaway scripts |
+| `describe_type` | Reading source to understand type fields, methods, and values |
+| `grep_usage` | Grepping for symbol names across files (parse-aware via ast-grep + tree-sitter) |
 
 Cursor-based tools (`goto_definition`, `type_of`, `find_references`) support a `no_opt` parameter that disables compiler optimizations to preserve the full AST — useful when globals, enum values, or bitfield constants get constant-folded away.
 

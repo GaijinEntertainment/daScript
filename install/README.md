@@ -38,6 +38,7 @@
 | `examples/`  | Example scripts                                       |
 | `tutorials/` | Language and integration tutorials                    |
 | `utils/mcp/` | MCP server for AI coding assistants (requires dasHV)  |
+| `tree-sitter-daslang/` | Tree-sitter grammar, shared library, and highlighting queries |
 
 ## Quick Start
 
@@ -61,6 +62,28 @@ target_link_libraries(your_app PRIVATE DAS::libDaScript)
 ```
 
 See `tutorials/integration/` for complete C and C++ embedding examples.
+
+## Tree-sitter Grammar
+
+A full tree-sitter grammar for daslang is included in `tree-sitter-daslang/`. Use it for:
+
+- **Syntax highlighting** — `tree-sitter-daslang/queries/highlights.scm` works in editors that support tree-sitter (Neovim, Helix, Zed)
+- **Parse-aware search** — via [ast-grep](https://ast-grep.github.io/) (`sg`) for structural code search. Install `sg`, then run from the SDK root (where `sgconfig.yml` lives):
+  ```sh
+  sg run -p "symbol_name" -l daslang
+  ```
+- **Editor extensions** — `tree-sitter-daslang/editors/zed/` includes a Zed extension
+
+## MCP Server (AI Tool Integration)
+
+If the SDK was built with dasHV enabled, `utils/mcp/` contains an [MCP](https://modelcontextprotocol.io/) server exposing 18 compiler-backed tools to AI coding assistants: compilation diagnostics, type inspection, go-to-definition, find-references, AST dump, expression evaluation, parse-aware grep, and more.
+
+Start the server:
+```sh
+bin/daslang utils/mcp/main.das
+```
+
+See `utils/mcp/README.md` for configuration and the full tool list.
 
 ## Building from Source
 

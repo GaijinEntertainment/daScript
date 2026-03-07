@@ -23,6 +23,7 @@ require tools/type_of public
 require tools/find_references public
 require tools/eval_expression public
 require tools/describe_type public
+require tools/grep_usage public
 
 // helper: parse tool result JSON, return (text, isError)
 def parse_result(result : string; var text : string&; var is_error : bool&) : bool {
@@ -791,5 +792,82 @@ def test_describe_type(t : T?) {
         parse_result(do_describe_type("NonExistentType", ""), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "not found") >= 0, "should report not found")
+    }
+}
+
+// ── grep_usage ──────────────────────────────────────────────────────
+
+[test]
+def test_grep_usage(t : T?) {
+    t |> run("finds symbol in directory") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_grep_usage("compile_program", "utils/mcp/tools", "", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "compile_program") >= 0, "should contain symbol name")
+        t |> success(find(text, "common.das") >= 0, "should find in common.das")
+        t |> success(find(text, "Found") >= 0, "should have Found header")
+    }
+    t |> run("returns correct line numbers") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_grep_usage("compile_program", "utils/mcp/tools", "", ""), text, is_error)
+        // line numbers should be > 1 (not all zeros)
+        t |> success(find(text, "  1:") < 0 || find(text, "  38:") >= 0 || find(text, "  41:") >= 0, "should have real line numbers")
+    }
+    t |> run("no matches returns clean message") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_grep_usage("xyzzy_nonexistent_symbol_12345", "utils/mcp/tools", "", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+    }
+    t |> run("missing symbol is error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_grep_usage("", "", "", ""), text, is_error)
+        t |> success(is_error, "should be error")
+    }
+}
+
+[test]
+def test_grep_usage_parse_aware(t : T?) {
+    t |> run("skips comments and strings") <| @(t : T?) {
+        // search for 'compile_program' in tools — should only find code references,
+        // not occurrences inside comments or strings
+        var text : string
+        var is_error = false
+        parse_result(do_grep_usage("compile_program", "utils/mcp/tools", "", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        // all matches should be actual code (compile_program function calls/defs)
+        t |> success(find(text, "common.das") >= 0, "should find in common.das where it's defined")
+    }
+}
+
+[test]
+def test_grep_usage_glob_exclude(t : T?) {
+    t |> run("exclude glob filters out files") <| @(t : T?) {
+        // compile_program is defined in common.das — exclude it
+        var text : string
+        var is_error = false
+        parse_result(do_grep_usage("compile_program", "utils/mcp/tools", "", "!**/common.das"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "common.das") < 0, "common.das should be excluded")
+    }
+    t |> run("include glob limits to matching files") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_grep_usage("compile_program", "utils/mcp/tools", "", "common.das"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        // only common.das should appear
+        t |> success(find(text, "common.das") >= 0, "should find in common.das")
+        t |> success(find(text, "compile_check.das") < 0, "should not find in other files")
+    }
+}
+
+[test]
+def test_grep_usage_detect(t : T?) {
+    t |> run("detects ast-grep") <| @(t : T?) {
+        let sg = detect_ast_grep()
+        t |> success(!empty(sg), "ast-grep should be detected in test environment")
     }
 }

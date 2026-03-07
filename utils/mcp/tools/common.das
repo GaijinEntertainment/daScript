@@ -4,8 +4,10 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
 require daslib/json_boost public
+require daslib/strings_boost public
 require ast public
 require rtti public
+require math public
 require strings public
 require fio public
 
@@ -175,5 +177,76 @@ def write_function_list(var writer : StringBuilderWriter; program : smart_ptr<Pr
         for (f in generic_instances) {
             write(writer, "{f}\n")
         }
+    }
+}
+
+// ── File path utilities ──────────────────────────────────────────────
+
+def resolve_path(path : string) : string {
+    if (empty(path)) {
+        return get_das_root()
+    }
+    if (length(path) > 0 && character_at(path, 0) != '/' && find(path, ":") < 0) {
+        return "{get_das_root()}/{path}"
+    }
+    return path
+}
+
+def make_relative_path(path, root : string) : string {
+    var result = path
+    if (find(result, root) == 0) {
+        result = slice(result, length(root) + 1)
+    }
+    return replace(result, "\\", "/")
+}
+
+// Expand a glob pattern (e.g. "utils/mcp/tools/*.das") into a list of file paths
+def expand_glob(pattern : string; var result : array<string>) {
+    let last_slash = max(rfind(pattern, "/"), rfind(pattern, "\\"))
+    var dir_part = "."
+    var file_pattern = pattern
+    if (last_slash >= 0) {
+        dir_part = slice(pattern, 0, last_slash)
+        file_pattern = slice(pattern, last_slash + 1)
+    }
+    dir(dir_part) <| $(fname) {
+        if (fname == "." || fname == "..") {
+            return
+        }
+        if (glob_match(file_pattern, fname)) {
+            if (dir_part == ".") {
+                result |> push(fname)
+            } else {
+                result |> push("{dir_part}/{fname}")
+            }
+        }
+    }
+    sort(result)
+}
+
+// Parse file argument: glob pattern, comma-separated list, or single file
+def parse_file_list(file : string; var result : array<string>) {
+    if (find(file, "*") >= 0 || find(file, "?") >= 0) {
+        expand_glob(file, result)
+    } elif (find(file, ",") >= 0) {
+        var rest = file
+        while (!empty(rest)) {
+            let comma = find(rest, ",")
+            if (comma >= 0) {
+                let part = strip(slice(rest, 0, comma))
+                if (!empty(part)) {
+                    result |> push(part)
+                }
+                rest = slice(rest, comma + 1)
+            } else {
+                let part = strip(rest)
+                if (!empty(part)) {
+                    result |> push(part)
+                }
+                break
+            }
+        }
+    } else {
+        result |> push(file)
     }
 }

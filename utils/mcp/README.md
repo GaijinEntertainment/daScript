@@ -22,6 +22,10 @@ A minimal [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) serve
 | `goto_definition` | Given a cursor position (file, line, column), resolve the definition of the symbol under the cursor. Returns location, kind (variable/function/field/builtin/struct/enum/typedef), and source snippet. Optional `no_opt` to preserve pre-optimization AST |
 | `type_of` | Given a cursor position (file, line, column), return the resolved type of the expression under the cursor. Shows all expressions at position from innermost to outermost. Optional `no_opt` |
 | `find_references` | Find all references to the symbol under the cursor (function calls, variable uses, field accesses, type refs, enum/bitfield values, aliases). Works from both usage and declaration sites. Scope: `file` (default) or `all` (all loaded modules). Optional `no_opt` |
+| `eval_expression` | Evaluate a daslang expression and return its printed result. Supports comma-separated module imports via `require` parameter |
+| `describe_type` | Describe a type's fields, methods, values, and base type. Supports structs, classes, handled types, enums, bitfields, variants, tuples, typedefs |
+| `program_log` | Produce full post-compilation program text (like `options log`). Shows all types, globals, and functions after macro expansion and inference. Optional `function` filter |
+| `grep_usage` | Parse-aware symbol search across `.das` files using ast-grep + tree-sitter. Finds identifier occurrences excluding comments and strings. Conditional on `sg` CLI |
 
 ## Prerequisites
 
@@ -99,7 +103,10 @@ Optionally, allow the MCP tools without prompting by adding to `.claude/settings
       "mcp__daslang__goto_definition",
       "mcp__daslang__type_of",
       "mcp__daslang__find_references",
-      "mcp__daslang__program_log"
+      "mcp__daslang__program_log",
+      "mcp__daslang__eval_expression",
+      "mcp__daslang__describe_type",
+      "mcp__daslang__grep_usage"
     ]
   }
 }
