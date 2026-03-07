@@ -272,6 +272,13 @@ namespace das {
         return context->allocateString(ss.str(),at);
     }
 
+    char * ast_describe_program ( smart_ptr_raw<Program> t, Context * context, LineInfoArg * at ) {
+        if ( !t ) context->throw_error_at(at, "expecting program, not null");
+        TextWriter ss;
+        ss << *t;
+        return context->allocateString(ss.str(),at);
+    }
+
     char * ast_describe_function ( smart_ptr_raw<Function> t, Context * context, LineInfoArg * at ) {
         if ( !t ) context->throw_error_at(at, "expecting function, not null");
         TextWriter ss;
@@ -1109,6 +1116,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(ast_describe_function)>(*this, lib,  "describe_function",
             SideEffects::none, "ast_describe_function")
                 ->args({"function","context","lineinfo"});
+        addExtern<DAS_BIND_FUN(ast_describe_program)>(*this, lib,  "describe_program",
+            SideEffects::none, "ast_describe_program")
+                ->args({"program","context","lineinfo"});
         addExtern<DAS_BIND_FUN(ast_find_bitfield_name)>(*this, lib,  "find_bitfield_name",
             SideEffects::none, "ast_find_bitfield_name")
                 ->args({"bit","value","context","lineinfo"});

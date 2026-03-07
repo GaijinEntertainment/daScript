@@ -41,6 +41,57 @@ The `no_opt` parameter disables compiler optimizations (`CodeOfPolicies.no_optim
 
 ---
 
+## Urgent: Diagnostics & Debugging
+
+### program_log
+
+**What:** Produce the `options log` output — the full post-compilation program text after all macro expansions, template instantiations, inference, and optimizations.
+
+**Why:** This is the single most useful debugging view for understanding what the compiler actually produces. When macros or templates generate unexpected code, `options log` shows the ground truth. Currently `ast_dump mode=source` shows individual functions, but there's no way to see the complete picture: all requires, all structs, all functions, all globals — as the compiler sees them after every transformation pass.
+
+**Implementation approach:**
+- Use `describe_program(program)` or the C++ `Program::operator<<` (same as `options log`)
+- Filter to the user's module by default, with an optional `all_modules` flag
+- Support optional `function` parameter to limit output to a single function (like `ast_dump mode=source` but with struct/global context)
+
+**Parameters:**
+- `file` (required) — file to compile
+- `function` (optional) — limit to a specific function
+- `all_modules` (optional, default false) — include all loaded modules, not just the user's
+
+**Output:** Complete post-compilation daslang source text.
+
+**Difficulty:** Easy. The infrastructure (`describe_program`, `describe_function`) already exists. Mostly wiring.
+
+### ast_dump with LineInfo
+
+**What:** Add optional LineInfo output to `ast_dump` — show `at=line:col-lastline:lastcol` and `file=filename` on each expression node in the S-expression output.
+
+**Why:** Essential for debugging cursor-based tools (`goto_definition`, `type_of`, `find_references`). When a cursor query fails to find an expression, the only way to diagnose it is to see the actual LineInfo spans on each AST node. This is how we discovered that template-instantiated dot-calls have collapsed `ExprCall` spans (e.g., `t.key_exists("hello")` gets `12:15-12:16` instead of the full expression range).
+
+**Implementation approach:**
+- Add a `lineinfo` boolean parameter to `ast_dump`
+- In `format_func_body` / `debug_expression`, append `at=L:C-L:C` after each expression node when enabled
+- Optionally show `file=` when the expression points to a different file than the input (common with template-instantiated code)
+
+**Parameters:**
+- Extends existing `ast_dump` tool
+- `lineinfo` (optional, default false) — include LineInfo on each node
+
+**Output:** Same S-expression as `ast_dump mode=ast`, but each node annotated with its source location.
+
+**Difficulty:** Easy-medium. The `debug_expression` visitor in C++ would need a flag, or we write a custom daslang visitor that wraps `debug_expression` output with LineInfo. Could also be a new `mode=ast_lineinfo`.
+
+### Known issue: narrow LineInfo on dot-call expressions
+
+Template-instantiated and dot-call expressions (`expr.method(args)`) can have collapsed `ExprCall` LineInfo spans. For example, `t.key_exists("hello")` compiles to `ExprCall` with span `12:15-12:16` (just the `.` portion) instead of spanning the full expression. This affects all cursor-based tools — they may fail to find expressions at certain column positions.
+
+**Root cause:** During type inference, dot-call syntax transforms `ExprField` into `ExprCall`, but the resulting `ExprCall` inherits the narrow field-access span. Template instantiation via `force_at` in `templates_boost.das` can also collapse spans, though method bodies already use `forceAt=false`.
+
+**Fix location:** C++ compiler type inference — the dot-call transformation should widen `ExprCall` LineInfo to span the full expression including arguments. Alternatively, `ast_cursor` could use line-only matching as a fallback when exact column matching fails.
+
+---
+
 ## Phase 2: Refactoring (Medium Priority)
 
 ### rename_symbol
@@ -249,16 +300,18 @@ Recommended order based on value/effort ratio:
 
 1. ~~**go_to_definition**~~ ✅ Implemented
 2. ~~**type_of**~~ ✅ Implemented
-3. **explain_error** — high value, relatively easy
-4. ~~**find_references**~~ ✅ Implemented (file + all-modules scope)
-5. **dependency_graph** — medium value, easy (extends `list_requires`)
-6. **type_search** — high value for API discovery, medium-hard effort
-7. **rename_symbol** — high value, depends on goto_definition + find_references (both done)
-8. **try_fix** — medium-high value, hard
-9. **extract_function** — medium value, very hard
-10. **workspace_index** — enabler for cross-file tools at scale
-11. **scaffold** — low priority (AI already generates good code)
-12. **package_search** — deferred until package manager exists
+3. ~~**find_references**~~ ✅ Implemented (file + all-modules scope)
+4. **program_log** — 🔴 urgent, easy (wiring only), critical for macro/template debugging
+5. **ast_dump with LineInfo** — 🔴 urgent, easy-medium, critical for cursor-tool debugging
+6. **explain_error** — high value, relatively easy
+7. **dependency_graph** — medium value, easy (extends `list_requires`)
+8. **type_search** — high value for API discovery, medium-hard effort
+9. **rename_symbol** — high value, depends on goto_definition + find_references (both done)
+10. **try_fix** — medium-high value, hard
+11. **extract_function** — medium value, very hard
+12. **workspace_index** — enabler for cross-file tools at scale
+13. **scaffold** — low priority (AI already generates good code)
+14. **package_search** — deferred until package manager exists
 
 ## Architecture Notes
 

@@ -12,7 +12,8 @@ A minimal [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) serve
 | `run_test` | Run dastest on a `.das` test file and return pass/fail results |
 | `format_file` | Format a `.das` file using `daslib/das_source_formatter` |
 | `run_script` | Run a `.das` file or inline code snippet and return stdout/stderr |
-| `ast_dump` | Dump AST of an expression or compiled function. `mode=ast` returns S-expression (node types/fields), `mode=source` returns post-macro daslang code |
+| `ast_dump` | Dump AST of an expression or compiled function. `mode=ast` returns S-expression (node types/fields), `mode=source` returns post-macro daslang code. Optional `lineinfo` to include file and line:col spans on each node |
+| `program_log` | Produce full post-compilation program text (like `options log`). Shows all types, globals, and functions after macro expansion, template instantiation, and inference. Optional `function` filter |
 | `list_modules` | List all available daslang modules (builtin C++ modules and daslib) |
 | `find_symbol` | Cross-module symbol search (functions, generics, structs, handled types, enums, globals, typedefs/aliases, fields). Case-insensitive substring by default; `=query` for exact match |
 | `list_requires` | Compile a `.das` file and list all `require` dependencies (direct and transitive), with source file paths and builtin annotations |
@@ -97,7 +98,8 @@ Optionally, allow the MCP tools without prompting by adding to `.claude/settings
       "mcp__daslang__convert_to_gen2",
       "mcp__daslang__goto_definition",
       "mcp__daslang__type_of",
-      "mcp__daslang__find_references"
+      "mcp__daslang__find_references",
+      "mcp__daslang__program_log"
     ]
   }
 }

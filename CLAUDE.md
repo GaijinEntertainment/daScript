@@ -217,7 +217,8 @@ The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics and p
 | `find_symbol` | Searching across modules for function/type names |
 | `list_module_api` | Reading daslib source to find available functions |
 | `list_modules` | Guessing module names or scanning `daslib/` directory |
-| `ast_dump` | Manually inspecting AST or post-macro output |
+| `ast_dump` | Manually inspecting AST or post-macro output (supports `lineinfo` for source locations) |
+| `program_log` | Running with `options log` to see full post-compilation program text |
 | `run_script` | Running scripts via shell and capturing output |
 | `run_test` | Running dastest via shell and parsing results |
 | `format_file` | Running the formatter script manually |

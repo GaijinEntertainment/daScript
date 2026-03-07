@@ -162,7 +162,7 @@ def test_ast_dump_expression(t : T?) {
     t |> run("expression mode returns S-expression") <| @(t : T?) {
         var text : string
         var is_error = false
-        parse_result(do_ast_dump("a + b", "", "", ""), text, is_error)
+        parse_result(do_ast_dump("a + b", "", "", "", ""), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "ExprOp2") >= 0, "should contain ExprOp2")
         t |> success(find(text, "ExprVar") >= 0, "should contain ExprVar")
@@ -174,7 +174,7 @@ def test_ast_dump_file_ast_mode(t : T?) {
     t |> run("file ast mode returns S-expression") <| @(t : T?) {
         var text : string
         var is_error = false
-        parse_result(do_ast_dump("", fixture_path("_fixture_valid.das"), "add", "ast"), text, is_error)
+        parse_result(do_ast_dump("", fixture_path("_fixture_valid.das"), "add", "ast", ""), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "def add") >= 0, "should contain function header")
         t |> success(find(text, "ExprReturn") >= 0, "should contain ExprReturn node")
@@ -186,7 +186,7 @@ def test_ast_dump_file_source_mode(t : T?) {
     t |> run("file source mode returns describe output") <| @(t : T?) {
         var text : string
         var is_error = false
-        parse_result(do_ast_dump("", fixture_path("_fixture_valid.das"), "add", "source"), text, is_error)
+        parse_result(do_ast_dump("", fixture_path("_fixture_valid.das"), "add", "source", ""), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "def add") >= 0, "should contain function header")
         t |> success(find(text, "return") >= 0, "should contain return statement")
@@ -200,7 +200,7 @@ def test_ast_dump_export_all(t : T?) {
     t |> run("export_all preserves non-main functions") <| @(t : T?) {
         var text : string
         var is_error = false
-        parse_result(do_ast_dump("", fixture_path("_fixture_valid.das"), "greet", "source"), text, is_error)
+        parse_result(do_ast_dump("", fixture_path("_fixture_valid.das"), "greet", "source", ""), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "def greet") >= 0, "greet should be preserved by export_all")
     }

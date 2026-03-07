@@ -36,6 +36,7 @@ require tools/convert_to_gen2 public
 require tools/goto_definition public
 require tools/type_of public
 require tools/find_references public
+require tools/program_log public
 
 let MCP_PORT = 9500
 let HEAP_COLLECT_THRESHOLD = 1024ul * 1024ul  // 1 MB
@@ -167,7 +168,8 @@ def handle_tools_list(id_json : string) : string {
             "expression" => PropertySchema(_type = "string", description = "A daslang expression to dump (e.g. 'a.b[0]', 'foo(x, y + 1)')"),
             "file" => PropertySchema(_type = "string", description = "Path to a .das file — dumps AST of compiled functions"),
             "function" => PropertySchema(_type = "string", description = "Function name to dump (optional, defaults to all functions)"),
-            "mode" => PropertySchema(_type = "string", description = "Output mode: 'ast' (default) for S-expression, 'source' for post-macro daslang code")
+            "mode" => PropertySchema(_type = "string", description = "Output mode: 'ast' (default) for S-expression, 'source' for post-macro daslang code"),
+            "lineinfo" => PropertySchema(_type = "string", description = "If 'true', include LineInfo (file, line:col spans) on each AST node. Only for mode='ast'")
         },
         []
     ))
@@ -232,6 +234,15 @@ def handle_tools_list(id_json : string) : string {
         ["file", "line", "column"]
     ))
     result.tools |> emplace(make_tool(
+        "program_log",
+        "Produce post-compilation program text (like 'options log'). Shows all types, globals, and functions after macro expansion, template instantiation, and inference.",
+        {
+            "file" => PropertySchema(_type = "string", description = "Path to the .das file to compile"),
+            "function" => PropertySchema(_type = "string", description = "Limit output to a specific function name (optional)")
+        },
+        ["file"]
+    ))
+    result.tools |> emplace(make_tool(
         "list_module_api",
         "List all functions, types, enums, and globals exported by a daslang module (e.g. 'math', 'strings', 'fio', 'ast', 'daslib/json')",
         {
@@ -275,7 +286,7 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5 : string) : string {
     } elif (tool_name == "run_script") {
         return do_run_script(arg1, arg2)
     } elif (tool_name == "ast_dump") {
-        return do_ast_dump(arg1, arg2, arg3, arg4)
+        return do_ast_dump(arg1, arg2, arg3, arg4, arg5)
     } elif (tool_name == "list_requires") {
         return do_list_requires(arg1)
     } elif (tool_name == "convert_to_gen2") {
@@ -286,6 +297,8 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5 : string) : string {
         return do_type_of(arg1, arg2, arg3, arg4)
     } elif (tool_name == "find_references") {
         return do_find_references(arg1, arg2, arg3, arg4, arg5)
+    } elif (tool_name == "program_log") {
+        return do_program_log(arg1, arg2)
     } elif (tool_name == "list_modules") {
         return do_list_modules()
     } elif (tool_name == "find_symbol") {
@@ -356,6 +369,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         arg2 = get_string_arg(args, "file")
         arg3 = get_string_arg(args, "function")
         arg4 = get_string_arg(args, "mode")
+        arg5 = get_string_arg(args, "lineinfo")
     } elif (name == "find_symbol") {
         arg1 = get_string_arg(args, "query")
         if (empty(arg1)) {
@@ -370,6 +384,12 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         }
         arg2 = get_string_arg(args, "filter")
         arg3 = get_string_arg(args, "section")
+    } elif (name == "program_log") {
+        arg1 = get_string_arg(args, "file")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'file' argument")
+        }
+        arg2 = get_string_arg(args, "function")
     } elif (name == "list_modules") {
         // no args needed
     } else {
