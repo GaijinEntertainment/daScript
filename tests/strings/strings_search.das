@@ -55,4 +55,37 @@ def test_search(t : T?) {
             t |> accept(find(str, substr, start))
         }
     }
+
+    // rfind — reverse find
+    t |> equal(rfind("hello/world/foo", "/"), 11)
+    t |> equal(rfind("hello/world/foo", "world"), 6)
+    t |> equal(rfind("hello", "/"), -1)
+    t |> equal(rfind("", "/"), -1)
+    t |> equal(rfind("abc", ""), -1)
+    t |> equal(rfind("aaa", "a"), 2)
+    t |> run("fuzz rfind") @@(t : T?) {
+        var fake <- Faker()
+        fuzz() {
+            let str = fake |> any_string
+            let substr = fake |> any_string
+            t |> accept(rfind(str, substr))
+        }
+    }
+
+    // rfind with start position
+    t |> equal(rfind("hello/world/foo", "/", 10), 5)
+    t |> equal(rfind("hello/world/foo", "/", 11), 11)
+    t |> equal(rfind("hello/world/foo", "/", 4), -1)
+    t |> equal(rfind("aaa", "a", 1), 1)
+    t |> equal(rfind("aaa", "a", 0), 0)
+    t |> run("fuzz rfind1") @@(t : T?) {
+        let limit = int(re_gen_get_rep_limit()) * 2
+        var fake <- Faker()
+        fuzz() {
+            let str = fake |> any_string
+            let substr = fake |> any_string
+            let start = fake |> random_int % limit
+            t |> accept(rfind(str, substr, start))
+        }
+    }
 }

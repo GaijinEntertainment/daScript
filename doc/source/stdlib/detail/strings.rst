@@ -50,6 +50,8 @@
 
 .. |handmade/function-strings-find| replace:: to be documented in |handmade/function-strings-find|.rst
 
+.. |handmade/function-strings-rfind| replace:: to be documented in |handmade/function-strings-rfind|.rst
+
 .. |handmade/function-strings-length| replace:: to be documented in |handmade/function-strings-length|.rst
 
 .. |handmade/function-strings-reverse| replace:: to be documented in |handmade/function-strings-reverse|.rst

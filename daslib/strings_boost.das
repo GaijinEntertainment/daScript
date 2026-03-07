@@ -355,3 +355,52 @@ def public is_null_or_whitespace(str : string) : bool {
     }
     return true
 }
+
+def public glob_match(pattern, text : string) : bool {
+    //! Matches ``text`` against a shell-style glob ``pattern``.
+    //! Supports ``*`` (matches any sequence of characters, including empty)
+    //! and ``?`` (matches exactly one character). All other characters are
+    //! compared literally.  Returns true if the entire ``text`` matches.
+    if (empty(pattern)) {
+        return empty(text)
+    }
+    if (empty(text)) {
+        // text is empty — only matches if pattern is all *'s
+        unsafe {
+            var pp = reinterpret<uint8?> pattern
+            while (*pp == uint8('*')) {
+                pp++
+            }
+            return *pp == 0u8
+        }
+    }
+    unsafe {
+        var pp = reinterpret<uint8?> pattern
+        var tp = reinterpret<uint8?> text
+        var star_pp : uint8?
+        var star_tp : uint8?
+        while (*tp != 0u8) {
+            if (*pp == uint8('?')) {
+                pp++
+                tp++
+            } elif (*pp == uint8('*')) {
+                star_pp = pp
+                star_tp = tp
+                pp++
+            } elif (*pp == *tp) {
+                pp++
+                tp++
+            } elif (star_pp != null) {
+                pp = star_pp + 1
+                star_tp++
+                tp = star_tp
+            } else {
+                return false
+            }
+        }
+        while (*pp == uint8('*')) {
+            pp++
+        }
+        return *pp == 0u8
+    }
+}

@@ -329,7 +329,7 @@ def document_module_strings(root : string) {
         group_by_regex("das::string manipulation", mod, %regex~(append|resize)$%%),
         group_by_regex("String modifications", mod, %regex~(chop|escape|unescape|repeat|replace|reverse|slice|
 strip|strip_left|strip_right|to_lower|to_lower_in_place|to_upper|to_upper_in_place|rtrim|safe_unescape|ltrim|trim)$%%),
-        group_by_regex("Search substrings", mod, %regex~find.*%%),
+        group_by_regex("Search substrings", mod, %regex~(find|rfind).*%%),
         group_by_regex("String comparison", mod, %regex~(compare_ignore_case)$%%),
         group_by_regex("String conversion routines", mod, %regex~(double|float|int|uint|int64|uint64|to_double|to_float|to_int|to_uint|to_int64|to_uint64|string|to_char|fmt|int8|to_int8|uint8|to_uint8|int16|to_int16|uint16|to_uint16|to_cpp_float)$%%),
         group_by_regex("String as array", mod, %regex~(modify_data|peek_data)$%%),
@@ -344,7 +344,7 @@ def document_module_strings_boost(root : string) {
         group_by_regex("Split and join", mod, %regex~(split|split_by_chars|join)$%%),
         group_by_regex("Formatting", mod, %regex~(wide|pad_left|pad_right|capitalize)$%%),
         group_by_regex("Queries and comparisons", mod, %regex~(is_character_at|eq|contains|count|is_null_or_whitespace)$%%),
-        group_by_regex("Search", mod, %regex~(last_index_of)$%%),
+        group_by_regex("Search", mod, %regex~(last_index_of|glob_match)$%%),
         group_by_regex("Replace", mod, %regex~(replace_multiple)$%%),
         group_by_regex("Prefix and suffix", mod, %regex~(trim_prefix|trim_suffix)$%%),
         group_by_regex("Levenshtein distance", mod, %regex~(levenshtein_distance|levenshtein_distance_fast)$%%),

@@ -215,7 +215,15 @@ def make_tool(name, description : string; var props : table<string; PropertySche
 
 def handle_tools_list(id_json : string) : string {
     var result : ToolsListResult
-    result.tools |> emplace(make_file_tool("compile_check", "Compile a daScript file and return errors or success"))
+    result.tools |> emplace(make_tool(
+        "compile_check",
+        "Compile daScript file(s) and return errors or success. Supports single file, comma-separated list, or glob pattern (e.g. 'utils/mcp/tools/*.das'). Batch mode reports pass/fail per file with summary.",
+        {
+            "file" => PropertySchema(_type = "string", description = "Path to .das file, comma-separated paths, or glob pattern (e.g. 'dir/*.das')"),
+            "project" => PROJECT_PROP
+        },
+        ["file"]
+    ))
     result.tools |> emplace(make_file_tool("list_functions", "Compile a daScript file and list all functions (after macro expansion)"))
     result.tools |> emplace(make_file_tool("list_types", "Compile a daScript file and list all structs, classes, enums, and type aliases"))
     result.tools |> emplace(make_file_tool("run_test", "Run dastest on a .das test file and return pass/fail results"))

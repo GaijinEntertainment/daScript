@@ -101,6 +101,46 @@ def test_compile_check_missing(t : T?) {
     }
 }
 
+// ── compile_check batch ──────────────────────────────────────────────
+
+[test]
+def test_compile_check_batch_comma(t : T?) {
+    t |> run("batch compile with comma-separated files") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        let files = "{fixture_path("_fixture_valid.das")},{fixture_path("_fixture_error.das")}"
+        parse_result(do_compile_check(files), text, is_error)
+        t |> success(is_error, "batch with error file should report error")
+        t |> success(find(text, "1 passed") >= 0, "should have 1 passed")
+        t |> success(find(text, "1 failed") >= 0, "should have 1 failed")
+        t |> success(find(text, "PASS") >= 0, "should have PASS line")
+        t |> success(find(text, "FAIL") >= 0, "should have FAIL line")
+    }
+}
+
+[test]
+def test_compile_check_batch_glob(t : T?) {
+    t |> run("batch compile with glob pattern") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_compile_check("utils/mcp/tests/*.das"), text, is_error)
+        // At least the valid and error fixtures should be found
+        t |> success(find(text, "PASS") >= 0, "should have at least one PASS")
+        t |> success(find(text, "files") >= 0, "should have summary line")
+    }
+}
+
+[test]
+def test_compile_check_glob_no_match(t : T?) {
+    t |> run("glob with no matches reports error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_compile_check("nonexistent_dir_xyz/*.das"), text, is_error)
+        t |> success(is_error, "should be error when no files match")
+        t |> success(find(text, "no files matched") >= 0, "should mention no files matched")
+    }
+}
+
 // ── list_functions ───────────────────────────────────────────────────
 
 [test]
