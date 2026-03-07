@@ -227,6 +227,8 @@ The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics and p
 | `list_requires` | Grepping for `require` statements and guessing transitive deps |
 | `find_references` | Manually searching for all usages of a symbol across files |
 
+Cursor-based tools (`goto_definition`, `type_of`, `find_references`) support a `no_opt` parameter that disables compiler optimizations to preserve the full AST — useful when globals, enum values, or bitfield constants get constant-folded away.
+
 **Starting the server:** `bin/Release/daslang.exe utils/mcp/main.das` (port 9500 by default)
 
 **Configuration:** See `utils/mcp/README.md` for `.mcp.json` setup and Claude Code permissions.

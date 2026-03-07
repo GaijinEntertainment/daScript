@@ -162,6 +162,8 @@ If the SDK was built with dasHV enabled, `utils/mcp/` contains a [Model Context 
 | `list_requires` | Grepping for `require` statements and guessing transitive deps |
 | `find_references` | Manually searching for all usages of a symbol across files |
 
+Cursor-based tools (`goto_definition`, `type_of`, `find_references`) support a `no_opt` parameter that disables compiler optimizations to preserve the full AST — useful when globals, enum values, or bitfield constants get constant-folded away.
+
 **Starting the server:** `bin/daslang utils/mcp/main.das` (port 9500 by default)
 
 **Configuration:** See `utils/mcp/README.md` for `.mcp.json` setup and permissions.

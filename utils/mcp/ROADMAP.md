@@ -2,7 +2,7 @@
 
 Future tools for the daslang MCP server, organized by priority and difficulty.
 
-## Current Tools (v0.1)
+## Current Tools (v0.2)
 
 | Tool | Description |
 |---|---|
@@ -12,90 +12,32 @@ Future tools for the daslang MCP server, organized by priority and difficulty.
 | `list_requires` | List direct and transitive require dependencies |
 | `list_modules` | List all available modules (builtin + daslib) |
 | `list_module_api` | List functions, types, enums, globals exported by a module |
-| `find_symbol` | Cross-module symbol search by substring |
+| `find_symbol` | Cross-module symbol search by substring (functions, generics, structs, handled types, enums, globals, typedefs/aliases) |
 | `ast_dump` | Dump AST of expression or function (S-expression or source mode) |
 | `run_script` | Run inline code or a .das file, capture stdout |
 | `run_test` | Run dastest on a test file |
 | `format_file` | Format a .das file in place |
+| `convert_to_gen2` | Convert gen1 (indentation) syntax to gen2 (braces/parens) |
+| `goto_definition` | Resolve symbol at cursor to its definition (variable, function, field, struct, enum, typedef, builtin). Optional `no_opt` to preserve pre-optimization AST |
+| `type_of` | Return resolved type of expression at cursor position. Optional `no_opt` |
+| `find_references` | Find all references to symbol at cursor (calls, variables, fields, type refs, addr, enum/bitfield values, aliases). Scope: `file` or `all`. Optional `no_opt` |
 
----
+### Cursor-based tools implementation notes
 
-## Phase 1: Navigation (High Priority)
+`goto_definition`, `type_of`, and `find_references` use `daslib/ast_cursor` (`find_at_cursor`) to map file+line+column to AST nodes. They support:
 
-### go_to_definition
+- **Functions:** `ExprCall` (calls), `ExprAddr` (function pointers `@@func`)
+- **Variables:** `ExprVar` (local and global), including declaration-based lookup via `for_each_global`
+- **Fields:** `ExprField`, `ExprSafeField` (`.field`, `?.field`)
+- **Enums:** `ExprConstEnumeration` (enum values like `Color.Red`)
+- **Bitfields:** `ExprConstBitfield` (bitfield values like `Flags.readable`)
+- **Aliases:** `TypeDecl.alias` — covers `typedef`, `bitfield`, `variant`, `tuple` declarations
+- **Structs/Classes:** type references via `TypeDecl.structType`
+- **Builtins:** built-in function signatures (no source location)
 
-**What:** Given a symbol name (and optionally a file + line), return the file path and line number where it's defined.
+The `no_opt` parameter disables compiler optimizations (`CodeOfPolicies.no_optimizations`), preserving `ExprVar` nodes for globals and `ExprConstBitfield`/`ExprConstEnumeration` nodes that would otherwise be constant-folded away.
 
-**Why:** The most-requested IDE feature. Lets the AI jump directly to definitions instead of grepping.
-
-**Implementation approach:**
-- For user-defined symbols: compile the file, walk `for_each_function` / `for_each_structure` / `for_each_enumeration` / `for_each_global` on the program's module. Each has a `LineInfo` with `.fileInfo.name` and `.line`.
-- For symbols from other modules: the `LineInfo` points to the original source file (or empty for C++ builtins).
-- For struct fields: iterate `structure.fields`, each has its own `LineInfo`.
-- For class methods: `for_each_function` already includes them (check `isClassMethod` flag).
-- For local variables: requires expression-level AST walking — more complex. Could use `ExprVisitor` to find `ExprVar` or `ExprLet` nodes matching the name at a given line.
-
-**Parameters:**
-- `file` (required) — the .das file containing the reference
-- `symbol` (required) — name of the symbol to find
-- `line` (optional) — line number hint to disambiguate overloads
-- `column` (optional) — column hint for field access chains
-
-**Output:** File path, line number, symbol kind (function/struct/enum/global/field/variable), and a snippet of the definition.
-
-**Difficulty:** Medium. Module-level symbols are straightforward via existing AST iteration. Local variables need expression walking.
-
-### find_references
-
-**What:** Given a symbol definition, find all files and lines where it's used.
-
-**Why:** Essential for understanding impact before refactoring. "Who calls this function?" "Where is this struct used?"
-
-**Implementation approach:**
-- Compile the file to get the full program with all dependencies resolved.
-- Walk the AST of every function body using `ExprVisitor`:
-  - `ExprCall` nodes → function references
-  - `ExprVar` nodes → variable/global references
-  - `ExprField` nodes → struct field references
-  - Type references in `ExprNew`, `ExprIsType`, variable declarations
-- Match by comparing the resolved definition (not just name string) to avoid false positives from overloads.
-- For cross-file references: need to compile multiple files or use a workspace-level index.
-
-**Challenges:**
-- daslang doesn't have a workspace/project concept — each file is compiled independently. Finding all references across a project means compiling every `.das` file that might use the symbol.
-- Could provide a `scope` parameter: `"file"` (single file), `"module"` (the module and its direct users), or `"project"` (scan all `.das` files in a directory tree).
-- File-scope references are fast (single compilation). Project-scope is slow but thorough.
-
-**Parameters:**
-- `symbol` (required) — name to search for
-- `file` (optional) — the file defining the symbol (for disambiguation)
-- `scope` (optional) — `"file"`, `"module"`, or `"project"` (default: `"file"`)
-- `root` (optional) — root directory for project-scope search
-
-**Output:** List of `(file, line, column, context_snippet)` tuples.
-
-**Difficulty:** Hard. Single-file is medium; cross-file requires scanning and compiling multiple files.
-
-### type_of
-
-**What:** Given a file, line, and column (or an expression string), return the resolved type.
-
-**Why:** daslang has type inference — the AI often needs to know what type an expression resolves to without guessing.
-
-**Implementation approach:**
-- For expression strings: wrap in a function, compile, extract the expression's `TypeDecl` via `ExprVisitor`.
-- For file+location: compile the file, find the expression at that line/column in the AST, return `describe(expr._type)`.
-- Could also show type modifiers (const, ref, temporary, implicit).
-
-**Parameters:**
-- `expression` (optional) — an expression to type-check
-- `file` (optional) — source file
-- `line` (optional) — line number
-- `column` (optional) — column number
-
-**Output:** Type description string, plus whether it's const/ref/temporary.
-
-**Difficulty:** Medium. Expression mode is straightforward. File+location mode needs position-to-AST-node mapping.
+`find_references` also supports declaration-based lookup: cursor on `def funcName`, `struct Name`, `enum Name`, `bitfield Name`, `variant Name`, `tuple Name`, or `let globalVar` declarations identifies the target via `for_each_function`/`for_each_structure`/`for_each_enumeration`/`for_each_typedef`/`for_each_global`.
 
 ---
 
@@ -305,13 +247,13 @@ Future tools for the daslang MCP server, organized by priority and difficulty.
 
 Recommended order based on value/effort ratio:
 
-1. **go_to_definition** — highest value, medium effort, enables other tools
-2. **type_of** — high value for AI-assisted coding, medium effort
+1. ~~**go_to_definition**~~ ✅ Implemented
+2. ~~**type_of**~~ ✅ Implemented
 3. **explain_error** — high value, relatively easy
-4. **find_references** (file scope first) — high value, medium effort
+4. ~~**find_references**~~ ✅ Implemented (file + all-modules scope)
 5. **dependency_graph** — medium value, easy (extends `list_requires`)
 6. **type_search** — high value for API discovery, medium-hard effort
-7. **rename_symbol** — high value but depends on #1 and #4
+7. **rename_symbol** — high value, depends on goto_definition + find_references (both done)
 8. **try_fix** — medium-high value, hard
 9. **extract_function** — medium value, very hard
 10. **workspace_index** — enabler for cross-file tools at scale
@@ -322,16 +264,11 @@ Recommended order based on value/effort ratio:
 
 ### Position-to-AST Mapping
 
-Several tools (go_to_definition, type_of, find_references) need to map a file position (line, column) to an AST node. This requires:
+Cursor-based tools (goto_definition, type_of, find_references) use `daslib/ast_cursor` module:
 
-1. Compile the file to get the full AST.
-2. Walk the AST with an `ExprVisitor` that checks each node's `LineInfo` against the target position.
-3. Return the most specific (deepest) node containing that position.
-
-This could be a shared utility in `common.das`:
-```
-def find_node_at(program, file, line, column) : ExpressionPtr?
-```
+- `find_at_cursor(program, file, line, col)` returns an array of `CursorHit` from innermost to outermost expression
+- Each `CursorHit` has: `expr` (the expression), `func` (enclosing function), `rtti` (node type name), `name` (symbol name if applicable)
+- `compile_program(file, export_all, no_opt)` in `tools/common.das` wraps compilation with proper CodeOfPolicies
 
 ### Cross-File Compilation
 
