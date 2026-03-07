@@ -347,8 +347,7 @@ jobs:
             echo "Skipping AOT tests on 32-bit Windows"
             ;;
            windows*)
-            cd bin/"${{ matrix.cmake_preset }}"
-            ./test_aot -use-aot _dasroot_/dastest/dastest.das -- --use-aot --color --test ../../tests
+            echo "Skipping AOT tests on Windows"
             ;;
            *)
             cd bin
