@@ -40,6 +40,7 @@ require tools/find_references public
 require tools/program_log public
 require tools/eval_expression public
 require tools/describe_type public
+require tools/grep_usage public
 
 let MCP_PORT = 9500
 let HEAP_COLLECT_THRESHOLD = 1024ul * 1024ul  // 1 MB
@@ -50,6 +51,7 @@ let LOG_FILE = "utils/mcp/mcp_server.log"
 
 var log_path : string
 var log_start_clock : clock
+var ast_grep_available : bool = false
 
 def log_open() {
     log_start_clock = get_clock()
@@ -356,6 +358,19 @@ def handle_tools_list(id_json : string) : string {
         },
         ["module"]
     ))
+    if (ast_grep_available) {
+        result.tools |> emplace(make_tool(
+            "grep_usage",
+            "Parse-aware symbol search across .das files using ast-grep + tree-sitter. Finds identifier occurrences excluding comments and strings. Much faster than compilation-based search.",
+            {
+                "symbol" => PropertySchema(_type = "string", description = "Identifier name to search for (e.g. 'compile_program', 'for_each_function')"),
+                "directory" => PropertySchema(_type = "string", description = "Directory to search in (default: project root). Relative to project root."),
+                "glob" => PropertySchema(_type = "string", description = "File filter pattern (e.g. 'daslib/*.das', 'utils/**/*.das'). Prefix with ! to exclude (e.g. '!modules/**')"),
+                "context_lines" => PropertySchema(_type = "string", description = "Lines of context around each match (default: 1)")
+            },
+            ["symbol"]
+        ))
+    }
     return json_rpc_response(id_json, sprint_json(result, false))
 }
 
@@ -413,6 +428,8 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : s
         return do_find_symbol(arg1, arg2, arg3, project)
     } elif (tool_name == "list_module_api") {
         return do_list_module_api(arg1, arg2, arg3, project)
+    } elif (tool_name == "grep_usage") {
+        return do_grep_usage(arg1, arg2, arg3, arg4)
     } else {
         return make_tool_result("unknown tool: {tool_name}", true)
     }
@@ -515,6 +532,14 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
             return json_rpc_error(id_json, -32602, "missing 'file' argument")
         }
         arg2 = get_string_arg(args, "function")
+    } elif (name == "grep_usage") {
+        arg1 = get_string_arg(args, "symbol")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'symbol' argument")
+        }
+        arg2 = get_string_arg(args, "directory")
+        arg3 = get_string_arg(args, "context_lines")
+        arg4 = get_string_arg(args, "glob")
     } elif (name == "list_modules") {
         // no args needed
     } else {
@@ -603,6 +628,17 @@ def main() {
     log_path = "{get_das_root()}/{LOG_FILE}"
     log_open()
     log_write("Starting daslang MCP server on port {port}")
+    // detect ast-grep for grep_usage tool
+    let sg_check = detect_ast_grep()
+    if (!empty(sg_check)) {
+        ast_grep_available = true
+        log_write("ast-grep detected — grep_usage tool enabled")
+    } else {
+        print("WARNING: ast-grep (sg) not found — grep_usage tool disabled\n")
+        print("  Install: pip install ast-grep-cli   (or: cargo install ast-grep)\n")
+        print("  Requires: tree-sitter-daslang/daslang.dll + sgconfig.yml\n")
+        log_write("WARNING: ast-grep not found — grep_usage tool disabled")
+    }
     print("Configure Claude Code with: \"url\": \"http://localhost:{port}/mcp\"\n")
     var server = new McpServer()
     server->init(port)

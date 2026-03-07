@@ -2,7 +2,7 @@
 
 Future tools for the daslang MCP server, organized by priority and difficulty.
 
-## Current Tools (v0.4)
+## Current Tools (v0.5)
 
 | Tool | Description |
 |---|---|
@@ -24,11 +24,13 @@ Future tools for the daslang MCP server, organized by priority and difficulty.
 | `find_references` | Find all references to symbol at cursor (calls, variables, fields, type refs, addr, enum/bitfield values, aliases, global declarations). Scope: `file` or `all`. Optional `no_opt` |
 | `eval_expression` | Evaluate a daslang expression and return printed result. Supports comma-separated module imports via `require` parameter |
 | `describe_type` | Describe a type's fields, methods, values, and base type. Supports structs, classes, handled types, enums, bitfields, variants, tuples, typedefs |
+| `grep_usage` | Parse-aware symbol search across .das files using ast-grep + tree-sitter. Conditional on `sg` CLI being installed |
 
 ### Cross-cutting features
 
 - **`.das_project` support** — all file-based tools accept an optional `project` parameter pointing to a `.das_project` file for custom module resolution and sandboxing
 - **Request logging** — file-based logging with timestamps for debugging
+- **Unified file utilities** — shared `resolve_path()`, `make_relative_path()`, `expand_glob()`, `parse_file_list()` in `tools/common.das` used by `compile_check` and `grep_usage`. Glob patterns support `!pattern` exclusion (gitignore-style)
 
 ### Cursor-based tools implementation notes
 
@@ -55,27 +57,11 @@ The `no_opt` parameter disables compiler optimizations (`CodeOfPolicies.no_optim
 
 Implemented as a standalone tool. Searches all modules for a type by name and describes its fields, methods, values, base type. Supports structs, classes, handled types, enums, bitfields, variants, tuples, and typedefs. Optional `module` parameter to limit search scope.
 
-### grep_usage
+### ~~grep_usage~~ ✅
 
-**What:** Find all `.das` files in a directory that contain calls to / references of a given symbol name, without requiring compilation or a cursor position.
+Implemented using ast-grep + tree-sitter for parse-aware identifier search. Finds symbol occurrences excluding comments and strings — no compilation needed. Conditionally available when `sg` (ast-grep) CLI is installed. Server prints install instructions if missing.
 
-**Why:** `find_references` requires compiling a specific file and pointing at a cursor position — great for precision, but too heavy when you just want "which files call `compile_program`?" or "show me how `for_each_global` is used across daslib/". This is the question you ask *before* you know which file to open. Text-level grep catches comments, strings, and partial matches; this tool should be smarter — parse-aware or at least filter out obvious false positives.
-
-**Implementation approach:**
-- Scan `.das` files in a directory (recursively)
-- For each file, search for the symbol name in function call positions, variable references, type annotations
-- Could use simple heuristics (not inside comments `//` or strings `"..."`) or light parsing
-- Return file paths with matching line numbers and context
-- Optional: compile each matching file and verify the symbol resolves to the expected definition
-
-**Parameters:**
-- `symbol` (required) — name to search for
-- `directory` (optional, default `.`) — root directory to scan
-- `context_lines` (optional, default 1) — lines of context around each match
-
-**Output:** List of `(file, line, context)` matches, grouped by file.
-
-**Difficulty:** Easy-medium. Text scanning with comment/string filtering. Full compilation-verified mode is medium.
+Parameters: `symbol` (required), `directory` (optional), `glob` (optional file filter), `context_lines` (optional). Output grouped by file with line numbers.
 
 ### ~~batch_compile~~ ✅
 
@@ -305,7 +291,7 @@ Recommended order based on value/effort ratio:
 6. ~~**dot-call LineInfo fix**~~ ✅ Fixed (`atEnclosure` on dot-call/arrow-call expressions in parser + inference)
 7. ~~**.das_project support**~~ ✅ Implemented (per-tool `project` parameter)
 8. ~~**describe_type**~~ ✅ Implemented (fields, methods, values, base types for all type kinds)
-9. **grep_usage** — 🔴 urgent, easy-medium, cross-file usage search without compilation
+9. ~~**grep_usage**~~ ✅ Implemented (ast-grep + tree-sitter, conditional on `sg` CLI)
 10. ~~**batch_compile**~~ ✅ Implemented (merged into `compile_check` with comma-separated and glob support)
 11. ~~**list_annotations**~~ ✅ Implemented (merged into `list_module_api` as `annotations` section)
 12. ~~**eval_expression**~~ ✅ Implemented (expression eval with `require` support)
