@@ -23,7 +23,6 @@ option(DAS_STBIMAGE_DISABLED "Disable dasStbImage (StbImage bindings, image load
 option(DAS_STBTRUETYPE_DISABLED "Disable dasStbTrueType (StbTrueType bindings, ttf rasterization)" OFF)
 option(DAS_PUGIXML_DISABLED "Disable dasPUGIXML (xml parsing library)" ON)
 option(DAS_SQLITE_DISABLED "Disable dasSQLITE (sqlite3 library)" ON)
-option(DAS_TELEGRAM_DISABLED "Disable dasTelegram (Telegram API bindings)" ON)
 option(DAS_TOOLS_DISABLED "Disable dasTools" OFF)
 option(DAS_TREE_SITTER_DISABLED "Disable tree-sitter-daslang grammar (no dependencies)" OFF)
 option(DAS_AOT_EXAMPLES_DISABLED "Disable dasAOT examples" OFF)
@@ -1307,6 +1306,24 @@ install(FILES
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/mcp/tests/
     DESTINATION utils/mcp/tests
     FILES_MATCHING PATTERN "*.das"
+)
+
+# Install daspkg (package manager)
+file(GLOB DAS_DASPKG_FILES ${PROJECT_SOURCE_DIR}/utils/daspkg/*.das)
+install(FILES ${DAS_DASPKG_FILES} DESTINATION utils/daspkg)
+install(FILES
+    ${PROJECT_SOURCE_DIR}/utils/daspkg/README.md
+    ${PROJECT_SOURCE_DIR}/utils/daspkg/DESIGN.md
+    DESTINATION utils/daspkg
+)
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/daspkg/fixtures/
+    DESTINATION utils/daspkg/fixtures
+    FILES_MATCHING PATTERN "*.das_package"
+)
+
+# Install daspkg examples
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/daspkg/
+    DESTINATION examples/daspkg
 )
 
 # Install core example .das files
