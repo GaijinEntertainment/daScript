@@ -165,6 +165,11 @@ daspkg doctor                             Check environment (git, cmake, gh)
 **Options:**
 - `--root <path>` — project root (default: current directory)
 - `--force` — force reinstall even if already installed
+- `--verbose`, `-v` — print debug details to screen (git commands, resolve steps, file operations)
+
+### Logging
+
+All operational output goes to both screen and `modules/.daspkg.log`. Debug-level messages (git commands, resolve results, file moves) always go to the log file; they only appear on screen with `--verbose`. The log file appends across runs — useful for diagnosing issues after the fact.
 
 ## Transport
 
@@ -300,7 +305,6 @@ The package's `CMakeLists.txt` is responsible for placing output (`.shared_modul
 ## Not Yet Implemented
 
 - **Sparse checkout** — fetch only `.das_package` before downloading the full repo. Would reduce bandwidth for version resolution.
-- **Rollback on failure** — backup old `modules/<name>/` before update, restore on failure. Currently update deletes then re-installs with no rollback.
 - **Symlinks for local paths** — `--link` flag for local installs. Currently always copies.
 - **Orphan cleanup** — detect unused transitive deps after `remove`.
 - **SDK version tracking** — record SDK version in lock file, warn on mismatch, prompt `daspkg build` after SDK upgrade.

@@ -9,7 +9,50 @@ module utils shared public
 require fio
 require strings
 
+// ── Logging ──────────────────────────────────────────────────────────
+
+var log_file_path : string
+var log_verbose_flag = false
+
+def log_init(root : string) {
+    let modules_dir = "{root}/modules"
+    mkdir(modules_dir)
+    log_file_path = "{modules_dir}/.daspkg.log"
+    fopen(log_file_path, "ab") <| $(f) {
+        if (f != null) {
+            fprint(f, "\n--- daspkg ---\n")
+        }
+    }
+}
+
+def private log_to_file(msg : string) {
+    if (empty(log_file_path)) {
+        return
+    }
+    fopen(log_file_path, "ab") <| $(f) {
+        if (f != null) {
+            fprint(f, msg)
+        }
+    }
+}
+
+// screen + file
+def log(msg : string) {
+    print(msg)
+    log_to_file(msg)
+}
+
+// file always, screen only with --verbose
+def log_debug(msg : string) {
+    let line = "  [debug] {msg}\n"
+    if (log_verbose_flag) {
+        print(line)
+    }
+    log_to_file(line)
+}
+
 def run_cmd(cmd : string; var output : string&) : int {
+    log_debug("$ {cmd}")
     var exit_code = -1
     unsafe {
         exit_code = popen(cmd) <| $(f) {
@@ -17,6 +60,12 @@ def run_cmd(cmd : string; var output : string&) : int {
                 output := fread(f)
             }
         }
+    }
+    if (exit_code != 0) {
+        log_debug("exit={exit_code}")
+    }
+    if (!empty(output)) {
+        log_to_file("  stdout: {output}\n")
     }
     return exit_code
 }

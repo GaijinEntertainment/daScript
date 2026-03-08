@@ -632,3 +632,65 @@ def test_satisfies_constraint(t : T?) {
         t |> success(satisfies_constraint("1.5.0", ">= 1.0 , < 2.0"))
     }
 }
+
+// --- logging tests ---
+
+[test]
+def test_log_writes_to_file(t : T?) {
+    let test_root = get_full_file_name("_daspkg_test_log")
+    mkdir(test_root)
+
+    t |> run("log() writes to both screen and file") @(t : T?) {
+        log_init(test_root)
+        log("hello from test\n")
+        // read the log file and check content
+        var content : string
+        fopen("{test_root}/modules/.daspkg.log", "rb") <| $(f) {
+            if (f != null) {
+                content = fread(f)
+            }
+        }
+        t |> success(find(content, "hello from test") >= 0)
+        t |> success(find(content, "--- daspkg ---") >= 0)
+    }
+
+    t |> run("log_debug() writes to file always") @(t : T?) {
+        log_verbose_flag = false
+        log_init(test_root)
+        log_debug("debug message here")
+        var content : string
+        fopen("{test_root}/modules/.daspkg.log", "rb") <| $(f) {
+            if (f != null) {
+                content = fread(f)
+            }
+        }
+        t |> success(find(content, "debug message here") >= 0)
+    }
+
+    t |> run("run_cmd logs command to file") @(t : T?) {
+        log_init(test_root)
+        var output : string
+        run_cmd("git --version 2>&1", output)
+        var content : string
+        fopen("{test_root}/modules/.daspkg.log", "rb") <| $(f) {
+            if (f != null) {
+                content = fread(f)
+            }
+        }
+        t |> success(find(content, "git --version") >= 0)
+        // note: stdout capture via popen is unreliable on Windows,
+        // so we only check the command itself is logged
+    }
+
+    t |> run("no file logging before log_init") @(t : T?) {
+        // reset log state
+        log_file_path = ""
+        log("this should not crash\n")
+        log_debug("neither should this")
+        t |> success(true)
+    }
+
+    // cleanup
+    rmdir_rec(test_root)
+    log_file_path = ""
+}
