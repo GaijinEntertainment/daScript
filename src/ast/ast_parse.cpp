@@ -829,6 +829,17 @@ namespace das {
                     reqR.extraDepModule = true;
                 }
             }
+            // If the module was already promoted to the global list
+            // by a prior compilation reuse it directly instead of
+            // recompilation.  Without this, a second Module* with the
+            // same nameHash ends up in the library and causes
+            // a hash-collision crash in addModule.
+            auto promotedMod = Module::requireEx(modName, true);
+            if ( promotedMod && promotedMod->promoted ) {
+                promotedMod->fromExtraDependency = true;
+                libGroup.addModule(promotedMod);
+                return true;
+            }
             auto finfo = access->getFileInfo(modFile);
             ModuleInfo info;
             info.fileName = finfo->name;
@@ -1085,25 +1096,19 @@ namespace das {
         vector<NamelessMismatch> namelessMismatches;
         uint64_t preqT = 0;
         string modName;
+        bool allGood = true;
+        for ( const auto & em : access->getExtraModules() ) {
+            allGood = addExtraDependency(em.first, em.second, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs) && allGood;
+        }
+        if ( !allGood ) {
+            auto res = make_smart<Program>();
+            res->error("internal error", logs.str(), "", LineInfo(), CompilationError::syntax_error);
+            return res;
+        }
         if ( getPrerequisits(fileName, access, modName, req, missing, circular, notAllowed, chain,
                 dependencies, namelessReq, namelessMismatches, libGroup, nullptr, 1, !policies.ignore_shared_modules) ) {
             preqT = get_time_usec(time0);
             disableSerializationOnDebugger(req);
-            bool allGood = true;
-            if ( policies.debugger ) {
-                allGood = addExtraDependency("debug", policies.debug_module, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs) && allGood;
-            } else if ( policies.profiler ) {
-                allGood = addExtraDependency("profiler", policies.profile_module, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs) && allGood;
-            } /* else */ if ( !policies.aot_module_path.empty() ) {
-                allGood = addExtraDependency("ast_aot_macro", policies.aot_module_path, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs) && allGood;
-            } /* else */ if ( policies.jit_enabled ) {
-                allGood = addExtraDependency("just_in_time", policies.jit_module, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs) && allGood;
-            }
-            if ( !allGood ) {
-                auto res = make_smart<Program>();
-                res->error("internal error", logs.str(), "", LineInfo(), CompilationError::syntax_error);
-                return res;
-            }
             if ( !verifyModuleNamesUnique(req, logs) ) {
                 auto res = make_smart<Program>();
                 res->error("Several modules with invalid names", logs.str(), "", LineInfo(),

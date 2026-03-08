@@ -170,7 +170,9 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
             cop.fail_on_no_aot = ctx.use_aot
             cop.threadlock_context = true
             cop.jit_enabled = jit_enabled()
-            cop.jit_module := "{get_das_root()}/daslib/just_in_time.das"
+            if (jit_enabled()) {
+                access |> add_extra_module("just_in_time", "{get_das_root()}/daslib/just_in_time.das")
+            }
             compile_file(file_name, access, unsafe(addr(mg)), cop) $(ok, program, output) {
                 var expectedErrors : table<CompilationError; int>
                 if (program != null) {

@@ -224,6 +224,9 @@ namespace das
             return false;
         }
 
+        void addExtraModule ( const string & modName, const string & modFile ) { extraModules.emplace_back(modName, modFile); }
+        const vector<pair<string,string>> & getExtraModules () const { return extraModules; }
+
         void lock() { locked = true; }
         void unlock() { locked = false; }
         bool isLocked() const { return locked; }
@@ -231,6 +234,7 @@ namespace das
         virtual FileInfo * getNewFileInfo ( const string & ) { return nullptr; }
     protected:
         das_hash_map<string, FileInfoPtr>    files;
+        vector<pair<string,string>>          extraModules;
         bool    locked = false;
     };
     template <> struct isCloneable<FileAccess> : false_type {};

@@ -1482,7 +1482,6 @@ namespace das
         bool        aot_macros = false;                 // enables aot of macro code (like 'qmacro_block')
         bool        paranoid_validation = false;        // todo
         bool        cross_platform = false;             // aot supports platform independent mode
-        string      aot_module_path;
         string      aot_result;                         // Path where to store cpp-result of aot
     // End aot config
         bool        completion = false;                 // this code is being compiled for 'completion' mode
@@ -1561,18 +1560,15 @@ namespace das
         //      3. context always has context mutex
         bool debugger = false;
         /*option*/ bool debug_infer_flag = false;  // set this to true to debug macros for missing "not_inferred"
-        string debug_module;
     // profiler
         // only enabled if profiler is disabled
         // when enabled
         //      1. disables [fastcall]
         bool profiler = false;
-        string profile_module;
     // pinvoke
         /*option*/ bool threadlock_context = false;               // has context mutex
     // jit
         bool jit_enabled = false;                // enable JIT
-        string jit_module;                       // path to jit module
         // todo: add this params to serialization?
         bool jit_jit_all_functions = true;       // JIT all functions by default
         bool jit_debug_info = false;             // Add debug info to generate binary code

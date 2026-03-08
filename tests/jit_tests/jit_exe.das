@@ -37,7 +37,7 @@ def test_hello_world(t : T?) {
             cop.jit_enabled = true
             cop.jit_exe_mode = true
             cop.jit_dll_mode = false
-            cop.jit_module := "{get_das_root()}/daslib/just_in_time.das"
+            access |> add_extra_module("just_in_time", "{get_das_root()}/daslib/just_in_time.das")
             cop.jit_output_path := EXE_PATH
             compile_file(SCRIPT_PATH, access, unsafe(addr(mg)), cop) <| $(ok, program, errors) {
                 t |> equal(ok, true)

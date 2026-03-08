@@ -67,12 +67,9 @@ Force in-scope for POD-like types.
 Log in-scope for POD-like types.
 Enables debugger support.
 Enables debug inference flag.
-Sets debug module (module which will be loaded when IDE connects).
 Enables profiler support.
-Sets profile module (module which will be loaded when profiler connects).
 Enables threadlock context.
 JIT enabled - if enabled, JIT will be used to compile code at runtime.
-JIT module - module loaded when -jit is specified.
 JIT all functions - if enabled, JIT will compile all functions in the module.
 JIT debug info - if enabled, JIT will generate debug info for JIT compiled code.
 JIT dll mode - if enabled, JIT will generate DLL's into JIT output folder and load them from there.
