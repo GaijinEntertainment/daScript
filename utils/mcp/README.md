@@ -26,6 +26,7 @@ A minimal [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) serve
 | `describe_type` | Describe a type's fields, methods, values, and base type. Supports structs, classes, handled types, enums, bitfields, variants, tuples, typedefs |
 | `grep_usage` | Parse-aware symbol search across `.das` files using ast-grep + tree-sitter. Finds identifier occurrences excluding comments and strings. Conditional on `sg` CLI |
 | `outline` | List all declarations (functions, structs, classes, enums, bitfields, variants, globals, typedefs) in a file or set of files using tree-sitter. Works on broken/incomplete code — no compilation needed. Conditional on `sg` CLI |
+| `aot` | Generate AOT (ahead-of-time) C++ code for a `.das` file or a single function. Without `function`, returns full AOT output. With `function`, extracts that function's C++ only. Overloaded names return a disambiguation list with mangled names for exact selection |
 
 ## Setup
 
@@ -91,7 +92,8 @@ Optionally, allow the MCP tools without prompting by adding to `.claude/settings
       "mcp__daslang__eval_expression",
       "mcp__daslang__describe_type",
       "mcp__daslang__grep_usage",
-      "mcp__daslang__outline"
+      "mcp__daslang__outline",
+      "mcp__daslang__aot"
     ]
   }
 }

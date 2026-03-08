@@ -40,6 +40,34 @@ def compile_and_simulate(file : string; project : string = ""; blk : block<(prog
     return compile_program(file, false, false, project) <| blk
 }
 
+def compile_and_simulate_ctx(file : string; project : string = ""; blk : block<(program : smart_ptr<Program>; var ctx : smart_ptr<Context>; issues : string) : string>) : string {
+    var inscope access <- make_file_access(project)
+    var result : string
+    var had_error = false
+    using() <| $(var mg : ModuleGroup) {
+        using() <| $(var cop : CodeOfPolicies) {
+            cop.threadlock_context = true
+            cop.ignore_shared_modules = true
+            compile_file(file, access, unsafe(addr(mg)), cop) <| $(ok; program; issues) {
+                if (!ok) {
+                    result = "Compilation failed:\n{issues}"
+                    had_error = true
+                } else {
+                    simulate(program) <| $(sok; var ctx; serrors) {
+                        if (!sok) {
+                            result = "Simulation failed:\n{serrors}"
+                            had_error = true
+                            return
+                        }
+                        result = invoke(blk, program, ctx, string(issues))
+                    }
+                }
+            }
+        }
+    }
+    return make_tool_result(result, had_error)
+}
+
 def compile_program(file : string; _export_all : bool; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
     return compile_program(file, _export_all, false, "") <| blk
 }
