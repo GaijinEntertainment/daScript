@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "daslang": {
-      "command": "bin/Release/daslang.exe",
-      "args": ["utils/mcp/main.das"]
-    }
-  }
-}

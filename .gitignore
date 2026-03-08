@@ -44,5 +44,6 @@ utils/dasFormatter/ds_parser.output
 src/parser/ds2_parser.output
 src/parser/ds_parser.output
 
-# MCP server log
+# MCP
+.mcp.json
 utils/mcp/mcp_server.log
