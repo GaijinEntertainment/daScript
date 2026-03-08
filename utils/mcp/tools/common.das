@@ -51,6 +51,7 @@ def compile_program(file : string; _export_all : bool; _no_opt : bool; project :
     using() <| $(var mg : ModuleGroup) {
         using() <| $(var cop : CodeOfPolicies) {
             cop.threadlock_context = true
+            cop.ignore_shared_modules = true
             if (_export_all) {
                 cop.export_all = true
             }

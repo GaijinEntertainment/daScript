@@ -6,6 +6,7 @@ require dastest/testing_boost public
 require daslib/json
 require daslib/json_boost
 require strings
+require fio
 
 require tools/compile_check public
 require tools/list_functions public
@@ -932,5 +933,28 @@ def test_grep_usage_detect(t : T?) {
     t |> run("detects ast-grep") <| @(t : T?) {
         let sg = detect_ast_grep()
         t |> success(!empty(sg), "ast-grep should be detected in test environment")
+    }
+}
+
+// ── shared module caching ───────────────────────────────────────────
+
+[test]
+def test_shared_module_not_cached(t : T?) {
+    let shared_mod = "utils/mcp/tests/fixture_shared_mod.das"
+    let original = "options gen2\nmodule fixture_shared_mod shared\n\nstruct Foo \{\n    x : int = 0;\n\}\n"
+    let modified = "options gen2\nmodule fixture_shared_mod shared\n\nstruct Foo \{\n    x : int = 0;\n\}\n\nstruct Bar \{\n    y : int = 0;\n\}\n"
+    t |> run("sees new struct after shared module changes") <| @(t : T?) {
+        // 1. compile user1 — caches shared module with only Foo
+        var text : string
+        var is_error = false
+        parse_result(do_compile_check(fixture_path("_fixture_shared_user.das")), text, is_error)
+        t |> success(!is_error, "user1 should compile (Foo exists)")
+        // 2. add Bar to the shared module
+        t |> success(fwrite(shared_mod, modified), "should write modified shared module")
+        // 3. compile user2 — uses Bar, must see the updated module
+        parse_result(do_compile_check(fixture_path("_fixture_shared_user2.das")), text, is_error)
+        t |> success(!is_error, "user2 should compile (Bar should be visible after module change)")
+        // 4. restore original
+        fwrite(shared_mod, original)
     }
 }
