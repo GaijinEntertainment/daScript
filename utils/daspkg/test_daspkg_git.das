@@ -541,3 +541,57 @@ def test_cmd_upgrade_dep_constraint(t : T?) {
         rmdir_rec(tmp_root)
     }
 }
+
+[test]
+def test_dependency_cycle_detection(t : T?) {
+    t |> run("cycle detection prevents infinite recursion") <| @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_cycle"
+        mkdir(tmp_root)
+        mkdir("{tmp_root}/modules")
+        var lf : LockFile
+        // install a package
+        install_git(tmp_root, "daspkg-test-pure", "github.com/borisbat/daspkg-test-pure", "", lf)
+        t |> success(has_package(lf, "daspkg-test-pure"))
+        // overwrite .das_package to require itself (cycle: A -> A)
+        fwrite("{tmp_root}/modules/daspkg-test-pure/.das_package", "options gen2\nrequire daslib/daspkg\n[export]\ndef dependencies(version : string) \{\n    require_package(\"github.com/borisbat/daspkg-test-pure\")\n\}\n")
+        // install_dependencies with cycle should not hang — visited set catches it
+        var visiting : table<string; bool>
+        install_dependencies(tmp_root, "daspkg-test-pure", lf, visiting)
+        // if we got here, cycle detection worked
+        t |> success(true, "cycle detection prevented infinite recursion")
+        // cleanup
+        rmdir_rec(tmp_root)
+    }
+}
+
+[test]
+def test_cmd_update_rollback(t : T?) {
+    t |> run("update restores backup on failure") <| @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_rollback"
+        mkdir(tmp_root)
+        var lf : LockFile
+        // install a real package
+        install_git(tmp_root, "daspkg-test-pure", "github.com/borisbat/daspkg-test-pure", "", lf)
+        t |> success(has_package(lf, "daspkg-test-pure"))
+        t |> success(fexist("{tmp_root}/modules/daspkg-test-pure/.das_package"))
+        // corrupt the lockfile source so update will fail to clone
+        var lf2 : LockFile
+        read_lock_file(tmp_root, lf2)
+        for (pkg in lf2.packages) {
+            if (pkg.name == "daspkg-test-pure") {
+                pkg.source = "github.com/borisbat/nonexistent-repo-daspkg-999"
+            }
+        }
+        write_lock_file(tmp_root, lf2)
+        // attempt update — clone fails, should restore from backup
+        cmd_update(tmp_root, "daspkg-test-pure")
+        // verify the package directory was restored
+        t |> success(fexist("{tmp_root}/modules/daspkg-test-pure/.das_package"), "package dir restored")
+        // verify lockfile still has the entry
+        var lf3 : LockFile
+        read_lock_file(tmp_root, lf3)
+        t |> success(has_package(lf3, "daspkg-test-pure"), "lockfile entry restored")
+        // cleanup
+        rmdir_rec(tmp_root)
+    }
+}

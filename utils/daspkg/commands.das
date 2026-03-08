@@ -110,7 +110,12 @@ def install_local(root, pkg_name, source : string; var lf : LockFile) {
     try_build_package(target, pkg_name)
 }
 
-def install_dependencies(root, pkg_name : string; var lf : LockFile) {
+def install_dependencies(root, pkg_name : string; var lf : LockFile; var visiting : table<string; bool>) {
+    if (key_exists(visiting, pkg_name)) {
+        print("Warning: dependency cycle detected at '{pkg_name}' — skipping\n")
+        return
+    }
+    visiting |> insert(pkg_name, true)
     let pkg_dir = "{root}/modules/{pkg_name}"
     let das_package = "{pkg_dir}/.das_package"
     if (!fexist(das_package)) {
@@ -124,7 +129,7 @@ def install_dependencies(root, pkg_name : string; var lf : LockFile) {
                 continue
             }
             print("  Installing dependency: {dep_name}...\n")
-            install_git(root, dep_name, d.source, "", lf, [is_root = false])
+            install_git(root, dep_name, d.source, "", lf, visiting, [is_root = false])
         }
     }
 }
@@ -170,6 +175,11 @@ def private git_clone(url, dir : string) : bool {
 }
 
 def install_git(root, pkg_name, source, version : string; var lf : LockFile; is_root : bool = true) {
+    var visiting : table<string; bool>
+    install_git(root, pkg_name, source, version, lf, visiting, [is_root = is_root])
+}
+
+def install_git(root, pkg_name, source, version : string; var lf : LockFile; var visiting : table<string; bool>; is_root : bool = true) {
     let modules_dir = "{root}/modules"
     let tmp_dir = "{modules_dir}/.daspkg_tmp/{pkg_name}"
     let target_dir = "{modules_dir}/{pkg_name}"
@@ -271,7 +281,7 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; is_
     print("Installed '{pkg_name}'\n")
 
     // step 5: install dependencies
-    install_dependencies(root, pkg_name, lf)
+    install_dependencies(root, pkg_name, lf, visiting)
 
     // step 6: build
     try_build_package(target_dir, pkg_name)
@@ -312,9 +322,11 @@ def cmd_install(root, spec : string; force : bool) {
             return
         }
         print("Resolved '{source}' -> {url}\n")
-        install_git(root, pkg_name, url, version, lf)
+        var visiting : table<string; bool>
+        install_git(root, pkg_name, url, version, lf, visiting, [is_root = true])
     } else {
-        install_git(root, pkg_name, source, version, lf)
+        var visiting : table<string; bool>
+        install_git(root, pkg_name, source, version, lf, visiting, [is_root = true])
     }
 }
 
@@ -392,12 +404,36 @@ def cmd_update(root, name : string) {
     let version = entry.version
     let is_root = entry.root
     let pkg_dir = "{root}/modules/{name}"
+    let backup_dir = "{root}/modules/.daspkg_backup/{name}"
     print("Updating '{name}'...\n")
+    // backup before deleting
     if (fexist(pkg_dir)) {
-        rmdir_rec(pkg_dir)
+        mkdir("{root}/modules/.daspkg_backup")
+        if (fexist(backup_dir)) {
+            rmdir_rec(backup_dir)
+        }
+        if (!rename(pkg_dir, backup_dir)) {
+            print("Error: failed to backup '{name}'\n")
+            return
+        }
     }
     remove_package(lf, name)
-    install_git(root, name, source, version, lf, [is_root = is_root])
+    var visiting : table<string; bool>
+    install_git(root, name, source, version, lf, visiting, [is_root = is_root])
+    // check if install succeeded
+    if (!has_package(lf, name)) {
+        print("Update failed — restoring backup\n")
+        if (fexist(backup_dir)) {
+            rename(backup_dir, pkg_dir)
+        }
+        set_package(lf, entry)
+        write_lock_file(root, lf)
+        return
+    }
+    // cleanup backup
+    if (fexist(backup_dir)) {
+        rmdir_rec(backup_dir)
+    }
 }
 
 // resolve latest version for a git package by cloning default branch and running .das_package
@@ -461,7 +497,8 @@ def cmd_upgrade(root, name : string) {
         rmdir_rec(pkg_dir)
     }
     remove_package(lf, name)
-    install_git(root, name, source, "", lf, [is_root = is_root])
+    var visiting : table<string; bool>
+    install_git(root, name, source, "", lf, visiting, [is_root = is_root])
     // check if deps need upgrading
     upgrade_dependencies(root, name, lf)
 }
@@ -481,7 +518,8 @@ def upgrade_dependencies(root, pkg_name : string; var lf : LockFile) {
         if (!has_package(lf, dep_name)) {
             // new dependency — install it
             print("  Installing new dependency: {dep_name}...\n")
-            install_git(root, dep_name, d.source, "", lf, [is_root = false])
+            var visiting : table<string; bool>
+            install_git(root, dep_name, d.source, "", lf, visiting, [is_root = false])
             continue
         }
         // check if installed version satisfies constraint
