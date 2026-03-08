@@ -54,6 +54,21 @@ main.das        3         1         75%
 TOTAL           3         1         75%
 ```
 
+Coverage can be recovered from recorded file as well. For example dastest
+creates coverage.lcov, and it can be parsed via:
+```
+# ./bin/daslang utils/dascov/main.das -- cov.txt --exclude tests/
+Coverage Summary
+=====================================================================================================================================
+File                                                                                                   Hits      Missed    Coverage
+-------------------------------------------------------------------------------------------------------------------------------------
+/home/alexey-churkin/daScript2/daScript2/daslib/fuzzer.das                                             145       0         100%
+  fuzzer`fuzz_numeric_op3`10015655030841158810                                                         4         0         100%
+  fuzzer`fuzz_numeric_vec_scal_op2`10935617188872172278                                                9         0         100%
+  fuzzer`fuzz_int_vector_op2`14625781784477760102                                                      8         0         100%
+
+```
+
 ### Macro coverage
 `require daslib/coverage` can be added to your project.
 This will include macro and add coverage instrumentation to your project.

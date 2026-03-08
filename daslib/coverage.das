@@ -602,6 +602,143 @@ def get_coverage_summary(cov_data : table<string; CoverageData>;
     }
 }
 
+def is_excluded(file : string; exclude_prefixes : array<string>) : bool {
+    for (prefix in exclude_prefixes) {
+        if (file |> starts_with(prefix)) {
+            return true
+        }
+    }
+    return false
+}
+
+
+def parse_lcov(lcov_path : string; exclude_prefixes : array<string>) : table<string; CoverageData> {
+    // Parses an LCOV file (possibly containing multiple records for the same
+    // source file), populates coverageData, and calls get_coverage_summary.
+    var currentFile = ""
+    var skipFile = false
+    // Track function start lines per file for assigning DA lines to functions.
+    var funcStarts : table<string; array<tuple<uint; string>>>
+    var result = table<string; CoverageData>()
+    fopen(lcov_path, "rb") <| $(f) {
+        if (f == null) {
+            print("Failed to open {lcov_path}\n")
+            return
+        }
+        while (!feof(f)) {
+            let line = fgets(f) |> strip()
+            if (line |> empty() || line == "end_of_record" || line == "TN:") {
+                continue
+            }
+            if (line |> starts_with("SF:")) {
+                currentFile = slice(line, 3)
+                skipFile = is_excluded(currentFile, exclude_prefixes)
+                continue
+            }
+            if (skipFile) {
+                continue
+            }
+            result |> get_with_default(currentFile) <| $(var cov) {
+                if (line |> starts_with("FN:")) {
+                    // FN:line,name
+                    let rest = slice(line, 3)
+                    let comma = find(rest, ",")
+                    if (comma >= 0) {
+                        let fline = uint(to_int(slice(rest, 0, comma)))
+                        let fname = slice(rest, comma + 1)
+                        cov.func_cov |> get_with_default(fname) <| $(var fc) {
+                            fc.line = fline
+                        }
+                        funcStarts |> get_with_default(currentFile) <| $(var starts) {
+                            starts |> push(tuple(fline, string(fname)))
+                        }
+                    }
+                } elif (line |> starts_with("FNDA:")) {
+                    // FNDA:hit_count,function_name
+                    let rest = slice(line, 5)
+                    let comma = find(rest, ",")
+                    if (comma >= 0) {
+                        let hits = uint(to_int(slice(rest, 0, comma)))
+                        let fname = slice(rest, comma + 1)
+                        cov.func_cov |> get_with_default(fname) <| $(var fc) {
+                            fc.hits += hits
+                        }
+                    }
+                } elif (line |> starts_with("DA:")) {
+                    // DA:line_number,hit_count
+                    let rest = slice(line, 3)
+                    let comma = find(rest, ",")
+                    if (comma >= 0) {
+                        let ln = uint(to_int(slice(rest, 0, comma)))
+                        let hits = uint(to_int(slice(rest, comma + 1)))
+                            if (cov.line_cov.lines |> key_exists(ln)) {
+                                unsafe(cov.line_cov.lines[ln]) += hits
+                            } else {
+                                cov.line_cov.lines |> insert(ln, hits)
+                            }
+                    }
+                } elif (line |> starts_with("BRDA:")) {
+                    // BRDA:line,block,branch,taken
+                    let rest = slice(line, 5)
+                    var last_comma = rfind(rest, ",")
+                    if (last_comma >= 0) {
+                        let taken = slice(rest, last_comma + 1)
+                        let hits = taken == "-" ? 0u : uint(to_int(taken))
+                        // parse line,block,branch from the key part
+                        let key_part = slice(rest, 0, last_comma)
+                        let c1 = find(key_part, ",")
+                        if (c1 >= 0) {
+                            let br_line = uint(to_int(slice(key_part, 0, c1)))
+                            let rest2 = slice(key_part, c1 + 1)
+                            let c2 = find(rest2, ",")
+                            if (c2 >= 0) {
+                                let block_num = uint(to_int(slice(rest2, 0, c2)))
+                                let branch_num = uint(to_int(slice(rest2, c2 + 1)))
+                                let idx = uint(cov.branch_cov |> length)
+                                cov.branch_cov |> insert(idx, BranchCov(
+                                    line = br_line,
+                                    block_num = block_num,
+                                    branch_num = branch_num,
+                                    hits = hits
+                                ))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Sort function starts and assign DA lines to functions for per-function line coverage.
+    for (file, starts in keys(funcStarts), values(funcStarts)) {
+        sort(starts) <| $(a, b) {
+            return a._0 < b._0
+        }
+        result |> get(file) <| $(var cov) {
+            for (ln, hits in keys(cov.line_cov.lines), values(cov.line_cov.lines)) {
+                // Find function with largest start line <= ln.
+                var bestFunc = ""
+                for (s in starts) {
+                    if (s._0 <= ln) {
+                        bestFunc = s._1
+                    } else {
+                        break
+                    }
+                }
+                if (!bestFunc |> empty()) {
+                    cov.func_cov |> get(bestFunc) <| $(var fc) {
+                        if (fc.line_cov.lines |> key_exists(ln)) {
+                            unsafe(fc.line_cov.lines[ln]) += hits
+                        } else {
+                            fc.line_cov.lines |> insert(ln, hits)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return <- result
+}
+
 // ==========================================================================
 // Public API
 // ==========================================================================
@@ -622,6 +759,12 @@ def public fill_coverage_report(var dest : string?; name : string = "") {
 
 // Returns all recorded coverage table to this moment.
 [export]
-def public get_coverage_details() {
+def public get_coverage_details(var cov : table<string; CoverageData>?) {
     return <- clone(coverageData)
+}
+
+[export]
+def public summary_from_lcov_file(filename : string; exclude : array<string>) {
+    let parsed_cov = parse_lcov(filename, exclude)
+    return get_coverage_summary(parsed_cov, true)
 }

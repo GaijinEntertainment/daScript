@@ -1,8 +1,12 @@
 options gen2
 
+options no_coverage
+
+require daslib/coverage
 require daslib/ast_boost
 require debugapi
 require fio
+require strings
 
 def public compile_and_simulate(input : string, var access; var mg : ModuleGroup?, cop, blk) {
     //! Compiles a daslang file, simulates it, and invokes a callback with the program and context.
@@ -23,11 +27,28 @@ def public compile_and_simulate(input : string, var access; var mg : ModuleGroup
 
 [export]
 def main() {
-    // Usage: ./bin/daslang utils/dascov/main.das -- <output file> <regular command>
-    // - if output file == `-` print short statistic to stdout
-    // - if output file is a regular file print to file in lcov format.
+    // Usage:
+    //   ./bin/daslang utils/dascov/main.das -- <lcov_file> [--exclude <prefix>]...
+    //     - print merged coverage summary from an existing LCOV file
+    //     - --exclude skips files starting with <prefix> (e.g. --exclude tests/)
+    //   ./bin/daslang utils/dascov/main.das -- <output file> <regular command>
+    //     - if output file == `-` print short statistic to stdout
+    //     - if output file is a regular file print to file in lcov format.
     let args <- get_command_line_arguments()
     let sep = find_index(args, "--") + 1
+    let numArgs = args |> length() - sep
+    // Collect --exclude prefixes.
+    var excludes : array<string>
+    for (i in range(sep, args |> length() - 1)) {
+        if (args[i] == "--exclude") {
+            excludes |> push(args[i + 1])
+        }
+    }
+    if (numArgs == 1 || (numArgs >= 2 && args[sep + 1] == "--exclude")) {
+        // LCOV summary mode: parse existing LCOV file and print summary.
+        print(coverage::summary_from_lcov_file(args[sep], excludes))
+        return
+    }
     var coverage_file = args[sep]
     var input_file = args[sep + 1]
     var new_args = array<string>()
