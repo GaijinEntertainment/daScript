@@ -7,11 +7,11 @@ Demonstrates the daspkg workflow with C and C++ native modules.
 From this directory:
 
 ```bash
-# Install packages from local paths (listed in daspkg.json)
-daslang ../../utils/daspkg/main.das -- --root . install
+# Install packages from local paths (listed in .das_package)
+daslang ../../../utils/daspkg/main.das -- --root . install
 
 # Build native modules (compiles .shared_module files via CMake)
-daslang ../../utils/daspkg/main.das -- --root . build
+daslang ../../../utils/daspkg/main.das -- --root . build
 
 # Run the example
 daslang main.das
@@ -28,11 +28,11 @@ counter(step=5), 2x increment = 10
 
 ## Updating after changes
 
-If you modify the source packages under `../daspkg-packages/`, re-sync and rebuild:
+If you modify the source packages under `../packages/`, re-sync and rebuild:
 
 ```bash
-daslang ../../utils/daspkg/main.das -- --root . update
-daslang ../../utils/daspkg/main.das -- --root . build
+daslang ../../../utils/daspkg/main.das -- --root . update
+daslang ../../../utils/daspkg/main.das -- --root . build
 ```
 
 ## Packages used
@@ -40,4 +40,4 @@ daslang ../../utils/daspkg/main.das -- --root . build
 - **daspkg-example-c** — Pure C module using `daScriptC.h` (fast math functions)
 - **daspkg-example-cpp** — C++ module using `ManagedStructureAnnotation` (Counter type)
 
-Both packages live under `../daspkg-packages/` and are installed as local dependencies.
+Both packages live under `../packages/` and are installed as local dependencies.

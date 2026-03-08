@@ -1,7 +1,0 @@
-{
-    "name": "daspkg-example-mixed",
-    "description": "Example mixed module — depends on fastmath C module, adds das utilities",
-    "dependencies": {
-        "daspkg-example-c": "../daspkg-example-c"
-    }
-}

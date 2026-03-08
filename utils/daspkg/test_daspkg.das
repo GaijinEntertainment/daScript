@@ -128,69 +128,26 @@ def test_lockfile_roundtrip(t : T?) {
         mkdir(tmp_dir)
         var lf : LockFile
         lf.sdk_version = "0.4.0"
-        var entry = PackageEntry()
-        entry.source = "github.com/user/foo"
-        entry.version = "v1.0"
-        entry.tag = "v1.0"
-        entry.root = true
-        lf.packages |> insert("foo", entry)
-        var dep = PackageEntry()
-        dep.source = "github.com/user/bar"
-        dep.version = "v2.0"
-        dep.tag = "v2.0"
-        dep.root = false
-        lf.packages |> insert("bar", dep)
+        set_package(lf, PackageEntry(name = "foo", source = "github.com/user/foo",
+            version = "v1.0", tag = "v1.0", root = true))
+        set_package(lf, PackageEntry(name = "bar", source = "github.com/user/bar",
+            version = "v2.0", tag = "v2.0", root = false))
         t |> success(write_lock_file(tmp_dir, lf))
         var lf2 : LockFile
         t |> success(read_lock_file(tmp_dir, lf2))
         t |> equal(lf2.sdk_version, "0.4.0")
         t |> equal(length(lf2.packages), 2)
-        t |> success(lf2.packages |> key_exists("foo"))
-        t |> success(lf2.packages |> key_exists("bar"))
-        unsafe {
-            t |> equal(lf2.packages["foo"].source, "github.com/user/foo")
-            t |> equal(lf2.packages["foo"].version, "v1.0")
-            t |> success(lf2.packages["foo"].root)
-            t |> equal(lf2.packages["bar"].source, "github.com/user/bar")
-            t |> success(!lf2.packages["bar"].root)
-        }
+        t |> success(has_package(lf2, "foo"))
+        t |> success(has_package(lf2, "bar"))
+        let foo = get_package(lf2, "foo")
+        t |> equal(foo.source, "github.com/user/foo")
+        t |> equal(foo.version, "v1.0")
+        t |> success(foo.root)
+        let bar = get_package(lf2, "bar")
+        t |> equal(bar.source, "github.com/user/bar")
+        t |> success(!bar.root)
         // cleanup
         remove("{tmp_dir}/{LOCK_FILE_NAME}")
-        rmdir(tmp_dir)
-    }
-}
-
-[test]
-def test_read_pkg_dependencies(t : T?) {
-    t |> run("parses daspkg.json dependencies") @(t : T?) {
-        let tmp_dir = "{get_das_root()}/_daspkg_test_tmp"
-        mkdir(tmp_dir)
-        let manifest = "{tmp_dir}/daspkg.json"
-        fwrite(manifest, "\{\"name\":\"test\",\"dependencies\":\{\"foo\":\"github.com/user/foo\",\"bar\":\"github.com/user/bar\"\}\}")
-        var deps : table<string; string>
-        t |> success(read_pkg_dependencies(tmp_dir, deps))
-        t |> equal(length(deps), 2)
-        t |> success(deps |> key_exists("foo"))
-        t |> success(deps |> key_exists("bar"))
-        unsafe {
-            t |> equal(deps["foo"], "github.com/user/foo")
-            t |> equal(deps["bar"], "github.com/user/bar")
-        }
-        // cleanup
-        remove(manifest)
-        rmdir(tmp_dir)
-    }
-    t |> run("no manifest returns false") @(t : T?) {
-        var deps : table<string; string>
-        t |> success(!read_pkg_dependencies("{get_das_root()}/_daspkg_nonexistent", deps))
-    }
-    t |> run("no dependencies field returns false") @(t : T?) {
-        let tmp_dir = "{get_das_root()}/_daspkg_test_tmp2"
-        mkdir(tmp_dir)
-        fwrite("{tmp_dir}/daspkg.json", "\{\"name\":\"test\"\}")
-        var deps : table<string; string>
-        t |> success(!read_pkg_dependencies(tmp_dir, deps))
-        remove("{tmp_dir}/daspkg.json")
         rmdir(tmp_dir)
     }
 }
@@ -208,11 +165,10 @@ def test_install_local(t : T?) {
         var lf : LockFile
         install_local(tmp_root, "hello", tmp_src, lf)
         // verify lock file entry
-        t |> success(lf.packages |> key_exists("hello"))
-        unsafe {
-            t |> success(lf.packages["hello"].local)
-            t |> success(lf.packages["hello"].root)
-        }
+        t |> success(has_package(lf, "hello"))
+        let hello = get_package(lf, "hello")
+        t |> success(hello.local)
+        t |> success(hello.root)
         // verify files copied
         t |> success(fexist("{tmp_root}/modules/hello/daslib/hello.das"))
         // verify lock file was written to disk
@@ -233,10 +189,7 @@ def test_cmd_remove(t : T?) {
         fwrite("{tmp_root}/modules/testpkg/dummy.txt", "hello")
         // write a lock file with the package
         var lf : LockFile
-        var entry = PackageEntry()
-        entry.source = "github.com/user/testpkg"
-        entry.root = true
-        lf.packages |> insert("testpkg", entry)
+        set_package(lf, PackageEntry(name = "testpkg", source = "github.com/user/testpkg", root = true))
         write_lock_file(tmp_root, lf)
         // remove
         cmd_remove(tmp_root, "testpkg")
@@ -245,7 +198,7 @@ def test_cmd_remove(t : T?) {
         // verify lock file updated
         var lf2 : LockFile
         t |> success(read_lock_file(tmp_root, lf2))
-        t |> success(!lf2.packages |> key_exists("testpkg"))
+        t |> success(!has_package(lf2, "testpkg"))
         // cleanup
         rmdir_rec(tmp_root)
     }
@@ -253,33 +206,33 @@ def test_cmd_remove(t : T?) {
 
 [test]
 def test_read_manifest(t : T?) {
-    t |> run("valid manifest") @(t : T?) {
+    t |> run("valid manifest from .das_package") @(t : T?) {
         let tmp_dir = "{get_das_root()}/_daspkg_test_manifest"
         mkdir(tmp_dir)
-        fwrite("{tmp_dir}/daspkg.json", "\{\"name\":\"mypkg\",\"description\":\"A test package\"\}")
+        fwrite("{tmp_dir}/.das_package", "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"mypkg\")\n    package_description(\"A test package\")\n\}\n")
         var manifest : PackageManifest
         t |> success(read_manifest(tmp_dir, manifest))
         t |> equal(manifest.name, "mypkg")
         t |> equal(manifest.description, "A test package")
-        remove("{tmp_dir}/daspkg.json")
+        remove("{tmp_dir}/.das_package")
         rmdir(tmp_dir)
     }
     t |> run("missing name") @(t : T?) {
         let tmp_dir = "{get_das_root()}/_daspkg_test_manifest2"
         mkdir(tmp_dir)
-        fwrite("{tmp_dir}/daspkg.json", "\{\"description\":\"no name\"\}")
+        fwrite("{tmp_dir}/.das_package", "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_description(\"no name\")\n\}\n")
         var manifest : PackageManifest
         t |> success(!read_manifest(tmp_dir, manifest))
-        remove("{tmp_dir}/daspkg.json")
+        remove("{tmp_dir}/.das_package")
         rmdir(tmp_dir)
     }
     t |> run("missing description") @(t : T?) {
         let tmp_dir = "{get_das_root()}/_daspkg_test_manifest3"
         mkdir(tmp_dir)
-        fwrite("{tmp_dir}/daspkg.json", "\{\"name\":\"mypkg\"\}")
+        fwrite("{tmp_dir}/.das_package", "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"mypkg\")\n\}\n")
         var manifest : PackageManifest
         t |> success(!read_manifest(tmp_dir, manifest))
-        remove("{tmp_dir}/daspkg.json")
+        remove("{tmp_dir}/.das_package")
         rmdir(tmp_dir)
     }
     t |> run("no manifest file") @(t : T?) {
@@ -380,12 +333,8 @@ def test_cmd_check(t : T?) {
 
     // write lockfile with two entries: one present, one missing
     var lf = LockFile()
-    var e1 = PackageEntry()
-    e1.source = "github.com/user/mypkg"
-    lf.packages |> insert("mypkg", e1)
-    var e2 = PackageEntry()
-    e2.source = "github.com/user/ghost"
-    lf.packages |> insert("ghost", e2)
+    set_package(lf, PackageEntry(name = "mypkg", source = "github.com/user/mypkg"))
+    set_package(lf, PackageEntry(name = "ghost", source = "github.com/user/ghost"))
     write_lock_file(test_root, lf)
 
     t |> run("detects present and missing packages") @(t : T?) {
@@ -401,9 +350,7 @@ def test_cmd_check(t : T?) {
         let pkg2_dir = "{modules_dir}/nopkg"
         mkdir(pkg2_dir)
         var lf2 = LockFile()
-        var e = PackageEntry()
-        e.source = "github.com/user/nopkg"
-        lf2.packages |> insert("nopkg", e)
+        set_package(lf2, PackageEntry(name = "nopkg", source = "github.com/user/nopkg"))
         write_lock_file(test_root, lf2)
         cmd_check(test_root)  // should print WARNING, not crash
         t |> success(fexist(pkg2_dir))
@@ -447,6 +394,8 @@ def test_cmd_doctor(t : T?) {
 
 let PKG_FIXTURE = "utils/daspkg/fixtures/test.das_package"
 let PKG_BRANCH_FIXTURE = "utils/daspkg/fixtures/test_branch.das_package"
+let PKG_REDIRECT_FIXTURE = "utils/daspkg/fixtures/test_redirect.das_package"
+let PKG_SDK_AWARE_FIXTURE = "utils/daspkg/fixtures/test_sdk_aware.das_package"
 
 [test]
 def test_run_das_package_meta(t : T?) {
@@ -525,5 +474,161 @@ def test_run_das_package_optional_functions(t : T?) {
         tt |> success(ok)
         tt |> equal(false, info.is_cmake)
         tt |> equal(false, info.is_custom)
+    }
+}
+
+[test]
+def test_run_das_package_resolve_redirect(t : T?) {
+    t |> run("resolves redirect to different repo") @(t : T?) {
+        var res : ResolveResult
+        let ok = run_das_package_resolve(PKG_REDIRECT_FIXTURE, "", "", res)
+        t |> success(ok)
+        t |> equal("github.com/borisbat/daspkg-test-pure", res.source)
+        t |> equal("v1.0", res.tag)
+        t |> equal("", res.branch)
+    }
+}
+
+[test]
+def test_run_das_package_resolve_sdk_aware(t : T?) {
+    t |> run("resolves latest to default tag") @(t : T?) {
+        var res : ResolveResult
+        let ok = run_das_package_resolve(PKG_SDK_AWARE_FIXTURE, "0.5", "", res)
+        t |> success(ok)
+        t |> equal("v2.0", res.tag)
+    }
+    t |> run("resolves 1.x to v1.5") @(t : T?) {
+        var res : ResolveResult
+        let ok = run_das_package_resolve(PKG_SDK_AWARE_FIXTURE, "0.5", "1.x", res)
+        t |> success(ok)
+        t |> equal("v1.5", res.tag)
+    }
+    t |> run("resolves explicit version") @(t : T?) {
+        var res : ResolveResult
+        let ok = run_das_package_resolve(PKG_SDK_AWARE_FIXTURE, "0.5", "3.0", res)
+        t |> success(ok)
+        t |> equal("v3.0", res.tag)
+    }
+}
+
+[test]
+def test_parse_version(t : T?) {
+    t |> run("parses major.minor.patch") @(t : T?) {
+        let v = parse_version("1.2.3")
+        t |> success(v.valid)
+        t |> equal(1, v.major)
+        t |> equal(2, v.minor)
+        t |> equal(3, v.patch)
+    }
+    t |> run("parses with v prefix") @(t : T?) {
+        let v = parse_version("v1.2.3")
+        t |> success(v.valid)
+        t |> equal(1, v.major)
+        t |> equal(2, v.minor)
+        t |> equal(3, v.patch)
+    }
+    t |> run("parses major.minor") @(t : T?) {
+        let v = parse_version("2.5")
+        t |> success(v.valid)
+        t |> equal(2, v.major)
+        t |> equal(5, v.minor)
+        t |> equal(0, v.patch)
+    }
+    t |> run("parses major only") @(t : T?) {
+        let v = parse_version("3")
+        t |> success(v.valid)
+        t |> equal(3, v.major)
+        t |> equal(0, v.minor)
+        t |> equal(0, v.patch)
+    }
+    t |> run("invalid version") @(t : T?) {
+        let v = parse_version("abc")
+        t |> success(!v.valid)
+    }
+    t |> run("empty version") @(t : T?) {
+        let v = parse_version("")
+        t |> success(!v.valid)
+    }
+}
+
+[test]
+def test_compare_versions(t : T?) {
+    t |> run("equal versions") @(t : T?) {
+        let a = parse_version("1.2.3")
+        let b = parse_version("1.2.3")
+        t |> equal(0, compare_versions(a, b))
+    }
+    t |> run("major differs") @(t : T?) {
+        let a = parse_version("1.0.0")
+        let b = parse_version("2.0.0")
+        t |> equal(-1, compare_versions(a, b))
+        t |> equal(1, compare_versions(b, a))
+    }
+    t |> run("minor differs") @(t : T?) {
+        let a = parse_version("1.2.0")
+        let b = parse_version("1.3.0")
+        t |> equal(-1, compare_versions(a, b))
+    }
+    t |> run("patch differs") @(t : T?) {
+        let a = parse_version("1.2.3")
+        let b = parse_version("1.2.4")
+        t |> equal(-1, compare_versions(a, b))
+    }
+}
+
+[test]
+def test_satisfies_constraint(t : T?) {
+    t |> run("empty constraint matches anything") @(t : T?) {
+        t |> success(satisfies_constraint("1.0.0", ""))
+        t |> success(satisfies_constraint("v99.0.0", ""))
+    }
+    t |> run("exact match") @(t : T?) {
+        t |> success(satisfies_constraint("1.2.3", "1.2.3"))
+        t |> success(!satisfies_constraint("1.2.4", "1.2.3"))
+    }
+    t |> run("exact with = prefix") @(t : T?) {
+        t |> success(satisfies_constraint("1.2.3", "=1.2.3"))
+        t |> success(!satisfies_constraint("1.2.4", "=1.2.3"))
+    }
+    t |> run("greater or equal") @(t : T?) {
+        t |> success(satisfies_constraint("1.0.0", ">=1.0"))
+        t |> success(satisfies_constraint("2.0.0", ">=1.0"))
+        t |> success(!satisfies_constraint("0.9.0", ">=1.0"))
+    }
+    t |> run("greater than") @(t : T?) {
+        t |> success(!satisfies_constraint("1.0.0", ">1.0"))
+        t |> success(satisfies_constraint("1.0.1", ">1.0"))
+    }
+    t |> run("less or equal") @(t : T?) {
+        t |> success(satisfies_constraint("1.0.0", "<=1.0"))
+        t |> success(satisfies_constraint("0.9.0", "<=1.0"))
+        t |> success(!satisfies_constraint("1.0.1", "<=1.0"))
+    }
+    t |> run("less than") @(t : T?) {
+        t |> success(satisfies_constraint("0.9.0", "<1.0"))
+        t |> success(!satisfies_constraint("1.0.0", "<1.0"))
+    }
+    t |> run("range with comma") @(t : T?) {
+        t |> success(satisfies_constraint("1.5.0", ">=1.0,<2.0"))
+        t |> success(satisfies_constraint("1.0.0", ">=1.0,<2.0"))
+        t |> success(!satisfies_constraint("2.0.0", ">=1.0,<2.0"))
+        t |> success(!satisfies_constraint("0.9.0", ">=1.0,<2.0"))
+    }
+    t |> run("v prefix on version") @(t : T?) {
+        t |> success(satisfies_constraint("v1.2.3", ">=1.0"))
+        t |> success(satisfies_constraint("v1.2.3", "1.2.3"))
+    }
+    t |> run("v prefix on constraint") @(t : T?) {
+        t |> success(satisfies_constraint("1.2.3", ">=v1.0"))
+        t |> success(satisfies_constraint("1.2.3", "v1.2.3"))
+    }
+    t |> run("invalid version fails") @(t : T?) {
+        t |> success(!satisfies_constraint("abc", ">=1.0"))
+    }
+    t |> run("invalid constraint fails") @(t : T?) {
+        t |> success(!satisfies_constraint("1.0.0", ">=abc"))
+    }
+    t |> run("spaces in range") @(t : T?) {
+        t |> success(satisfies_constraint("1.5.0", ">= 1.0 , < 2.0"))
     }
 }

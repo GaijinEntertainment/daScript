@@ -1,8 +1,0 @@
-{
-    "name": "daspkg-build-example",
-    "description": "Example project demonstrating daspkg with C/C++ module builds",
-    "dependencies": {
-        "daspkg-example-c": "../daspkg-packages/daspkg-example-c",
-        "daspkg-example-cpp": "../daspkg-packages/daspkg-example-cpp"
-    }
-}
