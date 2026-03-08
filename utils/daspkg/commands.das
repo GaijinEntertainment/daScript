@@ -63,7 +63,7 @@ def cmd_list(root : string) {
         return
     }
     print("Installed packages:\n")
-    for (name, entry in keys(lf.packages), values(lf.packages)) {
+    for (entry in lf.packages) {
         var flags : string
         if (entry.local) {
             flags = " (local)"
@@ -72,10 +72,10 @@ def cmd_list(root : string) {
             flags = "{flags} (dependency)"
         }
         if (!empty(entry.tag)) {
-            print("  {name} @ {entry.tag}{flags}\n")
+            print("  {entry.name} @ {entry.tag}{flags}\n")
             print("    {entry.source}\n")
         } else {
-            print("  {name}{flags}\n")
+            print("  {entry.name}{flags}\n")
             print("    {entry.source}\n")
         }
     }
@@ -104,11 +104,7 @@ def install_local(root, pkg_name, source : string; var lf : LockFile) {
         return
     }
 
-    var entry = PackageEntry()
-    entry.source = full_source
-    entry.local = true
-    entry.root = true
-    lf.packages |> insert(pkg_name, entry)
+    set_package(lf, PackageEntry(name=pkg_name, source=full_source, local=true, root=true))
     write_lock_file(root, lf)
     print("Installed '{pkg_name}' (local)\n")
     try_build_package(target, pkg_name)
@@ -124,7 +120,7 @@ def install_dependencies(root, pkg_name : string; var lf : LockFile) {
     if (run_das_package_deps(das_package, "", pkg_deps)) {
         for (d in pkg_deps) {
             let dep_name = package_name_from_source(d.source)
-            if (lf.packages |> key_exists(dep_name)) {
+            if (has_package(lf, dep_name)) {
                 continue
             }
             print("  Installing dependency: {dep_name}...\n")
@@ -269,13 +265,8 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; is_
     }
 
     // step 4: record in lock file
-    var entry = PackageEntry()
-    entry.source = actual_source
-    entry.version = version
-    entry.tag = actual_tag
-    entry.branch = actual_branch
-    entry.root = is_root
-    lf.packages |> insert(pkg_name, entry)
+    set_package(lf, PackageEntry(name=pkg_name, source=actual_source, version=version,
+        tag=actual_tag, branch=actual_branch, root=is_root))
     write_lock_file(root, lf)
     print("Installed '{pkg_name}'\n")
 
@@ -305,7 +296,7 @@ def cmd_install(root, spec : string; force : bool) {
     // check if already installed
     var lf : LockFile
     read_lock_file(root, lf)
-    if (!force && lf.packages |> key_exists(pkg_name)) {
+    if (!force && has_package(lf, pkg_name)) {
         print("'{pkg_name}' is already installed (use --force to reinstall)\n")
         return
     }
@@ -349,7 +340,7 @@ def cmd_remove(root, name : string) {
         print("Error: no lock file found\n")
         return
     }
-    if (!(lf.packages |> key_exists(name))) {
+    if (!has_package(lf, name)) {
         print("Error: package '{name}' is not installed\n")
         return
     }
@@ -360,7 +351,7 @@ def cmd_remove(root, name : string) {
         rmdir_rec(pkg_dir)
     }
 
-    lf.packages |> erase(name)
+    remove_package(lf, name)
     write_lock_file(root, lf)
     print("Removed '{name}'\n")
 }
@@ -371,11 +362,11 @@ def cmd_update(root, name : string) {
         print("Error: no lock file found\n")
         return
     }
-    if (!(lf.packages |> key_exists(name))) {
+    if (!has_package(lf, name)) {
         print("Error: package '{name}' is not installed\n")
         return
     }
-    let entry = lf.packages[name]
+    let entry = get_package(lf, name)
     if (entry.local) {
         // re-copy from original source path
         let source = entry.source
@@ -405,7 +396,7 @@ def cmd_update(root, name : string) {
     if (fexist(pkg_dir)) {
         rmdir_rec(pkg_dir)
     }
-    lf.packages |> erase(name)
+    remove_package(lf, name)
     install_git(root, name, source, version, lf, [is_root = is_root])
 }
 
@@ -415,7 +406,12 @@ def cmd_update_all(root : string) {
         print("No packages installed (no lock file found)\n")
         return
     }
-    for (name in keys(lf.packages)) {
+    // collect names first — cmd_update modifies lf.packages
+    var names : array<string>
+    for (entry in lf.packages) {
+        names |> push_clone(entry.name)
+    }
+    for (name in names) {
         cmd_update(root, name)
     }
 }
@@ -546,18 +542,18 @@ def cmd_check(root : string) {
         return
     }
     var ok = true
-    for (name, entry in keys(lf.packages), values(lf.packages)) {
-        let pkg_dir = "{root}/modules/{name}"
+    for (entry in lf.packages) {
+        let pkg_dir = "{root}/modules/{entry.name}"
         if (!fexist(pkg_dir)) {
-            print("  MISSING: {name} (directory not found)\n")
+            print("  MISSING: {entry.name} (directory not found)\n")
             ok = false
             continue
         }
         let has_module = fexist("{pkg_dir}/.das_module")
         if (!has_module) {
-            print("  WARNING: {name} has no .das_module\n")
+            print("  WARNING: {entry.name} has no .das_module\n")
         } else {
-            print("  OK: {name}\n")
+            print("  OK: {entry.name}\n")
         }
     }
     if (ok) {

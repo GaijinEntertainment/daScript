@@ -128,32 +128,24 @@ def test_lockfile_roundtrip(t : T?) {
         mkdir(tmp_dir)
         var lf : LockFile
         lf.sdk_version = "0.4.0"
-        var entry = PackageEntry()
-        entry.source = "github.com/user/foo"
-        entry.version = "v1.0"
-        entry.tag = "v1.0"
-        entry.root = true
-        lf.packages |> insert("foo", entry)
-        var dep = PackageEntry()
-        dep.source = "github.com/user/bar"
-        dep.version = "v2.0"
-        dep.tag = "v2.0"
-        dep.root = false
-        lf.packages |> insert("bar", dep)
+        set_package(lf, PackageEntry(name="foo", source="github.com/user/foo",
+            version="v1.0", tag="v1.0", root=true))
+        set_package(lf, PackageEntry(name="bar", source="github.com/user/bar",
+            version="v2.0", tag="v2.0", root=false))
         t |> success(write_lock_file(tmp_dir, lf))
         var lf2 : LockFile
         t |> success(read_lock_file(tmp_dir, lf2))
         t |> equal(lf2.sdk_version, "0.4.0")
         t |> equal(length(lf2.packages), 2)
-        t |> success(lf2.packages |> key_exists("foo"))
-        t |> success(lf2.packages |> key_exists("bar"))
-        unsafe {
-            t |> equal(lf2.packages["foo"].source, "github.com/user/foo")
-            t |> equal(lf2.packages["foo"].version, "v1.0")
-            t |> success(lf2.packages["foo"].root)
-            t |> equal(lf2.packages["bar"].source, "github.com/user/bar")
-            t |> success(!lf2.packages["bar"].root)
-        }
+        t |> success(has_package(lf2, "foo"))
+        t |> success(has_package(lf2, "bar"))
+        let foo = get_package(lf2, "foo")
+        t |> equal(foo.source, "github.com/user/foo")
+        t |> equal(foo.version, "v1.0")
+        t |> success(foo.root)
+        let bar = get_package(lf2, "bar")
+        t |> equal(bar.source, "github.com/user/bar")
+        t |> success(!bar.root)
         // cleanup
         remove("{tmp_dir}/{LOCK_FILE_NAME}")
         rmdir(tmp_dir)
@@ -173,11 +165,10 @@ def test_install_local(t : T?) {
         var lf : LockFile
         install_local(tmp_root, "hello", tmp_src, lf)
         // verify lock file entry
-        t |> success(lf.packages |> key_exists("hello"))
-        unsafe {
-            t |> success(lf.packages["hello"].local)
-            t |> success(lf.packages["hello"].root)
-        }
+        t |> success(has_package(lf, "hello"))
+        let hello = get_package(lf, "hello")
+        t |> success(hello.local)
+        t |> success(hello.root)
         // verify files copied
         t |> success(fexist("{tmp_root}/modules/hello/daslib/hello.das"))
         // verify lock file was written to disk
@@ -198,10 +189,7 @@ def test_cmd_remove(t : T?) {
         fwrite("{tmp_root}/modules/testpkg/dummy.txt", "hello")
         // write a lock file with the package
         var lf : LockFile
-        var entry = PackageEntry()
-        entry.source = "github.com/user/testpkg"
-        entry.root = true
-        lf.packages |> insert("testpkg", entry)
+        set_package(lf, PackageEntry(name="testpkg", source="github.com/user/testpkg", root=true))
         write_lock_file(tmp_root, lf)
         // remove
         cmd_remove(tmp_root, "testpkg")
@@ -210,7 +198,7 @@ def test_cmd_remove(t : T?) {
         // verify lock file updated
         var lf2 : LockFile
         t |> success(read_lock_file(tmp_root, lf2))
-        t |> success(!lf2.packages |> key_exists("testpkg"))
+        t |> success(!has_package(lf2, "testpkg"))
         // cleanup
         rmdir_rec(tmp_root)
     }
@@ -345,12 +333,8 @@ def test_cmd_check(t : T?) {
 
     // write lockfile with two entries: one present, one missing
     var lf = LockFile()
-    var e1 = PackageEntry()
-    e1.source = "github.com/user/mypkg"
-    lf.packages |> insert("mypkg", e1)
-    var e2 = PackageEntry()
-    e2.source = "github.com/user/ghost"
-    lf.packages |> insert("ghost", e2)
+    set_package(lf, PackageEntry(name="mypkg", source="github.com/user/mypkg"))
+    set_package(lf, PackageEntry(name="ghost", source="github.com/user/ghost"))
     write_lock_file(test_root, lf)
 
     t |> run("detects present and missing packages") @(t : T?) {
@@ -366,9 +350,7 @@ def test_cmd_check(t : T?) {
         let pkg2_dir = "{modules_dir}/nopkg"
         mkdir(pkg2_dir)
         var lf2 = LockFile()
-        var e = PackageEntry()
-        e.source = "github.com/user/nopkg"
-        lf2.packages |> insert("nopkg", e)
+        set_package(lf2, PackageEntry(name="nopkg", source="github.com/user/nopkg"))
         write_lock_file(test_root, lf2)
         cmd_check(test_root)  // should print WARNING, not crash
         t |> success(fexist(pkg2_dir))

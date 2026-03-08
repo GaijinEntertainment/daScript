@@ -216,7 +216,7 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 
 The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics and program introspection to AI coding assistants via the [Model Context Protocol](https://modelcontextprotocol.io/). Uses stdio transport — no extra build dependencies.
 
-**When MCP tools are available**, prefer them over manual compilation and grep-based exploration:
+**When MCP tools are available**, prefer them over manual compilation and grep-based exploration. **For searching `.das` files, prefer MCP tools over built-in Grep/Glob** — `grep_usage` is parse-aware (tree-sitter), `find_references` resolves cross-module symbols, `find_symbol` searches all loaded modules:
 
 | Tool | Use instead of... |
 |---|---|
@@ -238,7 +238,7 @@ The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics and p
 | `find_references` | Manually searching for all usages of a symbol across files |
 | `eval_expression` | Evaluating expressions by writing throwaway scripts |
 | `describe_type` | Reading source to understand type fields, methods, and values |
-| `grep_usage` | Grepping for symbol names across files (parse-aware via ast-grep + tree-sitter) |
+| `grep_usage` | Using built-in Grep tool to search for symbol names in `.das` files (parse-aware via ast-grep + tree-sitter — no false positives from comments/strings) |
 | `outline` | Manually scanning files for function/struct/enum declarations |
 
 Cursor-based tools (`goto_definition`, `type_of`, `find_references`) support a `no_opt` parameter that disables compiler optimizations to preserve the full AST — useful when globals, enum values, or bitfield constants get constant-folded away.

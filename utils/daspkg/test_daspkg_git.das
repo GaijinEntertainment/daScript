@@ -22,11 +22,10 @@ def test_install_git_basic(t : T?) {
         var lf : LockFile
         install_git(tmp_root, "daspkg-test-pure", "github.com/borisbat/daspkg-test-pure", "", lf)
         // verify lock file entry
-        t |> success(lf.packages |> key_exists("daspkg-test-pure"))
-        unsafe {
-            t |> equal(lf.packages["daspkg-test-pure"].source, "github.com/borisbat/daspkg-test-pure")
-            t |> success(lf.packages["daspkg-test-pure"].root)
-        }
+        t |> success(has_package(lf, "daspkg-test-pure"))
+        let pkg = get_package(lf, "daspkg-test-pure")
+        t |> equal(pkg.source, "github.com/borisbat/daspkg-test-pure")
+        t |> success(pkg.root)
         // verify files exist
         t |> success(fexist("{tmp_root}/modules/daspkg-test-pure/.das_package"))
         t |> success(fexist("{tmp_root}/modules/daspkg-test-pure/daslib/test_pure.das"))
@@ -42,10 +41,8 @@ def test_install_git_version_v1(t : T?) {
         mkdir(tmp_root)
         var lf : LockFile
         install_git(tmp_root, "daspkg-test-versions", "github.com/borisbat/daspkg-test-versions", "1.0", lf)
-        t |> success(lf.packages |> key_exists("daspkg-test-versions"))
-        unsafe {
-            t |> equal(lf.packages["daspkg-test-versions"].tag, "v1.0")
-        }
+        t |> success(has_package(lf, "daspkg-test-versions"))
+        t |> equal(get_package(lf, "daspkg-test-versions").tag, "v1.0")
         // v1.0 has get_version returning "1.0" and no new_in_v2
         let src = fread("{tmp_root}/modules/daspkg-test-versions/daslib/test_versions.das")
         t |> success(find(src, "return \"1.0\"") >= 0)
@@ -61,10 +58,8 @@ def test_install_git_version_v2(t : T?) {
         mkdir(tmp_root)
         var lf : LockFile
         install_git(tmp_root, "daspkg-test-versions", "github.com/borisbat/daspkg-test-versions", "2.0", lf)
-        t |> success(lf.packages |> key_exists("daspkg-test-versions"))
-        unsafe {
-            t |> equal(lf.packages["daspkg-test-versions"].tag, "v2.0")
-        }
+        t |> success(has_package(lf, "daspkg-test-versions"))
+        t |> equal(get_package(lf, "daspkg-test-versions").tag, "v2.0")
         // v2.0 has get_version returning "2.0" and new_in_v2
         let src = fread("{tmp_root}/modules/daspkg-test-versions/daslib/test_versions.das")
         t |> success(find(src, "return \"2.0\"") >= 0)
@@ -82,13 +77,11 @@ def test_install_with_dependencies(t : T?) {
         // daspkg-test-deps depends on daspkg-test-pure
         install_git(tmp_root, "daspkg-test-deps", "github.com/borisbat/daspkg-test-deps", "", lf)
         // both packages should be installed
-        t |> success(lf.packages |> key_exists("daspkg-test-deps"), "main package installed")
-        t |> success(lf.packages |> key_exists("daspkg-test-pure"), "dependency installed")
+        t |> success(has_package(lf, "daspkg-test-deps"), "main package installed")
+        t |> success(has_package(lf, "daspkg-test-pure"), "dependency installed")
         // dependency should be marked as non-root
-        unsafe {
-            t |> success(lf.packages["daspkg-test-deps"].root, "main is root")
-            t |> success(!lf.packages["daspkg-test-pure"].root, "dep is not root")
-        }
+        t |> success(get_package(lf, "daspkg-test-deps").root, "main is root")
+        t |> success(!get_package(lf, "daspkg-test-pure").root, "dep is not root")
         // verify both module dirs exist
         t |> success(fexist("{tmp_root}/modules/daspkg-test-deps/daslib/test_deps.das"))
         t |> success(fexist("{tmp_root}/modules/daspkg-test-pure/daslib/test_pure.das"))
@@ -120,7 +113,7 @@ def test_cmd_install_by_name(t : T?) {
         // verify installed
         var lf : LockFile
         t |> success(read_lock_file(tmp_root, lf))
-        t |> success(lf.packages |> key_exists("daspkg-test-pure"))
+        t |> success(has_package(lf, "daspkg-test-pure"))
         t |> success(fexist("{tmp_root}/modules/daspkg-test-pure/daslib/test_pure.das"))
         // cleanup
         rmdir_rec(tmp_root)
@@ -135,7 +128,7 @@ def test_cmd_update_single(t : T?) {
         // install first
         var lf : LockFile
         install_git(tmp_root, "daspkg-test-pure", "github.com/borisbat/daspkg-test-pure", "", lf)
-        t |> success(lf.packages |> key_exists("daspkg-test-pure"))
+        t |> success(has_package(lf, "daspkg-test-pure"))
         // update it
         cmd_update(tmp_root, "daspkg-test-pure")
         // verify still present after update
@@ -159,7 +152,7 @@ def test_cmd_update_recopies_local(t : T?) {
         // install locally
         var lf : LockFile
         install_local(tmp_root, "localpkg", src_dir, lf)
-        t |> success(lf.packages |> key_exists("localpkg"))
+        t |> success(has_package(lf, "localpkg"))
         // modify source
         fopen("{src_dir}/hello.das", "wb") <| $(f) {
             fwrite(f, "// hello v2\n")
@@ -219,11 +212,9 @@ def test_cmd_update_preserves_version(t : T?) {
         // install v1.0
         var lf : LockFile
         install_git(tmp_root, "daspkg-test-versions", "github.com/borisbat/daspkg-test-versions", "1.0", lf)
-        t |> success(lf.packages |> key_exists("daspkg-test-versions"))
-        unsafe {
-            t |> equal(lf.packages["daspkg-test-versions"].tag, "v1.0")
-            t |> equal(lf.packages["daspkg-test-versions"].version, "1.0")
-        }
+        t |> success(has_package(lf, "daspkg-test-versions"))
+        t |> equal(get_package(lf, "daspkg-test-versions").tag, "v1.0")
+        t |> equal(get_package(lf, "daspkg-test-versions").version, "1.0")
         // verify v1.0 content
         var src = fread("{tmp_root}/modules/daspkg-test-versions/daslib/test_versions.das")
         t |> success(find(src, "\"1.0\"") >= 0)
@@ -231,10 +222,8 @@ def test_cmd_update_preserves_version(t : T?) {
         cmd_update(tmp_root, "daspkg-test-versions")
         var lf2 : LockFile
         t |> success(read_lock_file(tmp_root, lf2))
-        unsafe {
-            t |> equal(lf2.packages["daspkg-test-versions"].tag, "v1.0")
-            t |> equal(lf2.packages["daspkg-test-versions"].version, "1.0")
-        }
+        t |> equal(get_package(lf2, "daspkg-test-versions").tag, "v1.0")
+        t |> equal(get_package(lf2, "daspkg-test-versions").version, "1.0")
         // verify still v1.0 content
         src = fread("{tmp_root}/modules/daspkg-test-versions/daslib/test_versions.das")
         t |> success(find(src, "\"1.0\"") >= 0)
@@ -255,7 +244,7 @@ def test_cmd_install_all_integration(t : T?) {
         // verify installed
         var lf : LockFile
         t |> success(read_lock_file(tmp_root, lf))
-        t |> success(lf.packages |> key_exists("daspkg-test-pure"))
+        t |> success(has_package(lf, "daspkg-test-pure"))
         t |> success(fexist("{tmp_root}/modules/daspkg-test-pure/daslib/test_pure.das"))
         // cleanup
         rmdir_rec(tmp_root)
@@ -287,7 +276,7 @@ def test_cmd_install_already_installed(t : T?) {
         cmd_install(tmp_root, "github.com/borisbat/daspkg-test-pure", false)
         var lf : LockFile
         t |> success(read_lock_file(tmp_root, lf))
-        t |> success(lf.packages |> key_exists("daspkg-test-pure"))
+        t |> success(has_package(lf, "daspkg-test-pure"))
         // install again without force — should skip
         cmd_install(tmp_root, "github.com/borisbat/daspkg-test-pure", false)
         t |> success(fexist("{tmp_root}/modules/daspkg-test-pure/daslib/test_pure.das"))
@@ -305,7 +294,7 @@ def test_install_local_auto_build(t : T?) {
         // install local package that has CMakeLists.txt
         var lf : LockFile
         install_local(tmp_root, "daspkg-example-c", src_dir, lf)
-        t |> success(lf.packages |> key_exists("daspkg-example-c"))
+        t |> success(has_package(lf, "daspkg-example-c"))
         // verify CMakeLists.txt was copied
         t |> success(fexist("{tmp_root}/modules/daspkg-example-c/CMakeLists.txt"))
         // verify build was triggered — _build directory should exist
@@ -326,7 +315,7 @@ def test_update_local_auto_build(t : T?) {
         // install first
         var lf : LockFile
         install_local(tmp_root, "daspkg-example-c", src_dir, lf)
-        t |> success(lf.packages |> key_exists("daspkg-example-c"))
+        t |> success(has_package(lf, "daspkg-example-c"))
         // remove the built module to verify rebuild on update
         let module_file = "{tmp_root}/modules/daspkg-example-c/dasModuleFastMath.shared_module"
         if (fexist(module_file))
