@@ -420,3 +420,24 @@ def test_cmd_check_no_lockfile(t : T?) {
         t |> success(true)  // just verify no crash
     }
 }
+
+[test]
+def test_check_tool(t : T?) {
+    t |> run("detects git") @(t : T?) {
+        t |> success(check_tool("git", "git --version"))
+    }
+    t |> run("detects cmake") @(t : T?) {
+        t |> success(check_tool("cmake", "cmake --version"))
+    }
+    t |> run("fails on nonexistent tool") @(t : T?) {
+        t |> success(!check_tool("nonexistent", "nonexistent_tool_xyz --version"))
+    }
+}
+
+[test]
+def test_cmd_doctor(t : T?) {
+    t |> run("runs without crash") @(t : T?) {
+        cmd_doctor()
+        t |> success(true)
+    }
+}

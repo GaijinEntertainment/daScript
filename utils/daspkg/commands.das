@@ -109,6 +109,7 @@ def install_local(root, pkg_name, source : string; var lf : LockFile) {
     lf.packages |> insert(pkg_name, entry)
     write_lock_file(root, lf)
     print("Installed '{pkg_name}' (local)\n")
+    try_build_package(target, pkg_name)
 }
 
 def install_dependencies(root, pkg_name : string; var lf : LockFile) {
@@ -184,6 +185,9 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; is_
 
     // step 5: install dependencies
     install_dependencies(root, pkg_name, lf)
+
+    // step 6: build if package has CMakeLists.txt
+    try_build_package(target_dir, pkg_name)
 }
 
 def cmd_install(root, spec : string; force : bool) {
@@ -288,6 +292,7 @@ def cmd_update(root, name : string) {
             return
         }
         print("Updated '{name}'\n")
+        try_build_package(target, name)
         return
     }
     let pkg_dir = "{root}/modules/{name}"
@@ -303,6 +308,7 @@ def cmd_update(root, name : string) {
         }
     }
     print("Updated '{name}'\n")
+    try_build_package(pkg_dir, name)
 }
 
 def cmd_update_all(root : string) {
@@ -363,6 +369,54 @@ def cmd_build(root : string) {
         print("No packages with CMakeLists.txt found\n")
     } else {
         print("Build complete: {built} succeeded, {failed} failed\n")
+    }
+}
+
+def check_tool(name, cmd : string) : bool {
+    var output : string
+    let exit_code = run_cmd("{cmd} 2>&1", output)
+    if (exit_code == 0) {
+        let trimmed = strip(output)
+        if (!empty(trimmed)) {
+            let nl = find(trimmed, "\n")
+            let version_line = nl >= 0 ? slice(trimmed, 0, nl) : trimmed
+            print("  OK: {name} — {version_line}\n")
+        } else {
+            print("  OK: {name}\n")
+        }
+        return true
+    } else {
+        print("  MISSING: {name} — not found in PATH\n")
+        return false
+    }
+}
+
+def cmd_doctor() {
+    print("Checking environment...\n")
+    var ok = true
+    if (!check_tool("git", "git --version")) {
+        ok = false
+    }
+    if (!check_tool("cmake", "cmake --version")) {
+        ok = false
+    }
+    if (!check_tool("gh", "gh --version")) {
+        // gh is optional — only needed for introduce/withdraw
+        print("    (optional — only needed for introduce/withdraw)\n")
+    }
+    if (ok) {
+        print("Environment OK\n")
+    } else {
+        print("Some required tools are missing\n")
+    }
+}
+
+def try_build_package(pkg_dir, name : string) {
+    if (fexist("{pkg_dir}/CMakeLists.txt")) {
+        print("Building '{name}'...\n")
+        if (!build_package(pkg_dir)) {
+            print("  Warning: build failed for '{name}'\n")
+        }
     }
 }
 

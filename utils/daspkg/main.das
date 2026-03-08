@@ -26,8 +26,9 @@ def print_usage() {
     print("  search <query>                     Search the package index\n")
     print("  introduce [url]                    Add a package to the index via PR\n")
     print("  withdraw <name>                    Remove a package from the index via PR\n")
-    print("  build                              Build C++ packages\n")
-    print("  check                              Verify SDK compatibility\n")
+    print("  build                              Build C/C++ packages\n")
+    print("  check                              Verify installed packages\n")
+    print("  doctor                             Check environment (git, cmake, gh)\n")
     print("\nOptions:\n")
     print("  --root <path>   Project root (default: current directory)\n")
     print("  --force         Force reinstall\n")
@@ -70,6 +71,8 @@ def main() {
         cmd_build(root)
     } elif (command == "check") {
         cmd_check(root)
+    } elif (command == "doctor") {
+        cmd_doctor()
     } elif (command == "search") {
         if (empty(parsed.command_arg)) {
             print("Error: search requires a query\n")
