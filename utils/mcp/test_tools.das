@@ -12,6 +12,7 @@ require tools/compile_check public
 require tools/list_functions public
 require tools/list_types public
 require tools/run_script public
+require tools/run_test public
 require tools/format_file public
 require tools/ast_dump public
 require tools/list_modules public
@@ -196,6 +197,29 @@ def test_run_script_error(t : T?) {
         var is_error = false
         let code = "options gen2\ndef broken() : int \{\n    return \"nope\"\n\}\n"
         parse_result(do_run_script("", code), text, is_error)
+        t |> success(is_error, "should be error")
+    }
+}
+
+// ── run_test ──────────────────────────────────────────────────────────
+
+[test]
+def test_run_test_passing(t : T?) {
+    t |> run("passing test returns success") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_run_test(fixture_path("_fixture_test.das")), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "passed") >= 0, "should contain 'passed'")
+    }
+}
+
+[test]
+def test_run_test_bad_file(t : T?) {
+    t |> run("nonexistent file reports error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_run_test("nonexistent_test_file.das"), text, is_error)
         t |> success(is_error, "should be error")
     }
 }

@@ -9,11 +9,10 @@ def do_eval_expression(expression, req_modules : string) : string {
     if (empty(expression)) {
         return make_tool_result("missing 'expression' argument", true)
     }
-    let args <- get_command_line_arguments()
-    if (empty(args)) {
+    let exe = get_daslang_exe()
+    if (empty(exe)) {
         return make_tool_result("Cannot determine daslang executable path", true)
     }
-    let exe = args[0]
     let stub_path = "{get_das_root()}/_mcp_stub.das"
     // build script source
     let script = build_string() <| $(var w) {
@@ -44,22 +43,8 @@ def do_eval_expression(expression, req_modules : string) : string {
     if (!write_ok) {
         return make_tool_result("Cannot write temp file: {stub_path}", true)
     }
-    let cmd = "{exe} {stub_path}"
     var output : string
-    var exit_code = 0
-    unsafe {
-        exit_code = popen(cmd) <| $(f) {
-            if (f == null) {
-                output = "Failed to execute: {cmd}"
-                return
-            }
-            output = build_string() <| $(var w) {
-                while (!feof(f)) {
-                    write(w, fgets(f))
-                }
-            }
-        }
-    }
+    let exit_code = run_and_capture("{exe} {stub_path}", output)
     if (exit_code != 0) {
         return make_tool_result("Evaluation failed (exit code {exit_code}):\n{output}", true)
     }
