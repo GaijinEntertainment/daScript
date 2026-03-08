@@ -211,7 +211,7 @@ def write_function_list(var writer : StringBuilderWriter; program : smart_ptr<Pr
 
 // ── Executable path ──────────────────────────────────────────────────
 
-// Returns absolute path to the daslang executable, with backslashes for Windows cmd.exe
+// Returns absolute path to the daslang executable, with backslashes on Windows
 def get_daslang_exe() : string {
     let args <- get_command_line_arguments()
     if (empty(args)) {
@@ -222,8 +222,11 @@ def get_daslang_exe() : string {
     if (find(exe, ":") < 0 && character_at(exe, 0) != '/') {
         exe = "{get_das_root()}/{exe}"
     }
-    // Replace forward slashes with backslashes for cmd.exe on Windows
-    return replace(exe, "/", "\\")
+    // Replace forward slashes with backslashes for cmd.exe on Windows only
+    if (get_platform_name() == "windows") {
+        return replace(exe, "/", "\\")
+    }
+    return exe
 }
 
 // Run an external command, capture stdout+stderr to a temp file, return (exit_code, output)

@@ -1,0 +1,6 @@
+ruleDirs: []
+customLanguages:
+  daslang:
+    libraryPath: tree-sitter-daslang/daslang.dylib
+    extensions: [das]
+    expandoChar: "#"
