@@ -14,6 +14,7 @@
 //   - Writer settings: no_trailing_zeros, no_empty_arrays
 //   - Broken JSON repair with try_fixing_broken_json
 //   - sprint_json for serializing any value to JSON
+//   - sscan_json for deserializing JSON directly into structs
 //   - Class serialization
 //
 // requires:  daslib/json, daslib/json_boost
@@ -493,6 +494,51 @@ def rename_demo() {
     // output: from_JV: _type=button, _class=5
 }
 
+// === sscan_json ===
+// sscan_json is the reverse of sprint_json — it parses a JSON string
+// directly into a struct, without going through JsonValue?.
+// It uses RTTI to match JSON keys to struct fields and supports
+// all the same types as sprint_json: structs, pointers, arrays,
+// tables, tuples, variants, enums, bitfields, vector types, and
+// all basic types. It also respects @rename field annotations.
+
+struct Config {
+    host : string
+    port : int
+    @rename _type : string
+    tags : array<string>
+}
+
+def sscan_json_demo() {
+    print("\n=== sscan_json ===\n")
+
+    // Parse JSON directly into a struct
+    var cfg : Config
+    let ok = sscan_json("\{\"host\":\"localhost\",\"port\":8080,\"type\":\"server\",\"tags\":[\"prod\",\"v2\"]\}", cfg)
+    print("ok: {ok}\n")
+    // output: ok: true
+    print("host: {cfg.host}, port: {cfg.port}\n")
+    // output: host: localhost, port: 8080
+    print("type: {cfg._type}\n")
+    // output: type: server
+    print("tags: {cfg.tags[0]}, {cfg.tags[1]}\n")
+    // output: tags: prod, v2
+
+    // Round-trip: sprint_json -> sscan_json
+    var src = Player(name = "Hero", hp = 100, speed = 5.5)
+    let json = sprint_json(src, false)
+    var dst : Player
+    sscan_json(json, dst)
+    print("round-trip: {dst.name}, hp={dst.hp}\n")
+    // output: round-trip: Hero, hp=100
+
+    // Unknown keys are ignored, missing fields keep defaults
+    var partial : Config
+    sscan_json("\{\"host\":\"example.com\",\"unknown\":true\}", partial)
+    print("partial: host={partial.host}, port={partial.port}\n")
+    // output: partial: host=example.com, port=0
+}
+
 // === Class serialization ===
 // Both JV/from_JV and sprint_json work with classes.
 // Classes serialize their fields just like structs.
@@ -537,5 +583,6 @@ def main() {
     sprint_json_demo()
     annotations_demo()
     rename_demo()
+    sscan_json_demo()
     class_serialization()
 }

@@ -44,6 +44,8 @@
 
 .. |handmade/function-builtin-sprint_json| replace:: to be documented in |handmade/function-builtin-sprint_json|.rst
 
+.. |handmade/function-builtin-sscan_json| replace:: to be documented in |handmade/function-builtin-sscan_json|.rst
+
 .. |handmade/function-builtin-terminate| replace:: to be documented in |handmade/function-builtin-terminate|.rst
 
 .. |handmade/function-builtin-breakpoint| replace:: to be documented in |handmade/function-builtin-breakpoint|.rst

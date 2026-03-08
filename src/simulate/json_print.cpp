@@ -46,8 +46,12 @@ namespace das {
                         embed = arg.bValue;
                     } else if ( arg.name=="optional" && arg.type==Type::tBool ) {
                         optional = arg.bValue;
-                    } else if ( arg.name=="rename" && arg.type==Type::tString ) {
-                        name = arg.sValue;
+                    } else if ( arg.name=="rename" ) {
+                        if ( arg.type==Type::tString ) {
+                            name = arg.sValue;
+                        } else if ( arg.type==Type::tBool && !name.empty() && name[0]=='_' ) {
+                            name = name.substr(1);
+                        }
                     }
                 }
             }

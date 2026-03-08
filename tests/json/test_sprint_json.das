@@ -436,31 +436,30 @@ def test_annotation_rename(t : T?) {
 // ============================================================
 
 struct BareRenameFields {
-    @rename _bare : int         // no string value — should silently keep "_bare"
+    @rename _bare : int         // no string value — strips leading underscore, key is "bare"
     normal : string
 }
 
 [test]
 def test_annotation_rename_bare(t : T?) {
-    t |> run("bare @rename keeps original name in sprint_json") @(t : T?) {
+    t |> run("bare @rename strips underscore in sprint_json") @(t : T?) {
         var s = BareRenameFields(_bare = 42, normal = "ok")
         let json = sprint_json(s, false)
-        // Validate via parsed JSON — exact substring matching is fragile
-        // under JIT which may produce pretty-printed output (spaces after colons).
+        // Validate via parsed JSON — bare @rename strips leading underscore
         var error : string
         var js = read_json(json, error)
         t |> equal(error, "")
-        t |> equal(js?._bare ?? -1, 42)
+        t |> equal(js?.bare ?? -1, 42)
     }
-    t |> run("bare @rename keeps original name in JV") @(t : T?) {
+    t |> run("bare @rename strips underscore in JV") @(t : T?) {
         var s = BareRenameFields(_bare = 99, normal = "ok")
         var js = JV(s)
-        // should use "_bare" as key, not crash
-        t |> equal(js?._bare ?? 0, 99)
+        // key is "bare" (underscore stripped)
+        t |> equal(js?.bare ?? 0, 99)
     }
     t |> run("bare @rename from_JV") @(t : T?) {
         var error : string
-        var js = read_json("\{ \"_bare\": 7, \"normal\": \"yes\" \}", error)
+        var js = read_json("\{ \"bare\": 7, \"normal\": \"yes\" \}", error)
         t |> equal(error, "")
         var s = from_JV(js, type<BareRenameFields>)
         t |> equal(s._bare, 7)
