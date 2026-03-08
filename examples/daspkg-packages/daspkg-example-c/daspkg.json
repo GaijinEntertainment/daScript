@@ -1,0 +1,4 @@
+{
+    "name": "daspkg-example-c",
+    "description": "Example C module — wraps fast math functions using pure C API (daScriptC.h)"
+}

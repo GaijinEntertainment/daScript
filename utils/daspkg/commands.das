@@ -272,7 +272,22 @@ def cmd_update(root, name : string) {
     }
     let entry = lf.packages[name]
     if (entry.local) {
-        print("Skipping '{name}' (local package)\n")
+        // re-copy from original source path
+        let source = entry.source
+        if (empty(source) || !fexist(source)) {
+            print("Error: local source '{source}' not found\n")
+            return
+        }
+        let target = "{root}/modules/{name}"
+        print("Updating '{name}' from {source}...\n")
+        if (fexist(target)) {
+            rmdir_rec(target)
+        }
+        if (!copy_dir_rec(source, target)) {
+            print("Error: copy failed\n")
+            return
+        }
+        print("Updated '{name}'\n")
         return
     }
     let pkg_dir = "{root}/modules/{name}"
@@ -301,8 +316,54 @@ def cmd_update_all(root : string) {
     }
 }
 
+def build_package(pkg_dir : string) : bool {
+    let build_dir = "{pkg_dir}/_build"
+    let das_root = get_das_root()
+
+    // Configure — pass DASLANG_DIR so the package can find headers and libs
+    var output : string
+    var exit_code = run_cmd("cmake -B \"{build_dir}\" -S \"{pkg_dir}\" -DDASLANG_DIR=\"{das_root}\" 2>&1", output)
+    if (exit_code != 0) {
+        print("  CMake configure FAILED:\n{output}\n")
+        return false
+    }
+
+    // Build
+    exit_code = run_cmd("cmake --build \"{build_dir}\" --config Release 2>&1", output)
+    if (exit_code != 0) {
+        print("  CMake build FAILED:\n{output}\n")
+        return false
+    }
+    return true
+}
+
 def cmd_build(root : string) {
-    print("Build not yet implemented — reserved for C++ plugin packages\n")
+    let modules_dir = "{root}/modules"
+    if (!fexist(modules_dir)) {
+        print("No modules directory found\n")
+        return
+    }
+    var built = 0
+    var failed = 0
+    dir(modules_dir) <| $(name) {
+        if (name == "." || name == ".." || starts_with(name, ".")) {
+            return
+        }
+        let pkg_dir = "{modules_dir}/{name}"
+        if (fexist("{pkg_dir}/CMakeLists.txt")) {
+            print("Building '{name}'...\n")
+            if (build_package(pkg_dir)) {
+                built ++
+            } else {
+                failed ++
+            }
+        }
+    }
+    if (built == 0 && failed == 0) {
+        print("No packages with CMakeLists.txt found\n")
+    } else {
+        print("Build complete: {built} succeeded, {failed} failed\n")
+    }
 }
 
 def cmd_check(root : string) {
