@@ -10,6 +10,7 @@ JSON
     single: Tutorial; JSON Serialization
     single: Tutorial; json_boost
     single: Tutorial; sprint_json
+    single: Tutorial; sscan_json
 
 This tutorial covers ``daslib/json`` and ``daslib/json_boost`` — parsing,
 building, writing, and querying JSON data in daslang.
@@ -238,7 +239,7 @@ simple values too::
 Field annotations
 =================
 
-Struct field annotations control how ``sprint_json`` serializes fields.
+Struct field annotations control how ``sprint_json`` and ``sscan_json`` handle fields.
 These require ``options rtti`` to be enabled.
 
 - ``@optional`` — skip the field if it has a default or empty value
@@ -283,7 +284,7 @@ appears as ``"type"`` in the output (``@rename``).
 Use ``@rename="json_key"`` when the JSON key is a daslang reserved word
 or doesn't follow daslang naming conventions. The field keeps a safe name
 in code (e.g. ``_type``) but serializes as the desired key. ``@rename``
-works with ``sprint_json``, ``JV``, and ``from_JV``::
+works with ``sprint_json``, ``sscan_json``, ``JV``, and ``from_JV``::
 
   struct ApiResponse {
       @rename="type" _type : string
@@ -299,6 +300,38 @@ works with ``sprint_json``, ``JV``, and ``from_JV``::
   var js = read_json("{\"type\":\"button\",\"class\":5,\"value\":2.0}", error)
   var result = from_JV(js, type<ApiResponse>)
   // result._type == "button", result._class == 5
+
+sscan_json
+==========
+
+``sscan_json`` is the reverse of ``sprint_json`` — it parses a JSON string
+directly into a struct using RTTI, without going through ``JsonValue?``.
+It supports all the same types: structs, pointers, arrays, tables, tuples,
+variants, enums, bitfields, vector types, and all scalar types.
+It also respects ``@rename`` field annotations::
+
+  struct Config {
+      host : string
+      port : int
+      @rename _type : string
+      tags : array<string>
+  }
+
+  var cfg : Config
+  let ok = sscan_json("{\"host\":\"localhost\",\"port\":8080,\"type\":\"server\",\"tags\":[\"prod\",\"v2\"]}", cfg)
+  // ok == true, cfg.host == "localhost", cfg.port == 8080
+  // cfg._type == "server", cfg.tags == ["prod", "v2"]
+
+``sscan_json`` returns ``true`` on success and ``false`` on malformed JSON.
+Unknown keys are silently ignored, and missing fields keep their default values.
+
+Round-trip with ``sprint_json``::
+
+  var src = Player(name = "Hero", hp = 100, speed = 5.5)
+  let json = sprint_json(src, false)
+  var dst : Player
+  sscan_json(json, dst)
+  // dst.name == "Hero", dst.hp == 100
 
 Class serialization
 ===================

@@ -2307,6 +2307,7 @@ System infrastructure
   *  :ref:`print (text: string) <function-builtin_print_string>`
   *  :ref:`sprint (value: any; flags: print_flags) : string <function-builtin_sprint_any_print_flags>`
   *  :ref:`sprint_json (value: any; humanReadable: bool) : string <function-builtin_sprint_json_any_bool>`
+  *  :ref:`sscan_json (json: string; value: any) : bool <function-builtin_sscan_json_string_any>`
   *  :ref:`stackwalk (args: bool = true; vars: bool = true) <function-builtin_stackwalk_bool_bool>`
   *  :ref:`terminate () <function-builtin_terminate>`
   *  :ref:`to_compiler_log (text: string) <function-builtin_to_compiler_log_string>`
@@ -2420,6 +2421,17 @@ Serializes `value` directly to a JSON string, bypassing intermediate representat
 :Arguments: * **value** : any
 
             * **humanReadable** : bool
+
+.. _function-builtin_sscan_json_string_any:
+
+.. das:function:: sscan_json(json: string; value: any) : bool
+
+Parses a JSON string directly into `value` using RTTI type information — no intermediate ``JsonValue?`` representation. Returns true on success. Supports structs, pointers, arrays, tables, tuples, variants, enums, bitfields, vector types, and all scalar types. Handles ``@rename`` field annotations. Throws an error for handled types.
+
+
+:Arguments: * **json** : string
+
+            * **value** : any
 
 .. _function-builtin_stackwalk_bool_bool:
 

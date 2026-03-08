@@ -2613,8 +2613,9 @@ namespace das {
             } else {
                 if ( expr->fields.size()==1 ) {
                     const char * mask = "xyzw";
+                    bool is64bit = expr->type->baseType==Type::tInt64 || expr->type->baseType==Type::tUInt64;
                     ss << "v_extract_" << mask[expr->fields[0]];
-                    if ( expr->type->baseType!=Type::tFloat ) ss << "i";
+                    if ( expr->type->baseType!=Type::tFloat ) ss << (is64bit ? "i64" : "i");
                     ss << "(";
                     if (expr->type->baseType != Type::tFloat) ss << "v_cast_vec4i(";
                 } else if ( TypeDecl::isSequencialMask(expr->fields) ) {

@@ -436,8 +436,12 @@ def public parse_json_annotation(name : string; annotation : array<tuple<name : 
     var fieldState : JsonFieldState
     fieldState.argName = name
     for (ann in annotation) {
-        if (ann.name == "rename" && ann.data is tString) {
-            fieldState.argName = ann.data as tString
+        if (ann.name == "rename") {
+            if (ann.data is tString) {
+                fieldState.argName = ann.data as tString
+            } elif (ann.data is tBool && length(name) > 0 && character_at(name, 0) == '_') {
+                fieldState.argName = slice(name, 1)
+            }
         } elif (ann.name == "enum_as_int" && ann.data is tBool) {
             fieldState.enumAsInt = ann.data as tBool
         } elif (ann.name == "unescape" && ann.data is tBool) {

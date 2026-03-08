@@ -2518,10 +2518,11 @@ class public CppAot : AstVisitor {
         } else {
             if (length(expr.fields) == 1) {
                 let mask = "xyzw";
+                let is64bit = expr._type.baseType == Type.tInt64 || expr._type.baseType == Type.tUInt64;
                 write(*ss, "v_extract_")
                 *ss |> write_char(character_at(mask, int(expr.fields[0])));
                 if (expr._type.baseType != Type.tFloat) {
-                    write(*ss, "i");
+                    write(*ss, is64bit ? "i64" : "i");
                 }
                 write(*ss, "(");
                 if (expr._type.baseType != Type.tFloat) {

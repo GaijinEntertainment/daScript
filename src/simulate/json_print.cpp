@@ -46,8 +46,12 @@ namespace das {
                         embed = arg.bValue;
                     } else if ( arg.name=="optional" && arg.type==Type::tBool ) {
                         optional = arg.bValue;
-                    } else if ( arg.name=="rename" && arg.type==Type::tString ) {
-                        name = arg.sValue;
+                    } else if ( arg.name=="rename" ) {
+                        if ( arg.type==Type::tString ) {
+                            name = arg.sValue;
+                        } else if ( arg.type==Type::tBool && !name.empty() && name[0]=='_' ) {
+                            name = name.substr(1);
+                        }
                     }
                 }
             }
@@ -169,7 +173,7 @@ namespace das {
         }
         virtual void Int8 ( int8_t & value ) override {
             if ( !ignoreNextFields.empty() && ignoreNextFields.back() ) return;
-            ss << value;
+            ss << int32_t(value);
         }
         virtual void UInt8 ( uint8_t & value ) override {
             if ( !ignoreNextFields.empty() && ignoreNextFields.back() ) return;
@@ -177,7 +181,7 @@ namespace das {
         }
         virtual void Int16 ( int16_t & value ) override {
             if ( !ignoreNextFields.empty() && ignoreNextFields.back() ) return;
-            ss << value;
+            ss << int32_t(value);
         }
         virtual void UInt16 ( uint16_t & value ) override {
             if ( !ignoreNextFields.empty() && ignoreNextFields.back() ) return;

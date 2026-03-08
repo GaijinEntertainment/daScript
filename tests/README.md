@@ -289,6 +289,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | safe.das | Safe JSON operators — ?[], ?., ?? fallback | |
 | test_json_edge.das | JSON edge cases — parsing scalars, arrays, nested, whitespace, error recovery | |
 | test_sprint_json.das | sprint_json — basic types, structs, arrays, tables, variants, annotations, RTTI | |
+| test_sscan_json.das | sscan_json — scalars, structs, pointers, arrays, tables, tuples, variants, vectors, ranges, bitfields, enums, @rename, round-trip | |
 | types.das | JV/from_JV JSON serialization for all basic/vector/struct types | |
 
 ## language/
