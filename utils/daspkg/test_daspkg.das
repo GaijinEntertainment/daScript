@@ -8,7 +8,12 @@ require dastest/testing_boost public
 require fio
 require strings
 
+require daslib/json
+require daslib/json_boost
+
 require lockfile
+require utils
+require index
 require commands
 
 [test]
@@ -242,5 +247,118 @@ def test_cmd_remove(t : T?) {
         t |> success(!lf2.packages |> key_exists("testpkg"))
         // cleanup
         rmdir_rec(tmp_root)
+    }
+}
+
+[test]
+def test_read_manifest(t : T?) {
+    t |> run("valid manifest") @(t : T?) {
+        let tmp_dir = "{get_das_root()}/_daspkg_test_manifest"
+        mkdir(tmp_dir)
+        fwrite("{tmp_dir}/daspkg.json", "\{\"name\":\"mypkg\",\"description\":\"A test package\"\}")
+        var manifest : PackageManifest
+        t |> success(read_manifest(tmp_dir, manifest))
+        t |> equal(manifest.name, "mypkg")
+        t |> equal(manifest.description, "A test package")
+        remove("{tmp_dir}/daspkg.json")
+        rmdir(tmp_dir)
+    }
+    t |> run("missing name") @(t : T?) {
+        let tmp_dir = "{get_das_root()}/_daspkg_test_manifest2"
+        mkdir(tmp_dir)
+        fwrite("{tmp_dir}/daspkg.json", "\{\"description\":\"no name\"\}")
+        var manifest : PackageManifest
+        t |> success(!read_manifest(tmp_dir, manifest))
+        remove("{tmp_dir}/daspkg.json")
+        rmdir(tmp_dir)
+    }
+    t |> run("missing description") @(t : T?) {
+        let tmp_dir = "{get_das_root()}/_daspkg_test_manifest3"
+        mkdir(tmp_dir)
+        fwrite("{tmp_dir}/daspkg.json", "\{\"name\":\"mypkg\"\}")
+        var manifest : PackageManifest
+        t |> success(!read_manifest(tmp_dir, manifest))
+        remove("{tmp_dir}/daspkg.json")
+        rmdir(tmp_dir)
+    }
+    t |> run("no manifest file") @(t : T?) {
+        var manifest : PackageManifest
+        t |> success(!read_manifest("{get_das_root()}/_daspkg_nonexistent", manifest))
+    }
+}
+
+[test]
+def test_add_to_index_json(t : T?) {
+    t |> run("adds new package") @(t : T?) {
+        let result = add_to_index_json("[]", "mypkg", "github.com/user/mypkg", "A cool package")
+        t |> success(!empty(result))
+        var error : string
+        var js = read_json(result, error)
+        t |> success(js != null)
+        unsafe {
+            t |> equal(length(js.value as _array), 1)
+            t |> equal((js.value as _array)[0]?.name ?? "", "mypkg")
+            t |> equal((js.value as _array)[0]?.url ?? "", "github.com/user/mypkg")
+            t |> equal((js.value as _array)[0]?.description ?? "", "A cool package")
+        }
+    }
+    t |> run("preserves existing and sorts") @(t : T?) {
+        let input = add_to_index_json("[]", "pkg2", "github.com/user/pkg2", "Second")
+        let result = add_to_index_json(input, "pkg1", "github.com/user/pkg1", "First")
+        var error : string
+        var js = read_json(result, error)
+        t |> success(js != null)
+        unsafe {
+            t |> equal(length(js.value as _array), 2)
+            // pkg1 should come before pkg2 (sorted)
+            t |> equal((js.value as _array)[0]?.name ?? "", "pkg1")
+            t |> equal((js.value as _array)[1]?.name ?? "", "pkg2")
+        }
+    }
+    t |> run("invalid JSON returns empty") @(t : T?) {
+        let result = add_to_index_json("not json", "pkg", "url", "desc")
+        t |> success(empty(result))
+    }
+}
+
+[test]
+def test_remove_from_index_json(t : T?) {
+    t |> run("removes existing package") @(t : T?) {
+        let input = add_to_index_json("[]", "mypkg", "github.com/user/mypkg", "desc")
+        let result = remove_from_index_json(input, "mypkg")
+        t |> success(!empty(result))
+        var error : string
+        var js = read_json(result, error)
+        t |> success(js != null)
+        unsafe {
+            t |> equal(length(js.value as _array), 0)
+        }
+    }
+    t |> run("preserves other entries") @(t : T?) {
+        var input = add_to_index_json("[]", "pkg1", "github.com/user/pkg1", "First")
+        input = add_to_index_json(input, "pkg2", "github.com/user/pkg2", "Second")
+        let result = remove_from_index_json(input, "pkg1")
+        var error : string
+        var js = read_json(result, error)
+        t |> success(js != null)
+        unsafe {
+            t |> equal(length(js.value as _array), 1)
+            t |> equal((js.value as _array)[0]?.name ?? "", "pkg2")
+        }
+    }
+    t |> run("removing nonexistent is no-op") @(t : T?) {
+        let input = add_to_index_json("[]", "pkg1", "github.com/user/pkg1", "desc")
+        let result = remove_from_index_json(input, "nonexistent")
+        var error : string
+        var js = read_json(result, error)
+        t |> success(js != null)
+        unsafe {
+            t |> equal(length(js.value as _array), 1)
+            t |> equal((js.value as _array)[0]?.name ?? "", "pkg1")
+        }
+    }
+    t |> run("invalid JSON returns empty") @(t : T?) {
+        let result = remove_from_index_json("bad", "pkg")
+        t |> success(empty(result))
     }
 }

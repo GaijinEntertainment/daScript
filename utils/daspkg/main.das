@@ -9,6 +9,8 @@ require fio
 require strings
 
 require lockfile
+require utils
+require index
 require commands
 
 // daspkg — daslang package manager
@@ -22,6 +24,8 @@ def print_usage() {
     print("  update [name]                      Update one or all packages\n")
     print("  list                               List installed packages\n")
     print("  search <query>                     Search the package index\n")
+    print("  introduce [url]                    Add a package to the index via PR\n")
+    print("  withdraw <name>                    Remove a package from the index via PR\n")
     print("  build                              Build C++ packages\n")
     print("  check                              Verify SDK compatibility\n")
     print("\nOptions:\n")
@@ -31,7 +35,7 @@ def print_usage() {
 
 [export]
 def main() {
-    let args = get_command_line_arguments()
+    var args := get_command_line_arguments()
     let parsed = parse_args(args)
 
     if (empty(parsed.command)) {
@@ -71,6 +75,14 @@ def main() {
             print("Error: search requires a query\n")
         } else {
             cmd_search(root, parsed.command_arg)
+        }
+    } elif (command == "introduce") {
+        cmd_introduce(root, parsed.command_arg)
+    } elif (command == "withdraw") {
+        if (empty(parsed.command_arg)) {
+            print("Error: withdraw requires a package name\n")
+        } else {
+            cmd_withdraw(root, parsed.command_arg)
         }
     } else {
         print("Unknown command: {command}\n\n")

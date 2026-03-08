@@ -10,6 +10,8 @@ require fio
 require strings
 
 require lockfile
+require utils
+require index
 require commands
 
 [test]
