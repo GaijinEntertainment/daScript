@@ -1131,6 +1131,7 @@ class public CppAot : AstVisitor {
     prologue : bool = false;
     solidContext : bool = false;
     cross_platform : bool = false;
+    aot_filter_function : string;  // when set, emit markers around matching function
 
     cachedTi = new DebugVarCache()
 
@@ -1302,6 +1303,9 @@ class public CppAot : AstVisitor {
         return true;
     }
     def override preVisitFunction(fn : FunctionPtr) {
+        if (!empty(aot_filter_function) && (fn.name == aot_filter_function || aotFuncName(fn.get_ptr()) == aot_filter_function)) {
+            write(*ss, "\n/*<<AOT_FUNC_BEGIN>>*/");
+        }
         write(*ss, "\ninline ");
         describeLocalCppType(ss, fn.result, cross_platform, CpptSubstitureRef.no, CpptSkipConst.yes);
         write(*ss, " {aotFuncName(fn.get_ptr())} ( Context * __context__");
@@ -1348,6 +1352,9 @@ class public CppAot : AstVisitor {
             write(*ss, "}\n");
         } else {
             write(*ss, "\n");
+        }
+        if (!empty(aot_filter_function) && (fn.name == aot_filter_function || aotFuncName(fn.get_ptr()) == aot_filter_function)) {
+            write(*ss, "/*<<AOT_FUNC_END>>*/\n");
         }
         return fn;
     }
@@ -4067,6 +4074,72 @@ def public run_aot(prog : Program?; var pctx : Context?; cop : CodeOfPolicies) :
     }
 }
 
+
+let AOT_FUNC_BEGIN = "/*<<AOT_FUNC_BEGIN>>*/"
+let AOT_FUNC_END = "/*<<AOT_FUNC_END>>*/"
+
+[export]
+def public run_aot_function(prog : Program?; var pctx : Context?; cop : CodeOfPolicies; func_name : string) : string {
+    //! Generates AOT C++ for a single function, identified by name.
+    //! Returns the extracted function body, or empty string if not found.
+    let program <- unsafe(reinterpret<ProgramPtr>(prog));
+    return build_string() $(writer) {
+        let (modules_str, noAotModule) = getRequiredModulesFor(program)
+        if ((program._options |> find_arg("no_aot") ?as tBool ?? false) || noAotModule) {
+            return
+        }
+        build_string() $(tmp_writer) {
+            let marker_vis = new NoAotMarker();
+            var inscope adapter_marker <- make_visitor(*marker_vis)
+            visit(program, adapter_marker);
+
+            var coll = new BlockVariableCollector();
+            var inscope adapter_coll <- make_visitor(*coll)
+            visit(program, adapter_coll)
+
+            var pmarker = new PrologueMarker();
+            var inscope adapter_p <- make_visitor(*pmarker)
+            visit(program, adapter_p)
+
+            var flags = new SetPrinterFlags();
+            var inscope flags_adapter <- make_visitor(*flags)
+            visit(program, flags_adapter)
+
+            setAotHashes(program, *pctx)
+
+            var cpp_aot = new CppAot(ss = unsafe(addr(tmp_writer)),
+                                        program := program,
+                                        collector = coll,
+                                        prologue = program._options |> find_arg("aot_prologue") ?as tBool ?? false ||
+                                                program.getDebugger,
+                                        solidContext = program.policies.solid_context ||
+                                                (program._options |> find_arg("solid_context") ?as tBool ?? false),
+                                        cross_platform = cop.cross_platform,
+                                        aot_filter_function = func_name)
+            cpp_aot.helper.helper.rtti = program._options  |> find_arg("rtti") ?as tBool ?? false;
+            cpp_aot.helper.cross_platform = cop.cross_platform;
+            var inscope adapter <- make_visitor(*cpp_aot)
+            cpp_aot.adapter := adapter
+            dumpDependencies(program, cpp_aot);
+            visit(program, cpp_aot.adapter, true)
+            let full_output = cpp_aot.str()
+            delete cpp_aot.helper.helper
+            unsafe {
+                delete cpp_aot.collector
+                delete cpp_aot
+            }
+            // extract between markers
+            let begin_pos = find(full_output, AOT_FUNC_BEGIN)
+            if (begin_pos >= 0) {
+                let content_start = begin_pos + length(AOT_FUNC_BEGIN)
+                let end_pos = find(full_output, AOT_FUNC_END, content_start)
+                if (end_pos >= 0) {
+                    write(writer, slice(full_output, content_start, end_pos))
+                }
+            }
+        }
+    }
+}
 
 [export]
 def public aot(input : string; paranoid_validation : bool, cross_platform : bool; cop : CodeOfPolicies) : string {

@@ -27,6 +27,7 @@ require tools/eval_expression public
 require tools/describe_type public
 require tools/grep_usage public
 require tools/outline public
+require tools/aot public
 
 // helper: parse tool result JSON, return (text, isError)
 def parse_result(result : string; var text : string&; var is_error : bool&) : bool {
@@ -980,5 +981,100 @@ def test_shared_module_not_cached(t : T?) {
         t |> success(!is_error, "user2 should compile (Bar should be visible after module change)")
         // 4. restore original
         fwrite(shared_mod, original)
+    }
+}
+
+// ── aot ─────────────────────────────────────────────────────────────
+
+[test]
+def test_aot_full_file(t : T?) {
+    t |> run("full file AOT") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_aot(fixture_path("_fixture_valid.das"), ""), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "inline") >= 0, "should contain inline functions")
+        t |> success(find(text, "namespace das") >= 0, "should contain namespace")
+    }
+}
+
+[test]
+def test_aot_single_function(t : T?) {
+    t |> run("extracts single function by name") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_aot(fixture_path("_fixture_aot.das"), "helper"), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "inline") >= 0, "should contain inline keyword")
+        t |> success(find(text, "helper") >= 0, "should contain helper function name")
+        // should NOT contain describe
+        t |> success(find(text, "describe") < 0, "should not contain other functions")
+    }
+}
+
+[test]
+def test_aot_not_found(t : T?) {
+    t |> run("nonexistent function") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_aot(fixture_path("_fixture_aot.das"), "nonexistent"), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(!is_error, "should not be error (informational)")
+        t |> success(find(text, "No function matching") >= 0, "should say no match")
+        t |> success(find(text, "Available functions") >= 0, "should list available functions")
+    }
+}
+
+[test]
+def test_aot_multiple_matches(t : T?) {
+    t |> run("overloaded function returns disambiguation list") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_aot(fixture_path("_fixture_aot.das"), "describe"), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "Multiple functions match") >= 0, "should say multiple matches")
+        t |> success(find(text, "int") >= 0, "should show int overload signature")
+        t |> success(find(text, "float") >= 0, "should show float overload signature")
+    }
+}
+
+[test]
+def test_aot_select_by_aot_name(t : T?) {
+    t |> run("select overload by mangled aot_name") <| @(t : T?) {
+        // first get the disambiguation list to find the aot_name
+        var text : string
+        var is_error = false
+        parse_result(do_aot(fixture_path("_fixture_aot.das"), "describe"), text, is_error)
+        // extract an aot_name from the list (format: "describe(...) [describe_HEXHASH]")
+        let bracket_pos = find(text, "[describe_")
+        t |> success(bracket_pos >= 0, "should contain bracketed aot_name")
+        if (bracket_pos < 0) {
+            return
+        }
+        let name_start = bracket_pos + 1
+        let name_end = find(text, "]", name_start)
+        t |> success(name_end > name_start, "should have closing bracket")
+        if (name_end <= name_start) {
+            return
+        }
+        let aot_name = slice(text, name_start, name_end)
+        // now select by aot_name
+        parse_result(do_aot(fixture_path("_fixture_aot.das"), aot_name), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "inline") >= 0, "should contain inline function")
+        t |> success(find(text, aot_name) >= 0, "should contain the selected aot_name")
+    }
+}
+
+[test]
+def test_aot_missing_file(t : T?) {
+    t |> run("missing file reports error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_aot("nonexistent_file_12345.das", ""), text, is_error)
+        t |> success(is_error, "should be error")
     }
 }

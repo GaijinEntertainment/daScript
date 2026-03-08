@@ -32,6 +32,7 @@ require tools/eval_expression public
 require tools/describe_type public
 require tools/grep_usage public
 require tools/outline public
+require tools/aot public
 
 let HEAP_COLLECT_THRESHOLD = 1024ul * 1024ul  // 1 MB
 let LOG_FILE = "utils/mcp/mcp_server.log"
@@ -375,6 +376,16 @@ def handle_tools_list(id_json : string) : string {
             ["file"]
         ))
     }
+    result.tools |> emplace(make_tool(
+        "aot",
+        "Generate AOT (ahead-of-time) C++ code for a daScript file or a single function. Without 'function', returns the full AOT output. With 'function', returns C++ for that function only. If multiple functions match, returns the list of matches.",
+        {
+            "file" => PropertySchema(_type = "string", description = "Path to the .das file"),
+            "function" => PropertySchema(_type = "string", description = "Function name to extract AOT for. Supports exact name, method name (matches ClassName`method), and generic origin."),
+            "project" => PROJECT_PROP
+        },
+        ["file"]
+    ))
     return json_rpc_response(id_json, sprint_json(result, false))
 }
 
@@ -442,6 +453,8 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : s
         return do_grep_usage(arg1, arg2, arg3, arg4)
     } elif (tool_name == "outline") {
         return do_outline(arg1, arg2)
+    } elif (tool_name == "aot") {
+        return do_aot(arg1, arg2, project)
     } else {
         return make_tool_result("unknown tool: {tool_name}", true)
     }
@@ -561,6 +574,12 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         }
     } elif (name == "list_modules") {
         // no args needed
+    } elif (name == "aot") {
+        arg1 = get_string_arg(args, "file")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'file' argument")
+        }
+        arg2 = get_string_arg(args, "function")
     } else {
         return json_rpc_error(id_json, -32602, "unknown tool: {name}")
     }
