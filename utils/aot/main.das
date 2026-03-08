@@ -156,29 +156,25 @@ def main() {
         aotlib_files = get_list_of_files(args, "-aotlib")
         ctx_files = get_list_of_files(args, "-ctx")
     }
-    // If no files provided return `0`
-    // Otherwise if at least 1 file succeeded return `0`
-    var result = (aot_files |> empty() &&
-                 aotlib_files |> empty() &&
-                 ctx_files |> empty())
+    var result = true
     using <| $(var cop : CodeOfPolicies) {
         updateCOP(cop, !gen1, gen2_make, false)
         for ((aot_in, aot_out) in aot_files) {
             let res = aot(aot_in, false, cross_platform, cop)
             let written = write_result(res, aot_out, "Aot", force_overwrite)
-            result = result || written
+            result = result && written
         }
         updateCOP(cop, !gen1, gen2_make, true)
         for ((aot_in, aot_out) in aotlib_files) {
             let res = aot(aot_in, false, cross_platform, cop)
             let written = write_result(res, aot_out, "Aot library", force_overwrite)
-            result = result || written
+            result = result && written
         }
         updateCOP(cop, !gen1, gen2_make, false)
         for ((ctx_in, ctx_out) in ctx_files) {
             let res = standalone_aot(ctx_in, ctx_out, cross_platform, false, cop)
             let written = write_result(res, ctx_out, "Standalone ctx", force_overwrite)
-            result = result || written
+            result = result && written
         }
     }
     unsafe {

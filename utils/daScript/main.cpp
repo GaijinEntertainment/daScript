@@ -307,7 +307,7 @@ int das_aot_main ( int argc, char * argv[] ) {
     #endif
     Module::Initialize();
     daScriptEnvironment::getBound()->g_isInAot = true;
-    bool compiled = false;
+    bool compiled = true;
     if ( standaloneContext ) {
         StandaloneContextCfg cfg = {standaloneContextName, standaloneClassName ? standaloneClassName : "StandaloneContext"};
         cfg.cross_platform = cross_platform;
@@ -350,7 +350,7 @@ int das_aot_main ( int argc, char * argv[] ) {
                 if (!is_ok && !quiet) {
                     tout << "Failed to compile `" << string(in_file) << "` in aot.\n";
                 }
-                compiled |= is_ok;
+                compiled &= is_ok;
             }
         } else {
             size_t id = 2;
@@ -360,7 +360,7 @@ int das_aot_main ( int argc, char * argv[] ) {
                 if (!is_ok && !quiet) {
                     tout << "Failed to compile `" << out << "` in aot.\n";
                 }
-                compiled |= is_ok;
+                compiled &= is_ok;
                 id += 2;
             }
         }
