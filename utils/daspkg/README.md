@@ -184,8 +184,39 @@ State is stored in module globals (`_pkg_name`, `_download_ref`, etc.) and read 
 
 Run tests:
 ```bash
+# unit tests (local operations, parsing, package_runner) — fast, no network
 daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg.das
+
+# integration tests (git clone, version resolve, index fetch) — requires network
 daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg_git.das
+```
+
+### Manual example testing
+
+```bash
+# version-pinned install — v1.0 (only get_version())
+cd examples/daspkg/daspkg-version-1
+daslang ../../../utils/daspkg/main.das -- --root . install
+daslang main.das
+# expected: version = 1.0
+
+# version-pinned install — v2.0 (get_version() + new_in_v2())
+cd examples/daspkg/daspkg-version-2
+daslang ../../../utils/daspkg/main.das -- --root . install
+daslang main.das
+# expected: version = 2.0
+#           new in v2 = this function only exists in v2
+
+# pure daslang install from git
+cd examples/daspkg/daspkg-example
+daslang ../../../utils/daspkg/main.das -- --root . install
+dalang main.das
+
+# C/C++ build workflow
+cd examples/daspkg/daspkg-build-example
+daslang ../../../utils/daspkg/main.das -- --root . install
+daslang ../../../utils/daspkg/main.das -- --root . build
+daslang main.das
 ```
 
 ## Use-case workflows
