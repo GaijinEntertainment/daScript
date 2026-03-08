@@ -173,7 +173,7 @@ namespace das {
         }
         virtual void Int8 ( int8_t & value ) override {
             if ( !ignoreNextFields.empty() && ignoreNextFields.back() ) return;
-            ss << value;
+            ss << int32_t(value);
         }
         virtual void UInt8 ( uint8_t & value ) override {
             if ( !ignoreNextFields.empty() && ignoreNextFields.back() ) return;
@@ -181,7 +181,7 @@ namespace das {
         }
         virtual void Int16 ( int16_t & value ) override {
             if ( !ignoreNextFields.empty() && ignoreNextFields.back() ) return;
-            ss << value;
+            ss << int32_t(value);
         }
         virtual void UInt16 ( uint16_t & value ) override {
             if ( !ignoreNextFields.empty() && ignoreNextFields.back() ) return;
