@@ -25,6 +25,7 @@ namespace das {
     DAS_API void builtin_feint ( char * text, Context * context, LineInfoArg * at );
     DAS_API vec4f builtin_sprint ( Context & context, SimNode_CallBase * call, vec4f * args );
     DAS_API vec4f builtin_json_sprint ( Context & context, SimNode_CallBase * call, vec4f * args );
+    DAS_API vec4f builtin_json_sscan ( Context & context, SimNode_CallBase * call, vec4f * args );
     DAS_API char * builtin_print_data ( const void * data, const TypeInfo * typeInfo, Bitfield flags, Context * context, LineInfoArg * at );
     DAS_API char * builtin_print_data_v ( float4 data, const TypeInfo * typeInfo, Bitfield flags, Context * context, LineInfoArg * at );
     DAS_API char * builtin_debug_type ( const TypeInfo * typeInfo, Context * context, LineInfoArg * at );
