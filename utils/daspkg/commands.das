@@ -1,4 +1,5 @@
 options gen2
+options rtti
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
@@ -14,6 +15,7 @@ require daslib/json_boost
 require lockfile
 require utils
 require index
+require package_runner
 
 struct ParsedArgs {
     root : string
@@ -114,16 +116,20 @@ def install_local(root, pkg_name, source : string; var lf : LockFile) {
 
 def install_dependencies(root, pkg_name : string; var lf : LockFile) {
     let pkg_dir = "{root}/modules/{pkg_name}"
-    var deps : table<string; string>
-    if (!read_pkg_dependencies(pkg_dir, deps)) {
+    let das_package = "{pkg_dir}/.das_package"
+    if (!fexist(das_package)) {
         return
     }
-    for (dep_name, dep_source in keys(deps), values(deps)) {
-        if (lf.packages |> key_exists(dep_name)) {
-            continue
+    var pkg_deps : array<PackageDependency>
+    if (run_das_package_deps(das_package, "", pkg_deps)) {
+        for (d in pkg_deps) {
+            let dep_name = package_name_from_source(d.source)
+            if (lf.packages |> key_exists(dep_name)) {
+                continue
+            }
+            print("  Installing dependency: {dep_name}...\n")
+            install_git(root, dep_name, d.source, "", lf, [is_root = false])
         }
-        print("  Installing dependency: {dep_name}...\n")
-        install_git(root, dep_name, dep_source, "", lf, [is_root = false])
     }
 }
 
@@ -232,13 +238,18 @@ def cmd_install(root, spec : string; force : bool) {
 }
 
 def cmd_install_all(root : string; force : bool) {
-    var deps : table<string; string>
-    if (!read_pkg_dependencies(root, deps)) {
-        print("No daspkg.json found or no dependencies listed\n")
+    let das_package = "{root}/.das_package"
+    if (!fexist(das_package)) {
+        print("No .das_package found\n")
         return
     }
-    for (name, source in keys(deps), values(deps)) {
-        cmd_install(root, source, force)
+    var pkg_deps : array<PackageDependency>
+    if (!run_das_package_deps(das_package, "", pkg_deps) || length(pkg_deps) == 0) {
+        print("No dependencies listed in .das_package\n")
+        return
+    }
+    for (d in pkg_deps) {
+        cmd_install(root, d.source, force)
     }
 }
 
@@ -412,6 +423,27 @@ def cmd_doctor() {
 }
 
 def try_build_package(pkg_dir, name : string) {
+    let das_package = "{pkg_dir}/.das_package"
+    if (fexist(das_package)) {
+        var info : PackageBuildInfo
+        if (run_das_package_build(das_package, info)) {
+            if (info.is_cmake) {
+                print("Building '{name}'...\n")
+                if (!build_package(pkg_dir)) {
+                    print("  Warning: build failed for '{name}'\n")
+                }
+            } elif (info.is_custom && !empty(info.command)) {
+                print("Building '{name}' (custom)...\n")
+                var output : string
+                let exit_code = run_cmd("cd \"{pkg_dir}\" && {info.command} 2>&1", output)
+                if (exit_code != 0) {
+                    print("  Warning: custom build failed for '{name}':\n{output}\n")
+                }
+            }
+        }
+        return
+    }
+    // fallback: check for CMakeLists.txt directly
     if (fexist("{pkg_dir}/CMakeLists.txt")) {
         print("Building '{name}'...\n")
         if (!build_package(pkg_dir)) {

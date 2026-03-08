@@ -28,7 +28,7 @@ def test_install_git_basic(t : T?) {
             t |> success(lf.packages["daspkg-test-pure"].root)
         }
         // verify files exist
-        t |> success(fexist("{tmp_root}/modules/daspkg-test-pure/daspkg.json"))
+        t |> success(fexist("{tmp_root}/modules/daspkg-test-pure/.das_package"))
         t |> success(fexist("{tmp_root}/modules/daspkg-test-pure/daslib/test_pure.das"))
         // cleanup
         rmdir_rec(tmp_root)
@@ -193,13 +193,11 @@ def test_cmd_update_all_integration(t : T?) {
 
 [test]
 def test_cmd_install_all_integration(t : T?) {
-    t |> run("installs all dependencies from daspkg.json") @(t : T?) {
+    t |> run("installs all dependencies from .das_package") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_inst_all"
         mkdir(tmp_root)
-        // write a daspkg.json with two deps
-        fopen("{tmp_root}/daspkg.json", "wb") <| $(f) {
-            fwrite(f, "\{\"name\":\"test\",\"description\":\"test\",\"dependencies\":\{\"daspkg-test-pure\":\"github.com/borisbat/daspkg-test-pure\"\}\}\n")
-        }
+        // write a .das_package with a dependency
+        fwrite("{tmp_root}/.das_package", "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"test-project\")\n    package_description(\"test\")\n\}\n[export]\ndef dependencies(version : string) \{\n    require_package(\"github.com/borisbat/daspkg-test-pure\")\n\}\n")
         cmd_install_all(tmp_root, false)
         // verify installed
         var lf : LockFile

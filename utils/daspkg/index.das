@@ -13,6 +13,7 @@ require daslib/json_boost
 
 require lockfile
 require utils
+require package_runner
 
 let INDEX_REPO = "github.com/borisbat/daspkg-index"
 
@@ -95,37 +96,6 @@ def is_index_name(spec : string) : bool {
     return find(spec, "/") < 0 && find(spec, "\\") < 0 && find(spec, ".") < 0
 }
 
-def read_pkg_dependencies(pkg_dir : string; var deps : table<string; string>) : bool {
-    let manifest = "{pkg_dir}/daspkg.json"
-    if (!fexist(manifest)) {
-        return false
-    }
-    let text = fread(manifest)
-    if (empty(text)) {
-        return false
-    }
-    var error : string
-    var parsed = read_json(text, error)
-    if (parsed == null) {
-        return false
-    }
-    let dependencies = parsed?.dependencies
-    if (dependencies == null) {
-        return false
-    }
-    if (!(dependencies.value is _object)) {
-        return false
-    }
-    unsafe {
-        for (name, val in keys(dependencies.value as _object), values(dependencies.value as _object)) {
-            if (val != null && val.value is _string) {
-                deps[name] := val.value as _string
-            }
-        }
-    }
-    return true
-}
-
 def cmd_search(root, query : string) {
     var index : table<string; IndexEntry>
     if (!fetch_index(root, index)) {
@@ -151,30 +121,24 @@ struct PackageManifest {
 }
 
 def read_manifest(pkg_dir : string; var manifest : PackageManifest) : bool {
-    let path = "{pkg_dir}/daspkg.json"
-    if (!fexist(path)) {
-        print("Error: no daspkg.json found in {pkg_dir}\n")
+    let das_package = "{pkg_dir}/.das_package"
+    if (!fexist(das_package)) {
+        print("Error: no .das_package found in {pkg_dir}\n")
         return false
     }
-    let text = fread(path)
-    if (empty(text)) {
-        print("Error: cannot read {path}\n")
+    var meta : PackageMeta
+    if (!run_das_package_meta(das_package, meta)) {
+        print("Error: failed to run .das_package in {pkg_dir}\n")
         return false
     }
-    var error : string
-    var parsed = read_json(text, error)
-    if (parsed == null) {
-        print("Error parsing daspkg.json: {error}\n")
-        return false
-    }
-    manifest.name = parsed?.name ?? ""
-    manifest.description = parsed?.description ?? ""
+    manifest.name = meta.pkg_name
+    manifest.description = meta.description
     if (empty(manifest.name)) {
-        print("Error: daspkg.json missing 'name' field\n")
+        print("Error: .das_package missing package_name()\n")
         return false
     }
     if (empty(manifest.description)) {
-        print("Error: daspkg.json missing 'description' field\n")
+        print("Error: .das_package missing package_description()\n")
         return false
     }
     return true

@@ -161,41 +161,6 @@ def test_lockfile_roundtrip(t : T?) {
 }
 
 [test]
-def test_read_pkg_dependencies(t : T?) {
-    t |> run("parses daspkg.json dependencies") @(t : T?) {
-        let tmp_dir = "{get_das_root()}/_daspkg_test_tmp"
-        mkdir(tmp_dir)
-        let manifest = "{tmp_dir}/daspkg.json"
-        fwrite(manifest, "\{\"name\":\"test\",\"dependencies\":\{\"foo\":\"github.com/user/foo\",\"bar\":\"github.com/user/bar\"\}\}")
-        var deps : table<string; string>
-        t |> success(read_pkg_dependencies(tmp_dir, deps))
-        t |> equal(length(deps), 2)
-        t |> success(deps |> key_exists("foo"))
-        t |> success(deps |> key_exists("bar"))
-        unsafe {
-            t |> equal(deps["foo"], "github.com/user/foo")
-            t |> equal(deps["bar"], "github.com/user/bar")
-        }
-        // cleanup
-        remove(manifest)
-        rmdir(tmp_dir)
-    }
-    t |> run("no manifest returns false") @(t : T?) {
-        var deps : table<string; string>
-        t |> success(!read_pkg_dependencies("{get_das_root()}/_daspkg_nonexistent", deps))
-    }
-    t |> run("no dependencies field returns false") @(t : T?) {
-        let tmp_dir = "{get_das_root()}/_daspkg_test_tmp2"
-        mkdir(tmp_dir)
-        fwrite("{tmp_dir}/daspkg.json", "\{\"name\":\"test\"\}")
-        var deps : table<string; string>
-        t |> success(!read_pkg_dependencies(tmp_dir, deps))
-        remove("{tmp_dir}/daspkg.json")
-        rmdir(tmp_dir)
-    }
-}
-
-[test]
 def test_install_local(t : T?) {
     t |> run("installs and records in lockfile") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_root"
@@ -253,33 +218,33 @@ def test_cmd_remove(t : T?) {
 
 [test]
 def test_read_manifest(t : T?) {
-    t |> run("valid manifest") @(t : T?) {
+    t |> run("valid manifest from .das_package") @(t : T?) {
         let tmp_dir = "{get_das_root()}/_daspkg_test_manifest"
         mkdir(tmp_dir)
-        fwrite("{tmp_dir}/daspkg.json", "\{\"name\":\"mypkg\",\"description\":\"A test package\"\}")
+        fwrite("{tmp_dir}/.das_package", "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"mypkg\")\n    package_description(\"A test package\")\n\}\n")
         var manifest : PackageManifest
         t |> success(read_manifest(tmp_dir, manifest))
         t |> equal(manifest.name, "mypkg")
         t |> equal(manifest.description, "A test package")
-        remove("{tmp_dir}/daspkg.json")
+        remove("{tmp_dir}/.das_package")
         rmdir(tmp_dir)
     }
     t |> run("missing name") @(t : T?) {
         let tmp_dir = "{get_das_root()}/_daspkg_test_manifest2"
         mkdir(tmp_dir)
-        fwrite("{tmp_dir}/daspkg.json", "\{\"description\":\"no name\"\}")
+        fwrite("{tmp_dir}/.das_package", "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_description(\"no name\")\n\}\n")
         var manifest : PackageManifest
         t |> success(!read_manifest(tmp_dir, manifest))
-        remove("{tmp_dir}/daspkg.json")
+        remove("{tmp_dir}/.das_package")
         rmdir(tmp_dir)
     }
     t |> run("missing description") @(t : T?) {
         let tmp_dir = "{get_das_root()}/_daspkg_test_manifest3"
         mkdir(tmp_dir)
-        fwrite("{tmp_dir}/daspkg.json", "\{\"name\":\"mypkg\"\}")
+        fwrite("{tmp_dir}/.das_package", "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"mypkg\")\n\}\n")
         var manifest : PackageManifest
         t |> success(!read_manifest(tmp_dir, manifest))
-        remove("{tmp_dir}/daspkg.json")
+        remove("{tmp_dir}/.das_package")
         rmdir(tmp_dir)
     }
     t |> run("no manifest file") @(t : T?) {
