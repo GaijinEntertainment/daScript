@@ -396,20 +396,17 @@ def cmd_update(root, name : string) {
         try_build_package(target, name)
         return
     }
+    // re-install from source with same version — re-resolves via .das_package
+    let source = entry.source
+    let version = entry.version
+    let is_root = entry.root
     let pkg_dir = "{root}/modules/{name}"
     print("Updating '{name}'...\n")
-    var output : string
-    let exit_code = run_cmd("git -C \"{pkg_dir}\" pull --ff-only 2>&1", output)
-    if (exit_code != 0) {
-        // fall back to fetch + reset
-        let exit_code2 = run_cmd("git -C \"{pkg_dir}\" fetch origin 2>&1 && git -C \"{pkg_dir}\" reset --hard origin/HEAD 2>&1", output)
-        if (exit_code2 != 0) {
-            print("Error: update failed:\n{output}\n")
-            return
-        }
+    if (fexist(pkg_dir)) {
+        rmdir_rec(pkg_dir)
     }
-    print("Updated '{name}'\n")
-    try_build_package(pkg_dir, name)
+    lf.packages |> erase(name)
+    install_git(root, name, source, version, lf, [is_root = is_root])
 }
 
 def cmd_update_all(root : string) {

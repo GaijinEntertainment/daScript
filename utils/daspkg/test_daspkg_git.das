@@ -212,6 +212,39 @@ def test_cmd_update_all_integration(t : T?) {
 }
 
 [test]
+def test_cmd_update_preserves_version(t : T?) {
+    t |> run("update re-resolves pinned version") @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_upd_ver"
+        mkdir(tmp_root)
+        // install v1.0
+        var lf : LockFile
+        install_git(tmp_root, "daspkg-test-versions", "github.com/borisbat/daspkg-test-versions", "1.0", lf)
+        t |> success(lf.packages |> key_exists("daspkg-test-versions"))
+        unsafe {
+            t |> equal(lf.packages["daspkg-test-versions"].tag, "v1.0")
+            t |> equal(lf.packages["daspkg-test-versions"].version, "1.0")
+        }
+        // verify v1.0 content
+        var src = fread("{tmp_root}/modules/daspkg-test-versions/daslib/test_versions.das")
+        t |> success(find(src, "\"1.0\"") >= 0)
+        // update — should stay on v1.0, not jump to main/v2.0
+        cmd_update(tmp_root, "daspkg-test-versions")
+        var lf2 : LockFile
+        t |> success(read_lock_file(tmp_root, lf2))
+        unsafe {
+            t |> equal(lf2.packages["daspkg-test-versions"].tag, "v1.0")
+            t |> equal(lf2.packages["daspkg-test-versions"].version, "1.0")
+        }
+        // verify still v1.0 content
+        src = fread("{tmp_root}/modules/daspkg-test-versions/daslib/test_versions.das")
+        t |> success(find(src, "\"1.0\"") >= 0)
+        t |> success(find(src, "new_in_v2") < 0)
+        // cleanup
+        rmdir_rec(tmp_root)
+    }
+}
+
+[test]
 def test_cmd_install_all_integration(t : T?) {
     t |> run("installs all dependencies from .das_package") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_inst_all"

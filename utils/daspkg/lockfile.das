@@ -15,9 +15,9 @@ require daslib/json_boost
 
 struct PackageEntry {
     source : string
-    version : string
-    tag : string
-    branch : string
+    version : string           // requested version (e.g. "1.0" from install foo@1.0)
+    tag : string               // resolved git tag (e.g. "v1.0" after resolve())
+    branch : string            // resolved git branch (if branch-based)
     root : bool = true
     local : bool = false
 }
