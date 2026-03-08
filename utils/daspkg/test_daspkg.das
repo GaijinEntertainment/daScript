@@ -15,6 +15,7 @@ require lockfile
 require utils
 require index
 require commands
+require package_runner public
 
 [test]
 def test_package_name_from_source(t : T?) {
@@ -439,5 +440,90 @@ def test_cmd_doctor(t : T?) {
     t |> run("runs without crash") @(t : T?) {
         cmd_doctor()
         t |> success(true)
+    }
+}
+
+// --- package_runner tests ---
+
+let PKG_FIXTURE = "utils/daspkg/fixtures/test.das_package"
+let PKG_BRANCH_FIXTURE = "utils/daspkg/fixtures/test_branch.das_package"
+
+[test]
+def test_run_das_package_meta(t : T?) {
+    t |> run("reads package metadata") @(t : T?) {
+        var meta : PackageMeta
+        let ok = run_das_package_meta(PKG_FIXTURE, meta)
+        t |> success(ok)
+        t |> equal("test-pkg", meta.pkg_name)
+        t |> equal("Test Author", meta.author)
+        t |> equal("A test package", meta.description)
+        t |> equal("https://github.com/test/test-pkg", meta.source)
+    }
+}
+
+[test]
+def test_run_das_package_resolve_tag(t : T?) {
+    t |> run("resolves tag version") @(t : T?) {
+        var res : ResolveResult
+        let ok = run_das_package_resolve(PKG_FIXTURE, "0.5", "1.2.3", res)
+        t |> success(ok)
+        t |> equal("v1.2.3", res.tag)
+        t |> equal("", res.branch)
+    }
+}
+
+[test]
+def test_run_das_package_resolve_branch(t : T?) {
+    t |> run("resolves branch download") @(t : T?) {
+        var res : ResolveResult
+        let ok = run_das_package_resolve(PKG_BRANCH_FIXTURE, "0.5", "1.0", res)
+        t |> success(ok)
+        t |> equal("", res.tag)
+        t |> equal("main", res.branch)
+    }
+}
+
+[test]
+def test_run_das_package_deps(t : T?) {
+    t |> run("reads dependencies") @(t : T?) {
+        var deps : array<PackageDependency>
+        let ok = run_das_package_deps(PKG_FIXTURE, "1.0", deps)
+        t |> success(ok)
+        t |> equal(2, length(deps))
+        t |> equal("https://github.com/test/dep-a", deps[0].source)
+        t |> equal(">=1.0", deps[0].version_constraint)
+        t |> equal("https://github.com/test/dep-b", deps[1].source)
+        t |> equal("", deps[1].version_constraint)
+    }
+}
+
+[test]
+def test_run_das_package_build(t : T?) {
+    t |> run("reads cmake build info") @(tt : T?) {
+        var info : PackageBuildInfo
+        let ok = run_das_package_build(PKG_FIXTURE, info)
+        tt |> success(ok)
+        tt |> equal(true, info.is_cmake)
+    }
+}
+
+[test]
+def test_run_das_package_missing_file(t : T?) {
+    t |> run("returns false for missing file") @(t : T?) {
+        var meta : PackageMeta
+        let ok = run_das_package_meta("nonexistent.das_package", meta)
+        t |> equal(false, ok)
+    }
+}
+
+[test]
+def test_run_das_package_optional_functions(t : T?) {
+    t |> run("succeeds when function is missing") @(tt : T?) {
+        // test_branch.das_package has no build() function — should still succeed
+        var info : PackageBuildInfo
+        let ok = run_das_package_build(PKG_BRANCH_FIXTURE, info)
+        tt |> success(ok)
+        tt |> equal(false, info.is_cmake)
+        tt |> equal(false, info.is_custom)
     }
 }
