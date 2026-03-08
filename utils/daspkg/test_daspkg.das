@@ -128,10 +128,10 @@ def test_lockfile_roundtrip(t : T?) {
         mkdir(tmp_dir)
         var lf : LockFile
         lf.sdk_version = "0.4.0"
-        set_package(lf, PackageEntry(name="foo", source="github.com/user/foo",
-            version="v1.0", tag="v1.0", root=true))
-        set_package(lf, PackageEntry(name="bar", source="github.com/user/bar",
-            version="v2.0", tag="v2.0", root=false))
+        set_package(lf, PackageEntry(name = "foo", source = "github.com/user/foo",
+            version = "v1.0", tag = "v1.0", root = true))
+        set_package(lf, PackageEntry(name = "bar", source = "github.com/user/bar",
+            version = "v2.0", tag = "v2.0", root = false))
         t |> success(write_lock_file(tmp_dir, lf))
         var lf2 : LockFile
         t |> success(read_lock_file(tmp_dir, lf2))
@@ -189,7 +189,7 @@ def test_cmd_remove(t : T?) {
         fwrite("{tmp_root}/modules/testpkg/dummy.txt", "hello")
         // write a lock file with the package
         var lf : LockFile
-        set_package(lf, PackageEntry(name="testpkg", source="github.com/user/testpkg", root=true))
+        set_package(lf, PackageEntry(name = "testpkg", source = "github.com/user/testpkg", root = true))
         write_lock_file(tmp_root, lf)
         // remove
         cmd_remove(tmp_root, "testpkg")
@@ -333,8 +333,8 @@ def test_cmd_check(t : T?) {
 
     // write lockfile with two entries: one present, one missing
     var lf = LockFile()
-    set_package(lf, PackageEntry(name="mypkg", source="github.com/user/mypkg"))
-    set_package(lf, PackageEntry(name="ghost", source="github.com/user/ghost"))
+    set_package(lf, PackageEntry(name = "mypkg", source = "github.com/user/mypkg"))
+    set_package(lf, PackageEntry(name = "ghost", source = "github.com/user/ghost"))
     write_lock_file(test_root, lf)
 
     t |> run("detects present and missing packages") @(t : T?) {
@@ -350,7 +350,7 @@ def test_cmd_check(t : T?) {
         let pkg2_dir = "{modules_dir}/nopkg"
         mkdir(pkg2_dir)
         var lf2 = LockFile()
-        set_package(lf2, PackageEntry(name="nopkg", source="github.com/user/nopkg"))
+        set_package(lf2, PackageEntry(name = "nopkg", source = "github.com/user/nopkg"))
         write_lock_file(test_root, lf2)
         cmd_check(test_root)  // should print WARNING, not crash
         t |> success(fexist(pkg2_dir))
@@ -508,5 +508,127 @@ def test_run_das_package_resolve_sdk_aware(t : T?) {
         let ok = run_das_package_resolve(PKG_SDK_AWARE_FIXTURE, "0.5", "3.0", res)
         t |> success(ok)
         t |> equal("v3.0", res.tag)
+    }
+}
+
+[test]
+def test_parse_version(t : T?) {
+    t |> run("parses major.minor.patch") @(t : T?) {
+        let v = parse_version("1.2.3")
+        t |> success(v.valid)
+        t |> equal(1, v.major)
+        t |> equal(2, v.minor)
+        t |> equal(3, v.patch)
+    }
+    t |> run("parses with v prefix") @(t : T?) {
+        let v = parse_version("v1.2.3")
+        t |> success(v.valid)
+        t |> equal(1, v.major)
+        t |> equal(2, v.minor)
+        t |> equal(3, v.patch)
+    }
+    t |> run("parses major.minor") @(t : T?) {
+        let v = parse_version("2.5")
+        t |> success(v.valid)
+        t |> equal(2, v.major)
+        t |> equal(5, v.minor)
+        t |> equal(0, v.patch)
+    }
+    t |> run("parses major only") @(t : T?) {
+        let v = parse_version("3")
+        t |> success(v.valid)
+        t |> equal(3, v.major)
+        t |> equal(0, v.minor)
+        t |> equal(0, v.patch)
+    }
+    t |> run("invalid version") @(t : T?) {
+        let v = parse_version("abc")
+        t |> success(!v.valid)
+    }
+    t |> run("empty version") @(t : T?) {
+        let v = parse_version("")
+        t |> success(!v.valid)
+    }
+}
+
+[test]
+def test_compare_versions(t : T?) {
+    t |> run("equal versions") @(t : T?) {
+        let a = parse_version("1.2.3")
+        let b = parse_version("1.2.3")
+        t |> equal(0, compare_versions(a, b))
+    }
+    t |> run("major differs") @(t : T?) {
+        let a = parse_version("1.0.0")
+        let b = parse_version("2.0.0")
+        t |> equal(-1, compare_versions(a, b))
+        t |> equal(1, compare_versions(b, a))
+    }
+    t |> run("minor differs") @(t : T?) {
+        let a = parse_version("1.2.0")
+        let b = parse_version("1.3.0")
+        t |> equal(-1, compare_versions(a, b))
+    }
+    t |> run("patch differs") @(t : T?) {
+        let a = parse_version("1.2.3")
+        let b = parse_version("1.2.4")
+        t |> equal(-1, compare_versions(a, b))
+    }
+}
+
+[test]
+def test_satisfies_constraint(t : T?) {
+    t |> run("empty constraint matches anything") @(t : T?) {
+        t |> success(satisfies_constraint("1.0.0", ""))
+        t |> success(satisfies_constraint("v99.0.0", ""))
+    }
+    t |> run("exact match") @(t : T?) {
+        t |> success(satisfies_constraint("1.2.3", "1.2.3"))
+        t |> success(!satisfies_constraint("1.2.4", "1.2.3"))
+    }
+    t |> run("exact with = prefix") @(t : T?) {
+        t |> success(satisfies_constraint("1.2.3", "=1.2.3"))
+        t |> success(!satisfies_constraint("1.2.4", "=1.2.3"))
+    }
+    t |> run("greater or equal") @(t : T?) {
+        t |> success(satisfies_constraint("1.0.0", ">=1.0"))
+        t |> success(satisfies_constraint("2.0.0", ">=1.0"))
+        t |> success(!satisfies_constraint("0.9.0", ">=1.0"))
+    }
+    t |> run("greater than") @(t : T?) {
+        t |> success(!satisfies_constraint("1.0.0", ">1.0"))
+        t |> success(satisfies_constraint("1.0.1", ">1.0"))
+    }
+    t |> run("less or equal") @(t : T?) {
+        t |> success(satisfies_constraint("1.0.0", "<=1.0"))
+        t |> success(satisfies_constraint("0.9.0", "<=1.0"))
+        t |> success(!satisfies_constraint("1.0.1", "<=1.0"))
+    }
+    t |> run("less than") @(t : T?) {
+        t |> success(satisfies_constraint("0.9.0", "<1.0"))
+        t |> success(!satisfies_constraint("1.0.0", "<1.0"))
+    }
+    t |> run("range with comma") @(t : T?) {
+        t |> success(satisfies_constraint("1.5.0", ">=1.0,<2.0"))
+        t |> success(satisfies_constraint("1.0.0", ">=1.0,<2.0"))
+        t |> success(!satisfies_constraint("2.0.0", ">=1.0,<2.0"))
+        t |> success(!satisfies_constraint("0.9.0", ">=1.0,<2.0"))
+    }
+    t |> run("v prefix on version") @(t : T?) {
+        t |> success(satisfies_constraint("v1.2.3", ">=1.0"))
+        t |> success(satisfies_constraint("v1.2.3", "1.2.3"))
+    }
+    t |> run("v prefix on constraint") @(t : T?) {
+        t |> success(satisfies_constraint("1.2.3", ">=v1.0"))
+        t |> success(satisfies_constraint("1.2.3", "v1.2.3"))
+    }
+    t |> run("invalid version fails") @(t : T?) {
+        t |> success(!satisfies_constraint("abc", ">=1.0"))
+    }
+    t |> run("invalid constraint fails") @(t : T?) {
+        t |> success(!satisfies_constraint("1.0.0", ">=abc"))
+    }
+    t |> run("spaces in range") @(t : T?) {
+        t |> success(satisfies_constraint("1.5.0", ">= 1.0 , < 2.0"))
     }
 }

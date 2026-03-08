@@ -21,7 +21,8 @@ def print_usage() {
     print("Commands:\n")
     print("  install <url|name|path>[@version]  Install a package\n")
     print("  remove <name>                      Remove a package\n")
-    print("  update [name]                      Update one or all packages\n")
+    print("  update [name]                      Re-install at pinned version\n")
+    print("  upgrade [name]                     Upgrade to latest version\n")
     print("  list                               List installed packages\n")
     print("  search <query>                     Search the package index\n")
     print("  introduce [url]                    Add a package to the index via PR\n")
@@ -66,6 +67,12 @@ def main() {
             cmd_update_all(root)
         } else {
             cmd_update(root, parsed.command_arg)
+        }
+    } elif (command == "upgrade") {
+        if (empty(parsed.command_arg)) {
+            cmd_upgrade_all(root)
+        } else {
+            cmd_upgrade(root, parsed.command_arg)
         }
     } elif (command == "build") {
         cmd_build(root)

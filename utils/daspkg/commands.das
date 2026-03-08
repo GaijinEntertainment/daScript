@@ -104,7 +104,7 @@ def install_local(root, pkg_name, source : string; var lf : LockFile) {
         return
     }
 
-    set_package(lf, PackageEntry(name=pkg_name, source=full_source, local=true, root=true))
+    set_package(lf, PackageEntry(name = pkg_name, source = full_source, local = true, root = true))
     write_lock_file(root, lf)
     print("Installed '{pkg_name}' (local)\n")
     try_build_package(target, pkg_name)
@@ -265,8 +265,8 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; is_
     }
 
     // step 4: record in lock file
-    set_package(lf, PackageEntry(name=pkg_name, source=actual_source, version=version,
-        tag=actual_tag, branch=actual_branch, root=is_root))
+    set_package(lf, PackageEntry(name = pkg_name, source = actual_source, version = version,
+        tag = actual_tag, branch = actual_branch, root = is_root))
     write_lock_file(root, lf)
     print("Installed '{pkg_name}'\n")
 
@@ -398,6 +398,125 @@ def cmd_update(root, name : string) {
     }
     remove_package(lf, name)
     install_git(root, name, source, version, lf, [is_root = is_root])
+}
+
+// resolve latest version for a git package by cloning default branch and running .das_package
+// returns the resolved tag/branch, or empty if resolution fails
+def private resolve_latest(source : string; var res : ResolveResult) : bool {
+    let tmp_dir = "{get_das_root()}/_daspkg_resolve_tmp"
+    if (fexist(tmp_dir)) {
+        rmdir_rec(tmp_dir)
+    }
+    let git_url = "https://{source}.git"
+    if (!git_clone(git_url, tmp_dir)) {
+        return false
+    }
+    let das_package = "{tmp_dir}/.das_package"
+    var ok = false
+    if (fexist(das_package)) {
+        ok = run_das_package_resolve(das_package, "", "", res)
+    }
+    rmdir_rec(tmp_dir)
+    return ok
+}
+
+def cmd_upgrade(root, name : string) {
+    var lf : LockFile
+    if (!read_lock_file(root, lf)) {
+        print("Error: no lock file found\n")
+        return
+    }
+    if (!has_package(lf, name)) {
+        print("Error: package '{name}' is not installed\n")
+        return
+    }
+    let entry = get_package(lf, name)
+    if (entry.local) {
+        print("'{name}' is a local package — use 'update' instead\n")
+        return
+    }
+    // resolve latest from default branch
+    print("Checking '{name}' for upgrades...\n")
+    var res : ResolveResult
+    if (!resolve_latest(entry.source, res)) {
+        print("  Could not resolve latest version for '{name}'\n")
+        return
+    }
+    // determine resolved ref
+    let new_tag = res.tag
+    let new_branch = res.branch
+    // compare with current
+    let current_ref = !empty(entry.tag) ? entry.tag : entry.branch
+    let new_ref = !empty(new_tag) ? new_tag : new_branch
+    if (current_ref == new_ref) {
+        print("  '{name}' is already at {current_ref}\n")
+        return
+    }
+    print("  {current_ref} -> {new_ref}\n")
+    // re-install at the new version (empty version = unpinned)
+    let is_root = entry.root
+    let source = entry.source
+    let pkg_dir = "{root}/modules/{name}"
+    if (fexist(pkg_dir)) {
+        rmdir_rec(pkg_dir)
+    }
+    remove_package(lf, name)
+    install_git(root, name, source, "", lf, [is_root = is_root])
+    // check if deps need upgrading
+    upgrade_dependencies(root, name, lf)
+}
+
+def upgrade_dependencies(root, pkg_name : string; var lf : LockFile) {
+    let pkg_dir = "{root}/modules/{pkg_name}"
+    let das_package = "{pkg_dir}/.das_package"
+    if (!fexist(das_package)) {
+        return
+    }
+    var pkg_deps : array<PackageDependency>
+    if (!run_das_package_deps(das_package, "", pkg_deps)) {
+        return
+    }
+    for (d in pkg_deps) {
+        let dep_name = package_name_from_source(d.source)
+        if (!has_package(lf, dep_name)) {
+            // new dependency — install it
+            print("  Installing new dependency: {dep_name}...\n")
+            install_git(root, dep_name, d.source, "", lf, [is_root = false])
+            continue
+        }
+        // check if installed version satisfies constraint
+        if (empty(d.version_constraint)) {
+            continue
+        }
+        let dep_entry = get_package(lf, dep_name)
+        let dep_version = dep_entry.tag
+        if (!satisfies_constraint(dep_version, d.version_constraint)) {
+            print("  Dependency '{dep_name}' @ {dep_version} does not satisfy {d.version_constraint} — upgrading...\n")
+            cmd_upgrade(root, dep_name)
+        }
+    }
+}
+
+def cmd_upgrade_all(root : string) {
+    var lf : LockFile
+    if (!read_lock_file(root, lf)) {
+        print("No packages installed (no lock file found)\n")
+        return
+    }
+    // upgrade root packages only — deps get pulled along
+    var names : array<string>
+    for (entry in lf.packages) {
+        if (entry.root && !entry.local) {
+            names |> push_clone(entry.name)
+        }
+    }
+    if (length(names) == 0) {
+        print("No upgradeable packages\n")
+        return
+    }
+    for (name in names) {
+        cmd_upgrade(root, name)
+    }
 }
 
 def cmd_update_all(root : string) {

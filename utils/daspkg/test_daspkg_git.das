@@ -415,3 +415,129 @@ def test_cmd_build_integration(t : T?) {
         rmdir_rec(tmp_root)
     }
 }
+
+[test]
+def test_cmd_upgrade_single(t : T?) {
+    t |> run("upgrades from v1.0 to latest") @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_upgr"
+        mkdir(tmp_root)
+        // install v1.0
+        var lf : LockFile
+        install_git(tmp_root, "daspkg-test-versions", "github.com/borisbat/daspkg-test-versions", "1.0", lf)
+        t |> success(has_package(lf, "daspkg-test-versions"))
+        t |> equal(get_package(lf, "daspkg-test-versions").tag, "v1.0")
+        // verify v1.0 content
+        var src = fread("{tmp_root}/modules/daspkg-test-versions/daslib/test_versions.das")
+        t |> success(find(src, "\"1.0\"") >= 0)
+        t |> success(find(src, "new_in_v2") < 0)
+        // upgrade — should go to v2.0 (latest)
+        cmd_upgrade(tmp_root, "daspkg-test-versions")
+        // verify upgraded
+        var lf2 : LockFile
+        t |> success(read_lock_file(tmp_root, lf2))
+        t |> equal(get_package(lf2, "daspkg-test-versions").tag, "v2.0")
+        // version field should be empty (unpinned)
+        t |> equal(get_package(lf2, "daspkg-test-versions").version, "")
+        // verify v2.0 content
+        src = fread("{tmp_root}/modules/daspkg-test-versions/daslib/test_versions.das")
+        t |> success(find(src, "\"2.0\"") >= 0)
+        t |> success(find(src, "new_in_v2") >= 0)
+        // cleanup
+        rmdir_rec(tmp_root)
+    }
+}
+
+[test]
+def test_cmd_upgrade_already_latest(t : T?) {
+    t |> run("upgrade skips when already at latest") @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_upgr_skip"
+        mkdir(tmp_root)
+        // install latest (no version pin)
+        var lf : LockFile
+        install_git(tmp_root, "daspkg-test-versions", "github.com/borisbat/daspkg-test-versions", "", lf)
+        t |> success(has_package(lf, "daspkg-test-versions"))
+        let tag_before = get_package(lf, "daspkg-test-versions").tag
+        // upgrade should be a no-op
+        cmd_upgrade(tmp_root, "daspkg-test-versions")
+        var lf2 : LockFile
+        t |> success(read_lock_file(tmp_root, lf2))
+        t |> equal(get_package(lf2, "daspkg-test-versions").tag, tag_before)
+        // cleanup
+        rmdir_rec(tmp_root)
+    }
+}
+
+[test]
+def test_cmd_upgrade_local_skips(t : T?) {
+    t |> run("upgrade skips local packages") @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_upgr_local"
+        let src_dir = "{get_das_root()}/_daspkg_test_upgr_src"
+        mkdir(tmp_root)
+        mkdir(src_dir)
+        fopen("{src_dir}/hello.das", "wb") <| $(f) {
+            fwrite(f, "// hello\n")
+        }
+        var lf : LockFile
+        install_local(tmp_root, "localpkg", src_dir, lf)
+        // upgrade should print a message and skip, not crash
+        cmd_upgrade(tmp_root, "localpkg")
+        t |> success(has_package(lf, "localpkg"))
+        // cleanup
+        rmdir_rec(tmp_root)
+        rmdir_rec(src_dir)
+    }
+}
+
+[test]
+def test_cmd_upgrade_all_integration(t : T?) {
+    t |> run("upgrades all root packages") @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_upgr_all"
+        mkdir(tmp_root)
+        // install daspkg-test-versions at v1.0 and daspkg-test-pure (latest)
+        var lf : LockFile
+        install_git(tmp_root, "daspkg-test-versions", "github.com/borisbat/daspkg-test-versions", "1.0", lf)
+        install_git(tmp_root, "daspkg-test-pure", "github.com/borisbat/daspkg-test-pure", "", lf)
+        t |> equal(get_package(lf, "daspkg-test-versions").tag, "v1.0")
+        // upgrade all
+        cmd_upgrade_all(tmp_root)
+        // daspkg-test-versions should be upgraded to v2.0
+        var lf2 : LockFile
+        t |> success(read_lock_file(tmp_root, lf2))
+        t |> equal(get_package(lf2, "daspkg-test-versions").tag, "v2.0")
+        // daspkg-test-pure should still be present
+        t |> success(has_package(lf2, "daspkg-test-pure"))
+        // cleanup
+        rmdir_rec(tmp_root)
+    }
+}
+
+[test]
+def test_cmd_upgrade_dep_constraint(t : T?) {
+    t |> run("upgrades dependency when constraint not satisfied") @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_upgr_dep"
+        mkdir(tmp_root)
+        mkdir("{tmp_root}/modules")
+        // install daspkg-test-versions at v1.0
+        var lf : LockFile
+        install_git(tmp_root, "daspkg-test-versions", "github.com/borisbat/daspkg-test-versions", "1.0", lf)
+        t |> equal(get_package(lf, "daspkg-test-versions").tag, "v1.0")
+        // create a fake parent package with a .das_package that requires >=2.0
+        let parent_dir = "{tmp_root}/modules/fake-parent"
+        mkdir(parent_dir)
+        fwrite("{parent_dir}/.das_package", "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"fake-parent\")\n    package_description(\"test\")\n\}\n[export]\ndef dependencies(version : string) \{\n    require_package(\"github.com/borisbat/daspkg-test-versions\", \">=2.0\")\n\}\n")
+        set_package(lf, PackageEntry(name = "fake-parent", source = "local", root = true))
+        write_lock_file(tmp_root, lf)
+        // call upgrade_dependencies — should detect v1.0 doesn't satisfy >=2.0 and upgrade
+        upgrade_dependencies(tmp_root, "fake-parent", lf)
+        // verify daspkg-test-versions was upgraded to v2.0
+        var lf2 : LockFile
+        t |> success(read_lock_file(tmp_root, lf2))
+        t |> equal(get_package(lf2, "daspkg-test-versions").tag, "v2.0")
+        // verify v2.0 content
+        let src = fread("{tmp_root}/modules/daspkg-test-versions/daslib/test_versions.das")
+        t |> success(find(src, "\"2.0\"") >= 0)
+        t |> success(find(src, "new_in_v2") >= 0)
+        // cleanup
+        rmdir_rec(tmp_root)
+    }
+}
