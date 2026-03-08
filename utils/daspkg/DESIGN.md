@@ -165,6 +165,11 @@ daspkg doctor                             Check environment (git, cmake, gh)
 **Options:**
 - `--root <path>` — project root (default: current directory)
 - `--force` — force reinstall even if already installed
+- `--verbose`, `-v` — print debug details to screen (git commands, resolve steps, file operations)
+
+### Logging
+
+All operational output goes to both screen and `modules/.daspkg.log`. Debug-level messages (git commands, resolve results, file moves) always go to the log file; they only appear on screen with `--verbose`. The log file appends across runs — useful for diagnosing issues after the fact.
 
 ## Transport
 
@@ -299,12 +304,44 @@ The package's `CMakeLists.txt` is responsible for placing output (`.shared_modul
 
 ## Not Yet Implemented
 
+### Discovery & Index
+
+Current state: curated `packages.json` in a git repo, `daspkg search` does substring match, `introduce`/`withdraw` create PRs. Closest to Go modules (decentralized, git-based, no auth).
+
+Comparison with other ecosystems:
+
+| | npm | Go | Rust (crates.io) | daspkg |
+|---|---|---|---|---|
+| Registry | Central server, web UI, API | No registry — any git URL works | Central server, web UI, API | Git repo + JSON file |
+| Discovery | npmjs.com, download counts, categories | pkg.go.dev auto-indexes from proxy | crates.io, categories, badges | `search` (substring match) |
+| Publishing | `npm publish` (auth token) | Push tagged commit | `cargo publish` (auth token) | `introduce` (creates PR) |
+| Metadata | `package.json` (keywords, license, homepage) | `go.mod` (minimal) | `Cargo.toml` (categories, keywords) | `.das_package` (name, description, deps) |
+
+Planned improvements (ordered by effort):
+
+- **Richer index metadata** — add `keywords`, `license`, `author`, `tags` to index entries. Makes `search` more useful. Low effort — extend `IndexEntry` struct and `packages.json` schema.
+- **Static catalog website** — generate GitHub Pages from `packages.json`. Browsable in a browser, no server. Medium effort.
+- **Auto-discovery** — if `daspkg install github.com/user/repo` succeeds and the repo has a valid `.das_package`, offer to auto-add to index (or auto-index without PR for a "known packages" list). Reduces friction for publishing.
+- **Search API / server** — full-text search, download counts, web UI. Only worth it with significant community. High effort.
+
+The PR-based introduce/withdraw is good for a young ecosystem — transparent, no infrastructure, maintainer review. Keep it as the primary path.
+
+### Transport & Performance
+
 - **Sparse checkout** — fetch only `.das_package` before downloading the full repo. Would reduce bandwidth for version resolution.
-- **Rollback on failure** — backup old `modules/<name>/` before update, restore on failure. Currently update deletes then re-installs with no rollback.
+
+### Install & Update
+
 - **Symlinks for local paths** — `--link` flag for local installs. Currently always copies.
 - **Orphan cleanup** — detect unused transitive deps after `remove`.
 - **SDK version tracking** — record SDK version in lock file, warn on mismatch, prompt `daspkg build` after SDK upgrade.
+
+### Security & Sandboxing
+
 - **`.das_project` sandbox** — restrict what `.das_package` scripts can `require` (no `fio`, no `unsafe`). Currently `.das_package` has full access.
+
+### Dependency Resolution
+
 - **Full constraint solver** — for when the ecosystem is large enough to need it (currently first-installed wins for diamonds).
 
 ## Open Questions

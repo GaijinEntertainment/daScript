@@ -33,6 +33,7 @@ def print_usage() {
     print("\nOptions:\n")
     print("  --root <path>   Project root (default: current directory)\n")
     print("  --force         Force reinstall\n")
+    print("  --verbose, -v   Print detailed progress\n")
 }
 
 [export]
@@ -46,6 +47,7 @@ def main() {
     }
 
     let root = get_full_file_name(parsed.root)
+    log_init(root)
     let command = parsed.command
 
     if (command == "list") {
