@@ -24,6 +24,7 @@ struct PackageMeta {
 struct ResolveResult {
     tag : string
     branch : string
+    source : string    // non-empty = redirect to different repo
 }
 
 struct PackageDependency {
@@ -88,6 +89,12 @@ def run_das_package_resolve(das_package_path : string; sdk_version, version : st
                     result.branch = result.tag
                     result.tag = ""
                 }
+            }
+        }
+        p = unsafe(get_context_global_variable(ctx, "_download_source"))
+        if (p != null) {
+            unsafe {
+                result.source = clone_string(*reinterpret<string?>(p))
             }
         }
     }

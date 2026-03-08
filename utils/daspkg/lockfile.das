@@ -17,6 +17,7 @@ struct PackageEntry {
     source : string
     version : string
     tag : string
+    branch : string
     root : bool = true
     local : bool = false
 }

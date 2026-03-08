@@ -36,19 +36,39 @@ def test_install_git_basic(t : T?) {
 }
 
 [test]
-def test_install_git_version(t : T?) {
-    t |> run("checks out specific tag") @(t : T?) {
-        let tmp_root = "{get_das_root()}/_daspkg_test_ver"
+def test_install_git_version_v1(t : T?) {
+    t |> run("installs v1.0 via resolve — no new_in_v2") @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_v1"
         mkdir(tmp_root)
         var lf : LockFile
-        install_git(tmp_root, "daspkg-test-versions", "github.com/borisbat/daspkg-test-versions", "v1.0", lf)
+        install_git(tmp_root, "daspkg-test-versions", "github.com/borisbat/daspkg-test-versions", "1.0", lf)
         t |> success(lf.packages |> key_exists("daspkg-test-versions"))
         unsafe {
             t |> equal(lf.packages["daspkg-test-versions"].tag, "v1.0")
         }
-        // v1.0 should have the module file
-        t |> success(fexist("{tmp_root}/modules/daspkg-test-versions/daslib/test_versions.das"))
-        // cleanup
+        // v1.0 has get_version returning "1.0" and no new_in_v2
+        let src = fread("{tmp_root}/modules/daspkg-test-versions/daslib/test_versions.das")
+        t |> success(find(src, "return \"1.0\"") >= 0)
+        t |> success(find(src, "new_in_v2") < 0)
+        rmdir_rec(tmp_root)
+    }
+}
+
+[test]
+def test_install_git_version_v2(t : T?) {
+    t |> run("installs v2.0 via resolve — has new_in_v2") @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_v2"
+        mkdir(tmp_root)
+        var lf : LockFile
+        install_git(tmp_root, "daspkg-test-versions", "github.com/borisbat/daspkg-test-versions", "2.0", lf)
+        t |> success(lf.packages |> key_exists("daspkg-test-versions"))
+        unsafe {
+            t |> equal(lf.packages["daspkg-test-versions"].tag, "v2.0")
+        }
+        // v2.0 has get_version returning "2.0" and new_in_v2
+        let src = fread("{tmp_root}/modules/daspkg-test-versions/daslib/test_versions.das")
+        t |> success(find(src, "return \"2.0\"") >= 0)
+        t |> success(find(src, "new_in_v2") >= 0)
         rmdir_rec(tmp_root)
     }
 }
@@ -247,7 +267,7 @@ def test_cmd_install_already_installed(t : T?) {
 def test_install_local_auto_build(t : T?) {
     t |> run("auto-builds package with CMakeLists.txt on install") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_autobuild"
-        let src_dir = get_full_file_name("examples/daspkg-packages/daspkg-example-c")
+        let src_dir = get_full_file_name("examples/daspkg/packages/daspkg-example-c")
         mkdir(tmp_root)
         // install local package that has CMakeLists.txt
         var lf : LockFile
@@ -268,7 +288,7 @@ def test_install_local_auto_build(t : T?) {
 def test_update_local_auto_build(t : T?) {
     t |> run("auto-builds package with CMakeLists.txt on update") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_autobuild_upd"
-        let src_dir = get_full_file_name("examples/daspkg-packages/daspkg-example-c")
+        let src_dir = get_full_file_name("examples/daspkg/packages/daspkg-example-c")
         mkdir(tmp_root)
         // install first
         var lf : LockFile
@@ -351,7 +371,7 @@ def test_full_workflow_local(t : T?) {
 def test_cmd_build_integration(t : T?) {
     t |> run("builds all packages with CMakeLists.txt") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_build_all"
-        let src_dir = get_full_file_name("examples/daspkg-packages/daspkg-example-c")
+        let src_dir = get_full_file_name("examples/daspkg/packages/daspkg-example-c")
         mkdir(tmp_root)
         // manually copy package without auto-build
         let modules_dir = "{tmp_root}/modules"

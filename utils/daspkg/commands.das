@@ -133,6 +133,46 @@ def install_dependencies(root, pkg_name : string; var lf : LockFile) {
     }
 }
 
+def private git_checkout_tag(dir, tag : string) : bool {
+    var output : string
+    var exit_code = run_cmd("git -C \"{dir}\" fetch --depth 1 origin tag \"{tag}\" 2>&1", output)
+    if (exit_code != 0) {
+        print("Error: git fetch tag failed (exit {exit_code}):\n{output}\n")
+        return false
+    }
+    exit_code = run_cmd("git -C \"{dir}\" checkout \"{tag}\" 2>&1", output)
+    if (exit_code != 0) {
+        print("Error: git checkout failed (exit {exit_code}):\n{output}\n")
+        return false
+    }
+    return true
+}
+
+def private git_checkout_branch(dir, branch : string) : bool {
+    var output : string
+    var exit_code = run_cmd("git -C \"{dir}\" fetch --depth 1 origin \"{branch}\" 2>&1", output)
+    if (exit_code != 0) {
+        print("Error: git fetch branch failed (exit {exit_code}):\n{output}\n")
+        return false
+    }
+    exit_code = run_cmd("git -C \"{dir}\" checkout \"{branch}\" 2>&1", output)
+    if (exit_code != 0) {
+        print("Error: git checkout failed (exit {exit_code}):\n{output}\n")
+        return false
+    }
+    return true
+}
+
+def private git_clone(url, dir : string) : bool {
+    var output : string
+    let exit_code = run_cmd("git clone --depth 1 \"{url}\" \"{dir}\" 2>&1", output)
+    if (exit_code != 0) {
+        print("Error: git clone failed (exit {exit_code}):\n{output}\n")
+        return false
+    }
+    return true
+}
+
 def install_git(root, pkg_name, source, version : string; var lf : LockFile; is_root : bool = true) {
     let modules_dir = "{root}/modules"
     let tmp_dir = "{modules_dir}/.daspkg_tmp/{pkg_name}"
@@ -141,32 +181,81 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; is_
     mkdir(modules_dir)
     mkdir("{modules_dir}/.daspkg_tmp")
 
+    // step 1: shallow clone default branch
     let git_url = "https://{source}.git"
-
-    // step 1: shallow clone
     print("Cloning {git_url}...\n")
-    var output : string
-    var exit_code = run_cmd("git clone --depth 1 \"{git_url}\" \"{tmp_dir}\" 2>&1", output)
-    if (exit_code != 0) {
-        print("Error: git clone failed (exit {exit_code}):\n{output}\n")
+    if (!git_clone(git_url, tmp_dir)) {
         return
     }
 
-    // step 2: checkout specific tag/version if requested
-    if (!empty(version)) {
+    // step 2: resolve version via .das_package (if present)
+    var actual_source = source
+    var actual_tag = ""
+    var actual_branch = ""
+    let das_package = "{tmp_dir}/.das_package"
+    if (fexist(das_package)) {
+        var res : ResolveResult
+        if (run_das_package_resolve(das_package, "", version, res)) {
+            if (!empty(res.source)) {
+                // redirect — re-clone from a different repo
+                print("Redirecting to {res.source}...\n")
+                rmdir_rec(tmp_dir)
+                actual_source = res.source
+                let redirect_url = "https://{res.source}.git"
+                if (!git_clone(redirect_url, tmp_dir)) {
+                    return
+                }
+                // checkout the ref from the redirect
+                if (!empty(res.tag)) {
+                    print("Fetching tag {res.tag}...\n")
+                    if (!git_checkout_tag(tmp_dir, res.tag)) {
+                        rmdir_rec(tmp_dir)
+                        return
+                    }
+                    actual_tag = res.tag
+                } elif (!empty(res.branch)) {
+                    print("Switching to branch {res.branch}...\n")
+                    if (!git_checkout_branch(tmp_dir, res.branch)) {
+                        rmdir_rec(tmp_dir)
+                        return
+                    }
+                    actual_branch = res.branch
+                }
+            } elif (!empty(res.tag)) {
+                // tag checkout
+                print("Fetching tag {res.tag}...\n")
+                if (!git_checkout_tag(tmp_dir, res.tag)) {
+                    rmdir_rec(tmp_dir)
+                    return
+                }
+                actual_tag = res.tag
+            } elif (!empty(res.branch)) {
+                // branch checkout
+                print("Switching to branch {res.branch}...\n")
+                if (!git_checkout_branch(tmp_dir, res.branch)) {
+                    rmdir_rec(tmp_dir)
+                    return
+                }
+                actual_branch = res.branch
+            } elif (!empty(version)) {
+                // resolve returned nothing — fall back to version as tag
+                print("Fetching tag {version}...\n")
+                if (!git_checkout_tag(tmp_dir, version)) {
+                    rmdir_rec(tmp_dir)
+                    return
+                }
+                actual_tag = version
+            }
+        }
+    }
+    if (empty(actual_tag) && empty(actual_branch) && !empty(version)) {
+        // no .das_package or resolve failed — treat version as tag directly
         print("Fetching tag {version}...\n")
-        exit_code = run_cmd("git -C \"{tmp_dir}\" fetch --depth 1 origin tag \"{version}\" 2>&1", output)
-        if (exit_code != 0) {
-            print("Error: git fetch tag failed (exit {exit_code}):\n{output}\n")
+        if (!git_checkout_tag(tmp_dir, version)) {
             rmdir_rec(tmp_dir)
             return
         }
-        exit_code = run_cmd("git -C \"{tmp_dir}\" checkout \"{version}\" 2>&1", output)
-        if (exit_code != 0) {
-            print("Error: git checkout failed (exit {exit_code}):\n{output}\n")
-            rmdir_rec(tmp_dir)
-            return
-        }
+        actual_tag = version
     }
 
     // step 3: move to final location
@@ -181,9 +270,10 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; is_
 
     // step 4: record in lock file
     var entry = PackageEntry()
-    entry.source = source
+    entry.source = actual_source
     entry.version = version
-    entry.tag = version
+    entry.tag = actual_tag
+    entry.branch = actual_branch
     entry.root = is_root
     lf.packages |> insert(pkg_name, entry)
     write_lock_file(root, lf)
@@ -192,7 +282,7 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; is_
     // step 5: install dependencies
     install_dependencies(root, pkg_name, lf)
 
-    // step 6: build if package has CMakeLists.txt
+    // step 6: build
     try_build_package(target_dir, pkg_name)
 }
 

@@ -43,10 +43,12 @@ enum DownloadKind {
     unset
     tag
     branch
+    redirect
 }
 
 var _download_kind : DownloadKind = DownloadKind.unset
 var _download_ref : string
+var _download_source : string
 
 def download_tag(tag : string) {
     _download_kind = DownloadKind.tag
@@ -56,6 +58,12 @@ def download_tag(tag : string) {
 def download_branch(branch : string) {
     _download_kind = DownloadKind.branch
     _download_ref = branch
+}
+
+def download_redirect(source, ref : string) {
+    _download_kind = DownloadKind.redirect
+    _download_source = source
+    _download_ref = ref
 }
 
 // --- Dependencies (accumulated by `dependencies()`) ---
@@ -104,6 +112,7 @@ def reset_package_state() {
     _pkg_source = ""
     _download_kind = DownloadKind.unset
     _download_ref = ""
+    _download_source = ""
     delete _dependencies
     _build_kind = BuildKind.no_build
     _build_command = ""

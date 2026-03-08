@@ -412,6 +412,8 @@ def test_cmd_doctor(t : T?) {
 
 let PKG_FIXTURE = "utils/daspkg/fixtures/test.das_package"
 let PKG_BRANCH_FIXTURE = "utils/daspkg/fixtures/test_branch.das_package"
+let PKG_REDIRECT_FIXTURE = "utils/daspkg/fixtures/test_redirect.das_package"
+let PKG_SDK_AWARE_FIXTURE = "utils/daspkg/fixtures/test_sdk_aware.das_package"
 
 [test]
 def test_run_das_package_meta(t : T?) {
@@ -490,5 +492,39 @@ def test_run_das_package_optional_functions(t : T?) {
         tt |> success(ok)
         tt |> equal(false, info.is_cmake)
         tt |> equal(false, info.is_custom)
+    }
+}
+
+[test]
+def test_run_das_package_resolve_redirect(t : T?) {
+    t |> run("resolves redirect to different repo") @(t : T?) {
+        var res : ResolveResult
+        let ok = run_das_package_resolve(PKG_REDIRECT_FIXTURE, "", "", res)
+        t |> success(ok)
+        t |> equal("github.com/borisbat/daspkg-test-pure", res.source)
+        t |> equal("v1.0", res.tag)
+        t |> equal("", res.branch)
+    }
+}
+
+[test]
+def test_run_das_package_resolve_sdk_aware(t : T?) {
+    t |> run("resolves latest to default tag") @(t : T?) {
+        var res : ResolveResult
+        let ok = run_das_package_resolve(PKG_SDK_AWARE_FIXTURE, "0.5", "", res)
+        t |> success(ok)
+        t |> equal("v2.0", res.tag)
+    }
+    t |> run("resolves 1.x to v1.5") @(t : T?) {
+        var res : ResolveResult
+        let ok = run_das_package_resolve(PKG_SDK_AWARE_FIXTURE, "0.5", "1.x", res)
+        t |> success(ok)
+        t |> equal("v1.5", res.tag)
+    }
+    t |> run("resolves explicit version") @(t : T?) {
+        var res : ResolveResult
+        let ok = run_das_package_resolve(PKG_SDK_AWARE_FIXTURE, "0.5", "3.0", res)
+        t |> success(ok)
+        t |> equal("v3.0", res.tag)
     }
 }

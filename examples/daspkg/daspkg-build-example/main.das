@@ -1,10 +1,10 @@
 options gen2
 
 // This example uses C and C++ modules installed via daspkg from local paths.
-// Run from the examples/daspkg-build directory:
+// Run from this directory:
 //
-//   daslang ../../utils/daspkg/main.das -- --root . install
-//   daslang ../../utils/daspkg/main.das -- --root . build
+//   daslang ../../../utils/daspkg/main.das -- --root . install
+//   daslang ../../../utils/daspkg/main.das -- --root . build
 //   daslang main.das
 
 require fastmath
