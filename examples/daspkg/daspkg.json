@@ -1,0 +1,8 @@
+{
+    "name": "daspkg-example",
+    "description": "Example project using daspkg",
+    "dependencies": {
+        "daspkg-test-pure": "github.com/borisbat/daspkg-test-pure",
+        "daspkg-test-deps": "github.com/borisbat/daspkg-test-deps"
+    }
+}

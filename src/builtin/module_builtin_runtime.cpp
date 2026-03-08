@@ -1422,6 +1422,12 @@ namespace das
         return context->allocateString(getDasRoot(), at);
     }
 
+    char * builtin_get_das_version ( Context * context, LineInfoArg * at ) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%d.%d.%d", DAS_VERSION_MAJOR, DAS_VERSION_MINOR, DAS_VERSION_PATCH);
+        return context->allocateString(string(buf), at);
+    }
+
     char * to_das_string(const string & str, Context * ctx, LineInfoArg * at) {
         return ctx->allocateString(str, at);
     }
@@ -1684,6 +1690,9 @@ namespace das
         // command line arguments
         addExtern<DAS_BIND_FUN(builtin_das_root)>(*this, lib, "get_das_root",
             SideEffects::accessExternal,"builtin_das_root")
+                ->args({"context","at"});
+        addExtern<DAS_BIND_FUN(builtin_get_das_version)>(*this, lib, "get_das_version",
+            SideEffects::none,"builtin_get_das_version")
                 ->args({"context","at"});
         addExtern<DAS_BIND_FUN(getCommandLineArguments)>(*this, lib, "builtin_get_command_line_arguments",
             SideEffects::accessExternal,"getCommandLineArguments")

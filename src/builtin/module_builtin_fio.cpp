@@ -154,6 +154,9 @@ namespace das {
     void builtin_exit ( int32_t ec ) GENERATE_IO_STUB
     bool builtin_remove_file ( const char * path ) GENERATE_IO_STUB_RET
     bool builtin_rename_file ( const char * old_path, const char * new_path ) GENERATE_IO_STUB_RET
+    bool builtin_rmdir ( const char * path ) GENERATE_IO_STUB_RET
+    bool builtin_fexist ( const char * path ) GENERATE_IO_STUB_RET
+    bool builtin_rmdir_rec ( const char * path ) GENERATE_IO_STUB_RET
 #undef GENERATE_IO_STUB
 #undef GENERATE_IO_STUB_RET
 
@@ -558,6 +561,67 @@ namespace das {
         return rename(old_path, new_path) == 0;
     }
 
+    bool builtin_rmdir ( const char * path ) {
+        if ( !path ) return false;
+#if defined(_MSC_VER)
+        return _rmdir(path) == 0;
+#else
+        return rmdir(path) == 0;
+#endif
+    }
+
+    bool builtin_fexist ( const char * path ) {
+        if ( !path ) return false;
+        struct stat st;
+        return stat(path, &st) == 0;
+    }
+
+#if defined(_MSC_VER)
+    static bool rmdir_rec_impl ( const string & path ) {
+        _finddata_t c_file;
+        intptr_t hFile;
+        string findPath = path + "/*";
+        if ((hFile = _findfirst(findPath.c_str(), &c_file)) != -1L) {
+            do {
+                if ( strcmp(c_file.name, ".") == 0 || strcmp(c_file.name, "..") == 0 ) continue;
+                string child = path + "/" + c_file.name;
+                if ( c_file.attrib & _A_SUBDIR ) {
+                    if ( !rmdir_rec_impl(child) ) { _findclose(hFile); return false; }
+                } else {
+                    if ( c_file.attrib & _A_RDONLY ) _chmod(child.c_str(), _S_IREAD | _S_IWRITE);
+                    if ( remove(child.c_str()) != 0 ) { _findclose(hFile); return false; }
+                }
+            } while (_findnext(hFile, &c_file) == 0);
+            _findclose(hFile);
+        }
+        return _rmdir(path.c_str()) == 0;
+    }
+#else
+    static bool rmdir_rec_impl ( const string & path ) {
+        DIR * dir = opendir(path.c_str());
+        if ( !dir ) return false;
+        struct dirent * ent;
+        while ((ent = readdir(dir)) != nullptr) {
+            if ( strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0 ) continue;
+            string child = path + "/" + ent->d_name;
+            struct stat st;
+            if ( stat(child.c_str(), &st) != 0 ) { closedir(dir); return false; }
+            if ( S_ISDIR(st.st_mode) ) {
+                if ( !rmdir_rec_impl(child) ) { closedir(dir); return false; }
+            } else {
+                if ( remove(child.c_str()) != 0 ) { closedir(dir); return false; }
+            }
+        }
+        closedir(dir);
+        return rmdir(path.c_str()) == 0;
+    }
+#endif
+
+    bool builtin_rmdir_rec ( const char * path ) {
+        if ( !path ) return false;
+        return rmdir_rec_impl(string(path));
+    }
+
     bool has_env_variable ( const char * var, Context * , LineInfoArg * ) {
         if ( !var ) return false;
         auto res = getenv(var);
@@ -680,6 +744,12 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_rename_file)>(*this, lib, "rename",
                 SideEffects::modifyExternal, "builtin_rename_file")
                     ->args({"old_name","new_name"});
+            addExtern<DAS_BIND_FUN(builtin_fexist)>(*this, lib, "fexist",
+                SideEffects::modifyExternal, "builtin_fexist")
+                    ->arg("path");
+            addExtern<DAS_BIND_FUN(builtin_rmdir_rec)>(*this, lib, "rmdir_rec",
+                SideEffects::modifyExternal, "builtin_rmdir_rec")
+                    ->arg("path");
             addExtern<DAS_BIND_FUN(builtin_fopen)>(*this, lib, "fopen",
                 SideEffects::modifyExternal, "builtin_fopen")
                     ->args({"name","mode"})->setNoDiscard();
@@ -740,6 +810,9 @@ namespace das {
                     ->args({"path","block","context","line"});
             addExtern<DAS_BIND_FUN(builtin_mkdir)>(*this, lib, "mkdir",
                 SideEffects::modifyExternal, "builtin_mkdir")
+                    ->arg("path");
+            addExtern<DAS_BIND_FUN(builtin_rmdir)>(*this, lib, "rmdir",
+                SideEffects::modifyExternal, "builtin_rmdir")
                     ->arg("path");
             addExtern<DAS_BIND_FUN(builtin_chdir)>(*this, lib, "chdir",
                 SideEffects::modifyExternal, "builtin_chdir")

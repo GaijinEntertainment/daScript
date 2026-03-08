@@ -2300,6 +2300,7 @@ System infrastructure
   *  :ref:`eval_main_loop (block: block\<():void\>) <function-builtin_eval_main_loop_block_ls__c_void_gr_>`
   *  :ref:`feint (text: string) <function-builtin_feint_string>`
   *  :ref:`get_das_root () : string <function-builtin_get_das_root>`
+  *  :ref:`get_das_version () : string <function-builtin_get_das_version>`
   *  :ref:`is_in_aot () : bool <function-builtin_is_in_aot>`
   *  :ref:`is_intern_strings () : bool <function-builtin_is_intern_strings>`
   *  :ref:`panic (text: string) <function-builtin_panic_string>`
@@ -2357,6 +2358,13 @@ No-op replacement for `print`. Has the same signature and side-effect annotation
 .. das:function:: get_das_root() : string
 
 Returns the file-system path to the daslang root directory, where `daslib` and other standard libraries are located.
+
+
+.. _function-builtin_get_das_version:
+
+.. das:function:: get_das_version() : string
+
+Returns the daslang SDK version as a string in "major.minor.patch" format (e.g. "0.6.0").
 
 
 .. _function-builtin_is_in_aot:

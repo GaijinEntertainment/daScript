@@ -139,7 +139,7 @@ get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_defau
         group_by_regex("Smart ptr infrastructure", mod, %regex~(add_ptr_ref|smart_ptr|get_const_ptr|move|move_new|get_ptr$)%%),
         group_by_regex("Macro infrastructure", mod, %regex~(is_folding|is_compiling|is_in_completion|is_reporting_compilation_errors)%%),
         group_by_regex("Profiler", mod, %regex~(profile|reset_profiler|dump_profile_info|collect_profile_info)$%%),
-        group_by_regex("System infrastructure", mod, %regex~(panic|print|feint|sprint|sprint_json|to_log|to_compiler_log|error|terminate|breakpoint|stackwalk|get_das_root|is_in_aot|aot_enabled|is_intern_strings|eval_main_loop)$%%),
+        group_by_regex("System infrastructure", mod, %regex~(panic|print|feint|sprint|sprint_json|to_log|to_compiler_log|error|terminate|breakpoint|stackwalk|get_das_root|get_das_version|is_in_aot|aot_enabled|is_intern_strings|eval_main_loop)$%%),
         group_by_regex("Memory manipulation", mod, %regex~(intptr|memcmp|variant_index|set_variant_index|hash|memcpy|lock_data|map_to_array|map_to_ro_array)$%%),
         group_by_regex("Binary serializer", mod, %regex~(binary_load|binary_save)$%%),
         group_by_regex("Path and command line", mod, %regex~(get_command_line_arguments)$%%),
@@ -166,7 +166,7 @@ def document_module_fio(root : string) {
         hide_group(group_by_regex("Internal builtin functions", mod, %regex~builtin%%)),
         group_by_regex("File manipulation", mod, %regex~(f|stat$|getchar|remove|rename)%%),
         group_by_regex("Path manipulation", mod, %regex~(base_name|dir_name|get_full_file_name)$%%),
-        group_by_regex("Directory manipulation", mod, %regex~(dir|mkdir|mkdir_rec|chdir|getcwd)$%%),
+        group_by_regex("Directory manipulation", mod, %regex~(dir|mkdir|mkdir_rec|rmdir|rmdir_rec|chdir|getcwd)$%%),
         group_by_regex("OS specific routines", mod, %regex~(sleep|exit|popen|popen_binary|get_env_variable|sanitize_command_line|has_env_variable)$%%),
         group_by_regex("Dynamic modules", mod, %regex~(register_dynamic_module|register_native_path)$%%)
     )

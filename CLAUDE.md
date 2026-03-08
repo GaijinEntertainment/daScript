@@ -142,6 +142,15 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - **Bitfield sizes**: `bitfield Name : uint8 { ... }`, `: uint16`, `: uint64`; default is `uint` (32-bit). Always unsigned.
 - **Bitfield from expression**: `bitfield64(1ul << 13ul)` — use the constructor to create a bitfield value from an integer expression. Similarly `bitfield8()`, `bitfield16()`.
 
+### Pass-by-value vs pass-by-reference
+
+- Most types (structs, arrays, tables) always pass by reference — `&` is unnecessary on them
+- Only **workhorse types** (`int`, `float`, `bool`, `string`, etc. — `isWorkhorseType` on the C++ side) pass by value
+- **`var s : string`** — writable local copy, changes do NOT propagate back to the caller
+- **`var s : string&`** — pass by reference, changes propagate back. Use `&` for string out-parameters
+- **`clone_string(s)`** — clones a string into the current context's heap. Required for cross-context calls where the source context may be destroyed
+- **`:=`** on strings performs a clone (allocates in current context). Plain `=` copies the pointer
+
 ### Memory and move semantics
 
 - daslang has garbage collection — `delete` is not required in most code

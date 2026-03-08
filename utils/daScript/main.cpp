@@ -233,7 +233,7 @@ int das_aot_main ( int argc, char * argv[] ) {
                 }
                 setDasRoot(argv[ai+1]);
                 ai += 1;
-            } else if ( strcmp(argv[ai],"-project-root")==0 ) {
+            } else if ( strcmp(argv[ai],"-project-root")==0 || strcmp(argv[ai],"-project_root")==0 ) {
                 project_root = argv[ai + 1];
                 ai++;
             } else if ( strcmp(argv[ai],"-v2syntax")==0 ) {
@@ -653,7 +653,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 dryRun = true;
             } else if ( cmd=="compile-only" ) {
                 compileOnly = true;
-            } else if ( cmd=="project-root" ) {
+            } else if ( cmd=="project-root" || cmd=="project_root" ) {
                 project_root = argv[i + 1];
                 i++;
             } else if ( cmd=="run-fmt" ) {

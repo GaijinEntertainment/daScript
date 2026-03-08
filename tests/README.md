@@ -184,6 +184,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | File | Description | Expects errors |
 |---|---|---|
 | fio_file.das | File I/O — fopen, fread, fwrite with fuzzing | |
+| fio_utils.das | File utilities — fexist, rmdir, rmdir_rec, fread/fwrite by path, get_das_version | |
 
 ## functional/
 
