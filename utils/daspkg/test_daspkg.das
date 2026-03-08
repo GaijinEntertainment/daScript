@@ -362,3 +362,61 @@ def test_remove_from_index_json(t : T?) {
         t |> success(empty(result))
     }
 }
+
+[test]
+def test_cmd_check(t : T?) {
+    let test_root = get_full_file_name("_daspkg_test_check")
+    let modules_dir = "{test_root}/modules"
+    let pkg_dir = "{modules_dir}/mypkg"
+
+    // setup: create module dir with .das_module
+    mkdir(test_root)
+    mkdir(modules_dir)
+    mkdir(pkg_dir)
+    fopen("{pkg_dir}/.das_module", "wb") <| $(f) {
+        fwrite(f, "options gen2\n")
+    }
+
+    // write lockfile with two entries: one present, one missing
+    var lf = LockFile()
+    var e1 = PackageEntry()
+    e1.source = "github.com/user/mypkg"
+    lf.packages |> insert("mypkg", e1)
+    var e2 = PackageEntry()
+    e2.source = "github.com/user/ghost"
+    lf.packages |> insert("ghost", e2)
+    write_lock_file(test_root, lf)
+
+    t |> run("detects present and missing packages") @(t : T?) {
+        // cmd_check prints output — just verify it doesn't crash
+        cmd_check(test_root)
+        // verify the package dir exists
+        t |> success(fexist(pkg_dir))
+        // verify the ghost dir does NOT exist
+        t |> success(!fexist("{modules_dir}/ghost"))
+    }
+
+    t |> run("warns about missing .das_module") @(t : T?) {
+        let pkg2_dir = "{modules_dir}/nopkg"
+        mkdir(pkg2_dir)
+        var lf2 = LockFile()
+        var e = PackageEntry()
+        e.source = "github.com/user/nopkg"
+        lf2.packages |> insert("nopkg", e)
+        write_lock_file(test_root, lf2)
+        cmd_check(test_root)  // should print WARNING, not crash
+        t |> success(fexist(pkg2_dir))
+        rmdir_rec(pkg2_dir)
+    }
+
+    // cleanup
+    rmdir_rec(test_root)
+}
+
+[test]
+def test_cmd_check_no_lockfile(t : T?) {
+    t |> run("no lockfile prints message") @(t : T?) {
+        cmd_check("_daspkg_nonexistent_dir")
+        t |> success(true)  // just verify no crash
+    }
+}

@@ -261,17 +261,74 @@ def cmd_remove(root, name : string) {
 }
 
 def cmd_update(root, name : string) {
-    print("TODO: update {name}\n")
+    var lf : LockFile
+    if (!read_lock_file(root, lf)) {
+        print("Error: no lock file found\n")
+        return
+    }
+    if (!(lf.packages |> key_exists(name))) {
+        print("Error: package '{name}' is not installed\n")
+        return
+    }
+    let entry = lf.packages[name]
+    if (entry.local) {
+        print("Skipping '{name}' (local package)\n")
+        return
+    }
+    let pkg_dir = "{root}/modules/{name}"
+    print("Updating '{name}'...\n")
+    var output : string
+    let exit_code = run_cmd("git -C \"{pkg_dir}\" pull --ff-only 2>&1", output)
+    if (exit_code != 0) {
+        // fall back to fetch + reset
+        let exit_code2 = run_cmd("git -C \"{pkg_dir}\" fetch origin 2>&1 && git -C \"{pkg_dir}\" reset --hard origin/HEAD 2>&1", output)
+        if (exit_code2 != 0) {
+            print("Error: update failed:\n{output}\n")
+            return
+        }
+    }
+    print("Updated '{name}'\n")
 }
 
 def cmd_update_all(root : string) {
-    print("TODO: update all\n")
+    var lf : LockFile
+    if (!read_lock_file(root, lf)) {
+        print("No packages installed (no lock file found)\n")
+        return
+    }
+    for (name in keys(lf.packages)) {
+        cmd_update(root, name)
+    }
 }
 
 def cmd_build(root : string) {
-    print("TODO: build\n")
+    print("Build not yet implemented — reserved for C++ plugin packages\n")
 }
 
 def cmd_check(root : string) {
-    print("TODO: check\n")
+    var lf : LockFile
+    if (!read_lock_file(root, lf)) {
+        print("No packages installed\n")
+        return
+    }
+    var ok = true
+    for (name, entry in keys(lf.packages), values(lf.packages)) {
+        let pkg_dir = "{root}/modules/{name}"
+        if (!fexist(pkg_dir)) {
+            print("  MISSING: {name} (directory not found)\n")
+            ok = false
+            continue
+        }
+        let has_module = fexist("{pkg_dir}/.das_module")
+        if (!has_module) {
+            print("  WARNING: {name} has no .das_module\n")
+        } else {
+            print("  OK: {name}\n")
+        }
+    }
+    if (ok) {
+        print("All packages present\n")
+    } else {
+        print("Some packages are missing — run 'daspkg install' to fix\n")
+    }
 }
