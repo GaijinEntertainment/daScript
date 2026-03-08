@@ -409,7 +409,7 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : s
     } elif (tool_name == "list_types") {
         return do_list_types(arg1, project)
     } elif (tool_name == "run_test") {
-        return do_run_test(arg1)
+        return do_run_test(arg1, project)
     } elif (tool_name == "format_file") {
         return do_format_file(arg1)
     } elif (tool_name == "run_script") {

@@ -181,6 +181,45 @@ def write_function_list(var writer : StringBuilderWriter; program : smart_ptr<Pr
     }
 }
 
+// ── Executable path ──────────────────────────────────────────────────
+
+// Returns absolute path to the daslang executable, with backslashes for Windows cmd.exe
+def get_daslang_exe() : string {
+    let args <- get_command_line_arguments()
+    if (empty(args)) {
+        return ""
+    }
+    var exe = args[0]
+    // If relative path, make absolute using das_root
+    if (find(exe, ":") < 0 && character_at(exe, 0) != '/') {
+        exe = "{get_das_root()}/{exe}"
+    }
+    // Replace forward slashes with backslashes for cmd.exe on Windows
+    return replace(exe, "/", "\\")
+}
+
+// Run an external command, capture stdout+stderr to a temp file, return (exit_code, output)
+def run_and_capture(cmd_line : string; var output : string&) : int {
+    let root = get_das_root()
+    let tmp_out = "{root}/_mcp_cmd_output.txt"
+    let full_cmd = "{cmd_line} > {tmp_out} 2>&1"
+    var exit_code = -1
+    unsafe {
+        exit_code = popen(full_cmd) <| $(f) {
+            if (f != null) {
+                fread(f)
+            }
+        }
+    }
+    fopen(tmp_out, "rb") <| $(f) {
+        if (f != null) {
+            output = fread(f)
+        }
+    }
+    remove(tmp_out)
+    return exit_code
+}
+
 // ── File path utilities ──────────────────────────────────────────────
 
 def resolve_path(path : string) : string {
