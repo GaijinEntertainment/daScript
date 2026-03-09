@@ -225,14 +225,24 @@ def handle_tools_list(id_json : string) : string {
     ))
     result.tools |> emplace(make_file_tool("list_functions", "Compile a daScript file and list all functions (after macro expansion)"))
     result.tools |> emplace(make_file_tool("list_types", "Compile a daScript file and list all structs, classes, enums, and type aliases"))
-    result.tools |> emplace(make_file_tool("run_test", "Run dastest on a .das test file and return pass/fail results"))
+    result.tools |> emplace(make_tool(
+        "run_test",
+        "Run dastest on a .das test file and return pass/fail results",
+        {
+            "file" => PropertySchema(_type = "string", description = "Path to the .das test file"),
+            "timeout" => PropertySchema(_type = "string", description = "Timeout in seconds (default: 120). Process tree is killed if exceeded"),
+            "project" => PROJECT_PROP
+        },
+        ["file"]
+    ))
     result.tools |> emplace(make_file_tool("format_file", "Format a .das file using the daslang code formatter"))
     result.tools |> emplace(make_tool(
         "run_script",
         "Run a daslang script and return its stdout output. Provide either a file path or inline code.",
         {
             "file" => PropertySchema(_type = "string", description = "Path to the .das file to run"),
-            "code" => PropertySchema(_type = "string", description = "Inline daslang code to run (written to temp file and executed)")
+            "code" => PropertySchema(_type = "string", description = "Inline daslang code to run (written to temp file and executed)"),
+            "timeout" => PropertySchema(_type = "string", description = "Timeout in seconds (default: 30). Process tree is killed if exceeded")
         },
         []
     ))
@@ -420,11 +430,11 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : s
     } elif (tool_name == "list_types") {
         return do_list_types(arg1, project)
     } elif (tool_name == "run_test") {
-        return do_run_test(arg1, project)
+        return do_run_test(arg1, project, arg2)
     } elif (tool_name == "format_file") {
         return do_format_file(arg1)
     } elif (tool_name == "run_script") {
-        return do_run_script(arg1, arg2)
+        return do_run_script(arg1, arg2, arg3)
     } elif (tool_name == "eval_expression") {
         return do_eval_expression(arg1, arg2)
     } elif (tool_name == "describe_type") {
@@ -488,11 +498,17 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
     let name = tool_name_val.value as _string
     var arg1, arg2, arg3, arg4, arg5 : string
     let project = get_string_arg(args, "project")
-    if (name == "compile_check" || name == "list_functions" || name == "list_types" || name == "run_test" || name == "format_file" || name == "list_requires") {
+    if (name == "compile_check" || name == "list_functions" || name == "list_types" || name == "format_file" || name == "list_requires") {
         arg1 = get_string_arg(args, "file")
         if (empty(arg1)) {
             return json_rpc_error(id_json, -32602, "missing 'file' argument")
         }
+    } elif (name == "run_test") {
+        arg1 = get_string_arg(args, "file")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'file' argument")
+        }
+        arg2 = get_string_arg(args, "timeout")
     } elif (name == "convert_to_gen2") {
         arg1 = get_string_arg(args, "file")
         if (empty(arg1)) {
@@ -519,6 +535,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
     } elif (name == "run_script") {
         arg1 = get_string_arg(args, "file")
         arg2 = get_string_arg(args, "code")
+        arg3 = get_string_arg(args, "timeout")
     } elif (name == "eval_expression") {
         arg1 = get_string_arg(args, "expression")
         if (empty(arg1)) {

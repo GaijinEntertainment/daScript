@@ -15,6 +15,16 @@
 #include "daScript/misc/sysos.h"
 
 #include <sstream>
+#include <thread>
+#include <atomic>
+#include <chrono>
+#if _WIN32
+#include <fcntl.h>
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
+#define DAS_POPEN_TIMEOUT 0x7FFFFF01
 
 MAKE_TYPE_FACTORY(clock, das::Time)// use MAKE_TYPE_FACTORY out of namespace. Some compilers not happy otherwise
 
@@ -131,6 +141,7 @@ namespace das {
     int builtin_popen_impl ( const char * cmd, bool bin, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     int builtin_popen_binary ( const char * cmd, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     int builtin_popen ( const char * cmd, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    int builtin_popen_timeout ( const char * cmd, float timeout_sec, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * get_full_file_name ( const char * path, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     bool has_env_variable ( const char * var, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * get_env_variable ( const char * var, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
@@ -544,6 +555,138 @@ namespace das {
         return builtin_popen_impl(cmd, false, blk, context, at);
     }
 
+    int builtin_popen_timeout ( const char * cmd, float timeout_sec, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) {
+        if ( !cmd ) {
+            context->throw_error_at(at, "popen of null");
+            return -1;
+        }
+        if ( timeout_sec <= 0.0f ) {
+            return builtin_popen_impl(cmd, false, blk, context, at);
+        }
+#ifdef _MSC_VER
+        // Windows: CreateProcess with stdout pipe + job object for process tree kill
+        SECURITY_ATTRIBUTES sa;
+        sa.nLength = sizeof(SECURITY_ATTRIBUTES);
+        sa.bInheritHandle = TRUE;
+        sa.lpSecurityDescriptor = NULL;
+        HANDLE hReadPipe = NULL, hWritePipe = NULL;
+        if ( !CreatePipe(&hReadPipe, &hWritePipe, &sa, 0) ) {
+            vec4f args[1]; args[0] = cast<FILE *>::from(nullptr);
+            context->invoke(blk, args, nullptr, at);
+            return -1;
+        }
+        SetHandleInformation(hReadPipe, HANDLE_FLAG_INHERIT, 0);
+        // Create job object to kill entire process tree on timeout
+        HANDLE hJob = CreateJobObjectA(NULL, NULL);
+        if ( hJob ) {
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli;
+            memset(&jeli, 0, sizeof(jeli));
+            jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &jeli, sizeof(jeli));
+        }
+        STARTUPINFOA si;
+        memset(&si, 0, sizeof(si));
+        si.cb = sizeof(si);
+        si.hStdOutput = hWritePipe;
+        si.hStdError = hWritePipe;
+        si.dwFlags = STARTF_USESTDHANDLES;
+        PROCESS_INFORMATION pi;
+        memset(&pi, 0, sizeof(pi));
+        string cmdLine = string("cmd.exe /c ") + cmd;
+        BOOL created = CreateProcessA(NULL, (LPSTR)cmdLine.c_str(), NULL, NULL, TRUE,
+            CREATE_NO_WINDOW | CREATE_SUSPENDED, NULL, NULL, &si, &pi);
+        CloseHandle(hWritePipe);
+        if ( !created ) {
+            CloseHandle(hReadPipe);
+            if ( hJob ) CloseHandle(hJob);
+            vec4f args[1]; args[0] = cast<FILE *>::from(nullptr);
+            context->invoke(blk, args, nullptr, at);
+            return -1;
+        }
+        if ( hJob ) AssignProcessToJobObject(hJob, pi.hProcess);
+        ResumeThread(pi.hThread);
+        CloseHandle(pi.hThread);
+        int fd = _open_osfhandle((intptr_t)hReadPipe, _O_RDONLY | _O_TEXT);
+        FILE * f = _fdopen(fd, "rt");
+        // Watchdog thread: wait for timeout, then kill entire process tree via job object
+        HANDLE hProcess = pi.hProcess;
+        DWORD timeout_ms = (DWORD)(timeout_sec * 1000.0f);
+        atomic<bool> timedOut{false};
+        thread watchdog([hProcess, hJob, timeout_ms, &timedOut]() {
+            if ( WaitForSingleObject(hProcess, timeout_ms) == WAIT_TIMEOUT ) {
+                timedOut = true;
+                if ( hJob ) {
+                    TerminateJobObject(hJob, 1);
+                } else {
+                    TerminateProcess(hProcess, 1);
+                }
+            }
+        });
+        vec4f args[1];
+        args[0] = cast<FILE *>::from(f);
+        context->invoke(blk, args, nullptr, at);
+        WaitForSingleObject(hProcess, INFINITE);
+        DWORD exitCode = 0;
+        GetExitCodeProcess(hProcess, &exitCode);
+        fclose(f);
+        watchdog.join();
+        CloseHandle(hProcess);
+        if ( hJob ) CloseHandle(hJob);
+        return timedOut ? DAS_POPEN_TIMEOUT : (int)exitCode;
+#else
+        // Unix: fork/exec with pipe + watchdog thread
+        int pipefd[2];
+        if ( pipe(pipefd) == -1 ) {
+            vec4f args[1]; args[0] = cast<FILE *>::from(nullptr);
+            context->invoke(blk, args, nullptr, at);
+            return -1;
+        }
+        pid_t pid = fork();
+        if ( pid == -1 ) {
+            close(pipefd[0]);
+            close(pipefd[1]);
+            vec4f args[1]; args[0] = cast<FILE *>::from(nullptr);
+            context->invoke(blk, args, nullptr, at);
+            return -1;
+        }
+        if ( pid == 0 ) {
+            // Child process
+            close(pipefd[0]);
+            dup2(pipefd[1], STDOUT_FILENO);
+            dup2(pipefd[1], STDERR_FILENO);
+            close(pipefd[1]);
+            execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
+            _exit(127);
+        }
+        // Parent process
+        close(pipefd[1]);
+        FILE * f = fdopen(pipefd[0], "r");
+        atomic<bool> timedOut{false};
+        atomic<bool> processDone{false};
+        thread watchdog([pid, timeout_sec, &timedOut, &processDone]() {
+            auto deadline = chrono::steady_clock::now() + chrono::milliseconds((int)(timeout_sec * 1000.0f));
+            while ( chrono::steady_clock::now() < deadline ) {
+                if ( processDone.load() ) return;
+                this_thread::sleep_for(chrono::milliseconds(100));
+            }
+            if ( !processDone.load() ) {
+                timedOut = true;
+                kill(pid, SIGKILL);
+            }
+        });
+        vec4f args[1];
+        args[0] = cast<FILE *>::from(f);
+        context->invoke(blk, args, nullptr, at);
+        int status = 0;
+        waitpid(pid, &status, 0);
+        processDone = true;
+        fclose(f);
+        watchdog.join();
+        if ( timedOut ) return DAS_POPEN_TIMEOUT;
+        return WIFEXITED(status) ? WEXITSTATUS(status) : WIFSIGNALED(status) ? WTERMSIG(status) : status;
+#endif
+    }
+
     char * get_full_file_name ( const char * path, Context * context, LineInfoArg * at ) {
         if ( !path ) return nullptr;
         auto res = normalizeFileName(path);
@@ -840,6 +983,10 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_popen_binary)>(*this, lib, "popen_binary",
                 SideEffects::modifyExternal, "builtin_popen_binary")
                     ->args({"command","scope","context","at"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_popen_timeout)>(*this, lib, "popen_timeout",
+                SideEffects::modifyExternal, "builtin_popen_timeout")
+                    ->args({"command","timeout","scope","context","at"})->unsafeOperation = true;
+            addConstant<int32_t>(*this, "popen_timed_out", DAS_POPEN_TIMEOUT);
             addExtern<DAS_BIND_FUN(get_full_file_name)>(*this, lib, "get_full_file_name",
                 SideEffects::accessExternal, "get_full_file_name")
                     ->args({"path","context","at"});

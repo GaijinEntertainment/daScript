@@ -229,16 +229,26 @@ def get_daslang_exe() : string {
     return exe
 }
 
-// Run an external command, capture stdout+stderr to a temp file, return (exit_code, output)
-def run_and_capture(cmd_line : string; var output : string&) : int {
+// Run an external command, capture stdout+stderr to a temp file, return exit_code.
+// timeout_sec > 0 kills the process tree after that many seconds (returns popen_timed_out).
+// timeout_sec <= 0 means no timeout.
+def run_and_capture(cmd_line : string; var output : string&; timeout_sec : float = 0.0) : int {
     let root = get_das_root()
     let tmp_out = "{root}/_mcp_cmd_output.txt"
     let full_cmd = "{cmd_line} > {tmp_out} 2>&1"
     var exit_code = -1
     unsafe {
-        exit_code = popen(full_cmd) <| $(f) {
-            if (f != null) {
-                fread(f)
+        if (timeout_sec > 0.0) {
+            exit_code = popen_timeout(full_cmd, timeout_sec) <| $(f) {
+                if (f != null) {
+                    fread(f)
+                }
+            }
+        } else {
+            exit_code = popen(full_cmd) <| $(f) {
+                if (f != null) {
+                    fread(f)
+                }
             }
         }
     }
