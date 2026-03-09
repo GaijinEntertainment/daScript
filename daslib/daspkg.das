@@ -14,27 +14,54 @@ module daspkg shared public
 // daspkg (utils/daspkg/main.das) compiles and runs the .das_package, then reads
 // the accumulated state from the module globals.
 
-// --- Package metadata (set by `package()`) ---
+// --- Package metadata result (used by daspkg tool and .das_package scripts) ---
 
-var _pkg_name : string
-var _pkg_author : string
-var _pkg_description : string
-var _pkg_source : string
+struct PackageMeta {
+    pkg_name : string
+    author : string
+    description : string
+    source : string
+    license : string
+    tags : array<string>
+    min_sdk : string
+}
+
+// --- Package metadata globals (set by `package()`) ---
+
+var _pkg_meta : PackageMeta
 
 def package_name(name : string) {
-    _pkg_name = name
+    _pkg_meta.pkg_name = name
 }
 
 def package_author(author : string) {
-    _pkg_author = author
+    _pkg_meta.author = author
 }
 
 def package_description(desc : string) {
-    _pkg_description = desc
+    _pkg_meta.description = desc
 }
 
 def package_source(url : string) {
-    _pkg_source = url
+    _pkg_meta.source = url
+}
+
+def package_license(license : string) {
+    _pkg_meta.license = license
+}
+
+def package_tag(tag : string) {
+    _pkg_meta.tags |> push_clone(tag)
+}
+
+def package_tags(tags : array<string>) {
+    for (t in tags) {
+        _pkg_meta.tags |> push_clone(t)
+    }
+}
+
+def package_min_sdk(version : string) {
+    _pkg_meta.min_sdk = version
 }
 
 // --- Version resolution (set by `resolve()`) ---
@@ -103,17 +130,3 @@ def custom_build(command : string) {
     _build_command = command
 }
 
-// --- State management (used by daspkg tool) ---
-
-def reset_package_state() {
-    _pkg_name = ""
-    _pkg_author = ""
-    _pkg_description = ""
-    _pkg_source = ""
-    _download_kind = DownloadKind.unset
-    _download_ref = ""
-    _download_source = ""
-    delete _dependencies
-    _build_kind = BuildKind.no_build
-    _build_command = ""
-}

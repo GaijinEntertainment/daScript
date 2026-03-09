@@ -111,7 +111,7 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - **Construction:** `new Type(field=val)` — NOT `new [[Type() field=val]]`
 - **Enum access:** `EnumName.EnumValue` with dot — NOT `EnumName EnumValue`
 - **Array literals:** `[1, 2, 3]` — NOT `[[int 1; 2; 3]]`. Creates `array<int>`; use `fixed_array(1, 2, 3)` for fixed-size
-- **Struct init:** `Foo(a=1, b=2)` — NOT `[[Foo() a=1, b=2]]`
+- **Struct init:** `Foo(a=1, b=2)` — NOT `[[Foo() a=1, b=2]]`. Move-init: `Foo(a=1, b <- expr)` for non-copyable fields
 - **Table literals:** `{ "k" => v, "k2" => v2 }` — NOT `{{ "k" => v; "k2" => v2 }}`
 - **Bare blocks:** `{ var x = 1; ... }` at statement level creates a lexical scope (NOT a table literal). Supports `finally`: `{ ... } finally { ... }`
 - **Named arguments:** `foo([name = value])` with square brackets

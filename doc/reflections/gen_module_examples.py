@@ -187,6 +187,26 @@ normalization, resolution of relative URIs, and GUID generation.""",
 
 # ============ DASLIB MODULES ============
 
+reg("ansi_colors",
+    """The ANSI_COLORS module provides ANSI terminal color and style helpers.
+Color output is controlled by the ``use_tty_colors`` global variable.
+Call ``init_ansi_colors`` to auto-detect color support from command-line flags
+and environment variables, or set ``use_tty_colors`` directly.""",
+    "require daslib/ansi_colors",
+    example="""\
+    require daslib/ansi_colors
+
+    [export]
+    def main() {
+        use_tty_colors = true
+        print("{red_str("error")}: something went wrong\\n")
+        print("{green_str("ok")}: all good\\n")
+        print("{bold_str("important")}: pay attention\\n")
+        use_tty_colors = false
+        print("{red_str("no color")}: plain text\\n")
+    }
+""")
+
 reg("algorithm",
     """The ALGORITHM module provides array and collection manipulation algorithms including
 sorting, searching, set operations, and element removal.""",

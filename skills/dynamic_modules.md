@@ -248,9 +248,27 @@ def initialize(project_path : string) {
 }
 ```
 
-### `.das_package` for packages
+### `.das_package` manifest
 
-Minimal metadata for `daspkg`:
+Every package has a `.das_package` file — a daslang script that declares metadata, version resolution, dependencies, and build info. It uses `require daslib/daspkg` which provides the API.
+
+#### `PackageMeta` struct (defined in `daslib/daspkg.das`)
+
+```das
+struct PackageMeta {
+    pkg_name : string
+    author : string
+    description : string
+    source : string       // canonical source URL (e.g. "github.com/user/repo")
+    license : string      // SPDX identifier (e.g. "BSD-3-Clause", "MIT")
+    tags : array<string>  // searchable tags
+    min_sdk : string      // minimum daslang SDK version (e.g. "0.4")
+}
+```
+
+The setter functions write to a global `var _pkg_meta : PackageMeta` which daspkg reads after running the script.
+
+#### Metadata (`package()` function)
 
 ```das
 options gen2
@@ -259,7 +277,54 @@ require daslib/daspkg
 [export]
 def package() {
     package_name("my-package")
+    package_author("username")
     package_description("What the package does")
+    package_source("github.com/user/repo")   // optional: canonical source URL
+    package_license("MIT")                    // optional: SPDX license
+    package_tag("networking")                 // optional: searchable tags (call multiple times)
+    package_min_sdk("0.4")                    // optional: minimum SDK version
+}
+```
+
+Required: `package_name`, `package_description`. Everything else is optional.
+
+#### Version resolution (`resolve()` function)
+
+```das
+[export]
+def resolve(sdk_version, version : string) {
+    if (empty(version) || version == "latest") {
+        download_branch("main")       // track a branch
+    } else {
+        download_tag("v{version}")    // download a specific git tag
+    }
+}
+```
+
+Resolution functions: `download_tag(ref)`, `download_branch(ref)`, `download_redirect(source, ref)`.
+
+If `resolve()` is not defined, daspkg clones the default branch.
+
+#### Dependencies (`dependencies()` function)
+
+```das
+[export]
+def dependencies(version : string) {
+    require_package("github.com/user/dep1")
+    require_package("github.com/user/dep2", ">=1.0")  // with version constraint
+}
+```
+
+Version constraints: `>=1.0`, `>1.0`, `<=2.0`, `<2.0`, `=1.5`, `>=1.0,<2.0` (range).
+
+#### Build info (`build()` function)
+
+```das
+[export]
+def build() {
+    cmake_build()                    // CMake-based build
+    // or: custom_build("make all") // custom build command
+    // or: no_build()               // pure-das, no build needed (default)
 }
 ```
 
@@ -282,3 +347,25 @@ das-claude/
     anthropic.das               # module anthropic — require anthropic/anthropic
   test_anthropic.das            # tests at root — require anthropic/anthropic
 ```
+
+### daspkg CLI
+
+The package manager is `utils/daspkg/main.das`:
+
+```bash
+daslang.exe utils/daspkg/main.das -- <command> [args]
+```
+
+Commands:
+- `install <source>` — install a package (`github.com/user/repo`, local path, or index name)
+- `update [name]` — update all or a specific package
+- `remove <name>` — remove an installed package
+- `list` — list installed packages
+- `check` — verify installed packages match lockfile
+- `doctor` — check environment (git, cmake, gh)
+- `search <query>` — search the package index
+- `build <name>` — build a native package
+
+Flags: `--root <dir>` (project root, default `.`), `--force` (reinstall), `--color`/`--no-color`.
+
+Packages install to `modules/<RepoName>/`. Lock file: `daspkg.lock` in the root directory.

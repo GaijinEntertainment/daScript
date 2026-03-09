@@ -19,6 +19,7 @@ require daslib/regex
 require daslib/regex_boost
 require daslib/apply
 require daslib/algorithm
+require daslib/ansi_colors
 require daslib/jobque_boost
 require daslib/apply_in_context
 require daslib/contracts
@@ -461,6 +462,16 @@ def document_module_apply_in_context(root : string) {
     var groups <- array<DocGroup>(
     )
     document("Cross-context evaluation helpers", mod, "apply_in_context.rst", groups)
+}
+
+def document_module_ansi_colors(root : string) {
+    var mod = find_module("ansi_colors")
+    var groups <- array<DocGroup>(
+        group_by_regex("Configuration", mod, %regex~.*(init_ansi_colors|use_tty_colors)$%%),
+        group_by_regex("Colors", mod, %regex~.*(red_str|green_str|yellow_str|blue_str|magenta_str|cyan_str)$%%),
+        group_by_regex("Styles", mod, %regex~.*(bold_str|dim_str|underline_str|reset_str)$%%)
+    )
+    document("ANSI terminal color and style helpers", mod, "ansi_colors.rst", groups)
 }
 
 def document_module_algorithm(root : string) {
@@ -1141,6 +1152,7 @@ def main {
     document_module_jobque(root)
     // document daslib modules
     document_module_algorithm(root)
+    document_module_ansi_colors(root)
     document_module_apply_in_context(root)
     document_module_apply(root)
     document_module_archive(root)

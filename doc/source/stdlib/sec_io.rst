@@ -4,7 +4,7 @@
 I/O and Serialization
 *********************
 
-File I/O, networking, URI parsing, and binary serialization.
+File I/O, networking, URI parsing, terminal output, and binary serialization.
 
 .. toctree::
 
@@ -14,4 +14,5 @@ File I/O, networking, URI parsing, and binary serialization.
    dashv_boost.rst
    uriparser.rst
    uriparser_boost.rst
+   ansi_colors.rst
    archive.rst

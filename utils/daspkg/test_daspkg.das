@@ -11,6 +11,8 @@ require strings
 require daslib/json
 require daslib/json_boost
 
+require daslib/ansi_colors
+
 require lockfile
 require utils
 require index
@@ -396,6 +398,7 @@ let PKG_FIXTURE = "utils/daspkg/fixtures/test.das_package"
 let PKG_BRANCH_FIXTURE = "utils/daspkg/fixtures/test_branch.das_package"
 let PKG_REDIRECT_FIXTURE = "utils/daspkg/fixtures/test_redirect.das_package"
 let PKG_SDK_AWARE_FIXTURE = "utils/daspkg/fixtures/test_sdk_aware.das_package"
+let PKG_RICH_FIXTURE = "utils/daspkg/fixtures/test_rich.das_package"
 
 [test]
 def test_run_das_package_meta(t : T?) {
@@ -693,4 +696,322 @@ def test_log_writes_to_file(t : T?) {
     // cleanup
     rmdir_rec(test_root)
     log_file_path = ""
+}
+
+// --- rich metadata tests ---
+
+[test]
+def test_run_das_package_rich_meta(t : T?) {
+    t |> run("reads license, tags, min_sdk") @(t : T?) {
+        var meta : PackageMeta
+        let ok = run_das_package_meta(PKG_RICH_FIXTURE, meta)
+        t |> success(ok)
+        t |> equal("rich-pkg", meta.pkg_name)
+        t |> equal("testauthor", meta.author)
+        t |> equal("A richly annotated test package", meta.description)
+        t |> equal("MIT", meta.license)
+        t |> equal(2, length(meta.tags))
+        t |> equal("networking", meta.tags[0])
+        t |> equal("http", meta.tags[1])
+        t |> equal("0.4", meta.min_sdk)
+    }
+    t |> run("original fixture has no new fields") @(t : T?) {
+        var meta : PackageMeta
+        let ok = run_das_package_meta(PKG_FIXTURE, meta)
+        t |> success(ok)
+        t |> success(empty(meta.license))
+        t |> equal(0, length(meta.tags))
+        t |> success(empty(meta.min_sdk))
+    }
+}
+
+// --- index parsing with rich fields ---
+
+[test]
+def test_parse_index_json_rich(t : T?) {
+    t |> run("parses all enriched fields") @(t : T?) {
+        let json_text = "[\{\"name\":\"mypkg\",\"url\":\"github.com/user/mypkg\",\"description\":\"desc\",\"author\":\"alice\",\"license\":\"MIT\",\"tags\":[\"ai\",\"http\"],\"min_sdk\":\"0.4\",\"modules\":[\"mypkg\"],\"latest_version\":\"v1.0\",\"last_updated\":\"2025-01-01\",\"has_native\":true,\"dependencies\":[\"dep-a\"]\}]"
+        var index : table<string; IndexEntry>
+        t |> success(parse_index_json(json_text, index))
+        t |> success(index |> key_exists("mypkg"))
+        unsafe {
+            let entry & = index["mypkg"]
+            t |> equal("github.com/user/mypkg", entry.url)
+            t |> equal("desc", entry.description)
+            t |> equal("alice", entry.author)
+            t |> equal("MIT", entry.license)
+            t |> equal(2, length(entry.tags))
+            t |> equal("ai", entry.tags[0])
+            t |> equal("http", entry.tags[1])
+            t |> equal("0.4", entry.min_sdk)
+            t |> equal(1, length(entry.modules))
+            t |> equal("mypkg", entry.modules[0])
+            t |> equal("v1.0", entry.latest_version)
+            t |> equal("2025-01-01", entry.last_updated)
+            t |> success(entry.has_native)
+            t |> equal(1, length(entry.dependencies))
+            t |> equal("dep-a", entry.dependencies[0])
+        }
+    }
+    t |> run("omitted fields default properly") @(t : T?) {
+        let json_text = "[\{\"name\":\"bare\",\"url\":\"github.com/user/bare\",\"description\":\"minimal\"\}]"
+        var index : table<string; IndexEntry>
+        t |> success(parse_index_json(json_text, index))
+        unsafe {
+            let entry & = index["bare"]
+            t |> success(empty(entry.author))
+            t |> success(empty(entry.license))
+            t |> equal(0, length(entry.tags))
+            t |> success(empty(entry.min_sdk))
+            t |> equal(0, length(entry.modules))
+            t |> success(!entry.has_native)
+        }
+    }
+}
+
+// --- index serialization roundtrip ---
+
+[test]
+def test_serialize_index_rich(t : T?) {
+    t |> run("roundtrip preserves all fields") @(t : T?) {
+        let json_text = "[\{\"name\":\"pkg1\",\"url\":\"github.com/u/pkg1\",\"description\":\"first\",\"author\":\"bob\",\"license\":\"Apache-2.0\",\"tags\":[\"game\"],\"min_sdk\":\"0.3\",\"modules\":[\"mod_a\",\"mod_b\"],\"latest_version\":\"v2.0\",\"last_updated\":\"2025-06-01\",\"has_native\":true,\"dependencies\":[\"dep1\"]\}]"
+        var index : table<string; IndexEntry>
+        t |> success(parse_index_json(json_text, index))
+        let serialized = serialize_index(index)
+        t |> success(!empty(serialized))
+        // re-parse
+        var index2 : table<string; IndexEntry>
+        t |> success(parse_index_json(serialized, index2))
+        t |> success(index2 |> key_exists("pkg1"))
+        unsafe {
+            let e & = index2["pkg1"]
+            t |> equal("bob", e.author)
+            t |> equal("Apache-2.0", e.license)
+            t |> equal(1, length(e.tags))
+            t |> equal("game", e.tags[0])
+            t |> equal("0.3", e.min_sdk)
+            t |> equal(2, length(e.modules))
+            t |> equal("v2.0", e.latest_version)
+            t |> equal("2025-06-01", e.last_updated)
+            t |> success(e.has_native)
+            t |> equal(1, length(e.dependencies))
+        }
+    }
+    t |> run("omits empty optional fields") @(t : T?) {
+        let json_text = "[\{\"name\":\"slim\",\"url\":\"github.com/u/slim\",\"description\":\"minimal\"\}]"
+        var index : table<string; IndexEntry>
+        t |> success(parse_index_json(json_text, index))
+        let serialized = serialize_index(index)
+        // should NOT contain "author", "license", etc. keys
+        t |> success(find(serialized, "\"author\"") < 0)
+        t |> success(find(serialized, "\"license\"") < 0)
+        t |> success(find(serialized, "\"tags\"") < 0)
+        t |> success(find(serialized, "\"has_native\"") < 0)
+    }
+}
+
+// --- add_to_index_json_rich ---
+
+[test]
+def test_add_to_index_json_rich(t : T?) {
+    t |> run("adds package with full manifest") @(t : T?) {
+        var manifest : PackageManifest
+        manifest.name = "rich"
+        manifest.description = "A rich package"
+        manifest.author = "alice"
+        manifest.license = "MIT"
+        manifest.tags |> push_clone("ai")
+        manifest.min_sdk = "0.4"
+        manifest.modules |> push_clone("rich_mod")
+        manifest.has_native = true
+        manifest.dependencies |> push_clone("dep-x")
+        let result = add_to_index_json_rich("[]", "rich", manifest, "github.com/alice/rich")
+        t |> success(!empty(result))
+        var index : table<string; IndexEntry>
+        t |> success(parse_index_json(result, index))
+        unsafe {
+            let e & = index["rich"]
+            t |> equal("alice", e.author)
+            t |> equal("MIT", e.license)
+            t |> equal(1, length(e.tags))
+            t |> equal("ai", e.tags[0])
+            t |> equal("0.4", e.min_sdk)
+            t |> equal(1, length(e.modules))
+            t |> equal("rich_mod", e.modules[0])
+            t |> success(e.has_native)
+            t |> equal(1, length(e.dependencies))
+        }
+    }
+}
+
+// --- search tests ---
+
+[test]
+def test_search_matches(t : T?) {
+    t |> run("search scoring and filters") @(t : T?) {
+        // build a small index
+        let json_text = "[\{\"name\":\"das-http\",\"url\":\"github.com/u/das-http\",\"description\":\"HTTP client\",\"author\":\"alice\",\"tags\":[\"networking\",\"http\"],\"modules\":[\"http_client\"]\},\{\"name\":\"das-imgui\",\"url\":\"github.com/u/das-imgui\",\"description\":\"ImGui bindings\",\"tags\":[\"gui\"],\"modules\":[\"imgui\"]\}]"
+        var index : table<string; IndexEntry>
+        parse_index_json(json_text, index)
+        unsafe {
+            // name substring match
+            t |> success(matches_entry("das-http", index["das-http"], "http") < 100)
+            // description match
+            t |> success(matches_entry("das-imgui", index["das-imgui"], "bindings") < 100)
+            // tag: filter — matching tag
+            t |> success(matches_entry("das-http", index["das-http"], "tag:networking") < 100)
+            // tag: filter — non-matching tag
+            t |> equal(100, matches_entry("das-imgui", index["das-imgui"], "tag:networking"))
+            // module: filter — matching module
+            t |> success(matches_entry("das-imgui", index["das-imgui"], "module:imgui") < 100)
+            // module: filter — non-matching module
+            t |> equal(100, matches_entry("das-http", index["das-http"], "module:imgui"))
+            // no match returns 100
+            t |> equal(100, matches_entry("das-http", index["das-http"], "zzzzzzzzz"))
+            // author match
+            t |> success(matches_entry("das-http", index["das-http"], "alice") < 100)
+        }
+    }
+}
+
+// --- README generation ---
+
+[test]
+def test_generate_readme(t : T?) {
+    t |> run("generates markdown with modules and tags") @(t : T?) {
+        let json_text = "[\{\"name\":\"mypkg\",\"url\":\"github.com/u/mypkg\",\"description\":\"My package\",\"author\":\"bob\",\"license\":\"MIT\",\"tags\":[\"ai\"],\"modules\":[\"mymod\"]\}]"
+        let readme = generate_index_readme(json_text)
+        t |> success(!empty(readme))
+        t |> success(find(readme, "# daspkg package index") >= 0)
+        t |> success(find(readme, "## Module Index") >= 0)
+        t |> success(find(readme, "mymod") >= 0)
+        t |> success(find(readme, "mypkg") >= 0)
+        t |> success(find(readme, "## Packages by Tag") >= 0)
+        t |> success(find(readme, "**ai**") >= 0)
+        t |> success(find(readme, "**Author:** bob") >= 0)
+        t |> success(find(readme, "**License:** MIT") >= 0)
+        t |> success(find(readme, "daspkg install github.com/u/mypkg") >= 0)
+    }
+    t |> run("empty index produces valid readme") @(t : T?) {
+        let readme = generate_index_readme("[]")
+        t |> success(!empty(readme))
+        t |> success(find(readme, "0 package(s) registered") >= 0)
+    }
+    t |> run("no modules skips module index section") @(t : T?) {
+        let json_text = "[\{\"name\":\"bare\",\"url\":\"github.com/u/bare\",\"description\":\"No modules\"\}]"
+        let readme = generate_index_readme(json_text)
+        t |> success(find(readme, "## Module Index") < 0)
+    }
+}
+
+// --- ansi_colors tests ---
+
+[test]
+def test_ansi_colors(t : T?) {
+    t |> run("colors disabled returns plain text") @(t : T?) {
+        use_tty_colors = false
+        t |> equal("hello", red_str("hello"))
+        t |> equal("hello", green_str("hello"))
+        t |> equal("hello", yellow_str("hello"))
+        t |> equal("hello", blue_str("hello"))
+        t |> equal("hello", magenta_str("hello"))
+        t |> equal("hello", cyan_str("hello"))
+        t |> equal("hello", bold_str("hello"))
+        t |> equal("hello", dim_str("hello"))
+        t |> equal("hello", underline_str("hello"))
+        t |> equal("", reset_str())
+    }
+    t |> run("colors enabled wraps with ANSI codes") @(t : T?) {
+        use_tty_colors = true
+        t |> equal("\x1B[31mhi\x1B[0m", red_str("hi"))
+        t |> equal("\x1B[32mhi\x1B[0m", green_str("hi"))
+        t |> equal("\x1B[33mhi\x1B[0m", yellow_str("hi"))
+        t |> equal("\x1B[34mhi\x1B[0m", blue_str("hi"))
+        t |> equal("\x1B[35mhi\x1B[0m", magenta_str("hi"))
+        t |> equal("\x1B[36mhi\x1B[0m", cyan_str("hi"))
+        t |> equal("\x1B[1mhi\x1B[0m", bold_str("hi"))
+        t |> equal("\x1B[2mhi\x1B[0m", dim_str("hi"))
+        t |> equal("\x1B[4mhi\x1B[0m", underline_str("hi"))
+        t |> equal("\x1B[0m", reset_str())
+        use_tty_colors = false
+    }
+    t |> run("init_ansi_colors with --color flag") @(t : T?) {
+        use_tty_colors = false
+        init_ansi_colors(["exe", "script.das", "--color"])
+        t |> success(use_tty_colors)
+        use_tty_colors = false
+    }
+    t |> run("init_ansi_colors with --no-color flag") @(t : T?) {
+        use_tty_colors = true
+        init_ansi_colors(["exe", "script.das", "--no-color"])
+        t |> success(!use_tty_colors)
+    }
+}
+
+// --- parse_args color flags ---
+
+[test]
+def test_parse_args_color_flags(t : T?) {
+    t |> run("--color sets use_tty_colors") @(t : T?) {
+        use_tty_colors = false
+        parse_args(["exe", "main.das", "--", "list", "--color"])
+        t |> success(use_tty_colors)
+        use_tty_colors = false
+    }
+    t |> run("--no-color clears use_tty_colors") @(t : T?) {
+        use_tty_colors = true
+        parse_args(["exe", "main.das", "--", "list", "--no-color"])
+        t |> success(!use_tty_colors)
+    }
+}
+
+// --- read_manifest with rich metadata ---
+
+[test]
+def test_read_manifest_rich(t : T?) {
+    t |> run("reads license, tags, min_sdk from manifest") @(t : T?) {
+        let tmp_dir = "{get_das_root()}/_daspkg_test_manifest_rich"
+        mkdir(tmp_dir)
+        fwrite("{tmp_dir}/.das_package", "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"richpkg\")\n    package_description(\"Rich package\")\n    package_license(\"Apache-2.0\")\n    package_tag(\"ai\")\n    package_tag(\"ml\")\n    package_min_sdk(\"0.5\")\n\}\n")
+        var manifest : PackageManifest
+        t |> success(read_manifest(tmp_dir, manifest))
+        t |> equal("richpkg", manifest.name)
+        t |> equal("Apache-2.0", manifest.license)
+        t |> equal(2, length(manifest.tags))
+        t |> equal("ai", manifest.tags[0])
+        t |> equal("ml", manifest.tags[1])
+        t |> equal("0.5", manifest.min_sdk)
+        remove("{tmp_dir}/.das_package")
+        rmdir(tmp_dir)
+    }
+}
+
+// --- extract_modules ---
+
+[test]
+def test_extract_modules(t : T?) {
+    t |> run("extracts modules from .das_module") @(t : T?) {
+        let tmp_dir = "{get_das_root()}/_daspkg_test_modules"
+        mkdir(tmp_dir)
+        fwrite("{tmp_dir}/.das_package", "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"modpkg\")\n    package_description(\"Has modules\")\n\}\n")
+        fwrite("{tmp_dir}/.das_module", "options gen2\nrequire daslib/dyn_modules\n[export]\ndef register() \{\n    register_native_path(\"mod_a\", \"\{get_das_root()\}/daslib\")\n    register_native_path(\"mod_b\", \"\{get_das_root()\}/daslib\")\n\}\n")
+        var manifest : PackageManifest
+        t |> success(read_manifest(tmp_dir, manifest))
+        t |> equal(2, length(manifest.modules))
+        t |> equal("mod_a", manifest.modules[0])
+        t |> equal("mod_b", manifest.modules[1])
+        remove("{tmp_dir}/.das_package")
+        remove("{tmp_dir}/.das_module")
+        rmdir(tmp_dir)
+    }
+    t |> run("no .das_module means no modules") @(t : T?) {
+        let tmp_dir = "{get_das_root()}/_daspkg_test_nomod"
+        mkdir(tmp_dir)
+        fwrite("{tmp_dir}/.das_package", "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"nomod\")\n    package_description(\"No modules\")\n\}\n")
+        var manifest : PackageManifest
+        t |> success(read_manifest(tmp_dir, manifest))
+        t |> equal(0, length(manifest.modules))
+        remove("{tmp_dir}/.das_package")
+        rmdir(tmp_dir)
+    }
 }
