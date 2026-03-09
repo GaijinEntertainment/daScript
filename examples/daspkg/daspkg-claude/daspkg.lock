@@ -1,0 +1,23 @@
+{
+  "sdk_version":"",
+  "packages":[
+    {
+      "name":"dasAnthropic",
+      "source":"github.com/borisbat/dasAnthropic",
+      "version":"",
+      "tag":"",
+      "branch":"",
+      "root":true,
+      "local":false
+    },
+    {
+      "name":"dasTelegram",
+      "source":"github.com/borisbat/dasTelegram",
+      "version":"",
+      "tag":"",
+      "branch":"main",
+      "root":true,
+      "local":false
+    }
+  ]
+}

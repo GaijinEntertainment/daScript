@@ -93,7 +93,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/daslib_modules.md` | Working with `daslib/` modules (linq, json, regex, functional, match, etc.), channels, or extending the standard library |
 | `skills/das_macros.md` | Writing compile-time macros, AST manipulation, qmacro/quote code generation, smart_ptr ownership patterns |
 | `skills/writing_benchmarks.md` | Writing or running benchmark files under `benchmarks/` |
-| `skills/dynamic_modules.md` | Creating or editing `.das_module` descriptors, adding new modules under `modules/` |
+| `skills/dynamic_modules.md` | Creating or editing `.das_module` descriptors, adding new modules under `modules/`, structuring daspkg packages |
 | `skills/install_instructions.md` | Creating or updating AI instruction files (`install/CLAUDE.md`, `install/skills/`) for the installed SDK |
 | `skills/aot_testing.md` | Adding AOT test files, working with the `test_aot` binary, `Module::aotRequire()`, CMake AOT macros, **debugging AOT hash mismatches** |
 
@@ -139,6 +139,8 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - No `bool(int)` cast — use `x != 0`; no `string(bool)` — use `"{flag}"`
 - `int("123")` does NOT work — use `to_int` from `require strings`
 - Hex literals are `uint` by default — use `int(0x3F)` for int
+- **`default<T>`** — the default (zero) value of type `T`: `default<int>` is `0`, `default<string>` is `""`, `default<float>` is `0.0f`
+- **`typedecl(expr)`** — compile-time type-of expression, usable inside `default<>`: `default<typedecl(field)>` gives the zero value of `field`'s type. Useful in generic code with `static_if` to compare against defaults.
 - **Bitfield sizes**: `bitfield Name : uint8 { ... }`, `: uint16`, `: uint64`; default is `uint` (32-bit). Always unsigned.
 - **Bitfield from expression**: `bitfield64(1ul << 13ul)` — use the constructor to create a bitfield value from an integer expression. Similarly `bitfield8()`, `bitfield16()`.
 
@@ -156,6 +158,14 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - daslang has garbage collection — `delete` is not required in most code
 - `var inscope` declares automatic cleanup; struct fields need defaults or `@safe_when_uninitialized`
 - `<-` is memcpy+memset(0), NOT smart_ptr-aware — see `skills/das_macros.md` for smart_ptr patterns
+
+### Unsafe
+
+- **`unsafe(expr)`** — narrow-scope unsafe, preferred over `unsafe { block }`. Limits unsafe to the exact expression that needs it
+- **Local reference binding is unsafe:** `let blk & = expr` requires `unsafe` whenever it creates a local reference to a non-local expression — `let blk & = unsafe(expr)`
+- **Variant `as` read access is safe:** `(v as _field).member` works without `unsafe` after an `is` check
+- **Variant field assignment is always unsafe:** `v._field = value` and `set_variant_index(v, N)` require `unsafe`
+- **`reinterpret<T>(expr)`** requires `unsafe` — used for const-stripping on regular pointers: `unsafe(reinterpret<Foo?>(const_ptr))`
 
 ### Error handling
 
