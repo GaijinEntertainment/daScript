@@ -590,6 +590,22 @@ def JV(value : auto(TT)) : JsonValue? {
                     fieldState <- parse_json_annotation(name, annotations)
                     fieldStateParsed = true
                 }
+                if (fieldState.optional) {
+                    // skip @optional fields at default (zero) value, matching sprint_json behavior
+                    static_if (typeinfo is_string(field)) {
+                        if (empty(field)) { return ; }
+                    } static_elif (typeinfo is_array(field)) {
+                        if (length(field) == 0) { return ; }
+                    } static_elif (typeinfo is_table(field)) {
+                        if (length(field) == 0) { return ; }
+                    } static_elif (typeinfo is_pointer(field)) {
+                        if (field == null) { return ; }
+                    } else {
+                        static_if (typeinfo is_workhorse(field)) {
+                            if (field == default<typedecl(field)>) { return ; }
+                        }
+                    }
+                }
                 if (fieldState.enumAsInt) {     // we only need to handle it as we are writing out, reading handles it at the enum level
                     static_if (typeinfo is_enum(field)) {
                         let fieldStateEnumValue : int = int(field)

@@ -196,3 +196,89 @@ install(FILES ${PROJECT_SOURCE_DIR}/modules/dasFoo/.das_module
 - Dynamic binary (`daslang`): if `require foo/bar` fails, check that `modules/dasFoo/.das_module` exists and contains a matching `register_native_path("foo", "bar", ...)` or `register_dynamic_module(...)` call
 - Use `das_is_dll_build()` to check at runtime whether running in the dynamic binary
 - The `.shared_module` extension is used for C++ module DLLs — NOT `.das_module` (that's the descriptor script)
+
+## daspkg package structure
+
+Standalone packages (managed by `daspkg`) use the same `.das_module` mechanism but follow a specific folder layout that enables `require`, testing, and examples all from the package root.
+
+### Layout
+
+```
+my-package/                     # package root (git repo)
+  .das_package                  # daspkg metadata (package_name, description)
+  .das_module                   # register_native_path for the module
+  .gitignore
+  namespace/                    # module namespace directory
+    module.das                  # main module file (require namespace/module)
+    helper.das                  # additional module files (require namespace/helper)
+  test_module.das               # tests at package root
+  example_basic.das             # examples at package root
+```
+
+### Why this layout works
+
+- **`require namespace/module`** resolves because the package root is the working directory — the compiler finds `namespace/module.das` relative to it
+- **Tests and examples at the root** can `require namespace/module` without any special configuration
+- **`.das_module`** registers the path for use when installed into a project via `daspkg install`
+- **No `.das_project` needed** — the root-level layout is self-contained
+
+### `.das_module` for packages
+
+The `.das_module` registers the module so that projects installing the package can `require` it:
+
+```das
+options gen2
+require fio
+
+[export]
+def initialize(project_path : string) {
+    register_native_path("namespace", "module", "{project_path}/namespace/module.das")
+}
+```
+
+For packages with multiple files under the namespace:
+
+```das
+[export]
+def initialize(project_path : string) {
+    let paths = ["module", "helper", "utils"]
+    for (path in paths) {
+        register_native_path("namespace", "{path}", "{project_path}/namespace/{path}.das")
+    }
+}
+```
+
+### `.das_package` for packages
+
+Minimal metadata for `daspkg`:
+
+```das
+options gen2
+require daslib/daspkg
+
+[export]
+def package() {
+    package_name("my-package")
+    package_description("What the package does")
+}
+```
+
+### Running tests
+
+From the package root:
+
+```bash
+daslang.exe dastest/dastest.das -- --test test_module.das
+```
+
+### Example: `das-claude` package
+
+```
+das-claude/
+  .das_package                  # package_name("das-claude")
+  .das_module                   # register_native_path("anthropic", "anthropic", ...)
+  .gitignore
+  anthropic/
+    anthropic.das               # module anthropic — require anthropic/anthropic
+  test_anthropic.das            # tests at root — require anthropic/anthropic
+```
