@@ -1,0 +1,88 @@
+options gen2
+
+// Sandbox policy for the compile_check tool.
+// Only safe modules are allowed — no file I/O, no networking, no unsafe blocks.
+
+require strings
+require daslib/strings_boost
+
+typedef module_info = tuple<string; string; string> const
+
+var DAS_PAK_ROOT = "./"
+
+// ---------------------------------------------------------------------------
+// module_get — resolve `require` paths to files
+// ---------------------------------------------------------------------------
+[export]
+def module_get(req, from : string) : module_info {
+    let rs <- split_by_chars(req, "./")
+    let mod_name = rs[length(rs) - 1]
+    if (length(rs) == 2 && rs[0] == "daslib") {
+        return (mod_name, "{get_das_root()}/daslib/{mod_name}.das", "")
+    }
+    // relative module
+    var fr <- split_by_chars(from, "/")
+    if (length(fr) > 0) {
+        pop(fr)
+    }
+    for (se in rs) {
+        push(fr, se)
+    }
+    return (mod_name, join(fr, "/") + ".das", "")
+}
+
+// ---------------------------------------------------------------------------
+// module_allowed — whitelist safe modules only
+// ---------------------------------------------------------------------------
+[export]
+def module_allowed(mod, filename : string) : bool {
+    // core
+    if (mod == "$") {
+        return true
+    }
+    // safe native modules
+    if (mod == "math" || mod == "strings") {
+        return true
+    }
+    // safe daslib modules
+    if (mod == "strings_boost" || mod == "utf8_utils") {
+        return true
+    }
+    if (mod == "algorithm" || mod == "functional") {
+        return true
+    }
+    return false
+}
+
+// ---------------------------------------------------------------------------
+// module_allowed_unsafe — no unsafe blocks
+// ---------------------------------------------------------------------------
+[export]
+def module_allowed_unsafe(mod, filename : string) : bool {
+    return false
+}
+
+// ---------------------------------------------------------------------------
+// option_allowed — cosmetic and gen2 options only
+// ---------------------------------------------------------------------------
+[export]
+def option_allowed(opt, from : string) : bool {
+    if (opt == "gen2" || opt == "indenting") {
+        return true
+    }
+    if (opt == "no_unused_function_arguments" || opt == "no_unused_block_arguments") {
+        return true
+    }
+    return false
+}
+
+// ---------------------------------------------------------------------------
+// annotation_allowed — common safe annotations
+// ---------------------------------------------------------------------------
+[export]
+def annotation_allowed(ann, from : string) : bool {
+    if (ann == "export" || ann == "private") {
+        return true
+    }
+    return false
+}
