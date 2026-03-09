@@ -33,17 +33,31 @@ A minimal [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) serve
 No extra build dependencies — the MCP server uses stdio transport. Claude Code manages the process lifecycle automatically.
 
 ```bash
-# Manual test:
+# Manual test (Windows):
 bin/Release/daslang.exe utils/mcp/main.das
+
+# Manual test (Linux):
+./bin/daslang utils/mcp/main.das
 ```
 
 Configure in `.mcp.json` (project root):
 
 ```json
+// Windows
 {
   "mcpServers": {
     "daslang": {
-      "command": "path/to/daslang.exe",
+      "command": "bin/Release/daslang.exe",
+      "args": ["utils/mcp/main.das"]
+    }
+  }
+}
+
+// Linux
+{
+  "mcpServers": {
+    "daslang": {
+      "command": "./bin/daslang",
       "args": ["utils/mcp/main.das"]
     }
   }
@@ -53,7 +67,11 @@ Configure in `.mcp.json` (project root):
 Or add via CLI:
 
 ```bash
-claude mcp add daslang -- path/to/daslang.exe utils/mcp/main.das
+# Windows
+claude mcp add daslang -- bin/Release/daslang.exe utils/mcp/main.das
+
+# Linux
+claude mcp add daslang -- ./bin/daslang utils/mcp/main.das
 ```
 
 Claude Code starts and stops the server automatically with each session.
@@ -100,6 +118,23 @@ Optionally, allow the MCP tools without prompting by adding to `.claude/settings
 ```
 
 After creating/editing these files, restart Claude Code (or start a new session) for it to pick up the MCP server.
+
+## ast-grep / tree-sitter setup
+
+The `grep_usage` and `outline` tools use [ast-grep](https://ast-grep.github.io/) (`sg` CLI) with a custom tree-sitter grammar for daslang. The `sgconfig.yml` config file is platform-specific (shared library extension differs), so it is gitignored.
+
+Copy the appropriate template to `sgconfig.yml` in the project root:
+
+```bash
+# Windows
+cp sgconfig.yml.windows sgconfig.yml
+
+# Linux
+cp sgconfig.yml.linux sgconfig.yml
+
+# macOS
+cp sgconfig.yml.osx sgconfig.yml
+```
 
 ## How It Works
 

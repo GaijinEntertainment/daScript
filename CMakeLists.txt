@@ -1513,8 +1513,13 @@ if(NOT ${DAS_TREE_SITTER_DISABLED})
         tree-sitter-daslang/queries/highlights.scm
         DESTINATION tree-sitter-daslang/queries
     )
-    # ast-grep config and rules (used by grep_usage and outline MCP tools)
-    install(FILES ${PROJECT_SOURCE_DIR}/sgconfig.yml DESTINATION ${DAS_INSTALL_DOCDIR})
+    # ast-grep config templates (used by grep_usage and outline MCP tools)
+    install(FILES
+        ${PROJECT_SOURCE_DIR}/sgconfig.yml.windows
+        ${PROJECT_SOURCE_DIR}/sgconfig.yml.linux
+        ${PROJECT_SOURCE_DIR}/sgconfig.yml.osx
+        DESTINATION ${DAS_INSTALL_DOCDIR}
+    )
     install(FILES
         tree-sitter-daslang/outline_rules.yml
         DESTINATION tree-sitter-daslang

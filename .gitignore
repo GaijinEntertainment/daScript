@@ -44,6 +44,7 @@ utils/dasFormatter/ds_parser.output
 src/parser/ds2_parser.output
 src/parser/ds_parser.output
 
-# MCP
+# MCP / ast-grep (platform-specific config)
 .mcp.json
+sgconfig.yml
 utils/mcp/mcp_server.log
