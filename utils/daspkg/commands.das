@@ -12,6 +12,8 @@ require strings
 require daslib/json
 require daslib/json_boost
 
+require daslib/ansi_colors
+
 require lockfile
 require utils
 require index
@@ -40,6 +42,10 @@ def parse_args(args : array<string>) : ParsedArgs {
         let arg = args[i]
         if (arg == "--force") {
             result.force = true
+        } elif (arg == "--color") {
+            use_tty_colors = true
+        } elif (arg == "--no-color") {
+            use_tty_colors = false
         } elif (arg == "--verbose" || arg == "-v") {
             log_verbose_flag = true
         } elif (arg == "--root" && i + 1 < length(args)) {

@@ -10,16 +10,9 @@ module package_runner shared public
 
 require debugapi
 require fio
-require daslib/daspkg
+require daslib/daspkg public
 
 // Results from running a .das_package script
-
-struct PackageMeta {
-    pkg_name : string
-    author : string
-    description : string
-    source : string
-}
 
 struct ResolveResult {
     tag : string
@@ -43,28 +36,17 @@ struct PackageBuildInfo {
 def run_das_package_meta(das_package_path : string; var meta : PackageMeta) : bool {
     var args : array<string>
     var ok = run_das_package(das_package_path, "package", args) <| $(ctx) {
-        var p = unsafe(get_context_global_variable(ctx, "_pkg_name"))
+        var p = unsafe(get_context_global_variable(ctx, "_pkg_meta"))
         if (p != null) {
-            unsafe {
-                meta.pkg_name = clone_string(*reinterpret<string?>(p))
-            }
-        }
-        p = unsafe(get_context_global_variable(ctx, "_pkg_author"))
-        if (p != null) {
-            unsafe {
-                meta.author = clone_string(*reinterpret<string?>(p))
-            }
-        }
-        p = unsafe(get_context_global_variable(ctx, "_pkg_description"))
-        if (p != null) {
-            unsafe {
-                meta.description = clone_string(*reinterpret<string?>(p))
-            }
-        }
-        p = unsafe(get_context_global_variable(ctx, "_pkg_source"))
-        if (p != null) {
-            unsafe {
-                meta.source = clone_string(*reinterpret<string?>(p))
+            let src = unsafe(reinterpret<PackageMeta?>(p))
+            meta.pkg_name = clone_string(src.pkg_name)
+            meta.author = clone_string(src.author)
+            meta.description = clone_string(src.description)
+            meta.source = clone_string(src.source)
+            meta.license = clone_string(src.license)
+            meta.min_sdk = clone_string(src.min_sdk)
+            for (t in src.tags) {
+                meta.tags |> push_clone(clone_string(t))
             }
         }
     }
@@ -77,25 +59,21 @@ def run_das_package_resolve(das_package_path : string; sdk_version, version : st
     var ok = run_das_package(das_package_path, "resolve", args) <| $(ctx) {
         var p = unsafe(get_context_global_variable(ctx, "_download_ref"))
         if (p != null) {
-            unsafe {
-                result.tag = clone_string(*reinterpret<string?>(p))
-            }
+            let ref = unsafe(reinterpret<string?>(p))
+            result.tag = clone_string(*ref)
         }
         p = unsafe(get_context_global_variable(ctx, "_download_kind"))
         if (p != null) {
-            unsafe {
-                let kind = *reinterpret<DownloadKind?>(p)
-                if (kind == DownloadKind.branch) {
-                    result.branch = result.tag
-                    result.tag = ""
-                }
+            let kind = *unsafe(reinterpret<DownloadKind?>(p))
+            if (kind == DownloadKind.branch) {
+                result.branch = result.tag
+                result.tag = ""
             }
         }
         p = unsafe(get_context_global_variable(ctx, "_download_source"))
         if (p != null) {
-            unsafe {
-                result.source = clone_string(*reinterpret<string?>(p))
-            }
+            let src = unsafe(reinterpret<string?>(p))
+            result.source = clone_string(*src)
         }
     }
     return ok
@@ -107,11 +85,9 @@ def run_das_package_deps(das_package_path : string; version : string; var deps :
     var ok = run_das_package(das_package_path, "dependencies", args) <| $(ctx) {
         var p = unsafe(get_context_global_variable(ctx, "_dependencies"))
         if (p != null) {
-            unsafe {
-                let arr = reinterpret<array<Dependency>?>(p)
-                for (d in *arr) {
-                    deps |> emplace(PackageDependency(source = clone_string(d.source), version_constraint = clone_string(d.version_constraint)))
-                }
+            let arr = unsafe(reinterpret<array<Dependency>?>(p))
+            for (d in *arr) {
+                deps |> emplace(PackageDependency(source = clone_string(d.source), version_constraint = clone_string(d.version_constraint)))
             }
         }
     }
@@ -124,17 +100,14 @@ def run_das_package_build(das_package_path : string; var info : PackageBuildInfo
     var ok = run_das_package(das_package_path, "build", args) <| $(ctx) {
         var p = unsafe(get_context_global_variable(ctx, "_build_kind"))
         if (p != null) {
-            unsafe {
-                let kind = *reinterpret<BuildKind?>(p)
-                info.is_cmake = kind == BuildKind.cmake
-                info.is_custom = kind == BuildKind.custom
-            }
+            let kind = *unsafe(reinterpret<BuildKind?>(p))
+            info.is_cmake = kind == BuildKind.cmake
+            info.is_custom = kind == BuildKind.custom
         }
         p = unsafe(get_context_global_variable(ctx, "_build_command"))
         if (p != null) {
-            unsafe {
-                info.command = clone_string(*reinterpret<string?>(p))
-            }
+            let cmd = unsafe(reinterpret<string?>(p))
+            info.command = clone_string(*cmd)
         }
     }
     return ok

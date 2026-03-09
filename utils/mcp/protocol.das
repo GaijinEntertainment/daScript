@@ -33,6 +33,7 @@ require tools/describe_type public
 require tools/grep_usage public
 require tools/outline public
 require tools/aot public
+require tools/package_search public
 
 let HEAP_COLLECT_THRESHOLD = 1024ul * 1024ul  // 1 MB
 let LOG_FILE = "utils/mcp/mcp_server.log"
@@ -396,6 +397,24 @@ def handle_tools_list(id_json : string) : string {
         },
         ["file"]
     ))
+    result.tools |> emplace(make_tool(
+        "package_search",
+        "Search the daspkg package index. Returns matching packages as JSON array with name, url, description, author, license, tags, modules, min_sdk, latest_version, etc. Empty query returns all packages.",
+        {
+            "query" => PropertySchema(_type = "string", description = "Search query — matches name, description, author, tags, modules. Leave empty to list all."),
+            "refresh" => PropertySchema(_type = "string", description = "If 'true', fetch fresh index from GitHub. Otherwise use local cache.")
+        },
+        []
+    ))
+    result.tools |> emplace(make_tool(
+        "package_info",
+        "Get full metadata for a single package from the daspkg index by exact name.",
+        {
+            "name" => PropertySchema(_type = "string", description = "Exact package name (e.g. 'das-claude', 'das-telegram')"),
+            "refresh" => PropertySchema(_type = "string", description = "If 'true', fetch fresh index from GitHub. Otherwise use local cache.")
+        },
+        ["name"]
+    ))
     return json_rpc_response(id_json, sprint_json(result, false))
 }
 
@@ -465,6 +484,10 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : s
         return do_outline(arg1, arg2)
     } elif (tool_name == "aot") {
         return do_aot(arg1, arg2, project)
+    } elif (tool_name == "package_search") {
+        return do_package_search(arg1, arg2)
+    } elif (tool_name == "package_info") {
+        return do_package_info(arg1, arg2)
     } else {
         return make_tool_result("unknown tool: {tool_name}", true)
     }
@@ -591,6 +614,15 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         }
     } elif (name == "list_modules") {
         // no args needed
+    } elif (name == "package_search") {
+        arg1 = get_string_arg(args, "query")
+        arg2 = get_string_arg(args, "refresh")
+    } elif (name == "package_info") {
+        arg1 = get_string_arg(args, "name")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'name' argument")
+        }
+        arg2 = get_string_arg(args, "refresh")
     } elif (name == "aot") {
         arg1 = get_string_arg(args, "file")
         if (empty(arg1)) {

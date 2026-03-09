@@ -43,6 +43,7 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | `skills/cpp_integration.md` | Embedding daslang in C++ host applications, binding types/functions/enums |
 | `skills/daslib_modules.md` | Using `daslib/` modules (linq, json, regex, functional, match, etc.), channels |
 | `skills/das_macros.md` | Writing compile-time macros, AST manipulation, qmacro/quote code generation, smart_ptr ownership |
+| `skills/daspkg.md` | Creating `.das_package` manifests, package structure, daspkg commands |
 
 Multiple skill files may apply to a single task. For example, embedding daslang and calling its standard library requires reading both `skills/cpp_integration.md` and `skills/daslib_modules.md`.
 
@@ -55,7 +56,7 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - **Construction:** `new Type(field=val)` — NOT `new [[Type() field=val]]`
 - **Enum access:** `EnumName.EnumValue` with dot — NOT `EnumName EnumValue`
 - **Array literals:** `[1, 2, 3]` — NOT `[[int 1; 2; 3]]`. Creates `array<int>`; use `fixed_array(1, 2, 3)` for fixed-size
-- **Struct init:** `Foo(a=1, b=2)` — NOT `[[Foo() a=1, b=2]]`
+- **Struct init:** `Foo(a=1, b=2)` — NOT `[[Foo() a=1, b=2]]`. Move-init: `Foo(a=1, b <- expr)` for non-copyable fields
 - **Table literals:** `{ "k" => v, "k2" => v2 }` — NOT `{{ "k" => v; "k2" => v2 }}`
 - **Bare blocks:** `{ var x = 1; ... }` at statement level creates a lexical scope (NOT a table literal). Supports `finally`: `{ ... } finally { ... }`
 - **Named arguments:** `foo([name = value])` with square brackets
@@ -147,6 +148,21 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - `examples/` — Example scripts
 - `dastest/` — Test framework (usable for testing your own code)
 - `utils/mcp/` — MCP server for AI coding assistants (stdio transport, no extra deps)
+- `utils/daspkg/` — Package manager
+
+## Package Manager (daspkg)
+
+daspkg manages daslang packages — install from GitHub or local paths, resolve dependencies, build native modules.
+
+```bash
+bin/daslang utils/daspkg/main.das -- <command> [args]
+```
+
+Commands: `install <source>`, `update [name]`, `remove <name>`, `list`, `search <query>`, `check`, `doctor`, `build <name>`.
+
+Packages install to `modules/<RepoName>/`. Lock file: `daspkg.lock`.
+
+See `skills/daspkg.md` for `.das_package` manifest format and package structure.
 
 ## MCP Server (AI Tool Integration)
 
