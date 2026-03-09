@@ -325,6 +325,19 @@ Sets a custom error page file.
 
 :Arguments: * **filename** : string
 
+.. _function-dashv_boost_HvWebServer_rq_SSE_HvWebServer_string_lambda_ls_var_req_c_HttpRequest_q_;var_resp_c_HttpResponse_q__c_http_status_gr__0x9b:
+
+.. das:function:: HvWebServer.SSE(uri: string; lmb: lambda<(var req:HttpRequest?;var resp:HttpResponse?):http_status>)
+
+Registers an SSE (Server-Sent Events) handler for ``uri``.
+Same signature as GET/POST — set SSE headers and write events to the response.
+Uses ``ANY`` method matching so any HTTP method reaches this handler.
+
+
+:Arguments: * **uri** : string
+
+            * **lmb** : lambda<(req: :ref:`HttpRequest <handle-dashv-HttpRequest>`?;resp: :ref:`HttpResponse <handle-dashv-HttpResponse>`?): :ref:`http_status <enum-dashv-http_status>`>
+
 
 ++++++++++++++++++++
 HTTP request helpers

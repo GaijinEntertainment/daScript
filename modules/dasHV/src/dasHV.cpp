@@ -13,6 +13,7 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(HttpMessage,HttpMessage)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(HttpRequest,HttpRequest)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(HttpResponse,HttpResponse)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(HttpContext,hv::HttpContext)
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(HttpResponseWriter,hv::HttpResponseWriter)
 
 namespace das {
 
@@ -291,6 +292,12 @@ struct HttpContextAnnotation : ManagedStructureAnnotation<hv::HttpContext> {
     }
 };
 
+struct HttpResponseWriterAnnotation : ManagedStructureAnnotation<hv::HttpResponseWriter> {
+    HttpResponseWriterAnnotation(ModuleLibrary & ml)
+        : ManagedStructureAnnotation ("HttpResponseWriter", ml, "hv::HttpResponseWriter") {
+    }
+};
+
 class WebServer_Adapter : public hv::WebSocketServer, public HvWebServer_Adapter {
 public:
     WebServer_Adapter ( char * pClass, const StructInfo * info, Context * ctx )
@@ -468,6 +475,24 @@ public:
         lock_guard<mutex> guard(lock);
         router.error_page = filename ? filename : "";
     }
+    void SSE ( const char * path, Lambda lmb, Context * context, LineInfoArg * at ) {
+        lock_guard<mutex> guard(lock);
+        router.Any(path,[this,context,at,lmb](HttpRequest * req,HttpResponse * resp) -> int {
+            promise<int> p;
+            auto f = p.get_future();
+            {
+                lock_guard<mutex> guard(lock);
+                que.emplace_back([&](){
+                    p.set_value(das_invoke_lambda<int>::invoke<HttpRequest*,HttpResponse*>(context,at,lmb,req,resp));
+                });
+            }
+            return f.get();
+        });
+    }
+    void release_writer ( hv::HttpResponseWriter * w ) {
+        lock_guard<mutex> guard(writer_lock);
+        active_writers.erase(w);
+    }
 protected:
     HttpService router;
     WebSocketService service;
@@ -475,6 +500,8 @@ protected:
     Context *   context;
     mutex       lock;
     vector<function<void()>>    que;
+    mutex       writer_lock;
+    map<hv::HttpResponseWriter*, HttpResponseWriterPtr>  active_writers;
 };
 
 string getDasRoot ( void );
@@ -569,6 +596,44 @@ void das_wss_static ( hv::WebSocketServer * server, const char * path, const cha
 void das_wss_allow_cors ( hv::WebSocketServer * server ) {
     auto adapter = (WebServer_Adapter *) server;
     adapter->ALLOW_CORS();
+}
+
+void das_wss_sse ( hv::WebSocketServer * server, const char * url, Lambda lmb, Context * context, LineInfoArg * at ) {
+    auto adapter = (WebServer_Adapter *) server;
+    adapter->SSE(url, lmb, context, at);
+}
+
+// HttpResponseWriter operations
+
+int das_writer_end_headers ( hv::HttpResponseWriter * w, const char * key, const char * value ) {
+    if ( !w ) return -1;
+    return w->EndHeaders(key ? key : "", value ? value : "");
+}
+
+int das_writer_sse_event ( hv::HttpResponseWriter * w, const char * data, const char * event ) {
+    if ( !w ) return -1;
+    return w->SSEvent(data ? data : "", event ? event : "message");
+}
+
+int das_writer_write_chunked ( hv::HttpResponseWriter * w, const char * data, int32_t len ) {
+    if ( !w ) return -1;
+    return w->WriteChunked(data ? data : "", len);
+}
+
+int das_writer_end ( hv::HttpResponseWriter * w ) {
+    if ( !w ) return -1;
+    return w->End();
+}
+
+int das_writer_close ( hv::HttpResponseWriter * w ) {
+    if ( !w ) return -1;
+    return w->close(true);
+}
+
+void das_writer_release ( hv::WebSocketServer * server, hv::HttpResponseWriter * w ) {
+    if ( !server || !w ) return;
+    auto adapter = (WebServer_Adapter *) server;
+    adapter->release_writer(w);
 }
 
 void das_wss_set_document_root ( hv::WebSocketServer * server, const char * dir ) {
@@ -816,6 +881,37 @@ void das_req_REQUEST ( HttpRequest * req, const TBlock<void,HttpResponse*> & blo
     auto preq = std::make_shared<HttpRequest>(*req);
     auto resp = requests::request(preq);
     das_invoke<void>::invoke<HttpResponse*>(context,at,block,resp.get());
+}
+
+// Streaming request — invokes on_body per chunk
+void das_req_REQUEST_CB ( HttpRequest * req, const TBlock<void,const uint8_t*,int32_t> & on_body,
+        const TBlock<void,HttpResponse*> & on_complete, Context * context, LineInfoArg * at ) {
+    if ( !req ) return;
+    auto preq = std::make_shared<HttpRequest>(*req);
+    preq->http_cb = [&on_body, context, at]
+            (HttpMessage* , http_parser_state state, const char* data, size_t size) {
+        if ( state == HP_BODY && data && size ) {
+            das_invoke<void>::invoke<const uint8_t*,int32_t>(context, at, on_body,
+                (const uint8_t*)data, int32_t(size));
+        }
+    };
+    auto resp = requests::request(preq);
+    das_invoke<void>::invoke<HttpResponse*>(context,at,on_complete,resp.get());
+}
+
+void das_req_REQUEST_CB_S ( HttpRequest * req, const TBlock<void,const char*> & on_body,
+        const TBlock<void,HttpResponse*> & on_complete, Context * context, LineInfoArg * at ) {
+    if ( !req ) return;
+    auto preq = std::make_shared<HttpRequest>(*req);
+    preq->http_cb = [&on_body, context, at]
+            (HttpMessage* , http_parser_state state, const char* data, size_t size) {
+        if ( state == HP_BODY && data && size ) {
+            string tmp(data, size);
+            das_invoke<void>::invoke<const char*>(context, at, on_body, tmp.c_str());
+        }
+    };
+    auto resp = requests::request(preq);
+    das_invoke<void>::invoke<HttpResponse*>(context,at,on_complete,resp.get());
 }
 
 // Response/message header access
@@ -1301,6 +1397,37 @@ public:
         addExtern<DAS_BIND_FUN(das_httpreq_get_url_encoded)> (*this, lib, "get_url_encoded",
             SideEffects::worstDefault, "das_httpreq_get_url_encoded")
                 ->args({"request","key","context","at"});
+        // Streaming request (client-side)
+        addExtern<DAS_BIND_FUN(das_req_REQUEST_CB)> (*this, lib, "request_cb",
+            SideEffects::worstDefault, "das_req_REQUEST_CB")
+                ->args({"request","on_body","on_complete","context","at"});
+        addExtern<DAS_BIND_FUN(das_req_REQUEST_CB_S)> (*this, lib, "request_cb",
+            SideEffects::worstDefault, "das_req_REQUEST_CB_S")
+                ->args({"request","on_body","on_complete","context","at"});
+        // Server-side SSE
+        addAnnotation(make_smart<HttpResponseWriterAnnotation>(lib));
+        addExtern<DAS_BIND_FUN(das_wss_sse)> (*this, lib, "SSE",
+            SideEffects::worstDefault, "das_wss_sse")
+                ->args({"server","url","lambda","context","at"})->unsafeOperation = true;
+        // HttpResponseWriter operations
+        addExtern<DAS_BIND_FUN(das_writer_end_headers)> (*this, lib, "end_headers",
+            SideEffects::worstDefault, "das_writer_end_headers")
+                ->args({"writer","key","value"});
+        addExtern<DAS_BIND_FUN(das_writer_sse_event)> (*this, lib, "sse_event",
+            SideEffects::worstDefault, "das_writer_sse_event")
+                ->args({"writer","data","event"});
+        addExtern<DAS_BIND_FUN(das_writer_write_chunked)> (*this, lib, "write_chunked",
+            SideEffects::worstDefault, "das_writer_write_chunked")
+                ->args({"writer","data","length"});
+        addExtern<DAS_BIND_FUN(das_writer_end)> (*this, lib, "end_response",
+            SideEffects::worstDefault, "das_writer_end")
+                ->args({"writer"});
+        addExtern<DAS_BIND_FUN(das_writer_close)> (*this, lib, "close_writer",
+            SideEffects::worstDefault, "das_writer_close")
+                ->args({"writer"});
+        addExtern<DAS_BIND_FUN(das_writer_release)> (*this, lib, "release_writer",
+            SideEffects::worstDefault, "das_writer_release")
+                ->args({"server","writer"});
 
     }
     virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {

@@ -216,6 +216,7 @@ Run any tutorial from the project root::
    tutorials/dasHV_04_http_server_advanced.rst
    tutorials/dasHV_05_cookies_and_forms.rst
    tutorials/dasHV_06_websockets.rst
+   tutorials/dasHV_07_sse_and_streaming.rst
 
 .. _tutorials_daspugixml:
 

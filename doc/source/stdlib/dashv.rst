@@ -356,6 +356,14 @@ HTTP request/response context passed to route handlers.
 
 
 
+.. _handle-dashv-HttpResponseWriter:
+
+.. das:attribute:: HttpResponseWriter
+
+HTTP response writer for streaming responses. Supports chunked transfer encoding and SSE events. Obtained through async HTTP handlers registered with ``SSE``.
+
+
+
 
 ++++++++++++++++
 WebSocket client
@@ -544,6 +552,7 @@ HTTP route registration
   *  :ref:`PUT (url: string; text: string; headers: table\<string, string\>; block: block\<(HttpResponse?):void\>) <function-dashv_PUT_string_string_table_ls_string,_string_gr__block_ls_HttpResponse_q__c_void_gr_>`
   *  :ref:`PUT (server: WebSocketServer?; url: string; lambda: lambda\<():void\>) <function-dashv_PUT_WebSocketServer_q__string_lambda_ls__c_void_gr_>`
   *  :ref:`PUT (url: string; text: string; headers: table\<string, string\>; from: table\<string, string\>; block: block\<(HttpResponse?):void\>) <function-dashv_PUT_string_string_table_ls_string,_string_gr__table_ls_string,_string_gr__block_ls_HttpResponse_q__c_void_gr_>`
+  *  :ref:`SSE (server: WebSocketServer?; url: string; lambda: lambda\<():void\>) <function-dashv_SSE_WebSocketServer_q__string_lambda_ls__c_void_gr_>`
 
 .. _function-dashv_ANY_WebSocketServer_q__string_lambda_ls__c_void_gr_:
 
@@ -738,6 +747,23 @@ Registers a PUT route handler, or performs an HTTP PUT client request.
 .. _function-dashv_PUT_string_string_table_ls_string,_string_gr__table_ls_string,_string_gr__block_ls_HttpResponse_q__c_void_gr_:
 
 .. das:function:: PUT(url: string; text: string; headers: table<string, string>; from: table<string, string>; block: block<(HttpResponse?):void>)
+
+----
+
+.. _function-dashv_SSE_WebSocketServer_q__string_lambda_ls__c_void_gr_:
+
+.. das:function:: SSE(server: WebSocketServer?; url: string; lambda: lambda<():void>)
+
+.. warning::
+  This is unsafe operation.
+
+Registers an SSE (Server-Sent Events) handler on the server for the given URL path. Uses ``ANY`` method matching so both GET and POST requests reach the handler. The lambda receives the request and response and returns an HTTP status code.
+
+:Arguments: * **server** :  :ref:`WebSocketServer <handle-dashv-WebSocketServer>`? implicit
+
+            * **url** : string implicit
+
+            * **lambda** : lambda<void>
 
 
 +++++++++++++++++++++++++
@@ -945,6 +971,8 @@ HTTP client requests
 ++++++++++++++++++++
 
   *  :ref:`request (request: HttpRequest?; block: block\<(HttpResponse?):void\>) <function-dashv_request_HttpRequest_q__block_ls_HttpResponse_q__c_void_gr_>`
+  *  :ref:`request_cb (request: HttpRequest?; on_body: block\<(uint8 const?;int):void\>; on_complete: block\<(HttpResponse?):void\>) <function-dashv_request_cb_HttpRequest_q__block_ls_uint8_const_q_;int_c_void_gr__block_ls_HttpResponse_q__c_void_gr_>`
+  *  :ref:`request_cb (request: HttpRequest?; on_body: block\<(string):void\>; on_complete: block\<(HttpResponse?):void\>) <function-dashv_request_cb_HttpRequest_q__block_ls_string_c_void_gr__block_ls_HttpResponse_q__c_void_gr_>`
   *  :ref:`status_message (response: HttpResponse?) : string <function-dashv_status_message_HttpResponse_q_>`
 
 .. _function-dashv_request_HttpRequest_q__block_ls_HttpResponse_q__c_void_gr_:
@@ -957,6 +985,28 @@ Sends an HTTP request configured via an `HttpRequest` object and invokes the blo
 :Arguments: * **request** :  :ref:`HttpRequest <handle-dashv-HttpRequest>`? implicit
 
             * **block** : block<( :ref:`HttpResponse <handle-dashv-HttpResponse>`?):void> implicit
+
+
+request_cb
+^^^^^^^^^^
+
+.. _function-dashv_request_cb_HttpRequest_q__block_ls_uint8_const_q_;int_c_void_gr__block_ls_HttpResponse_q__c_void_gr_:
+
+.. das:function:: request_cb(request: HttpRequest?; on_body: block<(uint8 const?;int):void>; on_complete: block<(HttpResponse?):void>)
+
+Sends an HTTP request and invokes ``on_body`` with raw bytes (``uint8?`` pointer and size) for each body chunk as it arrives, then calls ``on_complete`` with the final response. Use this for binary streaming or when exact byte counts are needed.
+
+:Arguments: * **request** :  :ref:`HttpRequest <handle-dashv-HttpRequest>`? implicit
+
+            * **on_body** : block<(uint8?;int):void> implicit
+
+            * **on_complete** : block<( :ref:`HttpResponse <handle-dashv-HttpResponse>`?):void> implicit
+
+.. _function-dashv_request_cb_HttpRequest_q__block_ls_string_c_void_gr__block_ls_HttpResponse_q__c_void_gr_:
+
+.. das:function:: request_cb(request: HttpRequest?; on_body: block<(string):void>; on_complete: block<(HttpResponse?):void>)
+
+----
 
 .. _function-dashv_status_message_HttpResponse_q_:
 
@@ -1305,5 +1355,79 @@ Sets a URL-encoded form field on a request.
             * **key** : string implicit
 
             * **value** : string implicit
+
+
++++++++++++++++++++
+SSE response writer
++++++++++++++++++++
+
+  *  :ref:`close_writer (writer: HttpResponseWriter?) : int <function-dashv_close_writer_HttpResponseWriter_q_>`
+  *  :ref:`end_headers (writer: HttpResponseWriter?; key: string; value: string) : int <function-dashv_end_headers_HttpResponseWriter_q__string_string>`
+  *  :ref:`end_response (writer: HttpResponseWriter?) : int <function-dashv_end_response_HttpResponseWriter_q_>`
+  *  :ref:`release_writer (server: WebSocketServer?; writer: HttpResponseWriter?) <function-dashv_release_writer_WebSocketServer_q__HttpResponseWriter_q_>`
+  *  :ref:`sse_event (writer: HttpResponseWriter?; data: string; event: string) : int <function-dashv_sse_event_HttpResponseWriter_q__string_string>`
+  *  :ref:`write_chunked (writer: HttpResponseWriter?; data: string; length: int) : int <function-dashv_write_chunked_HttpResponseWriter_q__string_int>`
+
+.. _function-dashv_close_writer_HttpResponseWriter_q_:
+
+.. das:function:: close_writer(writer: HttpResponseWriter?) : int
+
+Closes the response writer's underlying connection. Use this to forcefully terminate a long-lived streaming connection. Returns 0 on success.
+
+:Arguments: * **writer** :  :ref:`HttpResponseWriter <handle-dashv-HttpResponseWriter>`? implicit
+
+.. _function-dashv_end_headers_HttpResponseWriter_q__string_string:
+
+.. das:function:: end_headers(writer: HttpResponseWriter?; key: string; value: string) : int
+
+Sends the response headers through the writer, adding one final header (key/value pair). Call this before writing body chunks or SSE events. Returns 0 on success.
+
+:Arguments: * **writer** :  :ref:`HttpResponseWriter <handle-dashv-HttpResponseWriter>`? implicit
+
+            * **key** : string implicit
+
+            * **value** : string implicit
+
+.. _function-dashv_end_response_HttpResponseWriter_q_:
+
+.. das:function:: end_response(writer: HttpResponseWriter?) : int
+
+Ends the chunked response by sending a zero-length terminating chunk. Call this after all data has been written to signal the end of the response. Returns 0 on success.
+
+:Arguments: * **writer** :  :ref:`HttpResponseWriter <handle-dashv-HttpResponseWriter>`? implicit
+
+.. _function-dashv_release_writer_WebSocketServer_q__HttpResponseWriter_q_:
+
+.. das:function:: release_writer(server: WebSocketServer?; writer: HttpResponseWriter?)
+
+Releases the server's reference to a response writer, allowing it to be destroyed. Call this after ``end_response`` or ``close_writer`` to free the writer's resources.
+
+:Arguments: * **server** :  :ref:`WebSocketServer <handle-dashv-WebSocketServer>`? implicit
+
+            * **writer** :  :ref:`HttpResponseWriter <handle-dashv-HttpResponseWriter>`? implicit
+
+.. _function-dashv_sse_event_HttpResponseWriter_q__string_string:
+
+.. das:function:: sse_event(writer: HttpResponseWriter?; data: string; event: string) : int
+
+Sends an SSE event through the response writer. Formats the data and event type according to the SSE wire protocol. Returns 0 on success.
+
+:Arguments: * **writer** :  :ref:`HttpResponseWriter <handle-dashv-HttpResponseWriter>`? implicit
+
+            * **data** : string implicit
+
+            * **event** : string implicit
+
+.. _function-dashv_write_chunked_HttpResponseWriter_q__string_int:
+
+.. das:function:: write_chunked(writer: HttpResponseWriter?; data: string; length: int) : int
+
+Writes a chunk of data through the response writer using HTTP chunked transfer encoding. Returns 0 on success.
+
+:Arguments: * **writer** :  :ref:`HttpResponseWriter <handle-dashv-HttpResponseWriter>`? implicit
+
+            * **data** : string implicit
+
+            * **length** : int
 
 
