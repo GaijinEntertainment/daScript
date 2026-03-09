@@ -36,5 +36,11 @@ dist/
 *.wasm
 *.obj
 *.o
-*.wasm
 *.dll
+
+# Linker artifacts
+*.exp
+*.lib
+
+# Lockfiles
+package-lock.json

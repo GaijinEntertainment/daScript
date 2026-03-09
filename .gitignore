@@ -48,3 +48,9 @@ src/parser/ds_parser.output
 .mcp.json
 sgconfig.yml
 utils/mcp/mcp_server.log
+
+# Emscripten SDK (local install)
+emsdk/
+
+# Claude Code (local settings)
+.claude/settings.json
