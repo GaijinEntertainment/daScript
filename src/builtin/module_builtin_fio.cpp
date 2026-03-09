@@ -22,6 +22,9 @@
 #include <fcntl.h>
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#else
+#include <signal.h>
+#include <sys/wait.h>
 #endif
 
 #define DAS_POPEN_TIMEOUT 0x7FFFFF01
