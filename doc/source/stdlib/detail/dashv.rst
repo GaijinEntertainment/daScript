@@ -110,6 +110,22 @@
 
 .. |handmade/function-dashv-get_url_encoded| replace:: to be documented in |handmade/function-dashv-get_url_encoded|.rst
 
+.. |handmade/function-dashv-request_cb| replace:: to be documented in |handmade/function-dashv-request_cb|.rst
+
+.. |handmade/function-dashv-SSE| replace:: to be documented in |handmade/function-dashv-SSE|.rst
+
+.. |handmade/function-dashv-end_headers| replace:: to be documented in |handmade/function-dashv-end_headers|.rst
+
+.. |handmade/function-dashv-sse_event| replace:: to be documented in |handmade/function-dashv-sse_event|.rst
+
+.. |handmade/function-dashv-write_chunked| replace:: to be documented in |handmade/function-dashv-write_chunked|.rst
+
+.. |handmade/function-dashv-end_response| replace:: to be documented in |handmade/function-dashv-end_response|.rst
+
+.. |handmade/function-dashv-close_writer| replace:: to be documented in |handmade/function-dashv-close_writer|.rst
+
+.. |handmade/function-dashv-release_writer| replace:: to be documented in |handmade/function-dashv-release_writer|.rst
+
 .. |handmade/structure_annotation-dashv-WebSocketClient| replace:: to be documented in |handmade/structure_annotation-dashv-WebSocketClient|.rst
 
 .. |handmade/structure_annotation-dashv-WebSocketServer| replace:: to be documented in |handmade/structure_annotation-dashv-WebSocketServer|.rst
@@ -123,4 +139,6 @@
 .. |handmade/structure_annotation-dashv-HttpResponse| replace:: to be documented in |handmade/structure_annotation-dashv-HttpResponse|.rst
 
 .. |handmade/structure_annotation-dashv-HttpContext| replace:: to be documented in |handmade/structure_annotation-dashv-HttpContext|.rst
+
+.. |handmade/structure_annotation-dashv-HttpResponseWriter| replace:: to be documented in |handmade/structure_annotation-dashv-HttpResponseWriter|.rst
 

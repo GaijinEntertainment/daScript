@@ -152,6 +152,12 @@ class HvWebServer {
         //! Sets a custom error page file.
         set_error_page(server, filename)
     }
+    def SSE(uri : string; lmb : lambda<(var req : HttpRequest?; var resp : HttpResponse?) : http_status>) : void {
+        //! Registers an SSE (Server-Sent Events) handler for ``uri``.
+        //! Same signature as GET/POST — set SSE headers and write events to the response.
+        //! Uses ``ANY`` method matching so any HTTP method reaches this handler.
+        unsafe(SSE(server, uri, lmb))
+    }
 }
 
 def with_http_request(blk : block<(var req : HttpRequest?#) : void>) {

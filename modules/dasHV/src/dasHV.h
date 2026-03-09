@@ -11,6 +11,7 @@ MAKE_EXTERNAL_TYPE_FACTORY(HttpMessage,HttpMessage)
 MAKE_EXTERNAL_TYPE_FACTORY(HttpRequest,HttpRequest)
 MAKE_EXTERNAL_TYPE_FACTORY(HttpResponse,HttpResponse)
 MAKE_EXTERNAL_TYPE_FACTORY(HttpContext,hv::HttpContext)
+MAKE_EXTERNAL_TYPE_FACTORY(HttpResponseWriter,hv::HttpResponseWriter)
 
 DAS_BIND_ENUM_CAST(ws_opcode)
 DAS_BASE_BIND_ENUM_GEN(ws_opcode,ws_opcode)
@@ -49,6 +50,15 @@ void das_wss_head ( hv::WebSocketServer * server, const char * url, Lambda lmb, 
 void das_wss_any ( hv::WebSocketServer * server, const char * url, Lambda lmb, Context * context, LineInfoArg * at );
 void das_wss_static ( hv::WebSocketServer * server, const char * path, const char * dir );
 void das_wss_allow_cors ( hv::WebSocketServer * server );
+void das_wss_sse ( hv::WebSocketServer * server, const char * url, Lambda lmb, Context * context, LineInfoArg * at );
+
+// HttpResponseWriter operations
+int das_writer_end_headers ( hv::HttpResponseWriter * w, const char * key, const char * value );
+int das_writer_sse_event ( hv::HttpResponseWriter * w, const char * data, const char * event );
+int das_writer_write_chunked ( hv::HttpResponseWriter * w, const char * data, int32_t len );
+int das_writer_end ( hv::HttpResponseWriter * w );
+int das_writer_close ( hv::HttpResponseWriter * w );
+void das_writer_release ( hv::WebSocketServer * server, hv::HttpResponseWriter * w );
 
 http_status das_resp_string ( HttpResponse * resp, const char * msg, http_status status = HTTP_STATUS_OK );
 http_status das_resp_json ( HttpResponse * resp, const char * json_str, http_status status = HTTP_STATUS_OK );
@@ -85,6 +95,12 @@ void das_req_HEAD_H ( const char * url, const TTable<char *,char *> & tab, const
 
 // Generic request
 void das_req_REQUEST ( HttpRequest * req, const TBlock<void,HttpResponse*> & block, Context * context, LineInfoArg * at );
+
+// Streaming request — invokes on_body per chunk, then on_complete when done
+void das_req_REQUEST_CB ( HttpRequest * req, const TBlock<void,const uint8_t*,int32_t> & on_body,
+    const TBlock<void,HttpResponse*> & on_complete, Context * context, LineInfoArg * at );
+void das_req_REQUEST_CB_S ( HttpRequest * req, const TBlock<void,const char*> & on_body,
+    const TBlock<void,HttpResponse*> & on_complete, Context * context, LineInfoArg * at );
 
 // Response/message header access
 char * das_httpm_get_header ( HttpMessage * msg, const char * key, Context * context, LineInfoArg * at );

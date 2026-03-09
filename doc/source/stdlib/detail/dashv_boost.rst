@@ -64,6 +64,8 @@
 
 .. |detail/method-dashv_boost-HvWebServer.set_error_page| replace:: to be documented in |detail/method-dashv_boost-HvWebServer.set_error_page|.rst
 
+.. |detail/method-dashv_boost-HvWebServer.SSE| replace:: to be documented in |detail/method-dashv_boost-HvWebServer.SSE|.rst
+
 .. |detail/function-dashv_boost-with_http_request| replace:: to be documented in |detail/function-dashv_boost-with_http_request|.rst
 
 .. |detail/function-dashv_boost-get_body_bytes| replace:: to be documented in |detail/function-dashv_boost-get_body_bytes|.rst

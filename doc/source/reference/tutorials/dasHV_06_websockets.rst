@@ -277,3 +277,5 @@ Quick Reference
    Full source: :download:`tutorials/dasHV/06_websockets.das <../../../../tutorials/dasHV/06_websockets.das>`
 
    Previous tutorial: :ref:`tutorial_dasHV_cookies_and_forms`
+
+   Next tutorial: :ref:`tutorial_dasHV_sse_and_streaming`
