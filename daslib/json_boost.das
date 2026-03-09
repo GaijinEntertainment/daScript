@@ -601,7 +601,7 @@ def JV(value : auto(TT)) : JsonValue? {
                     } static_elif (typeinfo is_pointer(field)) {
                         if (field == null) { return ; }
                     } else {
-                        static_if (!typeinfo is_struct(field) && !typeinfo is_variant(field) && !typeinfo is_tuple(field)) {
+                        static_if (typeinfo is_workhorse(field)) {
                             if (field == default<typedecl(field)>) { return ; }
                         }
                     }
