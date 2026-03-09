@@ -162,15 +162,15 @@ It essentially substitutes `value as name` with `value.value as name` and `value
 Value conversion
 ++++++++++++++++
 
-  *  :ref:`JV (val1: auto; val2: auto; val3: auto; val4: auto; val5: auto; val6: auto; val7: auto; val8: auto; val9: auto) : JsonValue? <function-json_boost_JV_auto_auto_auto_auto_auto_auto_auto_auto_auto_0x2b9>`
-  *  :ref:`JV (val1: auto; val2: auto; val3: auto; val4: auto) : JsonValue? <function-json_boost_JV_auto_auto_auto_auto_0x2a0>`
-  *  :ref:`JV (val1: auto; val2: auto; val3: auto; val4: auto; val5: auto; val6: auto; val7: auto) : JsonValue? <function-json_boost_JV_auto_auto_auto_auto_auto_auto_auto_0x2af>`
-  *  :ref:`JV (val1: auto; val2: auto; val3: auto; val4: auto; val5: auto; val6: auto; val7: auto; val8: auto; val9: auto; val10: auto) : JsonValue? <function-json_boost_JV_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto_0x2be>`
-  *  :ref:`JV (val1: auto; val2: auto; val3: auto; val4: auto; val5: auto; val6: auto) : JsonValue? <function-json_boost_JV_auto_auto_auto_auto_auto_auto_0x2aa>`
-  *  :ref:`JV (val1: auto; val2: auto; val3: auto; val4: auto; val5: auto) : JsonValue? <function-json_boost_JV_auto_auto_auto_auto_auto_0x2a5>`
-  *  :ref:`JV (val1: auto; val2: auto) : JsonValue? <function-json_boost_JV_auto_auto_0x296>`
-  *  :ref:`JV (val1: auto; val2: auto; val3: auto; val4: auto; val5: auto; val6: auto; val7: auto; val8: auto) : JsonValue? <function-json_boost_JV_auto_auto_auto_auto_auto_auto_auto_auto_0x2b4>`
-  *  :ref:`JV (val1: auto; val2: auto; val3: auto) : JsonValue? <function-json_boost_JV_auto_auto_auto_0x29b>`
+  *  :ref:`JV (val1: auto; val2: auto; val3: auto; val4: auto; val5: auto; val6: auto; val7: auto; val8: auto; val9: auto) : JsonValue? <function-json_boost_JV_auto_auto_auto_auto_auto_auto_auto_auto_auto_0x2c9>`
+  *  :ref:`JV (val1: auto; val2: auto; val3: auto; val4: auto) : JsonValue? <function-json_boost_JV_auto_auto_auto_auto_0x2b0>`
+  *  :ref:`JV (val1: auto; val2: auto; val3: auto; val4: auto; val5: auto; val6: auto; val7: auto) : JsonValue? <function-json_boost_JV_auto_auto_auto_auto_auto_auto_auto_0x2bf>`
+  *  :ref:`JV (val1: auto; val2: auto; val3: auto; val4: auto; val5: auto; val6: auto; val7: auto; val8: auto; val9: auto; val10: auto) : JsonValue? <function-json_boost_JV_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto_0x2ce>`
+  *  :ref:`JV (val1: auto; val2: auto; val3: auto; val4: auto; val5: auto; val6: auto) : JsonValue? <function-json_boost_JV_auto_auto_auto_auto_auto_auto_0x2ba>`
+  *  :ref:`JV (val1: auto; val2: auto; val3: auto; val4: auto; val5: auto) : JsonValue? <function-json_boost_JV_auto_auto_auto_auto_auto_0x2b5>`
+  *  :ref:`JV (val1: auto; val2: auto) : JsonValue? <function-json_boost_JV_auto_auto_0x2a6>`
+  *  :ref:`JV (val1: auto; val2: auto; val3: auto; val4: auto; val5: auto; val6: auto; val7: auto; val8: auto) : JsonValue? <function-json_boost_JV_auto_auto_auto_auto_auto_auto_auto_auto_0x2c4>`
+  *  :ref:`JV (val1: auto; val2: auto; val3: auto) : JsonValue? <function-json_boost_JV_auto_auto_auto_0x2ab>`
   *  :ref:`JV (v: auto(VecT)) : auto <function-json_boost_JV_autoVecT_0x17d>`
   *  :ref:`JV (value: auto(TT)) : JsonValue? <function-json_boost_JV_autoTT_0x223>`
   *  :ref:`from_JV (v: JsonValue const?; ent: uint16; defV: uint16 = uint16(0)) : auto <function-json_boost_from_JV_JsonValue_const_q__uint16_uint16>`
@@ -198,7 +198,7 @@ Value conversion
 JV
 ^^
 
-.. _function-json_boost_JV_auto_auto_auto_auto_auto_auto_auto_auto_auto_0x2b9:
+.. _function-json_boost_JV_auto_auto_auto_auto_auto_auto_auto_auto_auto_0x2c9:
 
 .. das:function:: JV(val1: auto; val2: auto; val3: auto; val4: auto; val5: auto; val6: auto; val7: auto; val8: auto; val9: auto) : JsonValue?
 
@@ -223,35 +223,35 @@ Creates array of nine JsonValues.
 
             * **val9** : auto
 
-.. _function-json_boost_JV_auto_auto_auto_auto_0x2a0:
+.. _function-json_boost_JV_auto_auto_auto_auto_0x2b0:
 
 .. das:function:: JV(val1: auto; val2: auto; val3: auto; val4: auto) : JsonValue?
 
-.. _function-json_boost_JV_auto_auto_auto_auto_auto_auto_auto_0x2af:
+.. _function-json_boost_JV_auto_auto_auto_auto_auto_auto_auto_0x2bf:
 
 .. das:function:: JV(val1: auto; val2: auto; val3: auto; val4: auto; val5: auto; val6: auto; val7: auto) : JsonValue?
 
-.. _function-json_boost_JV_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto_0x2be:
+.. _function-json_boost_JV_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto_0x2ce:
 
 .. das:function:: JV(val1: auto; val2: auto; val3: auto; val4: auto; val5: auto; val6: auto; val7: auto; val8: auto; val9: auto; val10: auto) : JsonValue?
 
-.. _function-json_boost_JV_auto_auto_auto_auto_auto_auto_0x2aa:
+.. _function-json_boost_JV_auto_auto_auto_auto_auto_auto_0x2ba:
 
 .. das:function:: JV(val1: auto; val2: auto; val3: auto; val4: auto; val5: auto; val6: auto) : JsonValue?
 
-.. _function-json_boost_JV_auto_auto_auto_auto_auto_0x2a5:
+.. _function-json_boost_JV_auto_auto_auto_auto_auto_0x2b5:
 
 .. das:function:: JV(val1: auto; val2: auto; val3: auto; val4: auto; val5: auto) : JsonValue?
 
-.. _function-json_boost_JV_auto_auto_0x296:
+.. _function-json_boost_JV_auto_auto_0x2a6:
 
 .. das:function:: JV(val1: auto; val2: auto) : JsonValue?
 
-.. _function-json_boost_JV_auto_auto_auto_auto_auto_auto_auto_auto_0x2b4:
+.. _function-json_boost_JV_auto_auto_auto_auto_auto_auto_auto_auto_0x2c4:
 
 .. das:function:: JV(val1: auto; val2: auto; val3: auto; val4: auto; val5: auto; val6: auto; val7: auto; val8: auto) : JsonValue?
 
-.. _function-json_boost_JV_auto_auto_auto_0x29b:
+.. _function-json_boost_JV_auto_auto_auto_0x2ab:
 
 .. das:function:: JV(val1: auto; val2: auto; val3: auto) : JsonValue?
 

@@ -4,17 +4,22 @@ options no_unused_block_arguments = false
 
 require common public
 
-def do_run_test(file : string; project : string = "") : string {
+def do_run_test(file : string; project : string = ""; timeout_str : string = "") : string {
     let exe = get_daslang_exe()
     if (empty(exe)) {
         return make_tool_result("Cannot determine daslang executable path", true)
     }
-    var cmd = "{exe} {get_das_root()}/dastest/dastest.das -- --test {file}"
+    let test_file = resolve_path(file)
+    var cmd = "{exe} {get_das_root()}/dastest/dastest.das -- --test {test_file}"
     if (!empty(project)) {
         cmd = "{cmd} --project {project}"
     }
+    let timeout_sec = empty(timeout_str) ? 120.0 : float(to_int(timeout_str))
     var output : string
-    let exit_code = run_and_capture(cmd, output)
+    let exit_code = run_and_capture(cmd, output, timeout_sec)
+    if (exit_code == popen_timed_out) {
+        return make_tool_result("Tests timed out after {timeout_sec}s:\n{output}", true)
+    }
     if (exit_code != 0) {
         return make_tool_result("Tests FAILED (exit code {exit_code}):\n{output}", true)
     }

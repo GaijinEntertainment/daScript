@@ -74,6 +74,13 @@ Constant for fseek that positions the file pointer relative to its current posit
 
 Constant for fseek that positions the file pointer relative to the end of the file by the given offset.
 
+.. _global-fio-popen_timed_out:
+
+.. das:attribute:: popen_timed_out = 2147483393
+
+Sentinel exit code returned by `popen_timeout` when the process was killed due to exceeding the timeout.
+
+
 .. _global-fio-df_magic:
 
 .. das:attribute:: df_magic = 0x12345678
@@ -638,6 +645,7 @@ OS specific routines
   *  :ref:`has_env_variable (var: string) : bool <function-fio_has_env_variable_string>`
   *  :ref:`popen (command: string; scope: block\<(FILE const?):void\>) : int <function-fio_popen_string_block_ls_FILE_const_q__c_void_gr_>`
   *  :ref:`popen_binary (command: string; scope: block\<(FILE const?):void\>) : int <function-fio_popen_binary_string_block_ls_FILE_const_q__c_void_gr_>`
+  *  :ref:`popen_timeout (command: string; timeout: float; scope: block\<(FILE const?):void\>) : int <function-fio_popen_timeout_string_float_block_ls_FILE_const_q__c_void_gr_>`
   *  :ref:`sanitize_command_line (var: string) : string <function-fio_sanitize_command_line_string>`
   *  :ref:`sleep (msec: uint) <function-fio_sleep_uint>`
 
@@ -696,6 +704,22 @@ Opens a pipe to the given shell command in binary mode, provides the resulting F
 
 
 :Arguments: * **command** : string implicit
+
+            * **scope** : block<( :ref:`FILE <handle-fio-FILE>`?):void> implicit
+
+.. _function-fio_popen_timeout_string_float_block_ls_FILE_const_q__c_void_gr_:
+
+.. das:function:: popen_timeout(command: string; timeout: float; scope: block<(FILE const?):void>) : int
+
+.. warning::
+  This is unsafe operation.
+
+Opens a process for reading, kills the entire process tree if it exceeds `timeout` seconds. Returns exit code on normal completion, or `popen_timed_out` if the timeout was exceeded. If `timeout` is 0 or negative, behaves identically to `popen`.
+
+
+:Arguments: * **command** : string implicit
+
+            * **timeout** : float
 
             * **scope** : block<( :ref:`FILE <handle-fio-FILE>`?):void> implicit
 

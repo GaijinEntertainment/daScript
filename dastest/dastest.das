@@ -185,6 +185,7 @@ def main() {
     } else {
         let totalFiles = length(files)
         let totalThreads = max(1, args |> get_int_arg("--isolated-mode-threads", get_total_hw_threads() * 2)) // magic x2, os should be able to schedule sub processes in parallel
+        let testTimeout = args |> get_float_arg("--test-timeout", 0.)  // per-test timeout in seconds, 0 = no timeout
         log::info("Running {totalFiles} tests in isolated mode with {totalThreads} threads\n")
         with_channel(totalFiles) $(inputChannel) {
             with_channel(totalFiles) $(outputChannel) {
@@ -198,7 +199,7 @@ def main() {
                                 isoRes.cmd = clone_string(input.cmd)
                                 let fileTime = ref_time_ticks()
                                 unsafe {
-                                    isoRes.exitCode = popen(input.cmd) $(f) {
+                                    isoRes.exitCode = popen_timeout(input.cmd, testTimeout) $(f) {
                                         if (f == null) {
                                             // log::error("Internal error: Failed to execute cmd > {input.cmd}")
                                             isoRes.err |> push("Internal error: Failed to execute cmd > {input.cmd}")
@@ -270,11 +271,14 @@ def main() {
                                 res.total += 1
                                 res.errors += 1
                             }
-                            if (!isoRes.parsedResult) {
+                            if (isoRes.exitCode == popen_timed_out) {
+                                log::red("`{isoRes.uri}` timed out after {testTimeout}s")
+                                log::info("to get more information, run the test manually\n> {isoRes.cmd}")
+                            } elif (!isoRes.parsedResult) {
                                 log::red("`{isoRes.uri}` execution was interrupted, crashed for example")
                                 log::info("to get more information, run the test manually\n> {isoRes.cmd}")
                             }
-                            if (isoRes.exitCode != 0) {
+                            if (isoRes.exitCode != 0 && isoRes.exitCode != popen_timed_out) {
                                 log::red("exit status {isoRes.exitCode}")
                             }
                         }

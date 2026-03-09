@@ -66,6 +66,8 @@
 
 .. |handmade/function-fio-popen_binary| replace:: to be documented in |handmade/function-fio-popen_binary|.rst
 
+.. |handmade/function-fio-popen_timeout| replace:: to be documented in |handmade/function-fio-popen_timeout|.rst
+
 .. |handmade/function-fio-get_full_file_name| replace:: to be documented in |handmade/function-fio-get_full_file_name|.rst
 
 .. |handmade/function-fio-get_env_variable| replace:: to be documented in |handmade/function-fio-get_env_variable|.rst
@@ -95,6 +97,8 @@
 .. |handmade/variable-fio-seek_cur| replace:: to be documented in |handmade/variable-fio-seek_cur|.rst
 
 .. |handmade/variable-fio-seek_end| replace:: to be documented in |handmade/variable-fio-seek_end|.rst
+
+.. |handmade/variable-fio-popen_timed_out| replace:: to be documented in |handmade/variable-fio-popen_timed_out|.rst
 
 .. |handmade/variable-fio-df_magic| replace:: to be documented in |handmade/variable-fio-df_magic|.rst
 
