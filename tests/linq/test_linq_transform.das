@@ -83,6 +83,25 @@ def test_select(t : T?) {
             t |> equal(q._1.a[1], i * 10)
         }
     }
+    t |> run("select from array") @(t : T?) {
+        var nums = [10, 20, 30, 40, 50]
+        var query = select(nums)
+        for (i, q in 0..5, query) {
+            t |> equal(q._0, i)
+            t |> equal(q._1, (i + 1) * 10)
+        }
+    }
+    t |> run("select from array with result selector") @(t : T?) {
+        var nums = [10, 20, 30]
+        var query = _select(
+            nums,
+            (_, _ * 2)
+        )
+        for (i, q in 0..3, query) {
+            t |> equal(q._0, (i + 1) * 10)
+            t |> equal(q._1, (i + 1) * 20)
+        }
+    }
     t |> run("select to sequence") @(t : T?) {
         var chars = ["a", "b", "c", "d", "e"]
         var query = select(chars).to_sequence()

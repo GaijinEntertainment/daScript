@@ -113,6 +113,14 @@ def test_take(t : T?) {
             t |> success(c.a.Equal([i, i * 10]))
         }
     }
+    t |> run("take from array") @(t : T?) {
+        let arr = [for (x in 0..5); x]
+        var result = take(arr, 3)
+        t |> equal(3, length(result))
+        for (c, i in result, 0..3) {
+            t |> equal(c, i)
+        }
+    }
     t |> run("take to array") @(t : T?) {
         var query_array = take_to_array(
             [iterator for(x in 0..5); x],
