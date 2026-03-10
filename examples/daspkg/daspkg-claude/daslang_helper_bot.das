@@ -166,6 +166,7 @@ def markdown_to_html(md : string) : string {
 }
 
 def send_html(chat_id, text : string) {
+    sleep(500u) // avoid Telegram rate limits
     telegram_sendLongMessage(send_message(chat_id = chat_id, text = text, parse_mode = "HTML"))
 }
 
@@ -275,6 +276,11 @@ def main() {
         var updates <- telegram_getUpdates(get_updates(offset = offset, timeout = 30l, limit = 100l))
         let err = telegram_get_last_error()
         if (!empty(err)) {
+            if (find(err, "429") >= 0 || find(err, "Too Many Requests") >= 0) {
+                print("Rate limited, waiting 5s...\n")
+                sleep(5000u)
+                continue
+            }
             print("Poll error: {err}\n")
             break
         }
