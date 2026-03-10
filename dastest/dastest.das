@@ -36,7 +36,13 @@ struct JsonTestReport {
     tests : array<SuiteTestResult>
 }
 
+struct FailedFile {
+    uri : string
+    reason : string
+}
+
 var private fileTimings : array<FileTiming>
+var private failedFiles : array<FailedFile>
 var private timingOutliers : int = 0
 var private jsonFilePath : string
 var private jsonTestFile : string
@@ -207,6 +213,8 @@ def main() {
                 }
             } else {
                 log::red("FAIL {uri} {time_dt_hr(fileDt)}")
+                var reason = "{status.failed} failed, {status.errors} errors"
+                failedFiles |> push(FailedFile(uri = clone_string(uri), reason = clone_string(reason)))
             }
             if (timingOutliers > 0) {
                 fileTimings |> push(FileTiming(uri = clone_string(uri), dt = fileDt))
@@ -298,20 +306,26 @@ def main() {
                             log::green("PASS {isoRes.uri} {time_dt_hr(isoRes.fileDt)}")
                         } else {
                             log::red("FAIL {isoRes.uri} {time_dt_hr(isoRes.fileDt)}")
+                            var reason = ""
                             if (isoRes.exitCode != 0 || !isoRes.parsedResult) {
                                 res.total += 1
                                 res.errors += 1
                             }
                             if (isoRes.exitCode == popen_timed_out) {
-                                log::red("`{isoRes.uri}` timed out after {testTimeout}s")
+                                reason = "timed out after {testTimeout}s"
+                                log::red("`{isoRes.uri}` {reason}")
                                 log::info("to get more information, run the test manually\n> {isoRes.cmd}")
                             } elif (!isoRes.parsedResult) {
+                                reason = "crashed (exit status {isoRes.exitCode})"
                                 log::red("`{isoRes.uri}` execution was interrupted, crashed for example")
                                 log::info("to get more information, run the test manually\n> {isoRes.cmd}")
+                            } else {
+                                reason = "{isoRes.status.failed} failed, {isoRes.status.errors} errors"
                             }
                             if (isoRes.exitCode != 0 && isoRes.exitCode != popen_timed_out) {
                                 log::red("exit status {isoRes.exitCode}")
                             }
+                            failedFiles |> push(FailedFile(uri = clone_string(isoRes.uri), reason = clone_string(reason)))
                         }
                     }
 
@@ -384,6 +398,13 @@ def finish_tests(res : SuiteResult; start_time : int64) {
     if (resCode == 0) {
         log::green("SUCCESS! {time_dt_hr(totalDt)}")
     } else {
+        if (length(failedFiles) > 0) {
+            log::red("\nFAILURES:")
+            for (ff in failedFiles) {
+                log::red("  {ff.uri} — {ff.reason}")
+            }
+            log::info("")
+        }
         log::red("FAILED! {time_dt_hr(totalDt)}")
     }
     if (!empty(jsonFilePath)) {
