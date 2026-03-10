@@ -14,6 +14,7 @@ let private verbose = false
 let private uriPaths = false
 
 var useTtyColors = false
+var failuresOnly = false
 
 def info_raw(msg : string | #) {
     print("{msg}")
@@ -47,6 +48,9 @@ def error(msg : string | #) {
 
 
 def green(msg : string | #) {
+    if (failuresOnly) {
+        return
+    }
     if (!verbose) {
         print(green_str("{msg}\n"))
     } else {

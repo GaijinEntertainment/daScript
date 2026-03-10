@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options rtti
 
 require fio
 require strings
@@ -23,8 +24,28 @@ struct FileTiming {
     dt : int     // microseconds
 }
 
+struct JsonTestReport {
+    file : string
+    total : int
+    passed : int
+    failed : int
+    errors : int
+    skipped : int
+    success : bool
+    time_usec : int
+    tests : array<SuiteTestResult>
+}
+
+struct FailedFile {
+    uri : string
+    reason : string
+}
+
 var private fileTimings : array<FileTiming>
+var private failedFiles : array<FailedFile>
 var private timingOutliers : int = 0
+var private jsonFilePath : string
+var private jsonTestFile : string
 
 
 def private collect_input_paths(args : array<string>; var paths : array<string>) {
@@ -134,6 +155,8 @@ def main() {
         return
     }
 
+    log::failuresOnly = args |> has_value("--failures-only")
+
     var res : SuiteResult
     let startTime = ref_time_ticks()
 
@@ -161,6 +184,22 @@ def main() {
     }
 
     timingOutliers = args |> get_int_arg("--timing-outliers", 0)
+    jsonFilePath = args |> get_str_arg("--json-file", "")
+    if (!empty(jsonFilePath)) {
+        suite::clear_test_results()
+        if (length(files) == 1) {
+            jsonTestFile = files[0]
+        } else {
+            jsonTestFile = build_string() <| $(var w) {
+                for (p, pi in inputPaths, range(length(inputPaths))) {
+                    if (pi > 0) {
+                        write(w, ",")
+                    }
+                    write(w, p)
+                }
+            }
+        }
+    }
 
     let isolatedMode = args |> has_value("--isolated-mode")
     var ctx <- SuiteCtx(args)
@@ -176,6 +215,8 @@ def main() {
                 }
             } else {
                 log::red("FAIL {uri} {time_dt_hr(fileDt)}")
+                var reason = "{status.failed} failed, {status.errors} errors"
+                failedFiles |> push(FailedFile(uri = clone_string(uri), reason = clone_string(reason)))
             }
             if (timingOutliers > 0) {
                 fileTimings |> push(FileTiming(uri = clone_string(uri), dt = fileDt))
@@ -267,20 +308,26 @@ def main() {
                             log::green("PASS {isoRes.uri} {time_dt_hr(isoRes.fileDt)}")
                         } else {
                             log::red("FAIL {isoRes.uri} {time_dt_hr(isoRes.fileDt)}")
+                            var reason = ""
                             if (isoRes.exitCode != 0 || !isoRes.parsedResult) {
                                 res.total += 1
                                 res.errors += 1
                             }
                             if (isoRes.exitCode == popen_timed_out) {
-                                log::red("`{isoRes.uri}` timed out after {testTimeout}s")
+                                reason = "timed out after {testTimeout}s"
+                                log::red("`{isoRes.uri}` {reason}")
                                 log::info("to get more information, run the test manually\n> {isoRes.cmd}")
                             } elif (!isoRes.parsedResult) {
+                                reason = "crashed (exit status {isoRes.exitCode})"
                                 log::red("`{isoRes.uri}` execution was interrupted, crashed for example")
                                 log::info("to get more information, run the test manually\n> {isoRes.cmd}")
+                            } else {
+                                reason = "{isoRes.status.failed} failed, {isoRes.status.errors} errors"
                             }
                             if (isoRes.exitCode != 0 && isoRes.exitCode != popen_timed_out) {
                                 log::red("exit status {isoRes.exitCode}")
                             }
+                            failedFiles |> push(FailedFile(uri = clone_string(isoRes.uri), reason = clone_string(reason)))
                         }
                     }
 
@@ -353,7 +400,32 @@ def finish_tests(res : SuiteResult; start_time : int64) {
     if (resCode == 0) {
         log::green("SUCCESS! {time_dt_hr(totalDt)}")
     } else {
+        if (length(failedFiles) > 0) {
+            log::red("\nFAILURES:")
+            for (ff in failedFiles) {
+                log::red("  {ff.uri} — {ff.reason}")
+            }
+            log::info("")
+        }
         log::red("FAILED! {time_dt_hr(totalDt)}")
+    }
+    if (!empty(jsonFilePath)) {
+        var report = JsonTestReport(
+            file = jsonTestFile,
+            total = res.total,
+            passed = res.passed,
+            failed = res.failed,
+            errors = res.errors,
+            skipped = res.skipped,
+            success = resCode == 0,
+            time_usec = totalDt,
+            tests <- suite::test_results
+        )
+        fopen(jsonFilePath, "wb") <| $(f) {
+            if (f != null) {
+                fwrite(f, sprint_json(report, false))
+            }
+        }
     }
     unsafe {
         fio::exit(resCode)

@@ -28,6 +28,7 @@ require tools/describe_type public
 require tools/grep_usage public
 require tools/outline public
 require tools/aot public
+require tools/daspkg public
 
 // helper: parse tool result JSON, return (text, isError)
 def parse_result(result : string; var text : string&; var is_error : bool&) : bool {
@@ -1078,3 +1079,171 @@ def test_aot_missing_file(t : T?) {
         t |> success(is_error, "should be error")
     }
 }
+
+// ── daspkg tools ─────────────────────────────────────────────────────
+
+[test]
+def test_daspkg_list_empty(t : T?) {
+    t |> run("list with no packages installed") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_daspkg_list(""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "[]") >= 0 || find(text, "No packages installed") >= 0, "should report empty list")
+    }
+}
+
+[test]
+def test_daspkg_check_empty(t : T?) {
+    t |> run("check with no packages installed") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_daspkg_check(""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "[]") >= 0 || find(text, "No packages installed") >= 0, "should report empty check")
+    }
+}
+
+[test]
+def test_daspkg_search(t : T?) {
+    t |> run("search returns JSON array") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_daspkg_search("", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        // result should be a JSON array (starts with '[')
+        let trimmed = strip(text)
+        t |> success(length(trimmed) > 0 && character_at(trimmed, 0) == '[', "should return JSON array")
+    }
+    t |> run("search filters by query") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_daspkg_search("claude", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "das-claude") >= 0, "should find das-claude package")
+    }
+}
+
+[test]
+def test_daspkg_info(t : T?) {
+    t |> run("info returns package metadata") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_daspkg_info("das-claude", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "das-claude") >= 0, "should contain package name")
+    }
+    t |> run("info for nonexistent package returns empty") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_daspkg_info("nonexistent_pkg_12345", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "[]") >= 0, "should return empty array")
+    }
+}
+
+[test]
+def test_daspkg_remove_not_installed(t : T?) {
+    t |> run("remove nonexistent package") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_daspkg_remove("nonexistent_pkg_12345", ""), text, is_error)
+        // daspkg prints error but exits 0, so check text
+        t |> success(find(text, "not installed") >= 0 || find(text, "no lock file") >= 0 || find(text, "No packages installed") >= 0, "should report not installed")
+    }
+}
+
+[test]
+def test_daspkg_update_no_lockfile(t : T?) {
+    t |> run("update with no lock file") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_daspkg_update("", ""), text, is_error)
+        t |> success(find(text, "No packages installed") >= 0 || find(text, "no lock file") >= 0, "should report no packages")
+    }
+}
+
+[test]
+def test_daspkg_upgrade_no_lockfile(t : T?) {
+    t |> run("upgrade with no lock file") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_daspkg_upgrade("", ""), text, is_error)
+        t |> success(find(text, "No packages installed") >= 0 || find(text, "no lock file") >= 0, "should report no packages")
+    }
+}
+
+// ── JSON output mode tests ──────────────────────────────────────────
+
+[test]
+def test_compile_check_json(t : T?) {
+    t |> run("json mode returns CompileResult array") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_compile_check(fixture_path("_fixture_valid.das"), "", true), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "\"success\":true") >= 0, "should contain success:true")
+        t |> success(find(text, "\"file\":") >= 0, "should contain file field")
+    }
+    t |> run("json mode reports errors") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_compile_check(fixture_path("_fixture_error.das"), "", true), text, is_error)
+        t |> success(find(text, "\"success\":false") >= 0, "should contain success:false")
+        t |> success(find(text, "\"errors\":") >= 0, "should contain errors field")
+    }
+    t |> run("json batch returns array") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        let batch = fixture_path("_fixture_valid.das") + "," + fixture_path("_fixture_error.das")
+        parse_result(do_compile_check(batch, "", true), text, is_error)
+        // Should be a JSON array with 2 elements
+        let arr_start = "[" + "\{"
+        t |> success(find(text, arr_start) >= 0, "should start with array")
+        t |> success(find(text, "\"success\":true") >= 0, "should have a passing result")
+        t |> success(find(text, "\"success\":false") >= 0, "should have a failing result")
+    }
+}
+
+[test]
+def test_run_test_json(t : T?) {
+    t |> run("json mode returns TestSummary") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_run_test(fixture_path("_fixture_test.das"), "", "", true), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "\"success\":true") >= 0, "should contain success:true")
+        t |> success(find(text, "\"total\":") >= 0, "should contain total field")
+        t |> success(find(text, "\"tests\":") >= 0, "should contain tests array")
+    }
+}
+
+[test]
+def test_list_modules_json(t : T?) {
+    t |> run("json mode returns ModuleList") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_list_modules(true), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "\"builtin\":") >= 0, "should contain builtin field")
+        t |> success(find(text, "\"daslib\":") >= 0, "should contain daslib field")
+        t |> success(find(text, "\"math\"") >= 0, "should contain math module")
+    }
+}
+
+[test]
+def test_list_requires_json(t : T?) {
+    t |> run("json mode returns RequiresResult") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_list_requires(fixture_path("_fixture_valid.das"), "", true), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "\"direct\":") >= 0, "should contain direct field")
+        t |> success(find(text, "\"transitive\":") >= 0, "should contain transitive field")
+    }
+}
+

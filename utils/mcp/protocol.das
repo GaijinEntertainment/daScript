@@ -33,7 +33,7 @@ require tools/describe_type public
 require tools/grep_usage public
 require tools/outline public
 require tools/aot public
-require tools/package_search public
+require tools/daspkg public
 
 let HEAP_COLLECT_THRESHOLD = 1024ul * 1024ul  // 1 MB
 let LOG_FILE = "utils/mcp/mcp_server.log"
@@ -220,7 +220,8 @@ def handle_tools_list(id_json : string) : string {
         "Compile daScript file(s) and return errors or success. Supports single file, comma-separated list, or glob pattern (e.g. 'utils/mcp/tools/*.das'). Batch mode reports pass/fail per file with summary.",
         {
             "file" => PropertySchema(_type = "string", description = "Path to .das file, comma-separated paths, or glob pattern (e.g. 'dir/*.das')"),
-            "project" => PROJECT_PROP
+            "project" => PROJECT_PROP,
+            "json" => PropertySchema(_type = "string", description = "If 'true', return structured JSON (array of CompileResult with file, success, errors, warnings)")
         },
         ["file"]
     ))
@@ -232,7 +233,8 @@ def handle_tools_list(id_json : string) : string {
         {
             "file" => PropertySchema(_type = "string", description = "Path to the .das test file"),
             "timeout" => PropertySchema(_type = "string", description = "Timeout in seconds (default: 120). Process tree is killed if exceeded"),
-            "project" => PROJECT_PROP
+            "project" => PROJECT_PROP,
+            "json" => PropertySchema(_type = "string", description = "If 'true', return structured JSON (TestSummary with file, tests, total, passed, failed, errors, skipped, success, time)")
         },
         ["file"]
     ))
@@ -282,7 +284,9 @@ def handle_tools_list(id_json : string) : string {
     result.tools |> emplace(make_tool(
         "list_modules",
         "List all available daslang modules (builtin and daslib)",
-        {},
+        {
+            "json" => PropertySchema(_type = "string", description = "If 'true', return structured JSON (ModuleList with builtin and daslib arrays)")
+        },
         []
     ))
     result.tools |> emplace(make_tool(
@@ -296,7 +300,16 @@ def handle_tools_list(id_json : string) : string {
         },
         ["query"]
     ))
-    result.tools |> emplace(make_file_tool("list_requires", "Compile a .das file and list all require dependencies (direct and transitive)"))
+    result.tools |> emplace(make_tool(
+        "list_requires",
+        "Compile a .das file and list all require dependencies (direct and transitive)",
+        {
+            "file" => PropertySchema(_type = "string", description = "Path to the .das file"),
+            "project" => PROJECT_PROP,
+            "json" => PropertySchema(_type = "string", description = "If 'true', return structured JSON (RequiresResult with direct and transitive arrays of RequireEntry)")
+        },
+        ["file"]
+    ))
     result.tools |> emplace(make_tool(
         "convert_to_gen2",
         "Convert a daslang source file from v1 (indentation-based) syntax to gen2 (braces, parentheses) syntax using das-fmt. Returns converted code or writes in place.",
@@ -398,22 +411,75 @@ def handle_tools_list(id_json : string) : string {
         ["file"]
     ))
     result.tools |> emplace(make_tool(
-        "package_search",
+        "daspkg_search",
         "Search the daspkg package index. Returns matching packages as JSON array with name, url, description, author, license, tags, modules, min_sdk, latest_version, etc. Empty query returns all packages.",
         {
             "query" => PropertySchema(_type = "string", description = "Search query — matches name, description, author, tags, modules. Leave empty to list all."),
-            "refresh" => PropertySchema(_type = "string", description = "If 'true', fetch fresh index from GitHub. Otherwise use local cache.")
+            "root" => PropertySchema(_type = "string", description = "Project root directory (default: daScript repo root)")
         },
         []
     ))
     result.tools |> emplace(make_tool(
-        "package_info",
+        "daspkg_info",
         "Get full metadata for a single package from the daspkg index by exact name.",
         {
             "name" => PropertySchema(_type = "string", description = "Exact package name (e.g. 'das-claude', 'das-telegram')"),
-            "refresh" => PropertySchema(_type = "string", description = "If 'true', fetch fresh index from GitHub. Otherwise use local cache.")
+            "root" => PropertySchema(_type = "string", description = "Project root directory (default: daScript repo root)")
         },
         ["name"]
+    ))
+    result.tools |> emplace(make_tool(
+        "daspkg_list",
+        "List all installed daspkg packages with their sources, versions, and flags.",
+        {
+            "root" => PropertySchema(_type = "string", description = "Project root directory (default: daScript repo root)")
+        },
+        []
+    ))
+    result.tools |> emplace(make_tool(
+        "daspkg_check",
+        "Verify installed daspkg packages — checks that directories and .das_module files exist.",
+        {
+            "root" => PropertySchema(_type = "string", description = "Project root directory (default: daScript repo root)")
+        },
+        []
+    ))
+    result.tools |> emplace(make_tool(
+        "daspkg_install",
+        "Install a daspkg package from GitHub, index, or local path. Without 'spec', installs all dependencies from .das_package.",
+        {
+            "spec" => PropertySchema(_type = "string", description = "Package spec: GitHub URL (github.com/user/repo), index name (dasImgui), local path (./path), optionally with version (@1.0)"),
+            "force" => PropertySchema(_type = "string", description = "If 'true', force reinstall even if already installed"),
+            "root" => PropertySchema(_type = "string", description = "Project root directory (default: daScript repo root)")
+        },
+        []
+    ))
+    result.tools |> emplace(make_tool(
+        "daspkg_remove",
+        "Remove an installed daspkg package.",
+        {
+            "name" => PropertySchema(_type = "string", description = "Package name to remove"),
+            "root" => PropertySchema(_type = "string", description = "Project root directory (default: daScript repo root)")
+        },
+        ["name"]
+    ))
+    result.tools |> emplace(make_tool(
+        "daspkg_update",
+        "Re-install daspkg package(s) at their pinned version. Without 'name', updates all packages.",
+        {
+            "name" => PropertySchema(_type = "string", description = "Package name to update (omit for all)"),
+            "root" => PropertySchema(_type = "string", description = "Project root directory (default: daScript repo root)")
+        },
+        []
+    ))
+    result.tools |> emplace(make_tool(
+        "daspkg_upgrade",
+        "Upgrade daspkg package(s) to latest version. Without 'name', upgrades all packages.",
+        {
+            "name" => PropertySchema(_type = "string", description = "Package name to upgrade (omit for all)"),
+            "root" => PropertySchema(_type = "string", description = "Project root directory (default: daScript repo root)")
+        },
+        []
     ))
     return json_rpc_response(id_json, sprint_json(result, false))
 }
@@ -443,13 +509,13 @@ def get_string_arg(args : JsonValue?; name : string) : string {
 
 def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : string {
     if (tool_name == "compile_check") {
-        return do_compile_check(arg1, project)
+        return do_compile_check(arg1, project, arg2 == "true")
     } elif (tool_name == "list_functions") {
         return do_list_functions(arg1, project)
     } elif (tool_name == "list_types") {
         return do_list_types(arg1, project)
     } elif (tool_name == "run_test") {
-        return do_run_test(arg1, project, arg2)
+        return do_run_test(arg1, project, arg2, arg3 == "true")
     } elif (tool_name == "format_file") {
         return do_format_file(arg1)
     } elif (tool_name == "run_script") {
@@ -461,7 +527,7 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : s
     } elif (tool_name == "ast_dump") {
         return do_ast_dump(arg1, arg2, arg3, arg4, arg5, project)
     } elif (tool_name == "list_requires") {
-        return do_list_requires(arg1, project)
+        return do_list_requires(arg1, project, arg2 == "true")
     } elif (tool_name == "convert_to_gen2") {
         return do_convert_to_gen2(arg1, arg2 == "true")
     } elif (tool_name == "goto_definition") {
@@ -473,7 +539,7 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : s
     } elif (tool_name == "program_log") {
         return do_program_log(arg1, arg2, project)
     } elif (tool_name == "list_modules") {
-        return do_list_modules()
+        return do_list_modules(arg1 == "true")
     } elif (tool_name == "find_symbol") {
         return do_find_symbol(arg1, arg2, arg3, project)
     } elif (tool_name == "list_module_api") {
@@ -484,10 +550,22 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : s
         return do_outline(arg1, arg2)
     } elif (tool_name == "aot") {
         return do_aot(arg1, arg2, project)
-    } elif (tool_name == "package_search") {
-        return do_package_search(arg1, arg2)
-    } elif (tool_name == "package_info") {
-        return do_package_info(arg1, arg2)
+    } elif (tool_name == "daspkg_search") {
+        return do_daspkg_search(arg1, arg2)
+    } elif (tool_name == "daspkg_info") {
+        return do_daspkg_info(arg1, arg2)
+    } elif (tool_name == "daspkg_list") {
+        return do_daspkg_list(arg1)
+    } elif (tool_name == "daspkg_check") {
+        return do_daspkg_check(arg1)
+    } elif (tool_name == "daspkg_install") {
+        return do_daspkg_install(arg1, arg2, arg3 == "true")
+    } elif (tool_name == "daspkg_remove") {
+        return do_daspkg_remove(arg1, arg2)
+    } elif (tool_name == "daspkg_update") {
+        return do_daspkg_update(arg1, arg2)
+    } elif (tool_name == "daspkg_upgrade") {
+        return do_daspkg_upgrade(arg1, arg2)
     } else {
         return make_tool_result("unknown tool: {tool_name}", true)
     }
@@ -521,17 +599,30 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
     let name = tool_name_val.value as _string
     var arg1, arg2, arg3, arg4, arg5 : string
     let project = get_string_arg(args, "project")
-    if (name == "compile_check" || name == "list_functions" || name == "list_types" || name == "format_file" || name == "list_requires") {
+    if (name == "compile_check") {
         arg1 = get_string_arg(args, "file")
         if (empty(arg1)) {
             return json_rpc_error(id_json, -32602, "missing 'file' argument")
         }
+        arg2 = get_string_arg(args, "json")
+    } elif (name == "list_functions" || name == "list_types" || name == "format_file") {
+        arg1 = get_string_arg(args, "file")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'file' argument")
+        }
+    } elif (name == "list_requires") {
+        arg1 = get_string_arg(args, "file")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'file' argument")
+        }
+        arg2 = get_string_arg(args, "json")
     } elif (name == "run_test") {
         arg1 = get_string_arg(args, "file")
         if (empty(arg1)) {
             return json_rpc_error(id_json, -32602, "missing 'file' argument")
         }
         arg2 = get_string_arg(args, "timeout")
+        arg3 = get_string_arg(args, "json")
     } elif (name == "convert_to_gen2") {
         arg1 = get_string_arg(args, "file")
         if (empty(arg1)) {
@@ -613,16 +704,31 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
             return json_rpc_error(id_json, -32602, "missing 'file' or 'glob' argument")
         }
     } elif (name == "list_modules") {
-        // no args needed
-    } elif (name == "package_search") {
+        arg1 = get_string_arg(args, "json")
+    } elif (name == "daspkg_search") {
         arg1 = get_string_arg(args, "query")
-        arg2 = get_string_arg(args, "refresh")
-    } elif (name == "package_info") {
+        arg2 = get_string_arg(args, "root")
+    } elif (name == "daspkg_info") {
         arg1 = get_string_arg(args, "name")
         if (empty(arg1)) {
             return json_rpc_error(id_json, -32602, "missing 'name' argument")
         }
-        arg2 = get_string_arg(args, "refresh")
+        arg2 = get_string_arg(args, "root")
+    } elif (name == "daspkg_list" || name == "daspkg_check") {
+        arg1 = get_string_arg(args, "root")
+    } elif (name == "daspkg_install") {
+        arg1 = get_string_arg(args, "spec")
+        arg2 = get_string_arg(args, "root")
+        arg3 = get_string_arg(args, "force")
+    } elif (name == "daspkg_remove") {
+        arg1 = get_string_arg(args, "name")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'name' argument")
+        }
+        arg2 = get_string_arg(args, "root")
+    } elif (name == "daspkg_update" || name == "daspkg_upgrade") {
+        arg1 = get_string_arg(args, "name")
+        arg2 = get_string_arg(args, "root")
     } elif (name == "aot") {
         arg1 = get_string_arg(args, "file")
         if (empty(arg1)) {

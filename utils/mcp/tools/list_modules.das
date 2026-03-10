@@ -1,10 +1,17 @@
 options gen2
+options rtti
 options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
 require common public
+require daslib/json_boost
 
-def do_list_modules() : string {
+struct ModuleList {
+    builtin : array<string>
+    daslib : array<string>
+}
+
+def do_list_modules(json : bool = false) : string {
     var builtin_mods : array<string>
     program_for_each_registered_module() <| $(mod) {
         let mname = string(mod.name)
@@ -22,6 +29,10 @@ def do_list_modules() : string {
         daslib_mods |> push(slice(fname, 0, length(fname) - 4))
     }
     sort(daslib_mods)
+    if (json) {
+        var result = ModuleList(builtin <- builtin_mods, daslib <- daslib_mods)
+        return make_tool_result(sprint_json(result, false))
+    }
     return make_tool_result(build_string() <| $(var writer) {
         write(writer, "Builtin/C++ modules ({length(builtin_mods)}):\n")
         for (m in builtin_mods) {
