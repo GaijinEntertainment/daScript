@@ -30,6 +30,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <unistd.h>
+#include <utility>
 
 #else
 
@@ -231,37 +232,112 @@ namespace das {
         }
     }
 
-    inline void crash_signal_handler(int sig, siginfo_t *info, void * /*ucontext*/) {
+#if defined(__APPLE__) && defined(__aarch64__)
+    static inline uintptr_t strip_pac(uintptr_t p) { return p & (uintptr_t)0x0000FFFFFFFFFFFF; }
+#else
+    static inline uintptr_t strip_pac(uintptr_t p) { return p; }
+#endif
+
+    // Returns malloc'd demangled name, or nullptr. Caller must free().
+    inline char * demangle(char * line) {
+        int status = -1;
+#if defined(__linux__)
+        // Linux format: "module(mangled+offset) [addr]"
+        char *ms = strchr(line, '(');
+        char *me = ms ? strchr(ms, '+') : nullptr;
+        if (ms && me) {
+            char c = *me; *me = '\0';
+            char *d = abi::__cxa_demangle(ms + 1, nullptr, nullptr, &status);
+            *me = c;
+            if (status == 0) return d;
+        }
+#elif defined(__APPLE__)
+        // macOS format: "N  module  addr  _Zmangle + offset"
+        char *zs = strstr(line, "_Z");
+        char *ze = zs ? strstr(zs, " + ") : nullptr;
+        if (zs && ze) {
+            char c = *ze; *ze = '\0';
+            char *d = abi::__cxa_demangle(zs, nullptr, nullptr, &status);
+            *ze = c;
+            if (status == 0) return d;
+        }
+#endif
+        return nullptr;
+    }
+
+    inline pair<uintptr_t, uintptr_t> get_fp_sp(void *ucontext_ptr) {
+        uintptr_t fp = 0, sp = 0;
+        if (!ucontext_ptr) return {fp, sp};
+        ucontext_t *uc = (ucontext_t *)ucontext_ptr;
+#if defined(__linux__)
+#  if defined(__x86_64__)
+        fp = (uintptr_t)uc->uc_mcontext.gregs[REG_RBP];
+        sp = (uintptr_t)uc->uc_mcontext.gregs[REG_RSP];
+#  elif defined(__aarch64__)
+        fp = (uintptr_t)uc->uc_mcontext.regs[29];
+        sp = (uintptr_t)uc->uc_mcontext.sp;
+#  endif
+#elif defined(__APPLE__)
+#  if defined(__x86_64__)
+        fp = (uintptr_t)uc->uc_mcontext->__ss.__rbp;
+        sp = (uintptr_t)uc->uc_mcontext->__ss.__rsp;
+#  elif defined(__aarch64__)
+        fp = (uintptr_t)uc->uc_mcontext->__ss.__fp;
+        sp = (uintptr_t)uc->uc_mcontext->__ss.__sp;
+#  endif
+#endif
+        return {fp, sp};
+    }
+
+    inline void crash_signal_handler(int sig, siginfo_t *info, void *ucontext_ptr) {
         fprintf(stderr, "\nCRASH: %s (signal %d)", signal_to_string(sig), sig);
         if (info->si_addr)
             fprintf(stderr, " at address %p", info->si_addr);
         fprintf(stderr, "\n");
 
-        void *frames[DAS_CRASH_HANDLER_MAX_STACK_FRAMES];
-        int nframes = backtrace(frames, DAS_CRASH_HANDLER_MAX_STACK_FRAMES);
+        // FP walk: collect ret_pc (for printing) and fp (for Context* scanning).
+        // Using ucontext gives the crashed frame directly, unaffected by SA_ONSTACK.
+        void *fpPCs[DAS_CRASH_HANDLER_MAX_STACK_FRAMES];
+        CrashFrame fpFrames[DAS_CRASH_HANDLER_MAX_STACK_FRAMES];
+        int fpCount = 0;
+        {
+            auto [fp, sp] = get_fp_sp(ucontext_ptr);
+            for (int i = 0; i < DAS_CRASH_HANDLER_MAX_STACK_FRAMES && fp != 0; i++) {
+                uintptr_t *frame_words = (uintptr_t *)fp;
+                uintptr_t saved_fp = strip_pac(frame_words[0]);
+                uintptr_t ret_pc   = strip_pac(frame_words[1]);
+                if (saved_fp == 0 || ret_pc == 0) break;
+                fpPCs[fpCount]             = (void *)ret_pc;
+                fpFrames[fpCount].frameRbp = fp;
+                fpFrames[fpCount].frameRsp = sp;
+                fpCount++;
+                if (saved_fp <= fp) break;
+                sp = fp + 2 * sizeof(uintptr_t);
+                fp = saved_fp;
+            }
+        }
+
+        // Use FP walk PCs for symbol resolution — works even with SA_ONSTACK.
+        // Fall back to backtrace() if no frame pointers (e.g. -fomit-frame-pointer on Linux).
+        void *btFrames[DAS_CRASH_HANDLER_MAX_STACK_FRAMES];
+        void **frames = fpCount > 0 ? fpPCs : btFrames;
+        bool interesting[DAS_CRASH_HANDLER_MAX_STACK_FRAMES] = {};
+        int nframes = fpCount;
+
+        int frameCount = 0;
+        CrashFrame collectedFrames[DAS_CRASH_HANDLER_MAX_STACK_FRAMES];
+
         if (nframes > 0) {
             fprintf(stderr, "Stack trace:\n");
             char **symbols = backtrace_symbols(frames, nframes);
             if (symbols) {
                 for (int i = 0; i < nframes; i++) {
-                    char *mangled_start = strchr(symbols[i], '(');
-                    char *mangled_end = mangled_start ? strchr(mangled_start, '+') : nullptr;
-                    if (mangled_start && mangled_end) {
-                        *mangled_end = '\0';
-                        int status = -1;
-                        char *demangled = abi::__cxa_demangle(mangled_start + 1, nullptr, nullptr, &status);
-                        if (status == 0 && demangled) {
-                            *mangled_end = '+';
-                            *mangled_start = '\0';
-                            fprintf(stderr, "  [%2d] %s(%s+%s\n", i, symbols[i], demangled, mangled_end + 1);
-                            free(demangled);
-                        } else {
-                            *mangled_end = '+';
-                            fprintf(stderr, "  [%2d] %s\n", i, symbols[i]);
-                        }
-                    } else {
-                        fprintf(stderr, "  [%2d] %s\n", i, symbols[i]);
+                    char *d = demangle(symbols[i]);
+                    fprintf(stderr, "  [%2d] %s\n", i, symbols[i]);
+                    if (g_crash_handler_frame_filter && d) {
+                        collectedFrames[frameCount++] = fpFrames[i];
                     }
+                    free(d);
                 }
                 free(symbols);
             } else {
@@ -270,14 +346,26 @@ namespace das {
         }
         fflush(stderr);
 
+        if (g_crash_handler_extra_info && fpCount > 0) {
+            g_crash_handler_extra_info(collectedFrames, frameCount);
+        }
+
         signal(sig, SIG_DFL);
         raise(sig);
     }
 
     inline void install_crash_handler() {
+        // Add alt stack for stack overflow detection.
+        static thread_local char alt_stack_buf[64 * 1024];
+        stack_t ss = {};
+        ss.ss_sp    = alt_stack_buf;
+        ss.ss_size  = sizeof(alt_stack_buf);
+        ss.ss_flags = 0;
+        sigaltstack(&ss, nullptr);
+
         struct sigaction sa = {};
         sa.sa_sigaction = crash_signal_handler;
-        sa.sa_flags = SA_SIGINFO | SA_RESETHAND;
+        sa.sa_flags = SA_SIGINFO | SA_RESETHAND | SA_ONSTACK;
         sigemptyset(&sa.sa_mask);
         sigaction(SIGSEGV, &sa, nullptr);
         sigaction(SIGBUS,  &sa, nullptr);
