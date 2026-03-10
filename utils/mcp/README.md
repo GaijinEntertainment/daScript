@@ -1,22 +1,22 @@
 # daslang MCP Server
 
-A minimal [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that exposes daslang compiler diagnostics and program introspection to AI coding assistants like Claude Code.
+A [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that exposes 29 daslang compiler-backed tools to AI coding assistants like Claude Code — compilation diagnostics, program introspection, AOT generation, package management, and more.
 
 ## Tools
 
 | Tool | Description |
 |---|---|
-| `compile_check` | Compile a `.das` file and return errors/warnings plus a categorized function listing on success |
+| `compile_check` | Compile a `.das` file and return errors/warnings plus a categorized function listing on success. Optional `json` for structured output |
 | `list_functions` | Compile a `.das` file and list all user functions, class methods, and generic instances (after macro expansion) |
 | `list_types` | Compile a `.das` file and list all structs, classes (with fields), enums (with values), and type aliases |
-| `run_test` | Run dastest on a `.das` test file and return pass/fail results |
+| `run_test` | Run dastest on a `.das` test file and return pass/fail results. Optional `json` for structured output |
 | `format_file` | Format a `.das` file using `daslib/das_source_formatter` |
 | `run_script` | Run a `.das` file or inline code snippet and return stdout/stderr |
 | `ast_dump` | Dump AST of an expression or compiled function. `mode=ast` returns S-expression (node types/fields), `mode=source` returns post-macro daslang code. Optional `lineinfo` to include file and line:col spans on each node |
 | `program_log` | Produce full post-compilation program text (like `options log`). Shows all types, globals, and functions after macro expansion, template instantiation, and inference. Optional `function` filter |
-| `list_modules` | List all available daslang modules (builtin C++ modules and daslib) |
+| `list_modules` | List all available daslang modules (builtin C++ modules and daslib). Optional `json` for structured output |
 | `find_symbol` | Cross-module symbol search (functions, generics, structs, handled types, enums, globals, typedefs/aliases, fields). Case-insensitive substring by default; `=query` for exact match |
-| `list_requires` | Compile a `.das` file and list all `require` dependencies (direct and transitive), with source file paths and builtin annotations |
+| `list_requires` | Compile a `.das` file and list all `require` dependencies (direct and transitive), with source file paths and builtin annotations. Optional `json` for structured output |
 | `list_module_api` | List all functions, types, enums, and globals exported by a builtin or daslib module (e.g. `math`, `strings`, `fio`, `daslib/json`). Optional `compact` mode for large modules |
 | `convert_to_gen2` | Convert a `.das` file from gen1 (indentation-based) syntax to gen2 (braces/parentheses) using `das-fmt`. Optional `inplace` flag to modify the file directly |
 | `goto_definition` | Given a cursor position (file, line, column), resolve the definition of the symbol under the cursor. Returns location, kind (variable/function/field/builtin/struct/enum/typedef), and source snippet. Optional `no_opt` to preserve pre-optimization AST |
@@ -27,6 +27,14 @@ A minimal [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) serve
 | `grep_usage` | Parse-aware symbol search across `.das` files using ast-grep + tree-sitter. Finds identifier occurrences excluding comments and strings. Conditional on `sg` CLI |
 | `outline` | List all declarations (functions, structs, classes, enums, bitfields, variants, globals, typedefs) in a file or set of files using tree-sitter. Works on broken/incomplete code — no compilation needed. Conditional on `sg` CLI |
 | `aot` | Generate AOT (ahead-of-time) C++ code for a `.das` file or a single function. Without `function`, returns full AOT output. With `function`, extracts that function's C++ only. Overloaded names return a disambiguation list with mangled names for exact selection |
+| `daspkg_search` | Search the daspkg package index. Returns matching packages as JSON array with name, url, description, author, license, tags, modules, etc. Empty query returns all packages |
+| `daspkg_info` | Get full metadata for a single package from the daspkg index by exact name |
+| `daspkg_list` | List all installed daspkg packages with their sources, versions, and flags |
+| `daspkg_check` | Verify installed daspkg packages — checks that directories and `.das_module` files exist |
+| `daspkg_install` | Install a daspkg package from GitHub, index, or local path. Without `spec`, installs all dependencies from `.das_package` |
+| `daspkg_remove` | Remove an installed daspkg package |
+| `daspkg_update` | Re-install daspkg package(s) at their pinned version. Without `name`, updates all packages |
+| `daspkg_upgrade` | Upgrade daspkg package(s) to latest version. Without `name`, upgrades all packages |
 
 ## Setup
 
@@ -111,7 +119,15 @@ Optionally, allow the MCP tools without prompting by adding to `.claude/settings
       "mcp__daslang__describe_type",
       "mcp__daslang__grep_usage",
       "mcp__daslang__outline",
-      "mcp__daslang__aot"
+      "mcp__daslang__aot",
+      "mcp__daslang__daspkg_search",
+      "mcp__daslang__daspkg_info",
+      "mcp__daslang__daspkg_list",
+      "mcp__daslang__daspkg_check",
+      "mcp__daslang__daspkg_install",
+      "mcp__daslang__daspkg_remove",
+      "mcp__daslang__daspkg_update",
+      "mcp__daslang__daspkg_upgrade"
     ]
   }
 }

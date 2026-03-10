@@ -68,7 +68,7 @@ Group related checks with ``run``::
       }
   }
 
-Use ``@@(t : T?) { ... }`` (no-capture lambda) for the callback.
+Use ``@@(t : T?) { ... }`` (local function) for the callback.
 
 Running tests
 =============

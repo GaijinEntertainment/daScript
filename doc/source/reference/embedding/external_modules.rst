@@ -607,7 +607,8 @@ and link against ``DAS::libDaScriptDyn`` as shown above.
 
 .. seealso::
 
-   * :ref:`embedding_modules` — C++ API reference for module bindings
-   * :ref:`aot` — AOT compilation details
-   * :ref:`tutorial_integration_cpp_hello_world` — step-by-step C++ host tutorial
-   * `dascript-demo repository <https://github.com/aleksisch/dascript-demo>`_ — complete external project example
+   * :ref:`utils_daspkg` -- daspkg package manager (automated install, update, build)
+   * :ref:`embedding_modules` -- C++ API reference for module bindings
+   * :ref:`aot` -- AOT compilation details
+   * :ref:`tutorial_integration_cpp_hello_world` -- step-by-step C++ host tutorial
+   * `dascript-demo repository <https://github.com/aleksisch/dascript-demo>`_ -- complete external project example

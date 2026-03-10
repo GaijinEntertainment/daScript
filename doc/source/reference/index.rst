@@ -25,4 +25,5 @@ THE SOFTWARE.
    design_philosophy.rst
    language.rst
    embedding.rst
+   utils.rst
    tutorials.rst

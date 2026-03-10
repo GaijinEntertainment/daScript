@@ -83,9 +83,30 @@ Build the grammar:
 cmake --build build --target tree_sitter_daslang
 ```
 
+## Package manager (daspkg)
+
+A built-in package manager in [`utils/daspkg/`](utils/daspkg/) handles installing, updating, and building daslang packages — both pure-daslang and C++ native modules.
+
+```sh
+# Install a package from the index
+./bin/daslang utils/daspkg/main.das -- install das-claude
+
+# Install from a git URL
+./bin/daslang utils/daspkg/main.das -- install github.com/user/repo
+
+# Search the package index
+./bin/daslang utils/daspkg/main.das -- search json
+```
+
+See [`utils/daspkg/README.md`](utils/daspkg/README.md) for the full command reference and package authoring guide.
+
+## Crash handler
+
+A built-in crash handler (`include/daScript/misc/crash_handler.h`) captures both native C++ stack traces and daslang call stacks when a crash occurs during script execution. Enabled by default on Windows (SEH + `StackWalk64`) with POSIX signal fallback on Linux/macOS. See [`examples/crash/`](examples/crash/) for usage.
+
 ## MCP server (AI tool integration)
 
-An [MCP](https://modelcontextprotocol.io/) server in [`utils/mcp/`](utils/mcp/) exposes 19 compiler-backed tools to AI coding assistants (Claude Code, etc.): compilation diagnostics, type inspection, go-to-definition, find-references, AST dump, expression evaluation, parse-aware grep, and more.
+An [MCP](https://modelcontextprotocol.io/) server in [`utils/mcp/`](utils/mcp/) exposes 29 compiler-backed tools to AI coding assistants (Claude Code, etc.): compilation diagnostics, type inspection, go-to-definition, find-references, AST dump, AOT generation, expression evaluation, parse-aware grep, package management, and more.
 
 No extra build dependencies (stdio transport). See [`utils/mcp/README.md`](utils/mcp/README.md) for setup and configuration.
 
