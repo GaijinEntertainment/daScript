@@ -22,6 +22,8 @@
 //      (allows `implicit` parameters in named modules)
 //   7. test_module_failed — module_allowed blocking a require
 //      (strings_boost is blocked, compilation must fail)
+//   8. test_module_conflict — module name collision detection
+//      (two packages provide module "foo", compilation must fail)
 
 options gen2
 options multiple_contexts
@@ -140,6 +142,14 @@ def test_module_unsafe(t : T?) {
 def test_module_failed(t : T?) {
     let base = "{get_das_root()}/tests/module_tests/_modules/failed"
     t |> run("module_allowed blocks strings_boost — compilation must fail") @(t : T?) {
+        t |> success(run_module_test_expect_failure(base, "main.das"))
+    }
+}
+
+[test]
+def test_module_conflict(t : T?) {
+    let base = "{get_das_root()}/tests/module_tests/_modules/conflict"
+    t |> run("same module name from different packages — compilation must fail") @(t : T?) {
         t |> success(run_module_test_expect_failure(base, "main.das"))
     }
 }

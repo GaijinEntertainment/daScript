@@ -1,4 +1,5 @@
 options gen2
+options rtti
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
@@ -150,6 +151,38 @@ struct SearchResult {
     score : int       // lower = better match
 }
 
+struct PackageInfo {
+    name : string
+    url : string
+    description : string
+    author : string
+    license : string
+    tags : array<string>
+    modules : array<string>
+    min_sdk : string
+    latest_version : string
+    last_updated : string
+    has_native : bool
+    dependencies : array<string>
+}
+
+def private make_package_info(name : string; entry : IndexEntry) : PackageInfo {
+    return PackageInfo(
+        name = name,
+        url = entry.url,
+        description = entry.description,
+        author = entry.author,
+        license = entry.license,
+        tags := entry.tags,
+        modules := entry.modules,
+        min_sdk = entry.min_sdk,
+        latest_version = entry.latest_version,
+        last_updated = entry.last_updated,
+        has_native = entry.has_native,
+        dependencies := entry.dependencies
+    )
+}
+
 def private fuzzy_match(haystack, needle : string; max_distance : int = 2) : bool {
     if (find(to_lower(haystack), needle) >= 0) {
         return true
@@ -275,9 +308,12 @@ def private format_entry(name : string; entry : IndexEntry) {
     print("    {dim_str(install_cmd)}\n")
 }
 
-def cmd_search(root, query : string) {
+def cmd_search(root, query : string; json : bool = false) {
     var index : table<string; IndexEntry>
     if (!fetch_index(root, index)) {
+        if (json) {
+            print("[]\n")
+        }
         return
     }
     let q = to_lower(query)
@@ -295,6 +331,19 @@ def cmd_search(root, query : string) {
         }
         return a.name < b.name
     }
+    if (json) {
+        var infos : array<PackageInfo>
+        for (r in results) {
+            if (index |> key_exists(r.name)) {
+                unsafe {
+                    infos |> emplace(make_package_info(r.name, index[r.name]))
+                }
+            }
+        }
+        print(sprint_json(infos, false))
+        print("\n")
+        return
+    }
     for (r in results) {
         if (index |> key_exists(r.name)) {
             unsafe {
@@ -306,9 +355,12 @@ def cmd_search(root, query : string) {
     print("{length(results)} package(s) found\n")
 }
 
-def cmd_search_all(root : string) {
+def cmd_search_all(root : string; json : bool = false) {
     var index : table<string; IndexEntry>
     if (!fetch_index(root, index)) {
+        if (json) {
+            print("[]\n")
+        }
         return
     }
     // collect and sort by name
@@ -318,6 +370,19 @@ def cmd_search_all(root : string) {
     }
     sort(names) <| $(a, b : string) : bool {
         return a < b
+    }
+    if (json) {
+        var infos : array<PackageInfo>
+        for (name in names) {
+            if (index |> key_exists(name)) {
+                unsafe {
+                    infos |> emplace(make_package_info(name, index[name]))
+                }
+            }
+        }
+        print(sprint_json(infos, false))
+        print("\n")
+        return
     }
     for (name in names) {
         if (index |> key_exists(name)) {

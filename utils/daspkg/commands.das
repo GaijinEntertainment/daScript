@@ -25,6 +25,7 @@ struct ParsedArgs {
     command : string
     command_arg : string
     force : bool
+    json : bool
 }
 
 def parse_args(args : array<string>) : ParsedArgs {
@@ -46,6 +47,8 @@ def parse_args(args : array<string>) : ParsedArgs {
             use_tty_colors = true
         } elif (arg == "--no-color") {
             use_tty_colors = false
+        } elif (arg == "--json") {
+            result.json = true
         } elif (arg == "--verbose" || arg == "-v") {
             log_verbose_flag = true
         } elif (arg == "--root" && i + 1 < length(args)) {
@@ -61,14 +64,27 @@ def parse_args(args : array<string>) : ParsedArgs {
     return result
 }
 
-def cmd_list(root : string) {
+def cmd_list(root : string; json : bool = false) {
     var lf : LockFile
     if (!read_lock_file(root, lf)) {
-        print("No packages installed (no lock file found)\n")
+        if (json) {
+            print("[]\n")
+        } else {
+            print("No packages installed (no lock file found)\n")
+        }
         return
     }
     if (length(lf.packages) == 0) {
-        print("No packages installed\n")
+        if (json) {
+            print("[]\n")
+        } else {
+            print("No packages installed\n")
+        }
+        return
+    }
+    if (json) {
+        print(sprint_json(lf.packages, false))
+        print("\n")
         return
     }
     print("Installed packages:\n")
@@ -717,25 +733,50 @@ def try_build_package(pkg_dir, name : string) {
     }
 }
 
-def cmd_check(root : string) {
+struct CheckResult {
+    name : string
+    status : string
+    message : string
+}
+
+def cmd_check(root : string; json : bool = false) {
     var lf : LockFile
     if (!read_lock_file(root, lf)) {
-        print("No packages installed\n")
+        if (json) {
+            print("[]\n")
+        } else {
+            print("No packages installed\n")
+        }
         return
     }
+    var results : array<CheckResult>
     var ok = true
     for (entry in lf.packages) {
         let pkg_dir = "{root}/modules/{entry.name}"
         if (!fexist(pkg_dir)) {
-            print("  MISSING: {entry.name} (directory not found)\n")
+            results |> emplace(CheckResult(name = entry.name, status = "missing", message = "directory not found"))
             ok = false
             continue
         }
         let has_module = fexist("{pkg_dir}/.das_module")
         if (!has_module) {
-            print("  WARNING: {entry.name} has no .das_module\n")
+            results |> emplace(CheckResult(name = entry.name, status = "warning", message = "no .das_module"))
         } else {
-            print("  OK: {entry.name}\n")
+            results |> emplace(CheckResult(name = entry.name, status = "ok", message = ""))
+        }
+    }
+    if (json) {
+        print(sprint_json(results, false))
+        print("\n")
+        return
+    }
+    for (r in results) {
+        if (r.status == "ok") {
+            print("  OK: {r.name}\n")
+        } elif (r.status == "missing") {
+            print("  MISSING: {r.name} ({r.message})\n")
+        } else {
+            print("  WARNING: {r.name} {r.message}\n")
         }
     }
     if (ok) {

@@ -1027,6 +1027,10 @@ if (NOT ${DAS_TOOLS_DISABLED})
         ${PROJECT_SOURCE_DIR}/dastest/README.md
         DESTINATION ${DAS_INSTALL_DASTESTDIR}
     )
+    install(DIRECTORY ${PROJECT_SOURCE_DIR}/dastest/tests/
+        DESTINATION ${DAS_INSTALL_DASTESTDIR}/tests
+        FILES_MATCHING PATTERN "*.das"
+    )
 
     add_executable(das-fmt ${PROJECT_SOURCE_DIR}/utils/dasFormatter/main.cpp)
     TARGET_LINK_LIBRARIES(das-fmt libDaScript ${SRC_LIBRARIES} ${DAS_MODULES_LIBS})
@@ -1307,6 +1311,11 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/mcp/tests/
     FILES_MATCHING PATTERN "*.das"
 )
 
+# Install benchctl (benchmark analysis)
+file(GLOB DAS_BENCHCTL_FILES ${PROJECT_SOURCE_DIR}/utils/benchctl/*.das)
+install(FILES ${DAS_BENCHCTL_FILES} DESTINATION utils/benchctl)
+install(FILES ${PROJECT_SOURCE_DIR}/utils/benchctl/README.md DESTINATION utils/benchctl)
+
 # Install daspkg (package manager)
 file(GLOB DAS_DASPKG_FILES ${PROJECT_SOURCE_DIR}/utils/daspkg/*.das)
 install(FILES ${DAS_DASPKG_FILES} DESTINATION utils/daspkg)
@@ -1493,6 +1502,20 @@ if(NOT ${DAS_TREE_SITTER_DISABLED})
     else()
         target_compile_options(tree_sitter_daslang PRIVATE -Wall -Wextra -Wno-unused-parameter)
     endif()
+    # Copy platform-specific sgconfig.yml to project root for ast-grep
+    if(WIN32)
+        set(SGCONFIG_TEMPLATE "${PROJECT_SOURCE_DIR}/sgconfig.yml.windows")
+    elseif(APPLE)
+        set(SGCONFIG_TEMPLATE "${PROJECT_SOURCE_DIR}/sgconfig.yml.osx")
+    else()
+        set(SGCONFIG_TEMPLATE "${PROJECT_SOURCE_DIR}/sgconfig.yml.linux")
+    endif()
+    add_custom_command(TARGET tree_sitter_daslang POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${SGCONFIG_TEMPLATE}"
+            "${PROJECT_SOURCE_DIR}/sgconfig.yml"
+        COMMENT "Copying sgconfig.yml for ast-grep (from ${SGCONFIG_TEMPLATE})"
+    )
     install(TARGETS tree_sitter_daslang
         RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
         LIBRARY DESTINATION ${DAS_INSTALL_LIBDIR}
@@ -1512,13 +1535,8 @@ if(NOT ${DAS_TREE_SITTER_DISABLED})
         tree-sitter-daslang/queries/highlights.scm
         DESTINATION tree-sitter-daslang/queries
     )
-    # ast-grep config templates (used by grep_usage and outline MCP tools)
-    install(FILES
-        ${PROJECT_SOURCE_DIR}/sgconfig.yml.windows
-        ${PROJECT_SOURCE_DIR}/sgconfig.yml.linux
-        ${PROJECT_SOURCE_DIR}/sgconfig.yml.osx
-        DESTINATION ${DAS_INSTALL_DOCDIR}
-    )
+    # Install platform-specific sgconfig.yml for ast-grep (used by grep_usage and outline MCP tools)
+    install(FILES "${SGCONFIG_TEMPLATE}" DESTINATION . RENAME sgconfig.yml)
     install(FILES
         tree-sitter-daslang/outline_rules.yml
         DESTINATION tree-sitter-daslang

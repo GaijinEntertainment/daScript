@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options rtti
 
 require fio
 require strings
@@ -23,8 +24,22 @@ struct FileTiming {
     dt : int     // microseconds
 }
 
+struct JsonTestReport {
+    file : string
+    total : int
+    passed : int
+    failed : int
+    errors : int
+    skipped : int
+    success : bool
+    time_usec : int
+    tests : array<SuiteTestResult>
+}
+
 var private fileTimings : array<FileTiming>
 var private timingOutliers : int = 0
+var private jsonFilePath : string
+var private jsonTestFile : string
 
 
 def private collect_input_paths(args : array<string>; var paths : array<string>) {
@@ -161,6 +176,22 @@ def main() {
     }
 
     timingOutliers = args |> get_int_arg("--timing-outliers", 0)
+    jsonFilePath = args |> get_str_arg("--json-file", "")
+    if (!empty(jsonFilePath)) {
+        suite::clear_test_results()
+        if (length(files) == 1) {
+            jsonTestFile = files[0]
+        } else {
+            jsonTestFile = build_string() <| $(var w) {
+                for (p, pi in inputPaths, range(length(inputPaths))) {
+                    if (pi > 0) {
+                        write(w, ",")
+                    }
+                    write(w, p)
+                }
+            }
+        }
+    }
 
     let isolatedMode = args |> has_value("--isolated-mode")
     var ctx <- SuiteCtx(args)
@@ -354,6 +385,24 @@ def finish_tests(res : SuiteResult; start_time : int64) {
         log::green("SUCCESS! {time_dt_hr(totalDt)}")
     } else {
         log::red("FAILED! {time_dt_hr(totalDt)}")
+    }
+    if (!empty(jsonFilePath)) {
+        var report = JsonTestReport(
+            file = jsonTestFile,
+            total = res.total,
+            passed = res.passed,
+            failed = res.failed,
+            errors = res.errors,
+            skipped = res.skipped,
+            success = resCode == 0,
+            time_usec = totalDt,
+            tests <- suite::test_results
+        )
+        fopen(jsonFilePath, "wb") <| $(f) {
+            if (f != null) {
+                fwrite(f, sprint_json(report, false))
+            }
+        }
     }
     unsafe {
         fio::exit(resCode)

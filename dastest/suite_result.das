@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options rtti
 
 module suite_result shared
 
@@ -11,6 +12,13 @@ struct SuiteResult {
     errors : int// compile, runtime error
     total : int// total number of tests
     skipped : int// number of skipped tests
+}
+
+struct SuiteTestResult {
+    name : string
+    passed : bool
+    skipped : bool
+    @rename = "time" time_usec : int  // microseconds
 }
 
 

@@ -17,6 +17,11 @@ require log
 require testing
 require suite_result public
 
+var test_results : array<SuiteTestResult>
+
+def clear_test_results() {
+    delete test_results
+}
 
 struct SuiteCtx {
     // Shared options.
@@ -488,6 +493,13 @@ def private test_any(name : string; func; args_num : int; var context : FileCtx;
     } else {
         log::green("{context.indenting}--- PASS '{name}' {time_dt_hr(dt)}")
     }
+
+    test_results |> emplace(SuiteTestResult(
+        name = clone_string(name),
+        passed = !failed && !skipped,
+        skipped = skipped,
+        time_usec = dt
+    ))
 }
 
 def private run_queued_benchmarks(var suite_ctx : SuiteCtx; var file_ctx : FileCtx, var res : SuiteResult&) {

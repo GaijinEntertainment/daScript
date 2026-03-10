@@ -1,8 +1,21 @@
 options gen2
+options rtti
 options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
 require common public
+require daslib/json_boost
+
+struct RequireEntry {
+    name : string
+    is_public : bool
+    source : string  // "builtin" or file path
+}
+
+struct RequiresResult {
+    direct : array<RequireEntry>
+    transitive : array<RequireEntry>
+}
 
 def module_kind(mod : Module?) : string {
     if (mod == null) {
@@ -14,26 +27,31 @@ def module_kind(mod : Module?) : string {
     return "builtin"
 }
 
-def do_list_requires(file : string; project : string = "") : string {
+def do_list_requires(file : string; project : string = ""; json : bool = false) : string {
     return compile_program(file, true, false, project) <| $(program; issues) {
         // direct requires from allRequireDecl
-        var direct : array<string>
+        var direct_text : array<string>
+        var direct_entries : array<RequireEntry>
         var direct_modules : array<string>
         for_each_require_declaration(program) <| $(var mod : Module?; mod_name : string#; mod_file : string#; var is_public : bool; at : LineInfo&) {
-            let pub_marker = is_public ? " public" : ""
-            let source = "  // {module_kind(mod)}"
-            direct |> push("  require {mod_name}{pub_marker}{source}")
+            let kind = module_kind(mod)
+            if (!json) {
+                let pub_marker = is_public ? " public" : ""
+                direct_text |> push("  require {mod_name}{pub_marker}  // {kind}")
+            } else {
+                direct_entries |> emplace(RequireEntry(name = string(mod_name), is_public = is_public, source = kind))
+            }
             direct_modules |> push(string(mod_name))
         }
         // transitive: walk dependencies of the main module, skip "$" (always implicit)
-        var transitive : array<string>
+        var transitive_text : array<string>
+        var transitive_entries : array<RequireEntry>
         let thisMod = get_this_module(program)
         var visited : table<string; bool>
         for (dm in direct_modules) {
             visited |> insert(dm, true)
         }
         visited |> insert("$", true)
-        // collect deps from each direct dependency recursively
         var queue : array<Module?>
         module_for_each_dependency(thisMod) <| $(var dep : Module?; var is_pub : bool) {
             let dep_name = string(dep.name)
@@ -47,7 +65,12 @@ def do_list_requires(file : string; project : string = "") : string {
             let mod = queue[idx]
             idx++
             let mod_name = string(mod.name)
-            transitive |> push("  {mod_name}  // {module_kind(mod)}")
+            let kind = module_kind(mod)
+            if (!json) {
+                transitive_text |> push("  {mod_name}  // {kind}")
+            } else {
+                transitive_entries |> emplace(RequireEntry(name = mod_name, source = kind))
+            }
             module_for_each_dependency(mod) <| $(var dep : Module?; var is_pub : bool) {
                 let dep_name = string(dep.name)
                 if (!key_exists(visited, dep_name)) {
@@ -56,24 +79,31 @@ def do_list_requires(file : string; project : string = "") : string {
                 }
             }
         }
-        sort(transitive)
+        if (json) {
+            sort(transitive_entries) <| $(a, b : RequireEntry) {
+                return a.name < b.name
+            }
+            var result = RequiresResult(direct <- direct_entries, transitive <- transitive_entries)
+            return sprint_json(result, false)
+        }
+        sort(transitive_text)
         return build_string() <| $(var w) {
-            if (!empty(direct)) {
+            if (!empty(direct_text)) {
                 write(w, "Direct requires:\n")
-                for (d in direct) {
+                for (d in direct_text) {
                     write(w, "{d}\n")
                 }
             }
-            if (!empty(transitive)) {
-                if (!empty(direct)) {
+            if (!empty(transitive_text)) {
+                if (!empty(direct_text)) {
                     write(w, "\n")
                 }
-                write(w, "Transitive dependencies ({length(transitive)}):\n")
-                for (t in transitive) {
+                write(w, "Transitive dependencies ({length(transitive_text)}):\n")
+                for (t in transitive_text) {
                     write(w, "{t}\n")
                 }
             }
-            if (empty(direct) && empty(transitive)) {
+            if (empty(direct_text) && empty(transitive_text)) {
                 write(w, "No requires found.\n")
             }
         }

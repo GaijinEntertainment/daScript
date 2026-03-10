@@ -39,6 +39,7 @@ def print_usage() {
     print("  --color         Enable colored output\n")
     print("  --no-color      Disable colored output\n")
     print("  --verbose, -v   Print detailed progress\n")
+    print("  --json          Machine-readable JSON output (list, check, search)\n")
 }
 
 [export]
@@ -56,7 +57,7 @@ def main() {
     let command = parsed.command
 
     if (command == "list") {
-        cmd_list(root)
+        cmd_list(root, parsed.json)
     } elif (command == "install") {
         if (empty(parsed.command_arg)) {
             cmd_install_all(root, parsed.force)
@@ -84,14 +85,14 @@ def main() {
     } elif (command == "build") {
         cmd_build(root)
     } elif (command == "check") {
-        cmd_check(root)
+        cmd_check(root, parsed.json)
     } elif (command == "doctor") {
         cmd_doctor()
     } elif (command == "search") {
         if (empty(parsed.command_arg)) {
-            cmd_search_all(root)
+            cmd_search_all(root, parsed.json)
         } else {
-            cmd_search(root, parsed.command_arg)
+            cmd_search(root, parsed.command_arg, parsed.json)
         }
     } elif (command == "update-index") {
         cmd_update_index(root)
