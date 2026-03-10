@@ -1,4 +1,5 @@
 options gen2
+options no_coverage
 // options log=true,log_infer_passes=false,log_optimization_passes=true,optimize=true
 
 expect 40100

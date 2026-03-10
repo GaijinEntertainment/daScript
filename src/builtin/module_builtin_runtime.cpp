@@ -1433,6 +1433,13 @@ namespace das
         arr = g_CommandLineArguments;
     }
 
+    void withCommandLineArguments( const Array & arr, const TBlock<void> & body, Context * context, LineInfoArg * at ) {
+        auto prev = g_CommandLineArguments;
+        g_CommandLineArguments = arr;
+        context->invoke(body, nullptr, nullptr, at);
+        g_CommandLineArguments = prev;
+    }
+
     char * builtin_das_root ( Context * context, LineInfoArg * at ) {
         return context->allocateString(getDasRoot(), at);
     }
@@ -1712,6 +1719,9 @@ namespace das
         addExtern<DAS_BIND_FUN(getCommandLineArguments)>(*this, lib, "builtin_get_command_line_arguments",
             SideEffects::accessExternal,"getCommandLineArguments")
                 ->arg("arguments");
+        addExtern<DAS_BIND_FUN(withCommandLineArguments)>(*this, lib,  "with_argv",
+            SideEffects::invoke, "withArgv")
+                ->args({"new_arguments", "block","context","line"});
         // compile-time functions
         addExtern<DAS_BIND_FUN(is_compiling)>(*this, lib, "is_compiling",
             SideEffects::accessExternal, "is_compiling");

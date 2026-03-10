@@ -49,7 +49,6 @@ static CodeOfPolicies getPolicies() {
     CodeOfPolicies policies;
     policies.aot = aotEnabled;
     policies.aot_module = true;
-    policies.aot_module_path = "";
     if (aotMacros) {
         policies.aot_macros = true;
         policies.export_all = true; // need it for aot to export macros
@@ -307,7 +306,7 @@ int das_aot_main ( int argc, char * argv[] ) {
     #endif
     Module::Initialize();
     daScriptEnvironment::getBound()->g_isInAot = true;
-    bool compiled = false;
+    bool compiled = true;
     if ( standaloneContext ) {
         StandaloneContextCfg cfg = {standaloneContextName, standaloneClassName ? standaloneClassName : "StandaloneContext"};
         cfg.cross_platform = cross_platform;
@@ -350,7 +349,7 @@ int das_aot_main ( int argc, char * argv[] ) {
                 if (!is_ok && !quiet) {
                     tout << "Failed to compile `" << string(in_file) << "` in aot.\n";
                 }
-                compiled |= is_ok;
+                compiled &= is_ok;
             }
         } else {
             size_t id = 2;
@@ -360,7 +359,7 @@ int das_aot_main ( int argc, char * argv[] ) {
                 if (!is_ok && !quiet) {
                     tout << "Failed to compile `" << out << "` in aot.\n";
                 }
-                compiled |= is_ok;
+                compiled &= is_ok;
                 id += 2;
             }
         }
@@ -380,10 +379,10 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
     CodeOfPolicies policies;
     if ( debuggerRequired ) {
         policies.debugger = true;
-        policies.debug_module = getDasRoot() + "/daslib/debug.das";
+        access->addExtraModule("debug", getDasRoot() + "/daslib/debug.das");
     } else if ( profilerRequired ) {
         policies.profiler = true;
-        policies.profile_module = getDasRoot() + "/daslib/profiler.das";
+        access->addExtraModule("profiler", getDasRoot() + "/daslib/profiler.das");
     } /*else*/ if ( jitEnabled != JitMode::None ) {
         policies.jit_enabled = true;
         switch (jitEnabled) {
@@ -392,13 +391,13 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
             case JitMode::Direct: break;
             default: break;
         }
-        policies.jit_module = getDasRoot() + "/daslib/just_in_time.das";
+        access->addExtraModule("just_in_time", getDasRoot() + "/daslib/just_in_time.das");
         policies.jit_output_path = jitOutPath;
         policies.dll_search_paths.emplace_back(getDasRoot() + "/lib");
     } else if (aotEnabled) {
         policies.aot = false;
         policies.aot_module = true;
-        policies.aot_module_path = getDasRoot() + "/daslib/aot_macro.das";
+        access->addExtraModule("ast_aot_macro", getDasRoot() + "/daslib/aot_macro.das");
         policies.aot_result = aotResult;
         daScriptEnvironment::getBound()->g_isInAot = true;
     }

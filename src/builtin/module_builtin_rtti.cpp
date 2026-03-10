@@ -789,15 +789,12 @@ namespace das {
         // debugger
             addField<DAS_BIND_MANAGED_FIELD(debugger)>("debugger");
             addField<DAS_BIND_MANAGED_FIELD(debug_infer_flag)>("debug_infer_flag");
-            addField<DAS_BIND_MANAGED_FIELD(debug_module)>("debug_module");
         // profiler
             addField<DAS_BIND_MANAGED_FIELD(profiler)>("profiler");
-            addField<DAS_BIND_MANAGED_FIELD(profile_module)>("profile_module");
         // threadlock context
             addField<DAS_BIND_MANAGED_FIELD(threadlock_context)>("threadlock_context");
         // jit
             addField<DAS_BIND_MANAGED_FIELD(jit_enabled)>("jit_enabled");
-            addField<DAS_BIND_MANAGED_FIELD(jit_module)>("jit_module");
             addField<DAS_BIND_MANAGED_FIELD(jit_jit_all_functions)>("jit_jit_all_functions");
             addField<DAS_BIND_MANAGED_FIELD(jit_debug_info)>("jit_debug_info");
             addField<DAS_BIND_MANAGED_FIELD(jit_opt_level)>("jit_opt_level");
@@ -1161,6 +1158,12 @@ namespace das {
         if ( !mod ) return false;
         if ( !path ) return false;
         return access->addFsRoot(mod, path);
+    }
+
+    void rtti_add_extra_module ( smart_ptr_raw<FileAccess> access, const char * modName, const char * modFile, Context * context, LineInfoArg * at ) {
+        if ( !modName ) context->throw_error_at(at, "expecting module name");
+        if ( !modFile ) context->throw_error_at(at, "expecting module file path");
+        access->addExtraModule(modName, modFile);
     }
 
 
@@ -1573,6 +1576,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(rtti_add_file_access_root)>(*this, lib, "add_file_access_root",
                 SideEffects::modifyExternal, "rtti_add_file_access_root")
                     ->args({"access","mod","path"});
+            addExtern<DAS_BIND_FUN(rtti_add_extra_module)>(*this, lib, "add_extra_module",
+                SideEffects::modifyExternal, "rtti_add_extra_module")
+                    ->args({"access","modName","modFile","context","line"});
             addExtern<DAS_BIND_FUN(rtti_builtin_program_for_each_module)>(*this, lib, "program_for_each_module",
                 SideEffects::modifyExternal, "rtti_builtin_program_for_each_module")
                     ->args({"program","block","context","line"});

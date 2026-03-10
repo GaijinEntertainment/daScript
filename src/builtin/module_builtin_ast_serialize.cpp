@@ -2220,9 +2220,7 @@ namespace das {
               << value.force_inscope_pod
               << value.log_inscope_pod
               << value.debugger
-              << value.debug_module
               << value.profiler
-              << value.profile_module
               << value.jit_enabled
               << value.jit_jit_all_functions
               << value.jit_debug_info

@@ -2,6 +2,7 @@ options gen2
 // options log=true
 // options log_infer_passes=true // log_nodes=false
 
+options no_coverage
 options persistent_heap = true
 
 require strings

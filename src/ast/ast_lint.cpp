@@ -940,6 +940,8 @@ namespace das {
         "heap_size_limit",              Type::tInt,
         "string_heap_size_limit",       Type::tInt,
         "gc",                           Type::tBool,
+    // coverage
+        "no_coverage",                   Type::tBool,
     // aot
         "no_aot",                       Type::tBool,
         "aot_prologue",                 Type::tBool,

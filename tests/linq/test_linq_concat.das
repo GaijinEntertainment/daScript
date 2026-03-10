@@ -40,6 +40,11 @@ def test_append(t : T?) {
         append_inplace(a, 5)
         t |> success(a.Equal([0, 1, 2, 3, 4, 5]))
     }
+    t |> run("append from array") @(t : T?) {
+        let arr = [for (x in 0..5); x]
+        var result = append(arr, 5)
+        t |> success(result.Equal([0, 1, 2, 3, 4, 5]))
+    }
 }
 
 [test]
@@ -74,6 +79,11 @@ def test_prepend(t : T?) {
         prepend_inplace(a, -1)
         t |> success(a.Equal([-1, 0, 1, 2, 3, 4]))
     }
+    t |> run("prepend from array") @(t : T?) {
+        let arr = [for (x in 0..5); x]
+        var result = prepend(arr, -1)
+        t |> success(result.Equal([-1, 0, 1, 2, 3, 4]))
+    }
 }
 
 [test]
@@ -107,5 +117,11 @@ def test_concat(t : T?) {
         var a = [for (x in 0..5); x]
         concat_inplace(a, [for (x in 5..10); x])
         t |> success(a.Equal([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]))
+    }
+    t |> run("concat from arrays") @(t : T?) {
+        let a = [for (x in 0..5); x]
+        let b = [for (x in 5..10); x]
+        var result = concat(a, b)
+        t |> success(result.Equal([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]))
     }
 }

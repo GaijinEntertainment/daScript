@@ -4,6 +4,8 @@
 options gen2
 expect 40209:2
 
+options no_coverage
+
 //options log_optimization_passes=true
 // options log=true
 

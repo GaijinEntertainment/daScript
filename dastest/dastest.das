@@ -203,6 +203,9 @@ def main() {
 
     let isolatedMode = args |> has_value("--isolated-mode")
     var ctx <- SuiteCtx(args)
+    if (!ctx.cov_path |> empty()) {
+        remove(ctx.cov_path)
+    }
     if (!isolatedMode) {
         for (file in files) {
             let uri = ctx.uriPaths ? file_name_to_uri(file) : file

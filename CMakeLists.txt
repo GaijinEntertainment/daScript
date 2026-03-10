@@ -100,8 +100,6 @@ MACRO(DAS_AOT_EXT input_files genList mainTarget dasAotTool dasAotToolArg)
     set(command_args "")
     list(LENGTH input_files num_files)
 
-    message(STATUS "DAS_AOT_EXT called on ${mainTarget} with files number: ${num_files}")
-
     foreach(input ${input_files})
         get_filename_component(input_src ${input} ABSOLUTE)
         get_filename_component(input_dir ${input_src} DIRECTORY)
