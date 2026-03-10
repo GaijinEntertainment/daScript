@@ -1,1 +1,0 @@
-Creates new entity ID.
