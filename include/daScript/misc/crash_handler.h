@@ -42,6 +42,27 @@ namespace das {
 
 #define DAS_CRASH_HANDLER_MAX_STACK_FRAMES 64
 
+    struct CrashFrame {
+        uint64_t     frameRbp;      // frame pointer (RBP/FP)
+        uint64_t     frameRsp;      // stack pointer (RSP/SP)
+    };
+
+    // Per-frame filter: returns true if this symbol name is "interesting"
+    // (e.g. contains "SimNode"). Only matching frames are collected.
+    typedef bool (*CrashHandlerFrameFilterFunc)(const char * symbolName);
+
+    // Called after C++ stack trace is printed, with collected interesting frames.
+    typedef void (*CrashHandlerExtraInfoFunc)(CrashFrame * frames, int frameCount);
+
+    inline CrashHandlerFrameFilterFunc g_crash_handler_frame_filter = nullptr;
+    inline CrashHandlerExtraInfoFunc g_crash_handler_extra_info = nullptr;
+
+    inline void set_crash_handler_extra_info(CrashHandlerFrameFilterFunc filter,
+                                             CrashHandlerExtraInfoFunc callback) {
+        g_crash_handler_frame_filter = filter;
+        g_crash_handler_extra_info = callback;
+    }
+
 #if !DAS_CRASH_HANDLER_PLATFORM_SUPPORTED
 
     inline void install_crash_handler() {}
@@ -85,6 +106,9 @@ namespace das {
         IMAGEHLP_LINE64 line = {};
         line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
 
+        CrashFrame collectedFrames[DAS_CRASH_HANDLER_MAX_STACK_FRAMES];
+        int frameCount = 0;
+
         fprintf(stderr, "Stack trace:\n");
         for (int i = 0; i < DAS_CRASH_HANDLER_MAX_STACK_FRAMES; i++) {
             if (!StackWalk64(machineType, process, thread, &frame, ctx, NULL,
@@ -94,19 +118,32 @@ namespace das {
                 break;
             DWORD64 displacement64 = 0;
             DWORD displacement32 = 0;
+            const char * symName = nullptr;
             if (SymFromAddr(process, frame.AddrPC.Offset, &displacement64, symbol)) {
+                symName = symbol->Name;
                 if (SymGetLineFromAddr64(process, frame.AddrPC.Offset, &displacement32, &line)) {
-                    fprintf(stderr, "  [%2d] %s + 0x%llx (%s:%lu)\n", i, symbol->Name,
+                    fprintf(stderr, "  [%2d] %s + 0x%llx (%s:%lu)\n", i, symName,
                             (unsigned long long)displacement64, line.FileName, line.LineNumber);
                 } else {
-                    fprintf(stderr, "  [%2d] %s + 0x%llx\n", i, symbol->Name,
+                    fprintf(stderr, "  [%2d] %s + 0x%llx\n", i, symName,
                             (unsigned long long)displacement64);
                 }
             } else {
                 fprintf(stderr, "  [%2d] 0x%llx\n", i, (unsigned long long)frame.AddrPC.Offset);
             }
+            // Ask the filter if this frame is interesting
+            if (g_crash_handler_frame_filter && symName
+                    && g_crash_handler_frame_filter(symName)
+                    && frameCount < DAS_CRASH_HANDLER_MAX_STACK_FRAMES) {
+                collectedFrames[frameCount].frameRbp = frame.AddrFrame.Offset;
+                collectedFrames[frameCount].frameRsp = frame.AddrStack.Offset;
+                frameCount++;
+            }
         }
         SymCleanup(process);
+        if (g_crash_handler_extra_info && frameCount > 0) {
+            g_crash_handler_extra_info(collectedFrames, frameCount);
+        }
     }
 
     inline const char * exception_code_to_string(DWORD code) {
@@ -126,8 +163,39 @@ namespace das {
         }
     }
 
+    inline bool is_fatal_exception(DWORD code) {
+        switch (code) {
+            case EXCEPTION_ACCESS_VIOLATION:
+            case EXCEPTION_STACK_OVERFLOW:
+            case EXCEPTION_INT_DIVIDE_BY_ZERO:
+            case EXCEPTION_ILLEGAL_INSTRUCTION:
+            case EXCEPTION_FLT_DIVIDE_BY_ZERO:
+            case EXCEPTION_FLT_OVERFLOW:
+            case EXCEPTION_FLT_UNDERFLOW:
+            case EXCEPTION_ARRAY_BOUNDS_EXCEEDED:
+            case EXCEPTION_DATATYPE_MISALIGNMENT:
+            case EXCEPTION_IN_PAGE_ERROR:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     inline LONG WINAPI crash_handler_callback(EXCEPTION_POINTERS *ep) {
         DWORD code = ep->ExceptionRecord->ExceptionCode;
+        if (!is_fatal_exception(code))
+            return EXCEPTION_CONTINUE_SEARCH;
+        static volatile long in_handler = 0;
+        if (InterlockedExchange(&in_handler, 1)) {
+            _exit(3);
+        }
+        if (code == EXCEPTION_STACK_OVERFLOW) {
+            // Stack overflow — minimal output, no stack trace (stack is blown)
+            static const char msg[] = "\nCRASH: EXCEPTION_STACK_OVERFLOW (0xC00000FD)\n"
+                                      "  (stack overflow — stack trace unavailable)\n";
+            WriteFile(GetStdHandle(STD_ERROR_HANDLE), msg, sizeof(msg) - 1, NULL, NULL);
+            _exit(3);
+        }
         fprintf(stderr, "\nCRASH: %s (0x%08lX) at address 0x%llx\n",
                 exception_code_to_string(code), (unsigned long)code,
                 (unsigned long long)ep->ExceptionRecord->ExceptionAddress);
@@ -138,10 +206,15 @@ namespace das {
         }
         print_stack_trace(ep->ContextRecord);
         fflush(stderr);
-        return EXCEPTION_EXECUTE_HANDLER;
+        _exit(3);
+        return EXCEPTION_EXECUTE_HANDLER;  // unreachable
     }
 
     inline void install_crash_handler() {
+        // Suppress Windows Error Reporting dialog on crash
+        SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+        ULONG stackGuarantee = 32 * 1024;
+        SetThreadStackGuarantee(&stackGuarantee);
         SetUnhandledExceptionFilter(crash_handler_callback);
     }
 
@@ -220,5 +293,9 @@ namespace das {
 #endif
 
 #undef DAS_CRASH_HANDLER_MAX_STACK_FRAMES
+
+    // Das-aware crash handler: installs SEH/signal handler + das stack walk callback.
+    // Defined in project_specific_crash_handler.cpp.
+    DAS_API void install_das_crash_handler();
 
 } // namespace das

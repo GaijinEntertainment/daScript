@@ -331,6 +331,8 @@ namespace das
             uint32_t stackSize = 0;
         };
 
+        static constexpr uint32_t CONTEXT_MAGIC = 0xDA514C09;  // "das" + "ctx" + version
+        uint32_t context_magic = CONTEXT_MAGIC;
         Context(uint32_t stackSize = 16*1024, bool ph = false);
         Context(const Context &, uint32_t category_);
         Context(const Context & ctx, const CopyOptions & opts);

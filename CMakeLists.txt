@@ -729,6 +729,7 @@ include/daScript/misc/performance_time.h
 src/hal/debug_break.cpp
 src/hal/project_specific.cpp
 src/hal/project_specific_file_info.cpp
+src/hal/project_specific_crash_handler.cpp
 include/daScript/misc/crash_handler.h
 include/daScript/misc/network.h
 src/misc/network.cpp
@@ -958,6 +959,7 @@ SET(DAS_DASCRIPT_MAIN_SRC
 # Tests
 if (NOT ${DAS_TESTS_DISABLED})
     include(examples/pathTracer/CMakeLists.txt)
+    include(examples/crash/CMakeLists.txt)
     if(NOT ${DAS_AOT_EXAMPLES_DISABLED} AND NOT WIN32)
         include(tests/aot/CMakeLists.txt)
     endif()
