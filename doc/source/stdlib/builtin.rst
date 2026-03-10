@@ -3348,3 +3348,18 @@ Notifies the compiler that ahead-of-time code generation is now in progress.
 
 
 
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-builtin_with_argv_array_ls_anything_gr__block_ls__c_void_gr_:
+
+.. das:function:: with_argv(new_arguments: array<anything>; block: block<():void>)
+
+Sets ``argc``, ``argv`` to first argument, for the ``body`` block. 
+
+:Arguments: * **new_arguments** : array implicit
+
+            * **block** : block<void> implicit
+
+

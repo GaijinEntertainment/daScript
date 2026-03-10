@@ -798,17 +798,11 @@ Handled structures
 
          * **debug_infer_flag** : bool - Enables debug inference flag.
 
-         * **debug_module** :  :ref:`das_string <handle-builtin-das_string>` - Sets debug module (module which will be loaded when IDE connects).
-
          * **profiler** : bool - Enables profiler support.
-
-         * **profile_module** :  :ref:`das_string <handle-builtin-das_string>` - Sets profile module (module which will be loaded when profiler connects).
 
          * **threadlock_context** : bool - Enables threadlock context.
 
          * **jit_enabled** : bool - JIT enabled - if enabled, JIT will be used to compile code at runtime.
-
-         * **jit_module** :  :ref:`das_string <handle-builtin-das_string>` - JIT module - module loaded when -jit is specified.
 
          * **jit_jit_all_functions** : bool - JIT all functions - if enabled, JIT will compile all functions in the module.
 
@@ -2777,5 +2771,23 @@ Iterates through each element of an RTTI container (e.g., ``AnnotationArguments`
 .. _function-rtti_each_EnumInfo_implicit__eq__eq_const:
 
 .. das:function:: each(info: EnumInfo implicit ==const) : iterator<EnumValueInfo&>
+
+
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-rtti_add_extra_module_smart_ptr_ls_FileAccess_gr__string_string:
+
+.. das:function:: add_extra_module(access: smart_ptr<FileAccess>; modName: string; modFile: string)
+
+Adds extra module to ``FileAccess``. All files compiled via this ``FileAccess`` will include this extra module.
+
+
+:Arguments: * **access** : smart_ptr< :ref:`FileAccess <handle-rtti-FileAccess>`> implicit
+
+            * **modName** : string implicit
+
+            * **modFile** : string implicit
 
 

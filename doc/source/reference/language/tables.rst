@@ -20,20 +20,43 @@ Tables are associative containers implemented as a set of key/value pairs:
         tab["some"] = 20  // replaces the value for 'some' key
     }
 
-Accessing a table element via the index operator is unsafe, because Daslang containers store unboxed values.
+Daslang containers store unboxed values, so table lookups via the index operator (``tab[key]``) can
+cause undefined behavior when the **same table** is referenced more than once in the **same expression**.
 Consider the following example:
 
 .. code-block:: das
 
-    tab["1"] = tab["2"]               // this potentially breaks the table
+    tab["1"] = tab["2"]               // ERROR: potential table lookup collision
 
-What happens is table may get resized either after tab["1"] or tab["2"] if either key is missing (similar to C++ STL hash_map).
+What happens is the table may get resized after either ``tab["1"]`` or ``tab["2"]`` if the key is missing
+(similar to C++ STL hash_map), invalidating the reference returned by the other lookup.
 
-It is possible to suppress this unsafe error via ``CodeOfPolicies``, or by using the following option:
+The compiler detects this and reports a ``table_lookup_collision`` lint error. The check catches any
+expression where the same table appears in two or more index operations that keep the result as a
+reference (assignments, moves, clones). Value lookups (where the result is immediately copied out)
+are safe and not flagged.
+
+Other dangerous patterns include:
 
 .. code-block:: das
 
-    options unsafe_table_lookup = false
+    tab[1] := tab[2]                  // ERROR: clone between two lookups
+    tab[1] <- tab[2]                  // ERROR: move between two lookups
+    foo.tab[1] = foo.tab[2]          // ERROR: same table via field access
+
+A single ``tab[key]`` in an expression is always safe. Multiple lookups of **different** tables in the
+same expression are also safe:
+
+.. code-block:: das
+
+    tab1[1] = tab2[2]                 // OK: different tables
+
+It is possible to make **all** table lookups unsafe (requiring an ``unsafe`` block) via ``CodeOfPolicies``
+or the following option:
+
+.. code-block:: das
+
+    options unsafe_table_lookup        // makes every tab[key] require unsafe
 
 Safe navigation of the table is safe, since it does not create missing keys:
 
