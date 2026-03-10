@@ -1,5 +1,13 @@
 options gen2
-expect 40216:6
+expect 40216:7
+
+def take_two_ret(var a : int&; var b : int&) : int {
+    return a + b
+}
+
+// collision: global variable init with two table ref lookups
+var g_tab : table<int; int> <- { 1 => 10, 2 => 20 }
+var g_val = take_two_ret(g_tab[1], g_tab[2])
 
 struct Foo {
     tab : table<int; int>
