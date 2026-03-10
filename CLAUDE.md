@@ -217,7 +217,11 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - `tutorials/language/` — Language tutorial `.das` files
 - `tutorials/integration/cpp/` — C++ integration tutorials
 - `modules/` — External plugin modules
-- `utils/mcp/` — MCP server for AI coding assistants (stdio transport, no extra deps)
+- `utils/mcp/` — MCP server for AI coding assistants (29 tools, stdio transport, no extra deps)
+- `utils/daspkg/` — Package manager (install, update, build, search packages)
+- `examples/daspkg/` — Package manager example projects
+- `examples/crash/` — Crash handler example (native + daslang stack traces)
+- `include/daScript/misc/crash_handler.h` — Crash handler with daslang stack walk support
 
 ## MCP Server (AI Tool Integration)
 
@@ -247,6 +251,15 @@ The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics and p
 | `describe_type` | Reading source to understand type fields, methods, and values |
 | `grep_usage` | Using built-in Grep tool to search for symbol names in `.das` files (parse-aware via ast-grep + tree-sitter — no false positives from comments/strings) |
 | `outline` | Manually scanning files for function/struct/enum declarations |
+| `aot` | Manually running AOT generation and extracting function C++ |
+| `daspkg_search` | Manually searching the daspkg package index |
+| `daspkg_info` | Manually looking up package metadata |
+| `daspkg_list` | Manually listing installed packages |
+| `daspkg_check` | Manually verifying installed packages |
+| `daspkg_install` | Installing packages via shell commands |
+| `daspkg_remove` | Removing packages via shell commands |
+| `daspkg_update` | Updating packages via shell commands |
+| `daspkg_upgrade` | Upgrading packages via shell commands |
 
 Cursor-based tools (`goto_definition`, `type_of`, `find_references`) support a `no_opt` parameter that disables compiler optimizations to preserve the full AST — useful when globals, enum values, or bitfield constants get constant-folded away.
 
