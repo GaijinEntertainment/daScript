@@ -563,7 +563,7 @@ namespace das {
 }
 
 int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
-    install_crash_handler();
+    install_das_crash_handler();
     bool isArgAot = false;
     if (argc > 1) {
         isArgAot = strcmp(argv[1],"-aot")==0;
