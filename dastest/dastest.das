@@ -155,6 +155,8 @@ def main() {
         return
     }
 
+    log::failuresOnly = args |> has_value("--failures-only")
+
     var res : SuiteResult
     let startTime = ref_time_ticks()
 

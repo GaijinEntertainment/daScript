@@ -395,7 +395,9 @@ def private sub_test_any_lambda(name : string; func : lambda; args_num : int; va
 
 
 def private test_any(name : string; func; args_num : int; var context : FileCtx; var res : SuiteResult&) {
-    log::info("{context.indenting}=== RUN '{name}'")
+    if (!log::failuresOnly) {
+        log::info("{context.indenting}=== RUN '{name}'")
+    }
     let beforeFailed = res.failed
     let beforeErrors = res.errors
     res.total += 1
