@@ -875,9 +875,11 @@ def test_generate_readme(t : T?) {
         t |> success(find(readme, "mypkg") >= 0)
         t |> success(find(readme, "## Packages by Tag") >= 0)
         t |> success(find(readme, "**ai**") >= 0)
+        t |> success(find(readme, "## Package Index") >= 0)
+        t |> success(find(readme, "| Package | Description | Install |") >= 0)
         t |> success(find(readme, "**Author:** bob") >= 0)
         t |> success(find(readme, "**License:** MIT") >= 0)
-        t |> success(find(readme, "daspkg install github.com/u/mypkg") >= 0)
+        t |> success(find(readme, "daspkg install mypkg") >= 0)
     }
     t |> run("empty index produces valid readme") @(t : T?) {
         let readme = generate_index_readme("[]")

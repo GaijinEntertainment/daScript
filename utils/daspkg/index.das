@@ -610,6 +610,19 @@ def generate_index_readme_from_index(index : table<string; IndexEntry>) : string
         writer |> write("# daspkg package index\n\n")
         writer |> write("Package registry for [daspkg](https://github.com/GaijinEntertainment/daScript), the daslang package manager.\n\n")
 
+        // package index table
+        writer |> write("## Package Index\n\n")
+        writer |> write("| Package | Description | Install |\n")
+        writer |> write("|---------|-------------|---------|\n")
+        for (name, entry in names, entries) {
+            var desc = entry.description
+            if (length(desc) > 60) {
+                desc = slice(desc, 0, 57) + "..."
+            }
+            writer |> write("| [{name}](#{name}) | {desc} | `daspkg install {name}` |\n")
+        }
+        writer |> write("\n")
+
         // packages by tag
         if (length(tag_to_pkgs) > 0) {
             writer |> write("## Packages by Tag\n\n")
@@ -656,7 +669,7 @@ def generate_index_readme_from_index(index : table<string; IndexEntry>) : string
             for (d in details) {
                 writer |> write("- {d}\n")
             }
-            writer |> write("- **Install:** `daspkg install {entry.url}`\n")
+            writer |> write("- **Install:** `daspkg install {name}`\n")
             writer |> write("- **URL:** [{entry.url}](https://{entry.url})\n")
             writer |> write("\n---\n\n")
         }
