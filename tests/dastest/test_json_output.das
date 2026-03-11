@@ -22,7 +22,7 @@ struct JsonReport {
 
 def run_dastest(fixture : string; extra_args : string = "") : JsonReport {
     let das_root = get_das_root()
-    let compiler = "{das_root}/bin/Release/daslang.exe"
+    let compiler = get_command_line_arguments()[0]
     let dastest_path = "{das_root}/dastest/dastest.das"
     let json_file = "{das_root}/tests/dastest/_temp_{fixture}.json"
     let test_file = "{das_root}/tests/dastest/_fixture_{fixture}.das"
