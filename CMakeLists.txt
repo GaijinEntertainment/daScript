@@ -14,7 +14,6 @@ option(DAS_CLANG_BIND_DISABLED "Disable dasClangBind (libclang bindings, C/C++ p
 option(DAS_LLVM_DISABLED "Disable dasLLVM (llvm bindings)" ON)
 option(DAS_HV_DISABLED "Disable dasHV (websokets,http server and client)" ON)
 option(DAS_GLFW_DISABLED "Disable dasGLFW (GLFW window for graphics apps)" OFF)
-option(DAS_IMGUI_DISABLED "Disable dasIMGUI (IMGUI, IMNODES, IMGUI-NODE-EDITOR gui libraries)" ON)
 option(DAS_MINFFT_DISABLED "Disable dasMinfft (Minimal FFT library)" ON)
 option(DAS_AUDIO_DISABLED "Disable dasAudio (Miniaudio sound library)" ON)
 option(DAS_STDDLG_DISABLED "Disable dasStdDlg (File new,open,save etc dialogs)" OFF)
@@ -1349,9 +1348,21 @@ install(FILES ${DAS_DEBUGAPI_EXAMPLES}
 
 file(GLOB DAS_GRAPHICS_EXAMPLES
     ${PROJECT_SOURCE_DIR}/examples/graphics/*.das
+    ${PROJECT_SOURCE_DIR}/examples/graphics/.das_package
+    ${PROJECT_SOURCE_DIR}/examples/graphics/README.md
 )
 install(FILES ${DAS_GRAPHICS_EXAMPLES}
     DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/graphics
+)
+
+# Install node-editor example
+file(GLOB DAS_NODE_EDITOR_EXAMPLES
+    ${PROJECT_SOURCE_DIR}/examples/node-editor/*.das
+    ${PROJECT_SOURCE_DIR}/examples/node-editor/.das_package
+    ${PROJECT_SOURCE_DIR}/examples/node-editor/README.md
+)
+install(FILES ${DAS_NODE_EDITOR_EXAMPLES}
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/node-editor
 )
 
 file(GLOB DAS_UNCATEGORIZED_EXAMPLES
@@ -1359,6 +1370,27 @@ file(GLOB DAS_UNCATEGORIZED_EXAMPLES
 )
 install(FILES ${DAS_UNCATEGORIZED_EXAMPLES}
     DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/uncategorized
+)
+
+# Install telegram example
+install(FILES
+    ${PROJECT_SOURCE_DIR}/examples/telegram/.das_package
+    ${PROJECT_SOURCE_DIR}/examples/telegram/README.md
+    ${PROJECT_SOURCE_DIR}/examples/telegram/echo_bot.das
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/telegram
+)
+
+# Install claude example
+install(FILES
+    ${PROJECT_SOURCE_DIR}/examples/claude/.das_package
+    ${PROJECT_SOURCE_DIR}/examples/claude/.gitignore
+    ${PROJECT_SOURCE_DIR}/examples/claude/daslang_helper_bot.das
+    ${PROJECT_SOURCE_DIR}/examples/claude/sandbox.das_project
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/claude
+)
+install(FILES
+    ${PROJECT_SOURCE_DIR}/examples/claude/examples/daslang_helper/system_prompt.md
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/claude/examples/daslang_helper
 )
 
 file(GLOB DAS_HV_EXAMPLES

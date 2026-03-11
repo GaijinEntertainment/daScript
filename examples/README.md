@@ -76,3 +76,73 @@ Start the server, open `http://localhost:9090` in a browser,
 and/or run `ws_chat_client.das` in a terminal — all clients share the
 same chat room. See `examples/hv/README.md` for details.
 
+## daspkg/ — Package Manager Examples
+
+Example projects demonstrating the `daspkg` package manager. Each subdirectory
+is a self-contained project with a `.das_package` descriptor.
+
+| Directory | Description |
+|-----------|-------------|
+| `daspkg-example/` | Minimal project that installs a package from the index |
+| `daspkg-build-example/` | Project with a C++ build step (`cmake_build`) |
+| `daspkg-version-1/` | Package versioning — pinning to version 1.x |
+| `daspkg-version-2/` | Package versioning — pinning to version 2.x |
+| `packages/daspkg-example-c/` | Template for a daspkg package with C sources |
+| `packages/daspkg-example-cpp/` | Template for a daspkg package with C++ shared module |
+| `packages/daspkg-example-mixed/` | Template for a mixed daslang + C++ package |
+
+## telegram/ — Telegram Bot Example
+
+A Telegram echo bot using the `das-telegram` daspkg package. Requires setup:
+
+```
+cd examples/telegram
+daslang.exe ../../utils/daspkg/main.das -- install
+```
+
+| File | Description |
+|------|-------------|
+| `echo_bot.das` | Telegram echo bot — replies with the same message |
+
+## claude/ — Claude API Example
+
+A daslang helper bot using the `das-claude` daspkg package (Anthropic API bindings). Requires setup:
+
+```
+cd examples/claude
+daslang.exe ../../utils/daspkg/main.das -- install
+```
+
+| File | Description |
+|------|-------------|
+| `daslang_helper_bot.das` | Interactive Claude-powered daslang coding assistant |
+
+## graphics/ — ImGui Examples
+
+ImGui examples using the `dasImgui` daspkg package. Requires setup:
+
+```
+cd examples/graphics
+daslang.exe ../../utils/daspkg/main.das -- install
+daslang.exe -project_root . furier_opengl_imgui_example.das
+```
+
+| File | Description |
+|------|-------------|
+| `furier_opengl_imgui_example.das` | Fourier series visualization with ImGui controls |
+
+## node-editor/ — Node Editor Example
+
+[imgui-node-editor](https://github.com/thedmd/imgui-node-editor) example using
+`dasImguiNodeEditor` and `dasImgui` daspkg packages. Requires setup:
+
+```
+cd examples/node-editor
+daslang.exe ../../utils/daspkg/main.das -- install
+daslang.exe -project_root . imgui_node_editor_basic.das
+```
+
+| File | Description |
+|------|-------------|
+| `imgui_node_editor_basic.das` | Two linked nodes in a fullscreen node-editor canvas |
+

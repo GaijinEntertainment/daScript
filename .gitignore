@@ -53,5 +53,9 @@ utils/mcp/mcp_server.log
 # Emscripten SDK (local install)
 emsdk/
 
+# daspkg artifacts
+daspkg.lock
+examples/*/modules/
+
 # Claude Code (local settings)
 .claude/settings.json

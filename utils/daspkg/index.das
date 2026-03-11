@@ -27,7 +27,6 @@ struct IndexEntry {
     license : string
     tags : array<string>
     min_sdk : string
-    modules : array<string>
     latest_version : string
     last_updated : string
     has_native : bool
@@ -113,7 +112,6 @@ def parse_index_json(text : string; var index : table<string; IndexEntry>) : boo
                     latest_version = val?.latest_version ?? "",
                     last_updated = val?.last_updated ?? "",
                     tags <- parse_string_array(val, "tags"),
-                    modules <- parse_string_array(val, "modules"),
                     dependencies <- parse_string_array(val, "dependencies")
                 )
                 let native_val = val?["has_native"]
@@ -158,7 +156,6 @@ struct PackageInfo {
     author : string
     license : string
     tags : array<string>
-    modules : array<string>
     min_sdk : string
     latest_version : string
     last_updated : string
@@ -174,7 +171,6 @@ def private make_package_info(name : string; entry : IndexEntry) : PackageInfo {
         author = entry.author,
         license = entry.license,
         tags := entry.tags,
-        modules := entry.modules,
         min_sdk = entry.min_sdk,
         latest_version = entry.latest_version,
         last_updated = entry.last_updated,
@@ -226,15 +222,6 @@ def matches_entry(name : string; entry : IndexEntry; query : string) : int {
         }
         return 100
     }
-    if (starts_with(query, "module:")) {
-        let mod_q = to_lower(slice(query, 7))
-        for (m in entry.modules) {
-            if (fuzzy_match(m, mod_q)) {
-                return 0
-            }
-        }
-        return 100
-    }
     // general search across all fields
     var best = match_score(name, query)
     if (best == 0) {
@@ -246,12 +233,6 @@ def matches_entry(name : string; entry : IndexEntry; query : string) : int {
     }
     for (t in entry.tags) {
         let s = match_score(t, query)
-        if (s < best) {
-            best = s
-        }
-    }
-    for (m in entry.modules) {
-        let s = match_score(m, query)
         if (s < best) {
             best = s
         }
@@ -286,11 +267,8 @@ def private format_entry(name : string; entry : IndexEntry) {
     if (length(meta_parts) > 0) {
         print("    {join(meta_parts, " | ")}\n")
     }
-    // line 3: modules | tags | min-sdk
+    // line 3: tags | min-sdk
     var cat_parts : array<string>
-    if (length(entry.modules) > 0) {
-        cat_parts |> push_clone("modules: {cyan_str(join(entry.modules, ", "))}")
-    }
     if (length(entry.tags) > 0) {
         cat_parts |> push_clone("tags: {green_str(join(entry.tags, ", "))}")
     }
@@ -404,7 +382,6 @@ struct PackageManifest {
     license : string
     tags : array<string>
     min_sdk : string
-    modules : array<string>
     has_native : bool
     dependencies : array<string>
 }
@@ -436,8 +413,6 @@ def read_manifest(pkg_dir : string; var manifest : PackageManifest) : bool {
         print("Error: .das_package missing package_description()\n")
         return false
     }
-    // extract modules from .das_module
-    extract_modules(pkg_dir, manifest)
     // check build info
     var build_info : PackageBuildInfo
     if (run_das_package_build(das_package, build_info)) {
@@ -451,36 +426,6 @@ def read_manifest(pkg_dir : string; var manifest : PackageManifest) : bool {
         }
     }
     return true
-}
-
-def private extract_modules(pkg_dir : string; var manifest : PackageManifest) {
-    let das_module = "{pkg_dir}/.das_module"
-    if (!fexist(das_module)) {
-        return
-    }
-    // parse register_native_path calls from .das_module
-    let text = fread(das_module)
-    if (empty(text)) {
-        return
-    }
-    // simple text parsing: find register_native_path("name", ...) lines
-    var rest = text
-    while (true) {
-        let pos = find(rest, "register_native_path(\"")
-        if (pos < 0) {
-            break
-        }
-        let start = pos + length("register_native_path(\"")
-        let end_quote = find(rest, "\"", start)
-        if (end_quote < 0) {
-            break
-        }
-        let mod_name = slice(rest, start, end_quote)
-        if (!empty(mod_name)) {
-            manifest.modules |> push_clone(mod_name)
-        }
-        rest = slice(rest, end_quote + 1)
-    }
 }
 
 def get_git_remote_url(pkg_dir : string) : string {
@@ -534,15 +479,6 @@ def private entry_to_jv(name : string; entry : IndexEntry) : JsonValue? {
             (obj.value as _object)["min_sdk"] = JV(entry.min_sdk)
         }
     }
-    if (length(entry.modules) > 0) {
-        var arr : array<JsonValue?>
-        for (m in entry.modules) {
-            arr |> push(JV(m))
-        }
-        unsafe {
-            (obj.value as _object)["modules"] = JV(arr)
-        }
-    }
     if (!empty(entry.latest_version)) {
         unsafe {
             (obj.value as _object)["latest_version"] = JV(entry.latest_version)
@@ -580,9 +516,6 @@ def private manifest_to_entry(manifest : PackageManifest; url : string) : IndexE
     entry.has_native = manifest.has_native
     for (t in manifest.tags) {
         entry.tags |> push_clone(t)
-    }
-    for (m in manifest.modules) {
-        entry.modules |> push_clone(m)
     }
     for (d in manifest.dependencies) {
         entry.dependencies |> push_clone(d)
@@ -677,25 +610,18 @@ def generate_index_readme_from_index(index : table<string; IndexEntry>) : string
         writer |> write("# daspkg package index\n\n")
         writer |> write("Package registry for [daspkg](https://github.com/GaijinEntertainment/daScript), the daslang package manager.\n\n")
 
-        // module index
-        var has_modules = false
-        for (entry in entries) {
-            if (length(entry.modules) > 0) {
-                has_modules = true
-                break
+        // package index table
+        writer |> write("## Package Index\n\n")
+        writer |> write("| Package | Description | Install |\n")
+        writer |> write("|---------|-------------|---------|\n")
+        for (name, entry in names, entries) {
+            var desc = entry.description
+            if (length(desc) > 60) {
+                desc = slice(desc, 0, 57) + "..."
             }
+            writer |> write("| [{name}](#{name}) | {desc} | `daspkg install {name}` |\n")
         }
-        if (has_modules) {
-            writer |> write("## Module Index\n\n")
-            writer |> write("| Module | Package | Install |\n")
-            writer |> write("|--------|---------|--------|\n")
-            for (name, entry in names, entries) {
-                for (m in entry.modules) {
-                    writer |> write("| `{m}` | {name} | `daspkg install {entry.url}` |\n")
-                }
-            }
-            writer |> write("\n")
-        }
+        writer |> write("\n")
 
         // packages by tag
         if (length(tag_to_pkgs) > 0) {
@@ -722,10 +648,6 @@ def generate_index_readme_from_index(index : table<string; IndexEntry>) : string
             if (!empty(entry.license)) {
                 details |> push_clone("**License:** {entry.license}")
             }
-            if (length(entry.modules) > 0) {
-                let mods = join(entry.modules, "`, `")
-                details |> push_clone("**Modules:** `{mods}`")
-            }
             if (length(entry.tags) > 0) {
                 details |> push_clone("**Tags:** {join(entry.tags, ", ")}")
             }
@@ -747,7 +669,7 @@ def generate_index_readme_from_index(index : table<string; IndexEntry>) : string
             for (d in details) {
                 writer |> write("- {d}\n")
             }
-            writer |> write("- **Install:** `daspkg install {entry.url}`\n")
+            writer |> write("- **Install:** `daspkg install {name}`\n")
             writer |> write("- **URL:** [{entry.url}](https://{entry.url})\n")
             writer |> write("\n---\n\n")
         }
@@ -1026,12 +948,6 @@ def cmd_update_index(root : string) {
                     delete index[name].tags
                     for (t in manifest.tags) {
                         index[name].tags |> push_clone(t)
-                    }
-                }
-                if (length(manifest.modules) > 0) {
-                    delete index[name].modules
-                    for (m in manifest.modules) {
-                        index[name].modules |> push_clone(m)
                     }
                 }
                 index[name].has_native = manifest.has_native

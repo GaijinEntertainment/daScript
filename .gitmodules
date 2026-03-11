@@ -1,6 +1,3 @@
-[submodule "modules/dasImgui"]
-	path = modules/dasImgui
-	url = https://github.com/borisbat/dasImgui.git
 [submodule "modules/dasMinfft"]
 	path = modules/dasMinfft
 	url = https://github.com/imp5imp5/dasMinfft.git

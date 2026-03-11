@@ -730,7 +730,7 @@ def test_run_das_package_rich_meta(t : T?) {
 [test]
 def test_parse_index_json_rich(t : T?) {
     t |> run("parses all enriched fields") @(t : T?) {
-        let json_text = "[\{\"name\":\"mypkg\",\"url\":\"github.com/user/mypkg\",\"description\":\"desc\",\"author\":\"alice\",\"license\":\"MIT\",\"tags\":[\"ai\",\"http\"],\"min_sdk\":\"0.4\",\"modules\":[\"mypkg\"],\"latest_version\":\"v1.0\",\"last_updated\":\"2025-01-01\",\"has_native\":true,\"dependencies\":[\"dep-a\"]\}]"
+        let json_text = "[\{\"name\":\"mypkg\",\"url\":\"github.com/user/mypkg\",\"description\":\"desc\",\"author\":\"alice\",\"license\":\"MIT\",\"tags\":[\"ai\",\"http\"],\"min_sdk\":\"0.4\",\"latest_version\":\"v1.0\",\"last_updated\":\"2025-01-01\",\"has_native\":true,\"dependencies\":[\"dep-a\"]\}]"
         var index : table<string; IndexEntry>
         t |> success(parse_index_json(json_text, index))
         t |> success(index |> key_exists("mypkg"))
@@ -744,8 +744,6 @@ def test_parse_index_json_rich(t : T?) {
             t |> equal("ai", entry.tags[0])
             t |> equal("http", entry.tags[1])
             t |> equal("0.4", entry.min_sdk)
-            t |> equal(1, length(entry.modules))
-            t |> equal("mypkg", entry.modules[0])
             t |> equal("v1.0", entry.latest_version)
             t |> equal("2025-01-01", entry.last_updated)
             t |> success(entry.has_native)
@@ -763,7 +761,6 @@ def test_parse_index_json_rich(t : T?) {
             t |> success(empty(entry.license))
             t |> equal(0, length(entry.tags))
             t |> success(empty(entry.min_sdk))
-            t |> equal(0, length(entry.modules))
             t |> success(!entry.has_native)
         }
     }
@@ -774,7 +771,7 @@ def test_parse_index_json_rich(t : T?) {
 [test]
 def test_serialize_index_rich(t : T?) {
     t |> run("roundtrip preserves all fields") @(t : T?) {
-        let json_text = "[\{\"name\":\"pkg1\",\"url\":\"github.com/u/pkg1\",\"description\":\"first\",\"author\":\"bob\",\"license\":\"Apache-2.0\",\"tags\":[\"game\"],\"min_sdk\":\"0.3\",\"modules\":[\"mod_a\",\"mod_b\"],\"latest_version\":\"v2.0\",\"last_updated\":\"2025-06-01\",\"has_native\":true,\"dependencies\":[\"dep1\"]\}]"
+        let json_text = "[\{\"name\":\"pkg1\",\"url\":\"github.com/u/pkg1\",\"description\":\"first\",\"author\":\"bob\",\"license\":\"Apache-2.0\",\"tags\":[\"game\"],\"min_sdk\":\"0.3\",\"latest_version\":\"v2.0\",\"last_updated\":\"2025-06-01\",\"has_native\":true,\"dependencies\":[\"dep1\"]\}]"
         var index : table<string; IndexEntry>
         t |> success(parse_index_json(json_text, index))
         let serialized = serialize_index(index)
@@ -790,7 +787,6 @@ def test_serialize_index_rich(t : T?) {
             t |> equal(1, length(e.tags))
             t |> equal("game", e.tags[0])
             t |> equal("0.3", e.min_sdk)
-            t |> equal(2, length(e.modules))
             t |> equal("v2.0", e.latest_version)
             t |> equal("2025-06-01", e.last_updated)
             t |> success(e.has_native)
@@ -822,7 +818,6 @@ def test_add_to_index_json_rich(t : T?) {
         manifest.license = "MIT"
         manifest.tags |> push_clone("ai")
         manifest.min_sdk = "0.4"
-        manifest.modules |> push_clone("rich_mod")
         manifest.has_native = true
         manifest.dependencies |> push_clone("dep-x")
         let result = add_to_index_json_rich("[]", "rich", manifest, "github.com/alice/rich")
@@ -836,8 +831,6 @@ def test_add_to_index_json_rich(t : T?) {
             t |> equal(1, length(e.tags))
             t |> equal("ai", e.tags[0])
             t |> equal("0.4", e.min_sdk)
-            t |> equal(1, length(e.modules))
-            t |> equal("rich_mod", e.modules[0])
             t |> success(e.has_native)
             t |> equal(1, length(e.dependencies))
         }
@@ -850,7 +843,7 @@ def test_add_to_index_json_rich(t : T?) {
 def test_search_matches(t : T?) {
     t |> run("search scoring and filters") @(t : T?) {
         // build a small index
-        let json_text = "[\{\"name\":\"das-http\",\"url\":\"github.com/u/das-http\",\"description\":\"HTTP client\",\"author\":\"alice\",\"tags\":[\"networking\",\"http\"],\"modules\":[\"http_client\"]\},\{\"name\":\"das-imgui\",\"url\":\"github.com/u/das-imgui\",\"description\":\"ImGui bindings\",\"tags\":[\"gui\"],\"modules\":[\"imgui\"]\}]"
+        let json_text = "[\{\"name\":\"das-http\",\"url\":\"github.com/u/das-http\",\"description\":\"HTTP client\",\"author\":\"alice\",\"tags\":[\"networking\",\"http\"]\},\{\"name\":\"das-imgui\",\"url\":\"github.com/u/das-imgui\",\"description\":\"ImGui bindings\",\"tags\":[\"gui\"]\}]"
         var index : table<string; IndexEntry>
         parse_index_json(json_text, index)
         unsafe {
@@ -862,10 +855,6 @@ def test_search_matches(t : T?) {
             t |> success(matches_entry("das-http", index["das-http"], "tag:networking") < 100)
             // tag: filter — non-matching tag
             t |> equal(100, matches_entry("das-imgui", index["das-imgui"], "tag:networking"))
-            // module: filter — matching module
-            t |> success(matches_entry("das-imgui", index["das-imgui"], "module:imgui") < 100)
-            // module: filter — non-matching module
-            t |> equal(100, matches_entry("das-http", index["das-http"], "module:imgui"))
             // no match returns 100
             t |> equal(100, matches_entry("das-http", index["das-http"], "zzzzzzzzz"))
             // author match
@@ -878,29 +867,24 @@ def test_search_matches(t : T?) {
 
 [test]
 def test_generate_readme(t : T?) {
-    t |> run("generates markdown with modules and tags") @(t : T?) {
-        let json_text = "[\{\"name\":\"mypkg\",\"url\":\"github.com/u/mypkg\",\"description\":\"My package\",\"author\":\"bob\",\"license\":\"MIT\",\"tags\":[\"ai\"],\"modules\":[\"mymod\"]\}]"
+    t |> run("generates markdown with tags") @(t : T?) {
+        let json_text = "[\{\"name\":\"mypkg\",\"url\":\"github.com/u/mypkg\",\"description\":\"My package\",\"author\":\"bob\",\"license\":\"MIT\",\"tags\":[\"ai\"]\}]"
         let readme = generate_index_readme(json_text)
         t |> success(!empty(readme))
         t |> success(find(readme, "# daspkg package index") >= 0)
-        t |> success(find(readme, "## Module Index") >= 0)
-        t |> success(find(readme, "mymod") >= 0)
         t |> success(find(readme, "mypkg") >= 0)
         t |> success(find(readme, "## Packages by Tag") >= 0)
         t |> success(find(readme, "**ai**") >= 0)
+        t |> success(find(readme, "## Package Index") >= 0)
+        t |> success(find(readme, "| Package | Description | Install |") >= 0)
         t |> success(find(readme, "**Author:** bob") >= 0)
         t |> success(find(readme, "**License:** MIT") >= 0)
-        t |> success(find(readme, "daspkg install github.com/u/mypkg") >= 0)
+        t |> success(find(readme, "daspkg install mypkg") >= 0)
     }
     t |> run("empty index produces valid readme") @(t : T?) {
         let readme = generate_index_readme("[]")
         t |> success(!empty(readme))
         t |> success(find(readme, "0 package(s) registered") >= 0)
-    }
-    t |> run("no modules skips module index section") @(t : T?) {
-        let json_text = "[\{\"name\":\"bare\",\"url\":\"github.com/u/bare\",\"description\":\"No modules\"\}]"
-        let readme = generate_index_readme(json_text)
-        t |> success(find(readme, "## Module Index") < 0)
     }
 }
 
@@ -986,32 +970,3 @@ def test_read_manifest_rich(t : T?) {
     }
 }
 
-// --- extract_modules ---
-
-[test]
-def test_extract_modules(t : T?) {
-    t |> run("extracts modules from .das_module") @(t : T?) {
-        let tmp_dir = "{get_das_root()}/_daspkg_test_modules"
-        mkdir(tmp_dir)
-        fwrite("{tmp_dir}/.das_package", "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"modpkg\")\n    package_description(\"Has modules\")\n\}\n")
-        fwrite("{tmp_dir}/.das_module", "options gen2\nrequire daslib/dyn_modules\n[export]\ndef register() \{\n    register_native_path(\"mod_a\", \"\{get_das_root()\}/daslib\")\n    register_native_path(\"mod_b\", \"\{get_das_root()\}/daslib\")\n\}\n")
-        var manifest : PackageManifest
-        t |> success(read_manifest(tmp_dir, manifest))
-        t |> equal(2, length(manifest.modules))
-        t |> equal("mod_a", manifest.modules[0])
-        t |> equal("mod_b", manifest.modules[1])
-        remove("{tmp_dir}/.das_package")
-        remove("{tmp_dir}/.das_module")
-        rmdir(tmp_dir)
-    }
-    t |> run("no .das_module means no modules") @(t : T?) {
-        let tmp_dir = "{get_das_root()}/_daspkg_test_nomod"
-        mkdir(tmp_dir)
-        fwrite("{tmp_dir}/.das_package", "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"nomod\")\n    package_description(\"No modules\")\n\}\n")
-        var manifest : PackageManifest
-        t |> success(read_manifest(tmp_dir, manifest))
-        t |> equal(0, length(manifest.modules))
-        remove("{tmp_dir}/.das_package")
-        rmdir(tmp_dir)
-    }
-}

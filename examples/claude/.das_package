@@ -1,0 +1,15 @@
+options gen2
+
+require daslib/daspkg
+
+[export]
+def package() {
+    package_name("claude-example")
+    package_description("daslang helper bot powered by Claude API")
+}
+
+[export]
+def dependencies(version : string) {
+    require_package("das-claude")
+    require_package("dasTelegram")
+}
