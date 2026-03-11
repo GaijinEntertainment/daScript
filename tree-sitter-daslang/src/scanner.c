@@ -5,6 +5,7 @@ enum TokenType {
   STRING_CONTENT,
   AUTOMATIC_SEMICOLON,
   FLOAT_TRAILING_DOT,
+  NO_NEWLINE,
 };
 
 void *tree_sitter_daslang_external_scanner_create(void) {
@@ -131,6 +132,29 @@ bool tree_sitter_daslang_external_scanner_scan(void *payload,
       }
     }
     // No trailing-dot float found — fall through to other token types
+  }
+
+  // NO_NEWLINE — succeeds only when no newline before next token AND next token is not '{'
+  // ('{' always starts a block, not a one-liner body)
+  if (valid_symbols[NO_NEWLINE] && !valid_symbols[STRING_CONTENT]) {
+    lexer->mark_end(lexer);
+    bool found_newline = false;
+    for (;;) {
+      if (lexer->lookahead == ' ' || lexer->lookahead == '\t' ||
+          lexer->lookahead == '\f') {
+        lexer->advance(lexer, true);
+      } else if (lexer->lookahead == '\n' || lexer->lookahead == '\r') {
+        found_newline = true;
+        break;
+      } else {
+        break;
+      }
+    }
+    if (!found_newline && !lexer->eof(lexer) && lexer->lookahead != '{') {
+      lexer->result_symbol = NO_NEWLINE;
+      return true;
+    }
+    return false;
   }
 
   // In error recovery, all symbols are valid — don't emit ASI

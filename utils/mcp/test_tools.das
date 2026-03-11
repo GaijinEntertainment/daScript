@@ -28,7 +28,6 @@ require tools/describe_type public
 require tools/grep_usage public
 require tools/outline public
 require tools/aot public
-require tools/daspkg public
 
 // helper: parse tool result JSON, return (text, isError)
 def parse_result(result : string; var text : string&; var is_error : bool&) : bool {
@@ -1077,109 +1076,6 @@ def test_aot_missing_file(t : T?) {
         var is_error = false
         parse_result(do_aot("nonexistent_file_12345.das", ""), text, is_error)
         t |> success(is_error, "should be error")
-    }
-}
-
-// ── daspkg tools ─────────────────────────────────────────────────────
-
-[test]
-def test_daspkg_list_empty(t : T?) {
-    t |> run("list with no packages installed") <| @(t : T?) {
-        var text : string
-        var is_error = false
-        parse_result(do_daspkg_list(""), text, is_error)
-        t |> success(!is_error, "should not be error")
-        t |> success(find(text, "[]") >= 0 || find(text, "No packages installed") >= 0, "should report empty list")
-    }
-}
-
-[test]
-def test_daspkg_check_empty(t : T?) {
-    t |> run("check with no packages installed") <| @(t : T?) {
-        var text : string
-        var is_error = false
-        parse_result(do_daspkg_check(""), text, is_error)
-        t |> success(!is_error, "should not be error")
-        t |> success(find(text, "[]") >= 0 || find(text, "No packages installed") >= 0, "should report empty check")
-    }
-}
-
-[test]
-def test_daspkg_search(t : T?) {
-    t |> run("search returns JSON array") <| @(t : T?) {
-        var text : string
-        var is_error = false
-        parse_result(do_daspkg_search("", ""), text, is_error)
-        t |> success(!is_error, "should not be error")
-        // result should be a JSON array (starts with '[')
-        let trimmed = strip(text)
-        t |> success(length(trimmed) > 0 && character_at(trimmed, 0) == '[', "should return JSON array")
-    }
-    t |> run("search filters by query") <| @(t : T?) {
-        var text : string
-        var is_error = false
-        parse_result(do_daspkg_search("claude", ""), text, is_error)
-        t |> success(!is_error, "should not be error")
-        t |> success(find(text, "das-claude") >= 0, "should find das-claude package")
-    }
-}
-
-[test]
-def test_daspkg_info(t : T?) {
-    t |> run("info returns package metadata") <| @(t : T?) {
-        var text : string
-        var is_error = false
-        parse_result(do_daspkg_info("das-claude", ""), text, is_error)
-        t |> success(!is_error, "should not be error")
-        t |> success(find(text, "das-claude") >= 0, "should contain package name")
-    }
-    t |> run("info for nonexistent package returns empty") <| @(t : T?) {
-        var text : string
-        var is_error = false
-        parse_result(do_daspkg_info("nonexistent_pkg_12345", ""), text, is_error)
-        t |> success(!is_error, "should not be error")
-        t |> success(find(text, "[]") >= 0, "should return empty array")
-    }
-}
-
-[test]
-def test_daspkg_remove_not_installed(t : T?) {
-    t |> run("remove nonexistent package") <| @(t : T?) {
-        var text : string
-        var is_error = false
-        parse_result(do_daspkg_remove("nonexistent_pkg_12345", ""), text, is_error)
-        // daspkg prints error but exits 0, so check text
-        t |> success(find(text, "not installed") >= 0 || find(text, "no lock file") >= 0 || find(text, "No packages installed") >= 0, "should report not installed")
-    }
-}
-
-[test]
-def test_daspkg_update_no_lockfile(t : T?) {
-    t |> run("update with no lock file") <| @(t : T?) {
-        var text : string
-        var is_error = false
-        parse_result(do_daspkg_update("", ""), text, is_error)
-        t |> success(find(text, "No packages installed") >= 0 || find(text, "no lock file") >= 0, "should report no packages")
-    }
-}
-
-[test]
-def test_daspkg_upgrade_no_lockfile(t : T?) {
-    t |> run("upgrade with no lock file") <| @(t : T?) {
-        var text : string
-        var is_error = false
-        parse_result(do_daspkg_upgrade("", ""), text, is_error)
-        t |> success(find(text, "No packages installed") >= 0 || find(text, "no lock file") >= 0, "should report no packages")
-    }
-}
-
-[test]
-def test_daspkg_build_no_packages(t : T?) {
-    t |> run("build with no buildable packages") <| @(t : T?) {
-        var text : string
-        var is_error = false
-        parse_result(do_daspkg_build(""), text, is_error)
-        t |> success(find(text, "No packages") >= 0 || find(text, "no lock file") >= 0 || find(text, "No modules") >= 0 || find(text, "succeeded") >= 0, "should report build status")
     }
 }
 

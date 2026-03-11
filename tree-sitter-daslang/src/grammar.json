@@ -3801,8 +3801,17 @@
           "name": "block"
         },
         {
-          "type": "SYMBOL",
-          "name": "_one_liner_body"
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "_no_newline"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_one_liner_body"
+            }
+          ]
         }
       ]
     },
@@ -7431,7 +7440,7 @@
                     "name": "alternative",
                     "content": {
                       "type": "SYMBOL",
-                      "name": "_expression"
+                      "name": "_one_liner_body"
                     }
                   }
                 ]
@@ -10411,6 +10420,10 @@
     {
       "type": "SYMBOL",
       "name": "float_trailing_dot"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_no_newline"
     }
   ],
   "inline": [
