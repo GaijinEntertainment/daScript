@@ -1348,9 +1348,21 @@ install(FILES ${DAS_DEBUGAPI_EXAMPLES}
 
 file(GLOB DAS_GRAPHICS_EXAMPLES
     ${PROJECT_SOURCE_DIR}/examples/graphics/*.das
+    ${PROJECT_SOURCE_DIR}/examples/graphics/.das_package
+    ${PROJECT_SOURCE_DIR}/examples/graphics/README.md
 )
 install(FILES ${DAS_GRAPHICS_EXAMPLES}
     DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/graphics
+)
+
+# Install node-editor example
+file(GLOB DAS_NODE_EDITOR_EXAMPLES
+    ${PROJECT_SOURCE_DIR}/examples/node-editor/*.das
+    ${PROJECT_SOURCE_DIR}/examples/node-editor/.das_package
+    ${PROJECT_SOURCE_DIR}/examples/node-editor/README.md
+)
+install(FILES ${DAS_NODE_EDITOR_EXAMPLES}
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/node-editor
 )
 
 file(GLOB DAS_UNCATEGORIZED_EXAMPLES
