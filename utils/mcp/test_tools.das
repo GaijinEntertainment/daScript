@@ -1173,6 +1173,16 @@ def test_daspkg_upgrade_no_lockfile(t : T?) {
     }
 }
 
+[test]
+def test_daspkg_build_no_packages(t : T?) {
+    t |> run("build with no buildable packages") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_daspkg_build(""), text, is_error)
+        t |> success(find(text, "No packages") >= 0 || find(text, "no lock file") >= 0 || find(text, "No modules") >= 0 || find(text, "succeeded") >= 0, "should report build status")
+    }
+}
+
 // ── JSON output mode tests ──────────────────────────────────────────
 
 [test]
