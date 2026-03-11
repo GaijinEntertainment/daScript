@@ -156,6 +156,63 @@ namespace das {
         return false;
     }
 
+    struct PathToLoop {
+        const Variable * var = nullptr;
+        const Function * func = nullptr;
+    };
+
+    bool detectLoop ( vector<PathToLoop> & path, const Variable * var, das_hash_set<const Variable*> & visitedVar, das_hash_set<const Function*> & visitedFunc );
+    bool detectLoop ( vector<PathToLoop> & path, const Function * func, das_hash_set<const Variable*> & visitedVar, das_hash_set<const Function*> & visitedFunc );
+
+    // we are going to detect, if global variable uses itself during initialization (via other variables or functions)
+    bool detectLoop ( vector<PathToLoop> & path, const Variable * var, das_hash_set<const Variable*> & visitedVar, das_hash_set<const Function*> & visitedFunc ) {
+        if ( var == path[0].var && path.size()>1 ) {
+            // we are back to the original variable, we have a loop
+            return true;
+        }
+        if ( visitedVar.find(var) != visitedVar.end() ) {
+            return false;
+        }
+        visitedVar.insert(var);
+        for ( auto & use : var->useGlobalVariables ) {
+            path.push_back({use,nullptr});
+            if ( detectLoop(path, use, visitedVar, visitedFunc) ) {
+                return true;
+            }
+            path.pop_back();
+        }
+        for ( auto & use : var->useFunctions ) {
+            path.push_back({nullptr,use});
+            if ( detectLoop(path, use, visitedVar, visitedFunc) ) {
+                return true;
+            }
+            path.pop_back();
+        }
+        return false;
+    }
+
+    bool detectLoop ( vector<PathToLoop> & path, const Function * func, das_hash_set<const Variable*> & visitedVar, das_hash_set<const Function*> & visitedFunc ) {
+        if ( visitedFunc.find(func) != visitedFunc.end() ) {
+            return false;
+        }
+        visitedFunc.insert(func);
+        for ( auto & use : func->useGlobalVariables ) {
+            path.push_back({use,nullptr});
+            if ( detectLoop(path, use, visitedVar, visitedFunc) ) {
+                return true;
+            }
+            path.pop_back();
+        }
+        for ( auto & use : func->useFunctions ) {
+            path.push_back({nullptr,use});
+            if ( detectLoop(path, use, visitedVar, visitedFunc) ) {
+                return true;
+            }
+            path.pop_back();
+        }
+        return false;
+    }
+
     class LintVisitor : public Visitor {
         bool checkOnlyFastAot;
         bool checkAotSideEffects;
@@ -362,6 +419,22 @@ namespace das {
         virtual void preVisitGlobalLetInit ( const VariablePtr & var, Expression * that ) override {
             Visitor::preVisitGlobalLetInit(var,that);
             globalVar = var.get();
+            das_hash_set<const Variable*> visitedVar;
+            das_hash_set<const Function*> visitedFunc;
+            vector<PathToLoop> path;
+            path.push_back(PathToLoop{var.get(), nullptr});
+            if ( detectLoop(path, var.get(), visitedVar, visitedFunc) ) {
+                TextWriter ss;
+                for ( auto & step : path ) {
+                    if ( step.var ) {
+                        ss << "->" << step.var->name;
+                    } else if ( step.func ) {
+                        ss << "->" << step.func->getMangledName();
+                    }
+                }
+                program->error("global variable initialization loop", ss.str(), "",
+                    var->at, CompilationError::variable_not_found);
+            }
             tableLookupCollision.push_back(das_hash_set<uint64_t>());
         }
         virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & var, Expression * that ) override {
