@@ -9,5 +9,5 @@ def package() {
 
 [export]
 def dependencies(version : string) {
-    require_package("github.com/borisbat/dasImgui")
+    require_package("dasImgui")
 }

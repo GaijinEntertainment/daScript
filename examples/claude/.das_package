@@ -4,12 +4,12 @@ require daslib/daspkg
 
 [export]
 def package() {
-    package_name("daspkg-claude")
-    package_description("daslang helper bot — Telegram bot powered by Claude API")
+    package_name("claude-example")
+    package_description("daslang helper bot powered by Claude API")
 }
 
 [export]
 def dependencies(version : string) {
-    require_package("github.com/borisbat/dasAnthropic")
-    require_package("github.com/borisbat/dasTelegram")
+    require_package("das-claude")
+    require_package("dasTelegram")
 }
