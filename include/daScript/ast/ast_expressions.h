@@ -145,6 +145,7 @@ namespace das
                 bool        write : 1;
                 bool        no_promotion : 1;
                 bool        underClone : 1;
+                bool        underDeref : 1;
             };
             uint32_t atFlags = 0;
         };

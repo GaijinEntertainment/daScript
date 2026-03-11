@@ -362,8 +362,10 @@ namespace das {
         virtual void preVisitGlobalLetInit ( const VariablePtr & var, Expression * that ) override {
             Visitor::preVisitGlobalLetInit(var,that);
             globalVar = var.get();
+            tableLookupCollision.push_back(das_hash_set<uint64_t>());
         }
         virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & var, Expression * that ) override {
+            tableLookupCollision.pop_back();
             if ( disableInit && !var->init->rtti_isConstant() ) {   // we double check here, if it made it past infer
                 program->error("[init] is disabled in the options or CodeOfPolicies", "", "",
                         var->at, CompilationError::no_init);
@@ -898,16 +900,6 @@ namespace das {
                     var->at,CompilationError::invalid_variable_type);
             }
         }
-        virtual void preVisitBlockExpression ( ExprBlock * block, Expression * expr ) override {
-            Visitor::preVisitBlockExpression(block, expr);
-            if ( expr->rtti_isOp2() ) {
-                auto op2 = static_cast<ExprOp2 *>(expr);
-                if ( op2->func && op2->func->builtIn && op2->func->sideEffectFlags==0 ) {
-                    program->error("top level no side effect operation " + op2->op, "", "",
-                        expr->at, CompilationError::top_level_no_sideeffect_operation);
-                }
-            }
-        }
         virtual void preVisit ( ExprMakeStruct * mks ) override {
             Visitor::preVisit(mks);
             if ( mks->constructor && mks->constructor->arguments.size() ) {
@@ -920,12 +912,45 @@ namespace das {
             if ( expr->alwaysSafe ) return;
             usedTypeExprs.insert(expr);
         }
+        virtual void preVisitBlockExpression ( ExprBlock * block, Expression * expr ) override {
+            Visitor::preVisitBlockExpression(block, expr);
+            tableLookupCollision.push_back(das_hash_set<uint64_t>());
+            if ( expr->rtti_isOp2() ) {
+                auto op2 = static_cast<ExprOp2 *>(expr);
+                if ( op2->func && op2->func->builtIn && op2->func->sideEffectFlags==0 ) {
+                    program->error("top level no side effect operation " + op2->op, "", "",
+                        expr->at, CompilationError::top_level_no_sideeffect_operation);
+                }
+            }
+        }
+        virtual ExpressionPtr visitBlockExpression ( ExprBlock * block, Expression * expr ) override {
+            tableLookupCollision.pop_back();
+            return Visitor::visitBlockExpression(block,expr);
+        }
+        virtual void preVisit ( ExprAt * expr ) override {
+            Visitor::preVisit(expr);
+            // we look for table at, and check 'subexpr' of it, which is the table.
+            // if it collides with anything - its an error
+            if ( !expr->underDeref && expr->subexpr->type->isGoodTableType() ) {
+                auto subexprText = expr->subexpr->describe();
+                auto subexprHash = hash64z(subexprText.c_str());
+                auto it = tableLookupCollision.back().find(subexprHash);
+                if ( it!=tableLookupCollision.back().end() ) {
+                    program->error("potential table lookup collision for " + subexprText, "",
+                        "tab[key1] = tab[key2], or fun(tab[key1],tab[key2]) scenarios may produce undefined behavior",
+                        expr->subexpr->at, CompilationError::table_lookup_collision);
+                } else {
+                    tableLookupCollision.back().insert(subexprHash);
+                }
+            }
+        }
     public:
         ProgramPtr program;
         Function * func = nullptr;
         Variable * globalVar = nullptr;
         bool anyUnsafe = false;
         das_hash_set<Expression *> usedTypeExprs;
+        vector<das_hash_set<uint64_t>> tableLookupCollision;
     };
 
     struct Option {
@@ -941,7 +966,7 @@ namespace das {
         "string_heap_size_limit",       Type::tInt,
         "gc",                           Type::tBool,
     // coverage
-        "no_coverage",                   Type::tBool,
+        "no_coverage",                  Type::tBool,
     // aot
         "no_aot",                       Type::tBool,
         "aot_prologue",                 Type::tBool,

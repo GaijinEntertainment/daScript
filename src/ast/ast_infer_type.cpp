@@ -915,6 +915,11 @@ namespace das {
                 return mks;
             }
         }
+        // mark ExprAt to be under_deref
+        if (expr->subexpr->rtti_isAt()) {
+            auto atExpr = static_cast<ExprAt*>(expr->subexpr.get());
+            atExpr->underDeref = true;
+        }
         // infer
         if (!expr->subexpr->type->isRef()) {
             if (expr->subexpr->rtti_isConstant()) {
@@ -2747,7 +2752,9 @@ namespace das {
         verifyType(expr->typeexpr);
         return Visitor::visit(expr);
     }
+
     ExpressionPtr InferTypes::visit(ExprAt *expr) {
+        expr->underDeref = false;
         if (!expr->subexpr->type || expr->subexpr->type->isAliasOrExpr())
             return Visitor::visit(expr); // failed to infer
         if (!expr->index->type || expr->index->type->isAliasOrExpr())

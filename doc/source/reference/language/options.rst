@@ -289,8 +289,11 @@ Safety and Strictness
      - Disallows ``unsafe``-ly uninitialized structures.
    * - ``unsafe_table_lookup``
      - bool
-     - true
-     - Makes table lookup (``tab[key]``) an unsafe operation.
+     - false
+     - Makes table lookup (``tab[key]``) an unsafe operation. When ``false`` (default),
+       table lookups are safe but the compiler still detects dangerous patterns where
+       the same table is indexed multiple times in a single expression
+       (``table_lookup_collision`` lint error).
    * - ``relaxed_pointer_const``
      - bool
      - false

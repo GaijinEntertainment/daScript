@@ -368,6 +368,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | failed_block.das | Block variable initialization failures | **expect** `30108` `30113` |
 | failed_capture_self.das | Capturing `self` in lambda fails | **expect** `30508` `30124` |
 | failed_constants.das | Out-of-range numeric literal errors | **expect** `10006:12` `10010:4` |
+| failed_table_lookup_collision.das | Table lookup collision lint — same table indexed twice in one expression | **expect** `40216:7` |
 | finally.das | `finally` blocks — exceptions, loops, nested, return | |
 | for_const_array.das | For-loop over `fixed_array` constant | |
 | for_continue.das | `continue` in while, for, and complex nested loops | |

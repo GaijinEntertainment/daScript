@@ -475,6 +475,7 @@ class RstComment : AstCommentReader {
             output = get_das_root() + "/doc/source/stdlib/detail/"
         }
         let fname = "{output}/{name}.rst"
+        mkdir(output)
         fopen(fname,"wb") <| $ ( f ) {
             if (f==null) {
                 panic_rst("can't open {fname}")

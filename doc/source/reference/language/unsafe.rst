@@ -171,10 +171,16 @@ They are typically controlled via CodeOfPolicies or appropriate option:
 
 .. code-block:: das
 
-    options unsafe_table_lookup = false // makes table indexing safe. refers to CodeOfPolicies::unsafe_table_lookup
+    options unsafe_table_lookup // makes ALL table indexing unsafe. refers to CodeOfPolicies::unsafe_table_lookup
 
     var tab <- { 1=>"one", 2=>"two" }
-    tab[3] = "three"        // this is unsafe, since it can create a pointer to a temporary object
+    unsafe {
+        tab[3] = "three"    // requires unsafe when unsafe_table_lookup is enabled
+    }
+
+By default ``unsafe_table_lookup`` is ``false`` — individual table lookups are safe. However, the compiler
+still detects dangerous patterns where the same table is indexed more than once in a single expression
+(see :ref:`Tables <tables>` for details).
 
 .. seealso::
 

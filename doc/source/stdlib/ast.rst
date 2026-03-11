@@ -493,6 +493,8 @@ properties of the `ExprAt` object.
 
          * **under_clone** (0x10) - The expression is under a clone operation.
 
+         * **under_deref** (0x20) - The expression is under a dereference (ExprRef2Value), safe for table lookup collision detection.
+
 
 
 .. _alias-ExprMakeLocalFlags:

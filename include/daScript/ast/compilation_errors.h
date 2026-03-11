@@ -164,6 +164,7 @@ namespace das
     ,   in_scope_in_the_loop                    =   40213       // for ( a in b ) { let in scope ... ; }
     ,   no_init                                 =   40214       // [init] disabled via options or CodeOfPolicies
     ,   no_writing_to_nameless                  =   40215       // writing to nameless variable, like in a().b = 5
+    ,   table_lookup_collision                  =   40216       // multiple lookups of the same table in the same expression, i.e. tab[1] = tab[2]
 
     ,   duplicate_key                           =   40300       // { 1:1, ..., 1:* }
 
