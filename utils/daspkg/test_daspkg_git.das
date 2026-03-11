@@ -318,8 +318,7 @@ def test_update_local_auto_build(t : T?) {
         t |> success(has_package(lf, "daspkg-example-c"))
         // remove the built module to verify rebuild on update
         let module_file = "{tmp_root}/modules/daspkg-example-c/dasModuleFastMath.shared_module"
-        if (fexist(module_file))
-            remove(module_file)
+        if (fexist(module_file)) remove(module_file)
         t |> success(!fexist(module_file))
         // update should re-copy and rebuild
         cmd_update(tmp_root, "daspkg-example-c")
@@ -402,10 +401,8 @@ def test_cmd_build_integration(t : T?) {
         copy_dir_rec(src_dir, pkg_dir)
         // remove any pre-existing build artifacts
         let module_file = "{pkg_dir}/dasModuleFastMath.shared_module"
-        if (fexist(module_file))
-            remove(module_file)
-        if (fexist("{pkg_dir}/_build"))
-            rmdir_rec("{pkg_dir}/_build")
+        if (fexist(module_file)) remove(module_file)
+        if (fexist("{pkg_dir}/_build")) rmdir_rec("{pkg_dir}/_build")
         // run cmd_build
         cmd_build(tmp_root)
         // verify build happened

@@ -2811,6 +2811,22 @@
           {
             "type": "_expression",
             "named": true
+          },
+          {
+            "type": "break_statement",
+            "named": true
+          },
+          {
+            "type": "continue_statement",
+            "named": true
+          },
+          {
+            "type": "return_statement",
+            "named": true
+          },
+          {
+            "type": "yield_statement",
+            "named": true
           }
         ]
       },

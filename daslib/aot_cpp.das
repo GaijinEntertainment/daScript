@@ -3830,8 +3830,7 @@ def collectUsedFunctions(modules : array<Module?>; totalFunctions : int; this_mo
             if (!all_modules && pfun._module != this_module) {
                 return ;
             }
-            if (pfun.index < 0 || !pfun.flags.used)
-                return ;
+            if (pfun.index < 0 || !pfun.flags.used) return ;
             if (!is_all) {
                 if (pfun.flags.builtIn || pfun.flags.noAot) return ;
             }
@@ -3902,8 +3901,7 @@ def public setAotHashes(program : ProgramPtr; var ctx : Context) {
     var fni = 0;
     program.get_ptr() |> for_each_module_no_order($(mod) {
         mod |> for_each_module_function($(pfun) {
-            if (pfun.index < 0 || !pfun.flags.used)
-                return ;
+            if (pfun.index < 0 || !pfun.flags.used) return ;
             pfun.hash = get_function_hash_by_id(pfun.get_ptr(), pfun.index, unsafe(reinterpret<void?>(ctx)));
             fni++;
         })
@@ -3912,8 +3910,7 @@ def public setAotHashes(program : ProgramPtr; var ctx : Context) {
     // its the same as semantic hash, only takes dependencies into account
     program.get_ptr() |> for_each_module_no_order($(mod) {
         mod |> for_each_module_function($(pfun) {
-            if (pfun.index < 0 || !pfun.flags.used)
-                return ;
+            if (pfun.index < 0 || !pfun.flags.used) return ;
             pfun.aotHash = get_function_aot_hash(pfun.get_ptr());
         });
     });

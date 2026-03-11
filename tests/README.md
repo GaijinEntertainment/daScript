@@ -368,6 +368,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | failed_block.das | Block variable initialization failures | **expect** `30108` `30113` |
 | failed_capture_self.das | Capturing `self` in lambda fails | **expect** `30508` `30124` |
 | failed_constants.das | Out-of-range numeric literal errors | **expect** `10006:12` `10010:4` |
+| failed_if_one_liner_multiline.das | One-liner if/else/elif body on separate line is an error | **expect** `20000:7` |
 | failed_table_lookup_collision.das | Table lookup collision lint — same table indexed twice in one expression | **expect** `40216:7` |
 | finally.das | `finally` blocks — exceptions, loops, nested, return | |
 | for_const_array.das | For-loop over `fixed_array` constant | |
@@ -376,6 +377,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | for_single_element.das | For-loop over single-element dim array | |
 | fully_qualified_generic_name.das | Fully qualified `UnitTest::start_effect` generic call | |
 | func_addr.das | Function pointer via `@@` — invoke, comparison, null check | |
+| if_one_liner.das | One-liner `if` — postfix, prefix, break, continue on same line | |
 | if_not_null.das | `if_not_null` macro — null skips, non-null invokes block | |
 | ignore_deref.das | Pointer deref from array — by value and explicit type | |
 | infer_alias_and_alias_ctor.das | Auto alias inference — generic join, findObject | |

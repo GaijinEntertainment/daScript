@@ -85,6 +85,7 @@ module.exports = grammar({
     $._string_content,
     $._automatic_semicolon,
     $.float_trailing_dot,
+    $._no_newline,
   ],
 
   supertypes: $ => [
@@ -645,7 +646,7 @@ module.exports = grammar({
 
     _if_body: $ => choice(
       $.block,
-      $._one_liner_body,
+      seq($._no_newline, $._one_liner_body),
     ),
 
     _one_liner_body: $ => choice($._expression, $.return_statement, $.yield_statement, $.break_statement, $.continue_statement),
@@ -1226,7 +1227,7 @@ module.exports = grammar({
       '(',
       field('condition', $._expression),
       ')',
-      optional(seq('else', field('alternative', $._expression))),
+      optional(seq('else', field('alternative', $._one_liner_body))),
     )),
 
     // ---- Make / literal expressions ----

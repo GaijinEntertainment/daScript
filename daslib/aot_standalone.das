@@ -100,8 +100,7 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
     if (program.totalVariables > 0) {
         program.get_ptr() |> for_each_module_no_order($(pm) {
             pm |> for_each_global($(pvar) {
-                if (!pvar.flags.used)
-                    return
+                if (!pvar.flags.used) return
                 if (pvar.index < 0) {
                     panic("Internal compiler errors. Simulating variable which is not used{pvar.name}");
                     return
