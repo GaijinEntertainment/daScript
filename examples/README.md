@@ -85,13 +85,37 @@ is a self-contained project with a `.das_package` descriptor.
 |-----------|-------------|
 | `daspkg-example/` | Minimal project that installs a package from the index |
 | `daspkg-build-example/` | Project with a C++ build step (`cmake_build`) |
-| `daspkg-claude/` | Using the `das-claude` package (Anthropic API bindings) |
-| `daspkg-telegram/` | Using the `das-telegram` package (Telegram Bot API) |
 | `daspkg-version-1/` | Package versioning — pinning to version 1.x |
 | `daspkg-version-2/` | Package versioning — pinning to version 2.x |
 | `packages/daspkg-example-c/` | Template for a daspkg package with C sources |
 | `packages/daspkg-example-cpp/` | Template for a daspkg package with C++ shared module |
 | `packages/daspkg-example-mixed/` | Template for a mixed daslang + C++ package |
+
+## telegram/ — Telegram Bot Example
+
+A Telegram echo bot using the `das-telegram` daspkg package. Requires setup:
+
+```
+cd examples/telegram
+daslang.exe ../../utils/daspkg/main.das -- install
+```
+
+| File | Description |
+|------|-------------|
+| `echo_bot.das` | Telegram echo bot — replies with the same message |
+
+## claude/ — Claude API Example
+
+A daslang helper bot using the `das-claude` daspkg package (Anthropic API bindings). Requires setup:
+
+```
+cd examples/claude
+daslang.exe ../../utils/daspkg/main.das -- install
+```
+
+| File | Description |
+|------|-------------|
+| `daslang_helper_bot.das` | Interactive Claude-powered daslang coding assistant |
 
 ## graphics/ — ImGui Examples
 

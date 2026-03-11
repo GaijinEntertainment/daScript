@@ -1372,6 +1372,27 @@ install(FILES ${DAS_UNCATEGORIZED_EXAMPLES}
     DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/uncategorized
 )
 
+# Install telegram example
+install(FILES
+    ${PROJECT_SOURCE_DIR}/examples/telegram/.das_package
+    ${PROJECT_SOURCE_DIR}/examples/telegram/README.md
+    ${PROJECT_SOURCE_DIR}/examples/telegram/echo_bot.das
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/telegram
+)
+
+# Install claude example
+install(FILES
+    ${PROJECT_SOURCE_DIR}/examples/claude/.das_package
+    ${PROJECT_SOURCE_DIR}/examples/claude/.gitignore
+    ${PROJECT_SOURCE_DIR}/examples/claude/daslang_helper_bot.das
+    ${PROJECT_SOURCE_DIR}/examples/claude/sandbox.das_project
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/claude
+)
+install(FILES
+    ${PROJECT_SOURCE_DIR}/examples/claude/examples/daslang_helper/system_prompt.md
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/claude/examples/daslang_helper
+)
+
 file(GLOB DAS_HV_EXAMPLES
     ${PROJECT_SOURCE_DIR}/examples/hv/*.das
     ${PROJECT_SOURCE_DIR}/examples/hv/*.html
