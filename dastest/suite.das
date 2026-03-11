@@ -18,6 +18,7 @@ require testing
 require suite_result public
 
 var test_results : array<SuiteTestResult>
+var bench_messages : array<string>
 
 def clear_test_results() {
     delete test_results
@@ -613,6 +614,9 @@ def private bench_on_finished_impl(var suite_ctx : SuiteCtx; var benchmarking : 
     let avg_string_heap_bytes = double(ceil(float(stats.string_heap_bytes) / float(n)))
     let avg_string_num_allocs = double(ceil(float(stats.string_allocs) / float(n)))
 
+    // Collect plain-text stats for JSON report messages (always, regardless of format)
+    bench_messages |> push("{stats.sub_name}: {avg_time:.1f} ns/op, {avg_heap_bytes:.0f} B/op, {avg_num_allocs:.0f} allocs/op [{stats.func_type}]")
+
     if (suite_ctx.bench_format == BenchmarkOutputFormat.native) {
         let entries = [
             (int64(avg_time), "ns/op", 18, false),
@@ -651,6 +655,7 @@ def private bench_on_finished_impl(var suite_ctx : SuiteCtx; var benchmarking : 
         info_raw("{s}\n")
         return
     }
+
 }
 
 def private run_benchmark(var suite_ctx : SuiteCtx; var file_ctx : FileCtx; var res : SuiteResult&; name : string; func : function<(b : B?) : void>) {
@@ -658,6 +663,7 @@ def private run_benchmark(var suite_ctx : SuiteCtx; var file_ctx : FileCtx; var 
 
     let t0 = ref_time_ticks()
     var deliberateRecover = false
+    delete bench_messages
 
     var func_type = "INTERP"
     if (is_in_aot()) {
@@ -687,7 +693,6 @@ def private run_benchmark(var suite_ctx : SuiteCtx; var file_ctx : FileCtx; var 
 
             benchmarking.on_finished <- @capture(& selfCtx, & suite_ctx, & benchmarking) (stats : BenchmarkRunStats) {
                 unsafe {
-                    // This extra info is useful for JSON serialization.
                     var with_func_type = stats
                     with_func_type.func_type = func_type
                     selfCtx |> invoke_in_context("bench_on_finished_impl", suite_ctx, benchmarking, with_func_type)
@@ -702,10 +707,11 @@ def private run_benchmark(var suite_ctx : SuiteCtx; var file_ctx : FileCtx; var 
         benchmarking.failed = true
     }
 
+    let dt = get_time_usec(t0)
+
     // A failed bench increases the failure count and may
     // print an exception if it wasn't a controlled panic via fail or failNow.
     if (benchmarking.failed) {
-        let dt = get_time_usec(t0)
         res.failed++
         if (benchmarking.started && !benchmarking.finished) {
             if (suite_ctx.bench_format != BenchmarkOutputFormat.json) {
@@ -725,6 +731,14 @@ def private run_benchmark(var suite_ctx : SuiteCtx; var file_ctx : FileCtx; var 
             }
         }
     }
+
+    test_results |> emplace(SuiteTestResult(
+        name = clone_string(name),
+        passed = !benchmarking.failed,
+        skipped = false,
+        time_usec = dt,
+        messages <- bench_messages
+    ))
 }
 
 def private errorOrBlue(expectFailure : bool; msg : string) {

@@ -41,6 +41,7 @@ export async function runTests(
     filePath: string,
     testNames?: string[],
     cancellation?: { readonly isCancelled: boolean; kill?: () => void },
+    options?: { benchmark?: boolean },
 ): Promise<RunResult> {
     const jsonFile = path.join(os.tmpdir(), `dastest_${Date.now()}_${Math.random().toString(36).slice(2)}.json`);
 
@@ -50,9 +51,13 @@ export async function runTests(
         '--test', filePath,
         '--json-file', jsonFile,
     ];
+    if (options?.benchmark) {
+        args.push('--bench');
+    }
     if (testNames) {
+        const nameFlag = options?.benchmark ? '--bench-names' : '--test-names';
         for (const name of testNames) {
-            args.push('--test-names', name);
+            args.push(nameFlag, name);
         }
     }
 
