@@ -481,6 +481,14 @@ def handle_tools_list(id_json : string) : string {
         },
         []
     ))
+    result.tools |> emplace(make_tool(
+        "daspkg_build",
+        "Build C/C++ packages that have CMakeLists.txt. Runs cmake configure and build for each package in the modules directory.",
+        {
+            "root" => PropertySchema(_type = "string", description = "Project root directory (default: daScript repo root)")
+        },
+        []
+    ))
     return json_rpc_response(id_json, sprint_json(result, false))
 }
 
@@ -566,6 +574,8 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : s
         return do_daspkg_update(arg1, arg2)
     } elif (tool_name == "daspkg_upgrade") {
         return do_daspkg_upgrade(arg1, arg2)
+    } elif (tool_name == "daspkg_build") {
+        return do_daspkg_build(arg1)
     } else {
         return make_tool_result("unknown tool: {tool_name}", true)
     }
@@ -729,6 +739,8 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
     } elif (name == "daspkg_update" || name == "daspkg_upgrade") {
         arg1 = get_string_arg(args, "name")
         arg2 = get_string_arg(args, "root")
+    } elif (name == "daspkg_build") {
+        arg1 = get_string_arg(args, "root")
     } elif (name == "aot") {
         arg1 = get_string_arg(args, "file")
         if (empty(arg1)) {
