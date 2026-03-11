@@ -429,6 +429,8 @@ def private test_any(name : string; func; args_num : int; var context : FileCtx;
     var deliberateRecover = false
     var failed = false
     var skipped = false
+    var testMessages : array<string>
+    var testLocation : string
     let t0 = ref_time_ticks()
     var testing : T?
     defer <| $ {
@@ -470,8 +472,13 @@ def private test_any(name : string; func; args_num : int; var context : FileCtx;
                     }
                 }
 
-                testing.onLog <- @ capture(& context)(msg : string; at : LineInfo) {
-                    log::info("{context.indenting}{file_info_hr(at, context.uriPaths)}: {msg}")
+                testing.onLog <- @ capture(& context, & testMessages, & testLocation)(msg : string; at : LineInfo) {
+                    let loc = file_info_hr(at, context.uriPaths)
+                    log::info("{context.indenting}{loc}: {msg}")
+                    testMessages |> push("{loc}: {msg}")
+                    if (empty(testLocation)) {
+                        testLocation = "{at.fileInfo != null ? string(at.fileInfo.name) : ""}:{int(at.line)}"
+                    }
                 }
 
                 *context.context |> invoke_in_context(func, testing)
@@ -485,15 +492,38 @@ def private test_any(name : string; func; args_num : int; var context : FileCtx;
             res.errors += 1
             errorOrBlue(context.expectFailure, "{context.indenting}--- FAIL '{name}' {time_dt_hr(dt)}")
             if (!empty(context.context.exception)) {
-                errorOrBlue(context.expectFailure, "{file_info_hr(context.context.exceptionAt, context.uriPaths)}: {context.indenting}{context.context.exception}")
+                let loc = file_info_hr(context.context.exceptionAt, context.uriPaths)
+                errorOrBlue(context.expectFailure, "{loc}: {context.indenting}{context.context.exception}")
+                testMessages |> push("{loc}: {context.context.exception}")
+                if (empty(testLocation)) {
+                    testLocation = "{loc}"
+                }
             }
             if (!empty(context.context.last_exception)) {
-                errorOrBlue(context.expectFailure, "{file_info_hr(context.context.exceptionAt, context.uriPaths)}: {context.indenting}{context.context.last_exception}")
+                let loc = file_info_hr(context.context.exceptionAt, context.uriPaths)
+                errorOrBlue(context.expectFailure, "{loc}: {context.indenting}{context.context.last_exception}")
+                testMessages |> push("{loc}: {context.context.last_exception}")
+                if (empty(testLocation)) {
+                    testLocation = "{loc}"
+                }
             }
             if (context.stackOnRecover) {
                 *context.context |> stackwalk(context.context.exceptionAt)
             }
         }
+    }
+
+    // clone strings from test context into dastest context
+    if (!empty(testMessages)) {
+        var clonedMessages : array<string>
+        for (m in testMessages) {
+            clonedMessages |> push(clone_string(m))
+        }
+        delete testMessages
+        testMessages <- clonedMessages
+    }
+    if (!empty(testLocation)) {
+        testLocation = clone_string(testLocation)
     }
 
     var expectFailure = context.expectFailure
@@ -524,7 +554,9 @@ def private test_any(name : string; func; args_num : int; var context : FileCtx;
         name = clone_string(name),
         passed = !failed && !skipped,
         skipped = skipped,
-        time_usec = dt
+        time_usec = dt,
+        messages <- testMessages,
+        location = testLocation
     ))
 }
 
