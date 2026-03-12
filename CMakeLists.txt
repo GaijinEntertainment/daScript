@@ -1289,7 +1289,6 @@ install(FILES ${PROJECT_SOURCE_DIR}/include/vecmath/LICENSE DESTINATION ${DAS_IN
 
 # Install utility scripts
 install(FILES ${PROJECT_SOURCE_DIR}/utils/aot/main.das DESTINATION utils/aot)
-install(FILES ${PROJECT_SOURCE_DIR}/utils/dasCodeFormatter/main.das DESTINATION utils/dasCodeFormatter)
 
 # Install MCP server (stdio transport, no dasHV dependency)
 install(FILES
