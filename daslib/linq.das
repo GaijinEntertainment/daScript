@@ -100,7 +100,13 @@ Comparators and keys (*)
 // TODO:
 //      change to stable-sort?
 
-def to_sequence(a : array<auto(TT)>) : iterator<TT -const -&> {
+def to_sequence(a : array<auto(TT)> ==const) : iterator<TT -const -&> {
+    //! Converts an array to an iterator
+    var b := a
+    return to_sequence_move(b)
+}
+
+def to_sequence(var a : array<auto(TT)> ==const) : iterator<TT -const -&> {
     //! Converts an array to an iterator
     var b := a
     return to_sequence_move(b)

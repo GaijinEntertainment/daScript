@@ -1363,7 +1363,7 @@ namespace das {
         return blk;
     }
 
-    FunctionPtr makeCloneTuple ( const LineInfo & at, const TypeDeclPtr & tupleType ) {
+    FunctionPtr makeCloneTuple ( const LineInfo & at, const TypeDeclPtr & tupleType, bool fromConst ) {
         DAS_ASSERT(tupleType->isTuple() && "can only clone tuple");
         auto fn = make_smart<Function>();
         fn->generated = true;
@@ -1384,8 +1384,8 @@ namespace das {
         arg1->at = at;
         arg1->name = "src";
         arg1->type = make_smart<TypeDecl>(*tupleType);
-        arg1->type->constant = true;
-        arg1->type->explicitConst = false;
+        arg1->type->constant = fromConst;
+        arg1->type->explicitConst = true;
         arg1->type->ref = false;
         arg1->type->implicit = true;
         fn->arguments.push_back(arg1);
@@ -1450,7 +1450,7 @@ namespace das {
         return fn;
     }
 
-    FunctionPtr makeCloneVariant ( const LineInfo & at, const TypeDeclPtr & variantType ) {
+    FunctionPtr makeCloneVariant ( const LineInfo & at, const TypeDeclPtr & variantType, bool fromConst ) {
         DAS_ASSERT(variantType->isVariant() && "can only clone variant");
         auto fn = make_smart<Function>();
         fn->generated = true;
@@ -1471,8 +1471,8 @@ namespace das {
         arg1->at = at;
         arg1->name = "src";
         arg1->type = make_smart<TypeDecl>(*variantType);
-        arg1->type->constant = true;
-        arg1->type->explicitConst = false;
+        arg1->type->constant = fromConst;
+        arg1->type->explicitConst = true;
         arg1->type->ref = false;
         arg1->type->implicit = true;
         fn->arguments.push_back(arg1);
