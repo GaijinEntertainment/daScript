@@ -176,6 +176,14 @@ class CollectExternVisitor : AstVisitor {
                 // function that will assign to the global variable pointer to a function
                 // at startup.
                 let global_var = LLVMGetNamedGlobal(g_mod, name.glob())
+                // JIT may not emit some globals due to optimizations.
+                // Now we have it only for `count`, see:
+                // d901e741b164f6328660178e8ed3ae406d78c8e1.
+                // Simplest way is to skip global if it wasn't created, which
+                // means it was never accessed.
+                if (global_var == null) {
+                    return
+                }
                 var call_args = array<LLVMValueRef>(
                     get_string_constant_ptr(builder, string(expr.func._module.name)),
                     get_string_constant_ptr(builder, get_mangled_name(expr.func)),
