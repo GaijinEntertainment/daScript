@@ -1,5 +1,6 @@
 options gen2
 options no_unused_function_arguments = false
+options no_aot
 options rtti
 
 require dastest/testing_boost
