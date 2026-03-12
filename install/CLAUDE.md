@@ -193,14 +193,6 @@ See `skills/daspkg.md` for `.das_package` manifest format and package structure.
 | `grep_usage` | Grepping for symbol names across files (parse-aware via ast-grep + tree-sitter) |
 | `outline` | Manually scanning files for function/struct/enum declarations |
 | `aot` | Manually running AOT generation and extracting function C++ |
-| `daspkg_search` | Manually searching the daspkg package index |
-| `daspkg_info` | Manually looking up package metadata |
-| `daspkg_list` | Manually listing installed packages |
-| `daspkg_check` | Manually verifying installed packages |
-| `daspkg_install` | Installing packages via shell commands |
-| `daspkg_remove` | Removing packages via shell commands |
-| `daspkg_update` | Updating packages via shell commands |
-| `daspkg_upgrade` | Upgrading packages via shell commands |
 
 Cursor-based tools (`goto_definition`, `type_of`, `find_references`) support a `no_opt` parameter that disables compiler optimizations to preserve the full AST — useful when globals, enum values, or bitfield constants get constant-folded away.
 
