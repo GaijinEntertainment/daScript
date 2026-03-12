@@ -1131,7 +1131,7 @@ class public LlvmJitVisitor : AstVisitor {
         let fn_type = LLVMFunctionType(types.LLVMVoidPtrType(),
                     fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType()))
         if (new_handle == null) {
-            var new_handle_ptr = get_jit_new(t)
+            var new_handle_ptr = get_jit_new(t.annotation)
             if (new_handle_ptr == null) {
                 failed_T(t, "missing new`handle function pointer for {describe(t)}")
                 return tuple(null, null)
@@ -4348,7 +4348,7 @@ class public LlvmJitVisitor : AstVisitor {
         let fn_type = LLVMFunctionType(types.t_void,
                 fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType(), types.LLVMVoidPtrType()))
         if (delete_handle == null) {
-            var delete_handle_ptr = get_jit_delete(t)
+            var delete_handle_ptr = get_jit_delete(t.annotation)
             if (delete_handle_ptr == null) {
                 failed_T(t, "missing delete`handle function pointer for {describe(t)}")
                 return null
@@ -6001,7 +6001,7 @@ class public ResolveExternVisitor : AstVisitor {
     }
     def override preVisitExprNew(expr : smart_ptr<ExprNew>) {
         if (expr.typeexpr.isHandle) {
-            var new_handle_ptr = get_jit_new(expr.typeexpr)
+            var new_handle_ptr = get_jit_new(expr.typeexpr.annotation)
             if (new_handle_ptr == null) {
                 failed_T(expr.typeexpr, "missing new`handle function pointer for {describe(expr.typeexpr)}")
                 return
@@ -6012,7 +6012,7 @@ class public ResolveExternVisitor : AstVisitor {
                 if (expr.typeexpr.baseType == Type.tHandle) {
                     var inscope elemT = clone_type(expr.typeexpr)
                     elemT.dim |> clear() // hack to get correct ptr to ctor
-                    var new_handle_ptr = get_jit_new(elemT)
+                    var new_handle_ptr = get_jit_new(elemT.annotation)
                     if (new_handle_ptr == null) {
                         failed_T(elemT, "missing new`handle function pointer for {describe(elemT)}")
                         return
@@ -6053,7 +6053,7 @@ class public ResolveExternVisitor : AstVisitor {
         if (subT.isPointer) {
             assume firstT = expr.subexpr._type.firstType
             if (firstT.isHandle) {
-                var delete_handle_ptr = get_jit_delete(firstT)
+                var delete_handle_ptr = get_jit_delete(firstT.annotation)
                 if (delete_handle_ptr == null) {
                     failed_T(firstT, "missing delete`handle function pointer for {describe(firstT)}")
                     return
@@ -6079,7 +6079,7 @@ class public ResolveExternVisitor : AstVisitor {
     def override preVisitExprAscend(expr : smart_ptr<ExprAscend>) : void {
         if (expr.subexpr._type.isHandle) {
             assume firstT = expr.subexpr._type
-            var new_handle_ptr = get_jit_new(firstT)
+            var new_handle_ptr = get_jit_new(firstT.annotation)
             if (new_handle_ptr == null) {
                 failed_T(firstT, "missing new`handle function pointer for {describe(firstT)}")
                 return

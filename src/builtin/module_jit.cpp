@@ -325,6 +325,20 @@ extern "C" {
         }
     }
 
+    DAS_API Annotation *jit_get_annotation ( const char * moduleName,
+                                                 const char * annName ) {
+        Annotation *result = nullptr;
+        Module::foreach([&](Module * module) -> bool {
+            if ( module->name != moduleName ) return true;
+            result = module->findAnnotation(annName).get();
+            return false;
+        });
+        if (!result) {
+            DAS_FATAL_ERROR("Failed to find annotation %s in module %s.", annName, moduleName);
+        }
+        return result;
+    }
+
     DAS_API void jit_trap() {
         DAS_FATAL_ERROR("FATAL: Unresolved dynamic function call in compiled code. This indicates a missing JIT symbol. Disable `strict` mode or remove this call.\n");
     }
@@ -636,19 +650,15 @@ extern "C" {
             return das_get_jit_table_erase(baseType, context, at);
         }
 
+        void * das_get_jit_new ( TypeAnnotation *annotation ) {
+            return annotation->jitGetNew();
+        }
+
+        void * das_get_jit_delete ( TypeAnnotation *annotation ) {
+            return annotation->jitGetDelete();
+        }
     }
 
-    void * das_get_jit_new ( TypeDeclPtr htype, Context * context, LineInfoArg * at ) {
-        if ( !htype ) context->throw_error_at(at, "can't get `new`, type is null");
-        if ( !htype->isHandle() ) context->throw_error_at(at, "can't get `new`, type is not a handle");
-        return htype->annotation->jitGetNew();
-    }
-
-    void * das_get_jit_delete ( TypeDeclPtr htype, Context * context, LineInfoArg * at ) {
-        if ( !htype ) context->throw_error_at(at, "can't get `delete`, type is null");
-        if ( !htype->isHandle() ) context->throw_error_at(at, "can't get `delete`, type is not a handle");
-        return htype->annotation->jitGetDelete();
-    }
 
     void * das_instrument_line_info ( const LineInfo & info, Context * context, LineInfoArg * at ) {
         LineInfo * info_ptr = (LineInfo *) context->code->allocate(sizeof(LineInfo));
@@ -881,11 +891,9 @@ extern "C" {
                 SideEffects::none, "das_get_builtin_function_address")
                     ->args({"fn","context","at"});
             addExtern<DAS_BIND_FUN(das_get_jit_new)>(*this, lib,  "get_jit_new",
-                SideEffects::none, "das_get_jit_new")
-                    ->args({"type","context","at"});
+                SideEffects::none, "das_get_jit_new")->args({"ann"});
             addExtern<DAS_BIND_FUN(das_get_jit_delete)>(*this, lib,  "get_jit_delete",
-                SideEffects::none, "das_get_jit_delete")
-                    ->args({"type","context","at"});
+                SideEffects::none, "das_get_jit_delete")->args({"ann"});
             addExtern<DAS_BIND_FUN(das_get_jit_debug_enter)>(*this, lib,  "get_jit_debug_enter",
                 SideEffects::none, "das_get_jit_debug_enter");
             addExtern<DAS_BIND_FUN(das_get_jit_debug_exit)>(*this, lib,  "get_jit_debug_exit",
