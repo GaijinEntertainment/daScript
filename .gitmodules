@@ -1,6 +1,3 @@
 [submodule "modules/dasMinfft"]
 	path = modules/dasMinfft
 	url = https://github.com/imp5imp5/dasMinfft.git
-[submodule "miniaudio"]
-	path = modules/dasAudio/miniaudio
-	url = https://github.com/mackron/miniaudio.git
