@@ -765,7 +765,7 @@ namespace das {
                 auto fnList = getCloneFunc(cloneType, cloneType);
                 if (verifyCloneFunc(fnList, expr->at)) {
                     if (fnList.size() == 0) {
-                        auto clf = makeCloneTuple(expr->at, cloneType);
+                        auto clf = makeCloneTuple(expr->at, cloneType, expr->right->type->constant);
                         clf->privateFunction = true;
                         extraFunctions.push_back(clf);
                     }
@@ -781,7 +781,7 @@ namespace das {
                 auto fnList = getCloneFunc(cloneType, cloneType);
                 if (verifyCloneFunc(fnList, expr->at)) {
                     if (fnList.size() == 0) {
-                        auto clf = makeCloneVariant(expr->at, cloneType);
+                        auto clf = makeCloneVariant(expr->at, cloneType, expr->right->type->constant);
                         clf->privateFunction = true;
                         extraFunctions.push_back(clf);
                     }
