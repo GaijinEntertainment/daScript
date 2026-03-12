@@ -121,6 +121,12 @@ Command-line arguments
    * - ``--failures-only``
      - Suppress PASS and RUN output; show only failures and the final
        summary.  Useful for large test runs where only errors matter.
+   * - ``--cov-path <path>``
+     - Enable code coverage and write an LCOV report to *path*.  Each
+       test file's coverage is appended (the file is truncated at the
+       start of the run).  Requires ``daslib/coverage``.  The resulting
+       file can be viewed with :ref:`utils_dascov` or standard LCOV
+       tools.
 
 Internal arguments (used by isolated mode):
 
@@ -337,3 +343,5 @@ Test file conventions
    :ref:`tutorial_testing` -- introductory tutorial on writing tests
 
    ``dastest/testing_boost`` -- the testing boost module (assertions, sub-tests, benchmarks)
+
+   :ref:`utils_dascov` -- standalone code coverage tool (parses LCOV output from ``--cov-path``)

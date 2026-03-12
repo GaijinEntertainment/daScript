@@ -9,11 +9,11 @@
  MCP Server --- AI Tool Integration
 ===========================================
 
-The daslang MCP server exposes 29 compiler-backed tools to AI coding
+The daslang MCP server exposes 20 compiler-backed tools to AI coding
 assistants via the `Model Context Protocol <https://modelcontextprotocol.io/>`_.
 It provides compilation diagnostics, type inspection, go-to-definition,
 find-references, AST dump, AOT generation, expression evaluation,
-parse-aware grep, package management, and more.
+parse-aware grep, and more.
 
 Uses stdio transport -- no extra build dependencies.
 
@@ -57,7 +57,7 @@ session.
 Tools
 =====
 
-The server exposes 29 tools.  Each tool is invoked via MCP's
+The server exposes 20 tools.  Each tool is invoked via MCP's
 ``tools/call`` method.
 
 Compilation and diagnostics
@@ -89,7 +89,8 @@ Compilation and diagnostics
    * - ``list_module_api``
      - List all functions, types, enums, and globals exported by a
        builtin or daslib module.  Optional ``compact`` mode for large
-       modules.
+       modules, ``filter`` for substring matching, ``section`` to
+       limit output (e.g. ``functions``, ``structs``).
 
 Code navigation
 ---------------
@@ -198,38 +199,6 @@ Parse-aware search (tree-sitter)
        tree-sitter.  Works on broken/incomplete code -- no compilation
        needed.  Conditional on ``sg`` CLI.
 
-Package management (daspkg)
-----------------------------
-
-.. list-table::
-   :header-rows: 1
-   :widths: 25 75
-
-   * - Tool
-     - Description
-   * - ``daspkg_search``
-     - Search the daspkg package index.  Returns matching packages as
-       JSON array.  Empty query returns all packages.
-   * - ``daspkg_info``
-     - Get full metadata for a single package by exact name.
-   * - ``daspkg_list``
-     - List all installed packages with sources, versions, and flags.
-   * - ``daspkg_check``
-     - Verify installed packages -- checks directories and
-       ``.das_module`` files.
-   * - ``daspkg_install``
-     - Install a package from GitHub, index, or local path.  Without
-       ``spec``, installs all dependencies from ``.das_package``.
-   * - ``daspkg_remove``
-     - Remove an installed package.
-   * - ``daspkg_update``
-     - Re-install package(s) at their pinned version.  Without
-       ``name``, updates all.
-   * - ``daspkg_upgrade``
-     - Upgrade package(s) to latest version.  Without ``name``,
-       upgrades all.
-
-
 ast-grep / tree-sitter setup
 =============================
 
@@ -310,15 +279,7 @@ Optionally, allow all MCP tools without prompting by adding to
          "mcp__daslang__describe_type",
          "mcp__daslang__grep_usage",
          "mcp__daslang__outline",
-         "mcp__daslang__aot",
-         "mcp__daslang__daspkg_search",
-         "mcp__daslang__daspkg_info",
-         "mcp__daslang__daspkg_list",
-         "mcp__daslang__daspkg_check",
-         "mcp__daslang__daspkg_install",
-         "mcp__daslang__daspkg_remove",
-         "mcp__daslang__daspkg_update",
-         "mcp__daslang__daspkg_upgrade"
+         "mcp__daslang__aot"
        ]
      }
    }
