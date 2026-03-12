@@ -4927,7 +4927,8 @@ namespace das {
 
         vector<TypeDeclPtr> nonNamedTypes;
         if (!inferArguments(nonNamedTypes, expr->nonNamedArguments)) {
-            // TODO: report error
+            error("can't infer type of non-named argument in call to " + expr->name, "", "",
+                  expr->at, CompilationError::invalid_argument_type);
             return Visitor::visit(expr);
         }
         MatchingFunctions functions, generics;
