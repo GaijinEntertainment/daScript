@@ -35,7 +35,7 @@ The `--root` flag sets the project root directory (default: current directory). 
 ## Install Sources
 
 - **GitHub:** `install github.com/user/repo` — NO `https://` prefix (daspkg prepends it)
-- **With version:** `install github.com/user/repo@1.0`
+- **With version:** `install github.com/user/repo@1.0` (also accepts `@v1.0` — the `v` prefix is stripped automatically)
 - **Local path:** `install ./path/to/package`
 - **Index name:** `install my-package` (looks up in package index)
 

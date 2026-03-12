@@ -332,6 +332,11 @@ def cmd_install(root, spec : string; force : bool) {
     if (at_pos >= 0) {
         source = slice(spec, 0, at_pos)
         version = slice(spec, at_pos + 1)
+        // strip leading "v"/"V" — version is a semver number, not a git tag
+        // the .das_package resolve() function maps version -> tag (e.g. "1.0" -> "v1.0")
+        if (starts_with(version, "v") || starts_with(version, "V")) {
+            version = slice(version, 1)
+        }
     }
 
     let pkg_name = package_name_from_source(source)

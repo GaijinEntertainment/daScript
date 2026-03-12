@@ -52,6 +52,25 @@ def test_install_git_version_v1(t : T?) {
 }
 
 [test]
+def test_install_version_with_v_prefix(t : T?) {
+    t |> run("@v1.0 strips v prefix — no double-v") @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_vprefix"
+        mkdir(tmp_root)
+        // cmd_install parses @v1.0 and should strip the v prefix
+        cmd_install(tmp_root, "github.com/borisbat/daspkg-test-versions@v1.0", false)
+        var lf : LockFile
+        t |> success(read_lock_file(tmp_root, lf))
+        t |> success(has_package(lf, "daspkg-test-versions"))
+        t |> equal(get_package(lf, "daspkg-test-versions").tag, "v1.0")
+        t |> equal(get_package(lf, "daspkg-test-versions").version, "1.0")
+        // verify v1.0 content
+        let src = fread("{tmp_root}/modules/daspkg-test-versions/daslib/test_versions.das")
+        t |> success(find(src, "return \"1.0\"") >= 0)
+        rmdir_rec(tmp_root)
+    }
+}
+
+[test]
 def test_install_git_version_v2(t : T?) {
     t |> run("installs v2.0 via resolve — has new_in_v2") @(t : T?) {
         let tmp_root = "{get_das_root()}/_daspkg_test_v2"
