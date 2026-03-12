@@ -19,6 +19,8 @@ struct SuiteTestResult {
     passed : bool
     skipped : bool
     @rename = "time" time_usec : int  // microseconds
+    messages : array<string>          // collected log/error messages
+    location : string                 // "file:line" of first failure (empty if passed)
 }
 
 
