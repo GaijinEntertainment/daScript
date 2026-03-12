@@ -90,13 +90,14 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/daslib_modules.md` | Working with `daslib/` modules (linq, json, regex, functional, match, etc.), channels, or extending the standard library |
 | `skills/das_macros.md` | Writing compile-time macros, AST manipulation, qmacro/quote code generation, smart_ptr ownership patterns |
 | `skills/writing_benchmarks.md` | Writing or running benchmark files under `benchmarks/` |
-| `skills/dynamic_modules.md` | Creating or editing `.das_module` descriptors, adding new modules under `modules/`, structuring daspkg packages |
+| `skills/daspkg.md` | Running daspkg commands, creating `.das_package` manifests, package structure |
+| `skills/dynamic_modules.md` | Creating or editing `.das_module` descriptors, adding new modules under `modules/` |
 | `skills/install_instructions.md` | Creating or updating AI instruction files (`install/CLAUDE.md`, `install/skills/`) for the installed SDK |
 | `skills/aot_testing.md` | Adding AOT test files, working with the `test_aot` binary, `Module::aotRequire()`, CMake AOT macros, **debugging AOT hash mismatches** |
 
 Multiple skill files may apply to a single task. For example, creating a new daslib module requires reading `skills/das_formatting.md`, `skills/daslib_modules.md`, and possibly `skills/documentation_rst.md`.
 
-**Formatter reminder:** Always use `utils/dasCodeFormatter/main.das` for formatting `.das` files. Do NOT use `utils/dasFormatter/` (that is the v1→v2 syntax converter, not a code formatter).
+**Formatter reminder:** Use the MCP `format_file` tool to format `.das` files. It calls `daslib/das_source_formatter` directly. Do NOT use `utils/dasFormatter/` (that is the v1→v2 syntax converter, not a code formatter).
 
 ### Updating Instructions with New Knowledge
 
@@ -217,7 +218,7 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - `tutorials/language/` — Language tutorial `.das` files
 - `tutorials/integration/cpp/` — C++ integration tutorials
 - `modules/` — External plugin modules
-- `utils/mcp/` — MCP server for AI coding assistants (29 tools, stdio transport, no extra deps)
+- `utils/mcp/` — MCP server for AI coding assistants (20 tools, stdio transport, no extra deps)
 - `utils/daspkg/` — Package manager (install, update, build, search packages)
 - `examples/daspkg/` — Package manager example projects
 - `examples/crash/` — Crash handler example (native + daslang stack traces)
@@ -252,14 +253,6 @@ The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics and p
 | `grep_usage` | Using built-in Grep tool to search for symbol names in `.das` files (parse-aware via ast-grep + tree-sitter — no false positives from comments/strings) |
 | `outline` | Manually scanning files for function/struct/enum declarations |
 | `aot` | Manually running AOT generation and extracting function C++ |
-| `daspkg_search` | Manually searching the daspkg package index |
-| `daspkg_info` | Manually looking up package metadata |
-| `daspkg_list` | Manually listing installed packages |
-| `daspkg_check` | Manually verifying installed packages |
-| `daspkg_install` | Installing packages via shell commands |
-| `daspkg_remove` | Removing packages via shell commands |
-| `daspkg_update` | Updating packages via shell commands |
-| `daspkg_upgrade` | Upgrading packages via shell commands |
 
 Cursor-based tools (`goto_definition`, `type_of`, `find_references`) support a `no_opt` parameter that disables compiler optimizations to preserve the full AST — useful when globals, enum values, or bitfield constants get constant-folded away.
 

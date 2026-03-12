@@ -33,7 +33,6 @@ require tools/describe_type public
 require tools/grep_usage public
 require tools/outline public
 require tools/aot public
-require tools/daspkg public
 
 let HEAP_COLLECT_THRESHOLD = 1024ul * 1024ul  // 1 MB
 let LOG_FILE = "utils/mcp/mcp_server.log"
@@ -410,85 +409,6 @@ def handle_tools_list(id_json : string) : string {
         },
         ["file"]
     ))
-    result.tools |> emplace(make_tool(
-        "daspkg_search",
-        "Search the daspkg package index. Returns matching packages as JSON array with name, url, description, author, license, tags, modules, min_sdk, latest_version, etc. Empty query returns all packages.",
-        {
-            "query" => PropertySchema(_type = "string", description = "Search query — matches name, description, author, tags, modules. Leave empty to list all."),
-            "root" => PropertySchema(_type = "string", description = "Project root directory (default: daScript repo root)")
-        },
-        []
-    ))
-    result.tools |> emplace(make_tool(
-        "daspkg_info",
-        "Get full metadata for a single package from the daspkg index by exact name.",
-        {
-            "name" => PropertySchema(_type = "string", description = "Exact package name (e.g. 'das-claude', 'das-telegram')"),
-            "root" => PropertySchema(_type = "string", description = "Project root directory (default: daScript repo root)")
-        },
-        ["name"]
-    ))
-    result.tools |> emplace(make_tool(
-        "daspkg_list",
-        "List all installed daspkg packages with their sources, versions, and flags.",
-        {
-            "root" => PropertySchema(_type = "string", description = "Project root directory (default: daScript repo root)")
-        },
-        []
-    ))
-    result.tools |> emplace(make_tool(
-        "daspkg_check",
-        "Verify installed daspkg packages — checks that directories and .das_module files exist.",
-        {
-            "root" => PropertySchema(_type = "string", description = "Project root directory (default: daScript repo root)")
-        },
-        []
-    ))
-    result.tools |> emplace(make_tool(
-        "daspkg_install",
-        "Install a daspkg package from GitHub, index, or local path. Without 'spec', installs all dependencies from .das_package.",
-        {
-            "spec" => PropertySchema(_type = "string", description = "Package spec: GitHub URL (github.com/user/repo), index name (dasImgui), local path (./path), optionally with version (@1.0)"),
-            "force" => PropertySchema(_type = "string", description = "If 'true', force reinstall even if already installed"),
-            "root" => PropertySchema(_type = "string", description = "Project root directory (default: daScript repo root)")
-        },
-        []
-    ))
-    result.tools |> emplace(make_tool(
-        "daspkg_remove",
-        "Remove an installed daspkg package.",
-        {
-            "name" => PropertySchema(_type = "string", description = "Package name to remove"),
-            "root" => PropertySchema(_type = "string", description = "Project root directory (default: daScript repo root)")
-        },
-        ["name"]
-    ))
-    result.tools |> emplace(make_tool(
-        "daspkg_update",
-        "Re-install daspkg package(s) at their pinned version. Without 'name', updates all packages.",
-        {
-            "name" => PropertySchema(_type = "string", description = "Package name to update (omit for all)"),
-            "root" => PropertySchema(_type = "string", description = "Project root directory (default: daScript repo root)")
-        },
-        []
-    ))
-    result.tools |> emplace(make_tool(
-        "daspkg_upgrade",
-        "Upgrade daspkg package(s) to latest version. Without 'name', upgrades all packages.",
-        {
-            "name" => PropertySchema(_type = "string", description = "Package name to upgrade (omit for all)"),
-            "root" => PropertySchema(_type = "string", description = "Project root directory (default: daScript repo root)")
-        },
-        []
-    ))
-    result.tools |> emplace(make_tool(
-        "daspkg_build",
-        "Build C/C++ packages that have CMakeLists.txt. Runs cmake configure and build for each package in the modules directory.",
-        {
-            "root" => PropertySchema(_type = "string", description = "Project root directory (default: daScript repo root)")
-        },
-        []
-    ))
     return json_rpc_response(id_json, sprint_json(result, false))
 }
 
@@ -558,24 +478,6 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : s
         return do_outline(arg1, arg2)
     } elif (tool_name == "aot") {
         return do_aot(arg1, arg2, project)
-    } elif (tool_name == "daspkg_search") {
-        return do_daspkg_search(arg1, arg2)
-    } elif (tool_name == "daspkg_info") {
-        return do_daspkg_info(arg1, arg2)
-    } elif (tool_name == "daspkg_list") {
-        return do_daspkg_list(arg1)
-    } elif (tool_name == "daspkg_check") {
-        return do_daspkg_check(arg1)
-    } elif (tool_name == "daspkg_install") {
-        return do_daspkg_install(arg1, arg2, arg3 == "true")
-    } elif (tool_name == "daspkg_remove") {
-        return do_daspkg_remove(arg1, arg2)
-    } elif (tool_name == "daspkg_update") {
-        return do_daspkg_update(arg1, arg2)
-    } elif (tool_name == "daspkg_upgrade") {
-        return do_daspkg_upgrade(arg1, arg2)
-    } elif (tool_name == "daspkg_build") {
-        return do_daspkg_build(arg1)
     } else {
         return make_tool_result("unknown tool: {tool_name}", true)
     }
@@ -715,32 +617,6 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         }
     } elif (name == "list_modules") {
         arg1 = get_string_arg(args, "json")
-    } elif (name == "daspkg_search") {
-        arg1 = get_string_arg(args, "query")
-        arg2 = get_string_arg(args, "root")
-    } elif (name == "daspkg_info") {
-        arg1 = get_string_arg(args, "name")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'name' argument")
-        }
-        arg2 = get_string_arg(args, "root")
-    } elif (name == "daspkg_list" || name == "daspkg_check") {
-        arg1 = get_string_arg(args, "root")
-    } elif (name == "daspkg_install") {
-        arg1 = get_string_arg(args, "spec")
-        arg2 = get_string_arg(args, "root")
-        arg3 = get_string_arg(args, "force")
-    } elif (name == "daspkg_remove") {
-        arg1 = get_string_arg(args, "name")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'name' argument")
-        }
-        arg2 = get_string_arg(args, "root")
-    } elif (name == "daspkg_update" || name == "daspkg_upgrade") {
-        arg1 = get_string_arg(args, "name")
-        arg2 = get_string_arg(args, "root")
-    } elif (name == "daspkg_build") {
-        arg1 = get_string_arg(args, "root")
     } elif (name == "aot") {
         arg1 = get_string_arg(args, "file")
         if (empty(arg1)) {

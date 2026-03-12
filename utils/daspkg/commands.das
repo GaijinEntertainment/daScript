@@ -167,12 +167,12 @@ def install_dependencies(root, pkg_name : string; var lf : LockFile; var visitin
 
 def private git_checkout_tag(dir, tag : string) : bool {
     var output : string
-    var exit_code = run_cmd("git -C \"{dir}\" fetch --depth 1 origin tag \"{tag}\" 2>&1", output)
+    var exit_code = run_cmd("git -C \"{dir}\" fetch --depth 1 origin tag \"{tag}\"", output)
     if (exit_code != 0) {
         log("Error: git fetch tag failed (exit {exit_code}):\n{output}\n")
         return false
     }
-    exit_code = run_cmd("git -C \"{dir}\" checkout \"{tag}\" 2>&1", output)
+    exit_code = run_cmd("git -C \"{dir}\" checkout \"{tag}\"", output)
     if (exit_code != 0) {
         log("Error: git checkout failed (exit {exit_code}):\n{output}\n")
         return false
@@ -182,12 +182,12 @@ def private git_checkout_tag(dir, tag : string) : bool {
 
 def private git_checkout_branch(dir, branch : string) : bool {
     var output : string
-    var exit_code = run_cmd("git -C \"{dir}\" fetch --depth 1 origin \"{branch}\" 2>&1", output)
+    var exit_code = run_cmd("git -C \"{dir}\" fetch --depth 1 origin \"{branch}\"", output)
     if (exit_code != 0) {
         log("Error: git fetch branch failed (exit {exit_code}):\n{output}\n")
         return false
     }
-    exit_code = run_cmd("git -C \"{dir}\" checkout \"{branch}\" 2>&1", output)
+    exit_code = run_cmd("git -C \"{dir}\" checkout \"{branch}\"", output)
     if (exit_code != 0) {
         log("Error: git checkout failed (exit {exit_code}):\n{output}\n")
         return false
@@ -197,7 +197,7 @@ def private git_checkout_branch(dir, branch : string) : bool {
 
 def private git_clone(url, dir : string) : bool {
     var output : string
-    let exit_code = run_cmd("git clone --depth 1 \"{url}\" \"{dir}\" 2>&1", output)
+    let exit_code = run_cmd("git clone --depth 1 \"{url}\" \"{dir}\"", output)
     if (exit_code != 0) {
         log("Error: git clone failed (exit {exit_code}):\n{output}\n")
         return false
@@ -281,10 +281,16 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
                 // resolve returned nothing — fall back to version as tag
                 log("Fetching tag {version}...\n")
                 if (!git_checkout_tag(tmp_dir, version)) {
-                    rmdir_rec(tmp_dir)
-                    return
+                    // try with v prefix
+                    log("Fetching tag v{version}...\n")
+                    if (!git_checkout_tag(tmp_dir, "v{version}")) {
+                        rmdir_rec(tmp_dir)
+                        return
+                    }
+                    actual_tag = "v{version}"
+                } else {
+                    actual_tag = version
                 }
-                actual_tag = version
             }
         }
     }
@@ -292,10 +298,16 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
         // no .das_package or resolve failed — treat version as tag directly
         log("Fetching tag {version}...\n")
         if (!git_checkout_tag(tmp_dir, version)) {
-            rmdir_rec(tmp_dir)
-            return
+            // try with v prefix
+            log("Fetching tag v{version}...\n")
+            if (!git_checkout_tag(tmp_dir, "v{version}")) {
+                rmdir_rec(tmp_dir)
+                return
+            }
+            actual_tag = "v{version}"
+        } else {
+            actual_tag = version
         }
-        actual_tag = version
     }
 
     // step 3: move to final location
@@ -332,6 +344,11 @@ def cmd_install(root, spec : string; force : bool) {
     if (at_pos >= 0) {
         source = slice(spec, 0, at_pos)
         version = slice(spec, at_pos + 1)
+        // strip leading "v"/"V" — version is a semver number, not a git tag
+        // the .das_package resolve() function maps version -> tag (e.g. "1.0" -> "v1.0")
+        if (starts_with(version, "v") || starts_with(version, "V")) {
+            version = slice(version, 1)
+        }
     }
 
     let pkg_name = package_name_from_source(source)
@@ -620,14 +637,14 @@ def build_package(pkg_dir : string) : bool {
 
     // Configure — pass DASLANG_DIR so the package can find headers and libs
     var output : string
-    var exit_code = run_cmd("cmake -B \"{build_dir}\" -S \"{pkg_dir}\" -DDASLANG_DIR=\"{das_root}\" 2>&1", output)
+    var exit_code = run_cmd("cmake -B \"{build_dir}\" -S \"{pkg_dir}\" -DDASLANG_DIR=\"{das_root}\"", output)
     if (exit_code != 0) {
         log("  CMake configure FAILED:\n{output}\n")
         return false
     }
 
     // Build
-    exit_code = run_cmd("cmake --build \"{build_dir}\" --config Release 2>&1", output)
+    exit_code = run_cmd("cmake --build \"{build_dir}\" --config Release", output)
     if (exit_code != 0) {
         log("  CMake build FAILED:\n{output}\n")
         return false
@@ -666,7 +683,7 @@ def cmd_build(root : string) {
 
 def check_tool(name, cmd : string) : bool {
     var output : string
-    let exit_code = run_cmd("{cmd} 2>&1", output)
+    let exit_code = run_cmd("{cmd}", output)
     if (exit_code == 0) {
         let trimmed = strip(output)
         if (!empty(trimmed)) {
@@ -716,7 +733,7 @@ def try_build_package(pkg_dir, name : string) {
             } elif (info.is_custom && !empty(info.command)) {
                 log("Building '{name}' (custom)...\n")
                 var output : string
-                let exit_code = run_cmd("cd \"{pkg_dir}\" && {info.command} 2>&1", output)
+                let exit_code = run_cmd("cd \"{pkg_dir}\" && {info.command}", output)
                 if (exit_code != 0) {
                     log("  Warning: custom build failed for '{name}':\n{output}\n")
                 }

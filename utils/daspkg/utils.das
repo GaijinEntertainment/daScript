@@ -53,19 +53,27 @@ def log_debug(msg : string) {
 
 def run_cmd(cmd : string; var output : string&) : int {
     log_debug("$ {cmd}")
+    let tmp_out = "{get_das_root()}/_daspkg_cmd_output.txt"
+    let full_cmd = "{cmd} > \"{tmp_out}\" 2>&1"
     var exit_code = -1
     unsafe {
-        exit_code = popen(cmd) <| $(f) {
+        exit_code = popen(full_cmd) <| $(f) {
             if (f != null) {
-                output := fread(f)
+                fread(f)
             }
         }
     }
+    fopen(tmp_out, "rb") <| $(f) {
+        if (f != null) {
+            output = fread(f)
+        }
+    }
+    remove(tmp_out)
     if (exit_code != 0) {
         log_debug("exit={exit_code}")
     }
     if (!empty(output)) {
-        log_to_file("  stdout: {output}\n")
+        log_to_file("  output: {output}\n")
     }
     return exit_code
 }

@@ -62,14 +62,14 @@ def fetch_index(root : string; var index : table<string; IndexEntry>) : bool {
     if (fexist(packages_file)) {
         // update existing cache
         var output : string
-        run_cmd("git -C \"{cache_dir}\" checkout main 2>&1", output)
-        run_cmd("git -C \"{cache_dir}\" fetch origin 2>&1", output)
-        run_cmd("git -C \"{cache_dir}\" reset --hard origin/main 2>&1", output)
+        run_cmd("git -C \"{cache_dir}\" checkout main", output)
+        run_cmd("git -C \"{cache_dir}\" fetch origin", output)
+        run_cmd("git -C \"{cache_dir}\" reset --hard origin/main", output)
     } else {
         // fresh clone
         let git_url = "https://{INDEX_REPO}.git"
         var output : string
-        let exit_code = run_cmd("git clone --depth 1 \"{git_url}\" \"{cache_dir}\" 2>&1", output)
+        let exit_code = run_cmd("git clone --depth 1 \"{git_url}\" \"{cache_dir}\"", output)
         if (exit_code != 0) {
             print("Error: failed to clone index: {output}\n")
             return false
@@ -430,7 +430,7 @@ def read_manifest(pkg_dir : string; var manifest : PackageManifest) : bool {
 
 def get_git_remote_url(pkg_dir : string) : string {
     var output : string
-    let exit_code = run_cmd("git -C \"{pkg_dir}\" remote get-url origin 2>&1", output)
+    let exit_code = run_cmd("git -C \"{pkg_dir}\" remote get-url origin", output)
     if (exit_code != 0) {
         return ""
     }
@@ -737,7 +737,7 @@ def cmd_introduce(root, source : string) {
         mkdir(tmp_dir)
         let git_url = "https://{source}.git"
         var output : string
-        let exit_code = run_cmd("git clone --depth 1 \"{git_url}\" \"{tmp_dir}\" 2>&1", output)
+        let exit_code = run_cmd("git clone --depth 1 \"{git_url}\" \"{tmp_dir}\"", output)
         if (exit_code != 0) {
             print("Error: failed to clone {git_url}:\n{output}\n")
             rmdir_rec(tmp_dir)
@@ -783,17 +783,17 @@ def cmd_introduce(root, source : string) {
     let branch_name = "introduce-{manifest.name}"
 
     var output : string
-    run_cmd("git -C \"{cache_dir}\" checkout main 2>&1", output)
-    run_cmd("git -C \"{cache_dir}\" fetch origin 2>&1", output)
-    run_cmd("git -C \"{cache_dir}\" reset --hard origin/main 2>&1", output)
-    run_cmd("git -C \"{cache_dir}\" checkout -B \"{branch_name}\" 2>&1", output)
+    run_cmd("git -C \"{cache_dir}\" checkout main", output)
+    run_cmd("git -C \"{cache_dir}\" fetch origin", output)
+    run_cmd("git -C \"{cache_dir}\" reset --hard origin/main", output)
+    run_cmd("git -C \"{cache_dir}\" checkout -B \"{branch_name}\"", output)
 
     let packages_file = "{cache_dir}/packages.json"
     let old_text = fread(packages_file)
     let new_text = add_to_index_json_rich(old_text, manifest.name, manifest, pkg_url)
     if (empty(new_text)) {
         print("Error: failed to modify packages.json\n")
-        run_cmd("git -C \"{cache_dir}\" checkout main 2>&1", output)
+        run_cmd("git -C \"{cache_dir}\" checkout main", output)
         return
     }
     fwrite(packages_file, "{new_text}\n")
@@ -803,31 +803,23 @@ def cmd_introduce(root, source : string) {
         fwrite("{cache_dir}/README.md", readme)
     }
 
-    run_cmd("git -C \"{cache_dir}\" add packages.json README.md 2>&1", output)
-    run_cmd("git -C \"{cache_dir}\" commit -m \"Add {manifest.name}\" 2>&1", output)
-    var exit_code = run_cmd("git -C \"{cache_dir}\" push --force origin \"{branch_name}\" 2>&1", output)
+    run_cmd("git -C \"{cache_dir}\" add packages.json README.md", output)
+    run_cmd("git -C \"{cache_dir}\" commit -m \"Add {manifest.name}\"", output)
+    var exit_code = run_cmd("git -C \"{cache_dir}\" push --force origin \"{branch_name}\"", output)
     if (exit_code != 0) {
         print("Error: failed to push branch: {output}\n")
-        run_cmd("git -C \"{cache_dir}\" checkout main 2>&1", output)
+        run_cmd("git -C \"{cache_dir}\" checkout main", output)
         return
     }
 
-    let pr_out_file = "{cache_dir}/_pr_output.txt"
-    exit_code = run_cmd("gh pr create --repo borisbat/daspkg-index --base main --head \"{branch_name}\" --title \"Add package: {manifest.name}\" --body \"Introduce **{manifest.name}** — {manifest.description}\n\nURL: `{pkg_url}`\" > \"{pr_out_file}\" 2>&1", output)
-    var pr_output : string
-    fopen(pr_out_file, "rb") <| $(f) {
-        if (f != null) {
-            pr_output = fread(f)
-        }
-    }
-    remove(pr_out_file)
+    exit_code = run_cmd("gh pr create --repo borisbat/daspkg-index --base main --head \"{branch_name}\" --title \"Add package: {manifest.name}\" --body \"Introduce **{manifest.name}** — {manifest.description}\n\nURL: `{pkg_url}`\"", output)
     if (exit_code != 0) {
-        print("Error: failed to create PR: {pr_output}{output}\n")
+        print("Error: failed to create PR: {output}\n")
     } else {
-        print("PR created: {strip(pr_output)}\n")
+        print("PR created: {strip(output)}\n")
     }
 
-    run_cmd("git -C \"{cache_dir}\" checkout main 2>&1", output)
+    run_cmd("git -C \"{cache_dir}\" checkout main", output)
 }
 
 def cmd_withdraw(root, name : string) {
@@ -845,17 +837,17 @@ def cmd_withdraw(root, name : string) {
     let branch_name = "withdraw-{name}"
 
     var output : string
-    run_cmd("git -C \"{cache_dir}\" checkout main 2>&1", output)
-    run_cmd("git -C \"{cache_dir}\" fetch origin 2>&1", output)
-    run_cmd("git -C \"{cache_dir}\" reset --hard origin/main 2>&1", output)
-    run_cmd("git -C \"{cache_dir}\" checkout -B \"{branch_name}\" 2>&1", output)
+    run_cmd("git -C \"{cache_dir}\" checkout main", output)
+    run_cmd("git -C \"{cache_dir}\" fetch origin", output)
+    run_cmd("git -C \"{cache_dir}\" reset --hard origin/main", output)
+    run_cmd("git -C \"{cache_dir}\" checkout -B \"{branch_name}\"", output)
 
     let packages_file = "{cache_dir}/packages.json"
     let old_text = fread(packages_file)
     let new_text = remove_from_index_json(old_text, name)
     if (empty(new_text)) {
         print("Error: failed to modify packages.json\n")
-        run_cmd("git -C \"{cache_dir}\" checkout main 2>&1", output)
+        run_cmd("git -C \"{cache_dir}\" checkout main", output)
         return
     }
     fwrite(packages_file, "{new_text}\n")
@@ -865,31 +857,23 @@ def cmd_withdraw(root, name : string) {
         fwrite("{cache_dir}/README.md", readme)
     }
 
-    run_cmd("git -C \"{cache_dir}\" add packages.json README.md 2>&1", output)
-    run_cmd("git -C \"{cache_dir}\" commit -m \"Remove {name}\" 2>&1", output)
-    var exit_code = run_cmd("git -C \"{cache_dir}\" push --force origin \"{branch_name}\" 2>&1", output)
+    run_cmd("git -C \"{cache_dir}\" add packages.json README.md", output)
+    run_cmd("git -C \"{cache_dir}\" commit -m \"Remove {name}\"", output)
+    var exit_code = run_cmd("git -C \"{cache_dir}\" push --force origin \"{branch_name}\"", output)
     if (exit_code != 0) {
         print("Error: failed to push branch: {output}\n")
-        run_cmd("git -C \"{cache_dir}\" checkout main 2>&1", output)
+        run_cmd("git -C \"{cache_dir}\" checkout main", output)
         return
     }
 
-    let pr_out_file = "{cache_dir}/_pr_output.txt"
-    exit_code = run_cmd("gh pr create --repo borisbat/daspkg-index --base main --head \"{branch_name}\" --title \"Remove package: {name}\" --body \"Withdraw **{name}** from the package index.\" > \"{pr_out_file}\" 2>&1", output)
-    var pr_output : string
-    fopen(pr_out_file, "rb") <| $(f) {
-        if (f != null) {
-            pr_output = fread(f)
-        }
-    }
-    remove(pr_out_file)
+    exit_code = run_cmd("gh pr create --repo borisbat/daspkg-index --base main --head \"{branch_name}\" --title \"Remove package: {name}\" --body \"Withdraw **{name}** from the package index.\"", output)
     if (exit_code != 0) {
-        print("Error: failed to create PR: {pr_output}{output}\n")
+        print("Error: failed to create PR: {output}\n")
     } else {
-        print("PR created: {strip(pr_output)}\n")
+        print("PR created: {strip(output)}\n")
     }
 
-    run_cmd("git -C \"{cache_dir}\" checkout main 2>&1", output)
+    run_cmd("git -C \"{cache_dir}\" checkout main", output)
 }
 
 // ── update-index ────────────────────────────────────────────────────
@@ -924,7 +908,7 @@ def cmd_update_index(root : string) {
             }
             let git_url = "https://{url}.git"
             var output : string
-            let exit_code = run_cmd("git clone --depth 1 \"{git_url}\" \"{tmp_dir}\" 2>&1", output)
+            let exit_code = run_cmd("git clone --depth 1 \"{git_url}\" \"{tmp_dir}\"", output)
             if (exit_code != 0) {
                 print("  Warning: failed to clone {url}: {output}\n")
                 continue
@@ -961,14 +945,14 @@ def cmd_update_index(root : string) {
 
             // get latest tag from git
             var tag_output : string
-            let tag_exit = run_cmd("git -C \"{tmp_dir}\" describe --tags --abbrev=0 2>&1", tag_output)
+            let tag_exit = run_cmd("git -C \"{tmp_dir}\" describe --tags --abbrev=0", tag_output)
             if (tag_exit == 0 && !empty(strip(tag_output))) {
                 index[name].latest_version = strip(tag_output)
             }
 
             // get last commit date
             var date_output : string
-            let date_exit = run_cmd("git -C \"{tmp_dir}\" log -1 --format=%cs 2>&1", date_output)
+            let date_exit = run_cmd("git -C \"{tmp_dir}\" log -1 --format=%cs", date_output)
             if (date_exit == 0 && !empty(strip(date_output))) {
                 index[name].last_updated = strip(date_output)
             }
@@ -1001,10 +985,10 @@ def cmd_update_index(root : string) {
     let branch_name = "update-index"
 
     var output : string
-    run_cmd("git -C \"{cache_dir}\" checkout main 2>&1", output)
-    run_cmd("git -C \"{cache_dir}\" fetch origin 2>&1", output)
-    run_cmd("git -C \"{cache_dir}\" reset --hard origin/main 2>&1", output)
-    run_cmd("git -C \"{cache_dir}\" checkout -B \"{branch_name}\" 2>&1", output)
+    run_cmd("git -C \"{cache_dir}\" checkout main", output)
+    run_cmd("git -C \"{cache_dir}\" fetch origin", output)
+    run_cmd("git -C \"{cache_dir}\" reset --hard origin/main", output)
+    run_cmd("git -C \"{cache_dir}\" checkout -B \"{branch_name}\"", output)
 
     let new_text = serialize_index(index)
     let packages_file = "{cache_dir}/packages.json"
@@ -1015,31 +999,23 @@ def cmd_update_index(root : string) {
         fwrite("{cache_dir}/README.md", readme)
     }
 
-    run_cmd("git -C \"{cache_dir}\" add packages.json README.md 2>&1", output)
-    run_cmd("git -C \"{cache_dir}\" commit -m \"Update index metadata\" 2>&1", output)
-    var exit_code = run_cmd("git -C \"{cache_dir}\" push --force origin \"{branch_name}\" 2>&1", output)
+    run_cmd("git -C \"{cache_dir}\" add packages.json README.md", output)
+    run_cmd("git -C \"{cache_dir}\" commit -m \"Update index metadata\"", output)
+    var exit_code = run_cmd("git -C \"{cache_dir}\" push --force origin \"{branch_name}\"", output)
     if (exit_code != 0) {
         print("Error: failed to push branch: {output}\n")
-        run_cmd("git -C \"{cache_dir}\" checkout main 2>&1", output)
+        run_cmd("git -C \"{cache_dir}\" checkout main", output)
         return
     }
 
-    let pr_out_file = "{cache_dir}/_pr_output.txt"
-    exit_code = run_cmd("gh pr create --repo borisbat/daspkg-index --base main --head \"{branch_name}\" --title \"Update index metadata\" --body \"Refreshed metadata for {updated} package(s).\" > \"{pr_out_file}\" 2>&1", output)
-    var pr_output : string
-    fopen(pr_out_file, "rb") <| $(f) {
-        if (f != null) {
-            pr_output = fread(f)
-        }
-    }
-    remove(pr_out_file)
+    exit_code = run_cmd("gh pr create --repo borisbat/daspkg-index --base main --head \"{branch_name}\" --title \"Update index metadata\" --body \"Refreshed metadata for {updated} package(s).\"", output)
     if (exit_code != 0) {
-        print("Error: failed to create PR: {pr_output}{output}\n")
+        print("Error: failed to create PR: {output}\n")
     } else {
-        print("PR created: {strip(pr_output)}\n")
+        print("PR created: {strip(output)}\n")
     }
 
-    run_cmd("git -C \"{cache_dir}\" checkout main 2>&1", output)
+    run_cmd("git -C \"{cache_dir}\" checkout main", output)
     print("Updated {updated} package(s)\n")
 }
 
@@ -1049,7 +1025,7 @@ def private github_get_license(url : string) : string {
     // url is like "github.com/user/repo"
     // use gh api to get license
     var output : string
-    let exit_code = run_cmd("gh api repos/{slice(url, length("github.com/"))} --jq .license.spdx_id 2>&1", output)
+    let exit_code = run_cmd("gh api repos/{slice(url, length("github.com/"))} --jq .license.spdx_id", output)
     if (exit_code == 0) {
         let result = strip(output)
         if (result != "null" && result != "NOASSERTION" && !empty(result)) {
