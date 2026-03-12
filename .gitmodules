@@ -1,3 +1,0 @@
-[submodule "miniaudio"]
-	path = modules/dasAudio/miniaudio
-	url = https://github.com/mackron/miniaudio.git
