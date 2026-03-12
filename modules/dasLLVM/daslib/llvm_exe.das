@@ -303,8 +303,23 @@ class CollectExternVisitor : AstVisitor {
 
     def override preVisitExprMakeStructIndex(expr : smart_ptr<ExprMakeStruct>; index : int; last : bool) : void {
         if (expr.constructor != null && !expr.constructor.moreFlags.requestJit) {
-            add_unimplemented(uid.get_ctor(expr), expr)
-            // Can be implemented.
+            let fn = expr.constructor
+            let fnmna = uid.get_dll_fn_name_ptr(fn)
+            let fn_publ = LLVMGetNamedFunction(g_mod, fnmna.publ())
+            let fn_ptr_cast = LLVMBuildPointerCast(builder, fn_publ, types.LLVMVoidPtrType(), "")
+            var reg_args = fixed_array<LLVMOpaqueValue?>(
+                standalone_ctx,
+                types.ConstI64(fn.index |> uint64),
+                get_string_constant_ptr(builder, string(fn.name)),
+                get_string_constant_ptr(builder, string(fn |> get_mangled_name())),
+                types.ConstI64(fn.getMangledNameHash),
+                types.ConstI32(fn.totalStackSize |> uint64),
+                fn_ptr_cast,
+                types.ConstI1(isCMRES(fn)),
+                types.ConstI1(fn.flags.fastCall),
+                types.ConstI1(fn.moreFlags.pinvoke),
+            )
+            LLVMBuildCall2(builder, reg_standalone_fn_type, reg_standalone_fn, reg_args, "")
         }
     }
 
