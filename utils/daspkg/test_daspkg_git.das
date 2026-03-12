@@ -360,13 +360,11 @@ def test_full_workflow_local(t : T?) {
             fwrite(f, "options gen2\nrequire greeter/greeter\n[export]\ndef main() \{\n    print(greet(\"world\"))\n\}\n")
         }
 
-        // step 3: run the script with -project_root, capture output to file
-        let out_file = "{tmp_root}/_output.txt"
+        // step 3: run the script with -project_root, capture output
         var output : string
-        var exit_code = run_cmd("{daslang} -project_root {tmp_root} {tmp_root}/test_script.das > {out_file} 2>&1", output)
-        let result_v1 = strip(fread(out_file))
+        var exit_code = run_cmd("{daslang} -project_root {tmp_root} {tmp_root}/test_script.das", output)
         t |> success(exit_code == 0, "script runs successfully (exit={exit_code})")
-        t |> equal("hello, world", result_v1, "correct output v1")
+        t |> equal("hello, world", strip(output), "correct output v1")
 
         // step 4: modify the source package
         fopen("{pkg_src}/daslib/greeter.das", "wb") <| $(f) {
@@ -377,10 +375,9 @@ def test_full_workflow_local(t : T?) {
         cmd_update(tmp_root, "greeter")
 
         // step 6: run again — should reflect the update
-        exit_code = run_cmd("{daslang} -project_root {tmp_root} {tmp_root}/test_script.das > {out_file} 2>&1", output)
-        let result_v2 = strip(fread(out_file))
+        exit_code = run_cmd("{daslang} -project_root {tmp_root} {tmp_root}/test_script.das", output)
         t |> success(exit_code == 0, "script runs after update (exit={exit_code})")
-        t |> equal("hi, world", result_v2, "correct output v2")
+        t |> equal("hi, world", strip(output), "correct output v2")
 
         // cleanup
         rmdir_rec(tmp_root)

@@ -673,7 +673,7 @@ def test_log_writes_to_file(t : T?) {
     t |> run("run_cmd logs command to file") @(t : T?) {
         log_init(test_root)
         var output : string
-        run_cmd("git --version 2>&1", output)
+        run_cmd("git --version", output)
         var content : string
         fopen("{test_root}/modules/.daspkg.log", "rb") <| $(f) {
             if (f != null) {
