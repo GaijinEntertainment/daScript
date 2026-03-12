@@ -3,8 +3,7 @@ options gen2
 // This example uses the das-minfft package installed via daspkg.
 // Run from this directory:
 //
-//   daslang ../../utils/daspkg/main.das -- --root . install
-//   daslang ../../utils/daspkg/main.das -- --root . build
+//   daslang ../../utils/daspkg/main.das -- install
 //   daslang main.das
 
 require minfft
