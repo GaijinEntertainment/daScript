@@ -1067,6 +1067,9 @@ get_target_property(DAS_FMT_LIBS das-fmt LINK_LIBRARIES)
     target_include_directories(test_concurrent_init_dyn PRIVATE ${NEED_MODULES_PATH})
     SETUP_CPP11(test_concurrent_init_dyn)
 
+    # Build daslang utilities as standalone executables (-exe mode)
+    add_subdirectory(utils)
+
 endif()
 
 # This list should be significantly reduced, most of the files, except aot related should be private.
