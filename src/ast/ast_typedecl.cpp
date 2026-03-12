@@ -277,7 +277,7 @@ namespace das
         } else {
             if ( decl->firstType ) updateAliasMap(decl->firstType, pass->firstType, aliases, options);
             if ( decl->secondType ) updateAliasMap(decl->secondType, pass->secondType, aliases, options);
-            for ( size_t iA=0, iAs = decl->argTypes.size(); iA!=iAs; ++iA ) {
+            for ( size_t iA=0, iAs = min(decl->argTypes.size(), pass->argTypes.size()); iA!=iAs; ++iA ) {
                 updateAliasMap(decl->argTypes[iA], pass->argTypes[iA], aliases, options);
             }
         }
