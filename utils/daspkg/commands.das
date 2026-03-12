@@ -281,10 +281,16 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
                 // resolve returned nothing — fall back to version as tag
                 log("Fetching tag {version}...\n")
                 if (!git_checkout_tag(tmp_dir, version)) {
-                    rmdir_rec(tmp_dir)
-                    return
+                    // try with v prefix
+                    log("Fetching tag v{version}...\n")
+                    if (!git_checkout_tag(tmp_dir, "v{version}")) {
+                        rmdir_rec(tmp_dir)
+                        return
+                    }
+                    actual_tag = "v{version}"
+                } else {
+                    actual_tag = version
                 }
-                actual_tag = version
             }
         }
     }
@@ -292,10 +298,16 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
         // no .das_package or resolve failed — treat version as tag directly
         log("Fetching tag {version}...\n")
         if (!git_checkout_tag(tmp_dir, version)) {
-            rmdir_rec(tmp_dir)
-            return
+            // try with v prefix
+            log("Fetching tag v{version}...\n")
+            if (!git_checkout_tag(tmp_dir, "v{version}")) {
+                rmdir_rec(tmp_dir)
+                return
+            }
+            actual_tag = "v{version}"
+        } else {
+            actual_tag = version
         }
-        actual_tag = version
     }
 
     // step 3: move to final location
