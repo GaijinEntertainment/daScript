@@ -12,7 +12,6 @@ options_table = {
     "dasHV":          "DAS_HV_DISABLED",
     "dasImgui":       "DAS_IMGUI_DISABLED",
     "dasLLVM":        "DAS_LLVM_DISABLED",
-    "dasMinfft":      "DAS_MINFFT_DISABLED",
     "dasOpenGL":      "",
     "dasAudio":       "DAS_AUDIO_DISABLED",
     "dasStbImage":    "DAS_STBIMAGE_DISABLED",
