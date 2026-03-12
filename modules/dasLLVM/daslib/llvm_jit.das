@@ -78,6 +78,12 @@ def set_private_linkage(value : LLVMOpaqueValue?) {
     LLVMSetUnnamedAddress(value, LLVMUnnamedAddr.LLVMGlobalUnnamedAddr);
 }
 
+// Use internal linkage without unnamed address so symbol names are preserved in the
+// object file's .symtab, making backtraces and debuggers (lldb/gdb) readable.
+def set_debug_linkage(value : LLVMOpaqueValue?) {
+    LLVMSetLinkage(value, LLVMLinkage.LLVMInternalLinkage)
+}
+
 def set_public_linkage(value : LLVMOpaqueValue?) {
     LLVMSetLinkage(value, LLVMLinkage.LLVMDLLExportLinkage)
     LLVMSetDLLStorageClass(value, LLVMDLLStorageClass.LLVMDLLExportStorageClass)
@@ -530,7 +536,11 @@ class public LlvmJitVisitor : AstVisitor {
             failed("Function {fun_name.impl()} somehow already present!")
         }
         ffunc = LLVMAddFunctionWithType(g_mod, fun_name.impl(), fun_type)
-        set_private_linkage(ffunc)
+        if (flags.need_di) {
+            set_debug_linkage(ffunc)
+        } else {
+            set_private_linkage(ffunc)
+        }
         // setup parameter alignment
         for (a, ai in arguments, ucount()) {
             var param = LLVMGetParam(ffunc, ai)
@@ -6242,7 +6252,11 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
         array<LLVMTypeRef>(types.LLVMVoidPtrType())
     )
     let globals_fn = LLVMAddFunctionWithType(g_mod, fn_name, globals_fn_type)
-    set_private_linkage(globals_fn)
+    if (flags.need_di) {
+        set_debug_linkage(globals_fn)
+    } else {
+        set_private_linkage(globals_fn)
+    }
     visitor.ffunc = globals_fn
     let entry = LLVMAppendBasicBlockInContext(g_ctx, globals_fn, "entry")
     visitor.function_entry = entry
