@@ -308,14 +308,6 @@ class CollectExternVisitor : AstVisitor {
         }
     }
 
-    def override preVisitExprTypeInfo(expr : smart_ptr<ExprTypeInfo>) : void {
-        if (expr.trait == "rtti_classinfo") {
-            add_unimplemented(uid.get_tinfo(expr), expr)
-            // Cannot be implemented,
-            // requires typeinfo.
-        }
-    }
-
     def override preVisitExprMakeBlock(expr : smart_ptr<ExprMakeBlock>) : void {
         let annotationData = (expr._block as ExprBlock).annotationData
         if (annotationData != 0 |> uint64()) {

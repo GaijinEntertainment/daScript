@@ -3895,6 +3895,9 @@ class public LlvmJitVisitor : AstVisitor {
         } elif (info.basicType == Type.tStructure) {
             var t = create_struct_global_pointer(info.structType)
             initValues[0] = t
+            if (info.firstType != null) {
+                initValues[1] = create_type_info_global(info.firstType)
+            }
         } elif (info.basicType == Type.tEnumeration || info.basicType == Type.tEnumeration8 ||
                 info.basicType == Type.tEnumeration16 || info.basicType == Type.tEnumeration64) {
             initValues[0] = create_enum_global_pointer(info.enumType)
@@ -5493,8 +5496,7 @@ class public LlvmJitVisitor : AstVisitor {
             var cll = LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_AST_TYPEDECL), params, "")
             setE(expr, cll)
         } elif (expr.trait == "rtti_classinfo") {
-            var tinfo = make_type_info_structure(*jit_context, expr.typeexpr)
-            let tptr = save_address_global(uid.get_tinfo(expr), tinfo, types.LLVMVoidPtrType())
+            var tptr = create_type_info_global(make_type_info_structure(*jit_context, expr.typeexpr))
             setE(expr, tptr)
         } else {
             failed_E(expr, "typeinfo({expr.trait}) is not supported yet")
@@ -6095,15 +6097,6 @@ class public ResolveExternVisitor : AstVisitor {
                 return
             }
             dll.set_glob_address(uid.get_ascend_new(expr), new_handle_ptr)
-        }
-    }
-
-    def override preVisitExprTypeInfo(expr : smart_ptr<ExprTypeInfo>) : void {
-        if (expr.trait == "rtti_classinfo") {
-            dll.set_glob_address(
-                uid.get_tinfo(expr),
-                make_type_info_structure(*jit_context, expr.typeexpr)
-            )
         }
     }
 
