@@ -11,7 +11,6 @@ time {
         -DDAS_IMGUI_DISABLED:BOOL=TRUE          \
         -DDAS_CLANG_BIND_DISABLED:BOOL=TRUE     \
         -DDAS_LLVM_DISABLED:BOOL=TRUE           \
-        -DDAS_MINFFT_DISABLED:BOOL=TRUE         \
         -DDAS_AUDIO_DISABLED:BOOL=TRUE          \
         -DDAS_STDDLG_DISABLED:BOOL=TRUE         \
         -DDAS_STBIMAGE_DISABLED:BOOL=TRUE       \

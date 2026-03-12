@@ -58,7 +58,7 @@ Key flags (all default to `ON` = disabled in CMakeLists.txt):
 - `DAS_IMGUI_DISABLED` — ImGui
 - `DAS_LLVM_DISABLED` — LLVM JIT
 - `DAS_CLANG_BIND_DISABLED` — Clang bindings
-- `DAS_AUDIO_DISABLED`, `DAS_MINFFT_DISABLED`, `DAS_STBIMAGE_DISABLED`, `DAS_STBTRUETYPE_DISABLED`, `DAS_STDDLG_DISABLED`, `DAS_SQLITE_DISABLED`
+- `DAS_AUDIO_DISABLED`, `DAS_STBIMAGE_DISABLED`, `DAS_STBTRUETYPE_DISABLED`, `DAS_STDDLG_DISABLED`, `DAS_SQLITE_DISABLED`
 
 **To change modules:** Edit the active `cmake.configureSettings` in `.vscode/settings.json`, then reconfigure:
 ```

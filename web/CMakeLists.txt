@@ -9,7 +9,6 @@ option(DAS_CLANG_BIND_DISABLED "Disable dasClangBind (libclang bindings, C/C++ p
 option(DAS_LLVM_DISABLED "Disable dasLLVM (llvm bindings)" ON)
 option(DAS_HV_DISABLED "Disable dasHV (websokets,http server and client)" ON)
 option(DAS_GLFW_DISABLED "Disable dasGLFW (GLFW window for graphics apps)" ON)
-option(DAS_MINFFT_DISABLED "Disable dasMinfft (Minimal FFT library)" ON)
 option(DAS_AUDIO_DISABLED "Disable dasAudio (Miniaudio sound library)" ON)
 option(DAS_STDDLG_DISABLED "Disable dasStdDlg (File new,open,save etc dialogs)" ON)
 option(DAS_STBIMAGE_DISABLED "Disable dasStbImage (StbImage bindings, image loading and saving)" ON)
