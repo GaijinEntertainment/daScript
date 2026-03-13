@@ -121,6 +121,11 @@ namespace das {
     DAS_API ExprInvoke * makeInvokeMethod ( const LineInfo & at, Expression * a, const string & b );
 
     /*
+        this is short for invoke(type<callStruct>.b, a, args)
+    */
+    DAS_API ExprInvoke * makeInvokeMethod ( const LineInfo & at, Structure * callStruct, Expression * a, const string & b );
+
+    /*
      pointer finalizer, i.e.
       def finalize(var THIS:PtrType&)
         if THIS != null
