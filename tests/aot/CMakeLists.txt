@@ -106,6 +106,9 @@ FILE(GLOB AOT_DYNAMIC_CAST_RTTI_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/dyna
 # AOT for fio test files
 FILE(GLOB AOT_FIO_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/fio/*.das")
 
+# AOT for fs test files
+FILE(GLOB AOT_FS_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/fs/*.das")
+
 # AOT for functional test files
 FILE(GLOB AOT_FUNCTIONAL_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/functional/*.das")
 
@@ -260,6 +263,10 @@ add_custom_target(test_aot_fio)
 SET(FIO_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_FIO_FILES}" FIO_AOT_GENERATED_SRC test_aot_fio daslang)
 
+add_custom_target(test_aot_fs)
+SET(FS_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_FS_FILES}" FS_AOT_GENERATED_SRC test_aot_fs daslang)
+
 add_custom_target(test_aot_functional)
 SET(FUNCTIONAL_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_FUNCTIONAL_FILES}" FUNCTIONAL_AOT_GENERATED_SRC test_aot_functional daslang)
@@ -373,6 +380,7 @@ SOURCE_GROUP_FILES("aot generated" DEBUG_AGENT_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DECS_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DYNAMIC_CAST_RTTI_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" FIO_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" FS_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" FUNCTIONAL_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" HANDLE_TYPES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" HASH_MAP_AOT_GENERATED_SRC)
@@ -418,6 +426,7 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${DECS_AOT_GENERATED_SRC}
     ${DYNAMIC_CAST_RTTI_AOT_GENERATED_SRC}
     ${FIO_AOT_GENERATED_SRC}
+    ${FS_AOT_GENERATED_SRC}
     ${FUNCTIONAL_AOT_GENERATED_SRC}
     ${HANDLE_TYPES_AOT_GENERATED_SRC}
     ${HASH_MAP_AOT_GENERATED_SRC}
@@ -452,7 +461,7 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_bitfields test_aot_bool_array
     test_aot_data_walker test_aot_debug
     test_aot_debug_agent test_aot_decs test_aot_dynamic_cast_rtti
-    test_aot_fio test_aot_functional
+    test_aot_fio test_aot_fs test_aot_functional
     test_aot_handle_types test_aot_hash_map
     test_aot_interfaces
     test_aot_jobque test_aot_json
