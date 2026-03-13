@@ -40,6 +40,7 @@ def fstat(f : file) : FStat {
     return fs
 }
 
+[generic]
 def fread(f : file; blk : block<(data : string const#)>) {
     var stmp = fread(f)
     unsafe {
@@ -57,10 +58,12 @@ struct df_header {
     size : int
 }
 
+[generic]
 def fload(file : file; size : int; blk : block<(data : array<uint8>) : void>) : void {
     _builtin_load(file, size, blk)
 }
 
+[generic]
 def fload(f : file; buf : auto(BufType) -const) {
     var dfh : df_header
     let r1 = _builtin_read(f, dfh, typeinfo sizeof(type<df_header>))
@@ -80,6 +83,7 @@ def fload(f : file; buf : auto(BufType) -const) {
     return loaded
 }
 
+[generic]
 def fsave(f : file; buf : auto(BufType) const) {
     var r1, r2 : int
     binary_save(buf) <| $(data) {
@@ -99,6 +103,7 @@ def fsave(f : file; buf : auto(BufType) const) {
     return (r1 + r2)
 }
 
+[generic]
 def fread(f : file; buf : auto(BufType) const implicit) {
     concept_assert(typeinfo is_raw(buf), "'fread' accepts only raw POD types")
     unsafe {
@@ -106,6 +111,7 @@ def fread(f : file; buf : auto(BufType) const implicit) {
     }
 }
 
+[generic]
 def fread(f : file; buf : array<auto(BufType)> const implicit) {
     concept_assert(typeinfo is_raw(type<BufType>), "'fread' accepts only raw POD type arrays")
     unsafe {
@@ -113,6 +119,7 @@ def fread(f : file; buf : array<auto(BufType)> const implicit) {
     }
 }
 
+[generic]
 def fwrite(f : file; buf : auto(BufType) const implicit) {
     concept_assert(typeinfo is_raw(buf), "'fwrite' accepts only raw POD types")
     unsafe {
@@ -120,6 +127,7 @@ def fwrite(f : file; buf : auto(BufType) const implicit) {
     }
 }
 
+[generic]
 def fwrite(f : file; buf : array<auto(BufType)> const implicit) {
     concept_assert(typeinfo is_raw(type<BufType>), "'fwrite' accepts only raw POD type arrays")
     unsafe {
@@ -127,6 +135,7 @@ def fwrite(f : file; buf : array<auto(BufType)> const implicit) {
     }
 }
 
+[generic]
 def mkdir_rec(path : string) : bool {
     return true if (path == "")
     var st : FStat

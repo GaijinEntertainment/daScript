@@ -1,6 +1,5 @@
 options gen2
 options indenting = 4
-options no_aot
 
 require dastest/testing_boost public
 require fio
