@@ -2535,15 +2535,19 @@ namespace das {
     // ExprLooksLikeCall
 
     ExpressionPtr ExprLooksLikeCall::visit(Visitor & vis) {
-        vis.preVisit(this);
-        for ( auto & arg : arguments ) {
-            if ( vis.canVisitLooksLikeCallArg(this, arg.get(), arg==arguments.back()) ) {
-                vis.preVisitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
-                arg = arg->visit(vis);
-                arg = vis.visitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
+        if ( vis.canVisitLooksLikeCall(this) ) {
+            vis.preVisit(this);
+            for ( auto & arg : arguments ) {
+                if ( vis.canVisitLooksLikeCallArg(this, arg.get(), arg==arguments.back()) ) {
+                    vis.preVisitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
+                    arg = arg->visit(vis);
+                    arg = vis.visitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
+                }
             }
+            return vis.visit(this);
+        } else {
+            return this;
         }
-        return vis.visit(this);
     }
 
     ExpressionPtr ExprLooksLikeCall::clone( const ExpressionPtr & expr ) const {
@@ -2609,23 +2613,27 @@ namespace das {
     // named call
 
     ExpressionPtr ExprNamedCall::visit(Visitor & vis) {
-        vis.preVisit(this);
+        if ( vis.canVisitNamedCall(this) ) {
+            vis.preVisit(this);
 
-        if (nonNamedArguments.size() > 0) {
-            ExprCall dummy;
-            for (auto& arg : nonNamedArguments) {
-                vis.preVisitCallArg(&dummy, arg.get(), arg == nonNamedArguments.back());
-                arg = arg->visit(vis);
-                arg = vis.visitCallArg(&dummy, arg.get(), arg == nonNamedArguments.back());
+            if (nonNamedArguments.size() > 0) {
+                ExprCall dummy;
+                for (auto& arg : nonNamedArguments) {
+                    vis.preVisitCallArg(&dummy, arg.get(), arg == nonNamedArguments.back());
+                    arg = arg->visit(vis);
+                    arg = vis.visitCallArg(&dummy, arg.get(), arg == nonNamedArguments.back());
+                }
+                this->argumentsFailedToInfer = dummy.argumentsFailedToInfer;
             }
-            this->argumentsFailedToInfer = dummy.argumentsFailedToInfer;
+            for (auto& arg : arguments) {
+                vis.preVisitNamedCallArg(this, arg.get(), arg == arguments.back());
+                arg->value = arg->value->visit(vis);
+                arg = vis.visitNamedCallArg(this, arg.get(), arg==arguments.back());
+            }
+            return vis.visit(this);
+        } else {
+            return this;
         }
-        for (auto& arg : arguments) {
-            vis.preVisitNamedCallArg(this, arg.get(), arg == arguments.back());
-            arg->value = arg->value->visit(vis);
-            arg = vis.visitNamedCallArg(this, arg.get(), arg==arguments.back());
-        }
-        return vis.visit(this);
     }
 
     ExpressionPtr ExprNamedCall::clone( const ExpressionPtr & expr ) const {

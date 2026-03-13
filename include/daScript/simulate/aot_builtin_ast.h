@@ -165,6 +165,8 @@ namespace das {
         virtual bool canVisitWithAliasSubexpression ( ExprAssume * expr ) override;
         virtual bool canVisitMakeBlockBody ( ExprMakeBlock * expr ) override;
         virtual bool canVisitCall ( ExprCall * expr ) override;
+        virtual bool canVisitNamedCall ( ExprNamedCall * expr ) override;
+        virtual bool canVisitLooksLikeCall ( ExprLooksLikeCall * expr ) override;
         // WHOLE PROGRAM
         virtual void preVisitProgram ( Program * prog ) override;
         virtual void visitProgram ( Program * prog ) override;

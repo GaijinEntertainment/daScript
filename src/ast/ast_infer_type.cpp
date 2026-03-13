@@ -4988,13 +4988,26 @@ namespace das {
         }
         return Visitor::visit(expr);
     }
+    bool InferTypes::canVisitLooksLikeCall(ExprLooksLikeCall *call) {
+        if ( callDepth >= program->policies.max_call_depth ) {
+            error("call expression depth exceeded maximum allowed (" + to_string(program->policies.max_call_depth) + ")", "", "",
+                  call->at, CompilationError::too_many_infer_passes);
+            return false;
+        }
+        return true;
+    }
     void InferTypes::preVisit(ExprLooksLikeCall *call) {
+        callDepth++;
         Visitor::preVisit(call);
         call->argumentsFailedToInfer = false;
         if (call->arguments.size() > DAS_MAX_FUNCTION_ARGUMENTS) {
             error("too many arguments in " + call->name + ", max allowed is DAS_MAX_FUNCTION_ARGUMENTS=" DAS_STR(DAS_MAX_FUNCTION_ARGUMENTS), "", "",
                   call->at, CompilationError::too_many_arguments);
         }
+    }
+    ExpressionPtr InferTypes::visit(ExprLooksLikeCall *call) {
+        callDepth--;
+        return Visitor::visit(call);
     }
     ExpressionPtr InferTypes::visitLooksLikeCallArg(ExprLooksLikeCall *call, Expression *arg, bool last) {
         if (!arg->type)
@@ -5004,7 +5017,16 @@ namespace das {
         checkEmptyBlock(arg);
         return Visitor::visitLooksLikeCallArg(call, arg, last);
     }
+    bool InferTypes::canVisitNamedCall(ExprNamedCall *call) {
+        if ( callDepth >= program->policies.max_call_depth ) {
+            error("call expression depth exceeded maximum allowed (" + to_string(program->policies.max_call_depth) + ")", "", "",
+                  call->at, CompilationError::too_many_infer_passes);
+            return false;
+        }
+        return true;
+    }
     void InferTypes::preVisit(ExprNamedCall *call) {
+        callDepth++;
         Visitor::preVisit(call);
         call->argumentsFailedToInfer = false;
         if ((call->arguments.size() > DAS_MAX_FUNCTION_ARGUMENTS) || (call->nonNamedArguments.size() > DAS_MAX_FUNCTION_ARGUMENTS)) {
@@ -5021,6 +5043,7 @@ namespace das {
         return Visitor::visitNamedCallArg(call, arg, last);
     }
     ExpressionPtr InferTypes::visit(ExprNamedCall *expr) {
+        callDepth--;
         if (expr->argumentsFailedToInfer) {
             if (func)
                 func->notInferred();
@@ -5126,7 +5149,16 @@ namespace das {
         }
         return Visitor::visit(expr);
     }
+    bool InferTypes::canVisitCall(ExprCall *call) {
+        if ( callDepth >= program->policies.max_call_depth ) {
+            error("call expression depth exceeded maximum allowed (" + to_string(program->policies.max_call_depth) + ")", "", "",
+                  call->at, CompilationError::too_many_infer_passes);
+            return false;
+        }
+        return true;
+    }
     void InferTypes::preVisit(ExprCall *call) {
+        callDepth++;
         Visitor::preVisit(call);
         call->argumentsFailedToInfer = false;
         if (call->arguments.size() > DAS_MAX_FUNCTION_ARGUMENTS) {
@@ -5170,6 +5202,7 @@ namespace das {
         return Visitor::visitCallArg(call, arg, last);
     }
     ExpressionPtr InferTypes::visit(ExprCall *expr) {
+        callDepth--;
         if (expr->argumentsFailedToInfer) {
             if (func)
                 func->notInferred();

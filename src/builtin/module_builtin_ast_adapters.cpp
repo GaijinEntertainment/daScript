@@ -172,6 +172,30 @@ namespace das {
         }
     }
 
+    bool VisitorAdapter::canVisitNamedCall(ExprNamedCall *expr) {
+        if ( auto fnCanVisit = get_canVisitNamedCall(classPtr) ) {
+            bool result = true;
+            runMacroFunction(context, "canVisitNamedCall", [&]() {
+                result = invoke_canVisitNamedCall(context,fnCanVisit,classPtr,expr);
+            });
+            return result;
+        } else {
+            return true;
+        }
+    }
+
+    bool VisitorAdapter::canVisitLooksLikeCall(ExprLooksLikeCall *expr) {
+        if ( auto fnCanVisit = get_canVisitLooksLikeCall(classPtr) ) {
+            bool result = true;
+            runMacroFunction(context, "canVisitLooksLikeCall", [&]() {
+                result = invoke_canVisitLooksLikeCall(context,fnCanVisit,classPtr,expr);
+            });
+            return result;
+        } else {
+            return true;
+        }
+    }
+
     void VisitorAdapter::preVisitProgram(Program *prog) {
         if ( auto fnPreVisit = get_preVisitProgram(classPtr) ) {
             runMacroFunction(context, "preVisitProgram", [&]() {
