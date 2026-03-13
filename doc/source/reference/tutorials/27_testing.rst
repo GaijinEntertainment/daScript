@@ -111,7 +111,7 @@ Here is the ``.das_test`` used by the main ``tests/`` directory:
           *result = false
           return
       }
-      if (folder_name == "jit_tests" || folder_name == "jitted_scripts") {
+      if (folder_name == "jit_tests" || folder_name == ".jitted_scripts") {
           let args <- get_command_line_arguments()
           for (arg in args) {
               if (arg == "--use-aot") {

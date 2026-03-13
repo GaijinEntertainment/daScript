@@ -4,7 +4,6 @@
 
 set(DAS_UTILS
     aot
-    dasCodeFormatter
     dascov
     daspkg
     mcp
@@ -13,8 +12,6 @@ set(DAS_UTILS
 if(NOT DAS_SQLITE_DISABLED)
     list(APPEND DAS_UTILS benchctl)
 endif()
-
-set(DASLANG_EXE ${PROJECT_SOURCE_DIR}/bin/daslang)
 
 # Collect daslib and LLVM daslib sources as dependencies.
 file(GLOB DASLIB_SOURCES ${PROJECT_SOURCE_DIR}/daslib/*.das)
@@ -27,7 +24,7 @@ foreach(util ${DAS_UTILS})
 
     add_custom_command(
         OUTPUT  ${UTIL_OUT}
-        COMMAND ${DASLANG_EXE} -exe -output ${PROJECT_SOURCE_DIR}/bin/${util} ${UTIL_MAIN}
+        COMMAND daslang -exe -output ${PROJECT_SOURCE_DIR}/bin/${util} ${UTIL_MAIN}
         DEPENDS ${UTIL_MAIN} daslang ${DASLIB_SOURCES} ${DASLLVM_DASLIB_SOURCES}
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Building ${util} executable (daslang -exe)"
