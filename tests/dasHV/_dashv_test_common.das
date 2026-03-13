@@ -46,7 +46,7 @@ def with_test_server(server_type : auto(ServerType); port : int; blk : block<(ba
                     started |> notify_and_release
                     while (stop_flag |> get == 0) {
                         server->tick()
-                        sleep(10u)
+                        sleep(1u)
                     }
                     server->stop()
                     finished |> notify_and_release

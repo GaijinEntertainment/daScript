@@ -96,7 +96,7 @@ def with_advanced_test_server(port : int; blk : block<(base_url : string) : void
                     started |> notify_and_release
                     while (stop_flag |> get == 0) {
                         server->tick()
-                        sleep(10u)
+                        sleep(1u)
                     }
                     server->stop()
                     finished |> notify_and_release

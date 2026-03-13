@@ -95,8 +95,8 @@ def wait_messages(var client : TestWsClient?; count : int; max_ms : int = 3000) 
     var elapsed = 0
     while (length(client.received) < count && elapsed < max_ms) {
         client->process_event_que()
-        sleep(20u)
-        elapsed += 20
+        sleep(1u)
+        elapsed += 1
     }
 }
 
@@ -105,8 +105,8 @@ def wait_closed(var client : TestWsClient?; max_ms : int = 3000) {
     var elapsed = 0
     while (!client.closed && elapsed < max_ms) {
         client->process_event_que()
-        sleep(20u)
-        elapsed += 20
+        sleep(1u)
+        elapsed += 1
     }
 }
 
@@ -125,7 +125,7 @@ def with_ws_test_server(port : int; blk : block<(ws_url : string; http_url : str
                     started |> notify_and_release
                     while (stop_flag |> get == 0) {
                         server->tick()
-                        sleep(10u)
+                        sleep(1u)
                     }
                     server->stop()
                     unsafe {
