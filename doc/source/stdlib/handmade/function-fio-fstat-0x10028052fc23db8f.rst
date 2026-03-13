@@ -1,2 +1,1 @@
-// stub
-def fstat (f: file) : FStat
+Returns the file status (size, modification time, etc.) for an open file handle.

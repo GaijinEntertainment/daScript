@@ -1,2 +1,1 @@
-// stub
-def stat (file: string; stat: FStat) : bool
+Returns the file status (size, modification time, etc.) for a file at the given path.
