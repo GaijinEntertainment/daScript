@@ -109,7 +109,7 @@ class JIT_LLVM : AstSimulateMacro {
         // out to be reachable.
         let exe_strict = true
         assume config_out_path = string(prog.policies.jit_output_path)
-        let output_path = config_out_path |> empty() ? "jitted_scripts/{prog.thisNamespace}" : config_out_path
+        let output_path = config_out_path |> empty() ? ".jitted_scripts/{prog.thisNamespace}" : config_out_path
         assume path_to_shared_lib = string(prog.policies.jit_path_to_shared_lib)
         assume path_to_linker = string(prog.policies.jit_path_to_linker)
 

@@ -11,7 +11,7 @@ build/
 # All build binaries stored here
 bin/
 # JIT stores dll's here
-jitted_scripts/
+.jitted_scripts/
 # All build libraries stored here
 lib/
 modules/**/*.shared_module
