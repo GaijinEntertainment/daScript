@@ -82,4 +82,33 @@ namespace das {
     DAS_API bool has_env_variable ( const char * var, Context * context, LineInfoArg * at );
     DAS_API char * get_env_variable ( const char * var, Context * context, LineInfoArg * at );
     DAS_API char * sanitize_command_line ( const char * cmd, Context * context, LineInfoArg * at );
+    // filesystem operations (C++17 <filesystem>)
+    struct DiskSpaceInfo {
+        uint64_t capacity = 0;
+        uint64_t free = 0;
+        uint64_t available = 0;
+    };
+    // path manipulation
+    DAS_API char * builtin_fs_extension ( const char * path, Context * context, LineInfoArg * at );
+    DAS_API char * builtin_fs_stem ( const char * path, Context * context, LineInfoArg * at );
+    DAS_API char * builtin_fs_replace_extension ( const char * path, const char * new_ext, Context * context, LineInfoArg * at );
+    DAS_API char * builtin_fs_join ( const char * a, const char * b, Context * context, LineInfoArg * at );
+    DAS_API char * builtin_fs_normalize ( const char * path, Context * context, LineInfoArg * at );
+    DAS_API bool   builtin_fs_is_absolute ( const char * path );
+    DAS_API char * builtin_fs_relative ( const char * path, const char * base, Context * context, LineInfoArg * at );
+    DAS_API char * builtin_fs_parent ( const char * path, Context * context, LineInfoArg * at );
+    // file queries
+    DAS_API int64_t builtin_fs_file_size ( const char * path );
+    DAS_API bool    builtin_fs_equivalent ( const char * a, const char * b );
+    DAS_API bool    builtin_fs_is_symlink ( const char * path );
+    // file operations
+    DAS_API bool    builtin_fs_copy_file ( const char * src, const char * dst, bool overwrite );
+    DAS_API bool    builtin_fs_set_mtime ( const char * path, Time time );
+    // directory operations
+    DAS_API void    builtin_fs_dir_rec ( const char * path, const Block & blk, Context * context, LineInfoArg * at );
+    // system queries
+    DAS_API char *  builtin_fs_temp_directory ( Context * context, LineInfoArg * at );
+    DAS_API char *  builtin_fs_create_temp_file ( const char * prefix, const char * ext, Context * context, LineInfoArg * at );
+    DAS_API char *  builtin_fs_create_temp_directory ( const char * prefix, Context * context, LineInfoArg * at );
+    DAS_API bool    builtin_fs_disk_space ( const char * path, DiskSpaceInfo & info );
 }

@@ -149,6 +149,18 @@ namespace das {
     bool has_env_variable ( const char * var, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * get_env_variable ( const char * var, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * sanitize_command_line ( const char * cmd, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    // filesystem stubs
+    char * builtin_fs_extension ( const char * path, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    char * builtin_fs_stem ( const char * path, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    char * builtin_fs_replace_extension ( const char * path, const char * new_ext, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    char * builtin_fs_join ( const char * a, const char * b, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    char * builtin_fs_normalize ( const char * path, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    char * builtin_fs_relative ( const char * path, const char * base, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    char * builtin_fs_parent ( const char * path, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    void builtin_fs_dir_rec ( const char * path, const Block & blk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    char * builtin_fs_temp_directory ( Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    char * builtin_fs_create_temp_file ( const char * prefix, const char * ext, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    char * builtin_fs_create_temp_directory ( const char * prefix, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
 #undef GENERATE_IO_STUB
 
 #define GENERATE_IO_STUB { DAS_FATAL_ERROR("%s is not implemented (because DAS_NO_FILEIO is enabled).", __FUNCTION__); }
@@ -171,6 +183,13 @@ namespace das {
     bool builtin_rmdir ( const char * path ) GENERATE_IO_STUB_RET
     bool builtin_fexist ( const char * path ) GENERATE_IO_STUB_RET
     bool builtin_rmdir_rec ( const char * path ) GENERATE_IO_STUB_RET
+    bool builtin_fs_is_absolute ( const char * path ) GENERATE_IO_STUB_RET
+    int64_t builtin_fs_file_size ( const char * path ) GENERATE_IO_STUB_RET
+    bool builtin_fs_equivalent ( const char * a, const char * b ) GENERATE_IO_STUB_RET
+    bool builtin_fs_is_symlink ( const char * path ) GENERATE_IO_STUB_RET
+    bool builtin_fs_copy_file ( const char * src, const char * dst, bool overwrite ) GENERATE_IO_STUB_RET
+    bool builtin_fs_set_mtime ( const char * path, Time time ) GENERATE_IO_STUB_RET
+    bool builtin_fs_disk_space ( const char * path, DiskSpaceInfo & info ) GENERATE_IO_STUB_RET
 #undef GENERATE_IO_STUB
 #undef GENERATE_IO_STUB_RET
 
@@ -187,8 +206,12 @@ namespace das {
 }
 #else // DAS_NO_FILEIO
 
+#include <filesystem>
+#include <random>
+
 MAKE_TYPE_FACTORY(FStat, das::FStat)
 MAKE_TYPE_FACTORY(FILE,FILE)
+MAKE_TYPE_FACTORY(DiskSpaceInfo, das::DiskSpaceInfo)
 
 namespace das {
     void builtin_sleep ( uint32_t msec ) {
@@ -869,6 +892,227 @@ namespace das {
         return context->allocateString(ss.str().data(), uint32_t(ss.str().size()), at);
     }
 
+    // ---- filesystem operations (C++17 <filesystem>) ----
+
+    namespace stdfs = std::filesystem;
+
+    struct DiskSpaceInfoAnnotation : ManagedStructureAnnotation<DiskSpaceInfo, true> {
+        DiskSpaceInfoAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation("DiskSpaceInfo", ml) {
+            validationNeverFails = true;
+            addField<DAS_BIND_MANAGED_FIELD(capacity)>("capacity");
+            addField<DAS_BIND_MANAGED_FIELD(free)>("free");
+            addField<DAS_BIND_MANAGED_FIELD(available)>("available");
+        }
+        virtual bool canMove() const override { return true; }
+        virtual bool canCopy() const override { return true; }
+        virtual bool isLocal() const override { return true; }
+    };
+
+    // path manipulation
+
+    char * builtin_fs_extension ( const char * path, Context * ctx, LineInfoArg * at ) {
+        if ( !path ) return nullptr;
+        try {
+            auto ext = stdfs::path(path).extension().string();
+            if ( ext.empty() ) return nullptr;
+            return ctx->allocateString(ext.data(), uint32_t(ext.size()), at);
+        } catch (...) { return nullptr; }
+    }
+
+    char * builtin_fs_stem ( const char * path, Context * ctx, LineInfoArg * at ) {
+        if ( !path ) return nullptr;
+        try {
+            auto s = stdfs::path(path).stem().string();
+            if ( s.empty() ) return nullptr;
+            return ctx->allocateString(s.data(), uint32_t(s.size()), at);
+        } catch (...) { return nullptr; }
+    }
+
+    char * builtin_fs_replace_extension ( const char * path, const char * new_ext, Context * ctx, LineInfoArg * at ) {
+        if ( !path ) return nullptr;
+        try {
+            auto p = stdfs::path(path);
+            p.replace_extension(new_ext ? new_ext : "");
+            auto s = p.string();
+            return ctx->allocateString(s.data(), uint32_t(s.size()), at);
+        } catch (...) { return nullptr; }
+    }
+
+    char * builtin_fs_join ( const char * a, const char * b, Context * ctx, LineInfoArg * at ) {
+        if ( !a && !b ) return nullptr;
+        try {
+            stdfs::path pa = a ? a : "";
+            if ( b ) pa /= b;
+            auto s = pa.string();
+            return ctx->allocateString(s.data(), uint32_t(s.size()), at);
+        } catch (...) { return nullptr; }
+    }
+
+    char * builtin_fs_normalize ( const char * path, Context * ctx, LineInfoArg * at ) {
+        if ( !path ) return nullptr;
+        try {
+            auto s = stdfs::path(path).lexically_normal().string();
+            if ( s.empty() ) return nullptr;
+            return ctx->allocateString(s.data(), uint32_t(s.size()), at);
+        } catch (...) { return nullptr; }
+    }
+
+    bool builtin_fs_is_absolute ( const char * path ) {
+        if ( !path ) return false;
+        try { return stdfs::path(path).is_absolute(); }
+        catch (...) { return false; }
+    }
+
+    char * builtin_fs_relative ( const char * path, const char * base, Context * ctx, LineInfoArg * at ) {
+        if ( !path || !base ) return nullptr;
+        try {
+            auto s = stdfs::relative(stdfs::path(path), stdfs::path(base)).string();
+            if ( s.empty() ) return nullptr;
+            return ctx->allocateString(s.data(), uint32_t(s.size()), at);
+        } catch (...) { return nullptr; }
+    }
+
+    char * builtin_fs_parent ( const char * path, Context * ctx, LineInfoArg * at ) {
+        if ( !path ) return nullptr;
+        try {
+            auto s = stdfs::path(path).parent_path().string();
+            if ( s.empty() ) return nullptr;
+            return ctx->allocateString(s.data(), uint32_t(s.size()), at);
+        } catch (...) { return nullptr; }
+    }
+
+    // file queries
+
+    int64_t builtin_fs_file_size ( const char * path ) {
+        if ( !path ) return -1;
+        try {
+            auto sz = stdfs::file_size(path);
+            return static_cast<int64_t>(sz);
+        } catch (...) { return -1; }
+    }
+
+    bool builtin_fs_equivalent ( const char * a, const char * b ) {
+        if ( !a || !b ) return false;
+        try { return stdfs::equivalent(a, b); }
+        catch (...) { return false; }
+    }
+
+    bool builtin_fs_is_symlink ( const char * path ) {
+        if ( !path ) return false;
+        try { return stdfs::is_symlink(path); }
+        catch (...) { return false; }
+    }
+
+    // file operations
+
+    bool builtin_fs_copy_file ( const char * src, const char * dst, bool overwrite ) {
+        if ( !src || !dst ) return false;
+        try {
+            auto opts = overwrite ? stdfs::copy_options::overwrite_existing : stdfs::copy_options::none;
+            return stdfs::copy_file(src, dst, opts);
+        } catch (...) { return false; }
+    }
+
+    bool builtin_fs_set_mtime ( const char * path, Time time ) {
+        if ( !path ) return false;
+        try {
+            // convert time_t to file_time_type
+            auto sys_time = std::chrono::system_clock::from_time_t(time.time);
+            auto file_time = stdfs::file_time_type::clock::now() +
+                (sys_time - std::chrono::system_clock::now());
+            stdfs::last_write_time(path, file_time);
+            return true;
+        } catch (...) { return false; }
+    }
+
+    // directory operations
+
+    void builtin_fs_dir_rec ( const char * path, const Block & blk, Context * ctx, LineInfoArg * at ) {
+        if ( !path ) return;
+        try {
+            stdfs::path root(path);
+            std::error_code ec;
+            for ( auto & entry : stdfs::recursive_directory_iterator(root,
+                    stdfs::directory_options::skip_permission_denied, ec) ) {
+                if ( ec ) { ec.clear(); continue; }
+                auto rel = stdfs::relative(entry.path(), root, ec).string();
+                if ( ec ) { ec.clear(); continue; }
+                bool is_dir = entry.is_directory(ec);
+                if ( ec ) { ec.clear(); }
+                char * fname = ctx->allocateString(rel.data(), uint32_t(rel.size()), at);
+                vec4f args[2] = {
+                    cast<char*>::from(fname),
+                    cast<bool>::from(is_dir)
+                };
+                ctx->invoke(blk, args, nullptr, at);
+            }
+        } catch (...) {}
+    }
+
+    // system queries
+
+    char * builtin_fs_temp_directory ( Context * ctx, LineInfoArg * at ) {
+        try {
+            auto s = stdfs::temp_directory_path().string();
+            return ctx->allocateString(s.data(), uint32_t(s.size()), at);
+        } catch (...) { return nullptr; }
+    }
+
+    char * builtin_fs_create_temp_file ( const char * prefix, const char * ext, Context * ctx, LineInfoArg * at ) {
+        try {
+            auto tmp = stdfs::temp_directory_path();
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            std::uniform_int_distribution<uint64_t> dis;
+            for ( int i = 0; i < 100; ++i ) {
+                auto name = string(prefix ? prefix : "tmp") + "_" + std::to_string(dis(gen))
+                    + (ext ? ext : "");
+                auto p = tmp / name;
+                std::error_code ec;
+                if ( !stdfs::exists(p, ec) ) {
+                    // create empty file
+                    FILE * f = fopen(p.string().c_str(), "wb");
+                    if ( f ) {
+                        fclose(f);
+                        auto s = p.string();
+                        return ctx->allocateString(s.data(), uint32_t(s.size()), at);
+                    }
+                }
+            }
+            return nullptr;
+        } catch (...) { return nullptr; }
+    }
+
+    char * builtin_fs_create_temp_directory ( const char * prefix, Context * ctx, LineInfoArg * at ) {
+        try {
+            auto tmp = stdfs::temp_directory_path();
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            std::uniform_int_distribution<uint64_t> dis;
+            for ( int i = 0; i < 100; ++i ) {
+                auto name = string(prefix ? prefix : "tmp") + "_" + std::to_string(dis(gen));
+                auto p = tmp / name;
+                std::error_code ec;
+                if ( stdfs::create_directory(p, ec) && !ec ) {
+                    auto s = p.string();
+                    return ctx->allocateString(s.data(), uint32_t(s.size()), at);
+                }
+            }
+            return nullptr;
+        } catch (...) { return nullptr; }
+    }
+
+    bool builtin_fs_disk_space ( const char * path, DiskSpaceInfo & info ) {
+        if ( !path ) return false;
+        try {
+            auto si = stdfs::space(path);
+            info.capacity = si.capacity;
+            info.free = si.free;
+            info.available = si.available;
+            return true;
+        } catch (...) { return false; }
+    }
+
     class Module_FIO : public Module {
     public:
         Module_FIO() : Module("fio") {
@@ -1011,6 +1255,67 @@ namespace das {
             addExtern<DAS_BIND_FUN(sanitize_command_line)>(*this, lib, "sanitize_command_line",
                 SideEffects::none, "sanitize_command_line")
                     ->args({"var","context","at"});
+            // filesystem operations (C++17 <filesystem>)
+            addAnnotation(make_smart<DiskSpaceInfoAnnotation>(lib));
+            // path manipulation
+            addExtern<DAS_BIND_FUN(builtin_fs_extension)>(*this, lib, "extension",
+                SideEffects::none, "builtin_fs_extension")
+                    ->args({"path","context","at"});
+            addExtern<DAS_BIND_FUN(builtin_fs_stem)>(*this, lib, "stem",
+                SideEffects::none, "builtin_fs_stem")
+                    ->args({"path","context","at"});
+            addExtern<DAS_BIND_FUN(builtin_fs_replace_extension)>(*this, lib, "replace_extension",
+                SideEffects::none, "builtin_fs_replace_extension")
+                    ->args({"path","new_ext","context","at"});
+            addExtern<DAS_BIND_FUN(builtin_fs_join)>(*this, lib, "path_join",
+                SideEffects::none, "builtin_fs_join")
+                    ->args({"a","b","context","at"});
+            addExtern<DAS_BIND_FUN(builtin_fs_normalize)>(*this, lib, "normalize",
+                SideEffects::none, "builtin_fs_normalize")
+                    ->args({"path","context","at"});
+            addExtern<DAS_BIND_FUN(builtin_fs_is_absolute)>(*this, lib, "is_absolute",
+                SideEffects::none, "builtin_fs_is_absolute")
+                    ->arg("path");
+            addExtern<DAS_BIND_FUN(builtin_fs_relative)>(*this, lib, "relative",
+                SideEffects::accessExternal, "builtin_fs_relative")
+                    ->args({"path","base","context","at"});
+            addExtern<DAS_BIND_FUN(builtin_fs_parent)>(*this, lib, "parent",
+                SideEffects::none, "builtin_fs_parent")
+                    ->args({"path","context","at"});
+            // file queries
+            addExtern<DAS_BIND_FUN(builtin_fs_file_size)>(*this, lib, "file_size",
+                SideEffects::accessExternal, "builtin_fs_file_size")
+                    ->arg("path");
+            addExtern<DAS_BIND_FUN(builtin_fs_equivalent)>(*this, lib, "equivalent",
+                SideEffects::accessExternal, "builtin_fs_equivalent")
+                    ->args({"a","b"});
+            addExtern<DAS_BIND_FUN(builtin_fs_is_symlink)>(*this, lib, "is_symlink",
+                SideEffects::accessExternal, "builtin_fs_is_symlink")
+                    ->arg("path");
+            // file operations
+            addExtern<DAS_BIND_FUN(builtin_fs_copy_file)>(*this, lib, "copy_file",
+                SideEffects::modifyExternal, "builtin_fs_copy_file")
+                    ->args({"src","dst","overwrite"});
+            addExtern<DAS_BIND_FUN(builtin_fs_set_mtime)>(*this, lib, "set_mtime",
+                SideEffects::modifyExternal, "builtin_fs_set_mtime")
+                    ->args({"path","time"});
+            // directory operations
+            addExtern<DAS_BIND_FUN(builtin_fs_dir_rec)>(*this, lib, "builtin_dir_rec",
+                SideEffects::modifyExternal, "builtin_fs_dir_rec")
+                    ->args({"path","block","context","at"});
+            // system queries
+            addExtern<DAS_BIND_FUN(builtin_fs_temp_directory)>(*this, lib, "temp_directory",
+                SideEffects::accessExternal, "builtin_fs_temp_directory")
+                    ->args({"context","at"});
+            addExtern<DAS_BIND_FUN(builtin_fs_create_temp_file)>(*this, lib, "create_temp_file",
+                SideEffects::modifyExternal, "builtin_fs_create_temp_file")
+                    ->args({"prefix","ext","context","at"});
+            addExtern<DAS_BIND_FUN(builtin_fs_create_temp_directory)>(*this, lib, "create_temp_directory",
+                SideEffects::modifyExternal, "builtin_fs_create_temp_directory")
+                    ->args({"prefix","context","at"});
+            addExtern<DAS_BIND_FUN(builtin_fs_disk_space)>(*this, lib, "builtin_disk_space",
+                SideEffects::accessExternal, "builtin_fs_disk_space")
+                    ->args({"path","info"});
             // add builtin module
             compileBuiltinModule("fio.das",fio_das, sizeof(fio_das));
             // lets verify all names

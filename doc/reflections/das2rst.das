@@ -165,9 +165,10 @@ def document_module_fio(root : string) {
     var mod = get_module("fio")
     var groups <- array<DocGroup>(
         hide_group(group_by_regex("Internal builtin functions", mod, %regex~builtin%%)),
-        group_by_regex("File manipulation", mod, %regex~(f|stat$|getchar|remove|rename)%%),
-        group_by_regex("Path manipulation", mod, %regex~(base_name|dir_name|get_full_file_name)$%%),
-        group_by_regex("Directory manipulation", mod, %regex~(dir|mkdir|mkdir_rec|rmdir|rmdir_rec|chdir|getcwd)$%%),
+        group_by_regex("File manipulation", mod, %regex~(f|stat$|getchar|remove|rename|copy_file|file_size|equivalent|is_symlink|set_mtime)%%),
+        group_by_regex("Path manipulation", mod, %regex~(base_name|dir_name|get_full_file_name|extension|stem|replace_extension|path_join|normalize|is_absolute|relative|parent)$%%),
+        group_by_regex("Directory manipulation", mod, %regex~(dir|dir_rec|mkdir|mkdir_rec|rmdir|rmdir_rec|chdir|getcwd)$%%),
+        group_by_regex("Filesystem queries", mod, %regex~(temp_directory|create_temp_file|create_temp_directory|disk_space)$%%),
         group_by_regex("OS specific routines", mod, %regex~(sleep|exit|popen|popen_binary|popen_timeout|popen_timed_out|get_env_variable|sanitize_command_line|has_env_variable)$%%),
         group_by_regex("Dynamic modules", mod, %regex~(register_dynamic_module|register_native_path)$%%)
     )
