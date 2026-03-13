@@ -257,7 +257,23 @@ namespace das {
     /* a->b(args) is short for invoke(a.b, cast<auto> deref(a), args)  */
     ExprInvoke * makeInvokeMethod ( const LineInfo & at, Expression * a, const string & b ) {
         auto pInvoke = new ExprInvoke(at, "invoke");
-        auto pAt = make_smart<ExprField>(at, a->clone(), b);
+        auto pAt = make_smart<ExprField>(at, a, b);
+        pInvoke->arguments.push_back(pAt);
+        pInvoke->isInvokeMethod = true;
+        auto pTypeAuto = make_smart<ExprTypeDecl>(at, make_smart<TypeDecl>(Type::autoinfer));
+        pTypeAuto->typeexpr->at = at;
+        pInvoke->arguments.push_back(pTypeAuto);
+        return pInvoke;
+    }
+
+    /* a->b(args) is short for invoke(type<callStruct>.b, cast<auto> deref(a), args)  */
+    ExprInvoke * makeInvokeMethod ( const LineInfo & at, Structure * callStruct, Expression * a, const string & b ) {
+        auto pInvoke = new ExprInvoke(at, "invoke");
+        auto callType = make_smart<TypeDecl>(Type::tStructure);
+        callType->at = at;
+        callType->structType = callStruct;
+        auto callTypeExpr = make_smart<ExprTypeDecl>(at, callType);
+        auto pAt = make_smart<ExprField>(at, callTypeExpr, b);
         pInvoke->arguments.push_back(pAt);
         pInvoke->isInvokeMethod = true;
         auto pCast = make_smart<ExprCast>();

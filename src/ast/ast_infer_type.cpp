@@ -1338,9 +1338,65 @@ namespace das {
             return nullptr;
         }
     }
+
+    ExpressionPtr extractCastAutoDeref ( ExpressionPtr & expr ) {
+        auto eFoo = expr;
+        if ( eFoo->rtti_isCast() ) {
+            eFoo = static_pointer_cast<ExprCast>(eFoo)->subexpr;
+            if ( eFoo->rtti_isPtr2Ref() ) {
+                auto ePtr2Ref = static_pointer_cast<ExprPtr2Ref>(eFoo);
+                if ( ePtr2Ref->alwaysSafe ) {
+                    eFoo = ePtr2Ref->subexpr;
+                }
+            }
+        }
+        return eFoo;
+    }
+
     ExpressionPtr InferTypes::visit(ExprInvoke *expr) {
         if (expr->argumentsFailedToInfer) {
             auto blockT = expr->arguments[0]->type;
+            if ( expr->isInvokeMethod && expr->arguments[0]->rtti_isField() && expr->arguments[1]->rtti_isTypeDecl() ) {
+                auto eField = static_pointer_cast<ExprField>(expr->arguments[0]);
+                auto eFVT = eField->value->type;
+                if ( eFVT && !eFVT->isAutoOrAlias() ) {
+                    // arg 1 becomes cast<auto> deref(field.value)
+                    auto pCast = make_smart<ExprCast>();
+                    pCast->at = expr->at;
+                    pCast->castType = make_smart<TypeDecl>(Type::autoinfer);
+                    pCast->subexpr = make_smart<ExprPtr2Ref>(expr->at, eField->value);
+                    pCast->subexpr->alwaysSafe = true;
+                    expr->arguments[1] = pCast;
+                    // arg 0 becomes cast<filed_type>.fieldName
+                    eField->value = make_smart<ExprTypeDecl>(expr->at, make_smart<TypeDecl>(*eFVT));
+                    // and we are done
+                    reportAstChanged();
+                    return Visitor::visit(expr);
+                } else if (func && func->isClassMethod && eField->value->rtti_isVar()) {
+                    auto eVar = static_pointer_cast<ExprVar>(eField->value);
+                    if (eVar->name == "super") {
+                        if (auto baseClass = func->classParent->parent) {
+                            reportAstChanged();
+                            auto callName = "_::" + baseClass->name + "`" + eField->name;
+                            auto newCall = make_smart<ExprCall>(expr->at, callName);
+                            newCall->atEnclosure = expr->atEnclosure;
+                            newCall->arguments.push_back(make_smart<ExprVar>(expr->at, "self"));
+                            for (size_t i = 2; i != expr->arguments.size(); ++i) {
+                                newCall->arguments.push_back(expr->arguments[i]);
+                            }
+                            return newCall;
+                        } else {
+                            error("call to super in " + func->name + " is not allowed, no base class for " + func->classParent->name, "", "",
+                                    expr->at, CompilationError::function_not_found);
+                            return Visitor::visit(expr);
+                        }
+                    }
+                } else {
+                    error("can't infer method call, field type is not inferred yet", "", "",
+                          expr->at, CompilationError::function_not_found);
+                    return Visitor::visit(expr);
+                }
+            }
             if (!blockT) {
                 if (expr->isInvokeMethod) {
                     ExpressionPtr value;
@@ -1349,27 +1405,9 @@ namespace das {
                     if (expr->arguments[0]->rtti_isField()) {
                         auto eField = static_pointer_cast<ExprField>(expr->arguments[0]);
                         if (eField->value->type) { // it inferred, but field not found
-                            value = eField->value;
+                            value = extractCastAutoDeref(expr->arguments[1]);
                             valueType = eField->value->type;
                             methodName = eField->name;
-                        } else if (func && func->isClassMethod && eField->value->rtti_isVar()) {
-                            auto eVar = static_pointer_cast<ExprVar>(eField->value);
-                            if (eVar->name == "super") {
-                                if (auto baseClass = func->classParent->parent) {
-                                    reportAstChanged();
-                                    auto callName = "_::" + baseClass->name + "`" + eField->name;
-                                    auto newCall = make_smart<ExprCall>(expr->at, callName);
-                                    newCall->atEnclosure = expr->atEnclosure;
-                                    newCall->arguments.push_back(make_smart<ExprVar>(expr->at, "self"));
-                                    for (size_t i = 2; i != expr->arguments.size(); ++i) {
-                                        newCall->arguments.push_back(expr->arguments[i]);
-                                    }
-                                    return newCall;
-                                } else {
-                                    error("call to super in " + func->name + " is not allowed, no base class for " + func->classParent->name, "", "",
-                                          expr->at, CompilationError::function_not_found);
-                                }
-                            }
                         }
                     } else if (expr->arguments[0]->rtti_isSwizzle()) {
                         auto eSwizzle = static_pointer_cast<ExprSwizzle>(expr->arguments[0]);
@@ -1449,7 +1487,7 @@ namespace das {
                 // no go, not a good block
             } else if (expr->arguments.size() - 1 != blockT->argTypes.size()) {
                 // default arguments
-                // invoke(foo.GetValue,cast<auto> foo)
+                // invoke(type<foo>.GetValue,cast<auto> deref(foo))
                 if (expr->isInvokeMethod) {
                     auto classDotMethod = expr->arguments[0];
                     if (classDotMethod->rtti_isR2V()) {
@@ -1512,7 +1550,9 @@ namespace das {
                                         auto stf = sttf->type.get();
                                         if (stf && stf->dim.size() == 0 && (stf->baseType == Type::tBlock || stf->baseType == Type::tFunction || stf->baseType == Type::tLambda)) {
                                             reportAstChanged();
-                                            expr->isInvokeMethod = false; // we replace invoke(foo.GetValue,cast<auto> foo,...) with invoke(foo.GetValue,...)
+                                            expr->isInvokeMethod = false;
+                                            // we replace invoke(foo.GetValue,cast<auto> foo,...) with invoke(foo.GetValue,...)
+                                            eField->value = extractCastAutoDeref(expr->arguments[1]);
                                             expr->arguments.erase(expr->arguments.begin() + 1);
                                         } else {
                                             error("'" + stt->name + "->" + eField->name + "' expecting function", "", "",
@@ -4966,7 +5006,7 @@ namespace das {
                         nonNamedArgumentTypes.push_back(vSelf->type);
                         if (hasMatchingMemberCall(callStruct, expr->name, expr->arguments, nonNamedArgumentTypes, true)) {
                             reportAstChanged();
-                            auto pInvoke = makeInvokeMethod(expr->at, vSelf.get(), expr->name);
+                            auto pInvoke = makeInvokeMethod(expr->at, callStruct, vSelf.get(), expr->name);
                             auto methodFunc = findMethodFunction(callStruct, expr->name);
                             auto newArguments = demoteCallArguments(expr, methodFunc);
                             for (size_t i = 1, n = newArguments.size(); i != n; ++i) {
@@ -4991,7 +5031,7 @@ namespace das {
                     if (hasMatchingMemberCall(selfStruct, expr->name, expr->arguments, nonNamedArgumentTypes, false)) {
                         reportAstChanged();
                         auto self = new ExprVar(expr->at, "self");
-                        auto pInvoke = makeInvokeMethod(expr->at, self, expr->name);
+                        auto pInvoke = makeInvokeMethod(expr->at, selfStruct, self, expr->name);
                         auto methodFunc = findMethodFunction(selfStruct, expr->name);
                         expr->nonNamedArguments.insert(expr->nonNamedArguments.begin(), self);
                         auto newArguments = demoteCallArguments(expr, methodFunc);
@@ -5154,7 +5194,7 @@ namespace das {
                             reportAstChanged();
                             if (memFn->classMethod) {
                                 auto self = new ExprVar(expr->at, "self");
-                                auto pInvoke = makeInvokeMethod(expr->at, self, expr->name);
+                                auto pInvoke = makeInvokeMethod(expr->at, bt->structType, self, expr->name);
                                 for (auto &arg : expr->arguments) {
                                     pInvoke->arguments.push_back(arg->clone());
                                 }

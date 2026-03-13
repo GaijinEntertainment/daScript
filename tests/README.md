@@ -486,6 +486,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | structure_already_defined.das | Duplicate struct definition | **expect** `30206` |
 | structure_field_already_declared.das | Duplicate struct field name | **expect** `30115` |
 | structure_not_found_ambiguous.das | Ambiguous struct name — same name in two modules | **expect** `30302` |
+| super.das | `super` keyword — parent constructor calls, parent method calls, 3-level hierarchy | |
 | table.das | Table tombstone handling and iteration | |
 | table_operations.das | Table find, insert, delete, key_exists, erase collision, lock panic, defaults, modify | |
 | test_value_table_key.das | `table<EntityId; string>` — value-type table key ops, set operations | |
