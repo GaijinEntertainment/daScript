@@ -217,18 +217,18 @@ File manipulation
   *  :ref:`fflush (file: FILE const?) <function-fio_fflush_FILE_const_q_>`
   *  :ref:`fgets (file: FILE const?) : string <function-fio_fgets_FILE_const_q_>`
   *  :ref:`file_size (path: string) : int64 <function-fio_file_size_string>`
+  *  :ref:`fload (f: file; var buf: auto(BufType)) : auto <function-fio_fload_file_autoBufType_0x43>`
   *  :ref:`fload (file: file; size: int; blk: block\<(data:array\<uint8\>):void\>) <function-fio_fload_file_int_block_ls_data_c_array_ls_uint8_gr__c_void_gr_>`
-  *  :ref:`fload (f: file; var buf: auto(BufType)) : auto <function-fio_fload_file_autoBufType_0x40>`
   *  :ref:`fmap (file: FILE const?; block: block\<(array\<uint8\>#):void\>) <function-fio_fmap_FILE_const_q__block_ls_array_ls_uint8_gr__hh__c_void_gr_>`
-  *  :ref:`fopen (name: string; mode: string) : FILE const? <function-fio_fopen_string_string>`
   *  :ref:`fopen (name: string; mode: string; blk: block\<(f:file):void\>) : auto <function-fio_fopen_string_string_block_ls_f_c_file_c_void_gr_>`
+  *  :ref:`fopen (name: string; mode: string) : FILE const? <function-fio_fopen_string_string>`
   *  :ref:`fprint (file: FILE const?; text: string) <function-fio_fprint_FILE_const_q__string>`
-  *  :ref:`fread (f: file; buf: auto(BufType)) : auto <function-fio_fread_file_autoBufType_0x66>`
+  *  :ref:`fread (f: file; buf: auto(BufType)) : auto <function-fio_fread_file_autoBufType_0x6b>`
   *  :ref:`fread (path: string) : string <function-fio_fread_string>`
   *  :ref:`fread (file: FILE const?) : string <function-fio_fread_FILE_const_q_>`
-  *  :ref:`fread (f: file; blk: block\<(data:string#):auto\>) : auto <function-fio_fread_file_block_ls_data_c_string_hh__c_auto_gr_>`
   *  :ref:`fread (f: file; buf: array\<auto(BufType)\>) : auto <function-fio_fread_file_array_ls_autoBufType_gr_>`
-  *  :ref:`fsave (f: file; buf: auto(BufType)) : auto <function-fio_fsave_file_autoBufType_0x53>`
+  *  :ref:`fread (f: file; blk: block\<(data:string#):auto\>) : auto <function-fio_fread_file_block_ls_data_c_string_hh__c_auto_gr_>`
+  *  :ref:`fsave (f: file; buf: auto(BufType)) : auto <function-fio_fsave_file_autoBufType_0x57>`
   *  :ref:`fseek (file: FILE const?; offset: int64; mode: int) : int64 <function-fio_fseek_FILE_const_q__int64_int>`
   *  :ref:`fstat (f: file) : FStat <function-fio_fstat_file>`
   *  :ref:`fstat (file: FILE const?; stat: FStat) : bool <function-fio_fstat_FILE_const_q__FStat>`
@@ -239,7 +239,7 @@ File manipulation
   *  :ref:`fwrite (f: file; buf: array\<auto(BufType)\>) : auto <function-fio_fwrite_file_array_ls_autoBufType_gr_>`
   *  :ref:`fwrite (file: FILE const?; text: string) <function-fio_fwrite_FILE_const_q__string>`
   *  :ref:`fwrite (path: string; text: string) : bool <function-fio_fwrite_string_string>`
-  *  :ref:`fwrite (f: file; buf: auto(BufType)) : auto <function-fio_fwrite_file_autoBufType_0x74>`
+  *  :ref:`fwrite (f: file; buf: auto(BufType)) : auto <function-fio_fwrite_file_autoBufType_0x7b>`
   *  :ref:`getchar () : int <function-fio_getchar>`
   *  :ref:`is_symlink (path: string) : bool <function-fio_is_symlink_string>`
   *  :ref:`remove (name: string) : bool <function-fio_remove_string>`
@@ -330,22 +330,21 @@ Returns the file size in bytes, or -1 if the file does not exist or an error occ
 fload
 ^^^^^
 
+.. _function-fio_fload_file_autoBufType_0x43:
+
+.. das:function:: fload(f: file; buf: auto(BufType)) : auto
+
+// stub
+def fload (f: file; var buf: auto(BufType)) : auto
+
+
+:Arguments: * **f** :  :ref:`file <alias-file>`
+
+            * **buf** : auto(BufType)
+
 .. _function-fio_fload_file_int_block_ls_data_c_array_ls_uint8_gr__c_void_gr_:
 
 .. das:function:: fload(file: file; size: int; blk: block<(data:array<uint8>):void>)
-
-Obsolete; loads binary data from a file into the provided buffer or passes it as an array of uint8 to a block.
-
-
-:Arguments: * **file** :  :ref:`file <alias-file>`
-
-            * **size** : int
-
-            * **blk** : block<(data:array<uint8>):void>
-
-.. _function-fio_fload_file_autoBufType_0x40:
-
-.. das:function:: fload(f: file; buf: auto(BufType)) : auto
 
 ----
 
@@ -364,21 +363,22 @@ Memory-maps the contents of the given FILE pointer and provides the data as an a
 fopen
 ^^^^^
 
-.. _function-fio_fopen_string_string:
-
-.. das:function:: fopen(name: string; mode: string) : FILE const?
-
-// stub
-def fopen (name: string; mode: string) : FILE const?
-
-
-:Arguments: * **name** : string implicit
-
-            * **mode** : string implicit
-
 .. _function-fio_fopen_string_string_block_ls_f_c_file_c_void_gr_:
 
 .. das:function:: fopen(name: string; mode: string; blk: block<(f:file):void>) : auto
+
+Opens the file at the given path with the specified mode string, returning a FILE pointer or invoking a block with a file handle.
+
+
+:Arguments: * **name** : string
+
+            * **mode** : string
+
+            * **blk** : block<(f: :ref:`file <alias-file>`):void>
+
+.. _function-fio_fopen_string_string:
+
+.. das:function:: fopen(name: string; mode: string) : FILE const?
 
 ----
 
@@ -397,7 +397,7 @@ Writes the given text string to the specified FILE pointer, equivalent to print 
 fread
 ^^^^^
 
-.. _function-fio_fread_file_autoBufType_0x66:
+.. _function-fio_fread_file_autoBufType_0x6b:
 
 .. das:function:: fread(f: file; buf: auto(BufType)) : auto
 
@@ -416,17 +416,17 @@ Reads data from a file into a buffer, an array, or returns the full contents as 
 
 .. das:function:: fread(file: FILE const?) : string
 
-.. _function-fio_fread_file_block_ls_data_c_string_hh__c_auto_gr_:
-
-.. das:function:: fread(f: file; blk: block<(data:string#):auto>) : auto
-
 .. _function-fio_fread_file_array_ls_autoBufType_gr_:
 
 .. das:function:: fread(f: file; buf: array<auto(BufType)>) : auto
 
+.. _function-fio_fread_file_block_ls_data_c_string_hh__c_auto_gr_:
+
+.. das:function:: fread(f: file; blk: block<(data:string#):auto>) : auto
+
 ----
 
-.. _function-fio_fsave_file_autoBufType_0x53:
+.. _function-fio_fsave_file_autoBufType_0x57:
 
 .. das:function:: fsave(f: file; buf: auto(BufType)) : auto
 
@@ -458,8 +458,7 @@ fstat
 
 .. das:function:: fstat(f: file) : FStat
 
-// stub
-def fstat (f: file) : FStat
+Returns the file status (size, modification time, etc.) for an open file handle.
 
 
 :Arguments: * **f** :  :ref:`file <alias-file>`
@@ -523,7 +522,7 @@ Writes a string, typed buffer, or array of data to the specified file handle.
 
 .. das:function:: fwrite(path: string; text: string) : bool
 
-.. _function-fio_fwrite_file_autoBufType_0x74:
+.. _function-fio_fwrite_file_autoBufType_0x7b:
 
 .. das:function:: fwrite(f: file; buf: auto(BufType)) : auto
 
@@ -584,8 +583,7 @@ stat
 
 .. das:function:: stat(file: string; stat: FStat) : bool
 
-// stub
-def stat (file: string; stat: FStat) : bool
+Returns the file status (size, modification time, etc.) for a file at the given path.
 
 
 :Arguments: * **file** : string implicit
