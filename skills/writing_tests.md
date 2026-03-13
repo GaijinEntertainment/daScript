@@ -110,6 +110,31 @@ Tests under `tests/aot/` are compiled ahead-of-time into the `test_aot` binary. 
 - If creating a new subdirectory, add a new section header and table.
 - Mark helper/module files (non-test) with *(helper)*.
 
+## IMPORTANT: Register ALL test directories in CMake for AOT
+
+**Every test directory under `tests/` must be registered in `tests/aot/CMakeLists.txt`** so that the `test_aot` binary generates and links AOT stubs for those tests. If a test file is not registered, `test_aot` will fail with `error[50101]: AOT link failed` when it encounters functions without AOT stubs.
+
+When adding a new test directory (e.g., `tests/foo/`), follow the pattern in `tests/aot/CMakeLists.txt`:
+
+1. Add a `FILE(GLOB ...)` to collect test files:
+   ```cmake
+   FILE(GLOB AOT_FOO_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/foo/*.das")
+   ```
+2. Add a custom target and `DAS_AOT` call:
+   ```cmake
+   add_custom_target(test_aot_foo)
+   SET(FOO_AOT_GENERATED_SRC)
+   DAS_AOT("${AOT_FOO_FILES}" FOO_AOT_GENERATED_SRC test_aot_foo daslang)
+   ```
+3. Add `SOURCE_GROUP_FILES`:
+   ```cmake
+   SOURCE_GROUP_FILES("aot generated" FOO_AOT_GENERATED_SRC)
+   ```
+4. Add `${FOO_AOT_GENERATED_SRC}` to the `add_executable(test_aot ...)` source list
+5. Add `test_aot_foo` to the `ADD_DEPENDENCIES(test_aot ...)` list
+
+**Do NOT use `options no_aot`** to work around AOT link failures — fix the root cause by ensuring the test is registered in the AOT build.
+
 ## Test-first bug verification
 
 When fixing bugs, write the failing test BEFORE applying the fix:

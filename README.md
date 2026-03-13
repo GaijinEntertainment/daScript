@@ -53,6 +53,7 @@ clang++ host.cpp aot_main.cpp -Iinclude lib/liblibDaScript.a lib/liblibUriParser
 For a complete walkthrough, see the [AOT tutorial](doc/source/reference/tutorials/integration_cpp_13_aot.rst) and [integration_cpp_13.cpp](tutorials/integration/cpp/integration_cpp_13.cpp).
 
 ## JIT usage
+
 To use JIT, you need the `LLVM 16.0.6` shared library at the path
 `lib/LLVM.dll`, this name is fixed because of [dynamic bindings](modules/dasLLVM/bindings/llvm_func.das).
 
@@ -64,24 +65,11 @@ For more details on how JIT works and what can be configured, see the
 [JIT Readme](modules/dasLLVM/README.md).
 
 ## Embedding into cmake
+
 To embed daslang into your CMake application, simply call `find_package(DAS)`.
 This will provide the targets `libDaScript`
 and `libDaScriptDyn`. For an example of using daslang as an external project
 (including usage for dynamic modules) see [this demo](https://github.com/aleksisch/dascript-demo).
-
-## Tree-sitter grammar
-
-A full tree-sitter grammar for daslang lives in [`tree-sitter-daslang/`](tree-sitter-daslang/). It parses 99.4% of the codebase (all valid files) and is built automatically by CMake as a shared library.
-
-Use it for:
-- **Syntax highlighting** — `queries/highlights.scm` included, works in editors that support tree-sitter (Neovim, Helix, Zed)
-- **Parse-aware search** — via [ast-grep](https://ast-grep.github.io/) (`sg`) for structural code search across `.das` files
-- **Editor extensions** — `tree-sitter-daslang/editors/zed/` includes a Zed extension
-
-Build the grammar:
-```sh
-cmake --build build --target tree_sitter_daslang
-```
 
 ## Package manager (daspkg)
 
@@ -100,9 +88,11 @@ A built-in package manager in [`utils/daspkg/`](utils/daspkg/) handles installin
 
 See [`utils/daspkg/README.md`](utils/daspkg/README.md) for the full command reference and package authoring guide.
 
-## Crash handler
 
-A built-in crash handler (`include/daScript/misc/crash_handler.h`) captures both native C++ stack traces and daslang call stacks when a crash occurs during script execution. Enabled by default on Windows (SEH + `StackWalk64`) with POSIX signal fallback on Linux/macOS. See [`examples/crash/`](examples/crash/) for usage.
+## VS Code extensions
+
+- [daScript](https://marketplace.visualstudio.com/items?itemName=eguskov.dascript) — syntax highlighting for `.das` files
+- [daScript language support](https://marketplace.visualstudio.com/items?itemName=profelis.dascript-plugin) — language server, linting, debugging, and snippets
 
 ## MCP server (AI tool integration)
 
@@ -110,7 +100,16 @@ An [MCP](https://modelcontextprotocol.io/) server in [`utils/mcp/`](utils/mcp/) 
 
 No extra build dependencies (stdio transport). See [`utils/mcp/README.md`](utils/mcp/README.md) for setup and configuration.
 
-## VS Code extensions
+## Tree-sitter grammar
 
-- [daScript](https://marketplace.visualstudio.com/items?itemName=eguskov.dascript) — syntax highlighting for `.das` files
-- [daScript language support](https://marketplace.visualstudio.com/items?itemName=profelis.dascript-plugin) — language server, linting, debugging, and snippets
+A full tree-sitter grammar for daslang lives in [`tree-sitter-daslang/`](tree-sitter-daslang/). It parses 99.4% of the codebase (all valid files) and is built automatically by CMake as a shared library.
+
+Use it for:
+- **Syntax highlighting** — `queries/highlights.scm` included, works in editors that support tree-sitter (Neovim, Helix, Zed)
+- **Parse-aware search** — via [ast-grep](https://ast-grep.github.io/) (`sg`) for structural code search across `.das` files
+- **Editor extensions** — `tree-sitter-daslang/editors/zed/` includes a Zed extension
+
+Build the grammar:
+```sh
+cmake --build build --target tree_sitter_daslang
+```

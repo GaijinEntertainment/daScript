@@ -65,7 +65,15 @@ bin/Release/daslang.exe dastest/dastest.das -- --test tests/aot
 
 The `-use-aot` flag enables AOT for sub-compiled test files even when the host binary has stubs. But `test_aot` auto-detects via `is_in_aot()` in `dastest/suite.das`.
 
-## Adding a New AOT Test
+## Adding Tests to AOT — CRITICAL
+
+**Every test directory under `tests/` must be registered in `tests/aot/CMakeLists.txt`**. The `test_aot` binary (built on Linux/macOS CI) runs ALL tests under `tests/` with AOT enabled. If a test directory's AOT stubs aren't generated and linked, `test_aot` will fail with `error[50101]: AOT link failed`.
+
+This applies to ALL test directories (e.g., `tests/fio/`, `tests/fs/`, `tests/json/`), not just `tests/aot/`. See the "Registering a New Test Directory" section below.
+
+**Do NOT use `options no_aot`** to suppress AOT link failures — register the tests properly in CMake instead.
+
+## Adding a New AOT Test in `tests/aot/`
 
 1. Create `tests/aot/test_foo.das`:
 
@@ -323,3 +331,33 @@ AOT-generated C++ files go into `_aot_generated/` subdirectories — all are git
 
 When creating a new AOT target that generates into a new directory, add it to `.gitignore`.
 All `_aot_generated/` directories are covered by a single broad pattern in `.gitignore` — no need to add per-directory entries.
+
+## Registering a New Test Directory for AOT
+
+When you create a new test directory (e.g., `tests/foo/`), you MUST register it in `tests/aot/CMakeLists.txt` following this pattern:
+
+**Step 1** — Add a glob to collect files (near the other `FILE(GLOB ...)` lines):
+```cmake
+# AOT for foo test files
+FILE(GLOB AOT_FOO_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/foo/*.das")
+```
+
+**Step 2** — Add a custom target and AOT call (near the other `add_custom_target` blocks):
+```cmake
+add_custom_target(test_aot_foo)
+SET(FOO_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_FOO_FILES}" FOO_AOT_GENERATED_SRC test_aot_foo daslang)
+```
+
+**Step 3** — Add a source group (near the other `SOURCE_GROUP_FILES` lines):
+```cmake
+SOURCE_GROUP_FILES("aot generated" FOO_AOT_GENERATED_SRC)
+```
+
+**Step 4** — Add `${FOO_AOT_GENERATED_SRC}` to the `add_executable(test_aot ...)` source list.
+
+**Step 5** — Add `test_aot_foo` to the `ADD_DEPENDENCIES(test_aot ...)` list.
+
+**Why this matters**: CI builds `test_aot` on Linux/macOS and runs ALL tests under `tests/` with AOT enabled (`cop.fail_on_no_aot = true`). Without registration, the test's functions won't have AOT stubs → `error[50101]: AOT link failed`. The `test_aot` target is only built on non-Windows platforms (`NOT WIN32` guard in root CMakeLists.txt), so this failure won't be caught locally on Windows.
+
+Also ensure that wrapper functions in builtin `.das` files (like `src/builtin/fio.das`) are marked `[generic]` — otherwise AOT can't inline them and will try to link against a non-existent concrete stub from the builtin module.
