@@ -81,7 +81,7 @@ language = 'en'
 # directories to ignore when looking for source files.
 # Exclude detail/ and handmade/ under stdlib/ — these are intermediate files
 # used by das2rst generation, not standalone documentation pages.
-exclude_patterns = ['stdlib/detail', 'stdlib/handmade']
+exclude_patterns = ['stdlib/generated/detail', 'stdlib/handmade']
 
 # The reST default role (used for this markup: `text`) to use for all
 # documents.

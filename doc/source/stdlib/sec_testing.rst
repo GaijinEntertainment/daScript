@@ -9,12 +9,12 @@ and debug adapter protocol support.
 
 .. toctree::
 
-   debugapi.rst
-   coverage.rst
-   profiler.rst
-   profiler_boost.rst
-   debug_eval.rst
-   faker.rst
-   fuzzer.rst
-   dap.rst
-   heartbeat.rst
+   generated/debugapi.rst
+   generated/coverage.rst
+   generated/profiler.rst
+   generated/profiler_boost.rst
+   generated/debug_eval.rst
+   generated/faker.rst
+   generated/fuzzer.rst
+   generated/dap.rst
+   generated/heartbeat.rst

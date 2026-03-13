@@ -9,6 +9,6 @@ game architecture.
 
 .. toctree::
 
-   decs.rst
-   decs_boost.rst
-   decs_state.rst
+   generated/decs.rst
+   generated/decs_boost.rst
+   generated/decs_state.rst

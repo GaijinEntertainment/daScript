@@ -9,8 +9,8 @@ constructor/method helpers.
 
 .. toctree::
 
-   class_boost.rst
-   instance_function.rst
-   interfaces.rst
-   dynamic_cast_rtti.rst
-   generic_return.rst
+   generated/class_boost.rst
+   generated/instance_function.rst
+   generated/interfaces.rst
+   generated/dynamic_cast_rtti.rst
+   generated/generic_return.rst

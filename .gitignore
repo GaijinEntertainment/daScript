@@ -23,7 +23,7 @@ _aot_generated/
 modules/dasSFML/libsfml/
 site/
 doc/sphinx-build/
-doc/source/stdlib/detail/
+doc/source/stdlib/generated/
 doc/source/__pycache__/
 doc/source/_build/doctrees/environment.pickle
 doc/source/_build/

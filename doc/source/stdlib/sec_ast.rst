@@ -9,15 +9,15 @@ templates, quoting, and macro infrastructure.
 
 .. toctree::
 
-   rtti.rst
-   ast.rst
-   ast_boost.rst
-   templates.rst
-   templates_boost.rst
-   quote.rst
-   macro_boost.rst
-   typemacro_boost.rst
-   ast_block_to_loop.rst
-   ast_cursor.rst
-   ast_used.rst
-   constexpr.rst
+   generated/rtti.rst
+   generated/ast.rst
+   generated/ast_boost.rst
+   generated/templates.rst
+   generated/templates_boost.rst
+   generated/quote.rst
+   generated/macro_boost.rst
+   generated/typemacro_boost.rst
+   generated/ast_block_to_loop.rst
+   generated/ast_cursor.rst
+   generated/ast_used.rst
+   generated/constexpr.rst

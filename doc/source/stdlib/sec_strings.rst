@@ -8,9 +8,9 @@ String manipulation, formatting, encoding, and temporary string utilities.
 
 .. toctree::
 
-   strings.rst
-   strings_boost.rst
-   temp_strings.rst
-   utf8_utils.rst
-   base64.rst
-   stringify.rst
+   generated/strings.rst
+   generated/strings_boost.rst
+   generated/temp_strings.rst
+   generated/utf8_utils.rst
+   generated/base64.rst
+   generated/stringify.rst
