@@ -159,3 +159,17 @@ def fwrite(path : string; text : string) : bool {
     }
     return ok
 }
+
+// recursive directory iteration
+[generic]
+def dir_rec(path : string; blk : block<(filename : string; is_dir : bool) : void>) {
+    builtin_dir_rec(path, blk)
+}
+
+// convenience: disk_space returning struct
+[generic]
+def disk_space(path : string) : DiskSpaceInfo {
+    var info = DiskSpaceInfo()
+    builtin_disk_space(path, info)
+    return info
+}
