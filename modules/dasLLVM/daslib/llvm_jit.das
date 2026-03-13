@@ -360,6 +360,14 @@ class public LlvmJitVisitor : AstVisitor {
         clear_builder_location()
     }
 
+    def set_globalvar_linkage(value : LLVMOpaqueValue?) {
+        if (flags.need_di) {
+            set_debug_linkage(value)
+        } else {
+            set_private_linkage(value)
+        }
+    }
+
     def get_debug_file_location(at : LineInfo) : LLVMOpaqueMetadata? {
         if (debug_info_enabled()) {
             let filename = at.fileInfo != null ? string(at.fileInfo.name) : ""
@@ -673,7 +681,7 @@ class public LlvmJitVisitor : AstVisitor {
         )
         let line_info_type = StructType(types, line_info_members)
         let line_info_global = LLVMAddGlobal(g_mod, line_info_type, "li_{int(at.line)}_{int(at.column)}")
-        set_private_linkage(line_info_global)
+        set_globalvar_linkage(line_info_global)
         var init_values = fixed_array(g_builder |> LLVMBuildPointerCast(dummy, uint8_ptr, ""),
             types.ConstI32(at.column |> uint64()),
             types.ConstI32(at.line |> uint64()),
@@ -689,7 +697,7 @@ class public LlvmJitVisitor : AstVisitor {
         let uint8_ptr = LLVMPointerType(LLVMPointerType(types.t_int8, 0u), 0u)
         let line_info_ptr_type = uint8_ptr
         let line_info_ptr_global = LLVMAddGlobal(g_mod, line_info_ptr_type, "li_ptr" /* no name */)
-        set_private_linkage(line_info_ptr_global)
+        set_globalvar_linkage(line_info_ptr_global)
         LLVMSetInitializer(line_info_ptr_global, line_info_global)
         return line_info_ptr_global
     }
@@ -1038,7 +1046,7 @@ class public LlvmJitVisitor : AstVisitor {
             }
             let arr_ty = LLVMArrayType(void_ptr, nArgs)
             var ti_arr = LLVMAddGlobal(g_mod, arr_ty, "string_node_{expr.at.line:d}")
-            set_private_linkage(ti_arr)
+            set_globalvar_linkage(ti_arr)
             ti_arr |> LLVMSetInitializer <| LLVMConstArray(void_ptr, array_data_ptr(tinfo_vals), nArgs)
             types_arr_ptr = ti_arr
         } else {
@@ -1479,7 +1487,7 @@ class public LlvmJitVisitor : AstVisitor {
                     }
                     let arr_ty = LLVMArrayType(types.LLVMVoidPtrType(), nArgs)
                     var ti_arr = LLVMAddGlobal(g_mod, arr_ty, "string_node_{expr.at.line:d}")
-                    set_private_linkage(ti_arr)
+                    set_globalvar_linkage(ti_arr)
                     ti_arr |> LLVMSetInitializer <| LLVMConstArray(types.LLVMVoidPtrType(), array_data_ptr(tinfo_vals), nArgs)
                     types_arr_ptr = ti_arr
                 } else {
@@ -3701,11 +3709,13 @@ class public LlvmJitVisitor : AstVisitor {
                 LLVMConstInt(types.t_int64, evi.value  |> uint64(), 0)
             )
             let evi_global = LLVMAddGlobal(g_mod, ty, "enumvalueinfo")
+            set_globalvar_linkage(evi_global)
             evi_global |> LLVMSetInitializer <| LLVMConstNamedStruct(ty, array_data_ptr(init_fields), 2u)
             array_init |> push <| unsafe(reinterpret<LLVMValueRef>(evi_global))
         }
         let ptr_ty = LLVMPointerType(ty, 0u)
         let arr_global = LLVMAddGlobal(g_mod, LLVMArrayType(ptr_ty, len), "enumvalueinfo_ptr_array")
+        set_globalvar_linkage(arr_global)
         arr_global |> LLVMSetInitializer <| LLVMConstArray(ptr_ty, array_data_ptr(array_init), len)
         return g_builder |> LLVMBuildPointerCast(arr_global, types.LLVMVoidPtrType(), "mycast")
     }
@@ -3749,7 +3759,7 @@ class public LlvmJitVisitor : AstVisitor {
         let ty = get_llvm_type_for_varinfo()
         for (i in range(len)) {
             let varinfo = g_mod |> LLVMAddGlobal(ty, "varinfo")
-            set_private_linkage(varinfo)
+            set_globalvar_linkage(varinfo)
             let vi = unsafe(ei[i])
             varinfo |> LLVMSetInitializer <| get_value_for_varinfo(vi)
             array_init |> push <| unsafe(reinterpret<LLVMValueRef>(varinfo))
@@ -3767,7 +3777,7 @@ class public LlvmJitVisitor : AstVisitor {
                 if (!(ann_vals |> empty())) {
                     let n = ann_vals |> length() |> uint()
                     let ann_global = LLVMAddGlobal(g_mod, LLVMArrayType(ann_ty, n), "varinfo_annotations")
-                    set_private_linkage(ann_global)
+                    set_globalvar_linkage(ann_global)
                     ann_global |> LLVMSetInitializer <| LLVMConstArray(ann_ty, array_data_ptr(ann_vals), n)
                     annotation_varinfo_list |> push <| AnnotationVarInfoEntry(
                         varinfo = varinfo,
@@ -3778,7 +3788,7 @@ class public LlvmJitVisitor : AstVisitor {
         }
         let my_struct_array_type = LLVMArrayType(LLVMPointerType(ty, 0u), len |> uint())
         let varinfo_array = LLVMAddGlobal(g_mod, my_struct_array_type, "varinfo_ptr_array")
-        set_private_linkage(varinfo_array)
+        set_globalvar_linkage(varinfo_array)
         let initializer = LLVMConstArray(LLVMPointerType(ty, 0u), array_data_ptr(array_init), len |> uint())
         LLVMSetInitializer(varinfo_array) <| initializer
 
@@ -3791,7 +3801,7 @@ class public LlvmJitVisitor : AstVisitor {
         }
         var ty = get_llvm_type_for_enuminfo(ei.count)
         var struct_info_global = LLVMAddGlobal(g_mod, ty, "enuminfo_{ei.module_name}_{ei.name}")
-        set_private_linkage(struct_info_global)
+        set_globalvar_linkage(struct_info_global)
         enuminfo_cache[ei] = struct_info_global
         var init_values <- [
             get_string_constant_ptr(g_builder, ei.name),
@@ -3810,7 +3820,7 @@ class public LlvmJitVisitor : AstVisitor {
         }
         var ty = get_llvm_type_for_structinfo()
         var struct_info_global = LLVMAddGlobal(g_mod, ty, "si_{si.name}")
-        set_private_linkage(struct_info_global)
+        set_globalvar_linkage(struct_info_global)
         structinfo_cache[si] = struct_info_global
         var void_ptr = types.LLVMVoidPtrType()
         var init_values <- [
@@ -3854,6 +3864,7 @@ class public LlvmJitVisitor : AstVisitor {
         let element_t = types.LLVMVoidPtrType();
         let tinfo_array_ty = LLVMArrayType(element_t, len)
         var global = LLVMAddGlobal(g_mod, tinfo_array_ty, "argtypes")
+        set_globalvar_linkage(global)
         global |> LLVMSetInitializer <| LLVMConstArray(element_t, array_data_ptr(array_init), len)
         return global
     }
@@ -3869,6 +3880,7 @@ class public LlvmJitVisitor : AstVisitor {
         }
         let tinfo_array_ty = LLVMArrayType(ty, len)
         var global = LLVMAddGlobal(g_mod, tinfo_array_ty, "argnames")
+        set_globalvar_linkage(global)
         global |> LLVMSetInitializer <| LLVMConstArray(ty, array_data_ptr(array_init), len)
         return global
     }
@@ -3932,7 +3944,7 @@ class public LlvmJitVisitor : AstVisitor {
             }
             let dim_arr_ty = LLVMArrayType(types.t_int32, info.dimSize)
             var dim_global = LLVMAddGlobal(g_mod, dim_arr_ty, "dim")
-            set_private_linkage(dim_global)
+            set_globalvar_linkage(dim_global)
             dim_global |> LLVMSetInitializer <| LLVMConstArray(types.t_int32, array_data_ptr(dim_vals), info.dimSize)
             initValues[5] = dim_global
         }
@@ -3949,7 +3961,7 @@ class public LlvmJitVisitor : AstVisitor {
 
         var type_info_type = get_llvm_type_for_typeinfo()
         let type_info_global = LLVMAddGlobal(g_mod, type_info_type, "ti")
-        set_private_linkage(type_info_global)
+        set_globalvar_linkage(type_info_global)
 
         typeinfo_cache[ti] = type_info_global
 
