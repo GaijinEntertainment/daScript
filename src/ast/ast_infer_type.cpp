@@ -1605,6 +1605,11 @@ namespace das {
         // infer
         expr->arguments[0] = Expression::autoDereference(expr->arguments[0]);
         auto blockT = expr->arguments[0]->type;
+        if (!blockT) {
+            error("invoke argument type can't be inferred", "", "",
+                  expr->at, CompilationError::invalid_argument_type);
+            return Visitor::visit(expr);
+        }
         if (blockT->isAutoOrAlias()) {
             error("invoke argument not fully inferred " + describeType(blockT), "", "",
                   expr->at, CompilationError::invalid_argument_type);
