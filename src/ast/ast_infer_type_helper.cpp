@@ -1238,7 +1238,7 @@ namespace das {
             // we build var_name._partIndex
             auto varName = make_smart<ExprVar>(varAt, name);
             auto partExpr = make_smart<ExprField>(varAt, varName, "_" + to_string(partIndex), true);
-            assume.push_back(make_smart<ExprAssume>(varAt, part, ExpressionPtr(partExpr)));
+            assume.push_back(AssumeEntry{make_smart<ExprAssume>(varAt, part, ExpressionPtr(partExpr)), {}});
             partIndex++;
         }
     }

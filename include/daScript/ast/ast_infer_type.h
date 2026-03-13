@@ -38,7 +38,11 @@ namespace das {
         vector<ExprBlock *> blocks;
         vector<ExprBlock *> scopes;
         vector<ExprWith *> with;
-        vector<smart_ptr<ExprAssume>> assume;
+        struct AssumeEntry {
+            smart_ptr<ExprAssume>   expr;
+            das_hash_set<string>    vars;   // ExprVar names referenced in subexpr
+        };
+        vector<AssumeEntry> assume;
         vector<smart_ptr<ExprAssume>> assumeType;
         vector<size_t> varStack;
         vector<size_t> assumeStack;
