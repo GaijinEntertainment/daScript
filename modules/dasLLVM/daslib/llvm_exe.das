@@ -29,12 +29,6 @@ require fio
 
 module llvm_exe shared private
 
-struct ExternalFunction {
-    module_name : string
-    mangled_name : string
-    global_dll_name : DllName = DllName()
-}
-
 bitfield TabOperation {
     at,
     find,
@@ -46,10 +40,8 @@ class CollectExternVisitor : AstVisitor {
 
     // Let's keep order of traversal during initialization.
     // In this way we need `seen` table to not initialize twice.
-    extern_calls : array<ExternalFunction>
     table_calls : array<tuple<t_type : Type; dll_name : DllName; tab_operation : TabOperation>>
     address_expr : array<tuple<dll_name : DllName; fn : string>>
-    unimplemented_nodes : array<tuple<dll_name : DllName; at : string>>
     tab_at_accessor : LLVMOpaqueValue?
     tab_find_accessor : LLVMOpaqueValue?
     tab_erase_accessor : LLVMOpaqueValue?
@@ -68,7 +60,16 @@ class CollectExternVisitor : AstVisitor {
     reg_extern_fn_type : LLVMOpaqueType?
     reg_extern_fn : LLVMOpaqueValue?
 
+    get_extern_ann_type : LLVMOpaqueType?
+    get_extern_ann : LLVMOpaqueValue?
+
+    c_get_jit_new_type : LLVMOpaqueType?
+    c_get_jit_new : LLVMOpaqueValue?
+    c_get_jit_delete_type : LLVMOpaqueType?
+    c_get_jit_delete : LLVMOpaqueValue?
+
     standalone_ctx : LLVMOpaqueValue?
+
 
     def CollectExternVisitor(standalone_context : LLVMOpaqueValue?; _ctx : LLVMContextRef;
                              _builder : LLVMBuilderRef,
@@ -102,6 +103,29 @@ class CollectExternVisitor : AstVisitor {
             )
         )
         reg_extern_fn = LLVMAddFunctionWithType(g_mod, "jit_init_extern_function", reg_extern_fn_type)
+
+        get_extern_ann_type = LLVMFunctionType(types.LLVMVoidPtrType(),
+            fixed_array<LLVMTypeRef>(
+                types.LLVMVoidPtrType(),  // const char* module_name
+                types.LLVMVoidPtrType(),  // const char* ann_name
+            )
+        )
+        get_extern_ann = LLVMAddFunctionWithType(g_mod, "jit_get_annotation", get_extern_ann_type)
+
+        c_get_jit_new_type = LLVMFunctionType(types.LLVMVoidPtrType(),
+            fixed_array<LLVMTypeRef>(
+                types.LLVMVoidPtrType(),  // TypeAnnotation*
+            )
+        )
+        c_get_jit_new = LLVMAddFunctionWithType(g_mod, "das_get_jit_new", c_get_jit_new_type)
+
+        c_get_jit_delete_type = LLVMFunctionType(types.LLVMVoidPtrType(),
+            fixed_array<LLVMTypeRef>(
+                types.LLVMVoidPtrType(),  // TypeAnnotation*
+            )
+        )
+        c_get_jit_delete = LLVMAddFunctionWithType(g_mod, "das_get_jit_delete", c_get_jit_delete_type)
+
     // For each JIT function, register it in the context and point any ExprAddr global to it.
         reg_standalone_fn_type = LLVMFunctionType(types.LLVMVoidPtrType(),
             fixed_array<LLVMTypeRef>(
@@ -152,6 +176,14 @@ class CollectExternVisitor : AstVisitor {
                 // function that will assign to the global variable pointer to a function
                 // at startup.
                 let global_var = LLVMGetNamedGlobal(g_mod, name.glob())
+                // JIT may not emit some globals due to optimizations.
+                // Now we have it only for `count`, see:
+                // d901e741b164f6328660178e8ed3ae406d78c8e1.
+                // Simplest way is to skip global if it wasn't created, which
+                // means it was never accessed.
+                if (global_var == null) {
+                    return
+                }
                 var call_args = array<LLVMValueRef>(
                     get_string_constant_ptr(builder, string(expr.func._module.name)),
                     get_string_constant_ptr(builder, get_mangled_name(expr.func)),
@@ -160,6 +192,30 @@ class CollectExternVisitor : AstVisitor {
                 LLVMBuildCall2(builder, reg_extern_fn_type, reg_extern_fn, call_args, "")
             }
         }
+    }
+
+    def get_annotation(ann : TypeAnnotation?) {
+        var call_args = array<LLVMValueRef>(
+            get_string_constant_ptr(builder, string(ann._module.name)),
+            get_string_constant_ptr(builder, string(ann.name)),
+        )
+        return LLVMBuildCall2(builder, get_extern_ann_type, get_extern_ann, call_args, "")
+    }
+
+    def register_new_from_annotation(name : DllName; ann : TypeAnnotation?) {
+        let ann_ptr = get_annotation(ann)
+        var call_args = array<LLVMValueRef>(ann_ptr)
+        let fn_ptr = LLVMBuildCall2(builder, c_get_jit_new_type, c_get_jit_new, call_args, "")
+        let global_var = LLVMGetNamedGlobal(g_mod, name.glob())
+        LLVMBuildStore(builder, fn_ptr, global_var)
+    }
+
+    def register_delete_from_annotation(name : DllName; ann : TypeAnnotation?) {
+        let ann_ptr = get_annotation(ann)
+        var call_args = array<LLVMValueRef>(ann_ptr)
+        let fn_ptr = LLVMBuildCall2(builder, c_get_jit_delete_type, c_get_jit_delete, call_args, "")
+        let global_var = LLVMGetNamedGlobal(g_mod, name.glob())
+        LLVMBuildStore(builder, fn_ptr, global_var)
     }
 
     def add_unimplemented(name : DllName; expr : ExpressionPtr) {
@@ -190,23 +246,16 @@ class CollectExternVisitor : AstVisitor {
         if (expr.typeexpr.isHandle) {
             let name = uid.get_new(expr.typeexpr)
             if (initialize(name)) {
-                add_unimplemented(name, expr)
-                // Requires typeinfo: htype->annotation->jitGetNew().
+                register_new_from_annotation(name, expr.typeexpr.annotation)
             }
         } else {
             if (expr.typeexpr.dim |> length > 0) {
                 if (expr.typeexpr.baseType == Type.tHandle) {
                     var inscope elemT = clone_type(expr.typeexpr)
                     elemT.dim |> clear() // hack to get correct ptr to ctor
-                    var new_handle_ptr = get_jit_new(elemT)
-                    if (new_handle_ptr == null) {
-                        failed_T(elemT, "missing new`handle function pointer for {describe(elemT)}")
-                        return
-                    }
                     let name = uid.get_new(expr.typeexpr)
                     if (initialize(name)) {
-                        add_unimplemented(name, expr)
-                        // Requires typeinfo: htype->annotation->jitGetNew().
+                        register_new_from_annotation(name, elemT.annotation)
                     }
                 } else {
                     if (expr.initializer) {
@@ -227,8 +276,10 @@ class CollectExternVisitor : AstVisitor {
         if (subT.isPointer) {
             assume firstT = expr.subexpr._type.firstType
             if (firstT.isHandle) {
-                unimplemented_nodes |> push(tuple(uid.get_delete_type(firstT), describe(expr.at)))
-                // requires typeinfo: htype->annotation->jitGetDelete();
+                let name = uid.get_delete_type(firstT)
+                if (initialize(name)) {
+                    register_delete_from_annotation(name, firstT.annotation)
+                }
             }
         }
     }
@@ -260,16 +311,23 @@ class CollectExternVisitor : AstVisitor {
 
     def override preVisitExprMakeStructIndex(expr : smart_ptr<ExprMakeStruct>; index : int; last : bool) : void {
         if (expr.constructor != null && !expr.constructor.moreFlags.requestJit) {
-            add_unimplemented(uid.get_ctor(expr), expr)
-            // Can be implemented.
-        }
-    }
-
-    def override preVisitExprTypeInfo(expr : smart_ptr<ExprTypeInfo>) : void {
-        if (expr.trait == "rtti_classinfo") {
-            add_unimplemented(uid.get_tinfo(expr), expr)
-            // Cannot be implemented,
-            // requires typeinfo.
+            let fn = expr.constructor
+            let fnmna = uid.get_dll_fn_name_ptr(fn)
+            let fn_publ = LLVMGetNamedFunction(g_mod, fnmna.publ())
+            let fn_ptr_cast = LLVMBuildPointerCast(builder, fn_publ, types.LLVMVoidPtrType(), "")
+            var reg_args = fixed_array<LLVMOpaqueValue?>(
+                standalone_ctx,
+                types.ConstI64(fn.index |> uint64),
+                get_string_constant_ptr(builder, string(fn.name)),
+                get_string_constant_ptr(builder, string(fn |> get_mangled_name())),
+                types.ConstI64(fn.getMangledNameHash),
+                types.ConstI32(fn.totalStackSize |> uint64),
+                fn_ptr_cast,
+                types.ConstI1(isCMRES(fn)),
+                types.ConstI1(fn.flags.fastCall),
+                types.ConstI1(fn.moreFlags.pinvoke),
+            )
+            LLVMBuildCall2(builder, reg_standalone_fn_type, reg_standalone_fn, reg_args, "")
         }
     }
 
@@ -451,6 +509,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; funcs :
 
     let any_unimplemented = collect_external_functions(global_context, ctx, builder, mod, types, funcs, uids)
     if (strict && any_unimplemented) {
+        to_log(LOG_ERROR, "Some of the nodes above are unimplemented!\n")
         return null
     }
 

@@ -143,12 +143,24 @@ class PrimitiveTypes {
 
 }
 
+def public array_data_ptr(var arr : auto(T)[]) : T? {
+    return unsafe(addr(arr[0]))
+}
+
+def public array_data_ptr(var arr : array<auto(T)>) : T? {
+    if (arr |> empty()) {
+        return null
+    } else {
+        return unsafe(addr(arr[0]))
+    }
+}
+
 def StructType(types : PrimitiveTypes?; var fields : LLVMOpaqueType? []) {
-    return types.StructType(unsafe(addr(fields[0])), uint(length(fields)))
+    return types.StructType(array_data_ptr(fields), uint(length(fields)))
 }
 
 def StructType(types : PrimitiveTypes?; var fields : array<LLVMOpaqueType?>) {
-    return types.StructType(unsafe(addr(fields[0])), uint(length(fields)))
+    return types.StructType(array_data_ptr(fields), uint(length(fields)))
 }
 
 
@@ -257,19 +269,19 @@ def LLVMBuildShuffleVector(builder : LLVMOpaqueBuilder?; var types : PrimitiveTy
             elem |> push(LLVMGetUndef(types.t_int32))
         }
     }
-    return LLVMBuildShuffleVector(builder, v1, v2, LLVMConstVector(unsafe(addr(elem[0])), uint(length(elem))), name)
+    return LLVMBuildShuffleVector(builder, v1, v2, LLVMConstVector(array_data_ptr(elem), uint(length(elem))), name)
 }
 
 def LLVMAddIncoming(phi : LLVMOpaqueValue?; var phi_vals : LLVMOpaqueValue? []; var phi_blocks : LLVMOpaqueBasicBlock? []) {
     static_if (typeinfo dim(phi_vals) != typeinfo dim(phi_blocks)) {
         concept_assert(false, "LLVMAddIncoming: phi_vals and phi_blocks must have the same length")
     }
-    LLVMAddIncoming(phi, unsafe(addr(phi_vals[0])), unsafe(addr(phi_blocks[0])), uint(length(phi_vals)))
+    LLVMAddIncoming(phi, array_data_ptr(phi_vals), array_data_ptr(phi_blocks), uint(length(phi_vals)))
 }
 
 def LLVMAddIncoming(phi : LLVMOpaqueValue?; var phi_vals : array<LLVMOpaqueValue?>; var phi_blocks : array<LLVMOpaqueBasicBlock?>) {
     assert(length(phi_vals) == length(phi_blocks), "LLVMAddIncoming: phi_vals and phi_blocks must have the same length")
-    LLVMAddIncoming(phi, unsafe(addr(phi_vals[0])), unsafe(addr(phi_blocks[0])), uint(length(phi_vals)))
+    LLVMAddIncoming(phi, array_data_ptr(phi_vals), array_data_ptr(phi_blocks), uint(length(phi_vals)))
 }
 
 def LLVMBuildGEP2(builder : LLVMOpaqueBuilder?; ty : LLVMOpaqueType?; ptr : LLVMOpaqueValue?; var index : LLVMOpaqueValue?; name : string; inbounds : bool = true) {
@@ -281,7 +293,7 @@ def LLVMBuildGEP2(builder : LLVMOpaqueBuilder?; ty : LLVMOpaqueType?; ptr : LLVM
 }
 
 def LLVMFunctionType(ret_type : LLVMTypeRef; var param_types : LLVMTypeRef[]; isVariadic : bool = false) {
-    return LLVMFunctionType(ret_type, unsafe(addr(param_types[0])), uint(length(param_types)), isVariadic ? 1 : 0)
+    return LLVMFunctionType(ret_type, array_data_ptr(param_types), uint(length(param_types)), isVariadic ? 1 : 0)
 }
 
 def LLVMFunctionType(ret_type : LLVMTypeRef; var param_types : array<LLVMTypeRef>; isVariadic : bool = false) {
@@ -289,7 +301,7 @@ def LLVMFunctionType(ret_type : LLVMTypeRef; var param_types : array<LLVMTypeRef
     if (nparam == 0) {
         return LLVMFunctionType(ret_type, null, 0u, isVariadic ? 1 : 0)
     } else {
-        return LLVMFunctionType(ret_type, unsafe(addr(param_types[0])), uint(nparam), isVariadic ? 1 : 0)
+        return LLVMFunctionType(ret_type, array_data_ptr(param_types), uint(nparam), isVariadic ? 1 : 0)
     }
 }
 
@@ -391,11 +403,11 @@ def LLVMBuildFloat4_xyzw(builder : LLVMOpaqueBuilder?; var types : PrimitiveType
 }
 
 def LLVMBuildCall(builder : LLVMOpaqueBuilder?; func : LLVMOpaqueValue?; var args : LLVMOpaqueValue? []; name : string) {
-    return LLVMBuildCall(builder, func, unsafe(addr(args[0])), uint(length(args)), name)
+    return LLVMBuildCall(builder, func, array_data_ptr(args), uint(length(args)), name)
 }
 
 def LLVMBuildCall2(builder : LLVMOpaqueBuilder?; typ : LLVMOpaqueType?; func : LLVMOpaqueValue?; var args : LLVMOpaqueValue? []; name : string) {
-    return LLVMBuildCall2(builder, typ, func, unsafe(addr(args[0])), uint(length(args)), name)
+    return LLVMBuildCall2(builder, typ, func, array_data_ptr(args), uint(length(args)), name)
 }
 
 def LLVMBuildCall2(builder : LLVMOpaqueBuilder?; typ : LLVMOpaqueType?; func : LLVMOpaqueValue?; name : string) {
@@ -405,7 +417,7 @@ def LLVMBuildCall2(builder : LLVMOpaqueBuilder?; typ : LLVMOpaqueType?; func : L
 def LLVMBuildCall2(builder : LLVMOpaqueBuilder?; typ : LLVMOpaqueType?; func : LLVMOpaqueValue?; var args : array<LLVMOpaqueValue?>; name : string) {
     let nparams = length(args)
     if (nparams != 0) {
-        return LLVMBuildCall2(builder, typ, func, unsafe(addr(args[0])), uint(nparams), name)
+        return LLVMBuildCall2(builder, typ, func, array_data_ptr(args), uint(nparams), name)
     } else {
         return LLVMBuildCall2(builder, typ, func, null, 0u, name)
     }
@@ -416,7 +428,7 @@ def LLVMLookupIntrinsicID(name : string) {
 }
 
 def LLVMGetIntrinsicDeclaration(mod : LLVMOpaqueModule?; id : uint; var argTypes : array<LLVMOpaqueType?>) {
-    return LLVMGetIntrinsicDeclaration(mod, id, unsafe(addr(argTypes[0])), uint64(length(argTypes)))
+    return LLVMGetIntrinsicDeclaration(mod, id, array_data_ptr(argTypes), uint64(length(argTypes)))
 }
 
 def describe(typ : LLVMOpaqueType?) {
@@ -476,7 +488,7 @@ def set_meta_dereferenceable(g_ctx : LLVMContextRef; var types : PrimitiveTypes?
     LLVMSetMetadata(
         instr,
         LLVMGetMDKindIDInContext(g_ctx, msg, uint(length(msg))),
-        LLVMMDNodeInContext(g_ctx, unsafe(addr(values[0])), 1u))
+        LLVMMDNodeInContext(g_ctx, array_data_ptr(values), 1u))
 }
 
 def LLVMAddAttributeToFunctionArgumentRange(func : LLVMOpaqueValue?; rng : urange; attr : LLVMOpaqueAttributeRef?) {
