@@ -2168,6 +2168,7 @@ namespace das {
               << value.keep_alive
               << value.very_safe_context
               << value.max_infer_passes
+              << value.max_call_depth
               << value.verify_infer_types
               << value.stack
               << value.intern_strings
@@ -2327,7 +2328,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 78;
+        static constexpr uint32_t currentVersion = 79;
         return currentVersion;
     }
 

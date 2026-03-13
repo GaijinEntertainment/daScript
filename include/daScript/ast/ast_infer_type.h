@@ -86,6 +86,7 @@ namespace das {
         int32_t consumeDepth = 0;
         bool   fatalAliasLoop = false;
         bool   inArgumentInit = false;
+        int32_t callDepth = 0;
 
     public:
         vector<FunctionPtr> extraFunctions;
@@ -509,9 +510,12 @@ namespace das {
         virtual void preVisit(ExprCallMacro *expr) override;
         virtual ExpressionPtr visit(ExprCallMacro *expr) override;
         // ExprLooksLikeCall
+        virtual bool canVisitLooksLikeCall(ExprLooksLikeCall *call) override;
         virtual void preVisit(ExprLooksLikeCall *call) override;
+        virtual ExpressionPtr visit(ExprLooksLikeCall *call) override;
         virtual ExpressionPtr visitLooksLikeCallArg(ExprLooksLikeCall *call, Expression *arg, bool last) override;
         // ExprNamedCall
+        virtual bool canVisitNamedCall(ExprNamedCall *call) override;
         vector<ExpressionPtr> demoteCallArguments(ExprNamedCall *expr, const FunctionPtr &pFn);
         ExpressionPtr demoteCall(ExprNamedCall *expr, const FunctionPtr &pFn);
         virtual void preVisit(ExprNamedCall *call) override;
@@ -540,6 +544,7 @@ namespace das {
                           CompilationError cerror = CompilationError::function_not_found);
         virtual ExpressionPtr visit(ExprNamedCall *expr) override;
         // ExprCall
+        virtual bool canVisitCall(ExprCall *call) override;
         void markNoDiscard(Expression *expr);
         virtual void preVisit(ExprCall *call) override;
         bool isConsumeArgumentFunc(Function *fn);

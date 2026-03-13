@@ -313,6 +313,8 @@ class AstVisitor {
     def abstract visitExprLooksLikeCallArgument(expr : smart_ptr<ExprLooksLikeCall>; arg : ExpressionPtr; last : bool) : ExpressionPtr
 // call
     def abstract canVisitCall(expr : ExprCall?) : bool
+    def abstract canVisitNamedCall(expr : ExprNamedCall?) : bool
+    def abstract canVisitLooksLikeCall(expr : ExprLooksLikeCall?) : bool
     def abstract preVisitExprCall(expr : smart_ptr<ExprCall>) : void
     def abstract visitExprCall(expr : smart_ptr<ExprCall>) : ExpressionPtr
     def abstract preVisitExprCallArgument(expr : smart_ptr<ExprCall>; arg : ExpressionPtr; last : bool) : void

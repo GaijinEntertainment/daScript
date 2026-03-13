@@ -1493,6 +1493,7 @@ namespace das
         int32_t     always_report_candidates_threshold = 6; // always report candidates if there are less than this number
     // infer passes
         /*option*/ int32_t     max_infer_passes = 50;              // maximum number of infer passes
+        /*option*/ int32_t     max_call_depth = 50;                // maximum call expression nesting depth during inference
         bool verify_infer_types = false;                       // verify inferred types (to see if there is internal consistency). note - this adds errors to failing tests
     // memory
         /*option*/ uint32_t    stack = 16*1024;                    // 0 for unique stack
