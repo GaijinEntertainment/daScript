@@ -139,6 +139,10 @@ namespace das {
         daScriptEnvironment::ensure();
         g_envTotal ++;
 
+        if (daScriptEnvironment::getBound()->modules == nullptr) {
+            DAS_FATAL_ERROR("No modules founds. You should add modules before call that function.");
+        }
+
         // InitDependencies do not add new modules.
         vector<bool> mod_state;
         bool any = true;
