@@ -1371,7 +1371,8 @@ namespace das {
                     eField->value = make_smart<ExprTypeDecl>(expr->at, make_smart<TypeDecl>(*eFVT));
                     // and we are done
                     reportAstChanged();
-                    return Visitor::visit(expr);
+                    // we don't need to wait for another pass - code bellow handles exactly this case
+                    // return Visitor::visit(expr);
                 } else if (func && func->isClassMethod && eField->value->rtti_isVar()) {
                     auto eVar = static_pointer_cast<ExprVar>(eField->value);
                     if (eVar->name == "super") {
