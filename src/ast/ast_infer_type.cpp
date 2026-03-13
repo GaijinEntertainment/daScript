@@ -3834,11 +3834,11 @@ namespace das {
     ExpressionPtr InferTypes::visit(ExprVar *expr) {
         // assume (that on the stack)
         for (auto it = assume.rbegin(), its = assume.rend(); it != its; ++it) {
-            auto ita = *it;
-            if (ita->alias == expr->name) {
+            auto & ita = *it;
+            if (ita.expr->alias == expr->name) {
                 reportAstChanged();
-                auto csub = ita->subexpr->clone();
-                // forceAt(csub, ita->at);
+                auto csub = ita.expr->subexpr->clone();
+                // forceAt(csub, ita.expr->at);
                 return csub;
             }
         }
@@ -4203,8 +4203,8 @@ namespace das {
         // assume
         if (expr->subexpr) {
             for (const auto &aa : assume) {
-                if (aa->alias == name) {
-                    error("can't assume " + name + ", alias already taken by another assume expression at " + aa->at.describe(), "", "",
+                if (aa.expr->alias == name) {
+                    error("can't assume " + name + ", alias already taken by another assume expression at " + aa.expr->at.describe(), "", "",
                           expr->at, CompilationError::invalid_assume);
                     return;
                 }
@@ -4276,9 +4276,70 @@ namespace das {
             }
         }
     }
+    struct CollectAssumeVars : Visitor {
+        das_hash_set<string> vars;
+        virtual void preVisit(ExprVar * expr) override {
+            Visitor::preVisit(expr);
+            vars.insert(expr->name);
+        }
+    };
     ExpressionPtr InferTypes::visit(ExprAssume *expr) {
         if (expr->subexpr) {
-            assume.emplace_back(expr);
+            // collect variables referenced in subexpr
+            CollectAssumeVars collector;
+            expr->subexpr->visit(collector);
+            // check for circular dependency: can we reach expr->alias transitively?
+            das_hash_map<string,string> cameFrom;   // node -> predecessor in BFS
+            vector<string> worklist;
+            for (const auto & v : collector.vars) {
+                if (cameFrom.find(v) == cameFrom.end()) {
+                    worklist.push_back(v);
+                    cameFrom[v] = expr->alias;
+                }
+            }
+            bool hasCycle = false;
+            while (!worklist.empty()) {
+                auto cur = move(worklist.back());
+                worklist.pop_back();
+                if (cur == expr->alias) { hasCycle = true; break; }
+                for (const auto & ae : assume) {
+                    if (ae.expr->alias == cur) {
+                        for (const auto & v : ae.vars) {
+                            if (cameFrom.find(v) == cameFrom.end()) {
+                                cameFrom[v] = cur;
+                                worklist.push_back(v);
+                            }
+                        }
+                    }
+                }
+            }
+            if (hasCycle) {
+                string extra;
+                if (verbose) {
+                    // reconstruct: walk cameFrom backwards from the node that reached expr->alias
+                    // cameFrom[expr->alias] was set during seed, so find the node whose assume deps include expr->alias
+                    vector<string> chain;
+                    string cur = expr->alias;
+                    do {
+                        chain.push_back(cur);
+                        auto it = cameFrom.find(cur);
+                        if (it == cameFrom.end()) break;
+                        cur = it->second;
+                    } while (cur != expr->alias);
+                    chain.push_back(expr->alias);
+                    // chain is reversed (e.g. [y, x, y]), reverse to get [y, x, y] -> "y -> x -> y"
+                    // actually it's already in reverse BFS order, so reverse it
+                    std::reverse(chain.begin(), chain.end());
+                    extra = chain[0];
+                    for (size_t i = 1; i < chain.size(); i++) {
+                        extra += " -> " + chain[i];
+                    }
+                }
+                error("assume '" + expr->alias + "' creates a circular dependency", extra, "",
+                      expr->at, CompilationError::invalid_assume);
+                return expr;
+            }
+            assume.push_back(AssumeEntry{expr, move(collector.vars)});
         } else {
             assumeType.emplace_back(expr);
         }
@@ -4419,7 +4480,7 @@ namespace das {
             pVar->source = src;
             pVar->can_shadow = expr->canShadow;
             for (auto &al : assume) {
-                if (al->alias == pVar->name) {
+                if (al.expr->alias == pVar->name) {
                     error("can't make loop variable `" + pVar->name + "`, name already taken by alias", "", "",
                           pVar->at, CompilationError::variable_not_found);
                 }
@@ -4598,7 +4659,7 @@ namespace das {
                   var->at, CompilationError::cant_infer_missing_initializer);
         }
         for (auto &al : assume) {
-            if (al->alias == var->name) {
+            if (al.expr->alias == var->name) {
                 error("can't make local variable `" + var->name + "`, name already taken by alias", "", "",
                       var->at, CompilationError::variable_not_found);
             }
