@@ -4972,7 +4972,7 @@ class public LlvmJitVisitor : AstVisitor {
                 pass
             } elif (returnType.isPointer) {
                 var resPtr = getE(expr.subexpr)
-                if (expr.subexpr._type.flags.ref) {
+                if (expr.subexpr._type.flags.ref && !returnType.flags.ref) {
                     // if source is ptr&, we empty it
                     resPtr = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(returnType), resPtr, expr.subexpr._type.alignOf, "result_before_move")
                     if (expr.returnFlags.moveSemantics) {
