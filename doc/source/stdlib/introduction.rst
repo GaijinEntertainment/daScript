@@ -70,7 +70,6 @@ Data structures
 * :doc:`flat_hash_table <generated/flat_hash_table>` — open-addressing flat hash table template
 * :doc:`cuckoo_hash_table <generated/cuckoo_hash_table>` — cuckoo hash table with O(1) worst-case lookup
 * :doc:`bool_array <generated/bool_array>` — packed boolean array (``BoolArray``) backed by ``uint[]`` storage
-* :doc:`linked_list <generated/linked_list>` — intrusive doubly-linked list data structure
 * :doc:`soa <generated/soa>` — Structure of Arrays transformation for cache-friendly data layout
 
 Serialization and data
@@ -118,7 +117,6 @@ Control flow macros
 * :doc:`unroll <generated/unroll>` — compile-time loop unrolling macro
 * :doc:`instance_function <generated/instance_function>` — ``[instance_function]`` annotation for struct method binding
 * :doc:`array_boost <generated/array_boost>` — ``temp_array``, ``array_view``, and ``empty`` helpers
-* :doc:`heartbeat <generated/heartbeat>` — periodic heartbeat callback injection
 
 Pattern matching
 ----------------
@@ -144,7 +142,6 @@ Testing and debugging
 
 * :doc:`faker <generated/faker>` — random test data generator: strings, numbers, dates
 * :doc:`fuzzer <generated/fuzzer>` — function fuzzing framework
-* :doc:`coverage <generated/coverage>` — code coverage instrumentation and reporting
 * :doc:`profiler <generated/profiler>` — instrumenting CPU profiler for function-level timing
 * :doc:`profiler_boost <generated/profiler_boost>` — profiler cross-context helpers and high-level macros
 * :doc:`debug_eval <generated/debug_eval>` — runtime expression evaluation for interactive debugging
@@ -154,7 +151,6 @@ Code quality and tooling
 ------------------------
 
 * :doc:`lint <generated/lint>` — static analysis pass for common code issues
-* :doc:`lint_everything <generated/lint_everything>` — global lint pass applying paranoid diagnostics to all modules
 * :doc:`validate_code <generated/validate_code>` — AST validation annotations for custom code checks
 * :doc:`refactor <generated/refactor>` — automated code refactoring transformations
 
