@@ -259,7 +259,9 @@ namespace das
         FieldDeclarationRef findFieldRef ( const string & name ) const;
         int getSizeOf() const;
         uint64_t getSizeOf64() const;
+        uint64_t getSizeOf64(bool & failed) const;
         int getAlignOf() const;
+        int getAlignOfFailed(bool & failed) const;
         __forceinline bool canCopy() const { return canCopy(false); }
         bool canCopy(bool tempMatters) const;
         bool canCloneFromConst() const;
