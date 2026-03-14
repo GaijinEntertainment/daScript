@@ -14,6 +14,10 @@ def can_visit_folder(folder_name : string; var result : bool?) {
         *result = has_module("pugixml")
         return
     }
+    if (folder_name == "stbimage") {
+        *result = has_module("stbimage")
+        return
+    }
     if (folder_name == "jit_tests" || folder_name == ".jitted_scripts") {
         let args <- get_command_line_arguments()
         for (arg in args) {
