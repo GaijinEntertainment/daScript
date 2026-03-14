@@ -8,8 +8,8 @@ Core modules providing built-in operations, math, and random number generation.
 
 .. toctree::
 
-   builtin.rst
-   math.rst
-   math_bits.rst
-   math_boost.rst
-   random.rst
+   generated/builtin.rst
+   generated/math.rst
+   generated/math_bits.rst
+   generated/math_boost.rst
+   generated/random.rst

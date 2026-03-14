@@ -472,10 +472,10 @@ class RstComment : AstCommentReader {
         if (outputIds >= 0) {
             output = args[outputIds+1] + "/index/detail/"
         } else {
-            output = get_das_root() + "/doc/source/stdlib/detail/"
+            output = get_das_root() + "/doc/source/stdlib/generated/detail/"
         }
         let fname = "{output}/{name}.rst"
-        mkdir(output)
+        mkdir_rec(output)
         fopen(fname,"wb") <| $ ( f ) {
             if (f==null) {
                 panic_rst("can't open {fname}")

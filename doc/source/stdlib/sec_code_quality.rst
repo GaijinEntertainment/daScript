@@ -8,11 +8,10 @@ Linting, code validation, refactoring tools, and source formatting.
 
 .. toctree::
 
-   lint.rst
-   lint_everything.rst
-   validate_code.rst
-   refactor.rst
-   consume.rst
-   remove_call_args.rst
-   das_source_formatter.rst
-   das_source_formatter_fio.rst
+   generated/lint.rst
+   generated/validate_code.rst
+   generated/refactor.rst
+   generated/consume.rst
+   generated/remove_call_args.rst
+   generated/das_source_formatter.rst
+   generated/das_source_formatter_fio.rst

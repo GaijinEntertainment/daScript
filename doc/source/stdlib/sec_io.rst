@@ -8,11 +8,11 @@ File I/O, networking, URI parsing, terminal output, and binary serialization.
 
 .. toctree::
 
-   fio.rst
-   network.rst
-   dashv.rst
-   dashv_boost.rst
-   uriparser.rst
-   uriparser_boost.rst
-   ansi_colors.rst
-   archive.rst
+   generated/fio.rst
+   generated/network.rst
+   generated/dashv.rst
+   generated/dashv_boost.rst
+   generated/uriparser.rst
+   generated/uriparser_boost.rst
+   generated/ansi_colors.rst
+   generated/archive.rst

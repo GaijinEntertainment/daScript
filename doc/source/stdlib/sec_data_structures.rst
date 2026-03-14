@@ -8,10 +8,9 @@ Container extensions, sorting, hash tables, linked lists, and specialized arrays
 
 .. toctree::
 
-   array_boost.rst
-   sort_boost.rst
-   flat_hash_table.rst
-   cuckoo_hash_table.rst
-   linked_list.rst
-   soa.rst
-   bool_array.rst
+   generated/array_boost.rst
+   generated/sort_boost.rst
+   generated/flat_hash_table.rst
+   generated/cuckoo_hash_table.rst
+   generated/soa.rst
+   generated/bool_array.rst

@@ -360,6 +360,6 @@ Classes serialize their fields just like structs::
 
    :ref:`Functional programming tutorial <tutorial_functional>` (previous tutorial).
 
-   :doc:`/stdlib/json` — core JSON module reference.
+   :doc:`/stdlib/generated/json` — core JSON module reference.
 
-   :doc:`/stdlib/json_boost` — JSON boost module reference.
+   :doc:`/stdlib/generated/json_boost` — JSON boost module reference.

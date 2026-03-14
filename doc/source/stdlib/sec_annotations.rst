@@ -9,18 +9,18 @@ and other compile-time utilities.
 
 .. toctree::
 
-   contracts.rst
-   apply.rst
-   defer.rst
-   if_not_null.rst
-   is_local.rst
-   safe_addr.rst
-   static_let.rst
-   lpipe.rst
-   assert_once.rst
-   unroll.rst
-   bitfield_boost.rst
-   bitfield_trait.rst
-   enum_trait.rst
-   type_traits.rst
-   cpp_bind.rst
+   generated/contracts.rst
+   generated/apply.rst
+   generated/defer.rst
+   generated/if_not_null.rst
+   generated/is_local.rst
+   generated/safe_addr.rst
+   generated/static_let.rst
+   generated/lpipe.rst
+   generated/assert_once.rst
+   generated/unroll.rst
+   generated/bitfield_boost.rst
+   generated/bitfield_trait.rst
+   generated/enum_trait.rst
+   generated/type_traits.rst
+   generated/cpp_bind.rst

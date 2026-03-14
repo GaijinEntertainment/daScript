@@ -453,6 +453,6 @@ Syntax                     Effect
 
    Next tutorial: :ref:`Operator overloading <tutorial_operator_overloading>`.
 
-   :doc:`/stdlib/regex` — core regex module reference.
+   :doc:`/stdlib/generated/regex` — core regex module reference.
 
-   :doc:`/stdlib/regex_boost` — regex boost module reference.
+   :doc:`/stdlib/generated/regex_boost` — regex boost module reference.

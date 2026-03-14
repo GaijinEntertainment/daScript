@@ -9,8 +9,8 @@ and pattern matching.
 
 .. toctree::
 
-   algorithm.rst
-   functional.rst
-   linq.rst
-   linq_boost.rst
-   match.rst
+   generated/algorithm.rst
+   generated/functional.rst
+   generated/linq.rst
+   generated/linq_boost.rst
+   generated/match.rst

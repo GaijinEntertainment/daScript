@@ -1137,7 +1137,7 @@ def document_module_validate_code(root : string) {
 def main {
     disable_profiler(this_context())
     disable_profiler_log(this_context())
-    let root = get_das_root() + "/doc/source/stdlib"// todo: modify to output /temp so that we can merge changes
+    let root = get_das_root() + "/doc/source/stdlib/generated"
     // document embedded modules
     document_module_builtin(root)
     document_module_math(root)

@@ -31,7 +31,8 @@ let { //! Configuration constants for the RST documentation generator.
 
 var public {
     das_root = get_das_root()
-    topic_root = "{das_root}/doc/source/stdlib"
+    topic_root = "{das_root}/doc/source/stdlib/generated"
+    handmade_root = "{das_root}/doc/source/stdlib"
     add_stub_header = true
     add_empty_topic = true
     strict_struct_fields = true
@@ -883,11 +884,13 @@ def document_topic(header : string; doc_file : file; topic, content : string imp
 }
 
 def document_topic(doc_file : file; topic, content : string implicit; cb : block<(text : string) : string>) {
-    let topic_file_name = "{topic_root}/{slice(topic,1,-1)}.rst"
+    let is_handmade_topic = topic |> starts_with("|handmade/")
+    let base_root = is_handmade_topic ? handmade_root : topic_root
+    let topic_file_name = "{base_root}/{slice(topic,1,-1)}.rst"
     // print("documenting topic: {topic} -> {topic_file_name}\n{content}\n")
     mkdir_rec(dir_name(topic_file_name))
     var st : FStat
-    if (topic |> starts_with("|handmade/") && !stat(topic_file_name, st)) {
+    if (is_handmade_topic && !stat(topic_file_name, st)) {
         fopen(topic_file_name, "wb") $(topic_file) {
             if (topic_file != null) {
                 if (add_stub_header) {

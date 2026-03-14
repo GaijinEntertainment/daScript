@@ -8,10 +8,10 @@ JSON, XML, regular expressions, and reStructuredText processing.
 
 .. toctree::
 
-   json.rst
-   json_boost.rst
-   pugixml.rst
-   PUGIXML_boost.rst
-   regex.rst
-   regex_boost.rst
-   rst.rst
+   generated/json.rst
+   generated/json_boost.rst
+   generated/pugixml.rst
+   generated/PUGIXML_boost.rst
+   generated/regex.rst
+   generated/regex_boost.rst
+   generated/rst.rst
