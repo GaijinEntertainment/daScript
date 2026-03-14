@@ -375,7 +375,7 @@ namespace das {
 
     struct NodePrefix {
         uint32_t    size = 0;
-#ifdef NDEBUG
+#ifdef DAS_NO_ASSERTIONS
         uint32_t    magic;
 #else
         uint32_t    magic = 0xdeadc0de;
