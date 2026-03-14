@@ -839,6 +839,11 @@ namespace das {
             if (!expr->subexpr->type)
                 return Visitor::visit(expr);
             expr->subexpr = Expression::autoDereference(expr->subexpr);
+            if (!expr->subexpr->type) {
+                error("goto label type can't be inferred", "", "",
+                      expr->at, CompilationError::type_not_found);
+                return Visitor::visit(expr);
+            }
             if (!expr->subexpr->type->isSimpleType(Type::tInt)) {
                 error("label type has to be int, not " + describeType(expr->subexpr->type), "", "",
                       expr->at, CompilationError::invalid_label);
@@ -1045,6 +1050,11 @@ namespace das {
         expr->unsafeDeref = func ? func->unsafeDeref : false;
         // infer
         expr->subexpr = Expression::autoDereference(expr->subexpr);
+        if (!expr->subexpr->type) {
+            error("dereference type can't be inferred", "", "",
+                  expr->at, CompilationError::type_not_found);
+            return Visitor::visit(expr);
+        }
         if (!expr->subexpr->type->isPointer()) {
             error("can only dereference a pointer", "", "",
                   expr->at, CompilationError::cant_dereference);
@@ -1139,6 +1149,11 @@ namespace das {
         // infer
         expr->subexpr = Expression::autoDereference(expr->subexpr);
         auto seT = expr->subexpr->type;
+        if (!seT) {
+            error("null coalescing type can't be inferred", "", "",
+                  expr->at, CompilationError::type_not_found);
+            return Visitor::visit(expr);
+        }
         auto dvT = expr->defaultValue->type;
         if (!seT->isPointer()) {
             error("can only dereference a pointer", "", "",
@@ -1180,6 +1195,11 @@ namespace das {
         }
         // infer
         expr->autoDereference();
+        if (!expr->arguments[0]->type) {
+            error("static_assert argument type can't be inferred", "", "",
+                  expr->at, CompilationError::type_not_found);
+            return Visitor::visit(expr);
+        }
         if (!expr->arguments[0]->type->isSimpleType(Type::tBool))
             error("static assert condition must be boolean", "", "",
                   expr->at, CompilationError::invalid_argument_type);
@@ -1243,6 +1263,11 @@ namespace das {
         }
         // infer
         expr->autoDereference();
+        if (!expr->arguments[0]->type) {
+            error("assert argument type can't be inferred", "", "",
+                  expr->at, CompilationError::type_not_found);
+            return Visitor::visit(expr);
+        }
         if (!expr->arguments[0]->type->isSimpleType(Type::tBool))
             error("assert condition must be boolean", "", "",
                   expr->at, CompilationError::invalid_argument_type);
@@ -1640,6 +1665,11 @@ namespace das {
         }
         for (size_t i = 0, is = blockT->argTypes.size(); i != is; ++i) {
             auto &passType = expr->arguments[i + 1]->type;
+            if (!passType) {
+                error("invoke argument " + to_string(i + 1) + " type can't be inferred", "", "",
+                      expr->at, CompilationError::invalid_argument_type);
+                return Visitor::visit(expr);
+            }
             auto &argType = blockT->argTypes[i];
             if (!isMatchingArgument(nullptr, argType, passType, false, false)) {
                 auto extras = verbose ? ("\n" + describeMismatchingArgument(to_string(i + 1), passType, argType, (int)i)) : "";
@@ -1694,6 +1724,11 @@ namespace das {
         expr->arguments[1] = Expression::autoDereference(expr->arguments[1]);
         auto containerType = expr->arguments[0]->type;
         auto valueType = expr->arguments[1]->type;
+        if (!containerType || !valueType) {
+            error("argument type can't be inferred", "", "",
+                  expr->at, CompilationError::type_not_found);
+            return Visitor::visit(expr);
+        }
         if (containerType->isGoodTableType()) {
             if (!containerType->firstType->isSameType(*valueType, RefMatters::no, ConstMatters::no, TemporaryMatters::no))
                 error("key must be of the same type as table<key,...>", "", "",
@@ -1721,6 +1756,11 @@ namespace das {
         expr->arguments[1] = Expression::autoDereference(expr->arguments[1]);
         auto containerType = expr->arguments[0]->type;
         auto valueType = expr->arguments[1]->type;
+        if (!containerType || !valueType) {
+            error("argument type can't be inferred", "", "",
+                  expr->at, CompilationError::type_not_found);
+            return Visitor::visit(expr);
+        }
         if (containerType->isGoodTableType()) {
             if (!containerType->firstType->isSameType(*valueType, RefMatters::no, ConstMatters::no, TemporaryMatters::no))
                 error("key must be of the same type as table<key,...>", "", "",
@@ -1748,6 +1788,11 @@ namespace das {
         expr->arguments[1] = Expression::autoDereference(expr->arguments[1]);
         auto containerType = expr->arguments[0]->type;
         auto valueType = expr->arguments[1]->type;
+        if (!containerType || !valueType) {
+            error("argument type can't be inferred", "", "",
+                  expr->at, CompilationError::type_not_found);
+            return Visitor::visit(expr);
+        }
         if (containerType->isGoodTableType()) {
             if (!containerType->firstType->isSameType(*valueType, RefMatters::no, ConstMatters::no, TemporaryMatters::no))
                 error("key must be of the same type as table<key,...>", "", "",
@@ -1777,6 +1822,11 @@ namespace das {
         expr->arguments[1] = Expression::autoDereference(expr->arguments[1]);
         auto containerType = expr->arguments[0]->type;
         auto valueType = expr->arguments[1]->type;
+        if (!containerType || !valueType) {
+            error("argument type can't be inferred", "", "",
+                  expr->at, CompilationError::type_not_found);
+            return Visitor::visit(expr);
+        }
         if (containerType->isGoodTableType()) {
             if (!containerType->firstType->isSameType(*valueType, RefMatters::no, ConstMatters::no, TemporaryMatters::no))
                 error("key must be of the same type as table<key,...>", "", "",
@@ -1917,27 +1967,30 @@ namespace das {
         }
         if (nErrors == program->errors.size()) {
             if (expr->trait == "sizeof") {
-                if (expr->typeexpr->isExprTypeAnywhere()) {
-                    error("typeinfo(sizeof " + describeType(expr->typeexpr) + ") is not fully inferred, expecting resolved dim", "", "",
-                          expr->at, CompilationError::type_not_found);
+                bool failed = false;
+                uint64_t size = expr->typeexpr->getSizeOf64(failed);
+                if (failed) {
+                    error("typeinfo(sizeof " + describeType(expr->typeexpr) + ") is not fully inferred yet", "", "",
+                          expr->at, CompilationError::invalid_type);
                     return Visitor::visit(expr);
                 }
-                reportAstChanged();
-                uint64_t size = expr->typeexpr->getSizeOf64();
                 if (size > 0x7fffffff) {
                     error("typeinfo(sizeof " + describeType(expr->typeexpr) + ") is too big", "", "",
                           expr->at, CompilationError::invalid_type);
                     return Visitor::visit(expr);
                 }
+                reportAstChanged();
                 return make_smart<ExprConstInt>(expr->at, int(size));
             } else if (expr->trait == "alignof") {
-                if (expr->typeexpr->isExprTypeAnywhere()) {
-                    error("typeinfo(alignof " + describeType(expr->typeexpr) + ") is not fully inferred, expecting resolved dim", "", "",
-                          expr->at, CompilationError::type_not_found);
+                bool failed = false;
+                auto align = expr->typeexpr->getAlignOfFailed(failed);
+                if (failed) {
+                    error("typeinfo(alignof " + describeType(expr->typeexpr) + ") is not fully inferred yet", "", "",
+                          expr->at, CompilationError::invalid_type);
                     return Visitor::visit(expr);
                 }
                 reportAstChanged();
-                return make_smart<ExprConstInt>(expr->at, expr->typeexpr->getAlignOf());
+                return make_smart<ExprConstInt>(expr->at, align);
             } else if (expr->trait == "is_dim") {
                 reportAstChanged();
                 return make_smart<ExprConstBool>(expr->at, expr->typeexpr->dim.size() != 0);
@@ -2446,6 +2499,11 @@ namespace das {
         // size
         if (expr->sizeexpr) {
             expr->sizeexpr = Expression::autoDereference(expr->sizeexpr);
+            if (!expr->sizeexpr->type) {
+                error("delete size type can't be inferred", "", "",
+                      expr->at, CompilationError::type_not_found);
+                return Visitor::visit(expr);
+            }
             if (!expr->sizeexpr->type->isSimpleType(Type::tInt)) {
                 error("can't delete, expecting size to be int and not " + describeType(expr->sizeexpr->type), "", "",
                       expr->at, CompilationError::bad_delete);
@@ -2826,6 +2884,11 @@ namespace das {
         expr->index = Expression::autoDereference(expr->index);
         auto seT = expr->subexpr->type;
         auto ixT = expr->index->type;
+        if (!ixT) {
+            error("index type can't be inferred", "", "",
+                  expr->index->at, CompilationError::type_not_found);
+            return Visitor::visit(expr);
+        }
         if (seT->isGoodTableType()) {
             if (!seT->firstType->isSameType(*ixT, RefMatters::no, ConstMatters::no, TemporaryMatters::no)) {
                 error("table index type mismatch, '" + describeType(seT->firstType) + "' vs '" + describeType(ixT) + "'", "", "",
@@ -2937,6 +3000,11 @@ namespace das {
         }
         expr->index = Expression::autoDereference(expr->index);
         auto ixT = expr->index->type;
+        if (!ixT) {
+            error("safe index type can't be inferred", "", "",
+                  expr->index->at, CompilationError::type_not_found);
+            return Visitor::visit(expr);
+        }
         if (expr->subexpr->type->isPointer()) {
             if (!expr->subexpr->type->firstType) {
                 error("can't index 'void' pointer", "", "",
@@ -3635,6 +3703,11 @@ namespace das {
             } else if (valT->isBitfield()) {
                 expr->value = Expression::autoDereference(expr->value);
                 valT = expr->value->type;
+                if (!valT) {
+                    error("bitfield type can't be inferred", "", "",
+                          expr->at, CompilationError::type_not_found);
+                    return Visitor::visit(expr);
+                }
                 int index = valT->bitFieldIndex(expr->name);
                 if (index == -1 || index >= int(valT->argNames.size())) {
                     error("can't get bit field '" + expr->name + "' in " + describeType(valT), "", "",

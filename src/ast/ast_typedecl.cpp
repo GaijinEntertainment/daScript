@@ -2833,11 +2833,33 @@ namespace das
         return size;
     }
 
+    uint64_t TypeDecl::getTupleSize64(bool & failed) const {
+        DAS_ASSERT(baseType==Type::tTuple);
+        uint64_t size = 0;
+        for ( const auto & argT : argTypes ) {
+            int al = argT->getAlignOfFailed(failed) - 1;
+            size = (size + al) & ~al;
+            size += argT->getSizeOf64(failed);
+        }
+        int al = getTupleAlignFailed(failed) - 1;
+        size = (size + al) & ~al;
+        return size;
+    }
+
     int TypeDecl::getTupleAlign() const {
         DAS_ASSERT(baseType==Type::tTuple);
         int align = 1;
         for ( const auto & argT : argTypes ) {
             align = das::max ( argT->getAlignOf(), align );
+        }
+        return align;
+    }
+
+    int TypeDecl::getTupleAlignFailed(bool & failed) const {
+        DAS_ASSERT(baseType==Type::tTuple);
+        int align = 1;
+        for ( const auto & argT : argTypes ) {
+            align = das::max ( argT->getAlignOfFailed(failed), align );
         }
         return align;
     }
@@ -2886,11 +2908,33 @@ namespace das
         return maxSize;
     }
 
+    uint64_t TypeDecl::getVariantSize64(bool & failed) const {
+        DAS_ASSERT(baseType==Type::tVariant);
+        uint64_t maxSize = 0;
+        int al = getVariantAlignFailed(failed) - 1;
+        for ( const auto & argT : argTypes ) {
+            uint64_t size = (getTypeBaseSize(Type::tInt) + al) & ~al;
+            size += argT->getSizeOf64(failed);
+            maxSize = das::max(size, maxSize);
+        }
+        maxSize = (maxSize + al) & ~al;
+        return maxSize;
+    }
+
     int TypeDecl::getVariantAlign() const {
         DAS_ASSERT(baseType==Type::tVariant);
         int align = getTypeBaseAlign(Type::tInt);
         for ( const auto & argT : argTypes ) {
             align = das::max ( argT->getAlignOf(), align );
+        }
+        return align;
+    }
+
+    int TypeDecl::getVariantAlignFailed(bool & failed) const {
+        DAS_ASSERT(baseType==Type::tVariant);
+        int align = getTypeBaseAlign(Type::tInt);
+        for ( const auto & argT : argTypes ) {
+            align = das::max ( argT->getAlignOfFailed(failed), align );
         }
         return align;
     }
@@ -2940,6 +2984,26 @@ namespace das
         }
     }
 
+    uint64_t TypeDecl::getBaseSizeOf64(bool & failed) const {
+        if ( baseType==Type::tHandle ) {
+            return annotation->getSizeOf();
+        } else if ( baseType==Type::tStructure ) {
+            return !structType->circular ? structType->getSizeOf64(failed) : 0;
+        } else if ( baseType==Type::tTuple ) {
+            return getTupleSize64(failed);
+        } else if ( baseType==Type::tVariant ) {
+            return getVariantSize64(failed);
+        } else if ( isEnumT() ) {
+            return enumType ? getTypeBaseSize(enumType->baseType) : getTypeBaseSize(Type::tInt);
+        } else {
+            if ( baseType==Type::alias || baseType==Type::autoinfer || baseType==Type::option) {
+                failed = true;
+                return 0;
+            }
+            return getTypeBaseSize(baseType);
+        }
+    }
+
     int TypeDecl::getAlignOf() const {
         if ( baseType==Type::tHandle ) {
             return int(annotation->getAlignOf());
@@ -2952,6 +3016,26 @@ namespace das
         } else if ( isEnumT() ) {
             return enumType ? getTypeBaseAlign(enumType->baseType) : getTypeBaseAlign(Type::tInt);
         } else {
+            return getTypeBaseAlign(baseType);
+        }
+    }
+
+    int TypeDecl::getAlignOfFailed(bool &failed) const {
+        if ( baseType==Type::tHandle ) {
+            return int(annotation->getAlignOf());
+        } else if ( baseType==Type::tStructure ) {
+            return !structType->circular ? structType->getAlignOfFailed(failed) : 0;
+        } else if ( baseType==Type::tTuple ) {
+            return getTupleAlignFailed(failed);
+        } else if ( baseType==Type::tVariant ) {
+            return getVariantAlignFailed(failed);
+        } else if ( isEnumT() ) {
+            return enumType ? getTypeBaseAlign(enumType->baseType) : getTypeBaseAlign(Type::tInt);
+        } else {
+            if ( baseType==Type::alias || baseType==Type::autoinfer || baseType==Type::option) {
+                failed = true;
+                return 0;
+            }
             return getTypeBaseAlign(baseType);
         }
     }
@@ -2978,6 +3062,16 @@ namespace das
 
     uint64_t TypeDecl::getSizeOf64() const {
         return getBaseSizeOf64() * getCountOf64();
+    }
+
+    uint64_t TypeDecl::getSizeOf64(bool & failed) const {
+        for ( auto di : dim ) {
+            if ( di==TypeDecl::dimAuto || di==TypeDecl::dimConst ) {
+                failed = true;
+                return 0;
+            }
+        }
+        return getBaseSizeOf64(failed) * getCountOf64();
     }
 
     int TypeDecl::getStride() const {

@@ -146,6 +146,7 @@ namespace das {
         auto it = smn2s.find(mangledName);
         if ( it!=smn2s.end() ) return it->second;
         StructInfo * sti = debugInfo->makeNode<StructInfo>();
+        smn2s[mangledName] = sti;
         sti->name = debugInfo->allocateCachedName(st.name);
         sti->flags = 0;
         if ( st.isClass ) sti->flags |= StructInfo::flag_class;
@@ -196,7 +197,6 @@ namespace das {
             sti->annotation_list = nullptr;
         }
         sti->hash = hash_blockz64((uint8_t *)mangledName.c_str());
-        smn2s[mangledName] = sti;
         return sti;
     }
 
