@@ -101,6 +101,46 @@ namespace das {
         to[3*stride] = ptr[uint32_t(v_extract_wi(i))];
     }
 
+    // ---- pixel copy and conversion declarations (implementations in module_builtin_raster.cpp) ----
+
+    struct rast_rgb8  { uint8_t  r, g, b; };
+    struct rast_rgb16 { uint16_t r, g, b; };
+    struct rast_float3 { float x, y, z; };
+    struct rast_float4 { float x, y, z, w; };
+
+    // typed copy_reversed (8 pixel sizes)
+    void rast_copy_reversed_1  ( uint8_t *d, const uint8_t *s, int32_t c );
+    void rast_copy_reversed_2  ( uint16_t *d, const uint16_t *s, int32_t c );
+    void rast_copy_reversed_3  ( void *d, void *s, int32_t c );
+    void rast_copy_reversed_4  ( uint32_t *d, const uint32_t *s, int32_t c );
+    void rast_copy_reversed_6  ( void *d, void *s, int32_t c );
+    void rast_copy_reversed_8  ( uint64_t *d, const uint64_t *s, int32_t c );
+    void rast_copy_reversed_12 ( void *d, void *s, int32_t c );
+    void rast_copy_reversed_16 ( void *d, void *s, int32_t c );
+
+    // typed copy_rect (8 pixel sizes)
+    void rast_copy_rect_1  ( uint8_t *d, const uint8_t *s, int32_t dw, int32_t sw, int32_t sx0, int32_t sy0, int32_t dx0, int32_t dy0, int32_t w, int32_t h );
+    void rast_copy_rect_2  ( uint16_t *d, const uint16_t *s, int32_t dw, int32_t sw, int32_t sx0, int32_t sy0, int32_t dx0, int32_t dy0, int32_t w, int32_t h );
+    void rast_copy_rect_3  ( void *d, void *s, int32_t dw, int32_t sw, int32_t sx0, int32_t sy0, int32_t dx0, int32_t dy0, int32_t w, int32_t h );
+    void rast_copy_rect_4  ( uint32_t *d, const uint32_t *s, int32_t dw, int32_t sw, int32_t sx0, int32_t sy0, int32_t dx0, int32_t dy0, int32_t w, int32_t h );
+    void rast_copy_rect_6  ( void *d, void *s, int32_t dw, int32_t sw, int32_t sx0, int32_t sy0, int32_t dx0, int32_t dy0, int32_t w, int32_t h );
+    void rast_copy_rect_8  ( uint64_t *d, const uint64_t *s, int32_t dw, int32_t sw, int32_t sx0, int32_t sy0, int32_t dx0, int32_t dy0, int32_t w, int32_t h );
+    void rast_copy_rect_12 ( void *d, void *s, int32_t dw, int32_t sw, int32_t sx0, int32_t sy0, int32_t dx0, int32_t dy0, int32_t w, int32_t h );
+    void rast_copy_rect_16 ( void *d, void *s, int32_t dw, int32_t sw, int32_t sx0, int32_t sy0, int32_t dx0, int32_t dy0, int32_t w, int32_t h );
+
+    // channel conversion
+    void rast_convert_channels_u8  ( uint8_t * dst, const uint8_t * src, int32_t num_pixels, int32_t src_ch, int32_t dst_ch );
+    void rast_convert_channels_u16 ( uint16_t * dst, const uint16_t * src, int32_t num_pixels, int32_t src_ch, int32_t dst_ch );
+    void rast_convert_channels_f32 ( float * dst, const float * src, int32_t num_pixels, int32_t src_ch, int32_t dst_ch );
+
+    // bpc conversion
+    void rast_convert_u8_to_f32  ( float * dst, const uint8_t * src, int32_t count );
+    void rast_convert_f32_to_u8  ( uint8_t * dst, const float * src, int32_t count );
+    void rast_convert_u8_to_u16  ( uint16_t * dst, const uint8_t * src, int32_t count );
+    void rast_convert_u16_to_u8  ( uint8_t * dst, const uint16_t * src, int32_t count );
+    void rast_convert_u16_to_f32 ( float * dst, const uint16_t * src, int32_t count );
+    void rast_convert_f32_to_u16 ( uint16_t * dst, const float * src, int32_t count );
+
     __forceinline void u8x4_gather_store ( void * _to, const void * _from, vec4f from_index ) {
         // read 4 floats from memory, using 4 uint32_t indices and then write them to memory, but only for floats, where value[i]!=mask_v[i]
         auto from = (uint8_t *) _from;

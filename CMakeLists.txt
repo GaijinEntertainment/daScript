@@ -602,7 +602,6 @@ src/builtin/module_builtin_vector_ctor.cpp
 src/builtin/module_builtin_array.cpp
 src/builtin/module_builtin_das.cpp
 src/builtin/module_builtin_math.cpp
-src/builtin/module_builtin_raster.cpp
 src/builtin/module_builtin_string.cpp
 src/builtin/module_builtin_rtti.h
 src/builtin/module_builtin_rtti.cpp
@@ -778,7 +777,6 @@ include/daScript/simulate/aot.h
 include/daScript/simulate/aot_library.h
 include/daScript/simulate/aot_builtin.h
 include/daScript/simulate/aot_builtin_math.h
-include/daScript/simulate/aot_builtin_raster.h
 include/daScript/simulate/aot_builtin_matrix.h
 include/daScript/simulate/aot_builtin_time.h
 include/daScript/simulate/aot_builtin_string.h
@@ -956,7 +954,7 @@ SET(DAS_DASCRIPT_MAIN_SRC
 if (NOT ${DAS_TESTS_DISABLED})
     include(examples/pathTracer/CMakeLists.txt)
     include(examples/crash/CMakeLists.txt)
-    if(NOT ${DAS_AOT_EXAMPLES_DISABLED} AND NOT WIN32)
+    if(NOT ${DAS_AOT_EXAMPLES_DISABLED} AND NOT (WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 4))
         include(tests/aot/CMakeLists.txt)
     endif()
 endif()
@@ -1146,7 +1144,6 @@ SET(DAS_SIMULATE_INCLUDES
     include/daScript/simulate/aot_builtin_math.h
     include/daScript/simulate/aot_builtin_matrix.h
     include/daScript/simulate/aot_builtin_network.h
-    include/daScript/simulate/aot_builtin_raster.h
     include/daScript/simulate/aot_builtin_rtti.h
     include/daScript/simulate/aot_builtin_string.h
     include/daScript/simulate/aot_builtin_time.h

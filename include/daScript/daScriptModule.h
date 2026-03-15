@@ -14,7 +14,6 @@ namespace das
 #define NEED_ALL_DEFAULT_MODULES \
     NEED_MODULE(Module_BuiltIn); \
     NEED_MODULE(Module_Math); \
-    NEED_MODULE(Module_Raster); \
     NEED_MODULE(Module_Strings); \
     NEED_MODULE(Module_Rtti); \
     NEED_MODULE(Module_Ast); \
@@ -51,7 +50,6 @@ namespace das
 #define DECLARE_ALL_DEFAULT_MODULES \
     DECLARE_MODULE(Module_BuiltIn); \
     DECLARE_MODULE(Module_Math); \
-    DECLARE_MODULE(Module_Raster); \
     DECLARE_MODULE(Module_Strings); \
     DECLARE_MODULE(Module_Rtti); \
     DECLARE_MODULE(Module_Ast); \
@@ -64,7 +62,6 @@ namespace das
 #define PULL_ALL_DEFAULT_MODULES \
     PULL_MODULE(Module_BuiltIn); \
     PULL_MODULE(Module_Math); \
-    PULL_MODULE(Module_Raster); \
     PULL_MODULE(Module_Strings); \
     PULL_MODULE(Module_Rtti); \
     PULL_MODULE(Module_Ast); \

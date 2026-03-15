@@ -262,9 +262,6 @@ int das_aot_main ( int argc, char * argv[] ) {
     if (!Module::require("math")) {
         NEED_MODULE(Module_Math);
     }
-    if (!Module::require("raster")) {
-        NEED_MODULE(Module_Raster);
-    }
     if (!Module::require("strings")) {
         NEED_MODULE(Module_Strings);
     }
@@ -773,9 +770,6 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     }
     if (!Module::require("math")) {
         NEED_MODULE(Module_Math);
-    }
-    if (!Module::require("raster")) {
-        NEED_MODULE(Module_Raster);
     }
     if (!Module::require("strings")) {
         NEED_MODULE(Module_Strings);

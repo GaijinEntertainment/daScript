@@ -86,7 +86,6 @@ require daslib/profiler_boost
 require daslib/quote
 require daslib/refactor
 require daslib/remove_call_args
-// require daslib/raster_boost                    // depends on external raster module
 // require daslib/spoof                           // depends on peg module
 require daslib/stringify
 require daslib/temp_strings
