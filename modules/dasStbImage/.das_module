@@ -6,4 +6,5 @@ def initialize(project_path : string) {
     if (das_is_dll_build()) {
         register_dynamic_module("{project_path}/dasModuleStbImage.shared_module", "Module_StbImage")
     }
+    register_native_path("stbimage", "stbimage_boost", "{project_path}/stbimage/stbimage_boost.das")
 }
