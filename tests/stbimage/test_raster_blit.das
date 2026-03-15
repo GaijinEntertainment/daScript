@@ -198,10 +198,10 @@ def test_blit_alpha_detailed(t : T?) {
         var src = make_image(4, 4, 1)
         for (b in src.bytes) { b = uint8(0); }
         // set src pixels at (1,1), (2,1), (1,2), (2,2) to 255
-        src.bytes[1*4+1] = uint8(255)
-        src.bytes[1*4+2] = uint8(255)
-        src.bytes[2*4+1] = uint8(255)
-        src.bytes[2*4+2] = uint8(255)
+        src.bytes[1 * 4 + 1] = uint8(255)
+        src.bytes[1 * 4 + 2] = uint8(255)
+        src.bytes[2 * 4 + 1] = uint8(255)
+        src.bytes[2 * 4 + 2] = uint8(255)
         dst.blit_alpha(src, 1, 1, 2, 2, 2, 2, 128, 64, 32)
         // dst pixels at (2,2), (3,2), (2,3), (3,3) should be colored
         for (dy in range(4)) {
