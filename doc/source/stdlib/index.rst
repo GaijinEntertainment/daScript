@@ -37,5 +37,6 @@ THE SOFTWARE.
    sec_classes.rst
    sec_testing.rst
    sec_code_quality.rst
+   sec_media.rst
 
 

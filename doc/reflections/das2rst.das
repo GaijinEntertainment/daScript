@@ -94,6 +94,7 @@ require daslib/typemacro_boost
 require daslib/validate_code
 require dashv/dashv_boost
 require pugixml/PUGIXML_boost
+require stbimage/stbimage_boost
 
 def document_module_math(root : string) {
     var mod = get_module("math")
@@ -1132,6 +1133,53 @@ def document_module_validate_code(root : string) {
     document("Code validation annotations", mod, "validate_code.rst", groups)
 }
 
+def document_module_stbimage(root : string) {
+    var mod = get_module("stbimage")
+    var groups <- array<DocGroup>(
+        group_by_regex("Image loading", mod, %regex~(stbi_load|stbi_loadf|stbi_load_16|stbi_load_from_memory|stbi_loadf_from_memory|stbi_load_16_from_memory|stbi_load_gif_from_memory)$%%),
+        group_by_regex("Image info", mod, %regex~(stbi_info|stbi_info_from_memory|stbi_is_hdr|stbi_is_hdr_from_memory|stbi_is_16_bit|stbi_is_16_bit_from_memory)$%%),
+        group_by_regex("Memory management", mod, %regex~(stbi_image_free|stbi_failure_reason)$%%),
+        group_by_regex("Load settings", mod, %regex~(stbi_set_flip_vertically_on_load|stbi_set_unpremultiply_on_load|stbi_convert_iphone_png_to_rgb)$%%),
+        group_by_regex("HDR gamma and scale", mod, %regex~(stbi_hdr_to_ldr_gamma|stbi_hdr_to_ldr_scale|stbi_ldr_to_hdr_gamma|stbi_ldr_to_hdr_scale)$%%),
+        group_by_regex("File writing", mod, %regex~(stbi_write_png|stbi_write_bmp|stbi_write_tga|stbi_write_jpg|stbi_write_hdr)$%%),
+        group_by_regex("Write to memory", mod, %regex~(stbi_write_png_to_memory|stbi_write_bmp_to_memory|stbi_write_tga_to_memory|stbi_write_jpg_to_memory)$%%),
+        group_by_regex("Write settings", mod, %regex~(stbi_flip_vertically_on_write|stbi_write_set_.*|stbi_write_get_.*)$%%),
+        group_by_regex("Image resizing", mod, %regex~(stbir_resize|stbir_resize_uint8_srgb|stbir_resize_uint8_linear|stbir_resize_float_linear)$%%)
+    )
+    document("Image loading, writing, and resizing (stb_image)", mod, "stbimage.rst", groups)
+}
+
+def document_module_raster(root : string) {
+    var mod = get_module("raster")
+    var groups <- array<DocGroup>(
+        group_by_regex("Gather", mod, %regex~gather$%%),
+        group_by_regex("Scatter", mod, %regex~scatter$%%),
+        group_by_regex("Scatter with mask", mod, %regex~scatter_neq_mask$%%),
+        group_by_regex("Store with mask", mod, %regex~store_neq_mask$%%),
+        group_by_regex("Gather-scatter", mod, %regex~gather_scatter$%%),
+        group_by_regex("Gather-scatter with mask", mod, %regex~gather_scatter_neq_mask$%%),
+        group_by_regex("Gather-store with mask", mod, %regex~gather_store_neq_mask$%%),
+        group_by_regex("Gather-store with stride", mod, %regex~gather_store_stride$%%),
+        group_by_regex("Byte gather-store", mod, %regex~u8x4_gather_store$%%),
+        group_by_regex("Copy reversed", mod, %regex~rast_copy_reversed_.*$%%),
+        group_by_regex("Copy rect", mod, %regex~rast_copy_rect_.*$%%),
+        group_by_regex("Channel conversion", mod, %regex~rast_convert_channels_.*$%%),
+        group_by_regex("BPC conversion", mod, %regex~rast_convert_.*_to_.*$%%),
+        group_by_regex("Span raster", mod, %regex~rast_hspan.*$%%)
+    )
+    document("Raster operations (pixel copy, convert, SIMD gather/scatter)", mod, "raster.rst", groups)
+}
+
+def document_module_stbimage_boost(root : string) {
+    var mod = find_module("stbimage_boost")
+    var groups <- array<DocGroup>(
+        group_by_regex("Image construction", mod, %regex~(make_image)$%%),
+        group_by_regex("Image loading", mod, %regex~(load_image|image_info|is_hdr|is_16_bit|is_hdr_from_memory|is_16_bit_from_memory)$%%),
+        group_by_regex("Pixel access", mod, %regex~(with_pixels|with_pixels_f|with_pixels_16|with_row|with_row_f|with_row_16)$%%)
+    )
+    document("High-level image API (stbimage_boost)", mod, "stbimage_boost.rst", groups)
+}
+
 [export]
 def main {
     disable_profiler(this_context())
@@ -1143,6 +1191,8 @@ def main {
     document_module_fio(root)
     document_module_network(root)
     document_module_dashv(root)
+    document_module_stbimage(root)
+    document_module_raster(root)
     document_module_uriparser(root)
     document_module_pugixml(root)
     document_module_debugapi(root)
@@ -1225,6 +1275,7 @@ def main {
     document_module_soa(root)
     document_module_sort_boost(root)
     document_module_static_let(root)
+    document_module_stbimage_boost(root)
     document_module_stringify(root)
     document_module_strings_boost(root)
     document_module_temp_strings(root)
