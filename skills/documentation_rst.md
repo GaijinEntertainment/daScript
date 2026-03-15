@@ -2,15 +2,19 @@
 
 ## Standard Library Documentation
 
-The stdlib docs live in `doc/source/stdlib/` and are generated from `//!` doc-comments in `daslib/*.das`.
+The stdlib docs live in `doc/source/stdlib/` and are generated from `//!` doc-comments in source files.
 
 ### Documentation pipeline
 
-1. `daslib/*.das` files contain `//!` comments for each module, struct, function
-2. `doc/reflections/rst_comment.das` extracts comments into `doc/source/stdlib/detail/*.rst`
+1. Source files contain `//!` doc-comments for each module, struct, function:
+   - `daslib/*.das` — standard library modules
+   - `modules/<ModuleName>/<subdir>/*.das` — external module daScript code (e.g. `modules/dasStbImage/stbimage/stbimage_boost.das`)
+   - C++ modules get their docs from handmade files only (no `//!` comments)
+2. `doc/reflections/rst_comment.das` extracts `//!` comments into `doc/source/stdlib/detail/*.rst`
 3. `doc/reflections/das2rst.das` + `doc/reflections/rst.das` combine detail RST with handmade content
-4. **`doc/source/stdlib/handmade/`** — manually written module descriptions and examples (2,001 files)
-5. Final RST output goes to `doc/source/stdlib/*.rst`
+4. **`doc/source/stdlib/handmade/`** — manually written descriptions (fallback/supplement for functions, types, enums)
+5. **`doc/source/stdlib/detail/`** — auto-generated from `//!` comments (do NOT edit manually)
+6. Final RST output goes to **`doc/source/stdlib/generated/`** (NOT `doc/source/stdlib/` root)
 
 ### Key documentation tools
 
@@ -127,12 +131,18 @@ After creating or modifying any RST files, stdlib documentation, or `daslib/*.da
 2. `bin/Release/daslang.exe doc/reflections/das2rst.das` — generates RST and creates stub doc files
 3. Check for stubs: `grep -rl "// stub" doc/source/stdlib/handmade/` — fill in descriptions
 4. Regenerate: `bin/Release/daslang.exe doc/reflections/das2rst.das` (picks up filled stubs)
-5. Verify no "Uncategorized": `grep -c Uncategorized doc/source/stdlib/*.rst | grep -v ':0$'`
+5. Verify no "Uncategorized": `grep -c Uncategorized doc/source/stdlib/generated/*.rst | grep -v ':0$'`
 6. Clean Sphinx build (step 2 above) — verify `build succeeded.` with no new warnings
+
+**Documenting external modules (under `modules/`):**
+- C++ modules (e.g. `stbimage`, `raster`): use `get_module("name")` in `das2rst.das` — documented via handmade files only
+- daScript modules (e.g. `stbimage_boost`): use `find_module("name")` in `das2rst.das` — documented via `//!` comments + handmade files
+- Add `require` for the module in `das2rst.das` (e.g. `require stbimage/stbimage_boost`) to load it
+- The `.das_module` descriptor transitively loads C++ modules, so one `require` may suffice for multiple modules
 
 ## Tutorial RST conventions
 
-Tutorial RST files live in `doc/source/reference/tutorials/` with companion `.das` files in `tutorials/language/`.
+Tutorial RST files live in `doc/source/reference/tutorials/` with companion `.das` files in `tutorials/language/` (language tutorials), `tutorials/dasStbImage/` (image tutorials), `tutorials/dasHV/` (HTTP tutorials), `tutorials/dasPUGIXML/` (XML tutorials), `tutorials/macros/` (macro tutorials), or `tutorials/integration/cpp/` (C++ integration tutorials).
 
 - Each RST starts with a label: `.. _tutorial_name:` (e.g., `.. _tutorial_linq:`)
 - Include `.. index::` directive with relevant `single: Tutorial; Topic` entries

@@ -239,3 +239,25 @@ Run any tutorial from the project root::
    tutorials/dasPUGIXML_02_building.rst
    tutorials/dasPUGIXML_03_xpath.rst
    tutorials/dasPUGIXML_04_serialization.rst
+
+.. _tutorials_dasstbimage:
+
+dasStbImage (Image I/O) Tutorials
+=================================
+
+These tutorials cover the ``stbimage_boost`` module — image loading,
+saving, format conversion, and pixel manipulation using
+`stb_image <https://github.com/nothings/stb>`_.  The companion
+``.das`` files are in ``tutorials/dasStbImage/``.
+
+Run any tutorial from the project root::
+
+   daslang.exe tutorials/dasStbImage/01_loading_images.das
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/dasStbImage_01_loading_images.rst
+   tutorials/dasStbImage_02_saving_and_encoding.rst
+   tutorials/dasStbImage_03_transforms.rst
+   tutorials/dasStbImage_04_pixel_access_and_conversion.rst

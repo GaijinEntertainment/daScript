@@ -80,11 +80,11 @@ struct public Image {
     //! Image container with raw pixel data in original format.
     //! ``bpc`` (bytes per component): 1 = uint8, 2 = uint16, 4 = float.
     //! ``channels``: 1 = grey, 2 = grey+alpha, 3 = RGB, 4 = RGBA.
-    bytes    : array<uint8>
-    width    : int
-    height   : int
-    channels : int
-    bpc      : int
+    bytes    : array<uint8>  //! Raw pixel data stored as a byte array.
+    width    : int           //! Width of the image in pixels.
+    height   : int           //! Height of the image in pixels.
+    channels : int           //! Number of color channels (1=grey, 2=grey+alpha, 3=RGB, 4=RGBA).
+    bpc      : int           //! Bytes per component (1=uint8, 2=uint16, 4=float).
 
     // ---- queries ----
 
@@ -559,8 +559,27 @@ def public with_row(var self : Image; y : int; blk : block<(var row : array<floa
     }
 }
 
+def public with_row(var self : Image; y : int; blk : block<(var row : array<uint16>#) : void>) {
+    //! Access a single row as ``array<uint16>``. Image must have ``bpc == 2``.
+    assert(self.bpc == 2, "with_row<uint16> requires bpc=2")
+    assert(y >= 0 && y < self.height, "row out of bounds")
+    let row_elems = self.width * self.channels
+    unsafe {
+        __builtin_array_lock(self.bytes)
+        var view : array<uint16>#
+        _builtin_make_temp_array(view, reinterpret<uint16?>(addr(self.bytes[y * row_elems * 2])), row_elems)
+        invoke(blk, view)
+        __builtin_array_unlock(self.bytes)
+    }
+}
+
 def public with_row_f(var self : Image; y : int; blk : block<(var row : array<float>#) : void>) {
     //! Explicit-name alias for ``with_row`` with float block.
+    self |> with_row(y, blk)
+}
+
+def public with_row_16(var self : Image; y : int; blk : block<(var row : array<uint16>#) : void>) {
+    //! Explicit-name alias for ``with_row`` with uint16 block.
     self |> with_row(y, blk)
 }
 
