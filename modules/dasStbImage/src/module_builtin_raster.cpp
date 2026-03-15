@@ -5,7 +5,7 @@
 #include "daScript/ast/ast_policy_types.h"
 #include "daScript/ast/ast_handle.h"
 
-#include "daScript/simulate/aot_builtin_raster.h"
+#include "aot_builtin_raster.h"
 
 namespace das
 {
@@ -294,10 +294,13 @@ namespace das
             verifyAotReady();
         }
         virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
-            tw << "#include \"daScript/simulate/aot_builtin_raster.h\"\n";
+            tw << "#include \"modules/dasStbImage/src/aot_builtin_raster.h\"\n";
             return ModuleAotType::cpp;
         }
     };
+
+REGISTER_DYN_MODULE(Module_Raster,Module_Raster);
+
 }
 
 REGISTER_MODULE_IN_NAMESPACE(Module_Raster,das);
