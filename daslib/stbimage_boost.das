@@ -51,6 +51,206 @@ def private copy_rect(var dst; src; dst_w, src_w, sx0, sy0, dx0, dy0, w, h : int
     }
 }
 
+// ---- channel conversion helpers (one per bpc type) ----
+
+def private convert_channels_u8(var dst : array<uint8>; src : array<uint8>; num_pixels, src_ch, dst_ch : int) {
+    for (i in range(num_pixels)) {
+        let si = i * src_ch
+        let di = i * dst_ch
+        var r, g, b, a : int
+        if (src_ch == 1) {
+            r = int(src[si])
+            g = r
+            b = r
+            a = 255
+        } elif (src_ch == 2) {
+            r = int(src[si])
+            g = r
+            b = r
+            a = int(src[si + 1])
+        } elif (src_ch == 3) {
+            r = int(src[si])
+            g = int(src[si + 1])
+            b = int(src[si + 2])
+            a = 255
+        } else {
+            r = int(src[si])
+            g = int(src[si + 1])
+            b = int(src[si + 2])
+            a = int(src[si + 3])
+        }
+        if (dst_ch == 1) {
+            dst[di] = uint8((r * 77 + g * 150 + b * 29 + 128) >> 8)
+        } elif (dst_ch == 2) {
+            dst[di] = uint8((r * 77 + g * 150 + b * 29 + 128) >> 8)
+            dst[di + 1] = uint8(a)
+        } elif (dst_ch == 3) {
+            dst[di] = uint8(r)
+            dst[di + 1] = uint8(g)
+            dst[di + 2] = uint8(b)
+        } else {
+            dst[di] = uint8(r)
+            dst[di + 1] = uint8(g)
+            dst[di + 2] = uint8(b)
+            dst[di + 3] = uint8(a)
+        }
+    }
+}
+
+def private convert_channels_u16(var dst_bytes : array<uint8>; src_bytes : array<uint8>; num_pixels, src_ch, dst_ch : int) {
+    unsafe {
+        var dp = reinterpret<uint16?>(addr(dst_bytes[0]))
+        var sp = reinterpret<uint16?>(addr(src_bytes[0]))
+        for (i in range(num_pixels)) {
+            let si = i * src_ch
+            let di = i * dst_ch
+            var r, g, b, a : int
+            if (src_ch == 1) {
+                r = int(sp[si])
+                g = r
+                b = r
+                a = 65535
+            } elif (src_ch == 2) {
+                r = int(sp[si])
+                g = r
+                b = r
+                a = int(sp[si + 1])
+            } elif (src_ch == 3) {
+                r = int(sp[si])
+                g = int(sp[si + 1])
+                b = int(sp[si + 2])
+                a = 65535
+            } else {
+                r = int(sp[si])
+                g = int(sp[si + 1])
+                b = int(sp[si + 2])
+                a = int(sp[si + 3])
+            }
+            if (dst_ch == 1) {
+                dp[di] = uint16((r * 77 + g * 150 + b * 29 + 128) >> 8)
+            } elif (dst_ch == 2) {
+                dp[di] = uint16((r * 77 + g * 150 + b * 29 + 128) >> 8)
+                dp[di + 1] = uint16(a)
+            } elif (dst_ch == 3) {
+                dp[di] = uint16(r)
+                dp[di + 1] = uint16(g)
+                dp[di + 2] = uint16(b)
+            } else {
+                dp[di] = uint16(r)
+                dp[di + 1] = uint16(g)
+                dp[di + 2] = uint16(b)
+                dp[di + 3] = uint16(a)
+            }
+        }
+    }
+}
+
+def private convert_channels_f32(var dst_bytes : array<uint8>; src_bytes : array<uint8>; num_pixels, src_ch, dst_ch : int) {
+    unsafe {
+        var dp = reinterpret<float?>(addr(dst_bytes[0]))
+        var sp = reinterpret<float?>(addr(src_bytes[0]))
+        for (i in range(num_pixels)) {
+            let si = i * src_ch
+            let di = i * dst_ch
+            var r, g, b, a : float
+            if (src_ch == 1) {
+                r = sp[si]
+                g = r
+                b = r
+                a = 1.0f
+            } elif (src_ch == 2) {
+                r = sp[si]
+                g = r
+                b = r
+                a = sp[si + 1]
+            } elif (src_ch == 3) {
+                r = sp[si]
+                g = sp[si + 1]
+                b = sp[si + 2]
+                a = 1.0f
+            } else {
+                r = sp[si]
+                g = sp[si + 1]
+                b = sp[si + 2]
+                a = sp[si + 3]
+            }
+            if (dst_ch == 1) {
+                dp[di] = r * 0.299f + g * 0.587f + b * 0.114f
+            } elif (dst_ch == 2) {
+                dp[di] = r * 0.299f + g * 0.587f + b * 0.114f
+                dp[di + 1] = a
+            } elif (dst_ch == 3) {
+                dp[di] = r
+                dp[di + 1] = g
+                dp[di + 2] = b
+            } else {
+                dp[di] = r
+                dp[di + 1] = g
+                dp[di + 2] = b
+                dp[di + 3] = a
+            }
+        }
+    }
+}
+
+// ---- bpc conversion helpers (per-component, linear) ----
+
+def private convert_u8_to_f32(var dst : array<uint8>; src : array<uint8>; count : int) {
+    unsafe {
+        var dp = reinterpret<float?>(addr(dst[0]))
+        for (i in range(count)) {
+            dp[i] = float(src[i]) / 255.0f
+        }
+    }
+}
+
+def private convert_f32_to_u8(var dst : array<uint8>; src : array<uint8>; count : int) {
+    unsafe {
+        var sp = reinterpret<float?>(addr(src[0]))
+        for (i in range(count)) {
+            dst[i] = uint8(clamp(int(sp[i] * 255.0f + 0.5f), 0, 255))
+        }
+    }
+}
+
+def private convert_u8_to_u16(var dst : array<uint8>; src : array<uint8>; count : int) {
+    unsafe {
+        var dp = reinterpret<uint16?>(addr(dst[0]))
+        for (i in range(count)) {
+            dp[i] = uint16(int(src[i]) * 257)
+        }
+    }
+}
+
+def private convert_u16_to_u8(var dst : array<uint8>; src : array<uint8>; count : int) {
+    unsafe {
+        var sp = reinterpret<uint16?>(addr(src[0]))
+        for (i in range(count)) {
+            dst[i] = uint8(int(sp[i]) >> 8)
+        }
+    }
+}
+
+def private convert_u16_to_f32(var dst : array<uint8>; src : array<uint8>; count : int) {
+    unsafe {
+        var dp = reinterpret<float?>(addr(dst[0]))
+        var sp = reinterpret<uint16?>(addr(src[0]))
+        for (i in range(count)) {
+            dp[i] = float(sp[i]) / 65535.0f
+        }
+    }
+}
+
+def private convert_f32_to_u16(var dst : array<uint8>; src : array<uint8>; count : int) {
+    unsafe {
+        var dp = reinterpret<uint16?>(addr(dst[0]))
+        var sp = reinterpret<float?>(addr(src[0]))
+        for (i in range(count)) {
+            dp[i] = uint16(clamp(int(sp[i] * 65535.0f + 0.5f), 0, 65535))
+        }
+    }
+}
+
 def private get_pixel_layout(ch : int) : stbir_pixel_layout {
     if (ch == 4) {
         return stbir_pixel_layout.STBIR_RGBA
@@ -485,14 +685,49 @@ struct public Image {
     [class_method]
     def static const to_channels(target_channels : int) : Image {
         //! Convert image to a different number of channels. Returns a new Image.
-        //! Uses encode-to-PNG then decode with requested channels.
+        //! Grey conversion uses ITU-R BT.601 luminance (0.299R + 0.587G + 0.114B).
+        //! Added alpha is set to max (255 / 65535 / 1.0).
         if (target_channels == channels) {
             var result = Image(width = width, height = height, channels = channels, bpc = bpc, bytes <- clone(bytes))
             return <- result
         }
-        var result : Image
-        stbi_write_png_to_memory(width, height, channels, unsafe(addr(bytes[0])), width * channels * bpc) <| $(data : array<uint8>#) {
-            result.load_from_memory(data, target_channels)
+        var result = Image(width = width, height = height, channels = target_channels, bpc = bpc)
+        let num_pixels = width * height
+        result.bytes |> resize(num_pixels * target_channels * bpc)
+        if (bpc == 1) {
+            convert_channels_u8(result.bytes, bytes, num_pixels, channels, target_channels)
+        } elif (bpc == 2) {
+            convert_channels_u16(result.bytes, bytes, num_pixels, channels, target_channels)
+        } elif (bpc == 4) {
+            convert_channels_f32(result.bytes, bytes, num_pixels, channels, target_channels)
+        }
+        return <- result
+    }
+
+    [class_method]
+    def static const to_bpc(target_bpc : int) : Image {
+        //! Convert image to a different bytes-per-component. Returns a new Image.
+        //! Conversion is linear (no gamma correction).
+        //! uint8 range [0,255], uint16 range [0,65535], float range [0.0,1.0].
+        if (target_bpc == bpc) {
+            var result = Image(width = width, height = height, channels = channels, bpc = bpc, bytes <- clone(bytes))
+            return <- result
+        }
+        var result = Image(width = width, height = height, channels = channels, bpc = target_bpc)
+        let count = width * height * channels
+        result.bytes |> resize(count * target_bpc)
+        if (bpc == 1 && target_bpc == 4) {
+            convert_u8_to_f32(result.bytes, bytes, count)
+        } elif (bpc == 4 && target_bpc == 1) {
+            convert_f32_to_u8(result.bytes, bytes, count)
+        } elif (bpc == 1 && target_bpc == 2) {
+            convert_u8_to_u16(result.bytes, bytes, count)
+        } elif (bpc == 2 && target_bpc == 1) {
+            convert_u16_to_u8(result.bytes, bytes, count)
+        } elif (bpc == 2 && target_bpc == 4) {
+            convert_u16_to_f32(result.bytes, bytes, count)
+        } elif (bpc == 4 && target_bpc == 2) {
+            convert_f32_to_u16(result.bytes, bytes, count)
         }
         return <- result
     }

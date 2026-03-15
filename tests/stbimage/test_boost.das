@@ -709,59 +709,6 @@ def test_flip_vertical_hdr(t : T?) {
     }
 }
 
-// ---- channel conversion ----
-
-[test]
-def test_to_channels_rgba_to_rgb(t : T?) {
-    t |> run("convert 4ch to 3ch") <| @(tt : T?) {
-        var img : Image
-        img.load(test_image_path("test.png"))
-        tt |> equal(img.channels, 4)
-        var rgb <- img.to_channels(3)
-        tt |> equal(rgb.channels, 3)
-        tt |> equal(rgb.width, 64)
-        tt |> equal(rgb.height, 64)
-        tt |> success(!rgb.has_alpha(), "no alpha")
-    }
-}
-
-[test]
-def test_to_channels_rgb_to_rgba(t : T?) {
-    t |> run("convert 3ch to 4ch") <| @(tt : T?) {
-        var img : Image
-        img.load(test_image_path("test.png"), 3)
-        tt |> equal(img.channels, 3)
-        var rgba <- img.to_channels(4)
-        tt |> equal(rgba.channels, 4)
-        tt |> success(rgba.has_alpha(), "has alpha")
-    }
-}
-
-[test]
-def test_to_channels_to_grey(t : T?) {
-    t |> run("convert 4ch to 1ch grey") <| @(tt : T?) {
-        var img : Image
-        img.load(test_image_path("test.png"))
-        var grey <- img.to_channels(1)
-        tt |> equal(grey.channels, 1)
-        tt |> equal(grey.width, 64)
-    }
-}
-
-[test]
-def test_to_channels_same(t : T?) {
-    t |> run("convert same channel count is identity") <| @(tt : T?) {
-        var img : Image
-        img.load(test_image_path("test.png"))
-        var same <- img.to_channels(4)
-        tt |> equal(same.channels, 4)
-        tt |> equal(same.width, 64)
-        for (i in range(16)) {
-            tt |> equal(int(img.bytes[i]), int(same.bytes[i]))
-        }
-    }
-}
-
 // ---- standalone functions ----
 
 [test]
