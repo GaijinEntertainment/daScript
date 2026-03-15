@@ -184,6 +184,16 @@ FILE(GLOB AOT_URI_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/uri/*.das")
 # AOT for lpipe test files
 FILE(GLOB AOT_LPIPE_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/lpipe/*.das")
 
+# AOT for stbimage test files
+FILE(GLOB AOT_STBIMAGE_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/stbimage/*.das")
+# Exclude gen_test_images (utility script, not a test)
+list(FILTER AOT_STBIMAGE_FILES EXCLUDE REGEX "gen_test_images")
+
+# StbImage test module files (libraries required by stbimage tests)
+SET(AOT_STBIMAGE_MODULE_FILES
+    modules/dasStbImage/stbimage/stbimage_boost.das
+)
+
 # AOT for language test files
 FILE(GLOB AOT_LANGUAGE_TEST_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/language/*.das")
 # Exclude expect-error tests and no_aot files
@@ -359,6 +369,14 @@ add_custom_target(test_aot_language_modules)
 SET(LANGUAGE_MODULES_AOT_GENERATED_SRC)
 DAS_AOT_LIB("${AOT_LANGUAGE_MODULE_FILES}" LANGUAGE_MODULES_AOT_GENERATED_SRC test_aot_language_modules daslang)
 
+add_custom_target(test_aot_stbimage)
+SET(STBIMAGE_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_STBIMAGE_FILES}" STBIMAGE_AOT_GENERATED_SRC test_aot_stbimage daslang)
+
+add_custom_target(test_aot_stbimage_modules)
+SET(STBIMAGE_MODULES_AOT_GENERATED_SRC)
+DAS_AOT_LIB("${AOT_STBIMAGE_MODULE_FILES}" STBIMAGE_MODULES_AOT_GENERATED_SRC test_aot_stbimage_modules daslang)
+
 add_custom_target(test_aot_tests)
 SET(TEST_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_TEST_FILES}" TEST_AOT_GENERATED_SRC test_aot_tests daslang)
@@ -406,6 +424,8 @@ SOURCE_GROUP_FILES("aot generated" LANGUAGE_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LANGUAGE_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DASLIB_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DECS_MODULES_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" STBIMAGE_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" STBIMAGE_MODULES_AOT_GENERATED_SRC)
 
 # Build the test_aot executable using the same main.cpp as daslang
 add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
@@ -452,6 +472,8 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${LANGUAGE_MODULES_AOT_GENERATED_SRC}
     ${DASLIB_MODULES_AOT_GENERATED_SRC}
     ${DECS_MODULES_AOT_GENERATED_SRC}
+    ${STBIMAGE_AOT_GENERATED_SRC}
+    ${STBIMAGE_MODULES_AOT_GENERATED_SRC}
 )
 TARGET_LINK_LIBRARIES(test_aot libDaScriptAot ${SRC_LIBRARIES} ${DAS_MODULES_LIBS})
 ADD_DEPENDENCIES(test_aot libDaScriptAot
@@ -474,6 +496,7 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_lpipe
     test_aot_language test_aot_language_modules
     test_aot_daslib_modules test_aot_decs_modules
+    test_aot_stbimage test_aot_stbimage_modules
 )
 target_include_directories(test_aot PRIVATE ${NEED_MODULES_PATH} ${PROJECT_SOURCE_DIR}/modules/dasUnitTest)
 SETUP_CPP11(test_aot)
