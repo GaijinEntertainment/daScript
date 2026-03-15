@@ -95,6 +95,7 @@ require daslib/validate_code
 require dashv/dashv_boost
 require pugixml/PUGIXML_boost
 require stbimage/stbimage_boost
+require stbimage/stbimage_ttf
 
 def document_module_math(root : string) {
     var mod = get_module("math")
@@ -1165,7 +1166,9 @@ def document_module_raster(root : string) {
         group_by_regex("Copy rect", mod, %regex~rast_copy_rect_.*$%%),
         group_by_regex("Channel conversion", mod, %regex~rast_convert_channels_.*$%%),
         group_by_regex("BPC conversion", mod, %regex~rast_convert_.*_to_.*$%%),
-        group_by_regex("Span raster", mod, %regex~rast_hspan.*$%%)
+        group_by_regex("Span raster", mod, %regex~rast_hspan.*$%%),
+        group_by_regex("Fill rect", mod, %regex~rast_fill_rect_.*$%%),
+        group_by_regex("Alpha blit", mod, %regex~rast_blit_alpha$%%)
     )
     document("Raster operations (pixel copy, convert, SIMD gather/scatter)", mod, "raster.rst", groups)
 }
@@ -1175,9 +1178,37 @@ def document_module_stbimage_boost(root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Image construction", mod, %regex~(make_image)$%%),
         group_by_regex("Image loading", mod, %regex~(load_image|image_info|is_hdr|is_16_bit|is_hdr_from_memory|is_16_bit_from_memory)$%%),
-        group_by_regex("Pixel access", mod, %regex~(with_pixels|with_pixels_f|with_pixels_16|with_row|with_row_f|with_row_16)$%%)
+        group_by_regex("Pixel access", mod, %regex~(with_pixels|with_pixels_f|with_pixels_16|with_row|with_row_f|with_row_16)$%%),
+        group_by_regex("Drawing", mod, %regex~.*(fill_rect|blit_alpha|blit)$%%),
+        group_by_regex("Format conversion", mod, %regex~.*(to_channels|to_bpc)$%%),
+        group_by_regex("Transforms", mod, %regex~.*(resize|flip_vertical|flip_horizontal|crop)$%%),
+        group_by_regex("Save and encode", mod, %regex~.*(save|encode)$%%),
+        group_by_regex("Image properties", mod, %regex~.*(valid|stride|has_alpha|pixel_size|is_hdr|data_size)$%%),
+        group_by_regex("Image loading (methods)", mod, %regex~.*(load|load_hdr|load_16|load_from_memory|load_hdr_from_memory|load_16_from_memory)$%%)
     )
     document("High-level image API (stbimage_boost)", mod, "stbimage_boost.rst", groups)
+}
+
+def document_module_stbtruetype(root : string) {
+    var mod = get_module("stbtruetype")
+    var groups <- array<DocGroup>(
+        group_by_regex("Font loading", mod, %regex~.*(GetNumberOfFonts|GetFontOffsetForIndex|InitFont)$%%),
+        group_by_regex("Font packing", mod, %regex~.*(PackBegin|PackEnd|PackFontRange|PackSetOversampling|PackSetSkipMissingCodepoints|GetPackedQuad)$%%),
+        group_by_regex("Font metrics", mod, %regex~.*(ScaleForPixelHeight|ScaleForMappingEmToPixels|GetFontVMetrics|GetFontBoundingBox)$%%),
+        group_by_regex("Codepoint metrics", mod, %regex~.*(GetCodepointHMetrics|GetCodepointKernAdvance|GetCodepointBox|FindGlyphIndex)$%%),
+        group_by_regex("Codepoint bitmaps", mod, %regex~.*(GetCodepointBitmap|GetCodepointBitmapSubpixel|MakeCodepointBitmap|MakeCodepointBitmapSubpixel|GetCodepointBitmapBox|GetCodepointBitmapBoxSubpixel|FreeBitmap)$%%)
+    )
+    document("TrueType font loading and rasterization (stb_truetype)", mod, "stbtruetype.rst", groups)
+}
+
+def document_module_stbimage_ttf(root : string) {
+    var mod = find_module("stbimage_ttf")
+    var groups <- array<DocGroup>(
+        group_by_regex("Font loading", mod, %regex~(load_ttf)$%%),
+        group_by_regex("Font metrics", mod, %regex~(font_metrics)$%%),
+        group_by_regex("Text rendering", mod, %regex~(render_text)$%%)
+    )
+    document("High-level TrueType font API (stbimage_ttf)", mod, "stbimage_ttf.rst", groups)
 }
 
 [export]
@@ -1193,6 +1224,7 @@ def main {
     document_module_dashv(root)
     document_module_stbimage(root)
     document_module_raster(root)
+    document_module_stbtruetype(root)
     document_module_uriparser(root)
     document_module_pugixml(root)
     document_module_debugapi(root)
@@ -1276,6 +1308,7 @@ def main {
     document_module_sort_boost(root)
     document_module_static_let(root)
     document_module_stbimage_boost(root)
+    document_module_stbimage_ttf(root)
     document_module_stringify(root)
     document_module_strings_boost(root)
     document_module_temp_strings(root)

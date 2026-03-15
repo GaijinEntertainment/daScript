@@ -322,6 +322,65 @@ namespace das
         }
     }
 
+    // ---- fill rect ----
+
+    void rast_fill_rect_1 ( uint8_t * dst, int32_t dw, int32_t dx, int32_t dy, int32_t w, int32_t h, uint8_t val ) {
+        for ( int32_t row = 0; row < h; ++row ) {
+            uint8_t * dr = dst + (dy + row) * dw + dx;
+            memset(dr, val, w);
+        }
+    }
+
+    void rast_fill_rect_4 ( uint32_t * dst, int32_t dw, int32_t dx, int32_t dy, int32_t w, int32_t h, uint32_t val ) {
+        for ( int32_t row = 0; row < h; ++row ) {
+            uint32_t * dr = dst + (dy + row) * dw + dx;
+            for ( int32_t col = 0; col < w; ++col )
+                dr[col] = val;
+        }
+    }
+
+    // ---- alpha blend core (SIMD, 1 pixel at a time, 4 channels in parallel) ----
+    //
+    // out = (alpha * src + (255 - alpha) * dst + 128) >> 8
+    //
+    // This processes all 4 RGBA channels simultaneously using vec4i.
+    // The same core works for both 1ch→4ch (constant color) and future 4ch→4ch blits.
+
+    __forceinline void rast_blend_pixel ( uint32_t * dst_px, vec4i src_rgba, vec4i alpha4 ) {
+        vec4i dst_rgba = v_cvt_byte_vec4i(*dst_px);
+        vec4i v255 = v_splatsi(255);
+        vec4i inv_alpha = v_subi(v255, alpha4);
+        // exact integer divide by 255: (x + 1 + (x >> 8)) >> 8
+        vec4i x = v_addi(v_muli(alpha4, src_rgba), v_muli(inv_alpha, dst_rgba));
+        vec4i result = v_srli(v_addi(v_addi(x, v_splatsi(1)), v_srli(x, 8)), 8);
+        // alpha channel: saturate(dst_a + src_a)
+        vec4i out_a = v_mini(v_addi(dst_rgba, alpha4), v255);
+        // replace .w with saturated alpha
+        vec4i mask = v_make_vec4i(-1, -1, -1, 0);
+        result = v_ori(v_andi(result, mask), v_andi(out_a, v_xori(mask, v_splatsi(-1))));
+        // pack int32 -> int16 -> uint8
+        vec4i packed = v_packus16(v_packs(result), v_packs(result));
+        *dst_px = uint32_t(v_extract_xi(packed));
+    }
+
+    // ---- alpha blit (1ch alpha source onto 4ch RGBA dest with color) ----
+
+    void rast_blit_alpha ( uint8_t * dst, const uint8_t * src, int32_t dw, int32_t sw,
+            int32_t sx0, int32_t sy0, int32_t dx0, int32_t dy0, int32_t w, int32_t h,
+            uint8_t r, uint8_t g, uint8_t b ) {
+        vec4i src_rgba = v_make_vec4i(r, g, b, 255);
+        for ( int32_t row = 0; row < h; ++row ) {
+            const uint8_t * sr = src + (sy0 + row) * sw + sx0;
+            uint32_t * dr = (uint32_t *)(dst + ((dy0 + row) * dw + dx0) * 4);
+            for ( int32_t col = 0; col < w; ++col ) {
+                uint32_t a = sr[col];
+                if ( a == 0 ) continue;
+                vec4i alpha4 = v_splatsi(a);
+                rast_blend_pixel(dr + col, src_rgba, alpha4);
+            }
+        }
+    }
+
     // ---- bpc conversion ----
 
     void rast_convert_u8_to_f32 ( float * dst, const uint8_t * src, int32_t count ) {
@@ -518,6 +577,14 @@ namespace das
                 SideEffects::modifyArgument,"rast_convert_u16_to_f32")->args({"dst","src","count"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(rast_convert_f32_to_u16)>(*this, lib, "rast_convert_f32_to_u16",
                 SideEffects::modifyArgument,"rast_convert_f32_to_u16")->args({"dst","src","count"})->unsafeOperation = true;
+            // fill rect
+            addExtern<DAS_BIND_FUN(rast_fill_rect_1)>(*this, lib, "rast_fill_rect_1",
+                SideEffects::modifyArgument,"rast_fill_rect_1")->args({"dst","dst_w","dx","dy","w","h","val"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(rast_fill_rect_4)>(*this, lib, "rast_fill_rect_4",
+                SideEffects::modifyArgument,"rast_fill_rect_4")->args({"dst","dst_w","dx","dy","w","h","val"})->unsafeOperation = true;
+            // alpha blit
+            addExtern<DAS_BIND_FUN(rast_blit_alpha)>(*this, lib, "rast_blit_alpha",
+                SideEffects::modifyArgument,"rast_blit_alpha")->args({"dst","src","dst_w","src_w","sx0","sy0","dx0","dy0","w","h","r","g","b"})->unsafeOperation = true;
             // span rasters
             addExtern<DAS_BIND_FUN(rast_hspan_u8)>(*this, lib, "rast_hspan_u8", SideEffects::modifyArgument,"rast_hspan_u8")
                 ->args({"span","spanOffset","tspan","tspanOffset","uvY","dUVY","count","at","context"});

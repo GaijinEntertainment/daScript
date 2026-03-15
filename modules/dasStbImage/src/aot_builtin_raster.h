@@ -141,6 +141,15 @@ namespace das {
     void rast_convert_u16_to_f32 ( float * dst, const uint16_t * src, int32_t count );
     void rast_convert_f32_to_u16 ( uint16_t * dst, const float * src, int32_t count );
 
+    // fill rect
+    void rast_fill_rect_1 ( uint8_t * dst, int32_t dw, int32_t dx, int32_t dy, int32_t w, int32_t h, uint8_t val );
+    void rast_fill_rect_4 ( uint32_t * dst, int32_t dw, int32_t dx, int32_t dy, int32_t w, int32_t h, uint32_t val );
+
+    // alpha blit (1ch alpha source onto 4ch RGBA dest with color)
+    void rast_blit_alpha ( uint8_t * dst, const uint8_t * src, int32_t dw, int32_t sw,
+        int32_t sx0, int32_t sy0, int32_t dx0, int32_t dy0, int32_t w, int32_t h,
+        uint8_t r, uint8_t g, uint8_t b );
+
     __forceinline void u8x4_gather_store ( void * _to, const void * _from, vec4f from_index ) {
         // read 4 floats from memory, using 4 uint32_t indices and then write them to memory, but only for floats, where value[i]!=mask_v[i]
         auto from = (uint8_t *) _from;

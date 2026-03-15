@@ -192,6 +192,7 @@ list(FILTER AOT_STBIMAGE_FILES EXCLUDE REGEX "gen_test_images")
 # StbImage test module files (libraries required by stbimage tests)
 SET(AOT_STBIMAGE_MODULE_FILES
     modules/dasStbImage/stbimage/stbimage_boost.das
+    modules/dasStbImage/stbimage/stbimage_ttf.das
 )
 
 # AOT for language test files

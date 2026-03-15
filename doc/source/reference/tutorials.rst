@@ -261,3 +261,4 @@ Run any tutorial from the project root::
    tutorials/dasStbImage_02_saving_and_encoding.rst
    tutorials/dasStbImage_03_transforms.rst
    tutorials/dasStbImage_04_pixel_access_and_conversion.rst
+   tutorials/dasStbImage_05_drawing_and_blending.rst

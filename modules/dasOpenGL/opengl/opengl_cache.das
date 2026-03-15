@@ -22,11 +22,11 @@ var images : table<string; uint>
 var fonts : table<string; Font?>
 
 [apply_in_context(opengl_cache)]
-def public cache_font(name : string implicit) : Font? {
+def public cache_font(name : string implicit; oversampling : int = 2) : Font? {
     if (!fonts |> key_exists(name)) {
-        create_ttf_adapter()
         var font <- new Font()
-        *font <- load_ttf(name)
+        *font <- load_ttf(name, [oversampling = oversampling])
+        upload_font_texture(*font)
         fonts[clone_string(name)] = font
         return font
     }

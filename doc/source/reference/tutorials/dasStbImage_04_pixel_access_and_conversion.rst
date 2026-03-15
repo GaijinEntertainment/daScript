@@ -125,3 +125,5 @@ higher precision, then channels:
 .. seealso::
 
    Full source: :download:`tutorials/dasStbImage/04_pixel_access_and_conversion.das <../../../../tutorials/dasStbImage/04_pixel_access_and_conversion.das>`
+
+   Next tutorial: :ref:`tutorial_dasStbImage_drawing_and_blending`

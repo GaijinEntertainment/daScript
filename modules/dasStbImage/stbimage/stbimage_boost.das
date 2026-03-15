@@ -427,6 +427,66 @@ struct public Image {
     }
 
     [class_method]
+    def static fill_rect(x, y, w, h : int; color : uint) {
+        //! Fill a rectangle with a packed RGBA color. Requires 4-channel uint8 image.
+        assert(channels == 4 && bpc == 1, "fill_rect(uint) requires 4-channel uint8 image")
+        let cx0 = max(x, 0)
+        let cy0 = max(y, 0)
+        let cx1 = min(x + w, int(width))
+        let cy1 = min(y + h, int(height))
+        if (cx0 >= cx1 || cy0 >= cy1) {
+            return
+        }
+        unsafe {
+            rast_fill_rect_4(reinterpret<uint?>(addr(bytes[0])), int(width), cx0, cy0, cx1 - cx0, cy1 - cy0, color)
+        }
+    }
+
+    [class_method]
+    def static fill_rect(x, y, w, h : int; val : uint8) {
+        //! Fill a rectangle with a single byte value. Requires 1-channel uint8 image.
+        assert(channels == 1 && bpc == 1, "fill_rect(uint8) requires 1-channel uint8 image")
+        let cx0 = max(x, 0)
+        let cy0 = max(y, 0)
+        let cx1 = min(x + w, int(width))
+        let cy1 = min(y + h, int(height))
+        if (cx0 >= cx1 || cy0 >= cy1) {
+            return
+        }
+        unsafe {
+            rast_fill_rect_1(addr(bytes[0]), int(width), cx0, cy0, cx1 - cx0, cy1 - cy0, val)
+        }
+    }
+
+    [class_method]
+    def static blit_alpha(src : Image; sx, sy, dx, dy, w, h : int; r, g, b : int) {
+        //! Alpha-blend a 1-channel source onto this 4-channel RGBA image with the given color.
+        //! Source alpha modulates (r,g,b). Clips to both source and destination bounds.
+        assert(channels == 4 && bpc == 1, "blit_alpha dest must be 4-channel uint8")
+        assert(src.channels == 1 && src.bpc == 1, "blit_alpha src must be 1-channel uint8")
+        // clip to source bounds
+        var csx = sx; var csy = sy; var cdx = dx; var cdy = dy; var cw = w; var ch = h
+        if (csx < 0) { cdx -= csx; cw += csx; csx = 0; }
+        if (csy < 0) { cdy -= csy; ch += csy; csy = 0; }
+        if (csx + cw > int(src.width)) { cw = int(src.width) - csx; }
+        if (csy + ch > int(src.height)) { ch = int(src.height) - csy; }
+        // clip to dest bounds
+        if (cdx < 0) { csx -= cdx; cw += cdx; cdx = 0; }
+        if (cdy < 0) { csy -= cdy; ch += cdy; cdy = 0; }
+        if (cdx + cw > int(width)) { cw = int(width) - cdx; }
+        if (cdy + ch > int(height)) { ch = int(height) - cdy; }
+        if (cw <= 0 || ch <= 0) {
+            return
+        }
+        unsafe {
+            rast_blit_alpha(addr(bytes[0]), addr(src.bytes[0]),
+                int(width), int(src.width),
+                csx, csy, cdx, cdy, cw, ch,
+                uint8(clamp(r, 0, 255)), uint8(clamp(g, 0, 255)), uint8(clamp(b, 0, 255)))
+        }
+    }
+
+    [class_method]
     def static const to_channels(target_channels : int) : Image {
         //! Convert image to a different number of channels. Returns a new Image.
         //! Grey conversion uses ITU-R BT.601 luminance (0.299R + 0.587G + 0.114B).

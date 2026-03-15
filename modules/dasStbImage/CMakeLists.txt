@@ -10,19 +10,25 @@ IF ((NOT DAS_STBIMAGE_INCLUDED) AND (NOT ${DAS_STBIMAGE_DISABLED}))
 	# libDasModuleStbImage
 	SET(DAS_STBIMAGE_MODULE_SRC
 		${DAS_STBIMAGE_DIR}/src/dasStbImage.h
+		${DAS_STBIMAGE_DIR}/src/dasStbImage_impl.cpp
 		${DAS_STBIMAGE_DIR}/src/dasStbImage.cpp
 		${DAS_STBIMAGE_DIR}/src/aot_builtin_raster.h
-		${DAS_STBIMAGE_DIR}/src/module_builtin_raster.cpp
+		${DAS_STBIMAGE_DIR}/src/dasRaster.cpp
+		${DAS_STBIMAGE_DIR}/src/dasStbTrueType.h
+		${DAS_STBIMAGE_DIR}/src/dasStbTrueType_impl.cpp
+		${DAS_STBIMAGE_DIR}/src/dasStbTrueType.cpp
 	)
 
 	ADD_MODULE_CPP(StbImage)
 	ADD_MODULE_CPP(Raster)
+	ADD_MODULE_CPP(StbTrueType)
 	ADD_MODULE_DAS(stbimage stbimage stbimage_boost)
-	# Disable UBSan for dasStbImage.cpp — stb_image_resize2.h uses intentional negative
+	ADD_MODULE_DAS(stbimage stbimage stbimage_ttf)
+	# Disable UBSan for dasStbImage_impl.cpp — stb_image_resize2.h uses intentional negative
 	# pointer arithmetic in sRGB table lookups (fp32_to_srgb8_tab4 - 912) that is safe
 	# but flagged as UB by UndefinedBehaviorSanitizer.
 	IF(DAS_USE_SANITIZER STREQUAL "undefined" OR DAS_USE_SANITIZER STREQUAL "ubsan")
-		SET_SOURCE_FILES_PROPERTIES(${DAS_STBIMAGE_DIR}/src/dasStbImage.cpp
+		SET_SOURCE_FILES_PROPERTIES(${DAS_STBIMAGE_DIR}/src/dasStbImage_impl.cpp
 			PROPERTIES COMPILE_FLAGS "-fno-sanitize=undefined")
 	ENDIF()
 
@@ -40,6 +46,10 @@ IF ((NOT DAS_STBIMAGE_INCLUDED) AND (NOT ${DAS_STBIMAGE_DISABLED}))
         FILES_MATCHING
         PATTERN "*.das"
         PATTERN "_aot_generated" EXCLUDE
+    )
+
+    install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules/dasStbImage/fonts
+        DESTINATION ${DAS_INSTALL_MODULESDIR}/dasStbImage
     )
 
 ENDIF()
