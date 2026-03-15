@@ -5,26 +5,17 @@
 #include "daScript/ast/ast_typefactory_bind.h"
 #include "daScript/simulate/bind_enum.h"
 
-#ifdef STB_IMPLEMENTATION_ALREADY_LINKED
-    #include "stb_image.h"
-    #include "stb_image_write.h"
-    #include "stb_image_resize2.h"
-#else
-    #define STB_IMAGE_IMPLEMENTATION
-    #include "stb_image.h"
-    #define STB_IMAGE_WRITE_IMPLEMENTATION
-    #include "stb_image_write.h"
-    #define STB_IMAGE_RESIZE_IMPLEMENTATION
-    #include "stb_image_resize2.h"
-#endif
+#include "stb_image.h"
+#include "stb_image_write.h"
+#include "stb_image_resize2.h"
 
-// stb_image_write config variable wrappers
-void stbi_write_set_png_compression_level ( int level ) { stbi_write_png_compression_level = level; }
-int  stbi_write_get_png_compression_level ( ) { return stbi_write_png_compression_level; }
-void stbi_write_set_force_png_filter ( int filter ) { stbi_write_force_png_filter = filter; }
-int  stbi_write_get_force_png_filter ( ) { return stbi_write_force_png_filter; }
-void stbi_write_set_tga_with_rle ( int rle ) { stbi_write_tga_with_rle = rle; }
-int  stbi_write_get_tga_with_rle ( ) { return stbi_write_tga_with_rle; }
+// stb_image_write config variable wrappers (defined in dasStbImage_impl.cpp)
+void stbi_write_set_png_compression_level ( int level );
+int  stbi_write_get_png_compression_level ( );
+void stbi_write_set_force_png_filter ( int filter );
+int  stbi_write_get_force_png_filter ( );
+void stbi_write_set_tga_with_rle ( int rle );
+int  stbi_write_get_tga_with_rle ( );
 
 // stb_image_resize2 enums — anonymous typedef enums, need unqualified access + proxy types
 DAS_BIND_ENUM_CAST_98(stbir_pixel_layout)
@@ -60,12 +51,8 @@ DAS_BASE_BIND_ENUM_BOTH(DAS_BIND_ENUM_UNQUALIFIED_HELPER, stbir_datatype, stbir_
 DAS_BASE_BIND_ENUM_FACTORY(stbir_datatype, "stbir_datatype")
 DAS_BASE_BIND_ENUM_FACTORY(stbir_datatype_DasProxy, "stbir_datatype")
 
-// stbi_write_*_to_func callback — accumulates into a vector
-static void stbi_write_to_vec_callback ( void * context, void * data, int size ) {
-    auto * vec = (std::vector<uint8_t> *) context;
-    auto * src = (const uint8_t *) data;
-    vec->insert(vec->end(), src, src + size);
-}
+// stbi_write_*_to_func callback (defined in dasStbImage_impl.cpp)
+void stbi_write_to_vec_callback ( void * context, void * data, int size );
 
 namespace das {
 
