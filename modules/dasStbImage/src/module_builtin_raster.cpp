@@ -166,6 +166,189 @@ namespace das
         }
     }
 
+    // ---- copy_reversed implementations (8 pixel sizes) ----
+
+    template <typename T>
+    static void rast_copy_reversed_impl ( T * dst, const T * src, int32_t count ) {
+        for ( int32_t i = 0; i < count; ++i )
+            dst[i] = src[count - 1 - i];
+    }
+
+    void rast_copy_reversed_1  ( uint8_t *d, const uint8_t *s, int32_t c )  { rast_copy_reversed_impl(d, s, c); }
+    void rast_copy_reversed_2  ( uint16_t *d, const uint16_t *s, int32_t c ) { rast_copy_reversed_impl(d, s, c); }
+    void rast_copy_reversed_4  ( uint32_t *d, const uint32_t *s, int32_t c ) { rast_copy_reversed_impl(d, s, c); }
+    void rast_copy_reversed_8  ( uint64_t *d, const uint64_t *s, int32_t c ) { rast_copy_reversed_impl(d, s, c); }
+
+    void rast_copy_reversed_3  ( void *d, void *s, int32_t c ) {
+        rast_copy_reversed_impl((rast_rgb8 *)d, (const rast_rgb8 *)s, c);
+    }
+    void rast_copy_reversed_6  ( void *d, void *s, int32_t c ) {
+        rast_copy_reversed_impl((rast_rgb16 *)d, (const rast_rgb16 *)s, c);
+    }
+    void rast_copy_reversed_12 ( void *d, void *s, int32_t c ) {
+        rast_copy_reversed_impl((rast_float3 *)d, (const rast_float3 *)s, c);
+    }
+    void rast_copy_reversed_16 ( void *d, void *s, int32_t c ) {
+        rast_copy_reversed_impl((rast_float4 *)d, (const rast_float4 *)s, c);
+    }
+
+    // ---- copy_rect implementations (8 pixel sizes) ----
+
+    template <typename T>
+    static void rast_copy_rect_impl ( T * dst, const T * src, int32_t dw, int32_t sw,
+            int32_t sx0, int32_t sy0, int32_t dx0, int32_t dy0, int32_t w, int32_t h ) {
+        for ( int32_t row = 0; row < h; ++row ) {
+            T * dr = dst + (dy0 + row) * dw + dx0;
+            const T * sr = src + (sy0 + row) * sw + sx0;
+            for ( int32_t col = 0; col < w; ++col )
+                dr[col] = sr[col];
+        }
+    }
+
+    void rast_copy_rect_1  ( uint8_t *d, const uint8_t *s, int32_t dw, int32_t sw, int32_t sx0, int32_t sy0, int32_t dx0, int32_t dy0, int32_t w, int32_t h ) {
+        rast_copy_rect_impl(d, s, dw, sw, sx0, sy0, dx0, dy0, w, h);
+    }
+    void rast_copy_rect_2  ( uint16_t *d, const uint16_t *s, int32_t dw, int32_t sw, int32_t sx0, int32_t sy0, int32_t dx0, int32_t dy0, int32_t w, int32_t h ) {
+        rast_copy_rect_impl(d, s, dw, sw, sx0, sy0, dx0, dy0, w, h);
+    }
+    void rast_copy_rect_4  ( uint32_t *d, const uint32_t *s, int32_t dw, int32_t sw, int32_t sx0, int32_t sy0, int32_t dx0, int32_t dy0, int32_t w, int32_t h ) {
+        rast_copy_rect_impl(d, s, dw, sw, sx0, sy0, dx0, dy0, w, h);
+    }
+    void rast_copy_rect_8  ( uint64_t *d, const uint64_t *s, int32_t dw, int32_t sw, int32_t sx0, int32_t sy0, int32_t dx0, int32_t dy0, int32_t w, int32_t h ) {
+        rast_copy_rect_impl(d, s, dw, sw, sx0, sy0, dx0, dy0, w, h);
+    }
+    void rast_copy_rect_3  ( void *d, void *s, int32_t dw, int32_t sw, int32_t sx0, int32_t sy0, int32_t dx0, int32_t dy0, int32_t w, int32_t h ) {
+        rast_copy_rect_impl((rast_rgb8 *)d, (const rast_rgb8 *)s, dw, sw, sx0, sy0, dx0, dy0, w, h);
+    }
+    void rast_copy_rect_6  ( void *d, void *s, int32_t dw, int32_t sw, int32_t sx0, int32_t sy0, int32_t dx0, int32_t dy0, int32_t w, int32_t h ) {
+        rast_copy_rect_impl((rast_rgb16 *)d, (const rast_rgb16 *)s, dw, sw, sx0, sy0, dx0, dy0, w, h);
+    }
+    void rast_copy_rect_12 ( void *d, void *s, int32_t dw, int32_t sw, int32_t sx0, int32_t sy0, int32_t dx0, int32_t dy0, int32_t w, int32_t h ) {
+        rast_copy_rect_impl((rast_float3 *)d, (const rast_float3 *)s, dw, sw, sx0, sy0, dx0, dy0, w, h);
+    }
+    void rast_copy_rect_16 ( void *d, void *s, int32_t dw, int32_t sw, int32_t sx0, int32_t sy0, int32_t dx0, int32_t dy0, int32_t w, int32_t h ) {
+        rast_copy_rect_impl((rast_float4 *)d, (const rast_float4 *)s, dw, sw, sx0, sy0, dx0, dy0, w, h);
+    }
+
+    // ---- channel conversion (loops inside each branch) ----
+
+    void rast_convert_channels_u8 ( uint8_t * dst, const uint8_t * src, int32_t num_pixels, int32_t src_ch, int32_t dst_ch ) {
+        if ( src_ch == 1 && dst_ch == 2 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*2] = src[i]; dst[i*2+1] = 255; }
+        } else if ( src_ch == 1 && dst_ch == 3 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*3] = src[i]; dst[i*3+1] = src[i]; dst[i*3+2] = src[i]; }
+        } else if ( src_ch == 1 && dst_ch == 4 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*4] = src[i]; dst[i*4+1] = src[i]; dst[i*4+2] = src[i]; dst[i*4+3] = 255; }
+        } else if ( src_ch == 2 && dst_ch == 1 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i] = src[i*2]; }
+        } else if ( src_ch == 2 && dst_ch == 3 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*3] = src[i*2]; dst[i*3+1] = src[i*2]; dst[i*3+2] = src[i*2]; }
+        } else if ( src_ch == 2 && dst_ch == 4 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*4] = src[i*2]; dst[i*4+1] = src[i*2]; dst[i*4+2] = src[i*2]; dst[i*4+3] = src[i*2+1]; }
+        } else if ( src_ch == 3 && dst_ch == 1 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i] = uint8_t((uint32_t(src[i*3])*77u + uint32_t(src[i*3+1])*150u + uint32_t(src[i*3+2])*29u + 128u) >> 8u); }
+        } else if ( src_ch == 3 && dst_ch == 2 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*2] = uint8_t((uint32_t(src[i*3])*77u + uint32_t(src[i*3+1])*150u + uint32_t(src[i*3+2])*29u + 128u) >> 8u); dst[i*2+1] = 255; }
+        } else if ( src_ch == 3 && dst_ch == 4 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*4] = src[i*3]; dst[i*4+1] = src[i*3+1]; dst[i*4+2] = src[i*3+2]; dst[i*4+3] = 255; }
+        } else if ( src_ch == 4 && dst_ch == 1 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i] = uint8_t((uint32_t(src[i*4])*77u + uint32_t(src[i*4+1])*150u + uint32_t(src[i*4+2])*29u + 128u) >> 8u); }
+        } else if ( src_ch == 4 && dst_ch == 2 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*2] = uint8_t((uint32_t(src[i*4])*77u + uint32_t(src[i*4+1])*150u + uint32_t(src[i*4+2])*29u + 128u) >> 8u); dst[i*2+1] = src[i*4+3]; }
+        } else if ( src_ch == 4 && dst_ch == 3 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*3] = src[i*4]; dst[i*3+1] = src[i*4+1]; dst[i*3+2] = src[i*4+2]; }
+        } else if ( src_ch == dst_ch ) {
+            memcpy(dst, src, num_pixels * src_ch);
+        }
+    }
+
+    void rast_convert_channels_u16 ( uint16_t * dst, const uint16_t * src, int32_t num_pixels, int32_t src_ch, int32_t dst_ch ) {
+        if ( src_ch == 1 && dst_ch == 2 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*2] = src[i]; dst[i*2+1] = 65535; }
+        } else if ( src_ch == 1 && dst_ch == 3 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*3] = src[i]; dst[i*3+1] = src[i]; dst[i*3+2] = src[i]; }
+        } else if ( src_ch == 1 && dst_ch == 4 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*4] = src[i]; dst[i*4+1] = src[i]; dst[i*4+2] = src[i]; dst[i*4+3] = 65535; }
+        } else if ( src_ch == 2 && dst_ch == 1 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i] = src[i*2]; }
+        } else if ( src_ch == 2 && dst_ch == 3 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*3] = src[i*2]; dst[i*3+1] = src[i*2]; dst[i*3+2] = src[i*2]; }
+        } else if ( src_ch == 2 && dst_ch == 4 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*4] = src[i*2]; dst[i*4+1] = src[i*2]; dst[i*4+2] = src[i*2]; dst[i*4+3] = src[i*2+1]; }
+        } else if ( src_ch == 3 && dst_ch == 1 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i] = uint16_t((uint32_t(src[i*3])*77u + uint32_t(src[i*3+1])*150u + uint32_t(src[i*3+2])*29u + 128u) >> 8u); }
+        } else if ( src_ch == 3 && dst_ch == 2 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*2] = uint16_t((uint32_t(src[i*3])*77u + uint32_t(src[i*3+1])*150u + uint32_t(src[i*3+2])*29u + 128u) >> 8u); dst[i*2+1] = 65535; }
+        } else if ( src_ch == 3 && dst_ch == 4 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*4] = src[i*3]; dst[i*4+1] = src[i*3+1]; dst[i*4+2] = src[i*3+2]; dst[i*4+3] = 65535; }
+        } else if ( src_ch == 4 && dst_ch == 1 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i] = uint16_t((uint32_t(src[i*4])*77u + uint32_t(src[i*4+1])*150u + uint32_t(src[i*4+2])*29u + 128u) >> 8u); }
+        } else if ( src_ch == 4 && dst_ch == 2 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*2] = uint16_t((uint32_t(src[i*4])*77u + uint32_t(src[i*4+1])*150u + uint32_t(src[i*4+2])*29u + 128u) >> 8u); dst[i*2+1] = src[i*4+3]; }
+        } else if ( src_ch == 4 && dst_ch == 3 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*3] = src[i*4]; dst[i*3+1] = src[i*4+1]; dst[i*3+2] = src[i*4+2]; }
+        } else if ( src_ch == dst_ch ) {
+            memcpy(dst, src, num_pixels * src_ch * sizeof(uint16_t));
+        }
+    }
+
+    void rast_convert_channels_f32 ( float * dst, const float * src, int32_t num_pixels, int32_t src_ch, int32_t dst_ch ) {
+        if ( src_ch == 1 && dst_ch == 2 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*2] = src[i]; dst[i*2+1] = 1.0f; }
+        } else if ( src_ch == 1 && dst_ch == 3 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*3] = src[i]; dst[i*3+1] = src[i]; dst[i*3+2] = src[i]; }
+        } else if ( src_ch == 1 && dst_ch == 4 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*4] = src[i]; dst[i*4+1] = src[i]; dst[i*4+2] = src[i]; dst[i*4+3] = 1.0f; }
+        } else if ( src_ch == 2 && dst_ch == 1 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i] = src[i*2]; }
+        } else if ( src_ch == 2 && dst_ch == 3 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*3] = src[i*2]; dst[i*3+1] = src[i*2]; dst[i*3+2] = src[i*2]; }
+        } else if ( src_ch == 2 && dst_ch == 4 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*4] = src[i*2]; dst[i*4+1] = src[i*2]; dst[i*4+2] = src[i*2]; dst[i*4+3] = src[i*2+1]; }
+        } else if ( src_ch == 3 && dst_ch == 1 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i] = src[i*3]*0.299f + src[i*3+1]*0.587f + src[i*3+2]*0.114f; }
+        } else if ( src_ch == 3 && dst_ch == 2 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*2] = src[i*3]*0.299f + src[i*3+1]*0.587f + src[i*3+2]*0.114f; dst[i*2+1] = 1.0f; }
+        } else if ( src_ch == 3 && dst_ch == 4 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*4] = src[i*3]; dst[i*4+1] = src[i*3+1]; dst[i*4+2] = src[i*3+2]; dst[i*4+3] = 1.0f; }
+        } else if ( src_ch == 4 && dst_ch == 1 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i] = src[i*4]*0.299f + src[i*4+1]*0.587f + src[i*4+2]*0.114f; }
+        } else if ( src_ch == 4 && dst_ch == 2 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*2] = src[i*4]*0.299f + src[i*4+1]*0.587f + src[i*4+2]*0.114f; dst[i*2+1] = src[i*4+3]; }
+        } else if ( src_ch == 4 && dst_ch == 3 ) {
+            for ( int32_t i = 0; i < num_pixels; ++i ) { dst[i*3] = src[i*4]; dst[i*3+1] = src[i*4+1]; dst[i*3+2] = src[i*4+2]; }
+        } else if ( src_ch == dst_ch ) {
+            memcpy(dst, src, num_pixels * src_ch * sizeof(float));
+        }
+    }
+
+    // ---- bpc conversion ----
+
+    void rast_convert_u8_to_f32 ( float * dst, const uint8_t * src, int32_t count ) {
+        for ( int32_t i = 0; i < count; ++i ) dst[i] = float(src[i]) / 255.0f;
+    }
+    void rast_convert_f32_to_u8 ( uint8_t * dst, const float * src, int32_t count ) {
+        for ( int32_t i = 0; i < count; ++i ) {
+            float v = src[i] < 0.0f ? 0.0f : (src[i] > 1.0f ? 1.0f : src[i]);
+            dst[i] = uint8_t(v * 255.0f + 0.5f);
+        }
+    }
+    void rast_convert_u8_to_u16 ( uint16_t * dst, const uint8_t * src, int32_t count ) {
+        for ( int32_t i = 0; i < count; ++i ) dst[i] = uint16_t(src[i]) * 257u;
+    }
+    void rast_convert_u16_to_u8 ( uint8_t * dst, const uint16_t * src, int32_t count ) {
+        for ( int32_t i = 0; i < count; ++i ) dst[i] = uint8_t((uint32_t(src[i]) + 128u) / 257u);
+    }
+    void rast_convert_u16_to_f32 ( float * dst, const uint16_t * src, int32_t count ) {
+        for ( int32_t i = 0; i < count; ++i ) dst[i] = float(src[i]) / 65535.0f;
+    }
+    void rast_convert_f32_to_u16 ( uint16_t * dst, const float * src, int32_t count ) {
+        for ( int32_t i = 0; i < count; ++i ) {
+            float v = src[i] < 0.0f ? 0.0f : (src[i] > 1.0f ? 1.0f : src[i]);
+            dst[i] = uint16_t(v * 65535.0f + 0.5f);
+        }
+    }
+
     class Module_Raster : public Module {
     public:
         Module_Raster() : Module("raster") {
@@ -283,6 +466,58 @@ namespace das
 
             addExternEx<void(uint8_t *,const uint8_t *,int4),DAS_BIND_FUN(u8x4_gather_store)>(*this, lib, "u8x4_gather_store",
                 SideEffects::modifyArgument,"u8x4_gather_store")->args({"to","from","from_index4"})->unsafeOperation = true;
+            // typed copy helpers (8 pixel sizes)
+            addExtern<DAS_BIND_FUN(rast_copy_reversed_1)>(*this, lib, "rast_copy_reversed_1",
+                SideEffects::modifyArgument,"rast_copy_reversed_1")->args({"dst","src","count"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(rast_copy_reversed_2)>(*this, lib, "rast_copy_reversed_2",
+                SideEffects::modifyArgument,"rast_copy_reversed_2")->args({"dst","src","count"})->unsafeOperation = true;
+            addExternEx<void(void*,void*,int32_t),DAS_BIND_FUN(rast_copy_reversed_3)>(*this, lib, "rast_copy_reversed_3",
+                SideEffects::modifyExternal,"rast_copy_reversed_3")->args({"dst","src","count"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(rast_copy_reversed_4)>(*this, lib, "rast_copy_reversed_4",
+                SideEffects::modifyArgument,"rast_copy_reversed_4")->args({"dst","src","count"})->unsafeOperation = true;
+            addExternEx<void(void*,void*,int32_t),DAS_BIND_FUN(rast_copy_reversed_6)>(*this, lib, "rast_copy_reversed_6",
+                SideEffects::modifyExternal,"rast_copy_reversed_6")->args({"dst","src","count"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(rast_copy_reversed_8)>(*this, lib, "rast_copy_reversed_8",
+                SideEffects::modifyArgument,"rast_copy_reversed_8")->args({"dst","src","count"})->unsafeOperation = true;
+            addExternEx<void(void*,void*,int32_t),DAS_BIND_FUN(rast_copy_reversed_12)>(*this, lib, "rast_copy_reversed_12",
+                SideEffects::modifyExternal,"rast_copy_reversed_12")->args({"dst","src","count"})->unsafeOperation = true;
+            addExternEx<void(void*,void*,int32_t),DAS_BIND_FUN(rast_copy_reversed_16)>(*this, lib, "rast_copy_reversed_16",
+                SideEffects::modifyExternal,"rast_copy_reversed_16")->args({"dst","src","count"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(rast_copy_rect_1)>(*this, lib, "rast_copy_rect_1",
+                SideEffects::modifyArgument,"rast_copy_rect_1")->args({"dst","src","dst_w","src_w","sx0","sy0","dx0","dy0","w","h"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(rast_copy_rect_2)>(*this, lib, "rast_copy_rect_2",
+                SideEffects::modifyArgument,"rast_copy_rect_2")->args({"dst","src","dst_w","src_w","sx0","sy0","dx0","dy0","w","h"})->unsafeOperation = true;
+            addExternEx<void(void*,void*,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t),DAS_BIND_FUN(rast_copy_rect_3)>(*this, lib, "rast_copy_rect_3",
+                SideEffects::modifyExternal,"rast_copy_rect_3")->args({"dst","src","dst_w","src_w","sx0","sy0","dx0","dy0","w","h"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(rast_copy_rect_4)>(*this, lib, "rast_copy_rect_4",
+                SideEffects::modifyArgument,"rast_copy_rect_4")->args({"dst","src","dst_w","src_w","sx0","sy0","dx0","dy0","w","h"})->unsafeOperation = true;
+            addExternEx<void(void*,void*,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t),DAS_BIND_FUN(rast_copy_rect_6)>(*this, lib, "rast_copy_rect_6",
+                SideEffects::modifyExternal,"rast_copy_rect_6")->args({"dst","src","dst_w","src_w","sx0","sy0","dx0","dy0","w","h"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(rast_copy_rect_8)>(*this, lib, "rast_copy_rect_8",
+                SideEffects::modifyArgument,"rast_copy_rect_8")->args({"dst","src","dst_w","src_w","sx0","sy0","dx0","dy0","w","h"})->unsafeOperation = true;
+            addExternEx<void(void*,void*,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t),DAS_BIND_FUN(rast_copy_rect_12)>(*this, lib, "rast_copy_rect_12",
+                SideEffects::modifyExternal,"rast_copy_rect_12")->args({"dst","src","dst_w","src_w","sx0","sy0","dx0","dy0","w","h"})->unsafeOperation = true;
+            addExternEx<void(void*,void*,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t,int32_t),DAS_BIND_FUN(rast_copy_rect_16)>(*this, lib, "rast_copy_rect_16",
+                SideEffects::modifyExternal,"rast_copy_rect_16")->args({"dst","src","dst_w","src_w","sx0","sy0","dx0","dy0","w","h"})->unsafeOperation = true;
+            // pixel format conversion
+            addExtern<DAS_BIND_FUN(rast_convert_channels_u8)>(*this, lib, "rast_convert_channels_u8",
+                SideEffects::modifyArgument,"rast_convert_channels_u8")->args({"dst","src","num_pixels","src_ch","dst_ch"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(rast_convert_channels_u16)>(*this, lib, "rast_convert_channels_u16",
+                SideEffects::modifyArgument,"rast_convert_channels_u16")->args({"dst","src","num_pixels","src_ch","dst_ch"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(rast_convert_channels_f32)>(*this, lib, "rast_convert_channels_f32",
+                SideEffects::modifyArgument,"rast_convert_channels_f32")->args({"dst","src","num_pixels","src_ch","dst_ch"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(rast_convert_u8_to_f32)>(*this, lib, "rast_convert_u8_to_f32",
+                SideEffects::modifyArgument,"rast_convert_u8_to_f32")->args({"dst","src","count"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(rast_convert_f32_to_u8)>(*this, lib, "rast_convert_f32_to_u8",
+                SideEffects::modifyArgument,"rast_convert_f32_to_u8")->args({"dst","src","count"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(rast_convert_u8_to_u16)>(*this, lib, "rast_convert_u8_to_u16",
+                SideEffects::modifyArgument,"rast_convert_u8_to_u16")->args({"dst","src","count"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(rast_convert_u16_to_u8)>(*this, lib, "rast_convert_u16_to_u8",
+                SideEffects::modifyArgument,"rast_convert_u16_to_u8")->args({"dst","src","count"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(rast_convert_u16_to_f32)>(*this, lib, "rast_convert_u16_to_f32",
+                SideEffects::modifyArgument,"rast_convert_u16_to_f32")->args({"dst","src","count"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(rast_convert_f32_to_u16)>(*this, lib, "rast_convert_f32_to_u16",
+                SideEffects::modifyArgument,"rast_convert_f32_to_u16")->args({"dst","src","count"})->unsafeOperation = true;
             // span rasters
             addExtern<DAS_BIND_FUN(rast_hspan_u8)>(*this, lib, "rast_hspan_u8", SideEffects::modifyArgument,"rast_hspan_u8")
                 ->args({"span","spanOffset","tspan","tspanOffset","uvY","dUVY","count","at","context"});
@@ -294,7 +529,7 @@ namespace das
             verifyAotReady();
         }
         virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
-            tw << "#include \"modules/dasStbImage/src/aot_builtin_raster.h\"\n";
+            tw << "#include \"../modules/dasStbImage/src/aot_builtin_raster.h\"\n";
             return ModuleAotType::cpp;
         }
     };

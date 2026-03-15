@@ -12,244 +12,12 @@ module stbimage_boost shared public
 //! All unsafe pointer operations are encapsulated internally.
 
 require stbimage public
+require raster
 require daslib/safe_addr
 require daslib/class_boost
 require fio
 require strings
 require math
-
-// pixel-sized structs for typed dispatch (no native 3-byte or 6-byte types)
-struct private rgb8 {
-    r : uint8
-    g : uint8
-    b : uint8
-}
-
-struct private rgb16 {
-    r : uint16
-    g : uint16
-    b : uint16
-}
-
-// generic per-pixel copy helpers — instantiated per pixel type via reinterpret dispatch
-
-def private copy_reversed(var dst; src; w : int) {
-    unsafe {
-        for (x in range(w)) {
-            dst[w - 1 - x] = src[x]
-        }
-    }
-}
-
-def private copy_rect(var dst; src; dst_w, src_w, sx0, sy0, dx0, dy0, w, h : int) {
-    unsafe {
-        for (row in range(h)) {
-            for (col in range(w)) {
-                dst[(dy0 + row) * dst_w + dx0 + col] = src[(sy0 + row) * src_w + sx0 + col]
-            }
-        }
-    }
-}
-
-// ---- channel conversion helpers (one per bpc type) ----
-
-def private convert_channels_u8(var dst : array<uint8>; src : array<uint8>; num_pixels, src_ch, dst_ch : int) {
-    for (i in range(num_pixels)) {
-        let si = i * src_ch
-        let di = i * dst_ch
-        var r, g, b, a : int
-        if (src_ch == 1) {
-            r = int(src[si])
-            g = r
-            b = r
-            a = 255
-        } elif (src_ch == 2) {
-            r = int(src[si])
-            g = r
-            b = r
-            a = int(src[si + 1])
-        } elif (src_ch == 3) {
-            r = int(src[si])
-            g = int(src[si + 1])
-            b = int(src[si + 2])
-            a = 255
-        } else {
-            r = int(src[si])
-            g = int(src[si + 1])
-            b = int(src[si + 2])
-            a = int(src[si + 3])
-        }
-        if (dst_ch == 1) {
-            dst[di] = uint8((r * 77 + g * 150 + b * 29 + 128) >> 8)
-        } elif (dst_ch == 2) {
-            dst[di] = uint8((r * 77 + g * 150 + b * 29 + 128) >> 8)
-            dst[di + 1] = uint8(a)
-        } elif (dst_ch == 3) {
-            dst[di] = uint8(r)
-            dst[di + 1] = uint8(g)
-            dst[di + 2] = uint8(b)
-        } else {
-            dst[di] = uint8(r)
-            dst[di + 1] = uint8(g)
-            dst[di + 2] = uint8(b)
-            dst[di + 3] = uint8(a)
-        }
-    }
-}
-
-def private convert_channels_u16(var dst_bytes : array<uint8>; src_bytes : array<uint8>; num_pixels, src_ch, dst_ch : int) {
-    unsafe {
-        var dp = reinterpret<uint16?>(addr(dst_bytes[0]))
-        var sp = reinterpret<uint16?>(addr(src_bytes[0]))
-        for (i in range(num_pixels)) {
-            let si = i * src_ch
-            let di = i * dst_ch
-            var r, g, b, a : int
-            if (src_ch == 1) {
-                r = int(sp[si])
-                g = r
-                b = r
-                a = 65535
-            } elif (src_ch == 2) {
-                r = int(sp[si])
-                g = r
-                b = r
-                a = int(sp[si + 1])
-            } elif (src_ch == 3) {
-                r = int(sp[si])
-                g = int(sp[si + 1])
-                b = int(sp[si + 2])
-                a = 65535
-            } else {
-                r = int(sp[si])
-                g = int(sp[si + 1])
-                b = int(sp[si + 2])
-                a = int(sp[si + 3])
-            }
-            if (dst_ch == 1) {
-                dp[di] = uint16((r * 77 + g * 150 + b * 29 + 128) >> 8)
-            } elif (dst_ch == 2) {
-                dp[di] = uint16((r * 77 + g * 150 + b * 29 + 128) >> 8)
-                dp[di + 1] = uint16(a)
-            } elif (dst_ch == 3) {
-                dp[di] = uint16(r)
-                dp[di + 1] = uint16(g)
-                dp[di + 2] = uint16(b)
-            } else {
-                dp[di] = uint16(r)
-                dp[di + 1] = uint16(g)
-                dp[di + 2] = uint16(b)
-                dp[di + 3] = uint16(a)
-            }
-        }
-    }
-}
-
-def private convert_channels_f32(var dst_bytes : array<uint8>; src_bytes : array<uint8>; num_pixels, src_ch, dst_ch : int) {
-    unsafe {
-        var dp = reinterpret<float?>(addr(dst_bytes[0]))
-        var sp = reinterpret<float?>(addr(src_bytes[0]))
-        for (i in range(num_pixels)) {
-            let si = i * src_ch
-            let di = i * dst_ch
-            var r, g, b, a : float
-            if (src_ch == 1) {
-                r = sp[si]
-                g = r
-                b = r
-                a = 1.0f
-            } elif (src_ch == 2) {
-                r = sp[si]
-                g = r
-                b = r
-                a = sp[si + 1]
-            } elif (src_ch == 3) {
-                r = sp[si]
-                g = sp[si + 1]
-                b = sp[si + 2]
-                a = 1.0f
-            } else {
-                r = sp[si]
-                g = sp[si + 1]
-                b = sp[si + 2]
-                a = sp[si + 3]
-            }
-            if (dst_ch == 1) {
-                dp[di] = r * 0.299f + g * 0.587f + b * 0.114f
-            } elif (dst_ch == 2) {
-                dp[di] = r * 0.299f + g * 0.587f + b * 0.114f
-                dp[di + 1] = a
-            } elif (dst_ch == 3) {
-                dp[di] = r
-                dp[di + 1] = g
-                dp[di + 2] = b
-            } else {
-                dp[di] = r
-                dp[di + 1] = g
-                dp[di + 2] = b
-                dp[di + 3] = a
-            }
-        }
-    }
-}
-
-// ---- bpc conversion helpers (per-component, linear) ----
-
-def private convert_u8_to_f32(var dst : array<uint8>; src : array<uint8>; count : int) {
-    unsafe {
-        var dp = reinterpret<float?>(addr(dst[0]))
-        for (i in range(count)) {
-            dp[i] = float(src[i]) / 255.0f
-        }
-    }
-}
-
-def private convert_f32_to_u8(var dst : array<uint8>; src : array<uint8>; count : int) {
-    unsafe {
-        var sp = reinterpret<float?>(addr(src[0]))
-        for (i in range(count)) {
-            dst[i] = uint8(clamp(int(sp[i] * 255.0f + 0.5f), 0, 255))
-        }
-    }
-}
-
-def private convert_u8_to_u16(var dst : array<uint8>; src : array<uint8>; count : int) {
-    unsafe {
-        var dp = reinterpret<uint16?>(addr(dst[0]))
-        for (i in range(count)) {
-            dp[i] = uint16(int(src[i]) * 257)
-        }
-    }
-}
-
-def private convert_u16_to_u8(var dst : array<uint8>; src : array<uint8>; count : int) {
-    unsafe {
-        var sp = reinterpret<uint16?>(addr(src[0]))
-        for (i in range(count)) {
-            dst[i] = uint8(int(sp[i]) >> 8)
-        }
-    }
-}
-
-def private convert_u16_to_f32(var dst : array<uint8>; src : array<uint8>; count : int) {
-    unsafe {
-        var dp = reinterpret<float?>(addr(dst[0]))
-        var sp = reinterpret<uint16?>(addr(src[0]))
-        for (i in range(count)) {
-            dp[i] = float(sp[i]) / 65535.0f
-        }
-    }
-}
-
-def private convert_f32_to_u16(var dst : array<uint8>; src : array<uint8>; count : int) {
-    unsafe {
-        var dp = reinterpret<uint16?>(addr(dst[0]))
-        var sp = reinterpret<float?>(addr(src[0]))
-        for (i in range(count)) {
-            dp[i] = uint16(clamp(int(sp[i] * 65535.0f + 0.5f), 0, 65535))
-        }
-    }
-}
 
 def private get_pixel_layout(ch : int) : stbir_pixel_layout {
     if (ch == 4) {
@@ -560,53 +328,27 @@ struct public Image {
         let h = int(height)
         unsafe {
             let px = channels * bpc
-            if (px == 1) {
-                var dp = reinterpret<uint8?>(addr(result.bytes[0]))
-                var sp = reinterpret<uint8?>(addr(bytes[0]))
-                for (row in range(h)) {
-                    copy_reversed(dp + row * w, sp + row * w, w)
-                }
-            } elif (px == 2) {
-                var dp = reinterpret<uint16?>(addr(result.bytes[0]))
-                var sp = reinterpret<uint16?>(addr(bytes[0]))
-                for (row in range(h)) {
-                    copy_reversed(dp + row * w, sp + row * w, w)
-                }
-            } elif (px == 3) {
-                var dp = reinterpret<rgb8?>(addr(result.bytes[0]))
-                var sp = reinterpret<rgb8?>(addr(bytes[0]))
-                for (row in range(h)) {
-                    copy_reversed(dp + row * w, sp + row * w, w)
-                }
-            } elif (px == 4) {
-                var dp = reinterpret<uint?>(addr(result.bytes[0]))
-                var sp = reinterpret<uint?>(addr(bytes[0]))
-                for (row in range(h)) {
-                    copy_reversed(dp + row * w, sp + row * w, w)
-                }
-            } elif (px == 6) {
-                var dp = reinterpret<rgb16?>(addr(result.bytes[0]))
-                var sp = reinterpret<rgb16?>(addr(bytes[0]))
-                for (row in range(h)) {
-                    copy_reversed(dp + row * w, sp + row * w, w)
-                }
-            } elif (px == 8) {
-                var dp = reinterpret<uint64?>(addr(result.bytes[0]))
-                var sp = reinterpret<uint64?>(addr(bytes[0]))
-                for (row in range(h)) {
-                    copy_reversed(dp + row * w, sp + row * w, w)
-                }
-            } elif (px == 12) {
-                var dp = reinterpret<float3?>(addr(result.bytes[0]))
-                var sp = reinterpret<float3?>(addr(bytes[0]))
-                for (row in range(h)) {
-                    copy_reversed(dp + row * w, sp + row * w, w)
-                }
-            } elif (px == 16) {
-                var dp = reinterpret<float4?>(addr(result.bytes[0]))
-                var sp = reinterpret<float4?>(addr(bytes[0]))
-                for (row in range(h)) {
-                    copy_reversed(dp + row * w, sp + row * w, w)
+            let dp = addr(result.bytes[0])
+            let sp = addr(bytes[0])
+            for (row in range(h)) {
+                let doff = row * w * px
+                let soff = row * w * px
+                if (px == 1) {
+                    rast_copy_reversed_1(dp + doff, sp + soff, w)
+                } elif (px == 2) {
+                    rast_copy_reversed_2(reinterpret<uint16?>(dp + doff), reinterpret<uint16?>(sp + soff), w)
+                } elif (px == 3) {
+                    rast_copy_reversed_3(reinterpret<void?>(dp + doff), reinterpret<void?>(sp + soff), w)
+                } elif (px == 4) {
+                    rast_copy_reversed_4(reinterpret<uint?>(dp + doff), reinterpret<uint?>(sp + soff), w)
+                } elif (px == 6) {
+                    rast_copy_reversed_6(reinterpret<void?>(dp + doff), reinterpret<void?>(sp + soff), w)
+                } elif (px == 8) {
+                    rast_copy_reversed_8(reinterpret<uint64?>(dp + doff), reinterpret<uint64?>(sp + soff), w)
+                } elif (px == 12) {
+                    rast_copy_reversed_12(reinterpret<void?>(dp + doff), reinterpret<void?>(sp + soff), w)
+                } elif (px == 16) {
+                    rast_copy_reversed_16(reinterpret<void?>(dp + doff), reinterpret<void?>(sp + soff), w)
                 }
             }
         }
@@ -662,22 +404,24 @@ struct public Image {
         let sw = int(src.width)
         unsafe {
             let px = channels * bpc
+            let dp = addr(bytes[0])
+            let sp = addr(src.bytes[0])
             if (px == 1) {
-                copy_rect(reinterpret<uint8?>(addr(bytes[0])), reinterpret<uint8?>(addr(src.bytes[0])), dw, sw, sx0, sy0, x0, y0, cw, rh)
+                rast_copy_rect_1(dp, sp, dw, sw, sx0, sy0, x0, y0, cw, rh)
             } elif (px == 2) {
-                copy_rect(reinterpret<uint16?>(addr(bytes[0])), reinterpret<uint16?>(addr(src.bytes[0])), dw, sw, sx0, sy0, x0, y0, cw, rh)
+                rast_copy_rect_2(reinterpret<uint16?>(dp), reinterpret<uint16?>(sp), dw, sw, sx0, sy0, x0, y0, cw, rh)
             } elif (px == 3) {
-                copy_rect(reinterpret<rgb8?>(addr(bytes[0])), reinterpret<rgb8?>(addr(src.bytes[0])), dw, sw, sx0, sy0, x0, y0, cw, rh)
+                rast_copy_rect_3(reinterpret<void?>(dp), reinterpret<void?>(sp), dw, sw, sx0, sy0, x0, y0, cw, rh)
             } elif (px == 4) {
-                copy_rect(reinterpret<uint?>(addr(bytes[0])), reinterpret<uint?>(addr(src.bytes[0])), dw, sw, sx0, sy0, x0, y0, cw, rh)
+                rast_copy_rect_4(reinterpret<uint?>(dp), reinterpret<uint?>(sp), dw, sw, sx0, sy0, x0, y0, cw, rh)
             } elif (px == 6) {
-                copy_rect(reinterpret<rgb16?>(addr(bytes[0])), reinterpret<rgb16?>(addr(src.bytes[0])), dw, sw, sx0, sy0, x0, y0, cw, rh)
+                rast_copy_rect_6(reinterpret<void?>(dp), reinterpret<void?>(sp), dw, sw, sx0, sy0, x0, y0, cw, rh)
             } elif (px == 8) {
-                copy_rect(reinterpret<uint64?>(addr(bytes[0])), reinterpret<uint64?>(addr(src.bytes[0])), dw, sw, sx0, sy0, x0, y0, cw, rh)
+                rast_copy_rect_8(reinterpret<uint64?>(dp), reinterpret<uint64?>(sp), dw, sw, sx0, sy0, x0, y0, cw, rh)
             } elif (px == 12) {
-                copy_rect(reinterpret<float3?>(addr(bytes[0])), reinterpret<float3?>(addr(src.bytes[0])), dw, sw, sx0, sy0, x0, y0, cw, rh)
+                rast_copy_rect_12(reinterpret<void?>(dp), reinterpret<void?>(sp), dw, sw, sx0, sy0, x0, y0, cw, rh)
             } elif (px == 16) {
-                copy_rect(reinterpret<float4?>(addr(bytes[0])), reinterpret<float4?>(addr(src.bytes[0])), dw, sw, sx0, sy0, x0, y0, cw, rh)
+                rast_copy_rect_16(reinterpret<void?>(dp), reinterpret<void?>(sp), dw, sw, sx0, sy0, x0, y0, cw, rh)
             }
         }
     }
@@ -694,12 +438,14 @@ struct public Image {
         var result = Image(width = width, height = height, channels = target_channels, bpc = bpc)
         let num_pixels = width * height
         result.bytes |> resize(num_pixels * target_channels * bpc)
-        if (bpc == 1) {
-            convert_channels_u8(result.bytes, bytes, num_pixels, channels, target_channels)
-        } elif (bpc == 2) {
-            convert_channels_u16(result.bytes, bytes, num_pixels, channels, target_channels)
-        } elif (bpc == 4) {
-            convert_channels_f32(result.bytes, bytes, num_pixels, channels, target_channels)
+        unsafe {
+            if (bpc == 1) {
+                rast_convert_channels_u8(addr(result.bytes[0]), addr(bytes[0]), num_pixels, channels, target_channels)
+            } elif (bpc == 2) {
+                rast_convert_channels_u16(reinterpret<uint16?>(addr(result.bytes[0])), reinterpret<uint16?>(addr(bytes[0])), num_pixels, channels, target_channels)
+            } elif (bpc == 4) {
+                rast_convert_channels_f32(reinterpret<float?>(addr(result.bytes[0])), reinterpret<float?>(addr(bytes[0])), num_pixels, channels, target_channels)
+            }
         }
         return <- result
     }
@@ -716,18 +462,20 @@ struct public Image {
         var result = Image(width = width, height = height, channels = channels, bpc = target_bpc)
         let count = width * height * channels
         result.bytes |> resize(count * target_bpc)
-        if (bpc == 1 && target_bpc == 4) {
-            convert_u8_to_f32(result.bytes, bytes, count)
-        } elif (bpc == 4 && target_bpc == 1) {
-            convert_f32_to_u8(result.bytes, bytes, count)
-        } elif (bpc == 1 && target_bpc == 2) {
-            convert_u8_to_u16(result.bytes, bytes, count)
-        } elif (bpc == 2 && target_bpc == 1) {
-            convert_u16_to_u8(result.bytes, bytes, count)
-        } elif (bpc == 2 && target_bpc == 4) {
-            convert_u16_to_f32(result.bytes, bytes, count)
-        } elif (bpc == 4 && target_bpc == 2) {
-            convert_f32_to_u16(result.bytes, bytes, count)
+        unsafe {
+            if (bpc == 1 && target_bpc == 4) {
+                rast_convert_u8_to_f32(reinterpret<float?>(addr(result.bytes[0])), addr(bytes[0]), count)
+            } elif (bpc == 4 && target_bpc == 1) {
+                rast_convert_f32_to_u8(addr(result.bytes[0]), reinterpret<float?>(addr(bytes[0])), count)
+            } elif (bpc == 1 && target_bpc == 2) {
+                rast_convert_u8_to_u16(reinterpret<uint16?>(addr(result.bytes[0])), addr(bytes[0]), count)
+            } elif (bpc == 2 && target_bpc == 1) {
+                rast_convert_u16_to_u8(addr(result.bytes[0]), reinterpret<uint16?>(addr(bytes[0])), count)
+            } elif (bpc == 2 && target_bpc == 4) {
+                rast_convert_u16_to_f32(reinterpret<float?>(addr(result.bytes[0])), reinterpret<uint16?>(addr(bytes[0])), count)
+            } elif (bpc == 4 && target_bpc == 2) {
+                rast_convert_f32_to_u16(reinterpret<uint16?>(addr(result.bytes[0])), reinterpret<float?>(addr(bytes[0])), count)
+            }
         }
         return <- result
     }
