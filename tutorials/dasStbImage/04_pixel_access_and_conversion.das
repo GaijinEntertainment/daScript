@@ -140,13 +140,13 @@ def example_to_channels() {
     var inscope rgb <- rgba.to_channels(3)
     print("  to_channels(3): {rgb.channels} ch, size={rgb.data_size()}\n")
     // RGB → greyscale
-    var inscope grey <-rgb.to_channels(1)
+    var inscope grey <- rgb.to_channels(1)
     print("  to_channels(1): {grey.channels} ch, size={grey.data_size()}\n")
     // Greyscale → RGBA
-    var inscope back <-grey.to_channels(4)
+    var inscope back <- grey.to_channels(4)
     print("  to_channels(4): {back.channels} ch, size={back.data_size()}\n")
     // Grey+alpha
-    var inscope grey_a <-grey.to_channels(2)
+    var inscope grey_a <- grey.to_channels(2)
     print("  to_channels(2): {grey_a.channels} ch, size={grey_a.data_size()}\n")
 }
 
@@ -174,10 +174,10 @@ def example_to_bpc() {
         print("  Float pixel (0,0): R={pixels[0]} G={pixels[1]} B={pixels[2]} A={pixels[3]}\n")
     }
     // float → uint16
-    var inscope img16 <-hdr.to_bpc(2)
+    var inscope img16 <- hdr.to_bpc(2)
     print("  to_bpc(2): bpc={img16.bpc}, data_size={img16.data_size()}\n")
     // uint16 → uint8 (round-trip)
-    var inscope back <-img16.to_bpc(1)
+    var inscope back <- img16.to_bpc(1)
     print("  to_bpc(1): bpc={back.bpc}, data_size={back.data_size()}\n")
     // Verify round-trip preserves values
     var match = true
@@ -206,13 +206,13 @@ def example_combined() {
     var inscope img <- make_test_image()
     print("  Source: {img.channels} ch, bpc={img.bpc}\n")
     // Convert RGBA uint8 → RGB float (HDR pipeline input)
-    var inscope hdr_rgb <-img.to_bpc(4).to_channels(3)
+    var inscope hdr_rgb <- img.to_bpc(4).to_channels(3)
     print("  HDR RGB: {hdr_rgb.channels} ch, bpc={hdr_rgb.bpc}, data_size={hdr_rgb.data_size()}\n")
     // Convert back: RGB float → RGBA uint8
-    var inscope rgba_u8 <-hdr_rgb.to_channels(4).to_bpc(1)
+    var inscope rgba_u8 <- hdr_rgb.to_channels(4).to_bpc(1)
     print("  Back to RGBA uint8: {rgba_u8.channels} ch, bpc={rgba_u8.bpc}\n")
     // Convert to greyscale uint16 (scientific imaging)
-    var inscope grey16 <-img.to_channels(1).to_bpc(2)
+    var inscope grey16 <- img.to_channels(1).to_bpc(2)
     print("  Grey uint16: {grey16.channels} ch, bpc={grey16.bpc}, data_size={grey16.data_size()}\n")
 }
 
