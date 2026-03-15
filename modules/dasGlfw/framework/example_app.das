@@ -7,7 +7,6 @@ require glfw/glfw_live
 require opengl/opengl_boost
 require opengl/opengl_gen
 require opengl/opengl_cache
-require ttf/stb_ttf_common public
 require opengl/opengl_ttf
 require daslib/defer
 require daslib/safe_addr

@@ -16,7 +16,7 @@ def main {
     defer <| $() {
         glfwTerminate()
     }
-    glfwInitOpenGL(3, 3) // todo: figure out why we need compat profile here
+    glfwInitOpenGL(3, 3)
     var window = glfwCreateWindow(1280, 720, "OpenGL - Hello opengl_ttf", null, null)
     if (window == null) {
         panic("can't create window")
@@ -25,14 +25,16 @@ def main {
         glfwDestroyWindow(window)
     }
     glfwMakeContextCurrent(window)
-    // create ttf internals, load font
+    // create ttf internals, load font with oversampling=2 for GPU rendering
     create_ttf_objects()
-    font <- load_ttf([
-      fname = "droidsansmono.ttf",
-      path1 = "{get_das_root()}/modules/dasOpenGL/examples/",
-      path2 = "{get_das_root()}/examples/media",
-      canfail = true
-    ])
+    font <- load_ttf("{get_das_root()}/modules/dasOpenGL/examples/droidsansmono.ttf", [oversampling = 2])
+    if (!!empty(font.bitmap.bytes)) {
+        font <- load_ttf("{get_das_root()}/examples/media/droidsansmono.ttf", [oversampling = 2])
+    }
+    if (!!empty(font.bitmap.bytes)) {
+        panic("can't load droidsansmono.ttf")
+    }
+    upload_font_texture(font)
     // create vertex arrays with quads, which render particular text
     var hw_text <- font |> create_quads("Hello, world")
     // make a translate-scale matrix, so that text is in the middle, and 1.0 wide
@@ -63,4 +65,3 @@ def main {
         return true
     }
 }
-
