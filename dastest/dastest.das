@@ -139,6 +139,7 @@ struct IsolatedResult {
     exitCode : int
     parsedResult : bool
     status : SuiteResult
+    tests : array<SuiteTestResult>
     fileDt : int
     err : array<string>
     log : array<string>
@@ -151,7 +152,19 @@ def main() {
     let runIdx = args |> find_index("--run")
     if (runIdx != -1) {
         let res = suite::test_file(args[runIdx + 1], SuiteCtx(args))
-        log::info_raw("\n{jsonResultPrefix}{write_json(JV(res))}\n{jsonResultPrefix}")
+        // Send full report with per-test details for isolated mode JSON collection
+        var report = JsonTestReport(
+            file = args[runIdx + 1],
+            total = res.total,
+            passed = res.passed,
+            failed = res.failed,
+            errors = res.errors,
+            skipped = res.skipped,
+            success = res.failed + res.errors == 0,
+            time_usec = 0,
+            tests <- suite::test_results
+        )
+        log::info_raw("\n{jsonResultPrefix}{sprint_json(report, false)}\n{jsonResultPrefix}")
         return
     }
 
@@ -272,6 +285,7 @@ def main() {
                                         } elif (js != null) {
                                             isoRes.parsedResult = true
                                             isoRes.status = SuiteResult(js)
+                                            parse_test_results(js, isoRes.tests)
                                         }
                                     }
                                 }
@@ -291,13 +305,28 @@ def main() {
                         let uri = ctx.uriPaths ? file_name_to_uri(file) : file
                         let jitstr = jit_enabled() ? "-jit" : ""
                         let aotstr = is_in_aot() ? "-use-aot" : ""
-                        let singleTest = "{args[0]} {args[1]} {jitstr} {aotstr} -- --run {file} {log::useTtyColors ? " --color" : ""}"
+                        let benchstr = ctx.bench_enabled ? "--bench" : ""
+                        let singleTest = "{args[0]} {args[1]} {jitstr} {aotstr} -- --run {file} {benchstr} {log::useTtyColors ? " --color" : ""}"
                         inputChannel |> push_clone(IsoInput(uri = clone_string(uri), cmd = clone_string(singleTest)))
                         inputChannel |> notify()
                     }
 
                     for (isoRes in each_clone(outputChannel, type<IsolatedResult>)) {
                         res += isoRes.status
+                        for (tr in isoRes.tests) {
+                            var msgs : array<string>
+                            for (m in tr.messages) {
+                                msgs |> push(clone_string(m))
+                            }
+                            suite::test_results |> emplace(SuiteTestResult(
+                                name = clone_string(tr.name),
+                                passed = tr.passed,
+                                skipped = tr.skipped,
+                                time_usec = tr.time_usec,
+                                messages <- msgs,
+                                location = clone_string(tr.location)
+                            ))
+                        }
                         for (err in isoRes.err) {
                             log::error(err)
                         }

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { DaslangConfig } from './config';
+import { DaslangConfig, getRuntimeFlags } from './config';
 import {
     discoverTestFiles,
     discoverTestsInFile,
@@ -9,6 +9,8 @@ import {
     benchmarkTag,
 } from './testDiscovery';
 import { runTests, parseLocation } from './testRunner';
+
+const outputChannel = vscode.window.createOutputChannel('daslang Tests');
 
 export function createTestController(config: DaslangConfig): vscode.TestController {
     const controller = vscode.tests.createTestController('daslang-dastest', 'daslang Tests');
@@ -78,6 +80,19 @@ async function runHandler(
 ): Promise<void> {
     const run = controller.createTestRun(request);
 
+    // Read toggle settings fresh (user may have changed them since activation)
+    const { jit, isolatedMode } = getRuntimeFlags();
+
+    // Show output channel and clear previous output
+    outputChannel.clear();
+    outputChannel.show(true); // true = preserve focus
+
+    // Log run configuration
+    const flags: string[] = [];
+    if (jit) { flags.push('JIT'); }
+    if (isolatedMode) { flags.push('isolated'); }
+    outputChannel.appendLine(`--- daslang test run [${mode}]${flags.length > 0 ? ' (' + flags.join(', ') + ')' : ''} ---`);
+
     // Collect tests to run, grouped by file path
     const fileGroups = new Map<string, vscode.TestItem[]>();
     const testsToRun = request.include ?? gatherAllTests(controller);
@@ -143,6 +158,9 @@ async function runHandler(
                 run.started(test);
             }
 
+            // Log which file is being tested
+            outputChannel.appendLine(`\n> ${filePath}${pass.benchmark ? ' (benchmarks)' : ''}`);
+
             // Determine if we need to filter to specific tests/benchmarks
             const expectedTag = pass.benchmark ? benchmarkTag : testTag;
             const allMatchingInFile: vscode.TestItem[] = [];
@@ -166,7 +184,14 @@ async function runHandler(
             });
 
             try {
-                const result = await runTests(config, filePath, testNames, cancellation, { benchmark: pass.benchmark });
+                const result = await runTests(config, filePath, testNames, cancellation, {
+                    benchmark: pass.benchmark,
+                    jit,
+                    isolatedMode,
+                    onOutput: (chunk) => {
+                        outputChannel.append(chunk);
+                    },
+                });
 
                 if (result.timedOut) {
                     for (const test of pass.tests) {
@@ -183,50 +208,66 @@ async function runHandler(
                     continue;
                 }
 
-                // Map JSON results to TestItems
-                for (const testResult of result.report.tests) {
-                    const testItem = pass.tests.find(t => t.id.split('/').pop() === testResult.name);
-                    if (!testItem) {
-                        continue;
-                    }
-
-                    const durationMs = testResult.time / 1000;
-
-                    if (testResult.skipped) {
-                        run.skipped(testItem);
-                    } else if (testResult.passed) {
-                        if (pass.benchmark && testResult.messages.length > 0) {
-                            const output = testResult.messages.join('\r\n') + '\r\n';
-                            run.appendOutput(output, undefined, testItem);
-                            testItem.description = testResult.messages.join(' | ');
-                            // Don't pass duration — let description show stats instead of "1.2s"
-                            run.passed(testItem);
-                        } else {
-                            run.passed(testItem, durationMs);
+                if (result.report.tests.length === 0 && result.report.total > 0) {
+                    // Isolated mode: JSON report has summary but no per-test details.
+                    // Use summary to pass/fail all tests as a group.
+                    const durationMs = result.report.time_usec / 1000;
+                    if (result.report.success) {
+                        for (const test of pass.tests) {
+                            run.passed(test, durationMs);
                         }
                     } else {
-                        const messageText = testResult.messages.length > 0
-                            ? testResult.messages.join('\n')
-                            : 'Test failed';
-                        const msg = new vscode.TestMessage(messageText);
-
-                        const loc = parseLocation(testResult.location);
-                        if (loc && testItem.uri) {
-                            msg.location = new vscode.Location(
-                                testItem.uri,
-                                new vscode.Position(loc.line - 1, 0),
-                            );
+                        const msg = `${result.report.failed} failed, ${result.report.errors} errors (isolated mode)`;
+                        for (const test of pass.tests) {
+                            run.failed(test, new vscode.TestMessage(msg), durationMs);
+                        }
+                    }
+                } else {
+                    // Normal mode: map individual JSON results to TestItems
+                    for (const testResult of result.report.tests) {
+                        const testItem = pass.tests.find(t => t.id.split('/').pop() === testResult.name);
+                        if (!testItem) {
+                            continue;
                         }
 
-                        run.failed(testItem, msg, durationMs);
-                    }
-                }
+                        const durationMs = testResult.time / 1000;
 
-                // Handle tests not in JSON report
-                for (const test of pass.tests) {
-                    const found = result.report.tests.some(r => test.id.split('/').pop() === r.name);
-                    if (!found) {
-                        run.errored(test, new vscode.TestMessage('Test not found in results'));
+                        if (testResult.skipped) {
+                            run.skipped(testItem);
+                        } else if (testResult.passed) {
+                            if (pass.benchmark && testResult.messages.length > 0) {
+                                const output = testResult.messages.join('\r\n') + '\r\n';
+                                run.appendOutput(output, undefined, testItem);
+                                testItem.description = testResult.messages.join(' | ');
+                                // Don't pass duration — let description show stats instead of "1.2s"
+                                run.passed(testItem);
+                            } else {
+                                run.passed(testItem, durationMs);
+                            }
+                        } else {
+                            const messageText = testResult.messages.length > 0
+                                ? testResult.messages.join('\n')
+                                : 'Test failed';
+                            const msg = new vscode.TestMessage(messageText);
+
+                            const loc = parseLocation(testResult.location);
+                            if (loc && testItem.uri) {
+                                msg.location = new vscode.Location(
+                                    testItem.uri,
+                                    new vscode.Position(loc.line - 1, 0),
+                                );
+                            }
+
+                            run.failed(testItem, msg, durationMs);
+                        }
+                    }
+
+                    // Handle tests not in JSON report
+                    for (const test of pass.tests) {
+                        const found = result.report.tests.some(r => test.id.split('/').pop() === r.name);
+                        if (!found) {
+                            run.errored(test, new vscode.TestMessage('Test not found in results'));
+                        }
                     }
                 }
             } finally {
@@ -235,6 +276,7 @@ async function runHandler(
         }
     }
 
+    outputChannel.appendLine('\n--- done ---');
     run.end();
 }
 

@@ -41,16 +41,33 @@ export async function runTests(
     filePath: string,
     testNames?: string[],
     cancellation?: { readonly isCancelled: boolean; kill?: () => void },
-    options?: { benchmark?: boolean },
+    options?: { benchmark?: boolean; jit?: boolean; isolatedMode?: boolean; onOutput?: (chunk: string) => void },
 ): Promise<RunResult> {
     const jsonFile = path.join(os.tmpdir(), `dastest_${Date.now()}_${Math.random().toString(36).slice(2)}.json`);
 
-    const args = [
-        config.dastestPath,
-        '--',
-        '--test', filePath,
-        '--json-file', jsonFile,
-    ];
+    // Build command: daslang.exe dastest.das [-jit] -- [--isolated-mode] --test file --json-file tmp ...
+    // Note: -jit goes AFTER script path so that get_command_line_arguments()[0]=compiler, [1]=script.
+    // dastest's isolated mode uses args[0] and args[1] to construct subprocess commands.
+    const args: string[] = [];
+
+    // Script path (must be args[1] for isolated mode subprocess construction)
+    args.push(config.dastestPath);
+
+    // Top-level daslang flags (after script path, before --)
+    if (options?.jit) {
+        args.push('-jit');
+    }
+
+    // Separator
+    args.push('--');
+
+    // dastest flags
+    if (options?.isolatedMode) {
+        args.push('--isolated-mode');
+    }
+    args.push('--test', filePath);
+    args.push('--json-file', jsonFile);
+
     if (options?.benchmark) {
         args.push('--bench');
     }
@@ -76,10 +93,14 @@ export async function runTests(
         let timedOut = false;
 
         proc.stdout.on('data', (data: Buffer) => {
-            stdout += data.toString();
+            const chunk = data.toString();
+            stdout += chunk;
+            options?.onOutput?.(chunk);
         });
         proc.stderr.on('data', (data: Buffer) => {
-            stderr += data.toString();
+            const chunk = data.toString();
+            stderr += chunk;
+            options?.onOutput?.(chunk);
         });
 
         const timer = setTimeout(() => {
