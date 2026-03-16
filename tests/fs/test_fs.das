@@ -112,11 +112,15 @@ def test_file_size(t : T?) {
         fopen(tmp, "wb") <| $(f) {
             fwrite(f, "12345")
         }
-        t |> equal(file_size(tmp), int64(5))
+        var error : string
+        t |> equal(file_size(tmp, error), int64(5))
+        t |> success(empty(error), "unexpected error: {error}")
         remove(tmp)
     }
     t |> run("missing file") @(t : T?) {
-        t |> equal(file_size("/no/such/file_that_exists"), int64(-1))
+        var error : string
+        t |> equal(file_size("/no/such/file_that_exists", error), int64(-1))
+        t |> success(!empty(error), "expected error for missing file")
     }
 }
 
@@ -128,7 +132,9 @@ def test_equivalent(t : T?) {
         fopen(tmp, "wb") <| $(f) {
             fwrite(f, "test")
         }
-        t |> success(equivalent(tmp, tmp))
+        var error : string
+        t |> success(equivalent(tmp, tmp, error))
+        t |> success(empty(error), "unexpected error: {error}")
         remove(tmp)
     }
     t |> run("different files") @(t : T?) {
@@ -141,7 +147,9 @@ def test_equivalent(t : T?) {
         fopen(b, "wb") <| $(f) {
             fwrite(f, "b")
         }
-        t |> success(!equivalent(a, b))
+        var error : string
+        t |> success(!equivalent(a, b, error))
+        t |> success(empty(error), "unexpected error: {error}")
         remove(a)
         remove(b)
     }
@@ -155,11 +163,14 @@ def test_is_symlink(t : T?) {
         fopen(tmp, "wb") <| $(f) {
             fwrite(f, "test")
         }
-        t |> success(!is_symlink(tmp))
+        var error : string
+        t |> success(!is_symlink(tmp, error))
+        t |> success(empty(error), "unexpected error: {error}")
         remove(tmp)
     }
     t |> run("missing path") @(t : T?) {
-        t |> success(!is_symlink("/no/such/path"))
+        var error : string
+        t |> success(!is_symlink("/no/such/path", error))
     }
 }
 
@@ -172,7 +183,9 @@ def test_copy_file(t : T?) {
         fopen(src, "wb") <| $(f) {
             fwrite(f, "hello copy")
         }
-        t |> success(copy_file(src, dst, false))
+        var error : string
+        t |> success(copy_file(src, dst, false, error))
+        t |> success(empty(error), "unexpected error: {error}")
         t |> success(fexist(dst))
         fopen(dst, "rb") <| $(f) {
             let content = fread(f)
@@ -191,7 +204,8 @@ def test_copy_file(t : T?) {
         fopen(dst, "wb") <| $(f) {
             fwrite(f, "dst")
         }
-        t |> success(!copy_file(src, dst, false))
+        var error : string
+        t |> success(!copy_file(src, dst, false, error))
         remove(src)
         remove(dst)
     }
@@ -205,7 +219,9 @@ def test_copy_file(t : T?) {
         fopen(dst, "wb") <| $(f) {
             fwrite(f, "old content")
         }
-        t |> success(copy_file(src, dst, true))
+        var error : string
+        t |> success(copy_file(src, dst, true, error))
+        t |> success(empty(error), "unexpected error: {error}")
         fopen(dst, "rb") <| $(f) {
             let content = fread(f)
             t |> equal(content, "new content")
@@ -271,20 +287,24 @@ def test_dir_rec(t : T?) {
 [test]
 def test_temp_directory(t : T?) {
     t |> run("returns non-empty path") @(t : T?) {
-        let tmp = temp_directory()
+        var error : string
+        let tmp = temp_directory(error)
         t |> success(tmp != "")
         t |> success(fexist(tmp))
+        t |> success(empty(error), "unexpected error: {error}")
     }
 }
 
 [test]
 def test_create_temp_file(t : T?) {
     t |> run("creates file") @(t : T?) {
-        let path = create_temp_file("dastest", ".tmp")
+        var error : string
+        let path = create_temp_file("dastest", ".tmp", error)
         t |> success(path != "")
         t |> success(fexist(path))
         t |> success(find(path, "dastest") >= 0)
         t |> success(find(path, ".tmp") >= 0)
+        t |> success(empty(error), "unexpected error: {error}")
         remove(path)
     }
 }
@@ -292,10 +312,12 @@ def test_create_temp_file(t : T?) {
 [test]
 def test_create_temp_directory(t : T?) {
     t |> run("creates directory") @(t : T?) {
-        let path = create_temp_directory("dastest")
+        var error : string
+        let path = create_temp_directory("dastest", error)
         t |> success(path != "")
         t |> success(fexist(path))
         t |> success(find(path, "dastest") >= 0)
+        t |> success(empty(error), "unexpected error: {error}")
         rmdir(path)
     }
 }
@@ -304,9 +326,11 @@ def test_create_temp_directory(t : T?) {
 def test_disk_space(t : T?) {
     t |> run("current directory") @(t : T?) {
         var info = DiskSpaceInfo()
-        t |> success(builtin_disk_space(".", info))
+        var error : string
+        t |> success(builtin_disk_space(".", info, error))
         t |> success(info.capacity > uint64(0))
         t |> success(info.available > uint64(0))
+        t |> success(empty(error), "unexpected error: {error}")
     }
     t |> run("convenience overload") @(t : T?) {
         let info = disk_space(".")
@@ -323,7 +347,9 @@ def test_set_mtime(t : T?) {
             fwrite(f, "test")
         }
         let target_time = mktime(2020, 1, 1, 0, 0, 0)
-        t |> success(set_mtime(tmp, target_time))
+        var error : string
+        t |> success(set_mtime(tmp, target_time, error))
+        t |> success(empty(error), "unexpected error: {error}")
         let st = stat(tmp)
         t |> success(st.is_valid)
         let diff = int64(st.mtime) - int64(target_time)
@@ -338,8 +364,10 @@ def test_relative(t : T?) {
     t |> run("compute relative path") @(t : T?) {
         let root = get_das_root()
         let sub = path_join(root, "foo")
-        let rel = relative(sub, root)
+        var error : string
+        let rel = relative(sub, root, error)
         t |> success(rel != "")
         t |> equal(rel, "foo")
+        t |> success(empty(error), "unexpected error: {error}")
     }
 }

@@ -144,6 +144,17 @@ def mkdir_rec(path : string) : bool {
     return mkdir(path)
 }
 
+[generic]
+def mkdir_rec(path : string; var error : string&) : bool {
+    return true if (path == "")
+    var st : FStat
+    return true if (stat(path, st) && st.is_dir)
+    if (!mkdir_rec(dir_name(path), error)) {
+        return false
+    }
+    return mkdir(path, error)
+}
+
 // convenience: read entire file by path, returns empty string on failure
 [generic]
 def fread(path : string) : string {
@@ -172,13 +183,27 @@ def fwrite(path : string; text : string) : bool {
 // recursive directory iteration
 [generic]
 def dir_rec(path : string; blk : block<(filename : string; is_dir : bool) : void>) {
-    builtin_dir_rec(path, blk)
+    var error : string
+    builtin_dir_rec(path, blk, error)
+}
+
+[generic]
+def dir_rec(path : string; blk : block<(filename : string; is_dir : bool) : void>; var error : string&) {
+    builtin_dir_rec(path, blk, error)
 }
 
 // convenience: disk_space returning struct
 [generic]
 def disk_space(path : string) : DiskSpaceInfo {
     var info = DiskSpaceInfo()
-    builtin_disk_space(path, info)
+    var error : string
+    builtin_disk_space(path, info, error)
+    return info
+}
+
+[generic]
+def disk_space(path : string; var error : string&) : DiskSpaceInfo {
+    var info = DiskSpaceInfo()
+    builtin_disk_space(path, info, error)
     return info
 }
