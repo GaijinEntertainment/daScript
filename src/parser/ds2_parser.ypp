@@ -923,8 +923,12 @@ expression_if_block
         yyextra->das_keyword = false;
     } expression_if_one_liner[block] SEMICOLON {
         if ( yyextra->das_oneliner_line != -1 && $block->at.line != yyextra->das_oneliner_line ) {
-            das2_yyerror(scanner,"if one-liner body must be on the same line",
-                $block->at, CompilationError::syntax_error);
+            if ( yyextra->g_Program->policies.temp_one_liner_warning ) {
+                (*daScriptEnvironment::getBound()->g_compilerLog) << $block->at.describe() << ": *warning* if one-liner body should be on the same line\n";
+            } else {
+                das2_yyerror(scanner,"if one-liner body must be on the same line",
+                    $block->at, CompilationError::syntax_error);
+            }
         }
         $$ = $block;
     }
