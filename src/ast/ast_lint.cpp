@@ -1009,9 +1009,13 @@ namespace das {
                 auto subexprHash = hash64z(subexprText.c_str());
                 auto it = tableLookupCollision.back().find(subexprHash);
                 if ( it!=tableLookupCollision.back().end() ) {
-                    program->error("potential table lookup collision for " + subexprText, "",
-                        "tab[key1] = tab[key2], or fun(tab[key1],tab[key2]) scenarios may produce undefined behavior",
-                        expr->subexpr->at, CompilationError::table_lookup_collision);
+                    if ( program->policies.temp_table_lint_warning ) {
+                        (*daScriptEnvironment::getBound()->g_compilerLog) << expr->subexpr->at.describe() << ": *warning* potential table lookup collision for " << subexprText << "\n";
+                    } else {
+                        program->error("potential table lookup collision for " + subexprText, "",
+                                "tab[key1] = tab[key2], or fun(tab[key1],tab[key2]) scenarios may produce undefined behavior",
+                                expr->subexpr->at, CompilationError::table_lookup_collision);
+                    }
                 } else {
                     tableLookupCollision.back().insert(subexprHash);
                 }
@@ -1081,7 +1085,7 @@ namespace das {
         "no_unsafe_uninitialized_structures", Type::tBool,
     // version_2_syntax
         "gen2",                         Type::tBool,
-    // depricated
+    // deprecated
         "skip_lock_checks",             Type::tBool,
     };
 
