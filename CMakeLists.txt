@@ -35,6 +35,10 @@ set(DAS_INSTALL_MODULESDIR modules CACHE STRING "Directory where to install modu
 set(DAS_INSTALL_TUTORIALSDIR tutorials CACHE STRING "Directory where to install tutorial sources")
 set(DAS_INSTALL_DASTESTDIR dastest CACHE STRING "Directory where to install dastest")
 
+if(DAS_DISABLE_SYM_VISIBILITY)
+    add_compile_definitions(DAS_DISABLE_SYM_VISIBILITY)
+endif()
+
 IF(WIN32)
     IF(DAS_LLVM_DISABLED)
         # FOR NOW DISABLE EXCEPTIONS AND USE SETJMP/LONGJUMP, IF JIT IS ENABLED

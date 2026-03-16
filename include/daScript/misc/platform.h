@@ -247,7 +247,7 @@ __forceinline uint64_t rotr64_c(uint64_t a, uint64_t b) {
 #endif
 
 
-#if DAS_ENABLE_DLL
+#ifndef DAS_DISABLE_SYM_VISIBILITY
 #ifndef DAS_API
 #ifdef _MSC_VER
     #define DAS_EXPORT_DLL __declspec(dllexport)
@@ -508,5 +508,3 @@ private:
 #endif
 
 #include "daScript/misc/smart_ptr.h"
-
-
