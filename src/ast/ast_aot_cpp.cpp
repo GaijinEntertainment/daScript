@@ -2289,6 +2289,9 @@ namespace das {
             const auto & seT = isPtr ? expr->subexpr->type->firstType : expr->subexpr->type;
             if ((seT->dim.size() || seT->isGoodArrayType() || seT->isGoodTableType())) {
                 ss << describeCppType(seT,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::yes) << "::safe_index(";
+            } else if (isPtr && !seT->isVectorType()) {
+                ss << "das_index<" << describeCppType(expr->subexpr->type,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::no)
+                    << ">::safe_at(";
             } else {
                 ss << "das_index<" << describeCppType(seT,CpptSubstitureRef::no,CpptSkipRef::yes,CpptSkipConst::no)
                     << ">::safe_at(";

@@ -1912,6 +1912,17 @@ class public LlvmJitVisitor : AstVisitor {
             lpipe <| $() {
                 return LLVMConstNull(resType)
             }
+        } elif (subExprT.isPointer) {
+            // pointer safe-at: null check + GEP, no bounds check
+            var inscope etype := subExprT.firstType
+            var resType = LLVMPointerType(type_to_llvm_type(etype), 0u)
+            var if_not_null = LLVMBuildIsNotNull(g_builder, tsrc, "ptr_not_null")
+            res = build_select(if_not_null, resType) <| $() {
+                return build_array_index(tsrc, tidx, etype, "ptr_safe_at")
+            }
+            lpipe <| $() {
+                return LLVMConstNull(resType)
+            }
         } else {
             res = LLVMConstNull(type_to_llvm_type(expr._type))
             failed("unsupported visitExprSafeAt type {describe(subExprT)} {describe(expr.at)}")

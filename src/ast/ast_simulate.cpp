@@ -1756,7 +1756,19 @@ namespace das
                 uint32_t stride = type->firstType->getSizeOf();
                 return context.code->makeNode<SimNode_SafeAt>(at, prv, pidx, stride, 0, range);
             } else {
-                DAS_VERIFY(0 && "TODO: safe-at not implemented");
+                // pointer safe-at: null check + pointer arithmetic, no bounds check
+                uint32_t stride = seT->getSizeOf();
+                auto prv = subexpr->simulate(context);
+                auto pidx = index->simulate(context);
+                switch ( index->type->baseType ) {
+                case Type::tInt:    return context.code->makeNode<SimNode_PtrSafeAt<int32_t>>(at, prv, pidx, stride, 0);
+                case Type::tUInt:   return context.code->makeNode<SimNode_PtrSafeAt<uint32_t>>(at, prv, pidx, stride, 0);
+                case Type::tInt64:  return context.code->makeNode<SimNode_PtrSafeAt<int64_t>>(at, prv, pidx, stride, 0);
+                case Type::tUInt64: return context.code->makeNode<SimNode_PtrSafeAt<uint64_t>>(at, prv, pidx, stride, 0);
+                default:
+                    DAS_VERIFY(0 && "unsupported index type for pointer safe-at");
+                    return nullptr;
+                }
             }
         } else {
             const auto & seT = subexpr->type;
