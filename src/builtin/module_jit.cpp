@@ -657,6 +657,10 @@ extern "C" {
         void * das_get_jit_delete ( TypeAnnotation *annotation ) {
             return annotation->jitGetDelete();
         }
+
+        void * das_get_jit_clone ( TypeAnnotation *annotation ) {
+            return annotation->jitGetClone();
+        }
     }
 
 
@@ -894,6 +898,8 @@ extern "C" {
                 SideEffects::none, "das_get_jit_new")->args({"ann"});
             addExtern<DAS_BIND_FUN(das_get_jit_delete)>(*this, lib,  "get_jit_delete",
                 SideEffects::none, "das_get_jit_delete")->args({"ann"});
+            addExtern<DAS_BIND_FUN(das_get_jit_clone)>(*this, lib, "get_jit_clone",
+                SideEffects::none, "das_get_jit_clone")->args({"ann"});
             addExtern<DAS_BIND_FUN(das_get_jit_debug_enter)>(*this, lib,  "get_jit_debug_enter",
                 SideEffects::none, "das_get_jit_debug_enter");
             addExtern<DAS_BIND_FUN(das_get_jit_debug_exit)>(*this, lib,  "get_jit_debug_exit",

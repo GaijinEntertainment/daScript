@@ -67,6 +67,8 @@ class CollectExternVisitor : AstVisitor {
     c_get_jit_new : LLVMOpaqueValue?
     c_get_jit_delete_type : LLVMOpaqueType?
     c_get_jit_delete : LLVMOpaqueValue?
+    c_get_jit_clone_type : LLVMOpaqueType?
+    c_get_jit_clone : LLVMOpaqueValue?
 
     standalone_ctx : LLVMOpaqueValue?
 
@@ -125,6 +127,13 @@ class CollectExternVisitor : AstVisitor {
             )
         )
         c_get_jit_delete = LLVMAddFunctionWithType(g_mod, "das_get_jit_delete", c_get_jit_delete_type)
+
+        c_get_jit_clone_type = LLVMFunctionType(types.LLVMVoidPtrType(),
+            fixed_array<LLVMTypeRef>(
+                types.LLVMVoidPtrType(),  // TypeAnnotation*
+            )
+        )
+        c_get_jit_clone = LLVMAddFunctionWithType(g_mod, "das_get_jit_clone", c_get_jit_clone_type)
 
     // For each JIT function, register it in the context and point any ExprAddr global to it.
         reg_standalone_fn_type = LLVMFunctionType(types.LLVMVoidPtrType(),
@@ -218,6 +227,14 @@ class CollectExternVisitor : AstVisitor {
         LLVMBuildStore(builder, fn_ptr, global_var)
     }
 
+    def register_clone_from_annotation(name : DllName; ann : TypeAnnotation?) {
+        let ann_ptr = get_annotation(ann)
+        var call_args = array<LLVMValueRef>(ann_ptr)
+        let fn_ptr = LLVMBuildCall2(builder, c_get_jit_clone_type, c_get_jit_clone, call_args, "")
+        let global_var = LLVMGetNamedGlobal(g_mod, name.glob())
+        LLVMBuildStore(builder, fn_ptr, global_var)
+    }
+
     def add_unimplemented(name : DllName; expr : ExpressionPtr) {
         // Trap will not always help. At least try.
         to_log(LOG_WARNING, "LLVM JIT: Emit trap for {name.glob()} at {describe(expr.at)}.\n")
@@ -280,6 +297,16 @@ class CollectExternVisitor : AstVisitor {
                 if (initialize(name)) {
                     register_delete_from_annotation(name, firstT.annotation)
                 }
+            }
+        }
+    }
+
+    def override preVisitExprClone(expr : smart_ptr<ExprClone>) : void {
+        assume leftT = expr.left._type
+        if (leftT.isHandle) {
+            let name = uid.get_clone_type(leftT)
+            if (initialize(name)) {
+                register_clone_from_annotation(name, leftT.annotation)
             }
         }
     }

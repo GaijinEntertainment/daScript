@@ -53,6 +53,8 @@ namespace das
         virtual SimNode * simulateClone ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
             return context.code->makeNode<SimNode_CloneRefValueT<string>>(at, l, r);
         }
+        static void jit_clone_string ( void * dst, const void * src ) { *(string*)dst = *(const string*)src; }
+        virtual void * jitGetClone() const override { return (void *) &jit_clone_string; }
     };
 
     template <typename OT>
@@ -126,6 +128,8 @@ namespace das
         static __forceinline SimNode * simulateClone ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) {
             return context.code->makeNode<SimNode_CloneRefValueT<TT>>(at, l, r);
         }
+        static void jit_clone ( void * dst, const void * src ) { *(TT*)dst = *(const TT*)src; }
+        static void * jitGetClone () { return (void *) &jit_clone; }
     };
 
     template <typename TT>
@@ -133,6 +137,7 @@ namespace das
         static __forceinline SimNode * simulateClone ( Context &, const LineInfo &, SimNode *, SimNode * ) {
             return nullptr;
         }
+        static void * jitGetClone () { return nullptr; }
     };
 
     template <typename FuncT, FuncT fn> struct CallProperty;
@@ -296,6 +301,7 @@ namespace das
         virtual SimNode * simulateClone ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
             return GenCloneNode<OT>::simulateClone(context,at,l,r);
         }
+        virtual void * jitGetClone() const override { return GenCloneNode<OT>::jitGetClone(); }
     };
 
     template <typename OT, bool is_smart>
@@ -778,6 +784,8 @@ namespace das
         das::SimNode *simulateClone(das::Context &context, const das::LineInfo &at, das::SimNode *l, das::SimNode *r) const override {
             return context.code->makeNode<SimNode_Set<OT>>(at, l, r);
         }
+        static void jit_clone_value ( void * dst, const void * src ) { *(OT*)dst = *(const OT*)src; }
+        virtual void * jitGetClone() const override { return (void *) &jit_clone_value; }
         virtual uint64_t getOwnSemanticHash ( HashBuilder & hb, das_set<Structure *> & dep, das_set<Annotation *> & adep ) const override {
             hb.updateString(getMangledName());
             valueType->getOwnSemanticHash(hb, dep, adep);
