@@ -2,6 +2,11 @@
   "name": "vscode-daslang-test",
   "displayName": "daslang Test Explorer",
   "description": "Run daslang dastest tests from VSCode Test Explorer",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GaijinEntertainment/daScript"
+  },
+  "publisher": "borisbat",
   "version": "0.1.0",
   "engines": {
     "vscode": "^1.85.0"
