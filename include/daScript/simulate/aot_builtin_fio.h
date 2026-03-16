@@ -105,7 +105,7 @@ namespace das {
     DAS_API bool    builtin_fs_copy_file ( const char * src, const char * dst, bool overwrite, char * & error, Context * context, LineInfoArg * at );
     DAS_API bool    builtin_fs_set_mtime ( const char * path, Time time, char * & error, Context * context, LineInfoArg * at );
     // directory operations
-    DAS_API void    builtin_fs_dir_rec ( const char * path, const Block & blk, char * & error, Context * context, LineInfoArg * at );
+    DAS_API void    builtin_fs_dir_rec ( const char * path, const TBlock<void, char *, bool> & blk, char * & error, Context * context, LineInfoArg * at );
     // system queries
     DAS_API char *  builtin_fs_temp_directory ( char * & error, Context * context, LineInfoArg * at );
     DAS_API char *  builtin_fs_create_temp_file ( const char * prefix, const char * ext, char * & error, Context * context, LineInfoArg * at );

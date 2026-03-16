@@ -156,3 +156,98 @@ def test_relative_error(t : T?) {
         t |> success(empty(error), "error should be empty, got: {error}")
     }
 }
+
+// ---- _result variant wrappers ----
+
+[test]
+def test_file_size_result(t : T?) {
+    t |> run("success returns value") @(t : T?) {
+        let r = file_size_result("{get_das_root()}/tests/fio/fio_errors.das")
+        t |> success(r is value, "expected value variant")
+        t |> success(unsafe(r.value) > int64(0), "size should be positive")
+    }
+    t |> run("failure returns error") @(t : T?) {
+        let r = file_size_result("_no_such_file_99999.xyz")
+        t |> success(r is error, "expected error variant")
+        t |> success(!empty(unsafe(r.error)), "error should be non-empty")
+    }
+}
+
+[test]
+def test_equivalent_result(t : T?) {
+    t |> run("failure returns error") @(t : T?) {
+        let r = equivalent_result("_no_such_a_99999.xyz", "_no_such_b_99999.xyz")
+        t |> success(r is error, "expected error variant")
+        t |> success(!empty(unsafe(r.error)), "error should be non-empty")
+    }
+}
+
+[test]
+def test_copy_file_result(t : T?) {
+    t |> run("failure returns error") @(t : T?) {
+        let r = copy_file_result("_no_such_source_99999.xyz", "_dest.xyz", false)
+        t |> success(r is error, "expected error variant")
+        t |> success(!empty(unsafe(r.error)), "error should be non-empty")
+    }
+}
+
+[test]
+def test_temp_directory_result(t : T?) {
+    t |> run("success returns value") @(t : T?) {
+        let r = temp_directory_result()
+        t |> success(r is value, "expected value variant")
+        t |> success(!empty(unsafe(r.value)), "temp directory should be non-empty")
+    }
+}
+
+[test]
+def test_create_temp_file_result(t : T?) {
+    t |> run("success returns value") @(t : T?) {
+        let r = create_temp_file_result("dastest", ".tmp")
+        t |> success(r is value, "expected value variant")
+        let path = unsafe(r.value)
+        t |> success(!empty(path), "path should be non-empty")
+        t |> success(fexist(path), "file should exist")
+        remove(path)
+    }
+}
+
+[test]
+def test_create_temp_directory_result(t : T?) {
+    t |> run("success returns value") @(t : T?) {
+        let r = create_temp_directory_result("dastest")
+        t |> success(r is value, "expected value variant")
+        let path = unsafe(r.value)
+        t |> success(!empty(path), "path should be non-empty")
+        t |> success(fexist(path), "directory should exist")
+        rmdir(path)
+    }
+}
+
+[test]
+def test_relative_result(t : T?) {
+    t |> run("success returns value") @(t : T?) {
+        let r = relative_result("{get_das_root()}/tests/fio/fio_errors.das", "{get_das_root()}/tests")
+        t |> success(r is value, "expected value variant")
+        let v = unsafe(r.value)
+        t |> success(v == "fio/fio_errors.das" || v == "fio\\fio_errors.das", "expected fio/fio_errors.das, got {v}")
+    }
+}
+
+[test]
+def test_remove_result(t : T?) {
+    t |> run("failure returns error") @(t : T?) {
+        let r = remove_result("_no_such_file_to_remove_99999.xyz")
+        t |> success(r is error, "expected error variant")
+        t |> success(!empty(unsafe(r.error)), "error should be non-empty")
+    }
+}
+
+[test]
+def test_mkdir_result(t : T?) {
+    t |> run("failure returns error") @(t : T?) {
+        let r = mkdir_result("_no_such_parent_99999/child/deep")
+        t |> success(r is error, "expected error variant")
+        t |> success(!empty(unsafe(r.error)), "error should be non-empty")
+    }
+}

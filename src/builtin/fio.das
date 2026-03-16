@@ -207,3 +207,162 @@ def disk_space(path : string; var error : string&) : DiskSpaceInfo {
     builtin_disk_space(path, info, error)
     return info
 }
+
+// ---- result variants for error reporting ----
+
+variant fs_result_bool {
+    value : bool;
+    error : string;
+}
+
+variant fs_result_int64 {
+    value : int64;
+    error : string;
+}
+
+variant fs_result_string {
+    value : string;
+    error : string;
+}
+
+// ---- _result wrappers ----
+
+[generic]
+def file_size_result(path : string) : fs_result_int64 {
+    var error : string
+    let sz = file_size(path, error)
+    if (!empty(error)) {
+        return fs_result_int64(error = error)
+    }
+    return fs_result_int64(value = sz)
+}
+
+[generic]
+def equivalent_result(a : string; b : string) : fs_result_bool {
+    var error : string
+    let res = equivalent(a, b, error)
+    if (!empty(error)) {
+        return fs_result_bool(error = error)
+    }
+    return fs_result_bool(value = res)
+}
+
+[generic]
+def is_symlink_result(path : string) : fs_result_bool {
+    var error : string
+    let res = is_symlink(path, error)
+    if (!empty(error)) {
+        return fs_result_bool(error = error)
+    }
+    return fs_result_bool(value = res)
+}
+
+[generic]
+def copy_file_result(src : string; dst : string; overwrite : bool) : fs_result_bool {
+    var error : string
+    let res = copy_file(src, dst, overwrite, error)
+    if (!empty(error)) {
+        return fs_result_bool(error = error)
+    }
+    return fs_result_bool(value = res)
+}
+
+[generic]
+def set_mtime_result(path : string; time : Time) : fs_result_bool {
+    var error : string
+    let res = set_mtime(path, time, error)
+    if (!empty(error)) {
+        return fs_result_bool(error = error)
+    }
+    return fs_result_bool(value = res)
+}
+
+[generic]
+def temp_directory_result() : fs_result_string {
+    var error : string
+    let res = temp_directory(error)
+    if (!empty(error)) {
+        return fs_result_string(error = error)
+    }
+    return fs_result_string(value = res)
+}
+
+[generic]
+def create_temp_file_result(prefix : string; ext : string) : fs_result_string {
+    var error : string
+    let res = create_temp_file(prefix, ext, error)
+    if (!empty(error)) {
+        return fs_result_string(error = error)
+    }
+    return fs_result_string(value = res)
+}
+
+[generic]
+def create_temp_directory_result(prefix : string) : fs_result_string {
+    var error : string
+    let res = create_temp_directory(prefix, error)
+    if (!empty(error)) {
+        return fs_result_string(error = error)
+    }
+    return fs_result_string(value = res)
+}
+
+[generic]
+def relative_result(path : string; base : string) : fs_result_string {
+    var error : string
+    let res = relative(path, base, error)
+    if (!empty(error)) {
+        return fs_result_string(error = error)
+    }
+    return fs_result_string(value = res)
+}
+
+[generic]
+def remove_result(path : string) : fs_result_bool {
+    var error : string
+    let res = remove(path, error)
+    if (!empty(error)) {
+        return fs_result_bool(error = error)
+    }
+    return fs_result_bool(value = res)
+}
+
+[generic]
+def rename_result(old_name : string; new_name : string) : fs_result_bool {
+    var error : string
+    let res = rename(old_name, new_name, error)
+    if (!empty(error)) {
+        return fs_result_bool(error = error)
+    }
+    return fs_result_bool(value = res)
+}
+
+[generic]
+def mkdir_result(path : string) : fs_result_bool {
+    var error : string
+    let res = mkdir(path, error)
+    if (!empty(error)) {
+        return fs_result_bool(error = error)
+    }
+    return fs_result_bool(value = res)
+}
+
+[generic]
+def rmdir_result(path : string) : fs_result_bool {
+    var error : string
+    let res = rmdir(path, error)
+    if (!empty(error)) {
+        return fs_result_bool(error = error)
+    }
+    return fs_result_bool(value = res)
+}
+
+[generic]
+def rmdir_rec_result(path : string) : fs_result_bool {
+    var error : string
+    let res = rmdir_rec(path, error)
+    if (!empty(error)) {
+        return fs_result_bool(error = error)
+    }
+    return fs_result_bool(value = res)
+}
