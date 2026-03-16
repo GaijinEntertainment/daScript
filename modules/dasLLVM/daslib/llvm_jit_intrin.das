@@ -61,6 +61,9 @@ let g_intrin_lookup <- {
             "$::int64" => @@intrinsic_builtin_int,
             "$::uint64" => @@intrinsic_builtin_int,
             "$::bitfield" => @@intrinsic_builtin_int,
+            "$::bitfield8" => @@intrinsic_builtin_int,
+            "$::bitfield16" => @@intrinsic_builtin_int,
+            "$::bitfield64" => @@intrinsic_builtin_int,
     // bits
         "$::clz" => @@intrinsic_bit_nzp_op1,
         "$::ctz" => @@intrinsic_bit_nzp_op1,
@@ -98,6 +101,7 @@ let g_intrin_lookup <- {
     "math::min" => @@intrinsic_math_minmax,
     "math::max" => @@intrinsic_math_minmax,
     "math::clamp" => @@intrinsic_math_clamp,
+    "math::round" => @@intrinsic_math_float_op1,
     "math::floor" => @@intrinsic_math_float_op1,
     "math::ceil" => @@intrinsic_math_float_op1,
     "math::floori" => @@intrinsic_math_float_op1_to_int,
