@@ -2199,6 +2199,9 @@ class public CppAot : AstVisitor {
         if ((!seT.dim |> empty() || seT.isGoodArrayType || seT.isGoodTableType)) {
             let type_str = describeCppType(seT, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform))
             write(*ss, "{type_str}::safe_index(");
+        } elif (isPtr && !seT.isVectorType) {
+            let type_str = describeCppType(expr.subexpr._type, DescribeConfig(skip_ref = true, cross_platform = cross_platform))
+            write(*ss, "das_index<{type_str}>::safe_at(");
         } else {
             let type_str = describeCppType(seT, DescribeConfig(skip_ref = true, cross_platform = cross_platform))
             write(*ss, "das_index<{type_str}>::safe_at(");

@@ -922,6 +922,24 @@ namespace das {
     template <typename TT> using SimNode_PtrAtR2V_Int64 = SimNode_PtrAtR2V<int64_t,TT>;
     template <typename TT> using SimNode_PtrAtR2V_UInt64 = SimNode_PtrAtR2V<uint64_t,TT>;
 
+    // SAFE AT (POINTER) - null check, no bounds check
+    template <typename TT>
+    struct SimNode_PtrSafeAt : SimNode {
+        DAS_PTR_NODE;
+        SimNode_PtrSafeAt ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o )
+            : SimNode(at), value(rv), index(idx), stride(strd), offset(o) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute (Context & context) {
+            DAS_PROFILE_NODE
+            auto pValue = value->evalPtr(context);
+            if ( !pValue ) return nullptr;
+            auto idx = evalNode<TT>::eval(context,index);
+            return pValue + (idx*TT(stride) + TT(offset));
+        }
+        SimNode * value, * index;
+        uint32_t  stride, offset;
+    };
+
     // AT (INDEX)
     template <typename TT>
     struct SimNode_AtVector;

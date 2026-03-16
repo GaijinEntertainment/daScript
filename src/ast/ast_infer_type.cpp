@@ -3034,11 +3034,8 @@ namespace das {
                 // }
                 // expr->type = seT->annotation->makeIndexType(expr->subexpr, expr->index);
                 // expr->type->constant |= seT->constant;
-            } else if (seT->isPointer()) {
-                error("safe-index of pointer is not supported", "", "",
-                      expr->index->at, CompilationError::cant_index);
-                return Visitor::visit(expr);
-            } else {
+            } else if (seT->isVectorType() || seT->isGoodArrayType() || seT->dim.size()) {
+                // bounded types — int/uint only
                 if (!ixT->isIndex()) {
                     expr->type.reset();
                     error("index type must be 'int' or 'uint', not '" + describeType(ixT) + "'", "", "",
@@ -3070,23 +3067,29 @@ namespace das {
                         }
                         expr->type->firstType->constant |= seT->constant;
                     }
-                } else if (seT->isVectorType()) {
-                    expr->type = make_smart<TypeDecl>(Type::tPointer);
-                    expr->type->firstType = make_smart<TypeDecl>(seT->getVectorBaseType());
-                    expr->type->firstType->constant = seT->constant;
-                } else {
-                    error("type can't be safe-indexed: '" + describeType(seT) + "'", "", "",
-                          expr->subexpr->at, CompilationError::cant_index);
+                }
+            } else {
+                // pointer safe-at: a?[index] where a : T*
+                if (!ixT->isIndexExt()) {
+                    expr->type.reset();
+                    error("index type must be 'int', 'int64', 'uint', or 'uint64' and not '" + describeType(ixT) + "'", "", "",
+                          expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
                 }
+                if (!safeExpression(expr)) {
+                    error("safe-index of pointer must be inside the 'unsafe' block", "", "",
+                          expr->at, CompilationError::unsafe);
+                }
+                expr->type = make_smart<TypeDecl>(*expr->subexpr->type);
+                expr->type->constant |= seT->constant;
             }
         } else if (expr->subexpr->type->isGoodArrayType()) {
             if (!safeExpression(expr)) {
                 error("safe-index of array<> must be inside the 'unsafe' block", "", "",
                       expr->at, CompilationError::unsafe);
             }
-            if (!ixT->isIndexExt()) {
-                error("index type must be 'int', 'int64', 'uint', or 'uint64' and not '" + describeType(ixT) + "'", "", "",
+            if (!ixT->isIndex()) {
+                error("index type must be 'int' or 'uint', not '" + describeType(ixT) + "'", "", "",
                       expr->index->at, CompilationError::invalid_index_type);
                 return Visitor::visit(expr);
             }
@@ -3118,8 +3121,8 @@ namespace das {
                 error("safe-index of fixed_array<> must be inside the 'unsafe' block", "", "",
                       expr->at, CompilationError::unsafe);
             }
-            if (!ixT->isIndexExt()) {
-                error("index type must be 'int', 'int64', 'uint', or 'uint64' and not '" + describeType(ixT) + "'", "", "",
+            if (!ixT->isIndex()) {
+                error("index type must be 'int' or 'uint', not '" + describeType(ixT) + "'", "", "",
                       expr->index->at, CompilationError::invalid_index_type);
                 return Visitor::visit(expr);
             }
@@ -3136,8 +3139,8 @@ namespace das {
             }
             expr->type->firstType->constant |= seT->constant;
         } else if (expr->subexpr->type->isVectorType() && expr->subexpr->type->isRef()) {
-            if (!ixT->isIndexExt()) {
-                error("index type must be 'int', 'int64', 'uint', or 'uint64' and not '" + describeType(ixT) + "'", "", "",
+            if (!ixT->isIndex()) {
+                error("index type must be 'int' or 'uint', not '" + describeType(ixT) + "'", "", "",
                       expr->index->at, CompilationError::invalid_index_type);
                 return Visitor::visit(expr);
             }
