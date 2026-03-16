@@ -4386,6 +4386,54 @@ class public LlvmJitVisitor : AstVisitor {
         return delete_handle
     }
 
+    def get_clone_handle_function(t : TypeDeclPtr) : LLVMOpaqueValue? {
+        let func_name = uid.get_clone_type(t)
+        var clone_handle = LLVMGetNamedGlobal(g_mod, func_name.glob())
+        let fn_type = LLVMFunctionType(types.t_void,
+                fixed_array<LLVMTypeRef>(types.LLVMVoidPtrType(), types.LLVMVoidPtrType()))
+        if (clone_handle == null) {
+            var clone_handle_ptr = get_jit_clone(t.annotation)
+            if (clone_handle_ptr == null) {
+                failed_T(t, "missing clone`handle function pointer for {describe(t)}")
+                return null
+            }
+            // void clone_handle ( void * dst, void * src )
+            clone_handle = save_address_global(func_name, clone_handle_ptr, LLVMPointerType(fn_type, 0u))
+            g_fn_types[func_name.publ()] = fn_type
+        } else {
+            clone_handle = get_address_global(func_name, LLVMPointerType(fn_type, 0u))
+        }
+        return clone_handle
+    }
+
+    def override visitExprClone(expr : smart_ptr<ExprClone>) : ExpressionPtr {
+        assume leftT = expr.left._type
+        if (leftT.isHandle) {
+            var tdst = getE(expr.left)
+            var tsrc = getE(expr.right)
+            if (!expr.right._type.isRef && expr.right._type.annotation != null && !expr.right._type.annotation.isRefType) {
+                // r-value source — need to take address via alloca
+                var tmp = LLVMBuildAlloca(g_builder, type_to_llvm_type(expr.right._type), "clone_src_tmp")
+                LLVMBuildStore(g_builder, tsrc, tmp)
+                tsrc = tmp
+            }
+            var clone_fn = get_clone_handle_function(leftT)
+            if (clone_fn != null) {
+                let fn_type = g_fn_types[uid.get_clone_type(leftT).publ()]
+                var params <- fixed_array(
+                    LLVMBuildPointerCast(g_builder, tdst, types.LLVMVoidPtrType(), ""),
+                    LLVMBuildPointerCast(g_builder, tsrc, types.LLVMVoidPtrType(), "")
+                )
+                LLVMBuildCall2(g_builder, fn_type, clone_fn, params, "")
+            }
+        } elif (leftT.canCopy) {
+            build_copy(getE(expr.left), expr.right)
+        } else {
+            failed_E(expr, "clone of {describe(leftT)} is not supported yet")
+        }
+        return expr
+    }
+
     def override visitExprDelete(expr : smart_ptr<ExprDelete>) : ExpressionPtr {
         assume subexpr = expr.subexpr
         assume subT = expr.subexpr._type
@@ -5506,7 +5554,7 @@ class public LlvmJitVisitor : AstVisitor {
             var typ = g_fn_types[FN_JIT_AST_TYPEDECL]
             var cll = LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_AST_TYPEDECL), params, "")
             setE(expr, cll)
-        } elif (expr.trait == "rtti_classinfo") {
+        } elif (expr.trait == "rtti_classinfo" || expr.trait == "rtti_typeinfo") {
             var tptr = create_type_info_global(make_type_info_structure(*jit_context, expr.typeexpr))
             setE(expr, tptr)
         } else {
@@ -6086,6 +6134,18 @@ class public ResolveExternVisitor : AstVisitor {
         }
     }
 
+    def override preVisitExprClone(expr : smart_ptr<ExprClone>) : void {
+        assume leftT = expr.left._type
+        if (leftT.isHandle) {
+            var clone_handle_ptr = get_jit_clone(leftT.annotation)
+            if (clone_handle_ptr == null) {
+                failed_T(leftT, "missing clone`handle function pointer for {describe(leftT)}")
+                return
+            }
+            dll.set_glob_address(uid.get_clone_type(leftT), clone_handle_ptr)
+        }
+    }
+
     def override preVisitExprAddr(expr : smart_ptr<ExprAddr>) {
         var MNH_ADDR = get_function_addr(jit_context, expr.func)
         dll.set_glob_address(uid.get_addr(expr), MNH_ADDR)
@@ -6380,9 +6440,10 @@ class public DisableJitVisitor : AstVisitor {
         disable = false
     }
     def override preVisitExprTypeInfo(expr : smart_ptr<ExprTypeInfo>) : void {
-        if (expr.trait == "ast_typedecl" || expr.trait == "rtti_classinfo") {
+        if (expr.trait == "ast_typedecl" || expr.trait == "rtti_classinfo" || expr.trait == "rtti_typeinfo") {
             pass
         } else {
+            to_log(LOG_WARNING, "LLVM JIT: unsupported typeinfo trait `{expr.trait}` at {expr.at}, falling back to interpreter. Please report at https://github.com/GaijinEntertainment/daScript/issues\n")
             disable = true
         }
     }
@@ -6402,7 +6463,16 @@ class public DisableJitVisitor : AstVisitor {
     }
 
     def override preVisitExprClone(expr : smart_ptr<ExprClone>) : void {
-        disable = true
+        assume leftT = expr.left._type
+        if (leftT.isHandle) {
+            if (get_jit_clone(leftT.annotation) == null) {
+                to_log(LOG_WARNING, "LLVM JIT: clone of handled type `{describe(leftT)}` is not supported at {expr.at}, falling back to interpreter. Please report at https://github.com/GaijinEntertainment/daScript/issues\n")
+                disable = true
+            }
+        } elif (!leftT.canCopy) {
+            to_log(LOG_WARNING, "LLVM JIT: clone of `{describe(leftT)}` is not supported at {expr.at}, falling back to interpreter\n")
+            disable = true
+        }
     }
 
     def override preVisitExprAt(expr : smart_ptr<ExprAt>) : void {
@@ -6428,7 +6498,7 @@ class public DisableJitVisitor : AstVisitor {
     def disable_builtin_call(expr : smart_ptr<ExprCallFunc>) {
         if (expr.func.flags.builtIn && !expr.func.flags.interopFn && get_builtin_function_address(expr.func) == null) {
             if (!has_intrinsic(expr)) {
-                to_log(LOG_INFO, "LLVM JIT: disable fn {expr.func.name}\n");
+                to_log(LOG_WARNING, "LLVM JIT: unsupported builtin `{expr.func._module.name}::{expr.func.name}` at {expr.at}, falling back to interpreter.\n")
                 disable = true
             }
         }

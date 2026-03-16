@@ -66,6 +66,9 @@ class UidGen : AstVisitor {
         add(get_ptr(expr.subexpr._type.firstType))
     }
 
+    def override preVisitExprClone(expr : smart_ptr<ExprClone>) {
+        add(get_ptr(expr.left._type))
+    }
 
     def override preVisitExprTypeInfo(expr : smart_ptr<ExprTypeInfo>) {
         add(get_ptr(expr))
@@ -139,6 +142,10 @@ class public UidNodes {
 
     def get_delete_type(t : TypeDeclPtr) : DllName {
         return get_base(get_ptr(t), "delete`handle`{get_mangled_name(t)}")
+    }
+
+    def get_clone_type(t : TypeDeclPtr) : DllName {
+        return get_base(get_ptr(t), "clone`handle`{get_mangled_name(t)}")
     }
 
     def get_tinfo(expr : smart_ptr<ExprTypeInfo>) {

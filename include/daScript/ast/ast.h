@@ -579,9 +579,10 @@ namespace das
         virtual bool isYetAnotherVectorTemplate() const { return false; }   // has [], there is length(x), data is linear in memory
         // factory
         virtual void * factory () const { return nullptr; }
-        // new and delete, jit versions
+        // new, delete, and clone, jit versions
         virtual void * jitGetNew () const { return nullptr; }
         virtual void * jitGetDelete () const { return nullptr; }
+        virtual void * jitGetClone () const { return nullptr; }
         uint64_t ownSemanticHash = 0;
     };
 
