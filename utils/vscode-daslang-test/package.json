@@ -31,6 +31,16 @@
           "type": "number",
           "default": 120,
           "description": "Test execution timeout in seconds"
+        },
+        "dascript.isolatedMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run tests in isolated processes (catches crashes)"
+        },
+        "dascript.jit": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable JIT compilation for tests"
         }
       }
     }
