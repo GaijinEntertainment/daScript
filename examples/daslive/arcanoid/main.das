@@ -1,5 +1,5 @@
 options gen2
-// arcanoid
+// arcanoid live
 require glfw/glfw_boost
 require live/glfw_live
 require opengl/opengl_boost
@@ -13,6 +13,7 @@ require live/opengl_live
 require live/live_commands
 require live/live_api
 require live/live_watch_boost
+require live/live_vars
 require daslib/json
 require daslib/json_boost
 require daslib/math_boost
@@ -307,13 +308,13 @@ enum GameState {
     win_state
 }
 
-var score = 0
-var lives = START_LIVES
-var game_state = GameState.menu
+var @live score = 0
+var @live lives = START_LIVES
+var @live game_state = GameState.menu
 var space_was_pressed = false
 var esc_was_pressed = false
-var god_mode = false
-var game_speed = 1.0
+var @live god_mode = false
+var @live game_speed = 1.0
 
 
 // --- Bonuses ---
@@ -353,14 +354,14 @@ var snd_bonus_pickup : array<float>
 var snd_bonus_bad : array<float>
 
 // Active powerup timers
-var wide_paddle_timer = 0.0
-var narrow_paddle_timer = 0.0
-var fireball_timer = 0.0
-var speed_mod_timer = 0.0
-var speed_mod_factor = 1.0
-var sticky_active = false
-var sticky_ball_on_paddle = false
-var display_paddle_w = PADDLE_W
+var @live wide_paddle_timer = 0.0
+var @live narrow_paddle_timer = 0.0
+var @live fireball_timer = 0.0
+var @live speed_mod_timer = 0.0
+var @live speed_mod_factor = 1.0
+var @live sticky_active = false
+var @live sticky_ball_on_paddle = false
+var @live display_paddle_w = PADDLE_W
 var rng_seed = 42u
 
 def game_random() : float {
@@ -468,7 +469,7 @@ def reset_powerups() {
 
 // --- Paddle state ---
 
-var paddle_x = 0.0
+var @live paddle_x = 0.0
 
 def update_paddle(dt : float) {
     if (glfwGetKey(live_window, int(GLFW_KEY_LEFT)) == int(GLFW_PRESS)) {
@@ -999,80 +1000,38 @@ def draw_hud() {
 }
 
 // --- State preservation across reloads ---
+// Game globals tagged with @live are auto-serialized by live_vars macro.
+// Audio handles need manual preservation (pointer reinterpret).
 
 [before_reload]
-def save_game_state() {
-    var ser = new MemSerializer()
-    var arch = Archive(reading = false, stream = ser)
-    arch |> serialize(paddle_x)
-    arch |> serialize(score)
-    arch |> serialize(lives)
-    var gs = int(game_state)
-    arch |> serialize(gs)
-    arch |> serialize(wide_paddle_timer)
-    arch |> serialize(narrow_paddle_timer)
-    arch |> serialize(fireball_timer)
-    arch |> serialize(speed_mod_timer)
-    arch |> serialize(speed_mod_factor)
-    arch |> serialize(sticky_active)
-    arch |> serialize(sticky_ball_on_paddle)
-    arch |> serialize(display_paddle_w)
-    arch |> serialize(god_mode)
-    arch |> serialize(game_speed)
-    var data <- ser->extractData()
-    live_store_bytes("__arcanoid_state", data)
-    unsafe { delete ser; }
-    // Preserve audio handles
+def save_audio_handles() {
     if (audio_initialized) {
-        var aser = new MemSerializer()
-        var aarch = Archive(reading = false, stream = aser)
+        var ser = new MemSerializer()
+        var arch = Archive(reading = false, stream = ser)
         var cmd_ch = unsafe(reinterpret<uint64>(get_audio_command_channel()))
         var sid_ptr = unsafe(reinterpret<uint64>(get_sound_sid()))
-        aarch |> serialize(cmd_ch)
-        aarch |> serialize(sid_ptr)
-        var adata <- aser->extractData()
-        live_store_bytes("__arcanoid_audio", adata)
-        unsafe { delete aser; }
+        arch |> serialize(cmd_ch)
+        arch |> serialize(sid_ptr)
+        var data <- ser->extractData()
+        live_store_bytes("__arcanoid_audio", data)
+        unsafe { delete ser; }
     }
 }
 
 [after_reload]
-def restore_game_state() {
+def restore_audio_handles() {
     var data : array<uint8>
-    if (live_load_bytes("__arcanoid_state", data) && length(data) > 0) {
+    if (live_load_bytes("__arcanoid_audio", data) && length(data) > 0) {
         var ser = new MemSerializer(data)
         var arch = Archive(reading = true, stream = ser)
-        arch |> serialize(paddle_x)
-        arch |> serialize(score)
-        arch |> serialize(lives)
-        var gs : int
-        arch |> serialize(gs)
-        game_state = unsafe(reinterpret<GameState>(gs))
-        arch |> serialize(wide_paddle_timer)
-        arch |> serialize(narrow_paddle_timer)
-        arch |> serialize(fireball_timer)
-        arch |> serialize(speed_mod_timer)
-        arch |> serialize(speed_mod_factor)
-        arch |> serialize(sticky_active)
-        arch |> serialize(sticky_ball_on_paddle)
-        arch |> serialize(display_paddle_w)
-        arch |> serialize(god_mode)
-        arch |> serialize(game_speed)
-        unsafe { delete ser; }
-    }
-    // Restore audio handles
-    var adata : array<uint8>
-    if (live_load_bytes("__arcanoid_audio", adata) && length(adata) > 0) {
-        var aser = new MemSerializer(adata)
-        var aarch = Archive(reading = true, stream = aser)
         var cmd_ch : uint64
         var sid_ptr : uint64
-        aarch |> serialize(cmd_ch)
-        aarch |> serialize(sid_ptr)
+        arch |> serialize(cmd_ch)
+        arch |> serialize(sid_ptr)
         unsafe {
             set_audio_thread_command_channel(reinterpret<void?>(cmd_ch))
             set_sound_sid(reinterpret<void?>(sid_ptr))
-            delete aser
+            delete ser
         }
         audio_initialized = true
         init_audio_samples()
