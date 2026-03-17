@@ -17,11 +17,12 @@ require daslib/json_boost
 require daslib/math_boost
 require daslib/archive
 require opengl/opengl_ttf
+require audio/audio_boost
 require live_host
 
 // --- Constants ---
 
-let LIGHT_DIRECTION = normalize(float3(-1.0, -3.0, 2.0))
+let LIGHT_DIRECTION = normalize(float3(-2.0, -2.0, 1.5))
 
 let FIELD_W = 10.0
 let FIELD_H = 14.0
@@ -30,7 +31,7 @@ let WALL_HEIGHT = 0.6
 let GROUND_Y = -0.1
 
 let WALL_COLOR = float3(0.4, 0.4, 0.5)
-let GROUND_COLOR = float3(0.15, 0.12, 0.2)
+let GROUND_COLOR = float3(0.3, 0.25, 0.38)
 let PADDLE_COLOR = float3(0.2, 0.6, 1.0)
 let PADDLE_W = 2.0
 let PADDLE_H = 0.3
@@ -62,6 +63,98 @@ let BRICK_COLORS = fixed_array(
 let BRICK_POINTS = fixed_array(50, 40, 30, 20, 10)
 let START_LIVES = 3
 
+let BONUS_DROP_CHANCE = 0.25
+let BONUS_FALL_SPEED = 3.0
+let BONUS_SIZE = 0.4
+let POWERUP_DURATION = 10.0  // seconds for timed effects
+
+// --- Audio ---
+
+let AUDIO_RATE = 48000
+let AUDIO_CHANNELS = 1
+
+def gen_sine_sweep(freq_start, freq_end : float; duration : float; volume : float = 0.3) : array<float> {
+    let num_samples = int(float(AUDIO_RATE) * duration)
+    var samples : array<float>
+    samples |> resize(num_samples)
+    for (i in range(num_samples)) {
+        let t = float(i) / float(AUDIO_RATE)
+        let frac = t / duration
+        let freq = freq_start + (freq_end - freq_start) * frac
+        let envelope = 1.0 - frac  // linear fade out
+        samples[i] = sin(2.0 * PI * freq * t) * envelope * volume
+    }
+    return <- samples
+}
+
+def gen_noise_burst(duration : float; volume : float = 0.2) : array<float> {
+    let num_samples = int(float(AUDIO_RATE) * duration)
+    var samples : array<float>
+    samples |> resize(num_samples)
+    var seed = 12345u
+    for (i in range(num_samples)) {
+        let frac = float(i) / float(num_samples)
+        let envelope = 1.0 - frac
+        // Simple LCG random
+        seed = seed * 1103515245u + 12345u
+        let noise = float(int(seed >> 16u) % 1000) / 500.0 - 1.0
+        samples[i] = noise * envelope * volume
+    }
+    return <- samples
+}
+
+def mix_into(var dst : array<float>; src : array<float>) {
+    let n = min(length(dst), length(src))
+    for (i in range(n)) {
+        dst[i] += src[i]
+    }
+}
+
+var snd_paddle_hit : array<float>
+var snd_brick_break : array<float>
+var snd_wall_bounce : array<float>
+var snd_ball_miss : array<float>
+var snd_win : array<float>
+var audio_initialized = false
+
+def init_audio_samples() {
+    // Paddle hit: chirp 440→880Hz, 50ms
+    snd_paddle_hit <- gen_sine_sweep(440.0, 880.0, 0.05, 0.3)
+    // Brick break: noise + sine
+    snd_brick_break <- gen_noise_burst(0.08, 0.15)
+    var brick_tone <- gen_sine_sweep(600.0, 200.0, 0.08, 0.2)
+    mix_into(snd_brick_break, brick_tone)
+    // Wall bounce: short high tick
+    snd_wall_bounce <- gen_sine_sweep(1200.0, 800.0, 0.02, 0.15)
+    // Ball miss: descending tone
+    snd_ball_miss <- gen_sine_sweep(440.0, 110.0, 0.3, 0.25)
+    // Bonus pickup: bright rising chirp
+    snd_bonus_pickup <- gen_sine_sweep(600.0, 1200.0, 0.08, 0.25)
+    // Bonus bad: descending buzz
+    snd_bonus_bad <- gen_sine_sweep(400.0, 200.0, 0.1, 0.2)
+    // Win: ascending arpeggio
+    let notes = fixed_array(523.0, 659.0, 784.0, 1047.0)  // C5 E5 G5 C6
+    let note_dur = 0.12
+    let total_dur = note_dur * float(length(notes))
+    let total_samples = int(float(AUDIO_RATE) * total_dur)
+    snd_win |> resize(total_samples)
+    for (ni in range(length(notes))) {
+        var note <- gen_sine_sweep(notes[ni], notes[ni], note_dur, 0.25)
+        let offset = ni * int(float(AUDIO_RATE) * note_dur)
+        for (i in range(length(note))) {
+            if (offset + i < total_samples) {
+                snd_win[offset + i] += note[i]
+            }
+        }
+    }
+}
+
+def play_sfx(samples : array<float>) {
+    if (!audio_initialized) { return; }
+    var copy <- clone(samples)
+    play_sound_from_pcm(AUDIO_RATE, AUDIO_CHANNELS, copy)
+}
+
 // --- Shaders ---
 
 var @in @location = 0 v_position : float3
@@ -91,9 +184,17 @@ def fs_arcanoid {
     f_FragColor.w = f_Color.w
 }
 
+let SHADOW_COLOR = float3(0.05, 0.03, 0.08)
+
+[fragment_program]
+def fs_shadow {
+    f_FragColor = float4(SHADOW_COLOR, 0.5)
+}
+
 // --- GL objects ---
 
 var program : uint
+var shadow_program : uint
 var cube : OpenGLGeometryFragment
 var ground_plane : OpenGLGeometryFragment
 var sphere : OpenGLGeometryFragment
@@ -101,6 +202,7 @@ var hud_font : Font?
 
 def create_gl_objects() {
     program = cache_shader_program(vs_arcanoid`shader_text, fs_arcanoid`shader_text)
+    shadow_program = cache_shader_program(vs_arcanoid`shader_text, fs_shadow`shader_text)
     cube <- create_geometry_fragment <| gen_cube()
     ground_plane <- create_geometry_fragment <| gen_plane(GenDirection.xz)
     sphere <- create_geometry_fragment <| gen_sphere(16, 8, false)
@@ -116,22 +218,33 @@ def delete_gl_objects() {
 
 var display_w = 0
 var display_h = 0
+var active_program : uint
 
-def draw_box(pos : float3; dim : float3; color : float3) {
+def draw_box(pos : float3; dim : float3; color : float3; alpha : float = 1.0) {
     v_model = compose(pos, float4(0), dim * 0.5)
-    f_Color = float4(color, 1.0)
-    vs_arcanoid_bind_uniform(program)
-    fs_arcanoid_bind_uniform(program)
+    f_Color = float4(color, alpha)
+    vs_arcanoid_bind_uniform(active_program)
+    if (active_program == shadow_program) {
+        fs_shadow_bind_uniform(active_program)
+    } else {
+        fs_arcanoid_bind_uniform(active_program)
+    }
     cube |> draw_geometry_fragment()
 }
 
-def draw_sphere(pos : float3; radius : float; color : float3) {
+def draw_sphere(pos : float3; radius : float; color : float3; alpha : float = 1.0) {
     v_model = compose(pos, float4(0), float3(radius))
-    f_Color = float4(color, 1.0)
-    vs_arcanoid_bind_uniform(program)
-    fs_arcanoid_bind_uniform(program)
+    f_Color = float4(color, alpha)
+    vs_arcanoid_bind_uniform(active_program)
+    if (active_program == shadow_program) {
+        fs_shadow_bind_uniform(active_program)
+    } else {
+        fs_arcanoid_bind_uniform(active_program)
+    }
     sphere |> draw_geometry_fragment()
 }
+
+// --- Shadows (planar projection — same geometry re-drawn) ---
 
 def draw_ground() {
     glDisable(GL_CULL_FACE)
@@ -175,6 +288,147 @@ var game_over = false
 var game_won = false
 var space_was_pressed = false
 
+// --- Bonuses ---
+
+enum BonusType {
+    triple_ball
+    wide_paddle
+    narrow_paddle
+    sticky_paddle
+    fireball
+    extra_life
+    speed_up
+    speed_down
+}
+
+let NUM_BONUS_TYPES = 8
+
+let BONUS_COLORS = fixed_array(
+    float3(1.0, 1.0, 1.0),   // triple_ball — white
+    float3(0.2, 0.8, 1.0),   // wide_paddle — cyan
+    float3(1.0, 0.3, 0.3),   // narrow_paddle — red
+    float3(0.8, 0.8, 0.2),   // sticky_paddle — yellow
+    float3(1.0, 0.5, 0.0),   // fireball — orange
+    float3(0.3, 1.0, 0.3),   // extra_life — green
+    float3(1.0, 0.2, 0.8),   // speed_up — pink
+    float3(0.5, 0.3, 1.0)    // speed_down — purple
+)
+
+[decs_template]
+struct Bonus {
+    pos       : float3
+    bonus_type : int  // BonusType as int (enums in DECS templates need int)
+    color     : float3
+}
+
+var snd_bonus_pickup : array<float>
+var snd_bonus_bad : array<float>
+
+// Active powerup timers
+var wide_paddle_timer = 0.0
+var narrow_paddle_timer = 0.0
+var fireball_timer = 0.0
+var speed_mod_timer = 0.0
+var speed_mod_factor = 1.0
+var sticky_active = false
+var sticky_ball_on_paddle = false
+var rng_seed = 42u
+
+def game_random() : float {
+    rng_seed = rng_seed * 1103515245u + 12345u
+    return float((rng_seed >> 16u) & 0x7FFFu) / 32767.0
+}
+
+def current_paddle_w() : float {
+    if (wide_paddle_timer > 0.0) { return PADDLE_W * 1.6; }
+    if (narrow_paddle_timer > 0.0) { return PADDLE_W * 0.6; }
+    return PADDLE_W
+}
+
+def current_ball_speed() : float {
+    if (speed_mod_timer > 0.0) { return BALL_SPEED * speed_mod_factor; }
+    return BALL_SPEED
+}
+
+def spawn_bonus(pos : float3) {
+    if (game_random() > BONUS_DROP_CHANCE) { return; }
+    let btype = int(game_random() * float(NUM_BONUS_TYPES)) % NUM_BONUS_TYPES
+    create_entity <| @(eid, cmp) {
+        apply_decs_template(cmp, Bonus(
+            pos = float3(pos.x, pos.y, pos.z),
+            bonus_type = btype,
+            color = BONUS_COLORS[btype]
+        ))
+    }
+}
+
+def activate_bonus(btype : int) {
+    if (btype == int(BonusType.triple_ball)) {
+        // Spawn 2 extra balls from existing ball positions
+        var positions : array<float3>
+        var velocities : array<float3>
+        query <| $(b : Ball) {
+            positions |> push(b.pos)
+            velocities |> push(b.vel)
+        }
+        for (i in range(length(positions))) {
+            let p = positions[i]
+            let speed = length(velocities[i])
+            let vel1 = normalize(float3(velocities[i].x + sin(0.5) * speed * 0.3, 0.0, velocities[i].z)) * speed
+            let vel2 = normalize(float3(velocities[i].x + sin(-0.5) * speed * 0.3, 0.0, velocities[i].z)) * speed
+            create_entity <| @(eid, cmp) {
+                apply_decs_template(cmp, Ball(pos = p, vel = vel1))
+            }
+            create_entity <| @(eid, cmp) {
+                apply_decs_template(cmp, Ball(pos = p, vel = vel2))
+            }
+        }
+        play_sfx(snd_bonus_pickup)
+    } elif (btype == int(BonusType.wide_paddle)) {
+        wide_paddle_timer = POWERUP_DURATION
+        narrow_paddle_timer = 0.0
+        play_sfx(snd_bonus_pickup)
+    } elif (btype == int(BonusType.narrow_paddle)) {
+        narrow_paddle_timer = POWERUP_DURATION
+        wide_paddle_timer = 0.0
+        play_sfx(snd_bonus_bad)
+    } elif (btype == int(BonusType.sticky_paddle)) {
+        sticky_active = true
+        play_sfx(snd_bonus_pickup)
+    } elif (btype == int(BonusType.fireball)) {
+        fireball_timer = POWERUP_DURATION
+        play_sfx(snd_bonus_pickup)
+    } elif (btype == int(BonusType.extra_life)) {
+        lives++
+        play_sfx(snd_bonus_pickup)
+    } elif (btype == int(BonusType.speed_up)) {
+        speed_mod_timer = POWERUP_DURATION
+        speed_mod_factor = 1.5
+        play_sfx(snd_bonus_bad)
+    } elif (btype == int(BonusType.speed_down)) {
+        speed_mod_timer = POWERUP_DURATION
+        speed_mod_factor = 0.6
+        play_sfx(snd_bonus_pickup)
+    }
+}
+
+def update_powerup_timers(dt : float) {
+    if (wide_paddle_timer > 0.0) { wide_paddle_timer -= dt; }
+    if (narrow_paddle_timer > 0.0) { narrow_paddle_timer -= dt; }
+    if (fireball_timer > 0.0) { fireball_timer -= dt; }
+    if (speed_mod_timer > 0.0) { speed_mod_timer -= dt; }
+}
+
+def reset_powerups() {
+    wide_paddle_timer = 0.0
+    narrow_paddle_timer = 0.0
+    fireball_timer = 0.0
+    speed_mod_timer = 0.0
+    speed_mod_factor = 1.0
+    sticky_active = false
+    sticky_ball_on_paddle = false
+}
+
 // --- Paddle state ---
 
 var paddle_x = 0.0
@@ -186,15 +440,21 @@ def update_paddle(dt : float) {
     if (glfwGetKey(live_window, int(GLFW_KEY_RIGHT)) == int(GLFW_PRESS)) {
         paddle_x -= PADDLE_SPEED * dt
     }
-    let limit = FIELD_W * 0.5 - PADDLE_W * 0.5
+    let pw = current_paddle_w()
+    let limit = FIELD_W * 0.5 - pw * 0.5
     paddle_x = clamp(paddle_x, -limit, limit)
 }
 
 def draw_paddle() {
+    let pw = current_paddle_w()
+    var color = PADDLE_COLOR
+    if (wide_paddle_timer > 0.0) { color = float3(0.2, 1.0, 1.0); }
+    if (narrow_paddle_timer > 0.0) { color = float3(1.0, 0.3, 0.3); }
+    if (sticky_active) { color = float3(0.8, 0.8, 0.2); }
     draw_box(
         float3(paddle_x, PADDLE_H * 0.5, PADDLE_Z),
-        float3(PADDLE_W, PADDLE_H, PADDLE_D),
-        PADDLE_COLOR
+        float3(pw, PADDLE_H, PADDLE_D),
+        color
     )
 }
 
@@ -227,38 +487,61 @@ def has_balls() : bool {
 
 [decs(stage=update)]
 def update_balls(eid : EntityId; var b : Ball) {
+    // Sticky: ball sits on paddle
+    if (sticky_ball_on_paddle) {
+        b.pos.x = paddle_x
+        b.pos.z = PADDLE_Z + PADDLE_D * 0.5 + BALL_RADIUS
+        b.vel = float3(0.0)
+        return
+    }
+    // Normalize speed to current ball speed
+    let spd = current_ball_speed()
+    let cur_spd = length(b.vel)
+    if (cur_spd > 0.0 && abs(cur_spd - spd) > 0.1) {
+        b.vel = normalize(b.vel) * spd
+    }
     b.pos += b.vel * tick_dt
     let hw = FIELD_W * 0.5 - BALL_RADIUS
-    // Left wall (screen-left = +X due to camera)
+    // Left wall
     if (b.pos.x > hw) {
         b.pos.x = hw
         b.vel.x = -b.vel.x
+        play_sfx(snd_wall_bounce)
     }
     // Right wall
     if (b.pos.x < -hw) {
         b.pos.x = -hw
         b.vel.x = -b.vel.x
+        play_sfx(snd_wall_bounce)
     }
     // Top wall
     if (b.pos.z > FIELD_H - BALL_RADIUS) {
         b.pos.z = FIELD_H - BALL_RADIUS
         b.vel.z = -b.vel.z
+        play_sfx(snd_wall_bounce)
     }
     // Paddle collision
+    let pw = current_paddle_w()
     let pz_min = PADDLE_Z - PADDLE_D * 0.5 - BALL_RADIUS
     let pz_max = PADDLE_Z + PADDLE_D * 0.5 + BALL_RADIUS
-    let px_min = paddle_x - PADDLE_W * 0.5 - BALL_RADIUS
-    let px_max = paddle_x + PADDLE_W * 0.5 + BALL_RADIUS
+    let px_min = paddle_x - pw * 0.5 - BALL_RADIUS
+    let px_max = paddle_x + pw * 0.5 + BALL_RADIUS
     if (b.vel.z < 0.0 && b.pos.z >= pz_min && b.pos.z <= pz_max && b.pos.x >= px_min && b.pos.x <= px_max) {
         b.pos.z = pz_max
-        let offset = (b.pos.x - paddle_x) / (PADDLE_W * 0.5)
+        let offset = (b.pos.x - paddle_x) / (pw * 0.5)
         let angle = offset * 0.7
-        b.vel = normalize(float3(sin(angle), 0.0, cos(angle))) * length(b.vel)
+        b.vel = normalize(float3(sin(angle), 0.0, cos(angle))) * spd
+        play_sfx(snd_paddle_hit)
+        if (sticky_active) {
+            sticky_ball_on_paddle = true
+            sticky_active = false  // one use
+        }
     }
     // Ball fell below paddle — lose a life
     if (b.pos.z < -1.0) {
         delete_entity(eid)
         lives--
+        play_sfx(snd_ball_miss)
         if (lives <= 0) {
             game_over = true
         }
@@ -267,7 +550,9 @@ def update_balls(eid : EntityId; var b : Ball) {
 
 [decs(stage=draw)]
 def draw_balls(b : Ball) {
-    draw_sphere(b.pos, BALL_RADIUS, BALL_COLOR)
+    var color = BALL_COLOR
+    if (fireball_timer > 0.0) { color = float3(1.0, 0.4, 0.1); }
+    draw_sphere(b.pos, BALL_RADIUS, color)
 }
 
 // --- Bricks (DECS) ---
@@ -311,6 +596,180 @@ def draw_bricks(br : Brick) {
     draw_box(br.pos, float3(BRICK_W, BRICK_H, BRICK_D), br.color)
 }
 
+// --- Bonus entities ---
+
+[decs(stage=update)]
+def update_bonuses(eid : EntityId; var bn : Bonus) {
+    bn.pos.z -= BONUS_FALL_SPEED * tick_dt
+    // Rotate Y for visual flair
+    bn.pos.y = BONUS_SIZE * 0.5 + sin(float(get_uptime()) * 4.0) * 0.1
+    // Check paddle collection
+    let pw = current_paddle_w()
+    let px_min = paddle_x - pw * 0.5 - BONUS_SIZE * 0.5
+    let px_max = paddle_x + pw * 0.5 + BONUS_SIZE * 0.5
+    let pz_min = PADDLE_Z - PADDLE_D * 0.5 - BONUS_SIZE * 0.5
+    let pz_max = PADDLE_Z + PADDLE_D * 0.5 + BONUS_SIZE * 0.5
+    if (bn.pos.z >= pz_min && bn.pos.z <= pz_max && bn.pos.x >= px_min && bn.pos.x <= px_max) {
+        activate_bonus(bn.bonus_type)
+        delete_entity(eid)
+        return
+    }
+    // Fell off screen
+    if (bn.pos.z < -1.0) {
+        delete_entity(eid)
+    }
+}
+
+[decs(stage=draw)]
+def draw_bonuses(bn : Bonus) {
+    // Draw as small rotating cube
+    let angle = float(get_uptime()) * 3.0
+    v_model = compose(bn.pos, float4(0.0, sin(angle * 0.5), 0.0, cos(angle * 0.5)), float3(BONUS_SIZE * 0.5))
+    f_Color = float4(bn.color, 1.0)
+    vs_arcanoid_bind_uniform(program)
+    fs_arcanoid_bind_uniform(program)
+    cube |> draw_geometry_fragment()
+}
+
+// --- Particles ---
+
+[decs_template]
+struct Particle {
+    pos      : float3
+    vel      : float3
+    color    : float3
+    lifetime : float
+    max_life : float
+    radius   : float
+}
+
+def spawn_particles(origin : float3; color : float3; count : int = 8) {
+    for (i in range(count)) {
+        let angle = float(i) / float(count) * 2.0 * PI
+        let elevation = game_random() * 0.5 + 0.2
+        let speed = 2.0 + game_random() * 3.0
+        let vel = float3(cos(angle) * speed, elevation * speed, sin(angle) * speed)
+        let lt = 0.3 + game_random() * 0.4
+        let r = 0.05 + game_random() * 0.08
+        create_entity <| @(eid, cmp) {
+            apply_decs_template(cmp, Particle(
+                pos = origin,
+                vel = vel,
+                color = color,
+                lifetime = lt,
+                max_life = lt,
+                radius = r
+            ))
+        }
+    }
+}
+
+[decs(stage=update)]
+def update_particles(eid : EntityId; var p : Particle) {
+    p.lifetime -= tick_dt
+    if (p.lifetime <= 0.0) {
+        delete_entity(eid)
+        return
+    }
+    p.pos += p.vel * tick_dt
+    p.vel.y -= 6.0 * tick_dt  // gravity
+}
+
+[decs(stage=draw)]
+def draw_particles(p : Particle) {
+    let frac = p.lifetime / p.max_life
+    let alpha = frac
+    let r = p.radius * (1.0 + (1.0 - frac) * 2.0)  // expand as they fade
+    draw_sphere(p.pos, r, p.color, alpha)
+}
+
+// --- Ball trail ---
+
+[decs_template]
+struct Trail {
+    pos      : float3
+    lifetime : float
+}
+
+let TRAIL_INTERVAL = 0.02
+var trail_timer = 0.0
+
+def spawn_trail_dots() {
+    trail_timer -= tick_dt
+    if (trail_timer > 0.0) { return; }
+    trail_timer = TRAIL_INTERVAL
+    query <| $(b : Ball) {
+        let p = b.pos
+        create_entity <| @(eid, cmp) {
+            apply_decs_template(cmp, Trail(pos = p, lifetime = 0.15))
+        }
+    }
+}
+
+[decs(stage=update)]
+def update_trail(eid : EntityId; var t : Trail) {
+    t.lifetime -= tick_dt
+    if (t.lifetime <= 0.0) {
+        delete_entity(eid)
+    }
+}
+
+[decs(stage=draw)]
+def draw_trail(t : Trail) {
+    let alpha = t.lifetime / 0.15
+    var color = BALL_COLOR
+    if (fireball_timer > 0.0) { color = float3(1.0, 0.4, 0.1); }
+    draw_sphere(t.pos, BALL_RADIUS * 0.5 * alpha, color, alpha * 0.5)
+}
+
+// --- Shadow drawing ---
+
+def draw_shadow_scene() {
+    // Re-draw all scene geometry projected onto ground plane
+    // Paddle
+    let pw = current_paddle_w()
+    draw_box(float3(paddle_x, PADDLE_H * 0.5, PADDLE_Z), float3(pw, PADDLE_H, PADDLE_D), SHADOW_COLOR)
+    // Walls
+    let hw = FIELD_W * 0.5
+    draw_box(float3(-hw - WALL_THICKNESS * 0.5, WALL_HEIGHT * 0.5, FIELD_H * 0.5),
+        float3(WALL_THICKNESS, WALL_HEIGHT, FIELD_H + WALL_THICKNESS), SHADOW_COLOR)
+    draw_box(float3(hw + WALL_THICKNESS * 0.5, WALL_HEIGHT * 0.5, FIELD_H * 0.5),
+        float3(WALL_THICKNESS, WALL_HEIGHT, FIELD_H + WALL_THICKNESS), SHADOW_COLOR)
+    draw_box(float3(0.0, WALL_HEIGHT * 0.5, FIELD_H + WALL_THICKNESS * 0.5),
+        float3(FIELD_W + WALL_THICKNESS * 2.0, WALL_HEIGHT, WALL_THICKNESS), SHADOW_COLOR)
+    // Balls
+    query <| $(b : Ball) {
+        draw_sphere(b.pos, BALL_RADIUS, SHADOW_COLOR)
+    }
+    // Bricks
+    query <| $(br : Brick) {
+        draw_box(br.pos, float3(BRICK_W, BRICK_H, BRICK_D), SHADOW_COLOR)
+    }
+    // Bonuses
+    query <| $(bn : Bonus) {
+        draw_box(bn.pos, float3(BONUS_SIZE), SHADOW_COLOR)
+    }
+}
+
+def draw_shadows() {
+    let tm_shadow = planar_shadow(
+        float4(LIGHT_DIRECTION, 0.0),
+        plane_from_point_normal(float3(0.0, GROUND_Y + 0.005, 0.0), float3(0.0, 1.0, 0.0))
+    )
+    let saved_view = v_view
+    v_view = saved_view * tm_shadow
+    glUseProgram(shadow_program)
+    active_program = shadow_program
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    glDisable(GL_DEPTH_TEST)
+    draw_shadow_scene()
+    glEnable(GL_DEPTH_TEST)
+    glDisable(GL_BLEND)
+    v_view = saved_view
+    glUseProgram(program)
+    active_program = program
+}
 
 // --- Live commands ---
 
@@ -362,9 +821,57 @@ def cmd_spawn_bricks(input : JsonValue?) : JsonValue? {
     return JV("\{\"spawned\": true}")
 }
 
+[live_command(description="Spawn a bonus at paddle. Args: type")]
+def cmd_spawn_bonus(input : JsonValue?) : JsonValue? {
+    var btype = int(BonusType.wide_paddle)
+    if (input != null && input.value is _object) {
+        let tab & = unsafe(input.value as _object)
+        var tv = tab?["type"] ?? null
+        if (tv != null && tv.value is _string) {
+            let tname = tv.value as _string
+            if (tname == "triple_ball") { btype = int(BonusType.triple_ball); }
+            elif (tname == "wide_paddle") { btype = int(BonusType.wide_paddle); }
+            elif (tname == "narrow_paddle") { btype = int(BonusType.narrow_paddle); }
+            elif (tname == "fireball") { btype = int(BonusType.fireball); }
+            elif (tname == "extra_life") { btype = int(BonusType.extra_life); }
+        }
+    }
+    create_entity <| @(eid, cmp) {
+        apply_decs_template(cmp, Bonus(
+            pos = float3(paddle_x, 0.3, 5.0),
+            bonus_type = btype,
+            color = BONUS_COLORS[btype]
+        ))
+    }
+    return JV("\{\"spawned\": true, \"type\": {btype}}")
+}
+
 [live_command(description="Dump DECS archetypes, entities, and queries")]
 def cmd_decs_dump(input : JsonValue?) : JsonValue? {
     return JV("\{\"dump\": \"{debug_dump_string()}\"}")
+}
+
+[live_command(description="Activate a powerup. Args: type (triple_ball, wide_paddle, narrow_paddle, sticky_paddle, fireball, extra_life, speed_up, speed_down)")]
+def cmd_powerup(input : JsonValue?) : JsonValue? {
+    var btype = 0
+    if (input != null && input.value is _object) {
+        let tab & = unsafe(input.value as _object)
+        var tv = tab?["type"] ?? null
+        if (tv != null && tv.value is _string) {
+            let tname = tv.value as _string
+            if (tname == "triple_ball") { btype = int(BonusType.triple_ball); }
+            elif (tname == "wide_paddle") { btype = int(BonusType.wide_paddle); }
+            elif (tname == "narrow_paddle") { btype = int(BonusType.narrow_paddle); }
+            elif (tname == "sticky_paddle") { btype = int(BonusType.sticky_paddle); }
+            elif (tname == "fireball") { btype = int(BonusType.fireball); }
+            elif (tname == "extra_life") { btype = int(BonusType.extra_life); }
+            elif (tname == "speed_up") { btype = int(BonusType.speed_up); }
+            elif (tname == "speed_down") { btype = int(BonusType.speed_down); }
+            else { return JV("\{\"error\": \"unknown type\"}"); }
+        }
+    }
+    activate_bonus(btype)
+    return JV("\{\"activated\": true}")
 }
 
 
@@ -421,6 +928,18 @@ def save_game_state() {
     var data <- ser->extractData()
     live_store_bytes("__arcanoid_state", data)
     unsafe { delete ser; }
+    // Preserve audio handles
+    if (audio_initialized) {
+        var aser = new MemSerializer()
+        var aarch = Archive(reading = false, stream = aser)
+        var cmd_ch = unsafe(reinterpret<uint64>(get_audio_command_channel()))
+        var sid_ptr = unsafe(reinterpret<uint64>(get_sound_sid()))
+        aarch |> serialize(cmd_ch)
+        aarch |> serialize(sid_ptr)
+        var adata <- aser->extractData()
+        live_store_bytes("__arcanoid_audio", adata)
+        unsafe { delete aser; }
+    }
 }
 
 [after_reload]
@@ -436,6 +955,23 @@ def restore_game_state() {
         arch |> serialize(game_won)
         unsafe { delete ser; }
     }
+    // Restore audio handles
+    var adata : array<uint8>
+    if (live_load_bytes("__arcanoid_audio", adata) && length(adata) > 0) {
+        var aser = new MemSerializer(adata)
+        var aarch = Archive(reading = true, stream = aser)
+        var cmd_ch : uint64
+        var sid_ptr : uint64
+        aarch |> serialize(cmd_ch)
+        aarch |> serialize(sid_ptr)
+        unsafe {
+            set_audio_thread_command_channel(reinterpret<void?>(cmd_ch))
+            set_sound_sid(reinterpret<void?>(sid_ptr))
+            delete aser
+        }
+        audio_initialized = true
+        init_audio_samples()
+    }
 }
 
 // --- Lifecycle ---
@@ -444,6 +980,11 @@ def restore_game_state() {
 def init() {
     live_create_window("Arcanoid", 1024, 768)
     create_gl_objects()
+    if (!audio_initialized) {
+        audio_system_create()
+        audio_initialized = true
+        init_audio_samples()
+    }
     decs::restart()
     spawn_bricks()
     commit()
@@ -485,34 +1026,49 @@ def update() {
         paddle_x = 0.0
         game_over = false
         game_won = false
+        reset_powerups()
     }
     if (!game_over && !game_won) {
         update_paddle(dt)
-        if (!has_balls() && space_just) {
+        update_powerup_timers(tick_dt)
+        // Sticky release
+        if (sticky_ball_on_paddle && space_just) {
+            sticky_ball_on_paddle = false
+            query <| $(var b : Ball) {
+                b.vel = normalize(float3(0.3, 0.0, 1.0)) * current_ball_speed()
+            }
+        }
+        if (!has_balls() && !sticky_ball_on_paddle && space_just) {
             spawn_ball(paddle_x, 0.3)
         }
+        spawn_trail_dots()
         decs_stage("update")
         commit()
-        // Ball-brick collision
+        // Ball-brick collision (one per frame)
         var hit_eid : EntityId
+        var hit_pos : float3
         var hit_ball_idx = -1
         var hit_side = false
         var hit_row = 0
         var ball_idx = 0
+        let is_fireball = fireball_timer > 0.0
         query <| $(var b : Ball) {
-            if (hit_ball_idx < 0) {
+            if (hit_ball_idx < 0 || is_fireball) {
                 find_query <| $(eid : EntityId; br : Brick) {
                     let dx = abs(b.pos.x - br.pos.x) - (BRICK_W * 0.5 + BALL_RADIUS)
                     let dz = abs(b.pos.z - br.pos.z) - (BRICK_D * 0.5 + BALL_RADIUS)
                     if (dx < 0.0 && dz < 0.0) {
                         hit_eid = eid
+                        hit_pos = br.pos
                         hit_ball_idx = ball_idx
                         hit_side = dx > dz
                         hit_row = br.row
-                        if (hit_side) {
-                            b.vel.x = -b.vel.x
-                        } else {
-                            b.vel.z = -b.vel.z
+                        if (!is_fireball) {
+                            if (hit_side) {
+                                b.vel.x = -b.vel.x
+                            } else {
+                                b.vel.z = -b.vel.z
+                            }
                         }
                         return true
                     }
@@ -525,17 +1081,28 @@ def update() {
             delete_entity(hit_eid)
             commit()
             score += BRICK_POINTS[hit_row]
+            play_sfx(snd_brick_break)
+            spawn_bonus(hit_pos)
+            spawn_particles(hit_pos, BRICK_COLORS[hit_row])
+            commit()
             if (!has_bricks()) {
                 game_won = true
+                play_sfx(snd_win)
             }
         }
     }
 
     glUseProgram(program)
+    active_program = program
     draw_ground()
+    draw_shadows()
     draw_walls()
     draw_paddle()
+    // Particles and trail need blending
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
     decs_stage("draw")
+    glDisable(GL_BLEND)
 
     glDisable(GL_CULL_FACE)
     draw_hud()
