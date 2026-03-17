@@ -1,5 +1,5 @@
 options gen2
-
+// watcher test 6
 require glfw/glfw_boost
 require live/glfw_live
 require opengl/opengl_boost
@@ -12,6 +12,7 @@ require daslib/decs_boost
 require live/opengl_live
 require live/live_commands
 require live/live_api
+require live/live_watch_boost
 require daslib/json
 require daslib/json_boost
 require daslib/math_boost
@@ -513,6 +514,16 @@ def spawn_ball(px, vx : float) {
     }
 }
 
+def spawn_ball_on_paddle() {
+    create_entity <| @(eid, cmp) {
+        apply_decs_template(cmp, Ball(
+            pos = float3(paddle_x, BALL_RADIUS, PADDLE_Z + PADDLE_D * 0.5 + BALL_RADIUS),
+            vel = float3(0.0)
+        ))
+    }
+    sticky_ball_on_paddle = true
+}
+
 def has_balls() : bool {
     var found = false
     query <| $(b : Ball) {
@@ -816,69 +827,58 @@ def draw_shadows() {
 
 // --- Live commands ---
 
+struct CmdSpawnBallArgs {
+    x : float = 0.0
+    vx : float = 0.3
+}
+
 [live_command(description="Spawn a ball. Args: x, vx")]
 def cmd_spawn_ball(input : JsonValue?) : JsonValue? {
-    var x = paddle_x
-    var vx = 0.3
-    if (input != null && input.value is _object) {
-        let tab & = unsafe(input.value as _object)
-        var xv = tab?["x"] ?? null
-        if (xv != null) {
-            if (xv.value is _number) {
-                x = float(xv.value as _number)
-            } elif (xv.value is _longint) {
-                x = float(xv.value as _longint)
-            }
-        }
-        var vxv = tab?["vx"] ?? null
-        if (vxv != null) {
-            if (vxv.value is _number) {
-                vx = float(vxv.value as _number)
-            } elif (vxv.value is _longint) {
-                vx = float(vxv.value as _longint)
-            }
-        }
-    }
-    spawn_ball(x, float(vx))
-    return JV("\{\"spawned\": true}")
+    var args = from_JV(input, type<CmdSpawnBallArgs>)
+    if (args.x == 0.0) { args.x = paddle_x; }
+    spawn_ball(args.x, args.vx)
+    return JV(args)
+}
+
+struct GameStatusResult {
+    balls : int
+    bricks : int
+    score : int
+    lives : int
+    state : string
+    god_mode : bool
+    speed : float
+    paddle_x : float
 }
 
 [live_command(description="Show score, lives, ball/brick counts")]
 def cmd_game_status(input : JsonValue?) : JsonValue? {
-    var ball_count = 0
-    var brick_count = 0
-    var ball_info = ""
-    query <| $(b : Ball) {
-        ball_count++
-        ball_info = "pos=({b.pos.x},{b.pos.y},{b.pos.z}) vel=({b.vel.x},{b.vel.y},{b.vel.z})"
-    }
-    query <| $(br : Brick) {
-        brick_count++
-    }
-    return JV("\{\"balls\": {ball_count}, \"bricks\": {brick_count}, \"score\": {score}, \"lives\": {lives}, \"state\": \"{game_state}\", \"god_mode\": {god_mode}, \"speed\": {game_speed}, \"paddle_x\": {paddle_x}, \"ball\": \"{ball_info}\"}")
+    var result = GameStatusResult()
+    query <| $(b : Ball) { result.balls++; }
+    query <| $(br : Brick) { result.bricks++; }
+    result.score = score
+    result.lives = lives
+    result.state = "{game_state}"
+    result.god_mode = god_mode
+    result.speed = game_speed
+    result.paddle_x = paddle_x
+    return JV(result)
 }
 
 [live_command(description="Spawn a new set of bricks")]
 def cmd_spawn_bricks(input : JsonValue?) : JsonValue? {
     spawn_bricks()
-    return JV("\{\"spawned\": true}")
+    return JV(true)
+}
+
+struct CmdBonusTypeArgs {
+    @rename = "type" _type : BonusType = BonusType.wide_paddle
 }
 
 [live_command(description="Spawn a bonus at paddle. Args: type")]
 def cmd_spawn_bonus(input : JsonValue?) : JsonValue? {
-    var btype = int(BonusType.wide_paddle)
-    if (input != null && input.value is _object) {
-        let tab & = unsafe(input.value as _object)
-        var tv = tab?["type"] ?? null
-        if (tv != null && tv.value is _string) {
-            let tname = tv.value as _string
-            if (tname == "triple_ball") { btype = int(BonusType.triple_ball); }
-            elif (tname == "wide_paddle") { btype = int(BonusType.wide_paddle); }
-            elif (tname == "narrow_paddle") { btype = int(BonusType.narrow_paddle); }
-            elif (tname == "fireball") { btype = int(BonusType.fireball); }
-            elif (tname == "extra_life") { btype = int(BonusType.extra_life); }
-        }
-    }
+    let args = from_JV(input, type<CmdBonusTypeArgs>)
+    let btype = int(args._type)
     create_entity <| @(eid, cmp) {
         apply_decs_template(cmp, Bonus(
             pos = float3(paddle_x, 0.3, 5.0),
@@ -886,35 +886,19 @@ def cmd_spawn_bonus(input : JsonValue?) : JsonValue? {
             color = BONUS_COLORS[btype]
         ))
     }
-    return JV("\{\"spawned\": true, \"type\": {btype}}")
+    return JV(args)
 }
 
 [live_command(description="Dump DECS archetypes, entities, and queries")]
 def cmd_decs_dump(input : JsonValue?) : JsonValue? {
-    return JV("\{\"dump\": \"{debug_dump_string()}\"}")
+    return JV(debug_dump_string())
 }
 
 [live_command(description="Activate a powerup. Args: type (triple_ball, wide_paddle, narrow_paddle, sticky_paddle, fireball, extra_life, speed_up, speed_down)")]
 def cmd_powerup(input : JsonValue?) : JsonValue? {
-    var btype = 0
-    if (input != null && input.value is _object) {
-        let tab & = unsafe(input.value as _object)
-        var tv = tab?["type"] ?? null
-        if (tv != null && tv.value is _string) {
-            let tname = tv.value as _string
-            if (tname == "triple_ball") { btype = int(BonusType.triple_ball); }
-            elif (tname == "wide_paddle") { btype = int(BonusType.wide_paddle); }
-            elif (tname == "narrow_paddle") { btype = int(BonusType.narrow_paddle); }
-            elif (tname == "sticky_paddle") { btype = int(BonusType.sticky_paddle); }
-            elif (tname == "fireball") { btype = int(BonusType.fireball); }
-            elif (tname == "extra_life") { btype = int(BonusType.extra_life); }
-            elif (tname == "speed_up") { btype = int(BonusType.speed_up); }
-            elif (tname == "speed_down") { btype = int(BonusType.speed_down); }
-            else { return JV("\{\"error\": \"unknown type\"}"); }
-        }
-    }
-    activate_bonus(btype)
-    return JV("\{\"activated\": true}")
+    let args = from_JV(input, type<CmdBonusTypeArgs>)
+    activate_bonus(int(args._type))
+    return JV(args)
 }
 
 [live_command(description="Reset game to initial state")]
@@ -927,41 +911,35 @@ def cmd_reset_game(input : JsonValue?) : JsonValue? {
     paddle_x = 0.0
     game_state = GameState.playing
     reset_powerups()
-    return JV("\{\"reset\": true}")
+    return JV(true)
+}
+
+struct CmdSetLivesArgs {
+    lives : int = -1
 }
 
 [live_command(description="Set lives. Args: lives")]
 def cmd_set_lives(input : JsonValue?) : JsonValue? {
-    if (input != null && input.value is _object) {
-        let tab & = unsafe(input.value as _object)
-        var lv = tab?["lives"] ?? null
-        if (lv != null && lv.value is _longint) {
-            lives = int(lv.value as _longint)
-        }
-    }
-    return JV("\{\"lives\": {lives}}")
+    let args = from_JV(input, type<CmdSetLivesArgs>)
+    if (args.lives >= 0) { lives = args.lives; }
+    return JV(CmdSetLivesArgs(lives = lives))
 }
 
 [live_command(description="Toggle god mode (ball bounces back instead of falling)")]
 def cmd_god_mode(input : JsonValue?) : JsonValue? {
     god_mode = !god_mode
-    return JV("\{\"god_mode\": {god_mode}}")
+    return JV(god_mode)
+}
+
+struct CmdSpeedArgs {
+    speed : float = 1.0
 }
 
 [live_command(description="Set game speed multiplier. Args: speed (0.1=slow, 1=normal, 2=fast)")]
 def cmd_slow_motion(input : JsonValue?) : JsonValue? {
-    if (input != null && input.value is _object) {
-        let tab & = unsafe(input.value as _object)
-        var sv = tab?["speed"] ?? null
-        if (sv != null) {
-            if (sv.value is _number) {
-                game_speed = float(sv.value as _number)
-            } elif (sv.value is _longint) {
-                game_speed = float(sv.value as _longint)
-            }
-        }
-    }
-    return JV("\{\"speed\": {game_speed}}")
+    let args = from_JV(input, type<CmdSpeedArgs>)
+    game_speed = args.speed
+    return JV(args)
 }
 
 
@@ -987,28 +965,33 @@ def draw_text_centered(text : string; cx, y : int; tint : float3 = float3(1.0)) 
     delete quads
 }
 
+def pulse_tint(base : float3) : float3 {
+    let pulse = 0.5 + 0.5 * sin(float(get_uptime()) * 4.5)
+    return lerp(base * 0.86, base * 1.06, pulse)
+}
+
 def draw_hud() {
     let cx = display_w / 2
     let cy = display_h / 2
     if (game_state == GameState.menu) {
         draw_text_centered("ARCANOID", cx, cy - 60, float3(1.0, 0.8, 0.2))
-        draw_text_centered("PRESS SPACE TO START", cx, cy + 10, float3(0.7, 0.7, 0.7))
+        draw_text_centered("PRESS SPACE TO START", cx, cy + 10, pulse_tint(float3(0.7, 0.7, 0.7)))
         return
     }
     draw_text("SCORE: {score}", 10, 35, float3(1.0, 1.0, 1.0))
     draw_text("LIVES: {lives}", 10, 70, float3(0.3, 0.8, 1.0))
     if (game_state == GameState.game_over_state) {
         draw_text_centered("GAME OVER", cx, cy - 20, float3(1.0, 0.2, 0.2))
-        draw_text_centered("PRESS SPACE TO RESTART", cx, cy + 25, float3(0.7, 0.7, 0.7))
+        draw_text_centered("PRESS SPACE TO RESTART", cx, cy + 25, pulse_tint(float3(0.7, 0.7, 0.7)))
     } elif (game_state == GameState.win_state) {
         draw_text_centered("YOU WIN!", cx, cy - 20, float3(0.2, 1.0, 0.3))
         draw_text_centered("SCORE: {score}", cx, cy + 25, float3(1.0, 1.0, 0.5))
-        draw_text_centered("PRESS SPACE TO RESTART", cx, cy + 65, float3(0.7, 0.7, 0.7))
+        draw_text_centered("PRESS SPACE TO RESTART", cx, cy + 65, pulse_tint(float3(0.7, 0.7, 0.7)))
     } elif (game_state == GameState.paused) {
         draw_text_centered("PAUSED", cx, cy - 20, float3(0.8, 0.8, 0.8))
-        draw_text_centered("PRESS ESC TO RESUME", cx, cy + 25, float3(0.5, 0.5, 0.5))
-    } elif (!has_balls()) {
-        draw_text_centered("PRESS SPACE TO LAUNCH", cx, cy + 25, float3(0.5, 0.5, 0.5))
+        draw_text_centered("PRESS ESC TO RESUME", cx, cy + 25, pulse_tint(float3(0.5, 0.5, 0.5)))
+    } elif (sticky_ball_on_paddle) {
+        draw_text_centered("PRESS SPACE TO LAUNCH", cx, cy + 25, pulse_tint(float3(0.5, 0.5, 0.5)))
     }
     if (god_mode) {
         draw_text("GOD", display_w - 80, 35, float3(1.0, 0.5, 0.0))
@@ -1152,8 +1135,9 @@ def update() {
                 b.vel = normalize(float3(0.3, 0.0, 1.0)) * current_ball_speed()
             }
         }
-        if (!has_balls() && !sticky_ball_on_paddle && space_just) {
-            spawn_ball(paddle_x, 0.3)
+        if (!has_balls() && !sticky_ball_on_paddle) {
+            spawn_ball_on_paddle()
+            commit()
         }
         spawn_trail_dots()
         decs_stage("update")
@@ -1165,7 +1149,7 @@ def update() {
                 game_state = GameState.game_over_state
                 play_sfx(snd_game_over)
             } else {
-                spawn_ball(0.0, 0.0)
+                spawn_ball_on_paddle()
                 commit()
             }
         }
