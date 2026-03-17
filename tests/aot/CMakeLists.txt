@@ -26,7 +26,6 @@ SET(AOT_DASLIB_MODULE_FILES
     daslib/json_boost.das
     daslib/linq.das
     daslib/linq_boost.das
-    daslib/live.das
     daslib/lpipe.das
     daslib/match.das
     daslib/math_bits.das
