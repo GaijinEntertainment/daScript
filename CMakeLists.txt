@@ -1017,6 +1017,20 @@ if (NOT ${DAS_TOOLS_DISABLED})
         ${NEED_MODULES_PATH})
     SETUP_CPP11(daslang-live)
     SETUP_LTO(daslang-live)
+    if(APPLE)
+        SET_TARGET_PROPERTIES(daslang-live PROPERTIES
+            INSTALL_RPATH "@loader_path/../lib"
+            CMAKE_MACOSX_RPATH ON
+        )
+    elseif(UNIX)
+        SET_TARGET_PROPERTIES(daslang-live PROPERTIES
+            INSTALL_RPATH "\$ORIGIN/../lib"
+        )
+    endif()
+    INSTALL(
+        TARGETS daslang-live
+        RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
+    )
 
     file(GLOB DASLIB_SOURCES
         ${PROJECT_SOURCE_DIR}/daslib/*.das
@@ -1342,6 +1356,12 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/daspkg/fixtures/
 # Install daspkg examples
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/daspkg/
     DESTINATION examples/daspkg
+)
+
+# Install daslive examples
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/daslive/
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/daslive
+    FILES_MATCHING PATTERN "*.das"
 )
 
 # Install core example .das files
