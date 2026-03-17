@@ -18,6 +18,10 @@ def can_visit_folder(folder_name : string; var result : bool?) {
         *result = has_module("stbimage")
         return
     }
+    if (folder_name == "live_host") {
+        *result = has_module("live_host")
+        return
+    }
     if (folder_name == "jit_tests" || folder_name == ".jitted_scripts") {
         let args <- get_command_line_arguments()
         for (arg in args) {

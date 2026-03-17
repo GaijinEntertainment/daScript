@@ -9,6 +9,7 @@ IF(NOT DAS_OPENGL_INCLUDED)
     ADD_MODULE_DAS(opengl opengl opengl_ttf)
     ADD_MODULE_DAS(opengl opengl opengl_gen)
     ADD_MODULE_DAS(opengl opengl opengl_cache)
+    ADD_MODULE_DAS(live opengl opengl_live)
     ADD_MODULE_DAS(glsl glsl glsl_opengl)
 
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules/dasOpenGL/opengl

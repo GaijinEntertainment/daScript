@@ -43,7 +43,11 @@ static JitMode jitEnabled = JitMode::None; // Disabled by default.
 static string jitOutPath = ""; // Empty, JIT module will choose default.
 
 static bool noDynamicModules = false;
+#ifdef DAS_TEST_AOT
+static bool useAot = true;
+#else
 static bool useAot = false;
+#endif
 
 static bool version2syntax = true;
 static bool gen2MakeSyntax = false;

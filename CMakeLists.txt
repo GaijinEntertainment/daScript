@@ -1005,6 +1005,33 @@ if (NOT ${DAS_TOOLS_DISABLED})
         RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
     )
 
+    # daslang-live: live-reloading application host
+    SET(DAS_LIVE_MAIN_SRC
+        ${PROJECT_SOURCE_DIR}/utils/daslang-live/main.cpp
+        ${DAS_MODULES_NEED_INC}
+    )
+    add_executable(daslang-live ${DAS_LIVE_MAIN_SRC})
+    TARGET_LINK_LIBRARIES(daslang-live libDaScriptDyn ${SRC_LIBRARIES})
+    ADD_DEPENDENCIES(daslang-live libDaScriptDyn ${DAS_DYN_MODULES_LIBS})
+    target_include_directories(daslang-live PRIVATE
+        ${NEED_MODULES_PATH})
+    SETUP_CPP11(daslang-live)
+    SETUP_LTO(daslang-live)
+    if(APPLE)
+        SET_TARGET_PROPERTIES(daslang-live PROPERTIES
+            INSTALL_RPATH "@loader_path/../lib"
+            CMAKE_MACOSX_RPATH ON
+        )
+    elseif(UNIX)
+        SET_TARGET_PROPERTIES(daslang-live PROPERTIES
+            INSTALL_RPATH "\$ORIGIN/../lib"
+        )
+    endif()
+    INSTALL(
+        TARGETS daslang-live
+        RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
+    )
+
     file(GLOB DASLIB_SOURCES
         ${PROJECT_SOURCE_DIR}/daslib/*.das
     )
@@ -1329,6 +1356,12 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/daspkg/fixtures/
 # Install daspkg examples
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/daspkg/
     DESTINATION examples/daspkg
+)
+
+# Install daslive examples
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/daslive/
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/daslive
+    FILES_MATCHING PATTERN "*.das"
 )
 
 # Install core example .das files

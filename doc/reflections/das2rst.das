@@ -80,7 +80,6 @@ require daslib/generic_return
 // require daslib/heartbeat                     // qmacro(heartbeat()) conflicts when used in das2rst context
 require daslib/lint
 // require daslib/lint_everything               // global_lint_macro causes lint errors in other modules
-// require daslib/live                            // uses multiple_contexts
 require daslib/profiler
 require daslib/profiler_boost
 require daslib/quote

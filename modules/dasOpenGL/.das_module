@@ -1,0 +1,7 @@
+options gen2
+require fio
+
+[export]
+def initialize(project_path : string) {
+    register_native_path("live", "opengl_live", "{project_path}/opengl/opengl_live.das")
+}
