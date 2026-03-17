@@ -14,7 +14,7 @@ static void print_das_stack_walk(void * ctxPtr) {
     if (ctx->stack.empty()) {
         str = " (daslang stack empty - reset by recover before C++ overflow)\n";
     } else {
-        str = ctx->getStackWalk(nullptr, true, false);
+        str = ctx->getStackWalk(nullptr, false, false);
     }
     fprintf(stderr, "%s", str.c_str());
 }
