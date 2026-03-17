@@ -507,6 +507,6 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_daslib_modules test_aot_decs_modules
     test_aot_stbimage test_aot_stbimage_modules
 )
-target_include_directories(test_aot PRIVATE ${NEED_MODULES_PATH} ${PROJECT_SOURCE_DIR}/modules/dasUnitTest)
+target_include_directories(test_aot PRIVATE ${NEED_MODULES_PATH} ${PROJECT_SOURCE_DIR}/modules/dasUnitTest ${PROJECT_SOURCE_DIR}/modules/dasLiveHost/src)
 SETUP_CPP11(test_aot)
 SETUP_LTO(test_aot)

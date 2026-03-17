@@ -1951,10 +1951,10 @@ class public CppAot : AstVisitor {
         if (nc._type.flags.aotAlias) {
             write(*ss, "das_alias<{nc._type.alias}>::from(");
         }
-        let type_str1 = describeCppType(nc.defaultValue._type, DescribeConfig(cross_platform = cross_platform));
+        let type_str1 = describeCppType(nc._type, DescribeConfig(cross_platform = cross_platform));
         write(*ss, "das_null_coalescing<{type_str1}>::get(");
         if (nc.subexpr._type.isAotAlias) {
-            let type_str2 = describeCppType(nc.defaultValue._type, DescribeConfig(cross_platform = cross_platform));
+            let type_str2 = describeCppType(nc._type, DescribeConfig(cross_platform = cross_platform));
             write(*ss, "({type_str2} *)");
         }
     }

@@ -1961,10 +1961,10 @@ namespace das {
             if ( nc->type->aotAlias ) {
                 ss << "das_alias<" << nc->type->alias << ">::from(";
             }
-            ss << "das_null_coalescing<" << describeCppType(nc->defaultValue->type,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no)
+            ss << "das_null_coalescing<" << describeCppType(nc->type,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no)
                 << ">::get(";
             if ( nc->subexpr->type->isAotAlias() ) {
-                ss << "(" << describeCppType(nc->defaultValue->type,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no) << " *)";
+                ss << "(" << describeCppType(nc->type,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no) << " *)";
             }
         }
         virtual void preVisitNullCoaelescingDefault ( ExprNullCoalescing * nc, Expression * expr ) override {
