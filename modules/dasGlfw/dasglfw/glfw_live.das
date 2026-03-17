@@ -37,11 +37,13 @@ def public live_create_window(title : string; width, height : int) : GLFWwindow?
         panic("glfw_live: can't init glfw")
     }
     glfwInitOpenGL(3, 3)
+    glfwWindowHint(int(GLFW_SAMPLES), 4)
     live_window = glfwCreateWindow(width, height, title, null, null)
     if (live_window == null) {
         panic("glfw_live: can't create window")
     }
     glfwMakeContextCurrent(live_window)
+    glEnable(GL_MULTISAMPLE)
     init_opengl_cache()
     return live_window
 }

@@ -115,6 +115,7 @@ var snd_brick_break : array<float>
 var snd_wall_bounce : array<float>
 var snd_ball_miss : array<float>
 var snd_win : array<float>
+var snd_game_over : array<float>
 var audio_initialized = false
 
 def init_audio_samples() {
@@ -144,6 +145,21 @@ def init_audio_samples() {
         for (i in range(length(note))) {
             if (offset + i < total_samples) {
                 snd_win[offset + i] += note[i]
+            }
+        }
+    }
+    // Game over: descending arpeggio
+    let go_notes = fixed_array(523.0, 392.0, 330.0, 196.0)  // C5 G4 E4 G3
+    let go_note_dur = 0.15
+    let go_total_dur = go_note_dur * float(length(go_notes))
+    let go_total_samples = int(float(AUDIO_RATE) * go_total_dur)
+    snd_game_over |> resize(go_total_samples)
+    for (ni in range(length(go_notes))) {
+        var note <- gen_sine_sweep(go_notes[ni], go_notes[ni] * 0.9, go_note_dur, 0.3)
+        let offset = ni * int(float(AUDIO_RATE) * go_note_dur)
+        for (i in range(length(note))) {
+            if (offset + i < go_total_samples) {
+                snd_game_over[offset + i] += note[i]
             }
         }
     }
@@ -282,11 +298,22 @@ def draw_walls() {
 
 // --- Game state ---
 
+enum GameState {
+    menu
+    playing
+    paused
+    game_over_state
+    win_state
+}
+
 var score = 0
 var lives = START_LIVES
-var game_over = false
-var game_won = false
+var game_state = GameState.menu
 var space_was_pressed = false
+var esc_was_pressed = false
+var god_mode = false
+var game_speed = 1.0
+
 
 // --- Bonuses ---
 
@@ -332,6 +359,7 @@ var speed_mod_timer = 0.0
 var speed_mod_factor = 1.0
 var sticky_active = false
 var sticky_ball_on_paddle = false
+var display_paddle_w = PADDLE_W
 var rng_seed = 42u
 
 def game_random() : float {
@@ -339,10 +367,14 @@ def game_random() : float {
     return float((rng_seed >> 16u) & 0x7FFFu) / 32767.0
 }
 
-def current_paddle_w() : float {
+def target_paddle_w() : float {
     if (wide_paddle_timer > 0.0) { return PADDLE_W * 1.6; }
     if (narrow_paddle_timer > 0.0) { return PADDLE_W * 0.6; }
     return PADDLE_W
+}
+
+def current_paddle_w() : float {
+    return display_paddle_w
 }
 
 def current_ball_speed() : float {
@@ -417,6 +449,10 @@ def update_powerup_timers(dt : float) {
     if (narrow_paddle_timer > 0.0) { narrow_paddle_timer -= dt; }
     if (fireball_timer > 0.0) { fireball_timer -= dt; }
     if (speed_mod_timer > 0.0) { speed_mod_timer -= dt; }
+    // Smooth paddle width transition
+    let target = target_paddle_w()
+    let lerp_speed = 8.0 * dt
+    display_paddle_w += (target - display_paddle_w) * saturate(lerp_speed)
 }
 
 def reset_powerups() {
@@ -537,13 +573,15 @@ def update_balls(eid : EntityId; var b : Ball) {
             sticky_active = false  // one use
         }
     }
-    // Ball fell below paddle — lose a life
+    // Ball fell below paddle
     if (b.pos.z < -1.0) {
-        delete_entity(eid)
-        lives--
-        play_sfx(snd_ball_miss)
-        if (lives <= 0) {
-            game_over = true
+        if (god_mode) {
+            b.pos.z = PADDLE_Z + PADDLE_D * 0.5 + BALL_RADIUS
+            b.vel.z = abs(b.vel.z)
+        } else {
+            delete_entity(eid)
+            play_sfx(snd_ball_miss)
+            // Life lost only tracked after commit — see update loop
         }
     }
 }
@@ -745,9 +783,14 @@ def draw_shadow_scene() {
     query <| $(br : Brick) {
         draw_box(br.pos, float3(BRICK_W, BRICK_H, BRICK_D), SHADOW_COLOR)
     }
-    // Bonuses
+    // Bonuses (with rotation matching the main draw)
+    let angle = float(get_uptime()) * 3.0
     query <| $(bn : Bonus) {
-        draw_box(bn.pos, float3(BONUS_SIZE), SHADOW_COLOR)
+        v_model = compose(bn.pos, float4(0.0, sin(angle * 0.5), 0.0, cos(angle * 0.5)), float3(BONUS_SIZE * 0.5))
+        f_Color = float4(SHADOW_COLOR, 0.5)
+        vs_arcanoid_bind_uniform(active_program)
+        fs_shadow_bind_uniform(active_program)
+        cube |> draw_geometry_fragment()
     }
 }
 
@@ -812,7 +855,7 @@ def cmd_game_status(input : JsonValue?) : JsonValue? {
     query <| $(br : Brick) {
         brick_count++
     }
-    return JV("\{\"balls\": {ball_count}, \"bricks\": {brick_count}, \"score\": {score}, \"lives\": {lives}, \"game_over\": {game_over}, \"game_won\": {game_won}, \"paddle_x\": {paddle_x}, \"ball\": \"{ball_info}\"}")
+    return JV("\{\"balls\": {ball_count}, \"bricks\": {brick_count}, \"score\": {score}, \"lives\": {lives}, \"state\": \"{game_state}\", \"god_mode\": {god_mode}, \"speed\": {game_speed}, \"paddle_x\": {paddle_x}, \"ball\": \"{ball_info}\"}")
 }
 
 [live_command(description="Spawn a new set of bricks")]
@@ -874,6 +917,53 @@ def cmd_powerup(input : JsonValue?) : JsonValue? {
     return JV("\{\"activated\": true}")
 }
 
+[live_command(description="Reset game to initial state")]
+def cmd_reset_game(input : JsonValue?) : JsonValue? {
+    decs::restart()
+    spawn_bricks()
+    commit()
+    score = 0
+    lives = START_LIVES
+    paddle_x = 0.0
+    game_state = GameState.playing
+    reset_powerups()
+    return JV("\{\"reset\": true}")
+}
+
+[live_command(description="Set lives. Args: lives")]
+def cmd_set_lives(input : JsonValue?) : JsonValue? {
+    if (input != null && input.value is _object) {
+        let tab & = unsafe(input.value as _object)
+        var lv = tab?["lives"] ?? null
+        if (lv != null && lv.value is _longint) {
+            lives = int(lv.value as _longint)
+        }
+    }
+    return JV("\{\"lives\": {lives}}")
+}
+
+[live_command(description="Toggle god mode (ball bounces back instead of falling)")]
+def cmd_god_mode(input : JsonValue?) : JsonValue? {
+    god_mode = !god_mode
+    return JV("\{\"god_mode\": {god_mode}}")
+}
+
+[live_command(description="Set game speed multiplier. Args: speed (0.1=slow, 1=normal, 2=fast)")]
+def cmd_slow_motion(input : JsonValue?) : JsonValue? {
+    if (input != null && input.value is _object) {
+        let tab & = unsafe(input.value as _object)
+        var sv = tab?["speed"] ?? null
+        if (sv != null) {
+            if (sv.value is _number) {
+                game_speed = float(sv.value as _number)
+            } elif (sv.value is _longint) {
+                game_speed = float(sv.value as _longint)
+            }
+        }
+    }
+    return JV("\{\"speed\": {game_speed}}")
+}
+
 
 
 
@@ -898,19 +988,30 @@ def draw_text_centered(text : string; cx, y : int; tint : float3 = float3(1.0)) 
 }
 
 def draw_hud() {
-    draw_text("SCORE: {score}", 10, 35, float3(1.0, 1.0, 1.0))
-    draw_text("LIVES: {lives}", 10, 70, float3(0.3, 0.8, 1.0))
     let cx = display_w / 2
     let cy = display_h / 2
-    if (game_over) {
+    if (game_state == GameState.menu) {
+        draw_text_centered("ARCANOID", cx, cy - 60, float3(1.0, 0.8, 0.2))
+        draw_text_centered("PRESS SPACE TO START", cx, cy + 10, float3(0.7, 0.7, 0.7))
+        return
+    }
+    draw_text("SCORE: {score}", 10, 35, float3(1.0, 1.0, 1.0))
+    draw_text("LIVES: {lives}", 10, 70, float3(0.3, 0.8, 1.0))
+    if (game_state == GameState.game_over_state) {
         draw_text_centered("GAME OVER", cx, cy - 20, float3(1.0, 0.2, 0.2))
         draw_text_centered("PRESS SPACE TO RESTART", cx, cy + 25, float3(0.7, 0.7, 0.7))
-    } elif (game_won) {
+    } elif (game_state == GameState.win_state) {
         draw_text_centered("YOU WIN!", cx, cy - 20, float3(0.2, 1.0, 0.3))
         draw_text_centered("SCORE: {score}", cx, cy + 25, float3(1.0, 1.0, 0.5))
         draw_text_centered("PRESS SPACE TO RESTART", cx, cy + 65, float3(0.7, 0.7, 0.7))
+    } elif (game_state == GameState.paused) {
+        draw_text_centered("PAUSED", cx, cy - 20, float3(0.8, 0.8, 0.8))
+        draw_text_centered("PRESS ESC TO RESUME", cx, cy + 25, float3(0.5, 0.5, 0.5))
     } elif (!has_balls()) {
         draw_text_centered("PRESS SPACE TO LAUNCH", cx, cy + 25, float3(0.5, 0.5, 0.5))
+    }
+    if (god_mode) {
+        draw_text("GOD", display_w - 80, 35, float3(1.0, 0.5, 0.0))
     }
 }
 
@@ -923,8 +1024,8 @@ def save_game_state() {
     arch |> serialize(paddle_x)
     arch |> serialize(score)
     arch |> serialize(lives)
-    arch |> serialize(game_over)
-    arch |> serialize(game_won)
+    var gs = int(game_state)
+    arch |> serialize(gs)
     var data <- ser->extractData()
     live_store_bytes("__arcanoid_state", data)
     unsafe { delete ser; }
@@ -951,8 +1052,9 @@ def restore_game_state() {
         arch |> serialize(paddle_x)
         arch |> serialize(score)
         arch |> serialize(lives)
-        arch |> serialize(game_over)
-        arch |> serialize(game_won)
+        var gs : int
+        arch |> serialize(gs)
+        game_state = unsafe(reinterpret<GameState>(gs))
         unsafe { delete ser; }
     }
     // Restore audio handles
@@ -1012,23 +1114,35 @@ def update() {
     )
 
     let dt = get_dt()
-    tick_dt = min(dt, 1.0 / 30.0)
+    tick_dt = min(dt, 1.0 / 30.0) * game_speed
     let space_pressed = glfwGetKey(live_window, int(GLFW_KEY_SPACE)) == int(GLFW_PRESS)
     let space_just = space_pressed && !space_was_pressed
     space_was_pressed = space_pressed
-    // Restart game
-    if ((game_over || game_won) && space_just) {
+    let esc_pressed = glfwGetKey(live_window, int(GLFW_KEY_ESCAPE)) == int(GLFW_PRESS)
+    let esc_just = esc_pressed && !esc_was_pressed
+    esc_was_pressed = esc_pressed
+    // Menu → start
+    if (game_state == GameState.menu && space_just) {
+        game_state = GameState.playing
+    }
+    // Pause toggle
+    if (game_state == GameState.playing && esc_just) {
+        game_state = GameState.paused
+    } elif (game_state == GameState.paused && (esc_just || space_just)) {
+        game_state = GameState.playing
+    }
+    // Restart from game over / win
+    if ((game_state == GameState.game_over_state || game_state == GameState.win_state) && space_just) {
         decs::restart()
         spawn_bricks()
         commit()
         score = 0
         lives = START_LIVES
         paddle_x = 0.0
-        game_over = false
-        game_won = false
+        game_state = GameState.playing
         reset_powerups()
     }
-    if (!game_over && !game_won) {
+    if (game_state == GameState.playing) {
         update_paddle(dt)
         update_powerup_timers(tick_dt)
         // Sticky release
@@ -1044,6 +1158,17 @@ def update() {
         spawn_trail_dots()
         decs_stage("update")
         commit()
+        // Check if all balls are gone after update
+        if (!has_balls() && game_state == GameState.playing) {
+            lives--
+            if (lives <= 0) {
+                game_state = GameState.game_over_state
+                play_sfx(snd_game_over)
+            } else {
+                spawn_ball(0.0, 0.0)
+                commit()
+            }
+        }
         // Ball-brick collision (one per frame)
         var hit_eid : EntityId
         var hit_pos : float3
@@ -1086,7 +1211,7 @@ def update() {
             spawn_particles(hit_pos, BRICK_COLORS[hit_row])
             commit()
             if (!has_bricks()) {
-                game_won = true
+                game_state = GameState.win_state
                 play_sfx(snd_win)
             }
         }
