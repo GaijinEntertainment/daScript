@@ -13,7 +13,7 @@ module glfw_live shared public
 //! in the persistent byte store so it survives recompilation.
 //!
 //! Usage in your script:
-//!   require glfw/glfw_live
+//!   require live/glfw_live
 //!   [export] def init() { live_create_window("My App", 1280, 720) }
 //!   [export] def update() { if (live_begin_frame()) { /* render */ ; live_end_frame() } }
 //!   [export] def shutdown() { live_destroy_window() }

@@ -6,4 +6,5 @@ def initialize(project_path : string) {
     if (das_is_dll_build()) {
         register_dynamic_module("{project_path}/dasModuleGlfw.shared_module", "Module_dasGLFW")
     }
+    register_native_path("live", "glfw_live", "{project_path}/dasglfw/glfw_live.das")
 }

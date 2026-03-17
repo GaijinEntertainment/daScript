@@ -118,7 +118,7 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 	)
 	ADD_MODULE_CPP(dasGLFW)
 	ADD_MODULE_DAS(glfw dasglfw glfw_boost)
-	ADD_MODULE_DAS(glfw dasglfw glfw_live)
+	ADD_MODULE_DAS(live dasglfw glfw_live)
 	ADD_MODULE_LIB(libDasModuleGlfw dasModuleGlfw ${DAS_GLFW_BIND_MODULE_SRC})
 	MACRO(SETUP_GLFW glfw_mod_lib glfw_target)
 		ADD_DEPENDENCIES(${glfw_mod_lib} ${glfw_target})

@@ -13,7 +13,7 @@ module live_commands shared public
 //!
 //! Usage::
 //!
-//!     require daslib/live_commands
+//!     require live/live_commands
 //!     [live_command]
 //!     def spawn_enemy(input : JsonValue?) : JsonValue? { ... }
 

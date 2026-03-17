@@ -1,7 +1,7 @@
 options gen2
 
 require fio
-require daslib/live_watch
+require live/live_watch
 require live_host
 
 // Test the file watcher agent by creating a temp file, registering it

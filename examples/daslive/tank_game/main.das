@@ -1,17 +1,17 @@
 options gen2
 
 require glfw/glfw_boost
-require glfw/glfw_live
+require live/glfw_live
 require opengl/opengl_boost
 require opengl/opengl_gen
 require opengl/opengl_cache
 require daslib/defer
 require daslib/safe_addr
 require daslib/decs_boost
-require daslib/decs_live
-require daslib/opengl_live
-require daslib/live_commands
-require daslib/live_api
+require live/decs_live
+require live/opengl_live
+require live/live_commands
+require live/live_api
 require daslib/json
 require daslib/json_boost
 require daslib/random

@@ -2,8 +2,8 @@ options gen2
 
 require daslib/json
 require daslib/json_boost
-require daslib/live_commands
-require daslib/live_api
+require live/live_commands
+require live/live_api
 require live_host
 
 var spawn_count : int = 0

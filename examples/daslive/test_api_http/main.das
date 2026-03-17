@@ -5,8 +5,8 @@ options gc
 require dashv/dashv_boost
 require daslib/json
 require daslib/json_boost
-require daslib/live_commands
-require daslib/live_api
+require live/live_commands
+require live/live_api
 require strings
 require live_host
 

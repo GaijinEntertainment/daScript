@@ -12,11 +12,11 @@ module opengl_live shared public
 //!   screenshot — captures the current framebuffer to a PNG file
 
 require opengl/opengl_boost
-require glfw/glfw_live
+require live/glfw_live
 require stbimage
 require daslib/json
 require daslib/json_boost
-require daslib/live_commands
+require live/live_commands
 require live_host
 
 [live_command(description="Save framebuffer to PNG. Args: file")]

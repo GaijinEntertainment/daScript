@@ -5,7 +5,7 @@ options no_unused_function_arguments = false
 require dastest/testing_boost public
 require daslib/json
 require daslib/json_boost
-require daslib/live_commands
+require live/live_commands
 require strings
 require live_host
 

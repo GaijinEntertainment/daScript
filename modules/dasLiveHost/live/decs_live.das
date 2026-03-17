@@ -8,7 +8,7 @@ module decs_live shared public
 
 //! DECS persistence across live reloads.
 //!
-//! Just `require daslib/decs_live` in your script — DECS state is automatically
+//! Just `require live/decs_live` in your script — DECS state is automatically
 //! saved before reload and restored after. No boilerplate needed.
 
 require daslib/decs

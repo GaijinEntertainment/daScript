@@ -12,6 +12,10 @@ IF ((NOT DAS_LIVE_HOST_INCLUDED) AND ((NOT ${DAS_LIVE_HOST_DISABLED}) OR (NOT DE
     SOURCE_GROUP_FILES("source" DAS_LIVE_HOST_MODULE_SRC)
 
     ADD_MODULE_CPP(LiveHost)
+    ADD_MODULE_DAS(live live live_commands)
+    ADD_MODULE_DAS(live live live_api)
+    ADD_MODULE_DAS(live live live_watch)
+    ADD_MODULE_DAS(live live decs_live)
     ADD_MODULE_LIB(libDasModuleLiveHost dasModuleLiveHost ${DAS_LIVE_HOST_MODULE_SRC})
     SETUP_CPP11(libDasModuleLiveHost)
     SETUP_CPP11(dasModuleLiveHost)

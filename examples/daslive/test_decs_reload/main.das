@@ -1,7 +1,7 @@
 options gen2
 
 require daslib/decs_boost
-require daslib/decs_live
+require live/decs_live
 require live_host
 
 var reload_count : int = 0
