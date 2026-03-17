@@ -14,6 +14,7 @@ require live/live_commands
 require live/live_api
 require live/live_watch_boost
 require live/live_vars
+require live/audio_live
 require daslib/json
 require daslib/json_boost
 require daslib/math_boost
@@ -112,13 +113,13 @@ def mix_into(var dst : array<float>; src : array<float>) {
     }
 }
 
-var snd_paddle_hit : array<float>
-var snd_brick_break : array<float>
-var snd_wall_bounce : array<float>
-var snd_ball_miss : array<float>
-var snd_win : array<float>
-var snd_game_over : array<float>
-var audio_initialized = false
+var @live snd_paddle_hit : array<float>
+var @live snd_brick_break : array<float>
+var @live snd_wall_bounce : array<float>
+var @live snd_ball_miss : array<float>
+var @live snd_win : array<float>
+var @live snd_game_over : array<float>
+var @live audio_initialized = false
 
 def init_audio_samples() {
     // Paddle hit: chirp 440→880Hz, 50ms
@@ -350,8 +351,8 @@ struct Bonus {
     color     : float3
 }
 
-var snd_bonus_pickup : array<float>
-var snd_bonus_bad : array<float>
+var @live snd_bonus_pickup : array<float>
+var @live snd_bonus_bad : array<float>
 
 // Active powerup timers
 var @live wide_paddle_timer = 0.0
@@ -1001,42 +1002,7 @@ def draw_hud() {
 
 // --- State preservation across reloads ---
 // Game globals tagged with @live are auto-serialized by live_vars macro.
-// Audio handles need manual preservation (pointer reinterpret).
-
-[before_reload]
-def save_audio_handles() {
-    if (audio_initialized) {
-        var ser = new MemSerializer()
-        var arch = Archive(reading = false, stream = ser)
-        var cmd_ch = unsafe(reinterpret<uint64>(get_audio_command_channel()))
-        var sid_ptr = unsafe(reinterpret<uint64>(get_sound_sid()))
-        arch |> serialize(cmd_ch)
-        arch |> serialize(sid_ptr)
-        var data <- ser->extractData()
-        live_store_bytes("__arcanoid_audio", data)
-        unsafe { delete ser; }
-    }
-}
-
-[after_reload]
-def restore_audio_handles() {
-    var data : array<uint8>
-    if (live_load_bytes("__arcanoid_audio", data) && length(data) > 0) {
-        var ser = new MemSerializer(data)
-        var arch = Archive(reading = true, stream = ser)
-        var cmd_ch : uint64
-        var sid_ptr : uint64
-        arch |> serialize(cmd_ch)
-        arch |> serialize(sid_ptr)
-        unsafe {
-            set_audio_thread_command_channel(reinterpret<void?>(cmd_ch))
-            set_sound_sid(reinterpret<void?>(sid_ptr))
-            delete ser
-        }
-        audio_initialized = true
-        init_audio_samples()
-    }
-}
+// Audio handles preserved by audio_live module.
 
 // --- Lifecycle ---
 
