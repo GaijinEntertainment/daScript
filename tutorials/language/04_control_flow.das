@@ -128,9 +128,9 @@ def main {
 // 0..5: 0 1 2 3 4
 // range(4): 0 1 2 3
 // multiplication table:
-// 1	2	3
-// 2	4	6
-// 3	6	9
+// 1    2    3
+// 2    4    6
+// 3    6    9
 // break at 3: 0 1 2
 // skip odds: 0 2 4 6
 // Alice: 95
