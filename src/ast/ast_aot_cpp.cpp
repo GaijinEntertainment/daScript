@@ -2169,13 +2169,23 @@ namespace das {
                 ss << ">::get(";
             } else if ( field->value->type->isHandle() ) {
                 if (field->type->isString()) {
-                    ss << "((" << describeCppType(field->type) << ")(";  // c-cast const char * etc string casts to char * or char * const
+                    // c-cast const char * etc string casts to char * or char * const
+                    if ( field->value->type->constant ) {
+                        ss << "((const char * const)(";
+                    } else {
+                        ss << "((" << describeCppType(field->type) << ")(";
+                    }
                 }
                 field->value->type->annotation->aotPreVisitGetField(ss, field->name);
             } else if ( field->value->type->baseType==Type::tPointer ) {
                 if ( field->value->type->firstType->isHandle() ) {
                     if (field->type->isString()) {
-                        ss << "((" << describeCppType(field->type) << ")(";  // c-cast const char * etc string casts to char * or char * const
+                        // c-cast const char * etc string casts to char * or char * const
+                        if ( field->value->type->firstType->constant ) {
+                            ss << "((const char * const)(";
+                        } else {
+                            ss << "((" << describeCppType(field->type) << ")(";
+                        }
                     }
                     field->value->type->firstType->annotation->aotPreVisitGetFieldPtr(ss, field->name);
                 } else if ( field->value->type->firstType->isTuple() ) {

@@ -2108,13 +2108,23 @@ class public CppAot : AstVisitor {
             write(*ss, "{get_variant_field(field_type, field.fieldIndex)}::get(")
         } elif (field_type.isHandle) {
             if (field._type.isString) {
-                write(*ss, "(({describeCppType(field._type, DescribeConfig(cross_platform=cross_platform))})(");  // c-cast const char * etc string casts to char * or char * const
+                // c-cast const char * etc string casts to char * or char * const
+                if (field.value._type.flags.constant) {
+                    write(*ss, "((const char * const)(");
+                } else {
+                    write(*ss, "(({describeCppType(field._type, DescribeConfig(cross_platform=cross_platform))})(");
+                }
             }
             aot_previsit_get_field(field_type.annotation, ss, string(field.name));
         } elif (field_type.baseType == Type.tPointer) {
             if (field_type.firstType.isHandle) {
                 if (field._type.isString) {
-                    write(*ss, "(({describeCppType(field._type, DescribeConfig(cross_platform=cross_platform))})(")
+                    // c-cast const char * etc string casts to char * or char * const
+                    if (field.value._type.flags.constant) {
+                        write(*ss, "((const char * const)(");
+                    } else {
+                        write(*ss, "(({describeCppType(field._type, DescribeConfig(cross_platform=cross_platform))})(");
+                    }
                 }
                 aot_previsit_get_field_ptr(field_type.firstType.annotation, ss, string(field.name));
             } elif (field.value._type.firstType.isTuple) {
