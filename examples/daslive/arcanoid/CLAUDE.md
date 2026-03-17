@@ -92,8 +92,10 @@ curl -X POST http://localhost:9090/command -d '{"name":"cmd_reset_game"}'
 - **ECS**: Uses DECS (daslang ECS) for balls, bricks, bonuses, particles, trails
 - **Rendering**: OpenGL 3.3 with vertex/fragment shaders, planar shadows, HUD text
 - **Audio**: Procedurally generated sound effects via `audio_boost`
-- **State preservation**: `[before_reload]`/`[after_reload]` save/restore paddle position, score, lives, game state, and audio handles across live reloads
-- **DECS note**: DECS templates in this game are NOT serialized across reloads (`decs_live` is commented out) — DECS is restarted on reload. Only scalar game state (score, lives, paddle_x) is preserved.
+- **State preservation**: Full persistence across live reloads — game keeps running seamlessly
+  - `decs_live` serializes/restores all DECS entities (bricks, balls, bonuses, trails)
+  - `[before_reload]`/`[after_reload]` save/restore globals: paddle_x, score, lives, game_state, powerup timers, sticky state, god_mode, game_speed, audio handles
+  - `init()` guards `decs::restart()` + `spawn_bricks()` with `is_reload()` so entities aren't wiped on reload
 
 ## Keyboard Controls
 

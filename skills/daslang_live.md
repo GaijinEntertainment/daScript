@@ -103,7 +103,21 @@ Provides the `screenshot` live command (captures framebuffer to PNG).
 
 ### `live/decs_live` — DECS Persistence
 
-`require live/decs_live` — automatically serializes/restores DECS entity state across reloads. Just require it — no boilerplate needed. Note: only works if DECS templates are serializable (no pointers, lambdas, etc.).
+`require live/decs_live` — automatically serializes/restores DECS entity state across reloads via `mem_archive_save`/`mem_archive_load` on `decsState`. Just require it — no boilerplate needed. Works with POD templates (float3, int, string, etc.) — only fails if templates contain pointers, lambdas, or other non-serializable types.
+
+**IMPORTANT:** When using `decs_live`, guard `decs::restart()` and initial entity spawning with `is_reload()`:
+
+```das
+def init() {
+    if (!is_reload()) {
+        decs::restart()
+        spawn_initial_entities()
+        commit()
+    }
+}
+```
+
+Without this guard, `decs::restart()` wipes all entities that `decs_live` just restored in `[after_reload]` (which runs before `init()`).
 
 ### `live/live_commands` — Command Registration
 
