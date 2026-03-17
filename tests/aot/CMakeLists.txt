@@ -102,6 +102,11 @@ SET(AOT_DECS_MODULE_FILES
 # AOT for live_host test files
 FILE(GLOB AOT_LIVE_HOST_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/live_host/*.das")
 
+# Live host module files (libraries required by live_host tests)
+SET(AOT_LIVE_HOST_MODULE_FILES
+    modules/dasLiveHost/live/live_commands.das
+)
+
 # AOT for dynamic_cast_rtti test files
 FILE(GLOB AOT_DYNAMIC_CAST_RTTI_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/dynamic_cast_rtti/*.das")
 
@@ -272,6 +277,10 @@ add_custom_target(test_aot_live_host)
 SET(LIVE_HOST_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_LIVE_HOST_FILES}" LIVE_HOST_AOT_GENERATED_SRC test_aot_live_host daslang)
 
+add_custom_target(test_aot_live_host_modules)
+SET(LIVE_HOST_MODULES_AOT_GENERATED_SRC)
+DAS_AOT_LIB("${AOT_LIVE_HOST_MODULE_FILES}" LIVE_HOST_MODULES_AOT_GENERATED_SRC test_aot_live_host_modules daslang)
+
 add_custom_target(test_aot_dynamic_cast_rtti)
 SET(DYNAMIC_CAST_RTTI_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_DYNAMIC_CAST_RTTI_FILES}" DYNAMIC_CAST_RTTI_AOT_GENERATED_SRC test_aot_dynamic_cast_rtti daslang)
@@ -404,6 +413,7 @@ SOURCE_GROUP_FILES("aot generated" DEBUG_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DEBUG_AGENT_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DECS_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LIVE_HOST_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" LIVE_HOST_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DYNAMIC_CAST_RTTI_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" FIO_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" FS_AOT_GENERATED_SRC)
@@ -453,6 +463,7 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${DEBUG_AGENT_AOT_GENERATED_SRC}
     ${DECS_AOT_GENERATED_SRC}
     ${LIVE_HOST_AOT_GENERATED_SRC}
+    ${LIVE_HOST_MODULES_AOT_GENERATED_SRC}
     ${DYNAMIC_CAST_RTTI_AOT_GENERATED_SRC}
     ${FIO_AOT_GENERATED_SRC}
     ${FS_AOT_GENERATED_SRC}
@@ -491,7 +502,7 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_assert_once test_aot_async test_aot_bare_block test_aot_base64
     test_aot_bitfields test_aot_bool_array
     test_aot_data_walker test_aot_debug
-    test_aot_debug_agent test_aot_decs test_aot_live_host test_aot_dynamic_cast_rtti
+    test_aot_debug_agent test_aot_decs test_aot_live_host test_aot_live_host_modules test_aot_dynamic_cast_rtti
     test_aot_fio test_aot_fs test_aot_functional
     test_aot_handle_types test_aot_hash_map
     test_aot_interfaces
@@ -508,5 +519,6 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_stbimage test_aot_stbimage_modules
 )
 target_include_directories(test_aot PRIVATE ${NEED_MODULES_PATH} ${PROJECT_SOURCE_DIR}/modules/dasUnitTest ${PROJECT_SOURCE_DIR}/modules/dasLiveHost/src)
+target_compile_definitions(test_aot PRIVATE DAS_TEST_AOT)
 SETUP_CPP11(test_aot)
 SETUP_LTO(test_aot)
