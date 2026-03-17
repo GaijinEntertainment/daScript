@@ -215,9 +215,7 @@ void on_error_log ( void * , ma_uint32 level, const char * message ) {
 void data_callback(ma_device*, void* pOutput, const void*, ma_uint32 frameCount) {
     float fdt = 1.0f / float(g_rate);
     Array buffer;
-    buffer.data = (char *) pOutput;
-    buffer.size = buffer.capacity = frameCount * g_channels;
-    buffer.lock = 1;
+    array_mark_locked(buffer, pOutput, frameCount * g_channels);
     lock_guard<recursive_mutex> guard(*g_mixer_context->contextMutex);
     auto saved = daScriptEnvironment::exchangeBound(g_mixer_env);
     g_mixer_context->restart();

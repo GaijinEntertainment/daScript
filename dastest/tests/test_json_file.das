@@ -20,7 +20,7 @@ def json_out_path() : string {
 }
 
 def run_dastest_json(test_file : string; var json_content : string&; var exit_code : int&) {
-    let exe = "{get_das_root()}/bin/Release/daslang.exe"
+    let exe = get_command_line_arguments()[0]
     let json_path = json_out_path()
     let cmd = "{exe} {dastest_root()}/dastest.das -- --test {test_file} --json-file {json_path}"
     var output : string
@@ -162,7 +162,7 @@ def test_json_file_not_created_without_flag(tt : T?) {
     tt |> run("no JSON file without --json-file flag") <| @(t : T?) {
         let json_path = json_out_path()
         remove(json_path)
-        let exe = "{get_das_root()}/bin/Release/daslang.exe"
+        let exe = get_command_line_arguments()[0]
         let fix_path = fixture_path("_fixture_passing.das")
         let cmd = "{exe} {dastest_root()}/dastest.das -- --test {fix_path}"
         unsafe {
