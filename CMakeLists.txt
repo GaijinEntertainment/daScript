@@ -1005,6 +1005,19 @@ if (NOT ${DAS_TOOLS_DISABLED})
         RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
     )
 
+    # daslang-live: live-reloading application host
+    SET(DAS_LIVE_MAIN_SRC
+        ${PROJECT_SOURCE_DIR}/utils/daslang-live/main.cpp
+        ${DAS_MODULES_NEED_INC}
+    )
+    add_executable(daslang-live ${DAS_LIVE_MAIN_SRC})
+    TARGET_LINK_LIBRARIES(daslang-live libDaScriptDyn ${SRC_LIBRARIES})
+    ADD_DEPENDENCIES(daslang-live libDaScriptDyn ${DAS_DYN_MODULES_LIBS})
+    target_include_directories(daslang-live PRIVATE
+        ${NEED_MODULES_PATH})
+    SETUP_CPP11(daslang-live)
+    SETUP_LTO(daslang-live)
+
     file(GLOB DASLIB_SOURCES
         ${PROJECT_SOURCE_DIR}/daslib/*.das
     )
