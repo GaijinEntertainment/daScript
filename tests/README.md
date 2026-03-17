@@ -38,6 +38,16 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | test_serial_vectors.das | Vector/range serialization — float2/3/4, int2/3/4, uint4, range, urange, range64, urange64 | |
 | test_serial_annotations.das | Annotation support — @rename, @enum_as_int, mixed annotations, roundtrip with annotations | |
 
+## live_host/
+
+> **Note:** These tests require the dasLiveHost module. Skipped automatically via `.das_test` when the module is not available. Run separately: `dastest -- --test tests/live_host/`
+
+| File | Description | Expects errors |
+|---|---|---|
+| test_store.das | Persistent byte store — store/load round-trip, overwrite, missing keys, empty data, large data, multiple keys | |
+| test_lifecycle.das | Lifecycle functions — get_dt, get_uptime, get_fps, is_paused/set_paused, exit_requested, is_reload, is_live_mode | |
+| test_commands.das | Live command dispatch — [live_command] registration, JSON dispatch, args passing, null return, error handling | |
+
 ## algorithm/
 
 | File | Description | Expects errors |
@@ -158,8 +168,6 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | test_default_values.das | decs_template with default values | |
 | test_entity_lifecycle.das | Entity ID uniqueness, validity, invalidation after delete | |
 | test_gc.das | decs with GC — archive arrays, strings, gc_collect | |
-| test_live.das | Live reload — go_live, recompile, invoke_live | |
-| test_live_app.das | *(helper)* App for test_live — initialize, act, shutdown | |
 | test_objects.das | Creating objects/entities with set and clone syntax | |
 | test_optional_values.das | `@optional` query arguments | |
 | test_queries.das | Nested queries, by-eid, with different types | |
