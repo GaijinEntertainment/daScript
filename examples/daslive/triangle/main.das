@@ -2,8 +2,13 @@ options gen2
 
 require glfw/glfw_live
 require opengl/opengl_boost
+require stbimage
 require daslib/decs_boost
 require daslib/decs_live
+require daslib/json
+require daslib/json_boost
+require daslib/live_commands
+require daslib/live_api
 require daslib/safe_addr
 require daslib/math_boost
 require live_host
@@ -64,22 +69,12 @@ def delete_gl_objects() {
 
 // --- DECS: triangle state ---
 
-[decs_template]
-struct RotatingTriangle {
-    eid : EntityId
-    angle : float       // current rotation angle in radians
-    speed : float       // radians per second
-    radius : float      // distance from center
-}
-
 def make_triangle() {
     create_entity <| @(eid, cmp) {
-        apply_decs_template(cmp, RotatingTriangle(
-            eid = eid,
-            angle = 0.0,
-            speed = 1.5,
-            radius = 0.6
-        ))
+        cmp |> set("eid", eid)
+        cmp |> set("angle", 0.0f)
+        cmp |> set("speed", 1.5f)
+        cmp |> set("radius", 0.6f)
     }
     commit()
 }
@@ -101,6 +96,40 @@ def get_triangle_vertices(var vertices : Vertex[3]&) {
             vertices[i] = Vertex(xy = float2(cos(a), sin(a)) * radius, rgb = colors[i])
         }
     }
+}
+
+// --- Live commands ---
+
+[live_command]
+def screenshot(input : JsonValue?) : JsonValue? {
+    let fname = "screenshot.png"
+    var w, h : int
+    live_get_framebuffer_size(w, h)
+    if (w <= 0 || h <= 0) {
+        return JV("no framebuffer")
+    }
+    var pixels : array<uint8>
+    pixels |> resize(w * h * 4)
+    unsafe {
+        glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, addr(pixels[0]))
+    }
+    // Flip vertically (OpenGL origin is bottom-left)
+    let row_bytes = w * 4
+    var temp : array<uint8>
+    temp |> resize(row_bytes)
+    for (y in range(h / 2)) {
+        let top = y * row_bytes
+        let bot = (h - 1 - y) * row_bytes
+        unsafe {
+            memcpy(addr(temp[0]), addr(pixels[top]), row_bytes)
+            memcpy(addr(pixels[top]), addr(pixels[bot]), row_bytes)
+            memcpy(addr(pixels[bot]), addr(temp[0]), row_bytes)
+        }
+    }
+    unsafe {
+        stbi_write_png(fname, w, h, 4, addr(pixels[0]), w * 4)
+    }
+    return JV("\{\"saved\": \"{fname}\", \"width\": {w}, \"height\": {h}}")
 }
 
 // --- Lifecycle ---
