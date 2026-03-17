@@ -1,5 +1,5 @@
 options gen2
-// watcher test 6
+// arcanoid
 require glfw/glfw_boost
 require live/glfw_live
 require opengl/opengl_boost
@@ -8,7 +8,7 @@ require opengl/opengl_cache
 require daslib/defer
 require daslib/safe_addr
 require daslib/decs_boost
-// require live/decs_live  // our templates don't serialize; restart DECS on reload
+require live/decs_live
 require live/opengl_live
 require live/live_commands
 require live/live_api
@@ -1009,6 +1009,16 @@ def save_game_state() {
     arch |> serialize(lives)
     var gs = int(game_state)
     arch |> serialize(gs)
+    arch |> serialize(wide_paddle_timer)
+    arch |> serialize(narrow_paddle_timer)
+    arch |> serialize(fireball_timer)
+    arch |> serialize(speed_mod_timer)
+    arch |> serialize(speed_mod_factor)
+    arch |> serialize(sticky_active)
+    arch |> serialize(sticky_ball_on_paddle)
+    arch |> serialize(display_paddle_w)
+    arch |> serialize(god_mode)
+    arch |> serialize(game_speed)
     var data <- ser->extractData()
     live_store_bytes("__arcanoid_state", data)
     unsafe { delete ser; }
@@ -1038,6 +1048,16 @@ def restore_game_state() {
         var gs : int
         arch |> serialize(gs)
         game_state = unsafe(reinterpret<GameState>(gs))
+        arch |> serialize(wide_paddle_timer)
+        arch |> serialize(narrow_paddle_timer)
+        arch |> serialize(fireball_timer)
+        arch |> serialize(speed_mod_timer)
+        arch |> serialize(speed_mod_factor)
+        arch |> serialize(sticky_active)
+        arch |> serialize(sticky_ball_on_paddle)
+        arch |> serialize(display_paddle_w)
+        arch |> serialize(god_mode)
+        arch |> serialize(game_speed)
         unsafe { delete ser; }
     }
     // Restore audio handles
@@ -1070,9 +1090,11 @@ def init() {
         audio_initialized = true
         init_audio_samples()
     }
-    decs::restart()
-    spawn_bricks()
-    commit()
+    if (!is_reload()) {
+        decs::restart()
+        spawn_bricks()
+        commit()
+    }
 }
 
 [export]
