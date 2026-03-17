@@ -28,6 +28,7 @@ See `doc/source/reference/design_philosophy.rst` for the full design philosophy 
 - **Generate:** `generate_msvc_2022.bat` → creates `build/DAS.sln`
 - **Build:** `cmake --build build --config Release`
 - **Compiler binary:** `bin/Release/daslang.exe`
+- **Live-reload host:** `bin/Release/daslang-live.exe` — same script runs in both; see `utils/daslang-live/main.cpp`
 - **Run a script:** `bin/Release/daslang.exe path/to/script.das`
 - **Run tests:** `bin/Release/daslang.exe dastest/dastest.das -- --test path/to/test.das`
 - **AOT tests:** `cmake --build build --config Release --target test_aot` then `bin/Release/test_aot.exe dastest/dastest.das -- --test tests/aot`
@@ -220,10 +221,14 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - `tutorials/language/` — Language tutorial `.das` files
 - `tutorials/integration/cpp/` — C++ integration tutorials
 - `modules/` — External plugin modules
+- `modules/dasLiveHost/` — C++ module for live-reload host lifecycle (dynamic module)
+- `utils/daslang-live/` — Live-reloading application host (`daslang-live.exe`)
 - `utils/mcp/` — MCP server for AI coding assistants (20 tools, stdio transport, no extra deps)
 - `utils/daspkg/` — Package manager (install, update, build, search packages)
+- `examples/daslive/` — Live-reload examples (hello, triangle, tank_game, etc.)
 - `examples/daspkg/` — Package manager example projects
 - `examples/crash/` — Crash handler example (native + daslang stack traces)
+- `tests/live_host/` — Unit tests for dasLiveHost module (lifecycle, commands, store)
 - `include/daScript/misc/crash_handler.h` — Crash handler with daslang stack walk support
 
 ## MCP Server (AI Tool Integration)
