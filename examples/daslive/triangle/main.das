@@ -2,13 +2,13 @@ options gen2
 
 require glfw/glfw_live
 require opengl/opengl_boost
-require stbimage
 require daslib/decs_boost
 require daslib/decs_live
-require daslib/json
-require daslib/json_boost
+require daslib/opengl_live
 require daslib/live_commands
 require daslib/live_api
+require daslib/json
+require daslib/json_boost
 require daslib/safe_addr
 require daslib/math_boost
 require live_host
@@ -89,47 +89,57 @@ def update_triangle(dt : float) {
 
 def get_triangle_vertices(var vertices : Vertex[3]&) {
     query() <| $(angle : float; radius : float) {
-        // Three vertices 120 degrees apart, rotated by angle
-        let colors = fixed_array(float3(1.0, 0.2, 0.2), float3(0.2, 1.0, 0.2), float3(0.2, 0.2, 1.0))
-        for (i in range(3)) {
-            let a = angle + float(i) * (2.0 * PI / 3.0)
-            vertices[i] = Vertex(xy = float2(cos(a), sin(a)) * radius, rgb = colors[i])
-        }
+        // Aspect ratio correction
+        var w, h : int
+        live_get_framebuffer_size(w, h)
+        let aspect = h > 0 ? float(w) / float(h) : 1.0f
+        let scale = float2(1.0f / aspect, 1.0f)
+        // Arrow shape: tip (bright red) + two base vertices (dark blue)
+        let tip_offset = float2(cos(angle), sin(angle)) * radius
+        let perp = float2(-sin(angle), cos(angle)) * radius * 0.25f
+        let base = float2(cos(angle), sin(angle)) * radius * (-0.5f)
+        vertices[0] = Vertex(xy = tip_offset * scale, rgb = float3(1.0, 0.2, 0.0))
+        vertices[1] = Vertex(xy = (base + perp) * scale, rgb = float3(0.1, 0.1, 0.4))
+        vertices[2] = Vertex(xy = (base - perp) * scale, rgb = float3(0.1, 0.1, 0.4))
     }
 }
 
 // --- Live commands ---
 
 [live_command]
-def screenshot(input : JsonValue?) : JsonValue? {
-    let fname = "screenshot.png"
-    var w, h : int
-    live_get_framebuffer_size(w, h)
-    if (w <= 0 || h <= 0) {
-        return JV("no framebuffer")
-    }
-    var pixels : array<uint8>
-    pixels |> resize(w * h * 4)
-    unsafe {
-        glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, addr(pixels[0]))
-    }
-    // Flip vertically (OpenGL origin is bottom-left)
-    let row_bytes = w * 4
-    var temp : array<uint8>
-    temp |> resize(row_bytes)
-    for (y in range(h / 2)) {
-        let top = y * row_bytes
-        let bot = (h - 1 - y) * row_bytes
-        unsafe {
-            memcpy(addr(temp[0]), addr(pixels[top]), row_bytes)
-            memcpy(addr(pixels[top]), addr(pixels[bot]), row_bytes)
-            memcpy(addr(pixels[bot]), addr(temp[0]), row_bytes)
+def set_rotation(input : JsonValue?) : JsonValue? {
+    var enabled = true
+    if (input != null && input.value is _object) {
+        let tab & = unsafe(input.value as _object)
+        var ev = tab?["enabled"] ?? null
+        if (ev != null && ev.value is _bool) {
+            enabled = ev.value as _bool
         }
     }
-    unsafe {
-        stbi_write_png(fname, w, h, 4, addr(pixels[0]), w * 4)
+    query() <| $(var speed : float&) {
+        speed = enabled ? 1.5f : 0.0f
     }
-    return JV("\{\"saved\": \"{fname}\", \"width\": {w}, \"height\": {h}}")
+    return JV("\{\"rotation\": {enabled}}")
+}
+
+[live_command]
+def set_angle(input : JsonValue?) : JsonValue? {
+    var angle_val = 0.0f
+    if (input != null && input.value is _object) {
+        let tab & = unsafe(input.value as _object)
+        var av = tab?["angle"] ?? null
+        if (av != null) {
+            if (av.value is _number) {
+                angle_val = float(av.value as _number)
+            } elif (av.value is _longint) {
+                angle_val = float(av.value as _longint)
+            }
+        }
+    }
+    query() <| $(var angle : float&) {
+        angle = angle_val
+    }
+    return JV("\{\"angle\": {angle_val}}")
 }
 
 // --- Lifecycle ---

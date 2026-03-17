@@ -73,13 +73,13 @@ class LiveApiServer : HvWebServer {
 
 class LiveApiAgent : DapiDebugAgent {
     server : LiveApiServer?
-    def override onInstall(agent : DebugAgent?) : void {
+    def LiveApiAgent() {
         server = new LiveApiServer()
         server->init(live_api_port)
         server->start()
         print("live_api: server started on port {live_api_port}\n")
     }
-    def override onUninstall(agent : DebugAgent?) : void {
+    def operator delete() {
         if (server != null) {
             server->stop()
             unsafe {
