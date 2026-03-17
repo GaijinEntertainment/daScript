@@ -454,29 +454,41 @@ def public after_gc {
     }
 }
 
-def public debug_dump {
-    //! Prints out state of the ECS system.
+def public debug_dump_string : string {
+    //! Returns state of the ECS system as a string.
+    return build_string() <| $(var writer) {
+        debug_dump_writer(writer)
+    }
+}
+
+def public debug_dump_writer(var writer : StringBuilderWriter) {
+    //! Writes state of the ECS system to a StringBuilderWriter.
     for (arch in decsState.allArchetypes) {
-        to_log(LOG_DEBUG, "archtype {arch.hash} : {arch.size}\n")
+        writer |> write("archetype {arch.hash} : {arch.size}\n")
         for (index in range(arch.size)) {
-            to_log(LOG_DEBUG, "\tentity[{index}]\n")
+            writer |> write("\tentity[{index}]\n")
             for (c in arch.components) {
                 if (c.info.dumper != null) {
                     let offset = index * c.stride
                     unsafe {
                         let dump = invoke(c.info.dumper, addr(c.data[offset]))
-                        to_log(LOG_DEBUG, "\t\t{c.name} : {describe(c.info)} = {dump}\n")
+                        writer |> write("\t\t{c.name} : {describe(c.info)} = {dump}\n")
                     }
                 } else {
-                    to_log(LOG_DEBUG, "\t\t{c.name} : {describe(c.info)}\n")
+                    writer |> write("\t\t{c.name} : {describe(c.info)}\n")
                 }
             }
         }
     }
     for (erq in decsState.ecsQueries) {
-        to_log(LOG_DEBUG, "query {erq.hash}\n")
-        to_log(LOG_DEBUG, "\treq = {erq.req}\n\treqn = {erq.reqn}\n\tarchetypes = {erq.archetypes}\nat = {erq.at.file}:{int(erq.at.line)}\n")
+        writer |> write("query {erq.hash}\n")
+        writer |> write("\treq = {erq.req}\n\treqn = {erq.reqn}\n\tarchetypes = {erq.archetypes}\n\tat = {erq.at.file}:{int(erq.at.line)}\n")
     }
+}
+
+def public debug_dump {
+    //! Prints out state of the ECS system to LOG_DEBUG.
+    to_log(LOG_DEBUG, debug_dump_string())
 }
 
 def private with_archetype(hash : ComponentHash; blk : block<(var arch : Archetype; idx : int; isNew : bool) : void>) {

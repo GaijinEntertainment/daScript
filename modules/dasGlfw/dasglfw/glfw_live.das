@@ -21,6 +21,7 @@ module glfw_live shared public
 require glfw/glfw_boost
 require opengl/opengl_boost
 require opengl/opengl_cache
+require daslib/archive
 require live_host
 
 var public live_window : GLFWwindow?
@@ -91,28 +92,27 @@ def public live_get_framebuffer_size(var width, height : int&) {
 [before_reload]
 def save_glfw_window() {
     if (live_window != null) {
-        var data : array<uint8>
-        // Store the raw pointer value (8 bytes on 64-bit)
-        unsafe {
-            let ptr_val = reinterpret<uint64>(live_window)
-            for (i in range(8)) {
-                data |> push(uint8((ptr_val >> uint64(i * 8)) & uint64(0xFF)))
-            }
-        }
+        var ser = new MemSerializer()
+        var arch = Archive(reading = false, stream = ser)
+        var ptr_val = unsafe(reinterpret<uint64>(live_window))
+        arch |> serialize(ptr_val)
+        var data <- ser->extractData()
         live_store_bytes("__glfw_window", data)
+        unsafe { delete ser; }
     }
 }
 
 [after_reload]
 def restore_glfw_window() {
     var data : array<uint8>
-    if (live_load_bytes("__glfw_window", data) && length(data) == 8) {
+    if (live_load_bytes("__glfw_window", data) && length(data) > 0) {
+        var ser = new MemSerializer(data)
+        var arch = Archive(reading = true, stream = ser)
+        var ptr_val : uint64
+        arch |> serialize(ptr_val)
         unsafe {
-            var ptr_val : uint64 = uint64(0)
-            for (i in range(8)) {
-                ptr_val |= uint64(data[i]) << uint64(i * 8)
-            }
             live_window = reinterpret<GLFWwindow?>(ptr_val)
+            delete ser
         }
         if (live_window != null) {
             glfwMakeContextCurrent(live_window)

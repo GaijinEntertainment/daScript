@@ -41,8 +41,21 @@ class LiveApiServer : HvWebServer {
         allow_cors()
 
         GET("/status") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            let status_json = "\{\"fps\": {get_fps()}, \"uptime\": {get_uptime()}, \"paused\": {is_paused()}, \"dt\": {get_dt()}}"
+            let err = get_last_error()
+            var has_error = !empty(err)
+            var status_json = "\{\"fps\": {get_fps()}, \"uptime\": {get_uptime()}, \"paused\": {is_paused()}, \"dt\": {get_dt()}, \"has_error\": {has_error}}"
             return resp |> JSON(status_json, http_status.OK)
+        }
+
+        GET("/error") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            let err = get_last_error()
+            if (empty(err)) {
+                return resp |> JSON("\{\"error\": null}", http_status.OK)
+            }
+            // Return error as plain text to avoid JSON escaping issues
+            set_header(resp, "Content-Type", "text/plain")
+            resp.body := err
+            return http_status.OK
         }
 
         POST("/reload") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {

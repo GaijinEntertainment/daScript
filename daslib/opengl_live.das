@@ -19,7 +19,7 @@ require daslib/json_boost
 require daslib/live_commands
 require live_host
 
-[live_command]
+[live_command(description="Save framebuffer to PNG. Args: file")]
 def screenshot(input : JsonValue?) : JsonValue? {
     var fname = "screenshot.png"
     if (input != null && input.value is _object) {

@@ -27,6 +27,21 @@ require live_host
 // --- Registry ---
 
 var public live_command_registry : table<string; function<(input : JsonValue?) : JsonValue?>>
+var public live_command_descriptions : table<string; string>
+
+// --- Help ---
+
+def private live_help_json() : string {
+    var result = "\{\"commands\": \{"
+    var first = true
+    for (name, desc in keys(live_command_descriptions), values(live_command_descriptions)) {
+        if (!first) { result += ", "; }
+        first = false
+        result += "\"{name}\": \"{desc}\""
+    }
+    result += "}}"
+    return result
+}
 
 // --- Dispatch (called from [before_update]) ---
 
@@ -48,6 +63,9 @@ def public live_dispatch_command(command_json : string) : string {
         return "\{\"error\": \"missing command name\"}"
     }
     let name = name_val.value as _string
+    if (name == "help") {
+        return live_help_json()
+    }
     if (!key_exists(live_command_registry, name)) {
         return "\{\"error\": \"unknown command: {name}\"}"
     }
@@ -69,10 +87,16 @@ class LiveCommandMacro : AstFunctionAnnotation {
     //! in `live_command_registry` at context initialization.
     def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         let commandName = "{func.name}"
+        var description = ""
+        var p = args |> find_arg("description")
+        if (p is tString) {
+            description = p as tString
+        }
         // Create or get the [init] function that populates the registry
         var reg <- setup_call_list("register`live`commands", func.at, true/*isInit*/, true/*isPrivate*/)
         // Append: live_command_registry |> insert("commandName", @@func_name)
         reg.list |> emplace_new <| qmacro(live_commands::live_command_registry |> insert($v(commandName), @@$c("_::{func.name}")))
+        reg.list |> emplace_new <| qmacro(live_commands::live_command_descriptions |> insert($v(commandName), $v(description)))
         return true
     }
 }

@@ -55,6 +55,9 @@ static SetBoolFn  dll_set_paused = nullptr;
 static VoidFn  dll_clear_reload_flags = nullptr;
 static VoidFn  dll_clear_error = nullptr;
 
+typedef void (*SetStringFn)(const char *);
+static SetStringFn dll_set_last_error = nullptr;
+
 typedef void (*SetContextFn)(das::Context *);
 typedef void (*SetWatchedFilesFn)(const char **, int);
 static SetBoolFn  dll_set_live_mode = nullptr;
@@ -84,6 +87,7 @@ static bool load_live_host_functions() {
     dll_set_paused        = (SetBoolFn)get_dll_symbol("live_host_set_paused");
     dll_clear_reload_flags = (VoidFn)get_dll_symbol("live_host_clear_reload_flags");
     dll_clear_error       = (VoidFn)get_dll_symbol("live_host_clear_error");
+    dll_set_last_error    = (SetStringFn)get_dll_symbol("live_host_set_last_error");
     dll_set_live_mode        = (SetBoolFn)get_dll_symbol("live_host_set_live_mode");
     dll_set_dispatch_context = (SetContextFn)get_dll_symbol("live_host_set_dispatch_context");
     dll_set_watched_files    = (SetWatchedFilesFn)get_dll_symbol("live_host_set_watched_files");
@@ -142,11 +146,13 @@ static void auto_tick_agents() {
 struct CompileResult {
     ProgramPtr program;
     ContextPtr ctx;
+    FileAccessPtr access;
+    string errors;  // non-empty if compile/simulate failed
 };
 
 static CompileResult compile_script(const string & fn) {
     CompileResult result;
-    auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
+    result.access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
 
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
@@ -158,22 +164,28 @@ static CompileResult compile_script(const string & fn) {
     policies.threadlock_context = true;
     policies.ignore_shared_modules = true;
 
-    result.program = compileDaScript(fn, access, tout, dummyGroup, policies);
+    result.program = compileDaScript(fn, result.access, tout, dummyGroup, policies);
     if (!result.program) {
-        tout << "ERROR: failed to compile " << fn << "\n";
+        result.errors = "failed to compile " + fn;
+        tout << "ERROR: " << result.errors << "\n";
         return result;
     }
     if (result.program->failed()) {
+        TextWriter tw;
         for (auto & err : result.program->errors) {
-            tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
+            auto report = reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
+            tout << report;
+            tw << report;
         }
+        result.errors = tw.str();
         result.program.reset();
         return result;
     }
 
     result.ctx = SimulateWithErrReport(result.program, tout);
     if (!result.ctx) {
-        tout << "ERROR: simulation failed for " << fn << "\n";
+        result.errors = "simulation failed for " + fn;
+        tout << "ERROR: " << result.errors << "\n";
         result.program.reset();
     }
     return result;
@@ -334,6 +346,9 @@ static int run_lifecycle(const string & fn) {
         if (needsReload) {
             tout << "daslang-live: reloading...\n";
 
+            // Set reload flag BEFORE shutdown so is_reload() returns true
+            if (dll_set_is_reload) dll_set_is_reload(true);
+
             // Call [before_reload] functions
             call_annotated_list(ctx, g_annotated.before_reload);
 
@@ -349,8 +364,16 @@ static int run_lifecycle(const string & fn) {
             auto newCr = compile_script(fn);
             if (!newCr.ctx) {
                 tout << "daslang-live: reload FAILED, keeping old context (paused)\n";
+                if (dll_set_last_error) dll_set_last_error(newCr.errors.c_str());
                 if (dll_set_paused) dll_set_paused(true);
                 if (dll_clear_reload_flags) dll_clear_reload_flags();
+                // Re-init old context (shutdown was already called)
+                if (dll_set_is_reload) dll_set_is_reload(true);
+                ctx->restart();
+                call_annotated_list(ctx, g_annotated.after_reload);
+                if (fnInit) {
+                    ctx->evalWithCatch(fnInit, nullptr);
+                }
                 continue;
             }
 

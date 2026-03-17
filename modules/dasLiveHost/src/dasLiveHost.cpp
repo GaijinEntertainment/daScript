@@ -31,6 +31,9 @@ extern "C" {
     DAS_EXPORT_DLL void live_host_clear_error() {
         g_state.last_error.clear();
     }
+    DAS_EXPORT_DLL void live_host_set_last_error(const char * err) {
+        g_state.last_error = err ? err : "";
+    }
 
     // Called by host to set watched files (script + dependencies)
     DAS_EXPORT_DLL void live_host_set_watched_files(const char ** files, int count) {
