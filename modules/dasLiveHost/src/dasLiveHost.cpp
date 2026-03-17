@@ -15,6 +15,8 @@ extern "C" {
     DAS_EXPORT_DLL bool live_host_is_paused()           { return g_state.paused; }
     DAS_EXPORT_DLL bool live_host_files_changed()       { return g_state.files_changed; }
 
+    DAS_EXPORT_DLL void live_host_set_live_mode(bool v)  { g_state.live_mode = v; }
+
     DAS_EXPORT_DLL void live_host_set_dt(float v)       { g_state.dt = v; }
     DAS_EXPORT_DLL void live_host_set_uptime(float v)   { g_state.uptime = v; }
     DAS_EXPORT_DLL void live_host_set_fps(float v)      { g_state.fps = v; }
@@ -29,9 +31,37 @@ extern "C" {
     DAS_EXPORT_DLL void live_host_clear_error() {
         g_state.last_error.clear();
     }
+
+    // Called by host to set watched files (script + dependencies)
+    DAS_EXPORT_DLL void live_host_set_watched_files(const char ** files, int count) {
+        g_state.watched_files.clear();
+        for (int i = 0; i < count; i++) {
+            if (files[i]) g_state.watched_files.push_back(files[i]);
+        }
+    }
+
+    // Called by host after compile to set up command dispatch bridge
+    DAS_EXPORT_DLL void live_host_set_dispatch_context(Context * ctx) {
+        g_state.dispatch_context = ctx;
+        g_state.dispatch_fn = nullptr;
+        if (!ctx) return;
+        auto fns = ctx->findFunctions("live_dispatch_command");
+        if (fns.empty()) {
+            // Function not found — script may not require live_commands
+            return;
+        }
+        for (auto fn : fns) {
+            g_state.dispatch_fn = fn;
+            break;
+        }
+    }
 }
 
 // --- Lifecycle functions exposed to daScript ---
+
+bool live_is_live_mode() {
+    return g_state.live_mode;
+}
 
 void live_request_exit() {
     g_state.exit_requested = true;
@@ -100,6 +130,42 @@ bool live_load_bytes(const char * key, TArray<uint8_t> & data, Context * ctx) {
     return true;
 }
 
+// --- Command dispatch bridge ---
+// Called from the live_api agent context. Since the HV handler runs on the main
+// thread during tick(), the main context is idle and safe to call into.
+
+const char * live_dispatch_command_via_host(const char * cmd_json, Context * callerCtx) {
+    if (!g_state.dispatch_context || !g_state.dispatch_fn || !cmd_json) {
+        return callerCtx->allocateString("{\"error\": \"no dispatch context\"}", nullptr);
+    }
+    // Allocate the command string in the main context
+    auto * mainCtx = g_state.dispatch_context;
+    auto * cmdStr = mainCtx->allocateString(cmd_json, nullptr);
+    // Call live_dispatch_command(cmd_json) in the main context
+    vec4f args[1];
+    args[0] = cast<char *>::from(cmdStr);
+    auto result = mainCtx->evalWithCatch(g_state.dispatch_fn, args);
+    if (auto ex = mainCtx->getException()) {
+        string err = string("{\"error\": \"dispatch exception: ") + ex + "\"}";
+        return callerCtx->allocateString(err, nullptr);
+    }
+    // Clone result string to caller's context (main ctx string may be GC'd)
+    auto * resultStr = cast<char *>::to(result);
+    if (!resultStr) return callerCtx->allocateString("{\"ok\": true}", nullptr);
+    return callerCtx->allocateString(resultStr, nullptr);
+}
+
+// --- Watched files ---
+
+int32_t live_get_watched_file_count() {
+    return int32_t(g_state.watched_files.size());
+}
+
+const char * live_get_watched_file(int32_t index, Context * ctx) {
+    if (index < 0 || index >= int32_t(g_state.watched_files.size())) return nullptr;
+    return ctx->allocateString(g_state.watched_files[index], nullptr);
+}
+
 // --- GC ---
 
 void live_collect_gc(Context * ctx) {
@@ -162,6 +228,31 @@ struct AfterReloadAnnotation : FunctionAnnotation {
     }
 };
 
+struct BeforeUpdateAnnotation : FunctionAnnotation {
+    BeforeUpdateAnnotation() : FunctionAnnotation("before_update") {}
+    virtual bool apply(const FunctionPtr & func, ModuleGroup &,
+                       const AnnotationArgumentList &, string &) override {
+        func->exports = true;
+        func->name = "__before_update_" + func->name;
+        return true;
+    }
+    virtual bool apply(ExprBlock *, ModuleGroup &,
+                       const AnnotationArgumentList &, string & err) override {
+        err = "not supported for blocks";
+        return false;
+    }
+    virtual bool finalize(const FunctionPtr &, ModuleGroup &,
+                         const AnnotationArgumentList &,
+                         const AnnotationArgumentList &, string &) override {
+        return true;
+    }
+    virtual bool finalize(ExprBlock *, ModuleGroup &,
+                         const AnnotationArgumentList &,
+                         const AnnotationArgumentList &, string &) override {
+        return true;
+    }
+};
+
 // --- Module ---
 
 class Module_LiveHost : public Module {
@@ -173,6 +264,11 @@ public:
         // Annotations
         addAnnotation(make_smart<BeforeReloadAnnotation>());
         addAnnotation(make_smart<AfterReloadAnnotation>());
+        addAnnotation(make_smart<BeforeUpdateAnnotation>());
+
+        // Mode
+        addExtern<DAS_BIND_FUN(live_is_live_mode)>(*this, lib, "is_live_mode",
+            SideEffects::accessGlobal, "das::live_is_live_mode");
 
         // Lifecycle
         addExtern<DAS_BIND_FUN(live_request_exit)>(*this, lib, "request_exit",
@@ -202,6 +298,11 @@ public:
         // File watcher
         addExtern<DAS_BIND_FUN(live_signal_files_changed)>(*this, lib, "signal_files_changed",
             SideEffects::modifyExternal, "das::live_signal_files_changed");
+        addExtern<DAS_BIND_FUN(live_get_watched_file_count)>(*this, lib, "get_watched_file_count",
+            SideEffects::accessGlobal, "das::live_get_watched_file_count");
+        addExtern<DAS_BIND_FUN(live_get_watched_file)>(*this, lib, "get_watched_file",
+            SideEffects::accessGlobal, "das::live_get_watched_file")
+                ->args({"index", "context"});
 
         // Persistent store
         addExtern<DAS_BIND_FUN(live_store_bytes)>(*this, lib, "live_store_bytes",
@@ -216,6 +317,11 @@ public:
             SideEffects::modifyExternal, "das::live_collect_gc");
         addExtern<DAS_BIND_FUN(live_collect_string_gc)>(*this, lib, "live_collect_string_gc",
             SideEffects::modifyExternal, "das::live_collect_string_gc");
+
+        // Command dispatch bridge (called from live_api agent, dispatches in main context)
+        addExtern<DAS_BIND_FUN(live_dispatch_command_via_host)>(*this, lib, "dispatch_command",
+            SideEffects::modifyExternal, "das::live_dispatch_command_via_host")
+                ->args({"command_json", "context"});
     }
 
     virtual ModuleAotType aotRequire(TextWriter & tw) const override {

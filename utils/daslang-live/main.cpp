@@ -55,6 +55,12 @@ static SetBoolFn  dll_set_paused = nullptr;
 static VoidFn  dll_clear_reload_flags = nullptr;
 static VoidFn  dll_clear_error = nullptr;
 
+typedef void (*SetContextFn)(das::Context *);
+typedef void (*SetWatchedFilesFn)(const char **, int);
+static SetBoolFn  dll_set_live_mode = nullptr;
+static SetContextFn dll_set_dispatch_context = nullptr;
+static SetWatchedFilesFn dll_set_watched_files = nullptr;
+
 static void * get_dll_symbol(const char * name) {
 #ifdef _WIN32
     HMODULE hMod = GetModuleHandleA("dasModuleLiveHost.shared_module");
@@ -78,6 +84,9 @@ static bool load_live_host_functions() {
     dll_set_paused        = (SetBoolFn)get_dll_symbol("live_host_set_paused");
     dll_clear_reload_flags = (VoidFn)get_dll_symbol("live_host_clear_reload_flags");
     dll_clear_error       = (VoidFn)get_dll_symbol("live_host_clear_error");
+    dll_set_live_mode        = (SetBoolFn)get_dll_symbol("live_host_set_live_mode");
+    dll_set_dispatch_context = (SetContextFn)get_dll_symbol("live_host_set_dispatch_context");
+    dll_set_watched_files    = (SetWatchedFilesFn)get_dll_symbol("live_host_set_watched_files");
 
     // Check that at least the essential functions are available
     if (!dll_exit_requested || !dll_set_dt) {
@@ -182,24 +191,51 @@ static SimFunction * find_void_function(Context * ctx, const char * name) {
     return nullptr;
 }
 
-// --- Call all functions whose name starts with a given prefix ---
+// --- Cached annotated function lists ---
 
-static void call_annotated_functions(Context * ctx, const char * prefix) {
-    auto prefixLen = strlen(prefix);
-    int32_t total = ctx->getTotalFunctions();
-    for (int32_t i = 0; i < total; i++) {
-        auto fn = ctx->getFunction(i);
-        if (!fn || !fn->name) continue;
-        if (strncmp(fn->name, prefix, prefixLen) == 0) {
-            // Must be void() — no arguments
+struct AnnotatedFunctions {
+    vector<SimFunction *> before_reload;
+    vector<SimFunction *> after_reload;
+    vector<SimFunction *> before_update;
+
+    void build(Context * ctx) {
+        before_reload.clear();
+        after_reload.clear();
+        before_update.clear();
+        int32_t total = ctx->getTotalFunctions();
+        for (int32_t i = 0; i < total; i++) {
+            auto fn = ctx->getFunction(i);
+            if (!fn || !fn->name) continue;
             if (fn->debugInfo && fn->debugInfo->count == 0) {
-                ctx->evalWithCatch(fn, nullptr);
-                if (auto ex = ctx->getException()) {
-                    tout << "EXCEPTION in " << fn->name << ": " << ex << "\n";
+                if (strncmp(fn->name, "__before_reload_", 16) == 0) {
+                    before_reload.push_back(fn);
+                } else if (strncmp(fn->name, "__after_reload_", 15) == 0) {
+                    after_reload.push_back(fn);
+                } else if (strncmp(fn->name, "__before_update_", 16) == 0) {
+                    before_update.push_back(fn);
                 }
             }
         }
     }
+};
+
+static AnnotatedFunctions g_annotated;
+
+static void call_annotated_list(Context * ctx, const vector<SimFunction *> & fns) {
+    for (auto fn : fns) {
+        ctx->evalWithCatch(fn, nullptr);
+        if (auto ex = ctx->getException()) {
+            tout << "EXCEPTION in " << fn->name << ": " << ex << "\n";
+        }
+    }
+}
+
+// --- Set watched files ---
+
+static void set_watched_files(const string & scriptFile) {
+    if (!dll_set_watched_files) return;
+    const char * files[] = { scriptFile.c_str() };
+    dll_set_watched_files(files, 1);
 }
 
 // --- Main lifecycle loop ---
@@ -237,6 +273,9 @@ static int run_lifecycle(const string & fn) {
     tout << "daslang-live: lifecycle mode (init/update/shutdown)\n";
 
     if (dll_set_is_reload) dll_set_is_reload(false);
+    if (dll_set_dispatch_context) dll_set_dispatch_context(ctx);
+    set_watched_files(fn);
+    g_annotated.build(ctx);
     ctx->restart();
 
     // Call init()
@@ -270,6 +309,9 @@ static int run_lifecycle(const string & fn) {
             fpsTimer = now;
         }
 
+        // Before-update hooks (lockbox dispatch, etc.)
+        call_annotated_list(ctx, g_annotated.before_update);
+
         // Update (unless paused)
         bool paused = dll_is_paused ? dll_is_paused() : false;
         if (!paused) {
@@ -293,7 +335,7 @@ static int run_lifecycle(const string & fn) {
             tout << "daslang-live: reloading...\n";
 
             // Call [before_reload] functions
-            call_annotated_functions(ctx, "__before_reload");
+            call_annotated_list(ctx, g_annotated.before_reload);
 
             // Call shutdown()
             if (fnShutdown) {
@@ -329,6 +371,8 @@ static int run_lifecycle(const string & fn) {
             }
 
             // Reset state
+            if (dll_set_dispatch_context) dll_set_dispatch_context(ctx);
+            g_annotated.build(ctx);
             if (dll_set_is_reload) dll_set_is_reload(true);
             if (dll_set_paused) dll_set_paused(false);
             if (dll_clear_reload_flags) dll_clear_reload_flags();
@@ -339,7 +383,7 @@ static int run_lifecycle(const string & fn) {
 
             // Call [after_reload] functions BEFORE init — restores persistent
             // state (DECS, globals) so init() can use it immediately.
-            call_annotated_functions(ctx, "__after_reload");
+            call_annotated_list(ctx, g_annotated.after_reload);
 
             // Call init() in new context
             ctx->evalWithCatch(fnInit, nullptr);
@@ -466,6 +510,9 @@ int main(int argc, char * argv[]) {
     if (!load_live_host_functions()) {
         tout << "WARNING: live_host module not found — lifecycle functions will use defaults\n";
     }
+
+    // Set live mode flag before compile — agents check this in [_macro]
+    if (dll_set_live_mode) dll_set_live_mode(true);
 
     int result = run_lifecycle(scriptFile);
 

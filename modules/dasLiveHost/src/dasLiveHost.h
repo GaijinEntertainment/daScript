@@ -13,6 +13,7 @@ namespace das {
         bool full_reload = false;
 
         // Flags (set by host, read by script)
+        bool live_mode = false;
         bool is_reload = false;
         bool paused = false;
 
@@ -33,9 +34,14 @@ namespace das {
         // Persistent key-value store (survives reloads)
         mutex store_mutex;
         unordered_map<string, vector<uint8_t>> store;
+
+        // Command dispatch bridge (set by host after compile)
+        Context * dispatch_context = nullptr;
+        SimFunction * dispatch_fn = nullptr;
     };
 
     // Functions bound to daScript — declared here for AOT.
+    bool live_is_live_mode();
     void live_request_exit();
     bool live_exit_requested();
     void live_request_reload(bool full);
@@ -46,9 +52,12 @@ namespace das {
     bool live_is_paused();
     const char * live_get_last_error(Context * ctx);
     void live_signal_files_changed();
+    int32_t live_get_watched_file_count();
+    const char * live_get_watched_file(int32_t index, Context * ctx);
     void live_store_bytes(const char * key, const TArray<uint8_t> & data);
     bool live_load_bytes(const char * key, TArray<uint8_t> & data, Context * ctx);
     void live_collect_gc(Context * ctx);
     void live_collect_string_gc(Context * ctx);
+    const char * live_dispatch_command_via_host(const char * cmd_json, Context * callerCtx);
 
 }
