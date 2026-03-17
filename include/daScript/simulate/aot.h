@@ -941,6 +941,8 @@ namespace das {
     template <typename TT>
     struct TArray : Array {
         using THIS_TYPE = TArray<TT>;
+        template <typename U = TT>
+        static constexpr size_t stride = sizeof(U);
         TArray()  {}
         TArray(TArray & arr) { moveA(arr); }
         TArray(TArray && arr ) { moveA(arr); }
