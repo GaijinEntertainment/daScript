@@ -166,7 +166,7 @@ def init_audio_samples() {
 }
 
 def play_sfx(samples : array<float>) {
-    if (!audio_initialized) { return; }
+    if (!audio_initialized) { return ; }
     var copy <- clone(samples)
     play_sound_from_pcm(AUDIO_RATE, AUDIO_CHANNELS, copy)
 }
@@ -383,7 +383,7 @@ def current_ball_speed() : float {
 }
 
 def spawn_bonus(pos : float3) {
-    if (game_random() > BONUS_DROP_CHANCE) { return; }
+    if (game_random() > BONUS_DROP_CHANCE) { return ; }
     let btype = int(game_random() * float(NUM_BONUS_TYPES)) % NUM_BONUS_TYPES
     create_entity <| @(eid, cmp) {
         apply_decs_template(cmp, Bonus(
@@ -734,7 +734,7 @@ var trail_timer = 0.0
 
 def spawn_trail_dots() {
     trail_timer -= tick_dt
-    if (trail_timer > 0.0) { return; }
+    if (trail_timer > 0.0) { return ; }
     trail_timer = TRAIL_INTERVAL
     query <| $(b : Ball) {
         let p = b.pos
@@ -971,14 +971,14 @@ def cmd_slow_motion(input : JsonValue?) : JsonValue? {
 // --- HUD ---
 
 def draw_text(text : string; x, y : int; tint : float3 = float3(1.0)) {
-    if (hud_font == null) { return; }
+    if (hud_font == null) { return ; }
     var quads <- (*hud_font) |> create_quads(text)
     (*hud_font) |> draw_quads_2d(quads, display_w, display_h, x, y, tint)
     delete quads
 }
 
 def draw_text_centered(text : string; cx, y : int; tint : float3 = float3(1.0)) {
-    if (hud_font == null) { return; }
+    if (hud_font == null) { return ; }
     var quads <- (*hud_font) |> create_quads(text)
     let dim = quads_dim(quads)
     let tw = int(dim.vmax.x - dim.vmin.x)
