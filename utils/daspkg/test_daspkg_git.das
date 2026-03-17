@@ -351,7 +351,7 @@ def test_update_local_auto_build(t : T?) {
 def test_full_workflow_local(t : T?) {
     t |> run("install, run, update, run — pure das package") @(t : T?) {
         let das_root = get_das_root()
-        let daslang = "{das_root}/bin/Release/daslang.exe"
+        let daslang = get_command_line_arguments()[0]
         let tmp_root = "{das_root}/_daspkg_test_workflow"
         let pkg_src = "{das_root}/_daspkg_test_workflow_src"
 

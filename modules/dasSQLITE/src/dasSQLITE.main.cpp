@@ -34,15 +34,9 @@ struct ExecCallback {
 int exec_callback ( void * arg, int argc, char ** argv, char ** colName ) {
     ExecCallback * cb = (ExecCallback *) arg;
     Array arrFields;
-    arrFields.data = (char *) argv;
-    arrFields.capacity = arrFields.size = argv ? argc : 0;
-    arrFields.lock = 1;
-    arrFields.flags = 0;
+    array_mark_locked(arrFields, (char *) argv, argc);
     Array arrColumns;
-    arrColumns.data = (char *) colName;
-    arrColumns.capacity = arrColumns.size = colName ? argc : 0;
-    arrColumns.lock = 1;
-    arrColumns.flags = 0;
+    array_mark_locked(arrColumns, (char *) colName, argc);
     vec4f args[2] = {
         cast<Array *>::from(&arrFields),
         cast<Array *>::from(&arrColumns)
