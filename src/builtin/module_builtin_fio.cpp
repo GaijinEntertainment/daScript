@@ -15,17 +15,6 @@
 #include "daScript/misc/sysos.h"
 
 #include <sstream>
-#include <thread>
-#include <atomic>
-#include <chrono>
-#if _WIN32
-#include <fcntl.h>
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#else
-#include <signal.h>
-#include <sys/wait.h>
-#endif
 
 #define DAS_POPEN_TIMEOUT 0x7FFFFF01
 
@@ -210,6 +199,18 @@ namespace das {
 
 }
 #else // DAS_NO_FILEIO
+
+#include <thread>
+#include <atomic>
+#include <chrono>
+#if _WIN32
+#include <fcntl.h>
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
+#include <signal.h>
+#include <sys/wait.h>
+#endif
 
 #include <filesystem>
 #include <fstream>
