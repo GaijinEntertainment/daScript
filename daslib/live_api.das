@@ -55,6 +55,16 @@ class LiveApiServer : HvWebServer {
             return resp |> JSON("\{\"ok\": true}", http_status.OK)
         }
 
+        POST("/pause") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            set_paused(true)
+            return resp |> JSON("\{\"paused\": true}", http_status.OK)
+        }
+
+        POST("/unpause") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            set_paused(false)
+            return resp |> JSON("\{\"paused\": false}", http_status.OK)
+        }
+
         POST("/command") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let body = string(req.body)
             if (empty(body)) {

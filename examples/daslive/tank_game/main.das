@@ -991,7 +991,6 @@ def update() {
         return
     }
     let dt = get_dt()
-    // Act
     tick_dt = min(dt, 1.0 / 30.0)
     decs_stage("update_controls")
     decs_stage("update_ai")

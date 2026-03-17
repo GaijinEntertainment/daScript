@@ -81,6 +81,19 @@ bool live_is_reload() {
 }
 
 float live_get_dt() {
+    if (!g_state.live_mode) {
+        // Standalone mode: compute dt from elapsed time
+        auto now = std::chrono::steady_clock::now();
+        if (!g_state.time_initialized) {
+            g_state.last_time = now;
+            g_state.time_initialized = true;
+            return 0.0f;
+        }
+        float dt = std::chrono::duration<float>(now - g_state.last_time).count();
+        g_state.last_time = now;
+        g_state.dt = dt;
+        g_state.uptime += dt;
+    }
     return g_state.dt;
 }
 
@@ -94,6 +107,10 @@ float live_get_fps() {
 
 bool live_is_paused() {
     return g_state.paused;
+}
+
+void live_set_paused(bool v) {
+    g_state.paused = v;
 }
 
 const char * live_get_last_error(Context * ctx) {
@@ -292,6 +309,9 @@ public:
         // Error state
         addExtern<DAS_BIND_FUN(live_is_paused)>(*this, lib, "is_paused",
             SideEffects::accessGlobal, "das::live_is_paused");
+        addExtern<DAS_BIND_FUN(live_set_paused)>(*this, lib, "set_paused",
+            SideEffects::modifyExternal, "das::live_set_paused")
+                ->args({"paused"});
         addExtern<DAS_BIND_FUN(live_get_last_error)>(*this, lib, "get_last_error",
             SideEffects::accessGlobal, "das::live_get_last_error");
 

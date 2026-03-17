@@ -1,6 +1,7 @@
 #pragma once
 
 #include "daScript/daScript.h"
+#include <chrono>
 
 namespace das {
 
@@ -17,10 +18,12 @@ namespace das {
         bool is_reload = false;
         bool paused = false;
 
-        // Timing (set by host)
+        // Timing (set by host, or computed internally)
         float dt = 0.0f;
         float uptime = 0.0f;
         float fps = 0.0f;
+        std::chrono::steady_clock::time_point last_time;
+        bool time_initialized = false;
 
         // Error (set by host)
         string last_error;
@@ -50,6 +53,7 @@ namespace das {
     float live_get_uptime();
     float live_get_fps();
     bool live_is_paused();
+    void live_set_paused(bool v);
     const char * live_get_last_error(Context * ctx);
     void live_signal_files_changed();
     int32_t live_get_watched_file_count();
