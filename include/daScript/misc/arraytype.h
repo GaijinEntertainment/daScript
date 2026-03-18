@@ -149,12 +149,18 @@ namespace das {
 
 #define DAS_ARRAY_MAGIC 0xA11B3DA7 // magic number for array validation (alive data)
 
+    struct Table;
+
     struct Array {
         char *data;
         uint32_t size;
         uint32_t capacity;
+    // TArray, Table can set manually during copying.
+    protected:
+        // use friend helpers to lock-unlock.
         uint32_t magic;
         uint32_t lock;
+    public:
         union {
             struct {
                 bool shared : 1;
@@ -164,6 +170,15 @@ namespace das {
             uint32_t flags;
         };
         __forceinline bool isLocked() const { return lock; }
+
+        friend DAS_API int builtin_array_lock_count ( const Array & arr );
+        friend DAS_API void array_mark_locked(Array &arr, void *data, uint32_t capacity);
+        friend DAS_API void array_mark_locked(Array &arr, void *data, uint32_t size, uint32_t capacity);
+        friend DAS_API void array_lock(Context &context, Array &arr, LineInfo *at);
+        friend DAS_API void array_unlock(Context &context, Array &arr, LineInfo *at);
+        friend DAS_API void table_lock(Context &context, Table &arr, LineInfo *at);
+        friend DAS_API void table_unlock(Context &context, Table &arr, LineInfo *at);
+        template <typename KeyType> friend class TableHash;
     };
 
     class Context;

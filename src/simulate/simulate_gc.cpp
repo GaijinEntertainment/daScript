@@ -1082,7 +1082,7 @@ namespace das
         }
         virtual void afterArray ( Array * pa, TypeInfo * ti ) override {
             if ( pa->data ) {
-                if ( !pa->lock || pa->hopeless ) {
+                if ( !pa->isLocked() || pa->hopeless ) {
                     uint32_t oldSize = pa->capacity*ti->firstType->size;
                     __context__->free(pa->data, oldSize, __at__);
                 } else {
@@ -1098,7 +1098,7 @@ namespace das
         }
         virtual void afterTable ( Table * pa, TypeInfo * ti ) override {
             if ( pa->data ) {
-                if ( !pa->lock || pa->hopeless ) {
+                if ( !pa->isLocked() || pa->hopeless ) {
                     uint32_t oldSize = pa->capacity*(ti->firstType->size+ti->secondType->size+sizeof(TableHashKey));
                     __context__->free(pa->data, oldSize, __at__);
                 } else {

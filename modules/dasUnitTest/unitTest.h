@@ -87,6 +87,56 @@ DAS_MOD_API __forceinline Point3 getSamplePoint3() {return Point3{0,1,2};}
 DAS_MOD_API __forceinline Point3 doubleSamplePoint3(const Point3 &a) { return Point3{ a.x + a.x, a.y + a.y, a.z + a.z }; }
 DAS_MOD_API __forceinline void project_to_nearest_navmesh_point(Point3 & a, float t) { a = Point3{ a.x + t, a.y + t, a.z + t }; }
 
+
+class SimpleString
+{
+public:
+  typedef char value_type;
+
+  // constructors and destructor
+  SimpleString() : string(nullptr) {}
+  SimpleString(const SimpleString &s) { copyStr(s.string); }
+  SimpleString(SimpleString &&s) : string(s.string) { s.string = nullptr; }
+  explicit SimpleString(const char *s) : string((char *)s) {}
+  ~SimpleString() {}
+  void clear()
+  {
+    freeStr();
+    string = nullptr;
+  }
+  void copyStr(const char *s) { string = (char *)s; }
+  void freeStr() { (string) ? free(string) : (void)0; }
+  // assigment operators
+  SimpleString &operator=(const char *s)
+  {
+    if (string == s)
+      return *this;
+    copyStr(s);
+    return *this;
+  }
+  SimpleString &operator=(const SimpleString &s) { return operator=(s.str()); }
+  SimpleString &operator=(SimpleString &&s)
+  {
+    char *tmp = string;
+    string = s.string;
+    s.string = tmp;
+    return *this;
+  }
+
+  // string length and emptiness test
+  // explicit cast to char* and const char*: empty string always returns ""
+  char *str() { return string ? string : (char *)""; }
+  const char *str() const { return string ? string : ""; }
+
+  operator char *() { return str(); }
+  operator const char *() const { return str(); }
+
+
+private:
+  char *string;
+};
+
+
 struct DAS_MOD_API TestObjectFoo {
     Point3 hit;
     const Point3 * lookAt;
@@ -139,6 +189,7 @@ DAS_MOD_API __forceinline int takeDummy ( const TestObjectFoo & x ) { return x.f
 struct TestObjectBar {
     TestObjectFoo * fooPtr;
     float           barData;
+    SimpleString simple_string;
     TestObjectFoo & getFoo() { return *fooPtr; }
     TestObjectFoo * getFooPtr() { return fooPtr; }
 };

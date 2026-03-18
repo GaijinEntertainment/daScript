@@ -119,6 +119,7 @@ struct TestObjectBarAnnotation : ManagedStructureAnnotation <TestObjectBar> {
     TestObjectBarAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("TestObjectBar", ml) {
         addField<DAS_BIND_MANAGED_FIELD(fooPtr)>("fooPtr");
         addField<DAS_BIND_MANAGED_FIELD(barData)>("barData");
+        addFieldEx("simple_string", "simple_string", offsetof(TestObjectBar, simple_string), das::makeType<char *>(ml));
         addProperty<DAS_BIND_MANAGED_PROP(getFoo)>("getFoo");
         addProperty<DAS_BIND_MANAGED_PROP(getFooPtr)>("getFooPtr");
     }

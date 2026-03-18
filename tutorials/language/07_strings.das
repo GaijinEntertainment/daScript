@@ -186,7 +186,7 @@ def main {
 
 // output:
 // Hello, World!
-// tab:	here
+// tab: here
 // newline:
 // here
 // backslash: \

@@ -15,17 +15,6 @@
 #include "daScript/misc/sysos.h"
 
 #include <sstream>
-#include <thread>
-#include <atomic>
-#include <chrono>
-#if _WIN32
-#include <fcntl.h>
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#else
-#include <signal.h>
-#include <sys/wait.h>
-#endif
 
 #define DAS_POPEN_TIMEOUT 0x7FFFFF01
 
@@ -210,6 +199,18 @@ namespace das {
 
 }
 #else // DAS_NO_FILEIO
+
+#include <thread>
+#include <atomic>
+#include <chrono>
+#if _WIN32
+#include <fcntl.h>
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
+#include <signal.h>
+#include <sys/wait.h>
+#endif
 
 #include <filesystem>
 #include <fstream>
@@ -699,7 +700,7 @@ namespace das {
             auto deadline = chrono::steady_clock::now() + chrono::milliseconds((int)(timeout_sec * 1000.0f));
             while ( chrono::steady_clock::now() < deadline ) {
                 if ( processDone.load() ) return;
-                this_thread::sleep_for(chrono::milliseconds(100));
+                std::this_thread::sleep_for(chrono::milliseconds(100));
             }
             if ( !processDone.load() ) {
                 timedOut = true;
@@ -947,7 +948,7 @@ namespace das {
 
     // ---- filesystem operations (C++17 <filesystem>) ----
 
-    static char * ec_to_string ( const error_code & ec, Context * ctx, LineInfoArg * at ) {
+    static char * ec_to_string ( const std::error_code & ec, Context * ctx, LineInfoArg * at ) {
         auto msg = ec.message();
         return ctx->allocateString(msg.data(), uint32_t(msg.size()), at);
     }
@@ -968,21 +969,21 @@ namespace das {
 
     char * builtin_fs_extension ( const char * path, Context * ctx, LineInfoArg * at ) {
         if ( !path ) return nullptr;
-        auto ext = filesystem::path(path).extension().string();
+        auto ext = std::filesystem::path(path).extension().string();
         if ( ext.empty() ) return nullptr;
         return ctx->allocateString(ext.data(), uint32_t(ext.size()), at);
     }
 
     char * builtin_fs_stem ( const char * path, Context * ctx, LineInfoArg * at ) {
         if ( !path ) return nullptr;
-        auto s = filesystem::path(path).stem().string();
+        auto s = std::filesystem::path(path).stem().string();
         if ( s.empty() ) return nullptr;
         return ctx->allocateString(s.data(), uint32_t(s.size()), at);
     }
 
     char * builtin_fs_replace_extension ( const char * path, const char * new_ext, Context * ctx, LineInfoArg * at ) {
         if ( !path ) return nullptr;
-        auto p = filesystem::path(path);
+        auto p = std::filesystem::path(path);
         p.replace_extension(new_ext ? new_ext : "");
         auto s = p.string();
         return ctx->allocateString(s.data(), uint32_t(s.size()), at);
@@ -990,7 +991,7 @@ namespace das {
 
     char * builtin_fs_join ( const char * a, const char * b, Context * ctx, LineInfoArg * at ) {
         if ( !a && !b ) return nullptr;
-        filesystem::path pa = a ? a : "";
+        std::filesystem::path pa = a ? a : "";
         if ( b ) pa /= b;
         auto s = pa.string();
         return ctx->allocateString(s.data(), uint32_t(s.size()), at);
@@ -998,21 +999,21 @@ namespace das {
 
     char * builtin_fs_normalize ( const char * path, Context * ctx, LineInfoArg * at ) {
         if ( !path ) return nullptr;
-        auto s = filesystem::path(path).lexically_normal().string();
+        auto s = std::filesystem::path(path).lexically_normal().string();
         if ( s.empty() ) return nullptr;
         return ctx->allocateString(s.data(), uint32_t(s.size()), at);
     }
 
     bool builtin_fs_is_absolute ( const char * path ) {
         if ( !path ) return false;
-        return filesystem::path(path).is_absolute();
+        return std::filesystem::path(path).is_absolute();
     }
 
     char * builtin_fs_relative ( const char * path, const char * base, char * & error, Context * ctx, LineInfoArg * at ) {
         error = nullptr;
         if ( !path || !base ) { error = empty_path_error(ctx, at); return nullptr; }
-        error_code ec;
-        auto s = filesystem::relative(filesystem::path(path), filesystem::path(base), ec).string();
+        std::error_code ec;
+        auto s = std::filesystem::relative(std::filesystem::path(path), std::filesystem::path(base), ec).string();
         if ( ec ) { error = ec_to_string(ec, ctx, at); return nullptr; }
         if ( s.empty() ) return nullptr;
         return ctx->allocateString(s.data(), uint32_t(s.size()), at);
@@ -1020,7 +1021,7 @@ namespace das {
 
     char * builtin_fs_parent ( const char * path, Context * ctx, LineInfoArg * at ) {
         if ( !path ) return nullptr;
-        auto s = filesystem::path(path).parent_path().string();
+        auto s = std::filesystem::path(path).parent_path().string();
         if ( s.empty() ) return nullptr;
         return ctx->allocateString(s.data(), uint32_t(s.size()), at);
     }
@@ -1030,8 +1031,8 @@ namespace das {
     int64_t builtin_fs_file_size ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) {
         error = nullptr;
         if ( !path ) { error = empty_path_error(ctx, at); return -1; }
-        error_code ec;
-        auto sz = filesystem::file_size(path, ec);
+        std::error_code ec;
+        auto sz = std::filesystem::file_size(path, ec);
         if ( ec ) { error = ec_to_string(ec, ctx, at); return -1; }
         return static_cast<int64_t>(sz);
     }
@@ -1039,8 +1040,8 @@ namespace das {
     bool builtin_fs_equivalent ( const char * a, const char * b, char * & error, Context * ctx, LineInfoArg * at ) {
         error = nullptr;
         if ( !a || !b ) { error = empty_path_error(ctx, at); return false; }
-        error_code ec;
-        bool result = filesystem::equivalent(a, b, ec);
+        std::error_code ec;
+        bool result = std::filesystem::equivalent(a, b, ec);
         if ( ec ) { error = ec_to_string(ec, ctx, at); return false; }
         return result;
     }
@@ -1048,8 +1049,8 @@ namespace das {
     bool builtin_fs_is_symlink ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) {
         error = nullptr;
         if ( !path ) { error = empty_path_error(ctx, at); return false; }
-        error_code ec;
-        bool result = filesystem::is_symlink(path, ec);
+        std::error_code ec;
+        bool result = std::filesystem::is_symlink(path, ec);
         if ( ec ) { error = ec_to_string(ec, ctx, at); return false; }
         return result;
     }
@@ -1059,9 +1060,9 @@ namespace das {
     bool builtin_fs_copy_file ( const char * src, const char * dst, bool overwrite, char * & error, Context * ctx, LineInfoArg * at ) {
         error = nullptr;
         if ( !src || !dst ) { error = empty_path_error(ctx, at); return false; }
-        error_code ec;
-        auto opts = overwrite ? filesystem::copy_options::overwrite_existing : filesystem::copy_options::none;
-        bool result = filesystem::copy_file(src, dst, opts, ec);
+        std::error_code ec;
+        auto opts = overwrite ? std::filesystem::copy_options::overwrite_existing : std::filesystem::copy_options::none;
+        bool result = std::filesystem::copy_file(src, dst, opts, ec);
         if ( ec ) { error = ec_to_string(ec, ctx, at); return false; }
         return result;
     }
@@ -1069,11 +1070,11 @@ namespace das {
     bool builtin_fs_set_mtime ( const char * path, Time time, char * & error, Context * ctx, LineInfoArg * at ) {
         error = nullptr;
         if ( !path ) { error = empty_path_error(ctx, at); return false; }
-        error_code ec;
-        auto sys_time = das::chrono::system_clock::from_time_t(time.time);
-        auto file_time = filesystem::file_time_type::clock::now() +
-            (sys_time - das::chrono::system_clock::now());
-        filesystem::last_write_time(path, file_time, ec);
+        std::error_code ec;
+        auto sys_time = chrono::system_clock::from_time_t(time.time);
+        auto file_time = std::filesystem::file_time_type::clock::now() +
+            (sys_time - chrono::system_clock::now());
+        std::filesystem::last_write_time(path, file_time, ec);
         if ( ec ) { error = ec_to_string(ec, ctx, at); return false; }
         return true;
     }
@@ -1083,14 +1084,14 @@ namespace das {
     void builtin_fs_dir_rec ( const char * path, const TBlock<void, char *, bool> & blk, char * & error, Context * ctx, LineInfoArg * at ) {
         error = nullptr;
         if ( !path ) { error = empty_path_error(ctx, at); return; }
-        filesystem::path root(path);
-        error_code ec;
-        auto it = filesystem::recursive_directory_iterator(root,
-                filesystem::directory_options::skip_permission_denied, ec);
+        std::filesystem::path root(path);
+        std::error_code ec;
+        auto it = std::filesystem::recursive_directory_iterator(root,
+                std::filesystem::directory_options::skip_permission_denied, ec);
         if ( ec ) { error = ec_to_string(ec, ctx, at); return; }
         for ( auto & entry : it ) {
             if ( ec ) { ec.clear(); continue; }
-            auto rel = filesystem::relative(entry.path(), root, ec).string();
+            auto rel = std::filesystem::relative(entry.path(), root, ec).string();
             if ( ec ) { ec.clear(); continue; }
             bool is_dir = entry.is_directory(ec);
             if ( ec ) { ec.clear(); }
@@ -1107,34 +1108,35 @@ namespace das {
 
     char * builtin_fs_temp_directory ( char * & error, Context * ctx, LineInfoArg * at ) {
         error = nullptr;
-        error_code ec;
-        auto s = filesystem::temp_directory_path(ec).string();
+        std::error_code ec;
+        auto s = std::filesystem::temp_directory_path(ec).string();
         if ( ec ) { error = ec_to_string(ec, ctx, at); return nullptr; }
         return ctx->allocateString(s.data(), uint32_t(s.size()), at);
     }
 
-    static filesystem::path generate_unique_temp_path ( const char * prefix, const char * ext, error_code & ec ) {
-        auto tmp = filesystem::temp_directory_path(ec);
+    static std::filesystem::path generate_unique_temp_path ( const char * prefix, const char * ext, std::error_code & ec ) {
+        auto tmp = std::filesystem::temp_directory_path(ec);
         if ( ec ) return {};
-        das::random_device rd;
-        das::mt19937 gen(rd());
-        das::uniform_int_distribution<uint64_t> dis;
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<uint32_t> dis;
         for ( int i = 0; i < 100; ++i ) {
             auto name = string(prefix ? prefix : "tmp") + "_" + das::to_string(dis(gen))
                 + (ext ? ext : "");
-            auto p = tmp / name;
-            if ( !filesystem::exists(p, ec) && !ec ) return p;
+            // In order to support EASTL do not mix strings.
+            auto p = tmp / name.c_str();
+            if ( !std::filesystem::exists(p, ec) && !ec ) return p;
         }
         return {};
     }
 
     char * builtin_fs_create_temp_file ( const char * prefix, const char * ext, char * & error, Context * ctx, LineInfoArg * at ) {
         error = nullptr;
-        error_code ec;
+        std::error_code ec;
         auto p = generate_unique_temp_path(prefix, ext, ec);
         if ( ec ) { error = ec_to_string(ec, ctx, at); return nullptr; }
         if ( p.empty() ) return nullptr;
-        das::ofstream ofs(p, das::ios::binary);
+        std::ofstream ofs(p, std::ios::binary);
         if ( !ofs ) return nullptr;
         ofs.close();
         auto s = p.string();
@@ -1143,11 +1145,11 @@ namespace das {
 
     char * builtin_fs_create_temp_directory ( const char * prefix, char * & error, Context * ctx, LineInfoArg * at ) {
         error = nullptr;
-        error_code ec;
+        std::error_code ec;
         auto p = generate_unique_temp_path(prefix, "", ec);
         if ( ec ) { error = ec_to_string(ec, ctx, at); return nullptr; }
         if ( p.empty() ) return nullptr;
-        if ( !filesystem::create_directory(p, ec) || ec ) {
+        if ( !std::filesystem::create_directory(p, ec) || ec ) {
             if ( ec ) error = ec_to_string(ec, ctx, at);
             return nullptr;
         }
@@ -1158,8 +1160,8 @@ namespace das {
     bool builtin_fs_disk_space ( const char * path, DiskSpaceInfo & info, char * & error, Context * ctx, LineInfoArg * at ) {
         error = nullptr;
         if ( !path ) { error = empty_path_error(ctx, at); return false; }
-        error_code ec;
-        auto si = filesystem::space(path, ec);
+        std::error_code ec;
+        auto si = std::filesystem::space(path, ec);
         if ( ec ) { error = ec_to_string(ec, ctx, at); return false; }
         info.capacity = si.capacity;
         info.free = si.free;
@@ -1170,8 +1172,8 @@ namespace das {
     bool builtin_rmdir_rec_ec ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) {
         error = nullptr;
         if ( !path ) { error = empty_path_error(ctx, at); return false; }
-        error_code ec;
-        filesystem::remove_all(path, ec);
+        std::error_code ec;
+        std::filesystem::remove_all(path, ec);
         if ( ec ) { error = ec_to_string(ec, ctx, at); return false; }
         return true;
     }

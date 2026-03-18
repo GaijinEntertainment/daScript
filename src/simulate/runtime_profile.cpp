@@ -20,7 +20,8 @@ namespace das
         double tSec = minT/1000000.;
         if ( category ) {
             TextWriter ss;
-            ss << "\"" << category << "\", " << fmt::format("{:.9f}",tSec) << ", " << count << "\n";
+            // fmt::format return std::string, which is not always das::string.
+            ss << "\"" << category << "\", " << fmt::format("{:.9f}",tSec).c_str() << ", " << count << "\n";
             context->to_out(at, ss.str().c_str());
         }
         return (float) tSec;
