@@ -155,6 +155,7 @@ When `require live/live_api` is present, an HTTP server starts on port 9090 (con
 | POST | `/reload/full` | Trigger full reload |
 | POST | `/pause` | Pause the host |
 | POST | `/unpause` | Unpause the host |
+| POST | `/shutdown` | Graceful shutdown |
 | POST | `/command` | Dispatch a live command (JSON body) |
 
 ### Command Dispatch
