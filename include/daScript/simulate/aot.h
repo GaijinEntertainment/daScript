@@ -948,7 +948,7 @@ namespace das {
         TArray(TArray && arr ) { moveA(arr); }
         TArray & operator = ( TArray & arr ) { moveA(arr); return *this; }
         TArray & operator = ( TArray && arr ) { moveA(arr); return *this; }
-        __forceinline void moveA ( Array & arr ) {
+        __forceinline void moveA ( TArray & arr ) {
             data = arr.data; arr.data = 0;
             size = arr.size; arr.size = 0;
             capacity = arr.capacity; arr.capacity = 0;
@@ -1017,7 +1017,7 @@ namespace das {
         TTable(TTable && arr ) { moveT(arr); }
         TTable & operator = ( TTable & arr ) { moveT(arr); return *this; }
         TTable & operator = ( TTable && arr ) { moveT(arr); return *this; }
-        __forceinline void moveT ( Table & arr ) {
+        __forceinline void moveT ( TTable & arr ) {
             data = arr.data; arr.data = 0;
             size = arr.size; arr.size = 0;
             capacity = arr.capacity; arr.capacity = 0;
@@ -1058,7 +1058,7 @@ namespace das {
         TTable(TTable && arr ) { moveT(arr); }
         TTable & operator = ( TTable & arr ) { moveT(arr); return *this; }
         TTable & operator = ( TTable && arr ) { moveT(arr); return *this; }
-        __forceinline void moveT ( Table & arr ) {
+        __forceinline void moveT ( TTable & arr ) {
             data = arr.data; arr.data = 0;
             size = arr.size; arr.size = 0;
             capacity = arr.capacity; arr.capacity = 0;
@@ -1739,7 +1739,7 @@ namespace das {
     struct das_delete<TArray<TT>> {
         static __forceinline void clear ( Context * __context__, TArray<TT> & dim ) {
             if ( dim.data ) {
-                if ( !dim.lock ) {
+                if ( !dim.isLocked() ) {
                     uint32_t oldSize = dim.capacity*sizeof(TT);
                     __context__->free(dim.data, oldSize);
                 } else {
@@ -1754,7 +1754,7 @@ namespace das {
     struct das_delete<TTable<TKey,TVal>> {
         static __forceinline void clear ( Context * __context__, TTable<TKey,TVal> & tab ) {
             if ( tab.data ) {
-                if ( !tab.lock ) {
+                if ( !tab.isLocked() ) {
                     uint32_t oldSize = tab.capacity*(sizeof(TKey)+sizeof(TVal)+sizeof(TableHashKey));
                     __context__->free(tab.data, oldSize);
                 } else {
@@ -2798,7 +2798,7 @@ namespace das {
 
     template <typename TK, typename TV, typename TKey>
     __forceinline bool __builtin_table_erase ( Context * context, TTable<TK,TV> & tab, TKey _key ) {
-        if ( tab.lock ) context->throw_error("can't erase from locked table");
+        if ( tab.isLocked() ) context->throw_error("can't erase from locked table");
         TK key = (TK) _key;
         auto hfn = hash_function(*context, key);
         TableHash<TK> thh(context,safe_size_of<TV>::value);
@@ -2807,7 +2807,7 @@ namespace das {
 
     template <typename TK, typename TKey>
     __forceinline void __builtin_table_set_insert ( Context * context, TTable<TK,void> & tab, TKey _key ) {
-        if ( tab.lock ) context->throw_error("can't insert to a locked table");
+        if ( tab.isLocked() ) context->throw_error("can't insert to a locked table");
         TK key = (TK) _key;
         auto hfn = hash_function(*context, key);
         TableHash<TK> thh(context,0);

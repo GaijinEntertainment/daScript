@@ -1129,7 +1129,7 @@ namespace das
 
     void builtin_array_free ( Array & dim, int szt, Context * __context__, LineInfoArg * at ) {
         if ( dim.data ) {
-            if ( !dim.lock || dim.hopeless ) {
+            if ( !dim.isLocked() || dim.hopeless ) {
                 uint32_t oldSize = dim.capacity*szt;
                 __context__->free(dim.data, oldSize, at);
             } else {
@@ -1146,7 +1146,7 @@ namespace das
 
     void builtin_table_free ( Table & tab, int szk, int szv, Context * __context__, LineInfoArg * at ) {
         if ( tab.data ) {
-            if ( !tab.lock || tab.hopeless ) {
+            if ( !tab.isLocked() || tab.hopeless ) {
                 uint32_t oldSize = tab.capacity*(szk+szv+sizeof(TableHashKey));
                 __context__->free(tab.data, oldSize, at);
             } else {
