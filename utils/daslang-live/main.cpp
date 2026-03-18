@@ -164,6 +164,7 @@ static CompileResult compile_script(const string & fn) {
     policies.persistent_heap = true;
     policies.threadlock_context = true;
     policies.ignore_shared_modules = true;
+    policies.rtti = true;
 
     result.program = compileDaScript(fn, result.access, tout, dummyGroup, policies);
     if (!result.program) {
