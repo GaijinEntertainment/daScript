@@ -226,7 +226,7 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - `modules/` — External plugin modules
 - `modules/dasLiveHost/` — C++ module for live-reload host lifecycle (dynamic module)
 - `utils/daslang-live/` — Live-reloading application host (`daslang-live.exe`)
-- `utils/mcp/` — MCP server for AI coding assistants (20 tools, stdio transport, no extra deps)
+- `utils/mcp/` — MCP server for AI coding assistants (28 tools, stdio transport, no extra deps)
 - `utils/daspkg/` — Package manager (install, update, build, search packages)
 - `examples/daslive/` — Live-reload examples (hello, triangle, tank_game, etc.)
 - `examples/daspkg/` — Package manager example projects
@@ -236,9 +236,9 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 
 ## MCP Server (AI Tool Integration)
 
-The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics and program introspection to AI coding assistants via the [Model Context Protocol](https://modelcontextprotocol.io/). Uses stdio transport — no extra build dependencies.
+The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics, program introspection, and live-reload control to AI coding assistants via the [Model Context Protocol](https://modelcontextprotocol.io/). Uses stdio transport — no extra build dependencies.
 
-**When MCP tools are available**, prefer them over manual compilation and grep-based exploration. **For searching `.das` files, prefer MCP tools over built-in Grep/Glob** — `grep_usage` is parse-aware (tree-sitter), `find_references` resolves cross-module symbols, `find_symbol` searches all loaded modules:
+**When MCP tools are available**, prefer them over manual compilation and grep-based exploration. **For searching `.das` files, prefer MCP tools over built-in Grep/Glob** — `grep_usage` is parse-aware (tree-sitter), `find_references` resolves cross-module symbols, `find_symbol` searches all loaded modules. **For interacting with `daslang-live`, always use MCP live tools** — not curl.
 
 | Tool | Use instead of... |
 |---|---|
@@ -263,8 +263,20 @@ The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics and p
 | `grep_usage` | Using built-in Grep tool to search for symbol names in `.das` files (parse-aware via ast-grep + tree-sitter — no false positives from comments/strings) |
 | `outline` | Manually scanning files for function/struct/enum declarations |
 | `aot` | Manually running AOT generation and extracting function C++ |
+| `live_launch` | Manually starting `daslang-live.exe` from shell |
+| `live_status` | `curl http://localhost:9090/status` |
+| `live_error` | `curl http://localhost:9090/error` |
+| `live_reload` | `curl -X POST http://localhost:9090/reload` |
+| `live_pause` | `curl -X POST http://localhost:9090/pause` or `/unpause` |
+| `live_command` | `curl -X POST http://localhost:9090/command -d '{"name":"..."}` |
+| `live_shutdown` | `curl -X POST http://localhost:9090/shutdown` |
+| `shutdown` | Manually restarting the MCP server process |
 
 Cursor-based tools (`goto_definition`, `type_of`, `find_references`) support a `no_opt` parameter that disables compiler optimizations to preserve the full AST — useful when globals, enum values, or bitfield constants get constant-folded away.
+
+**Live tools:** The `live_*` tools interact with a running `daslang-live.exe` instance via its REST API. `live_launch` starts one if not already running (sets working directory to the script's folder). All live tools accept an optional `port` parameter (default 9090). When a compilation error is active, `live_command`, `live_pause` return HTTP 503 with the error. Use `live_reload` to fix. Hitting any unknown endpoint on the live API returns JSON help with all endpoints and curl examples.
+
+**`shutdown` tool:** Shuts down the MCP server process. Claude Code auto-restarts it, picking up code changes to `.das` tool files. Tool registration changes (adding/removing tools) still require a manual MCP restart.
 
 **Configuration:** Configure `.mcp.json` with `"command": "bin/Release/daslang.exe", "args": ["utils/mcp/main.das"]`. See `utils/mcp/README.md` for details and Claude Code permissions.
 

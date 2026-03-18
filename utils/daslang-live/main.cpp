@@ -272,47 +272,57 @@ static void set_watched_files(Context * ctx) {
 
 static int run_lifecycle(const string & fn) {
     auto cr = compile_script(fn);
-    if (!cr.ctx) return 1;
 
-    auto * ctx = cr.ctx.get();
+    Context * ctx = cr.ctx ? cr.ctx.get() : nullptr;
+    SimFunction * fnInit = nullptr;
+    SimFunction * fnUpdate = nullptr;
+    SimFunction * fnShutdown = nullptr;
 
-    // Detect mode: init exists → lifecycle, otherwise → main
-    auto * fnInit = find_void_function(ctx, "init");
-    auto * fnUpdate = find_void_function(ctx, "update");
-    auto * fnShutdown = find_void_function(ctx, "shutdown");
-    auto * fnMain = find_void_function(ctx, "main");
+    if (!ctx) {
+        // Initial compile failed — enter main loop with no context, paused,
+        // so the REST API can report the error and accept reload requests
+        tout << "daslang-live: initial compile FAILED, waiting for reload\n";
+        if (dll_set_last_error) dll_set_last_error(cr.errors.c_str());
+        if (dll_set_paused) dll_set_paused(true);
+    } else {
+        // Detect mode: init exists → lifecycle, otherwise → main
+        fnInit = find_void_function(ctx, "init");
+        fnUpdate = find_void_function(ctx, "update");
+        fnShutdown = find_void_function(ctx, "shutdown");
+        auto * fnMain = find_void_function(ctx, "main");
 
-    if (!fnInit && fnMain) {
-        // Simple mode: just call main() like daslang.exe
-        tout << "daslang-live: running main()\n";
-        ctx->restart();
-        ctx->evalWithCatch(fnMain, nullptr);
-        if (auto ex = ctx->getException()) {
-            tout << "EXCEPTION: " << ex << " at " << ctx->exceptionAt.describe() << "\n";
+        if (!fnInit && fnMain) {
+            // Simple mode: just call main() like daslang.exe
+            tout << "daslang-live: running main()\n";
+            ctx->restart();
+            ctx->evalWithCatch(fnMain, nullptr);
+            if (auto ex = ctx->getException()) {
+                tout << "EXCEPTION: " << ex << " at " << ctx->exceptionAt.describe() << "\n";
+                return 1;
+            }
+            return 0;
+        }
+
+        if (!fnInit) {
+            tout << "ERROR: script must export either init() or main()\n";
             return 1;
         }
-        return 0;
-    }
 
-    if (!fnInit) {
-        tout << "ERROR: script must export either init() or main()\n";
-        return 1;
-    }
+        // Lifecycle mode
+        tout << "daslang-live: lifecycle mode (init/update/shutdown)\n";
 
-    // Lifecycle mode
-    tout << "daslang-live: lifecycle mode (init/update/shutdown)\n";
+        if (dll_set_is_reload) dll_set_is_reload(false);
+        if (dll_set_dispatch_context) dll_set_dispatch_context(ctx);
+        set_watched_files(ctx);
+        g_annotated.build(ctx);
+        ctx->restart();
 
-    if (dll_set_is_reload) dll_set_is_reload(false);
-    if (dll_set_dispatch_context) dll_set_dispatch_context(ctx);
-    set_watched_files(ctx);
-    g_annotated.build(ctx);
-    ctx->restart();
-
-    // Call init()
-    ctx->evalWithCatch(fnInit, nullptr);
-    if (auto ex = ctx->getException()) {
-        tout << "EXCEPTION in init(): " << ex << " at " << ctx->exceptionAt.describe() << "\n";
-        return 1;
+        // Call init()
+        ctx->evalWithCatch(fnInit, nullptr);
+        if (auto ex = ctx->getException()) {
+            tout << "EXCEPTION in init(): " << ex << " at " << ctx->exceptionAt.describe() << "\n";
+            return 1;
+        }
     }
 
     double lastTime = get_time_sec();
@@ -340,20 +350,24 @@ static int run_lifecycle(const string & fn) {
         }
 
         // Before-update hooks (lockbox dispatch, etc.)
-        call_annotated_list(ctx, g_annotated.before_update);
+        if (ctx) call_annotated_list(ctx, g_annotated.before_update);
 
-        // Update (unless paused)
+        // Update (unless paused or no context)
         bool paused = dll_is_paused ? dll_is_paused() : false;
-        if (!paused) {
+        if (!paused && ctx && fnUpdate) {
             ctx->evalWithCatch(fnUpdate, nullptr);
             if (auto ex = ctx->getException()) {
                 tout << "EXCEPTION in update(): " << ex << " at " << ctx->exceptionAt.describe() << "\n";
                 if (dll_set_paused) dll_set_paused(true);
             }
         }
+        // Avoid busy-spinning when there's no context or paused
+        if (!ctx || paused) {
+            builtin_sleep(16);
+        }
 
         // GC
-        maybe_collect_gc(ctx);
+        if (ctx) maybe_collect_gc(ctx);
 
         // Auto-tick debug agents
         auto_tick_agents();
@@ -367,14 +381,14 @@ static int run_lifecycle(const string & fn) {
             // Set reload flag BEFORE shutdown so is_reload() returns true
             if (dll_set_is_reload) dll_set_is_reload(true);
 
-            // Call [before_reload] functions
-            call_annotated_list(ctx, g_annotated.before_reload);
-
-            // Call shutdown()
-            if (fnShutdown) {
-                ctx->evalWithCatch(fnShutdown, nullptr);
-                if (auto ex = ctx->getException()) {
-                    tout << "EXCEPTION in shutdown() during reload: " << ex << "\n";
+            // Call [before_reload] functions and shutdown (skip if no context, e.g. initial compile failed)
+            if (ctx) {
+                call_annotated_list(ctx, g_annotated.before_reload);
+                if (fnShutdown) {
+                    ctx->evalWithCatch(fnShutdown, nullptr);
+                    if (auto ex = ctx->getException()) {
+                        tout << "EXCEPTION in shutdown() during reload: " << ex << "\n";
+                    }
                 }
             }
 
@@ -385,12 +399,14 @@ static int run_lifecycle(const string & fn) {
                 if (dll_set_last_error) dll_set_last_error(newCr.errors.c_str());
                 if (dll_set_paused) dll_set_paused(true);
                 if (dll_clear_reload_flags) dll_clear_reload_flags();
-                // Re-init old context (shutdown was already called)
-                if (dll_set_is_reload) dll_set_is_reload(true);
-                ctx->restart();
-                call_annotated_list(ctx, g_annotated.after_reload);
-                if (fnInit) {
-                    ctx->evalWithCatch(fnInit, nullptr);
+                // Re-init old context if we have one (shutdown was already called)
+                if (ctx) {
+                    if (dll_set_is_reload) dll_set_is_reload(true);
+                    ctx->restart();
+                    call_annotated_list(ctx, g_annotated.after_reload);
+                    if (fnInit) {
+                        ctx->evalWithCatch(fnInit, nullptr);
+                    }
                 }
                 continue;
             }
@@ -439,7 +455,7 @@ static int run_lifecycle(const string & fn) {
     }
 
     // Shutdown
-    if (fnShutdown) {
+    if (ctx && fnShutdown) {
         ctx->evalWithCatch(fnShutdown, nullptr);
         if (auto ex = ctx->getException()) {
             tout << "EXCEPTION in shutdown(): " << ex << "\n";

@@ -145,6 +145,26 @@ Auto-installs as a debug agent. Polls `stat()` on watched files and triggers rel
 
 When `require live/live_api` is present, an HTTP server starts on port 9090 (configurable via `live_api_set_port()`). Auto-installs as a debug agent.
 
+### MCP Tools (preferred)
+
+**Always use MCP tools instead of curl** for interacting with daslang-live. They handle connection errors, port defaults, and return structured results:
+
+| MCP Tool | Description |
+|---|---|
+| `live_launch` | Start a daslang-live instance (detects if already running) |
+| `live_status` | Get fps, uptime, paused, dt, has_error |
+| `live_error` | Get last compilation error |
+| `live_reload` | Trigger reload (optional `full` param for full recompile) |
+| `live_pause` | Pause/unpause (`paused` = "true"/"false") |
+| `live_command` | Dispatch a `[live_command]` (`name` required, optional `args` JSON) |
+| `live_shutdown` | Graceful shutdown |
+
+All tools accept optional `port` parameter (default: "9090").
+
+**Error handling:** When a compilation error is active, `live_command` and `live_pause` return HTTP 503 with the error text and a hint to use `live_reload`. `live_status`, `live_error`, `live_reload`, and `live_shutdown` always work.
+
+**Help endpoint:** Any unmatched route (e.g. `GET /`) returns JSON listing all endpoints with descriptions and curl examples. Also includes current compilation error if any.
+
 ### Built-in Endpoints
 
 | Method | Path | Description |
@@ -153,10 +173,11 @@ When `require live/live_api` is present, an HTTP server starts on port 9090 (con
 | GET | `/error` | Plain text: last compilation error |
 | POST | `/reload` | Trigger reload |
 | POST | `/reload/full` | Trigger full reload |
-| POST | `/pause` | Pause the host |
-| POST | `/unpause` | Unpause the host |
+| POST | `/pause` | Pause the host (503 on compile error) |
+| POST | `/unpause` | Unpause the host (503 on compile error) |
 | POST | `/shutdown` | Graceful shutdown |
-| POST | `/command` | Dispatch a live command (JSON body) |
+| POST | `/command` | Dispatch a live command (503 on compile error) |
+| ANY | `*` | JSON help with all endpoints and curl examples |
 
 ### Command Dispatch
 
@@ -164,7 +185,9 @@ POST to `/command` with JSON body `{"name": "command_name", "args": {...}}`.
 
 The special command `help` returns all registered commands and their descriptions.
 
-### Using curl
+### Using curl (fallback)
+
+Use curl only when MCP tools are unavailable:
 
 ```bash
 # Check status
@@ -181,6 +204,9 @@ curl -X POST http://localhost:9090/command -d '{"name":"screenshot","args":{"fil
 
 # Trigger reload
 curl -X POST http://localhost:9090/reload
+
+# Get help (any unknown path)
+curl http://localhost:9090/
 ```
 
 ## Writing Live Commands
