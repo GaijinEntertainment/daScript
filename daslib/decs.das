@@ -950,6 +950,106 @@ def public create_entity(var blk : lambda<(eid : EntityId; var cmp : ComponentMa
     return eid
 }
 
+def public create_entities(count : int; blk : block<(eid : EntityId; i : int; var cmp : ComponentMap) : void>) {
+    //! Creates `count` entities in bulk. All entities must have the same archetype
+    //! (same set of components). This is much faster than calling `create_entity` in
+    //! a loop because it does a single archetype lookup and a single resize per
+    //! component array for the entire batch.
+    //!
+    //! Unlike `create_entity`, this is immediate — entities are visible to queries
+    //! right after the call returns (no `commit` needed).
+    //!
+    //! Example::
+    //!
+    //!     create_entities(100) <| $(eid : EntityId; i : int; var cmp : ComponentMap)
+    //!         apply_decs_template(cmp, Particle(pos = origin, vel = compute_vel(i)))
+    //!
+    if (count <= 0) {
+        return
+    }
+    if (insideQuery != 0) {
+        panic("decs: can't call `create_entities` from inside query")
+    }
+    // First entity: build component map to establish archetype
+    var cmp : ComponentMap
+    var first_eid = new_entity_id()
+    cmp |> push <| make_component("eid", first_eid)
+    invoke(blk, first_eid, 0, cmp)
+    cmp |> set("eid", first_eid)
+    var ahash = cmp_archetype_hash(cmp)
+    with_archetype(ahash) <| $(var arch; arch_idx; isNew) {
+        if (isNew) {
+            arch |> create_archetype(cmp, arch_idx)
+        }
+        // Pre-resize all component arrays for count entities at once
+        let base = arch.size
+        for (c in arch.components) {
+            c.data |> resize(length(c.data) + c.stride * count)
+        }
+        // Fill first entity
+        for (c, comp in arch.components, cmp) {
+            unsafe {
+                memcpy(addr(c.data[base * c.stride]), addr(comp.data), c.stride)
+            }
+        }
+        decsState.entityLookup[first_eid.id] = (first_eid.generation, ahash, base)
+        // Fill remaining entities (reuse cmp — set overwrites existing entries)
+        for (i in range(1, count)) {
+            var eid = new_entity_id()
+            cmp |> set("eid", eid)
+            invoke(blk, eid, i, cmp)
+            cmp |> set("eid", eid)
+            if (cmp_archetype_hash(cmp) != ahash) {
+                panic("decs: create_entities — all entities must have the same components (entity {i} differs from entity 0)")
+            }
+            let eidx = base + i
+            for (c, comp in arch.components, cmp) {
+                unsafe {
+                    memcpy(addr(c.data[eidx * c.stride]), addr(comp.data), c.stride)
+                }
+            }
+            decsState.entityLookup[eid.id] = (eid.generation, ahash, eidx)
+        }
+        arch.size += count
+    }
+    delete cmp
+}
+
+def public create_entities_from_cmp(count : int; var cmp : ComponentMap;
+                                    fill_blk : block<(var arch : Archetype; eidx : int; eid : EntityId; i : int) : void>) {
+    //! Creates `count` entities in bulk with maximum performance. Takes a pre-built
+    //! ComponentMap (used once to establish the archetype shape), then calls `fill_blk`
+    //! for each entity to write directly into archetype storage, bypassing ComponentMap.
+    //!
+    //! Typically called by macro-generated ``create_entities`T`` functions rather than
+    //! directly. See `create_entities` for the simpler ComponentMap-based API.
+    if (count <= 0) {
+        return
+    }
+    if (insideQuery != 0) {
+        panic("decs: can't call `create_entities_from_cmp` from inside query")
+    }
+    // Ensure eid component is present for archetype hash computation
+    cmp |> set("eid", INVALID_ENTITY_ID)
+    var ahash = cmp_archetype_hash(cmp)
+    with_archetype(ahash) <| $(var arch; arch_idx; isNew) {
+        if (isNew) {
+            arch |> create_archetype(cmp, arch_idx)
+        }
+        let base = arch.size
+        for (c in arch.components) {
+            c.data |> resize(length(c.data) + c.stride * count)
+        }
+        for (i in range(count)) {
+            var eid = new_entity_id()
+            let eidx = base + i
+            invoke(fill_blk, arch, eidx, eid, i)
+            decsState.entityLookup[eid.id] = (eid.generation, ahash, eidx)
+        }
+        arch.size += count
+    }
+}
+
 def public delete_entity(entityid : EntityId implicit) {
     //! Creates deferred action to delete entity specified by id.
     var deval <- @(var act : DeferAction) {
@@ -1254,6 +1354,33 @@ def public set(var cmp : ComponentMap; name : string; value : auto(TT)) {
     } else {
         cmp |> push(cv, idx)    // insert new one
     }
+}
+
+def public find_component_index(arch : Archetype; name : string) : int {
+    //! Returns the index of a named component within the archetype's component array.
+    //! Used to resolve component locations once, then write many entities via `set_direct_at`.
+    for (i in range(length(arch.components))) {
+        if (arch.components[i].name == name) {
+            return i
+        }
+    }
+    panic("decs: find_component_index — component '{name}' not found in archetype")
+    return -1
+}
+
+def public set_direct_at(var arch : Archetype; comp_idx : int; eidx : int; value : auto(TT)) {
+    //! Writes a component value directly into archetype storage by pre-resolved component index.
+    //! O(1) per write — use `find_component_index` once, then this for each entity.
+    unsafe {
+        memcpy(addr(arch.components[comp_idx].data[eidx * arch.components[comp_idx].stride]), addr(value), typeinfo sizeof(value))
+    }
+}
+
+def public set_direct(var arch : Archetype; name : string; eidx : int; value : auto(TT)) {
+    //! Writes a component value directly into archetype storage at the given entity index.
+    //! Convenience wrapper — does a name lookup per call. For bulk writes, prefer
+    //! `find_component_index` + `set_direct_at` to resolve the name once.
+    set_direct_at(arch, find_component_index(arch, name), eidx, value)
 }
 
 def public has(var cmp : ComponentMap; name : string) {

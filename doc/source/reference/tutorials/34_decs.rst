@@ -275,6 +275,43 @@ You can inspect the world state through ``decsState``:
         print("\n")
     }
 
+Bulk entity creation
+====================
+
+``create_entities`` creates many entities at once, much faster than calling
+``create_entity`` in a loop. Entities are immediately visible — no ``commit()``
+needed:
+
+.. code-block:: das
+
+    create_entities(100) <| $(eid : EntityId; i : int; var cmp : ComponentMap) {
+        apply_decs_template(cmp, Particle(
+            pos  = float3(float(i), 0, 0),
+            vel  = float3(0, 1, 0),
+            life = 100
+        ))
+    }
+
+High-performance bulk creation
+==============================
+
+For maximum performance, ``create_entities`T`` bypasses ``ComponentMap``
+entirely. The ``[decs_template]`` macro generates a type-specific bulk
+creation function that writes directly into archetype storage:
+
+.. code-block:: das
+
+    create_entities`Particle(1000) <| $(eid : EntityId; i : int; var p : Particle) {
+        p.pos  = float3(float(i), 0.0, 0.0)
+        p.vel  = float3(0, 1, 0)
+        p.life = 100
+    }
+
+The block receives the ``EntityId``, index ``i``, and a mutable struct
+instance. Just set the fields you need — the macro handles the archetype
+writes internally. This is ~7x faster than the ``ComponentMap``-based path
+at scale (1000+ entities).
+
 Utility functions
 =================
 

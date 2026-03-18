@@ -618,19 +618,13 @@ struct Brick {
 def spawn_bricks() {
     let total_w = float(BRICK_COLS) * (BRICK_W + BRICK_GAP) - BRICK_GAP
     let x_offset = -total_w * 0.5 + BRICK_W * 0.5
-    for (row in range(BRICK_ROWS)) {
-        let z = BRICK_START_Z + float(row) * (BRICK_D + BRICK_GAP)
-        let color = BRICK_COLORS[row]
-        for (col in range(BRICK_COLS)) {
-            let x = x_offset + float(col) * (BRICK_W + BRICK_GAP)
-            create_entity <| @(eid, cmp) {
-                apply_decs_template(cmp, Brick(
-                    pos = float3(x, BRICK_H * 0.5, z),
-                    color = color,
-                    row = row
-                ))
-            }
-        }
+    let total = BRICK_ROWS * BRICK_COLS
+    create_entities`Brick(total) <| $(eid : EntityId; i : int; var b : Brick) {
+        let row = i / BRICK_COLS
+        let col = i % BRICK_COLS
+        b.pos = float3(x_offset + float(col) * (BRICK_W + BRICK_GAP), BRICK_H * 0.5, BRICK_START_Z + float(row) * (BRICK_D + BRICK_GAP))
+        b.color = BRICK_COLORS[row]
+        b.row = row
     }
 }
 
@@ -695,23 +689,16 @@ struct Particle {
 }
 
 def spawn_particles(origin : float3; color : float3; count : int = 8) {
-    for (i in range(count)) {
+    create_entities`Particle(count) <| $(eid : EntityId; i : int; var p : Particle) {
         let angle = float(i) / float(count) * 2.0 * PI
         let elevation = game_random() * 0.5 + 0.2
         let speed = 2.0 + game_random() * 3.0
-        let vel = float3(cos(angle) * speed, elevation * speed, sin(angle) * speed)
-        let lt = 0.3 + game_random() * 0.4
-        let r = 0.05 + game_random() * 0.08
-        create_entity <| @(eid, cmp) {
-            apply_decs_template(cmp, Particle(
-                pos = origin,
-                vel = vel,
-                color = color,
-                lifetime = lt,
-                max_life = lt,
-                radius = r
-            ))
-        }
+        p.pos = origin
+        p.vel = float3(cos(angle) * speed, elevation * speed, sin(angle) * speed)
+        p.color = color
+        p.lifetime = 0.3 + game_random() * 0.4
+        p.max_life = p.lifetime
+        p.radius = 0.05 + game_random() * 0.08
     }
 }
 
@@ -749,10 +736,14 @@ def spawn_trail_dots() {
     trail_timer -= tick_dt
     if (trail_timer > 0.0) { return ; }
     trail_timer = TRAIL_INTERVAL
+    var ball_positions : array<float3>
     query <| $(b : Ball) {
-        let p = b.pos
-        create_entity <| @(eid, cmp) {
-            apply_decs_template(cmp, Trail(pos = p, lifetime = 0.15))
+        ball_positions |> push(b.pos)
+    }
+    if (length(ball_positions) > 0) {
+        create_entities`Trail(length(ball_positions)) <| $(eid : EntityId; i : int; var tr : Trail) {
+            tr.pos = ball_positions[i]
+            tr.lifetime = 0.15
         }
     }
 }
@@ -943,10 +934,6 @@ def cmd_slow_motion(input : JsonValue?) : JsonValue? {
     game_speed = args.speed
     return JV(args)
 }
-
-
-
-
 
 // --- HUD ---
 
