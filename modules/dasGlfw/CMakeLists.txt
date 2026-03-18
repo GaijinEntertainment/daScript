@@ -134,6 +134,12 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 	# We do not need to link dynamic library.
 	SETUP_GLFW(dasModuleGlfw GLFW3_DYN)
 	TARGET_LINK_LIBRARIES(dasModuleGlfw PUBLIC ${DAS_GLFW_DYN_PATH})
+	# Xcode 16.4+ triggers -Welaborated-enum-base on macOS SDK headers
+	# included transitively via glfw3native.h → ApplicationServices.h
+	IF(APPLE)
+		TARGET_COMPILE_OPTIONS(libDasModuleGlfw PRIVATE -Wno-elaborated-enum-base)
+		TARGET_COMPILE_OPTIONS(dasModuleGlfw PRIVATE -Wno-elaborated-enum-base)
+	ENDIF()
 	IF(APPLE)
 		find_library(COCOA_LIBRARY Cocoa)
 		find_library(IOKIT_LIBRARY IOKit)
