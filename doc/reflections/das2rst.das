@@ -1195,7 +1195,8 @@ def document_module_stbtruetype(root : string) {
         group_by_regex("Font packing", mod, %regex~.*(PackBegin|PackEnd|PackFontRange|PackSetOversampling|PackSetSkipMissingCodepoints|GetPackedQuad)$%%),
         group_by_regex("Font metrics", mod, %regex~.*(ScaleForPixelHeight|ScaleForMappingEmToPixels|GetFontVMetrics|GetFontBoundingBox)$%%),
         group_by_regex("Codepoint metrics", mod, %regex~.*(GetCodepointHMetrics|GetCodepointKernAdvance|GetCodepointBox|FindGlyphIndex)$%%),
-        group_by_regex("Codepoint bitmaps", mod, %regex~.*(GetCodepointBitmap|GetCodepointBitmapSubpixel|MakeCodepointBitmap|MakeCodepointBitmapSubpixel|GetCodepointBitmapBox|GetCodepointBitmapBoxSubpixel|FreeBitmap)$%%)
+        group_by_regex("Codepoint bitmaps", mod, %regex~.*(GetCodepointBitmap|GetCodepointBitmapSubpixel|MakeCodepointBitmap|MakeCodepointBitmapSubpixel|GetCodepointBitmapBox|GetCodepointBitmapBoxSubpixel|FreeBitmap)$%%),
+        group_by_regex("Glyph shape", mod, %regex~.*(GetCodepointShape|GetCodepointShape_count)$%%)
     )
     document("TrueType font loading and rasterization (stb_truetype)", mod, "stbtruetype.rst", groups)
 }
