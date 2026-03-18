@@ -441,12 +441,63 @@ static void print_help() {
     tout << "  -h, --help        — this help\n";
 }
 
+// --- Single instance ---
+
+#ifdef _WIN32
+static HANDLE g_singleInstanceMutex = nullptr;
+#else
+#include <sys/file.h>
+#include <unistd.h>
+static int g_lockFd = -1;
+#endif
+
+static bool acquire_single_instance() {
+#ifdef _WIN32
+    g_singleInstanceMutex = CreateMutexA(nullptr, TRUE, "daslang-live-single-instance");
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        if (g_singleInstanceMutex) {
+            CloseHandle(g_singleInstanceMutex);
+            g_singleInstanceMutex = nullptr;
+        }
+        return false;
+    }
+    return g_singleInstanceMutex != nullptr;
+#else
+    const char * lockPath = "/tmp/daslang-live.lock";
+    g_lockFd = open(lockPath, O_CREAT | O_RDWR, 0600);
+    if (g_lockFd < 0) return true;  // can't create lock file — allow running
+    if (flock(g_lockFd, LOCK_EX | LOCK_NB) != 0) {
+        close(g_lockFd);
+        g_lockFd = -1;
+        return false;
+    }
+    return true;
+#endif
+}
+
+static void release_single_instance() {
+#ifdef _WIN32
+    if (g_singleInstanceMutex) {
+        ReleaseMutex(g_singleInstanceMutex);
+        CloseHandle(g_singleInstanceMutex);
+        g_singleInstanceMutex = nullptr;
+    }
+#else
+    if (g_lockFd >= 0) {
+        flock(g_lockFd, LOCK_UN);
+        close(g_lockFd);
+        g_lockFd = -1;
+    }
+#endif
+}
+
 // --- Entry point ---
 
 int main(int argc, char * argv[]) {
 #if defined(_WIN32) && defined(_DEBUG)
     _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
+
     install_das_crash_handler();
 
     string scriptFile;
@@ -479,6 +530,11 @@ int main(int argc, char * argv[]) {
 
     if (scriptFile.empty()) {
         print_help();
+        return 1;
+    }
+
+    if (!acquire_single_instance()) {
+        fprintf(stderr, "ERROR: another instance of daslang-live is already running\n");
         return 1;
     }
 
@@ -540,5 +596,6 @@ int main(int argc, char * argv[]) {
     int result = run_lifecycle(scriptFile);
 
     Module::Shutdown();
+    release_single_instance();
     return result;
 }
