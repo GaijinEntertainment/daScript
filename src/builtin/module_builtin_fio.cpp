@@ -698,10 +698,10 @@ namespace das {
         atomic<bool> timedOut{false};
         atomic<bool> processDone{false};
         thread watchdog([pid, timeout_sec, &timedOut, &processDone]() {
-            auto deadline = chrono::steady_clock::now() + chrono::milliseconds((int)(timeout_sec * 1000.0f));
-            while ( chrono::steady_clock::now() < deadline ) {
+            auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds((int)(timeout_sec * 1000.0f));
+            while ( std::chrono::steady_clock::now() < deadline ) {
                 if ( processDone.load() ) return;
-                std::this_thread::sleep_for(chrono::milliseconds(100));
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
             if ( !processDone.load() ) {
                 timedOut = true;
@@ -1080,9 +1080,9 @@ namespace das {
         error = nullptr;
         if ( !path ) { error = empty_path_error(ctx, at); return false; }
         std::error_code ec;
-        auto sys_time = chrono::system_clock::from_time_t(time.time);
+        auto sys_time = std::chrono::system_clock::from_time_t(time.time);
         auto file_time = std::filesystem::file_time_type::clock::now() +
-            (sys_time - chrono::system_clock::now());
+            (sys_time - std::chrono::system_clock::now());
         std::filesystem::last_write_time(path, file_time, ec);
         if ( ec ) { error = ec_to_string(ec, ctx, at); return false; }
         return true;
