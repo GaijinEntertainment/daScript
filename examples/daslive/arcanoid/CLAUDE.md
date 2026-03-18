@@ -94,8 +94,10 @@ curl -X POST http://localhost:9090/command -d '{"name":"cmd_reset_game"}'
 - **Audio**: Procedurally generated sound effects via `audio_boost`
 - **State preservation**: Full persistence across live reloads — game keeps running seamlessly
   - `decs_live` serializes/restores all DECS entities (bricks, balls, bonuses, trails)
-  - `[before_reload]`/`[after_reload]` save/restore globals: paddle_x, score, lives, game_state, powerup timers, sticky state, god_mode, game_speed, audio handles
+  - `@live` variables (via `live/live_vars`) auto-persist: paddle_x, score, lives, game_state, powerup timers, sticky state, god_mode, game_speed
+  - `audio_live` (via `audio/audio_live`) auto-persists audio sample buffers
   - `init()` guards `decs::restart()` + `spawn_bricks()` with `is_reload()` so entities aren't wiped on reload
+- **Bulk entity creation**: Uses `create_entities`T` for bricks, particles, and trails — ~10x faster than individual `create_entity`
 
 ## Keyboard Controls
 

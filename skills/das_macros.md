@@ -59,3 +59,52 @@ Read this skill file before writing compile-time macros, AST manipulation code, 
 - **`$f(stringVar)`** — splice a string as a **field name**. Example: `st.$f(fieldName)` becomes `st.x` when `fieldName="x"`
 - **`$a(arrayOfExprPtr)`** — splice an `array<ExpressionPtr>` as function call **arguments**
 - **`$b(arrayOfExprPtr)`** — splice an `array<ExpressionPtr>` as a **block body** (sequence of statements). Build the array with `emplace_new`, then `$b(bodyExprs)` inlines all statements into the function body
+
+### Generating statements with `qmacro_expr`
+
+`qmacro_expr(${ statement; })` generates a statement-level expression — assignments, variable declarations, returns. The `${ }` block requires a trailing semicolon.
+
+```das
+// Generate an assignment statement
+blk |> emplace_new <| qmacro_expr(${ my_var = some_function(); })
+
+// Generate a variable declaration
+blk |> emplace_new <| qmacro_expr(${ var $i(varName) : int; })
+
+// Generate a return statement
+blk |> emplace_new <| qmacro_expr(${ return $i(resName); })
+```
+
+**Key difference from `qmacro()`**: `qmacro()` generates expressions (function calls, field access, etc.). `qmacro_expr()` generates statements that include `=`, `var`, `return`, etc. — things that aren't valid as standalone expressions.
+
+**Caveat**: Identifiers used in `qmacro_expr` are resolved in the **macro's** scope, not the generated code's scope. If generating references to variables that only exist in the generated code (not in the macro), the identifier must exist somewhere the macro can see it, or use manual AST construction instead.
+
+### Default-initializing generated struct variables
+
+In macro-generated code, `var x : $t(st)` fails with "uninitialized variable" for structs without field defaults. Use `default<T>` instead:
+
+```das
+// WRONG — fails if struct has uninitialized fields
+blk |> emplace_new <| qmacro_block() { var entity : $t(st) }
+
+// CORRECT — default-initializes all fields
+blk |> emplace_new <| qmacro_block() { var entity := default<$t(st)> }
+```
+
+### Generating complex function bodies
+
+For functions with variable declarations, nested blocks, and captured parameters, the `pass` + `reinterpret<ExprBlock?>` + `qmacro_block()` pattern works reliably:
+
+```das
+var inscope fn <- qmacro_function("my_func") $(count : int) : void {
+    pass
+}
+var blk = unsafe(reinterpret<ExprBlock?> fn.body)
+blk.list |> clear()
+blk.list |> emplace_new <| qmacro_block() {
+    var cache : array<int>
+    // ... complex body with nested blocks, invokes, etc.
+}
+```
+
+This avoids parser issues with `qmacro_function` body that contains complex nested blocks or variable declarations.

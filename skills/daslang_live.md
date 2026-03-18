@@ -254,6 +254,29 @@ def restore_my_state() {
 
 **Pointer preservation** (GLFW window, audio handles): serialize as `uint64` via `reinterpret`, restore and cast back. The underlying C/C++ objects live in the DLL and survive reload.
 
+### `live/live_vars` — `@live` Variable Macro
+
+`require live/live_vars` — annotate globals with `@live` for automatic serialization across reloads. Replaces manual `[before_reload]`/`[after_reload]` boilerplate entirely.
+
+```das
+require live/live_vars
+
+var @live score = 0
+var @live lives = 3
+var @live game_state = GameState.menu
+var @live paddle_x = 0.0
+```
+
+The macro generates `__before_reload_live_vars` and `__after_reload_live_vars` functions that serialize all `@live`-tagged globals via `Archive`. The host discovers these by name prefix.
+
+**What works:** All serializable types — `int`, `float`, `string`, `float3`, enums, structs (if all fields are serializable), `array<T>`, `table<K;V>`.
+
+**What doesn't work:** Pointers, lambdas, handles (GLFW windows, audio handles). For these, use manual `[before_reload]`/`[after_reload]` with `reinterpret<uint64>`.
+
+**Format mismatch safety:** Adding/removing/reordering `@live` variables between reloads changes the binary format. Deserialization is wrapped in `try/recover` — mismatches degrade to defaults instead of crashing.
+
+**Store key:** `"__live_vars_{module_name}"` — module-specific to avoid collisions.
+
 ## Typical Requires for a Live App
 
 ```das
@@ -263,8 +286,10 @@ require live/live_commands   // [live_command] annotation
 require live/live_api        // REST API server
 require live_host            // core lifecycle API
 // Optional:
+require live/live_vars        // @live variable auto-persistence
 require live/decs_live       // DECS persistence (if templates serialize)
 require live/live_watch_boost // file watcher + diagnostic commands
+require audio/audio_live     // audio sample persistence across reloads
 ```
 
 ## Debugging
