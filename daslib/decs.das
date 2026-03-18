@@ -1040,8 +1040,10 @@ def public create_entities_from_cmp(count : int; var cmp : ComponentMap;
         for (c in arch.components) {
             c.data |> resize(length(c.data) + c.stride * count)
         }
+        let id_base = uint(length(decsState.entityLookup))
+        decsState.entityLookup |> resize(int(id_base) + count)
         for (i in range(count)) {
-            var eid = new_entity_id()
+            let eid = EntityId(id = id_base + uint(i), generation = 1)
             let eidx = base + i
             invoke(fill_blk, arch, eidx, eid, i)
             decsState.entityLookup[eid.id] = (eid.generation, ahash, eidx)
