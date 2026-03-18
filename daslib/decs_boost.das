@@ -47,7 +47,12 @@ class DecsReqN : AstBlockAnnotation {
 [structure_macro(name="decs_template")]
 class DecsTemplate : AstStructureAnnotation {
     //! This macro creates a template for the given structure.
-    //! `apply_decs_template` and `remove_decs_template` functions are generated for the structure type.
+    //! The following functions are generated for the structure type:
+    //!
+    //!   * ``apply_decs_template(cmp, src)`` — sets components via ComponentMap
+    //!   * ``remove_decs_template(cmp, src)`` — removes components from ComponentMap
+    //!   * ``apply_decs_template_arch(arch, eidx, eid, src)`` — writes directly into archetype storage
+    //!   * ``create_entities`T(count, blk)`` — bulk creation with direct archetype writes
     def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         if (length(st.fields) == 0) {
             errors := "expecting at least one field in the desc_template {st.name}"
@@ -72,6 +77,53 @@ class DecsTemplate : AstStructureAnnotation {
         }
         if (!(compiling_module() |> add_function(fnErase))) {
             panic("failed to add remove_decs_template, can't add function {fnErase.name}")
+        }
+        // Generate apply_decs_template_arch — writes into archetype storage with cached indices.
+        // First call (empty cache) resolves component indices; subsequent calls are O(1) per field.
+        var inscope blkArchSetup : array<ExpressionPtr>
+        var inscope blkArchWrite : array<ExpressionPtr>
+        // eid at cache[0], fields at cache[1..N]
+        blkArchSetup |> emplace_new <| qmacro(cache |> push(decs::find_component_index(arch, "eid")))
+        blkArchWrite |> emplace_new <| qmacro(decs::set_direct_at(arch, cache[0], eidx, eid))
+        for (fld_idx, fld in iter_range(st.fields), st.fields) {
+            let ci = fld_idx + 1
+            blkArchSetup |> emplace_new <| qmacro(cache |> push(decs::find_component_index(arch, $v("{prefix}{fld.name}"))))
+            blkArchWrite |> emplace_new <| qmacro(decs::set_direct_at(arch, cache[$v(ci)], eidx, src.$f(fld.name)))
+        }
+        var inscope fnArch <- qmacro_function("apply_decs_template_arch") $(var arch : Archetype; eidx : int; eid : EntityId; src : $t(st); var cache : array<int>) : void {
+            pass
+        }
+        var blkA = unsafe(reinterpret<ExprBlock?> fnArch.body)
+        blkA.list |> clear()
+        blkA.list |> emplace_new <| qmacro_block() {
+            if (length(cache) == 0) {
+                $b(blkArchSetup)
+            }
+            $b(blkArchWrite)
+        }
+        if (!(compiling_module() |> add_function(fnArch))) {
+            panic("failed to add apply_decs_template_arch, can't add function {fnArch.name}")
+        }
+        // Generate create_entities`T — bulk creation with cached index resolution
+        var inscope fnBulk <- qmacro_function("create_entities`{st.name}") $(count : int; user_blk : block<(eid : decs::EntityId; i : int; var entity : $t(st)) : void>) : void {
+            pass
+        }
+        var blk = unsafe(reinterpret<ExprBlock?> fnBulk.body)
+        blk.list |> clear()
+        blk.list |> emplace_new <| qmacro_block() {
+            var defval := default<$t(st)>
+            var cmp : decs::ComponentMap
+            apply_decs_template(cmp, defval)
+            var cache : array<int>
+            decs::create_entities_from_cmp(count, cmp) <| $(var arch : decs::Archetype; eidx : int; eid : decs::EntityId; i : int) {
+                var entity := default<$t(st)>
+                invoke(user_blk, eid, i, entity)
+                apply_decs_template_arch(arch, eidx, eid, entity, cache)
+            }
+            delete cmp
+        }
+        if (!(compiling_module() |> add_function(fnBulk))) {
+            panic("failed to add create_entities`{st.name}, can't add function {fnBulk.name}")
         }
         return true
     }

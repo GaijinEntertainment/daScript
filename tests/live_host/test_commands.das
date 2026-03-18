@@ -113,7 +113,7 @@ def test_dispatch_with_args(t : T?) {
 def test_dispatch_null_return(t : T?) {
     t |> run("null return gives ok") @(t : T?) {
         let r = live_dispatch_command("\{\"name\": \"test_null_return\"}")
-        t |> equal(r, "\{\"ok\": true}")
+        t |> equal(r, "true")
     }
 }
 
@@ -137,6 +137,6 @@ def test_dispatch_errors(t : T?) {
     }
     t |> run("non-object JSON") @(t : T?) {
         let r = live_dispatch_command("42")
-        t |> success(find(r, "expected object") >= 0, "should report expected object")
+        t |> success(find(r, "missing command name") >= 0, "non-object has no name field")
     }
 }

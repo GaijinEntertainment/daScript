@@ -6,4 +6,5 @@ def initialize(project_path : string) {
     if (das_is_dll_build()) {
         register_dynamic_module("{project_path}/dasModuleAudio.shared_module", "Module_Audio")
     }
+    register_native_path("live", "audio_live", "{project_path}/audio/audio_live.das")
 }

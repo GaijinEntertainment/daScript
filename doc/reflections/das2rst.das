@@ -745,11 +745,11 @@ def document_module_decs(root : string) {
     var mod = find_module("decs")
     var groups <- array<DocGroup>(
         group_by_regex("Comparison and access", mod, %regex~(\=\=|\!\=|\.)$%%),
-        group_by_regex("Access (get/set/clone)", mod, %regex~(has|get|set|clone|remove|get_component)$%%),
+        group_by_regex("Access (get/set/clone)", mod, %regex~(has|get|set|set_direct|set_direct_at|clone|remove|get_component|find_component_index)$%%),
         group_by_regex("Entity status", mod, %regex~(is_alive|entity_count)$%%),
-        group_by_regex("Debug and serialization", mod, %regex~(describe|serialize|finalize|debug_dump)$%%),
+        group_by_regex("Debug and serialization", mod, %regex~(describe|serialize|finalize|debug_dump.*)$%%),
         group_by_regex("Stages", mod, %regex~(register_decs_stage_call|decs_stage|commit)$%%),
-        group_by_regex("Deferred actions", mod, %regex~(update_entity|create_entity|delete_entity)$%%),
+        group_by_regex("Deferred actions", mod, %regex~(update_entity|create_entity|create_entities|create_entities_from_cmp|delete_entity)$%%),
         group_by_regex("GC and reset", mod, %regex~(before_gc|after_gc|restart)$%%),
         group_by_regex("Iteration", mod, %regex~(for_each_archetype|for_eid_archetype|for_each_archetype_find|get_ro|decs_array|get_default_ro|get_optional)$%%),
         group_by_regex("Request", mod, %regex~(verify_request|compile_request|lookup_request|EcsRequestPos)$%%)

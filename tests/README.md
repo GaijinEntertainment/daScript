@@ -160,6 +160,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | failed_test_arguments.das | Invalid query arguments (optional with defaults, & + const) | **expect** `40104:4` `30103:2` |
 | failed_test_empty_template.das | Empty decs_template struct is rejected | **expect** `30111` |
 | test_archetype.das | Archetype creation, lookup, migration | |
+| test_bulk_create.das | Bulk entity creation — `create_entities` and `create_entities`T` direct path | |
 | test_arrays.das | Arrays as decs components — iterate, modify | |
 | test_boundaries.das | commit/restart inside query (expected failures) | |
 | test_commit_deferred.das | Deferred semantics — entities not visible until commit | |

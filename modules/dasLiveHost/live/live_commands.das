@@ -32,15 +32,13 @@ var public live_command_descriptions : table<string; string>
 // --- Help ---
 
 def private live_help_json() : string {
-    var result = "\{\"commands\": \{"
-    var first = true
+    var commands : table<string; string>
     for (name, desc in keys(live_command_descriptions), values(live_command_descriptions)) {
-        if (!first) { result += ", "; }
-        first = false
-        result += "\"{name}\": \"{desc}\""
+        commands[name] = desc
     }
-    result += "}}"
-    return result
+    var tab : table<string; JsonValue?>
+    tab |> insert("commands", JV(commands))
+    return write_json(JV(tab))
 }
 
 // --- Dispatch (called from [before_update]) ---
@@ -52,30 +50,29 @@ def public live_dispatch_command(command_json : string) : string {
     var parse_error = ""
     var js = read_json(command_json, parse_error)
     if (js == null) {
-        return "\{\"error\": \"{parse_error}\"}"
+        return write_json(JV("parse error: {parse_error}"))
     }
-    if (!(js.value is _object)) {
-        return "\{\"error\": \"expected object\"}"
+    let name = js?.name ?? ""
+    if (empty(name)) {
+        return write_json(JV("missing command name"))
     }
-    let tab & = unsafe(js.value as _object)
-    var name_val = tab?["name"] ?? null
-    if (name_val == null || !(name_val.value is _string)) {
-        return "\{\"error\": \"missing command name\"}"
-    }
-    let name = name_val.value as _string
     if (name == "help") {
         return live_help_json()
     }
     if (!key_exists(live_command_registry, name)) {
-        return "\{\"error\": \"unknown command: {name}\"}"
+        return write_json(JV("unknown command: {name}"))
     }
-    var args = unsafe(reinterpret<JsonValue?>(tab?["args"] ?? null))
+    var args : JsonValue?
+    if (js.value is _object) {
+        let tab & = unsafe(js.value as _object)
+        args = unsafe(reinterpret<JsonValue?>(tab?["args"] ?? null))
+    }
     var handler = live_command_registry[name]
     var result = invoke(handler, args)
     if (result != null) {
         return write_json(result)
     }
-    return "\{\"ok\": true}"
+    return write_json(JV(true))
 }
 
 // --- Macro ---

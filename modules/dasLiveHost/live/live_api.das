@@ -34,6 +34,16 @@ def live_api_set_port(port : int) {
     live_api_port = port
 }
 
+// --- Response types ---
+
+struct LiveStatus {
+    fps : float
+    uptime : float
+    paused : bool
+    dt : float
+    has_error : bool
+}
+
 // --- Server ---
 
 class LiveApiServer : HvWebServer {
@@ -41,16 +51,20 @@ class LiveApiServer : HvWebServer {
         allow_cors()
 
         GET("/status") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            let err = get_last_error()
-            var has_error = !empty(err)
-            var status_json = "\{\"fps\": {get_fps()}, \"uptime\": {get_uptime()}, \"paused\": {is_paused()}, \"dt\": {get_dt()}, \"has_error\": {has_error}}"
-            return resp |> JSON(status_json, http_status.OK)
+            let status = LiveStatus(
+                fps = get_fps(),
+                uptime = get_uptime(),
+                paused = is_paused(),
+                dt = get_dt(),
+                has_error = !empty(get_last_error())
+            )
+            return resp |> JSON(write_json(JV(status)), http_status.OK)
         }
 
         GET("/error") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let err = get_last_error()
             if (empty(err)) {
-                return resp |> JSON("\{\"error\": null}", http_status.OK)
+                return resp |> JSON(write_json(JVNull()), http_status.OK)
             }
             // Return error as plain text to avoid JSON escaping issues
             set_header(resp, "Content-Type", "text/plain")
@@ -60,28 +74,28 @@ class LiveApiServer : HvWebServer {
 
         POST("/reload") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             request_reload(false)
-            return resp |> JSON("\{\"ok\": true}", http_status.OK)
+            return resp |> JSON(write_json(JV(true)), http_status.OK)
         }
 
         POST("/reload/full") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             request_reload(true)
-            return resp |> JSON("\{\"ok\": true}", http_status.OK)
+            return resp |> JSON(write_json(JV(true)), http_status.OK)
         }
 
         POST("/pause") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             set_paused(true)
-            return resp |> JSON("\{\"paused\": true}", http_status.OK)
+            return resp |> JSON(write_json(JV(true)), http_status.OK)
         }
 
         POST("/unpause") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             set_paused(false)
-            return resp |> JSON("\{\"paused\": false}", http_status.OK)
+            return resp |> JSON(write_json(JV(true)), http_status.OK)
         }
 
         POST("/command") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let body = string(req.body)
             if (empty(body)) {
-                return resp |> JSON("\{\"error\": \"empty body\"}", http_status.BAD_REQUEST)
+                return resp |> JSON(write_json(JV("empty body")), http_status.BAD_REQUEST)
             }
             // Dispatch via C++ bridge — calls live_dispatch_command in the main context.
             // Safe because HV handler runs on the main thread during tick(),

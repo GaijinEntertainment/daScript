@@ -19,20 +19,25 @@ require daslib/json_boost
 require live/live_commands
 require live_host
 
+struct ScreenshotArgs {
+    file : string = "screenshot.png"
+}
+
+struct ScreenshotResult {
+    saved : string
+    width : int
+    height : int
+}
+
 [live_command(description="Save framebuffer to PNG. Args: file")]
 def screenshot(input : JsonValue?) : JsonValue? {
-    var fname = "screenshot.png"
-    if (input != null && input.value is _object) {
-        let tab & = unsafe(input.value as _object)
-        var fv = tab?["file"] ?? null
-        if (fv != null && fv.value is _string) {
-            fname = fv.value as _string
-        }
-    }
+    let args = from_JV(input, type<ScreenshotArgs>)
+    var fname = args.file
+    if (empty(fname)) { fname = "screenshot.png"; }
     var w, h : int
     live_get_framebuffer_size(w, h)
     if (w <= 0 || h <= 0) {
-        return JV("\{\"error\": \"no framebuffer\"}")
+        return JV("no framebuffer")
     }
     var pixels : array<uint8>
     pixels |> resize(w * h * 4)
@@ -55,5 +60,5 @@ def screenshot(input : JsonValue?) : JsonValue? {
     unsafe {
         stbi_write_png(fname, w, h, 4, addr(pixels[0]), w * 4)
     }
-    return JV("\{\"saved\": \"{fname}\", \"width\": {w}, \"height\": {h}}")
+    return JV(ScreenshotResult(saved = fname, width = w, height = h))
 }

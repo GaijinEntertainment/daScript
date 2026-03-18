@@ -6,7 +6,7 @@ def initialize(project_path : string) {
     if (das_is_dll_build()) {
         register_dynamic_module("{project_path}/dasModuleLiveHost.shared_module", "Module_LiveHost")
     }
-    let live_paths = ["live_commands", "live_api", "live_watch", "decs_live"]
+    let live_paths = ["live_commands", "live_api", "live_watch", "live_watch_boost", "decs_live", "live_vars"]
     for (path in live_paths) {
         register_native_path("live", "{path}", "{project_path}/live/{path}.das")
     }

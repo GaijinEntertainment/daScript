@@ -105,6 +105,7 @@ FILE(GLOB AOT_LIVE_HOST_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/live_host/*.
 # Live host module files (libraries required by live_host tests)
 SET(AOT_LIVE_HOST_MODULE_FILES
     modules/dasLiveHost/live/live_commands.das
+    modules/dasLiveHost/live/live_vars.das
 )
 
 # AOT for dynamic_cast_rtti test files

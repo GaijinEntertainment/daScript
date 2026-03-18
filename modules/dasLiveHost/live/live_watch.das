@@ -20,8 +20,13 @@ require live_host
 
 // --- Watched file state ---
 
-var watch_mtimes : table<string; clock>
-var watch_last_check : clock
+struct FileSnapshot {
+    mtime : clock
+    size : uint64
+}
+
+var watch_snapshots : table<string; FileSnapshot>
+var watch_last_uptime : float = -1.0
 var watch_file_count : int = -1
 
 // --- Refresh file list from host ---
@@ -32,17 +37,17 @@ def private refresh_file_list() {
         return
     }
     watch_file_count = count
-    watch_mtimes |> clear()
+    watch_snapshots |> clear()
     for (i in range(count)) {
         let f = get_watched_file(i)
         if (!empty(f)) {
             var st : FStat
             if (stat(f, st) && st.is_reg) {
-                watch_mtimes[f] = st.mtime
+                watch_snapshots[f] = FileSnapshot(mtime = st.mtime, size = st.size)
             }
         }
     }
-    watch_last_check = get_clock()
+    watch_last_uptime = get_uptime()
 }
 
 // --- Agent ---
@@ -60,18 +65,19 @@ class LiveWatchAgent : DapiDebugAgent {
         if (watch_file_count <= 0) {
             return
         }
-        // Throttle: check at most once per second
-        let now = get_clock()
-        if (float(now - watch_last_check) < 1.0) {
+        // Throttle: check twice per second (uptime is high-resolution)
+        let now = get_uptime()
+        if (now - watch_last_uptime < 0.5) {
             return
         }
-        watch_last_check = now
-        // Check file mtimes
-        for (f, mtime in keys(watch_mtimes), values(watch_mtimes)) {
+        watch_last_uptime = now
+        // Check file mtimes and sizes
+        for (f, snap in keys(watch_snapshots), values(watch_snapshots)) {
             var st : FStat
             if (stat(f, st) && st.is_reg) {
-                if (mtime != st.mtime) {
-                    mtime = st.mtime
+                if (snap.mtime != st.mtime || snap.size != st.size) {
+                    snap.mtime = st.mtime
+                    snap.size = st.size
                     signal_files_changed()
                     return
                 }
