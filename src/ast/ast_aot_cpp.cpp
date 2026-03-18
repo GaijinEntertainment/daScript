@@ -4013,7 +4013,7 @@ namespace das {
         }
 
         if (!fnn.empty()) {
-            logs << "\n#pragma optimize(\"\", off)\n"; // Let's disable any optimizations. It helps on MSVC to compile faster
+            logs << "\n#ifdef _MSC_VER\n#pragma optimize(\"\", off)\n#endif\n"; // Let's disable any optimizations. It helps on MSVC to compile faster
             // We should duplicate fields of AotFactory to reduce comptime.
             logs << "struct AotFunction { uint64_t hash; bool is_cmres; void * fn; vec4f (*wrappedFn)(Context*); };\n";
             logs << "static AotFunction functions[] = {\n";
@@ -4024,7 +4024,7 @@ namespace das {
                      << "(void*)&" << aotFuncName(fn) << ", &__wrap_" << aotFuncName(fn) << " },\n";
             }
             logs << "};\n";
-            logs << "#pragma optimize(\"\", on)\n"; // Enable optimizations back
+            logs << "#ifdef _MSC_VER\n#pragma optimize(\"\", on)\n#endif\n"; // Enable optimizations back
         }
         if ( headers ) {
             logs << "\nvoid registerAot ( AotLibrary & aotLib ) \n{\n";

@@ -111,12 +111,12 @@ class DecsTemplate : AstStructureAnnotation {
         var blk = unsafe(reinterpret<ExprBlock?> fnBulk.body)
         blk.list |> clear()
         blk.list |> emplace_new <| qmacro_block() {
-            var defval : $t(st)
+            var defval := default<$t(st)>
             var cmp : decs::ComponentMap
             apply_decs_template(cmp, defval)
             var cache : array<int>
             decs::create_entities_from_cmp(count, cmp) <| $(var arch : decs::Archetype; eidx : int; eid : decs::EntityId; i : int) {
-                var entity : $t(st)
+                var entity := default<$t(st)>
                 invoke(user_blk, eid, i, entity)
                 apply_decs_template_arch(arch, eidx, eid, entity, cache)
             }

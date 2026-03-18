@@ -3866,7 +3866,7 @@ def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var co
     }
 
     if (!fnn.empty()) {
-        write(*logs, "\n#pragma optimize(\"\", off)\n"); // Let's disable any optimizations. It helps on MSVC to compile faster
+        write(*logs, "\n#ifdef _MSC_VER\n#pragma optimize(\"\", off)\n#endif\n"); // Let's disable any optimizations. It helps on MSVC to compile faster
         // We should duplicate fields of AotFactory to reduce comptime.
         write(*logs, "struct AotFunction \{ uint64_t hash; bool is_cmres; void * fn; vec4f (*wrappedFn)(Context*); \};\n");
         write(*logs, "static AotFunction functions[] = \{\n");
@@ -3877,7 +3877,7 @@ def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var co
             write(*logs, "    \{ {fn.aotHash}, {is_cmres}, (void*)&{fn_name}, &__wrap_{fn_name} \},\n");
         }
         write(*logs, "};\n");
-        write(*logs, "#pragma optimize(\"\", on)\n"); // Enable optimizations back
+        write(*logs, "#ifdef _MSC_VER\n#pragma optimize(\"\", on)\n#endif\n"); // Enable optimizations back
     }
     if (headers) {
         write(*logs, "\nvoid registerAot ( AotLibrary & aotLib )\n\{\n")
