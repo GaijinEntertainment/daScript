@@ -149,7 +149,7 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - `daslib/` — Standard library modules (.das files)
 - `examples/` — Example scripts
 - `dastest/` — Test framework (usable for testing your own code)
-- `utils/mcp/` — MCP server for AI coding assistants (stdio transport, no extra deps)
+- `utils/mcp/` — MCP server for AI coding assistants (28 tools, stdio transport, no extra deps)
 - `utils/daspkg/` — Package manager
 
 ## Package Manager (daspkg)
@@ -195,8 +195,18 @@ See `skills/daspkg.md` for `.das_package` manifest format and package structure.
 | `grep_usage` | Grepping for symbol names across files (parse-aware via ast-grep + tree-sitter) |
 | `outline` | Manually scanning files for function/struct/enum declarations |
 | `aot` | Manually running AOT generation and extracting function C++ |
+| `live_launch` | Manually starting `daslang-live` from shell |
+| `live_status` | `curl http://localhost:9090/status` |
+| `live_error` | `curl http://localhost:9090/error` |
+| `live_reload` | `curl -X POST http://localhost:9090/reload` |
+| `live_pause` | `curl -X POST http://localhost:9090/pause` or `/unpause` |
+| `live_command` | `curl -X POST http://localhost:9090/command -d '{"name":"..."}` |
+| `live_shutdown` | `curl -X POST http://localhost:9090/shutdown` |
+| `shutdown` | Manually restarting the MCP server process |
 
 Cursor-based tools (`goto_definition`, `type_of`, `find_references`) support a `no_opt` parameter that disables compiler optimizations to preserve the full AST — useful when globals, enum values, or bitfield constants get constant-folded away.
+
+**Live tools:** The `live_*` tools interact with a running `daslang-live` instance via its REST API. `live_launch` starts one if not already running. All live tools accept optional `port` (default 9090). When a compilation error is active, `live_command` and `live_pause` return 503 with the error. Hitting any unknown endpoint returns JSON help.
 
 **Configuration:** Configure `.mcp.json` with `"command": "bin/daslang", "args": ["utils/mcp/main.das"]`. See `utils/mcp/README.md` for details and permissions.
 

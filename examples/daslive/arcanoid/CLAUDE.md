@@ -12,28 +12,25 @@ bin/Release/daslang.exe examples/daslive/arcanoid/main.das
 
 Both modes use the same `main.das`. Under `daslang.exe`, the script's `main()` function runs the init/update/shutdown loop directly. Under `daslang-live.exe`, the host manages the lifecycle and enables hot-reload + REST API.
 
-## REST API (live mode only)
+## Interacting with the live instance
 
-Server starts automatically on **port 9090** when running under `daslang-live.exe`.
+**Always use MCP tools** instead of curl for interacting with daslang-live:
 
-### Built-in Endpoints
-
-```bash
-curl http://localhost:9090/status                    # fps, uptime, paused, dt
-curl http://localhost:9090/error                     # last compilation error (plain text)
-curl -X POST http://localhost:9090/reload            # trigger reload
-curl -X POST http://localhost:9090/pause             # pause
-curl -X POST http://localhost:9090/unpause           # unpause
 ```
+live_launch   — start the instance (or check if already running)
+live_status   — fps, uptime, paused, dt, has_error
+live_error    — last compilation error
+live_reload   — trigger reload (optional full=true)
+live_pause    — pause/unpause (paused=true/false)
+live_command  — dispatch a [live_command] (name + optional args JSON)
+live_shutdown — graceful shutdown
+```
+
+When a compilation error is active, `live_command` and `live_pause` return 503 with the error. Use `live_reload` to fix.
 
 ### Commands
 
-All commands via `POST /command` with JSON body `{"name": "...", "args": {...}}`.
-
-```bash
-# List all available commands
-curl -X POST http://localhost:9090/command -d '{"name":"help"}'
-```
+Use `live_command` with `name="help"` to list all available commands.
 
 #### Built-in Commands (from modules)
 
@@ -62,29 +59,16 @@ curl -X POST http://localhost:9090/command -d '{"name":"help"}'
 
 **Powerup/bonus types:** `triple_ball`, `wide_paddle`, `narrow_paddle`, `sticky_paddle`, `fireball`, `extra_life`, `speed_up`, `speed_down`
 
-### Example curl Commands
+### Example MCP Commands
 
-```bash
-# Check game state
-curl -X POST http://localhost:9090/command -d '{"name":"cmd_game_status"}'
-
-# Spawn a ball at center with slight rightward velocity
-curl -X POST http://localhost:9090/command -d '{"name":"cmd_spawn_ball","args":{"x":0,"vx":0.3}}'
-
-# Activate wide paddle
-curl -X POST http://localhost:9090/command -d '{"name":"cmd_powerup","args":{"type":"wide_paddle"}}'
-
-# Toggle god mode
-curl -X POST http://localhost:9090/command -d '{"name":"cmd_god_mode"}'
-
-# Slow motion
-curl -X POST http://localhost:9090/command -d '{"name":"cmd_slow_motion","args":{"speed":0.3}}'
-
-# Take a screenshot
-curl -X POST http://localhost:9090/command -d '{"name":"screenshot","args":{"file":"arcanoid.png"}}'
-
-# Reset the game
-curl -X POST http://localhost:9090/command -d '{"name":"cmd_reset_game"}'
+```
+live_command name=cmd_game_status                              # Check game state
+live_command name=cmd_spawn_ball args={"x":0,"vx":0.3}         # Spawn a ball
+live_command name=cmd_powerup args={"type":"wide_paddle"}       # Activate wide paddle
+live_command name=cmd_god_mode                                  # Toggle god mode
+live_command name=cmd_slow_motion args={"speed":0.3}            # Slow motion
+live_command name=screenshot args={"file":"arcanoid.png"}       # Take a screenshot
+live_command name=cmd_reset_game                                # Reset the game
 ```
 
 ## Architecture

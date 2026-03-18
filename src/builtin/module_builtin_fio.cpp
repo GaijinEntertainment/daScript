@@ -145,6 +145,7 @@ namespace das {
     int builtin_popen_binary ( const char * cmd, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     int builtin_popen ( const char * cmd, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     int builtin_popen_timeout ( const char * cmd, float timeout_sec, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    int builtin_system ( const char * cmd, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * get_full_file_name ( const char * path, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     bool has_env_variable ( const char * var, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * get_env_variable ( const char * var, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
@@ -717,6 +718,14 @@ namespace das {
         if ( timedOut ) return DAS_POPEN_TIMEOUT;
         return WIFEXITED(status) ? WEXITSTATUS(status) : WIFSIGNALED(status) ? WTERMSIG(status) : status;
 #endif
+    }
+
+    int builtin_system ( const char * cmd, Context * context, LineInfoArg * at ) {
+        if ( !cmd ) {
+            context->throw_error_at(at, "system of null");
+            return -1;
+        }
+        return system(cmd);
     }
 
     char * get_full_file_name ( const char * path, Context * context, LineInfoArg * at ) {
@@ -1312,6 +1321,9 @@ namespace das {
                 SideEffects::modifyExternal, "builtin_popen_timeout")
                     ->args({"command","timeout","scope","context","at"})->unsafeOperation = true;
             addConstant<int32_t>(*this, "popen_timed_out", DAS_POPEN_TIMEOUT);
+            addExtern<DAS_BIND_FUN(builtin_system)>(*this, lib, "system",
+                SideEffects::modifyExternal, "builtin_system")
+                    ->args({"command","context","at"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(get_full_file_name)>(*this, lib, "get_full_file_name",
                 SideEffects::accessExternal, "get_full_file_name")
                     ->args({"path","context","at"});

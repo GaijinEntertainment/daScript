@@ -1,8 +1,10 @@
 # daslang MCP Server
 
-A [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that exposes 20 daslang compiler-backed tools to AI coding assistants like Claude Code — compilation diagnostics, program introspection, AOT generation, and more.
+A [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that exposes 28 daslang compiler-backed tools to AI coding assistants like Claude Code — compilation diagnostics, program introspection, AOT generation, live-reload control, and more.
 
 ## Tools
+
+### Compiler & Introspection
 
 | Tool | Description |
 |---|---|
@@ -27,6 +29,26 @@ A [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that e
 | `grep_usage` | Parse-aware symbol search across `.das` files using ast-grep + tree-sitter. Finds identifier occurrences excluding comments and strings. Conditional on `sg` CLI |
 | `outline` | List all declarations (functions, structs, classes, enums, bitfields, variants, globals, typedefs) in a file or set of files using tree-sitter. Works on broken/incomplete code — no compilation needed. Conditional on `sg` CLI |
 | `aot` | Generate AOT (ahead-of-time) C++ code for a `.das` file or a single function. Without `function`, returns full AOT output. With `function`, extracts that function's C++ only. Overloaded names return a disambiguation list with mangled names for exact selection |
+
+### Live-Reload Control
+
+These tools interact with a running `daslang-live.exe` instance via its REST API (default port 9090). All accept an optional `port` parameter.
+
+| Tool | Description |
+|---|---|
+| `live_launch` | Start a `daslang-live` instance with a script file. Sets working directory to the script's folder. Detects if already running. Polls up to 10 seconds to confirm startup |
+| `live_status` | Get status (fps, uptime, paused, dt, has_error) |
+| `live_error` | Get last compilation error (null if none) |
+| `live_reload` | Trigger reload. Optional `full` param for full recompile. Works even during compilation errors |
+| `live_pause` | Pause or unpause (`paused` = "true"/"false"). Returns 503 on compilation error |
+| `live_command` | Dispatch a `[live_command]` (`name` required, optional `args` JSON string). Returns 503 on compilation error. Use `name="help"` to list all commands |
+| `live_shutdown` | Graceful shutdown of the live instance |
+
+### Server Management
+
+| Tool | Description |
+|---|---|
+| `shutdown` | Shut down the MCP server itself. Claude Code auto-restarts it, picking up code changes to `.das` tool files. Tool registration changes require a manual restart |
 
 ## Setup
 
@@ -79,6 +101,7 @@ Claude Code starts and stops the server automatically with each session.
 ## Architecture
 
 - Each tool invocation runs in a **separate thread** (`new_thread`) with its own context/heap — when the thread ends, its memory is freed without GC
+- **Exception:** `live_*` tools run on the main thread (they use `system()` and `sleep()` which don't work well from `new_thread`)
 - Protocol logic lives in `protocol.das`, the entry point is `main.das`
 - Heap is collected after each request when over threshold (1 MB)
 - Tool handlers are modular: each tool lives in `tools/*.das`, shared utilities in `tools/common.das`
@@ -111,7 +134,15 @@ Optionally, allow the MCP tools without prompting by adding to `.claude/settings
       "mcp__daslang__describe_type",
       "mcp__daslang__grep_usage",
       "mcp__daslang__outline",
-      "mcp__daslang__aot"
+      "mcp__daslang__aot",
+      "mcp__daslang__live_launch",
+      "mcp__daslang__live_status",
+      "mcp__daslang__live_error",
+      "mcp__daslang__live_reload",
+      "mcp__daslang__live_pause",
+      "mcp__daslang__live_command",
+      "mcp__daslang__live_shutdown",
+      "mcp__daslang__shutdown"
     ]
   }
 }

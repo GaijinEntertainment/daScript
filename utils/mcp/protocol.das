@@ -33,6 +33,7 @@ require tools/describe_type public
 require tools/grep_usage public
 require tools/outline public
 require tools/aot public
+require tools/live public
 
 let HEAP_COLLECT_THRESHOLD = 1024ul * 1024ul  // 1 MB
 let LOG_FILE = "utils/mcp/mcp_server.log"
@@ -409,6 +410,68 @@ def handle_tools_list(id_json : string) : string {
         },
         ["file"]
     ))
+    result.tools |> emplace(make_tool(
+        "live_status",
+        "Get status of a running daslang-live instance (fps, uptime, paused, dt, has_error). Returns 503 JSON with compilation error if the script failed to compile.",
+        { "port" => PropertySchema(_type = "string", description = "Live API port (default: 9090)") },
+        []
+    ))
+    result.tools |> emplace(make_tool(
+        "live_error",
+        "Get the last compilation error from a running daslang-live instance. Returns null if no error.",
+        { "port" => PropertySchema(_type = "string", description = "Live API port (default: 9090)") },
+        []
+    ))
+    result.tools |> emplace(make_tool(
+        "live_reload",
+        "Trigger a reload of the running daslang-live script. Works even when there is a compilation error.",
+        {
+            "full" => PropertySchema(_type = "string", description = "If 'true', force full recompile instead of incremental reload"),
+            "port" => PropertySchema(_type = "string", description = "Live API port (default: 9090)")
+        },
+        []
+    ))
+    result.tools |> emplace(make_tool(
+        "live_pause",
+        "Pause or unpause the running daslang-live script. Returns 503 if there is a compilation error.",
+        {
+            "paused" => PropertySchema(_type = "string", description = "'true' to pause, 'false' to unpause"),
+            "port" => PropertySchema(_type = "string", description = "Live API port (default: 9090)")
+        },
+        ["paused"]
+    ))
+    result.tools |> emplace(make_tool(
+        "live_command",
+        "Dispatch a [live_command] to the running daslang-live instance. Use name='help' to list all available commands. Returns 503 if there is a compilation error.",
+        {
+            "name" => PropertySchema(_type = "string", description = "Command name (e.g. 'help', 'screenshot', 'cmd_spawn_ball')"),
+            "args" => PropertySchema(_type = "string", description = "Command arguments as JSON object string (e.g. '\{\"x\":1\}')"),
+            "port" => PropertySchema(_type = "string", description = "Live API port (default: 9090)")
+        },
+        ["name"]
+    ))
+    result.tools |> emplace(make_tool(
+        "live_shutdown",
+        "Gracefully shut down the running daslang-live instance.",
+        { "port" => PropertySchema(_type = "string", description = "Live API port (default: 9090)") },
+        []
+    ))
+    result.tools |> emplace(make_tool(
+        "live_launch",
+        "Launch a daslang-live instance with a script file. If an instance is already running, returns its status instead of starting a new one. Polls for up to 10 seconds to confirm startup.",
+        {
+            "file" => PropertySchema(_type = "string", description = "Path to the .das script file to run"),
+            "project" => PROJECT_PROP,
+            "port" => PropertySchema(_type = "string", description = "Live API port to check (default: 9090)")
+        },
+        ["file"]
+    ))
+    result.tools |> emplace(make_tool(
+        "shutdown",
+        "Shut down the MCP server. Claude Code will auto-restart it, picking up any code changes to MCP tools. Tool registration changes still require a manual restart.",
+        { "unused" => PropertySchema(_type = "string", description = "ignored") },
+        []
+    ))
     return json_rpc_response(id_json, sprint_json(result, false))
 }
 
@@ -478,6 +541,23 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : s
         return do_outline(arg1, arg2)
     } elif (tool_name == "aot") {
         return do_aot(arg1, arg2, project)
+    } elif (tool_name == "live_status") {
+        return do_live_status(arg1)
+    } elif (tool_name == "live_error") {
+        return do_live_error(arg1)
+    } elif (tool_name == "live_reload") {
+        return do_live_reload(arg1, arg2)
+    } elif (tool_name == "live_pause") {
+        return do_live_pause(arg1, arg2)
+    } elif (tool_name == "live_command") {
+        return do_live_command(arg1, arg2, arg3)
+    } elif (tool_name == "live_shutdown") {
+        return do_live_shutdown(arg1)
+    } elif (tool_name == "live_launch") {
+        return do_live_launch(arg1, arg2, arg3)
+    } elif (tool_name == "shutdown") {
+        unsafe { exit(0); }
+        return make_tool_result("shutting down")
     } else {
         return make_tool_result("unknown tool: {tool_name}", true)
     }
@@ -487,14 +567,20 @@ def run_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : string
     log_tool(tool_name, "{arg1} {arg2} {arg3} {arg4} {arg5}")
     let t0 = get_clock()
     var result : string
-    with_channel(1) <| $(ch) {
-        new_thread() <| @() {
-            let tool_result = dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project)
-            ch |> push_clone(ToolMessage(text = tool_result))
-            ch |> notify_and_release()
-        }
-        for_each_clone(ch) <| $(msg : ToolMessage#) {
-            result = clone_string(msg.text)
+    // Live tools run on the main thread — they use system() and sleep() which
+    // don't work well from new_thread, and they don't need compilation context
+    if (starts_with(tool_name, "live_")) {
+        result = dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project)
+    } else {
+        with_channel(1) <| $(ch) {
+            new_thread() <| @() {
+                let tool_result = dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project)
+                ch |> push_clone(ToolMessage(text = tool_result))
+                ch |> notify_and_release()
+            }
+            for_each_clone(ch) <| $(msg : ToolMessage#) {
+                result = clone_string(msg.text)
+            }
         }
     }
     let is_error = find(result, "\"isError\":true") >= 0
@@ -623,6 +709,37 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
             return json_rpc_error(id_json, -32602, "missing 'file' argument")
         }
         arg2 = get_string_arg(args, "function")
+    } elif (name == "live_status") {
+        arg1 = get_string_arg(args, "port")
+    } elif (name == "live_error") {
+        arg1 = get_string_arg(args, "port")
+    } elif (name == "live_reload") {
+        arg1 = get_string_arg(args, "full")
+        arg2 = get_string_arg(args, "port")
+    } elif (name == "live_pause") {
+        arg1 = get_string_arg(args, "paused")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'paused' argument")
+        }
+        arg2 = get_string_arg(args, "port")
+    } elif (name == "live_command") {
+        arg1 = get_string_arg(args, "name")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'name' argument")
+        }
+        arg2 = get_string_arg(args, "args")
+        arg3 = get_string_arg(args, "port")
+    } elif (name == "live_shutdown") {
+        arg1 = get_string_arg(args, "port")
+    } elif (name == "live_launch") {
+        arg1 = get_string_arg(args, "file")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'file' argument")
+        }
+        arg2 = get_string_arg(args, "project")
+        arg3 = get_string_arg(args, "port")
+    } elif (name == "shutdown") {
+        pass
     } else {
         return json_rpc_error(id_json, -32602, "unknown tool: {name}")
     }

@@ -1,4 +1,5 @@
 options gen2
+options rtti
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options indenting = 4
@@ -13,10 +14,18 @@ module live_api shared public
 //! that calls `live_dispatch_command` in the main application context.
 //!
 //! Endpoints:
-//!   GET  /status   — JSON with fps, uptime, paused, last_error
-//!   POST /reload   — triggers a reload
-//!   POST /shutdown — graceful shutdown
-//!   POST /command  — dispatches a [live_command] via host bridge
+//!   GET  /status      — JSON with fps, uptime, paused, dt, has_error
+//!   GET  /error       — last compilation error (plain text)
+//!   POST /reload      — triggers incremental reload
+//!   POST /reload/full — triggers full recompile
+//!   POST /pause       — pauses the host
+//!   POST /unpause     — unpauses the host
+//!   POST /shutdown    — graceful shutdown
+//!   POST /command     — dispatches a [live_command] via host bridge
+//!   ANY  *            — returns JSON help with all endpoints and curl examples
+//!
+//! When a compilation error is active, /command, /pause, and /unpause
+//! return HTTP 503 with the error text. Use /reload to fix.
 
 require dashv/dashv_boost
 require daslib/json
@@ -45,6 +54,45 @@ struct LiveStatus {
     has_error : bool
 }
 
+// --- Compilation error guard ---
+
+def compilation_error_response(resp : HttpResponse?) : http_status {
+    //! If there is a compilation error, writes a 503 JSON response and returns SERVICE_UNAVAILABLE.
+    //! Returns OK (200) if there is no error — caller should continue with normal logic.
+    let err = get_last_error()
+    if (!empty(err)) {
+        var tab : table<string; JsonValue?>
+        tab |> insert("error", JV(err))
+        tab |> insert("hint", JV("POST /reload to retry"))
+        return resp |> JSON(write_json(JV(tab)), http_status.SERVICE_UNAVAILABLE)
+    }
+    return http_status.OK
+}
+
+// --- Help ---
+
+def live_api_help_json() : string {
+    //! Returns JSON help listing all endpoints with descriptions and curl examples.
+    var endpoints : array<JsonValue?>
+    endpoints |> push(JV({ "method" => "GET", "path" => "/status", "description" => "JSON with fps, uptime, paused, dt, has_error", "curl" => "curl http://localhost:{live_api_port}/status" }))
+    endpoints |> push(JV({ "method" => "GET", "path" => "/error", "description" => "Last compilation error (plain text, or null)", "curl" => "curl http://localhost:{live_api_port}/error" }))
+    endpoints |> push(JV({ "method" => "POST", "path" => "/reload", "description" => "Trigger incremental reload", "curl" => "curl -X POST http://localhost:{live_api_port}/reload" }))
+    endpoints |> push(JV({ "method" => "POST", "path" => "/reload/full", "description" => "Trigger full recompile", "curl" => "curl -X POST http://localhost:{live_api_port}/reload/full" }))
+    endpoints |> push(JV({ "method" => "POST", "path" => "/pause", "description" => "Pause the host", "curl" => "curl -X POST http://localhost:{live_api_port}/pause" }))
+    endpoints |> push(JV({ "method" => "POST", "path" => "/unpause", "description" => "Unpause the host", "curl" => "curl -X POST http://localhost:{live_api_port}/unpause" }))
+    endpoints |> push(JV({ "method" => "POST", "path" => "/shutdown", "description" => "Graceful shutdown", "curl" => "curl -X POST http://localhost:{live_api_port}/shutdown" }))
+    var cmd_desc = "Dispatch a [live_command] (JSON body: \{\"name\":\"cmd\",\"args\":\{...\}\})"
+    var cmd_curl = "curl -X POST -H \"Content-Type: application/json\" -d '\{\"name\":\"help\"\}' http://localhost:{live_api_port}/command"
+    endpoints |> push(JV({ "method" => "POST", "path" => "/command", "description" => cmd_desc, "curl" => cmd_curl }))
+    var result : table<string; JsonValue?>
+    result |> insert("endpoints", JV(endpoints))
+    let err = get_last_error()
+    if (!empty(err)) {
+        result |> insert("error", JV(err))
+    }
+    return write_json(JV(result))
+}
+
 // --- Server ---
 
 class LiveApiServer : HvWebServer {
@@ -67,7 +115,6 @@ class LiveApiServer : HvWebServer {
             if (empty(err)) {
                 return resp |> JSON(write_json(JVNull()), http_status.OK)
             }
-            // Return error as plain text to avoid JSON escaping issues
             set_header(resp, "Content-Type", "text/plain")
             resp.body := err
             return http_status.OK
@@ -84,11 +131,19 @@ class LiveApiServer : HvWebServer {
         }
 
         POST("/pause") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            let guard = compilation_error_response(resp)
+            if (guard != http_status.OK) {
+                return guard
+            }
             set_paused(true)
             return resp |> JSON(write_json(JV(true)), http_status.OK)
         }
 
         POST("/unpause") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            let guard = compilation_error_response(resp)
+            if (guard != http_status.OK) {
+                return guard
+            }
             set_paused(false)
             return resp |> JSON(write_json(JV(true)), http_status.OK)
         }
@@ -99,15 +154,21 @@ class LiveApiServer : HvWebServer {
         }
 
         POST("/command") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            let guard = compilation_error_response(resp)
+            if (guard != http_status.OK) {
+                return guard
+            }
             let body = string(req.body)
             if (empty(body)) {
                 return resp |> JSON(write_json(JV("empty body")), http_status.BAD_REQUEST)
             }
-            // Dispatch via C++ bridge — calls live_dispatch_command in the main context.
-            // Safe because HV handler runs on the main thread during tick(),
-            // and the main context is idle at that point.
             let result = dispatch_command(body)
             return resp |> JSON(result, http_status.OK)
+        }
+
+        // Catch-all: return help for any unmatched route
+        ANY("*") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            return resp |> JSON(live_api_help_json(), http_status.OK)
         }
     }
 }
