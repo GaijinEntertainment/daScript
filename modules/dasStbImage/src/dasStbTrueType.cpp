@@ -6,11 +6,13 @@
 #include "daScript/ast/ast_handle.h"
 
 #include "stb_truetype.h"
+#include "dasStbTrueType.h"
 
 MAKE_TYPE_FACTORY(stbtt_packedchar, stbtt_packedchar);
 MAKE_TYPE_FACTORY(stbtt_aligned_quad, stbtt_aligned_quad);
 MAKE_TYPE_FACTORY(stbtt_fontinfo, stbtt_fontinfo);
 MAKE_TYPE_FACTORY(stbtt_pack_context, stbtt_pack_context);
+MAKE_TYPE_FACTORY(stbtt_vertex_das, stbtt_vertex_das);
 
 namespace das {
 
@@ -54,6 +56,44 @@ struct StbttPackContextAnnotation : ManagedStructureAnnotation<stbtt_pack_contex
     }
 };
 
+struct StbttVertexDasAnnotation : ManagedStructureAnnotation<stbtt_vertex_das> {
+    StbttVertexDasAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation("stbtt_vertex_das", ml) {
+        addField<DAS_BIND_MANAGED_FIELD(x)>("x", "x");
+        addField<DAS_BIND_MANAGED_FIELD(y)>("y", "y");
+        addField<DAS_BIND_MANAGED_FIELD(cx)>("cx", "cx");
+        addField<DAS_BIND_MANAGED_FIELD(cy)>("cy", "cy");
+        addField<DAS_BIND_MANAGED_FIELD(cx1)>("cx1", "cx1");
+        addField<DAS_BIND_MANAGED_FIELD(cy1)>("cy1", "cy1");
+        addField<DAS_BIND_MANAGED_FIELD(type)>("vtype", "vtype");
+    }
+};
+
+// Wrapper: get glyph shape as callback per vertex
+void stbtt_GetCodepointShape_foreach(const stbtt_fontinfo * info, int codepoint,
+    const TBlock<void, const stbtt_vertex_das &> & block, Context * ctx, LineInfoArg * at) {
+    stbtt_vertex * vertices = nullptr;
+    int num = stbtt_GetCodepointShape(info, codepoint, &vertices);
+    for (int i = 0; i < num; i++) {
+        stbtt_vertex_das v;
+        v.x = vertices[i].x;
+        v.y = vertices[i].y;
+        v.cx = vertices[i].cx;
+        v.cy = vertices[i].cy;
+        v.cx1 = vertices[i].cx1;
+        v.cy1 = vertices[i].cy1;
+        v.type = vertices[i].type;
+        das_invoke<void>::invoke<const stbtt_vertex_das &>(ctx, at, block, v);
+    }
+    if (vertices) stbtt_FreeShape(info, vertices);
+}
+
+int stbtt_GetCodepointShape_count(const stbtt_fontinfo * info, int codepoint) {
+    stbtt_vertex * vertices = nullptr;
+    int num = stbtt_GetCodepointShape(info, codepoint, &vertices);
+    if (vertices) stbtt_FreeShape(info, vertices);
+    return num;
+}
+
 // ---- Module ----
 
 class Module_StbTrueType : public Module {
@@ -68,6 +108,13 @@ public:
         addAnnotation(make_smart<StbttAlignedQuadAnnotation>(lib));
         addAnnotation(make_smart<StbttFontinfoAnnotation>(lib));
         addAnnotation(make_smart<StbttPackContextAnnotation>(lib));
+        addAnnotation(make_smart<StbttVertexDasAnnotation>(lib));
+
+        // ---- Glyph shape constants ----
+        addConstant<int>(*this, "STBTT_vmove", STBTT_vmove);
+        addConstant<int>(*this, "STBTT_vline", STBTT_vline);
+        addConstant<int>(*this, "STBTT_vcurve", STBTT_vcurve);
+        addConstant<int>(*this, "STBTT_vcubic", STBTT_vcubic);
 
         // ---- Font loading ----
         addExtern<DAS_BIND_FUN(stbtt_GetNumberOfFonts)>(*this, lib, "stbtt_GetNumberOfFonts",
@@ -148,6 +195,14 @@ public:
         addExtern<DAS_BIND_FUN(stbtt_FreeBitmap)>(*this, lib, "stbtt_FreeBitmap",
             SideEffects::modifyExternal, "stbtt_FreeBitmap")
                 ->args({"bitmap", "userdata"});
+
+        // ---- Glyph shape ----
+        addExtern<DAS_BIND_FUN(stbtt_GetCodepointShape_foreach)>(*this, lib, "stbtt_GetCodepointShape",
+            SideEffects::invoke, "stbtt_GetCodepointShape_foreach")
+                ->args({"info", "codepoint", "block", "context", "at"});
+        addExtern<DAS_BIND_FUN(stbtt_GetCodepointShape_count)>(*this, lib, "stbtt_GetCodepointShape_count",
+            SideEffects::none, "stbtt_GetCodepointShape_count")
+                ->args({"info", "codepoint"});
     }
     virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
         tw << "#include \"../modules/dasStbImage/src/dasStbTrueType.h\"\n";

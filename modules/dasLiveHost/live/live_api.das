@@ -13,9 +13,10 @@ module live_api shared public
 //! that calls `live_dispatch_command` in the main application context.
 //!
 //! Endpoints:
-//!   GET  /status  — JSON with fps, uptime, paused, last_error
-//!   POST /reload  — triggers a reload
-//!   POST /command — dispatches a [live_command] via host bridge
+//!   GET  /status   — JSON with fps, uptime, paused, last_error
+//!   POST /reload   — triggers a reload
+//!   POST /shutdown — graceful shutdown
+//!   POST /command  — dispatches a [live_command] via host bridge
 
 require dashv/dashv_boost
 require daslib/json
@@ -89,6 +90,11 @@ class LiveApiServer : HvWebServer {
 
         POST("/unpause") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             set_paused(false)
+            return resp |> JSON(write_json(JV(true)), http_status.OK)
+        }
+
+        POST("/shutdown") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+            request_exit()
             return resp |> JSON(write_json(JV(true)), http_status.OK)
         }
 
