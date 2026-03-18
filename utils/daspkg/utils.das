@@ -261,12 +261,25 @@ def copy_dir_rec(src, dst : string) : bool {
         } elif (st.is_reg) {
             fopen(src_child, "rb") <| $(fin) {
                 if (fin != null) {
-                    let data = fread(fin)
-                    fopen(dst_child, "wb") <| $(fout) {
-                        if (fout != null) {
-                            fwrite(fout, data)
-                        } else {
-                            ok = false
+                    let fs = fstat(fin)
+                    let sz = int(fs.size)
+                    if (sz == 0) {
+                        // empty file — just create it
+                        fopen(dst_child, "wb") <| $(fout) {
+                            if (fout == null) {
+                                ok = false
+                            }
+                        }
+                    } else {
+                        var buf : array<uint8>
+                        buf |> resize(sz)
+                        fread(fin, buf)
+                        fopen(dst_child, "wb") <| $(fout) {
+                            if (fout != null) {
+                                fwrite(fout, buf)
+                            } else {
+                                ok = false
+                            }
                         }
                     }
                 } else {

@@ -127,7 +127,7 @@ def do_live_launch(file, project, port : string) : string {
     }
     // Build launcher script — must detach stdin to avoid pipe inheritance from MCP
     let script_dir = dir_name(file)
-    var launch_file = clone_string(file)
+    var launch_file = clone_string(base_name(file))
     var launch_project = clone_string(project)
     var launch_exe_path = clone_string(live_exe)
     var launch_dir = clone_string(script_dir)
