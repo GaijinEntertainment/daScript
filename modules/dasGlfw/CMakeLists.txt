@@ -122,6 +122,10 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 	ADD_MODULE_LIB(libDasModuleGlfw dasModuleGlfw ${DAS_GLFW_BIND_MODULE_SRC})
 	MACRO(SETUP_GLFW glfw_mod_lib glfw_target)
 		ADD_DEPENDENCIES(${glfw_mod_lib} ${glfw_target})
+		IF(APPLE)
+			# On new MAC versions elaborated-enum-base fails in `Core`.
+			TARGET_COMPILE_OPTIONS(${glfw_mod_lib} PRIVATE -Wno-elaborated-enum-base)
+		ENDIF()
 		IF(UNIX AND NOT APPLE)
 			find_package(OpenGL REQUIRED)
 			target_link_libraries(${glfw_mod_lib} PRIVATE ${OPENGL_gl_LIBRARY} GL X11 Xrandr pthread Xi dl)
