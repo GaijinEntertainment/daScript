@@ -299,6 +299,7 @@ jobs:
     #         ;;
     #     esac
     - name: "Run formatter"
+      if: matrix.cmake_preset == 'Release'
       run: |
         set -eux
         case "${{ matrix.target }}${{ matrix.architecture }}" in
@@ -347,7 +348,10 @@ jobs:
             echo "Skipping AOT tests on 32-bit Windows"
             ;;
            windows*)
-            echo "Skipping AOT tests on Windows"
+            # Run single instance of daslang_static. It takes ~5 sec and
+            # one instance is enough to make sure it works.
+            cd bin/"${{ matrix.cmake_preset }}"
+            ./daslang_static _dasroot_/dastest/dastest.das -- --color --failures-only --test ../../tests
             ;;
            *)
             cd bin
@@ -356,6 +360,10 @@ jobs:
             # Run coverage only in Release since it is slow.
             ./daslang _dasroot_/dastest/dastest.das -- --cov-path coverage.lcov --color --test ../tests --timeout 1800
             ./daslang _dasroot_/utils/dascov/main.das -- coverage.lcov --exclude tests/
+
+            # Run single instance of daslang_static. It takes ~5 sec and
+            # one instance is enough to make sure it works.
+            ./daslang_static _dasroot_/dastest/dastest.das -- --color --failures-only --test ../tests
             ;;
         esac
 
