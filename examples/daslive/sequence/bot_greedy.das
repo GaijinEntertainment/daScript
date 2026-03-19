@@ -13,8 +13,11 @@ require math
 //   line_4             — extending own line to 4 (one away)
 //   line_3             — extending own line to 3
 //   line_2             — extending own line to 2
+//   gap_4              — gapped 4: 4 own chips + 1 gap in a 5-cell window (e.g. XX_XX)
+//   gap_3              — gapped 3: 3 own chips + 2 gaps in a 5-cell window (e.g. X_X_X)
 //   block_4            — blocking opponent's 4-in-a-row
 //   block_3            — blocking opponent's 3-in-a-row
+//   block_gap_4        — blocking opponent's gapped 4
 //   adjacency          — per adjacent own chip (8-directional)
 //   center             — center proximity multiplier
 //
@@ -32,8 +35,11 @@ struct GreedyWeights {
     line_4 : float = 500.0
     line_3 : float = 100.0
     line_2 : float = 20.0
+    gap_4 : float = 0.0
+    gap_3 : float = 0.0
     block_4 : float = 400.0
     block_3 : float = 50.0
+    block_gap_4 : float = 0.0
     adjacency : float = 3.0
     center : float = 0.5
     disrupt_4 : float = 800.0
@@ -77,6 +83,48 @@ def private best_line_through(game : GameState; row, col : int; color : ChipColo
     return best
 }
 
+// Scan all 5-cell windows through (row,col) in all directions.
+// For each window containing (row,col), count own chips and gaps (empty non-corner cells).
+// Returns best (chips, gaps) pair found — e.g. (4,1) means gapped-4.
+// Only counts windows where every non-gap cell matches `color` (no opponent chips blocking).
+def private best_gapped_line(game : GameState; row, col : int; color : ChipColor) : int2 {
+    var best_chips = 0
+    var best_gaps = 5
+    for (dir in range(4)) {
+        let dr = DIR_ROWS[dir]
+        let dc = DIR_COLS[dir]
+        // 5 possible window offsets that include (row,col)
+        for (offset in range(5)) {
+            let start_r = row - dr * offset
+            let start_c = col - dc * offset
+            var chips = 0
+            var gaps = 0
+            var valid = true
+            for (step in range(SEQUENCE_LENGTH)) {
+                let r = start_r + dr * step
+                let c = start_c + dc * step
+                if (r < 0 || r >= BOARD_ROWS || c < 0 || c >= BOARD_COLS) {
+                    valid = false
+                    break
+                }
+                if (cell_matches_color(game, r, c, color)) {
+                    chips++
+                } elif (game.board_chips[r * BOARD_COLS + c] == ChipColor.none) {
+                    gaps++
+                } else {
+                    valid = false
+                    break
+                }
+            }
+            if (valid && chips > best_chips) {
+                best_chips = chips
+                best_gaps = gaps
+            }
+        }
+    }
+    return int2(best_chips, best_gaps)
+}
+
 // Best opponent line length through this cell.
 def private opponent_threat_at(game : GameState; row, col : int; player_idx : int) : int {
     var max_threat = 0
@@ -114,12 +162,35 @@ def private score_placement(game : GameState; row, col : int; player_idx : int; 
     } elif (line == 2) {
         score += w.line_2
     }
+    // Gapped sequences (e.g. XX_XX, X_X_X)
+    if (w.gap_4 != 0.0 || w.gap_3 != 0.0) {
+        let gapped = best_gapped_line(temp_game, row, col, color)
+        if (gapped.x >= 4 && gapped.y >= 1) {
+            score += w.gap_4
+        } elif (gapped.x >= 3 && gapped.y >= 2) {
+            score += w.gap_3
+        }
+    }
     // Blocking
     let threat = opponent_threat_at(game, row, col, player_idx)
     if (threat >= 4) {
         score += w.block_4
     } elif (threat == 3) {
         score += w.block_3
+    }
+    // Blocking opponent's gapped sequences
+    if (w.block_gap_4 != 0.0) {
+        for (p in range(game.num_players)) {
+            if (p == player_idx) {
+                continue
+            }
+            let opp_color = player_chip_color(p)
+            let opp_gapped = best_gapped_line(game, row, col, opp_color)
+            if (opp_gapped.x >= 4 && opp_gapped.y >= 1) {
+                score += w.block_gap_4
+                break
+            }
+        }
     }
     // Adjacency
     for (dr in range(-1, 2)) {

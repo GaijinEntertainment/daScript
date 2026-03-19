@@ -141,14 +141,14 @@ def run_tournament(var bots : array<BotEntry>; num_games : int) {
 def main() {
     var bots : array<BotEntry>
     bots |> push(make_random_bot("random"))
-    bots |> push(make_greedy_bot("greedy"))
-    bots |> push(make_greedy_bot("aggressive", GreedyWeights(
-        line_4 = 800.0, line_3 = 200.0,
-        block_4 = 200.0, block_3 = 20.0
-    )))
     bots |> push(make_greedy_bot("defensive", GreedyWeights(
         block_4 = 900.0, block_3 = 150.0,
         line_4 = 300.0, line_3 = 50.0
     )))
-    run_tournament(bots, 200)
+    bots |> push(make_greedy_bot("gap-boy", GreedyWeights(
+        block_4 = 900.0, block_3 = 150.0,
+        line_4 = 300.0, line_3 = 50.0,
+        gap_4 = 400.0, gap_3 = 100.0, block_gap_4 = 300.0
+    )))
+    run_tournament(bots, 1000)
 }
