@@ -6,7 +6,7 @@ require dastest/testing_boost public
 require daslib/json
 require daslib/json_boost
 require strings
-require fio
+require daslib/fio
 
 require tools/compile_check public
 require tools/list_functions public

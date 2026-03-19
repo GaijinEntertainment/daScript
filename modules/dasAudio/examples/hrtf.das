@@ -3,7 +3,7 @@ options persistent_heap
 
 require audio/audio_boost
 require math
-require fio
+require daslib/fio
 
 require daslib/jobque_boost
 require audio_resource

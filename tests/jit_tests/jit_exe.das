@@ -1,7 +1,7 @@
 // This file tests creating JIT executable.
 options gen2
 options no_aot
-require fio
+require daslib/fio
 require rtti
 
 require dastest/testing_boost

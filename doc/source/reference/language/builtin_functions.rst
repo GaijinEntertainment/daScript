@@ -18,7 +18,7 @@ Daslang built-in functions fall into two categories:
   that are always available. These include container operations (``push``, ``sort``,
   ``find_index``), iterator helpers (``each``, ``next``), clone, lock, and serialization
   functions. They are documented in the standard library reference
-  (see :ref:`Built-in functions reference <stdlib__builtin>`).
+  (see :ref:`Built-in functions reference <stdlib_builtin>`).
 
 This page covers both groups, organized by category.
 

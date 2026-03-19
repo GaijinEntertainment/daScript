@@ -3,7 +3,7 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
 require common public
-require fio
+require daslib/fio
 
 def do_run_test(file : string; project : string = ""; timeout_str : string = ""; json : bool = false; failures_only : bool = false) : string {
     let exe = get_daslang_exe()

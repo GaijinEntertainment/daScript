@@ -28,7 +28,7 @@ options gen2
 
 require dashv/dashv_boost public
 require daslib/jobque_boost
-require fio
+require daslib/fio
 
 // ──────────────────────────────────────────────────────────────────────────
 // Server class

@@ -5,7 +5,7 @@ options indenting = 4
 
 require stbtruetype
 require stbimage/stbimage_ttf
-require fio
+require daslib/fio
 require dastest/testing_boost public
 
 def font_path() : string {

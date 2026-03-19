@@ -123,9 +123,9 @@ reg("fio",
 It provides functions for reading and writing files (``fopen``, ``fread``, ``fwrite``),
 directory management (``mkdir``, ``dir``), path manipulation (``join_path``,
 ``basename``, ``dirname``), and file metadata queries (``stat``, ``file_time``).""",
-    "require fio",
+    "require daslib/fio",
     example="""\
-    require fio
+    require daslib/fio
 
     [export]
     def main() {

@@ -6,7 +6,7 @@ module log shared
 require rtti
 require uriparser
 require strings
-require fio
+require daslib/fio
 require daslib/ansi_colors public
 
 

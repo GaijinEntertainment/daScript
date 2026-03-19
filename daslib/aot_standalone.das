@@ -1,7 +1,7 @@
 options gen2
 
 module aot_standalone private
-require fio
+require daslib/fio
 require rtti
 require strings
 

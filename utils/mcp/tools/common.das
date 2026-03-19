@@ -9,7 +9,7 @@ require ast public
 require rtti public
 require math public
 require strings public
-require fio public
+require daslib/fio public
 require daslib/command_line public
 
 var ast_grep_cmd : string

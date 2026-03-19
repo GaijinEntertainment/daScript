@@ -16,7 +16,7 @@ require daslib/strings_boost
 require daslib/regex_boost
 require daslib/defer
 require daslib/safe_addr
-require fio
+require daslib/fio
 
 // CXTranslationUnit
 let CXTranslationUnit_None = 0x0

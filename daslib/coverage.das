@@ -19,7 +19,7 @@ module coverage shared !inscope
 //! which can be converted to HTML via ``genhtml``.
 
 require ast
-require fio
+require daslib/fio
 require rtti
 require strings
 

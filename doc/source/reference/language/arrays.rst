@@ -45,7 +45,7 @@ Dynamic sub-arrays can be created out of any array type via range indexing:
 In reality ``a[b]``, where b is a range, is equivalent to ``subarray(a, b)``.
 
 Resizing, insertion, and deletion of dynamic arrays and array elements is done through a set of
-standard functions (see :ref:`built-in functions <stdlib__builtin>`).
+standard functions (see :ref:`built-in functions <stdlib_builtin>`).
 
 The relevant builtin functions are: ``push``, ``push_clone``, ``emplace``, ``reserve``, ``resize``, ``erase``, ``length``, ``clear``, ``empty`` and ``capacity``.
 

@@ -7,7 +7,7 @@ module geom_gen public
 
 require daslib/safe_addr
 require daslib/strings_boost
-require fio
+require daslib/fio
 require math
 
 struct GeometryPreviewVertex {

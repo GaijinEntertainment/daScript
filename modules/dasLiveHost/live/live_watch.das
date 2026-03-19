@@ -14,7 +14,7 @@ module live_watch shared public
 //! The host stores watched files in LiveHostState after compilation.
 //! The agent reads them via `get_watched_file_count()` / `get_watched_file()`.
 
-require fio
+require daslib/fio
 require debugapi
 require live_host
 

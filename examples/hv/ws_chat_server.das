@@ -17,7 +17,7 @@ options persistent_heap
 options gc
 
 require dashv/dashv_boost public
-require fio
+require daslib/fio
 require strings
 
 let PORT = 9090

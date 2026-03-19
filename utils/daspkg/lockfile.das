@@ -8,7 +8,7 @@ options persistent_heap
 
 module lockfile shared public
 
-require fio
+require daslib/fio
 require strings
 require daslib/json
 require daslib/json_boost

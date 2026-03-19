@@ -17,7 +17,7 @@ module ansi_colors shared public
 //! to auto-detect based on ``--color`` / ``--no-color`` flags and ``TERM`` /
 //! ``NO_COLOR`` environment variables, or set ``use_tty_colors`` directly.
 
-require fio
+require daslib/fio
 require strings
 
 var use_tty_colors = false

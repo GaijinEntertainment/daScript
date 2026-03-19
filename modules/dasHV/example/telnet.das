@@ -1,6 +1,6 @@
 options gen2
 require network
-require fio
+require daslib/fio
 require strings
 
 var {

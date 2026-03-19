@@ -2,7 +2,10 @@ options gen2
 options indenting = 4
 options remove_unused_symbols = false
 
-require fio
+// Make it shared, so other shared modules can include it.
+module fio shared
+
+require fio_core public
 require strings
 
 typedef file = FILE const?
@@ -20,6 +23,11 @@ def fopen(name : string; mode : string; blk : block<(f : file) : void>) {
 [generic]
 def dir(path : string; blk : block<(filename : string) : void>) {
     builtin_dir(path, blk)
+}
+
+[generic]
+def sleep(msec : uint) {
+    fio_core::sleep(msec)
 }
 
 [generic]

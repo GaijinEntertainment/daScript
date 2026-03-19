@@ -33,7 +33,7 @@ static void register_builtin_modules_impl() {
     if (!Module::require("jobque")) {
         NEED_MODULE(Module_JobQue);
     }
-    if (!Module::require("fio")) {
+    if (!Module::require("fio_core")) {
         NEED_MODULE(Module_FIO);
     }
     if (!Module::require("dasbind")) {

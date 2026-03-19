@@ -1,7 +1,7 @@
 options gen2
 require dastest/testing_boost public
 
-require fio
+require daslib/fio
 
 // ---- path manipulation (correctness, no error reporting) ----
 

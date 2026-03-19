@@ -5,7 +5,7 @@ options no_global_variables = false
 
 require dastest/testing_boost public
 
-require fio
+require daslib/fio
 require strings
 
 require daslib/json

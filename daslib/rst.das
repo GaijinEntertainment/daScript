@@ -13,7 +13,7 @@ module rst shared private
 //! module RTTI. Provides ``document``, ``group_by_regex``,
 //! ``describe_type``, and other helpers used by ``das2rst``.
 
-require fio
+require daslib/fio
 require math
 require rtti
 require ast
@@ -46,9 +46,19 @@ def PANIC(message : string) {
     unsafe(exit(-1))
 }
 
+let module_name_replacements = [
+    ("$", "builtin"),
+    ("fio_core", "fio"),
+]
+
 def module_name(mod) {
     let mn = string(mod.name)
-    return mn == "$" ? "builtin" : mn
+    for ((src, dst) in module_name_replacements) {
+        if (mn == src) {
+            return dst
+        }
+    }
+    return mn
 }
 
 def alias_label_name(td : TypeDeclPtr) {
