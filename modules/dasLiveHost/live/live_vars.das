@@ -28,6 +28,24 @@ require strings
 require daslib/ast_boost
 require daslib/templates_boost
 
+[lint_macro]
+class LiveVarsLint : AstPassMacro {
+    //! Lint pass that checks for @live on constant (let) variables.
+    def override apply(prog : ProgramPtr; mod : Module?) : bool {
+        if (mod.name == "live_vars") {
+            return false
+        }
+        mod |> for_each_global() <| $(g) {
+            if (g.annotation |> find_arg("live") ?as tBool ?? false) {
+                if (g._type.flags.constant) {
+                    macro_error(prog, g.at, "@live cannot be used on constant (let) variables — they never change: {g.name}")
+                }
+            }
+        }
+        return false
+    }
+}
+
 [infer_macro]
 class LiveVarsPass : AstPassMacro {
     //! Infer pass macro that generates serialization for @live globals.
@@ -50,10 +68,12 @@ class LiveVarsPass : AstPassMacro {
         var live_var_hashes : array<int64>
         mod |> for_each_global() <| $(g) {
             if (g.annotation |> find_arg("live") ?as tBool ?? false) {
-                live_var_names |> push(string(g.name))
-                live_var_keys |> push("__live_vars_{mod.name}_{g.name}")
-                let initHash = g.init != null ? int64(hash(describe(g.init))) : int64(0)
-                live_var_hashes |> push(initHash)
+                if (!g._type.flags.constant) {
+                    live_var_names |> push(string(g.name))
+                    live_var_keys |> push("__live_vars_{mod.name}_{g.name}")
+                    let initHash = g.init != null ? int64(hash(describe(g.init))) : int64(0)
+                    live_var_hashes |> push(initHash)
+                }
             }
         }
         if (length(live_var_names) == 0) {

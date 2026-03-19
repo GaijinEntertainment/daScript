@@ -149,8 +149,9 @@ var @live hand_margin = 4.0       // margin from screen edges for hand display
 var @live hand_row_gap = 2.0      // gap between suit rows in hand display
 var @live bot_stack_offset = 8.0  // pixel offset between stacked bot cards
 var @live cheat_mode = false      // show all player hands
-var @live seq_pulse_speed = 3.0  // speed of sequence highlight pulsing
-var @live seq_pulse_min = 0.7    // minimum brightness of pulse
+var @live seq_pulse_speed = 2.0  // speed of sequence highlight pulsing
+var @live seq_pulse_min = 0.7   // minimum brightness of pulse
+var @live seq_card_tint = 0.35  // how strongly sequence cards are tinted with chip color
 var selected_card = -1      // index of selected card in human hand (-1 = none
 
 // --- State ---
@@ -485,7 +486,13 @@ def draw_board(screen_w, screen_h : int) {
             let chip = get_chip(game, row, col)
             if (chip != ChipColor.none) {
                 let cc = chip_color_to_float4(chip)
-                tint = float4(lerp(1.0, cc.x, 0.15), lerp(1.0, cc.y, 0.15), lerp(1.0, cc.z, 0.15), 1.0)
+                if (is_in_sequence(game, row, col)) {
+                    // Stronger tint for sequence cards
+                    let st = float(seq_card_tint)
+                    tint = float4(lerp(1.0, cc.x, st), lerp(1.0, cc.y, st), lerp(1.0, cc.z, st), 1.0)
+                } else {
+                    tint = float4(lerp(1.0, cc.x, 0.15), lerp(1.0, cc.y, 0.15), lerp(1.0, cc.z, 0.15), 1.0)
+                }
             }
             if (row == hover_row && col == hover_col && !is_corner(row, col)) {
                 if (selected_card >= 0 && game.phase == GamePhase.playing && game.current_player == 0) {
@@ -522,9 +529,10 @@ def draw_board(screen_w, screen_h : int) {
                 var outline = float4(0.0, 0.0, 0.0, 0.9)
                 var r = chip_r
                 if (is_in_sequence(game, row, col)) {
-                    // Pulse brightness and slightly enlarge
-                    color *= float4(pulse, pulse, pulse, 1.0)
-                    outline = float4(1.0, 1.0, 1.0, pulse)
+                    // Gentle pulse + white outline
+                    let boost = 0.15 * pulse
+                    color = float4(min(color.x + boost, 1.0), min(color.y + boost, 1.0), min(color.z + boost, 1.0), 1.0)
+                    outline = float4(1.0, 1.0, 1.0, 0.6 + 0.4 * pulse)
                     r *= 1.0 + 0.1 * pulse
                 }
                 draw_chip(chip_renderer, cx, cy, r, color, outline, screen_w, screen_h)
