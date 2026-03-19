@@ -9,32 +9,7 @@ using namespace das;
 
 void InitModules() {
     // register modules
-    if (!Module::require("$")) {
-        NEED_MODULE(Module_BuiltIn);
-    }
-    if (!Module::require("math")) {
-        NEED_MODULE(Module_Math);
-    }
-    if (!Module::require("strings")) {
-        NEED_MODULE(Module_Strings);
-    }
-    if (!Module::require("rtti")) {
-        NEED_MODULE(Module_Rtti);
-    }
-    if (!Module::require("ast")) {
-        NEED_MODULE(Module_Ast);
-    }
-    if (!Module::require("jit")) {
-        NEED_MODULE(Module_Jit);
-    }
-    if (!Module::require("debugapi")) {
-        NEED_MODULE(Module_Debugger);
-    }
-    NEED_MODULE(Module_Network);
-    NEED_MODULE(Module_UriParser);
-    NEED_MODULE(Module_JobQue);
-    NEED_MODULE(Module_FIO);
-    NEED_MODULE(Module_DASBIND);
+    register_builtin_modules();
 #include "modules/external_need.inc"
     Module::Initialize();
     // compile and run
