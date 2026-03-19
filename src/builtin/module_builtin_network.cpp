@@ -128,7 +128,7 @@ namespace das {
             DAS_PROFILE_SECTION("Module_Network");
             ModuleLibrary lib(this);
             lib.addBuiltInModule();
-            addBuiltinDependency(lib, Module::require("rtti"));
+            addBuiltinDependency(lib, Module::require("rtti_core"));
             // sever
             addAnnotation(make_smart<ServerAnnotation>(lib));
             addExtern<DAS_BIND_FUN(makeServer)>(*this, lib,  "make_server",

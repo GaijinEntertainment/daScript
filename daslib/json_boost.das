@@ -13,7 +13,7 @@ module json_boost shared public
 //! reader macro for embedding JSON literals in source code.
 //! Requires the ``json`` module.
 
-require rtti public
+require daslib/rtti public
 require daslib/ast
 require strings
 require daslib/json public

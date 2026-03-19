@@ -28,7 +28,7 @@ Prerequisites: :ref:`tutorial_compile_and_run` (Tutorial 44) for
     options gen2
 
     require daslib/debugger
-    require rtti
+    require daslib/rtti
 
 
 Creating and installing a debug agent

@@ -9,7 +9,7 @@ require dastest/testing_boost
 
 require daslib/debugger
 require daslib/fio
-require rtti
+require daslib/rtti
 require strings
 
 def compile_and_simulate(input : string; var access; var mg : ModuleGroup?; cop; blk) {

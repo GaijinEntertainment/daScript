@@ -106,7 +106,7 @@ reg("rtti",
 It allows querying module structure, type declarations, function signatures, annotations,
 and other compile-time metadata at runtime. Used primarily by macro libraries and
 code generation tools.""",
-    "require rtti",
+    "require daslib/rtti",
 )
 
 reg("ast_core",

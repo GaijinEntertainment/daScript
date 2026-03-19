@@ -14,7 +14,7 @@ module static_let shared private
 //! deletes the variable on context shutdown.
 
 require daslib/ast
-require rtti
+require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
 

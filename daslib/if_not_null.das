@@ -12,7 +12,7 @@ module if_not_null shared private
 //! followed by a dereferenced call — ``call`` only executes if ``ptr`` is not null.
 
 require daslib/ast
-require rtti
+require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/defer

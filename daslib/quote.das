@@ -159,22 +159,22 @@ let blacklist = [
     ("ast_core::ExprVar", "pBlock"), // loop
     ("ast_core::EnumEntry", "value"), // loop
     ("ast_core::EnumEntry", "at"), // ignore it for now
-    ("rtti::AnnotationArgument", "at"),
+    ("rtti_core::AnnotationArgument", "at"),
     ("ast_core::CaptureEntry", "at"), // ignore it for now
     ("ast_core::MakeFieldDecl", "at"), // ignore it for now
     ("ast_core::Enumeration", "list"), // too huge in TypeDecl
 ]
 
 let managed_types = [
-    "rtti::Module",
-    "rtti::Annotation",
-    "rtti::TypeAnnotation",
+    "rtti_core::Module",
+    "rtti_core::Annotation",
+    "rtti_core::TypeAnnotation",
     "ast_core::Structure",
     "ast_core::CallMacro",
     "ast_core::Function",
-    "rtti::FileInfo",
+    "rtti_core::FileInfo",
     "ast_core::MakeStruct",
-    "rtti::LineInfo",
+    "rtti_core::LineInfo",
 ];
 
 def private get_dst_type(var _src_tp : TypeDeclPtr) {
@@ -186,11 +186,11 @@ def private get_dst_type(var _src_tp : TypeDeclPtr) {
         return <- typeinfo ast_typedecl(type<CaptureEntryInitData>);
     } elif (tstr |> starts_with("ast_core::EnumEntry")) {
         return <- typeinfo ast_typedecl(type<EnumEntryInitData>);
-    } elif (tstr |> starts_with("rtti::LineInfo")) {
+    } elif (tstr |> starts_with("rtti_core::LineInfo")) {
         return <- typeinfo ast_typedecl(type<LineInfoInitData>);
-    } elif (tstr |> starts_with("rtti::AnnotationArgument")) {
+    } elif (tstr |> starts_with("rtti_core::AnnotationArgument")) {
         return <- typeinfo ast_typedecl(type<AnnotationArgumentInitData>);
-    } elif (tstr |> starts_with("rtti::FileInfo")) {
+    } elif (tstr |> starts_with("rtti_core::FileInfo")) {
         return <- typeinfo ast_typedecl(type<FileInfoInitData>);
     } else {
         return <- src_tp;
@@ -303,7 +303,7 @@ def private convert_quote_struct_field(mod : Module?, data : uint8 const?,
         flags = ((describe(xtype) == "$::das_string" || isYetAnotherVectorTemplate(xtype)) ?
                         MakeFieldDeclFlags.cloneSemantics : MakeFieldDeclFlags.moveSemantics);
     }
-    if (describe(xtype) == "rtti::LineInfo") {
+    if (describe(xtype) == "rtti_core::LineInfo") {
         var inscope prev <- res_field;
         move_new(res_field) <| new ExprCall(at = parent_loc, name := "clone_line_info",
                                arguments := array<ExpressionPtr>(prev))
@@ -325,7 +325,7 @@ def private convert_quote_structure(mod : Module?; data : uint8 const?;
     var inscope mkStr <- new ExprMakeStruct(makeType <- get_dst_type(clone_type(info)), at = at)
     emplace(mkStr.structs, mkS1)
     mkStr.makeStructFlags |= ExprMakeStructFlags.useInitializer | ExprMakeStructFlags.canShadowBlock;
-    if (describe(info) == "rtti::FileInfo") {
+    if (describe(info) == "rtti_core::FileInfo") {
         return <- new ExprCall(at = at, name := "clone_file_info",
                                arguments := array<ExpressionPtr>(mkStr))
     }
@@ -368,10 +368,10 @@ def private convert_quote_expr(mod : Module?; var data : uint8 const?; info : Ty
     let tstr = describe(info);
 
     // First check managed types
-    if (tstr == "rtti::Annotation") {
+    if (tstr == "rtti_core::Annotation") {
         assume pdata = unsafe(reinterpret<rtti::Annotation>(data));
         return <- get_find_in_module_expr("module_find_annotation", pdata._module.name, pdata.name, at);
-    } elif (tstr == "rtti::TypeAnnotation") {
+    } elif (tstr == "rtti_core::TypeAnnotation") {
          assume pdata = unsafe(reinterpret<rtti::TypeAnnotation>(data));
          return <- get_find_in_module_expr("module_find_type_annotation", pdata._module.name, pdata.name, at)
     } elif (tstr == "ast_core::CallMacro") {
@@ -389,7 +389,7 @@ def private convert_quote_expr(mod : Module?; var data : uint8 const?; info : Ty
     } elif (tstr == "ast_core::Function") {
          assume pdata = unsafe(reinterpret<Function?>(data));
          return <- get_find_in_module_expr("find_unique_function_ptr", pdata._module.name, pdata.name, at);
-    } elif (tstr == "rtti::Module") {
+    } elif (tstr == "rtti_core::Module") {
          assume cur_mod = unsafe(reinterpret<Module?>(data));
          return <- find_module_expr(cur_mod.name, at);
     } elif (tstr == "$::das_string") {

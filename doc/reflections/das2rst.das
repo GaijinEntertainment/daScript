@@ -2,7 +2,7 @@ options gen2
 options rtti = true
 
 require daslib/fio
-require rtti
+require daslib/rtti
 require daslib/ast
 require math
 require uriparser
@@ -253,7 +253,10 @@ def document_module_uriparser(root : string) {
 }
 
 def document_module_rtti(root : string) {
-    var mod = get_module("rtti")
+    var mod = get_module("rtti_core")
+    var mod_das = find_module("rtti")
+    assert(mod_das != null)
+    let mods <- [mod, mod_das]
     var groups <- array<DocGroup>(
         group_by_regex("Initialization and finalization", mod, %regex~(using|LineInfo|CodeOfPolicies|RttiValue_nothing)$%%),
         group_by_regex("Type access", mod, %regex~(get_dim|builtin_is_same_type|is_compatible_cast|get_das_type_name|is_same_type|each_dim|arg_types|arg_names|get_type_size|get_type_align)$%%),
@@ -270,7 +273,7 @@ def document_module_rtti(root : string) {
         group_by_regex("Runtime data access", mod, %regex~(get_table_key_index)$%%),
         group_by_regex("Tuple and variant access", mod, %regex~(get_tuple_field_offset|get_variant_field_offset)$%%),
         group_by_regex("Iteration", mod, %regex~(each)$%%))
-    document("Runtime type information library", mod, "rtti.rst", groups)
+    documents("Runtime type information library", mods, "rtti.rst", groups)
 }
 
 def document_module_ast(root : string) {

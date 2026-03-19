@@ -14,7 +14,7 @@ module safe_addr shared private
 //! only works on shared global variables.
 
 require daslib/ast
-require rtti
+require daslib/rtti
 require daslib/ast_boost
 require daslib/is_local
 

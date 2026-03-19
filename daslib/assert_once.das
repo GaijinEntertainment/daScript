@@ -13,7 +13,7 @@ module assert_once shared private
 //! an auto-generated global flag variable.
 
 require daslib/ast
-require rtti
+require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
 

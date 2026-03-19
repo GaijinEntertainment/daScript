@@ -5,7 +5,7 @@ options remove_unused_symbols = false
 module network shared public
 
 require network_core public
-require rtti
+require daslib/rtti
 
 class Server {
     _server : smart_ptr<NetworkServer>

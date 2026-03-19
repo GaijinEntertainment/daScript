@@ -407,13 +407,10 @@ SET(BUILTIN_SRC
 ../src/builtin/module_file_access.cpp
 ../src/builtin/builtin.das.inc
 ../src/builtin/builtin.das
-../src/builtin/rtti.das.inc
-../src/builtin/rtti.das
 )
 list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
 CMAKE_TEXT_XXD(libDaScript ../src/builtin/builtin.das)
-CMAKE_TEXT_XXD(libDaScript ../src/builtin/rtti.das)
 
 SET(MISC_SRC
 ../include/daScript/misc/enums.h

@@ -1125,7 +1125,7 @@ public:
         ModuleLibrary lib;
         lib.addModule(this);
         lib.addBuiltInModule();
-        lib.addModule(Module::require("rtti"));
+        lib.addModule(Module::require("rtti_core"));
         addEnumeration(make_smart<Enumeration_ws_opcode>());
         addEnumeration(make_smart<Enumeration_ws_session_type>());
         addEnumeration(make_smart<Enumeration_http_method>());

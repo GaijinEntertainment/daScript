@@ -12,7 +12,7 @@ options relaxed_pointer_const = true
 module glsl_internal shared public
 
 require daslib/ast
-require rtti
+require daslib/rtti
 require strings
 
 require daslib/ast_boost

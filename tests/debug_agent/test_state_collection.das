@@ -5,7 +5,7 @@ options no_unused_block_arguments = false
 
 require dastest/testing_boost public
 require daslib/debugger
-require rtti
+require daslib/rtti
 
 var collect_count : int = 0
 var variable_count : int = 0

@@ -8,7 +8,7 @@ module debugger shared public
 
 require debugapi public
 
-require rtti public
+require daslib/rtti public
 
 class DapiDebugAgent {
     def abstract onInstall(agent : DebugAgent?) : void

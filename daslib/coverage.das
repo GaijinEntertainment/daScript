@@ -20,7 +20,7 @@ module coverage shared !inscope
 
 require daslib/ast
 require daslib/fio
-require rtti
+require daslib/rtti
 require strings
 
 require daslib/ast_boost

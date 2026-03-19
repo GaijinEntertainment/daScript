@@ -102,7 +102,7 @@ Here is the ``.das_test`` used by the main ``tests/`` directory:
   options gen2
   options indenting = 4
 
-  require rtti
+  require daslib/rtti
   require strings
 
   [export, pinvoke]

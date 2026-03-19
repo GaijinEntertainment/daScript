@@ -9,7 +9,7 @@ module opengl_state shared private
 require opengl
 require glfw
 require daslib/debugger
-require rtti
+require daslib/rtti
 
 require daslib/safe_addr
 

@@ -15,7 +15,7 @@ module templates shared private
 //! See also ``templates_boost`` for template substitution and code generation.
 
 require daslib/ast
-require rtti
+require daslib/rtti
 require strings
 require daslib/ast_boost
 

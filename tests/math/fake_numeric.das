@@ -8,7 +8,7 @@ options rtti = true
 module fake_numeric shared private
 
 require daslib/ast
-require rtti
+require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/macro_boost

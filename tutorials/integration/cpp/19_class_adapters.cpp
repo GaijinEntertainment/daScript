@@ -135,7 +135,7 @@ public:
         ModuleLibrary lib(this);
         lib.addBuiltInModule();
         // RTTI is needed so we can bind the StructInfo* parameter
-        addBuiltinDependency(lib, Module::require("rtti"));
+        addBuiltinDependency(lib, Module::require("rtti_core"));
 
         // Expose addObject to daslang as "add_object"
         addExtern<DAS_BIND_FUN(addObject)>(*this, lib, "add_object",

@@ -24,7 +24,7 @@ options gen2
 module structure_macro_mod public
 
 require daslib/ast
-require rtti
+require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
 

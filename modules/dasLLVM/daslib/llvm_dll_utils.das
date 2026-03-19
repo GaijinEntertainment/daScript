@@ -3,7 +3,7 @@ module llvm_dll_utils shared private
 
 require jit
 
-require rtti
+require daslib/rtti
 require daslib/strings_boost
 require daslib/ast
 

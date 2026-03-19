@@ -89,6 +89,7 @@ namespace das {
     }
 
     void Module::addBuiltinDependency ( ModuleLibrary & lib, Module * m, bool pub ) {
+        DAS_ASSERTF(m, "Trying to add nullptr module.");
         lib.addModule(m);
         requireModule[m] = pub;
     }

@@ -7,4 +7,4 @@ All functions and symbols are in "rtti" module, use require to get access to it.
 
 .. code-block:: das
 
-    require rtti
+    require daslib/rtti

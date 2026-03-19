@@ -2,7 +2,9 @@ options gen2
 options indenting = 4
 options remove_unused_symbols = false
 
-require rtti
+module rtti shared public
+
+require rtti_core public
 
 typedef FileAccessPtr = smart_ptr<FileAccess>
 

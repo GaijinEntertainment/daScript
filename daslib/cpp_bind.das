@@ -13,7 +13,7 @@ module cpp_bind public
 //! Used together with ``log_cpp_class_adapter``.
 
 require daslib/fio
-require rtti
+require daslib/rtti
 require daslib/ast
 require daslib/ast_boost
 require daslib/strings_boost

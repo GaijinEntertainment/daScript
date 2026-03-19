@@ -15,7 +15,7 @@ module rst shared private
 
 require daslib/fio
 require math
-require rtti
+require daslib/rtti
 require daslib/ast
 require strings
 require daslib/ast_boost
@@ -51,6 +51,7 @@ let module_name_replacements = [
     ("ast_core", "ast"),
     ("fio_core", "fio"),
     ("network_core", "network"),
+    ("rtti_core", "rtti"),
 ]
 
 def module_name(mod) {

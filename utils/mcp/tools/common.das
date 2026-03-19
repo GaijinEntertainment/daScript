@@ -6,7 +6,7 @@ options no_unused_block_arguments = false
 require daslib/json_boost public
 require daslib/strings_boost public
 require daslib/ast public
-require rtti public
+require daslib/rtti public
 require math public
 require strings public
 require daslib/fio public

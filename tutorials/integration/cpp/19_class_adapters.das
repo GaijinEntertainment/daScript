@@ -2,7 +2,7 @@ options gen2
 require tutorial_19
 
 // We need RTTI to pass StructInfo to C++ via class_info().
-require rtti
+require daslib/rtti
 
 // Derive a daslang class from the C++ abstract base class.
 // Override the virtual methods — these will be called from C++ through
