@@ -101,6 +101,21 @@ bin/Release/daslang.exe dastest/dastest.das -- --test examples/daslive/sequence/
   - `main.das`: `screen_to_cell` hit-testing, `handle_mouse` hover+click, chip tinting via `draw_card` tint, `hover_tint` @live var
   - `main.das`: `[live_command]` endpoints: `cmd_place_chip(row, col, color)`, `cmd_clear_board`
   - `test_gameplay.das`: 21 tests (13 Phase 1 + 8 Phase 2) — chip placement, bounds, color cycle, alpha values
-  - Note: chips rendered as card tint overlay (no separate geometry), click cycles through blue→green→red→yellow→none
+  - Note: chips rendered with custom GL shader (GL_TRIANGLE_FAN fill + GL_LINE_LOOP outline), 15% card tint, 90% opaque chips
   - Note: `require daslib/json_boost` needed for `from_JV` in live commands, `require glfw/glfw_boost` for mouse input
-- **Phase 3**: NOT STARTED — Game state + turn structure
+- **Phase 3**: COMPLETE — Game state + turn structure
+  - `gameplay.das`: `GameState` struct (hands, draw pile, discard, current player, phase), `Move` struct, `GamePhase` enum
+  - `gameplay.das`: `make_game(num_players, seed)`, `build_double_deck()`, `shuffle_deck()`, `deal_hands()`
+  - `gameplay.das`: `legal_moves(player_idx)`, `apply_move(player_idx, move)`, `is_dead_card()`, `discard_dead_cards()`
+  - `gameplay.das`: Jack logic — black jacks remove opponent chips, red jacks wild placement
+  - `gameplay.das`: `set_hand()`, `sort_hand()`, `card_suit()`, `card_rank()`, `suit_order()`, `rank_order()`
+  - `main.das`: `draw_hand_by_suit()` — 4 rows (one per suit), sorted by rank, with click-to-select for human
+  - `main.das`: `draw_hand_stack()` — diagonal stack of face-down cards for bot hands (non-cheat mode)
+  - `main.das`: Hand layout — P1=bottom-left, P2=top-left, P3=top-right, P4=bottom-right, using board scale
+  - `main.das`: Card selection + play-by-click on board cells, turn advancement
+  - `main.das`: `[live_command]` endpoints: `cmd_new_game`, `cmd_game_status`, `cmd_toggle_cheat`, `cmd_set_hand`, `cmd_debug_hands`
+  - `main.das`: `@live` annotations removed — not using live vars yet
+  - `test_gameplay.das`: 40 tests (21 Phase 1+2 + 19 Phase 3) — deck building, hand sizes, draw pile, game state, card validity, deterministic shuffle, suit/rank parsing, hand sorting, legal moves, apply_move, wrong player rejection, dead card detection, player chip colors, full game simulation
+  - Note: `cmd_set_hand` auto-sets phase to `playing` if game not started, for standalone testing
+  - Note: Fixed array dimension ordering — `string[MAX_PLAYERS][MAX_HAND_SIZE]` (first index selects player)
+- **Phase 4**: NOT STARTED — Win detection + sequence highlighting

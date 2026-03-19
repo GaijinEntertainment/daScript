@@ -4,6 +4,7 @@ options persistent_heap
 module gameplay public
 
 require strings
+require math
 
 // ============================================================================
 // Board layout — original Sequence board card order
@@ -147,4 +148,435 @@ def chip_color_to_float4(color : ChipColor) : float4 {
         return float4(0.9, 0.8, 0.1, 0.9)
     }
     return float4(1.0, 1.0, 1.0, 1.0)
+}
+
+// ============================================================================
+// Standard deck (two 52-card decks = 104 cards for Sequence)
+// ============================================================================
+
+let SUITS = fixed_array("club", "diamond", "heart", "spade")
+let RANKS = fixed_array("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "jack", "queen", "king")
+let SUIT_COUNT = 4
+let RANK_COUNT = 13
+
+def card_suit(card_name : string) : string {
+    let idx = find(card_name, "_")
+    if (idx < 0) {
+        return ""
+    }
+    return slice(card_name, 0, idx)
+}
+
+def card_rank(card_name : string) : string {
+    let idx = find(card_name, "_")
+    if (idx < 0) {
+        return ""
+    }
+    return slice(card_name, idx + 1)
+}
+
+// Rank order for sorting within a suit (ace=0, 2=1, ..., king=12)
+def rank_order(rank : string) : int {
+    for (i in range(RANK_COUNT)) {
+        if (RANKS[i] == rank) {
+            return i
+        }
+    }
+    return -1
+}
+
+// Suit order for sorting (club=0, diamond=1, heart=2, spade=3)
+def suit_order(suit : string) : int {
+    for (i in range(SUIT_COUNT)) {
+        if (SUITS[i] == suit) {
+            return i
+        }
+    }
+    return -1
+}
+
+def build_standard_deck() : array<string> {
+    var deck : array<string>
+    for (s in range(SUIT_COUNT)) {
+        for (r in range(RANK_COUNT)) {
+            deck |> push("{SUITS[s]}_{RANKS[r]}")
+        }
+    }
+    return <- deck
+}
+
+def build_double_deck() : array<string> {
+    var deck : array<string>
+    // Two standard decks
+    for (copy in range(2)) {
+        for (s in range(SUIT_COUNT)) {
+            for (r in range(RANK_COUNT)) {
+                deck |> push("{SUITS[s]}_{RANKS[r]}")
+            }
+        }
+    }
+    return <- deck
+}
+
+def shuffle_deck(var deck : array<string>&; seed : int) {
+    var rng_seed = seed
+    let n = length(deck)
+    var i = n - 1
+    while (i > 0) {
+        // Simple LCG random
+        rng_seed = rng_seed * 1103515245 + 12345
+        let j = abs(rng_seed) % (i + 1)
+        let tmp = deck[i]
+        deck[i] = deck[j]
+        deck[j] = tmp
+        i--
+    }
+}
+
+// ============================================================================
+// Game state
+// ============================================================================
+
+let MAX_PLAYERS = 4
+let MAX_HAND_SIZE = 7
+
+enum GamePhase {
+    not_started
+    playing
+    game_over
+}
+
+struct GameState {
+    num_players : int = 2
+    current_player : int = 0
+    phase : GamePhase = GamePhase.not_started
+    hands : string[MAX_PLAYERS][MAX_HAND_SIZE]
+    hand_sizes : int[MAX_PLAYERS]
+    draw_pile : array<string>
+    discard_pile : array<string>
+    winner : int = -1
+}
+
+var game = GameState()
+
+def hand_size_for_players(num_players : int) : int {
+    if (num_players == 2) {
+        return 7
+    } elif (num_players == 3) {
+        return 6
+    }
+    return 5  // 4 players
+}
+
+def player_chip_color(player_idx : int) : ChipColor {
+    if (player_idx == 0) {
+        return ChipColor.blue
+    } elif (player_idx == 1) {
+        return ChipColor.green
+    } elif (player_idx == 2) {
+        return ChipColor.red
+    }
+    return ChipColor.yellow
+}
+
+def make_game(num_players : int; seed : int = 42) {
+    game.num_players = clamp(num_players, 2, MAX_PLAYERS)
+    game.current_player = 0
+    game.phase = GamePhase.playing
+    game.winner = -1
+    // Clear hands
+    for (p in range(MAX_PLAYERS)) {
+        game.hand_sizes[p] = 0
+        for (c in range(MAX_HAND_SIZE)) {
+            game.hands[p][c] = ""
+        }
+    }
+    // Build and shuffle double deck
+    game.draw_pile <- build_double_deck()
+    shuffle_deck(game.draw_pile, seed)
+    game.discard_pile |> clear()
+    // Clear board
+    clear_all_chips()
+    // Deal hands
+    let hs = hand_size_for_players(game.num_players)
+    for (c in range(hs)) {
+        for (p in range(game.num_players)) {
+            if (length(game.draw_pile) > 0) {
+                game.hands[p][game.hand_sizes[p]] = game.draw_pile[length(game.draw_pile) - 1]
+                game.hand_sizes[p]++
+                game.draw_pile |> resize(length(game.draw_pile) - 1)
+            }
+        }
+    }
+}
+
+def draw_card_from_pile(player_idx : int) : bool {
+    if (player_idx < 0 || player_idx >= game.num_players) {
+        return false
+    }
+    if (game.hand_sizes[player_idx] >= MAX_HAND_SIZE) {
+        return false
+    }
+    if (length(game.draw_pile) == 0) {
+        return false
+    }
+    game.hands[player_idx][game.hand_sizes[player_idx]] = game.draw_pile[length(game.draw_pile) - 1]
+    game.hand_sizes[player_idx]++
+    game.draw_pile |> resize(length(game.draw_pile) - 1)
+    return true
+}
+
+def remove_card_from_hand(player_idx, card_idx : int) : string {
+    if (player_idx < 0 || player_idx >= game.num_players) {
+        return ""
+    }
+    if (card_idx < 0 || card_idx >= game.hand_sizes[player_idx]) {
+        return ""
+    }
+    let card = game.hands[player_idx][card_idx]
+    // Shift remaining cards left
+    for (i in range(card_idx, game.hand_sizes[player_idx] - 1)) {
+        game.hands[player_idx][i] = game.hands[player_idx][i + 1]
+    }
+    game.hand_sizes[player_idx]--
+    game.hands[player_idx][game.hand_sizes[player_idx]] = ""
+    return card
+}
+
+def get_hand_card(player_idx, card_idx : int) : string {
+    if (player_idx < 0 || player_idx >= game.num_players) {
+        return ""
+    }
+    if (card_idx < 0 || card_idx >= game.hand_sizes[player_idx]) {
+        return ""
+    }
+    return game.hands[player_idx][card_idx]
+}
+
+def get_hand_size(player_idx : int) : int {
+    if (player_idx < 0 || player_idx >= game.num_players) {
+        return 0
+    }
+    return game.hand_sizes[player_idx]
+}
+
+// ============================================================================
+// Dead card detection
+// ============================================================================
+
+// A card is "dead" if both board spaces for it are already occupied by chips
+def is_dead_card(card_name : string) : bool {
+    if (is_jack(card_name)) {
+        return false  // Jacks are never dead
+    }
+    var occupied = 0
+    var total = 0
+    for (i in range(BOARD_SIZE)) {
+        let row = i / BOARD_COLS
+        let col = i % BOARD_COLS
+        if (BOARD_LAYOUT[i] == card_name) {
+            total++
+            if (board_chips[i] != ChipColor.none) {
+                occupied++
+            }
+        }
+    }
+    return total > 0 && occupied == total
+}
+
+// Discard dead cards from hand and redraw
+def discard_dead_cards(player_idx : int) {
+    var changed = true
+    while (changed) {
+        changed = false
+        for (c in range(game.hand_sizes[player_idx])) {
+            let card = game.hands[player_idx][c]
+            if (is_dead_card(card)) {
+                remove_card_from_hand(player_idx, c)
+                game.discard_pile |> push(card)
+                draw_card_from_pile(player_idx)
+                changed = true
+                break
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Move structure and legal moves
+// ============================================================================
+
+struct Move {
+    card_idx : int = -1   // Index in player's hand
+    row : int = -1        // Board row to place/remove chip
+    col : int = -1        // Board col to place/remove chip
+}
+
+def legal_moves(player_idx : int) : array<Move> {
+    var moves : array<Move>
+    let color = player_chip_color(player_idx)
+    for (c in range(game.hand_sizes[player_idx])) {
+        let card = game.hands[player_idx][c]
+        if (is_red_jack(card)) {
+            // Wild: place on any open non-corner space
+            for (i in range(BOARD_SIZE)) {
+                let row = i / BOARD_COLS
+                let col = i % BOARD_COLS
+                if (!is_corner(row, col) && board_chips[i] == ChipColor.none) {
+                    moves |> push(Move(card_idx = c, row = row, col = col))
+                }
+            }
+        } elif (is_black_jack(card)) {
+            // Remove: any opponent chip (not from a completed sequence — TODO Phase 4)
+            for (i in range(BOARD_SIZE)) {
+                let row = i / BOARD_COLS
+                let col = i % BOARD_COLS
+                let chip = board_chips[i]
+                if (chip != ChipColor.none && chip != color) {
+                    moves |> push(Move(card_idx = c, row = row, col = col))
+                }
+            }
+        } else {
+            // Normal card: place on matching empty board space
+            for (i in range(BOARD_SIZE)) {
+                let row = i / BOARD_COLS
+                let col = i % BOARD_COLS
+                if (BOARD_LAYOUT[i] == card && board_chips[i] == ChipColor.none) {
+                    moves |> push(Move(card_idx = c, row = row, col = col))
+                }
+            }
+        }
+    }
+    return <- moves
+}
+
+def is_legal_move(player_idx : int; m : Move) : bool {
+    if (m.card_idx < 0 || m.card_idx >= game.hand_sizes[player_idx]) {
+        return false
+    }
+    if (m.row < 0 || m.row >= BOARD_ROWS || m.col < 0 || m.col >= BOARD_COLS) {
+        return false
+    }
+    let card = game.hands[player_idx][m.card_idx]
+    let idx = m.row * BOARD_COLS + m.col
+    let color = player_chip_color(player_idx)
+    if (is_red_jack(card)) {
+        return !is_corner(m.row, m.col) && board_chips[idx] == ChipColor.none
+    } elif (is_black_jack(card)) {
+        let chip = board_chips[idx]
+        return chip != ChipColor.none && chip != color
+    } else {
+        return BOARD_LAYOUT[idx] == card && board_chips[idx] == ChipColor.none
+    }
+}
+
+def has_legal_moves(player_idx : int) : bool {
+    // Quick check without building the full array
+    for (c in range(game.hand_sizes[player_idx])) {
+        let card = game.hands[player_idx][c]
+        if (is_red_jack(card)) {
+            for (i in range(BOARD_SIZE)) {
+                if (!is_corner(i / BOARD_COLS, i % BOARD_COLS) && board_chips[i] == ChipColor.none) {
+                    return true
+                }
+            }
+        } elif (is_black_jack(card)) {
+            let color = player_chip_color(player_idx)
+            for (i in range(BOARD_SIZE)) {
+                let chip = board_chips[i]
+                if (chip != ChipColor.none && chip != color) {
+                    return true
+                }
+            }
+        } else {
+            for (i in range(BOARD_SIZE)) {
+                if (BOARD_LAYOUT[i] == card && board_chips[i] == ChipColor.none) {
+                    return true
+                }
+            }
+        }
+    }
+    return false
+}
+
+// ============================================================================
+// Apply move
+// ============================================================================
+
+def apply_move(player_idx : int; move : Move) : bool {
+    if (game.phase != GamePhase.playing) {
+        return false
+    }
+    if (player_idx != game.current_player) {
+        return false
+    }
+    if (move.card_idx < 0 || move.card_idx >= game.hand_sizes[player_idx]) {
+        return false
+    }
+    let card = game.hands[player_idx][move.card_idx]
+    let color = player_chip_color(player_idx)
+    if (is_black_jack(card)) {
+        // Remove opponent chip
+        let chip = board_chips[move.row * BOARD_COLS + move.col]
+        if (chip == ChipColor.none || chip == color) {
+            return false
+        }
+        board_chips[move.row * BOARD_COLS + move.col] = ChipColor.none
+    } else {
+        // Place chip (normal or red jack)
+        if (board_chips[move.row * BOARD_COLS + move.col] != ChipColor.none) {
+            return false
+        }
+        board_chips[move.row * BOARD_COLS + move.col] = color
+    }
+    // Remove card from hand, discard it
+    let removed = remove_card_from_hand(player_idx, move.card_idx)
+    game.discard_pile |> push(removed)
+    // Draw replacement
+    draw_card_from_pile(player_idx)
+    // Discard any newly-dead cards
+    discard_dead_cards(player_idx)
+    // Advance turn
+    game.current_player = (game.current_player + 1) % game.num_players
+    return true
+}
+
+// ============================================================================
+// Hand sorting (for display)
+// ============================================================================
+
+// Replace a player's entire hand with the given cards
+def set_hand(player_idx : int; cards : array<string>) {
+    if (player_idx < 0 || player_idx >= MAX_PLAYERS) {
+        return
+    }
+    let n = min(length(cards), MAX_HAND_SIZE)
+    for (c in range(MAX_HAND_SIZE)) {
+        game.hands[player_idx][c] = c < n ? cards[c] : ""
+    }
+    game.hand_sizes[player_idx] = n
+}
+
+// Sort a player's hand by suit then rank
+def sort_hand(player_idx : int) {
+    let n = game.hand_sizes[player_idx]
+    // Simple insertion sort
+    for (i in range(1, n)) {
+        let card = game.hands[player_idx][i]
+        let s = suit_order(card_suit(card))
+        let r = rank_order(card_rank(card))
+        var j = i - 1
+        while (j >= 0) {
+            let cj = game.hands[player_idx][j]
+            let sj = suit_order(card_suit(cj))
+            let rj = rank_order(card_rank(cj))
+            if (sj > s || (sj == s && rj > r)) {
+                game.hands[player_idx][j + 1] = game.hands[player_idx][j]
+                j--
+            } else {
+                break
+            }
+        }
+        game.hands[player_idx][j + 1] = card
+    }
 }

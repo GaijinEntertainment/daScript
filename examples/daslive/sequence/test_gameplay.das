@@ -170,3 +170,221 @@ def test_chip_colors_have_alpha(t : T?) {
         t |> success(chip_color_to_float4(ChipColor.yellow).w > 0.0)
     }
 }
+
+// ============================================================================
+// Phase 3: Game state tests
+// ============================================================================
+
+[test]
+def test_double_deck(t : T?) {
+    var deck <- build_double_deck()
+    t |> equal(length(deck), 104)
+    // Count each card — should appear exactly twice
+    var counts : table<string; int>
+    for (card in deck) {
+        if (key_exists(counts, card)) {
+            counts[card] += 1
+        } else {
+            counts[card] = 1
+        }
+    }
+    t |> equal(length(counts), 52)
+    for (name, count in keys(counts), values(counts)) {
+        t |> equal(count, 2)
+    }
+}
+
+[test]
+def test_make_game_hand_sizes(t : T?) {
+    t |> run("2 players get 7 cards each") <| @(t : T?) {
+        make_game(2)
+        t |> equal(get_hand_size(0), 7)
+        t |> equal(get_hand_size(1), 7)
+    }
+    t |> run("3 players get 6 cards each") <| @(t : T?) {
+        make_game(3)
+        t |> equal(get_hand_size(0), 6)
+        t |> equal(get_hand_size(1), 6)
+        t |> equal(get_hand_size(2), 6)
+    }
+    t |> run("4 players get 5 cards each") <| @(t : T?) {
+        make_game(4)
+        t |> equal(get_hand_size(0), 5)
+        t |> equal(get_hand_size(1), 5)
+        t |> equal(get_hand_size(2), 5)
+        t |> equal(get_hand_size(3), 5)
+    }
+}
+
+[test]
+def test_make_game_draw_pile(t : T?) {
+    make_game(2)
+    // 104 cards - 14 dealt (2 players x 7) = 90 remaining
+    t |> equal(length(game.draw_pile), 90)
+    make_game(4)
+    // 104 cards - 20 dealt (4 players x 5) = 84 remaining
+    t |> equal(length(game.draw_pile), 84)
+}
+
+[test]
+def test_make_game_state(t : T?) {
+    make_game(2)
+    t |> equal(game.num_players, 2)
+    t |> equal(game.current_player, 0)
+    t |> equal(int(game.phase), int(GamePhase.playing))
+    t |> equal(game.winner, -1)
+}
+
+[test]
+def test_all_dealt_cards_valid(t : T?) {
+    make_game(4)
+    for (p in range(4)) {
+        for (c in range(get_hand_size(p))) {
+            let card = get_hand_card(p, c)
+            t |> success(is_valid_card_name(card), "player {p} card {c}: {card}")
+        }
+    }
+}
+
+[test]
+def test_shuffle_is_deterministic(t : T?) {
+    make_game(2, 123)
+    let card_a = get_hand_card(0, 0)
+    make_game(2, 123)
+    let card_b = get_hand_card(0, 0)
+    t |> equal(card_a, card_b)
+}
+
+[test]
+def test_shuffle_different_seeds(t : T?) {
+    make_game(2, 1)
+    var hand1 : array<string>
+    for (c in range(get_hand_size(0))) {
+        hand1 |> push(get_hand_card(0, c))
+    }
+    make_game(2, 999)
+    var different = false
+    for (c in range(get_hand_size(0))) {
+        if (get_hand_card(0, c) != hand1[c]) {
+            different = true
+        }
+    }
+    t |> success(different, "different seeds should produce different hands")
+}
+
+[test]
+def test_card_suit_rank(t : T?) {
+    t |> equal(card_suit("heart_queen"), "heart")
+    t |> equal(card_rank("heart_queen"), "queen")
+    t |> equal(card_suit("club_10"), "club")
+    t |> equal(card_rank("club_10"), "10")
+    t |> equal(card_suit("spade_1"), "spade")
+    t |> equal(card_rank("spade_1"), "1")
+}
+
+[test]
+def test_sort_hand(t : T?) {
+    make_game(2, 42)
+    sort_hand(0)
+    // Verify sorted: suits in order, ranks in order within suit
+    var prev_suit = -1
+    var prev_rank = -1
+    for (c in range(get_hand_size(0))) {
+        let card = get_hand_card(0, c)
+        let s = suit_order(card_suit(card))
+        let r = rank_order(card_rank(card))
+        if (s == prev_suit) {
+            t |> success(r >= prev_rank, "rank should increase within suit: {card}")
+        } else {
+            t |> success(s > prev_suit, "suit should increase: {card}")
+        }
+        prev_suit = s
+        prev_rank = r
+    }
+}
+
+[test]
+def test_legal_moves_normal_card(t : T?) {
+    make_game(2, 42)
+    let moves <- legal_moves(0)
+    t |> success(length(moves) > 0, "player 0 should have legal moves")
+    // Each move should target an empty board cell matching the card
+    for (m in moves) {
+        let card = get_hand_card(0, m.card_idx)
+        if (!is_jack(card)) {
+            let board_name = board_card_name(m.row, m.col)
+            t |> equal(card, board_name)
+            t |> equal(int(get_chip(m.row, m.col)), int(ChipColor.none))
+        }
+    }
+}
+
+[test]
+def test_apply_move(t : T?) {
+    make_game(2, 42)
+    let moves <- legal_moves(0)
+    t |> success(length(moves) > 0)
+    let m = moves[0]
+    let card = get_hand_card(0, m.card_idx)
+    t |> success(apply_move(0, m), "move should succeed")
+    // Chip placed (or removed for black jack)
+    if (!is_black_jack(card)) {
+        t |> equal(int(get_chip(m.row, m.col)), int(ChipColor.blue))
+    }
+    // Turn advanced
+    t |> equal(game.current_player, 1)
+}
+
+[test]
+def test_apply_move_wrong_player(t : T?) {
+    make_game(2, 42)
+    let moves <- legal_moves(0)
+    t |> success(length(moves) > 0)
+    // Player 1 can't move on player 0's turn
+    t |> success(!apply_move(1, moves[0]), "wrong player should fail")
+}
+
+[test]
+def test_dead_card_detection(t : T?) {
+    clear_all_chips()
+    // club_1 appears at (0,1) and (5,2) on the board
+    t |> success(!is_dead_card("club_1"), "not dead when empty")
+    place_chip(0, 1, ChipColor.blue)
+    t |> success(!is_dead_card("club_1"), "not dead when one occupied")
+    place_chip(5, 2, ChipColor.green)
+    t |> success(is_dead_card("club_1"), "dead when both occupied")
+    clear_all_chips()
+}
+
+[test]
+def test_jacks_never_dead(t : T?) {
+    t |> success(!is_dead_card("club_jack"))
+    t |> success(!is_dead_card("heart_jack"))
+}
+
+[test]
+def test_player_chip_colors(t : T?) {
+    t |> equal(int(player_chip_color(0)), int(ChipColor.blue))
+    t |> equal(int(player_chip_color(1)), int(ChipColor.green))
+    t |> equal(int(player_chip_color(2)), int(ChipColor.red))
+    t |> equal(int(player_chip_color(3)), int(ChipColor.yellow))
+}
+
+[test]
+def test_full_game_simulation(t : T?) {
+    // Play a full game with random legal moves to ensure no crashes
+    make_game(2, 77)
+    var turns = 0
+    while (game.phase == GamePhase.playing && turns < 200) {
+        let p = game.current_player
+        discard_dead_cards(p)
+        let moves <- legal_moves(p)
+        if (length(moves) == 0) {
+            break
+        }
+        let m = moves[turns % length(moves)]
+        apply_move(p, m)
+        turns++
+    }
+    t |> success(turns > 0, "should play at least one turn")
+}

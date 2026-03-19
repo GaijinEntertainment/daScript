@@ -5,7 +5,6 @@ require live/glfw_live
 require live/opengl_live
 require live/live_api
 require live/live_commands
-require live/live_vars
 require live/live_watch_boost
 require live_host
 require opengl/opengl_boost
@@ -141,10 +140,15 @@ def draw_chip(cr : ChipRenderer; cx, cy, radius : float; color : float4; outline
 
 // --- Tunable parameters ---
 
-var @live board_pad = 2.0
-var @live bg_color = float3(0.1, 0.15, 0.1)
-var @live hover_tint = float4(1.3, 1.3, 1.5, 1.0)
-var @live chip_radius_frac = 0.3  // chip radius as fraction of card width
+var board_pad = 2.0
+var bg_color = float3(0.1, 0.15, 0.1)
+var hover_tint = float4(1.3, 1.3, 1.5, 1.0)
+var chip_radius_frac = 0.3  // chip radius as fraction of card width
+var hand_margin = 4.0       // margin from screen edges for hand display
+var hand_row_gap = 2.0      // gap between suit rows in hand display
+var bot_stack_offset = 8.0  // pixel offset between stacked bot cards
+var cheat_mode = false      // show all player hands
+var selected_card = -1      // index of selected card in human hand (-1 = none
 
 // --- State ---
 
@@ -168,6 +172,7 @@ var board_pad_cur : float = 0.0
 var hover_row : int = -1
 var hover_col : int = -1
 var mouse_was_pressed : bool = false
+var mouse_clicked : bool = false  // true on the frame mouse was first pressed
 
 // --- Helpers ---
 
@@ -213,12 +218,172 @@ def handle_mouse() {
     hover_col = cell.x
     hover_row = cell.y
     let pressed = glfwGetMouseButton(live_window, int(GLFW_MOUSE_BUTTON_1)) == int(GLFW_PRESS)
-    if (pressed && !mouse_was_pressed && hover_row >= 0 && hover_col >= 0) {
-        let cur = get_chip(hover_row, hover_col)
-        let nxt = next_chip_color(cur)
-        place_chip(hover_row, hover_col, nxt)
-    }
+    mouse_clicked = pressed && !mouse_was_pressed
     mouse_was_pressed = pressed
+    if (mouse_clicked) {
+        if (game.phase == GamePhase.playing && game.current_player == 0 && selected_card >= 0) {
+            // Try to play selected card on hovered board cell
+            if (hover_row >= 0 && hover_col >= 0) {
+                let m = Move(card_idx = selected_card, row = hover_row, col = hover_col)
+                if (apply_move(0, m)) {
+                    selected_card = -1
+                    sort_hand(0)
+                }
+            }
+        }
+    }
+}
+
+// --- Hand display ---
+
+// Compute horizontal step to fit max_cards cards within avail_width pixels
+// Returns the x step between card left edges
+def compute_hand_step_x(cs_w, avail_width : float; max_cards : int) : float {
+    if (max_cards <= 1) {
+        return cs_w
+    }
+    // Need: (max_cards - 1) * step + cs_w <= avail_width
+    let step = (avail_width - cs_w) / float(max_cards - 1)
+    return min(step, cs_w)  // don't space more than card width
+}
+
+// Draw a player's hand as rows (one per suit), sorted by rank
+// anchor_x, anchor_y: corner anchor point
+// grow_right: cards extend right from anchor (true) or left (false)
+// grow_down: suit rows extend down from anchor (true) or up (false)
+def draw_hand_by_suit(player_idx : int; anchor_x, anchor_y : float; scale : float;
+                      step_x : float; screen_w, screen_h : int;
+                      grow_right, grow_down : bool) {
+    sort_hand(player_idx)
+    let cs_w = CARD_DOC_WIDTH * scale
+    let cs_h = CARD_DOC_HEIGHT * scale
+    let row_step = cs_h + float(hand_row_gap)
+    let is_human = player_idx == 0
+    // Group cards by suit
+    var suit_starts : int[5]
+    var num_suits = 0
+    var prev_suit = ""
+    for (c in range(get_hand_size(player_idx))) {
+        let card = get_hand_card(player_idx, c)
+        let s = card_suit(card)
+        if (s != prev_suit) {
+            suit_starts[num_suits] = c
+            num_suits++
+            prev_suit = s
+        }
+    }
+    suit_starts[num_suits] = get_hand_size(player_idx)
+    // Draw each suit row
+    for (row in range(num_suits)) {
+        let row_start = suit_starts[row]
+        let row_end = suit_starts[row + 1]
+        for (c in range(row_start, row_end)) {
+            let card = get_hand_card(player_idx, c)
+            let ci = c - row_start
+            let ry = grow_down ? float(row) : float(row - num_suits)
+            let rx = grow_right ? float(ci) : -float(ci) - 1.0
+            let card_x = anchor_x + rx * step_x + (grow_right ? 0.0 : (step_x - cs_w))
+            let card_y = anchor_y + ry * row_step
+            let card_idx = find_card(deck, card)
+            var tint = float4(1.0, 1.0, 1.0, 1.0)
+            if (is_human && selected_card >= 0) {
+                if (c == selected_card) {
+                    tint = float4(1.4, 1.4, 1.0, 1.0)
+                } else {
+                    tint = float4(0.5, 0.5, 0.5, 1.0)
+                }
+            }
+            if (card_idx >= 0) {
+                draw_card(renderer, deck, card_idx, card_x, card_y, scale, screen_w, screen_h,
+                    [tint = tint])
+            }
+        }
+    }
+    // Handle click on human hand cards
+    if (is_human && game.phase == GamePhase.playing && game.current_player == 0 && mouse_clicked) {
+        let mpos = glfwGetCursorPos(live_window)
+        var clicked = -1
+        for (row in range(num_suits)) {
+            let row_start = suit_starts[row]
+            let row_end = suit_starts[row + 1]
+            for (c in range(row_start, row_end)) {
+                let ci = c - row_start
+                let ry = grow_down ? float(row) : float(row - num_suits)
+                let rx = grow_right ? float(ci) : -float(ci) - 1.0
+                let card_x = anchor_x + rx * step_x + (grow_right ? 0.0 : (step_x - cs_w))
+                let card_y = anchor_y + ry * row_step
+                if (mpos.x >= card_x && mpos.x <= card_x + cs_w && mpos.y >= card_y && mpos.y <= card_y + cs_h) {
+                    clicked = c
+                }
+            }
+        }
+        if (clicked >= 0) {
+            selected_card = (selected_card == clicked) ? -1 : clicked
+        }
+    }
+}
+
+// Draw bot hand as diagonal stack of face-down cards
+def draw_hand_stack(player_idx : int; anchor_x, anchor_y : float; scale : float;
+                    screen_w, screen_h : int; grow_right, grow_down : bool) {
+    let n = get_hand_size(player_idx)
+    if (n == 0 || back_index < 0) {
+        return
+    }
+    let cs_w = CARD_DOC_WIDTH * scale
+    let cs_h = CARD_DOC_HEIGHT * scale
+    let ox = float(bot_stack_offset) * (grow_right ? 1.0 : -1.0)
+    let oy = float(bot_stack_offset) * (grow_down ? 1.0 : -1.0)
+    let color = player_chip_color(player_idx)
+    let tint = chip_color_to_float4(color) * float4(1.0, 1.0, 1.0, 0.5) + float4(0.5, 0.5, 0.5, 0.5)
+    for (i in range(n)) {
+        let card_x = anchor_x + float(i) * ox + (grow_right ? 0.0 : -cs_w)
+        let card_y = anchor_y + float(i) * oy + (grow_down ? 0.0 : -cs_h)
+        draw_card(renderer, deck, back_index, card_x, card_y, scale, screen_w, screen_h,
+            [tint = tint])
+    }
+}
+
+// Draw all player hands in their respective corners
+// Layout: P1=bottom-left, P2=top-left, P3=top-right, P4=bottom-right
+// Board is centered; hands go in left/right margins at board scale
+def draw_hands(screen_w, screen_h : int) {
+    let fw = float(screen_w)
+    let fh = float(screen_h)
+    let scale = board_scale
+    let cs_w = CARD_DOC_WIDTH * scale
+    let cs_h = CARD_DOC_HEIGHT * scale
+    let margin = float(hand_margin)
+    // Available width for hands = margin from screen edge to board edge
+    let left_avail = board_ox - margin * 2.0
+    let right_avail = fw - (board_ox + float(BOARD_COLS) * cs_w + float(BOARD_COLS + 1) * board_pad_cur) - margin * 2.0
+    // Compute step_x to fit 7 cards (max hand) in available width
+    let left_step = compute_hand_step_x(cs_w, left_avail, MAX_HAND_SIZE)
+    let right_step = compute_hand_step_x(cs_w, right_avail, MAX_HAND_SIZE)
+    // Vertical midpoint for splitting top/bottom hands
+    let mid_y = fh * 0.5
+    // P1 (human): bottom-left — always show by suit, growing up from bottom
+    draw_hand_by_suit(0, margin, fh - margin, scale, left_step, screen_w, screen_h, true, false)
+    // Other players
+    for (p in range(1, game.num_players)) {
+        if (cheat_mode) {
+            if (p == 1) {
+                draw_hand_by_suit(1, margin, margin, scale, left_step, screen_w, screen_h, true, true)
+            } elif (p == 2) {
+                draw_hand_by_suit(2, fw - margin, margin, scale, right_step, screen_w, screen_h, false, true)
+            } elif (p == 3) {
+                draw_hand_by_suit(3, fw - margin, fh - margin, scale, right_step, screen_w, screen_h, false, false)
+            }
+        } else {
+            if (p == 1) {
+                draw_hand_stack(1, margin, margin, scale, screen_w, screen_h, true, true)
+            } elif (p == 2) {
+                draw_hand_stack(2, fw - margin, margin, scale, screen_w, screen_h, false, true)
+            } elif (p == 3) {
+                draw_hand_stack(3, fw - margin, fh - margin, scale, screen_w, screen_h, false, false)
+            }
+        }
+    }
 }
 
 // --- Lifecycle ---
@@ -232,6 +397,10 @@ def init() {
     deck <- load_gpu_deck()
     back_index = find_card(deck, "back")
     compute_board_card_indices()
+    if (game.phase == GamePhase.not_started) {
+        make_game(2)
+        sort_hand(0)
+    }
     print("sequence: init (is_reload={is_reload()}, cards={card_count(deck)})\n")
 }
 
@@ -251,6 +420,9 @@ def update() {
     if (deck.loaded) {
         handle_mouse()
         draw_board(w, h)
+        if (game.phase == GamePhase.playing) {
+            draw_hands(w, h)
+        }
     }
     glDisable(GL_BLEND)
     live_end_frame()
@@ -286,8 +458,17 @@ def draw_board(screen_w, screen_h : int) {
                 let cc = chip_color_to_float4(chip)
                 tint = float4(lerp(1.0, cc.x, 0.15), lerp(1.0, cc.y, 0.15), lerp(1.0, cc.z, 0.15), 1.0)
             }
-            if (row == hover_row && col == hover_col) {
-                tint *= hover_tint
+            if (row == hover_row && col == hover_col && !is_corner(row, col)) {
+                if (selected_card >= 0 && game.phase == GamePhase.playing && game.current_player == 0) {
+                    let m = Move(card_idx = selected_card, row = row, col = col)
+                    if (is_legal_move(0, m)) {
+                        tint *= float4(0.6, 1.4, 0.6, 1.0)  // green = legal
+                    } else {
+                        tint *= float4(1.4, 0.5, 0.5, 1.0)  // red = illegal
+                    }
+                } else {
+                    tint *= hover_tint
+                }
             }
             let card_idx = board_card_indices[idx]
             if (card_idx >= 0) {
@@ -334,6 +515,88 @@ def cmd_place_chip(input : JsonValue?) : JsonValue? {
 def cmd_clear_board(input : JsonValue?) : JsonValue? {
     clear_all_chips()
     return JV("cleared")
+}
+
+struct CmdNewGameArgs {
+    num_players : int = 2
+    seed : int = -1  // -1 = use uptime as seed
+}
+
+[live_command(description="Start a new game. Args: num_players (2-4), seed (-1=random)")]
+def cmd_new_game(input : JsonValue?) : JsonValue? {
+    var args = from_JV(input, type<CmdNewGameArgs>)
+    let seed = args.seed >= 0 ? args.seed : int(get_uptime() * 1000.0)
+    make_game(args.num_players, seed)
+    sort_hand(0)
+    selected_card = -1
+    return JV("{game.num_players} players, seed={seed}")
+}
+
+struct CmdGameStatusResult {
+    phase : string
+    num_players : int
+    current_player : int
+    draw_pile_size : int
+    cheat_mode : bool
+}
+
+[live_command(description="Get current game status")]
+def cmd_game_status(input : JsonValue?) : JsonValue? {
+    var phase_str = "not_started"
+    if (game.phase == GamePhase.playing) {
+        phase_str = "playing"
+    } elif (game.phase == GamePhase.game_over) {
+        phase_str = "game_over"
+    }
+    return JV(CmdGameStatusResult(
+        phase = phase_str,
+        num_players = game.num_players,
+        current_player = game.current_player,
+        draw_pile_size = length(game.draw_pile),
+        cheat_mode = cheat_mode
+    ))
+}
+
+[live_command(description="Debug hand layout info")]
+def cmd_debug_hands(input : JsonValue?) : JsonValue? {
+    var info = "board_scale={board_scale} board_ox={board_ox} board_cs_w={board_cs_w} board_cs_h={board_cs_h}\n"
+    for (p in range(game.num_players)) {
+        info += "P{p}: {get_hand_size(p)} cards: "
+        for (c in range(get_hand_size(p))) {
+            info += get_hand_card(p, c)
+            if (c < get_hand_size(p) - 1) {
+                info += ", "
+            }
+        }
+        info += "\n"
+    }
+    return JV(info)
+}
+
+[live_command(description="Toggle cheat mode (show all hands)")]
+def cmd_toggle_cheat(input : JsonValue?) : JsonValue? {
+    cheat_mode = !cheat_mode
+    return JV(cheat_mode)
+}
+
+struct CmdSetHandArgs {
+    player : int = 0
+    cards : array<string>
+}
+
+[live_command(description="Set a player's hand. Args: player (0-3), cards (array of card names)")]
+def cmd_set_hand(input : JsonValue?) : JsonValue? {
+    var args = from_JV(input, type<CmdSetHandArgs>)
+    if (game.phase == GamePhase.not_started) {
+        game.phase = GamePhase.playing
+    }
+    if (args.player >= game.num_players) {
+        game.num_players = args.player + 1
+    }
+    set_hand(args.player, args.cards)
+    sort_hand(args.player)
+    selected_card = -1
+    return JV("{length(args.cards)} cards set for player {args.player}")
 }
 
 // --- Lifecycle ---
