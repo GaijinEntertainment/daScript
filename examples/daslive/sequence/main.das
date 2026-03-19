@@ -977,14 +977,15 @@ def update() {
     glDisable(GL_DEPTH_TEST)
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    let dt = get_dt()
     if (deck.loaded) {
         handle_keyboard()
         handle_mouse()
         // Tick animations
-        tick_animations(get_dt())
+        tick_animations(dt)
         // Bot auto-play
         if (game.phase == GamePhase.playing && game.current_player > 0 && !is_animating()) {
-            bot_timer -= get_dt()
+            bot_timer -= dt
             if (bot_timer <= 0.0) {
                 let bot_player = game.current_player
                 queue_discard_anims(bot_player)

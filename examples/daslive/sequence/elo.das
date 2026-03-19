@@ -1,8 +1,10 @@
 options gen2
 
-require gameplay
-require bot_random
-require bot_greedy
+module elo public
+
+require gameplay public
+require bot_random public
+require bot_greedy public
 require math
 
 // ELO rating system + headless tournament runner.
@@ -82,6 +84,44 @@ def play_headless_game(bot_a, bot_b : BotEntry; seed : int; max_turns : int = 50
     return -1
 }
 
+// Quiet tournament — no per-pair printing, just updates bots in-place with ELO/wins/losses.
+def run_tournament_quiet(var bots : array<BotEntry>; num_games : int; gen_seed : int = 42) {
+    let n = length(bots)
+    var game_seed = gen_seed
+    for (a in range(n)) {
+        for (b in range(a + 1, n)) {
+            var a_wins = 0
+            var b_wins = 0
+            var draws = 0
+            for (g in range(num_games)) {
+                game_seed++
+                var winner : int
+                if (g % 2 == 0) {
+                    winner = play_headless_game(bots[a], bots[b], game_seed)
+                } else {
+                    let w = play_headless_game(bots[b], bots[a], game_seed)
+                    winner = w < 0 ? -1 : (w == 0 ? 1 : 0)
+                }
+                if (winner == 0) {
+                    a_wins++
+                    elo_update(bots[a].elo, bots[b].elo, true)
+                } elif (winner == 1) {
+                    b_wins++
+                    elo_update(bots[a].elo, bots[b].elo, false)
+                } else {
+                    draws++
+                }
+            }
+            bots[a].wins += a_wins
+            bots[a].losses += b_wins
+            bots[a].draws += draws
+            bots[b].wins += b_wins
+            bots[b].losses += a_wins
+            bots[b].draws += draws
+        }
+    }
+}
+
 def run_tournament(var bots : array<BotEntry>; num_games : int) {
     let n = length(bots)
     print("Tournament: {num_games} games per pair, {n} bots\n")
@@ -137,24 +177,3 @@ def run_tournament(var bots : array<BotEntry>; num_games : int) {
     }
 }
 
-[export]
-def main() {
-    var bots : array<BotEntry>
-    bots |> push(make_random_bot("random"))
-    bots |> push(make_greedy_bot("greedy"))
-    bots |> push(make_greedy_bot("strange-boy", GreedyWeights(
-        line_4 = 300.0,
-        line_3 = 50.0,
-        line_2 = 20.0,
-        gap_4 = 300.0,
-        gap_3 = 50.0,
-        block_4 = 900.0,
-        block_3 = 150.0,
-        block_gap_4 = 900.0,
-        disrupt_4 = 800.0,
-        disrupt_3 = 100.0,
-        disrupt_2 = 20.0,
-        useful_after = 50.0
-    )))
-    run_tournament(bots, 1000)
-}
