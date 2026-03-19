@@ -5,7 +5,7 @@ require dastest/testing_boost
 
 require jit
 require rtti
-require ast
+require daslib/ast
 
 options rtti
 

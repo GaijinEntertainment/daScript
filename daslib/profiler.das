@@ -19,7 +19,7 @@ require debugapi
 require daslib/fio
 require strings
 require uriparser
-require ast
+require daslib/ast
 
 struct PerfNode {
     //! Performance tree node with timing data.

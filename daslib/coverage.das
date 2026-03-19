@@ -18,7 +18,7 @@ module coverage shared !inscope
 //! After execution, call `fill_coverage_report` to produce output in LCOV format,
 //! which can be converted to HTML via ``genhtml``.
 
-require ast
+require daslib/ast
 require daslib/fio
 require rtti
 require strings

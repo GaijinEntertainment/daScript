@@ -13,7 +13,7 @@ options strict_smart_pointers = false
 // options log = true
 
 require rtti
-require ast
+require daslib/ast
 require daslib/ast_boost
 require daslib/strings_boost
 

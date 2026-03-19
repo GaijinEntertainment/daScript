@@ -13,7 +13,7 @@ module apply_in_context shared private
 //! context. Useful for debug tooling, caches, and other agent-hosted
 //! services.
 
-require ast
+require daslib/ast
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/defer

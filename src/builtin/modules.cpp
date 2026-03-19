@@ -15,7 +15,7 @@ static void register_builtin_modules_impl() {
     if (!Module::require("rtti")) {
         NEED_MODULE(Module_Rtti);
     }
-    if (!Module::require("ast")) {
+    if (!Module::require("ast_core")) {
         NEED_MODULE(Module_Ast);
     }
     if (!Module::require("jit")) {

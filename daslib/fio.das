@@ -26,11 +26,6 @@ def dir(path : string; blk : block<(filename : string) : void>) {
 }
 
 [generic]
-def sleep(msec : uint) {
-    fio_core::sleep(msec)
-}
-
-[generic]
 def stat(path : string) : FStat {
     var fs : FStat
     if (stat(path, fs)) {

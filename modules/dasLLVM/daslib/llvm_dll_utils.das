@@ -5,7 +5,7 @@ require jit
 
 require rtti
 require daslib/strings_boost
-require ast
+require daslib/ast
 
 // Wrapped name for dll.
 struct public DllName {

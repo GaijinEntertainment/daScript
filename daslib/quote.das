@@ -152,28 +152,28 @@ def public clone_file_info(b : FileInfoInitData) : FileInfo? {
 }
 
 let blacklist = [
-    ("ast::Function", "inferStack"),
-    ("ast::Function", "annotations"),
-    ("ast::Function", "classParent"), // loop
-    ("ast::ExprReturn", "_block"), // loop
-    ("ast::ExprVar", "pBlock"), // loop
-    ("ast::EnumEntry", "value"), // loop
-    ("ast::EnumEntry", "at"), // ignore it for now
+    ("ast_core::Function", "inferStack"),
+    ("ast_core::Function", "annotations"),
+    ("ast_core::Function", "classParent"), // loop
+    ("ast_core::ExprReturn", "_block"), // loop
+    ("ast_core::ExprVar", "pBlock"), // loop
+    ("ast_core::EnumEntry", "value"), // loop
+    ("ast_core::EnumEntry", "at"), // ignore it for now
     ("rtti::AnnotationArgument", "at"),
-    ("ast::CaptureEntry", "at"), // ignore it for now
-    ("ast::MakeFieldDecl", "at"), // ignore it for now
-    ("ast::Enumeration", "list"), // too huge in TypeDecl
+    ("ast_core::CaptureEntry", "at"), // ignore it for now
+    ("ast_core::MakeFieldDecl", "at"), // ignore it for now
+    ("ast_core::Enumeration", "list"), // too huge in TypeDecl
 ]
 
 let managed_types = [
     "rtti::Module",
     "rtti::Annotation",
     "rtti::TypeAnnotation",
-    "ast::Structure",
-    "ast::CallMacro",
-    "ast::Function",
+    "ast_core::Structure",
+    "ast_core::CallMacro",
+    "ast_core::Function",
     "rtti::FileInfo",
-    "ast::MakeStruct",
+    "ast_core::MakeStruct",
     "rtti::LineInfo",
 ];
 
@@ -182,9 +182,9 @@ def private get_dst_type(var _src_tp : TypeDeclPtr) {
     let tstr = describe(src_tp);
     if (tstr |> starts_with("$::das_string")) {
         return <- new TypeDecl(baseType = Type.tString);
-    } elif (tstr |> starts_with("ast::CaptureEntry")) {
+    } elif (tstr |> starts_with("ast_core::CaptureEntry")) {
         return <- typeinfo ast_typedecl(type<CaptureEntryInitData>);
-    } elif (tstr |> starts_with("ast::EnumEntry")) {
+    } elif (tstr |> starts_with("ast_core::EnumEntry")) {
         return <- typeinfo ast_typedecl(type<EnumEntryInitData>);
     } elif (tstr |> starts_with("rtti::LineInfo")) {
         return <- typeinfo ast_typedecl(type<LineInfoInitData>);
@@ -242,7 +242,7 @@ def private convert_vec_expr(mod : Module?; field_values : uint8 const?; xtype :
             }
         }
     }
-    if (describe(xtype) == "ast::MakeStruct") {
+    if (describe(xtype) == "ast_core::MakeStruct") {
         unsafe {
             return <- new ExprCall(at = at, name := "cvt_to_mks",
                                 arguments := array<ExpressionPtr>(
@@ -274,7 +274,7 @@ def private get_find_in_module_expr(fn_name; module_name; obj_name; at) {
 def private is_quote_field_allowed(f_name, class_name, data) {
     for ((cl, fld) in blacklist) {
         if (fld == f_name && (cl == "*" || class_name == cl ||
-                             (class_name == "ast::Expression" &&
+                             (class_name == "ast_core::Expression" &&
                               unsafe(reinterpret<Expression>(data)).__rtti == cl))) {
             return false;
         }
@@ -339,7 +339,7 @@ def private convert_pointer_expr(mod; data; info; at) : ExpressionPtr {
     }
     assume first_tstr = describe(info.firstType);
     var inscope final_type <- clone(info.firstType);
-    if (first_tstr == "ast::Expression") {
+    if (first_tstr == "ast_core::Expression") {
         assume annotation = mod |> module_find_type_annotation(unsafe(reinterpret<ExpressionPtr>(pdata)).__rtti);
         move_new(final_type) <| new TypeDecl(baseType = Type.tHandle, annotation = annotation)
     }
@@ -374,10 +374,10 @@ def private convert_quote_expr(mod : Module?; var data : uint8 const?; info : Ty
     } elif (tstr == "rtti::TypeAnnotation") {
          assume pdata = unsafe(reinterpret<rtti::TypeAnnotation>(data));
          return <- get_find_in_module_expr("module_find_type_annotation", pdata._module.name, pdata.name, at)
-    } elif (tstr == "ast::CallMacro") {
+    } elif (tstr == "ast_core::CallMacro") {
          assume pdata = unsafe(reinterpret<CallMacro?>(data));
          return <- get_find_in_module_expr("find_call_macro", pdata._module.name, pdata.name, at)
-    } elif (tstr == "ast::Structure") {
+    } elif (tstr == "ast_core::Structure") {
          assume pdata = unsafe(reinterpret<Structure?>(data));
          // disable support for Structure::Module. If we compile without shared_modules it's impossible
          if (pdata._module.name == "ast_boost") { // How to check COP.shared_modules = false?
@@ -386,7 +386,7 @@ def private convert_quote_expr(mod : Module?; var data : uint8 const?; info : Ty
          // It's unnecessary, however there is bug in aot with ternary operator
          var inscope tmp = get_find_in_module_expr("module_find_structure", pdata._module.name, pdata.name, at);
          return <- tmp;
-    } elif (tstr == "ast::Function") {
+    } elif (tstr == "ast_core::Function") {
          assume pdata = unsafe(reinterpret<Function?>(data));
          return <- get_find_in_module_expr("find_unique_function_ptr", pdata._module.name, pdata.name, at);
     } elif (tstr == "rtti::Module") {
@@ -414,7 +414,7 @@ def private convert_quote_expr(mod : Module?; var data : uint8 const?; info : Ty
 }
 
 def convert_quote_to_expression(var arg_expr : ExpressionPtr; at : LineInfo) : ExpressionPtr {
-    let mod = get_module("ast");
+    let mod = get_module("ast_core");
     assume annotation = mod |> module_find_type_annotation(arg_expr.__rtti);
     var inscope tp <- new TypeDecl(baseType = Type.tHandle, annotation = annotation);
     tp.flags |= TypeDeclFlags.smartPtr;

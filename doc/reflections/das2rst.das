@@ -3,7 +3,7 @@ options rtti = true
 
 require daslib/fio
 require rtti
-require ast
+require daslib/ast
 require math
 require uriparser
 require strings
@@ -163,7 +163,10 @@ get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_defau
 }
 
 def document_module_fio(root : string) {
-    var mod = get_module("fio")
+    var mod = get_module("fio_core")
+    var mod_das = find_module("fio")
+    assert(mod_das != null)
+    let mods <- [mod, mod_das]
     var groups <- array<DocGroup>(
         hide_group(group_by_regex("Internal builtin functions", mod, %regex~builtin%%)),
         group_by_regex("File manipulation", mod, %regex~(f|stat$|getchar|remove|rename|copy_file|file_size|equivalent|is_symlink|set_mtime)%%),
@@ -173,7 +176,7 @@ def document_module_fio(root : string) {
         group_by_regex("OS specific routines", mod, %regex~(sleep|exit|system|popen|popen_binary|popen_timeout|popen_timed_out|get_env_variable|sanitize_command_line|has_env_variable)$%%),
         group_by_regex("Dynamic modules", mod, %regex~(register_dynamic_module|register_native_path)$%%)
     )
-    document("File input output library", mod, "fio.rst", groups)
+    documents("File input output library", mods, "fio.rst", groups)
 }
 
 def document_module_random(root : string) {
@@ -271,7 +274,10 @@ def document_module_rtti(root : string) {
 }
 
 def document_module_ast(root : string) {
-    var mod = get_module("ast")
+    var mod = get_module("ast_core")
+    var mod_das = find_module("ast")
+    assert(mod_das != null)
+    let mods <- [mod, mod_das]
     var groups <- array<DocGroup>(
         group_by_regex("Call generation", mod, %regex~(make_call)$%%),
         group_by_regex("Visitor pattern", mod, %regex~visit.*%%),
@@ -301,7 +307,7 @@ def document_module_ast(root : string) {
         group_by_regex("String builder writer", mod, %regex~(string_builder_str|string_builder_clear)$%%),
         hide_group(group_by_regex("Internal ast infrastructure", mod, %regex~(builtin_ast_.*)%%))
     )
-    document("AST manipulation library", mod, "ast.rst", groups)
+    documents("AST manipulation library", mods, "ast.rst", groups)
 }
 
 def document_module_ast_boost(root : string) {

@@ -12,7 +12,7 @@ module is_local shared public
 //! an expression can be safely treated as temporary (no hidden references
 //! escape through calls, indexing, or field access).
 
-require ast public
+require daslib/ast public
 require rtti
 require daslib/ast_boost
 require strings

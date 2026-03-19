@@ -5,7 +5,7 @@ options rtti
 
 require daslib/fio
 require rtti
-require ast
+require daslib/ast
 require debugapi
 require daslib/ast_boost
 require daslib/cpp_bind

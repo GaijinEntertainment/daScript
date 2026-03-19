@@ -409,8 +409,6 @@ SET(BUILTIN_SRC
 ../src/builtin/builtin.das
 ../src/builtin/rtti.das.inc
 ../src/builtin/rtti.das
-../src/builtin/ast.das.inc
-../src/builtin/ast.das
 ../src/builtin/network.das.inc
 ../src/builtin/network.das
 ../src/builtin/debugger.das.inc
@@ -420,7 +418,6 @@ list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
 CMAKE_TEXT_XXD(libDaScript ../src/builtin/builtin.das)
 CMAKE_TEXT_XXD(libDaScript ../src/builtin/rtti.das)
-CMAKE_TEXT_XXD(libDaScript ../src/builtin/ast.das)
 CMAKE_TEXT_XXD(libDaScript ../src/builtin/network.das)
 CMAKE_TEXT_XXD(libDaScript ../src/builtin/debugger.das)
 

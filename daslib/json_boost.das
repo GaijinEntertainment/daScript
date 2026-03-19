@@ -14,7 +14,7 @@ module json_boost shared public
 //! Requires the ``json`` module.
 
 require rtti public
-require ast
+require daslib/ast
 require strings
 require daslib/json public
 require daslib/ast_boost
