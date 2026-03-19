@@ -857,7 +857,12 @@ namespace das {
             }
         } else {
             if ( auto pm = findModule(moduleName) ) {
-                func(pm);
+                if ( !func(pm) ) return;
+                for ( auto & dep : pm->requireModule ) {
+                    if ( dep.second ) {  // public dependency
+                        if ( !func(dep.first) ) return;
+                    }
+                }
             }
         }
     }
