@@ -111,3 +111,36 @@ def test_chip_remove_alpha(t : T?) {
         t |> success(abs(chip_remove_alpha(1.5)) < 0.001)
     }
 }
+
+// Card fly ease-out: 1 - (1-t)^2
+def card_fly_ease(t : float) : float {
+    let tc = clamp(t, 0.0, 1.0)
+    return 1.0 - (1.0 - tc) * (1.0 - tc)
+}
+
+[test]
+def test_card_fly_ease(t : T?) {
+    t |> run("starts at 0") @(t : T?) {
+        t |> success(abs(card_fly_ease(0.0)) < 0.001)
+    }
+    t |> run("ends at 1") @(t : T?) {
+        t |> success(abs(card_fly_ease(1.0) - 1.0) < 0.001)
+    }
+    t |> run("monotonically increases") @(t : T?) {
+        var prev = card_fly_ease(0.0)
+        var ok = true
+        for (i in range(1, 11)) {
+            let v = card_fly_ease(float(i) * 0.1)
+            if (v < prev) {
+                ok = false
+            }
+            prev = v
+        }
+        t |> success(ok)
+    }
+    t |> run("decelerates — first half covers more than second half") @(t : T?) {
+        let first_half = card_fly_ease(0.5) - card_fly_ease(0.0)
+        let second_half = card_fly_ease(1.0) - card_fly_ease(0.5)
+        t |> success(first_half > second_half, "ease-out should decelerate")
+    }
+}

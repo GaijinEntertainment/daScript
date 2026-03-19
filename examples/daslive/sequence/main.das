@@ -156,6 +156,7 @@ var @live seq_card_tint = 0.35  // how strongly sequence cards are tinted with c
 var @live bot_delay = 0.5       // seconds between bot moves
 var @live anim_chip_duration = 0.25   // chip bounce duration
 var @live anim_remove_duration = 0.3  // chip removal flash duration
+var @live anim_card_duration = 0.2    // card fly duration
 var @live selected_card = -1      // index of selected card in human hand (-1 = none
 var @live bot_timer = 0.0         // countdown until next bot move
 var @live bot_rng_seed = 12345    // RNG seed for bot moves, incremented each move
@@ -165,6 +166,7 @@ var @live bot_rng_seed = 12345    // RNG seed for bot moves, incremented each mo
 enum AnimType {
     chip_place    // chip scale-up bounce
     chip_remove   // chip flash and shrink out
+    card_fly      // card flies from hand to board cell
 }
 
 struct Anim {
@@ -174,16 +176,83 @@ struct Anim {
     color : ChipColor         // chip color for rendering
     progress : float = 0.0    // 0..1
     duration : float = 0.25
-    // Deferred move to apply when chip_place finishes
+    // Deferred move to apply when animation finishes
     has_deferred_move : bool = false
     deferred_player : int = -1
     deferred_move : Move = Move()
+    // card_fly fields
+    card_gpu_idx : int = -1   // GPU card index for rendering
+    start_x : float = 0.0    // hand card screen position
+    start_y : float = 0.0
+    start_scale : float = 1.0
 }
 
 var anim_queue : array<Anim>
 
 def is_animating() : bool {
     return length(anim_queue) > 0
+}
+
+// Compute board cell top-left screen position
+def cell_screen_pos(row, col : int) : float2 {
+    return float2(board_ox + board_pad_cur + float(col) * (board_cs_w + board_pad_cur),
+                  board_oy + board_pad_cur + float(row) * (board_cs_h + board_pad_cur))
+}
+
+// Compute approximate hand card screen position for player 0 (human, bottom-left)
+def human_card_screen_pos(card_idx : int) : float2 {
+    let margin = float(hand_margin)
+    let scale = board_scale
+    let cs_w = CARD_DOC_WIDTH * scale
+    let cs_h = CARD_DOC_HEIGHT * scale
+    let left_avail = board_ox - margin * 2.0
+    let step_x = compute_hand_step_x(cs_w, left_avail, MAX_HAND_SIZE)
+    let row_step = cs_h + float(hand_row_gap)
+    // Find which suit row and position within row
+    sort_hand(game, 0)
+    var suit_starts : int[5]
+    var num_suits = 0
+    var prev_suit = ""
+    for (c in range(get_hand_size(game, 0))) {
+        let card = get_hand_card(game, 0, c)
+        let s = card_suit(card)
+        if (s != prev_suit) {
+            suit_starts[num_suits] = c
+            num_suits++
+            prev_suit = s
+        }
+    }
+    suit_starts[num_suits] = get_hand_size(game, 0)
+    let fw = float(screen_w)
+    let fh = float(screen_h)
+    for (row in range(num_suits)) {
+        if (card_idx >= suit_starts[row] && card_idx < suit_starts[row + 1]) {
+            let ci = card_idx - suit_starts[row]
+            let ry = float(row - num_suits)  // grow_down=false
+            let card_x = margin + float(ci) * step_x
+            let card_y = fh - margin + ry * row_step
+            return float2(card_x, card_y)
+        }
+    }
+    return float2(margin, fh - margin - cs_h)
+}
+
+// Compute approximate bot hand screen position (stack anchor)
+def bot_card_screen_pos(player_idx : int) : float2 {
+    let margin = float(hand_margin)
+    let scale = board_scale
+    let cs_w = CARD_DOC_WIDTH * scale
+    let cs_h = CARD_DOC_HEIGHT * scale
+    let fw = float(screen_w)
+    let fh = float(screen_h)
+    if (player_idx == 1) {
+        return float2(margin, margin)  // top-left
+    } elif (player_idx == 2) {
+        return float2(fw - margin - cs_w, margin)  // top-right
+    } elif (player_idx == 3) {
+        return float2(fw - margin - cs_w, fh - margin - cs_h)  // bottom-right
+    }
+    return float2(margin, margin)
 }
 
 def queue_chip_place(row, col : int; color : ChipColor; dur : float) {
@@ -199,8 +268,24 @@ def queue_chip_remove(row, col : int; color : ChipColor; dur : float) {
 // Queue a move that will be applied via apply_move when animation finishes
 def queue_animated_move(player_idx : int; m : Move; chip_color : ChipColor;
                         is_black_jack, is_red_jack : bool; target_row, target_col : int) {
+    // Card fly animation: card flies from hand to board cell
+    let card_name = get_hand_card(game, player_idx, m.card_idx)
+    let gpu_idx = find_card(deck, card_name)
+    var start_pos : float2
+    if (player_idx == 0) {
+        start_pos = human_card_screen_pos(m.card_idx)
+    } else {
+        start_pos = bot_card_screen_pos(player_idx)
+    }
+    var fly = Anim(atype = AnimType.card_fly, row = target_row, col = target_col,
+        color = chip_color, duration = float(anim_card_duration))
+    fly.card_gpu_idx = gpu_idx
+    fly.start_x = start_pos.x
+    fly.start_y = start_pos.y
+    fly.start_scale = board_scale
+    anim_queue |> emplace(fly)
+    // Then chip animation with deferred move
     if (is_black_jack) {
-        // Flash the chip being removed, then place nothing (apply_move handles removal)
         let victim_color = get_chip(game, target_row, target_col)
         var a = Anim(atype = AnimType.chip_remove, row = target_row, col = target_col,
             color = victim_color, duration = float(anim_remove_duration))
@@ -209,7 +294,6 @@ def queue_animated_move(player_idx : int; m : Move; chip_color : ChipColor;
         a.deferred_move = m
         anim_queue |> emplace(a)
     } else {
-        // Bounce the new chip in
         var a = Anim(atype = AnimType.chip_place, row = target_row, col = target_col,
             color = chip_color, duration = float(anim_chip_duration))
         a.has_deferred_move = true
@@ -298,6 +382,10 @@ var board_scale : float = 1.0
 var board_cs_w : float = 0.0
 var board_cs_h : float = 0.0
 var board_pad_cur : float = 0.0
+
+// Screen size (updated each frame)
+var screen_w : int = 1280
+var screen_h : int = 800
 
 // Mouse state
 var hover_row : int = -1
@@ -575,8 +663,9 @@ def update() {
     if (!live_begin_frame()) {
         return
     }
-    var w, h : int
-    live_get_framebuffer_size(w, h)
+    live_get_framebuffer_size(screen_w, screen_h)
+    var w = screen_w
+    var h = screen_h
     glViewport(0, 0, w, h)
     glClearColor(bg_color.x, bg_color.y, bg_color.z, 1.0)
     glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT)
@@ -608,6 +697,20 @@ def update() {
         draw_board(w, h)
         if (game.phase == GamePhase.playing || game.phase == GamePhase.game_over) {
             draw_hands(w, h)
+        }
+        // Draw flying card on top of everything
+        if (length(anim_queue) > 0 && anim_queue[0].atype == AnimType.card_fly) {
+            let a = anim_queue[0]
+            if (a.card_gpu_idx >= 0) {
+                let t = clamp(a.progress, 0.0, 1.0)
+                // Ease-out: decelerate towards target
+                let et = 1.0 - (1.0 - t) * (1.0 - t)
+                let target = cell_screen_pos(a.row, a.col)
+                let x = lerp(a.start_x, target.x, et)
+                let y = lerp(a.start_y, target.y, et)
+                let scale = a.start_scale
+                draw_card(renderer, deck, a.card_gpu_idx, x, y, scale, w, h)
+            }
         }
         if (game.phase == GamePhase.game_over) {
             draw_game_over(w, h)
