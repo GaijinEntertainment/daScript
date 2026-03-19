@@ -153,6 +153,7 @@ var selected_card = -1      // index of selected card in human hand (-1 = none
 
 // --- State ---
 
+var game = GameState()
 var renderer : CardRenderer
 var chip_renderer : ChipRenderer
 var deck = GpuDeck()
@@ -221,14 +222,19 @@ def handle_mouse() {
     let pressed = glfwGetMouseButton(live_window, int(GLFW_MOUSE_BUTTON_1)) == int(GLFW_PRESS)
     mouse_clicked = pressed && !mouse_was_pressed
     mouse_was_pressed = pressed
+    // Right-click deselects
+    let right_pressed = glfwGetMouseButton(live_window, int(GLFW_MOUSE_BUTTON_2)) == int(GLFW_PRESS)
+    if (right_pressed && selected_card >= 0) {
+        selected_card = -1
+    }
     if (mouse_clicked) {
         if (game.phase == GamePhase.playing && game.current_player == 0 && selected_card >= 0) {
             // Try to play selected card on hovered board cell
             if (hover_row >= 0 && hover_col >= 0) {
                 let m = Move(card_idx = selected_card, row = hover_row, col = hover_col)
-                if (apply_move(0, m)) {
+                if (apply_move(game, 0, m)) {
                     selected_card = -1
-                    sort_hand(0)
+                    sort_hand(game, 0)
                 }
             }
         }
@@ -255,7 +261,7 @@ def compute_hand_step_x(cs_w, avail_width : float; max_cards : int) : float {
 def draw_hand_by_suit(player_idx : int; anchor_x, anchor_y : float; scale : float;
                       step_x : float; screen_w, screen_h : int;
                       grow_right, grow_down : bool) {
-    sort_hand(player_idx)
+    sort_hand(game, player_idx)
     let cs_w = CARD_DOC_WIDTH * scale
     let cs_h = CARD_DOC_HEIGHT * scale
     let row_step = cs_h + float(hand_row_gap)
@@ -264,8 +270,8 @@ def draw_hand_by_suit(player_idx : int; anchor_x, anchor_y : float; scale : floa
     var suit_starts : int[5]
     var num_suits = 0
     var prev_suit = ""
-    for (c in range(get_hand_size(player_idx))) {
-        let card = get_hand_card(player_idx, c)
+    for (c in range(get_hand_size(game, player_idx))) {
+        let card = get_hand_card(game, player_idx, c)
         let s = card_suit(card)
         if (s != prev_suit) {
             suit_starts[num_suits] = c
@@ -273,13 +279,13 @@ def draw_hand_by_suit(player_idx : int; anchor_x, anchor_y : float; scale : floa
             prev_suit = s
         }
     }
-    suit_starts[num_suits] = get_hand_size(player_idx)
+    suit_starts[num_suits] = get_hand_size(game, player_idx)
     // Draw each suit row
     for (row in range(num_suits)) {
         let row_start = suit_starts[row]
         let row_end = suit_starts[row + 1]
         for (c in range(row_start, row_end)) {
-            let card = get_hand_card(player_idx, c)
+            let card = get_hand_card(game, player_idx, c)
             let ci = c - row_start
             let ry = grow_down ? float(row) : float(row - num_suits)
             let rx = grow_right ? float(ci) : -float(ci) - 1.0
@@ -327,7 +333,7 @@ def draw_hand_by_suit(player_idx : int; anchor_x, anchor_y : float; scale : floa
 // Draw bot hand as diagonal stack of face-down cards
 def draw_hand_stack(player_idx : int; anchor_x, anchor_y : float; scale : float;
                     screen_w, screen_h : int; grow_right, grow_down : bool) {
-    let n = get_hand_size(player_idx)
+    let n = get_hand_size(game, player_idx)
     if (n == 0 || back_index < 0) {
         return
     }
@@ -399,8 +405,8 @@ def init() {
     back_index = find_card(deck, "back")
     compute_board_card_indices()
     if (game.phase == GamePhase.not_started) {
-        make_game(2)
-        sort_hand(0)
+        make_game(game, 2)
+        sort_hand(game, 0)
     }
     print("sequence: init (is_reload={is_reload()}, cards={card_count(deck)})\n")
 }
@@ -454,7 +460,7 @@ def draw_board(screen_w, screen_h : int) {
             let card_x = board_ox + pad + float(col) * (cs_w + pad)
             let card_y = board_oy + pad + float(row) * (cs_h + pad)
             var tint = float4(1.0, 1.0, 1.0, 1.0)
-            let chip = get_chip(row, col)
+            let chip = get_chip(game, row, col)
             if (chip != ChipColor.none) {
                 let cc = chip_color_to_float4(chip)
                 tint = float4(lerp(1.0, cc.x, 0.15), lerp(1.0, cc.y, 0.15), lerp(1.0, cc.z, 0.15), 1.0)
@@ -462,7 +468,7 @@ def draw_board(screen_w, screen_h : int) {
             if (row == hover_row && col == hover_col && !is_corner(row, col)) {
                 if (selected_card >= 0 && game.phase == GamePhase.playing && game.current_player == 0) {
                     let m = Move(card_idx = selected_card, row = row, col = col)
-                    if (is_legal_move(0, m)) {
+                    if (is_legal_move(game, 0, m)) {
                         tint *= float4(0.6, 1.4, 0.6, 1.0)  // green = legal
                     } else {
                         tint *= float4(1.4, 0.5, 0.5, 1.0)  // red = illegal
@@ -485,7 +491,7 @@ def draw_board(screen_w, screen_h : int) {
     let chip_r = cs_w * float(chip_radius_frac)
     for (row in range(BOARD_ROWS)) {
         for (col in range(BOARD_COLS)) {
-            let chip = get_chip(row, col)
+            let chip = get_chip(game, row, col)
             if (chip != ChipColor.none) {
                 let cx = board_ox + pad + float(col) * (cs_w + pad) + cs_w * 0.5
                 let cy = board_oy + pad + float(row) * (cs_h + pad) + cs_h * 0.5
@@ -508,13 +514,13 @@ struct CmdPlaceChipArgs {
 [live_command(description="Place chip. Args: row, col, color (0=none,1=blue,2=green,3=red,4=yellow)")]
 def cmd_place_chip(input : JsonValue?) : JsonValue? {
     var args = from_JV(input, type<CmdPlaceChipArgs>)
-    place_chip(args.row, args.col, unsafe(reinterpret<ChipColor>(args.color)))
+    place_chip(game, args.row, args.col, unsafe(reinterpret<ChipColor>(args.color)))
     return JV(args)
 }
 
 [live_command(description="Clear all chips from the board")]
 def cmd_clear_board(input : JsonValue?) : JsonValue? {
-    clear_all_chips()
+    clear_all_chips(game)
     return JV("cleared")
 }
 
@@ -527,8 +533,8 @@ struct CmdNewGameArgs {
 def cmd_new_game(input : JsonValue?) : JsonValue? {
     var args = from_JV(input, type<CmdNewGameArgs>)
     let seed = args.seed >= 0 ? args.seed : int(get_uptime() * 1000.0)
-    make_game(args.num_players, seed)
-    sort_hand(0)
+    make_game(game, args.num_players, seed)
+    sort_hand(game, 0)
     selected_card = -1
     return JV("{game.num_players} players, seed={seed}")
 }
@@ -562,10 +568,10 @@ def cmd_game_status(input : JsonValue?) : JsonValue? {
 def cmd_debug_hands(input : JsonValue?) : JsonValue? {
     var info = "board_scale={board_scale} board_ox={board_ox} board_cs_w={board_cs_w} board_cs_h={board_cs_h}\n"
     for (p in range(game.num_players)) {
-        info += "P{p}: {get_hand_size(p)} cards: "
-        for (c in range(get_hand_size(p))) {
-            info += get_hand_card(p, c)
-            if (c < get_hand_size(p) - 1) {
+        info += "P{p}: {get_hand_size(game, p)} cards: "
+        for (c in range(get_hand_size(game, p))) {
+            info += get_hand_card(game, p, c)
+            if (c < get_hand_size(game, p) - 1) {
                 info += ", "
             }
         }
@@ -594,8 +600,8 @@ def cmd_set_hand(input : JsonValue?) : JsonValue? {
     if (args.player >= game.num_players) {
         game.num_players = args.player + 1
     }
-    set_hand(args.player, args.cards)
-    sort_hand(args.player)
+    set_hand(game, args.player, args.cards)
+    sort_hand(game, args.player)
     selected_card = -1
     return JV("{length(args.cards)} cards set for player {args.player}")
 }

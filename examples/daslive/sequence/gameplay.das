@@ -96,31 +96,8 @@ def is_valid_card_name(name : string) : bool {
 }
 
 // ============================================================================
-// Chip state
+// Chip helpers (color utilities — no game state needed)
 // ============================================================================
-
-var board_chips : ChipColor[100]
-
-def get_chip(row, col : int) : ChipColor {
-    if (row < 0 || row >= BOARD_ROWS || col < 0 || col >= BOARD_COLS) {
-        return ChipColor.none
-    }
-    return board_chips[row * BOARD_COLS + col]
-}
-
-def place_chip(row, col : int; color : ChipColor) : bool {
-    if (row < 0 || row >= BOARD_ROWS || col < 0 || col >= BOARD_COLS) {
-        return false
-    }
-    board_chips[row * BOARD_COLS + col] = color
-    return true
-}
-
-def clear_all_chips() {
-    for (i in range(BOARD_SIZE)) {
-        board_chips[i] = ChipColor.none
-    }
-}
 
 // Cycle through chip colors for debug placement
 def next_chip_color(color : ChipColor) : ChipColor {
@@ -254,10 +231,15 @@ struct GameState {
     hand_sizes : int[MAX_PLAYERS]
     draw_pile : array<string>
     discard_pile : array<string>
+    board_chips : ChipColor[100]
     winner : int = -1
 }
 
-var game = GameState()
+struct Move {
+    card_idx : int = -1   // Index in player's hand
+    row : int = -1        // Board row to place/remove chip
+    col : int = -1        // Board col to place/remove chip
+}
 
 def hand_size_for_players(num_players : int) : int {
     if (num_players == 2) {
@@ -279,7 +261,36 @@ def player_chip_color(player_idx : int) : ChipColor {
     return ChipColor.yellow
 }
 
-def make_game(num_players : int; seed : int = 42) {
+// ============================================================================
+// Chip state (on GameState)
+// ============================================================================
+
+def get_chip(game : GameState; row, col : int) : ChipColor {
+    if (row < 0 || row >= BOARD_ROWS || col < 0 || col >= BOARD_COLS) {
+        return ChipColor.none
+    }
+    return game.board_chips[row * BOARD_COLS + col]
+}
+
+def place_chip(var game : GameState; row, col : int; color : ChipColor) : bool {
+    if (row < 0 || row >= BOARD_ROWS || col < 0 || col >= BOARD_COLS) {
+        return false
+    }
+    game.board_chips[row * BOARD_COLS + col] = color
+    return true
+}
+
+def clear_all_chips(var game : GameState) {
+    for (i in range(BOARD_SIZE)) {
+        game.board_chips[i] = ChipColor.none
+    }
+}
+
+// ============================================================================
+// Game setup and hand management
+// ============================================================================
+
+def make_game(var game : GameState; num_players : int; seed : int = 42) {
     game.num_players = clamp(num_players, 2, MAX_PLAYERS)
     game.current_player = 0
     game.phase = GamePhase.playing
@@ -296,7 +307,7 @@ def make_game(num_players : int; seed : int = 42) {
     shuffle_deck(game.draw_pile, seed)
     game.discard_pile |> clear()
     // Clear board
-    clear_all_chips()
+    clear_all_chips(game)
     // Deal hands
     let hs = hand_size_for_players(game.num_players)
     for (c in range(hs)) {
@@ -310,7 +321,7 @@ def make_game(num_players : int; seed : int = 42) {
     }
 }
 
-def draw_card_from_pile(player_idx : int) : bool {
+def draw_card_from_pile(var game : GameState; player_idx : int) : bool {
     if (player_idx < 0 || player_idx >= game.num_players) {
         return false
     }
@@ -326,7 +337,7 @@ def draw_card_from_pile(player_idx : int) : bool {
     return true
 }
 
-def remove_card_from_hand(player_idx, card_idx : int) : string {
+def remove_card_from_hand(var game : GameState; player_idx, card_idx : int) : string {
     if (player_idx < 0 || player_idx >= game.num_players) {
         return ""
     }
@@ -343,7 +354,7 @@ def remove_card_from_hand(player_idx, card_idx : int) : string {
     return card
 }
 
-def get_hand_card(player_idx, card_idx : int) : string {
+def get_hand_card(game : GameState; player_idx, card_idx : int) : string {
     if (player_idx < 0 || player_idx >= game.num_players) {
         return ""
     }
@@ -353,7 +364,7 @@ def get_hand_card(player_idx, card_idx : int) : string {
     return game.hands[player_idx][card_idx]
 }
 
-def get_hand_size(player_idx : int) : int {
+def get_hand_size(game : GameState; player_idx : int) : int {
     if (player_idx < 0 || player_idx >= game.num_players) {
         return 0
     }
@@ -365,18 +376,16 @@ def get_hand_size(player_idx : int) : int {
 // ============================================================================
 
 // A card is "dead" if both board spaces for it are already occupied by chips
-def is_dead_card(card_name : string) : bool {
+def is_dead_card(game : GameState; card_name : string) : bool {
     if (is_jack(card_name)) {
         return false  // Jacks are never dead
     }
     var occupied = 0
     var total = 0
     for (i in range(BOARD_SIZE)) {
-        let row = i / BOARD_COLS
-        let col = i % BOARD_COLS
         if (BOARD_LAYOUT[i] == card_name) {
             total++
-            if (board_chips[i] != ChipColor.none) {
+            if (game.board_chips[i] != ChipColor.none) {
                 occupied++
             }
         }
@@ -385,16 +394,16 @@ def is_dead_card(card_name : string) : bool {
 }
 
 // Discard dead cards from hand and redraw
-def discard_dead_cards(player_idx : int) {
+def discard_dead_cards(var game : GameState; player_idx : int) {
     var changed = true
     while (changed) {
         changed = false
         for (c in range(game.hand_sizes[player_idx])) {
             let card = game.hands[player_idx][c]
-            if (is_dead_card(card)) {
-                remove_card_from_hand(player_idx, c)
+            if (is_dead_card(game, card)) {
+                remove_card_from_hand(game, player_idx, c)
                 game.discard_pile |> push(card)
-                draw_card_from_pile(player_idx)
+                draw_card_from_pile(game, player_idx)
                 changed = true
                 break
             }
@@ -403,16 +412,10 @@ def discard_dead_cards(player_idx : int) {
 }
 
 // ============================================================================
-// Move structure and legal moves
+// Legal moves
 // ============================================================================
 
-struct Move {
-    card_idx : int = -1   // Index in player's hand
-    row : int = -1        // Board row to place/remove chip
-    col : int = -1        // Board col to place/remove chip
-}
-
-def legal_moves(player_idx : int) : array<Move> {
+def legal_moves(game : GameState; player_idx : int) : array<Move> {
     var moves : array<Move>
     let color = player_chip_color(player_idx)
     for (c in range(game.hand_sizes[player_idx])) {
@@ -422,7 +425,7 @@ def legal_moves(player_idx : int) : array<Move> {
             for (i in range(BOARD_SIZE)) {
                 let row = i / BOARD_COLS
                 let col = i % BOARD_COLS
-                if (!is_corner(row, col) && board_chips[i] == ChipColor.none) {
+                if (!is_corner(row, col) && game.board_chips[i] == ChipColor.none) {
                     moves |> push(Move(card_idx = c, row = row, col = col))
                 }
             }
@@ -431,7 +434,7 @@ def legal_moves(player_idx : int) : array<Move> {
             for (i in range(BOARD_SIZE)) {
                 let row = i / BOARD_COLS
                 let col = i % BOARD_COLS
-                let chip = board_chips[i]
+                let chip = game.board_chips[i]
                 if (chip != ChipColor.none && chip != color) {
                     moves |> push(Move(card_idx = c, row = row, col = col))
                 }
@@ -441,7 +444,7 @@ def legal_moves(player_idx : int) : array<Move> {
             for (i in range(BOARD_SIZE)) {
                 let row = i / BOARD_COLS
                 let col = i % BOARD_COLS
-                if (BOARD_LAYOUT[i] == card && board_chips[i] == ChipColor.none) {
+                if (BOARD_LAYOUT[i] == card && game.board_chips[i] == ChipColor.none) {
                     moves |> push(Move(card_idx = c, row = row, col = col))
                 }
             }
@@ -450,7 +453,7 @@ def legal_moves(player_idx : int) : array<Move> {
     return <- moves
 }
 
-def is_legal_move(player_idx : int; m : Move) : bool {
+def is_legal_move(game : GameState; player_idx : int; m : Move) : bool {
     if (m.card_idx < 0 || m.card_idx >= game.hand_sizes[player_idx]) {
         return false
     }
@@ -461,36 +464,36 @@ def is_legal_move(player_idx : int; m : Move) : bool {
     let idx = m.row * BOARD_COLS + m.col
     let color = player_chip_color(player_idx)
     if (is_red_jack(card)) {
-        return !is_corner(m.row, m.col) && board_chips[idx] == ChipColor.none
+        return !is_corner(m.row, m.col) && game.board_chips[idx] == ChipColor.none
     } elif (is_black_jack(card)) {
-        let chip = board_chips[idx]
+        let chip = game.board_chips[idx]
         return chip != ChipColor.none && chip != color
     } else {
-        return BOARD_LAYOUT[idx] == card && board_chips[idx] == ChipColor.none
+        return BOARD_LAYOUT[idx] == card && game.board_chips[idx] == ChipColor.none
     }
 }
 
-def has_legal_moves(player_idx : int) : bool {
+def has_legal_moves(game : GameState; player_idx : int) : bool {
     // Quick check without building the full array
     for (c in range(game.hand_sizes[player_idx])) {
         let card = game.hands[player_idx][c]
         if (is_red_jack(card)) {
             for (i in range(BOARD_SIZE)) {
-                if (!is_corner(i / BOARD_COLS, i % BOARD_COLS) && board_chips[i] == ChipColor.none) {
+                if (!is_corner(i / BOARD_COLS, i % BOARD_COLS) && game.board_chips[i] == ChipColor.none) {
                     return true
                 }
             }
         } elif (is_black_jack(card)) {
             let color = player_chip_color(player_idx)
             for (i in range(BOARD_SIZE)) {
-                let chip = board_chips[i]
+                let chip = game.board_chips[i]
                 if (chip != ChipColor.none && chip != color) {
                     return true
                 }
             }
         } else {
             for (i in range(BOARD_SIZE)) {
-                if (BOARD_LAYOUT[i] == card && board_chips[i] == ChipColor.none) {
+                if (BOARD_LAYOUT[i] == card && game.board_chips[i] == ChipColor.none) {
                     return true
                 }
             }
@@ -503,7 +506,7 @@ def has_legal_moves(player_idx : int) : bool {
 // Apply move
 // ============================================================================
 
-def apply_move(player_idx : int; move : Move) : bool {
+def apply_move(var game : GameState; player_idx : int; move : Move) : bool {
     if (game.phase != GamePhase.playing) {
         return false
     }
@@ -517,36 +520,36 @@ def apply_move(player_idx : int; move : Move) : bool {
     let color = player_chip_color(player_idx)
     if (is_black_jack(card)) {
         // Remove opponent chip
-        let chip = board_chips[move.row * BOARD_COLS + move.col]
+        let chip = game.board_chips[move.row * BOARD_COLS + move.col]
         if (chip == ChipColor.none || chip == color) {
             return false
         }
-        board_chips[move.row * BOARD_COLS + move.col] = ChipColor.none
+        game.board_chips[move.row * BOARD_COLS + move.col] = ChipColor.none
     } else {
         // Place chip (normal or red jack)
-        if (board_chips[move.row * BOARD_COLS + move.col] != ChipColor.none) {
+        if (game.board_chips[move.row * BOARD_COLS + move.col] != ChipColor.none) {
             return false
         }
-        board_chips[move.row * BOARD_COLS + move.col] = color
+        game.board_chips[move.row * BOARD_COLS + move.col] = color
     }
     // Remove card from hand, discard it
-    let removed = remove_card_from_hand(player_idx, move.card_idx)
+    let removed = remove_card_from_hand(game, player_idx, move.card_idx)
     game.discard_pile |> push(removed)
     // Draw replacement
-    draw_card_from_pile(player_idx)
+    draw_card_from_pile(game, player_idx)
     // Discard any newly-dead cards
-    discard_dead_cards(player_idx)
+    discard_dead_cards(game, player_idx)
     // Advance turn
     game.current_player = (game.current_player + 1) % game.num_players
     return true
 }
 
 // ============================================================================
-// Hand sorting (for display)
+// Hand management (set, sort)
 // ============================================================================
 
 // Replace a player's entire hand with the given cards
-def set_hand(player_idx : int; cards : array<string>) {
+def set_hand(var game : GameState; player_idx : int; cards : array<string>) {
     if (player_idx < 0 || player_idx >= MAX_PLAYERS) {
         return
     }
@@ -558,7 +561,7 @@ def set_hand(player_idx : int; cards : array<string>) {
 }
 
 // Sort a player's hand by suit then rank
-def sort_hand(player_idx : int) {
+def sort_hand(var game : GameState; player_idx : int) {
     let n = game.hand_sizes[player_idx]
     // Simple insertion sort
     for (i in range(1, n)) {
