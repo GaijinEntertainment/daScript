@@ -612,7 +612,7 @@ def compute_hand_step_x(cs_w, avail_width : float; max_cards : int) : float {
     }
     // Need: (max_cards - 1) * step + cs_w <= avail_width
     let step = (avail_width - cs_w) / float(max_cards - 1)
-    return min(step, cs_w)  // don't space more than card width
+    return min(step, cs_w) * 0.93  // 7% more overlap
 }
 
 // Draw a player's hand as rows (one per suit), sorted by rank
@@ -833,6 +833,33 @@ def draw_ui_text(text : string; x, y : int; tint : float3 = float3(1.0)) {
     delete quads
 }
 
+// Draw text vertically, one char per line, going upward from (x, y)
+// Draw text rotated 90° counter-clockwise, centered vertically at (x, y)
+def draw_ui_text_vertical(text : string; x, y : int; tint : float3 = float3(1.0)) {
+    if (!ui_font_loaded) {
+        return
+    }
+    var quads <- ui_font |> create_quads(text)
+    if (empty(quads)) {
+        return
+    }
+    // Get text width to center it (width becomes height after rotation)
+    let dim = quads_dim(quads)
+    let text_width = dim.vmax.x - dim.vmin.x
+    let projection = ortho_rh(0.0, float(screen_w), float(screen_h), 0.0, -1.0, 1.0)
+    // Rotate 90° CCW, then translate. After rotation, text runs bottom-to-top.
+    // Offset by half text width along Y to center vertically.
+    var rot : float4x4
+    rot[0] = float4(0.0, -1.0, 0.0, 0.0)
+    rot[1] = float4(1.0, 0.0, 0.0, 0.0)
+    rot[2] = float4(0.0, 0.0, 1.0, 0.0)
+    rot[3] = float4(0.0, 0.0, 0.0, 1.0)
+    let view = translation(float3(float(x), float(y) + text_width * 0.5, 0.0)) * rot
+    let mvp = projection * view
+    ui_font |> draw_quads(quads, mvp, tint)
+    delete quads
+}
+
 def draw_ui_text_small(text : string; x, y : int; tint : float3 = float3(1.0)) {
     if (!ui_font_loaded) {
         return
@@ -880,12 +907,20 @@ def draw_hud(screen_w, screen_h : int) {
     draw_ui_text("N new", hint_x, hint_y, float3(0.5))
     draw_ui_text("C cheat", hint_x, hint_y + 26, float3(0.5))
     draw_ui_text("2/3/4", hint_x, hint_y + 52, float3(0.5))
+    // Jack hints — vertical text, left edge of board, vertically centered
+    let board_mid_y = int(board_oy + float(BOARD_ROWS) * (board_cs_h + board_pad_cur) * 0.5)
+    let jack_x = int(board_ox) - 2
+    draw_ui_text_vertical("red jacks are wild  ~  black jacks remove", jack_x, board_mid_y, float3(0.4))
 }
 
 // --- Keyboard input ---
 
+def game_seed() : int {
+    return int(get_time_usec(0l))
+}
+
 def start_new_game(num_players : int) {
-    make_game(game, num_players, int(get_uptime() * 1000.0))
+    make_game(game, num_players, game_seed())
     sort_hand(game, 0)
     selected_card = -1
     last_drawn_card = Card.card_none
@@ -981,7 +1016,7 @@ def init() {
         }
     }
     if (game.phase == GamePhase.not_started) {
-        make_game(game, 2, int(get_uptime() * 1000.0))
+        make_game(game, 2, game_seed())
         sort_hand(game, 0)
         bot_timer = float(bot_delay)
     }
