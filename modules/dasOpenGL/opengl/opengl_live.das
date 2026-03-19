@@ -19,6 +19,73 @@ require daslib/json_boost
 require live/live_commands
 require live_host
 
+// ============================================================================
+// Render statistics
+// ============================================================================
+
+//! Per-frame render statistics. Reset at the beginning of each frame
+//! by calling ``gl_stats_reset()``, then query with the ``gl_stats`` live command.
+struct GlStats {
+    draw_calls : int
+    triangles : int
+    lines : int
+    points : int
+    vertices : int  // total vertices submitted
+}
+
+var gl_render_stats : GlStats
+
+//! Reset render statistics. Call at the beginning of each frame (e.g. in ``update()``).
+def gl_stats_reset() {
+    gl_render_stats = GlStats()
+}
+
+//! Record a draw call. Call after each ``glDrawArrays`` or ``glDrawElements``.
+def gl_stats_draw(mode, count : int) {
+    gl_render_stats.draw_calls++
+    gl_render_stats.vertices += count
+    if (mode == int(GL_TRIANGLES)) {
+        gl_render_stats.triangles += count / 3
+    } elif (mode == int(GL_TRIANGLE_FAN)) {
+        gl_render_stats.triangles += count - 2
+    } elif (mode == int(GL_TRIANGLE_STRIP)) {
+        gl_render_stats.triangles += count - 2
+    } elif (mode == int(GL_LINES)) {
+        gl_render_stats.lines += count / 2
+    } elif (mode == int(GL_LINE_LOOP)) {
+        gl_render_stats.lines += count
+    } elif (mode == int(GL_LINE_STRIP)) {
+        gl_render_stats.lines += count - 1
+    } elif (mode == int(GL_POINTS)) {
+        gl_render_stats.points += count
+    }
+}
+
+struct GlStatsResult {
+    draw_calls : int
+    triangles : int
+    lines : int
+    points : int
+    vertices : int
+    fps : float
+}
+
+[live_command(description="OpenGL render statistics for the last frame")]
+def gl_stats(input : JsonValue?) : JsonValue? {
+    return JV(GlStatsResult(
+        draw_calls = gl_render_stats.draw_calls,
+        triangles = gl_render_stats.triangles,
+        lines = gl_render_stats.lines,
+        points = gl_render_stats.points,
+        vertices = gl_render_stats.vertices,
+        fps = 1.0 / get_dt()
+    ))
+}
+
+// ============================================================================
+// Screenshot
+// ============================================================================
+
 struct ScreenshotArgs {
     file : string = "screenshot.png"
 }

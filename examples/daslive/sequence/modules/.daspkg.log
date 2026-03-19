@@ -1,0 +1,6 @@
+
+--- daspkg ---
+  [debug] cmd_install: pkg='dasCards' source='e:/dasCards' version=''
+  [debug] install_local: 'dasCards' from 'e:\dasCards' -> 'D:\Work\daScript\examples\daslive\sequence/modules/dasCards'
+Copying e:\dasCards -> D:\Work\daScript\examples\daslive\sequence/modules/dasCards
+Installed 'dasCards' (local)

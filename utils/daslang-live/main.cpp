@@ -54,6 +54,7 @@ static SetFloatFn dll_set_fps = nullptr;
 static SetBoolFn  dll_set_is_reload = nullptr;
 static SetBoolFn  dll_set_paused = nullptr;
 static VoidFn  dll_clear_reload_flags = nullptr;
+static VoidFn  dll_clear_live_vars = nullptr;
 static VoidFn  dll_clear_error = nullptr;
 
 typedef void (*SetStringFn)(const char *);
@@ -87,6 +88,7 @@ static bool load_live_host_functions() {
     dll_set_is_reload     = (SetBoolFn)get_dll_symbol("live_host_set_is_reload");
     dll_set_paused        = (SetBoolFn)get_dll_symbol("live_host_set_paused");
     dll_clear_reload_flags = (VoidFn)get_dll_symbol("live_host_clear_reload_flags");
+    dll_clear_live_vars   = (VoidFn)get_dll_symbol("live_host_clear_live_vars");
     dll_clear_error       = (VoidFn)get_dll_symbol("live_host_clear_error");
     dll_set_last_error    = (SetStringFn)get_dll_symbol("live_host_set_last_error");
     dll_set_live_mode        = (SetBoolFn)get_dll_symbol("live_host_set_live_mode");
@@ -429,6 +431,7 @@ static int run_lifecycle(const string & fn) {
             }
 
             // Reset state
+            bool isFullReload = dll_full_reload && dll_full_reload();
             if (dll_set_dispatch_context) dll_set_dispatch_context(ctx);
             set_watched_files(ctx);
             g_annotated.build(ctx);
@@ -437,11 +440,18 @@ static int run_lifecycle(const string & fn) {
             if (dll_clear_reload_flags) dll_clear_reload_flags();
             if (dll_clear_error) dll_clear_error();
 
+            // Full reload: clear @live var entries so they reset to code defaults
+            if (isFullReload && dll_clear_live_vars) {
+                tout << "daslang-live: full reload — resetting @live variables\n";
+                dll_clear_live_vars();
+            }
+
             // Restart context and restore state before init
             ctx->restart();
 
             // Call [after_reload] functions BEFORE init — restores persistent
             // state (DECS, globals) so init() can use it immediately.
+            // On full reload the store is empty, so these are no-ops.
             call_annotated_list(ctx, g_annotated.after_reload);
 
             // Call init() in new context

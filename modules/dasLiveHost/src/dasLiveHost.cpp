@@ -28,6 +28,18 @@ extern "C" {
         g_state.full_reload = false;
         g_state.files_changed = false;
     }
+    DAS_EXPORT_DLL void live_host_clear_live_vars() {
+        lock_guard<mutex> lock(g_state.store_mutex);
+        // Only clear @live variable entries (prefix "__live_vars_"),
+        // preserving infrastructure keys like "__glfw_window", "__decs_*"
+        for (auto it = g_state.store.begin(); it != g_state.store.end(); ) {
+            if (it->first.compare(0, 12, "__live_vars_") == 0) {
+                it = g_state.store.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
     DAS_EXPORT_DLL void live_host_clear_error() {
         g_state.last_error.clear();
     }

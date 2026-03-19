@@ -196,7 +196,42 @@ def public serialize(var arch : Archive; var value : auto(TT)&) {
 }
 
 def public serialize(var arch : Archive; var value : auto(TT)[]) {
-    //! Serializes array by serializing its length and each element.
+    //! Serializes fixed-size array by serializing each element.
+    for (element in value) {
+        arch |> _::serialize(element)
+    }
+}
+
+def public serialize(var arch : Archive; var value : auto(TT)[][]) {
+    //! Serializes 2D fixed-size array by serializing each sub-array.
+    for (element in value) {
+        arch |> _::serialize(element)
+    }
+}
+
+def public serialize(var arch : Archive; var value : auto(TT)[][][]) {
+    //! Serializes 3D fixed-size array by serializing each sub-array.
+    for (element in value) {
+        arch |> _::serialize(element)
+    }
+}
+
+def public serialize(var arch : Archive; var value : auto(TT)[][][][]) {
+    //! Serializes 4D fixed-size array by serializing each sub-array.
+    for (element in value) {
+        arch |> _::serialize(element)
+    }
+}
+
+def public serialize(var arch : Archive; var value : auto(TT)[][][][][]) {
+    //! Serializes 5D fixed-size array by serializing each sub-array.
+    for (element in value) {
+        arch |> _::serialize(element)
+    }
+}
+
+def public serialize(var arch : Archive; var value : auto(TT)[][][][][][]) {
+    //! Serializes 6D fixed-size array by serializing each sub-array.
     for (element in value) {
         arch |> _::serialize(element)
     }
