@@ -132,12 +132,14 @@ def draw_chip(cr : ChipRenderer; cx, cy, radius : float; color : float4; outline
     fs_chip_bind_uniform(cr.program)
     glBindVertexArray(cr.fill_vao)
     glDrawArrays(GL_TRIANGLE_FAN, 0, CHIP_SEGMENTS + 2)
+    gl_stats_draw(int(GL_TRIANGLE_FAN), CHIP_SEGMENTS + 2)
     // Outline
     chip_u_color = outline_color
     vs_chip_bind_uniform(cr.program)
     glBindVertexArray(cr.outline_vao)
     glLineWidth(2.0)
     glDrawArrays(GL_LINE_LOOP, 0, CHIP_SEGMENTS)
+    gl_stats_draw(int(GL_LINE_LOOP), CHIP_SEGMENTS)
 }
 
 // --- Tunable parameters ---
@@ -797,6 +799,8 @@ def update() {
     glViewport(0, 0, w, h)
     glClearColor(bg_color.x, bg_color.y, bg_color.z, 1.0)
     glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT)
+    gl_stats_reset()
+    card_stats_reset()
     glDisable(GL_DEPTH_TEST)
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
@@ -863,6 +867,9 @@ def update() {
             draw_game_over(w, h)
         }
     }
+    // Fold card renderer stats into gl_render_stats
+    gl_render_stats.draw_calls += card_stats_get_draw_calls()
+    gl_render_stats.triangles += card_stats_get_triangles()
     glDisable(GL_BLEND)
     live_end_frame()
 }
@@ -1178,6 +1185,43 @@ def cmd_reset_board(input : JsonValue?) : JsonValue? {
     game.winner = -1
     selected_card = -1
     return JV("board reset, phase=playing")
+}
+
+struct CardDrawOpStats {
+    total_cards : int
+    total_draw_ops : int
+    total_stencil_groups : int
+    non_stencil_batches : int
+    stencil_draw_calls : int
+    non_stencil_draw_calls : int
+    avg_draw_calls_per_card : float
+    last_frame_card_draws : int
+    last_frame_draw_calls : int
+    last_frame_triangles : int
+}
+
+[live_command(description="Analyze card draw op structure")]
+def cmd_card_stats(input : JsonValue?) : JsonValue? {
+    var stats = CardDrawOpStats()
+    stats.total_cards = card_count(deck)
+    for (i in range(card_count(deck))) {
+        let gpu & = unsafe(deck.cards[i])
+        stats.total_draw_ops += length(gpu.draw_ops)
+        stats.total_stencil_groups += length(gpu.stencil_groups)
+        for (op in gpu.draw_ops) {
+            if (op.stencil_idx >= 0) {
+                stats.stencil_draw_calls += 2
+            } else {
+                stats.non_stencil_batches++
+                stats.non_stencil_draw_calls++
+            }
+        }
+    }
+    stats.avg_draw_calls_per_card = float(stats.stencil_draw_calls + stats.non_stencil_draw_calls) / float(stats.total_cards)
+    stats.last_frame_card_draws = card_stats_get_draws()
+    stats.last_frame_draw_calls = card_stats_get_draw_calls()
+    stats.last_frame_triangles = card_stats_get_triangles()
+    return JV(stats)
 }
 
 // --- Lifecycle ---
