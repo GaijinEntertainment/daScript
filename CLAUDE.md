@@ -30,6 +30,7 @@ See `doc/source/reference/design_philosophy.rst` for the full design philosophy 
 - **Compiler binary:** `bin/Release/daslang.exe`
 - **Live-reload host:** `bin/Release/daslang-live.exe` — same script runs in both; see `utils/daslang-live/main.cpp`
 - **Run a script:** `bin/Release/daslang.exe path/to/script.das`
+- **Compile-only check:** `bin/Release/daslang.exe -compile-only path/to/script.das` — compiles without simulation or execution, useful for syntax/type checking without needing a window or GL context. Use `-dry-run` to also simulate (but not execute).
 - **Run tests:** `bin/Release/daslang.exe dastest/dastest.das -- --test path/to/test.das`
 - **AOT tests:** `cmake --build build --config Release --target test_aot` then `bin/Release/test_aot.exe dastest/dastest.das -- --test tests/aot`
 - **IMPORTANT:** When adding a new test directory under `tests/`, register it in `tests/aot/CMakeLists.txt` for AOT compilation. See `skills/aot_testing.md` for the step-by-step pattern. CI runs ALL tests with AOT enabled — unregistered test directories cause `error[50101]: AOT link failed`

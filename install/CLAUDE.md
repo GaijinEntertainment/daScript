@@ -23,6 +23,7 @@ daslang was created at Gaijin Entertainment to solve a concrete problem: **inter
 ## Running Scripts
 
 - **Run a script:** `bin/daslang path/to/script.das`
+- **Compile-only check:** `bin/daslang -compile-only path/to/script.das` — compiles without simulation or execution. Use `-dry-run` to also simulate (but not execute).
 - **AOT generation:** `bin/daslang -aot input.das output.cpp`
 - **Example:** `bin/daslang examples/hello_world.das`
 
