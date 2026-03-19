@@ -142,3 +142,13 @@ bin/Release/daslang.exe dastest/dastest.das -- --test examples/daslive/sequence/
   - `main.das`: `[live_command]` `cmd_bot_move` — manually trigger one bot move for current or specified player
   - `main.das`: `[live_command]` `cmd_force_move`, `cmd_set_phase`, `cmd_set_player`, `cmd_reset_board` — debug commands
   - `test_bots.das`: 14 tests — legal moves, different seeds, jack handling (red/black), no-moves case, 100-move stress test, full game simulation
+- **Phase 6**: COMPLETE — Animations
+  - `main.das`: Animation queue system — `Anim` struct with type, position, progress, duration, deferred move
+  - `main.das`: `AnimType.chip_place` — bounce overshoot (0→1.2→1.0 scale), `AnimType.chip_remove` — flash+shrink (1.0→1.3→0)
+  - `main.das`: `queue_animated_move()` — queues animation and defers `apply_move` until animation completes
+  - `main.das`: Both human and bot moves go through animation queue; input blocked during animation
+  - `main.das`: `@live anim_chip_duration`, `@live anim_remove_duration` for tuning
+  - `main.das`: `@live game` — GameState now persists across live reloads (required archive fix for multi-dim fixed arrays)
+  - `daslib/archive.das`: Added `serialize` overloads for 2D through 6D fixed arrays (`auto(TT)[][]`, etc.)
+  - `tests/archive/test_archive.das`: 7 new tests — 2D int, 2D string, 3D int, struct with 2D array
+  - `test_anim.das`: 17 tests — chip_place scale curve (start/overshoot/settle/monotonic/clamp), chip_remove scale (start/flash/shrink/non-negative), chip_remove alpha (opaque/transparent/monotonic/clamp)

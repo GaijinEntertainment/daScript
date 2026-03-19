@@ -154,13 +154,135 @@ var @live seq_pulse_speed = 2.0  // speed of sequence highlight pulsing
 var @live seq_pulse_min = 0.7   // minimum brightness of pulse
 var @live seq_card_tint = 0.35  // how strongly sequence cards are tinted with chip color
 var @live bot_delay = 0.5       // seconds between bot moves
-var selected_card = -1      // index of selected card in human hand (-1 = none
-var bot_timer = 0.0         // countdown until next bot move
-var bot_rng_seed = 12345    // RNG seed for bot moves, incremented each move
+var @live anim_chip_duration = 0.25   // chip bounce duration
+var @live anim_remove_duration = 0.3  // chip removal flash duration
+var @live selected_card = -1      // index of selected card in human hand (-1 = none
+var @live bot_timer = 0.0         // countdown until next bot move
+var @live bot_rng_seed = 12345    // RNG seed for bot moves, incremented each move
+
+// --- Animation system ---
+
+enum AnimType {
+    chip_place    // chip scale-up bounce
+    chip_remove   // chip flash and shrink out
+}
+
+struct Anim {
+    atype : AnimType
+    row : int
+    col : int
+    color : ChipColor         // chip color for rendering
+    progress : float = 0.0    // 0..1
+    duration : float = 0.25
+    // Deferred move to apply when chip_place finishes
+    has_deferred_move : bool = false
+    deferred_player : int = -1
+    deferred_move : Move = Move()
+}
+
+var anim_queue : array<Anim>
+
+def is_animating() : bool {
+    return length(anim_queue) > 0
+}
+
+def queue_chip_place(row, col : int; color : ChipColor; dur : float) {
+    anim_queue |> emplace(Anim(atype = AnimType.chip_place, row = row, col = col,
+        color = color, duration = dur))
+}
+
+def queue_chip_remove(row, col : int; color : ChipColor; dur : float) {
+    anim_queue |> emplace(Anim(atype = AnimType.chip_remove, row = row, col = col,
+        color = color, duration = dur))
+}
+
+// Queue a move that will be applied via apply_move when animation finishes
+def queue_animated_move(player_idx : int; m : Move; chip_color : ChipColor;
+                        is_black_jack, is_red_jack : bool; target_row, target_col : int) {
+    if (is_black_jack) {
+        // Flash the chip being removed, then place nothing (apply_move handles removal)
+        let victim_color = get_chip(game, target_row, target_col)
+        var a = Anim(atype = AnimType.chip_remove, row = target_row, col = target_col,
+            color = victim_color, duration = float(anim_remove_duration))
+        a.has_deferred_move = true
+        a.deferred_player = player_idx
+        a.deferred_move = m
+        anim_queue |> emplace(a)
+    } else {
+        // Bounce the new chip in
+        var a = Anim(atype = AnimType.chip_place, row = target_row, col = target_col,
+            color = chip_color, duration = float(anim_chip_duration))
+        a.has_deferred_move = true
+        a.deferred_player = player_idx
+        a.deferred_move = m
+        anim_queue |> emplace(a)
+    }
+}
+
+def tick_animations(dt : float) {
+    if (length(anim_queue) == 0) {
+        return
+    }
+    anim_queue[0].progress += dt / anim_queue[0].duration
+    if (anim_queue[0].progress >= 1.0) {
+        let a = anim_queue[0]
+        if (a.has_deferred_move) {
+            apply_move(game, a.deferred_player, a.deferred_move)
+            if (a.deferred_player == 0) {
+                sort_hand(game, 0)
+            }
+        }
+        anim_queue |> erase(0)
+    }
+}
+
+// Returns animation scale for a chip at (row,col), or -1 if no active animation
+def get_chip_anim_scale(row, col : int) : float {
+    if (length(anim_queue) == 0) {
+        return -1.0
+    }
+    let a = anim_queue[0]
+    if (a.row != row || a.col != col) {
+        return -1.0
+    }
+    let t = clamp(a.progress, 0.0, 1.0)
+    if (a.atype == AnimType.chip_place) {
+        // Bounce: overshoot to 1.2 then settle to 1.0
+        if (t < 0.6) {
+            return t / 0.6 * 1.2  // grow to 1.2
+        } else {
+            return 1.2 - (t - 0.6) / 0.4 * 0.2  // settle to 1.0
+        }
+    } elif (a.atype == AnimType.chip_remove) {
+        // Shrink out: 1.0 -> 0.0 with initial flash (scale up briefly)
+        if (t < 0.2) {
+            return 1.0 + t / 0.2 * 0.3  // flash up to 1.3
+        } else {
+            return 1.3 * (1.0 - (t - 0.2) / 0.8)  // shrink to 0
+        }
+    }
+    return -1.0
+}
+
+// Returns animation alpha multiplier for chip_remove, or -1 if not applicable
+def get_chip_anim_alpha(row, col : int) : float {
+    if (length(anim_queue) == 0) {
+        return -1.0
+    }
+    let a = anim_queue[0]
+    if (a.row != row || a.col != col) {
+        return -1.0
+    }
+    if (a.atype == AnimType.chip_remove) {
+        let t = clamp(a.progress, 0.0, 1.0)
+        return 1.0 - t  // fade out
+    }
+    return -1.0
+}
 
 // --- State ---
 
-var game = GameState()
+var @live game = GameState()
 var renderer : CardRenderer
 var chip_renderer : ChipRenderer
 var deck = GpuDeck()
@@ -241,16 +363,20 @@ def handle_mouse() {
             sort_hand(game, 0)
             selected_card = -1
             bot_timer = float(bot_delay)
+            anim_queue |> clear()
             return
         }
-        if (game.phase == GamePhase.playing && game.current_player == 0 && selected_card >= 0) {
+        if (game.phase == GamePhase.playing && game.current_player == 0 && !is_animating() && selected_card >= 0) {
             // Try to play selected card on hovered board cell
             if (hover_row >= 0 && hover_col >= 0) {
                 let m = Move(card_idx = selected_card, row = hover_row, col = hover_col)
-                if (apply_move(game, 0, m)) {
+                if (is_legal_move(game, 0, m)) {
+                    let card = get_hand_card(game, 0, m.card_idx)
+                    let is_bj = is_black_jack(card)
+                    let is_rj = is_red_jack(card)
+                    queue_animated_move(0, m, player_chip_color(0), is_bj, is_rj, hover_row, hover_col)
                     selected_card = -1
-                    sort_hand(game, 0)
-                    bot_timer = float(bot_delay)  // give bot time before its turn
+                    bot_timer = float(bot_delay)
                 }
             }
         }
@@ -459,8 +585,10 @@ def update() {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
     if (deck.loaded) {
         handle_mouse()
+        // Tick animations
+        tick_animations(get_dt())
         // Bot auto-play
-        if (game.phase == GamePhase.playing && game.current_player > 0) {
+        if (game.phase == GamePhase.playing && game.current_player > 0 && !is_animating()) {
             bot_timer -= get_dt()
             if (bot_timer <= 0.0) {
                 let bot_player = game.current_player
@@ -468,7 +596,11 @@ def update() {
                 bot_rng_seed++
                 let m = bot_random_move(game, bot_player, bot_rng_seed)
                 if (m.card_idx >= 0) {
-                    apply_move(game, bot_player, m)
+                    let card = get_hand_card(game, bot_player, m.card_idx)
+                    let is_bj = is_black_jack(card)
+                    let is_rj = is_red_jack(card)
+                    queue_animated_move(bot_player, m, player_chip_color(bot_player),
+                        is_bj, is_rj, m.row, m.col)
                 }
                 bot_timer = float(bot_delay)
             }
@@ -543,20 +675,38 @@ def draw_board(screen_w, screen_h : int) {
             }
         }
     }
-    // Pass 2: draw chips on top (sequence chips pulse)
+    // Pass 2: draw chips on top (sequence chips pulse, animated chips bounce/fade)
     let chip_r = cs_w * float(chip_radius_frac)
     let pulse = float(seq_pulse_min) + (1.0 - float(seq_pulse_min)) * (0.5 + 0.5 * sin(get_uptime() * float(seq_pulse_speed)))
     for (row in range(BOARD_ROWS)) {
         for (col in range(BOARD_COLS)) {
             let chip = get_chip(game, row, col)
-            if (chip != ChipColor.none) {
+            // Check for active animation on this cell
+            let anim_s = get_chip_anim_scale(row, col)
+            let anim_a = get_chip_anim_alpha(row, col)
+            if (anim_s >= 0.0 && length(anim_queue) > 0 && anim_queue[0].atype == AnimType.chip_place) {
+                // Animated chip placement — draw the incoming chip with bounce scale
+                let cx = board_ox + pad + float(col) * (cs_w + pad) + cs_w * 0.5
+                let cy = board_oy + pad + float(row) * (cs_h + pad) + cs_h * 0.5
+                let anim_color = chip_color_to_float4(anim_queue[0].color)
+                let r = chip_r * anim_s
+                draw_chip(chip_renderer, cx, cy, r, anim_color, float4(0.0, 0.0, 0.0, 0.9), screen_w, screen_h)
+            } elif (anim_s >= 0.0 && length(anim_queue) > 0 && anim_queue[0].atype == AnimType.chip_remove) {
+                // Animated chip removal — draw shrinking/fading chip
+                let cx = board_ox + pad + float(col) * (cs_w + pad) + cs_w * 0.5
+                let cy = board_oy + pad + float(row) * (cs_h + pad) + cs_h * 0.5
+                let anim_color = chip_color_to_float4(anim_queue[0].color)
+                let alpha = anim_a >= 0.0 ? anim_a : 1.0
+                let r = chip_r * anim_s
+                let c = float4(anim_color.x, anim_color.y, anim_color.z, alpha)
+                draw_chip(chip_renderer, cx, cy, r, c, float4(1.0, 1.0, 1.0, alpha), screen_w, screen_h)
+            } elif (chip != ChipColor.none) {
                 let cx = board_ox + pad + float(col) * (cs_w + pad) + cs_w * 0.5
                 let cy = board_oy + pad + float(row) * (cs_h + pad) + cs_h * 0.5
                 var color = chip_color_to_float4(chip)
                 var outline = float4(0.0, 0.0, 0.0, 0.9)
                 var r = chip_r
                 if (is_in_sequence(game, row, col)) {
-                    // Gentle pulse + white outline
                     let boost = 0.15 * pulse
                     color = float4(min(color.x + boost, 1.0), min(color.y + boost, 1.0), min(color.z + boost, 1.0), 1.0)
                     outline = float4(1.0, 1.0, 1.0, 0.6 + 0.4 * pulse)
