@@ -22,7 +22,7 @@ module debug shared
 require math
 require strings
 require rtti
-require debugapi
+require daslib/debugger
 require daslib/fio
 require network
 require uriparser

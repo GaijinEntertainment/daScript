@@ -12,7 +12,7 @@ module dw_common shared public
 
 require dastest/testing_boost public
 require rtti public
-require debugapi public
+require daslib/debugger public
 require strings public
 
 

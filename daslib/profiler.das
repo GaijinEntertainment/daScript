@@ -15,7 +15,7 @@ module profiler shared private
 //! in ``chrome://tracing`` or Perfetto.
 //! See also ``profiler_boost`` for cross-context profiler control.
 
-require debugapi
+require daslib/debugger
 require daslib/fio
 require strings
 require uriparser

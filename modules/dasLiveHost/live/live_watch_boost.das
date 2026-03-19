@@ -14,7 +14,7 @@ module live_watch_boost shared public
 //!     require live/live_watch_boost
 
 require daslib/fio
-require debugapi
+require daslib/debugger
 require daslib/json
 require daslib/json_boost
 require live_host

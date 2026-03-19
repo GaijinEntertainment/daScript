@@ -9,7 +9,7 @@ options relaxed_pointer_const = true
 
 module opengl_cache shared private
 
-require debugapi
+require daslib/debugger
 
 require daslib/apply_in_context
 require daslib/safe_addr

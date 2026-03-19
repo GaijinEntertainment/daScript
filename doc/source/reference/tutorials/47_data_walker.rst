@@ -24,7 +24,7 @@ enumerations, bitfields).
     options rtti
 
     require rtti
-    require debugapi
+    require daslib/debugger
     require daslib/strings_boost
 
 
