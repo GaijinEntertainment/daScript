@@ -15,6 +15,7 @@ require daslib/json_boost
 require daslib/safe_addr
 require daslib/math_boost
 require gameplay
+require bot_random
 
 // --- Chip shader ---
 
@@ -152,7 +153,10 @@ var @live cheat_mode = false      // show all player hands
 var @live seq_pulse_speed = 2.0  // speed of sequence highlight pulsing
 var @live seq_pulse_min = 0.7   // minimum brightness of pulse
 var @live seq_card_tint = 0.35  // how strongly sequence cards are tinted with chip color
+var @live bot_delay = 0.5       // seconds between bot moves
 var selected_card = -1      // index of selected card in human hand (-1 = none
+var bot_timer = 0.0         // countdown until next bot move
+var bot_rng_seed = 12345    // RNG seed for bot moves, incremented each move
 
 // --- State ---
 
@@ -238,6 +242,7 @@ def handle_mouse() {
                 if (apply_move(game, 0, m)) {
                     selected_card = -1
                     sort_hand(game, 0)
+                    bot_timer = float(bot_delay)  // give bot time before its turn
                 }
             }
         }
@@ -446,6 +451,20 @@ def update() {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
     if (deck.loaded) {
         handle_mouse()
+        // Bot auto-play
+        if (game.phase == GamePhase.playing && game.current_player > 0) {
+            bot_timer -= get_dt()
+            if (bot_timer <= 0.0) {
+                let bot_player = game.current_player
+                discard_dead_cards(game, bot_player)
+                bot_rng_seed++
+                let m = bot_random_move(game, bot_player, bot_rng_seed)
+                if (m.card_idx >= 0) {
+                    apply_move(game, bot_player, m)
+                }
+                bot_timer = float(bot_delay)
+            }
+        }
         draw_board(w, h)
         if (game.phase == GamePhase.playing || game.phase == GamePhase.game_over) {
             draw_hands(w, h)
@@ -574,6 +593,7 @@ def cmd_new_game(input : JsonValue?) : JsonValue? {
     make_game(game, args.num_players, seed)
     sort_hand(game, 0)
     selected_card = -1
+    bot_timer = float(bot_delay)
     return JV("{game.num_players} players, seed={seed}")
 }
 
@@ -717,6 +737,29 @@ def cmd_set_player(input : JsonValue?) : JsonValue? {
     game.current_player = clamp(args.player, 0, game.num_players - 1)
     selected_card = -1
     return JV("current_player={game.current_player}")
+}
+
+[live_command(description="Trigger one bot move for current player (or specified player)")]
+def cmd_bot_move(input : JsonValue?) : JsonValue? {
+    var args = from_JV(input, type<CmdSetPlayerArgs>)  // reuse: just needs player
+    let p = args.player >= 0 ? args.player : game.current_player
+    if (p == 0) {
+        return JV("player 0 is human, use board click")
+    }
+    if (game.phase != GamePhase.playing) {
+        return JV("game not in playing phase")
+    }
+    discard_dead_cards(game, p)
+    bot_rng_seed++
+    let m = bot_random_move(game, p, bot_rng_seed)
+    if (m.card_idx >= 0) {
+        let card = get_hand_card(game, p, m.card_idx)
+        if (apply_move(game, p, m)) {
+            bot_timer = float(bot_delay)
+            return JV("P{p} played {card} at ({m.row},{m.col}), next=P{game.current_player}")
+        }
+    }
+    return JV("P{p} has no legal moves")
 }
 
 [live_command(description="Reset board: clear chips, sequences, set phase to playing")]

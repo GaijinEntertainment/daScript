@@ -133,4 +133,12 @@ bin/Release/daslang.exe dastest/dastest.das -- --test examples/daslive/sequence/
   - `main.das`: `[live_command]` `cmd_check_sequences` — manually finds sequences and reports them with winner detection
   - `main.das`: `@live` vars: `seq_pulse_speed`, `seq_pulse_min` for tuning pulse animation
   - `test_gameplay.das`: 55 tests (44 Phase 1-3 + 11 Phase 4) — horizontal/vertical/diagonal/anti-diagonal detection, FREE corner inclusion, 4-not-enough, overlapping sequences share one cell, win conditions for 2p and 3p, black jack can't remove from sequence, apply_move triggers game over
-- **Phase 5**: NOT STARTED — First bot (random)
+- **Phase 5**: COMPLETE — Random bot
+  - `bot_random.das`: module with `bot_random_move(game, player_idx, seed)` — picks uniformly random legal move using simple LCG
+  - `main.das`: Bot auto-play — player 0 is human, players 1+ are bots. After human move, bot plays after `bot_delay` timer
+  - `main.das`: `@live bot_delay = 0.5` — tunable seconds between bot moves
+  - `main.das`: `bot_timer`, `bot_rng_seed` state for bot turn scheduling
+  - `main.das`: `discard_dead_cards` called before each bot move
+  - `main.das`: `[live_command]` `cmd_bot_move` — manually trigger one bot move for current or specified player
+  - `main.das`: `[live_command]` `cmd_force_move`, `cmd_set_phase`, `cmd_set_player`, `cmd_reset_board` — debug commands
+  - `test_bots.das`: 14 tests — legal moves, different seeds, jack handling (red/black), no-moves case, 100-move stress test, full game simulation
