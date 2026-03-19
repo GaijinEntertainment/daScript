@@ -235,6 +235,14 @@ def handle_mouse() {
         selected_card = -1
     }
     if (mouse_clicked) {
+        if (game.phase == GamePhase.game_over) {
+            // Click anywhere to restart
+            make_game(game, game.num_players, game.num_players + int(get_uptime() * 1000.0))
+            sort_hand(game, 0)
+            selected_card = -1
+            bot_timer = float(bot_delay)
+            return
+        }
         if (game.phase == GamePhase.playing && game.current_player == 0 && selected_card >= 0) {
             // Try to play selected card on hovered board cell
             if (hover_row >= 0 && hover_col >= 0) {
