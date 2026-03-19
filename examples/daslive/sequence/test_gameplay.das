@@ -436,3 +436,197 @@ def test_is_legal_move(t : T?) {
         }
     }
 }
+
+// ============================================================================
+// Phase 4: Sequence detection and win condition tests
+// ============================================================================
+
+// Helper: place a horizontal sequence of chips starting at (row, col)
+def place_horizontal(var game : GameState; row, start_col : int; color : ChipColor) {
+    for (c in range(5)) {
+        place_chip(game, row, start_col + c, color)
+    }
+}
+
+// Helper: place a vertical sequence of chips starting at (row, col)
+def place_vertical(var game : GameState; start_row, col : int; color : ChipColor) {
+    for (r in range(5)) {
+        place_chip(game, start_row + r, col, color)
+    }
+}
+
+[test]
+def test_horizontal_sequence(t : T?) {
+    make_game(game, 2)
+    clear_all_chips(game)
+    // Place 5 blue chips in row 1, cols 1-5 (no corners)
+    place_horizontal(game, 1, 1, ChipColor.blue)
+    find_sequences(game)
+    let n = count_sequences(game, ChipColor.blue)
+    t |> success(n >= 1, "should find at least 1 horizontal sequence, found {n}")
+    clear_all_chips(game)
+}
+
+[test]
+def test_vertical_sequence(t : T?) {
+    make_game(game, 2)
+    clear_all_chips(game)
+    // Place 5 blue chips in col 1, rows 1-5
+    place_vertical(game, 1, 1, ChipColor.blue)
+    find_sequences(game)
+    let n = count_sequences(game, ChipColor.blue)
+    t |> success(n >= 1, "should find at least 1 vertical sequence, found {n}")
+    clear_all_chips(game)
+}
+
+[test]
+def test_diagonal_sequence(t : T?) {
+    make_game(game, 2)
+    clear_all_chips(game)
+    // Place 5 blue chips diagonally: (1,1), (2,2), (3,3), (4,4), (5,5)
+    for (i in range(5)) {
+        place_chip(game, 1 + i, 1 + i, ChipColor.blue)
+    }
+    find_sequences(game)
+    let n = count_sequences(game, ChipColor.blue)
+    t |> success(n >= 1, "should find at least 1 diagonal sequence, found {n}")
+    clear_all_chips(game)
+}
+
+[test]
+def test_anti_diagonal_sequence(t : T?) {
+    make_game(game, 2)
+    clear_all_chips(game)
+    // Place 5 blue chips anti-diagonally: (1,5), (2,4), (3,3), (4,2), (5,1)
+    for (i in range(5)) {
+        place_chip(game, 1 + i, 5 - i, ChipColor.blue)
+    }
+    find_sequences(game)
+    let n = count_sequences(game, ChipColor.blue)
+    t |> success(n >= 1, "should find at least 1 anti-diagonal sequence, found {n}")
+    clear_all_chips(game)
+}
+
+[test]
+def test_free_corner_in_sequence(t : T?) {
+    make_game(game, 2)
+    clear_all_chips(game)
+    // Place 4 blue chips in row 0, cols 1-4 (col 0 is FREE corner)
+    // The corner should act as wild, completing the sequence
+    for (c in range(1, 5)) {
+        place_chip(game, 0, c, ChipColor.blue)
+    }
+    find_sequences(game)
+    let n = count_sequences(game, ChipColor.blue)
+    t |> success(n >= 1, "FREE corner should complete horizontal sequence, found {n}")
+    // Also check that green can use the same corner
+    clear_all_chips(game)
+    for (c in range(1, 5)) {
+        place_chip(game, 0, c, ChipColor.green)
+    }
+    find_sequences(game)
+    let ng = count_sequences(game, ChipColor.green)
+    t |> success(ng >= 1, "FREE corner should work for green too, found {ng}")
+    clear_all_chips(game)
+}
+
+[test]
+def test_no_sequence_with_4(t : T?) {
+    make_game(game, 2)
+    clear_all_chips(game)
+    // Only 4 chips in a row is NOT a sequence
+    for (c in range(4)) {
+        place_chip(game, 3, 1 + c, ChipColor.blue)
+    }
+    find_sequences(game)
+    t |> equal(count_sequences(game, ChipColor.blue), 0)
+    clear_all_chips(game)
+}
+
+[test]
+def test_overlapping_sequences_share_one_cell(t : T?) {
+    make_game(game, 2)
+    clear_all_chips(game)
+    // Two horizontal sequences sharing one cell:
+    // Row 3, cols 1-5 and cols 5-9
+    for (c in range(1, 10)) {
+        place_chip(game, 3, c, ChipColor.blue)
+    }
+    find_sequences(game)
+    let n = count_sequences(game, ChipColor.blue)
+    // 9 chips in a row should form at least 2 sequences (sharing col 5)
+    t |> success(n >= 2, "9 in a row should form 2+ sequences, found {n}")
+    clear_all_chips(game)
+}
+
+[test]
+def test_win_condition_2_players(t : T?) {
+    make_game(game, 2)
+    clear_all_chips(game)
+    t |> equal(sequences_to_win(2), 2)
+    // One sequence is not enough
+    place_horizontal(game, 1, 1, ChipColor.blue)
+    find_sequences(game)
+    t |> equal(check_win(game), -1)
+    // Two sequences should win
+    place_horizontal(game, 3, 1, ChipColor.blue)
+    find_sequences(game)
+    t |> equal(check_win(game), 0)  // player 0 = blue
+    clear_all_chips(game)
+}
+
+[test]
+def test_win_condition_3_players(t : T?) {
+    make_game(game, 3)
+    clear_all_chips(game)
+    t |> equal(sequences_to_win(3), 1)
+    // One sequence should win for 3+ players
+    place_horizontal(game, 1, 1, ChipColor.green)
+    find_sequences(game)
+    t |> equal(check_win(game), 1)  // player 1 = green
+    clear_all_chips(game)
+}
+
+[test]
+def test_black_jack_cant_remove_from_sequence(t : T?) {
+    make_game(game, 2, 42)
+    clear_all_chips(game)
+    // Place a completed sequence for green (player 1)
+    place_horizontal(game, 1, 1, ChipColor.green)
+    find_sequences(game)
+    t |> success(count_sequences(game, ChipColor.green) >= 1)
+    // Verify that blue (player 0) can't remove any chip from that sequence
+    for (c in range(1, 6)) {
+        t |> success(!is_in_sequence(game, 1, c) || !is_legal_move(game, 0, Move(card_idx = 0, row = 1, col = c)),
+            "should not be able to remove from completed sequence at col {c}")
+    }
+    clear_all_chips(game)
+}
+
+[test]
+def test_apply_move_triggers_win(t : T?) {
+    // Set up a game where placing one more chip completes a winning condition
+    make_game(game, 3, 42)  // 3 players: 1 sequence to win
+    clear_all_chips(game)
+    // Place 4 blue chips, leaving room for a 5th
+    for (c in range(4)) {
+        place_chip(game, 2, 1 + c, ChipColor.blue)
+    }
+    // Give player 0 the card that matches board position (2, 5)
+    let target_card = board_card_name(2, 5)
+    var cards : array<string>
+    cards |> push(target_card)
+    for (i in range(1, 6)) {
+        cards |> push("club_1")  // filler
+    }
+    set_hand(game, 0, cards)
+    game.current_player = 0
+    game.phase = GamePhase.playing
+    // Play the card
+    let m = Move(card_idx = 0, row = 2, col = 5)
+    let ok = apply_move(game, 0, m)
+    t |> success(ok, "move should succeed")
+    t |> equal(int(game.phase), int(GamePhase.game_over))
+    t |> equal(game.winner, 0)
+    clear_all_chips(game)
+}

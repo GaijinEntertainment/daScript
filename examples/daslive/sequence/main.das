@@ -149,6 +149,8 @@ var @live hand_margin = 4.0       // margin from screen edges for hand display
 var @live hand_row_gap = 2.0      // gap between suit rows in hand display
 var @live bot_stack_offset = 8.0  // pixel offset between stacked bot cards
 var @live cheat_mode = false      // show all player hands
+var @live seq_pulse_speed = 3.0  // speed of sequence highlight pulsing
+var @live seq_pulse_min = 0.7    // minimum brightness of pulse
 var selected_card = -1      // index of selected card in human hand (-1 = none
 
 // --- State ---
@@ -393,6 +395,23 @@ def draw_hands(screen_w, screen_h : int) {
     }
 }
 
+// --- Game over overlay ---
+
+def draw_game_over(screen_w, screen_h : int) {
+    // Draw a large colored chip in the center to indicate the winner
+    let cx = float(screen_w) * 0.5
+    let cy = float(screen_h) * 0.5
+    let r = min(float(screen_w), float(screen_h)) * 0.08
+    let winner_color = player_chip_color(game.winner)
+    let color = chip_color_to_float4(winner_color)
+    // Pulsing winner chip
+    let pulse = 0.7 + 0.3 * sin(get_uptime() * 2.0)
+    let bright = color * float4(pulse, pulse, pulse, 1.0)
+    draw_chip(chip_renderer, cx, cy, r * 1.5, bright, float4(1.0, 1.0, 1.0, 1.0), screen_w, screen_h)
+    // Inner ring
+    draw_chip(chip_renderer, cx, cy, r * 0.8, color, float4(0.0, 0.0, 0.0, 1.0), screen_w, screen_h)
+}
+
 // --- Lifecycle ---
 
 [export]
@@ -427,8 +446,11 @@ def update() {
     if (deck.loaded) {
         handle_mouse()
         draw_board(w, h)
-        if (game.phase == GamePhase.playing) {
+        if (game.phase == GamePhase.playing || game.phase == GamePhase.game_over) {
             draw_hands(w, h)
+        }
+        if (game.phase == GamePhase.game_over) {
+            draw_game_over(w, h)
         }
     }
     glDisable(GL_BLEND)
@@ -487,17 +509,25 @@ def draw_board(screen_w, screen_h : int) {
             }
         }
     }
-    // Pass 2: draw chips on top
+    // Pass 2: draw chips on top (sequence chips pulse)
     let chip_r = cs_w * float(chip_radius_frac)
+    let pulse = float(seq_pulse_min) + (1.0 - float(seq_pulse_min)) * (0.5 + 0.5 * sin(get_uptime() * float(seq_pulse_speed)))
     for (row in range(BOARD_ROWS)) {
         for (col in range(BOARD_COLS)) {
             let chip = get_chip(game, row, col)
             if (chip != ChipColor.none) {
                 let cx = board_ox + pad + float(col) * (cs_w + pad) + cs_w * 0.5
                 let cy = board_oy + pad + float(row) * (cs_h + pad) + cs_h * 0.5
-                let color = chip_color_to_float4(chip)
-                let outline = float4(0.0, 0.0, 0.0, 0.9)
-                draw_chip(chip_renderer, cx, cy, chip_r, color, outline, screen_w, screen_h)
+                var color = chip_color_to_float4(chip)
+                var outline = float4(0.0, 0.0, 0.0, 0.9)
+                var r = chip_r
+                if (is_in_sequence(game, row, col)) {
+                    // Pulse brightness and slightly enlarge
+                    color *= float4(pulse, pulse, pulse, 1.0)
+                    outline = float4(1.0, 1.0, 1.0, pulse)
+                    r *= 1.0 + 0.1 * pulse
+                }
+                draw_chip(chip_renderer, cx, cy, r, color, outline, screen_w, screen_h)
             }
         }
     }
@@ -580,6 +610,30 @@ def cmd_debug_hands(input : JsonValue?) : JsonValue? {
     return JV(info)
 }
 
+[live_command(description="Find and display all completed sequences")]
+def cmd_check_sequences(input : JsonValue?) : JsonValue? {
+    find_sequences(game)
+    var info = "{length(game.sequences)} sequences found\n"
+    for (seq in game.sequences) {
+        var color_name = "unknown"
+        if (seq.color == ChipColor.blue) { color_name = "blue"; }
+        elif (seq.color == ChipColor.green) { color_name = "green"; }
+        elif (seq.color == ChipColor.red) { color_name = "red"; }
+        elif (seq.color == ChipColor.yellow) { color_name = "yellow"; }
+        info += "  {color_name}: "
+        for (i in range(5)) {
+            if (i > 0) { info += ", "; }
+            info += "({seq.cells[i].y},{seq.cells[i].x})"
+        }
+        info += "\n"
+    }
+    let w = check_win(game)
+    if (w >= 0) {
+        info += "WINNER: player {w}\n"
+    }
+    return JV(info)
+}
+
 [live_command(description="Toggle cheat mode (show all hands)")]
 def cmd_toggle_cheat(input : JsonValue?) : JsonValue? {
     cheat_mode = !cheat_mode
@@ -604,6 +658,67 @@ def cmd_set_hand(input : JsonValue?) : JsonValue? {
     sort_hand(game, args.player)
     selected_card = -1
     return JV("{length(args.cards)} cards set for player {args.player}")
+}
+
+struct CmdForceMoveArgs {
+    player : int = -1   // -1 = current player
+    card_idx : int = 0
+    row : int
+    col : int
+}
+
+[live_command(description="Force a move through apply_move (triggers sequences/win). Args: player, card_idx, row, col")]
+def cmd_force_move(input : JsonValue?) : JsonValue? {
+    var args = from_JV(input, type<CmdForceMoveArgs>)
+    let p = args.player >= 0 ? args.player : game.current_player
+    let m = Move(card_idx = args.card_idx, row = args.row, col = args.col)
+    let card = get_hand_card(game, p, args.card_idx)
+    if (apply_move(game, p, m)) {
+        return JV("P{p} played {card} at ({args.row},{args.col}), phase={game.phase}, winner={game.winner}")
+    }
+    return JV("move failed: P{p} card_idx={args.card_idx} at ({args.row},{args.col})")
+}
+
+struct CmdSetPhaseArgs {
+    phase : string = "playing"  // "not_started", "playing", "game_over"
+    winner : int = -1
+}
+
+[live_command(description="Set game phase. Args: phase (not_started/playing/game_over), winner (-1=none)")]
+def cmd_set_phase(input : JsonValue?) : JsonValue? {
+    var args = from_JV(input, type<CmdSetPhaseArgs>)
+    if (args.phase == "not_started") {
+        game.phase = GamePhase.not_started
+    } elif (args.phase == "playing") {
+        game.phase = GamePhase.playing
+    } elif (args.phase == "game_over") {
+        game.phase = GamePhase.game_over
+    }
+    game.winner = args.winner
+    selected_card = -1
+    return JV("phase={args.phase}, winner={game.winner}")
+}
+
+struct CmdSetPlayerArgs {
+    player : int = 0
+}
+
+[live_command(description="Set current player. Args: player (0-3)")]
+def cmd_set_player(input : JsonValue?) : JsonValue? {
+    var args = from_JV(input, type<CmdSetPlayerArgs>)
+    game.current_player = clamp(args.player, 0, game.num_players - 1)
+    selected_card = -1
+    return JV("current_player={game.current_player}")
+}
+
+[live_command(description="Reset board: clear chips, sequences, set phase to playing")]
+def cmd_reset_board(input : JsonValue?) : JsonValue? {
+    clear_all_chips(game)
+    game.sequences |> clear()
+    game.phase = GamePhase.playing
+    game.winner = -1
+    selected_card = -1
+    return JV("board reset, phase=playing")
 }
 
 // --- Lifecycle ---

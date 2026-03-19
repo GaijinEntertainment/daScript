@@ -223,6 +223,12 @@ enum GamePhase {
     game_over
 }
 
+// A completed sequence of 5 cells
+struct Sequence {
+    cells : int2[5]     // (col, row) for each cell in the sequence
+    color : ChipColor   // which player's sequence
+}
+
 struct GameState {
     num_players : int = 2
     current_player : int = 0
@@ -232,6 +238,7 @@ struct GameState {
     draw_pile : array<string>
     discard_pile : array<string>
     board_chips : ChipColor[100]
+    sequences : array<Sequence>   // completed sequences found so far
     winner : int = -1
 }
 
@@ -430,12 +437,12 @@ def legal_moves(game : GameState; player_idx : int) : array<Move> {
                 }
             }
         } elif (is_black_jack(card)) {
-            // Remove: any opponent chip (not from a completed sequence — TODO Phase 4)
+            // Remove: any opponent chip not in a completed sequence
             for (i in range(BOARD_SIZE)) {
                 let row = i / BOARD_COLS
                 let col = i % BOARD_COLS
                 let chip = game.board_chips[i]
-                if (chip != ChipColor.none && chip != color) {
+                if (chip != ChipColor.none && chip != color && !is_in_sequence(game, row, col)) {
                     moves |> push(Move(card_idx = c, row = row, col = col))
                 }
             }
@@ -467,7 +474,7 @@ def is_legal_move(game : GameState; player_idx : int; m : Move) : bool {
         return !is_corner(m.row, m.col) && game.board_chips[idx] == ChipColor.none
     } elif (is_black_jack(card)) {
         let chip = game.board_chips[idx]
-        return chip != ChipColor.none && chip != color
+        return chip != ChipColor.none && chip != color && !is_in_sequence(game, m.row, m.col)
     } else {
         return BOARD_LAYOUT[idx] == card && game.board_chips[idx] == ChipColor.none
     }
@@ -487,7 +494,7 @@ def has_legal_moves(game : GameState; player_idx : int) : bool {
             let color = player_chip_color(player_idx)
             for (i in range(BOARD_SIZE)) {
                 let chip = game.board_chips[i]
-                if (chip != ChipColor.none && chip != color) {
+                if (chip != ChipColor.none && chip != color && !is_in_sequence(game, i / BOARD_COLS, i % BOARD_COLS)) {
                     return true
                 }
             }
@@ -519,9 +526,12 @@ def apply_move(var game : GameState; player_idx : int; move : Move) : bool {
     let card = game.hands[player_idx][move.card_idx]
     let color = player_chip_color(player_idx)
     if (is_black_jack(card)) {
-        // Remove opponent chip
+        // Remove opponent chip (can't remove from a completed sequence)
         let chip = game.board_chips[move.row * BOARD_COLS + move.col]
         if (chip == ChipColor.none || chip == color) {
+            return false
+        }
+        if (is_in_sequence(game, move.row, move.col)) {
             return false
         }
         game.board_chips[move.row * BOARD_COLS + move.col] = ChipColor.none
@@ -539,9 +549,122 @@ def apply_move(var game : GameState; player_idx : int; move : Move) : bool {
     draw_card_from_pile(game, player_idx)
     // Discard any newly-dead cards
     discard_dead_cards(game, player_idx)
+    // Check for sequences and win
+    find_sequences(game)
+    let w = check_win(game)
+    if (w >= 0) {
+        game.winner = w
+        game.phase = GamePhase.game_over
+    }
     // Advance turn
     game.current_player = (game.current_player + 1) % game.num_players
     return true
+}
+
+// ============================================================================
+// Sequence detection and win condition
+// ============================================================================
+
+let SEQUENCE_LENGTH = 5
+
+// Directions: right, down, down-right, down-left
+let DIR_DR = 0  // row+0, col+1 (horizontal)
+let DIR_DC = 1  // row+1, col+0 (vertical)
+let DIR_DD = 2  // row+1, col+1 (diagonal down-right)
+let DIR_DA = 3  // row+1, col-1 (diagonal down-left)
+
+let DIR_ROWS = fixed_array(0, 1, 1, 1)
+let DIR_COLS = fixed_array(1, 0, 1, -1)
+
+// Check if a cell counts as belonging to a player's color
+// FREE corners are wild — they count for everyone
+def cell_matches_color(game : GameState; row, col : int; color : ChipColor) : bool {
+    if (is_corner(row, col)) {
+        return true  // FREE corners are wild for all players
+    }
+    return game.board_chips[row * BOARD_COLS + col] == color
+}
+
+// Check if a cell is part of any already-found sequence
+def is_in_sequence(game : GameState; row, col : int) : bool {
+    for (seq in game.sequences) {
+        for (c in seq.cells) {
+            if (c.x == col && c.y == row) {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+// Find all completed sequences for all players.
+// Scans in 4 directions from every cell.
+// Sequences can share at most one cell with each other.
+def find_sequences(var game : GameState) {
+    game.sequences |> clear()
+    for (p in range(game.num_players)) {
+        let color = player_chip_color(p)
+        for (dir in range(4)) {
+            let dr = DIR_ROWS[dir]
+            let dc = DIR_COLS[dir]
+            // Scan all starting positions for this direction
+            for (row in range(BOARD_ROWS)) {
+                for (col in range(BOARD_COLS)) {
+                    // Check if 5 consecutive cells in this direction match
+                    let end_row = row + dr * (SEQUENCE_LENGTH - 1)
+                    let end_col = col + dc * (SEQUENCE_LENGTH - 1)
+                    if (end_row < 0 || end_row >= BOARD_ROWS || end_col < 0 || end_col >= BOARD_COLS) {
+                        continue
+                    }
+                    var all_match = true
+                    var shared_count = 0
+                    var cells : int2[5]
+                    for (s in range(SEQUENCE_LENGTH)) {
+                        let r = row + dr * s
+                        let c = col + dc * s
+                        cells[s] = int2(c, r)
+                        if (!cell_matches_color(game, r, c, color)) {
+                            all_match = false
+                            break
+                        }
+                        if (is_in_sequence(game, r, c)) {
+                            shared_count++
+                        }
+                    }
+                    if (all_match && shared_count <= 1) {
+                        game.sequences |> push(Sequence(cells = cells, color = color))
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Count sequences for a specific player color
+def count_sequences(game : GameState; color : ChipColor) : int {
+    var count = 0
+    for (seq in game.sequences) {
+        if (seq.color == color) {
+            count++
+        }
+    }
+    return count
+}
+
+// How many sequences needed to win based on player count
+def sequences_to_win(num_players : int) : int {
+    return num_players == 2 ? 2 : 1
+}
+
+// Check if any player has won. Returns winner player index or -1.
+def check_win(game : GameState) : int {
+    let needed = sequences_to_win(game.num_players)
+    for (p in range(game.num_players)) {
+        if (count_sequences(game, player_chip_color(p)) >= needed) {
+            return p
+        }
+    }
+    return -1
 }
 
 // ============================================================================

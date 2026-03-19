@@ -104,18 +104,33 @@ bin/Release/daslang.exe dastest/dastest.das -- --test examples/daslive/sequence/
   - Note: chips rendered with custom GL shader (GL_TRIANGLE_FAN fill + GL_LINE_LOOP outline), 15% card tint, 90% opaque chips
   - Note: `require daslib/json_boost` needed for `from_JV` in live commands, `require glfw/glfw_boost` for mouse input
 - **Phase 3**: COMPLETE — Game state + turn structure
-  - `gameplay.das`: `GameState` struct (hands, draw pile, discard, current player, phase), `Move` struct, `GamePhase` enum
-  - `gameplay.das`: `make_game(num_players, seed)`, `build_double_deck()`, `shuffle_deck()`, `deal_hands()`
-  - `gameplay.das`: `legal_moves(player_idx)`, `apply_move(player_idx, move)`, `is_dead_card()`, `discard_dead_cards()`
-  - `gameplay.das`: Jack logic — black jacks remove opponent chips, red jacks wild placement
+  - `gameplay.das`: `GameState` struct (hands, draw pile, discard, current player, phase, board_chips, sequences), `Move` struct, `GamePhase` enum
+  - `gameplay.das`: All functions take `GameState` as first parameter (no module global) — enables bot state cloning
+  - `gameplay.das`: `make_game(game, num_players, seed)`, `build_double_deck()`, `shuffle_deck()`, `deal_hands()`
+  - `gameplay.das`: `legal_moves(game, player_idx)`, `apply_move(game, player_idx, move)`, `is_dead_card(game, card)`, `discard_dead_cards(game, player_idx)`
+  - `gameplay.das`: Jack logic — black jacks remove opponent chips (not from completed sequences), red jacks wild placement
   - `gameplay.das`: `set_hand()`, `sort_hand()`, `card_suit()`, `card_rank()`, `suit_order()`, `rank_order()`
   - `main.das`: `draw_hand_by_suit()` — 4 rows (one per suit), sorted by rank, with click-to-select for human
   - `main.das`: `draw_hand_stack()` — diagonal stack of face-down cards for bot hands (non-cheat mode)
   - `main.das`: Hand layout — P1=bottom-left, P2=top-left, P3=top-right, P4=bottom-right, using board scale
-  - `main.das`: Card selection + play-by-click on board cells, turn advancement
+  - `main.das`: Card selection + play-by-click on board cells, turn advancement, right-click deselect
+  - `main.das`: Green/red hover tint for legal/illegal moves when card selected, 50% darkening of non-selected cards
   - `main.das`: `[live_command]` endpoints: `cmd_new_game`, `cmd_game_status`, `cmd_toggle_cheat`, `cmd_set_hand`, `cmd_debug_hands`
-  - `main.das`: `@live` annotations removed — not using live vars yet
-  - `test_gameplay.das`: 40 tests (21 Phase 1+2 + 19 Phase 3) — deck building, hand sizes, draw pile, game state, card validity, deterministic shuffle, suit/rank parsing, hand sorting, legal moves, apply_move, wrong player rejection, dead card detection, player chip colors, full game simulation
+  - `main.das`: `@live` vars restored with `require live/live_vars` — per-variable keys with init-expression hash detection
+  - `test_gameplay.das`: 44 tests (21 Phase 1+2 + 23 Phase 3) — deck building, hand sizes, draw pile, game state, card validity, deterministic shuffle, suit/rank parsing, hand sorting, legal moves, apply_move, wrong player rejection, dead card detection, player chip colors, full game simulation, is_legal_move validation
   - Note: `cmd_set_hand` auto-sets phase to `playing` if game not started, for standalone testing
   - Note: Fixed array dimension ordering — `string[MAX_PLAYERS][MAX_HAND_SIZE]` (first index selects player)
-- **Phase 4**: NOT STARTED — Win detection + sequence highlighting
+  - Note: `live_vars.das` redesigned — each `@live` var gets own key with init-expression hash; changing default in code takes effect on normal reload
+- **Phase 4**: COMPLETE — Win detection + sequence highlighting
+  - `gameplay.das`: `Sequence` struct (5 cells + color), stored in `GameState.sequences`
+  - `gameplay.das`: `find_sequences(game)` — scans all 4 directions (horizontal, vertical, diagonal, anti-diagonal), FREE corners wild for all players, sequences can share at most one cell
+  - `gameplay.das`: `check_win(game)` — returns winner player index or -1; 2 sequences for 2p, 1 for 3-4p
+  - `gameplay.das`: `count_sequences(game, color)`, `sequences_to_win(num_players)`, `cell_matches_color()`, `is_in_sequence()`
+  - `gameplay.das`: Black jack protection — `is_legal_move`, `legal_moves`, `has_legal_moves`, and `apply_move` all reject removing chips from completed sequences
+  - `gameplay.das`: `apply_move` calls `find_sequences` + `check_win` after each chip placement; sets `game_over` phase and `winner` on win
+  - `main.das`: Sequence chips pulse (brightness + white outline + slight size increase) using `sin(uptime * speed)`
+  - `main.das`: Game over overlay — large pulsing winner-colored chip in center; hands remain visible
+  - `main.das`: `[live_command]` `cmd_check_sequences` — manually finds sequences and reports them with winner detection
+  - `main.das`: `@live` vars: `seq_pulse_speed`, `seq_pulse_min` for tuning pulse animation
+  - `test_gameplay.das`: 55 tests (44 Phase 1-3 + 11 Phase 4) — horizontal/vertical/diagonal/anti-diagonal detection, FREE corner inclusion, 4-not-enough, overlapping sequences share one cell, win conditions for 2p and 3p, black jack can't remove from sequence, apply_move triggers game over
+- **Phase 5**: NOT STARTED — First bot (random)
