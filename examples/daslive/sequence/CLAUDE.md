@@ -54,13 +54,27 @@ test_elo.das        -- tests for ELO calculations
 
 The board uses the **original Sequence board card order** (see reference image in PLAN.md context). The layout is a hardcoded 10x10 array in `gameplay.das`. FREE corners at positions (0,0), (0,9), (9,0), (9,9). No jacks appear on the board.
 
+Cards are displayed upright (no rotation) in a 10x10 grid, centered in the window with padding. The board is height-limited in a landscape window, leaving wide margins on both sides for player hands.
+
+## Player Hand Display
+
+Each player's hand is displayed in a screen corner:
+- **P1 (human)**: bottom-left — 4 rows sorted by suit (clubs, diamonds, hearts, spades), cards sorted by rank within each row
+- **P2**: top-left
+- **P3**: top-right
+- **P4**: bottom-right
+
+In **cheat mode**, all players show the 4-row suit display. In **normal mode**, bot hands show N face-down cards stacked diagonally at ~20° (just shows card count).
+
 ## Live Coding Patterns
 
 - `@live` vars for all tunable parameters (colors, sizes, delays, volumes)
+- `require live/live_vars` is REQUIRED for `@live` persistence — without it, vars reset every reload
 - `is_reload()` guard on expensive init (GPU resources, deck loading)
 - `[live_command]` for debug/test endpoints
 - `[before_reload]`/`[after_reload]` only if `@live` isn't sufficient
 - Cheat mode: toggle to see all players' hands
+- GPU resources (deck, renderer) must be recreated every init — they don't survive reload
 
 ## Testing
 
@@ -74,9 +88,12 @@ bin/Release/daslang.exe dastest/dastest.das -- --test examples/daslive/sequence/
 - **Phase 0**: COMPLETE — CLAUDE.md + PLAN.md written
 - **Phase 1**: COMPLETE — Board layout + static rendering
   - `gameplay.das`: module with `BOARD_LAYOUT` (10x10), `ChipColor` enum, jack helpers, `is_valid_card_name`
-  - `main.das`: 10x10 card grid rendering, auto-scaled to window, FREE corners as gold-tinted card backs
+  - `main.das`: 10x10 upright card grid, auto-scaled with padding, FREE corners as gold-tinted card backs
   - `test_gameplay.das`: 13 tests (all pass) — dimensions, corners, 96 non-free cells, each card x2, no jacks, valid names, bounds
   - `@live` vars: `board_pad`, `bg_color`
+  - `require live/live_vars` added for `@live` persistence
   - Note: `require opengl/opengl_boost` must be explicit in `main.das` (not transitively visible from `cards/opengl_cards`)
   - Note: MCP `compile_check` and `run_test` don't process `.das_module` files — use `daslang.exe`/`daslang-live.exe` for full compilation, MCP for gameplay-only tests
+  - Note: GPU resources (deck, renderer) don't survive live reload — always recreate in init()
+  - Fixed: `live_host_clear_live_vars()` added to dasLiveHost for full reload @live reset
 - **Phase 2**: NOT STARTED — Chips + hover + click
