@@ -161,3 +161,93 @@ def test_live_vars_archive_round_trip(t : T?) {
         t |> success(true, "survived garbage data without crash")
     }
 }
+
+[test]
+def test_live_vars_per_key_round_trip(t : T?) {
+    t |> run("per-variable save/load with matching hash") <| @(t : T?) {
+        // Simulate what the generated code does: hash + value
+        let init_hash = int64(hash("42"))  // hash of describe(test_int.init) = "42"
+        let key = "__test_per_key_int"
+        // Save
+        var value = 999
+        var ser = new MemSerializer()
+        var arch = Archive(reading = false, stream = ser)
+        var h = init_hash
+        arch |> serialize(h)
+        arch |> serialize(value)
+        var data <- ser->extractData()
+        live_store_bytes(key, data)
+        unsafe { delete ser; }
+        // Load with same hash — should restore
+        var restored = 0
+        var load_data : array<uint8>
+        if (live_load_bytes(key, load_data) && length(load_data) > 0) {
+            var deser = new MemSerializer(load_data)
+            var arch2 = Archive(reading = true, stream = deser)
+            var stored_hash : int64
+            arch2 |> serialize(stored_hash)
+            if (stored_hash == init_hash) {
+                arch2 |> serialize(restored)
+            }
+            unsafe { delete deser; }
+        }
+        t |> equal(restored, 999)
+    }
+    t |> run("hash mismatch discards stale data") <| @(t : T?) {
+        let key = "__test_per_key_mismatch"
+        let old_hash = int64(hash("42"))
+        let new_hash = int64(hash("99"))  // init changed from 42 to 99
+        // Save with old hash
+        var value = 777
+        var ser = new MemSerializer()
+        var arch = Archive(reading = false, stream = ser)
+        var h = old_hash
+        arch |> serialize(h)
+        arch |> serialize(value)
+        var data <- ser->extractData()
+        live_store_bytes(key, data)
+        unsafe { delete ser; }
+        // Load expecting new hash — should NOT restore
+        var restored = 0
+        var load_data : array<uint8>
+        if (live_load_bytes(key, load_data) && length(load_data) > 0) {
+            var deser = new MemSerializer(load_data)
+            var arch2 = Archive(reading = true, stream = deser)
+            var stored_hash : int64
+            arch2 |> serialize(stored_hash)
+            if (stored_hash == new_hash) {
+                arch2 |> serialize(restored)
+            }
+            unsafe { delete deser; }
+        }
+        t |> equal(restored, 0)
+    }
+    t |> run("no-init var uses hash 0") <| @(t : T?) {
+        let key = "__test_per_key_no_init"
+        let no_init_hash = int64(0)
+        // Save with hash 0
+        var value = 55
+        var ser = new MemSerializer()
+        var arch = Archive(reading = false, stream = ser)
+        var h = no_init_hash
+        arch |> serialize(h)
+        arch |> serialize(value)
+        var data <- ser->extractData()
+        live_store_bytes(key, data)
+        unsafe { delete ser; }
+        // Load with hash 0 — should restore
+        var restored = 0
+        var load_data : array<uint8>
+        if (live_load_bytes(key, load_data) && length(load_data) > 0) {
+            var deser = new MemSerializer(load_data)
+            var arch2 = Archive(reading = true, stream = deser)
+            var stored_hash : int64
+            arch2 |> serialize(stored_hash)
+            if (stored_hash == no_init_hash) {
+                arch2 |> serialize(restored)
+            }
+            unsafe { delete deser; }
+        }
+        t |> equal(restored, 55)
+    }
+}

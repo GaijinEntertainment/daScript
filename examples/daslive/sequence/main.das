@@ -5,6 +5,7 @@ require live/glfw_live
 require live/opengl_live
 require live/live_api
 require live/live_commands
+require live/live_vars
 require live/live_watch_boost
 require live_host
 require opengl/opengl_boost
@@ -140,14 +141,14 @@ def draw_chip(cr : ChipRenderer; cx, cy, radius : float; color : float4; outline
 
 // --- Tunable parameters ---
 
-var board_pad = 2.0
-var bg_color = float3(0.1, 0.15, 0.1)
-var hover_tint = float4(1.3, 1.3, 1.5, 1.0)
-var chip_radius_frac = 0.3  // chip radius as fraction of card width
-var hand_margin = 4.0       // margin from screen edges for hand display
-var hand_row_gap = 2.0      // gap between suit rows in hand display
-var bot_stack_offset = 8.0  // pixel offset between stacked bot cards
-var cheat_mode = false      // show all player hands
+var @live board_pad = 2.0
+var @live bg_color = float3(0.1, 0.15, 0.1)
+var @live hover_tint = float4(1.3, 1.3, 1.5, 1.0)
+var @live chip_radius_frac = 0.3  // chip radius as fraction of card width
+var @live hand_margin = 4.0       // margin from screen edges for hand display
+var @live hand_row_gap = 2.0      // gap between suit rows in hand display
+var @live bot_stack_offset = 8.0  // pixel offset between stacked bot cards
+var @live cheat_mode = false      // show all player hands
 var selected_card = -1      // index of selected card in human hand (-1 = none
 
 // --- State ---
