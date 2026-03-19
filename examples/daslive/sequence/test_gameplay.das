@@ -388,3 +388,49 @@ def test_full_game_simulation(t : T?) {
     }
     t |> success(turns > 0, "should play at least one turn")
 }
+
+[test]
+def test_is_legal_move(t : T?) {
+    make_game(2, 42)
+    let moves <- legal_moves(0)
+    t |> success(length(moves) > 0)
+    // Every move from legal_moves should be legal
+    for (m in moves) {
+        t |> success(is_legal_move(0, m), "legal_moves entry should be legal")
+    }
+    // Wrong card for a cell should be illegal
+    t |> run("normal card on wrong cell") <| @(t : T?) {
+        make_game(2, 42)
+        let card = get_hand_card(0, 0)
+        if (!is_jack(card)) {
+            // Find a cell that does NOT match this card
+            for (i in range(BOARD_SIZE)) {
+                let row = i / BOARD_COLS
+                let col = i % BOARD_COLS
+                if (board_card_name(row, col) != card && board_card_name(row, col) != FREE) {
+                    t |> success(!is_legal_move(0, Move(card_idx = 0, row = row, col = col)), "wrong cell should be illegal")
+                    break
+                }
+            }
+        }
+    }
+    t |> run("out of bounds is illegal") <| @(t : T?) {
+        make_game(2, 42)
+        t |> success(!is_legal_move(0, Move(card_idx = 0, row = -1, col = 0)))
+        t |> success(!is_legal_move(0, Move(card_idx = 0, row = 10, col = 0)))
+        t |> success(!is_legal_move(0, Move(card_idx = -1, row = 0, col = 0)))
+    }
+    t |> run("occupied cell is illegal for normal card") <| @(t : T?) {
+        make_game(2, 42)
+        let moves <- legal_moves(0)
+        if (length(moves) > 0) {
+            let m = moves[0]
+            let card = get_hand_card(0, m.card_idx)
+            if (!is_jack(card)) {
+                place_chip(m.row, m.col, ChipColor.blue)
+                t |> success(!is_legal_move(0, m), "occupied cell should be illegal")
+                clear_all_chips()
+            }
+        }
+    }
+}
