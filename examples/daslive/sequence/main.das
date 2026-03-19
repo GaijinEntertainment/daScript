@@ -165,6 +165,10 @@ var @live bot_delay = 0.5       // seconds between bot moves
 var @live anim_chip_duration = 0.25   // chip bounce duration
 var @live anim_remove_duration = 0.3  // chip removal flash duration
 var @live anim_card_duration = 0.3    // card fly duration
+var @live last_drawn_card = Card.card_none  // last card human received (for highlight)
+var @live last_drawn_pulse_speed = 1.5  // pulse speed for last drawn card
+var @live last_drawn_pulse_min = 0.7    // minimum brightness (dimmed)
+var @live last_drawn_pulse_max = 0.9    // maximum brightness
 var @live selected_card = -1      // index of selected card in human hand (-1 = none
 var @live bot_timer = 0.0         // countdown until next bot move
 var @live bot_rng_seed = 12345    // RNG seed for bot moves, incremented each move
@@ -367,7 +371,24 @@ def tick_animations(dt : float) {
             } elif (a.atype == AnimType.chip_remove) {
                 sfx_chip_remove()
             }
+            // Capture the card about to be drawn (top of draw pile)
+            var drawn = Card.card_none
+            if (length(game.draw_pile) > 0) {
+                drawn = game.draw_pile[length(game.draw_pile) - 1]
+            }
             apply_move(game, player, a.deferred_move)
+            // Track last drawn card for human player highlight
+            if (player == 0 && drawn != Card.card_none) {
+                // Check if the drawn card is still in hand (not dead-discarded)
+                var found = false
+                for (ci in range(get_hand_size(game, 0))) {
+                    if (get_hand_card(game, 0, ci) == drawn) {
+                        found = true
+                        break
+                    }
+                }
+                last_drawn_card = found ? drawn : Card.card_none
+            }
             // Check for new sequences or win
             if (game.phase == GamePhase.game_over) {
                 sfx_game_win()
@@ -573,6 +594,7 @@ def handle_mouse() {
                     let is_rj = is_red_jack(card)
                     queue_animated_move(0, m, player_chip_color(0), is_bj, is_rj, hover_row, hover_col)
                     selected_card = -1
+                    last_drawn_card = Card.card_none
                     bot_timer = float(bot_delay)
                 }
             }
@@ -638,6 +660,11 @@ def draw_hand_by_suit(player_idx : int; anchor_x, anchor_y : float; scale : floa
                 } else {
                     tint = float4(0.5, 0.5, 0.5, 1.0)
                 }
+            } elif (is_human && last_drawn_card != Card.card_none && card == last_drawn_card) {
+                let t = 0.5 + 0.5 * sin(get_uptime() * float(last_drawn_pulse_speed))
+                let rg = lerp(float(last_drawn_pulse_min), float(last_drawn_pulse_max), t)
+                let b = lerp(float(last_drawn_pulse_min) * 1.2, float(last_drawn_pulse_max), t)
+                tint = float4(rg, rg, b, 1.0)
             }
             if (card_idx >= 0) {
                 draw_card(renderer, deck, card_idx, card_x, card_y, scale, screen_w, screen_h,
@@ -861,6 +888,7 @@ def start_new_game(num_players : int) {
     make_game(game, num_players, int(get_uptime() * 1000.0))
     sort_hand(game, 0)
     selected_card = -1
+    last_drawn_card = Card.card_none
     bot_timer = float(bot_delay)
     anim_queue |> clear()
 }
