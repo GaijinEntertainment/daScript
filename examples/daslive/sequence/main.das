@@ -16,6 +16,7 @@ require daslib/safe_addr
 require daslib/math_boost
 require gameplay
 require bot_random
+require sfx
 
 // --- Chip shader ---
 
@@ -352,9 +353,25 @@ def tick_animations(dt : float) {
     anim_queue[0].progress += dt / anim_queue[0].duration
     if (anim_queue[0].progress >= 1.0) {
         let a = anim_queue[0]
+        // Sound for completed animation
+        if (a.atype == AnimType.card_fly) {
+            sfx_card_play()
+        }
         if (a.has_deferred_move) {
             let player = a.deferred_player
+            let seq_before = length(game.sequences)
+            if (a.atype == AnimType.chip_place) {
+                sfx_chip_place()
+            } elif (a.atype == AnimType.chip_remove) {
+                sfx_chip_remove()
+            }
             apply_move(game, player, a.deferred_move)
+            // Check for new sequences or win
+            if (game.phase == GamePhase.game_over) {
+                sfx_game_win()
+            } elif (length(game.sequences) > seq_before) {
+                sfx_sequence_complete()
+            }
             if (player == 0) {
                 sort_hand(game, 0)
             }
@@ -377,7 +394,12 @@ def tick_animations(dt : float) {
                 // start_x/y = draw pile pos, row/col encodes nothing useful here. We'll compute target in rendering.
                 draw_anim.deferred_player = player  // to know where to fly to
                 anim_queue |> emplace(draw_anim)
+                sfx_card_draw()
             }
+        }
+        // Turn chime after card draw completes (bot just finished its turn)
+        if (a.atype == AnimType.card_draw && game.phase == GamePhase.playing && game.current_player == 0) {
+            sfx_turn_chime()
         }
         anim_queue |> erase(0)
     }
@@ -785,6 +807,7 @@ def init() {
         make_game(game, 2)
         sort_hand(game, 0)
     }
+    init_audio()
     print("sequence: init (is_reload={is_reload()}, cards={card_count(deck)})\n")
 }
 
