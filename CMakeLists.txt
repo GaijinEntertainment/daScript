@@ -591,6 +591,7 @@ SET(BUILTIN_SRC
 include/daScript/builtin/ast_gen.inc
 include/daScript/builtin/debugapi_gen.inc
 
+src/builtin/modules.cpp
 src/builtin/module_builtin.h
 src/builtin/module_builtin.cpp
 src/builtin/module_builtin_misc_types.cpp
