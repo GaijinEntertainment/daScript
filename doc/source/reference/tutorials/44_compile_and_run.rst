@@ -24,7 +24,7 @@ section.
     options gen2
     options multiple_contexts   // required when holding smart_ptr<Context>
 
-    require rtti
+    require daslib/rtti
     require daslib/debugger
     require daslib/jobque_boost
 

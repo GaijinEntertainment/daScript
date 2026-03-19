@@ -1358,8 +1358,6 @@ namespace das {
     #endif
     }
 
-    #include "rtti.das.inc"
-
     Func builtin_getFunctionByMnh ( uint64_t MNH, Context * context ) {
         return Func(context->fnByMangledName(MNH));
     }
@@ -1453,7 +1451,7 @@ namespace das {
             addAnnotation(rec);
             initRecAnnotation(rec, lib);
         }
-        Module_Rtti() : Module("rtti") {
+        Module_Rtti() : Module("rtti_core") {
             DAS_PROFILE_SECTION("Module_Rtti");
             ModuleLibrary lib(this);
             lib.addBuiltInModule();
@@ -1727,8 +1725,6 @@ namespace das {
             addExtern<DAS_BIND_FUN(each_const_EnumInfo),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*this, lib, "each",
                 SideEffects::none, "each_const_EnumInfo")
                     ->args({"info","context","at"});
-            // add builtin module
-            compileBuiltinModule("rtti.das",rtti_das, sizeof(rtti_das));
             // lets make sure its all aot ready
             verifyAotReady();
         }

@@ -169,11 +169,11 @@ This pattern appears throughout the daslang ecosystem:
        Module_Audio() : Module("audio") {}
        bool initDependencies() override {
            if (initialized) return true;
-           if (!Module::require("rtti")) return false;
+           if (!Module::require("rtti_core")) return false;
            initialized = true;
            ModuleLibrary lib(this);
            lib.addBuiltInModule();
-           addBuiltinDependency(lib, Module::require("rtti"));
+           addBuiltinDependency(lib, Module::require("rtti_core"));
            // ... register types, functions ...
            return true;
        }

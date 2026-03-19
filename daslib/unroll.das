@@ -13,7 +13,7 @@ module unroll shared private
 //! the constant index in each unrolled copy.
 
 require daslib/ast
-require rtti
+require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
 

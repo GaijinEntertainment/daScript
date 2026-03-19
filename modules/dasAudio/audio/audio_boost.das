@@ -8,7 +8,7 @@ module audio_boost shared private
 
 require audio
 require math
-require rtti
+require daslib/rtti
 
 require daslib/array_boost
 require daslib/jobque_boost

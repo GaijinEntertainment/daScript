@@ -13,7 +13,7 @@ module is_local shared public
 //! escape through calls, indexing, or field access).
 
 require daslib/ast public
-require rtti
+require daslib/rtti
 require daslib/ast_boost
 require strings
 

@@ -23,8 +23,7 @@ module live_vars shared public
 //! the old persisted value is discarded — no full reload needed.
 
 require daslib/ast
-require rtti
-require strings
+require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
 

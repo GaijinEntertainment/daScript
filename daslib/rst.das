@@ -15,7 +15,7 @@ module rst shared private
 
 require daslib/fio
 require math
-require rtti
+require daslib/rtti
 require daslib/ast
 require strings
 require daslib/ast_boost
@@ -50,6 +50,7 @@ let module_name_replacements = [
     ("$", "builtin"),
     ("ast_core", "ast"),
     ("fio_core", "fio"),
+    ("rtti_core", "rtti"),
 ]
 
 def module_name(mod) {
@@ -2340,7 +2341,8 @@ def public documents(name : string; mods : array<Module?>; fname : string; var g
     let replace_names = [
         ("$", "_builtin"),
         ("ast_core", "ast"),
-        ("fio_core", "fio")
+        ("fio_core", "fio"),
+        ("rtti_core", "rtti")
     ]
     for ((src, dst) in replace_names) {
         if (mod_name == src) {

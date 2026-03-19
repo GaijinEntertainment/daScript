@@ -4,7 +4,7 @@ options remove_unused_symbols = false
 
 require daslib/network
 
-require rtti
+require daslib/rtti
 
 class Server {
     _server : smart_ptr<NetworkServer>

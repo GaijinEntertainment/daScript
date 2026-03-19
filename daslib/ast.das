@@ -8,7 +8,7 @@ options strict_smart_pointers
 module ast shared public
 
 require ast_core public
-require rtti public
+require daslib/rtti public
 require strings
 
 typedef ExpressionPtr = smart_ptr<Expression>

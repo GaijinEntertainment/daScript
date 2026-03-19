@@ -13,7 +13,7 @@ module remove_call_args shared private
 //! keeping the arguments available during inference.
 
 require daslib/ast
-require rtti
+require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
 

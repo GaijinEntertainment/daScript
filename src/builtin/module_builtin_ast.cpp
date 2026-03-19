@@ -705,9 +705,9 @@ namespace das {
             return apply(static_cast<vector<pair<unsigned int, unsigned int>>*>(vec));
         } else if (tstr == "smart_ptr<rtti::AnnotationDeclaration>") {
             return apply(static_cast<vector<smart_ptr<AnnotationDeclaration>>*>(vec));
-        } else if (tstr == "rtti::AnnotationArgument") {
+        } else if (tstr == "rtti_core::AnnotationArgument") {
             return apply(static_cast<vector<AnnotationArgument>*>(vec));
-        } else if (tstr == "rtti::LineInfo") {
+        } else if (tstr == "rtti_core::LineInfo") {
             return apply(static_cast<vector<LineInfo>*>(vec));
         } else if (tstr == "smart_ptr<ast::MakeStruct>") {
             return apply(static_cast<vector<smart_ptr<MakeStruct>>*>(vec));
@@ -994,7 +994,7 @@ namespace das {
         DAS_PROFILE_SECTION("Module_Ast");
         ModuleLibrary lib(this);
         lib.addBuiltInModule();
-        addBuiltinDependency(lib, Module::require("rtti"));
+        addBuiltinDependency(lib, Module::require("rtti_core"), true);
         registerAnnotations(lib);
         registerAnnotations1(lib);
         registerAnnotations2(lib);

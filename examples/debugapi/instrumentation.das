@@ -35,7 +35,7 @@
 options gen2
 options debugger = true
 
-require rtti
+require daslib/rtti
 require daslib/debugger
 require strings
 require math

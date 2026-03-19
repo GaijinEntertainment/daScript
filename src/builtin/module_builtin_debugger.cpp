@@ -1304,7 +1304,7 @@ namespace debugapi {
             DAS_PROFILE_SECTION("Module_Debugger");
             ModuleLibrary lib(this);
             lib.addBuiltInModule();
-            addBuiltinDependency(lib, Module::require("rtti"));
+            addBuiltinDependency(lib, Module::require("rtti_core"), true);
             // annotations
             addAnnotation(make_smart<PrologueAnnotation>(lib));
             addAnnotation(make_smart<AstDebugAgentAnnotation>(lib));

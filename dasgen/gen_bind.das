@@ -4,7 +4,7 @@ options gen2
 options rtti
 
 require daslib/fio
-require rtti
+require daslib/rtti
 require daslib/ast
 require daslib/debugger
 require daslib/ast_boost

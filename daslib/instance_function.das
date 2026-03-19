@@ -13,7 +13,7 @@ module instance_function shared private
 //! type parameters. Useful for creating concrete exports of generic functions.
 
 require daslib/ast
-require rtti
+require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/defer

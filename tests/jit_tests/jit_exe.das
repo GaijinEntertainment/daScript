@@ -2,7 +2,7 @@
 options gen2
 options no_aot
 require daslib/fio
-require rtti
+require daslib/rtti
 
 require dastest/testing_boost
 

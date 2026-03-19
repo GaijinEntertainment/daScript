@@ -1,7 +1,7 @@
 options gen2
 options no_unused_function_arguments = false
 require dastest/testing_boost public
-require rtti
+require daslib/rtti
 require daslib/ast
 
 // Test typeinfo trait queries on various types

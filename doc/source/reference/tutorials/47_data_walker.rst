@@ -23,7 +23,7 @@ enumerations, bitfields).
     options gen2
     options rtti
 
-    require rtti
+    require daslib/rtti
     require daslib/debugger
     require daslib/strings_boost
 

@@ -61,14 +61,14 @@ def isAstPtrType(_vinfo; what : string) {
 }
 
 def isRttiPtrType(_vinfo; what : string) {
-    return isModulePtrType(_vinfo, "rtti", what)
+    return isModulePtrType(_vinfo, "rtti_core", what)
 }
 
 def isRttiType(vinfo; what : string) {
     if (vinfo.basicType != Type.tHandle) {
         return false
     }
-    if (vinfo.annotation._module.name != "rtti") {
+    if (vinfo.annotation._module.name != "rtti_core") {
         return false
     }
     if (vinfo.annotation.name != what) {

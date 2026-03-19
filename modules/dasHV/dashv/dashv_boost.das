@@ -14,7 +14,7 @@ module dashv_boost shared public
 
 require dashv public
 
-require rtti
+require daslib/rtti
 require daslib/ast_boost
 
 

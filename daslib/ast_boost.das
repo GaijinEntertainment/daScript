@@ -15,7 +15,7 @@ module ast_boost shared public
 //! ``[optimization_macro]``, ``[lint_macro]``, ``[global_lint_macro]``,
 //! and ``[macro_function]``.
 
-require rtti
+require daslib/rtti
 require daslib/ast public
 require strings
 require daslib/strings_boost

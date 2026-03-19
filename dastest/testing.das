@@ -3,7 +3,7 @@ options indenting = 4
 
 module testing shared
 
-require rtti
+require daslib/rtti
 require strings // to compare strings/das_strings
 require daslib/math_bits
 require math

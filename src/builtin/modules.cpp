@@ -12,7 +12,7 @@ static void register_builtin_modules_impl() {
     if (!Module::require("strings")) {
         NEED_MODULE(Module_Strings);
     }
-    if (!Module::require("rtti")) {
+    if (!Module::require("rtti_core")) {
         NEED_MODULE(Module_Rtti);
     }
     if (!Module::require("ast_core")) {

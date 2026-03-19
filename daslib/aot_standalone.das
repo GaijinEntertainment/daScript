@@ -2,7 +2,7 @@ options gen2
 
 module aot_standalone private
 require daslib/fio
-require rtti
+require daslib/rtti
 require strings
 
 require daslib/match

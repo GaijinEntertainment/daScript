@@ -21,7 +21,7 @@ module debug shared
 
 require math
 require strings
-require rtti
+require daslib/rtti
 require daslib/debugger
 require daslib/fio
 require daslib/network
