@@ -3,41 +3,158 @@ options persistent_heap
 
 module gameplay public
 
-require strings
 require math
+
+// ============================================================================
+// Card enum — replaces string-based card representation
+// ============================================================================
+
+// Layout: none=0, then 52 cards ordered by suit (club, diamond, heart, spade)
+// × rank (1/ace, 2..10, jack, queen, king). Arithmetic extraction:
+//   suit  = (int(card) - 1) / 13   → 0=club, 1=diamond, 2=heart, 3=spade
+//   rank  = (int(card) - 1) % 13   → 0=ace, 1=2, ..., 9=10, 10=jack, 11=queen, 12=king
+
+enum Card : int {
+    card_none = 0
+    club_1 = 1
+    club_2
+    club_3
+    club_4
+    club_5
+    club_6
+    club_7
+    club_8
+    club_9
+    club_10
+    club_jack
+    club_queen
+    club_king
+    diamond_1
+    diamond_2
+    diamond_3
+    diamond_4
+    diamond_5
+    diamond_6
+    diamond_7
+    diamond_8
+    diamond_9
+    diamond_10
+    diamond_jack
+    diamond_queen
+    diamond_king
+    heart_1
+    heart_2
+    heart_3
+    heart_4
+    heart_5
+    heart_6
+    heart_7
+    heart_8
+    heart_9
+    heart_10
+    heart_jack
+    heart_queen
+    heart_king
+    spade_1
+    spade_2
+    spade_3
+    spade_4
+    spade_5
+    spade_6
+    spade_7
+    spade_8
+    spade_9
+    spade_10
+    spade_jack
+    spade_queen
+    spade_king
+}
+
+let SUIT_COUNT = 4
+let RANK_COUNT = 13
+
+// Suit/rank extraction via arithmetic
+def card_suit_idx(card : Card) : int {
+    return (int(card) - 1) / RANK_COUNT
+}
+
+def card_rank_idx(card : Card) : int {
+    return (int(card) - 1) % RANK_COUNT
+}
+
+def is_jack(card : Card) : bool {
+    return card == Card.club_jack || card == Card.spade_jack || card == Card.heart_jack || card == Card.diamond_jack
+}
+
+def is_black_jack(card : Card) : bool {
+    return card == Card.club_jack || card == Card.spade_jack
+}
+
+def is_red_jack(card : Card) : bool {
+    return card == Card.heart_jack || card == Card.diamond_jack
+}
+
+// Convert Card enum to dasCards string name (for GPU card lookup).
+// E.g. Card.heart_queen → "heart_queen", Card.card_none → ""
+let SUIT_NAMES = fixed_array("club", "diamond", "heart", "spade")
+let RANK_NAMES = fixed_array("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "jack", "queen", "king")
+
+def card_to_string(card : Card) : string {
+    if (card == Card.card_none) {
+        return ""
+    }
+    let s = card_suit_idx(card)
+    let r = card_rank_idx(card)
+    return "{SUIT_NAMES[s]}_{RANK_NAMES[r]}"
+}
+
+// Make a Card from suit and rank indices
+def make_card(suit_idx, rank_idx : int) : Card {
+    return unsafe(reinterpret<Card>(suit_idx * RANK_COUNT + rank_idx + 1))
+}
+
+// Parse a card name string to Card enum. Returns card_none if invalid.
+def string_to_card(name : string) : Card {
+    for (s in range(SUIT_COUNT)) {
+        for (r in range(RANK_COUNT)) {
+            let card = make_card(s, r)
+            if (card_to_string(card) == name) {
+                return card
+            }
+        }
+    }
+    return Card.card_none
+}
 
 // ============================================================================
 // Board layout — original Sequence board card order
 // ============================================================================
 
-// Card naming: "{suit}_{rank}" where suit is club/diamond/heart/spade,
-// rank is 1 (ace), 2-10, jack, queen, king. Empty string "" = FREE corner.
-// No jacks appear on the board (they are action-only cards).
-
-let FREE = ""
+// card_none = FREE corner. No jacks appear on the board.
+let FREE = Card.card_none
 
 let BOARD_LAYOUT = fixed_array(
-    //  col 0            col 1            col 2            col 3            col 4            col 5            col 6            col 7            col 8            col 9
+    //  col 0                col 1                col 2                col 3                col 4                col 5                col 6                col 7                col 8                col 9
     // Row 0
-    FREE,            "club_1",        "club_king",     "club_queen",    "club_10",       "club_9",        "club_8",        "club_7",        "club_6",        FREE,
+    FREE,                Card.club_1,         Card.club_king,      Card.club_queen,     Card.club_10,        Card.club_9,         Card.club_8,         Card.club_7,         Card.club_6,         FREE,
     // Row 1
-    "diamond_1",     "spade_7",       "spade_8",       "spade_9",       "spade_10",      "spade_queen",   "spade_king",    "spade_1",       "spade_5",       "spade_2",
+    Card.diamond_1,      Card.spade_7,        Card.spade_8,        Card.spade_9,        Card.spade_10,       Card.spade_queen,    Card.spade_king,     Card.spade_1,        Card.spade_5,        Card.spade_2,
     // Row 2
-    "diamond_king",  "spade_6",       "club_10",       "club_9",        "club_8",        "club_7",        "club_6",        "diamond_2",     "club_4",        "spade_3",
+    Card.diamond_king,   Card.spade_6,        Card.club_10,        Card.club_9,         Card.club_8,         Card.club_7,         Card.club_6,         Card.diamond_2,      Card.club_4,         Card.spade_3,
     // Row 3
-    "diamond_queen", "club_5",        "club_queen",    "heart_8",       "heart_7",       "heart_6",       "club_5",        "diamond_3",     "club_3",        "spade_4",
+    Card.diamond_queen,  Card.club_5,         Card.club_queen,     Card.heart_8,        Card.heart_7,        Card.heart_6,        Card.club_5,         Card.diamond_3,      Card.club_3,         Card.spade_4,
     // Row 4
-    "diamond_10",    "spade_4",       "club_king",     "heart_9",       "heart_2",       "heart_5",       "club_4",        "diamond_4",     "club_2",        "spade_5",
+    Card.diamond_10,     Card.spade_4,        Card.club_king,      Card.heart_9,        Card.heart_2,        Card.heart_5,        Card.club_4,         Card.diamond_4,      Card.club_2,         Card.spade_5,
     // Row 5
-    "diamond_9",     "spade_3",       "club_1",        "heart_10",      "heart_3",       "heart_4",       "club_3",        "diamond_5",     "heart_1",       "spade_6",
+    Card.diamond_9,      Card.spade_3,        Card.club_1,         Card.heart_10,       Card.heart_3,        Card.heart_4,        Card.club_3,         Card.diamond_5,      Card.heart_1,        Card.spade_6,
     // Row 6
-    "diamond_8",     "spade_2",       "diamond_1",     "heart_queen",   "heart_king",    "heart_1",       "club_2",        "diamond_6",     "heart_king",    "spade_7",
+    Card.diamond_8,      Card.spade_2,        Card.diamond_1,      Card.heart_queen,    Card.heart_king,     Card.heart_1,        Card.club_2,         Card.diamond_6,      Card.heart_king,     Card.spade_7,
     // Row 7
-    "diamond_7",     "heart_2",       "diamond_king",  "diamond_queen", "diamond_10",    "diamond_9",     "diamond_8",     "diamond_7",     "heart_queen",   "spade_8",
+    Card.diamond_7,      Card.heart_2,        Card.diamond_king,   Card.diamond_queen,  Card.diamond_10,     Card.diamond_9,      Card.diamond_8,      Card.diamond_7,      Card.heart_queen,    Card.spade_8,
     // Row 8
-    "diamond_6",     "heart_3",       "heart_4",       "heart_5",       "heart_6",       "heart_7",       "heart_8",       "heart_9",       "heart_10",      "spade_9",
+    Card.diamond_6,      Card.heart_3,        Card.heart_4,        Card.heart_5,        Card.heart_6,        Card.heart_7,        Card.heart_8,        Card.heart_9,        Card.heart_10,       Card.spade_9,
     // Row 9
-    FREE,            "diamond_5",     "diamond_4",     "diamond_3",     "diamond_2",     "spade_1",       "spade_king",    "spade_queen",   "spade_10",      FREE
+    FREE,                Card.diamond_5,      Card.diamond_4,      Card.diamond_3,      Card.diamond_2,      Card.spade_1,        Card.spade_king,     Card.spade_queen,    Card.spade_10,       FREE
 )
 
 let BOARD_ROWS = 10
@@ -60,46 +177,25 @@ enum ChipColor {
 // Board access
 // ============================================================================
 
-def board_card_name(row, col : int) : string {
+def board_card(row, col : int) : Card {
     if (row < 0 || row >= BOARD_ROWS || col < 0 || col >= BOARD_COLS) {
-        return ""
+        return Card.card_none
     }
     return BOARD_LAYOUT[row * BOARD_COLS + col]
 }
 
 def is_free_space(row, col : int) : bool {
-    return board_card_name(row, col) == FREE
+    return board_card(row, col) == FREE
 }
 
 def is_corner(row, col : int) : bool {
     return (row == 0 || row == BOARD_ROWS - 1) && (col == 0 || col == BOARD_COLS - 1)
 }
 
-// Check if a card name is a jack
-def is_jack(card_name : string) : bool {
-    return card_name == "club_jack" || card_name == "spade_jack" || card_name == "heart_jack" || card_name == "diamond_jack"
-}
-
-// Black jacks (spade, club) remove opponent chips
-def is_black_jack(card_name : string) : bool {
-    return card_name == "club_jack" || card_name == "spade_jack"
-}
-
-// Red jacks (heart, diamond) are wild — place anywhere open
-def is_red_jack(card_name : string) : bool {
-    return card_name == "heart_jack" || card_name == "diamond_jack"
-}
-
-// Validate card name format: {suit}_{rank} or special names
-def is_valid_card_name(name : string) : bool {
-    return starts_with(name, "club_") || starts_with(name, "diamond_") || starts_with(name, "heart_") || starts_with(name, "spade_")
-}
-
 // ============================================================================
-// Chip helpers (color utilities — no game state needed)
+// Chip helpers
 // ============================================================================
 
-// Cycle through chip colors for debug placement
 def next_chip_color(color : ChipColor) : ChipColor {
     if (color == ChipColor.none) {
         return ChipColor.blue
@@ -113,7 +209,6 @@ def next_chip_color(color : ChipColor) : ChipColor {
     return ChipColor.none
 }
 
-// Get display color for a chip
 def chip_color_to_float4(color : ChipColor) : float4 {
     if (color == ChipColor.blue) {
         return float4(0.2, 0.4, 0.9, 0.9)
@@ -128,79 +223,26 @@ def chip_color_to_float4(color : ChipColor) : float4 {
 }
 
 // ============================================================================
-// Standard deck (two 52-card decks = 104 cards for Sequence)
+// Deck building
 // ============================================================================
 
-let SUITS = fixed_array("club", "diamond", "heart", "spade")
-let RANKS = fixed_array("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "jack", "queen", "king")
-let SUIT_COUNT = 4
-let RANK_COUNT = 13
-
-def card_suit(card_name : string) : string {
-    let idx = find(card_name, "_")
-    if (idx < 0) {
-        return ""
-    }
-    return slice(card_name, 0, idx)
-}
-
-def card_rank(card_name : string) : string {
-    let idx = find(card_name, "_")
-    if (idx < 0) {
-        return ""
-    }
-    return slice(card_name, idx + 1)
-}
-
-// Rank order for sorting within a suit (ace=0, 2=1, ..., king=12)
-def rank_order(rank : string) : int {
-    for (i in range(RANK_COUNT)) {
-        if (RANKS[i] == rank) {
-            return i
-        }
-    }
-    return -1
-}
-
-// Suit order for sorting (club=0, diamond=1, heart=2, spade=3)
-def suit_order(suit : string) : int {
-    for (i in range(SUIT_COUNT)) {
-        if (SUITS[i] == suit) {
-            return i
-        }
-    }
-    return -1
-}
-
-def build_standard_deck() : array<string> {
-    var deck : array<string>
-    for (s in range(SUIT_COUNT)) {
-        for (r in range(RANK_COUNT)) {
-            deck |> push("{SUITS[s]}_{RANKS[r]}")
-        }
-    }
-    return <- deck
-}
-
-def build_double_deck() : array<string> {
-    var deck : array<string>
-    // Two standard decks
+def build_double_deck() : array<Card> {
+    var deck : array<Card>
     for (copy in range(2)) {
         for (s in range(SUIT_COUNT)) {
             for (r in range(RANK_COUNT)) {
-                deck |> push("{SUITS[s]}_{RANKS[r]}")
+                deck |> push(make_card(s, r))
             }
         }
     }
     return <- deck
 }
 
-def shuffle_deck(var deck : array<string>&; seed : int) {
+def shuffle_deck(var deck : array<Card>&; seed : int) {
     var rng_seed = seed
     let n = length(deck)
     var i = n - 1
     while (i > 0) {
-        // Simple LCG random
         rng_seed = rng_seed * 1103515245 + 12345
         let j = abs(rng_seed) % (i + 1)
         let tmp = deck[i]
@@ -223,29 +265,28 @@ enum GamePhase {
     game_over
 }
 
-// A completed sequence of 5 cells
 struct Sequence {
-    cells : int2[5]     // (col, row) for each cell in the sequence
-    color : ChipColor   // which player's sequence
+    cells : int2[5]
+    color : ChipColor
 }
 
 struct GameState {
     num_players : int = 2
     current_player : int = 0
     phase : GamePhase = GamePhase.not_started
-    hands : string[MAX_PLAYERS][MAX_HAND_SIZE]
+    hands : Card[MAX_PLAYERS][MAX_HAND_SIZE]
     hand_sizes : int[MAX_PLAYERS]
-    draw_pile : array<string>
-    discard_pile : array<string>
+    draw_pile : array<Card>
+    discard_pile : array<Card>
     board_chips : ChipColor[100]
-    sequences : array<Sequence>   // completed sequences found so far
+    sequences : array<Sequence>
     winner : int = -1
 }
 
 struct Move {
-    card_idx : int = -1   // Index in player's hand
-    row : int = -1        // Board row to place/remove chip
-    col : int = -1        // Board col to place/remove chip
+    card_idx : int = -1
+    row : int = -1
+    col : int = -1
 }
 
 def hand_size_for_players(num_players : int) : int {
@@ -254,7 +295,7 @@ def hand_size_for_players(num_players : int) : int {
     } elif (num_players == 3) {
         return 6
     }
-    return 5  // 4 players
+    return 5
 }
 
 def player_chip_color(player_idx : int) : ChipColor {
@@ -269,7 +310,7 @@ def player_chip_color(player_idx : int) : ChipColor {
 }
 
 // ============================================================================
-// Chip state (on GameState)
+// Chip state
 // ============================================================================
 
 def get_chip(game : GameState; row, col : int) : ChipColor {
@@ -302,20 +343,17 @@ def make_game(var game : GameState; num_players : int; seed : int = 42) {
     game.current_player = 0
     game.phase = GamePhase.playing
     game.winner = -1
-    // Clear hands
     for (p in range(MAX_PLAYERS)) {
         game.hand_sizes[p] = 0
         for (c in range(MAX_HAND_SIZE)) {
-            game.hands[p][c] = ""
+            game.hands[p][c] = Card.card_none
         }
     }
-    // Build and shuffle double deck
     game.draw_pile <- build_double_deck()
     shuffle_deck(game.draw_pile, seed)
     game.discard_pile |> clear()
-    // Clear board
     clear_all_chips(game)
-    // Deal hands
+    game.sequences |> clear()
     let hs = hand_size_for_players(game.num_players)
     for (c in range(hs)) {
         for (p in range(game.num_players)) {
@@ -344,29 +382,28 @@ def draw_card_from_pile(var game : GameState; player_idx : int) : bool {
     return true
 }
 
-def remove_card_from_hand(var game : GameState; player_idx, card_idx : int) : string {
+def remove_card_from_hand(var game : GameState; player_idx, card_idx : int) : Card {
     if (player_idx < 0 || player_idx >= game.num_players) {
-        return ""
+        return Card.card_none
     }
     if (card_idx < 0 || card_idx >= game.hand_sizes[player_idx]) {
-        return ""
+        return Card.card_none
     }
     let card = game.hands[player_idx][card_idx]
-    // Shift remaining cards left
     for (i in range(card_idx, game.hand_sizes[player_idx] - 1)) {
         game.hands[player_idx][i] = game.hands[player_idx][i + 1]
     }
     game.hand_sizes[player_idx]--
-    game.hands[player_idx][game.hand_sizes[player_idx]] = ""
+    game.hands[player_idx][game.hand_sizes[player_idx]] = Card.card_none
     return card
 }
 
-def get_hand_card(game : GameState; player_idx, card_idx : int) : string {
+def get_hand_card(game : GameState; player_idx, card_idx : int) : Card {
     if (player_idx < 0 || player_idx >= game.num_players) {
-        return ""
+        return Card.card_none
     }
     if (card_idx < 0 || card_idx >= game.hand_sizes[player_idx]) {
-        return ""
+        return Card.card_none
     }
     return game.hands[player_idx][card_idx]
 }
@@ -382,15 +419,14 @@ def get_hand_size(game : GameState; player_idx : int) : int {
 // Dead card detection
 // ============================================================================
 
-// A card is "dead" if both board spaces for it are already occupied by chips
-def is_dead_card(game : GameState; card_name : string) : bool {
-    if (is_jack(card_name)) {
-        return false  // Jacks are never dead
+def is_dead_card(game : GameState; card : Card) : bool {
+    if (is_jack(card)) {
+        return false
     }
     var occupied = 0
     var total = 0
     for (i in range(BOARD_SIZE)) {
-        if (BOARD_LAYOUT[i] == card_name) {
+        if (BOARD_LAYOUT[i] == card) {
             total++
             if (game.board_chips[i] != ChipColor.none) {
                 occupied++
@@ -400,7 +436,6 @@ def is_dead_card(game : GameState; card_name : string) : bool {
     return total > 0 && occupied == total
 }
 
-// Discard dead cards from hand and redraw
 def discard_dead_cards(var game : GameState; player_idx : int) {
     var changed = true
     while (changed) {
@@ -428,7 +463,6 @@ def legal_moves(game : GameState; player_idx : int) : array<Move> {
     for (c in range(game.hand_sizes[player_idx])) {
         let card = game.hands[player_idx][c]
         if (is_red_jack(card)) {
-            // Wild: place on any open non-corner space
             for (i in range(BOARD_SIZE)) {
                 let row = i / BOARD_COLS
                 let col = i % BOARD_COLS
@@ -437,7 +471,6 @@ def legal_moves(game : GameState; player_idx : int) : array<Move> {
                 }
             }
         } elif (is_black_jack(card)) {
-            // Remove: any opponent chip not in a completed sequence
             for (i in range(BOARD_SIZE)) {
                 let row = i / BOARD_COLS
                 let col = i % BOARD_COLS
@@ -447,7 +480,6 @@ def legal_moves(game : GameState; player_idx : int) : array<Move> {
                 }
             }
         } else {
-            // Normal card: place on matching empty board space
             for (i in range(BOARD_SIZE)) {
                 let row = i / BOARD_COLS
                 let col = i % BOARD_COLS
@@ -481,7 +513,6 @@ def is_legal_move(game : GameState; player_idx : int; m : Move) : bool {
 }
 
 def has_legal_moves(game : GameState; player_idx : int) : bool {
-    // Quick check without building the full array
     for (c in range(game.hand_sizes[player_idx])) {
         let card = game.hands[player_idx][c]
         if (is_red_jack(card)) {
@@ -526,7 +557,6 @@ def apply_move(var game : GameState; player_idx : int; move : Move) : bool {
     let card = game.hands[player_idx][move.card_idx]
     let color = player_chip_color(player_idx)
     if (is_black_jack(card)) {
-        // Remove opponent chip (can't remove from a completed sequence)
         let chip = game.board_chips[move.row * BOARD_COLS + move.col]
         if (chip == ChipColor.none || chip == color) {
             return false
@@ -536,27 +566,21 @@ def apply_move(var game : GameState; player_idx : int; move : Move) : bool {
         }
         game.board_chips[move.row * BOARD_COLS + move.col] = ChipColor.none
     } else {
-        // Place chip (normal or red jack)
         if (game.board_chips[move.row * BOARD_COLS + move.col] != ChipColor.none) {
             return false
         }
         game.board_chips[move.row * BOARD_COLS + move.col] = color
     }
-    // Remove card from hand, discard it
     let removed = remove_card_from_hand(game, player_idx, move.card_idx)
     game.discard_pile |> push(removed)
-    // Draw replacement
     draw_card_from_pile(game, player_idx)
-    // Discard any newly-dead cards
     discard_dead_cards(game, player_idx)
-    // Check for sequences and win
     find_sequences(game)
     let w = check_win(game)
     if (w >= 0) {
         game.winner = w
         game.phase = GamePhase.game_over
     }
-    // Advance turn
     game.current_player = (game.current_player + 1) % game.num_players
     return true
 }
@@ -567,25 +591,21 @@ def apply_move(var game : GameState; player_idx : int; move : Move) : bool {
 
 let SEQUENCE_LENGTH = 5
 
-// Directions: right, down, down-right, down-left
-let DIR_DR = 0  // row+0, col+1 (horizontal)
-let DIR_DC = 1  // row+1, col+0 (vertical)
-let DIR_DD = 2  // row+1, col+1 (diagonal down-right)
-let DIR_DA = 3  // row+1, col-1 (diagonal down-left)
+let DIR_DR = 0
+let DIR_DC = 1
+let DIR_DD = 2
+let DIR_DA = 3
 
 let DIR_ROWS = fixed_array(0, 1, 1, 1)
 let DIR_COLS = fixed_array(1, 0, 1, -1)
 
-// Check if a cell counts as belonging to a player's color
-// FREE corners are wild — they count for everyone
 def cell_matches_color(game : GameState; row, col : int; color : ChipColor) : bool {
     if (is_corner(row, col)) {
-        return true  // FREE corners are wild for all players
+        return true
     }
     return game.board_chips[row * BOARD_COLS + col] == color
 }
 
-// Check if a cell is part of any already-found sequence
 def is_in_sequence(game : GameState; row, col : int) : bool {
     for (seq in game.sequences) {
         for (c in seq.cells) {
@@ -597,9 +617,6 @@ def is_in_sequence(game : GameState; row, col : int) : bool {
     return false
 }
 
-// Find all completed sequences for all players.
-// Scans in 4 directions from every cell.
-// Sequences can share at most one cell with each other.
 def find_sequences(var game : GameState) {
     game.sequences |> clear()
     for (p in range(game.num_players)) {
@@ -607,10 +624,8 @@ def find_sequences(var game : GameState) {
         for (dir in range(4)) {
             let dr = DIR_ROWS[dir]
             let dc = DIR_COLS[dir]
-            // Scan all starting positions for this direction
             for (row in range(BOARD_ROWS)) {
                 for (col in range(BOARD_COLS)) {
-                    // Check if 5 consecutive cells in this direction match
                     let end_row = row + dr * (SEQUENCE_LENGTH - 1)
                     let end_col = col + dc * (SEQUENCE_LENGTH - 1)
                     if (end_row < 0 || end_row >= BOARD_ROWS || end_col < 0 || end_col >= BOARD_COLS) {
@@ -640,7 +655,6 @@ def find_sequences(var game : GameState) {
     }
 }
 
-// Count sequences for a specific player color
 def count_sequences(game : GameState; color : ChipColor) : int {
     var count = 0
     for (seq in game.sequences) {
@@ -651,12 +665,10 @@ def count_sequences(game : GameState; color : ChipColor) : int {
     return count
 }
 
-// How many sequences needed to win based on player count
 def sequences_to_win(num_players : int) : int {
     return num_players == 2 ? 2 : 1
 }
 
-// Check if any player has won. Returns winner player index or -1.
 def check_win(game : GameState) : int {
     let needed = sequences_to_win(game.num_players)
     for (p in range(game.num_players)) {
@@ -668,35 +680,28 @@ def check_win(game : GameState) : int {
 }
 
 // ============================================================================
-// Hand management (set, sort)
+// Hand management
 // ============================================================================
 
-// Replace a player's entire hand with the given cards
-def set_hand(var game : GameState; player_idx : int; cards : array<string>) {
+def set_hand(var game : GameState; player_idx : int; cards : array<Card>) {
     if (player_idx < 0 || player_idx >= MAX_PLAYERS) {
         return
     }
     let n = min(length(cards), MAX_HAND_SIZE)
     for (c in range(MAX_HAND_SIZE)) {
-        game.hands[player_idx][c] = c < n ? cards[c] : ""
+        game.hands[player_idx][c] = c < n ? cards[c] : Card.card_none
     }
     game.hand_sizes[player_idx] = n
 }
 
-// Sort a player's hand by suit then rank
 def sort_hand(var game : GameState; player_idx : int) {
     let n = game.hand_sizes[player_idx]
-    // Simple insertion sort
     for (i in range(1, n)) {
         let card = game.hands[player_idx][i]
-        let s = suit_order(card_suit(card))
-        let r = rank_order(card_rank(card))
+        let key = int(card)  // enum order is already suit-then-rank
         var j = i - 1
         while (j >= 0) {
-            let cj = game.hands[player_idx][j]
-            let sj = suit_order(card_suit(cj))
-            let rj = rank_order(card_rank(cj))
-            if (sj > s || (sj == s && rj > r)) {
+            if (int(game.hands[player_idx][j]) > key) {
                 game.hands[player_idx][j + 1] = game.hands[player_idx][j]
                 j--
             } else {

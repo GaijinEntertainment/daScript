@@ -220,10 +220,10 @@ def human_card_screen_pos(card_idx : int) : float2 {
     sort_hand(game, 0)
     var suit_starts : int[5]
     var num_suits = 0
-    var prev_suit = ""
+    var prev_suit = -1
     for (c in range(get_hand_size(game, 0))) {
         let card = get_hand_card(game, 0, c)
-        let s = card_suit(card)
+        let s = card_suit_idx(card)
         if (s != prev_suit) {
             suit_starts[num_suits] = c
             num_suits++
@@ -276,7 +276,6 @@ def queue_discard_anims(player_idx : int) {
     for (c in range(get_hand_size(game, player_idx))) {
         let card = get_hand_card(game, player_idx, c)
         if (is_dead_card(game, card)) {
-            let gpu_idx = find_card(deck, card)
             var start_pos : float2
             if (player_idx == 0) {
                 start_pos = human_card_screen_pos(c)
@@ -284,7 +283,7 @@ def queue_discard_anims(player_idx : int) {
                 start_pos = bot_card_screen_pos(player_idx)
             }
             var a = Anim(atype = AnimType.card_discard, duration = float(anim_card_duration))
-            a.card_gpu_idx = gpu_idx
+            a.card_gpu_idx = card_gpu_index(card)
             a.start_x = start_pos.x
             a.start_y = start_pos.y
             a.start_scale = board_scale
@@ -313,8 +312,8 @@ def queue_chip_remove(row, col : int; color : ChipColor; dur : float) {
 def queue_animated_move(player_idx : int; m : Move; chip_color : ChipColor;
                         is_black_jack, is_red_jack : bool; target_row, target_col : int) {
     // Card fly animation: card flies from hand to board cell
-    let card_name = get_hand_card(game, player_idx, m.card_idx)
-    let gpu_idx = find_card(deck, card_name)
+    let card = get_hand_card(game, player_idx, m.card_idx)
+    let gpu_idx = card_gpu_index(card)
     var start_pos : float2
     if (player_idx == 0) {
         start_pos = human_card_screen_pos(m.card_idx)
@@ -479,17 +478,37 @@ var hover_col : int = -1
 var mouse_was_pressed : bool = false
 var mouse_clicked : bool = false  // true on the frame mouse was first pressed
 
+// --- Card → GPU index lookup ---
+
+// Maps Card enum value → GPU deck index. Computed once at init.
+var card_gpu_lut : int[53]  // card_none=0, 52 cards
+
+def compute_card_gpu_lut() {
+    card_gpu_lut[0] = -1  // card_none
+    for (s in range(SUIT_COUNT)) {
+        for (r in range(RANK_COUNT)) {
+            let card = make_card(s, r)
+            card_gpu_lut[int(card)] = find_card(deck, card_to_string(card))
+        }
+    }
+}
+
+def card_gpu_index(card : Card) : int {
+    if (card == Card.card_none) {
+        return -1
+    }
+    return card_gpu_lut[int(card)]
+}
+
 // --- Helpers ---
 
 def compute_board_card_indices() {
     for (i in range(BOARD_SIZE)) {
-        let row = i / BOARD_COLS
-        let col = i % BOARD_COLS
-        let name = board_card_name(row, col)
-        if (name == FREE) {
+        let bc = BOARD_LAYOUT[i]
+        if (bc == Card.card_none) {
             board_card_indices[i] = -1
         } else {
-            board_card_indices[i] = find_card(deck, name)
+            board_card_indices[i] = card_gpu_index(bc)
         }
     }
 }
@@ -589,10 +608,10 @@ def draw_hand_by_suit(player_idx : int; anchor_x, anchor_y : float; scale : floa
     // Group cards by suit
     var suit_starts : int[5]
     var num_suits = 0
-    var prev_suit = ""
+    var prev_suit = -1
     for (c in range(get_hand_size(game, player_idx))) {
         let card = get_hand_card(game, player_idx, c)
-        let s = card_suit(card)
+        let s = card_suit_idx(card)
         if (s != prev_suit) {
             suit_starts[num_suits] = c
             num_suits++
@@ -611,7 +630,7 @@ def draw_hand_by_suit(player_idx : int; anchor_x, anchor_y : float; scale : floa
             let rx = grow_right ? float(ci) : -float(ci) - 1.0
             let card_x = anchor_x + rx * step_x + (grow_right ? 0.0 : (step_x - cs_w))
             let card_y = anchor_y + ry * row_step
-            let card_idx = find_card(deck, card)
+            let card_idx = card_gpu_index(card)
             var tint = float4(1.0, 1.0, 1.0, 1.0)
             if (is_human && selected_card >= 0) {
                 if (c == selected_card) {
@@ -769,7 +788,7 @@ def draw_discard_pile(screen_w, screen_h : int) {
             [tint = float4(0.6, 0.6, 0.6, 1.0)])
     }
     let top_card = game.discard_pile[n - 1]
-    let top_idx = find_card(deck, top_card)
+    let top_idx = card_gpu_index(top_card)
     if (top_idx >= 0) {
         let off = n >= 2 ? float(draw_pile_offset) : 0.0
         draw_card(renderer, deck, top_idx, pile_x + off, pile_y - off, scale, screen_w, screen_h)
@@ -803,6 +822,7 @@ def init() {
     chip_renderer = create_chip_renderer()
     deck <- load_gpu_deck()
     back_index = find_card(deck, "back")
+    compute_card_gpu_lut()
     compute_board_card_indices()
     if (game.phase == GamePhase.not_started) {
         make_game(game, 2)
@@ -1067,7 +1087,7 @@ def cmd_debug_hands(input : JsonValue?) : JsonValue? {
     for (p in range(game.num_players)) {
         info += "P{p}: {get_hand_size(game, p)} cards: "
         for (c in range(get_hand_size(game, p))) {
-            info += get_hand_card(game, p, c)
+            info += card_to_string(get_hand_card(game, p, c))
             if (c < get_hand_size(game, p) - 1) {
                 info += ", "
             }
@@ -1121,7 +1141,11 @@ def cmd_set_hand(input : JsonValue?) : JsonValue? {
     if (args.player >= game.num_players) {
         game.num_players = args.player + 1
     }
-    set_hand(game, args.player, args.cards)
+    var card_enums : array<Card>
+    for (name in args.cards) {
+        card_enums |> push(string_to_card(name))
+    }
+    set_hand(game, args.player, card_enums)
     sort_hand(game, args.player)
     selected_card = -1
     return JV("{length(args.cards)} cards set for player {args.player}")
@@ -1139,9 +1163,9 @@ def cmd_force_move(input : JsonValue?) : JsonValue? {
     var args = from_JV(input, type<CmdForceMoveArgs>)
     let p = args.player >= 0 ? args.player : game.current_player
     let m = Move(card_idx = args.card_idx, row = args.row, col = args.col)
-    let card = get_hand_card(game, p, args.card_idx)
+    let card_name = card_to_string(get_hand_card(game, p, args.card_idx))
     if (apply_move(game, p, m)) {
-        return JV("P{p} played {card} at ({args.row},{args.col}), phase={game.phase}, winner={game.winner}")
+        return JV("P{p} played {card_name} at ({args.row},{args.col}), phase={game.phase}, winner={game.winner}")
     }
     return JV("move failed: P{p} card_idx={args.card_idx} at ({args.row},{args.col})")
 }
@@ -1192,10 +1216,10 @@ def cmd_bot_move(input : JsonValue?) : JsonValue? {
     bot_rng_seed++
     let m = bot_greedy_move(game, p, bot_rng_seed)
     if (m.card_idx >= 0) {
-        let card = get_hand_card(game, p, m.card_idx)
+        let card_name = card_to_string(get_hand_card(game, p, m.card_idx))
         if (apply_move(game, p, m)) {
             bot_timer = float(bot_delay)
-            return JV("P{p} played {card} at ({m.row},{m.col}), next=P{game.current_player}")
+            return JV("P{p} played {card_name} at ({m.row},{m.col}), next=P{game.current_player}")
         }
     }
     return JV("P{p} has no legal moves")

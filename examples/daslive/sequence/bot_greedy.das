@@ -6,29 +6,46 @@ module bot_greedy public
 require gameplay
 require math
 
-// Greedy bot: scores each legal move by heuristic evaluation and picks the best.
+// Greedy bot: scores each legal move by configurable weights and picks the best.
 //
-// Placement scoring (normal cards + red jacks):
-//   +10000  complete a sequence (verified by temporary placement + find_sequences)
-//   +500    extends own line to 4 (one away from sequence)
-//   +100    extends own line to 3
-//   +20     extends own line to 2
-//   +400    blocks opponent's 4-in-a-row through this cell
-//   +50     blocks opponent's 3-in-a-row
-//   +3      per adjacent own chip (8-directional)
-//   +0..4.5 center proximity bonus
+// Placement weights:
+//   sequence_complete  — completing a full 5-in-a-row
+//   line_4             — extending own line to 4 (one away)
+//   line_3             — extending own line to 3
+//   line_2             — extending own line to 2
+//   block_4            — blocking opponent's 4-in-a-row
+//   block_3            — blocking opponent's 3-in-a-row
+//   adjacency          — per adjacent own chip (8-directional)
+//   center             — center proximity multiplier
 //
-// Removal scoring (black jacks):
-//   +800    disrupts opponent's 4-in-a-row
-//   +200    disrupts opponent's 3-in-a-row
-//   +40     disrupts opponent's 2-in-a-row
-//   +30     cell useful for own 3+ line after removal
+// Removal weights (black jacks):
+//   disrupt_4          — disrupting opponent's 4-in-a-row
+//   disrupt_3          — disrupting opponent's 3-in-a-row
+//   disrupt_2          — disrupting opponent's 2-in-a-row
+//   useful_after       — cell useful for own 3+ line after removal
 //
 // Ties broken by reservoir sampling (seed-based random).
 // No lookahead — purely greedy, one move at a time.
 
+struct GreedyWeights {
+    sequence_complete : float = 10000.0
+    line_4 : float = 500.0
+    line_3 : float = 100.0
+    line_2 : float = 20.0
+    block_4 : float = 400.0
+    block_3 : float = 50.0
+    adjacency : float = 3.0
+    center : float = 0.5
+    disrupt_4 : float = 800.0
+    disrupt_3 : float = 200.0
+    disrupt_2 : float = 40.0
+    useful_after : float = 30.0
+}
+
+let GREEDY_DEFAULT = GreedyWeights()
+
 // Count consecutive chips of `color` starting from (row,col) in direction (dr,dc),
-// including FREE corners as wild. Returns count (0 if starting cell doesn't match).
+// including FREE corners as wild.
 def private count_run(game : GameState; row, col, dr, dc : int; color : ChipColor) : int {
     var count = 0
     var r = row
@@ -44,18 +61,15 @@ def private count_run(game : GameState; row, col, dr, dc : int; color : ChipColo
     return count
 }
 
-// How many of the 5-in-a-row lines through (row,col) have potential?
-// For each direction, count consecutive own chips + empty + corners extending from (row,col).
-// Returns the longest partial sequence through this cell (in any direction).
+// Longest partial sequence through this cell in any direction.
 def private best_line_through(game : GameState; row, col : int; color : ChipColor) : int {
     var best = 0
     for (dir in range(4)) {
         let dr = DIR_ROWS[dir]
         let dc = DIR_COLS[dir]
-        // Count forward (including this cell) and backward
         let fwd = count_run(game, row, col, dr, dc, color)
         let bwd = count_run(game, row + (-dr), col + (-dc), -dr, -dc, color)
-        let total = fwd + bwd  // fwd includes (row,col), bwd does not
+        let total = fwd + bwd
         if (total > best) {
             best = total
         }
@@ -63,8 +77,7 @@ def private best_line_through(game : GameState; row, col : int; color : ChipColo
     return best
 }
 
-// Count how many of the opponent's partial sequences pass through (row,col)
-// and how long the best one is. Used for blocking evaluation.
+// Best opponent line length through this cell.
 def private opponent_threat_at(game : GameState; row, col : int; player_idx : int) : int {
     var max_threat = 0
     for (p in range(game.num_players)) {
@@ -80,37 +93,35 @@ def private opponent_threat_at(game : GameState; row, col : int; player_idx : in
     return max_threat
 }
 
-// Score a placement move (normal card or red jack placing a chip)
-def private score_placement(game : GameState; row, col : int; player_idx : int) : float {
+def private score_placement(game : GameState; row, col : int; player_idx : int; w : GreedyWeights) : float {
     let color = player_chip_color(player_idx)
     var score = 0.0
-    // Temporarily place chip to evaluate
+    // Temporarily place chip to check sequence completion
     var temp_game := game
     temp_game.board_chips[row * BOARD_COLS + col] = color
-    // Check if this completes a sequence
     find_sequences(temp_game)
     let new_seqs = count_sequences(temp_game, color)
     let old_seqs = count_sequences(game, color)
     if (new_seqs > old_seqs) {
-        score += 10000.0  // Completing a sequence is top priority
+        score += w.sequence_complete
     }
-    // Evaluate partial sequence extension
+    // Partial sequence extension
     let line = best_line_through(temp_game, row, col, color)
     if (line >= 4) {
-        score += 500.0  // One away from sequence
+        score += w.line_4
     } elif (line == 3) {
-        score += 100.0
+        score += w.line_3
     } elif (line == 2) {
-        score += 20.0
+        score += w.line_2
     }
-    // Blocking: check if this cell was valuable to opponents
+    // Blocking
     let threat = opponent_threat_at(game, row, col, player_idx)
     if (threat >= 4) {
-        score += 400.0  // Block opponent about to complete
+        score += w.block_4
     } elif (threat == 3) {
-        score += 50.0
+        score += w.block_3
     }
-    // Adjacency: prefer cells near own chips
+    // Adjacency
     for (dr in range(-1, 2)) {
         for (dc in range(-1, 2)) {
             if (dr == 0 && dc == 0) {
@@ -120,46 +131,43 @@ def private score_placement(game : GameState; row, col : int; player_idx : int) 
             let nc = col + dc
             if (nr >= 0 && nr < BOARD_ROWS && nc >= 0 && nc < BOARD_COLS) {
                 if (game.board_chips[nr * BOARD_COLS + nc] == color) {
-                    score += 3.0
+                    score += w.adjacency
                 }
             }
         }
     }
-    // Slight center preference
+    // Center preference
     let center_dist = abs(float(row) - 4.5) + abs(float(col) - 4.5)
-    score += (9.0 - center_dist) * 0.5
+    score += (9.0 - center_dist) * w.center
     return score
 }
 
-// Score a removal move (black jack removing an opponent's chip)
-def private score_removal(game : GameState; row, col : int; player_idx : int) : float {
+def private score_removal(game : GameState; row, col : int; player_idx : int; w : GreedyWeights) : float {
     var score = 0.0
     let victim_color = game.board_chips[row * BOARD_COLS + col]
-    // Prioritize removing from opponent's longest partial sequence
     let threat = best_line_through(game, row, col, victim_color)
     if (threat >= 4) {
-        score += 800.0  // Disrupt near-complete sequence
+        score += w.disrupt_4
     } elif (threat == 3) {
-        score += 200.0
+        score += w.disrupt_3
     } elif (threat == 2) {
-        score += 40.0
+        score += w.disrupt_2
     }
-    // Also consider if this cell would be good for us after removal
     let our_color = player_chip_color(player_idx)
     let our_line = best_line_through(game, row, col, our_color)
     if (our_line >= 3) {
-        score += 30.0  // We could use this spot
+        score += w.useful_after
     }
     return score
 }
 
-def bot_greedy_move(game : GameState; player_idx : int; seed : int) : Move {
+// Main entry point — with explicit weights
+def bot_greedy_move(game : GameState; player_idx : int; seed : int; w : GreedyWeights) : Move {
     var moves <- legal_moves(game, player_idx)
     let n = length(moves)
     if (n == 0) {
         return Move()
     }
-    // Score all moves
     var best_score = -1.0e10
     var best_idx = 0
     var num_tied = 0
@@ -167,18 +175,17 @@ def bot_greedy_move(game : GameState; player_idx : int; seed : int) : Move {
     for (i in range(n)) {
         let m = moves[i]
         let card = get_hand_card(game, player_idx, m.card_idx)
-        var score : float
+        var score = 0.0
         if (is_black_jack(card)) {
-            score = score_removal(game, m.row, m.col, player_idx)
+            score = score_removal(game, m.row, m.col, player_idx, w)
         } else {
-            score = score_placement(game, m.row, m.col, player_idx)
+            score = score_placement(game, m.row, m.col, player_idx, w)
         }
         if (score > best_score) {
             best_score = score
             best_idx = i
             num_tied = 1
         } elif (score == best_score) {
-            // Reservoir sampling for ties
             num_tied++
             rng = rng * 1103515245 + 12345
             if (abs(rng) % num_tied == 0) {
@@ -189,4 +196,9 @@ def bot_greedy_move(game : GameState; player_idx : int; seed : int) : Move {
     let result = moves[best_idx]
     delete moves
     return result
+}
+
+// Convenience overload with default weights
+def bot_greedy_move(game : GameState; player_idx : int; seed : int) : Move {
+    return bot_greedy_move(game, player_idx, seed, GREEDY_DEFAULT)
 }

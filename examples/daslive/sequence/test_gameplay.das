@@ -48,21 +48,22 @@ def test_exactly_96_non_free_cells(t : T?) {
 
 [test]
 def test_each_card_appears_twice(t : T?) {
-    var counts : table<string; int>
+    var counts : table<int; int>
     for (i in range(BOARD_SIZE)) {
         let row = i / BOARD_COLS
         let col = i % BOARD_COLS
-        let name = board_card_name(row, col)
-        if (name != FREE) {
-            if (key_exists(counts, name)) {
-                counts[name] += 1
+        let card = board_card(row, col)
+        if (card != Card.card_none) {
+            let k = int(card)
+            if (key_exists(counts, k)) {
+                counts[k] += 1
             } else {
-                counts[name] = 1
+                counts[k] = 1
             }
         }
     }
     t |> equal(length(counts), 48)
-    for (name, count in keys(counts), values(counts)) {
+    for (k, count in keys(counts), values(counts)) {
         t |> equal(count, 2)
     }
 }
@@ -72,19 +73,19 @@ def test_no_jacks_on_board(t : T?) {
     for (i in range(BOARD_SIZE)) {
         let row = i / BOARD_COLS
         let col = i % BOARD_COLS
-        let name = board_card_name(row, col)
-        t |> success(!is_jack(name), "no jacks on board at ({row},{col})")
+        let card = board_card(row, col)
+        t |> success(!is_jack(card), "no jacks on board at ({row},{col})")
     }
 }
 
 [test]
-def test_all_card_names_valid(t : T?) {
+def test_all_board_cards_valid(t : T?) {
     for (i in range(BOARD_SIZE)) {
         let row = i / BOARD_COLS
         let col = i % BOARD_COLS
-        let name = board_card_name(row, col)
-        if (name != FREE) {
-            t |> success(is_valid_card_name(name), "valid card name at ({row},{col}): {name}")
+        let card = board_card(row, col)
+        if (!is_corner(row, col)) {
+            t |> success(card != Card.card_none, "valid card at ({row},{col})")
         }
     }
 }
@@ -92,35 +93,52 @@ def test_all_card_names_valid(t : T?) {
 [test]
 def test_jack_helpers(t : T?) {
     t |> run("black jacks are removers") <| @(t : T?) {
-        t |> success(is_black_jack("spade_jack"))
-        t |> success(is_black_jack("club_jack"))
-        t |> success(!is_black_jack("heart_jack"))
-        t |> success(!is_black_jack("diamond_jack"))
+        t |> success(is_black_jack(Card.spade_jack))
+        t |> success(is_black_jack(Card.club_jack))
+        t |> success(!is_black_jack(Card.heart_jack))
+        t |> success(!is_black_jack(Card.diamond_jack))
     }
     t |> run("red jacks are wild") <| @(t : T?) {
-        t |> success(is_red_jack("heart_jack"))
-        t |> success(is_red_jack("diamond_jack"))
-        t |> success(!is_red_jack("spade_jack"))
-        t |> success(!is_red_jack("club_jack"))
+        t |> success(is_red_jack(Card.heart_jack))
+        t |> success(is_red_jack(Card.diamond_jack))
+        t |> success(!is_red_jack(Card.spade_jack))
+        t |> success(!is_red_jack(Card.club_jack))
     }
     t |> run("is_jack covers all four") <| @(t : T?) {
-        t |> success(is_jack("spade_jack"))
-        t |> success(is_jack("club_jack"))
-        t |> success(is_jack("heart_jack"))
-        t |> success(is_jack("diamond_jack"))
-        t |> success(!is_jack("spade_1"))
-        t |> success(!is_jack("heart_queen"))
+        t |> success(is_jack(Card.spade_jack))
+        t |> success(is_jack(Card.club_jack))
+        t |> success(is_jack(Card.heart_jack))
+        t |> success(is_jack(Card.diamond_jack))
+        t |> success(!is_jack(Card.spade_1))
+        t |> success(!is_jack(Card.heart_queen))
     }
 }
 
 [test]
-def test_board_card_name_bounds(t : T?) {
-    t |> equal(board_card_name(-1, 0), "")
-    t |> equal(board_card_name(0, -1), "")
-    t |> equal(board_card_name(10, 0), "")
-    t |> equal(board_card_name(0, 10), "")
-    // Valid cell should return non-empty (row 0, col 1 = club_1)
-    t |> equal(board_card_name(0, 1), "club_1")
+def test_board_card_bounds(t : T?) {
+    t |> equal(int(board_card(-1, 0)), int(Card.card_none))
+    t |> equal(int(board_card(0, -1)), int(Card.card_none))
+    t |> equal(int(board_card(10, 0)), int(Card.card_none))
+    t |> equal(int(board_card(0, 10)), int(Card.card_none))
+    t |> equal(int(board_card(0, 1)), int(Card.club_1))
+}
+
+[test]
+def test_card_to_string(t : T?) {
+    t |> equal(card_to_string(Card.heart_queen), "heart_queen")
+    t |> equal(card_to_string(Card.club_10), "club_10")
+    t |> equal(card_to_string(Card.spade_1), "spade_1")
+    t |> equal(card_to_string(Card.card_none), "")
+}
+
+[test]
+def test_card_suit_rank_idx(t : T?) {
+    t |> equal(card_suit_idx(Card.heart_queen), 2)  // heart = 2
+    t |> equal(card_rank_idx(Card.heart_queen), 11) // queen = 11
+    t |> equal(card_suit_idx(Card.club_1), 0)       // club = 0
+    t |> equal(card_rank_idx(Card.club_1), 0)       // ace = 0
+    t |> equal(card_suit_idx(Card.spade_king), 3)   // spade = 3
+    t |> equal(card_rank_idx(Card.spade_king), 12)  // king = 12
 }
 
 // ============================================================================
@@ -181,17 +199,17 @@ def test_chip_colors_have_alpha(t : T?) {
 def test_double_deck(t : T?) {
     var deck <- build_double_deck()
     t |> equal(length(deck), 104)
-    // Count each card — should appear exactly twice
-    var counts : table<string; int>
+    var counts : table<int; int>
     for (card in deck) {
-        if (key_exists(counts, card)) {
-            counts[card] += 1
+        let k = int(card)
+        if (key_exists(counts, k)) {
+            counts[k] += 1
         } else {
-            counts[card] = 1
+            counts[k] = 1
         }
     }
     t |> equal(length(counts), 52)
-    for (name, count in keys(counts), values(counts)) {
+    for (k, count in keys(counts), values(counts)) {
         t |> equal(count, 2)
     }
 }
@@ -221,10 +239,8 @@ def test_make_game_hand_sizes(t : T?) {
 [test]
 def test_make_game_draw_pile(t : T?) {
     make_game(game, 2)
-    // 104 cards - 14 dealt (2 players x 7) = 90 remaining
     t |> equal(length(game.draw_pile), 90)
     make_game(game, 4)
-    // 104 cards - 20 dealt (4 players x 5) = 84 remaining
     t |> equal(length(game.draw_pile), 84)
 }
 
@@ -243,7 +259,7 @@ def test_all_dealt_cards_valid(t : T?) {
     for (p in range(4)) {
         for (c in range(get_hand_size(game, p))) {
             let card = get_hand_card(game, p, c)
-            t |> success(is_valid_card_name(card), "player {p} card {c}: {card}")
+            t |> success(card != Card.card_none, "player {p} card {c} should be valid")
         }
     }
 }
@@ -254,20 +270,20 @@ def test_shuffle_is_deterministic(t : T?) {
     let card_a = get_hand_card(game, 0, 0)
     make_game(game, 2, 123)
     let card_b = get_hand_card(game, 0, 0)
-    t |> equal(card_a, card_b)
+    t |> equal(int(card_a), int(card_b))
 }
 
 [test]
 def test_shuffle_different_seeds(t : T?) {
     make_game(game, 2, 1)
-    var hand1 : array<string>
+    var hand1 : array<int>
     for (c in range(get_hand_size(game, 0))) {
-        hand1 |> push(get_hand_card(game, 0, c))
+        hand1 |> push(int(get_hand_card(game, 0, c)))
     }
     make_game(game, 2, 999)
     var different = false
     for (c in range(get_hand_size(game, 0))) {
-        if (get_hand_card(game, 0, c) != hand1[c]) {
+        if (int(get_hand_card(game, 0, c)) != hand1[c]) {
             different = true
         }
     }
@@ -276,32 +292,25 @@ def test_shuffle_different_seeds(t : T?) {
 
 [test]
 def test_card_suit_rank(t : T?) {
-    t |> equal(card_suit("heart_queen"), "heart")
-    t |> equal(card_rank("heart_queen"), "queen")
-    t |> equal(card_suit("club_10"), "club")
-    t |> equal(card_rank("club_10"), "10")
-    t |> equal(card_suit("spade_1"), "spade")
-    t |> equal(card_rank("spade_1"), "1")
+    t |> equal(card_suit_idx(Card.heart_queen), 2)  // heart
+    t |> equal(card_rank_idx(Card.heart_queen), 11) // queen
+    t |> equal(card_suit_idx(Card.club_10), 0)      // club
+    t |> equal(card_rank_idx(Card.club_10), 9)      // 10 (0-indexed: ace=0..10=9)
+    t |> equal(card_suit_idx(Card.spade_1), 3)      // spade
+    t |> equal(card_rank_idx(Card.spade_1), 0)      // ace
 }
 
 [test]
 def test_sort_hand(t : T?) {
     make_game(game, 2, 42)
     sort_hand(game, 0)
-    // Verify sorted: suits in order, ranks in order within suit
-    var prev_suit = -1
-    var prev_rank = -1
+    // Sorted by enum value = suit-then-rank order
+    var prev_val = 0
     for (c in range(get_hand_size(game, 0))) {
         let card = get_hand_card(game, 0, c)
-        let s = suit_order(card_suit(card))
-        let r = rank_order(card_rank(card))
-        if (s == prev_suit) {
-            t |> success(r >= prev_rank, "rank should increase within suit: {card}")
-        } else {
-            t |> success(s > prev_suit, "suit should increase: {card}")
-        }
-        prev_suit = s
-        prev_rank = r
+        let val = int(card)
+        t |> success(val >= prev_val, "hand should be sorted")
+        prev_val = val
     }
 }
 
@@ -310,12 +319,11 @@ def test_legal_moves_normal_card(t : T?) {
     make_game(game, 2, 42)
     let moves <- legal_moves(game, 0)
     t |> success(length(moves) > 0, "player 0 should have legal moves")
-    // Each move should target an empty board cell matching the card
     for (m in moves) {
         let card = get_hand_card(game, 0, m.card_idx)
         if (!is_jack(card)) {
-            let board_name = board_card_name(m.row, m.col)
-            t |> equal(card, board_name)
+            let bc = board_card(m.row, m.col)
+            t |> equal(int(card), int(bc))
             t |> equal(int(get_chip(game, m.row, m.col)), int(ChipColor.none))
         }
     }
@@ -329,11 +337,9 @@ def test_apply_move(t : T?) {
     let m = moves[0]
     let card = get_hand_card(game, 0, m.card_idx)
     t |> success(apply_move(game, 0, m), "move should succeed")
-    // Chip placed (or removed for black jack)
     if (!is_black_jack(card)) {
         t |> equal(int(get_chip(game, m.row, m.col)), int(ChipColor.blue))
     }
-    // Turn advanced
     t |> equal(game.current_player, 1)
 }
 
@@ -342,7 +348,6 @@ def test_apply_move_wrong_player(t : T?) {
     make_game(game, 2, 42)
     let moves <- legal_moves(game, 0)
     t |> success(length(moves) > 0)
-    // Player 1 can't move on player 0's turn
     t |> success(!apply_move(game, 1, moves[0]), "wrong player should fail")
 }
 
@@ -350,18 +355,18 @@ def test_apply_move_wrong_player(t : T?) {
 def test_dead_card_detection(t : T?) {
     clear_all_chips(game)
     // club_1 appears at (0,1) and (5,2) on the board
-    t |> success(!is_dead_card(game, "club_1"), "not dead when empty")
+    t |> success(!is_dead_card(game, Card.club_1), "not dead when empty")
     place_chip(game, 0, 1, ChipColor.blue)
-    t |> success(!is_dead_card(game, "club_1"), "not dead when one occupied")
+    t |> success(!is_dead_card(game, Card.club_1), "not dead when one occupied")
     place_chip(game, 5, 2, ChipColor.green)
-    t |> success(is_dead_card(game, "club_1"), "dead when both occupied")
+    t |> success(is_dead_card(game, Card.club_1), "dead when both occupied")
     clear_all_chips(game)
 }
 
 [test]
 def test_jacks_never_dead(t : T?) {
-    t |> success(!is_dead_card(game, "club_jack"))
-    t |> success(!is_dead_card(game, "heart_jack"))
+    t |> success(!is_dead_card(game, Card.club_jack))
+    t |> success(!is_dead_card(game, Card.heart_jack))
 }
 
 [test]
@@ -374,7 +379,6 @@ def test_player_chip_colors(t : T?) {
 
 [test]
 def test_full_game_simulation(t : T?) {
-    // Play a full game with random legal moves to ensure no crashes
     make_game(game, 2, 77)
     var turns = 0
     while (game.phase == GamePhase.playing && turns < 200) {
@@ -396,20 +400,18 @@ def test_is_legal_move(t : T?) {
     make_game(game, 2, 42)
     let moves <- legal_moves(game, 0)
     t |> success(length(moves) > 0)
-    // Every move from legal_moves should be legal
     for (m in moves) {
         t |> success(is_legal_move(game, 0, m), "legal_moves entry should be legal")
     }
-    // Wrong card for a cell should be illegal
     t |> run("normal card on wrong cell") <| @(t : T?) {
         make_game(game, 2, 42)
         let card = get_hand_card(game, 0, 0)
         if (!is_jack(card)) {
-            // Find a cell that does NOT match this card
             for (i in range(BOARD_SIZE)) {
                 let row = i / BOARD_COLS
                 let col = i % BOARD_COLS
-                if (board_card_name(row, col) != card && board_card_name(row, col) != FREE) {
+                let bc = board_card(row, col)
+                if (bc != card && bc != Card.card_none) {
                     t |> success(!is_legal_move(game, 0, Move(card_idx = 0, row = row, col = col)), "wrong cell should be illegal")
                     break
                 }
@@ -441,14 +443,12 @@ def test_is_legal_move(t : T?) {
 // Phase 4: Sequence detection and win condition tests
 // ============================================================================
 
-// Helper: place a horizontal sequence of chips starting at (row, col)
 def place_horizontal(var game : GameState; row, start_col : int; color : ChipColor) {
     for (c in range(5)) {
         place_chip(game, row, start_col + c, color)
     }
 }
 
-// Helper: place a vertical sequence of chips starting at (row, col)
 def place_vertical(var game : GameState; start_row, col : int; color : ChipColor) {
     for (r in range(5)) {
         place_chip(game, start_row + r, col, color)
@@ -459,7 +459,6 @@ def place_vertical(var game : GameState; start_row, col : int; color : ChipColor
 def test_horizontal_sequence(t : T?) {
     make_game(game, 2)
     clear_all_chips(game)
-    // Place 5 blue chips in row 1, cols 1-5 (no corners)
     place_horizontal(game, 1, 1, ChipColor.blue)
     find_sequences(game)
     let n = count_sequences(game, ChipColor.blue)
@@ -471,7 +470,6 @@ def test_horizontal_sequence(t : T?) {
 def test_vertical_sequence(t : T?) {
     make_game(game, 2)
     clear_all_chips(game)
-    // Place 5 blue chips in col 1, rows 1-5
     place_vertical(game, 1, 1, ChipColor.blue)
     find_sequences(game)
     let n = count_sequences(game, ChipColor.blue)
@@ -483,7 +481,6 @@ def test_vertical_sequence(t : T?) {
 def test_diagonal_sequence(t : T?) {
     make_game(game, 2)
     clear_all_chips(game)
-    // Place 5 blue chips diagonally: (1,1), (2,2), (3,3), (4,4), (5,5)
     for (i in range(5)) {
         place_chip(game, 1 + i, 1 + i, ChipColor.blue)
     }
@@ -497,7 +494,6 @@ def test_diagonal_sequence(t : T?) {
 def test_anti_diagonal_sequence(t : T?) {
     make_game(game, 2)
     clear_all_chips(game)
-    // Place 5 blue chips anti-diagonally: (1,5), (2,4), (3,3), (4,2), (5,1)
     for (i in range(5)) {
         place_chip(game, 1 + i, 5 - i, ChipColor.blue)
     }
@@ -511,15 +507,12 @@ def test_anti_diagonal_sequence(t : T?) {
 def test_free_corner_in_sequence(t : T?) {
     make_game(game, 2)
     clear_all_chips(game)
-    // Place 4 blue chips in row 0, cols 1-4 (col 0 is FREE corner)
-    // The corner should act as wild, completing the sequence
     for (c in range(1, 5)) {
         place_chip(game, 0, c, ChipColor.blue)
     }
     find_sequences(game)
     let n = count_sequences(game, ChipColor.blue)
     t |> success(n >= 1, "FREE corner should complete horizontal sequence, found {n}")
-    // Also check that green can use the same corner
     clear_all_chips(game)
     for (c in range(1, 5)) {
         place_chip(game, 0, c, ChipColor.green)
@@ -534,7 +527,6 @@ def test_free_corner_in_sequence(t : T?) {
 def test_no_sequence_with_4(t : T?) {
     make_game(game, 2)
     clear_all_chips(game)
-    // Only 4 chips in a row is NOT a sequence
     for (c in range(4)) {
         place_chip(game, 3, 1 + c, ChipColor.blue)
     }
@@ -547,14 +539,11 @@ def test_no_sequence_with_4(t : T?) {
 def test_overlapping_sequences_share_one_cell(t : T?) {
     make_game(game, 2)
     clear_all_chips(game)
-    // Two horizontal sequences sharing one cell:
-    // Row 3, cols 1-5 and cols 5-9
     for (c in range(1, 10)) {
         place_chip(game, 3, c, ChipColor.blue)
     }
     find_sequences(game)
     let n = count_sequences(game, ChipColor.blue)
-    // 9 chips in a row should form at least 2 sequences (sharing col 5)
     t |> success(n >= 2, "9 in a row should form 2+ sequences, found {n}")
     clear_all_chips(game)
 }
@@ -564,14 +553,12 @@ def test_win_condition_2_players(t : T?) {
     make_game(game, 2)
     clear_all_chips(game)
     t |> equal(sequences_to_win(2), 2)
-    // One sequence is not enough
     place_horizontal(game, 1, 1, ChipColor.blue)
     find_sequences(game)
     t |> equal(check_win(game), -1)
-    // Two sequences should win
     place_horizontal(game, 3, 1, ChipColor.blue)
     find_sequences(game)
-    t |> equal(check_win(game), 0)  // player 0 = blue
+    t |> equal(check_win(game), 0)
     clear_all_chips(game)
 }
 
@@ -580,10 +567,9 @@ def test_win_condition_3_players(t : T?) {
     make_game(game, 3)
     clear_all_chips(game)
     t |> equal(sequences_to_win(3), 1)
-    // One sequence should win for 3+ players
     place_horizontal(game, 1, 1, ChipColor.green)
     find_sequences(game)
-    t |> equal(check_win(game), 1)  // player 1 = green
+    t |> equal(check_win(game), 1)
     clear_all_chips(game)
 }
 
@@ -591,11 +577,9 @@ def test_win_condition_3_players(t : T?) {
 def test_black_jack_cant_remove_from_sequence(t : T?) {
     make_game(game, 2, 42)
     clear_all_chips(game)
-    // Place a completed sequence for green (player 1)
     place_horizontal(game, 1, 1, ChipColor.green)
     find_sequences(game)
     t |> success(count_sequences(game, ChipColor.green) >= 1)
-    // Verify that blue (player 0) can't remove any chip from that sequence
     for (c in range(1, 6)) {
         t |> success(!is_in_sequence(game, 1, c) || !is_legal_move(game, 0, Move(card_idx = 0, row = 1, col = c)),
             "should not be able to remove from completed sequence at col {c}")
@@ -605,24 +589,20 @@ def test_black_jack_cant_remove_from_sequence(t : T?) {
 
 [test]
 def test_apply_move_triggers_win(t : T?) {
-    // Set up a game where placing one more chip completes a winning condition
-    make_game(game, 3, 42)  // 3 players: 1 sequence to win
+    make_game(game, 3, 42)
     clear_all_chips(game)
-    // Place 4 blue chips, leaving room for a 5th
     for (c in range(4)) {
         place_chip(game, 2, 1 + c, ChipColor.blue)
     }
-    // Give player 0 the card that matches board position (2, 5)
-    let target_card = board_card_name(2, 5)
-    var cards : array<string>
+    let target_card = board_card(2, 5)
+    var cards : array<Card>
     cards |> push(target_card)
     for (i in range(1, 6)) {
-        cards |> push("club_1")  // filler
+        cards |> push(Card.club_1)
     }
     set_hand(game, 0, cards)
     game.current_player = 0
     game.phase = GamePhase.playing
-    // Play the card
     let m = Move(card_idx = 0, row = 2, col = 5)
     let ok = apply_move(game, 0, m)
     t |> success(ok, "move should succeed")
