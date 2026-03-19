@@ -143,18 +143,17 @@ def do_live_launch(file, project, port : string) : string {
     }
     let launcher = "{root}/_mcp_live_launch"
     if (is_windows) {
-        let bat = replace("{launcher}.bat", "/", "\\")
-        fopen(bat, "wt") <| $(f) {
+        let ps1 = replace("{launcher}.ps1", "/", "\\")
+        fopen(ps1, "wt") <| $(f) {
             if (f != null) {
-                fprint(f, "@cd /d \"{launch_dir}\" && start \"daslang-live\" \"{launch_exe_path}\" {script_args}\n")
+                fprint(f, "Start-Process -FilePath \"{launch_exe_path}\" -ArgumentList '{script_args}' -WorkingDirectory \"{launch_dir}\"\n")
             }
         }
-        // Run .bat via system() with < NUL to detach stdin from MCP pipe
         var exit_code = 0
         unsafe {
-            exit_code = system("{bat} < NUL > NUL 2>&1")
+            exit_code = system("powershell -NoProfile -ExecutionPolicy Bypass -File \"{ps1}\"")
         }
-        remove(bat)
+        remove(ps1)
         if (exit_code != 0) {
             return make_tool_result("Failed to launch daslang-live (exit {exit_code})", true)
         }
