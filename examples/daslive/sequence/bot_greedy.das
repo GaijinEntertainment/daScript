@@ -32,14 +32,14 @@ require math
 
 struct GreedyWeights {
     sequence_complete : float = 10000.0
-    line_4 : float = 500.0
-    line_3 : float = 100.0
+    line_4 : float = 300.0
+    line_3 : float = 50.0
     line_2 : float = 20.0
-    gap_4 : float = 0.0
-    gap_3 : float = 0.0
-    block_4 : float = 400.0
-    block_3 : float = 50.0
-    block_gap_4 : float = 0.0
+    gap_4 : float = 400.0
+    gap_3 : float = 100.0
+    block_4 : float = 900.0
+    block_3 : float = 150.0
+    block_gap_4 : float = 300.0
     adjacency : float = 3.0
     center : float = 0.5
     disrupt_4 : float = 800.0
