@@ -1,5 +1,5 @@
 options gen2
-require network
+require daslib/network
 require daslib/fio
 require strings
 

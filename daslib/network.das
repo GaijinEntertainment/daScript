@@ -2,7 +2,7 @@ options gen2
 options indenting = 4
 options remove_unused_symbols = false
 
-require network
+require daslib/network
 
 require rtti
 

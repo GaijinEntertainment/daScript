@@ -24,7 +24,7 @@ require strings
 require rtti
 require daslib/debugger
 require daslib/fio
-require network
+require daslib/network
 require uriparser
 
 require daslib/json

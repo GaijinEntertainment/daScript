@@ -189,7 +189,7 @@ def document_module_random(root : string) {
 }
 
 def document_module_network(root : string) {
-    var mod = get_module("network")
+    var mod = get_module("network_core")
     var groups <- array<DocGroup>(
         group_by_regex("Low level NetworkServer IO", mod, %regex~(make_server|server_init|server_is_open|server_is_connected|server_tick|server_send|server_restore)$%%)
     )

@@ -175,7 +175,7 @@ reg("network",
     """The NETWORK module implements networking facilities including HTTP client/server
 and low-level socket operations. It provides ``Server`` and ``Client`` classes
 with event-driven callbacks for handling connections, requests, and responses.""",
-    "require network",
+    "require daslib/network",
 )
 
 reg("uriparser",

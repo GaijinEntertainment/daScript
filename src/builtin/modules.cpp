@@ -24,7 +24,7 @@ static void register_builtin_modules_impl() {
     if (!Module::require("debugapi")) {
         NEED_MODULE(Module_Debugger);
     }
-    if (!Module::require("network")) {
+    if (!Module::require("network_core")) {
         NEED_MODULE(Module_Network);
     }
     if (!Module::require("uriparser")) {
