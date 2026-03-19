@@ -4,7 +4,7 @@ options no_coverage
 
 require daslib/coverage
 require daslib/ast_boost
-require debugapi
+require daslib/debugger
 require daslib/fio
 require strings
 

@@ -411,15 +411,12 @@ SET(BUILTIN_SRC
 ../src/builtin/rtti.das
 ../src/builtin/network.das.inc
 ../src/builtin/network.das
-../src/builtin/debugger.das.inc
-../src/builtin/debugger.das
 )
 list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
 CMAKE_TEXT_XXD(libDaScript ../src/builtin/builtin.das)
 CMAKE_TEXT_XXD(libDaScript ../src/builtin/rtti.das)
 CMAKE_TEXT_XXD(libDaScript ../src/builtin/network.das)
-CMAKE_TEXT_XXD(libDaScript ../src/builtin/debugger.das)
 
 SET(MISC_SRC
 ../include/daScript/misc/enums.h

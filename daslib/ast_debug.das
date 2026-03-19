@@ -12,7 +12,7 @@ module ast_debug shared private
 //! debug agent for live inspection of compilation state in
 //! the DAP variable view.
 
-require debugapi
+require daslib/debugger
 require daslib/ast_boost
 require daslib/strings
 

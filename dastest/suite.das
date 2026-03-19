@@ -6,7 +6,7 @@ module suite shared
 
 require daslib/ast
 require strings
-require debugapi
+require daslib/debugger
 require daslib/fio
 require daslib/strings_boost
 require daslib/json_boost

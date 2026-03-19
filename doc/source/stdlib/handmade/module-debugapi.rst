@@ -9,4 +9,4 @@ All functions and symbols are in "debugapi" module, use require to get access to
 
 .. code-block:: das
 
-    require debugapi
+    require daslib/debugger

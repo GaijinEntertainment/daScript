@@ -11,7 +11,7 @@ namespace das
     // Note: this is similar to NEED_ALL_DEFAULT_MODULES
     // but more safe, since it allows such modules to be
     // already registered.
-    void register_builtin_modules();
+    DAS_API void register_builtin_modules();
 
 };
 

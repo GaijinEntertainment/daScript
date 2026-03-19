@@ -5,7 +5,7 @@ options rtti
 require daslib/fio
 require strings
 require uriparser
-require debugapi
+require daslib/debugger
 require daslib/ast
 require daslib/json_boost
 require daslib/jobque_boost

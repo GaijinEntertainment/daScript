@@ -6,7 +6,7 @@ options no_aot = true
 
 module llvm_debug shared private
 
-require debugapi
+require daslib/debugger
 require llvm
 require llvm/daslib/llvm_boost
 

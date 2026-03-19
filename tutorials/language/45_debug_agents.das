@@ -32,7 +32,7 @@
 
 options gen2
 
-require debugapi
+require daslib/debugger
 require rtti
 
 // ============================================================

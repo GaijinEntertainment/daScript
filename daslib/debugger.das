@@ -4,7 +4,9 @@ options remove_unused_symbols = false
 options no_aot = true
 options strict_smart_pointers = true
 
-require debugapi
+module debugger shared public
+
+require debugapi public
 
 require rtti public
 

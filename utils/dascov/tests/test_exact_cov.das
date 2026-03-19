@@ -7,7 +7,7 @@ require daslib/coverage
 require daslib/strings_boost
 require dastest/testing_boost
 
-require debugapi
+require daslib/debugger
 require daslib/fio
 require rtti
 require strings

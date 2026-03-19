@@ -780,9 +780,6 @@ namespace debugapi {
         }
     };
 
-
-    #include "debugger.das.inc"
-
     StackWalkerPtr makeStackWalker ( const void * pClass, const StructInfo * info, Context * context ) {
         return make_smart<StackWalkerAdapter>((char *)pClass,info,context);
     }
@@ -1566,8 +1563,6 @@ namespace debugapi {
             addExtern<DAS_BIND_FUN(track_insane_pointer)>(*this, lib, "track_insane_pointer",
                 SideEffects::modifyArgumentAndAccessExternal, "track_insane_pointer")
                     ->args({"ptr","context"})->unsafeOperation = true;
-            // add builtin module
-            compileBuiltinModule("debugger.das",debugger_das,sizeof(debugger_das));
             // lets make sure its all aot ready
             verifyAotReady();
         }

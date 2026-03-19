@@ -34,7 +34,7 @@ options debugger = true
 options persistent_heap = true
 
 require rtti
-require debugapi
+require daslib/debugger
 require strings
 
 // ============================================================

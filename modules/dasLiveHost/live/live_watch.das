@@ -15,7 +15,7 @@ module live_watch shared public
 //! The agent reads them via `get_watched_file_count()` / `get_watched_file()`.
 
 require daslib/fio
-require debugapi
+require daslib/debugger
 require live_host
 
 // --- Watched file state ---
