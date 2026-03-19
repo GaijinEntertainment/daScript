@@ -23,7 +23,7 @@ require math
 require strings
 require rtti
 require debugapi
-require fio
+require daslib/fio
 require network
 require uriparser
 

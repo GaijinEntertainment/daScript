@@ -2,7 +2,7 @@ options gen2
 // based on https://zetcode.com/db/sqlitec/
 
 require sqlite/sqlite_boost
-require fio
+require daslib/fio
 
 [export]
 def main {

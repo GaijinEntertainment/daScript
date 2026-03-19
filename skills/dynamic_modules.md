@@ -31,7 +31,7 @@ Every `.das_module` is a daslang script with an `initialize` export:
 
 ```das
 options gen2
-require fio
+require daslib/fio
 
 [export]
 def initialize(project_path : string) {
@@ -87,7 +87,7 @@ def initialize(project_path : string) {
 
 ```das
 options gen2
-require fio
+require daslib/fio
 
 [export]
 def initialize(project_path : string) {
@@ -101,7 +101,7 @@ def initialize(project_path : string) {
 
 ```das
 options gen2
-require fio
+require daslib/fio
 
 [export]
 def initialize(project_path : string) {
@@ -117,7 +117,7 @@ def initialize(project_path : string) {
 
 ```das
 options gen2
-require fio
+require daslib/fio
 
 [export]
 def initialize(project_path : string) {
@@ -132,7 +132,7 @@ def initialize(project_path : string) {
 
 ```das
 options gen2
-require fio
+require daslib/fio
 
 [export]
 def initialize(project_path : string) {
@@ -228,7 +228,7 @@ The `.das_module` registers the module so that projects installing the package c
 
 ```das
 options gen2
-require fio
+require daslib/fio
 
 [export]
 def initialize(project_path : string) {

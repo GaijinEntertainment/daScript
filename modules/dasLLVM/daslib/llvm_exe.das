@@ -25,7 +25,7 @@ require daslib/lpipe
 require debugapi
 require math
 require jit
-require fio
+require daslib/fio
 
 module llvm_exe shared private
 

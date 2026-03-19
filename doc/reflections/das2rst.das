@@ -1,7 +1,7 @@
 options gen2
 options rtti = true
 
-require fio
+require daslib/fio
 require rtti
 require ast
 require math

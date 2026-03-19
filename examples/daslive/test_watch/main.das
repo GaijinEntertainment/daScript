@@ -1,6 +1,6 @@
 options gen2
 
-require fio
+require daslib/fio
 require live/live_watch
 require live_host
 

@@ -7,13 +7,13 @@ All functions and symbols are in "fio" module, use require to get access to it.
 
 .. code-block:: das
 
-    require fio
+    require daslib/fio
 
 Example:
 
 .. code-block:: das
 
-    require fio
+    require daslib/fio
 
         [export]
         def main() {

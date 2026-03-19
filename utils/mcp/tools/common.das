@@ -9,7 +9,7 @@ require ast public
 require rtti public
 require math public
 require strings public
-require fio public
+require daslib/fio public
 
 struct ContentItem {
     @rename = "type" _type : string

@@ -16,7 +16,7 @@ module profiler shared private
 //! See also ``profiler_boost`` for cross-context profiler control.
 
 require debugapi
-require fio
+require daslib/fio
 require strings
 require uriparser
 require ast

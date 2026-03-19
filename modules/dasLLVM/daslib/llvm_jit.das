@@ -24,7 +24,7 @@ require daslib/lpipe
 require debugapi
 require math
 require jit
-require fio
+require daslib/fio
 
 // uncomment to enable debug
 /*

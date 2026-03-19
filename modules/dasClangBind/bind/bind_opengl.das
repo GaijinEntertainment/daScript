@@ -3,7 +3,7 @@ options persistent_heap
 options gc
 
 require cbind/cbind_boost
-require fio
+require daslib/fio
 
 class OpenGLBind : DasGenBind {
     def OpenGLBind(pfn, pfp : string) {

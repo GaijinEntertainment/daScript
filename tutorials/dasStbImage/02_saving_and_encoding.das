@@ -12,7 +12,7 @@
 options gen2
 options indenting = 4
 
-require fio
+require daslib/fio
 require stbimage/stbimage_boost
 
 // ──────────────────────────────────────────────────────────────────────────

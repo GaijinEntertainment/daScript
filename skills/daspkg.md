@@ -94,7 +94,7 @@ Registers the module so projects can `require` it after `daspkg install`:
 
 ```das
 options gen2
-require fio
+require daslib/fio
 
 [export]
 def initialize(project_path : string) {

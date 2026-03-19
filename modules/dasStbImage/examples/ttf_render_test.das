@@ -9,7 +9,7 @@ options no_unused_function_arguments = false
 
 require stbimage/stbimage_ttf
 require stbimage/stbimage_boost
-require fio
+require daslib/fio
 
 def get_script_dir() : string {
     return "{get_das_root()}/modules/dasStbImage/examples"

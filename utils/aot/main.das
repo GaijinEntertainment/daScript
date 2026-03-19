@@ -2,7 +2,7 @@ options gen2
 require daslib/aot_cpp
 require daslib/aot_standalone
 
-require fio
+require daslib/fio
 require daslib/strings_boost
 
 require daslib/rtti

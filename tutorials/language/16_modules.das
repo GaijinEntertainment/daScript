@@ -108,7 +108,7 @@ def main {
     // Built-in modules:
     //   require math              -- math functions
     //   require strings           -- string parsing and formatting
-    //   require fio               -- file I/O
+    //   require daslib/fio               -- file I/O
     //   require rtti              -- runtime type information
     //
     // daslib modules (user-level standard library):

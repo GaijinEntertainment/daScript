@@ -10,7 +10,7 @@ require daslib/json
 require daslib/json_boost public
 require daslib/jobque_boost
 require strings
-require fio
+require daslib/fio
 
 require tools/compile_check public
 require tools/list_functions public
