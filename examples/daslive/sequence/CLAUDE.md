@@ -96,4 +96,11 @@ bin/Release/daslang.exe dastest/dastest.das -- --test examples/daslive/sequence/
   - Note: MCP `compile_check` and `run_test` don't process `.das_module` files — use `daslang.exe`/`daslang-live.exe` for full compilation, MCP for gameplay-only tests
   - Note: GPU resources (deck, renderer) don't survive live reload — always recreate in init()
   - Fixed: `live_host_clear_live_vars()` added to dasLiveHost for full reload @live reset
-- **Phase 2**: NOT STARTED — Chips + hover + click
+- **Phase 2**: COMPLETE — Chips + hover + click
+  - `gameplay.das`: `board_chips` array, `get_chip`, `place_chip`, `clear_all_chips`, `next_chip_color`, `chip_color_to_float4`
+  - `main.das`: `screen_to_cell` hit-testing, `handle_mouse` hover+click, chip tinting via `draw_card` tint, `hover_tint` @live var
+  - `main.das`: `[live_command]` endpoints: `cmd_place_chip(row, col, color)`, `cmd_clear_board`
+  - `test_gameplay.das`: 21 tests (13 Phase 1 + 8 Phase 2) — chip placement, bounds, color cycle, alpha values
+  - Note: chips rendered as card tint overlay (no separate geometry), click cycles through blue→green→red→yellow→none
+  - Note: `require daslib/json_boost` needed for `from_JV` in live commands, `require glfw/glfw_boost` for mouse input
+- **Phase 3**: NOT STARTED — Game state + turn structure

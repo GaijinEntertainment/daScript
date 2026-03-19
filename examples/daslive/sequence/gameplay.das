@@ -93,3 +93,58 @@ def is_red_jack(card_name : string) : bool {
 def is_valid_card_name(name : string) : bool {
     return starts_with(name, "club_") || starts_with(name, "diamond_") || starts_with(name, "heart_") || starts_with(name, "spade_")
 }
+
+// ============================================================================
+// Chip state
+// ============================================================================
+
+var board_chips : ChipColor[100]
+
+def get_chip(row, col : int) : ChipColor {
+    if (row < 0 || row >= BOARD_ROWS || col < 0 || col >= BOARD_COLS) {
+        return ChipColor.none
+    }
+    return board_chips[row * BOARD_COLS + col]
+}
+
+def place_chip(row, col : int; color : ChipColor) : bool {
+    if (row < 0 || row >= BOARD_ROWS || col < 0 || col >= BOARD_COLS) {
+        return false
+    }
+    board_chips[row * BOARD_COLS + col] = color
+    return true
+}
+
+def clear_all_chips() {
+    for (i in range(BOARD_SIZE)) {
+        board_chips[i] = ChipColor.none
+    }
+}
+
+// Cycle through chip colors for debug placement
+def next_chip_color(color : ChipColor) : ChipColor {
+    if (color == ChipColor.none) {
+        return ChipColor.blue
+    } elif (color == ChipColor.blue) {
+        return ChipColor.green
+    } elif (color == ChipColor.green) {
+        return ChipColor.red
+    } elif (color == ChipColor.red) {
+        return ChipColor.yellow
+    }
+    return ChipColor.none
+}
+
+// Get display color for a chip
+def chip_color_to_float4(color : ChipColor) : float4 {
+    if (color == ChipColor.blue) {
+        return float4(0.2, 0.4, 0.9, 0.7)
+    } elif (color == ChipColor.green) {
+        return float4(0.2, 0.8, 0.3, 0.7)
+    } elif (color == ChipColor.red) {
+        return float4(0.9, 0.2, 0.2, 0.7)
+    } elif (color == ChipColor.yellow) {
+        return float4(0.9, 0.8, 0.1, 0.7)
+    }
+    return float4(1.0, 1.0, 1.0, 1.0)
+}

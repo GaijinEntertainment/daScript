@@ -120,3 +120,53 @@ def test_board_card_name_bounds(t : T?) {
     // Valid cell should return non-empty (row 0, col 1 = club_1)
     t |> equal(board_card_name(0, 1), "club_1")
 }
+
+// ============================================================================
+// Phase 2: Chip state tests
+// ============================================================================
+
+[test]
+def test_chip_placement(t : T?) {
+    clear_all_chips()
+    t |> run("place and read back") <| @(t : T?) {
+        t |> success(place_chip(3, 4, ChipColor.blue))
+        t |> equal(int(get_chip(3, 4)), int(ChipColor.blue))
+        t |> success(place_chip(3, 4, ChipColor.red))
+        t |> equal(int(get_chip(3, 4)), int(ChipColor.red))
+    }
+    t |> run("clear restores none") <| @(t : T?) {
+        place_chip(5, 5, ChipColor.green)
+        clear_all_chips()
+        t |> equal(int(get_chip(5, 5)), int(ChipColor.none))
+    }
+    t |> run("out of bounds returns none") <| @(t : T?) {
+        t |> equal(int(get_chip(-1, 0)), int(ChipColor.none))
+        t |> equal(int(get_chip(0, 10)), int(ChipColor.none))
+        t |> equal(int(get_chip(10, 5)), int(ChipColor.none))
+    }
+    t |> run("out of bounds place returns false") <| @(t : T?) {
+        t |> success(!place_chip(-1, 0, ChipColor.blue))
+        t |> success(!place_chip(10, 0, ChipColor.blue))
+        t |> success(!place_chip(0, -1, ChipColor.blue))
+    }
+    clear_all_chips()
+}
+
+[test]
+def test_chip_color_cycle(t : T?) {
+    t |> equal(int(next_chip_color(ChipColor.none)), int(ChipColor.blue))
+    t |> equal(int(next_chip_color(ChipColor.blue)), int(ChipColor.green))
+    t |> equal(int(next_chip_color(ChipColor.green)), int(ChipColor.red))
+    t |> equal(int(next_chip_color(ChipColor.red)), int(ChipColor.yellow))
+    t |> equal(int(next_chip_color(ChipColor.yellow)), int(ChipColor.none))
+}
+
+[test]
+def test_chip_colors_have_alpha(t : T?) {
+    t |> run("all chip colors have nonzero alpha") <| @(t : T?) {
+        t |> success(chip_color_to_float4(ChipColor.blue).w > 0.0)
+        t |> success(chip_color_to_float4(ChipColor.green).w > 0.0)
+        t |> success(chip_color_to_float4(ChipColor.red).w > 0.0)
+        t |> success(chip_color_to_float4(ChipColor.yellow).w > 0.0)
+    }
+}
