@@ -5,7 +5,7 @@ options gen2
 expect 30108:4, 30101:2, 31300:3
 options force_inscope_pod = false
 
-require ast
+require daslib/ast
 
 struct StructureNotLocal {
     a : TypeDecl

@@ -1289,7 +1289,7 @@ namespace das {
         expr->type->smartPtr = true;
         expr->type->smartPtrNative = true;
         expr->type->firstType = make_smart<TypeDecl>(Type::tHandle);
-        expr->type->firstType->annotation = (TypeAnnotation *)Module::require("ast")->findAnnotation("Expression").get();
+        expr->type->firstType->annotation = (TypeAnnotation *)Module::require("ast_core")->findAnnotation("Expression").get();
         // mark quote as noAot
         if (func) {
             if (!program->policies.aot_macros) {

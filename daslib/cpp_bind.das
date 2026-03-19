@@ -14,7 +14,7 @@ module cpp_bind public
 
 require daslib/fio
 require rtti
-require ast
+require daslib/ast
 require daslib/ast_boost
 require daslib/strings_boost
 

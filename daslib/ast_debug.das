@@ -30,7 +30,7 @@ def isExpressionType(_vinfo) {
     if (vinfo.basicType != Type.tHandle) {
         return false
     }
-    if (vinfo.annotation._module.name != "ast") {
+    if (vinfo.annotation._module.name != "ast_core") {
         return false
     }
     if (!string(vinfo.annotation.name) |> starts_with("Expr")) {
@@ -57,7 +57,7 @@ def isModulePtrType(_vinfo; mod, what : string) {
 }
 
 def isAstPtrType(_vinfo; what : string) {
-    return isModulePtrType(_vinfo, "ast", what)
+    return isModulePtrType(_vinfo, "ast_core", what)
 }
 
 def isRttiPtrType(_vinfo; what : string) {

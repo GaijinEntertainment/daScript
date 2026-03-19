@@ -15,7 +15,7 @@ options no_aot
 
 module enum_macro_mod
 
-require ast
+require daslib/ast
 require daslib/ast_boost
 
 [enumeration_macro(name="enum_total")]

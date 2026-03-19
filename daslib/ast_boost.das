@@ -16,7 +16,7 @@ module ast_boost shared public
 //! and ``[macro_function]``.
 
 require rtti
-require ast public
+require daslib/ast public
 require strings
 require daslib/strings_boost
 
@@ -84,7 +84,7 @@ def isExpression(t : TypeDeclPtr; top : bool = true) : bool {
     } elif (t.dim |> length != 0) {
         return false
     } elif (t.baseType == Type.tHandle) {
-        if (t.annotation._module.name == "ast") {
+        if (t.annotation._module.name == "ast_core") {
             return starts_with("{t.annotation.name}", "Expr")
         } else {
             return false
@@ -586,7 +586,7 @@ def private makeAsOrSafeAs(expr; var enull : ExpressionPtr) {
 }
 
 // replacing ExprIsVariant(value,name) => ExprOp2('==",value.__rtti,"name")
-// if value is ast::Expr*
+// if value is ast_core::Expr*
 class BetterRttiVisitor : AstVariantMacro {
     //! Variant macro that optimizes `is` checks on AST expression types to __rtti string comparison.
     def override visitExprIsVariant(prog : ProgramPtr; mod : Module?; expr : smart_ptr<ExprIsVariant>) : ExpressionPtr {
@@ -1279,7 +1279,7 @@ def private debug_expression_impl(var writer : StringBuilderWriter; expr : Expre
             unsafe {
                 p8 = (reinterpret<int8?> expr) + int(offset)
             }
-            if (tstr == "smart_ptr<ast::Expression>") {
+            if (tstr == "smart_ptr<ast_core::Expression>") {
                 let pv = unsafe(reinterpret<ExpressionPtr?> p8)
                 let ts = repeat("  ", tabs + 2)
                 writer |> write("\n{ts}({name} ")

@@ -16,7 +16,7 @@ module rst shared private
 require daslib/fio
 require math
 require rtti
-require ast
+require daslib/ast
 require strings
 require daslib/ast_boost
 require daslib/strings_boost
@@ -48,6 +48,7 @@ def PANIC(message : string) {
 
 let module_name_replacements = [
     ("$", "builtin"),
+    ("ast_core", "ast"),
     ("fio_core", "fio"),
 ]
 
@@ -1446,7 +1447,7 @@ def document_typemacros(doc_file : file; mods : array<Module?>) {
             break
         }
         for_each_structure(mod) $(value) {
-            if (any || value.parent == null ||  value.parent.name != "AstTypeMacro" || value.parent._module.name != "ast") {
+            if (any || value.parent == null ||  value.parent.name != "AstTypeMacro" || value.parent._module.name != "ast_core") {
                 return
             }
             any = true
@@ -1458,7 +1459,7 @@ def document_typemacros(doc_file : file; mods : array<Module?>) {
     fwrite(doc_file, make_group("Type macros"))
     for (mod in mods) {
         for_each_structure(mod) $(value) {
-            if (value.parent == null ||  value.parent.name != "AstTypeMacro" || value.parent._module.name != "ast") {
+            if (value.parent == null ||  value.parent.name != "AstTypeMacro" || value.parent._module.name != "ast_core") {
                 return
             }
             document_typemacro(doc_file, mod, value)
@@ -2336,8 +2337,16 @@ def public documents(name : string; mods : array<Module?>; fname : string; var g
     }
     fwrite(doc_file, "\n")
     var mod_name = string(mods[0].name)
-    if (mod_name == "$") {
-        mod_name = "_builtin"
+    let replace_names = [
+        ("$", "_builtin"),
+        ("ast_core", "ast"),
+        ("fio_core", "fio")
+    ]
+    for ((src, dst) in replace_names) {
+        if (mod_name == src) {
+            mod_name = dst
+            break
+        }
     }
     fwrite(doc_file, make_header(name, mod_name))
     fwrite(doc_file, ".. das:module:: {mod_name}\n\n")

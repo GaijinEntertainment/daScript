@@ -6,7 +6,7 @@ require daslib/fio
 require strings
 require uriparser
 require debugapi
-require ast
+require daslib/ast
 require daslib/json_boost
 require daslib/jobque_boost
 

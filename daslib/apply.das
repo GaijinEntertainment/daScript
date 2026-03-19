@@ -13,7 +13,7 @@ module apply shared private
 //! annotation data). Useful for serialization, UI binding, and reflection
 //! without runtime RTTI overhead.
 
-require ast
+require daslib/ast
 require daslib/ast_boost
 require daslib/defer
 require daslib/templates_boost

@@ -11,7 +11,7 @@ module bitfield_trait shared private
 //! Generates ``bitfield_trait`` functions that return the string name
 //! of a bitfield bit, enabling runtime bitfield-to-string conversion.
 
-require ast
+require daslib/ast
 require daslib/ast_boost
 require daslib/contracts
 require daslib/strings_boost

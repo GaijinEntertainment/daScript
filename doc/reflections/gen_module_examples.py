@@ -109,13 +109,13 @@ code generation tools.""",
     "require rtti",
 )
 
-reg("ast",
+reg("ast_core",
     """The AST module provides access to the abstract syntax tree representation of daslang programs.
 It defines node types for all language constructs (expressions, statements, types, functions,
 structures, enumerations, etc.), visitors for tree traversal, and utilities for AST
 construction and manipulation. This module is the foundation for writing macros, code
 generators, and source-level program transformations.""",
-    "require ast",
+    "require daslib/ast",
 )
 
 reg("fio",
