@@ -50,6 +50,7 @@ let module_name_replacements = [
     ("$", "builtin"),
     ("ast_core", "ast"),
     ("fio_core", "fio"),
+    ("network_core", "network"),
 ]
 
 def module_name(mod) {

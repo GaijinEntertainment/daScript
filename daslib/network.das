@@ -2,8 +2,9 @@ options gen2
 options indenting = 4
 options remove_unused_symbols = false
 
-require network
+module network shared public
 
+require network_core public
 require rtti
 
 class Server {
