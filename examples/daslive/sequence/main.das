@@ -14,6 +14,8 @@ require cards/opengl_cards
 require daslib/json_boost
 require daslib/safe_addr
 require daslib/math_boost
+require opengl/opengl_ttf
+require fio
 require gameplay
 require bot_random
 require bot_greedy
@@ -456,6 +458,9 @@ var renderer : CardRenderer
 var chip_renderer : ChipRenderer
 var deck = GpuDeck()
 var back_index : int = -1
+var ui_font : Font
+var ui_font_small : Font
+var ui_font_loaded : bool = false
 
 // Precomputed card indices for each board cell (100 entries, -1 for FREE corners using back)
 var board_card_indices : int[100]
@@ -551,12 +556,7 @@ def handle_mouse() {
     }
     if (mouse_clicked) {
         if (game.phase == GamePhase.game_over) {
-            // Click anywhere to restart
-            make_game(game, game.num_players, game.num_players + int(get_uptime() * 1000.0))
-            sort_hand(game, 0)
-            selected_card = -1
-            bot_timer = float(bot_delay)
-            anim_queue |> clear()
+            start_new_game(game.num_players)
             return
         }
         // Discard dead cards for human before they play
@@ -795,6 +795,107 @@ def draw_discard_pile(screen_w, screen_h : int) {
     }
 }
 
+// --- UI text helper ---
+
+def draw_ui_text(text : string; x, y : int; tint : float3 = float3(1.0)) {
+    if (!ui_font_loaded) {
+        return
+    }
+    var quads <- ui_font |> create_quads(text)
+    ui_font |> draw_quads_2d(quads, screen_w, screen_h, x, y, tint)
+    delete quads
+}
+
+def draw_ui_text_small(text : string; x, y : int; tint : float3 = float3(1.0)) {
+    if (!ui_font_loaded) {
+        return
+    }
+    var quads <- ui_font_small |> create_quads(text)
+    ui_font_small |> draw_quads_2d(quads, screen_w, screen_h, x, y, tint)
+    delete quads
+}
+
+// --- Turn indicator + HUD ---
+
+def draw_hud(screen_w, screen_h : int) {
+    if (game.phase == GamePhase.not_started) {
+        return
+    }
+    // HUD on right side of board, above draw pile
+    let board_right = board_ox + float(BOARD_COLS) * (board_cs_w + board_pad_cur) + board_pad_cur
+    let margin = float(hand_margin)
+    let hud_x = board_right + margin
+    // Position above draw pile
+    let pile_top_y = float(screen_h) * 0.5 - CARD_DOC_HEIGHT * board_scale * 0.5 - float(draw_pile_max_cards) * float(draw_pile_offset)
+    let big_r = board_cs_w * float(chip_radius_frac) * 0.8
+    let small_r = big_r * 0.6
+    let row_h = big_r * 2.5
+    let needed = sequences_to_win(game.num_players)
+    let total_h = float(game.num_players) * row_h
+    var cy = pile_top_y - total_h - margin
+    // One row per player: chip (big if active) + sequence count
+    let chip_cx = hud_x + big_r
+    for (p in range(game.num_players)) {
+        let color = player_chip_color(p)
+        let cc = chip_color_to_float4(color)
+        let is_active = game.current_player == p && game.phase == GamePhase.playing
+        let r = is_active ? big_r : small_r
+        let chip_cy = cy + big_r  // all centers aligned to big_r
+        let outline = is_active ? float4(1.0, 1.0, 1.0, 0.9) : float4(0.0, 0.0, 0.0, 0.8)
+        draw_chip(chip_renderer, chip_cx, chip_cy, r, cc, outline, screen_w, screen_h)
+        let n = count_sequences(game, color)
+        draw_ui_text("{n}/{needed}", int(chip_cx + big_r + 8.0), int(chip_cy + 8.0), float3(cc.x, cc.y, cc.z))
+        cy += row_h
+    }
+    // Controls hint — left of board, vertically centered
+    let hint_x = 4
+    let hint_y = screen_h / 2
+    draw_ui_text("N new", hint_x, hint_y, float3(0.5))
+    draw_ui_text("C cheat", hint_x, hint_y + 26, float3(0.5))
+    draw_ui_text("2/3/4", hint_x, hint_y + 52, float3(0.5))
+}
+
+// --- Keyboard input ---
+
+def start_new_game(num_players : int) {
+    make_game(game, num_players, int(get_uptime() * 1000.0))
+    sort_hand(game, 0)
+    selected_card = -1
+    bot_timer = float(bot_delay)
+    anim_queue |> clear()
+}
+
+var key_n_was_pressed : bool = false
+var key_c_was_pressed : bool = false
+var key_2_was_pressed : bool = false
+var key_3_was_pressed : bool = false
+var key_4_was_pressed : bool = false
+
+def key_edge(key : int; var was_pressed : bool&) : bool {
+    let pressed = glfwGetKey(live_window, key) == int(GLFW_PRESS)
+    let edge = pressed && !was_pressed
+    was_pressed = pressed
+    return edge
+}
+
+def handle_keyboard() {
+    if (key_edge(int(GLFW_KEY_N), key_n_was_pressed)) {
+        start_new_game(game.num_players)
+    }
+    if (key_edge(int(GLFW_KEY_C), key_c_was_pressed)) {
+        cheat_mode = !cheat_mode
+    }
+    if (key_edge(int(GLFW_KEY_2), key_2_was_pressed)) {
+        start_new_game(2)
+    }
+    if (key_edge(int(GLFW_KEY_3), key_3_was_pressed)) {
+        start_new_game(3)
+    }
+    if (key_edge(int(GLFW_KEY_4), key_4_was_pressed)) {
+        start_new_game(4)
+    }
+}
+
 // --- Game over overlay ---
 
 def draw_game_over(screen_w, screen_h : int) {
@@ -810,6 +911,10 @@ def draw_game_over(screen_w, screen_h : int) {
     draw_chip(chip_renderer, cx, cy, r * 1.5, bright, float4(1.0, 1.0, 1.0, 1.0), screen_w, screen_h)
     // Inner ring
     draw_chip(chip_renderer, cx, cy, r * 0.8, color, float4(0.0, 0.0, 0.0, 1.0), screen_w, screen_h)
+    // Winner text
+    let winner_name = game.winner == 0 ? "You win!" : "P{game.winner + 1} wins!"
+    draw_ui_text(winner_name, int(cx) - 40, int(cy) + int(r * 1.8), float3(1.0, 1.0, 0.8))
+    draw_ui_text("Press N for new game", int(cx) - 90, int(cy) + int(r * 1.8) + 24, float3(0.6, 0.6, 0.6))
 }
 
 // --- Lifecycle ---
@@ -824,9 +929,33 @@ def init() {
     back_index = find_card(deck, "back")
     compute_card_gpu_lut()
     compute_board_card_indices()
+    if (!ui_font_loaded) {
+        create_ttf_objects()
+        let font_dir = dir_name(get_module_file_name("card_mesh"))
+        ui_font <- load_ttf("{font_dir}/DejaVuSerif.ttf", [pixel_height = 24.0, oversampling = 2])
+        if (empty(ui_font.bitmap.bytes)) {
+            ui_font <- load_ttf("{get_das_root()}/modules/dasOpenGL/examples/droidsansmono.ttf",
+                [pixel_height = 24.0, oversampling = 2])
+        }
+        if (!empty(ui_font.bitmap.bytes)) {
+            upload_font_texture(ui_font)
+            // Small font for hints
+            let font_dir2 = dir_name(get_module_file_name("card_mesh"))
+            ui_font_small <- load_ttf("{font_dir2}/DejaVuSerif.ttf", [pixel_height = 14.0, oversampling = 2])
+            if (empty(ui_font_small.bitmap.bytes)) {
+                ui_font_small <- load_ttf("{get_das_root()}/modules/dasOpenGL/examples/droidsansmono.ttf",
+                    [pixel_height = 14.0, oversampling = 2])
+            }
+            if (!empty(ui_font_small.bitmap.bytes)) {
+                upload_font_texture(ui_font_small)
+            }
+            ui_font_loaded = true
+        }
+    }
     if (game.phase == GamePhase.not_started) {
-        make_game(game, 2)
+        make_game(game, 2, int(get_uptime() * 1000.0))
         sort_hand(game, 0)
+        bot_timer = float(bot_delay)
     }
     init_audio()
     print("sequence: init (is_reload={is_reload()}, cards={card_count(deck)})\n")
@@ -849,6 +978,7 @@ def update() {
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
     if (deck.loaded) {
+        handle_keyboard()
         handle_mouse()
         // Tick animations
         tick_animations(get_dt())
@@ -875,6 +1005,7 @@ def update() {
             draw_hands(w, h)
             draw_draw_pile(w, h)
             draw_discard_pile(w, h)
+            draw_hud(w, h)
         }
         // Draw flying card on top of everything
         if (length(anim_queue) > 0) {
@@ -1273,6 +1404,12 @@ def cmd_card_stats(input : JsonValue?) : JsonValue? {
 }
 
 // --- Lifecycle ---
+
+[live_command(description="Check font loading status")]
+def cmd_font_status(input : JsonValue?) : JsonValue? {
+    let font_dir = dir_name(get_module_file_name("card_mesh"))
+    return JV("loaded={ui_font_loaded}, font_dir='{font_dir}', bitmap_bytes={length(ui_font.bitmap.bytes)}")
+}
 
 [export]
 def shutdown() {

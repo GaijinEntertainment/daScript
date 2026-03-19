@@ -340,7 +340,7 @@ def clear_all_chips(var game : GameState) {
 
 def make_game(var game : GameState; num_players : int; seed : int = 42) {
     game.num_players = clamp(num_players, 2, MAX_PLAYERS)
-    game.current_player = 0
+    game.current_player = seed >= 0 ? (abs(seed) % num_players) : 0
     game.phase = GamePhase.playing
     game.winner = -1
     for (p in range(MAX_PLAYERS)) {
