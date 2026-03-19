@@ -149,6 +149,8 @@ var @live chip_radius_frac = 0.3  // chip radius as fraction of card width
 var @live hand_margin = 4.0       // margin from screen edges for hand display
 var @live hand_row_gap = 2.0      // gap between suit rows in hand display
 var @live bot_stack_offset = 8.0  // pixel offset between stacked bot cards
+var @live draw_pile_offset = 3.0 // pixel offset between stacked draw pile cards
+var @live draw_pile_max_cards = 8 // max visible cards in draw pile stack
 var @live cheat_mode = false      // show all player hands
 var @live seq_pulse_speed = 2.0  // speed of sequence highlight pulsing
 var @live seq_pulse_min = 0.7   // minimum brightness of pulse
@@ -156,7 +158,7 @@ var @live seq_card_tint = 0.35  // how strongly sequence cards are tinted with c
 var @live bot_delay = 0.5       // seconds between bot moves
 var @live anim_chip_duration = 0.25   // chip bounce duration
 var @live anim_remove_duration = 0.3  // chip removal flash duration
-var @live anim_card_duration = 0.2    // card fly duration
+var @live anim_card_duration = 0.3    // card fly duration
 var @live selected_card = -1      // index of selected card in human hand (-1 = none
 var @live bot_timer = 0.0         // countdown until next bot move
 var @live bot_rng_seed = 12345    // RNG seed for bot moves, incremented each move
@@ -167,6 +169,8 @@ enum AnimType {
     chip_place    // chip scale-up bounce
     chip_remove   // chip flash and shrink out
     card_fly      // card flies from hand to board cell
+    card_draw     // face-down card flies from draw pile to hand
+    card_discard  // card flies from hand to discard pile
 }
 
 struct Anim {
@@ -255,6 +259,42 @@ def bot_card_screen_pos(player_idx : int) : float2 {
     return float2(margin, margin)
 }
 
+// Compute discard pile top position (below draw pile)
+def discard_pile_screen_pos() : float2 {
+    let cs_h = CARD_DOC_HEIGHT * board_scale
+    let pile_pos = draw_pile_screen_pos()
+    return float2(pile_pos.x, pile_pos.y + cs_h + float(hand_margin))
+}
+
+// Queue discard animations for dead cards, then discard them
+def queue_discard_anims(player_idx : int) {
+    // Find dead cards before discarding
+    for (c in range(get_hand_size(game, player_idx))) {
+        let card = get_hand_card(game, player_idx, c)
+        if (is_dead_card(game, card)) {
+            let gpu_idx = find_card(deck, card)
+            var start_pos : float2
+            if (player_idx == 0) {
+                start_pos = human_card_screen_pos(c)
+            } else {
+                start_pos = bot_card_screen_pos(player_idx)
+            }
+            var a = Anim(atype = AnimType.card_discard, duration = float(anim_card_duration))
+            a.card_gpu_idx = gpu_idx
+            a.start_x = start_pos.x
+            a.start_y = start_pos.y
+            a.start_scale = board_scale
+            a.deferred_player = player_idx
+            anim_queue |> emplace(a)
+        }
+    }
+    // Actually discard (state changes immediately, animations play visually)
+    discard_dead_cards(game, player_idx)
+    if (player_idx == 0) {
+        sort_hand(game, 0)
+    }
+}
+
 def queue_chip_place(row, col : int; color : ChipColor; dur : float) {
     anim_queue |> emplace(Anim(atype = AnimType.chip_place, row = row, col = col,
         color = color, duration = dur))
@@ -311,9 +351,30 @@ def tick_animations(dt : float) {
     if (anim_queue[0].progress >= 1.0) {
         let a = anim_queue[0]
         if (a.has_deferred_move) {
-            apply_move(game, a.deferred_player, a.deferred_move)
-            if (a.deferred_player == 0) {
+            let player = a.deferred_player
+            apply_move(game, player, a.deferred_move)
+            if (player == 0) {
                 sort_hand(game, 0)
+            }
+            // Queue card draw animation (card flies from draw pile to hand)
+            if (length(game.draw_pile) > 0) {
+                let pile_pos = draw_pile_screen_pos()
+                var target_pos : float2
+                if (player == 0) {
+                    // Fly to human hand area (bottom-left)
+                    target_pos = float2(float(hand_margin), float(screen_h) - float(hand_margin) - CARD_DOC_HEIGHT * board_scale)
+                } else {
+                    target_pos = bot_card_screen_pos(player)
+                }
+                var draw_anim = Anim(atype = AnimType.card_draw, duration = float(anim_card_duration))
+                draw_anim.start_x = pile_pos.x
+                draw_anim.start_y = pile_pos.y
+                draw_anim.card_gpu_idx = back_index  // face-down
+                // Store target in row/col fields as encoded floats — or use start for source, target goes in separate fields
+                // Actually, reuse: start = pile pos, target stored via row/col trick won't work. Let me use the Anim struct differently:
+                // start_x/y = draw pile pos, row/col encodes nothing useful here. We'll compute target in rendering.
+                draw_anim.deferred_player = player  // to know where to fly to
+                anim_queue |> emplace(draw_anim)
             }
         }
         anim_queue |> erase(0)
@@ -453,6 +514,10 @@ def handle_mouse() {
             bot_timer = float(bot_delay)
             anim_queue |> clear()
             return
+        }
+        // Discard dead cards for human before they play
+        if (game.phase == GamePhase.playing && game.current_player == 0 && !is_animating()) {
+            queue_discard_anims(0)
         }
         if (game.phase == GamePhase.playing && game.current_player == 0 && !is_animating() && selected_card >= 0) {
             // Try to play selected card on hovered board cell
@@ -623,6 +688,69 @@ def draw_hands(screen_w, screen_h : int) {
     }
 }
 
+// --- Draw pile ---
+
+// Top card of the draw pile screen position
+def draw_pile_screen_pos() : float2 {
+    let cs_h = CARD_DOC_HEIGHT * board_scale
+    let board_right = board_ox + float(BOARD_COLS) * (board_cs_w + board_pad_cur) + board_pad_cur
+    let margin = float(hand_margin)
+    let pile_x = board_right + margin
+    let pile_y = (float(screen_h) - cs_h) * 0.5 + cs_h * 0.5
+    let n = min(length(game.draw_pile), int(draw_pile_max_cards))
+    let off = float(draw_pile_offset)
+    return float2(pile_x + float(n) * off, pile_y - float(n) * off)
+}
+
+def draw_draw_pile(screen_w, screen_h : int) {
+    let n = length(game.draw_pile)
+    if (n == 0 || back_index < 0) {
+        return
+    }
+    let scale = board_scale
+    let cs_w = CARD_DOC_WIDTH * scale
+    let cs_h = CARD_DOC_HEIGHT * scale
+    // Position: right of board, vertically centered
+    let board_right = board_ox + float(BOARD_COLS) * (board_cs_w + board_pad_cur) + board_pad_cur
+    let margin = float(hand_margin)
+    let pile_x = board_right + margin
+    let pile_y = (float(screen_h) - cs_h) * 0.5
+    // Draw a small stack of face-down cards
+    let visible = min(n, int(draw_pile_max_cards))
+    let off = float(draw_pile_offset)
+    for (i in range(visible)) {
+        let x = pile_x + float(i) * off
+        let y = pile_y - float(i) * off
+        draw_card(renderer, deck, back_index, x, y, scale, screen_w, screen_h)
+    }
+}
+
+// --- Discard pile ---
+
+def draw_discard_pile(screen_w, screen_h : int) {
+    let n = length(game.discard_pile)
+    if (n == 0) {
+        return
+    }
+    let scale = board_scale
+    let cs_h = CARD_DOC_HEIGHT * scale
+    // Position: below draw pile
+    let pile_pos = draw_pile_screen_pos()
+    let pile_x = pile_pos.x
+    let pile_y = pile_pos.y + cs_h + float(hand_margin)
+    // Just show top card face-up, with 1 dimmed card behind if pile has 2+
+    if (n >= 2) {
+        draw_card(renderer, deck, back_index, pile_x, pile_y, scale, screen_w, screen_h,
+            [tint = float4(0.6, 0.6, 0.6, 1.0)])
+    }
+    let top_card = game.discard_pile[n - 1]
+    let top_idx = find_card(deck, top_card)
+    if (top_idx >= 0) {
+        let off = n >= 2 ? float(draw_pile_offset) : 0.0
+        draw_card(renderer, deck, top_idx, pile_x + off, pile_y - off, scale, screen_w, screen_h)
+    }
+}
+
 // --- Game over overlay ---
 
 def draw_game_over(screen_w, screen_h : int) {
@@ -681,7 +809,7 @@ def update() {
             bot_timer -= get_dt()
             if (bot_timer <= 0.0) {
                 let bot_player = game.current_player
-                discard_dead_cards(game, bot_player)
+                queue_discard_anims(bot_player)
                 bot_rng_seed++
                 let m = bot_random_move(game, bot_player, bot_rng_seed)
                 if (m.card_idx >= 0) {
@@ -697,19 +825,38 @@ def update() {
         draw_board(w, h)
         if (game.phase == GamePhase.playing || game.phase == GamePhase.game_over) {
             draw_hands(w, h)
+            draw_draw_pile(w, h)
+            draw_discard_pile(w, h)
         }
         // Draw flying card on top of everything
-        if (length(anim_queue) > 0 && anim_queue[0].atype == AnimType.card_fly) {
+        if (length(anim_queue) > 0) {
             let a = anim_queue[0]
-            if (a.card_gpu_idx >= 0) {
+            if (a.atype == AnimType.card_fly && a.card_gpu_idx >= 0) {
                 let t = clamp(a.progress, 0.0, 1.0)
-                // Ease-out: decelerate towards target
-                let et = 1.0 - (1.0 - t) * (1.0 - t)
+                let et = 1.0 - (1.0 - t) * (1.0 - t)  // ease-out
                 let target = cell_screen_pos(a.row, a.col)
                 let x = lerp(a.start_x, target.x, et)
                 let y = lerp(a.start_y, target.y, et)
-                let scale = a.start_scale
-                draw_card(renderer, deck, a.card_gpu_idx, x, y, scale, w, h)
+                draw_card(renderer, deck, a.card_gpu_idx, x, y, a.start_scale, w, h)
+            } elif (a.atype == AnimType.card_discard && a.card_gpu_idx >= 0) {
+                let t = clamp(a.progress, 0.0, 1.0)
+                let et = 1.0 - (1.0 - t) * (1.0 - t)  // ease-out
+                let target_pos = discard_pile_screen_pos()
+                let x = lerp(a.start_x, target_pos.x, et)
+                let y = lerp(a.start_y, target_pos.y, et)
+                draw_card(renderer, deck, a.card_gpu_idx, x, y, a.start_scale, w, h)
+            } elif (a.atype == AnimType.card_draw && back_index >= 0) {
+                let t = clamp(a.progress, 0.0, 1.0)
+                let et = 1.0 - (1.0 - t) * (1.0 - t)  // ease-out
+                var target_pos : float2
+                if (a.deferred_player == 0) {
+                    target_pos = float2(float(hand_margin), float(h) - float(hand_margin) - CARD_DOC_HEIGHT * board_scale)
+                } else {
+                    target_pos = bot_card_screen_pos(a.deferred_player)
+                }
+                let x = lerp(a.start_x, target_pos.x, et)
+                let y = lerp(a.start_y, target_pos.y, et)
+                draw_card(renderer, deck, back_index, x, y, board_scale, w, h)
             }
         }
         if (game.phase == GamePhase.game_over) {
@@ -1010,7 +1157,7 @@ def cmd_bot_move(input : JsonValue?) : JsonValue? {
     if (game.phase != GamePhase.playing) {
         return JV("game not in playing phase")
     }
-    discard_dead_cards(game, p)
+    queue_discard_anims(p)
     bot_rng_seed++
     let m = bot_random_move(game, p, bot_rng_seed)
     if (m.card_idx >= 0) {
