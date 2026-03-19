@@ -31,21 +31,21 @@ require math
 // No lookahead — purely greedy, one move at a time.
 
 struct GreedyWeights {
-    sequence_complete : float = 10000.0
-    line_4 : float = 300.0
-    line_3 : float = 50.0
-    line_2 : float = 20.0
-    gap_4 : float = 400.0
-    gap_3 : float = 100.0
-    block_4 : float = 900.0
-    block_3 : float = 150.0
-    block_gap_4 : float = 300.0
-    adjacency : float = 3.0
-    center : float = 0.5
-    disrupt_4 : float = 800.0
-    disrupt_3 : float = 200.0
-    disrupt_2 : float = 40.0
-    useful_after : float = 30.0
+    sequence_complete : float = 10639.3
+    line_4 : float = 78.1
+    line_3 : float = 10.0
+    line_2 : float = 1.1
+    gap_4 : float = 929.9
+    gap_3 : float = 55.2
+    block_4 : float = 460.3
+    block_3 : float = 35.0
+    block_gap_4 : float = 207.2
+    adjacency : float = 1.4
+    center : float = 2.5
+    disrupt_4 : float = 1890.6
+    disrupt_3 : float = 208.7
+    disrupt_2 : float = 38.4
+    useful_after : float = 51.8
 }
 
 let GREEDY_DEFAULT = GreedyWeights()
