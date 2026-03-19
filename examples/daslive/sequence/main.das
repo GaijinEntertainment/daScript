@@ -16,6 +16,7 @@ require daslib/safe_addr
 require daslib/math_boost
 require gameplay
 require bot_random
+require bot_greedy
 require sfx
 
 // --- Chip shader ---
@@ -838,7 +839,7 @@ def update() {
                 let bot_player = game.current_player
                 queue_discard_anims(bot_player)
                 bot_rng_seed++
-                let m = bot_random_move(game, bot_player, bot_rng_seed)
+                let m = bot_greedy_move(game, bot_player, bot_rng_seed)
                 if (m.card_idx >= 0) {
                     let card = get_hand_card(game, bot_player, m.card_idx)
                     let is_bj = is_black_jack(card)
@@ -1189,7 +1190,7 @@ def cmd_bot_move(input : JsonValue?) : JsonValue? {
     }
     queue_discard_anims(p)
     bot_rng_seed++
-    let m = bot_random_move(game, p, bot_rng_seed)
+    let m = bot_greedy_move(game, p, bot_rng_seed)
     if (m.card_idx >= 0) {
         let card = get_hand_card(game, p, m.card_idx)
         if (apply_move(game, p, m)) {

@@ -152,3 +152,13 @@ bin/Release/daslang.exe dastest/dastest.das -- --test examples/daslive/sequence/
   - `daslib/archive.das`: Added `serialize` overloads for 2D through 6D fixed arrays (`auto(TT)[][]`, etc.)
   - `tests/archive/test_archive.das`: 7 new tests — 2D int, 2D string, 3D int, struct with 2D array
   - `test_anim.das`: 17 tests — chip_place scale curve (start/overshoot/settle/monotonic/clamp), chip_remove scale (start/flash/shrink/non-negative), chip_remove alpha (opaque/transparent/monotonic/clamp)
+- **Phase 7**: COMPLETE — Sound Effects
+  - `sfx.das`: separate module for all audio — generators, sample buffers, playback, live command
+  - Procedural generation: `gen_sine_sweep()`, `gen_noise_burst()`, `mix_into()`, `gen_arpeggio()`
+  - 7 sounds: `card_play` (click/snap), `chip_place` (soft tap), `chip_remove` (descending tone), `card_draw` (swish), `sequence` (ascending arpeggio), `game_win` (fanfare), `turn_chime` (gentle note)
+  - Sound timing: card_play on fly start → chip_place/remove on animation complete → card_draw when draw queued → turn_chime after card_draw animation finishes
+  - `@live sfx_volume`, `@live audio_initialized`, `@live` sample buffers for persistence
+  - `[live_command]` `cmd_play_sound(name)` — test any sound via MCP
+  - `init_audio()` called in `init()` — creates audio system + generates all samples
+  - Note: `sfx.das` must NOT use `options persistent_heap` — causes crash in card_mesh module init (module loading order issue)
+  - Note: `sfx.das` requires `live_host` explicitly for `@live` var macro to find `live_store_bytes`/`live_load_bytes`
