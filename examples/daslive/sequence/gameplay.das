@@ -138,13 +138,13 @@ def next_chip_color(color : ChipColor) : ChipColor {
 // Get display color for a chip
 def chip_color_to_float4(color : ChipColor) : float4 {
     if (color == ChipColor.blue) {
-        return float4(0.2, 0.4, 0.9, 0.7)
+        return float4(0.2, 0.4, 0.9, 0.9)
     } elif (color == ChipColor.green) {
-        return float4(0.2, 0.8, 0.3, 0.7)
+        return float4(0.2, 0.8, 0.3, 0.9)
     } elif (color == ChipColor.red) {
-        return float4(0.9, 0.2, 0.2, 0.7)
+        return float4(0.9, 0.2, 0.2, 0.9)
     } elif (color == ChipColor.yellow) {
-        return float4(0.9, 0.8, 0.1, 0.7)
+        return float4(0.9, 0.8, 0.1, 0.9)
     }
     return float4(1.0, 1.0, 1.0, 1.0)
 }
