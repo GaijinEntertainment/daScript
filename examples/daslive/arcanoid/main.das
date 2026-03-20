@@ -210,11 +210,66 @@ def fs_shadow {
     f_FragColor = float4(SHADOW_COLOR, 0.5)
 }
 
+// --- Rounded box geometry ---
+
+def gen_rounded_cube(bevel : float; sectors : int = 16; stacks : int = 8) {
+    // Use sphere topology (known-good CCW winding) mapped onto rounded box surface
+    // Each sphere vertex direction is projected onto the box, then offset outward by bevel
+    var frag : GeometryFragment
+    let b = clamp(bevel, 0.01, 0.49)
+    let inner = 1.0 - b
+    let sectorStep = 2.0 * PI / float(sectors)
+    let stackStep = PI / float(stacks)
+    for (i in range(stacks + 1)) {
+        let stackAngle = PI / 2.0 - float(i) * stackStep
+        let xy = cos(stackAngle)
+        let z = sin(stackAngle)
+        for (j in range(sectors + 1)) {
+            let sectorAngle = float(j) * sectorStep
+            let x = xy * cos(sectorAngle)
+            let y = xy * sin(sectorAngle)
+            let n = normalize(float3(x, z, y))
+            // Clamp to inner box, then push out by bevel along normal
+            let clamped = float3(
+                clamp(n.x * 100.0, -inner, inner),
+                clamp(n.y * 100.0, -inner, inner),
+                clamp(n.z * 100.0, -inner, inner)
+            )
+            let pos = clamped + n * b
+            frag.vertices |> push(GeometryPreviewVertex(
+                xyz = pos, normal = n,
+                uv = float2(float(j) / float(sectors), float(i) / float(stacks))
+            ))
+        }
+    }
+    // Same index generation as gen_sphere
+    for (i in range(stacks)) {
+        let k1 = i * (sectors + 1)
+        let k2 = k1 + sectors + 1
+        for (j in range(sectors)) {
+            if (i != 0) {
+                frag.indices |> push(k1 + j)
+                frag.indices |> push(k1 + j + 1)
+                frag.indices |> push(k2 + j)
+            }
+            if (i != stacks - 1) {
+                frag.indices |> push(k1 + j + 1)
+                frag.indices |> push(k2 + j + 1)
+                frag.indices |> push(k2 + j)
+            }
+        }
+    }
+    frag.prim = GeometryFragmentType.triangles
+    gen_bbox(frag)
+    return <- frag
+}
+
 // --- GL objects ---
 
 var program : uint
 var shadow_program : uint
 var cube : OpenGLGeometryFragment
+var brick_geo : OpenGLGeometryFragment
 var ground_plane : OpenGLGeometryFragment
 var sphere : OpenGLGeometryFragment
 var hud_font : Font?
@@ -223,6 +278,7 @@ def create_gl_objects() {
     program = cache_shader_program(vs_arcanoid`shader_text, fs_arcanoid`shader_text)
     shadow_program = cache_shader_program(vs_arcanoid`shader_text, fs_shadow`shader_text)
     cube <- create_geometry_fragment <| gen_cube()
+    brick_geo <- create_geometry_fragment <| gen_rounded_cube(0.2)
     ground_plane <- create_geometry_fragment <| gen_plane(GenDirection.xz)
     sphere <- create_geometry_fragment <| gen_sphere(16, 8, false)
     cache_ttf_objects()
@@ -299,6 +355,20 @@ def draw_walls() {
     )
 }
 
+def draw_shield() {
+    if (shield_timer > 0.0) {
+        let hw = FIELD_W * 0.5
+        let alpha = min(shield_timer / 2.0, 1.0)  // fade out in last 2 seconds
+        let pulse = 0.7 + 0.3 * sin(float(get_uptime()) * 6.0)
+        let color = BONUS_COLORS[int(BonusType.shield)] * pulse
+        draw_box(
+            float3(0.0, WALL_HEIGHT * 0.25, SHIELD_Z),
+            float3(FIELD_W, WALL_HEIGHT * 0.5, 0.15),
+            color, alpha
+        )
+    }
+}
+
 // --- Game state ---
 
 enum GameState {
@@ -329,9 +399,10 @@ enum BonusType {
     extra_life
     speed_up
     speed_down
+    shield
 }
 
-let NUM_BONUS_TYPES = 8
+let NUM_BONUS_TYPES = 9
 
 let BONUS_COLORS = fixed_array(
     float3(1.0, 1.0, 1.0),   // triple_ball — white
@@ -341,8 +412,11 @@ let BONUS_COLORS = fixed_array(
     float3(1.0, 0.5, 0.0),   // fireball — orange
     float3(0.3, 1.0, 0.3),   // extra_life — green
     float3(1.0, 0.2, 0.8),   // speed_up — pink
-    float3(0.5, 0.3, 1.0)    // speed_down — purple
+    float3(0.5, 0.3, 1.0),   // speed_down — purple
+    float3(0.4, 0.9, 0.9)    // shield — teal
 )
+
+let SHIELD_Z = -0.5  // just below paddle
 
 [decs_template]
 struct Bonus {
@@ -360,9 +434,12 @@ var @live narrow_paddle_timer = 0.0
 var @live fireball_timer = 0.0
 var @live speed_mod_timer = 0.0
 var @live speed_mod_factor = 1.0
-var @live sticky_active = false
-var @live sticky_ball_on_paddle = false
+var @live sticky_timer = 0.0
+var @live shield_timer = 0.0
 var @live display_paddle_w = PADDLE_W
+var @live display_paddle_color = PADDLE_COLOR
+var @live last_powerup_color = PADDLE_COLOR
+var @live lives_blink_timer = 0.0
 var rng_seed = 42u
 
 def game_random() : float {
@@ -422,27 +499,38 @@ def activate_bonus(btype : int) {
     } elif (btype == int(BonusType.wide_paddle)) {
         wide_paddle_timer = POWERUP_DURATION
         narrow_paddle_timer = 0.0
+        last_powerup_color = BONUS_COLORS[btype]
         play_sfx(snd_bonus_pickup)
     } elif (btype == int(BonusType.narrow_paddle)) {
         narrow_paddle_timer = POWERUP_DURATION
         wide_paddle_timer = 0.0
+        last_powerup_color = BONUS_COLORS[btype]
         play_sfx(snd_bonus_bad)
     } elif (btype == int(BonusType.sticky_paddle)) {
-        sticky_active = true
+        sticky_timer = POWERUP_DURATION
+        last_powerup_color = BONUS_COLORS[btype]
         play_sfx(snd_bonus_pickup)
     } elif (btype == int(BonusType.fireball)) {
         fireball_timer = POWERUP_DURATION
+        last_powerup_color = BONUS_COLORS[btype]
         play_sfx(snd_bonus_pickup)
     } elif (btype == int(BonusType.extra_life)) {
         lives++
+        lives_blink_timer = 1.5
         play_sfx(snd_bonus_pickup)
     } elif (btype == int(BonusType.speed_up)) {
         speed_mod_timer = POWERUP_DURATION
         speed_mod_factor = 1.5
+        last_powerup_color = BONUS_COLORS[btype]
         play_sfx(snd_bonus_bad)
     } elif (btype == int(BonusType.speed_down)) {
         speed_mod_timer = POWERUP_DURATION
         speed_mod_factor = 0.6
+        last_powerup_color = BONUS_COLORS[btype]
+        play_sfx(snd_bonus_pickup)
+    } elif (btype == int(BonusType.shield)) {
+        shield_timer = POWERUP_DURATION
+        last_powerup_color = BONUS_COLORS[btype]
         play_sfx(snd_bonus_pickup)
     }
 }
@@ -452,10 +540,31 @@ def update_powerup_timers(dt : float) {
     if (narrow_paddle_timer > 0.0) { narrow_paddle_timer -= dt; }
     if (fireball_timer > 0.0) { fireball_timer -= dt; }
     if (speed_mod_timer > 0.0) { speed_mod_timer -= dt; }
+    let was_sticky = sticky_timer > 0.0
+    if (sticky_timer > 0.0) { sticky_timer -= dt; }
+    // Auto-launch stuck balls when sticky expires
+    if (was_sticky && sticky_timer <= 0.0) {
+        query <| $(var b : Ball) {
+            if (b.stuck != 0) {
+                let offset = b.stuck_offset / (current_paddle_w() * 0.5)
+                let angle = clamp(offset, -1.0, 1.0) * 0.7
+                b.vel = normalize(float3(sin(angle), 0.0, cos(angle))) * current_ball_speed()
+                b.stuck = 0
+                b.stuck_offset = 0.0
+            }
+        }
+    }
+    if (shield_timer > 0.0) { shield_timer -= dt; }
     // Smooth paddle width transition
     let target = target_paddle_w()
     let lerp_speed = 8.0 * dt
     display_paddle_w += (target - display_paddle_w) * saturate(lerp_speed)
+    // Smooth paddle color transition — last activated powerup wins
+    var any_active = wide_paddle_timer > 0.0 || narrow_paddle_timer > 0.0 || sticky_timer > 0.0 || fireball_timer > 0.0 || speed_mod_timer > 0.0 || shield_timer > 0.0
+    let target_color = any_active ? last_powerup_color : PADDLE_COLOR
+    display_paddle_color += (target_color - display_paddle_color) * saturate(lerp_speed)
+    // Lives blink timer
+    if (lives_blink_timer > 0.0) { lives_blink_timer -= dt; }
 }
 
 def reset_powerups() {
@@ -464,8 +573,8 @@ def reset_powerups() {
     fireball_timer = 0.0
     speed_mod_timer = 0.0
     speed_mod_factor = 1.0
-    sticky_active = false
-    sticky_ball_on_paddle = false
+    sticky_timer = 0.0
+    shield_timer = 0.0
 }
 
 // --- Paddle state ---
@@ -486,14 +595,10 @@ def update_paddle(dt : float) {
 
 def draw_paddle() {
     let pw = current_paddle_w()
-    var color = PADDLE_COLOR
-    if (wide_paddle_timer > 0.0) { color = float3(0.2, 1.0, 1.0); }
-    if (narrow_paddle_timer > 0.0) { color = float3(1.0, 0.3, 0.3); }
-    if (sticky_active) { color = float3(0.8, 0.8, 0.2); }
     draw_box(
         float3(paddle_x, PADDLE_H * 0.5, PADDLE_Z),
         float3(pw, PADDLE_H, PADDLE_D),
-        color
+        display_paddle_color
     )
 }
 
@@ -505,6 +610,8 @@ var tick_dt = 0.0
 struct Ball {
     pos : float3
     vel : float3
+    stuck : int = 0         // 1 if stuck to paddle
+    stuck_offset : float    // x-offset from paddle center when caught
 }
 
 def spawn_ball(px, vx : float) {
@@ -520,10 +627,17 @@ def spawn_ball_on_paddle() {
     create_entity <| @(eid, cmp) {
         apply_decs_template(cmp, Ball(
             pos = float3(paddle_x, BALL_RADIUS, PADDLE_Z + PADDLE_D * 0.5 + BALL_RADIUS),
-            vel = float3(0.0)
+            vel = float3(0.0),
+            stuck = 1,
+            stuck_offset = 0.0
         ))
     }
-    sticky_ball_on_paddle = true
+}
+
+def has_stuck_balls() : bool {
+    var found = false
+    query <| $(b : Ball) { if (b.stuck != 0) { found = true; } }
+    return found
 }
 
 def has_balls() : bool {
@@ -536,9 +650,9 @@ def has_balls() : bool {
 
 [decs(stage=update)]
 def update_balls(eid : EntityId; var b : Ball) {
-    // Sticky: ball sits on paddle
-    if (sticky_ball_on_paddle) {
-        b.pos.x = paddle_x
+    // Sticky: ball sits on paddle at caught offset
+    if (b.stuck != 0) {
+        b.pos.x = paddle_x + b.stuck_offset
         b.pos.z = PADDLE_Z + PADDLE_D * 0.5 + BALL_RADIUS
         b.vel = float3(0.0)
         return
@@ -581,10 +695,16 @@ def update_balls(eid : EntityId; var b : Ball) {
         let angle = offset * 0.7
         b.vel = normalize(float3(sin(angle), 0.0, cos(angle))) * spd
         play_sfx(snd_paddle_hit)
-        if (sticky_active) {
-            sticky_ball_on_paddle = true
-            sticky_active = false  // one use
+        if (sticky_timer > 0.0) {
+            b.stuck = 1
+            b.stuck_offset = b.pos.x - paddle_x
         }
+    }
+    // Shield wall collision
+    if (shield_timer > 0.0 && b.vel.z < 0.0 && b.pos.z < SHIELD_Z + BALL_RADIUS) {
+        b.pos.z = SHIELD_Z + BALL_RADIUS
+        b.vel.z = abs(b.vel.z)
+        play_sfx(snd_wall_bounce)
     }
     // Ball fell below paddle
     if (b.pos.z < -1.0) {
@@ -638,7 +758,15 @@ def has_bricks() : bool {
 
 [decs(stage=draw)]
 def draw_bricks(br : Brick) {
-    draw_box(br.pos, float3(BRICK_W, BRICK_H, BRICK_D), br.color)
+    v_model = compose(br.pos, float4(0), float3(BRICK_W, BRICK_H, BRICK_D) * 0.5)
+    f_Color = float4(br.color, 1.0)
+    vs_arcanoid_bind_uniform(active_program)
+    if (active_program == shadow_program) {
+        fs_shadow_bind_uniform(active_program)
+    } else {
+        fs_arcanoid_bind_uniform(active_program)
+    }
+    brick_geo |> draw_geometry_fragment()
 }
 
 // --- Bonus entities ---
@@ -655,6 +783,7 @@ def update_bonuses(eid : EntityId; var bn : Bonus) {
     let pz_min = PADDLE_Z - PADDLE_D * 0.5 - BONUS_SIZE * 0.5
     let pz_max = PADDLE_Z + PADDLE_D * 0.5 + BONUS_SIZE * 0.5
     if (bn.pos.z >= pz_min && bn.pos.z <= pz_max && bn.pos.x >= px_min && bn.pos.x <= px_max) {
+        spawn_pickup_vfx(bn.pos, bn.color)
         activate_bonus(bn.bonus_type)
         delete_entity(eid)
         return
@@ -689,16 +818,37 @@ struct Particle {
 }
 
 def spawn_particles(origin : float3; color : float3; count : int = 8) {
-    create_entities`Particle(count) <| $(eid : EntityId; i : int; var p : Particle) {
+    for (i in range(count)) {
         let angle = float(i) / float(count) * 2.0 * PI
         let elevation = game_random() * 0.5 + 0.2
         let speed = 2.0 + game_random() * 3.0
-        p.pos = origin
-        p.vel = float3(cos(angle) * speed, elevation * speed, sin(angle) * speed)
-        p.color = color
-        p.lifetime = 0.3 + game_random() * 0.4
-        p.max_life = p.lifetime
-        p.radius = 0.05 + game_random() * 0.08
+        let vel = float3(cos(angle) * speed, elevation * speed, sin(angle) * speed)
+        let lt = 0.3 + game_random() * 0.4
+        let r = 0.05 + game_random() * 0.08
+        create_entity <| @(eid, cmp) {
+            apply_decs_template(cmp, Particle(pos = origin, vel = vel, color = color,
+                lifetime = lt, max_life = lt, radius = r))
+        }
+    }
+}
+
+// --- Pickup VFX ---
+
+def spawn_pickup_vfx(origin : float3; color : float3) {
+    // Scatter of tiny cubes
+    let count = 10
+    for (i in range(count)) {
+        let angle = float(i) / float(count) * 2.0 * PI + game_random() * 0.5
+        let speed = 1.5 + game_random() * 2.0
+        let elevation = 1.0 + game_random() * 1.5
+        let vel = float3(cos(angle) * speed, elevation, sin(angle) * speed)
+        let c = lerp(color, float3(1.0), game_random() * 0.3)
+        let lt = 0.25 + game_random() * 0.2
+        let r = 0.03 + game_random() * 0.03
+        create_entity <| @(eid, cmp) {
+            apply_decs_template(cmp, Particle(pos = origin, vel = vel, color = c,
+                lifetime = lt, max_life = lt, radius = r))
+        }
     }
 }
 
@@ -717,8 +867,8 @@ def update_particles(eid : EntityId; var p : Particle) {
 def draw_particles(p : Particle) {
     let frac = p.lifetime / p.max_life
     let alpha = frac
-    let r = p.radius * (1.0 + (1.0 - frac) * 2.0)  // expand as they fade
-    draw_sphere(p.pos, r, p.color, alpha)
+    let r = p.radius * (0.5 + frac * 0.5)  // shrink as they fade
+    draw_box(p.pos, float3(r), p.color, alpha)
 }
 
 // --- Ball trail ---
@@ -887,7 +1037,21 @@ def cmd_decs_dump(input : JsonValue?) : JsonValue? {
     return JV(debug_dump_string())
 }
 
-[live_command(description="Activate a powerup. Args: type (triple_ball, wide_paddle, narrow_paddle, sticky_paddle, fireball, extra_life, speed_up, speed_down)")]
+[live_command(description="Drop a powerup above paddle. Args: type (triple_ball, wide_paddle, narrow_paddle, sticky_paddle, fireball, extra_life, speed_up, speed_down, shield)")]
+def cmd_drop_powerup(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<CmdBonusTypeArgs>)
+    let btype = int(args._type)
+    create_entity <| @(eid, cmp) {
+        apply_decs_template(cmp, Bonus(
+            pos = float3(paddle_x, 0.3, PADDLE_Z + 3.0),
+            bonus_type = btype,
+            color = BONUS_COLORS[btype]
+        ))
+    }
+    return JV(args)
+}
+
+[live_command(description="Activate a powerup. Args: type (triple_ball, wide_paddle, narrow_paddle, sticky_paddle, fireball, extra_life, speed_up, speed_down, shield)")]
 def cmd_powerup(input : JsonValue?) : JsonValue? {
     let args = from_JV(input, type<CmdBonusTypeArgs>)
     activate_bonus(int(args._type))
@@ -968,7 +1132,12 @@ def draw_hud() {
         return
     }
     draw_text("SCORE: {score}", 10, 35, float3(1.0, 1.0, 1.0))
-    draw_text("LIVES: {lives}", 10, 70, float3(0.3, 0.8, 1.0))
+    var lives_color = float3(0.3, 0.8, 1.0)
+    if (lives_blink_timer > 0.0) {
+        let blink = sin(lives_blink_timer * 20.0) > 0.0 ? 1.0 : 0.3
+        lives_color = float3(blink, 1.0, blink)
+    }
+    draw_text("LIVES: {lives}", 10, 70, lives_color)
     if (game_state == GameState.game_over_state) {
         draw_text_centered("GAME OVER", cx, cy - 20, float3(1.0, 0.2, 0.2))
         draw_text_centered("PRESS SPACE TO RESTART", cx, cy + 25, pulse_tint(float3(0.7, 0.7, 0.7)))
@@ -979,7 +1148,7 @@ def draw_hud() {
     } elif (game_state == GameState.paused) {
         draw_text_centered("PAUSED", cx, cy - 20, float3(0.8, 0.8, 0.8))
         draw_text_centered("PRESS ESC TO RESUME", cx, cy + 25, pulse_tint(float3(0.5, 0.5, 0.5)))
-    } elif (sticky_ball_on_paddle) {
+    } elif (has_stuck_balls()) {
         draw_text_centered("PRESS SPACE TO LAUNCH", cx, cy + 25, pulse_tint(float3(0.5, 0.5, 0.5)))
     }
     if (god_mode) {
@@ -1062,14 +1231,22 @@ def update() {
     if (game_state == GameState.playing) {
         update_paddle(dt)
         update_powerup_timers(tick_dt)
-        // Sticky release
-        if (sticky_ball_on_paddle && space_just) {
-            sticky_ball_on_paddle = false
+        // Sticky release — launch all stuck balls
+        if (space_just) {
             query <| $(var b : Ball) {
-                b.vel = normalize(float3(0.3, 0.0, 1.0)) * current_ball_speed()
+                if (b.stuck != 0) {
+                    var offset = b.stuck_offset / (current_paddle_w() * 0.5)
+                    if (abs(offset) < 0.1) { offset = 0.3; }  // avoid straight-up launch
+                    let angle = offset * 0.7
+                    b.vel = normalize(float3(sin(angle), 0.0, cos(angle))) * current_ball_speed()
+                    b.stuck = 0
+                    b.stuck_offset = 0.0
+                }
             }
         }
-        if (!has_balls() && !sticky_ball_on_paddle) {
+        var any_stuck = false
+        query <| $(b : Ball) { if (b.stuck != 0) { any_stuck = true; } }
+        if (!has_balls() && !any_stuck) {
             spawn_ball_on_paddle()
             commit()
         }
@@ -1140,6 +1317,7 @@ def update() {
     draw_ground()
     draw_shadows()
     draw_walls()
+    draw_shield()
     draw_paddle()
     // Particles and trail need blending
     glEnable(GL_BLEND)
