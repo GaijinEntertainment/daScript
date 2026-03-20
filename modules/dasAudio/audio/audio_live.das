@@ -42,23 +42,19 @@ def private save_audio_handles() {
 def private restore_audio_handles() {
     var data : array<uint8>
     if (live_load_bytes(STORE_KEY, data) && length(data) > 0) {
-        try {
-            var ser = new MemSerializer(data)
-            var arch = Archive(reading = true, stream = ser)
-            var cmd_ch : uint64
-            var col_ch : uint64
-            var sid_ptr : uint64
-            arch |> serialize(cmd_ch)
-            arch |> serialize(col_ch)
-            arch |> serialize(sid_ptr)
-            unsafe {
-                set_audio_thread_command_channel(reinterpret<void?>(cmd_ch))
-                set_collect_thread_command_channel(reinterpret<void?>(col_ch))
-                set_sound_sid(reinterpret<void?>(sid_ptr))
-                delete ser
-            }
-        } recover {
-            print("audio_live: failed to restore audio handles\n")
+        var ser = new MemSerializer(data)
+        var arch = Archive(reading = true, stream = ser)
+        var cmd_ch : uint64
+        var col_ch : uint64
+        var sid_ptr : uint64
+        arch |> serialize(cmd_ch)
+        arch |> serialize(col_ch)
+        arch |> serialize(sid_ptr)
+        unsafe {
+            set_audio_thread_command_channel(reinterpret<void?>(cmd_ch))
+            set_collect_thread_command_channel(reinterpret<void?>(col_ch))
+            set_sound_sid(reinterpret<void?>(sid_ptr))
+            delete ser
         }
     }
 }

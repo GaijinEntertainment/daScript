@@ -115,17 +115,14 @@ class LiveVarsPass : AstPassMacro {
             loadBlocks |> emplace_new <| qmacro_block() {
                 var data : array<uint8>
                 if (live_load_bytes($v(varKey), data) && length(data) > 0) {
-                    try {
-                        var ser = new MemSerializer(data)
-                        var arch = Archive(reading = true, stream = ser)
-                        var stored_hash : int64
-                        arch |> _::serialize(stored_hash)
-                        if (stored_hash == $v(varHash)) {
-                            arch |> _::serialize($i(varName))
-                        }
-                        unsafe { delete ser; }
-                    } recover {
+                    var ser = new MemSerializer(data)
+                    var arch = Archive(reading = true, stream = ser)
+                    var stored_hash : int64
+                    arch |> _::serialize(stored_hash)
+                    if (stored_hash == $v(varHash)) {
+                        arch |> _::serialize($i(varName))
                     }
+                    unsafe { delete ser; }
                 }
             }
         }

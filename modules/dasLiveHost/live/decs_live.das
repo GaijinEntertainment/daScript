@@ -27,10 +27,6 @@ def restore_decs_state() {
     //! Restores DECS state from the persistent store after a live reload.
     var data : array<uint8>
     if (live_load_bytes("__decs_state", data)) {
-        try {
-            data |> mem_archive_load(decsState)
-        } recover {
-            print("decs_live: failed to restore DECS state\n")
-        }
+        data |> mem_archive_load(decsState)
     }
 }

@@ -55,7 +55,10 @@ static SetBoolFn  dll_set_is_reload = nullptr;
 static SetBoolFn  dll_set_paused = nullptr;
 static VoidFn  dll_clear_reload_flags = nullptr;
 static VoidFn  dll_clear_live_vars = nullptr;
+static VoidFn  dll_clear_store = nullptr;
 static VoidFn  dll_clear_error = nullptr;
+static BoolFn  dll_is_context_dead = nullptr;
+static VoidFn  dll_clear_context_dead = nullptr;
 
 typedef void (*SetStringFn)(const char *);
 static SetStringFn dll_set_last_error = nullptr;
@@ -89,7 +92,10 @@ static bool load_live_host_functions() {
     dll_set_paused        = (SetBoolFn)get_dll_symbol("live_host_set_paused");
     dll_clear_reload_flags = (VoidFn)get_dll_symbol("live_host_clear_reload_flags");
     dll_clear_live_vars   = (VoidFn)get_dll_symbol("live_host_clear_live_vars");
+    dll_clear_store       = (VoidFn)get_dll_symbol("live_host_clear_store");
     dll_clear_error       = (VoidFn)get_dll_symbol("live_host_clear_error");
+    dll_is_context_dead   = (BoolFn)get_dll_symbol("live_host_is_context_dead");
+    dll_clear_context_dead = (VoidFn)get_dll_symbol("live_host_clear_context_dead");
     dll_set_last_error    = (SetStringFn)get_dll_symbol("live_host_set_last_error");
     dll_set_live_mode        = (SetBoolFn)get_dll_symbol("live_host_set_live_mode");
     dll_set_dispatch_context = (SetContextFn)get_dll_symbol("live_host_set_dispatch_context");
@@ -237,13 +243,15 @@ struct AnnotatedFunctions {
 
 static AnnotatedFunctions g_annotated;
 
-static void call_annotated_list(Context * ctx, const vector<SimFunction *> & fns) {
+static bool call_annotated_list(Context * ctx, const vector<SimFunction *> & fns) {
     for (auto fn : fns) {
         ctx->evalWithCatch(fn, nullptr);
         if (auto ex = ctx->getException()) {
-            tout << "EXCEPTION in " << fn->name << ": " << ex << "\n";
+            tout << "EXCEPTION in " << fn->name << ": " << ex << " at " << ctx->exceptionAt.describe() << "\n";
+            return false;
         }
     }
+    return true;
 }
 
 // --- Set watched files ---
@@ -280,6 +288,7 @@ static int run_lifecycle(const string & fn) {
     SimFunction * fnInit = nullptr;
     SimFunction * fnUpdate = nullptr;
     SimFunction * fnShutdown = nullptr;
+    bool ctx_had_exception = false;
 
     if (!ctx) {
         // Initial compile failed — enter main loop with no context, paused,
@@ -323,8 +332,12 @@ static int run_lifecycle(const string & fn) {
         // Call init()
         ctx->evalWithCatch(fnInit, nullptr);
         if (auto ex = ctx->getException()) {
-            tout << "EXCEPTION in init(): " << ex << " at " << ctx->exceptionAt.describe() << "\n";
-            return 1;
+            string msg = string("EXCEPTION in init(): ") + ex + " at " + ctx->exceptionAt.describe();
+            tout << msg << "\n";
+            if (dll_set_last_error) dll_set_last_error(msg.c_str());
+            if (dll_set_paused) dll_set_paused(true);
+            if (dll_clear_store) dll_clear_store();
+            ctx_had_exception = true;
         }
     }
 
@@ -353,24 +366,36 @@ static int run_lifecycle(const string & fn) {
         }
 
         // Before-update hooks (lockbox dispatch, etc.)
-        if (ctx) call_annotated_list(ctx, g_annotated.before_update);
+        // Skip if context had an exception — it's kept alive only for shutdown()
+        if (ctx && !ctx_had_exception) {
+            call_annotated_list(ctx, g_annotated.before_update);
+            // Check if a command exception killed the context during before_update
+            if (dll_is_context_dead && dll_is_context_dead()) {
+                ctx_had_exception = true;
+                if (dll_clear_store) dll_clear_store();
+            }
+        }
 
-        // Update (unless paused or no context)
+        // Update (unless paused, exception, or no context)
         bool paused = dll_is_paused ? dll_is_paused() : false;
-        if (!paused && ctx && fnUpdate) {
+        if (!paused && ctx && !ctx_had_exception && fnUpdate) {
             ctx->evalWithCatch(fnUpdate, nullptr);
             if (auto ex = ctx->getException()) {
-                tout << "EXCEPTION in update(): " << ex << " at " << ctx->exceptionAt.describe() << "\n";
+                string msg = string("EXCEPTION in update(): ") + ex + " at " + ctx->exceptionAt.describe();
+                tout << msg << "\n";
+                if (dll_set_last_error) dll_set_last_error(msg.c_str());
                 if (dll_set_paused) dll_set_paused(true);
+                if (dll_clear_store) dll_clear_store();
+                ctx_had_exception = true;
             }
         }
         // Avoid busy-spinning when there's no context or paused
-        if (!ctx || paused) {
+        if (!ctx || paused || ctx_had_exception) {
             builtin_sleep(16);
         }
 
         // GC
-        if (ctx) maybe_collect_gc(ctx);
+        if (ctx && !ctx_had_exception) maybe_collect_gc(ctx);
 
         // Auto-tick debug agents
         auto_tick_agents();
@@ -385,7 +410,13 @@ static int run_lifecycle(const string & fn) {
             if (dll_set_is_reload) dll_set_is_reload(true);
 
             // Call [before_reload] functions and shutdown (skip if no context, e.g. initial compile failed)
+            // After exception: skip before_reload (state is corrupted) but still call shutdown
+            // so resources (audio, GL) are properly released before context is destroyed.
             if (ctx) {
+                if (ctx_had_exception) {
+                    // Clear stale exception state so before_reload/shutdown can run
+                    ctx->restart();
+                }
                 call_annotated_list(ctx, g_annotated.before_reload);
                 if (fnShutdown) {
                     ctx->evalWithCatch(fnShutdown, nullptr);
@@ -403,7 +434,7 @@ static int run_lifecycle(const string & fn) {
                 if (dll_set_paused) dll_set_paused(true);
                 if (dll_clear_reload_flags) dll_clear_reload_flags();
                 // Re-init old context if we have one (shutdown was already called)
-                if (ctx) {
+                if (ctx && !ctx_had_exception) {
                     if (dll_set_is_reload) dll_set_is_reload(true);
                     ctx->restart();
                     call_annotated_list(ctx, g_annotated.after_reload);
@@ -439,6 +470,8 @@ static int run_lifecycle(const string & fn) {
             if (dll_set_paused) dll_set_paused(false);
             if (dll_clear_reload_flags) dll_clear_reload_flags();
             if (dll_clear_error) dll_clear_error();
+            if (dll_clear_context_dead) dll_clear_context_dead();
+            ctx_had_exception = false;
 
             // Full reload: clear @live var entries so they reset to code defaults
             if (isFullReload && dll_clear_live_vars) {
@@ -452,13 +485,25 @@ static int run_lifecycle(const string & fn) {
             // Call [after_reload] functions BEFORE init — restores persistent
             // state (DECS, globals) so init() can use it immediately.
             // On full reload the store is empty, so these are no-ops.
-            call_annotated_list(ctx, g_annotated.after_reload);
+            if (!call_annotated_list(ctx, g_annotated.after_reload)) {
+                string msg = "EXCEPTION during [after_reload], clearing store";
+                tout << msg << "\n";
+                if (dll_set_last_error) dll_set_last_error(msg.c_str());
+                if (dll_set_paused) dll_set_paused(true);
+                if (dll_clear_store) dll_clear_store();
+                ctx_had_exception = true;
+                continue;
+            }
 
             // Call init() in new context
             ctx->evalWithCatch(fnInit, nullptr);
             if (auto ex = ctx->getException()) {
-                tout << "EXCEPTION in init() after reload: " << ex << "\n";
+                string msg = string("EXCEPTION in init() after reload: ") + ex + " at " + ctx->exceptionAt.describe();
+                tout << msg << "\n";
+                if (dll_set_last_error) dll_set_last_error(msg.c_str());
                 if (dll_set_paused) dll_set_paused(true);
+                if (dll_clear_store) dll_clear_store();
+                ctx_had_exception = true;
             }
 
             tout << "daslang-live: reload complete\n";
