@@ -19,6 +19,7 @@ require fio
 require gameplay
 require bot_random
 require bot_greedy
+require bot_lookahead
 require sfx
 
 // --- Chip shader ---
@@ -162,6 +163,7 @@ var @live seq_pulse_speed = 2.0  // speed of sequence highlight pulsing
 var @live seq_pulse_min = 0.7   // minimum brightness of pulse
 var @live seq_card_tint = 0.35  // how strongly sequence cards are tinted with chip color
 var @live bot_delay = 0.5       // seconds between bot moves
+var @live bot_mode = 1          // 0=greedy, 1=lookahead
 var @live anim_chip_duration = 0.25   // chip bounce duration
 var @live anim_remove_duration = 0.3  // chip removal flash duration
 var @live anim_card_duration = 0.3    // card fly duration
@@ -907,6 +909,9 @@ def draw_hud(screen_w, screen_h : int) {
     draw_ui_text("N new", hint_x, hint_y, float3(0.5))
     draw_ui_text("C cheat", hint_x, hint_y + 26, float3(0.5))
     draw_ui_text("2/3/4", hint_x, hint_y + 52, float3(0.5))
+    draw_ui_text("B bot", hint_x, hint_y + 78, float3(0.5))
+    let bot_name = bot_mode == 0 ? "greedy" : "lookahead"
+    draw_ui_text(bot_name, hint_x + 4, hint_y + 100, float3(0.8, 0.8, 0.3))
     // Jack hints — vertical text, left edge of board, vertically centered
     let board_mid_y = int(board_oy + float(BOARD_ROWS) * (board_cs_h + board_pad_cur) * 0.5)
     let jack_x = int(board_ox) - 2
@@ -933,6 +938,7 @@ var key_c_was_pressed : bool = false
 var key_2_was_pressed : bool = false
 var key_3_was_pressed : bool = false
 var key_4_was_pressed : bool = false
+var key_b_was_pressed : bool = false
 
 def key_edge(key : int; var was_pressed : bool&) : bool {
     let pressed = glfwGetKey(live_window, key) == int(GLFW_PRESS)
@@ -956,6 +962,9 @@ def handle_keyboard() {
     }
     if (key_edge(int(GLFW_KEY_4), key_4_was_pressed)) {
         start_new_game(4)
+    }
+    if (key_edge(int(GLFW_KEY_B), key_b_was_pressed)) {
+        bot_mode = (bot_mode + 1) % 2
     }
 }
 
@@ -1053,7 +1062,7 @@ def update() {
                 let bot_player = game.current_player
                 queue_discard_anims(bot_player)
                 bot_rng_seed++
-                let m = bot_greedy_move(game, bot_player, bot_rng_seed)
+                let m = bot_mode == 0 ? bot_greedy_move(game, bot_player, bot_rng_seed) : bot_lookahead_move(game, bot_player, bot_rng_seed)
                 if (m.card_idx >= 0) {
                     let card = get_hand_card(game, bot_player, m.card_idx)
                     let is_bj = is_black_jack(card)
@@ -1409,7 +1418,7 @@ def cmd_bot_move(input : JsonValue?) : JsonValue? {
     }
     queue_discard_anims(p)
     bot_rng_seed++
-    let m = bot_greedy_move(game, p, bot_rng_seed)
+    let m = bot_mode == 0 ? bot_greedy_move(game, p, bot_rng_seed) : bot_lookahead_move(game, p, bot_rng_seed)
     if (m.card_idx >= 0) {
         let card_name = card_to_string(get_hand_card(game, p, m.card_idx))
         if (apply_move(game, p, m)) {
