@@ -95,7 +95,7 @@ jobs:
             architecture: 64
             release_target: darwin15
             release_arch: x86_64
-            runner: macos-15-intel # latest with x86_64 https://github.com/actions/runner-images?tab=readme-ov-file#available-images
+            runner: macos-15-large # Intel x86_64, 12 CPU
             architecture_string: x86_64
             archive_ext: tar.gz
 
@@ -103,14 +103,14 @@ jobs:
             architecture: arm64
             release_target: darwin15
             release_arch: arm64
-            runner: macos-15
+            runner: macos-15-xlarge # Apple Silicon arm64, M2
             architecture_string: arm64
             archive_ext: tar.gz
 
           - target: darwin26
             release_target: darwin26
             release_arch: arm64
-            runner: macos-26 # arm64 only image
+            runner: macos-26-xlarge # Apple Silicon arm64, M2
             architecture_string: arm64
             archive_ext: tar.gz
 
