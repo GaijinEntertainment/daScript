@@ -601,7 +601,6 @@ src/builtin/module_builtin_runtime_lockcheck.cpp
 src/builtin/module_builtin_vector.cpp
 src/builtin/module_builtin_vector_ctor.cpp
 src/builtin/module_builtin_array.cpp
-src/builtin/module_builtin_das.cpp
 src/builtin/module_builtin_math.cpp
 src/builtin/module_builtin_string.cpp
 src/builtin/module_builtin_rtti.h
@@ -624,12 +623,9 @@ src/builtin/module_builtin_network.cpp
 src/builtin/module_builtin_debugger.cpp
 src/builtin/module_builtin_jobque.cpp
 src/builtin/module_file_access.cpp
-src/builtin/builtin.das.inc
-src/builtin/builtin.das
 )
 list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
-CMAKE_TEXT_XXD(libDaScript src/builtin/builtin.das)
 
 SET(MISC_SRC
 include/daScript/misc/enums.h
