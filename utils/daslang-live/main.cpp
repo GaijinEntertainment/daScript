@@ -150,6 +150,7 @@ struct CompileResult {
     ProgramPtr program;
     ContextPtr ctx;
     FileAccessPtr access;
+    ModuleGroup moduleGroup;
     string errors;  // non-empty if compile/simulate failed
 };
 
@@ -157,7 +158,6 @@ static CompileResult compile_script(const string & fn) {
     CompileResult result;
     result.access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
 
-    ModuleGroup dummyGroup;
     CodeOfPolicies policies;
     policies.version_2_syntax = version2syntax;
     policies.fail_on_no_aot = false;
@@ -168,7 +168,7 @@ static CompileResult compile_script(const string & fn) {
     policies.ignore_shared_modules = true;
     policies.rtti = true;
 
-    result.program = compileDaScript(fn, result.access, tout, dummyGroup, policies);
+    result.program = compileDaScript(fn, result.access, tout, result.moduleGroup, policies);
     if (!result.program) {
         result.errors = "failed to compile " + fn;
         tout << "ERROR: " << result.errors << "\n";

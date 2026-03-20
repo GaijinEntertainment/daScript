@@ -61,6 +61,8 @@ typedef const struct bsph3f& bsph3f_cref;
 #if defined(DAGOR_ASAN_ENABLED) && (defined(__clang__) || __GNUC__ >= 7)
 # define NO_ASAN_INLINE inline __attribute__((no_sanitize_address))
 //loads have to switch off address sanitize. It is common (and ok) to load data from stack, even if data partially is not allocated (i.e. .xyzU).
+#elif defined(DAGOR_ASAN_ENABLED) && defined(_MSC_VER)
+# define NO_ASAN_INLINE __declspec(no_sanitize_address) __forceinline
 #else
 # define NO_ASAN_INLINE VECMATH_FINLINE
 #endif

@@ -60,6 +60,12 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 		-DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}
 		-DOPENSSL_LIBRARIES="${OPENSSL_CRYPTO_LIBRARY};${OPENSSL_SSL_LIBRARY}"
 	)
+	IF(DAS_USE_SANITIZER STREQUAL "address" OR DAS_USE_SANITIZER STREQUAL "asan")
+		LIST(APPEND HV_CMAKE_FLAGS
+			"-DCMAKE_C_FLAGS=/fsanitize=address"
+			"-DCMAKE_CXX_FLAGS=/fsanitize=address"
+		)
+	ENDIF()
 	ExternalProject_Add(
 		LIBHV
 		URL https://github.com/ithewei/libhv/archive/refs/tags/v1.3.4.tar.gz
