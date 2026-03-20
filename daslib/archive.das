@@ -203,37 +203,67 @@ def public serialize(var arch : Archive; var value : auto(TT)[]) {
 }
 
 def public serialize(var arch : Archive; var value : auto(TT)[][]) {
-    //! Serializes 2D fixed-size array by serializing each sub-array.
-    for (element in value) {
-        arch |> _::serialize(element)
+    //! Serializes 2D fixed-size array by serializing each element.
+    for (a in value) {
+        for (element in a) {
+            arch |> _::serialize(element)
+        }
     }
 }
 
 def public serialize(var arch : Archive; var value : auto(TT)[][][]) {
-    //! Serializes 3D fixed-size array by serializing each sub-array.
-    for (element in value) {
-        arch |> _::serialize(element)
+    //! Serializes 3D fixed-size array by serializing each element.
+    for (a in value) {
+        for (b in a) {
+            for (element in b) {
+                arch |> _::serialize(element)
+            }
+        }
     }
 }
 
 def public serialize(var arch : Archive; var value : auto(TT)[][][][]) {
-    //! Serializes 4D fixed-size array by serializing each sub-array.
-    for (element in value) {
-        arch |> _::serialize(element)
+    //! Serializes 4D fixed-size array by serializing each element.
+    for (a in value) {
+        for (b in a) {
+            for (c in b) {
+                for (element in c) {
+                    arch |> _::serialize(element)
+                }
+            }
+        }
     }
 }
 
 def public serialize(var arch : Archive; var value : auto(TT)[][][][][]) {
-    //! Serializes 5D fixed-size array by serializing each sub-array.
-    for (element in value) {
-        arch |> _::serialize(element)
+    //! Serializes 5D fixed-size array by serializing each element.
+    for (a in value) {
+        for (b in a) {
+            for (c in b) {
+                for (d in c) {
+                    for (element in d) {
+                        arch |> _::serialize(element)
+                    }
+                }
+            }
+        }
     }
 }
 
 def public serialize(var arch : Archive; var value : auto(TT)[][][][][][]) {
-    //! Serializes 6D fixed-size array by serializing each sub-array.
-    for (element in value) {
-        arch |> _::serialize(element)
+    //! Serializes 6D fixed-size array by serializing each element.
+    for (a in value) {
+        for (b in a) {
+            for (c in b) {
+                for (d in c) {
+                    for (e in d) {
+                        for (element in e) {
+                            arch |> _::serialize(element)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

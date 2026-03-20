@@ -2867,12 +2867,12 @@ class public LlvmJitVisitor : AstVisitor {
                 LLVMBuildStore(g_builder, sfrom, getV(svar))
             } elif (ssrc._type.dim |> length != 0) {// []->first()
                 var inscope etype <- clone_type(ssrc._type)
-                etype.dim |> pop()
+                etype.dim |> erase(0)
                 var element_type = type_to_llvm_type(svar._type)
                 var sdim = getE(ssrc)
                 var s0 = LLVMBuildGEP2(g_builder, element_type, sdim, types.ConstI32(0ul), "dim_0")
                 LLVMBuildStore(g_builder, s0, getV(svar))
-                let dimSize = ssrc._type.dim[ssrc._type.dim |> length - 1]
+                let dimSize = ssrc._type.dim[0]
                 var tail = types.ConstI32(uint64(dimSize - 1))
                 var sto = build_array_index(sdim, tail, etype, "last_element")
                 sto = LLVMBuildPtrToInt(g_builder, sto, types.LLVMIntPtrType(), "dim_end")
@@ -2986,7 +2986,7 @@ class public LlvmJitVisitor : AstVisitor {
                 LLVMPositionBuilderAtEnd(g_builder, nextOk)
             } elif (ssrc._type.dim |> length != 0) {// []->next()
                 var inscope etype <- clone_type(ssrc._type)
-                etype.dim |> pop()
+                etype.dim |> erase(0)
                 var svar_v = LLVMBuildLoad2(g_builder, LLVMPointerType(type_to_llvm_type(svar._type), 0u), getV(svar), "")
                 var svar_i = build_array_index(svar_v, types.ConstI32(1ul), etype, "next_element")
                 LLVMBuildStore(g_builder, svar_i, getV(svar))
