@@ -483,6 +483,7 @@ static void print_help() {
     tout << "Usage: daslang-live [options] <script.das>\n";
     tout << "  -project <file>   — project file (.das_project)\n";
     tout << "  -dasroot <path>   — override DAS_ROOT\n";
+    tout << "  -cwd              — change working directory to script's folder\n";
     tout << "  -v1syntax         — use v1 syntax (default: v2)\n";
     tout << "  -h, --help        — this help\n";
 }
@@ -548,6 +549,7 @@ int main(int argc, char * argv[]) {
 
     string scriptFile;
     bool noDynamicModules = false;
+    bool changeCwd = false;
 
     // Parse args
     for (int i = 1; i < argc; i++) {
@@ -556,6 +558,8 @@ int main(int argc, char * argv[]) {
             projectFile = argv[++i];
         } else if (arg == "-dasroot" && i + 1 < argc) {
             setDasRoot(argv[++i]);
+        } else if (arg == "-cwd") {
+            changeCwd = true;
         } else if (arg == "-v1syntax") {
             version2syntax = false;
         } else if (arg == "--no-dyn-modules") {
@@ -577,6 +581,20 @@ int main(int argc, char * argv[]) {
     if (scriptFile.empty()) {
         print_help();
         return 1;
+    }
+
+    // -cwd: change working directory to script's folder, strip path from scriptFile
+    if (changeCwd && !scriptFile.empty()) {
+        auto slash = scriptFile.find_last_of("\\/");
+        if (slash != string::npos) {
+            string dir = scriptFile.substr(0, slash);
+            scriptFile = scriptFile.substr(slash + 1);
+#ifdef _WIN32
+            SetCurrentDirectoryA(dir.c_str());
+#else
+            chdir(dir.c_str());
+#endif
+        }
     }
 
     if (!acquire_single_instance()) {

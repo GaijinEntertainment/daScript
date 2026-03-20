@@ -125,36 +125,32 @@ def do_live_launch(file, project, port : string) : string {
     if (!stat(live_exe).is_valid) {
         return make_tool_result("daslang-live not found in {root}/bin/Release/ or {root}/bin/", true)
     }
-    // Build launcher script — must detach stdin to avoid pipe inheritance from MCP
-    let script_dir = dir_name(file)
-    var launch_file = clone_string(base_name(file))
+    // Build launch command — daslang-live -cwd handles working directory
+    var launch_exe = clone_string(live_exe)
+    var launch_file = clone_string(file)
     var launch_project = clone_string(project)
-    var launch_exe_path = clone_string(live_exe)
-    var launch_dir = clone_string(script_dir)
     if (is_windows) {
+        launch_exe = replace(launch_exe, "/", "\\")
         launch_file = replace(launch_file, "/", "\\")
-        launch_exe_path = replace(launch_exe_path, "/", "\\")
         launch_project = replace(launch_project, "/", "\\")
-        launch_dir = replace(launch_dir, "/", "\\")
     }
-    var script_args = "\"{launch_file}\""
+    var script_args = "-cwd \"{launch_file}\""
     if (!empty(launch_project)) {
         script_args = "-project \"{launch_project}\" {script_args}"
     }
     let launcher = "{root}/_mcp_live_launch"
     if (is_windows) {
-        let bat = replace("{launcher}.bat", "/", "\\")
-        fopen(bat, "wt") <| $(f) {
+        let ps1 = replace("{launcher}.ps1", "/", "\\")
+        fopen(ps1, "wt") <| $(f) {
             if (f != null) {
-                fprint(f, "@cd /d \"{launch_dir}\" && start \"daslang-live\" \"{launch_exe_path}\" {script_args}\n")
+                fprint(f, "Start-Process -FilePath \"{launch_exe}\" -ArgumentList '{script_args}'\n")
             }
         }
-        // Run .bat via system() with < NUL to detach stdin from MCP pipe
         var exit_code = 0
         unsafe {
-            exit_code = system("{bat} < NUL > NUL 2>&1")
+            exit_code = system("powershell -NoProfile -ExecutionPolicy Bypass -File \"{ps1}\"")
         }
-        remove(bat)
+        remove(ps1)
         if (exit_code != 0) {
             return make_tool_result("Failed to launch daslang-live (exit {exit_code})", true)
         }
@@ -162,7 +158,7 @@ def do_live_launch(file, project, port : string) : string {
         let sh = "{launcher}.sh"
         fopen(sh, "wt") <| $(f) {
             if (f != null) {
-                fprint(f, "#!/bin/sh\ncd \"{script_dir}\"\nnohup \"{live_exe}\" {script_args} > /dev/null 2>&1 &\n")
+                fprint(f, "#!/bin/sh\nnohup \"{live_exe}\" {script_args} > /dev/null 2>&1 &\n")
             }
         }
         var exit_code = 0
