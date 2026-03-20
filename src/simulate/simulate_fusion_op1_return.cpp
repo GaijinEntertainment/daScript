@@ -11,6 +11,7 @@
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/ast/ast.h"
 #include "daScript/simulate/simulate_fusion_op1.h"
+#include "vecmath/dag_vecMathDecl.h"
 
 namespace das {
 
@@ -19,12 +20,15 @@ namespace das {
 #undef IMPLEMENT_ANY_OP1_NODE
 #define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
     struct SimNode_Op1##COMPUTE : SimNode_Op1Fusion { \
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+        NO_ASAN_INLINE vec4f doEval ( Context & context ) { \
             DAS_PROFILE_NODE \
             auto lv =  subexpr.compute##COMPUTE(context); \
             context.stopFlags |= EvalFlags::stopForReturn; \
             context.abiResult() = v_ldu((const float *) lv); \
             return v_zero(); \
+        } \
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+            return doEval(context); \
         } \
     };
 
@@ -64,12 +68,15 @@ IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,Return,,vec4f,vec4f)
 #undef IMPLEMENT_ANY_OP1_NODE
 #define IMPLEMENT_ANY_OP1_NODE(INLINE,OPNAME,TYPE,CTYPE,RCTYPE,COMPUTE) \
     struct SimNode_Op1##COMPUTE : SimNode_Op1Fusion { \
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+        NO_ASAN_INLINE vec4f doEval ( Context & context ) { \
             DAS_PROFILE_NODE \
             auto lv =  subexpr.compute##COMPUTE(context); \
             context.stopFlags |= EvalFlags::stopForReturn; \
             context.abiResult() = v_ldu((const float *) lv); \
             return v_zero(); \
+        } \
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
+            return doEval(context); \
         } \
     };
 
