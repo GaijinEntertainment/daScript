@@ -810,8 +810,9 @@ def public type_to_llvm_type(t : TypeDeclPtr) {
         var inscope ndt <- clone_type(t)
         ndt.dim |> clear()
         res = type_to_llvm_type(ndt)
-        for (d in t.dim) {
-            res = LLVMArrayType(res, uint(d))
+        let ndim = length(t.dim)
+        for (i in range(ndim)) {
+            res = LLVMArrayType(res, uint(t.dim[ndim - 1 - i]))
         }
     } elif (t.isPointer) {
         res = get_type_pointer(t.firstType)

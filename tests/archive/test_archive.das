@@ -145,10 +145,73 @@ def test_save_and_load_empty_string(t : T?) {
     test_save_and_load_string(t, "")
 }
 
-// Note: multi-dim fixed array serialization (2D, 3D) works correctly via
-// archive::serialize(auto(TT)[][]) overloads, but AOT codegen crashes on ARM
-// platforms. Tests removed pending ARM AOT fix. The overloads are exercised
-// by the sequence game's @live GameState (Card[MAX_PLAYERS][MAX_HAND_SIZE]).
+[test]
+def test_save_and_load_dim2d(t : T?) {
+    t |> run("int 2D fixed array") @(t : T?) {
+        var reference : int[3][2]
+        reference[0][0] = 42
+        reference[0][1] = 7
+        reference[2][1] = 99
+        var data <- mem_archive_save(reference)
+        var test : int[3][2]
+        data |> mem_archive_load(test)
+        delete data
+        t |> equal(test[0][0], 42)
+        t |> equal(test[0][1], 7)
+        t |> equal(test[1][0], 0)
+        t |> equal(test[2][1], 99)
+    }
+    t |> run("string 2D fixed array") @(t : T?) {
+        var reference : string[2][3]
+        reference[0][0] = "hello"
+        reference[1][2] = "world"
+        var data <- mem_archive_save(reference)
+        var test : string[2][3]
+        data |> mem_archive_load(test)
+        delete data
+        t |> equal(test[0][0], "hello")
+        t |> equal(test[0][1], "")
+        t |> equal(test[1][2], "world")
+    }
+}
+
+[test]
+def test_save_and_load_dim3d(t : T?) {
+    t |> run("int 3D fixed array") @(t : T?) {
+        var reference : int[2][3][4]
+        reference[0][0][0] = 1
+        reference[1][2][3] = 42
+        var data <- mem_archive_save(reference)
+        var test : int[2][3][4]
+        data |> mem_archive_load(test)
+        delete data
+        t |> equal(test[0][0][0], 1)
+        t |> equal(test[1][2][3], 42)
+        t |> equal(test[0][1][2], 0)
+    }
+}
+
+struct DimTestStruct {
+    values : float[2][3]
+    name : string
+}
+
+[test]
+def test_save_and_load_struct_with_dim(t : T?) {
+    t |> run("struct containing 2D fixed array") @(t : T?) {
+        var reference = DimTestStruct(name = "test")
+        reference.values[0][0] = 1.0
+        reference.values[1][2] = 3.14
+        var data <- mem_archive_save(reference)
+        var test : DimTestStruct
+        data |> mem_archive_load(test)
+        delete data
+        t |> equal(test.name, "test")
+        t |> equal(test.values[0][0], 1.0)
+        t |> equal(test.values[1][2], 3.14)
+        t |> equal(test.values[0][1], 0.0)
+    }
+}
 
 [test]
 def test_save_and_load_manual(t : T?) {
