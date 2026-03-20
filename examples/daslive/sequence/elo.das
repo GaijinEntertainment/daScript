@@ -5,7 +5,9 @@ module elo public
 require gameplay public
 require bot_random public
 require bot_greedy public
+require bot_lookahead public
 require math
+require daslib/jobque_boost
 
 // ELO rating system + headless tournament runner.
 // Run: bin/Release/daslang.exe examples/daslive/sequence/elo.das
@@ -16,8 +18,9 @@ let ELO_START = 1500.0
 
 struct BotEntry {
     name : string
-    bot_type : string       // "random" or "greedy"
-    weights : GreedyWeights = GreedyWeights() // used when bot_type == "greedy"
+    bot_type : string       // "random", "greedy", or "lookahead"
+    weights : GreedyWeights = GreedyWeights()
+    la_weights : LookaheadWeights = LookaheadWeights()
     elo : float
     wins : int
     losses : int
@@ -30,6 +33,10 @@ def make_random_bot(name : string) : BotEntry {
 
 def make_greedy_bot(name : string; w : GreedyWeights = GreedyWeights()) : BotEntry {
     return BotEntry(name = name, bot_type = "greedy", weights = w, elo = ELO_START)
+}
+
+def make_lookahead_bot(name : string; w : LookaheadWeights = LookaheadWeights()) : BotEntry {
+    return BotEntry(name = name, bot_type = "lookahead", la_weights = w, elo = ELO_START)
 }
 
 def elo_expected(rating_a, rating_b : float) : float {
@@ -50,6 +57,8 @@ def pick_move(bot : BotEntry; game : GameState; player_idx, seed : int) : Move {
         return bot_random_move(game, player_idx, seed)
     } elif (bot.bot_type == "greedy") {
         return bot_greedy_move(game, player_idx, seed, bot.weights)
+    } elif (bot.bot_type == "lookahead") {
+        return bot_lookahead_move(game, player_idx, seed, bot.la_weights)
     }
     return Move()
 }
@@ -84,40 +93,75 @@ def play_headless_game(bot_a, bot_b : BotEntry; seed : int; max_turns : int = 50
     return -1
 }
 
+// --- Result struct for parallel game evaluation ---
+
+struct GameResult {
+    winner : int  // 0=a_wins, 1=b_wins, -1=draw
+}
+
+// Play all games for a bot pair in parallel, return (a_wins, b_wins, draws).
+def play_pair_parallel(bot_a, bot_b : BotEntry; num_games, base_seed : int) : int3 {
+    var a_wins = 0
+    var b_wins = 0
+    var draws = 0
+    with_channel(num_games) $(ch) {
+        with_wait_group(num_games) $(wg) {
+            for (g in range(num_games)) {
+                let seed = base_seed + g
+                let even = g % 2 == 0
+                new_job() @() {
+                    var winner : int
+                    if (even) {
+                        winner = play_headless_game(bot_a, bot_b, seed)
+                    } else {
+                        let w = play_headless_game(bot_b, bot_a, seed)
+                        winner = w < 0 ? -1 : (w == 0 ? 1 : 0)
+                    }
+                    ch |> push_clone(GameResult(winner = winner))
+                    ch |> notify_and_release
+                    wg |> done
+                }
+            }
+        }
+        ch |> for_each_clone() $(r : GameResult#) {
+            if (r.winner == 0) {
+                a_wins++
+            } elif (r.winner == 1) {
+                b_wins++
+            } else {
+                draws++
+            }
+        }
+    }
+    return int3(a_wins, b_wins, draws)
+}
+
 // Quiet tournament — no per-pair printing, just updates bots in-place with ELO/wins/losses.
 def run_tournament_quiet(var bots : array<BotEntry>; num_games : int; gen_seed : int = 42) {
     let n = length(bots)
     var game_seed = gen_seed
-    for (a in range(n)) {
-        for (b in range(a + 1, n)) {
-            var a_wins = 0
-            var b_wins = 0
-            var draws = 0
-            for (g in range(num_games)) {
-                game_seed++
-                var winner : int
-                if (g % 2 == 0) {
-                    winner = play_headless_game(bots[a], bots[b], game_seed)
-                } else {
-                    let w = play_headless_game(bots[b], bots[a], game_seed)
-                    winner = w < 0 ? -1 : (w == 0 ? 1 : 0)
-                }
-                if (winner == 0) {
-                    a_wins++
+    with_job_que() {
+        for (a in range(n)) {
+            for (b in range(a + 1, n)) {
+                let result = play_pair_parallel(bots[a], bots[b], num_games, game_seed)
+                game_seed += num_games
+                let a_wins = result.x
+                let b_wins = result.y
+                let draws = result.z
+                // ELO updates are sequential (order-dependent)
+                for (g in range(a_wins)) {
                     elo_update(bots[a].elo, bots[b].elo, true)
-                } elif (winner == 1) {
-                    b_wins++
-                    elo_update(bots[a].elo, bots[b].elo, false)
-                } else {
-                    draws++
                 }
+                for (g in range(b_wins)) {
+                    elo_update(bots[a].elo, bots[b].elo, false)
+                }
+                bots[a].wins += a_wins
+                bots[a].losses += b_wins
+                bots[a].draws += draws
+                bots[b].wins += b_wins
+                bots[b].losses += a_wins
+                bots[b].draws += draws
             }
-            bots[a].wins += a_wins
-            bots[a].losses += b_wins
-            bots[a].draws += draws
-            bots[b].wins += b_wins
-            bots[b].losses += a_wins
-            bots[b].draws += draws
         }
     }
 }
@@ -127,38 +171,30 @@ def run_tournament(var bots : array<BotEntry>; num_games : int) {
     print("Tournament: {num_games} games per pair, {n} bots\n")
     print("---\n")
     var game_seed = 42
-    for (a in range(n)) {
-        for (b in range(a + 1, n)) {
-            var a_wins = 0
-            var b_wins = 0
-            var draws = 0
-            for (g in range(num_games)) {
-                game_seed++
-                var winner : int
-                if (g % 2 == 0) {
-                    winner = play_headless_game(bots[a], bots[b], game_seed)
-                } else {
-                    let w = play_headless_game(bots[b], bots[a], game_seed)
-                    winner = w < 0 ? -1 : (w == 0 ? 1 : 0)
-                }
-                if (winner == 0) {
-                    a_wins++
+    with_job_que() {
+        for (a in range(n)) {
+            for (b in range(a + 1, n)) {
+                let result = play_pair_parallel(bots[a], bots[b], num_games, game_seed)
+                game_seed += num_games
+                let a_wins = result.x
+                let b_wins = result.y
+                let draws = result.z
+                // ELO updates are sequential (order-dependent)
+                for (g in range(a_wins)) {
                     elo_update(bots[a].elo, bots[b].elo, true)
-                } elif (winner == 1) {
-                    b_wins++
-                    elo_update(bots[a].elo, bots[b].elo, false)
-                } else {
-                    draws++
                 }
+                for (g in range(b_wins)) {
+                    elo_update(bots[a].elo, bots[b].elo, false)
+                }
+                bots[a].wins += a_wins
+                bots[a].losses += b_wins
+                bots[a].draws += draws
+                bots[b].wins += b_wins
+                bots[b].losses += a_wins
+                bots[b].draws += draws
+                let pct = num_games > 0 ? float(a_wins) * 100.0 / float(num_games) : 0.0
+                print("{bots[a].name} vs {bots[b].name}: {a_wins}W {b_wins}L {draws}D ({pct:.1f}%)\n")
             }
-            bots[a].wins += a_wins
-            bots[a].losses += b_wins
-            bots[a].draws += draws
-            bots[b].wins += b_wins
-            bots[b].losses += a_wins
-            bots[b].draws += draws
-            let pct = num_games > 0 ? float(a_wins) * 100.0 / float(num_games) : 0.0
-            print("{bots[a].name} vs {bots[b].name}: {a_wins}W {b_wins}L {draws}D ({pct:.1f}%)\n")
         }
     }
     // Sort by ELO descending
