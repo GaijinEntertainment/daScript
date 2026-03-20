@@ -41,6 +41,9 @@ namespace das {
         // Command dispatch bridge (set by host after compile)
         Context * dispatch_context = nullptr;
         SimFunction * dispatch_fn = nullptr;
+
+        // Set by DLL when command exception kills context
+        bool context_dead = false;
     };
 
     // Functions bound to daScript — declared here for AOT.

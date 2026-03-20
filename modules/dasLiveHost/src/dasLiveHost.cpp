@@ -6,6 +6,22 @@ namespace das {
 // Single state instance, owned by the DLL. Host accesses via exported C functions.
 static LiveHostState g_state;
 
+// Clear data entries from the store (caller must hold store_mutex).
+// Convention: "__live_vars_*" and "__decs_*" are data entries that may contain
+// corrupted state. Everything else (window handles, audio handles, etc.) is
+// infrastructure and must survive.
+static void clear_store_data_locked() {
+    for (auto it = g_state.store.begin(); it != g_state.store.end(); ) {
+        const auto & key = it->first;
+        if (key.compare(0, 12, "__live_vars_") == 0 ||
+            key.compare(0, 7, "__decs_") == 0) {
+            it = g_state.store.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 // Exported C functions for the host executable to access state.
 // These cross the DLL boundary safely because they use only POD types.
 extern "C" {
@@ -40,6 +56,12 @@ extern "C" {
             }
         }
     }
+    DAS_EXPORT_DLL void live_host_clear_store() {
+        lock_guard<mutex> lock(g_state.store_mutex);
+        clear_store_data_locked();
+    }
+    DAS_EXPORT_DLL bool live_host_is_context_dead()    { return g_state.context_dead; }
+    DAS_EXPORT_DLL void live_host_clear_context_dead() { g_state.context_dead = false; }
     DAS_EXPORT_DLL void live_host_clear_error() {
         g_state.last_error.clear();
     }
@@ -178,7 +200,17 @@ const char * live_dispatch_command_via_host(const char * cmd_json, Context * cal
     args[0] = cast<char *>::from(cmdStr);
     auto result = mainCtx->evalWithCatch(g_state.dispatch_fn, args);
     if (auto ex = mainCtx->getException()) {
-        string err = string("{\"error\": \"dispatch exception: ") + ex + "\"}";
+        string msg = string("EXCEPTION in live_command: ") + ex + " at " + mainCtx->exceptionAt.describe();
+        g_state.last_error = msg;
+        g_state.paused = true;
+        g_state.context_dead = true;
+        {
+            lock_guard<mutex> lock(g_state.store_mutex);
+            clear_store_data_locked();
+        }
+        g_state.dispatch_context = nullptr;
+        g_state.dispatch_fn = nullptr;
+        string err = string("{\"error\": \"") + msg + "\"}";
         return callerCtx->allocateString(err, nullptr);
     }
     // Clone result string to caller's context (main ctx string may be GC'd)
