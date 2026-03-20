@@ -9,6 +9,7 @@ namespace das {
     DAS_API bool is_folding();
     DAS_API const char * compiling_file_name ( );
     DAS_API const char * compiling_module_name ( );
+    DAS_API const char * get_module_file_name ( const char * name, Context * context );
     DAS_API void setCommandLineArguments ( int argc, char * argv[] );
     DAS_API void getCommandLineArguments( Array & arr );
 
