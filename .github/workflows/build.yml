@@ -20,7 +20,7 @@ jobs:
   pre_job:
   ###########################################################
     # continue-on-error: true # Uncomment once integration is finished
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-fat
     # Map a step output to a job output
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
@@ -61,14 +61,14 @@ jobs:
           - target: linux
             release_target: linux
             release_arch: x86_64
-            runner: ubuntu-latest
+            runner: ubuntu-latest-fat
             archive_ext: tar.gz
             sanitizers: none
 
           # single asan build — disabled: consistently times out in CI
           # - target: linux
           #   architecture: 64
-          #   runner: ubuntu-latest
+          #   runner: ubuntu-latest-fat
           #   cmake_preset: Debug
           #   sanitizers: asan
           #   build_name: linux_asan
@@ -78,7 +78,7 @@ jobs:
           # single ubsan build
           - target: linux
             architecture: 64
-            runner: ubuntu-latest
+            runner: ubuntu-latest-fat
             cmake_preset: Debug
             sanitizers: ubsan
             build_name: linux_ubsan
@@ -88,7 +88,7 @@ jobs:
           - target: linux_arm
             release_target: linux
             release_arch: arm64
-            runner: ubuntu-24.04-arm
+            runner: ubuntu-24.04-arm-fat
             archive_ext: tar.gz
 
           - target: darwin15
@@ -115,7 +115,7 @@ jobs:
             archive_ext: tar.gz
 
           - target: windows
-            runner: windows-latest
+            runner: windows-latest-fat
             archive_ext: zip
 
           - target: windows
