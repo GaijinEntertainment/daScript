@@ -341,34 +341,45 @@ namespace das {
             else
                 b
             */
-            if (!block->isClosure && block->list.size() > 1) {
-                for ( int i=0, is=int(block->list.size())-1; i!=is; ++i ) {
-                    auto expr = block->list[i];
-                    if (expr != block->list.back()) {
-                        if (expr->rtti_isIfThenElse()) {
-                            auto ite = static_pointer_cast<ExprIfThenElse>(expr);
-                            if (!ite->if_false) {
-                                if (ite->if_true->rtti_isBlock()) {
-                                    auto tb = static_pointer_cast<ExprBlock>(ite->if_true);
-                                    if ( tb->list.size() ) {
-                                        auto lastE = tb->list.back();
-                                        if (lastE->rtti_isReturn() || lastE->rtti_isBreak() || lastE->rtti_isContinue()) {
-                                            vector<ExpressionPtr> tail;
-                                            tail.insert(tail.begin(), block->list.begin() + i + 1, block->list.end());
-                                            auto fb = make_smart<ExprBlock>();
-                                            fb->at = tail.front()->at;
-                                            swap(fb->list, tail);
-                                            ite->if_false = fb;
-                                            block->list.resize(i + 1);
-                                            reportFolding();
-                                            return Visitor::visit(block);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+            if (block->isClosure) {
+                return Visitor::visit(block);
+            }
+            // Traverse the block in reversed order to handle all transformations
+            // in a single pass. This makes it easier to apply or rewrites
+            // without doing a ping-pong with optimization runner per every if
+            // statement being rewritten. Instead, we'll report changes only
+            // once per the entire batch of rewrites.
+            // This reduces the approx run time of optimize phase over
+            // a ~400 if statement function from ~0.500s to ~0.005s
+            // and have ~2 optimization passes instead of ~402
+            bool anyChange = false;
+            for (int i = block->list.size() - 2; i >= 0; i--) {
+                auto expr = block->list[i];
+                if (!expr->rtti_isIfThenElse()) {
+                    continue;
                 }
+                auto ite = static_pointer_cast<ExprIfThenElse>(expr);
+                if (ite->if_false || !ite->if_true->rtti_isBlock()) {
+                    continue;
+                }
+                auto tb = static_pointer_cast<ExprBlock>(ite->if_true);
+                if (tb->list.size() == 0) {
+                    continue;
+                }
+                auto lastE = tb->list.back();
+                if (lastE->rtti_isReturn() || lastE->rtti_isBreak() || lastE->rtti_isContinue()) {
+                    vector<ExpressionPtr> tail;
+                    tail.insert(tail.begin(), block->list.begin() + i + 1, block->list.end());
+                    auto fb = make_smart<ExprBlock>();
+                    fb->at = tail.front()->at;
+                    swap(fb->list, tail);
+                    ite->if_false = fb;
+                    block->list.resize(i + 1);
+                    anyChange = true;
+                }
+            }
+            if (anyChange) {
+                reportFolding();
             }
             return Visitor::visit(block);
         }
