@@ -50,12 +50,14 @@ class PerfLintVisitor : AstVisitor {
     @do_not_delete perf004_save_stack : array<Variable?>
     // reported character_at locations (to avoid duplicate PERF002+PERF003)
     @do_not_delete reported_character_at : array<ExprCall?>
+    warning_count : int = 0
 
     def PerfLintVisitor() {
         pass
     }
 
     def perf_warning(text : string; at : LineInfo) : void {
+        warning_count ++
         if (compile_time_errors) {
             compiling_program() |> macro_performance_warning(at, text)
         } else {
@@ -333,17 +335,20 @@ class PerfLintVisitor : AstVisitor {
 // Public API
 // ---------------------------------------------------------------------------
 
-def public perf_lint(prog : ProgramPtr; compile_time_errors : bool) {
+def public perf_lint(prog : ProgramPtr; compile_time_errors : bool) : int {
     //! Runs the performance lint visitor on the compiled program.
+    //! Returns the number of warnings found.
     var astVisitor = new PerfLintVisitor(compile_time_errors = compile_time_errors)
     unsafe {
         astVisitor.astVisitorAdapter <- make_visitor(*astVisitor)
     }
     visit(prog, astVisitor.astVisitorAdapter)
+    let count = astVisitor.warning_count
     astVisitor.astVisitorAdapter := null
     unsafe {
         delete astVisitor
     }
+    return count
 }
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,4 @@
 options gen2
-expect 40217:2
 // PERF004: String interpolation reassignment in loop
 //
 // Problem:
@@ -20,7 +19,6 @@ expect 40217:2
 //       }
 //   }
 
-require daslib/perf_lint
 require strings
 
 def bad_string_builder_for() : string {

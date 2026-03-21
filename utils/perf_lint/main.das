@@ -55,38 +55,15 @@ def main() {
                 using() <| $(var cop : CodeOfPolicies) {
                     cop.threadlock_context = true
                     cop.ignore_shared_modules = true
+                    cop.export_all = true
                     compile_file(file, access, unsafe(addr(mg)), cop) <| $(ok; program; issues) {
                         if (!ok) {
-                            // Count performance warnings (error[40217]) vs real errors
-                            var perf_count = 0
-                            var has_real_errors = false
-                            var pos = 0
                             let issues_str = string(issues)
-                            while (true) {
-                                let idx = find(issues_str, "error[", pos)
-                                if (idx < 0) {
-                                    break
-                                }
-                                if (find(issues_str, "error[40217]", idx) == idx) {
-                                    perf_count ++
-                                } else {
-                                    has_real_errors = true
-                                }
-                                pos = idx + 6
-                            }
-                            if (has_real_errors) {
-                                print("  COMPILE ERROR:\n{issues_str}\n")
-                                failed_files ++
-                            } else {
-                                total_warnings += perf_count
-                                if (perf_count > 0) {
-                                    print("{issues_str}")
-                                }
-                            }
+                            print("  COMPILE ERROR:\n{issues_str}\n")
+                            failed_files ++
                         } else {
-                            if (!quiet) {
-                                print("  OK\n")
-                            }
+                            // Run perf_lint directly on the compiled program
+                            total_warnings += perf_lint(program, false)
                         }
                     }
                 }
@@ -102,6 +79,6 @@ def main() {
         print("Performance warnings: {total_warnings}\n")
     }
     unsafe {
-        fio::exit(total_warnings > 0 || failed_files > 0 ? 1 : 0)
+        fio::exit(failed_files > 0 ? 1 : 0)
     }
 }

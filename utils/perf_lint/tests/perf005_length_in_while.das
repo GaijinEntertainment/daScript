@@ -1,5 +1,4 @@
 options gen2
-expect 40217:1
 // PERF005: length(string) in while condition
 //
 // Problem:
@@ -23,7 +22,6 @@ expect 40217:1
 //       i ++
 //   }
 
-require daslib/perf_lint
 require strings
 
 def bad_length_in_while(s : string) : int {

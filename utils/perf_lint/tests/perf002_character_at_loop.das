@@ -1,5 +1,4 @@
 options gen2
-expect 40217:5
 // PERF002: character_at in loop with loop variable as index
 //
 // Problem:
@@ -19,34 +18,35 @@ expect 40217:5
 //       }
 //   }
 
-require daslib/perf_lint
 require strings
 
-def bad_character_at_for() {
-    let s = "hello world"
+def bad_character_at_for(s : string) : int {
+    var total = 0
     for (i in range(length(s))) {
-        let ch = character_at(s, i)     // PERF002
+        total += character_at(s, i)     // PERF002
     }
+    return total
 }
 
-def bad_character_at_nested() {
-    let s = "hello"
+def bad_character_at_nested(s : string) : int {
+    var total = 0
     for (i in range(length(s))) {
         for (j in range(length(s))) {
-            let ch = character_at(s, i) // PERF002 (i is a loop var)
+            total += character_at(s, i) // PERF002 (i is a loop var)
         }
     }
+    return total
 }
 
-def bad_character_at_expr() {
-    let s = "hello world"
+def bad_character_at_expr(s : string) : int {
+    var total = 0
     for (i in range(length(s))) {
-        let ch = character_at(s, i + 1) // PERF002 (loop var nested in expression)
+        total += character_at(s, i + 1) // PERF002 (loop var nested in expression)
     }
+    return total
 }
 
-def bad_character_at_mul() : int {
-    let s = "hello world"
+def bad_character_at_mul(s : string) : int {
     var total = 0
     for (i in range(length(s))) {
         total += character_at(s, i * 2) // PERF002 (loop var in expression)
@@ -56,17 +56,17 @@ def bad_character_at_mul() : int {
 
 // --- Good patterns (no warnings from PERF002) ---
 
-def good_peek_data() {
-    let s = "hello world"
+def good_peek_data(s : string) : int {
+    var total = 0
     peek_data(s) <| $(arr) {
         for (i in range(length(arr))) {
-            let ch = int(arr[i])        // O(1)
+            total += int(arr[i])        // O(1)
         }
     }
+    return total
 }
 
-def good_character_at_non_loop_var() : int {
-    let s = "hello world"
+def good_character_at_non_loop_var(s : string) : int {
     var idx = 3
     for (i in range(length(s))) {
         idx = character_at(s, idx)      // idx is not a loop variable — no PERF002

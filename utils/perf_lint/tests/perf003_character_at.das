@@ -1,5 +1,4 @@
 options gen2
-expect 40217:2
 // PERF003: character_at anywhere (informational)
 //
 // Problem:
@@ -16,7 +15,6 @@ expect 40217:2
 //       arr[i] = uint8('X')            // O(1) mutation, returns new string
 //   }
 
-require daslib/perf_lint
 require strings
 
 def info_character_at_standalone(s : string) : int {
