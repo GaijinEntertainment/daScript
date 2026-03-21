@@ -896,11 +896,19 @@ namespace das
         context->reportAnyHeap(info,true,true,false,errOnly);
     }
 
-    void builtin_table_lock ( const Table & arr, Context * context, LineInfoArg * at ) {
+    void builtin_table_lock ( Table & arr, Context * context, LineInfoArg * at ) {
+        table_lock(*context, arr, at);
+    }
+
+    void builtin_table_unlock ( Table & arr, Context * context, LineInfoArg * at ) {
+        table_unlock(*context, arr, at);
+    }
+
+    void builtin_table_lock_mutable ( const Table & arr, Context * context, LineInfoArg * at ) {
         table_lock(*context, const_cast<Table&>(arr), at);
     }
 
-    void builtin_table_unlock ( const Table & arr, Context * context, LineInfoArg * at ) {
+    void builtin_table_unlock_mutable ( const Table & arr, Context * context, LineInfoArg * at ) {
         table_unlock(*context, const_cast<Table&>(arr), at);
     }
 
@@ -1956,8 +1964,14 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_table_lock)>(*this, lib, "__builtin_table_lock",
             SideEffects::modifyArgumentAndExternal, "builtin_table_lock")
                 ->args({"table","context","at"});
+        addExtern<DAS_BIND_FUN(builtin_table_lock_mutable)>(*this, lib, "__builtin_table_lock_mutable",
+            SideEffects::modifyArgumentAndExternal, "builtin_table_lock_mutable")
+                ->args({"table","context","at"});
         addExtern<DAS_BIND_FUN(builtin_table_unlock)>(*this, lib, "__builtin_table_unlock",
             SideEffects::modifyArgumentAndExternal, "builtin_table_unlock")
+                ->args({"table","context","at"});
+        addExtern<DAS_BIND_FUN(builtin_table_unlock_mutable)>(*this, lib, "__builtin_table_unlock_mutable",
+            SideEffects::modifyArgumentAndExternal, "builtin_table_unlock_mutable")
                 ->args({"table","context","at"});
         addExtern<DAS_BIND_FUN(builtin_table_clear_lock)>(*this, lib, "__builtin_table_clear_lock",
             SideEffects::modifyArgumentAndExternal, "builtin_table_clear_lock")

@@ -55,8 +55,10 @@ namespace das {
     DAS_API void heap_collect ( bool stringHeap, bool validate, Context * context, LineInfoArg * info );
     DAS_API void heap_report ( Context * context, LineInfoArg * info );
     DAS_API void memory_report ( bool errorsOnly, Context * context, LineInfoArg * info );
-    DAS_API void builtin_table_lock ( const Table & arr, Context * context, LineInfoArg * at );
-    DAS_API void builtin_table_unlock ( const Table & arr, Context * context, LineInfoArg * at );
+    DAS_API void builtin_table_lock_mutable ( const Table & arr, Context * context, LineInfoArg * at );
+    DAS_API void builtin_table_unlock_mutable ( const Table & arr, Context * context, LineInfoArg * at );
+    DAS_API void builtin_table_lock ( Table & arr, Context * context, LineInfoArg * at );
+    DAS_API void builtin_table_unlock ( Table & arr, Context * context, LineInfoArg * at );
     DAS_API void builtin_table_clear_lock ( const Table & arr, Context * context );
     DAS_API int builtin_array_size ( const Array & arr );
     DAS_API int builtin_array_capacity ( const Array & arr );
@@ -67,8 +69,10 @@ namespace das {
     DAS_API void builtin_array_erase ( Array & pArray, int index, int stride, Context * context, LineInfoArg * at );
     DAS_API void builtin_array_erase_range ( Array & pArray, int index, int count, int stride, Context * context, LineInfoArg * at );
     DAS_API void builtin_array_clear ( Array & pArray, Context * context, LineInfoArg * at );
-    DAS_API void builtin_array_lock ( const Array & arr, Context * context, LineInfoArg * at );
-    DAS_API void builtin_array_unlock ( const Array & arr, Context * context, LineInfoArg * at );
+    DAS_API void builtin_array_lock_mutable ( const Array & arr, Context * context, LineInfoArg * at );
+    DAS_API void builtin_array_unlock_mutable ( const Array & arr, Context * context, LineInfoArg * at );
+    DAS_API void builtin_array_lock ( Array & arr, Context * context, LineInfoArg * at );
+    DAS_API void builtin_array_unlock ( Array & arr, Context * context, LineInfoArg * at );
     DAS_API void builtin_array_clear_lock ( const Array & arr, Context * );
     DAS_API void builtin_temp_array ( void * data, int size, const Block & block, Context * context, LineInfoArg * lineinfo );
     DAS_API void builtin_make_temp_array ( Array & arr, void * data, int size );

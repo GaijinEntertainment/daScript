@@ -483,11 +483,11 @@ def reserve(var Tab : table<auto(keyT); auto>; newSize : int) {
 def get(Tab : table<auto(keyT); auto(valT)> ==const#; at : keyT | #; blk : block<(p : valT#&) : void>) {
     var val = __builtin_table_find(Tab, at)
     if (val != null) {
-        __builtin_table_lock(Tab)
+        __builtin_table_lock_mutable(Tab)
         unsafe {
             invoke(blk, *(reinterpret<valT?#> val))
         }
-        __builtin_table_unlock(Tab)
+        __builtin_table_unlock_mutable(Tab)
         return true
     } else {
         return false
@@ -497,11 +497,11 @@ def get(Tab : table<auto(keyT); auto(valT)> ==const#; at : keyT | #; blk : block
 def get(Tab : table<auto(keyT); auto(valT)> ==const; at : keyT | #; blk : block<(p : valT&) : void>) {
     var val = __builtin_table_find(Tab, at)
     if (val != null) {
-        __builtin_table_lock(Tab)
+        __builtin_table_lock_mutable(Tab)
         unsafe {
             invoke(blk, *(reinterpret<valT?> val))
         }
-        __builtin_table_unlock(Tab)
+        __builtin_table_unlock_mutable(Tab)
         return true
     } else {
         return false
@@ -541,11 +541,11 @@ def get(var Tab : table<auto(keyT); auto(valT)> ==const; at : keyT | #; blk : bl
 def get(Tab : table<auto(keyT); auto(valT)[]> ==const#; at : keyT | #; blk : block<(p : valT[typeinfo dim_table_value(Tab)]#&) : void>) {
     var val = __builtin_table_find(Tab, at)
     if (val != null) {
-        __builtin_table_lock(Tab)
+        __builtin_table_lock_mutable(Tab)
         unsafe {
             invoke(blk, *(reinterpret<valT[typeinfo dim_table_value(Tab)]?#> val))
         }
-        __builtin_table_unlock(Tab)
+        __builtin_table_unlock_mutable(Tab)
         return true
     } else {
         return false
@@ -555,11 +555,11 @@ def get(Tab : table<auto(keyT); auto(valT)[]> ==const#; at : keyT | #; blk : blo
 def get(Tab : table<auto(keyT); auto(valT)[]> ==const; at : keyT | #; blk : block<(p : valT[typeinfo dim_table_value(Tab)]&) : void>) {
     var val = __builtin_table_find(Tab, at)
     if (val != null) {
-        __builtin_table_lock(Tab)
+        __builtin_table_lock_mutable(Tab)
         unsafe {
             invoke(blk, *(reinterpret<valT[typeinfo dim_table_value(Tab)]?> val))
         }
-        __builtin_table_unlock(Tab)
+        __builtin_table_unlock_mutable(Tab)
         return true
     } else {
         return false
@@ -1213,11 +1213,11 @@ def finalize(var a : table<auto(TK); auto(TV)>) {
 // temporal
 
 def lock(Tab : table<auto(keyT); auto(valT)> | #; blk : block<(t : table<keyT; valT>#) : void >) {
-    __builtin_table_lock(Tab)
+    __builtin_table_lock_mutable(Tab)
     unsafe {
         invoke(blk, reinterpret<table<auto(keyT); auto(valT)> const>(Tab))
     }
-    __builtin_table_unlock(Tab)
+    __builtin_table_unlock_mutable(Tab)
 }
 
 def lock_forever(var Tab : table<auto(keyT); auto(valT)> | #) : table<keyT; valT># {
@@ -1623,11 +1623,11 @@ def lock(var a : array<auto(TT)> ==const | #; blk : block<(var x : array<TT>#)>)
 }
 
 def lock(a : array<auto(TT)> ==const | #; blk : block<(x : array<TT>#)>) {
-    __builtin_array_lock(a)
+    __builtin_array_lock_mutable(a)
     unsafe {
         invoke(blk, reinterpret<array<auto(TT)> const#> a)
     }
-    __builtin_array_unlock(a)
+    __builtin_array_unlock_mutable(a)
 }
 
 def lock_data(var a : array<auto(TT)> ==const | #; blk : block<(var p : TT?#; s : int)>) {
@@ -1649,11 +1649,11 @@ def lock_data(var a : array<auto(TT)> ==const | #; blk : block<(var p : TT?#; s 
 def lock_data(a : array<auto(TT)> ==const | #; blk : block<(p : TT const?#; s : int)>) {
     let len = length(a)
     if (len != 0) {
-        __builtin_array_lock(a)
+        __builtin_array_lock_mutable(a)
         unsafe {
             invoke(blk, reinterpret<TT const?#> addr(a[0]), len)
         }
-        __builtin_array_unlock(a)
+        __builtin_array_unlock_mutable(a)
     } else {
         unsafe {
             invoke(blk, reinterpret<TT const?#> null, 0)

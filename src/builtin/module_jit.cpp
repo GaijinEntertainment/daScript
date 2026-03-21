@@ -377,11 +377,11 @@ extern "C" {
     }
 
     DAS_API void jit_array_lock ( const Array & arr, Context * context, LineInfoArg * at ) {
-        builtin_array_lock(arr, context, at);
+        builtin_array_lock_mutable(arr, context, at);
     }
 
     DAS_API void jit_array_unlock ( const Array & arr, Context * context, LineInfoArg * at ) {
-        builtin_array_unlock(arr, context, at);
+        builtin_array_unlock_mutable(arr, context, at);
     }
 
     DAS_API int32_t jit_str_cmp ( char * a, char * b ) {
