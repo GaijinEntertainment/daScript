@@ -1,0 +1,107 @@
+options gen2
+
+require daslib/perf_lint
+require daslib/ast_boost
+require fio
+require strings
+require daslib/strings_boost
+
+[export]
+def main() {
+    let args <- get_command_line_arguments()
+    let sep = find_index(args, "--") + 1
+    if (sep <= 0 || sep >= length(args)) {
+        print("Usage: daslang utils/perf_lint/main.das -- file1.das [file2.das ...] [--quiet]\n")
+        print("\nPerformance lint checker for daslang files.\n")
+        print("Compiles each file and reports performance anti-patterns.\n")
+        print("\nRules:\n")
+        print("  PERF001  string += in loop (O(n^2))\n")
+        print("  PERF002  character_at in loop with loop variable index\n")
+        print("  PERF003  character_at anywhere (info)\n")
+        print("  PERF004  string interpolation reassignment in loop (O(n^2))\n")
+        print("  PERF005  length(string) in while condition\n")
+        unsafe {
+            fio::exit(1)
+        }
+        return
+    }
+    var quiet = false
+    var files : array<string>
+    for (i in range(sep, length(args))) {
+        if (args[i] == "--quiet") {
+            quiet = true
+        } else {
+            files |> push(args[i])
+        }
+    }
+    if (length(files) == 0) {
+        print("Error: no files specified\n")
+        unsafe {
+            fio::exit(1)
+        }
+        return
+    }
+    var total_warnings = 0
+    var total_files = 0
+    var failed_files = 0
+    for (file in files) {
+        if (!quiet) {
+            print("checking {file}...\n")
+        }
+        total_files ++
+        if (true) {
+            var inscope access <- make_file_access("")
+            using() <| $(var mg : ModuleGroup) {
+                using() <| $(var cop : CodeOfPolicies) {
+                    cop.threadlock_context = true
+                    cop.ignore_shared_modules = true
+                    compile_file(file, access, unsafe(addr(mg)), cop) <| $(ok; program; issues) {
+                        if (!ok) {
+                            // Count performance warnings (error[40217]) vs real errors
+                            var perf_count = 0
+                            var has_real_errors = false
+                            var pos = 0
+                            let issues_str = string(issues)
+                            while (true) {
+                                let idx = find(issues_str, "error[", pos)
+                                if (idx < 0) {
+                                    break
+                                }
+                                if (find(issues_str, "error[40217]", idx) == idx) {
+                                    perf_count ++
+                                } else {
+                                    has_real_errors = true
+                                }
+                                pos = idx + 6
+                            }
+                            if (has_real_errors) {
+                                print("  COMPILE ERROR:\n{issues_str}\n")
+                                failed_files ++
+                            } else {
+                                total_warnings += perf_count
+                                if (perf_count > 0) {
+                                    print("{issues_str}")
+                                }
+                            }
+                        } else {
+                            if (!quiet) {
+                                print("  OK\n")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (!quiet || total_warnings > 0 || failed_files > 0) {
+        print("\n--- Summary ---\n")
+        print("Files checked: {total_files}\n")
+        if (failed_files > 0) {
+            print("Compile errors: {failed_files}\n")
+        }
+        print("Performance warnings: {total_warnings}\n")
+    }
+    unsafe {
+        fio::exit(total_warnings > 0 || failed_files > 0 ? 1 : 0)
+    }
+}

@@ -918,8 +918,9 @@ namespace das
             addInterop<builtin_strdup,void,vec4f> (*this, lib, "builtin_strdup",
                 SideEffects::modifyArgumentAndExternal, "builtin_strdup")->arg("anything")->unsafeOperation = true;
             // regular string
-            addExtern<DAS_BIND_FUN(get_character_at)>(*this, lib, "character_at",
+            auto chAt = addExtern<DAS_BIND_FUN(get_character_at)>(*this, lib, "character_at",
                 SideEffects::none, "get_character_at")->args({"str","idx","context","at"});
+            makeFunctionDeprecated(chAt.get(), "use peek_data(string) $ ( array<uint8> ) pattern instead");
             addExtern<DAS_BIND_FUN(get_character_uat)>(*this, lib, "character_uat",
                 SideEffects::none, "get_character_uat")->args({"str","idx"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(string_repeat)>(*this, lib, "repeat",

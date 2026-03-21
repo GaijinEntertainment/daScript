@@ -1,0 +1,66 @@
+options gen2
+expect 40217:3
+// PERF001: String concatenation with += in a loop
+//
+// Problem:
+//   Using `str += "text"` inside a loop where `str` is defined outside the loop
+//   creates O(n^2) total allocations. Each += allocates a new string of increasing
+//   length, copying all previous content.
+//
+// Bad pattern:
+//   var result = ""
+//   for (i in range(100)) {
+//       result += "x"       // O(n^2) — new allocation every iteration
+//   }
+//
+// Good pattern:
+//   let result = build_string() <| $(var writer) {
+//       for (i in range(100)) {
+//           write(writer, "x")  // O(n) — appends to a single buffer
+//       }
+//   }
+
+require daslib/perf_lint
+require strings
+
+def bad_for_loop() {
+    var result = ""
+    for (i in range(100)) {
+        result += "x"           // PERF001
+    }
+}
+
+def bad_while_loop() {
+    var result = ""
+    var i = 0
+    while (i < 100) {
+        result += "x"           // PERF001
+        i ++
+    }
+}
+
+def bad_nested_loop() {
+    var result = ""
+    for (i in range(10)) {
+        for (j in range(10)) {
+            result += "x"       // PERF001
+        }
+    }
+}
+
+// --- Good patterns (no warnings) ---
+
+def good_build_string() {
+    let result = build_string() <| $(var writer) {
+        for (i in range(100)) {
+            write(writer, "x")
+        }
+    }
+}
+
+def good_local_string_in_loop() {
+    for (i in range(100)) {
+        var local_str = ""
+        local_str += "x"       // local to loop body — no warning
+    }
+}

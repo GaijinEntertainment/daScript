@@ -118,6 +118,15 @@ namespace das
         }
     };
 
+    void makeFunctionDeprecated(Function * func, const string & message) {
+        func->deprecated = true;
+        AnnotationDeclarationPtr decl = make_smart<AnnotationDeclaration>();
+        decl->arguments.push_back(AnnotationArgument("message",message));
+        decl->annotation = make_smart<DeprecatedFunctionAnnotation>();
+        func->annotations.push_back(decl);
+    }
+
+
     struct TypeFunctionFunctionAnnotation : MarkFunctionAnnotation {
         TypeFunctionFunctionAnnotation() : MarkFunctionAnnotation("type_function") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string & error) override {

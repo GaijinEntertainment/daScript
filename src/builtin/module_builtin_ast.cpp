@@ -313,6 +313,11 @@ namespace das {
         prog->error(message ? message : "macro error","","",at,CompilationError::macro_failed);
     }
 
+    void ast_performance_warning ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo ) {
+        if ( !prog ) context->throw_error_at(lineInfo,"program can't be null (expecting compiling_program())");
+        prog->error(message ? message : "performance warning","","",at,CompilationError::performance_lint);
+    }
+
     int32_t get_variant_field_offset ( smart_ptr_raw<TypeDecl> td, int32_t index, Context * context, LineInfoArg * at ) {
         if ( !td ) context->throw_error_at(at,"expecting variant type");
         if ( td->baseType!=Type::tVariant ) context->throw_error_at(at,"expecting variant type, not %s", td->describe().c_str());
@@ -1293,6 +1298,9 @@ namespace das {
         // errors
         addExtern<DAS_BIND_FUN(ast_error)>(*this, lib,  "macro_error",
             SideEffects::modifyArgumentAndExternal, "ast_error")
+                ->args({"porogram","at","message","context","line"});
+        addExtern<DAS_BIND_FUN(ast_performance_warning)>(*this, lib,  "macro_performance_warning",
+            SideEffects::modifyArgumentAndExternal, "ast_performance_warning")
                 ->args({"porogram","at","message","context","line"});
         // class
         addExtern<DAS_BIND_FUN(makeClassRtti)>(*this, lib,  "builtin_ast_make_class_rtti",

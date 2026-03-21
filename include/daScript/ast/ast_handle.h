@@ -837,6 +837,8 @@ namespace das
     }
 
     void setParents ( Module * mod, const char * child, const std::initializer_list<const char *> & parents );
+
+    void makeFunctionDeprecated(Function * func, const string & message);
 }
 
 MAKE_TYPE_FACTORY(das_string, das::string);

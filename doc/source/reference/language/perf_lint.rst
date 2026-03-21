@@ -1,0 +1,188 @@
+.. _perf_lint:
+
+=================================
+Performance Lint (``perf_lint``)
+=================================
+
+.. index::
+    single: perf_lint
+    single: Performance Lint
+
+The ``perf_lint`` module detects common performance anti-patterns in daslang code
+at compile time. When required, a lint pass runs after compilation and reports
+warnings as ``CompilationError::performance_lint`` (error code ``40217``).
+
+-----------
+Quick start
+-----------
+
+Add ``require daslib/perf_lint`` to any file. The lint runs automatically at compile
+time and reports warnings inline::
+
+    options gen2
+    require daslib/perf_lint
+
+    def process(data : string) : string {
+        var result = ""
+        for (i in range(100)) {
+            result += "x"           // warning: PERF001
+        }
+        return result
+    }
+
+-------------------
+Standalone utility
+-------------------
+
+A standalone utility is available for batch-checking files from the command line::
+
+    bin/Release/daslang.exe utils/perf_lint/main.das -- file1.das file2.das [--quiet]
+
+The utility compiles each file (without simulation or execution), runs the lint
+visitor, and prints any warnings. Use ``--quiet`` to suppress progress messages.
+Exit code is ``0`` if no warnings, ``1`` if any warnings found.
+
+-----
+Rules
+-----
+
+PERF001 — string ``+=`` in loop
+================================
+
+String concatenation with ``+=`` inside a loop creates O(n\ :sup:`2`) allocations.
+Each iteration allocates a new string of increasing length, copying all previous content.
+
+.. code-block:: das
+
+    // Bad — O(n^2)
+    var result = ""
+    for (i in range(100)) {
+        result += "x"                   // PERF001
+    }
+
+    // Good — O(n)
+    let result = build_string() <| $(var writer) {
+        for (i in range(100)) {
+            write(writer, "x")
+        }
+    }
+
+PERF002 — ``character_at`` in loop with loop variable
+======================================================
+
+``character_at(s, i)`` is O(n) per call because it internally calls ``strlen``
+to validate the index. In a loop iterating over string indices with the loop
+variable as the index, this becomes O(n\ :sup:`2`) total.
+
+.. code-block:: das
+
+    // Bad — O(n^2)
+    for (i in range(length(s))) {
+        let ch = character_at(s, i)     // PERF002
+    }
+
+    // Good — O(n) total, O(1) per access
+    peek_data(s) <| $(arr) {
+        for (i in range(length(arr))) {
+            let ch = int(arr[i])
+        }
+    }
+
+PERF003 — ``character_at`` anywhere
+====================================
+
+Informational warning for any use of ``character_at``. Each call is O(n) due to
+``strlen``. For isolated checks this is acceptable, but in hot paths consider
+``peek_data`` for reads or ``modify_data`` for mutations.
+
+.. code-block:: das
+
+    let ch = character_at(s, 0)         // PERF003 (informational)
+
+    // Alternative: peek_data for O(1) access
+    peek_data(s) <| $(arr) {
+        let ch = int(arr[0])
+    }
+
+PERF004 — string interpolation reassignment in loop
+=====================================================
+
+``str = "{str}{more}"`` inside a loop has the same O(n\ :sup:`2`) behavior as
+``str += "..."``. Each iteration allocates a new string containing all previous
+content.
+
+.. code-block:: das
+
+    // Bad — O(n^2)
+    var result = ""
+    for (i in range(100)) {
+        result = "{result}x"            // PERF004
+    }
+
+    // Good — O(n)
+    let result = build_string() <| $(var writer) {
+        for (i in range(100)) {
+            write(writer, "x")
+        }
+    }
+
+PERF005 — ``length(string)`` in while condition
+=================================================
+
+``while (i < length(s))`` recomputes ``strlen(s)`` on every iteration. If ``s``
+is not modified in the loop body, this is wasted work. Note that ``for`` loops
+do **not** have this problem because ``for`` computes its source expression once.
+
+.. code-block:: das
+
+    // Bad — strlen every iteration
+    var i = 0
+    while (i < length(s)) {             // PERF005
+        i ++
+    }
+
+    // Good — cached length
+    let slen = length(s)
+    var i = 0
+    while (i < slen) {
+        i ++
+    }
+
+----------------
+Important notes
+----------------
+
+**Lint runs after optimization.** The lint pass runs on the post-optimization AST.
+This means patterns in dead code (unused variables, unreachable functions) may not
+trigger warnings. In real code where results are used, the patterns are preserved
+and detected correctly.
+
+**ExprRef2Value wrapping.** The compiler wraps many value-type reads in
+``ExprRef2Value`` nodes. The lint visitor unwraps these transparently — this is
+an implementation detail, not something users need to worry about.
+
+**Closures are excluded.** Code inside closures (blocks, lambdas) is not checked
+for loop-related patterns, since the closure may be called outside the loop context.
+
+-----
+Tests
+-----
+
+Test files are in ``utils/perf_lint/tests/``, one per rule plus a clean file:
+
+- ``perf001_string_concat_loop.das`` — string ``+=`` in for/while loops
+- ``perf002_character_at_loop.das`` — ``character_at`` with loop variable index
+- ``perf003_character_at.das`` — standalone ``character_at`` usage
+- ``perf004_string_builder_loop.das`` — string builder reassignment in loop
+- ``perf005_length_in_while.das`` — ``length(string)`` in while condition
+- ``no_warnings.das`` — clean code exercising correct patterns
+
+Run tests::
+
+    bin/Release/daslang.exe dastest/dastest.das -- --test utils/perf_lint/tests
+
+.. seealso::
+
+    :ref:`Adding new rules <skills/perf_lint.md>` (skill file for contributors),
+    ``daslib/perf_lint.das`` (source),
+    ``utils/perf_lint/main.das`` (standalone utility)
