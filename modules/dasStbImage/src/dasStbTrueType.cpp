@@ -64,7 +64,7 @@ struct StbttVertexDasAnnotation : ManagedStructureAnnotation<stbtt_vertex_das> {
         addField<DAS_BIND_MANAGED_FIELD(cy)>("cy", "cy");
         addField<DAS_BIND_MANAGED_FIELD(cx1)>("cx1", "cx1");
         addField<DAS_BIND_MANAGED_FIELD(cy1)>("cy1", "cy1");
-        addField<DAS_BIND_MANAGED_FIELD(type)>("vtype", "vtype");
+        addField<DAS_BIND_MANAGED_FIELD(type)>("vtype", "type");
     }
 };
 
