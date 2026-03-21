@@ -32,7 +32,6 @@ struct VarStackEntry {
 }
 
 class PerfLintVisitor : AstVisitor {
-    astVisitorAdapter : smart_ptr<ast::VisitorAdapter>
     compile_time_errors : bool
     // variable + loop tracking
     loop_depth : int = 0
@@ -46,8 +45,8 @@ class PerfLintVisitor : AstVisitor {
     @do_not_delete current_character_at : ExprCall?
     in_length_while_call : int = 0
     in_string_builder_check : int = 0
-    @do_not_delete perf004_target_var : Variable?
-    @do_not_delete perf004_save_stack : array<Variable?>
+    @do_not_delete string_builder_target_var : Variable?
+    @do_not_delete string_builder_save_stack : array<Variable?>
     // reported character_at locations (to avoid duplicate PERF002+PERF003)
     @do_not_delete reported_character_at : array<ExprCall?>
     warning_count : int = 0
@@ -57,11 +56,11 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf_warning(text : string; at : LineInfo) : void {
-        warning_count ++
+        warning_count++
         if (compile_time_errors) {
             compiling_program() |> macro_performance_warning(at, text)
         } else {
-            print("performance warning: {text} at {describe(at)}\n")
+            to_log(LOG_WARNING, "performance warning: {text} at {describe(at)}\n")
         }
     }
 
@@ -98,21 +97,17 @@ class PerfLintVisitor : AstVisitor {
     // --- expression helpers ---
 
     def find_string_var_from_expr(expr : Expression?) : Variable? {
-        if (expr == null) {
-            return null
-        }
+        return null if (expr == null)
         // Unwrap ExprRef2Value (compiler inserts these for value-type reads)
         var inner = expr
         if (inner is ExprRef2Value) {
             inner = get_ptr((inner as ExprRef2Value).subexpr)
         }
-        if (inner != null && (inner is ExprVar)) {
-            var evar = inner as ExprVar
-            if (evar.variable != null && evar.variable._type != null) {
-                if (evar.variable._type.baseType == Type.tString) {
-                    return get_ptr(evar.variable)
-                }
-            }
+        return null if (inner == null || !(inner is ExprVar))
+        var evar = inner as ExprVar
+        return null if (evar.variable == null || evar.variable._type == null)
+        if (evar.variable._type.baseType == Type.tString) {
+            return get_ptr(evar.variable)
         }
         return null
     }
@@ -121,19 +116,19 @@ class PerfLintVisitor : AstVisitor {
 
     def override preVisitExprBlock(blk : smart_ptr<ExprBlock>) : void {
         if (blk.blockFlags.isClosure) {
-            in_closure ++
-            perf004_save_stack |> push(perf004_target_var)
-            perf004_target_var = null
+            in_closure++
+            string_builder_save_stack |> push(string_builder_target_var)
+            string_builder_target_var = null
         }
         scope_stack |> push(length(var_stack))
     }
 
     def override visitExprBlock(var blk : smart_ptr<ExprBlock>) : ExpressionPtr {
         if (blk.blockFlags.isClosure) {
-            in_closure --
-            if (length(perf004_save_stack) > 0) {
-                perf004_target_var = perf004_save_stack |> back()
-                perf004_save_stack |> pop()
+            in_closure--
+            if (length(string_builder_save_stack) > 0) {
+                string_builder_target_var = string_builder_save_stack |> back()
+                string_builder_save_stack |> pop()
             }
         }
         if (length(scope_stack) > 0) {
@@ -156,7 +151,7 @@ class PerfLintVisitor : AstVisitor {
     def override preVisitExprFor(expr : smart_ptr<ExprFor>) : void {
         if (in_closure == 0) {
             scope_stack |> push(length(var_stack))
-            loop_depth ++
+            loop_depth++
         }
     }
 
@@ -168,7 +163,7 @@ class PerfLintVisitor : AstVisitor {
 
     def override visitExprFor(var expr : smart_ptr<ExprFor>) : ExpressionPtr {
         if (in_closure == 0) {
-            loop_depth --
+            loop_depth--
             if (length(scope_stack) > 0) {
                 var_stack |> resize(scope_stack |> back())
                 scope_stack |> pop()
@@ -180,7 +175,7 @@ class PerfLintVisitor : AstVisitor {
     def override preVisitExprWhile(expr : smart_ptr<ExprWhile>) : void {
         if (in_closure == 0) {
             scope_stack |> push(length(var_stack))
-            loop_depth ++
+            loop_depth++
             in_while_cond = true
         }
     }
@@ -191,7 +186,7 @@ class PerfLintVisitor : AstVisitor {
 
     def override visitExprWhile(var expr : smart_ptr<ExprWhile>) : ExpressionPtr {
         if (in_closure == 0) {
-            loop_depth --
+            loop_depth--
             if (length(scope_stack) > 0) {
                 var_stack |> resize(scope_stack |> back())
                 scope_stack |> pop()
@@ -225,33 +220,32 @@ class PerfLintVisitor : AstVisitor {
             var ecall = get_ptr(expr)
             // PERF002: start tracking — any loop var inside this call triggers warning
             if (loop_depth > 0) {
-                in_character_at_call ++
+                in_character_at_call++
                 current_character_at = ecall
             }
         }
         // PERF005: length(string) in while condition — start tracking
         if (in_while_cond && expr.func.name == "length" && expr.func._module.name == "strings") {
-            in_length_while_call ++
+            in_length_while_call++
         }
     }
 
     def override visitExprCall(var expr : smart_ptr<ExprCall>) : ExpressionPtr {
-        if (in_closure == 0) {
-            if (expr.func.name == "character_at" && expr.func._module.name == "strings") {
-                var ecall = get_ptr(expr)
-                if (loop_depth > 0 && in_character_at_call > 0) {
-                    in_character_at_call --
-                    current_character_at = null
-                }
-                // PERF003: character_at anywhere (info) — deferred so PERF002 can claim it first
-                if (!reported_character_at |> has_value(ecall)) {
-                    self->perf_warning("PERF003: character_at is O(n) due to strlen; consider peek_data() for hot paths", expr.at)
-                }
+        return <- expr if (in_closure > 0)
+        if (expr.func.name == "character_at" && expr.func._module.name == "strings") {
+            var ecall = get_ptr(expr)
+            if (loop_depth > 0 && in_character_at_call > 0) {
+                in_character_at_call--
+                current_character_at = null
             }
-            if (expr.func.name == "length" && expr.func._module.name == "strings") {
-                if (in_length_while_call > 0) {
-                    in_length_while_call --
-                }
+            // PERF003: character_at anywhere (info) — deferred so PERF002 can claim it first
+            if (!reported_character_at |> has_value(ecall)) {
+                self->perf_warning("PERF003: character_at is O(n) due to strlen; consider peek_data() for hot paths", expr.at)
+            }
+        }
+        if (expr.func.name == "length" && expr.func._module.name == "strings") {
+            if (in_length_while_call > 0) {
+                in_length_while_call--
             }
         }
         return <- expr
@@ -265,12 +259,12 @@ class PerfLintVisitor : AstVisitor {
         }
         var v = self->find_string_var_from_expr(get_ptr(expr.left))
         if (v != null && self->is_defined_outside_loop(v) && get_ptr(expr.right) is ExprStringBuilder) {
-            perf004_target_var = v
+            string_builder_target_var = v
         }
     }
 
     def override visitExprCopy(var expr : smart_ptr<ExprCopy>) : ExpressionPtr {
-        perf004_target_var = null
+        string_builder_target_var = null
         return <- expr
     }
 
@@ -280,24 +274,24 @@ class PerfLintVisitor : AstVisitor {
         }
         var v = self->find_string_var_from_expr(get_ptr(expr.left))
         if (v != null && self->is_defined_outside_loop(v) && get_ptr(expr.right) is ExprStringBuilder) {
-            perf004_target_var = v
+            string_builder_target_var = v
         }
     }
 
     def override visitExprMove(var expr : smart_ptr<ExprMove>) : ExpressionPtr {
-        perf004_target_var = null
+        string_builder_target_var = null
         return <- expr
     }
 
     def override preVisitExprStringBuilder(expr : smart_ptr<ExprStringBuilder>) : void {
-        if (perf004_target_var != null) {
-            in_string_builder_check ++
+        if (string_builder_target_var != null) {
+            in_string_builder_check++
         }
     }
 
     def override visitExprStringBuilder(var expr : smart_ptr<ExprStringBuilder>) : ExpressionPtr {
         if (in_string_builder_check > 0) {
-            in_string_builder_check --
+            in_string_builder_check--
         }
         return <- expr
     }
@@ -317,7 +311,7 @@ class PerfLintVisitor : AstVisitor {
             }
         }
         // PERF004: target var inside string builder
-        if (in_string_builder_check > 0 && perf004_target_var != null && v == perf004_target_var) {
+        if (in_string_builder_check > 0 && string_builder_target_var != null && v == string_builder_target_var) {
             self->perf_warning("PERF004: rebuilding string via interpolation in loop creates O(n^2) allocations; use build_string() instead", expr.at)
         }
         // PERF005: string var inside length() in while condition
@@ -339,15 +333,10 @@ def public perf_lint(prog : ProgramPtr; compile_time_errors : bool) : int {
     //! Runs the performance lint visitor on the compiled program.
     //! Returns the number of warnings found.
     var astVisitor = new PerfLintVisitor(compile_time_errors = compile_time_errors)
-    unsafe {
-        astVisitor.astVisitorAdapter <- make_visitor(*astVisitor)
-    }
-    visit(prog, astVisitor.astVisitorAdapter)
+    var inscope astVisitorAdapter <- make_visitor(*astVisitor)
+    visit(prog, astVisitorAdapter)
     let count = astVisitor.warning_count
-    astVisitor.astVisitorAdapter := null
-    unsafe {
-        delete astVisitor
-    }
+    unsafe { delete astVisitor; }
     return count
 }
 

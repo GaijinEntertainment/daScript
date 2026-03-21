@@ -175,6 +175,7 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 
 - `try/recover` — NOT `try/catch` (`recover` is the keyword)
 - `panic("message")`, `assert(condition)`, `verify(condition)` (stays in release)
+- **Postfix conditional:** `return expr if (cond)`, `break if (cond)`, `continue if (cond)` — early-exit guard on one line
 
 ### Generic function dispatch
 

@@ -48,19 +48,18 @@ def main() {
         if (!quiet) {
             print("checking {file}...\n")
         }
-        total_files ++
-        if (true) {
+        total_files++
+        {
             var inscope access <- make_file_access("")
             using() <| $(var mg : ModuleGroup) {
                 using() <| $(var cop : CodeOfPolicies) {
-                    cop.threadlock_context = true
                     cop.ignore_shared_modules = true
                     cop.export_all = true
                     compile_file(file, access, unsafe(addr(mg)), cop) <| $(ok; program; issues) {
                         if (!ok) {
                             let issues_str = string(issues)
                             print("  COMPILE ERROR:\n{issues_str}\n")
-                            failed_files ++
+                            failed_files++
                         } else {
                             // Run perf_lint directly on the compiled program
                             total_warnings += perf_lint(program, false)

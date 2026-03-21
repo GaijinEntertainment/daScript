@@ -170,16 +170,7 @@ for loop-related patterns, since the closure may be called outside the loop cont
 Tests
 -----
 
-Test files are in ``utils/perf_lint/tests/``, one per rule plus a clean file:
-
-- ``perf001_string_concat_loop.das`` — string ``+=`` in for/while loops
-- ``perf002_character_at_loop.das`` — ``character_at`` with loop variable index
-- ``perf003_character_at.das`` — standalone ``character_at`` usage
-- ``perf004_string_builder_loop.das`` — string builder reassignment in loop
-- ``perf005_length_in_while.das`` — ``length(string)`` in while condition
-- ``no_warnings.das`` — clean code exercising correct patterns
-
-Run tests::
+Tests are in ``utils/perf_lint/tests/``::
 
     bin/Release/daslang.exe dastest/dastest.das -- --test utils/perf_lint/tests
 
