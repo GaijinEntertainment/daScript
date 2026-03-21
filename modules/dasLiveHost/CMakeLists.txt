@@ -20,4 +20,11 @@ IF ((NOT DAS_LIVE_HOST_INCLUDED) AND ((NOT ${DAS_LIVE_HOST_DISABLED}) OR (NOT DE
     SETUP_CPP11(libDasModuleLiveHost)
     SETUP_CPP11(dasModuleLiveHost)
 
+    install(DIRECTORY ${DAS_LIVE_HOST_DIR}/live
+        DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLiveHost
+        FILES_MATCHING PATTERN "*.das"
+        PATTERN "_aot_generated" EXCLUDE
+        PATTERN "jitted_scripts" EXCLUDE
+    )
+
 ENDIF()

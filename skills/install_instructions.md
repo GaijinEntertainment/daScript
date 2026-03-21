@@ -12,6 +12,10 @@ Source files live under `install/` in the repo; CMake installs them to the SDK r
 | `install/skills/das_formatting.md` | `skills/das_formatting.md` | Code formatter usage |
 | `install/skills/cpp_integration.md` | `skills/cpp_integration.md` | C++ embedding patterns |
 | `install/skills/daslib_modules.md` | `skills/daslib_modules.md` | Standard library module reference |
+| `install/skills/das_macros.md` | `skills/das_macros.md` | Macro & AST programming |
+| `install/skills/daspkg.md` | `skills/daspkg.md` | Package manager usage |
+| `install/skills/dynamic_modules.md` | `skills/dynamic_modules.md` | `.das_module` descriptors |
+| `install/skills/daslang_live.md` | `skills/daslang_live.md` | Live-reload host |
 | `utils/mcp/` (whole dir) | `utils/mcp/` | MCP server for AI assistants (gated on dasHV) |
 
 ## What belongs in install instructions
@@ -83,6 +87,10 @@ After modifying install instructions:
    - `D:/daslang/skills/das_formatting.md`
    - `D:/daslang/skills/cpp_integration.md`
    - `D:/daslang/skills/daslib_modules.md`
+   - `D:/daslang/skills/das_macros.md`
+   - `D:/daslang/skills/daspkg.md`
+   - `D:/daslang/skills/dynamic_modules.md`
+   - `D:/daslang/skills/daslang_live.md`
    - `D:/daslang/utils/mcp/main.das` (only if built with `DAS_HV_DISABLED=OFF`)
    - `D:/daslang/utils/mcp/tools/common.das` (only if built with `DAS_HV_DISABLED=OFF`)
 4. Spot-check that no repo-internal paths leaked into install files

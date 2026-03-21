@@ -1335,6 +1335,12 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/mcp/tests/
     FILES_MATCHING PATTERN "*.das"
 )
 
+# Install dascov (code coverage)
+install(FILES ${PROJECT_SOURCE_DIR}/utils/dascov/main.das DESTINATION utils/dascov)
+install(FILES ${PROJECT_SOURCE_DIR}/utils/dascov/README.md DESTINATION utils/dascov)
+file(GLOB DAS_DASCOV_TEST_FILES ${PROJECT_SOURCE_DIR}/utils/dascov/tests/*.das)
+install(FILES ${DAS_DASCOV_TEST_FILES} DESTINATION utils/dascov/tests)
+
 # Install benchctl (benchmark analysis)
 file(GLOB DAS_BENCHCTL_FILES ${PROJECT_SOURCE_DIR}/utils/benchctl/*.das)
 install(FILES ${DAS_BENCHCTL_FILES} DESTINATION utils/benchctl)
@@ -1361,13 +1367,42 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/daspkg/
 # Install daslive examples
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/daslive/
     DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/daslive
-    FILES_MATCHING PATTERN "*.das"
+    FILES_MATCHING
+        PATTERN "*.das"
+        PATTERN ".das_package"
+    PATTERN "modules" EXCLUDE
+    PATTERN ".jitted_scripts" EXCLUDE
+    PATTERN "_aot_generated" EXCLUDE
+    PATTERN "jitted_scripts" EXCLUDE
 )
 
-# Install core example .das files
+# Install core example files
 install(FILES
     ${PROJECT_SOURCE_DIR}/examples/hello_world.das
+    ${PROJECT_SOURCE_DIR}/examples/README.md
     DESTINATION ${DAS_INSTALL_EXAMPLESDIR}
+)
+
+# Install dasbind example
+install(FILES
+    ${PROJECT_SOURCE_DIR}/examples/dasbind/dasbind_example.das
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/dasbind
+)
+
+# Install crash example
+install(FILES
+    ${PROJECT_SOURCE_DIR}/examples/crash/main.das
+    ${PROJECT_SOURCE_DIR}/examples/crash/stack_overflow.das
+    ${PROJECT_SOURCE_DIR}/examples/crash/main.cpp
+    ${PROJECT_SOURCE_DIR}/examples/crash/CMakeLists.txt
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/crash
+)
+
+# Install minfft example
+install(FILES
+    ${PROJECT_SOURCE_DIR}/examples/minfft/main.das
+    ${PROJECT_SOURCE_DIR}/examples/minfft/.das_package
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/minfft
 )
 
 file(GLOB DAS_DEBUGAPI_EXAMPLES
@@ -1455,6 +1490,23 @@ file(GLOB DASHV_TUTORIAL_SOURCES
 )
 install(FILES ${DASHV_TUTORIAL_SOURCES}
     DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/dasHV
+)
+
+# Install dasPUGIXML tutorial files (.das + data files)
+file(GLOB PUGIXML_TUTORIAL_SOURCES
+    ${PROJECT_SOURCE_DIR}/tutorials/dasPUGIXML/*.das
+    ${PROJECT_SOURCE_DIR}/tutorials/dasPUGIXML/*.xml
+)
+install(FILES ${PUGIXML_TUTORIAL_SOURCES}
+    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/dasPUGIXML
+)
+
+# Install dasStbImage tutorial .das files
+file(GLOB STBIMAGE_TUTORIAL_SOURCES
+    ${PROJECT_SOURCE_DIR}/tutorials/dasStbImage/*.das
+)
+install(FILES ${STBIMAGE_TUTORIAL_SOURCES}
+    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/dasStbImage
 )
 
 # ── Documentation build (optional) ──────────────────────────────────────────
