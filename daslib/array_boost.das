@@ -114,11 +114,11 @@ def array_view(bytes : array<auto(TT)> ==const; offset, length : int; blk : bloc
         if (offset < 0 || (offset + length) > length(bytes)) {
             panic("array_view: out of range")
         }
-        __builtin_array_lock(bytes)
+        __builtin_array_lock_mutable(bytes)
         var res : array<TT>#
         _builtin_make_temp_array(res, addr(bytes[offset]), length)
         invoke(blk, res)
-        __builtin_array_unlock(bytes)
+        __builtin_array_unlock_mutable(bytes)
     }
 }
 
