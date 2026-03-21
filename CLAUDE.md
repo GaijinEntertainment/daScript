@@ -99,6 +99,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/aot_testing.md` | Adding AOT test files, working with the `test_aot` binary, `Module::aotRequire()`, CMake AOT macros, **debugging AOT hash mismatches** |
 | `skills/visitor_gen_bind.md` | Adding or modifying `Visitor` virtual methods, `canVisit*` gates, running `gen_bind.das`, updating adapter bindings in `ast_gen.inc` |
 | `skills/daslang_live.md` | Working with `daslang-live.exe`, live-reload lifecycle, REST API, `[live_command]`, `[before_reload]`/`[after_reload]`, persistent store, `live/glfw_live`, `live/live_api` |
+| `skills/perf_lint.md` | Adding new performance lint rules to `daslib/perf_lint.das` |
 
 Multiple skill files may apply to a single task. For example, creating a new daslib module requires reading `skills/das_formatting.md`, `skills/daslib_modules.md`, and possibly `skills/documentation_rst.md`.
 
@@ -174,6 +175,7 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 
 - `try/recover` — NOT `try/catch` (`recover` is the keyword)
 - `panic("message")`, `assert(condition)`, `verify(condition)` (stays in release)
+- **Postfix conditional:** `return expr if (cond)`, `break if (cond)`, `continue if (cond)` — early-exit guard on one line
 
 ### Generic function dispatch
 
@@ -195,6 +197,13 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - `[unsafe_outside_of_for] def each(x) : iterator<T>` makes a type iterable in `for` loops
 - When the iterator is named `each`, the call can be omitted: `for (v in each(x))` is identical to `for (v in x)`
 - Other iterator names (e.g. `filter`, `map`) cannot be omitted
+
+### String access functions
+
+- **`peek_data(str) $(arr) { ... }`** — safe O(1) per-element read access to string as `array<uint8> const#`. One `strlen` call total. Preferred over `character_at` for iteration.
+- **`modify_data(str) $(var arr) { ... }`** — returns a modified copy; allocates new string, opens as mutable `array<uint8>`. Use for character-level transformations.
+- **`character_at(s, i)`** — O(n) per call (`strlen` + bounds check). Fine for isolated checks, but use `peek_data` in loops or hot paths.
+- Pointer-based string access (`reinterpret<uint8?>`) is for core library implementations only — user code should use `peek_data`/`modify_data` for safety.
 
 ### Common gotchas
 

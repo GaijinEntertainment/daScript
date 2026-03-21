@@ -164,6 +164,8 @@ DAS_BASE_BIND_ENUM(das::CompilationError, CompilationError,
     ,   unused_function_argument
     ,   unsafe_function
 
+    ,   performance_lint
+
     ,   too_many_infer_passes
 
 // integration errors

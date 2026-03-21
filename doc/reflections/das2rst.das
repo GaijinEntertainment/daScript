@@ -326,10 +326,10 @@ def document_module_strings(root : string) {
         hide_group(group_by_regex("Internal builtin functions", mod, %regex~builtin%%)),
         group_by_regex("Character set", mod, %regex~(set_total|set_element|is_char_in_set)$%%),
         group_by_regex("Character groups", mod, %regex~is.+%%),
-        group_by_regex("Character by index", mod, %regex~(character_at|character_uat)$%%),
+        group_by_regex("Character by index", mod, %regex~(character_at|character_uat|first_character)$%%),
         group_by_regex("String properties", mod, %regex~(empty|ends_with|length|starts_with)$%%),
         group_by_regex("String builder", mod, %regex~(build_string|format|write|write_char|write_chars|write_escape_string|build_hash)$%%),
-        group_by_regex("das::string manipulation", mod, %regex~(append|resize)$%%),
+        group_by_regex("das::string manipulation", mod, %regex~(append|resize|with_das_string)$%%),
         group_by_regex("String modifications", mod, %regex~(chop|escape|unescape|repeat|replace|reverse|slice|
 strip|strip_left|strip_right|to_lower|to_lower_in_place|to_upper|to_upper_in_place|rtrim|safe_unescape|ltrim|trim)$%%),
         group_by_regex("Search substrings", mod, %regex~(find|rfind).*%%),

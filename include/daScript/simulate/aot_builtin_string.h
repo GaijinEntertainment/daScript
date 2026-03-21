@@ -30,6 +30,9 @@ namespace das {
     DAS_API vec4f builtin_strdup ( Context &, SimNode_CallBase * call, vec4f * args );
 
     DAS_API int32_t get_character_at ( const char * str, int32_t index, Context * context, LineInfoArg * at );
+    DAS_API int32_t get_first_character ( const char * str, Context * context, LineInfoArg * at );
+    DAS_API int32_t get_first_character_ds ( const string & str, Context * context, LineInfoArg * at );
+    DAS_API void with_das_string ( const TBlock<void,TTemporary<string>> & block, Context * context, LineInfoArg * at );
 
     DAS_API bool builtin_string_endswith ( const char * str, const char * cmp, Context * context );
     DAS_API bool builtin_string_startswith ( const char * str, const char * cmp, Context * context );
