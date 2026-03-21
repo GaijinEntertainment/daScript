@@ -596,7 +596,7 @@ namespace das {
         void describeLocalType(vector<string> &results, TypeDecl *tp, const string &prefix, das_set<Structure *> &dep) const;
         string describeLocalType(TypeDecl *tp) const;
         virtual void preVisit(ExprMakeStruct *expr) override;
-        void convertCloneSemanticsToExpression(ExprMakeStruct *expr, int index, MakeFieldDecl *decl);
+        bool convertCloneSemanticsToExpression(ExprMakeStruct *expr, int index, MakeFieldDecl *decl);
         virtual MakeFieldDeclPtr visitMakeStructureField(ExprMakeStruct *expr, int index, MakeFieldDecl *decl, bool last) override;
         virtual ExpressionPtr structToTuple(const TypeDeclPtr &makeType, const MakeStructPtr &st, const LineInfo &at);
         virtual ExpressionPtr visit(ExprMakeStruct *expr) override;
