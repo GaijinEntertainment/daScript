@@ -12,6 +12,47 @@ daslang.exe examples/hello_world.das
 |------|-------------|
 | `hello_world.das` | Minimal hello-world program |
 
+## crash/ — Crash Handler Example
+
+Demonstrates native crash handling with daslang + C++ stack traces.
+Built as a C++ executable (`example_crash`) that links `libDaScriptDyn`.
+
+| File | Description |
+|------|-------------|
+| `main.das` | daslang script that triggers a native crash via `native_crash()` |
+| `stack_overflow.das` | Stack overflow test case |
+| `main.cpp` | C++ host with crash handler integration |
+
+## dasbind/ — Foreign Function Interface
+
+| File | Description |
+|------|-------------|
+| `dasbind_example.das` | Calling external C functions (Win32 API) via `[extern]` annotations |
+
+## daslive/ — Live-Reload Examples
+
+Examples for `daslang-live.exe`, the live-reloading application host.
+Scripts are edited and hot-reloaded without restarting. Run with:
+
+```
+daslang-live.exe examples/daslive/hello/main.das
+```
+
+| Directory | Description |
+|-----------|-------------|
+| `hello/` | Basic live-reload hello-world with OpenGL background color |
+| `triangle/` | Live-reloading triangle rendering |
+| `tank_game/` | Tank game example |
+| `arcanoid/` | Arcanoid game |
+| `sequence/` | Card game with AI bots, ELO rating, and evolution (requires `daspkg install`) |
+| `reload_test/` | Live-reload mechanism test |
+| `live_vars_demo/` | Variable viewer demo |
+| `test_api/` | REST API test |
+| `test_api_http/` | HTTP API test |
+| `test_commands/` | Live commands test |
+| `test_decs_reload/` | DECS (ECS) reload test |
+| `test_watch/` | Watch mechanism test |
+
 ## debugapi/ — Debug Agent Examples
 
 Debug agents let you inspect and control program execution at runtime:
@@ -22,16 +63,9 @@ All examples require `options debugger = true`.
 | File | Description |
 |------|-------------|
 | `allocation_tracking.das` | Heap allocation callbacks (`onAllocate`, `onReallocate`, `onFree`, `onAllocateString`, `onFreeString`) |
-| `heartbeat.das` | Periodic callback injection via `daslib/heartbeat` — watchdog, progress reporting |
 | `hw_breakpoint.das` | Hardware data breakpoints that fire when a memory address is written |
 | `instrumentation.das` | Line-level and function-level instrumentation hooks for profiling and tracing |
 | `stack_walker.das` | `DapiStackWalker` for call-stack inspection and diagnostic collection |
-
-## dasbind/ — Foreign Function Interface
-
-| File | Description |
-|------|-------------|
-| `dasbind_example.das` | Calling external C functions (Win32 API) via `[extern]` annotations |
 
 ## pathTracer/ — Path Tracer Demo
 
@@ -46,11 +80,6 @@ Requires the `stbimage` module and (for OpenGL variants) `dasGlfw` / `dasImgui`.
 | `toy_path_tracer_opengl.das` | Real-time path tracer with progressive accumulation |
 | `toy_path_tracer_opengl_hdr.das` | Real-time path tracer with HDR tonemapping |
 | `toy_path_tracer_profile.das` | Path tracer performance benchmark |
-
-## profile/ — Performance Benchmarks
-
-A benchmark suite comparing daslang against C++ and other languages.
-Built as a C++ executable that compiles and runs `.das` benchmark scripts.
 
 ## uncategorized/ — Miscellaneous Examples
 
@@ -75,6 +104,20 @@ The server serves an HTML page and speaks WebSocket on the same port.
 Start the server, open `http://localhost:9090` in a browser,
 and/or run `ws_chat_client.das` in a terminal — all clients share the
 same chat room. See `examples/hv/README.md` for details.
+
+## minfft/ — FFT Example
+
+FFT (Fast Fourier Transform) example using the `das-minfft` daspkg package. Requires setup:
+
+```
+cd examples/minfft
+daslang.exe ../../utils/daspkg/main.das -- install
+daslang.exe main.das
+```
+
+| File | Description |
+|------|-------------|
+| `main.das` | Compute FFT of a sine wave signal |
 
 ## daspkg/ — Package Manager Examples
 
@@ -145,4 +188,3 @@ daslang.exe -project_root . imgui_node_editor_basic.das
 | File | Description |
 |------|-------------|
 | `imgui_node_editor_basic.das` | Two linked nodes in a fullscreen node-editor canvas |
-
