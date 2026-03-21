@@ -13,8 +13,8 @@ module safe_addr shared private
 //! on local or global variables (not fields of expiring objects). ``shared_addr``
 //! only works on shared global variables.
 
-require ast
-require rtti
+require daslib/ast
+require daslib/rtti
 require daslib/ast_boost
 require daslib/is_local
 

@@ -12,8 +12,8 @@ module defer shared private
 //! ensuring it runs on scope exit (similar to Go's ``defer``). ``defer_delete`` is deprecated
 //! in favor of ``var inscope``.
 
-require ast
-require rtti
+require daslib/ast
+require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/macro_boost

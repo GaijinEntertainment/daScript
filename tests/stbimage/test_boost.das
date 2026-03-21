@@ -6,7 +6,7 @@ options indenting = 4
 require stbimage/stbimage_boost
 require daslib/safe_addr
 require strings
-require fio
+require daslib/fio
 require dastest/testing_boost public
 
 def test_image_path(name : string) : string {

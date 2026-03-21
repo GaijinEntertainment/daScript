@@ -32,8 +32,8 @@
 
 options gen2
 
-require debugapi
-require rtti
+require daslib/debugger
+require daslib/rtti
 
 // ============================================================
 // Section 1: Creating and installing a debug agent

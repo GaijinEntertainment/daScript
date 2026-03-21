@@ -18,7 +18,7 @@ require daslib/apply
 require daslib/templates
 require math
 require strings
-require rtti
+require daslib/rtti
 
 class public Serializer {
     //! Base class for serializers.

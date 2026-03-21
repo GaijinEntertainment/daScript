@@ -5,8 +5,10 @@ options no_global_variables = false
 options remove_unused_symbols = false
 options strict_smart_pointers
 
-require ast
-require rtti public
+module ast shared public
+
+require ast_core public
+require daslib/rtti public
 require strings
 
 typedef ExpressionPtr = smart_ptr<Expression>
@@ -32,6 +34,32 @@ typedef ForLoopMacroPtr = smart_ptr<ForLoopMacro>
 typedef CaptureMacroPtr = smart_ptr<CaptureMacro>
 typedef TypeMacroPtr = smart_ptr<TypeMacro>
 typedef SimulateMacroPtr = smart_ptr<SimulateMacro>
+
+// proxy wrappers for ast_core functions
+[generic]
+def for_each_function(mod : Module?; name : string; blk : block<(var func : FunctionPtr) : void>) {
+    ast_core::for_each_function(mod, name, blk)
+}
+
+[generic]
+def for_each_structure(mod : Module?; blk : block<(var st : StructurePtr) : void>) {
+    ast_core::for_each_structure(mod, blk)
+}
+
+[generic]
+def for_each_enumeration(mod : Module?; blk : block<(var en : EnumerationPtr) : void>) {
+    ast_core::for_each_enumeration(mod, blk)
+}
+
+[generic]
+def for_each_typedef(mod : Module?; blk : block<(name : string#; var value : TypeDeclPtr) : void>) {
+    ast_core::for_each_typedef(mod, blk)
+}
+
+[generic]
+def for_each_global(mod : Module?; blk : block<(var value : VariablePtr) : void>) {
+    ast_core::for_each_global(mod, blk)
+}
 
 
 [generic]

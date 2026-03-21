@@ -24,7 +24,7 @@ require dashv/dashv_boost public
 require daslib/jobque_boost
 require daslib/json_boost
 require strings
-require fio
+require daslib/fio
 
 let SERVER_PORT = 18084
 

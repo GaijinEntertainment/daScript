@@ -12,9 +12,9 @@ module cpp_bind public
 //! that forwards virtual method calls from C++ into the daslang context.
 //! Used together with ``log_cpp_class_adapter``.
 
-require fio
-require rtti
-require ast
+require daslib/fio
+require daslib/rtti
+require daslib/ast
 require daslib/ast_boost
 require daslib/strings_boost
 

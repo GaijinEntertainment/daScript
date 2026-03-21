@@ -6,7 +6,7 @@ options persistent_heap
 
 require dastest/testing_boost
 require daslib/bool_array
-require rtti
+require daslib/rtti
 
 // Benchmark that prints context name and tries to iterate BoolArray
 [benchmark]

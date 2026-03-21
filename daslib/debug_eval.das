@@ -17,8 +17,8 @@ require daslib/match
 require daslib/math_bits
 require daslib/ast_boost
 
-require rtti public
-require debugapi
+require daslib/rtti public
+require daslib/debugger
 
 variant Token {
     number : int64

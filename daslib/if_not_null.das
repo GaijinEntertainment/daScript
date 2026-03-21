@@ -11,8 +11,8 @@ module if_not_null shared private
 //! ``if_not_null`` transforms ``ptr |> if_not_null <| call(...)`` into a null check
 //! followed by a dereferenced call — ``call`` only executes if ``ptr`` is not null.
 
-require ast
-require rtti
+require daslib/ast
+require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/defer

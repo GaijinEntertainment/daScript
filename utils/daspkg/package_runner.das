@@ -8,8 +8,8 @@ options strict_smart_pointers = true
 
 module package_runner shared public
 
-require debugapi
-require fio
+require daslib/debugger
+require daslib/fio
 require daslib/daspkg public
 
 // Results from running a .das_package script

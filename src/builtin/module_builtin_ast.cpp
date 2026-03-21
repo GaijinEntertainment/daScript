@@ -649,7 +649,7 @@ namespace das {
     Annotation * get_expression_annotation ( Expression * expr, Context * context, LineInfoArg * at ) {
         if ( !expr ) return nullptr;
         if ( !daScriptEnvironment::getBound() ) context->throw_error_at(at, "expecting bound environment");
-        auto mod = Module::require("ast");
+        auto mod = Module::require("ast_core");
         return mod->findAnnotation(expr->__rtti).get();
     }
 
@@ -695,7 +695,7 @@ namespace das {
             return apply(static_cast<vector<const char *>*>(vec));
         } else if (tstr == "$::das_string") {
             return apply(static_cast<vector<string>*>(vec));
-        } else if (tstr == "ast::CaptureEntry") {
+        } else if (tstr == "ast_core::CaptureEntry") {
             return apply(static_cast<vector<CaptureEntry>*>(vec));
         } else if (tstr == "int") {
             return apply(static_cast<vector<int>*>(vec));
@@ -705,16 +705,16 @@ namespace das {
             return apply(static_cast<vector<pair<unsigned int, unsigned int>>*>(vec));
         } else if (tstr == "smart_ptr<rtti::AnnotationDeclaration>") {
             return apply(static_cast<vector<smart_ptr<AnnotationDeclaration>>*>(vec));
-        } else if (tstr == "rtti::AnnotationArgument") {
+        } else if (tstr == "rtti_core::AnnotationArgument") {
             return apply(static_cast<vector<AnnotationArgument>*>(vec));
-        } else if (tstr == "rtti::LineInfo") {
+        } else if (tstr == "rtti_core::LineInfo") {
             return apply(static_cast<vector<LineInfo>*>(vec));
         } else if (tstr == "smart_ptr<ast::MakeStruct>") {
             return apply(static_cast<vector<smart_ptr<MakeStruct>>*>(vec));
         } else if (tstr == "smart_ptr<ast::MakeFieldDecl>") {
             auto vec2 = (MakeStruct*)(vec); // todo: hack, multiple inheritance breaks order in memory.
             return apply(static_cast<vector<smart_ptr<MakeFieldDecl>>*>(vec2));
-        } else if (tstr == "ast::EnumEntry") {
+        } else if (tstr == "ast_core::EnumEntry") {
             return apply(static_cast<vector<Enumeration::EnumEntry>*>(vec));
         }
         DAS_FATAL_ERROR("vec length/index for %s is not implemented!\n", tstr.data());
@@ -990,13 +990,11 @@ namespace das {
         return mod->findFunctionByMangledNameHash(mnh);
     }
 
-    #include "ast.das.inc"
-
-    Module_Ast::Module_Ast() : Module("ast") {
+    Module_Ast::Module_Ast() : Module("ast_core") {
         DAS_PROFILE_SECTION("Module_Ast");
         ModuleLibrary lib(this);
         lib.addBuiltInModule();
-        addBuiltinDependency(lib, Module::require("rtti"));
+        addBuiltinDependency(lib, Module::require("rtti_core"), true);
         registerAnnotations(lib);
         registerAnnotations1(lib);
         registerAnnotations2(lib);
@@ -1004,8 +1002,6 @@ namespace das {
         registerAdapterAnnotations(lib);
         registerMacroExpressions(lib);
         registerFunctions(lib);
-        // add builtin module
-        compileBuiltinModule("ast.das",ast_das,sizeof(ast_das));
         // lets make sure its all aot ready
         // verifyAotReady();
     }

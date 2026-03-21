@@ -252,8 +252,6 @@ namespace das
         addRuntimeSort(lib);
         // TIME
         addTime(lib);
-        // NOW, for the builtin module
-        appendCompiledFunctions();
         // lets verify options (it is here because its the builtin module)
         verifyOptions();
         // lets verify all names

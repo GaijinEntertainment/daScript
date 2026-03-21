@@ -4,7 +4,7 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
 require dastest/testing_boost public
-require debugapi
+require daslib/debugger
 
 class LifecycleAgent : DapiDebugAgent {
     tag : int = 999

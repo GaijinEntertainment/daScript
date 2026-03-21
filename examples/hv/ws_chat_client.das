@@ -17,7 +17,7 @@ options persistent_heap
 options gc
 
 require dashv/dashv_boost public
-require fio
+require daslib/fio
 
 let SERVER_URL = "ws://127.0.0.1:9090/chat"
 

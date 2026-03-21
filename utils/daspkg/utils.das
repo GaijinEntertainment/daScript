@@ -6,7 +6,7 @@ options no_global_variables = false
 
 module utils shared public
 
-require fio
+require daslib/fio
 require strings
 
 // ── Logging ──────────────────────────────────────────────────────────

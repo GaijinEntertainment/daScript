@@ -5,7 +5,7 @@ options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_global_variables = false
 
-require fio
+require daslib/fio
 require strings
 
 require daslib/ansi_colors

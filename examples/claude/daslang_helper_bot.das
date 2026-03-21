@@ -6,7 +6,7 @@ options no_unused_block_arguments = false
 require telegram/tbot
 require anthropic/anthropic
 require daslib/json_boost
-require fio
+require daslib/fio
 require strings
 
 var system_prompt : string

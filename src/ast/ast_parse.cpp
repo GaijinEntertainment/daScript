@@ -1096,6 +1096,12 @@ namespace das {
         vector<NamelessMismatch> namelessMismatches;
         uint64_t preqT = 0;
         string modName;
+        auto builtinModule = Module::require("$");
+        DAS_ASSERTF(builtinModule, "Somehow `builtin` module is missing.")
+        if (!builtinModule->getFileInfo()) {
+            // compile daslib builtin module into its C++ module (once)
+            builtinModule->compileBuiltinModule("builtin.das", getDasRoot() + "/daslib/builtin.das", access);
+        }
         bool allGood = true;
         for ( const auto & em : access->getExtraModules() ) {
             allGood = addExtraDependency(em.first, em.second, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs) && allGood;

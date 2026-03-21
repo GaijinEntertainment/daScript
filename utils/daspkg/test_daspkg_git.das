@@ -6,7 +6,7 @@ options persistent_heap
 
 require dastest/testing_boost public
 
-require fio
+require daslib/fio
 require strings
 
 require lockfile
@@ -362,7 +362,7 @@ def test_full_workflow_local(t : T?) {
             fwrite(f, "options gen2\nmodule greeter\ndef greet(name : string) : string \{\n    return \"hello, \" + name\n\}\n")
         }
         fopen("{pkg_src}/.das_module", "wb") <| $(f) {
-            fwrite(f, "options gen2\nrequire fio\n[export]\ndef initialize(project_path : string) \{\n    register_native_path(\"greeter\", \"greeter\", \"\{project_path\}/daslib/greeter.das\")\n\}\n")
+            fwrite(f, "options gen2\nrequire daslib/fio\n[export]\ndef initialize(project_path : string) \{\n    register_native_path(\"greeter\", \"greeter\", \"\{project_path\}/daslib/greeter.das\")\n\}\n")
         }
 
         // create project dir

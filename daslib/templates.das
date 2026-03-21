@@ -14,8 +14,8 @@ module templates shared private
 //! generic functions.
 //! See also ``templates_boost`` for template substitution and code generation.
 
-require ast
-require rtti
+require daslib/ast
+require daslib/rtti
 require daslib/ast_boost
 
 [call_macro(name="decltype")]

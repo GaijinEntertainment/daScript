@@ -14,7 +14,7 @@ module profiler_boost shared private
 //! Requires the ``profiler`` module.
 
 require daslib/profiler
-require rtti public
+require daslib/rtti public
 
 def public enable_profiler(var ctx : Context) {
     //! Enables the profiler for the given context.

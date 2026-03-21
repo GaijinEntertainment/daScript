@@ -13,8 +13,8 @@ module live_watch_boost shared public
 //!
 //!     require live/live_watch_boost
 
-require fio
-require debugapi
+require daslib/fio
+require daslib/debugger
 require daslib/json
 require daslib/json_boost
 require live_host

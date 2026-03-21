@@ -12,7 +12,7 @@ module ast_debug shared private
 //! debug agent for live inspection of compilation state in
 //! the DAP variable view.
 
-require debugapi
+require daslib/debugger
 require daslib/ast_boost
 require daslib/strings
 
@@ -30,7 +30,7 @@ def isExpressionType(_vinfo) {
     if (vinfo.basicType != Type.tHandle) {
         return false
     }
-    if (vinfo.annotation._module.name != "ast") {
+    if (vinfo.annotation._module.name != "ast_core") {
         return false
     }
     if (!string(vinfo.annotation.name) |> starts_with("Expr")) {
@@ -57,18 +57,18 @@ def isModulePtrType(_vinfo; mod, what : string) {
 }
 
 def isAstPtrType(_vinfo; what : string) {
-    return isModulePtrType(_vinfo, "ast", what)
+    return isModulePtrType(_vinfo, "ast_core", what)
 }
 
 def isRttiPtrType(_vinfo; what : string) {
-    return isModulePtrType(_vinfo, "rtti", what)
+    return isModulePtrType(_vinfo, "rtti_core", what)
 }
 
 def isRttiType(vinfo; what : string) {
     if (vinfo.basicType != Type.tHandle) {
         return false
     }
-    if (vinfo.annotation._module.name != "rtti") {
+    if (vinfo.annotation._module.name != "rtti_core") {
         return false
     }
     if (vinfo.annotation.name != what) {

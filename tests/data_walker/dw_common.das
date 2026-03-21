@@ -11,8 +11,8 @@ options no_unused_block_arguments = false
 module dw_common shared public
 
 require dastest/testing_boost public
-require rtti public
-require debugapi public
+require daslib/rtti public
+require daslib/debugger public
 require strings public
 
 

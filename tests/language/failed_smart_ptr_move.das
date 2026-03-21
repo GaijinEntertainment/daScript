@@ -4,7 +4,7 @@
 options gen2
 expect 31300:1
 
-require ast
+require daslib/ast
 
 def pass_by_value_is_unsafe(p : smart_ptr<TypeDecl>) {// this will fail if enabled in CodeOfPolicies
     pass

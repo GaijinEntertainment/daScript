@@ -1,6 +1,6 @@
 options gen2
 require cbind/cbind_boost
-require fio
+require daslib/fio
 require daslib/defer
 require daslib/strings_boost
 

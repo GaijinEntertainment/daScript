@@ -2,7 +2,7 @@ options gen2
 
 module aot_cpp private
 
-require fio
+require daslib/fio
 require strings
 
 require daslib/match

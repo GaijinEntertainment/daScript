@@ -1,7 +1,7 @@
 options gen2
 require dastest/testing_boost public
 
-require fio
+require daslib/fio
 
 [test]
 def test_get_das_version(t : T?) {

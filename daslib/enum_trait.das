@@ -12,7 +12,7 @@ module enum_trait shared private
 //! values), ``each_name`` (iterate over all name strings), and
 //! ``find_value`` (look up a value by name).
 
-require ast
+require daslib/ast
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/templates

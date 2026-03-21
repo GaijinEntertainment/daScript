@@ -4,7 +4,7 @@ require daslib/math_bits
 
 require llvm/daslib/llvm_boost
 require jit
-require rtti
+require daslib/rtti
 require llvm/daslib/llvm_targets
 
 // If for some reason you want to set jit function manually you should add [no_jit] attribute.

@@ -3,7 +3,7 @@ options strict_smart_pointers
 
 require dastest/testing_boost public
 
-require ast
+require daslib/ast
 
 struct Foo {
     a : ExpressionPtr

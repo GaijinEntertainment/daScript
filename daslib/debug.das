@@ -21,10 +21,10 @@ module debug shared
 
 require math
 require strings
-require rtti
-require debugapi
-require fio
-require network
+require daslib/rtti
+require daslib/debugger
+require daslib/fio
+require daslib/network
 require uriparser
 
 require daslib/json

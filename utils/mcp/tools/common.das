@@ -5,11 +5,11 @@ options no_unused_block_arguments = false
 
 require daslib/json_boost public
 require daslib/strings_boost public
-require ast public
-require rtti public
+require daslib/ast public
+require daslib/rtti public
 require math public
 require strings public
-require fio public
+require daslib/fio public
 
 struct ContentItem {
     @rename = "type" _type : string

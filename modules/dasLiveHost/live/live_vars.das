@@ -22,9 +22,8 @@ module live_vars shared public
 //! If the default value in code changes, the hash mismatches on load and
 //! the old persisted value is discarded — no full reload needed.
 
-require ast
-require rtti
-require strings
+require daslib/ast
+require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
 

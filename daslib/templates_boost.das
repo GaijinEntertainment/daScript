@@ -15,7 +15,7 @@ module templates_boost shared public
 //! many other daslib macros.
 //! Requires the ``templates`` module.
 
-require ast
+require daslib/ast
 require daslib/ast_boost
 require daslib/algorithm
 require daslib/strings_boost

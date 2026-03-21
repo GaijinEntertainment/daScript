@@ -17,7 +17,7 @@ module rst_comment shared private
 
 require daslib/ast_boost
 require daslib/rst
-require fio
+require daslib/fio
 require strings
 require daslib/strings_boost
 

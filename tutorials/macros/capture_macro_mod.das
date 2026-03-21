@@ -15,7 +15,7 @@ options no_aot
 
 module capture_macro_mod
 
-require ast
+require daslib/ast
 require daslib/ast_boost
 
 // ---- [audited] tag annotation -----------------------------------------------

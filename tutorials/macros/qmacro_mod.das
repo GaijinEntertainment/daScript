@@ -20,7 +20,7 @@ options no_aot
 
 module qmacro_mod public
 
-require ast
+require daslib/ast
 require daslib/ast_boost
 require daslib/templates_boost
 

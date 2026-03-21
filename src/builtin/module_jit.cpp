@@ -807,8 +807,8 @@ extern "C" {
             DAS_PROFILE_SECTION("Module_Jit");
             ModuleLibrary lib(this);
             lib.addBuiltInModule();
-            addBuiltinDependency(lib, Module::require("rtti"));
-            addBuiltinDependency(lib, Module::require("ast"));
+            addBuiltinDependency(lib, Module::require("rtti_core"));
+            addBuiltinDependency(lib, Module::require("ast_core"));
             addExtern<DAS_BIND_FUN(das_invoke_code)>(*this, lib, "invoke_code",
                 SideEffects::worstDefault, "das_invoke_code")
                     ->args({"code","arguments","cmres","context"})->unsafeOperation = true;

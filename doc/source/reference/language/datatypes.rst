@@ -363,7 +363,7 @@ Smart pointers are primarily used in the macro and AST manipulation context:
 
 .. code-block:: das
 
-    require ast
+    require daslib/ast
 
     var inscope expr : smart_ptr<ExprConstInt> <- new ExprConstInt(value=42)
 

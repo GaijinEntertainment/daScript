@@ -299,7 +299,7 @@ visited (default ``true``).
 
    options gen2
 
-   require rtti
+   require daslib/rtti
    require strings
 
    [export, pinvoke]

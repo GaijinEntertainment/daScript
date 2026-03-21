@@ -12,7 +12,7 @@ module constant_expression shared private
 //! is a constant expression and also implements ``[constant_expression(arg)]``
 //! which folds the argument to a compile-time value.
 
-require ast
+require daslib/ast
 require daslib/ast_boost
 require daslib/strings_boost
 require daslib/templates_boost

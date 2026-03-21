@@ -23,8 +23,8 @@ options gen2
 
 module block_macro_mod public
 
-require ast
-require rtti
+require daslib/ast
+require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
 

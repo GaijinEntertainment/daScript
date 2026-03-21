@@ -249,7 +249,7 @@ A project file can lock down the scripting environment by combining
        return ann == "export" || ann == "private"
    }
 
-With this project file, user scripts cannot ``require fio``, use ``unsafe``
+With this project file, user scripts cannot ``require daslib/fio``, use ``unsafe``
 blocks, enable ``options rtti``, or apply annotations like ``[function_macro]``.
 
 .. seealso::

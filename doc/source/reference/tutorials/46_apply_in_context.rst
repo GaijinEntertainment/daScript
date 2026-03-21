@@ -23,7 +23,7 @@ Prerequisites: :ref:`tutorial_debug_agents` (Tutorial 45) for
     options gen2
 
     require daslib/apply_in_context
-    require debugapi
+    require daslib/debugger
 
 
 Setting up a named context

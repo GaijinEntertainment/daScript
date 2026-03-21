@@ -3,7 +3,7 @@ options rtti
 options persistent_heap
 
 require telegram/tbot
-require fio
+require daslib/fio
 require strings
 
 [export]

@@ -89,6 +89,7 @@ namespace das {
     }
 
     void Module::addBuiltinDependency ( ModuleLibrary & lib, Module * m, bool pub ) {
+        DAS_ASSERTF(m, "Trying to add nullptr module.");
         lib.addModule(m);
         requireModule[m] = pub;
     }
@@ -607,83 +608,96 @@ namespace das {
         return it != callThis.end() ? &it->second : nullptr;
     }
 
+    static bool appendBuiltinModuleContent ( Module * target, ProgramPtr program, const string & modName ) {
+        if ( !program ) {
+            DAS_FATAL_ERROR("builtin module did not parse %s\n", modName.c_str());
+            return false;
+        }
+        if (program->failed()) {
+            TextWriter issues;
+            for (auto & err : program->errors) {
+                issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
+            }
+            DAS_FATAL_ERROR("%s\nbuiltin module did not compile %s\n", issues.str().c_str(), modName.c_str());
+            return false;
+        }
+        // append content into target module
+        program->thisModule->aliasTypes.foreach([&](auto aliasTypePtr){
+            target->addAlias(aliasTypePtr);
+        });
+        program->thisModule->enumerations.foreach([&](auto penum){
+            target->addEnumeration(penum);
+        });
+        program->thisModule->structures.foreach([&](auto pst){
+            target->addStructure(pst);
+        });
+        program->thisModule->generics.foreach([&](auto fn){
+            target->addGeneric(fn);
+        });
+        program->thisModule->globals.foreach([&](auto gvar){
+            target->addVariable(gvar);
+        });
+        program->thisModule->functions.foreach([&](auto fn){
+            target->addFunction(fn);
+        });
+        for (auto & rqm : program->thisModule->requireModule) {
+            if ( rqm.first != target ) {
+                target->requireModule[rqm.first] |= rqm.second;
+            }
+        }
+        // macros
+        auto ptm = program->thisModule.get();
+        if ( ptm->macroContext ) {
+            swap ( target->macroContext, ptm->macroContext );
+            ptm->handleTypes.foreach([&](auto fna){
+                target->addAnnotation(fna);
+            });
+        }
+        target->simulateMacros.insert(target->simulateMacros.end(), ptm->simulateMacros.begin(), ptm->simulateMacros.end());
+        target->captureMacros.insert(target->captureMacros.end(), ptm->captureMacros.begin(), ptm->captureMacros.end());
+        target->forLoopMacros.insert(target->forLoopMacros.end(), ptm->forLoopMacros.begin(), ptm->forLoopMacros.end());
+        target->variantMacros.insert(target->variantMacros.end(), ptm->variantMacros.begin(), ptm->variantMacros.end());
+        target->macros.insert(target->macros.end(), ptm->macros.begin(), ptm->macros.end());
+        target->inferMacros.insert(target->inferMacros.end(), ptm->inferMacros.begin(), ptm->inferMacros.end());
+        target->optimizationMacros.insert(target->optimizationMacros.end(), ptm->optimizationMacros.begin(), ptm->optimizationMacros.end());
+        target->lintMacros.insert(target->lintMacros.end(), ptm->lintMacros.begin(), ptm->lintMacros.end());
+        target->globalLintMacros.insert(target->globalLintMacros.end(), ptm->globalLintMacros.begin(), ptm->globalLintMacros.end());
+        for ( auto & rm : ptm->readMacros ) {
+            target->addReaderMacro(rm.second);
+        }
+        for ( auto & tm : ptm->typeMacros ) {
+            target->addTypeMacro(tm.second);
+        }
+        target->commentReader = ptm->commentReader;
+        for ( auto & op : ptm->options) {
+            DAS_ASSERTF(target->options.find(op.first)==target->options.end(),"duplicate option %s", op.first.c_str());
+            target->options[op.first] = op.second;
+        }
+        SubstituteBuiltinModuleRefs( program, program->thisModule.get(), target );
+        return true;
+    }
+
     bool Module::compileBuiltinModule ( const string & modName, const unsigned char * const str, unsigned int str_len ) {
         TextWriter issues;
         auto access = make_smart<FileAccess>();
         auto fileInfo = make_unique<TextFileInfo>((char *) str, uint32_t(str_len), false);
         access->setFileInfo(modName, das::move(fileInfo));
         ModuleGroup dummyLibGroup;
-        CodeOfPolicies builtinPolicies;
-        builtinPolicies.version_2_syntax = false;   // NOTE: no version 2 syntax in builtin modules (yet)
         auto program = parseDaScript(modName, "", access, issues, dummyLibGroup, true);
         ownFileInfo = access->letGoOfFileInfo(modName);
         DAS_ASSERTF(ownFileInfo,"something went wrong and FileInfo for builtin module can not be obtained");
-        if ( program ) {
-            if (program->failed()) {
-                for (auto & err : program->errors) {
-                    issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
-                }
-                DAS_FATAL_ERROR("%s\nbuiltin module did not compile %s\n", issues.str().c_str(), modName.c_str());
-                return false;
-            }
-            // ok, now let's rip content
-            program->thisModule->aliasTypes.foreach([&](auto aliasTypePtr){
-                addAlias(aliasTypePtr);
-            });
-            program->thisModule->enumerations.foreach([&](auto penum){
-                addEnumeration(penum);
-            });
-            program->thisModule->structures.foreach([&](auto pst){
-                addStructure(pst);
-            });
-            program->thisModule->generics.foreach([&](auto fn){
-                addGeneric(fn);
-            });
-            program->thisModule->globals.foreach([&](auto gvar){
-                addVariable(gvar);
-            });
-            program->thisModule->functions.foreach([&](auto fn){
-                addFunction(fn);
-            });
-            for (auto & rqm : program->thisModule->requireModule) {
-                if ( rqm.first != this ) {
-                    requireModule[rqm.first] |= rqm.second;
-                }
-            }
-            // macros
-            auto ptm = program->thisModule.get();
-            if ( ptm->macroContext ) {
-                swap ( macroContext, ptm->macroContext );
-                ptm->handleTypes.foreach([&](auto fna){
-                    addAnnotation(fna);
-                });
-            }
-            simulateMacros.insert(simulateMacros.end(), ptm->simulateMacros.begin(), ptm->simulateMacros.end());
-            captureMacros.insert(captureMacros.end(), ptm->captureMacros.begin(), ptm->captureMacros.end());
-            forLoopMacros.insert(forLoopMacros.end(), ptm->forLoopMacros.begin(), ptm->forLoopMacros.end());
-            variantMacros.insert(variantMacros.end(), ptm->variantMacros.begin(), ptm->variantMacros.end());
-            macros.insert(macros.end(), ptm->macros.begin(), ptm->macros.end());
-            inferMacros.insert(inferMacros.end(), ptm->inferMacros.begin(), ptm->inferMacros.end());
-            optimizationMacros.insert(optimizationMacros.end(), ptm->optimizationMacros.begin(), ptm->optimizationMacros.end());
-            lintMacros.insert(lintMacros.end(), ptm->lintMacros.begin(), ptm->lintMacros.end());
-            globalLintMacros.insert(globalLintMacros.end(), ptm->globalLintMacros.begin(), ptm->globalLintMacros.end());
-            for ( auto & rm : ptm->readMacros ) {
-                addReaderMacro(rm.second);
-            }
-            for ( auto & tm : ptm->typeMacros ) {
-                addTypeMacro(tm.second);
-            }
-            commentReader = ptm->commentReader;
-            for ( auto & op : ptm->options) {
-                DAS_ASSERTF(options.find(op.first)==options.end(),"duplicate option %s", op.first.c_str());
-                options[op.first] = op.second;
-            }
-            SubstituteBuiltinModuleRefs( program, program->thisModule.get(), this );
-            return true;
-        } else {
-            DAS_FATAL_ERROR("builtin module did not parse %s\n", modName.c_str());
-            return false;
-        }
+        return appendBuiltinModuleContent(this, program, modName);
+    }
+
+    bool Module::compileBuiltinModule ( const string & modName, const string & filePath, const FileAccessPtr & access ) {
+        TextWriter issues;
+        ModuleGroup dummyLibGroup;
+        auto program = parseDaScript(filePath, modName, access, issues, dummyLibGroup, true);
+        const char *src; uint32_t length;
+        access->getFileInfo(filePath)->getSourceAndLength(src, length);
+        ownFileInfo = make_unique<TextFileInfo>((char *) src, uint32_t(length), false);
+        DAS_ASSERTF(ownFileInfo,"something went wrong and FileInfo for builtin module can not be obtained");
+        return appendBuiltinModuleContent(this, program, modName);
     }
 
     bool isValidBuiltinName ( const string & name, bool canPunkt ) {
@@ -857,7 +871,12 @@ namespace das {
             }
         } else {
             if ( auto pm = findModule(moduleName) ) {
-                func(pm);
+                if ( !func(pm) ) return;
+                for ( auto & dep : pm->requireModule ) {
+                    if ( dep.second ) {  // public dependency
+                        if ( !func(dep.first) ) return;
+                    }
+                }
             }
         }
     }

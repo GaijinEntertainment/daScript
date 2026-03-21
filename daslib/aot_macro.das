@@ -7,7 +7,7 @@ require daslib/macro_boost
 require daslib/templates_boost
 require daslib/ast_boost
 require strings
-require fio
+require daslib/fio
 
 
 //! Simulate macro that performs AOT compilation and writes output to the policy-specified file.

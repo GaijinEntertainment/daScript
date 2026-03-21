@@ -8,7 +8,7 @@ require dastest/suite_result
 require daslib/json
 require daslib/json_boost
 require daslib/strings_boost
-require fio
+require daslib/fio
 
 struct JsonReport {
     file : string

@@ -2,7 +2,10 @@ options gen2
 options indenting = 4
 options remove_unused_symbols = false
 
-require fio
+// Make it shared, so other shared modules can include it.
+module fio shared
+
+require fio_core public
 require strings
 
 typedef file = FILE const?
