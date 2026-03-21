@@ -9,7 +9,7 @@
  MCP Server --- AI Tool Integration
 ===========================================
 
-The daslang MCP server exposes 20 compiler-backed tools to AI coding
+The daslang MCP server exposes 28 compiler-backed tools to AI coding
 assistants via the `Model Context Protocol <https://modelcontextprotocol.io/>`_.
 It provides compilation diagnostics, type inspection, go-to-definition,
 find-references, AST dump, AOT generation, expression evaluation,
@@ -57,7 +57,7 @@ session.
 Tools
 =====
 
-The server exposes 20 tools.  Each tool is invoked via MCP's
+The server exposes 28 tools.  Each tool is invoked via MCP's
 ``tools/call`` method.
 
 Compilation and diagnostics
@@ -199,6 +199,37 @@ Parse-aware search (tree-sitter)
        tree-sitter.  Works on broken/incomplete code -- no compilation
        needed.  Conditional on ``sg`` CLI.
 
+Live-reload control
+-------------------
+
+These tools interact with a running :ref:`daslang-live <utils_daslang_live>`
+instance via its REST API.  All accept an optional ``port`` parameter
+(default 9090).
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   * - Tool
+     - Description
+   * - ``live_launch``
+     - Launch ``daslang-live.exe`` on a script if not already running.
+       Sets working directory to the script's folder.
+   * - ``live_status``
+     - Query the running instance for fps, uptime, paused state, and
+       error status.
+   * - ``live_error``
+     - Retrieve the last compilation error (plain text).
+   * - ``live_reload``
+     - Trigger an incremental or full reload.
+   * - ``live_pause``
+     - Pause or unpause execution.
+   * - ``live_command``
+     - Dispatch a ``[live_command]`` by name with JSON arguments.
+   * - ``live_shutdown``
+     - Gracefully shut down the running instance.
+
+
 ast-grep / tree-sitter setup
 =============================
 
@@ -290,3 +321,5 @@ Optionally, allow all MCP tools without prompting by adding to
    ``utils/mcp/README.md`` -- setup and configuration details
 
    `Model Context Protocol specification <https://modelcontextprotocol.io/>`_
+
+   :ref:`utils_daslang_live` -- the live-reload application host controlled by ``live_*`` tools
