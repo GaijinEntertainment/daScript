@@ -91,15 +91,17 @@ variable as the index, this becomes O(n\ :sup:`2`) total.
 PERF003 — ``character_at`` anywhere
 ====================================
 
-Informational warning for any use of ``character_at``. Each call is O(n) due to
-``strlen``. For isolated checks this is acceptable, but in hot paths consider
+Informational warning for any use of ``character_at``. Each call does a bounds
+check by scanning to the index. For accessing the first character, use
+``first_character`` which is O(1). For bulk access in hot paths, consider
 ``peek_data`` for reads or ``modify_data`` for mutations.
 
 .. code-block:: das
 
-    let ch = character_at(s, 0)         // PERF003 (informational)
+    let ch = character_at(s, 0)         // PERF003 — use first_character(s) instead
+    let ch2 = first_character(s)        // O(1), returns 0 for empty string
 
-    // Alternative: peek_data for O(1) access
+    // Alternative: peek_data for O(1) indexed access
     peek_data(s) <| $(arr) {
         let ch = int(arr[0])
     }
@@ -183,6 +185,5 @@ Run tests::
 
 .. seealso::
 
-    :ref:`Adding new rules <skills/perf_lint.md>` (skill file for contributors),
     ``daslib/perf_lint.das`` (source),
     ``utils/perf_lint/main.das`` (standalone utility)

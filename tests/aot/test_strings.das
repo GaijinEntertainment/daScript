@@ -43,3 +43,56 @@ def test_string_functions(t : T?) {
         t |> equal(join(arr, ","), "a,b,c")
     }
 }
+
+def test_first_character_empty_throws(t : T?) {
+    var threw = false
+    try {
+        let ch = first_character("")
+        t |> failure("should have thrown, got {ch}")
+    } recover {
+        threw = true
+    }
+    t |> success(threw, "first_character on empty string should throw")
+}
+
+def test_first_character_ds_empty_throws(t : T?) {
+    var threw = false
+    with_das_string() <| $(var ds) {
+        try {
+            let ch = first_character(ds)
+            t |> failure("should have thrown, got {ch}")
+        } recover {
+            threw = true
+        }
+    }
+    t |> success(threw, "first_character on empty das_string should throw")
+}
+
+[test]
+def test_first_character(t : T?) {
+    t |> run("first_character basic") @(t : T?) {
+        t |> equal(first_character("hello"), 'h')
+        t |> equal(first_character("A"), 'A')
+        t |> equal(first_character("123"), '1')
+    }
+    t |> run("first_character empty throws") @(t : T?) {
+        test_first_character_empty_throws(t)
+    }
+    t |> run("first_character das_string") @(t : T?) {
+        with_das_string() <| $(var ds) {
+            ds := "hello"
+            t |> equal(first_character(ds), 'h')
+        }
+        with_das_string() <| $(var ds) {
+            ds := "Z"
+            t |> equal(first_character(ds), 'Z')
+        }
+    }
+    t |> run("first_character das_string empty throws") @(t : T?) {
+        test_first_character_ds_empty_throws(t)
+    }
+    t |> run("character_at bounds check") @(t : T?) {
+        t |> equal(character_at("hello", 0), 'h')
+        t |> equal(character_at("hello", 4), 'o')
+    }
+}

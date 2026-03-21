@@ -32,11 +32,36 @@ namespace das
     };
 
     int32_t get_character_at ( const char * str, int32_t index, Context * context, LineInfoArg * at ) {
-        const uint32_t strLen = stringLengthSafe ( *context, str );
-        if ( uint32_t(index)>=strLen ) {
-            context->throw_error_at(at, "string character index out of range, %u of %u", uint32_t(index), strLen);
+        if ( !str || index<0 ) {
+            context->throw_error_at(at, "string character index out of range, %u", uint32_t(index));
+        }
+        for ( int32_t i = 0; i <= index; ++i ) {
+            if ( str[i]==0 ) {
+                context->throw_error_at(at, "string character index out of range, %u", uint32_t(index));
+            }
         }
         return ((uint8_t *)str)[index];
+    }
+
+    int32_t get_first_character ( const char * str, Context * context, LineInfoArg * at ) {
+        if ( !str || str[0]==0 ) {
+            context->throw_error_at(at, "string is empty");
+        }
+        return ((uint8_t *)str)[0];
+    }
+
+    int32_t get_first_character_ds ( const string & str, Context * context, LineInfoArg * at ) {
+        if ( str.empty() ) {
+            context->throw_error_at(at, "string is empty");
+        }
+        return ((uint8_t *)str.c_str())[0];
+    }
+
+    void with_das_string ( const TBlock<void,TTemporary<string>> & block, Context * context, LineInfoArg * at ) {
+        string tmp;
+        vec4f args[1];
+        args[0] = cast<string&>::from(tmp);
+        context->invoke(block, args, nullptr, at);
     }
 
     bool builtin_string_endswith ( const char * str, const char * cmp, Context * context ) {
@@ -922,6 +947,12 @@ namespace das
                 SideEffects::none, "get_character_at")->args({"str","idx","context","at"});
             addExtern<DAS_BIND_FUN(get_character_uat)>(*this, lib, "character_uat",
                 SideEffects::none, "get_character_uat")->args({"str","idx"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(get_first_character)>(*this, lib, "first_character",
+                SideEffects::none, "get_first_character")->args({"str","context","at"});
+            addExtern<DAS_BIND_FUN(get_first_character_ds)>(*this, lib, "first_character",
+                SideEffects::none, "get_first_character_ds")->args({"str","context","at"});
+            addExtern<DAS_BIND_FUN(with_das_string)>(*this, lib, "with_das_string",
+                SideEffects::invoke, "with_das_string")->args({"block","context","at"});
             addExtern<DAS_BIND_FUN(string_repeat)>(*this, lib, "repeat",
                 SideEffects::none, "string_repeat")->args({"str","count","context","at"});
             addExtern<DAS_BIND_FUN(to_string_char)>(*this, lib, "to_char",

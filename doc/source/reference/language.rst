@@ -40,6 +40,7 @@
    language/macros.rst
    language/reification.rst
    language/builtin_functions.rst
+   language/perf_lint.rst
 
 *****************************
 The Runtime

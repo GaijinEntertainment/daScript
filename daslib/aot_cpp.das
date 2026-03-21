@@ -1655,7 +1655,7 @@ class public CppAot : AstVisitor {
         }
     }
     def isOpPolicy1(that : smart_ptr<ExprOp1>) {
-        if (is_alpha(character_at(string(that.op), 0))) {
+        if (is_alpha(first_character(that.op))) {
             return true;
         }
         return that.subexpr._type.isPolicyType;
@@ -1688,8 +1688,7 @@ class public CppAot : AstVisitor {
             write(*ss, ",*__context__,nullptr)");
         } else {
             if (that.op == "+++" || that.op == "---") {
-                *ss |> write_char(character_at(string(that.op), 0))
-                *ss |> write_char(character_at(string(that.op), 1));
+                write(*ss, slice(string(that.op), 0, 2));
             }
             if (!noBracket(that) && !that.subexpr.printFlags.bottomLevel) {
                 write(*ss, ")");
@@ -1703,7 +1702,7 @@ class public CppAot : AstVisitor {
                 that.right._type.baseType == Type.tBool && that.right._type.isSimpleType);
     }
     def isOpPolicy2(that : smart_ptr<ExprOp2>) {
-        if (is_alpha(character_at(string(that.op), 0))) return true;
+        if (is_alpha(first_character(that.op))) return true;
         if (that.op == "/" || that.op == "%") return true;
         if (that.op == "<<<" || that.op == ">>>" || that.op == "<<<=" || that.op == ">>>=") return true;
         if (that.op == "<<" || that.op == ">>" || that.op == "<<=" || that.op == ">>=") return true;
@@ -2537,10 +2536,10 @@ class public CppAot : AstVisitor {
             write(*ss, "das_swizzle_ref<{type_str},{value_str},{int(expr.fields[0])}>::swizzle(");
         } else {
             if (length(expr.fields) == 1) {
-                let mask = "xyzw";
+                let mask = fixed_array('x','y','z','w');
                 let is64bit = expr._type.baseType == Type.tInt64 || expr._type.baseType == Type.tUInt64;
                 write(*ss, "v_extract_")
-                *ss |> write_char(character_at(mask, int(expr.fields[0])));
+                *ss |> write_char(mask[int(expr.fields[0])]);
                 if (expr._type.baseType != Type.tFloat) {
                     write(*ss, is64bit ? "i64" : "i");
                 }
