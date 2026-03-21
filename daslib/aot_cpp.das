@@ -2536,7 +2536,7 @@ class public CppAot : AstVisitor {
             write(*ss, "das_swizzle_ref<{type_str},{value_str},{int(expr.fields[0])}>::swizzle(");
         } else {
             if (length(expr.fields) == 1) {
-                let mask = fixed_array('x','y','z','w');
+                let mask = fixed_array('x', 'y', 'z', 'w');
                 let is64bit = expr._type.baseType == Type.tInt64 || expr._type.baseType == Type.tUInt64;
                 write(*ss, "v_extract_")
                 *ss |> write_char(mask[int(expr.fields[0])]);
