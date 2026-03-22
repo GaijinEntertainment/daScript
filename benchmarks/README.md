@@ -39,6 +39,13 @@ Every `.das` benchmark file in this directory tree is listed below, grouped by s
 |---|---|
 | `test01.das` | `get_key(tab, v)` vs `keys(tab)+values(tab)` — single iterator with pointer arithmetic vs two parallel iterators (1K, 10K, 100K entries) |
 
+## core/array/
+
+| File | Description |
+|---|---|
+| `test01.das` | emplace, emplace_grow, move, and reserve on arrays of locked vs unlocked struct elements |
+| `test02.das` | push vs push_clone — int and struct with string field (10K elements, pre-reserved) |
+
 ## core/array_lock/
 
 | File | Description |
