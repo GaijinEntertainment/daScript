@@ -369,7 +369,7 @@ class AudioSourcePCMStream : AudioSource {
         data |> resize(nsmp)
         var ofs = 0
         while (ofs < nsmp && length(chunks) != 0) {
-            var ncopy = min(length(chunks[0].samples), nsmp - ofs)
+            let ncopy = min(length(chunks[0].samples), nsmp - ofs)
             if (ncopy != 0) {
                 unsafe {
                     memcpy(unsafe(addr(data[ofs])), unsafe(addr(chunks[0].samples[0])), ncopy * 4)
@@ -729,12 +729,12 @@ def command_processor {
                 ch.source->append(pcmd.samples)
             }
         } elif (cmd is pause) {
-            var pcmd = cmd as pause
+            let pcmd = cmd as pause
             g_sid_2_channel |> get(pcmd.sid) <| $(var ch : AudioChannel?&) {
                 ch.paused = pcmd.paused
             }
         } elif (cmd is volume) {
-            var vcmd = cmd as volume
+            let vcmd = cmd as volume
             g_sid_2_channel |> get(vcmd.sid) <| $(var ch : AudioChannel?&) {
                 ch.volume = vcmd.volume
                 if (vcmd.time > 0.) {
@@ -745,12 +745,12 @@ def command_processor {
                 }
             }
         } elif (cmd is pan) {
-            var vcmd = cmd as pan
+            let vcmd = cmd as pan
             g_sid_2_channel |> get(vcmd.sid) <| $(var ch : AudioChannel?&) {
                 ma_volume_mixer_set_pan(unsafe(addr(ch.volume_mixer)), vcmd.pan)
             }
         } elif (cmd is pitch) {
-            var pcmd = cmd as pitch
+            let pcmd = cmd as pitch
             g_sid_2_channel |> get(pcmd.sid) <| $(var ch : AudioChannel?&) {
                 ch.pitch = pcmd.pitch
             }
@@ -759,7 +759,7 @@ def command_processor {
         } elif (cmd is global_pause) {
             g_pause = cmd as global_pause // todo: envelope?
         } elif (cmd is stop) {
-            var scmd = cmd as stop
+            let scmd = cmd as stop
             g_sid_2_channel |> get(scmd.sid) <| $(var ch : AudioChannel?&) {
                 if (scmd.time > 0.) {
                     let nFrames = uint64(scmd.time * float(MA_SAMPLE_RATE))

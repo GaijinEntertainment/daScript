@@ -98,7 +98,7 @@ def save_glfw_window() {
         var arch = Archive(reading = false, stream = ser)
         var ptr_val = unsafe(reinterpret<uint64>(live_window))
         arch |> serialize(ptr_val)
-        var data <- ser->extractData()
+        let data <- ser->extractData()
         live_store_bytes("__glfw_window", data)
         unsafe { delete ser; }
     }

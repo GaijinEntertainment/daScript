@@ -154,7 +154,7 @@ class PrintVisitor : AstVisitor {
                 // write(*writer, "// {describe_bitfield(fun.sideEffectFlags)}\n");
             }
         }
-        let bfa : FunctionFlags = fun.flags & function_annotation_flags;
+        // let bfa : FunctionFlags = fun.flags & function_annotation_flags;
         // // todo: describe_bitfield not supported in aot yet
         // write(*writer, "{describe_bitfield(bfa,"\n")}");
         if (fun.annotations |> length != 0) {
@@ -1105,7 +1105,7 @@ def Foo(x, y : int) {
 def add(a, b : int) {
     //! Adds two integers with an extra constant, used for AST print testing.
     // todo make global, after globals supported in standalone ctx
-    var add_extra = 13;
+    let add_extra = 13;
     print("a={a} b={b}");
     return a + b + add_extra;
 }
@@ -1194,7 +1194,7 @@ def allExpr(arg : int) {
         verify(ta == tg);
     }
     // ExprTypeInfo
-    var tinfo = typeinfo rtti_typeinfo(type<int>).basicType;
+    let tinfo = typeinfo rtti_typeinfo(type<int>).basicType;
     print("{tinfo}\n");
     // ExprPtr2Ref
     print("{*pFoo1}");

@@ -85,7 +85,7 @@ def gen_point_cloud(frag : GeometryFragment; numpoints : int) {
     cloud.vertices |> reserve(numpoints)
     var seed = random_seed(13)
     random_int4(seed)
-    for (t in 0..numpoints) {
+    for (_ in 0..numpoints) {
         let rnd = random_big_int(seed)
         let pidx = min(lower_bound(dens, rnd), length(dens) - 1)
         let i0 = frag.indices[pidx * 3 + 0]
@@ -129,13 +129,13 @@ def main {
         glfwDestroyWindow(window)
     }
     glfwMakeContextCurrent(window)
-    var program = create_shader_program(@@vs_preview, @@fs_preview)
+    let program = create_shader_program(@@vs_preview, @@fs_preview)
     // var mesh <- gen_sphere(32,16,false) |> create_geometry_fragment
     let mesh_file_name = "{get_das_root()}/modules/dasBGFX/bgfx/bgfx/examples/assets/meshes/bunny.obj" // orb
     // var mesh <- load_obj_mesh(mesh_file_name) |> create_geometry_fragment
-    var gmesh <- load_obj_mesh(mesh_file_name)
+    let gmesh <- load_obj_mesh(mesh_file_name)
     var pcmesh <- gen_point_cloud(gmesh, 1000000)
-    var mesh <- pcmesh |> create_points_fragment
+    let mesh <- pcmesh |> create_points_fragment
     let checkerboard_texture = gen_image_checkerboard(16, 16, 0xff404040, 0xff808080) |> create_texture
     let point_sprite_texture = gen_image_point(32, 0xffffffff) |> create_texture
     glBindTexture(GL_TEXTURE_2D, checkerboard_texture)
