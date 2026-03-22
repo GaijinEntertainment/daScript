@@ -235,13 +235,13 @@ def demo_property_testing() {
 // ============================================================
 
 def reverse_string(s : string) : string {
-    var result = ""
-    var i = length(s) - 1
-    while (i >= 0) {
-        result += slice(s, i, i + 1)
-        i --
+    return build_string() <| $(var w) {
+        var i = length(s) - 1
+        while (i >= 0) {
+            w |> write(slice(s, i, i + 1))
+            i --
+        }
     }
-    return result
 }
 
 def demo_string_testing() {

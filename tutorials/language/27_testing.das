@@ -100,13 +100,17 @@ def factorial(n : int) : int {
 }
 
 def is_palindrome(s : string) : bool {
-    let n = length(s)
-    for (i in range(n / 2)) {
-        if (character_at(s, i) != character_at(s, n - 1 - i)) {
-            return false
+    var result = true
+    peek_data(s) $(data) {
+        let n = length(data)
+        for (i in range(n / 2)) {
+            if (data[i] != data[n - 1 - i]) {
+                result = false
+                return
+            }
         }
     }
-    return true
+    return result
 }
 
 [test]

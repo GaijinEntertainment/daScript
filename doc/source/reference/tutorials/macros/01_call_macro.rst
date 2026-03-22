@@ -158,10 +158,11 @@ looking for ``(`` ... ``)`` pairs.  For each placeholder it:
            var inscope sbuilder <- new ExprStringBuilder(at = expr.at)
            let format = string((expr.arguments[0] as ExprConstString).value)
            var pos = 0
-           while (pos < length(format)) {
+           let format_len = length(format)
+           while (pos < format_len) {
                var open = find(format, '(', pos)
                if (open == -1) {
-                   let tail = format.chop(pos, length(format) - pos)
+                   let tail = format.chop(pos, format_len - pos)
                    sbuilder.elements |> emplace_new <| new ExprConstString(
                        value := tail, at = expr.at)
                    break
