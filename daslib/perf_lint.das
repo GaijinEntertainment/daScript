@@ -61,6 +61,9 @@ class PerfLintVisitor : AstVisitor {
     known_length_loop_depth : int = 0
     current_for_known_length : bool = true
     warning_count : int = 0
+    // collection mode — when true, warnings are appended to `warnings` instead of to_log
+    collect_warnings : bool = false
+    warnings : array<string>
 
     def PerfLintVisitor() {
         pass
@@ -80,6 +83,8 @@ class PerfLintVisitor : AstVisitor {
         }
         if (compile_time_errors) {
             compiling_program() |> macro_performance_warning(at, msg)
+        } elif (collect_warnings) {
+            warnings |> push("performance warning: {msg} at {describe(at)}")
         } else {
             to_log(LOG_WARNING, "performance warning: {msg} at {describe(at)}\n")
         }
@@ -532,6 +537,20 @@ def public perf_lint(prog : ProgramPtr; compile_time_errors : bool) : int {
     var inscope astVisitorAdapter <- make_visitor(*astVisitor)
     visit(prog, astVisitorAdapter)
     let count = astVisitor.warning_count
+    unsafe { delete astVisitor; }
+    return count
+}
+
+def public perf_lint_collect(prog : ProgramPtr; var warnings : array<string>) : int {
+    //! Runs the performance lint visitor and collects warnings as strings.
+    //! Returns the number of warnings found.
+    var astVisitor = new PerfLintVisitor(compile_time_errors = false, collect_warnings = true)
+    var inscope astVisitorAdapter <- make_visitor(*astVisitor)
+    visit(prog, astVisitorAdapter)
+    let count = astVisitor.warning_count
+    for (w in astVisitor.warnings) {
+        warnings |> push(w)
+    }
     unsafe { delete astVisitor; }
     return count
 }

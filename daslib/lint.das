@@ -31,6 +31,9 @@ class LintVisitor : AstVisitor {
     exprForTerminator : array<uint64>
     compile_time_errors : bool
     noLint : bool = false
+    // collection mode — when true, errors are appended to `errors` instead of error()
+    collect_errors : bool = false
+    errors : array<string>
     def LintVisitor() {
         pass
     }
@@ -40,6 +43,8 @@ class LintVisitor : AstVisitor {
         }
         if (compile_time_errors) {
             compiling_program() |> macro_error(at, text)
+        } elif (collect_errors) {
+            errors |> push("{text} at {describe(at)}")
         } else {
             error("{text} at {describe(at)}\n")
         }
@@ -97,10 +102,16 @@ class LintVisitor : AstVisitor {
         }
     }
     def override preVisitExprForVariable(expr : smart_ptr<ExprFor>; v : VariablePtr; last : bool) : void {
+        if (expr.canShadow) {
+            return
+        }
         validate_var(v, false)
     }
 
     def validate_var(v : VariablePtr; can_make_const : bool) {
+        if (v.flags.generated) {
+            return
+        }
         let name = string(v.name)
         if (name |> starts_with("__")) {// system variables
             return
@@ -164,4 +175,23 @@ def public paranoid(prog : ProgramPtr; compile_time_errors : bool) {
     unsafe {
         delete astVisitor
     }
+}
+
+def public paranoid_collect(prog : ProgramPtr; var errors : array<string>) : int {
+    //! Runs the paranoid lint visitor and collects errors as strings.
+    //! Returns the number of lint issues found.
+    var astVisitor = new LintVisitor(compile_time_errors = false, collect_errors = true)
+    unsafe {
+        astVisitor.astVisitorAdapter <- make_visitor(*astVisitor)
+    }
+    visit(prog, astVisitor.astVisitorAdapter)
+    let count = length(astVisitor.errors)
+    for (e in astVisitor.errors) {
+        errors |> push(e)
+    }
+    astVisitor.astVisitorAdapter := null
+    unsafe {
+        delete astVisitor
+    }
+    return count
 }

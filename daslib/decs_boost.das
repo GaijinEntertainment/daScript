@@ -304,7 +304,7 @@ def private append_index_lookup(arch_name : string; var qblock : smart_ptr<ExprB
         name := "{prefix}{a.name}{suffix}",
         _type <- vtype,
         init <- iget,
-        flags = VariableFlags.can_shadow
+        flags = VariableFlags.can_shadow | VariableFlags.generated
         )
     qblock.list |> emplace(vlet)
     return true

@@ -36,6 +36,27 @@ def make_tool_result(text : string; is_error : bool = false) : string {
     return sprint_json(result, false)
 }
 
+def write_deduped(var writer : StringBuilderWriter; messages : array<string>; prefix : string = "  ") {
+    var counts : table<string; int>
+    var order : array<string>
+    for (msg in messages) {
+        if (key_exists(counts, msg)) {
+            counts[msg]++
+        } else {
+            counts[msg] = 1
+            order |> push(msg)
+        }
+    }
+    for (msg in order) {
+        let n = counts[msg]
+        if (n > 1) {
+            writer |> write("{prefix}{msg} (x{n})\n")
+        } else {
+            writer |> write("{prefix}{msg}\n")
+        }
+    }
+}
+
 def compile_and_simulate(file : string; project : string = ""; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
     return compile_program(file, false, false, project) <| blk
 }
@@ -99,6 +120,37 @@ def compile_program(file : string; _export_all : bool; _no_opt : bool; project :
                         }
                         result = invoke(blk, program, string(issues))
                     }
+                }
+            }
+        }
+    }
+    return make_tool_result(result, had_error)
+}
+
+def compile_only(file : string; _export_all : bool; project : string = ""; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
+    return compile_only(file, _export_all, false, project) <| blk
+}
+
+def compile_only(file : string; _export_all : bool; _no_opt : bool; project : string = ""; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
+    var inscope access <- make_file_access(project)
+    var result : string
+    var had_error = false
+    using() <| $(var mg : ModuleGroup) {
+        using() <| $(var cop : CodeOfPolicies) {
+            cop.threadlock_context = true
+            cop.ignore_shared_modules = true
+            if (_export_all) {
+                cop.export_all = true
+            }
+            if (_no_opt) {
+                cop.no_optimizations = true
+            }
+            compile_file(file, access, unsafe(addr(mg)), cop) <| $(ok; program; issues) {
+                if (!ok) {
+                    result = "Compilation failed:\n{issues}"
+                    had_error = true
+                } else {
+                    result = invoke(blk, program, string(issues))
                 }
             }
         }

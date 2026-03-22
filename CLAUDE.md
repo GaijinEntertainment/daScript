@@ -236,7 +236,7 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - `modules/` — External plugin modules
 - `modules/dasLiveHost/` — C++ module for live-reload host lifecycle (dynamic module)
 - `utils/daslang-live/` — Live-reloading application host (`daslang-live.exe`)
-- `utils/mcp/` — MCP server for AI coding assistants (28 tools, stdio transport, no extra deps)
+- `utils/mcp/` — MCP server for AI coding assistants (30 tools, stdio transport, no extra deps)
 - `utils/daspkg/` — Package manager (install, update, build, search packages)
 - `examples/daslive/` — Live-reload examples (hello, triangle, tank_game, etc.)
 - `examples/daspkg/` — Package manager example projects
@@ -273,6 +273,8 @@ The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics, prog
 | `grep_usage` | Using built-in Grep tool to search for symbol names in `.das` files (parse-aware via ast-grep + tree-sitter — no false positives from comments/strings) |
 | `outline` | Manually scanning files for function/struct/enum declarations |
 | `aot` | Manually running AOT generation and extracting function C++ |
+| `perf_lint` | Running `perf_lint.das` manually or requiring the module for performance warnings |
+| `lint` | Running `lint.das` manually or requiring the module for code quality checks |
 | `live_launch` | Manually starting `daslang-live.exe` from shell |
 | `live_status` | `curl http://localhost:9090/status` |
 | `live_error` | `curl http://localhost:9090/error` |
