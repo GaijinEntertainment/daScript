@@ -135,6 +135,7 @@ class CursorVisitor : AstVisitor {
 
 def private reverse_hits(var src : array<CursorHit>) : array<CursorHit> {
     var result : array<CursorHit>
+    result |> reserve(length(src))
     var i = length(src) - 1
     while (i >= 0) {
         result |> emplace <| src[i]

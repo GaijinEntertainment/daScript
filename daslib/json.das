@@ -252,6 +252,7 @@ def private _lexer(var stext : string implicit) {
                                     }
                                 } else {
                                     // invalid hex sequence, preserve as-is
+                                    str |> reserve(length(str) + 2 + length(hex_str) + 1)
                                     push(str, uint8('\\'))
                                     push(str, uint8('u'))
                                     for (b in hex_str) {

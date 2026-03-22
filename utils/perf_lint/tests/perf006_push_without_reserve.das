@@ -19,7 +19,7 @@ options gen2
 //       result |> push(i)          // no reallocs
 //   }
 
-expect 40217:10
+expect 40217:9
 
 require daslib/perf_lint
 
@@ -33,11 +33,12 @@ def bad_push_for_loop() {
     delete result
 }
 
-def bad_emplace_while() {
+// While loops: no warning — loop bound is runtime-dependent, can't reserve meaningfully
+def good_emplace_while() {
     var result : array<int>
     var i = 0
     while (i < 100) {
-        result |> emplace(i)                    // PERF006
+        result |> emplace(i)                    // no warning — while loop
         i++
     }
     delete result

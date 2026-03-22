@@ -61,6 +61,7 @@ def writeStandaloneContextMethods(var prog : ProgramPtr; var logs : StringBuilde
         write(logs, "auto {prefix}{aotFunctionName(string(fn.origin != null ? fn.origin.name : fn.name))} ( ");
     // describe arguments
         var vars : array<string>
+        vars |> reserve(length(fn.arguments))
         for (variable in fn.arguments) {
             if (variable._type.baseType == Type.tStructure && declare_only) {
                 // It doesn't cover all cases, but anyway we'll get CE.
@@ -313,7 +314,8 @@ def GetFunctionInfo(pfun : Function?, info : string) {
 
 def addFunctionInfo(disableInit : bool; rtti : bool, fnn : array<Function?>, var helper : AotDebugInfoHelper?) {
     helper.helper.rtti = rtti;
-    var lookupFunctionTable : array<tuple<Function?, FuncInfo?>>;
+    var lookupFunctionTable : array<tuple<Function?, FuncInfo?>>
+    lookupFunctionTable |> reserve(length(fnn))
     for (pfun in fnn) {
         let info = helper.helper |> make_function_debug_info(pfun);
         lookupFunctionTable.push((pfun, info));

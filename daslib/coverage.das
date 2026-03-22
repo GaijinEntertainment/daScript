@@ -516,10 +516,14 @@ class CoveragePass : AstPassMacro {
                 }
 
                 // register branches
+                let nbranches = reg_data.allBranches |> length()
                 var blines : array<uint>
                 var block_nums : array<uint>
                 var branch_nums : array<uint>
-                for (i in range(reg_data.allBranches |> length())) {
+                blines |> reserve(nbranches)
+                block_nums |> reserve(nbranches)
+                branch_nums |> reserve(nbranches)
+                for (i in range(nbranches)) {
                     blines |> push(reg_data.allBranches[i]._0)
                     block_nums |> push(reg_data.allBranches[i]._1)
                     branch_nums |> push(reg_data.allBranches[i]._2)

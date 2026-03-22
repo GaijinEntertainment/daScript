@@ -21,6 +21,7 @@ module perf_lint shared private
 //!   PERF006 — push/emplace in loop without prior reserve()
 
 require daslib/ast_boost
+require strings
 
 // ---------------------------------------------------------------------------
 // Visitor
@@ -69,9 +70,12 @@ class PerfLintVisitor : AstVisitor {
         warning_count++
         var msg = text
         if (current_function != null && current_function.fromGeneric != null && length(current_function.inferStack) > 0) {
-            msg = "{text}\n  while compiling {current_function.name}"
-            for (ih in current_function.inferStack) {
-                msg = "{msg}\n  instanced from {ih.func.name} at {describe(ih.at)}"
+            msg = build_string() <| $(var w) {
+                w |> write(text)
+                w |> write("\n  while compiling {current_function.name}")
+                for (ih in current_function.inferStack) {
+                    w |> write("\n  instanced from {ih.func.name} at {describe(ih.at)}")
+                }
             }
         }
         if (compile_time_errors) {
@@ -322,7 +326,6 @@ class PerfLintVisitor : AstVisitor {
         if (in_closure == 0) {
             scope_stack |> push(length(var_stack))
             loop_depth++
-            known_length_loop_depth++
             if_depth_stack |> push(0)
             in_while_cond = true
         }
@@ -335,7 +338,6 @@ class PerfLintVisitor : AstVisitor {
     def override visitExprWhile(var expr : smart_ptr<ExprWhile>) : ExpressionPtr {
         if (in_closure == 0) {
             loop_depth--
-            known_length_loop_depth--
             if (length(scope_stack) > 0) {
                 var_stack |> resize(scope_stack |> back())
                 scope_stack |> pop()

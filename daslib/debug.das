@@ -1107,6 +1107,9 @@ class private DAgent : DapiDebugAgent {
         breakpoints |> erase(path)
         if (length(ini.breakpoints) >= 0) {
             var breaks <- array<DABreakpoint>()
+            let nbp = length(ini.breakpoints)
+            breaks |> reserve(nbp)
+            res.breakpoints |> reserve(length(res.breakpoints) + nbp)
             for (b in ini.breakpoints) {
                 breaks |> emplace(DABreakpoint(line = uint(b.line), id = breakpointId))
                 res.breakpoints |> emplace(Breakpoint(

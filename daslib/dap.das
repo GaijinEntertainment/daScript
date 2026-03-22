@@ -91,6 +91,7 @@ def SetDataBreakpointsArguments(data : JsonValue?) {
     var res <- SetDataBreakpointsArguments()
     var breakpoints = joj(data, "breakpoints")
     if (breakpoints != null) {
+        res.breakpoints |> reserve(length(breakpoints.value as _array))
         for (it in breakpoints.value as _array) {
             res.breakpoints |> emplace(DataBreakpoint(it))
         }
@@ -154,6 +155,7 @@ def SetBreakpointsArguments(data : JsonValue?) {
                                          sourceModified = job(data, "sourceModified"))
     var breakpoints = joj(data, "breakpoints")
     if (breakpoints != null) {
+        res.breakpoints |> reserve(length(breakpoints.value as _array))
         for (it in breakpoints.value as _array) {
             res.breakpoints |> emplace(SourceBreakpoint(it))
         }

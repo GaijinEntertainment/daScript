@@ -657,6 +657,9 @@ def JV(value : auto(TT)) : JsonValue? {
         return _::JV(map)
     } static_elif (typeinfo is_iterable(value)) {
         var arr : array<JsonValue?>
+        static_if (typeinfo is_array(value) || typeinfo is_dim(value)) {
+            arr |> reserve(length(value))
+        }
         for (x in value) {
             arr |> push <| _::JV(x)
         }
