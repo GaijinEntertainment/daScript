@@ -96,6 +96,16 @@ class PerfLintVisitor : AstVisitor {
 
     // --- expression helpers ---
 
+    def is_character_at_zero(expr : smart_ptr<ExprCall>) : bool {
+        if (length(expr.arguments) >= 2) {
+            var idx = get_ptr(expr.arguments[1])
+            if (idx is ExprConstInt && (idx as ExprConstInt).value == 0) {
+                return true
+            }
+        }
+        return false
+    }
+
     def find_string_var_from_expr(expr : Expression?) : Variable? {
         return null if (expr == null)
         // Unwrap ExprRef2Value (compiler inserts these for value-type reads)
@@ -231,18 +241,23 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def override visitExprCall(var expr : smart_ptr<ExprCall>) : ExpressionPtr {
-        return <- expr if (in_closure > 0)
+        // PERF003: character_at anywhere — fires even inside closures
         if (expr.func.name == "character_at" && expr.func._module.name == "strings") {
             var ecall = get_ptr(expr)
-            if (loop_depth > 0 && in_character_at_call > 0) {
+            if (in_closure == 0 && loop_depth > 0 && in_character_at_call > 0) {
                 in_character_at_call--
                 current_character_at = null
             }
-            // PERF003: character_at anywhere (info) — deferred so PERF002 can claim it first
+            // deferred so PERF002 can claim it first
             if (!reported_character_at |> has_value(ecall)) {
-                self->perf_warning("PERF003: character_at is O(n) due to strlen; consider peek_data() for hot paths", expr.at)
+                if (self->is_character_at_zero(expr)) {
+                    self->perf_warning("PERF003: character_at(s, 0) can be replaced with first_character(s)", expr.at)
+                } else {
+                    self->perf_warning("PERF003: character_at is O(n) due to strlen; consider peek_data() for hot paths", expr.at)
+                }
             }
         }
+        return <- expr if (in_closure > 0)
         if (expr.func.name == "length" && expr.func._module.name == "strings") {
             if (in_length_while_call > 0) {
                 in_length_while_call--

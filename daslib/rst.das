@@ -113,47 +113,49 @@ def public safe_function_name(name : string) : string {
 
 def public function_label_file(value : FunctionPtr | Function?; drop_args : int = 0) {
     //! Generates a unique RST label for a function based on its name and argument types.
-    var mn = "{value.name}"
-    var drop = drop_args
-    for (arg in value.arguments) {
-        if (drop-- > 0) {
-            continue
-        }
-        let prefix = arg._type.flags.removeConstant ? "var " : ""
-        if (arg._type.baseType == Type.autoinfer && arg.init != null) {
-            // During rst_comment (pre-inference), auto-inferred default arg types
-            // are unresolved. Determine the type from the init expression so the
-            // hash matches what das2rst (post-inference) produces.
-            let rtti = "{arg.init.__rtti}"
-            if (rtti == "ExprConstDouble") {
-                mn += "{prefix}double"
-            } elif (rtti == "ExprConstFloat") {
-                mn += "{prefix}float"
-            } elif (rtti == "ExprConstString") {
-                mn += "{prefix}string"
-            } elif (rtti == "ExprConstBool") {
-                mn += "{prefix}bool"
-            } elif (rtti == "ExprConstInt") {
-                mn += "{prefix}int"
-            } elif (rtti == "ExprConstUInt") {
-                mn += "{prefix}uint"
-            } elif (rtti == "ExprConstInt64") {
-                mn += "{prefix}int64"
-            } elif (rtti == "ExprConstUInt64") {
-                mn += "{prefix}uint64"
-            } elif (rtti == "ExprConstInt8") {
-                mn += "{prefix}int8"
-            } elif (rtti == "ExprConstUInt8") {
-                mn += "{prefix}uint8"
-            } elif (rtti == "ExprConstInt16") {
-                mn += "{prefix}int16"
-            } elif (rtti == "ExprConstUInt16") {
-                mn += "{prefix}uint16"
-            } else {
-                mn += "{prefix}auto"
+    var mn = build_string() <| $(var w) {
+        w |> write(value.name)
+        var drop = drop_args
+        for (arg in value.arguments) {
+            if (drop-- > 0) {
+                continue
             }
-        } else {
-            mn += "{prefix}{describe_type_short(arg._type)}"
+            let prefix = arg._type.flags.removeConstant ? "var " : ""
+            if (arg._type.baseType == Type.autoinfer && arg.init != null) {
+                // During rst_comment (pre-inference), auto-inferred default arg types
+                // are unresolved. Determine the type from the init expression so the
+                // hash matches what das2rst (post-inference) produces.
+                let rtti = "{arg.init.__rtti}"
+                if (rtti == "ExprConstDouble") {
+                    w |> write("{prefix}double")
+                } elif (rtti == "ExprConstFloat") {
+                    w |> write("{prefix}float")
+                } elif (rtti == "ExprConstString") {
+                    w |> write("{prefix}string")
+                } elif (rtti == "ExprConstBool") {
+                    w |> write("{prefix}bool")
+                } elif (rtti == "ExprConstInt") {
+                    w |> write("{prefix}int")
+                } elif (rtti == "ExprConstUInt") {
+                    w |> write("{prefix}uint")
+                } elif (rtti == "ExprConstInt64") {
+                    w |> write("{prefix}int64")
+                } elif (rtti == "ExprConstUInt64") {
+                    w |> write("{prefix}uint64")
+                } elif (rtti == "ExprConstInt8") {
+                    w |> write("{prefix}int8")
+                } elif (rtti == "ExprConstUInt8") {
+                    w |> write("{prefix}uint8")
+                } elif (rtti == "ExprConstInt16") {
+                    w |> write("{prefix}int16")
+                } elif (rtti == "ExprConstUInt16") {
+                    w |> write("{prefix}uint16")
+                } else {
+                    w |> write("{prefix}auto")
+                }
+            } else {
+                w |> write("{prefix}{describe_type_short(arg._type)}")
+            }
         }
     }
     return "{safe_function_name(string(value.name))}-{hash(mn)}"
@@ -161,40 +163,38 @@ def public function_label_file(value : FunctionPtr | Function?; drop_args : int 
 
 def public function_label_file(name; value : smart_ptr<TypeDecl>&; drop_args : int = 0) {
     //! Generates a unique RST label for a function type based on its name and argument types.
-    var mn = "{name}"
-    var drop = drop_args
-    for (arg in value.argTypes) {
-        if (drop-- > 0) {
-            continue
+    var mn = build_string() <| $(var w) {
+        w |> write(name)
+        var drop = drop_args
+        for (arg in value.argTypes) {
+            if (drop-- > 0) {
+                continue
+            }
+            let prefix = arg.flags.removeConstant ? "var " : ""
+            w |> write("{prefix}{describe_type_short(arg)}")
         }
-        // if arg.baseType == Type autoinfer
-        //     error("autoinfer in function '{name}'")
-            // PANIC("autoinfer in function")
-        let prefix = arg.flags.removeConstant ? "var " : ""
-        mn += "{prefix}{describe_type_short(arg)}"
     }
-    // if name == "player_flash_blindness_es"
-    //     print("deep: {mn} {hash(mn)}\n")
-    //     stackwalk(false, false)
     return "{safe_function_name(string(name))}-{hash(mn)}"
 }
 
 def function_short_mangled_name(value : FunctionPtr | Function?) {
-    var res = "{value.name}"
-    if (value._module != null) {
-        res = "{module_name(value._module)}_" + res
-    }
-    for (arg in value.arguments) {
-        if (arg._type.baseType == Type.fakeContext || arg._type.baseType == Type.fakeLineInfo) {
-            continue
+    return build_string() <| $(var w) {
+        if (value._module != null) {
+            w |> write(module_name(value._module))
+            w |> write("_")
         }
-        res += "_"
-        if (arg._type.flags.removeConstant && arg._type.flags.explicitConst) {
-            res += "_"
+        w |> write(value.name)
+        for (arg in value.arguments) {
+            if (arg._type.baseType == Type.fakeContext || arg._type.baseType == Type.fakeLineInfo) {
+                continue
+            }
+            w |> write("_")
+            if (arg._type.flags.removeConstant && arg._type.flags.explicitConst) {
+                w |> write("_")
+            }
+            w |> write(describe_type_short(arg._type))
         }
-        res += describe_type_short(arg._type)
     }
-    return res
 }
 
 def function_label_name(value : FunctionPtr | Function?) {
@@ -288,46 +288,48 @@ def describe_type_short(td : TypeDeclPtr) {
             res = "table<{describe_type_short(td.firstType)}, {describe_type_short(td.secondType)}>"
         }
     } elif (td.baseType == Type.tFunction || td.baseType == Type.tBlock || td.baseType == Type.tLambda) {
-        res = td.baseType == Type.tBlock ? "block<" : td.baseType == Type.tFunction ? "function<" : "lambda<"
-        if (td.argTypes |> length != 0) {
-            res += "("
-            if (td.argNames |> length != 0) {
-                var first = true
-                for (at, an in td.argTypes, td.argNames) {
-                    if (first) {
-                        first = false
-                    } else {
-                        res += ";"
+        res = build_string() <| $(var w) {
+            w |> write(td.baseType == Type.tBlock ? "block<" : td.baseType == Type.tFunction ? "function<" : "lambda<")
+            if (td.argTypes |> length != 0) {
+                w |> write("(")
+                if (td.argNames |> length != 0) {
+                    var first = true
+                    for (at, an in td.argTypes, td.argNames) {
+                        if (first) {
+                            first = false
+                        } else {
+                            w |> write(";")
+                        }
+                        if (at.flags.removeConstant) {
+                            w |> write("var ")
+                        }
+                        w |> write(string(an))
+                        w |> write(":")
+                        w |> write(describe_type_short(at))
                     }
-                    if (at.flags.removeConstant) {
-                        res += "var "
+                } else {
+                    var first = true
+                    for (at in td.argTypes) {
+                        if (first) {
+                            first = false
+                        } else {
+                            w |> write(";")
+                        }
+                        w |> write(describe_type_short(at))
                     }
-                    res += string(an)
-                    res += ":"
-                    res += describe_type_short(at)
+                }
+                w |> write(")")
+                if (td.firstType != null) {
+                    w |> write(":")
+                    w |> write(describe_type_short(td.firstType))
+                } else {
+                    w |> write(":void")
                 }
             } else {
-                var first = true
-                for (at in td.argTypes) {
-                    if (first) {
-                        first = false
-                    } else {
-                        res += ";"
-                    }
-                    res += describe_type_short(at)
-                }
+                w |> write("():void")
             }
-            res += ")"
-            if (td.firstType != null) {
-                res += ":"
-                res += describe_type_short(td.firstType)
-            } else {
-                res += ":void"
-            }
-        } else {
-            res += "():void"
+            w |> write(">")
         }
-        res += ">"
     }
     if (!empty(res)) {
         if (td.flags.temporary) {
@@ -1238,14 +1240,16 @@ def document_struct_method(doc_file : file; mod : Module?; value; var func) {
     //   non-static methods (isStaticClassMethod=false): self NOT in args (added during inference) → skip 1 for hash
     //   static methods (isStaticClassMethod=true): self IS in args (explicit) → skip 0 for hash
     let hash_drop = is_static ? 0 : 1
-    var mn = fname
-    var drop = hash_drop
-    for (arg in func.arguments) {
-        if (drop-- > 0) {
-            continue
+    var mn = build_string() <| $(var w) {
+        w |> write(fname)
+        var drop = hash_drop
+        for (arg in func.arguments) {
+            if (drop-- > 0) {
+                continue
+            }
+            let prefix = arg._type.flags.removeConstant ? "var " : ""
+            w |> write("{prefix}{describe_type_short(arg._type)}")
         }
-        let prefix = arg._type.flags.removeConstant ? "var " : ""
-        mn += "{prefix}{describe_type_short(arg._type)}"
     }
     let file_label = "{safe_function_name(fname)}-{hash(mn)}"
     document_function_topic(doc_file, func.result, topic("function", mod, "{value.name}-{file_label}"), "def {value.name}.{fname}", args)
@@ -1941,7 +1945,7 @@ def function_needs_documenting(func : FunctionPtr | Function?) {
     var isOperator = false
     if (isBuiltin) {
         peek(func.name) $(name) {
-            let ch = character_at(name, 0)
+            let ch = first_character(name)
             if (!is_alpha(ch) && !is_number(ch) && ch != '_') {
                 isOperator = true
             }
@@ -1986,7 +1990,7 @@ def document_warning(doc_file : file; issue : string) {
 def function_name(func : FunctionPtr | Function?) {
     let name = "{func.name}"
     if (!empty(func.name)) {
-        let ch = character_at(name, 0)
+        let ch = first_character(name)
         if (ch != '_' && !is_alpha(ch)) {
             var safeName = name
             // `is`NAME / `as`NAME → "operator is NAME" / "operator as NAME"

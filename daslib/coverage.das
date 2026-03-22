@@ -24,6 +24,7 @@ require rtti
 require strings
 
 require daslib/ast_boost
+require daslib/strings_boost
 require daslib/templates_boost
 
 
@@ -120,12 +121,11 @@ def private single_file_report(name : string) {
 def get_report(name : string = "") : string {
     //! Returns code coverage report in lcov format for the specified file, or all files if name is empty.
     if (name |> empty) {
-        var res = ""
-
-        for (k in keys(coverageData)) {
-            res += single_file_report(k)
+        return build_string() <| $(var w) {
+            for (k in keys(coverageData)) {
+                w |> write(single_file_report(k))
+            }
         }
-        return res
     } else {
         return single_file_report(name)
     }

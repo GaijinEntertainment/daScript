@@ -27,6 +27,7 @@ module interfaces shared private
 
 require daslib/ast_boost
 require daslib/templates_boost
+require daslib/strings_boost
 require daslib/defer
 require daslib/generic_return
 require strings
@@ -275,31 +276,32 @@ class ImplementsMacro : AstStructureAnnotation {
             return true  // apply already reported this error
         }
         // Check each interface method
-        var missing : string
-        for (ifld in iface.fields) {
-            let ifld_name = string(ifld.name)
-            // Skip compiler-generated fields
-            if (ifld_name == "__rtti" || ifld_name == "__finalize") {
-                continue
-            }
-            if (!ifld._type.isFunction) {
-                continue
-            }
-            // Methods with a default implementation (init != null) are optional
-            if (ifld.init != null) {
-                continue
-            }
-            // Abstract method — struct must provide {iface_name}`{method_name}
-            let expected = "{iface_name}`{ifld_name}"
-            var found = false
-            for (sfld in st.fields) {
-                if (string(sfld.name) == expected) {
-                    found = true
-                    break
+        var missing = build_string() <| $(var w) {
+            for (ifld in iface.fields) {
+                let ifld_name = string(ifld.name)
+                // Skip compiler-generated fields
+                if (ifld_name == "__rtti" || ifld_name == "__finalize") {
+                    continue
                 }
-            }
-            if (!found) {
-                missing = "{missing}{st.name} does not implement {iface_name}.{ifld_name}\n"
+                if (!ifld._type.isFunction) {
+                    continue
+                }
+                // Methods with a default implementation (init != null) are optional
+                if (ifld.init != null) {
+                    continue
+                }
+                // Abstract method — struct must provide {iface_name}`{method_name}
+                let expected = "{iface_name}`{ifld_name}"
+                var found = false
+                for (sfld in st.fields) {
+                    if (string(sfld.name) == expected) {
+                        found = true
+                        break
+                    }
+                }
+                if (!found) {
+                    w |> write("{st.name} does not implement {iface_name}.{ifld_name}\n")
+                }
             }
         }
         if (length(missing) > 0) {
