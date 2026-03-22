@@ -298,19 +298,8 @@ def private s_to_int(s : string) {
 }
 
 def private split_sptn(sptn : string) : tuple<p : int; t : int; n : int> {
-    var s : string
-    var ptn : array<string>
-    for (ch in sptn) {
-        if (ch == '/') {
-            ptn |> push(s)
-            s = ""
-        } else {
-            s += to_char(ch)
-        }
-    }
-    if (!empty(s)) {
-        ptn |> push(s)
-    }
+    var ptn <- split(sptn, "/")
+
     if (length(ptn) == 1) {
         return (s_to_int(ptn[0]), -1, -1)
     } else {
