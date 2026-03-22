@@ -199,6 +199,7 @@ def deleting_entities() {
 
     restart()
     var eids : array<EntityId>
+    eids |> reserve(5)
     for (i in range(5)) {
         let eid = create_entity() @(eid, cmp) {
             cmp.idx := i

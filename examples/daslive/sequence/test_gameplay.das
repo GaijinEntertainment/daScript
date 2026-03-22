@@ -277,6 +277,7 @@ def test_shuffle_is_deterministic(t : T?) {
 def test_shuffle_different_seeds(t : T?) {
     make_game(game, 2, 1)
     var hand1 : array<int>
+    hand1 |> reserve(get_hand_size(game, 0))
     for (c in range(get_hand_size(game, 0))) {
         hand1 |> push(int(get_hand_card(game, 0, c)))
     }
@@ -596,6 +597,7 @@ def test_apply_move_triggers_win(t : T?) {
     }
     let target_card = board_card(2, 5)
     var cards : array<Card>
+    cards |> reserve(6)
     cards |> push(target_card)
     for (i in range(1, 6)) {
         cards |> push(Card.club_1)

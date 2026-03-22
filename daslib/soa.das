@@ -251,12 +251,15 @@ class SoaStructMacro : AstStructureAnnotation {
                 structType = get_ptr(st)
             )
         )
+        var inscope reserveExprs : array<ExpressionPtr>
         var inscope bodyExprs : array<ExpressionPtr>
         for (fld in st.fields) {
             let fieldName = string(fld.name)
+            reserveExprs |> emplace_new <| qmacro(reserve(st.$f(fieldName), length(st.$f(fieldName)) + length(arr)))
             bodyExprs |> emplace_new <| qmacro(push_clone(st.$f(fieldName), elem.$f(fieldName)))
         }
         var inscope fn <- qmacro_function("from_array") $(var st : $t(stypeT); arr : $t(srcT)) : void {
+            $b(reserveExprs)
             for (elem in arr) {
                 $b(bodyExprs)
             }
@@ -283,6 +286,7 @@ class SoaStructMacro : AstStructureAnnotation {
         var inscope retT2 <- clone_type(retT)
         var inscope fn <- qmacro_function("to_array") $(st : $t(stypeT)) : $t(retT) {
             var result : $t(retT2)
+            result |> reserve(length(st.$f(firstFieldName)))
             for (soa_idx in range(length(st.$f(firstFieldName)))) {
                 var soa_elem : $t(elemT)
                 $b(bodyExprs)
