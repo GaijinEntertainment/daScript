@@ -381,6 +381,7 @@ def parse_all_tokens(var ctx : FormatterCtx) {
         ctx |> parse_token()
     }
 
+    ctx.tokens |> reserve(length(ctx.tokens) + 8)
     for (_ in range(8)) {
         ctx.tokens |> push(emptyToken)
     }

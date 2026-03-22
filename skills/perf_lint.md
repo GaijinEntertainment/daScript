@@ -111,3 +111,4 @@ After compilation, `Expression._type` is resolved. Check `expr._type.baseType ==
 | PERF003 | `character_at` anywhere | Info | O(n) due to strlen; consider `peek_data()` |
 | PERF004 | `str = "{str}..."` in loop | High | O(n^2) string interpolation; use `build_string()` |
 | PERF005 | `length(str)` in while condition | Medium | strlen recomputed each iteration; cache it |
+| PERF006 | `push`/`emplace` in loop without `reserve()` | Medium | repeated reallocations; `reserve()` before loop |

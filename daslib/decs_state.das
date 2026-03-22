@@ -60,6 +60,7 @@ class ContextStateAgent : DapiDebugAgent {
             var arq : EcsArchetypeView
             arq.hash = arch.hash
             arq.size = arch.size
+            arq.components |> reserve(length(arch.components))
             for (c in arch.components) {
                 var cv : EcsComponentView
                 cv.name = c.name

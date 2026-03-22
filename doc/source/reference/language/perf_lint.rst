@@ -150,6 +150,45 @@ do **not** have this problem because ``for`` computes its source expression once
         i ++
     }
 
+PERF006 — ``push``/``emplace`` in loop without ``reserve()``
+=============================================================
+
+Calling ``push``, ``push_clone``, or ``emplace`` on an array inside a loop without
+a preceding ``reserve()`` may trigger repeated reallocations as the array grows.
+The rule traces through field access chains (``self.items``, ``data.buffer``, etc.)
+to find the root variable, and distinguishes different field paths — ``reserve(t.a, N)``
+does not suppress a warning for ``t.b |> push(x)``.
+
+Conditional pushes (inside ``if``/``else``) are not flagged — the number of items is
+unpredictable, so ``reserve`` would be guesswork.
+
+.. code-block:: das
+
+    // Bad — may realloc each iteration
+    var result : array<int>
+    for (i in range(1000)) {
+        result |> push(i)                       // PERF006
+    }
+
+    // Bad — field access, no reserve on this path
+    for (i in range(1000)) {
+        self.items |> push(i)                   // PERF006
+    }
+
+    // Good — pre-allocate
+    var result : array<int>
+    result |> reserve(1000)
+    for (i in range(1000)) {
+        result |> push(i)
+    }
+
+    // Good — conditional push, no warning
+    for (i in range(1000)) {
+        if (i > 500) {
+            result |> push(i)
+        }
+    }
+
 ----------------
 Important notes
 ----------------

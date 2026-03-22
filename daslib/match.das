@@ -712,6 +712,7 @@ class MatchMacro : AstCallMacro {
             return <- default<ExpressionPtr>
         }
         if (multi_match) {
+            prefix |> reserve(length(prefix) + length(iffb))
             for (ib in iffb) {
                 prefix |> emplace(ib)
             }

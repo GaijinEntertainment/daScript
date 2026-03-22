@@ -1629,7 +1629,7 @@ def document_structure_annotation(doc_file : file; mod : Module?; value) {
     }
 
     fields |> sort($(a, b) => a.offset < b.offset)
-
+    tab |> reserve(length(fields))
     for (f in fields) {
         var line : array<string>
         push(line, f.name)

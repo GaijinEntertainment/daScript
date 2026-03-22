@@ -5,6 +5,8 @@ options no_unused_function_arguments = false
 
 module linq shared public
 
+require math
+
 //! LINQ-style query operations on iterators and arrays.
 //!
 //! Comprehensive collection of chainable operations: ``where``, ``select``,
@@ -2643,6 +2645,9 @@ def select_many_to_array(var src : iterator<auto(TT)>; collection_selector; resu
 def private zip_impl(var a; tt : auto(TT); var b; var uu : auto(UU)) : array<tuple<TT -const -&, UU -const -&>> {
     //! Merges two iterators into an array of tuples
     var buffer : array<tuple<TT -const -&, UU -const -&>>
+    static_if ((typeinfo is_array(a) || typeinfo is_dim(a)) && (typeinfo is_array(b) || typeinfo is_dim(b))) {
+        buffer |> reserve(min(length(a), length(b)))
+    }
     for (itA, itB in a, b) {
         buffer.emplace((itA, itB))
     }
@@ -2704,6 +2709,9 @@ def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; result_
 def private zip3_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : auto(WW)) : array<tuple<TT -const -&, UU -const -&, WW -const -&>> {
     //! Merges three iterators into an array of tuples
     var buffer : array<tuple<TT -const -&, UU -const -&, WW -const -&>>
+    static_if ((typeinfo is_array(a) || typeinfo is_dim(a)) && (typeinfo is_array(b) || typeinfo is_dim(b)) && (typeinfo is_array(c) || typeinfo is_dim(c))) {
+        buffer |> reserve(min(length(a), min(length(b), length(c))))
+    }
     for (itA, itB, itC in a, b, c) {
         buffer.emplace((itA, itB, itC))
     }

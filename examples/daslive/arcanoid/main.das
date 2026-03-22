@@ -216,6 +216,9 @@ def gen_rounded_cube(bevel : float; sectors : int = 16; stacks : int = 8) {
     // Use sphere topology (known-good CCW winding) mapped onto rounded box surface
     // Each sphere vertex direction is projected onto the box, then offset outward by bevel
     var frag : GeometryFragment
+    frag.vertices |> reserve((stacks + 1) * (sectors + 1))
+    frag.indices |> reserve(stacks * sectors * 6)
+
     let b = clamp(bevel, 0.01, 0.49)
     let inner = 1.0 - b
     let sectorStep = 2.0 * PI / float(sectors)

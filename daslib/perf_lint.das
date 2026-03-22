@@ -18,8 +18,10 @@ module perf_lint shared private
 //!   PERF003 — character_at anywhere (info: O(n) per call)
 //!   PERF004 — string interpolation reassignment in loop (O(n²))
 //!   PERF005 — length(string) in while condition (strlen each iteration)
+//!   PERF006 — push/emplace in loop without prior reserve()
 
 require daslib/ast_boost
+require strings
 
 // ---------------------------------------------------------------------------
 // Visitor
@@ -49,6 +51,15 @@ class PerfLintVisitor : AstVisitor {
     @do_not_delete string_builder_save_stack : array<Variable?>
     // reported character_at locations (to avoid duplicate PERF002+PERF003)
     @do_not_delete reported_character_at : array<ExprCall?>
+    // PERF006: path keys for arrays that had reserve() called
+    reserved_paths : array<string>
+    // PERF006: if-depth per scope — push(0) on scope entry, pop on exit
+    if_depth_stack : array<int>
+    // current function being visited (for inferStack reporting)
+    @do_not_delete current_function : Function?
+    // PERF006: known-length loop tracking
+    known_length_loop_depth : int = 0
+    current_for_known_length : bool = true
     warning_count : int = 0
 
     def PerfLintVisitor() {
@@ -57,10 +68,20 @@ class PerfLintVisitor : AstVisitor {
 
     def perf_warning(text : string; at : LineInfo) : void {
         warning_count++
+        var msg = text
+        if (current_function != null && current_function.fromGeneric != null && length(current_function.inferStack) > 0) {
+            msg = build_string() <| $(var w) {
+                w |> write(text)
+                w |> write("\n  while compiling {current_function.name}")
+                for (ih in current_function.inferStack) {
+                    w |> write("\n  instanced from {ih.func.name} at {describe(ih.at)}")
+                }
+            }
+        }
         if (compile_time_errors) {
-            compiling_program() |> macro_performance_warning(at, text)
+            compiling_program() |> macro_performance_warning(at, msg)
         } else {
-            to_log(LOG_WARNING, "performance warning: {text} at {describe(at)}\n")
+            to_log(LOG_WARNING, "performance warning: {msg} at {describe(at)}\n")
         }
     }
 
@@ -106,6 +127,76 @@ class PerfLintVisitor : AstVisitor {
         return false
     }
 
+    def is_array_func(expr : smart_ptr<ExprCall>; fname : string) : bool {
+        // Builtin generics (push, reserve, etc.) have fromGeneric set.
+        // Verify first argument is an array type.
+        if (expr.func.fromGeneric == null || expr.func.fromGeneric.name != fname) {
+            return false
+        }
+        if (length(expr.arguments) < 1) {
+            return false
+        }
+        let arg = get_ptr(expr.arguments[0])
+        return arg._type != null && arg._type.baseType == Type.tArray
+    }
+
+    def find_expr_path(var expr : Expression?; var path : string&) : Variable? {
+        //! Walks expression chains (field access, deref, index, etc.) to find the
+        //! root variable, building a path string to distinguish foo.a from foo.b.
+        //! Returns null if the chain can't be resolved (call results, Op3, etc.).
+        return null if (expr == null)
+        if (expr is ExprVar) {
+            var evar = expr as ExprVar
+            return null if (evar.variable == null)
+            return get_ptr(evar.variable)
+        }
+        if (expr is ExprRef2Value) {
+            return self->find_expr_path(get_ptr((expr as ExprRef2Value).subexpr), path)
+        }
+        if (expr is ExprField) {
+            var field = expr as ExprField
+            path := ".{field.name}{path}"
+            return self->find_expr_path(get_ptr(field.value), path)
+        }
+        if (expr is ExprSafeField) {
+            var field = expr as ExprSafeField
+            path := ".{field.name}{path}"
+            return self->find_expr_path(get_ptr(field.value), path)
+        }
+        if (expr is ExprAt) {
+            var at = expr as ExprAt
+            path := "[*]{path}"
+            return self->find_expr_path(get_ptr(at.subexpr), path)
+        }
+        if (expr is ExprSafeAt) {
+            var at = expr as ExprSafeAt
+            path := "[*]{path}"
+            return self->find_expr_path(get_ptr(at.subexpr), path)
+        }
+        if (expr is ExprSwizzle) {
+            var swiz = expr as ExprSwizzle
+            return self->find_expr_path(get_ptr(swiz.value), path)
+        }
+        if (expr is ExprCast) {
+            var ca = expr as ExprCast
+            return self->find_expr_path(get_ptr(ca.subexpr), path)
+        }
+        if (expr is ExprRef2Ptr) {
+            var rr = expr as ExprRef2Ptr
+            return self->find_expr_path(get_ptr(rr.subexpr), path)
+        }
+        if (expr is ExprPtr2Ref) {
+            var rr = expr as ExprPtr2Ref
+            return self->find_expr_path(get_ptr(rr.subexpr), path)
+        }
+        // Bail on everything else (Op3, NullCoalescing, calls, etc.)
+        return null
+    }
+
+    def make_path_key(v : Variable?; path : string) : string {
+        return "{intptr(v)}{path}"
+    }
+
     def find_string_var_from_expr(expr : Expression?) : Variable? {
         return null if (expr == null)
         // Unwrap ExprRef2Value (compiler inserts these for value-type reads)
@@ -120,6 +211,17 @@ class PerfLintVisitor : AstVisitor {
             return get_ptr(evar.variable)
         }
         return null
+    }
+
+    // --- function tracking ---
+
+    def override preVisitFunction(var fn : FunctionPtr) : void {
+        current_function = get_ptr(fn)
+    }
+
+    def override visitFunction(var fn : FunctionPtr) : FunctionPtr {
+        current_function = null
+        return <- fn
     }
 
     // --- scope tracking ---
@@ -162,6 +264,38 @@ class PerfLintVisitor : AstVisitor {
         if (in_closure == 0) {
             scope_stack |> push(length(var_stack))
             loop_depth++
+            if_depth_stack |> push(0)
+            current_for_known_length = true
+        }
+    }
+
+    def is_known_length_source(src : Expression?) : bool {
+        if (src == null || src._type == null) {
+            return false
+        }
+        let bt = src._type.baseType
+        if (bt == Type.tArray || bt == Type.tString) {
+            return true
+        }
+        if (bt == Type.tRange || bt == Type.tRange64 || bt == Type.tURange || bt == Type.tURange64) {
+            return true
+        }
+        // fixed arrays have dim > 0
+        if (src._type.dim |> length > 0) {
+            return true
+        }
+        return false
+    }
+
+    def override preVisitExprForSource(expr : smart_ptr<ExprFor>; src : ExpressionPtr; last : bool) : void {
+        if (in_closure == 0 && !self->is_known_length_source(get_ptr(src))) {
+            current_for_known_length = false
+        }
+    }
+
+    def override preVisitExprForBody(expr : smart_ptr<ExprFor>) : void {
+        if (in_closure == 0 && current_for_known_length) {
+            known_length_loop_depth++
         }
     }
 
@@ -174,9 +308,15 @@ class PerfLintVisitor : AstVisitor {
     def override visitExprFor(var expr : smart_ptr<ExprFor>) : ExpressionPtr {
         if (in_closure == 0) {
             loop_depth--
+            if (current_for_known_length) {
+                known_length_loop_depth--
+            }
             if (length(scope_stack) > 0) {
                 var_stack |> resize(scope_stack |> back())
                 scope_stack |> pop()
+            }
+            if (length(if_depth_stack) > 0) {
+                if_depth_stack |> pop()
             }
         }
         return <- expr
@@ -186,6 +326,7 @@ class PerfLintVisitor : AstVisitor {
         if (in_closure == 0) {
             scope_stack |> push(length(var_stack))
             loop_depth++
+            if_depth_stack |> push(0)
             in_while_cond = true
         }
     }
@@ -201,9 +342,27 @@ class PerfLintVisitor : AstVisitor {
                 var_stack |> resize(scope_stack |> back())
                 scope_stack |> pop()
             }
+            if (length(if_depth_stack) > 0) {
+                if_depth_stack |> pop()
+            }
         }
         in_while_cond = false
         return <- expr
+    }
+
+    // --- if-depth tracking (for PERF006 conditional suppression) ---
+
+    def override preVisitExprIfThenElse(ifte : smart_ptr<ExprIfThenElse>) : void {
+        if (length(if_depth_stack) > 0) {
+            if_depth_stack[length(if_depth_stack) - 1]++
+        }
+    }
+
+    def override visitExprIfThenElse(var ifte : smart_ptr<ExprIfThenElse>) : ExpressionPtr {
+        if (length(if_depth_stack) > 0) {
+            if_depth_stack[length(if_depth_stack) - 1]--
+        }
+        return <- ifte
     }
 
     // --- PERF001: string += in loop ---
@@ -254,6 +413,28 @@ class PerfLintVisitor : AstVisitor {
                     self->perf_warning("PERF003: character_at(s, 0) can be replaced with first_character(s)", expr.at)
                 } else {
                     self->perf_warning("PERF003: character_at is O(n) due to strlen; consider peek_data() for hot paths", expr.at)
+                }
+            }
+        }
+        // PERF006: track reserve() calls and detect push/emplace without reserve
+        if (self->is_array_func(expr, "reserve")) {
+            var path = ""
+            let rv = self->find_expr_path(get_ptr(expr.arguments[0]), path)
+            if (rv != null) {
+                let key = self->make_path_key(rv, path)
+                if (!reserved_paths |> has_value(key)) {
+                    reserved_paths |> push(key)
+                }
+            }
+        }
+        let in_conditional = length(if_depth_stack) > 0 && if_depth_stack[length(if_depth_stack) - 1] > 0
+        if (in_closure == 0 && known_length_loop_depth > 0 && !in_conditional) {
+            if (self->is_array_func(expr, "push") || self->is_array_func(expr, "push_clone") || self->is_array_func(expr, "emplace")) {
+                var path = ""
+                let rv = self->find_expr_path(get_ptr(expr.arguments[0]), path)
+                if (rv != null && self->is_defined_outside_loop(rv) && !reserved_paths |> has_value(self->make_path_key(rv, path))) {
+                    let fname = string(expr.func.fromGeneric.name)
+                    self->perf_warning("PERF006: {fname} in loop without prior reserve() may cause repeated reallocations; consider reserve() before the loop", expr.at)
                 }
             }
         }

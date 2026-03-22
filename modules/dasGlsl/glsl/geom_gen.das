@@ -64,6 +64,8 @@ def gen_bbox(var frag : GeometryFragment) {
 
 def gen_sphere(sectorCount, stackCount : int; cubeUV : bool) {
     var frag : GeometryFragment
+    frag.vertices |> reserve((stackCount + 1) * (sectorCount + 1))
+    frag.indices |> reserve(stackCount * sectorCount * 6)
     let sectorStep = 2. * PI / float(sectorCount)
     let stackStep = PI / float(stackCount)
     for (i in range(stackCount + 1)) {
@@ -159,6 +161,8 @@ def private get_unit_circle_veritces(sectorCount : int) {
 
 def gen_cylinder(plt : GenDirection; sectorCount : int) {
     var frag : GeometryFragment
+    frag.vertices |> reserve(4 * (sectorCount + 1) + 4)
+    frag.indices |> reserve(sectorCount * 12)
     var unitVertices <- get_unit_circle_veritces(sectorCount)
     // vertices
     for (tb in range(2)) {

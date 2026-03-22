@@ -245,6 +245,7 @@ class TypeMacroTemplate : AstStructureAnnotation {
 def public make_typemacro_template_instance(instance_type, template_type : Structure?; ex : array<tuple<string, string>> = array<tuple<string, string>>()) {
     //! Annotates a structure as a typemacro template instance of the given template type.
     var extra : array<tuple<string, RttiValue>>
+    extra |> reserve(1 + length(ex))
     extra.emplace(("parent", RttiValue(tString = "{template_type._module.name}::{template_type.name}")), 0)
     for (e in ex) {
         extra.emplace((e._0, RttiValue(tString = e._1)), 0)

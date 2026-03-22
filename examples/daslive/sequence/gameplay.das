@@ -228,6 +228,7 @@ def chip_color_to_float4(color : ChipColor) : float4 {
 
 def build_double_deck() : array<Card> {
     var deck : array<Card>
+    deck |> reserve(2 * SUIT_COUNT * RANK_COUNT)
     for (copy in range(2)) {
         for (s in range(SUIT_COUNT)) {
             for (r in range(RANK_COUNT)) {
