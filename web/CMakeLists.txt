@@ -26,7 +26,17 @@ add_link_options(-fwasm-exceptions)
 add_compile_definitions(DAS_ENABLE_EXCEPTIONS)
 add_compile_definitions(_EMSCRIPTEN_VER)
 
-set(CMAKE_CXX_FLAGS "-s TOTAL_MEMORY=128MB")
+add_link_options(
+    # Default STACK_SIZE is 64KB, not enough for daslang.
+    -sSTACK_SIZE=4MB
+    # `callMain` should be exported.
+    -sEXPORTED_RUNTIME_METHODS=callMain
+    # INVOKE_RUN needed to disable running daslang on initialization
+    # (it will print help message and exit).
+    -sINVOKE_RUN=0
+)
+# embed daslang standard library into wasm binary.
+add_link_options(--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../daslib@daslib)
 
 INCLUDE(../CMakeCommon.txt)
 
@@ -362,6 +372,7 @@ SET(BUILTIN_SRC
 ../include/daScript/builtin/debugapi_gen.inc
 
 
+../src/builtin/modules.cpp
 ../src/builtin/module_builtin.h
 ../src/builtin/module_builtin.cpp
 ../src/builtin/module_builtin_misc_types.cpp

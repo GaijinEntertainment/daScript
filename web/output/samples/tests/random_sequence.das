@@ -5,7 +5,9 @@ require math
 // options intern_strings = true
 
 def makeRandomSequence(var src : array<string>) {
-    let n = 500000
+    // Do not resize too much or add flag -sALLOW_MEMORY_GROWTH
+    // to CMakeLists.txt.
+    let n = 5000
     let mod = uint(n)
     resize(src, n)
     for (i in range(n)) {
