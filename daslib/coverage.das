@@ -555,7 +555,7 @@ def get_coverage_summary(cov_data : table<string; CoverageData>;
         }
     }
     if (per_function) {
-        for (file, data in keys(cov_data), values(cov_data)) {
+        for (_file, data in keys(cov_data), values(cov_data)) {
             for (fname in keys(data.func_cov)) {
                 if (fname |> length > max_len) {
                     max_len = fname |> length
@@ -684,7 +684,7 @@ def parse_lcov(lcov_path : string; exclude_prefixes : array<string>) : table<str
                 } elif (line |> starts_with("BRDA:")) {
                     // BRDA:line,block,branch,taken
                     let rest = slice(line, 5)
-                    var last_comma = rfind(rest, ",")
+                    let last_comma = rfind(rest, ",")
                     if (last_comma >= 0) {
                         let taken = slice(rest, last_comma + 1)
                         let hits = taken == "-" ? 0u : uint(to_int(taken))

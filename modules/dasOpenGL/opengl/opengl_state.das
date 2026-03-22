@@ -243,7 +243,7 @@ class ContextStateAgent : DapiDebugAgent {
                 let msrc = opengl_debug_source?[source] ?? "{source}";
                 let mtpe = opengl_debug_type?[tpe] ?? "{tpe}";
                 let msev = opengl_debug_severity?[severitie] ?? "{severitie}";
-                var dmsg =  (mtext, msrc, mtpe, msev);
+                let dmsg =  (mtext, msrc, mtpe, msev);
                 report_to_debugger(ctx, "OPENGL", "debug({id})", dmsg);
             }
         }
@@ -261,7 +261,7 @@ class ContextStateAgent : DapiDebugAgent {
             return ;
         }
         // error
-        var err = glGetError();
+        let err = glGetError();
         let found = opengl_last_error |> get(err) <| $(pname) {
             report_to_debugger(ctx, "OPENGL", "last error", pname);
         }

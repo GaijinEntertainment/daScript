@@ -96,7 +96,6 @@ def writeStandaloneContextMethods(var prog : ProgramPtr; var logs : StringBuilde
 }
 
 def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var tw : StringBuilderWriter, program : ProgramPtr) {
-    let disableInit = program._options |> find_arg("no_init") ?as tBool ?? program.policies.no_init;
     var lookupVariableTable : array<Variable?>;
     if (program.totalVariables > 0) {
         program.get_ptr() |> for_each_module_no_order($(pm) {
@@ -457,7 +456,6 @@ def public standalone_aot(input : string; output_dir : string; cross_platform : 
         compile_and_simulate(input, access, unsafe(addr(mg)), cop) $(var program : ProgramPtr; var pctx : smart_ptr<Context>) {
             result = build_string() $(writer) {
                 // lets comment on required modules
-                var modules_str : array<string>
                 let (modules_str, noAotModule) = getRequiredModulesFor(program)
                 if (program._options |> find_arg("no_aot") ?as tBool ?? false) {
                     panic("Standalone context called on non aot module {input}")

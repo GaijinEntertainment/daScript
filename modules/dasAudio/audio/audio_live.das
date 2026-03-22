@@ -33,7 +33,7 @@ def private save_audio_handles() {
     arch |> serialize(cmd_ch)
     arch |> serialize(col_ch)
     arch |> serialize(sid_ptr)
-    var data <- ser->extractData()
+    let data <- ser->extractData()
     live_store_bytes(STORE_KEY, data)
     unsafe { delete ser; }
 }
