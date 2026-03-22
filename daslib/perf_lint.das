@@ -18,6 +18,7 @@ module perf_lint shared private
 //!   PERF003 — character_at anywhere (info: O(n) per call)
 //!   PERF004 — string interpolation reassignment in loop (O(n²))
 //!   PERF005 — length(string) in while condition (strlen each iteration)
+//!   PERF006 — push/emplace in loop without prior reserve()
 
 require daslib/ast_boost
 
@@ -49,6 +50,10 @@ class PerfLintVisitor : AstVisitor {
     @do_not_delete string_builder_save_stack : array<Variable?>
     // reported character_at locations (to avoid duplicate PERF002+PERF003)
     @do_not_delete reported_character_at : array<ExprCall?>
+    // PERF006: path keys for arrays that had reserve() called
+    reserved_paths : array<string>
+    // PERF006: if-depth per scope — push(0) on scope entry, pop on exit
+    if_depth_stack : array<int>
     warning_count : int = 0
 
     def PerfLintVisitor() {
@@ -104,6 +109,76 @@ class PerfLintVisitor : AstVisitor {
             }
         }
         return false
+    }
+
+    def is_array_func(expr : smart_ptr<ExprCall>; fname : string) : bool {
+        // Builtin generics (push, reserve, etc.) have fromGeneric set.
+        // Verify first argument is an array type.
+        if (expr.func.fromGeneric == null || expr.func.fromGeneric.name != fname) {
+            return false
+        }
+        if (length(expr.arguments) < 1) {
+            return false
+        }
+        let arg = get_ptr(expr.arguments[0])
+        return arg._type != null && arg._type.baseType == Type.tArray
+    }
+
+    def find_expr_path(expr : Expression?; var path : string&) : Variable? {
+        //! Walks expression chains (field access, deref, index, etc.) to find the
+        //! root variable, building a path string to distinguish foo.a from foo.b.
+        //! Returns null if the chain can't be resolved (call results, Op3, etc.).
+        return null if (expr == null)
+        // ExprVar — base case
+        if (expr is ExprVar) {
+            var evar = expr as ExprVar
+            return null if (evar.variable == null)
+            return get_ptr(evar.variable)
+        }
+        // ExprRef2Value — unwrap (value-type reads)
+        if (expr is ExprRef2Value) {
+            return self->find_expr_path(get_ptr((expr as ExprRef2Value).subexpr), path)
+        }
+        // Use __rtti for types not registered with is/as
+        let rtti = expr.__rtti
+        // ExprField / ExprSafeField / ExprAsVariant / ExprSafeAsVariant
+        if (rtti == "ExprField" || rtti == "ExprSafeField" || rtti == "ExprAsVariant" || rtti == "ExprSafeAsVariant") {
+            var field = unsafe(reinterpret<ExprField?>(expr))
+            path := ".{field.name}{path}"
+            return self->find_expr_path(get_ptr(field.value), path)
+        }
+        // ExprAt / ExprSafeAt — index access (can't match index, use [*])
+        if (rtti == "ExprAt" || rtti == "ExprSafeAt") {
+            var at = unsafe(reinterpret<ExprAt?>(expr))
+            path := "[*]{path}"
+            return self->find_expr_path(get_ptr(at.subexpr), path)
+        }
+        // ExprSwizzle
+        if (rtti == "ExprSwizzle") {
+            var swiz = unsafe(reinterpret<ExprSwizzle?>(expr))
+            return self->find_expr_path(get_ptr(swiz.value), path)
+        }
+        // ExprCast
+        if (rtti == "ExprCast") {
+            var ca = unsafe(reinterpret<ExprCast?>(expr))
+            return self->find_expr_path(get_ptr(ca.subexpr), path)
+        }
+        // ExprRef2Ptr
+        if (rtti == "ExprRef2Ptr") {
+            var rr = unsafe(reinterpret<ExprRef2Ptr?>(expr))
+            return self->find_expr_path(get_ptr(rr.subexpr), path)
+        }
+        // ExprPtr2Ref
+        if (rtti == "ExprPtr2Ref") {
+            var rr = unsafe(reinterpret<ExprPtr2Ref?>(expr))
+            return self->find_expr_path(get_ptr(rr.subexpr), path)
+        }
+        // Bail on everything else (Op3, NullCoalescing, calls, etc.)
+        return null
+    }
+
+    def make_path_key(v : Variable?; path : string) : string {
+        return "{intptr(v)}{path}"
     }
 
     def find_string_var_from_expr(expr : Expression?) : Variable? {
@@ -162,6 +237,7 @@ class PerfLintVisitor : AstVisitor {
         if (in_closure == 0) {
             scope_stack |> push(length(var_stack))
             loop_depth++
+            if_depth_stack |> push(0)
         }
     }
 
@@ -178,6 +254,9 @@ class PerfLintVisitor : AstVisitor {
                 var_stack |> resize(scope_stack |> back())
                 scope_stack |> pop()
             }
+            if (length(if_depth_stack) > 0) {
+                if_depth_stack |> pop()
+            }
         }
         return <- expr
     }
@@ -186,6 +265,7 @@ class PerfLintVisitor : AstVisitor {
         if (in_closure == 0) {
             scope_stack |> push(length(var_stack))
             loop_depth++
+            if_depth_stack |> push(0)
             in_while_cond = true
         }
     }
@@ -201,9 +281,27 @@ class PerfLintVisitor : AstVisitor {
                 var_stack |> resize(scope_stack |> back())
                 scope_stack |> pop()
             }
+            if (length(if_depth_stack) > 0) {
+                if_depth_stack |> pop()
+            }
         }
         in_while_cond = false
         return <- expr
+    }
+
+    // --- if-depth tracking (for PERF006 conditional suppression) ---
+
+    def override preVisitExprIfThenElse(ifte : smart_ptr<ExprIfThenElse>) : void {
+        if (length(if_depth_stack) > 0) {
+            if_depth_stack[length(if_depth_stack) - 1]++
+        }
+    }
+
+    def override visitExprIfThenElse(var ifte : smart_ptr<ExprIfThenElse>) : ExpressionPtr {
+        if (length(if_depth_stack) > 0) {
+            if_depth_stack[length(if_depth_stack) - 1]--
+        }
+        return <- ifte
     }
 
     // --- PERF001: string += in loop ---
@@ -254,6 +352,28 @@ class PerfLintVisitor : AstVisitor {
                     self->perf_warning("PERF003: character_at(s, 0) can be replaced with first_character(s)", expr.at)
                 } else {
                     self->perf_warning("PERF003: character_at is O(n) due to strlen; consider peek_data() for hot paths", expr.at)
+                }
+            }
+        }
+        // PERF006: track reserve() calls and detect push/emplace without reserve
+        if (self->is_array_func(expr, "reserve")) {
+            var path = ""
+            let rv = self->find_expr_path(get_ptr(expr.arguments[0]), path)
+            if (rv != null) {
+                let key = self->make_path_key(rv, path)
+                if (!reserved_paths |> has_value(key)) {
+                    reserved_paths |> push(key)
+                }
+            }
+        }
+        let in_conditional = length(if_depth_stack) > 0 && if_depth_stack[length(if_depth_stack) - 1] > 0
+        if (in_closure == 0 && loop_depth > 0 && !in_conditional) {
+            if (self->is_array_func(expr, "push") || self->is_array_func(expr, "push_clone") || self->is_array_func(expr, "emplace")) {
+                var path = ""
+                let rv = self->find_expr_path(get_ptr(expr.arguments[0]), path)
+                if (rv != null && self->is_defined_outside_loop(rv) && !reserved_paths |> has_value(self->make_path_key(rv, path))) {
+                    let fname = string(expr.func.fromGeneric.name)
+                    self->perf_warning("PERF006: {fname} in loop without prior reserve() may cause repeated reallocations; consider reserve() before the loop", expr.at)
                 }
             }
         }

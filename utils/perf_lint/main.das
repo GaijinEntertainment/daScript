@@ -20,6 +20,7 @@ def main() {
         print("  PERF003  character_at anywhere (info)\n")
         print("  PERF004  string interpolation reassignment in loop (O(n^2))\n")
         print("  PERF005  length(string) in while condition\n")
+        print("  PERF006  push/emplace in loop without reserve()\n")
         unsafe {
             fio::exit(1)
         }
@@ -27,6 +28,7 @@ def main() {
     }
     var quiet = false
     var files : array<string>
+    files |> reserve(length(args) - sep)
     for (i in range(sep, length(args))) {
         if (args[i] == "--quiet") {
             quiet = true
