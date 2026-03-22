@@ -1176,6 +1176,24 @@ def values(var a : table<auto(keyT); auto(valT)[]> ==const | #) : iterator<valT[
     return <- it
 }
 
+def get_key(a : table<auto(keyT)> ==const; value) {
+    concept_assert(false, "can't get_key of a table<...; void>")
+}
+
+[nodiscard]
+def get_key(a : table<auto(keyT); auto(valT)>; value : valT&) : keyT -const {
+    var result : keyT -const
+    __builtin_table_get_key(unsafe(addr(result)), a, unsafe(addr(value)), typeinfo sizeof(type<valT>), typeinfo sizeof(type<keyT>))
+    return result
+}
+
+[nodiscard]
+def get_key(a : table<auto(keyT); auto(valT)[]>; value : valT[typeinfo dim_table_value(a)]) : keyT -const {
+    var result : keyT -const
+    __builtin_table_get_key(unsafe(addr(result)), a, unsafe(addr(value)), typeinfo sizeof(type<valT[typeinfo dim_table_value(a)]>), typeinfo sizeof(type<keyT>))
+    return result
+}
+
 def finalize_dim(var a : auto(TT)[]) {
     static_if (typeinfo can_delete(type<TT>)) {
         for (aV in a) {

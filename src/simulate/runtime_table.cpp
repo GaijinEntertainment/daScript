@@ -199,6 +199,25 @@ namespace das
         result = { (Iterator *) iter };
     }
 
+    void builtin_table_get_key ( void * result, const Table & tab, const void * value_ptr, int32_t value_stride, int32_t key_stride, Context * __context__, LineInfoArg * at ) {
+        const char * vp = (const char *)value_ptr;
+        if ( vp < tab.data || vp >= tab.data + tab.capacity * value_stride ) {
+            __context__->throw_error_at(at, "get_key: value pointer is not inside the table");
+            return;
+        }
+        ptrdiff_t offset = vp - tab.data;
+        if ( offset % value_stride != 0 ) {
+            __context__->throw_error_at(at, "get_key: value pointer is not aligned to value stride");
+            return;
+        }
+        ptrdiff_t index = offset / value_stride;
+        if ( tab.hashes[index] <= HASH_KILLED64 ) {
+            __context__->throw_error_at(at, "get_key: value points to an empty or deleted table slot");
+            return;
+        }
+        memcpy(result, tab.keys + index * key_stride, key_stride);
+    }
+
     // delete
 
     vec4f SimNode_DeleteTable::eval ( Context & context ) {

@@ -210,6 +210,7 @@ namespace das {
     struct Sequence;
     DAS_API void builtin_table_keys(Sequence &result, const Table &tab, int32_t stride, Context *__context__, LineInfoArg *at);
     DAS_API void builtin_table_values(Sequence &result, const Table &tab, int32_t stride, Context *__context__, LineInfoArg *at);
+    DAS_API void builtin_table_get_key(void * result, const Table & tab, const void * value_ptr, int32_t value_stride, int32_t key_stride, Context * __context__, LineInfoArg * at);
 
     template <typename TT>
     struct EnumStubAny {
