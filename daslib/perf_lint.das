@@ -548,6 +548,7 @@ def public perf_lint_collect(prog : ProgramPtr; var warnings : array<string>) : 
     var inscope astVisitorAdapter <- make_visitor(*astVisitor)
     visit(prog, astVisitorAdapter)
     let count = astVisitor.warning_count
+    warnings |> reserve(length(astVisitor.warnings))
     for (w in astVisitor.warnings) {
         warnings |> push(w)
     }
