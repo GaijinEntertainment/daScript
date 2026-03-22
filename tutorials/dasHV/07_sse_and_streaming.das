@@ -228,31 +228,33 @@ def parse_sse_events(body : string) : array<SseEvent> {
     var events : array<SseEvent>
     var current_event = ""
     var current_data = ""
-    var pos = 0
-    let len = length(body)
-    while (pos < len) {
-        // Find end of line
-        var eol = pos
-        while (eol < len && character_at(body, eol) != '\n') {
-            eol++
-        }
-        let line_len = eol - pos
-        if (line_len == 0) {
-            // Blank line = end of event
-            if (!empty(current_data) || !empty(current_event)) {
-                events |> emplace(SseEvent(event = current_event, data = current_data))
-                current_event = ""
-                current_data = ""
+    peek_data(body) $(bytes) {
+        var pos = 0
+        let len = length(bytes)
+        while (pos < len) {
+            // Find end of line
+            var eol = pos
+            while (eol < len && int(bytes[eol]) != '\n') {
+                eol++
             }
-        } else {
-            let line = slice(body, pos, eol)
-            if (starts_with(line, "event: ")) {
-                current_event = slice(line, 7)
-            } elif (starts_with(line, "data: ")) {
-                current_data = slice(line, 6)
+            let line_len = eol - pos
+            if (line_len == 0) {
+                // Blank line = end of event
+                if (!empty(current_data) || !empty(current_event)) {
+                    events |> emplace(SseEvent(event = current_event, data = current_data))
+                    current_event = ""
+                    current_data = ""
+                }
+            } else {
+                let line = slice(body, pos, eol)
+                if (starts_with(line, "event: ")) {
+                    current_event = slice(line, 7)
+                } elif (starts_with(line, "data: ")) {
+                    current_data = slice(line, 6)
+                }
             }
+            pos = eol + 1
         }
-        pos = eol + 1
     }
     return <- events
 }

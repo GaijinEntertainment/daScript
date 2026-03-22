@@ -151,11 +151,12 @@ class BasicReader : AstReaderMacro {
         }
         // Build the daScript function definition (gen2 syntax — braces required).
         // \{ and \} produce literal braces in the output, avoiding interpolation.
-        var result = "def {func_name}() \{\n"
-        for (stmt in stmts) {
-            result += "    {stmt}\n"
+        return build_string() <| $(var w) {
+            w |> write("def {func_name}() \{\n")
+            for (stmt in stmts) {
+                w |> write("    {stmt}\n")
+            }
+            w |> write("\}\n")
         }
-        result += "\}\n"
-        return result
     }
 }

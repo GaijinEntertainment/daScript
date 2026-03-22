@@ -176,12 +176,13 @@ tiny BASIC dialect and returns the equivalent daslang source code:
                stmts |> push("var {strip(slice(after_num, 4))}")
            }
        }
-       var result = "def {func_name}() \{\n"
-       for (stmt in stmts) {
-           result += "    {stmt}\n"
+       return build_string() <| $(var w) {
+           w |> write("def {func_name}() \{\n")
+           for (stmt in stmts) {
+               w |> write("    {stmt}\n")
+           }
+           w |> write("\}\n")
        }
-       result += "\}\n"
-       return result
    }
 
 The returned string is valid gen2 daslang code.  The parser receives

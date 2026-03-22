@@ -92,20 +92,22 @@ time:
                 errors := "expecting structure type"
                 return <- default<ExpressionPtr>
             }
-            var result = "{expr.typeexpr.structType.name}("
-            var first = true
-            for (i in iter_range(expr.typeexpr.structType.fields)) {
-                assume fld = expr.typeexpr.structType.fields[i]
-                if (fld.flags.classMethod) {
-                    continue
+            var result = build_string() <| $(var w) {
+                w |> write("{expr.typeexpr.structType.name}(")
+                var first = true
+                for (i in iter_range(expr.typeexpr.structType.fields)) {
+                    assume fld = expr.typeexpr.structType.fields[i]
+                    if (fld.flags.classMethod) {
+                        continue
+                    }
+                    if (!first) {
+                        w |> write(", ")
+                    }
+                    w |> write("{fld.name}:{describe(fld._type, false, false, false)}")
+                    first = false
                 }
-                if (!first) {
-                    result += ", "
-                }
-                result += "{fld.name}:{describe(fld._type, false, false, false)}"
-                first = false
+                w |> write(")")
             }
-            result += ")"
             return <- new ExprConstString(at = expr.at, value := result)
         }
     }

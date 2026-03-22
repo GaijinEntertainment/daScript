@@ -331,7 +331,7 @@ def public capitalize(str : string) : string {
     if (str |> empty()) {
         return str
     }
-    let first = character_at(str, 0)
+    let first = first_character(str)
     if (first >= 'a' && first <= 'z') {
         return build_string() $(writer) {
             writer |> write_char(first - 'a' + 'A')
@@ -348,12 +348,16 @@ def public is_null_or_whitespace(str : string) : bool {
     if (str |> empty()) {
         return true
     }
-    for (i in range(str |> length())) {
-        if (!is_white_space(character_at(str, i))) {
-            return false
+    var result = true
+    peek_data(str) $(data) {
+        for (i in range(length(data))) {
+            if (!is_white_space(int(data[i]))) {
+                result = false
+                return
+            }
         }
     }
-    return true
+    return result
 }
 
 def public glob_match(pattern, text : string) : bool {

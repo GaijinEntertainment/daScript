@@ -439,7 +439,7 @@ def public parse_json_annotation(name : string; annotation : array<tuple<name : 
         if (ann.name == "rename") {
             if (ann.data is tString) {
                 fieldState.argName = ann.data as tString
-            } elif (ann.data is tBool && length(name) > 0 && character_at(name, 0) == '_') {
+            } elif (ann.data is tBool && length(name) > 0 && first_character(name) == '_') {
                 fieldState.argName = slice(name, 1)
             }
         } elif (ann.name == "enum_as_int" && ann.data is tBool) {
