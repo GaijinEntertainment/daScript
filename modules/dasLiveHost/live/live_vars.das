@@ -98,7 +98,7 @@ class LiveVarsPass : AstPassMacro {
                 var init_hash = $v(varHash)
                 arch |> _::serialize(init_hash)
                 arch |> _::serialize($i(varName))
-                var data <- ser->extractData()
+                let data <- ser->extractData()
                 live_store_bytes($v(varKey), data)
                 unsafe { delete ser; }
             }

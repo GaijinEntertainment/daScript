@@ -57,6 +57,7 @@ def main() {
                 using() <| $(var cop : CodeOfPolicies) {
                     cop.ignore_shared_modules = true
                     cop.export_all = true
+                    cop.no_optimizations = true
                     compile_file(file, access, unsafe(addr(mg)), cop) <| $(ok; program; issues) {
                         if (!ok) {
                             let issues_str = string(issues)

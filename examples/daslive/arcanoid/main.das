@@ -126,7 +126,7 @@ def init_audio_samples() {
     snd_paddle_hit <- gen_sine_sweep(440.0, 880.0, 0.05, 0.3)
     // Brick break: noise + sine
     snd_brick_break <- gen_noise_burst(0.08, 0.15)
-    var brick_tone <- gen_sine_sweep(600.0, 200.0, 0.08, 0.2)
+    let brick_tone <- gen_sine_sweep(600.0, 200.0, 0.08, 0.2)
     mix_into(snd_brick_break, brick_tone)
     // Wall bounce: short high tick
     snd_wall_bounce <- gen_sine_sweep(1200.0, 800.0, 0.02, 0.15)
@@ -143,7 +143,7 @@ def init_audio_samples() {
     let total_samples = int(float(AUDIO_RATE) * total_dur)
     snd_win |> resize(total_samples)
     for (ni in range(length(notes))) {
-        var note <- gen_sine_sweep(notes[ni], notes[ni], note_dur, 0.25)
+        let note <- gen_sine_sweep(notes[ni], notes[ni], note_dur, 0.25)
         let offset = ni * int(float(AUDIO_RATE) * note_dur)
         for (i in range(length(note))) {
             if (offset + i < total_samples) {
@@ -158,7 +158,7 @@ def init_audio_samples() {
     let go_total_samples = int(float(AUDIO_RATE) * go_total_dur)
     snd_game_over |> resize(go_total_samples)
     for (ni in range(length(go_notes))) {
-        var note <- gen_sine_sweep(go_notes[ni], go_notes[ni] * 0.9, go_note_dur, 0.3)
+        let note <- gen_sine_sweep(go_notes[ni], go_notes[ni] * 0.9, go_note_dur, 0.3)
         let offset = ni * int(float(AUDIO_RATE) * go_note_dur)
         for (i in range(length(note))) {
             if (offset + i < go_total_samples) {
@@ -360,7 +360,6 @@ def draw_walls() {
 
 def draw_shield() {
     if (shield_timer > 0.0) {
-        let hw = FIELD_W * 0.5
         let alpha = min(shield_timer / 2.0, 1.0)  // fade out in last 2 seconds
         let pulse = 0.7 + 0.3 * sin(float(get_uptime()) * 6.0)
         let color = BONUS_COLORS[int(BonusType.shield)] * pulse
@@ -563,7 +562,7 @@ def update_powerup_timers(dt : float) {
     let lerp_speed = 8.0 * dt
     display_paddle_w += (target - display_paddle_w) * saturate(lerp_speed)
     // Smooth paddle color transition — last activated powerup wins
-    var any_active = wide_paddle_timer > 0.0 || narrow_paddle_timer > 0.0 || sticky_timer > 0.0 || fireball_timer > 0.0 || speed_mod_timer > 0.0 || shield_timer > 0.0
+    let any_active = wide_paddle_timer > 0.0 || narrow_paddle_timer > 0.0 || sticky_timer > 0.0 || fireball_timer > 0.0 || speed_mod_timer > 0.0 || shield_timer > 0.0
     let target_color = any_active ? last_powerup_color : PADDLE_COLOR
     display_paddle_color += (target_color - display_paddle_color) * saturate(lerp_speed)
     // Lives blink timer
