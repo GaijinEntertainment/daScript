@@ -1982,6 +1982,9 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_table_values)>(*this, lib, "__builtin_table_values",
             SideEffects::modifyArgumentAndExternal, "builtin_table_values")
                 ->args({"iterator","table","stride","context","at"});
+        addExtern<DAS_BIND_FUN(builtin_table_get_key)>(*this, lib, "__builtin_table_get_key",
+            SideEffects::modifyExternal, "builtin_table_get_key")
+                ->args({"result","table","value_ptr","value_stride","key_stride","context","at"});
         addInterop<builtin_table_reserve,void,vec4f,uint32_t>(*this, lib, "__builtin_table_reserve",
             SideEffects::modifyArgumentAndExternal, "builtin_table_reserve")
                 ->args({"table","size"});

@@ -40,7 +40,7 @@ A standalone utility is available for batch-checking files from the command line
 
 The utility compiles each file (without simulation or execution), runs the lint
 visitor, and prints any warnings. Use ``--quiet`` to suppress progress messages.
-Exit code is ``0`` if no warnings, ``1`` if any warnings found.
+Exit code is ``1`` if any files failed to compile, ``0`` otherwise.
 
 -----
 Rules
