@@ -285,7 +285,7 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
     let baseType = typeDecl.baseType;
 
     return build_string() $(writer) {
-        for (d in range(length(typeDecl.dim))) {
+        for (_ in range(length(typeDecl.dim))) {
             write(writer, "TDim<");
         }
         if (useAlias == CpptUseAlias.yes && typeDecl.flags.aotAlias && !typeDecl.alias.empty()) {
@@ -385,7 +385,7 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
                 write(writer, "Sequence")
             }
         } elif (baseType == Type.tBlock || baseType == Type.tFunction || baseType == Type.tLambda) {
-            var maybe_const = !typeDecl.flags.constant && typeDecl.baseType == Type.tBlock ? "const " : ""
+            let maybe_const = !typeDecl.flags.constant && typeDecl.baseType == Type.tBlock ? "const " : ""
             var type_name = "void"
             if (typeDecl.firstType != null) {
                 type_name = describeCppTypeEx(typeDecl.firstType, DescribeConfig(redundant_const = true, cross_platform = cfg.cross_platform), useAlias)
@@ -399,7 +399,7 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
         } else {
             write(writer, das_to_cppString(baseType));
         }
-        var args <- to_array(map(each(typeDecl.dim).reverse(), @(itd) { return ",{itd}>"; }))
+        let args <- to_array(map(each(typeDecl.dim).reverse(), @(itd) { return ",{itd}>"; }))
         reverse(args);
         write(writer, "{join(args, "")}")
 
@@ -474,8 +474,8 @@ class public PrologueMarker : AstVisitor {
     // ExprMakeBlock
     def override preVisitExprMakeBlock(expr : smart_ptr<ExprMakeBlock>) {
         if (func != null && func.flags.hasMakeBlock) {
-            let _blk = expr._block as ExprBlock;
-            if (!_blk.blockFlags.aotSkipMakeBlock) {
+            let blk = expr._block as ExprBlock;
+            if (!blk.blockFlags.aotSkipMakeBlock) {
                 func.flags |= FunctionFlags.aotNeedPrologue;
             }
         }
@@ -2842,7 +2842,7 @@ class public CppAot : AstVisitor {
             CallFunc_visitCallArg(enew, arg, last);
         } else {
             panic("we should not even be here. we are visiting arguments of a new, but it has no initializer???");
-            write(*ss, ",");
+            // write(*ss, ",");
         }
         return arg;
     }
@@ -2883,7 +2883,6 @@ class public CppAot : AstVisitor {
             panic("should not infer otherwise");
         }
         let type_str = describeCppType(expr._type.argTypes[variantIndex], DescribeConfig(cross_platform = cross_platform));
-        let offset_str = expr._type.get_variant_field_offset(variantIndex);
         write(*ss, "{tabs()}{get_variant_field(expr._type, variantIndex)}::set(");
         write(*ss, "{mkvName(expr)}");
         if (length(expr.variants) != 1) write(*ss, "({index},__context__)");
@@ -3785,7 +3784,7 @@ class ArgsConverter : AstVisitor {
 
     def override preVisitFunctionArgument(fn : FunctionPtr, arg : VariablePtr, last : bool) {
         // arg
-        var type_name = build_string() $(writer) {
+        let type_name = build_string() $(writer) {
             if (isLocalVec(arg._type)) {
                 describeLocalCppType(unsafe(addr(writer)), arg._type, cross_platform)
             } else {

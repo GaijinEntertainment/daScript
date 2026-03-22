@@ -67,7 +67,7 @@ def public live_dispatch_command(command_json : string) : string {
         let tab & = unsafe(js.value as _object)
         args = unsafe(reinterpret<JsonValue?>(tab?["args"] ?? null))
     }
-    var handler = live_command_registry[name]
+    let handler = live_command_registry[name]
     var result = invoke(handler, args)
     if (result != null) {
         return write_json(result)

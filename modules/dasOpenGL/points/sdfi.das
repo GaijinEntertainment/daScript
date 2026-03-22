@@ -183,8 +183,8 @@ def map_(pos : float3) {
 }
 
 def map_h(pos : float3) {
-    var bmin = float3(-2.25, 0.0, -3.5) - float3(BORDER)
-    var bmax = float3(2.35, 0.7, 1.5) + float3(BORDER)
+    let bmin = float3(-2.25, 0.0, -3.5) - float3(BORDER)
+    let bmax = float3(2.35, 0.7, 1.5) + float3(BORDER)
     /*
     let c = (bmin+bmax) * 0.5
     let d = (bmax-bmin) * 0.5
@@ -196,8 +196,8 @@ def map_h(pos : float3) {
 }
 
 def map_c(pos : float3) {
-    var bmin = float3(-2.25, 0.0, -3.5) - float3(BORDER)
-    var bmax = float3(2.35, 0.7, 1.5) + float3(BORDER)
+    let bmin = float3(-2.25, 0.0, -3.5) - float3(BORDER)
+    let bmax = float3(2.35, 0.7, 1.5) + float3(BORDER)
     let tx = (pos - bmin) * (1.0 / (bmax - bmin))
     return texture(t_sdf_color, tx)
 }
@@ -222,7 +222,7 @@ def calcSoftshadow(ro, rd : float3; mint, tmax : float) {
     var res = 1.0
     var t = mint
     var ph = 1e10
-    for (i in 0..32) {
+    for (_ in 0..32) {
         let h = map_h_(ro + rd * t)
         if (FAST_SHADOWS) {
             res = min(res, 10.0 * h / t)
@@ -250,11 +250,11 @@ def calcNormal(pos : float3) {
 }
 
 def castRay(ro, rd : float3) {
-    var tmin = 0.05
-    var tmax = 25.0
+    let tmin = 0.05
+    let _tmax = 25.0
     var res = -1.
     var t = tmin
-    for (i in 0..MAX_CAST_STEPS) {
+    for (_ in 0..MAX_CAST_STEPS) {
         let h = map_h_(ro + rd * t)
         if (abs(h) < (0.0001 * t)) {
             res = t
@@ -280,8 +280,8 @@ def calcAO(pos, nor : float3) {
 def render(ro, rd : float3) {
 
     // bbox
-    var bmin = float3(-2.25, 0.0, -3.5) - float3(BORDER)
-    var bmax = float3(2.35, 0.7, 1.5) + float3(BORDER)
+    let bmin = float3(-2.25, 0.0, -3.5) - float3(BORDER)
+    let bmax = float3(2.35, 0.7, 1.5) + float3(BORDER)
     if (!is_intersecting(Ray(origin = ro, dir = rd), AABB(min = bmin, max = bmax))) {
         return float3(0.0, 0.0, 0.0)
     }

@@ -18,7 +18,7 @@ require live_host
 [before_reload]
 def save_decs_state() {
     //! Serializes the current DECS state to the persistent store before a live reload.
-    var data <- mem_archive_save(decsState)
+    let data <- mem_archive_save(decsState)
     live_store_bytes("__decs_state", data)
 }
 

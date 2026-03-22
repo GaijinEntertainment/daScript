@@ -1273,10 +1273,10 @@ namespace das {
                 SideEffects::none, "builtin_basename")
                     ->args({"name","context","line"});
             addExtern<DAS_BIND_FUN(builtin_fstat)>(*this, lib, "fstat",
-                SideEffects::modifyExternal, "builtin_fstat")
+                SideEffects::modifyArgumentAndExternal, "builtin_fstat")
                     ->args({"file","stat","context","line"});
             addExtern<DAS_BIND_FUN(builtin_stat)>(*this, lib, "stat",
-                SideEffects::modifyExternal, "builtin_stat")
+                SideEffects::modifyArgumentAndExternal, "builtin_stat")
                     ->args({"file","stat"});
             addExtern<DAS_BIND_FUN(builtin_dir)>(*this, lib, "builtin_dir",
                 SideEffects::modifyExternal, "builtin_dir")
