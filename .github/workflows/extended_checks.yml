@@ -1,0 +1,180 @@
+name: extended checks
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  ###########################################################
+  pre_job:
+  ###########################################################
+    runs-on: ubuntu-latest-fat
+    outputs:
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+    steps:
+      - id: skip_check
+        uses: fkirc/skip-duplicate-actions@v5
+        with:
+          concurrent_skipping: 'same_content'
+          do_not_skip: '["pull_request", "workflow_dispatch"]'
+
+  ###########################################################
+  extended_checks:
+  ###########################################################
+    needs: pre_job
+    if: needs.pre_job.outputs.should_skip != 'true'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [linux, darwin15, windows]
+        architecture: [64, arm64]
+
+        include:
+          - target: linux
+            runner: ubuntu-latest-fat
+            build_system: cmake
+            cmake_generator: Ninja
+
+          - target: darwin15
+            architecture: arm64
+            runner: macos-15-xlarge
+            architecture_string: arm64
+            build_system: cmake
+            cmake_generator: Ninja
+
+          - target: windows
+            runner: windows-latest-fat
+            build_system: cmake
+            cmake_generator: Visual Studio 17 2022
+            architecture_string: x64
+
+        exclude:
+          - target: linux
+            architecture: arm64
+          - target: windows
+            architecture: arm64
+          - target: darwin15
+            architecture: 64
+
+    steps:
+    - name: "SCM Checkout"
+      uses: actions/checkout@v4
+
+    - name: "Install CMake and Ninja"
+      uses: lukka/get-cmake@latest
+
+    - if: runner.os == 'Windows'
+      uses: ilammy/setup-nasm@v1
+
+    - name: "Install: Required Dev Packages"
+      run: |
+        set -eux
+        case "${{ matrix.target }}" in
+          darwin15)
+            brew install bison openssl
+            echo 'export PATH="/usr/local/opt/bison/bin:$PATH"' >> ~/.bash_profile
+            export LDFLAGS="-L/usr/local/opt/bison/lib -L$(brew --prefix openssl)/lib"
+            export CPPFLAGS="-I$(brew --prefix openssl)/include"
+            ;;
+          linux)
+            echo "MARCH=64" >> $GITHUB_ENV
+            sudo apt-get update -y
+            sudo apt-get install --no-install-recommends -y \
+              mesa-common-dev \
+              libx11-dev \
+              libxrandr-dev \
+              libxcursor-dev \
+              libxinerama-dev \
+              libxi-dev
+            ;;
+        esac
+
+    - name: "Install openssl (Windows)"
+      if: runner.os == 'Windows'
+      run: |
+        git clone https://github.com/microsoft/vcpkg && ./vcpkg/bootstrap-vcpkg.sh
+        ./vcpkg/vcpkg install openssl:x64-windows --binarycaching
+        echo "VCPKG_ROOT=$(pwd)/vcpkg" >> $GITHUB_ENV
+
+    - name: "Clone required repos"
+      uses: actions/checkout@v4
+      with:
+        repository: profelis/das-fmt
+        path: das-fmt
+
+    - name: "Build: Daslang (Release)"
+      run: |
+        set -eux
+        ACTIVE_MODULES=$(grep -v "^#" ci/release_modules.txt | cut -d':' -f2 | sed 's|^|-D|' | xargs)
+        case "${{ matrix.target }}" in
+          windows)
+            export PATH="/c/Strawberry/perl/bin:$PATH"
+            cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=x64 -A ${{ matrix.architecture_string }} \
+              $ACTIVE_MODULES -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+            cmake --build ./build --config Release --target daslang das-fmt daslang_static
+            ;;
+          *)
+            CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build \
+              -DCMAKE_BUILD_TYPE:STRING=Release \
+              -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture_string }}" \
+              -G "${{ matrix.cmake_generator }}" $ACTIVE_MODULES
+            cmake --build ./build --config Release --target daslang daslang_static
+            ;;
+        esac
+
+    - name: "Install ast-grep"
+      run: npm install -g @ast-grep/cli
+
+    - name: "Run examples from modules"
+      run: cmake --build ./build --config Release --target run_examples
+
+    - name: "Run utils tests"
+      run: cmake --build ./build --config Release --target run_utils_tests
+
+    - name: "Build standalone executables"
+      run: |
+        set -eux
+        cmake --build ./build --config Release --target all_utils_exe
+        case "${{ matrix.target }}" in
+          windows) BIN=./bin/Release/ ;;
+          *)       BIN=./bin/ ;;
+        esac
+        $BIN/daslang -exe -output ./bin/das-fmt ./das-fmt/dasfmt.das
+
+    - name: "Run formatter"
+      run: |
+        set -eux
+        case "${{ matrix.target }}" in
+          windows) BIN=./bin/Release/ ;;
+          *)       BIN=./bin/ ;;
+        esac
+        $BIN/daslang ./das-fmt/dasfmt.das -- --path ./ --verify
+        $BIN/das-fmt.exe --path ./ --verify
+
+    - name: "Test daslang_static"
+      run: |
+        set -eux
+        case "${{ matrix.target }}" in
+          windows) BIN=bin/Release TESTS=../../tests ;;
+          *)       BIN=bin         TESTS=../tests ;;
+        esac
+        cd $BIN
+        ./daslang_static _dasroot_/dastest/dastest.das -- --color --failures-only --test $TESTS
+
+    - name: "Coverage"
+      if: matrix.target == 'linux'
+      run: |
+        cd bin
+        ./daslang _dasroot_/dastest/dastest.das -- --cov-path coverage.lcov --color --test ../tests --timeout 1800
+        ./dascov.exe -- coverage.lcov --exclude tests/

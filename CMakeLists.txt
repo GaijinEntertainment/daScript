@@ -300,6 +300,7 @@ SET(DAS_DYN_MODULES_LIBS)
 SET(DAS_MODULES_LIBS)
 
 SET(DAS_ALL_EXAMPLES)
+SET(DAS_EXAMPLES_TO_RUN)
 FILE(GLOB _modules RELATIVE "${PROJECT_SOURCE_DIR}/modules" "modules/*")
 
 # Every dynamic module should pass through this macro.
@@ -384,6 +385,14 @@ MACRO(ADD_EXAMPLE tgt)
     LIST(APPEND DAS_ALL_EXAMPLES ${tgt})
 ENDMACRO()
 
+# Register a .das file to be run as a headless example check.
+# Modules call this from their CMakeLists.txt for examples that
+# can run without GUI, audio, or user interaction.
+MACRO(ADD_EXAMPLE_RUN das_file)
+    MESSAGE("EXAMPLE_RUN ${das_file}")
+    LIST(APPEND DAS_EXAMPLES_TO_RUN ${das_file})
+ENDMACRO()
+
 FUNCTION(ADD_MODULE_CPP cpp)
     FILE(APPEND ${DAS_MODULES_NEED_INC}.temp "NEED_MODULE(Module_${cpp});\n")
     FILE(APPEND ${DAS_MODULES_DECLARE_INC}.temp "DECLARE_MODULE(Module_${cpp});\n")
@@ -423,6 +432,24 @@ FOREACH(_example ${DAS_ALL_EXAMPLES})
     TARGET_LINK_LIBRARIES(${_example} ${DAS_MODULES_LIBS})
     ADD_DEPENDENCIES(${_example} ${DAS_MODULES_LIBS})
 ENDFOREACH()
+
+# run_examples — runs all .das files registered via ADD_EXAMPLE_RUN.
+# Each example is executed with `daslang <file>` and must exit cleanly.
+IF(DAS_EXAMPLES_TO_RUN)
+    SET(_run_example_commands)
+    FOREACH(_das ${DAS_EXAMPLES_TO_RUN})
+        LIST(APPEND _run_example_commands
+            COMMAND ${CMAKE_COMMAND} -E echo "Running ${_das}"
+            COMMAND $<TARGET_FILE:daslang> ${_das}
+        )
+    ENDFOREACH()
+    ADD_CUSTOM_TARGET(run_examples
+        ${_run_example_commands}
+        DEPENDS daslang
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        COMMENT "Running headless module examples"
+    )
+ENDIF()
 
 ADD_CUSTOM_COMMAND(
     DEPENDS ${DAS_MODULES_NEED_INC}.temp
@@ -1599,6 +1626,12 @@ if(NOT ${DAS_TREE_SITTER_DISABLED})
         C_STANDARD 11
         PREFIX ""
         OUTPUT_NAME "daslang"
+        LIBRARY_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/tree-sitter-daslang"
+        RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/tree-sitter-daslang"
+        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${PROJECT_SOURCE_DIR}/tree-sitter-daslang"
+        RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${PROJECT_SOURCE_DIR}/tree-sitter-daslang"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${PROJECT_SOURCE_DIR}/tree-sitter-daslang"
+        RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${PROJECT_SOURCE_DIR}/tree-sitter-daslang"
     )
     if(MSVC)
         target_compile_options(tree_sitter_daslang PRIVATE /W3)

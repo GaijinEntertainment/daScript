@@ -15,4 +15,8 @@ IF(NOT DAS_PEG_INCLUDED)
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasPEG/.das_module
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasPEG
     )
+
+    ADD_EXAMPLE_RUN(modules/dasPEG/examples/csv.das)
+    ADD_EXAMPLE_RUN(modules/dasPEG/examples/declarations.das)
+
 ENDIF()

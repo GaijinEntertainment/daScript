@@ -551,7 +551,7 @@ def for_each_select(node : xml_node; xpath_query : string; blk : block<(xn : xpa
 [generic, template(ent), unused_argument(ent)]
 def from_XML(node : xml_node; ent : string; defV : string = "") : string {
     //! Reads the text content of *node* as a ``string``.
-    return as_string(node.text, defV)
+    return clone_string(as_string(node.text, defV))
 }
 
 [generic, template(ent), unused_argument(ent)]

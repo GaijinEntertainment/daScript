@@ -136,7 +136,7 @@ def two(prog : string; blk : block<(a : bool; err : array<ParsingError>) : void>
 [export]
 def main {
     var input1 = "def main(argc, argv) \{"
-    var input2 = "def main(123, argv) \{"
+    var input2 = "def main(argv) \{"
 
     two(input1) <| $(val; err) {
         print("Success: {val}\n")
