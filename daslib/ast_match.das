@@ -561,7 +561,7 @@ def private generate_pattern_args_match(pat_block : ExprBlock?; target_var : str
 
                 // Type matching — if argument has a type, match it
                 if (pat_arg._type != null) {
-                    var pat_td = unsafe(reinterpret<TypeDecl?> get_ptr(pat_arg._type))
+                    var pat_td = unsafe(reinterpret<TypeDecl?> pat_arg._type)
                     // Skip if type is autoinfer (unspecified)
                     if (pat_td.baseType != Type.autoinfer) {
                         let td_var = next_var(index)
@@ -580,7 +580,7 @@ def private generate_pattern_args_match(pat_block : ExprBlock?; target_var : str
 
     // Return type matching
     if (pat_block.returnType != null) {
-        var pat_ret = unsafe(reinterpret<TypeDecl?> get_ptr(pat_block.returnType))
+        var pat_ret = unsafe(reinterpret<TypeDecl?> pat_block.returnType)
         // Skip if return type is autoinfer or void (unspecified)
         if (pat_ret.baseType != Type.autoinfer && pat_ret.baseType != Type.tVoid) {
             let ret_var = next_var(index)
@@ -1067,7 +1067,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                         }
                         // Type matching (skip autoinfer)
                         if (pat_v._type != null) {
-                            var pat_td = unsafe(reinterpret<TypeDecl?> get_ptr(pat_v._type))
+                            var pat_td = unsafe(reinterpret<TypeDecl?> pat_v._type)
                             if (pat_td.baseType != Type.autoinfer) {
                                 let td_var = next_var(index)
                                 let fname4 = string(name)
