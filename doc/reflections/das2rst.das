@@ -68,6 +68,7 @@ require daslib/bool_array
 require daslib/bitfield_boost
 require daslib/bitfield_trait
 require daslib/async_boost
+require daslib/command_line
 require daslib/consume
 require daslib/dap
 require daslib/das_source_formatter
@@ -867,6 +868,14 @@ def document_module_linq_boost(root : string) {
     document("Boost module for LINQ", mod, "linq_boost.rst", groups)
 }
 
+def document_module_command_line(root : string) {
+    var mod = find_module("command_line")
+    var groups <- array<DocGroup>(
+        group_by_regex("Executable path", mod, %regex~(get_das_exe)$%%)
+    )
+    document("Command-line utilities", mod, "command_line.rst", groups)
+}
+
 def document_module_class_boost(root : string) {
     var mod = find_module("class_boost")
     var groups <- array<DocGroup>(
@@ -1261,6 +1270,7 @@ def main {
     document_module_bitfield_trait(root)
     document_module_bool_array(root)
     document_module_class_boost(root)
+    document_module_command_line(root)
     document_module_constexpr(root)
     document_module_consume(root)
     document_module_contracts(root)

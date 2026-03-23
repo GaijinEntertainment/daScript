@@ -7,12 +7,12 @@ require common public
 def do_list_module_api(module_name : string; filter : string = ""; section : string = ""; compact_str : string = ""; project : string = "") : string {
     let compact = compact_str == "true"
     // write a temp stub file that requires the module
-    let stub_path = "{get_das_root()}/_mcp_stub.das"
+    let stub_path = make_temp_das_file()
     let stub = "require {module_name}\n[export]\ndef main\n    pass\n"
     fopen(stub_path, "w") <| $(f) {
         fwrite(f, stub)
     }
-    return compile_and_simulate(stub_path, project) <| $(program; issues) {
+    let result = compile_and_simulate(stub_path, project) <| $(program; issues) {
         // find the target module
         var target_mod : Module?
         program_for_each_module(program) <| $(mod) {
@@ -29,6 +29,8 @@ def do_list_module_api(module_name : string; filter : string = ""; section : str
         }
         return empty(res) ? "(empty module)" : res
     }
+    remove(stub_path)
+    return result
 }
 
 def is_operator_function(name : string) : bool {

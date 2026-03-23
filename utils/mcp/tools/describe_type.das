@@ -9,7 +9,7 @@ def do_describe_type(name, module_name : string; project : string = "") : string
         return make_tool_result("missing 'name' argument", true)
     }
     // build stub that requires the module (if specified)
-    let stub_path = "{get_das_root()}/_mcp_stub.das"
+    let stub_path = make_temp_das_file()
     var stub = "options gen2\n"
     if (!empty(module_name)) {
         stub = "{stub}require {module_name}\n"
@@ -18,7 +18,7 @@ def do_describe_type(name, module_name : string; project : string = "") : string
     fopen(stub_path, "w") <| $(f) {
         fwrite(f, stub)
     }
-    return compile_and_simulate(stub_path, project) <| $(program; issues) {
+    let res = compile_and_simulate(stub_path, project) <| $(program; issues) {
         var result = ""
         // search all modules for the type
         program_for_each_module(program) <| $(mod) {
@@ -91,6 +91,8 @@ def do_describe_type(name, module_name : string; project : string = "") : string
         }
         return result
     }
+    remove(stub_path)
+    return res
 }
 
 def write_struct_detail(var w : StringBuilderWriter; value; mod : Module?) {

@@ -11,8 +11,10 @@ def do_run_script(file, code : string; timeout_str : string = "") : string {
     }
     // if code is provided, write to temp file; otherwise resolve relative path
     var script_path = !empty(file) ? resolve_path(file) : ""
+    var is_temp = false
     if (!empty(code)) {
-        script_path = "{get_das_root()}/_mcp_stub.das"
+        script_path = make_temp_das_file()
+        is_temp = true
         var write_ok = false
         fopen(script_path, "wb") <| $(fw) {
             if (fw == null) {
@@ -31,6 +33,9 @@ def do_run_script(file, code : string; timeout_str : string = "") : string {
     let timeout_sec = empty(timeout_str) ? 30.0 : float(to_int(timeout_str))
     var output : string
     let exit_code = run_and_capture("{exe} {script_path}", output, timeout_sec)
+    if (is_temp) {
+        remove(script_path)
+    }
     if (exit_code == popen_timed_out) {
         return make_tool_result("Script timed out after {timeout_sec}s:\n{output}", true)
     }

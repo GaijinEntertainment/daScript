@@ -236,7 +236,8 @@ def handle_tools_list(id_json : string) : string {
             "file" => PropertySchema(_type = "string", description = "Path to the .das test file"),
             "timeout" => PropertySchema(_type = "string", description = "Timeout in seconds (default: 120). Process tree is killed if exceeded"),
             "project" => PROJECT_PROP,
-            "json" => PropertySchema(_type = "string", description = "If 'true', return structured JSON (TestSummary with file, tests, total, passed, failed, errors, skipped, success, time)")
+            "json" => PropertySchema(_type = "string", description = "If 'true', return structured JSON (TestSummary with file, tests, total, passed, failed, errors, skipped, success, time)"),
+            "failures_only" => PropertySchema(_type = "string", description = "If 'true', only show failed tests in output")
         },
         ["file"]
     ))
@@ -526,7 +527,7 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : s
     } elif (tool_name == "list_types") {
         return do_list_types(arg1, project)
     } elif (tool_name == "run_test") {
-        return do_run_test(arg1, project, arg2, arg3 == "true")
+        return do_run_test(arg1, project, arg2, arg3 == "true", arg4 == "true")
     } elif (tool_name == "format_file") {
         return do_format_file(arg1)
     } elif (tool_name == "run_script") {
@@ -645,6 +646,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         }
         arg2 = get_string_arg(args, "timeout")
         arg3 = get_string_arg(args, "json")
+        arg4 = get_string_arg(args, "failures_only")
     } elif (name == "convert_to_gen2") {
         arg1 = get_string_arg(args, "file")
         if (empty(arg1)) {

@@ -13,7 +13,7 @@ def do_eval_expression(expression, req_modules : string) : string {
     if (empty(exe)) {
         return make_tool_result("Cannot determine daslang executable path", true)
     }
-    let stub_path = "{get_das_root()}/_mcp_stub.das"
+    let stub_path = make_temp_das_file()
     // build script source
     let script = build_string() <| $(var w) {
         write(w, "options gen2\n")
@@ -45,6 +45,7 @@ def do_eval_expression(expression, req_modules : string) : string {
     }
     var output : string
     let exit_code = run_and_capture("{exe} {stub_path}", output)
+    remove(stub_path)
     if (exit_code != 0) {
         return make_tool_result("Evaluation failed (exit code {exit_code}):\n{output}", true)
     }
