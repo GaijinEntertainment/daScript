@@ -48,7 +48,7 @@ def qm_run(expr : ExpressionPtr; blk : block<(var arg : ExpressionPtr) : QMatchR
 
 def qm_run_function(var func : FunctionPtr&; blk : block<(var body : ExpressionPtr; var func_ptr : Function?) : QMatchResult>) : QMatchResult {
     //! Run matching block on a function, passing both body and Function pointer.
-    if (get_ptr(func) == null) {
+    if (func == null) {
         return qm_fail_null()
     }
     var inscope body <- clone_expression(func.body)
@@ -102,8 +102,7 @@ def qm_scan(var blk_expr : ExpressionPtr&; var pos : int&; len : int; matcher : 
             }
         }
     }
-    var inscope blk_ref <- clone_expression(blk_expr)
-    return qm_fail_wildcard(blk_ref)
+    return qm_fail_wildcard(clone_expression(blk_expr))
 }
 
 def qm_extract(var expr : ExpressionPtr; var val : int&) : QMatchResult {
@@ -182,9 +181,8 @@ def qm_count_real_args(args : dasvector`smart_ptr`Variable) : int {
     //! Count arguments excluding fakeContext and fakeLineInfo.
     var count = 0
     for (arg in args) {
-        var a = get_ptr(arg)
-        if (get_ptr(a._type) != null) {
-            let bt = get_ptr(a._type).baseType
+        if (arg._type != null) {
+            let bt = arg._type.baseType
             if (bt != Type.fakeContext && bt != Type.fakeLineInfo) {
                 count ++
             }
@@ -199,9 +197,8 @@ def qm_real_arg_index(args : dasvector`smart_ptr`Variable; logical_idx : int) : 
     //! Map logical argument index (skipping fakeContext/fakeLineInfo) to physical index.
     var logical = 0
     for (arg, phys in args, range(length(args))) {
-        var a = get_ptr(arg)
-        if (get_ptr(a._type) != null) {
-            let bt = get_ptr(a._type).baseType
+        if (arg._type != null) {
+            let bt = arg._type.baseType
             if (bt == Type.fakeContext || bt == Type.fakeLineInfo) {
                 continue
             }
@@ -218,9 +215,8 @@ def qm_extract_remaining_args(args : dasvector`smart_ptr`Variable; from_logical 
     //! Collect remaining real arguments (skipping fakeContext/fakeLineInfo) starting from logical index.
     var logical = 0
     for (arg in args) {
-        var a = get_ptr(arg)
-        if (get_ptr(a._type) != null) {
-            let bt = get_ptr(a._type).baseType
+        if (arg._type != null) {
+            let bt = arg._type.baseType
             if (bt == Type.fakeContext || bt == Type.fakeLineInfo) {
                 continue
             }
@@ -263,8 +259,7 @@ def qm_extract_type(var expr : ExpressionPtr; var out_type : TypeDeclPtr&) : QMa
     if (!(expr is ExprTypeDecl)) {
         return qm_fail_type(expr)
     }
-    var td = (expr as ExprTypeDecl)
-    out_type |> move_new <| clone_type(td.typeexpr)
+    out_type |> move_new <| clone_type((expr as ExprTypeDecl).typeexpr)
     return qm_ok()
 }
 
@@ -313,7 +308,7 @@ def private qm_rtti_guard(at : LineInfo; actual_var : string; rtti_name : string
 
 [macro_function]
 def private qm_null_guard(at : LineInfo; actual_var : string) : ExpressionPtr {
-    var inscope cond <- qmacro(get_ptr($i(actual_var)) == null)
+    var inscope cond <- qmacro($i(actual_var) == null)
     var inscope fail <- qmacro(qm_fail_null())
     return <- qm_guard(at, cond, fail)
 }
@@ -399,8 +394,7 @@ def private generate_type_match(pat_type : TypeDecl?; td_var : string; expr_var 
     }
 
     // ── baseType ────────────────────────────────────────────
-    let bt = pat_type.baseType
-    var bt_int = int(bt)
+    var bt_int = int(pat_type.baseType)
     var inscope bt_cond <- qmacro(int($i(td_var).baseType) != $v(bt_int))
     body |> emplace_new <| qm_type_guard(at, expr_var, bt_cond)
 
@@ -457,7 +451,7 @@ def private generate_type_match(pat_type : TypeDecl?; td_var : string; expr_var 
     // ── firstType — recursive ───────────────────────────────
     if (pat_type.firstType != null) {
         let child_var = next_var(index)
-        var inscope nc <- qmacro(get_ptr($i(td_var).firstType) == null)
+        var inscope nc <- qmacro($i(td_var).firstType == null)
         body |> emplace_new <| qm_type_guard(at, expr_var, nc)
         body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_type($i(td_var).firstType); })
         generate_type_match(get_ptr(pat_type.firstType), child_var, expr_var, body, index, at)
@@ -466,7 +460,7 @@ def private generate_type_match(pat_type : TypeDecl?; td_var : string; expr_var 
     // ── secondType — recursive ──────────────────────────────
     if (pat_type.secondType != null) {
         let child_var = next_var(index)
-        var inscope nc <- qmacro(get_ptr($i(td_var).secondType) == null)
+        var inscope nc <- qmacro($i(td_var).secondType == null)
         body |> emplace_new <| qm_type_guard(at, expr_var, nc)
         body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_type($i(td_var).secondType); })
         generate_type_match(get_ptr(pat_type.secondType), child_var, expr_var, body, index, at)
@@ -540,9 +534,9 @@ def private generate_pattern_args_match(pat_block : ExprBlock?; target_var : str
         var a_tag_vname = ""
         {
             let last_arg = get_ptr(pat_block.arguments[n_args - 1])
-            if (get_ptr(last_arg._type) != null && get_ptr(last_arg._type).flags.isTag && get_ptr(last_arg._type).baseType == Type.none) {
+            if (last_arg._type != null && last_arg._type.flags.isTag && last_arg._type.baseType == Type.none) {
                 has_a_tag = true
-                if (get_ptr(last_arg.init) != null && last_arg.init is ExprVar) {
+                if (last_arg.init != null && last_arg.init is ExprVar) {
                     a_tag_vname = string((last_arg.init as ExprVar).name)
                 }
             }
@@ -583,7 +577,7 @@ def private generate_pattern_args_match(pat_block : ExprBlock?; target_var : str
                 }
 
                 // Type matching — if argument has a type, match it
-                if (get_ptr(pat_arg._type) != null) {
+                if (pat_arg._type != null) {
                     var pat_td = unsafe(reinterpret<TypeDecl?> get_ptr(pat_arg._type))
                     // Skip if type is autoinfer (unspecified)
                     if (pat_td.baseType != Type.autoinfer) {
@@ -603,7 +597,7 @@ def private generate_pattern_args_match(pat_block : ExprBlock?; target_var : str
     }
 
     // Return type matching
-    if (get_ptr(pat_block.returnType) != null) {
+    if (pat_block.returnType != null) {
         var pat_ret = unsafe(reinterpret<TypeDecl?> get_ptr(pat_block.returnType))
         // Skip if return type is autoinfer or void (unspecified)
         if (pat_ret.baseType != Type.autoinfer && pat_ret.baseType != Type.tVoid) {
@@ -786,9 +780,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
         // Clone the typeexpr for matching
         let td_var = next_var(index)
         body |> emplace_new <| qmacro_expr(${ var inscope $i(td_var) <- clone_type($i(cast_var).typeexpr); })
-        // Get pattern's TypeDecl
-        let pat_td = unsafe(reinterpret<ExprTypeDecl?> pattern)
-        generate_type_match(get_ptr(pat_td.typeexpr), td_var, actual_var, body, index, at)
+        generate_type_match(get_ptr(unsafe(reinterpret<ExprTypeDecl?> pattern).typeexpr), td_var, actual_var, body, index, at)
         return
     }
 
@@ -877,7 +869,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                             var fname = string(name)
                             body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_expression($i(cast_var).$f(fname)); })
                             if (!is_wildcard_call(child_pattern) && !(child_pattern is ExprTag)) {
-                                var inscope ncond <- qmacro(get_ptr($i(child_var)) == null)
+                                var inscope ncond <- qmacro($i(child_var) == null)
                                 var inscope nfail <- qmacro(qm_fail_null())
                                 body |> emplace_new <| qm_guard(at, ncond, nfail)
                             }
@@ -1001,7 +993,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                     let child_var = next_var(index)
                     var fname = string(name)
                     // Check not null
-                    var inscope ncond <- qmacro(get_ptr($i(cast_var).$f(fname)) == null)
+                    var inscope ncond <- qmacro($i(cast_var).$f(fname) == null)
                     var inscope nfail <- qmacro(qm_fail_null())
                     body |> emplace_new <| qm_guard(at, ncond, nfail)
                     body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_type($i(cast_var).$f(fname)); })
@@ -1017,7 +1009,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                     var fname = string(name)
                     body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_expression($i(cast_var).$f(fname)); })
                     if (!is_wildcard_call(child_pattern) && !(child_pattern is ExprTag)) {
-                        var inscope ncond <- qmacro(get_ptr($i(child_var)) == null)
+                        var inscope ncond <- qmacro($i(child_var) == null)
                         var inscope nfail <- qmacro(qm_fail_null())
                         body |> emplace_new <| qm_guard(at, ncond, nfail)
                     }
@@ -1025,7 +1017,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                 } else {
                     // Pattern's child is null — require actual's child is also null
                     var fname = string(name)
-                    var inscope ncond <- qmacro(get_ptr($i(cast_var).$f(fname)) != null)
+                    var inscope ncond <- qmacro($i(cast_var).$f(fname) != null)
                     var inscope nfail <- qmacro(qm_fail_field($i(actual_var)))
                     body |> emplace_new <| qm_guard(at, ncond, nfail)
                 }
@@ -1221,7 +1213,7 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
     // If actual is not ExprBlock, try matching the single statement directly.
     // Skip this optimization if pattern has arguments or return type — those require a real block.
     let has_pat_args = length(pat_block.arguments) > 0
-    let has_pat_ret = get_ptr(pat_block.returnType) != null && get_ptr(pat_block.returnType).baseType != Type.autoinfer && get_ptr(pat_block.returnType).baseType != Type.tVoid
+    let has_pat_ret = pat_block.returnType != null && pat_block.returnType.baseType != Type.autoinfer && pat_block.returnType.baseType != Type.tVoid
     let n_fixed = count_fixed_stmts(pat_block)
     if (n_fixed == 1 && !has_pat_args && !has_pat_ret) {
         var single_pat = get_single_fixed_stmt(pat_block)
