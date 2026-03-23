@@ -814,8 +814,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                                 let is_tagged = has_tags && si < length(pat_for.iteratorsTags) && pat_for.iteratorsTags[si] != null
                                 if (!is_tagged) {
                                     if (!empty(selem)) {
-                                        let sval = string(selem)
-                                        var inscope sc <- qmacro($i(cast_var).$f(name)[$v(si)] != $v(sval))
+                                        var inscope sc <- qmacro($i(cast_var).$f(name)[$v(si)] != $v(string(selem)))
                                         var inscope sf <- qmacro(qm_fail_field($i(actual_var)))
                                         body |> emplace_new <| qm_guard(at, sc, sf)
                                     }
@@ -833,7 +832,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                         if (*pv != null) {
                             let child_pattern = get_ptr(*pv)
                             let child_var = next_var(index)
-                                        body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_expression($i(cast_var).$f(name)); })
+                            body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_expression($i(cast_var).$f(name)); })
                             if (!is_wildcard_call(child_pattern) && !(child_pattern is ExprTag)) {
                                 var inscope ncond <- qmacro($i(child_var) == null)
                                 var inscope nfail <- qmacro(qm_fail_null())
@@ -846,14 +845,14 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                     let pv = unsafe(reinterpret<dasvector`smart_ptr`Expression?> p8)
                     let pat_len = length(*pv)
                     if (pat_len > 0) {
-                                var inscope cond_e <- qmacro(length($i(cast_var).$f(name)) != $v(pat_len))
+                        var inscope cond_e <- qmacro(length($i(cast_var).$f(name)) != $v(pat_len))
                         var inscope fail_e <- qmacro(qm_fail_list($i(actual_var)))
                         body |> emplace_new <| qm_guard(at, cond_e, fail_e)
                         for (elem, i in *pv, range(pat_len)) {
                             let child_pattern = get_ptr(elem)
                             if (child_pattern != null) {
                                 let child_var = next_var(index)
-                                    body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_expression($i(cast_var).$f(name)[$v(i)]); })
+                                body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_expression($i(cast_var).$f(name)[$v(i)]); })
                                 generate_match(child_pattern, child_var, body, index, at)
                             }
                         }
@@ -984,8 +983,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
             // das_string field
             let pv = unsafe(reinterpret<das_string?> p8)
             if (!empty(*pv)) {
-                let sval = string(*pv)
-                var inscope cond <- qmacro($i(cast_var).$f(name) != $v(sval))
+                var inscope cond <- qmacro($i(cast_var).$f(name) != $v(string(*pv)))
                 var inscope fail <- qmacro(qm_fail_field($i(actual_var)))
                 body |> emplace_new <| qm_guard(at, cond, fail)
             }
@@ -1062,8 +1060,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                 for (selem, si in *pv, range(pat_len)) {
                     {
                         if (!empty(selem)) {
-                            let sval = string(selem)
-                            var inscope sc <- qmacro($i(cast_var).$f(name)[$v(si)] != $v(sval))
+                            var inscope sc <- qmacro($i(cast_var).$f(name)[$v(si)] != $v(string(selem)))
                             var inscope sf <- qmacro(qm_fail_field($i(actual_var)))
                             body |> emplace_new <| qm_guard(at, sc, sf)
                         }
