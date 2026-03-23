@@ -384,8 +384,7 @@ def private generate_type_match(pat_type : TypeDecl?; td_var : string; expr_var 
         if (pat_type.firstType != null && length(pat_type.firstType.dimExpr) == 1) {
             let tag_expr = get_ptr(pat_type.firstType.dimExpr[0])
             if (tag_expr != null && tag_expr is ExprVar) {
-                let vname = string((tag_expr as ExprVar).name)
-                body |> emplace_new <| qmacro_expr(${ $i(vname) |> move_new <| clone_type($i(td_var)); })
+                body |> emplace_new <| qmacro_expr(${ $i((tag_expr as ExprVar).name) |> move_new <| clone_type($i(td_var)); })
             }
         }
         return
@@ -640,8 +639,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
         if (tag.name == "e" || tag.name == "") {
             let var_expr = tag.subexpr as ExprVar
             if (var_expr != null) {
-                let vname = string(var_expr.name)
-                body |> emplace_new <| qmacro_expr(${ $i(vname) |> move_new <| clone_expression($i(actual_var)); })
+                body |> emplace_new <| qmacro_expr(${ $i(var_expr.name) |> move_new <| clone_expression($i(actual_var)); })
             }
             return
         } elif (tag.name == "v") {
@@ -649,9 +647,8 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
             // Generates: var _qm_r = qm_extract(actual, vname); if (!_qm_r.matched) return _qm_r
             let var_expr = tag.subexpr as ExprVar
             if (var_expr != null) {
-                let vname = string(var_expr.name)
                 let r_var = next_var(index)
-                body |> emplace_new <| qmacro_expr(${ var $i(r_var) = qm_extract($i(actual_var), $i(vname)); })
+                body |> emplace_new <| qmacro_expr(${ var $i(r_var) = qm_extract($i(actual_var), $i(var_expr.name)); })
                 var inscope cond <- qmacro($i(r_var).matched == false)
                 var inscope fail <- make_var_ref(at, r_var)
                 body |> emplace_new <| qm_guard(at, cond, fail)
@@ -660,7 +657,6 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
         } elif (tag.name == "i") {
             let var_expr = tag.subexpr as ExprVar
             if (var_expr != null) {
-                let vname = string(var_expr.name)
                 // Check if $i wraps a declaration (ExprLet, ExprFor, ExprAddr)
                 if (tag.value != null) {
                     let wrapped = get_ptr(tag.value)
@@ -679,15 +675,15 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                         var inscope asv <- make_var_ref(at, actual_var)
                         var inscope asc <- new ExprAsVariant(at = at, value <- asv, name := "ExprLet")
                         body |> emplace_new <| qmacro_expr(${ var $i(cast_let) = $e(asc); })
-                        body |> emplace_new <| qmacro_expr(${ $i(vname) = string($i(cast_let).variables[0].name); })
+                        body |> emplace_new <| qmacro_expr(${ $i(var_expr.name) = string($i(cast_let).variables[0].name); })
                     } else {
                         // Other wrapped types — just match and extract name
                         generate_match(wrapped, actual_var, body, index, at)
-                        body |> emplace_new <| qmacro_expr(${ $i(vname) = qm_extract_name($i(actual_var)); })
+                        body |> emplace_new <| qmacro_expr(${ $i(var_expr.name) = qm_extract_name($i(actual_var)); })
                     }
                 } else {
                     // Standalone $i(name) — extract name from any expression
-                    body |> emplace_new <| qmacro_expr(${ $i(vname) = qm_extract_name($i(actual_var)); })
+                    body |> emplace_new <| qmacro_expr(${ $i(var_expr.name) = qm_extract_name($i(actual_var)); })
                 }
             }
             return
@@ -695,9 +691,8 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
             // $t(var) — extract TypeDeclPtr from ExprTypeDecl
             let var_expr = tag.subexpr as ExprVar
             if (var_expr != null) {
-                let vname = string(var_expr.name)
                 let r_var = next_var(index)
-                body |> emplace_new <| qmacro_expr(${ var $i(r_var) = qm_extract_type($i(actual_var), $i(vname)); })
+                body |> emplace_new <| qmacro_expr(${ var $i(r_var) = qm_extract_type($i(actual_var), $i(var_expr.name)); })
                 var inscope cond <- qmacro($i(r_var).matched == false)
                 var inscope fail <- make_var_ref(at, r_var)
                 body |> emplace_new <| qm_guard(at, cond, fail)
@@ -707,7 +702,6 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
             // $c(var)(args) — match call arguments, capture call name
             let var_expr = tag.subexpr as ExprVar
             if (var_expr != null) {
-                let vname = string(var_expr.name)
                 if (tag.value != null) {
                     // Clone wrapped ExprCall, clear placeholder name so field match skips it
                     var inscope wrapped_clone <- clone_expression(tag.value)
@@ -716,14 +710,13 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                     generate_match(get_ptr(wrapped_clone), actual_var, body, index, at)
                 }
                 // Extract call name
-                body |> emplace_new <| qmacro_expr(${ $i(vname) = qm_extract_call_name($i(actual_var)); })
+                body |> emplace_new <| qmacro_expr(${ $i(var_expr.name) = qm_extract_call_name($i(actual_var)); })
             }
             return
         } elif (tag.name == "f") {
             // a.$f(var) — match field value, capture field name
             let var_expr = tag.subexpr as ExprVar
             if (var_expr != null) {
-                let vname = string(var_expr.name)
                 if (tag.value != null) {
                     // Clone wrapped ExprField, clear placeholder name so field match skips it
                     var inscope wrapped_clone <- clone_expression(tag.value)
@@ -737,7 +730,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                     generate_match(get_ptr(wrapped_clone), actual_var, body, index, at)
                 }
                 // Extract field name
-                body |> emplace_new <| qmacro_expr(${ $i(vname) = qm_extract_field_name($i(actual_var)); })
+                body |> emplace_new <| qmacro_expr(${ $i(var_expr.name) = qm_extract_field_name($i(actual_var)); })
             }
             return
         }
@@ -1043,14 +1036,11 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                             // $i capture — extract variable name
                             let src = get_ptr(pat_v.source)
                             if (src is ExprVar) {
-                                let vname = string((src as ExprVar).name)
-                                body |> emplace_new <| qmacro_expr(${ $i(vname) = string($i(cast_var).$f(fname2)[$v(vi)].name); })
+                                body |> emplace_new <| qmacro_expr(${ $i((src as ExprVar).name) = string($i(cast_var).$f(fname2)[$v(vi)].name); })
                             }
                         } else {
-                            let vn = string(pat_v.name)
-                            if (!empty(vn)) {
-                                var vname = vn
-                                var inscope nc <- qmacro($i(cast_var).$f(fname2)[$v(vi)].name != $v(vname))
+                            if (!empty(pat_v.name)) {
+                                var inscope nc <- qmacro($i(cast_var).$f(fname2)[$v(vi)].name != $v(string(pat_v.name)))
                                 var inscope nf <- qmacro(qm_fail_field($i(actual_var)))
                                 body |> emplace_new <| qm_guard(at, nc, nf)
                             }
