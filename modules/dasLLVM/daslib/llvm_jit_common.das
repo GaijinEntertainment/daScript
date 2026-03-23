@@ -717,9 +717,7 @@ def public get_string_constant_ptr(builder : LLVMOpaqueBuilder?; message : strin
 }
 
 def public failed(msg : string) {
-    static_if (LLVM_DEBUG_EVERYTHING) {
-        to_log(LOG_ERROR, "LLVM JIT: {msg}\n")
-    }
+    to_log(LOG_ERROR, "LLVM JIT: {msg}\n")
     g_errors |> push("{msg}")
 }
 

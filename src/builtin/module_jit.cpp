@@ -328,7 +328,7 @@ extern "C" {
             return true;
         });
         if (!found) {
-            DAS_FATAL_ERROR("Failed to find %s in module %s.", funcMangledName, moduleName);
+            DAS_FATAL_ERROR("Failed to find %s in module %s.\n", funcMangledName, moduleName);
         }
     }
 
@@ -341,7 +341,7 @@ extern "C" {
             return false;
         });
         if (!result) {
-            DAS_FATAL_ERROR("Failed to find annotation %s in module %s.", annName, moduleName);
+            DAS_FATAL_ERROR("Failed to find annotation %s in module %s.\n", annName, moduleName);
         }
         return result;
     }
