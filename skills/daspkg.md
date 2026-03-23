@@ -20,14 +20,14 @@ The `--root` flag sets the project root directory (default: current directory). 
 
 | Command | Usage | Description |
 |---|---|---|
-| `search` | `search [query] --json` | Search the package index. Empty query lists all. `--json` for structured output |
-| `install` | `install <source> [--force]` | Install a package. Without source, installs all deps from `.das_package` |
-| `remove` | `remove <name>` | Remove an installed package |
-| `update` | `update [name]` | Re-install at pinned version. Without name, updates all |
-| `upgrade` | `upgrade [name]` | Upgrade to latest version. Without name, upgrades all |
-| `list` | `list [--json]` | List installed packages |
-| `check` | `check [--json]` | Verify installed packages match lockfile |
-| `build` | `build` | Build native (CMake) packages |
+| `search` | `search [query] [--json]` | Search the package index. Empty query lists all |
+| `install` | `install <source> [--force] [--global]` | Install a package. Without source, installs all deps from `.das_package` |
+| `remove` | `remove <name> [--global]` | Remove an installed package |
+| `update` | `update [name] [--global]` | Re-install at pinned version. Without name, updates all |
+| `upgrade` | `upgrade [name] [--global]` | Upgrade to latest version. Without name, upgrades all |
+| `list` | `list [--json] [--global]` | List installed packages |
+| `check` | `check [--json] [--global]` | Verify installed packages match lockfile |
+| `build` | `build [--global]` | Build native (CMake) packages |
 | `doctor` | `doctor` | Check environment (git, cmake, gh) |
 | `introduce` | `introduce` | Register package in the public index (creates PR on daspkg-index) |
 | `withdraw` | `withdraw` | Remove package from the public index |
@@ -39,14 +39,76 @@ The `--root` flag sets the project root directory (default: current directory). 
 - **Local path:** `install ./path/to/package`
 - **Index name:** `install my-package` (looks up in package index)
 
+## Options
+
+| Flag | Description |
+|---|---|
+| `--root <path>` | Project root directory (default: current directory) |
+| `--force` | Force reinstall (overrides duplicate/version checks) |
+| `--global`, `-g` | Operate on global modules in `{das_root}/modules/` (see below) |
+| `--color` | Enable colored output |
+| `--no-color` | Disable colored output (useful for capturing output) |
+| `--verbose`, `-v` | Print detailed progress |
+| `--json` | Machine-readable JSON output (`search`, `list`, `check`) |
+
 ## Key Details
 
-- Packages install to `modules/<RepoName>/` (e.g. `modules/dasAnthropic/`)
+- Packages install to `{root}/modules/<RepoName>/` (e.g. `modules/dasAnthropic/`)
 - Lock file: `daspkg.lock` in the `--root` directory
 - Package name (in `.das_package`) can differ from repo name
 - `install` and `update`/`upgrade` can take 10+ minutes for packages with native builds — use long timeouts
-- `--no-color` flag disables ANSI color output (useful for capturing output)
-- `--json` flag on `search`, `list`, `check` returns structured JSON
+
+## Global Modules
+
+Large packages (e.g. dasImgui) can be installed **globally** — once under `{das_root}/modules/` — and shared across all projects using that daScript SDK. This avoids redundant clones and builds.
+
+### Usage
+
+```bash
+# Install globally (to das_root/modules/)
+daspkg install --global dasImgui
+daspkg install --global github.com/user/dasImgui@1.0
+
+# List globally installed packages
+daspkg list --global
+
+# Update/upgrade globally
+daspkg update --global dasImgui
+daspkg upgrade --global dasImgui
+
+# Remove globally
+daspkg remove --global dasImgui
+
+# Build all global native packages
+daspkg build --global
+
+# Check global packages
+daspkg check --global
+```
+
+### Install behavior
+
+- **Global install** (`--global`): clones and builds in `{das_root}/modules/`, records in `{das_root}/modules/.daspkg_global.lock`
+- **Local install auto-uses global:** `daspkg install foo` checks the global lock file first. If a compatible global version exists, it records a reference (`"global": true` in project lock file) instead of cloning — zero network, zero build time
+- **Version mismatch:** if the global version doesn't satisfy the project's requested version, daspkg errors with a suggestion. Use `--force` to install locally, or `--global` to update the global copy
+- **Dependencies:** global packages' dependencies also install globally. Built-in SDK modules (already in `das_root/modules/`) are automatically skipped
+
+### Coexistence (local + global)
+
+A package can exist both locally and globally. The C++ runtime (`require_dynamic_modules`) handles this via **shadow detection**:
+
+- If the same module directory exists in both `{das_root}/modules/` and `{project_root}/modules/`, the **local version wins**
+- A warning is printed: `"Warning: local 'dasImgui' shadows global — using local"`
+- This is safe — removing the local copy seamlessly falls back to the global one
+
+### Remove behavior
+
+- `daspkg remove --global foo` — deletes `{das_root}/modules/foo/` and removes from global lock file
+- `daspkg remove foo` (where project entry has `"global": true`) — only removes the project lock file reference; the global directory is not deleted
+
+### CMake integration
+
+Global packages that use `cmake_build()` or `custom_build()` get a `.daspkg_standalone` marker file. The main daScript `CMakeLists.txt` skips directories with this marker during auto-discovery, preventing `FATAL_ERROR` from standalone CMakeLists.txt files (e.g. dasImgui requires `DASLANG_DIR` to be set explicitly).
 
 ## `.das_package` Manifest
 

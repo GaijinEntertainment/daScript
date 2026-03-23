@@ -21,6 +21,7 @@ struct PackageEntry {
     branch : string            // resolved git branch (if branch-based)
     root : bool = true
     local : bool = false
+    global : bool = false      // installed in das_root/modules/ (shared across projects)
 }
 
 struct LockFile {
@@ -29,9 +30,14 @@ struct LockFile {
 }
 
 let LOCK_FILE_NAME = "daspkg.lock"
+let GLOBAL_LOCK_FILE_NAME = ".daspkg_global.lock"
 
 def lock_file_path(project_root : string) : string {
     return "{project_root}/{LOCK_FILE_NAME}"
+}
+
+def global_lock_file_path() : string {
+    return "{get_das_root()}/modules/{GLOBAL_LOCK_FILE_NAME}"
 }
 
 // find index of package by name, -1 if not found
@@ -73,8 +79,7 @@ def remove_package(var lf : LockFile; name : string) {
     }
 }
 
-def read_lock_file(project_root : string; var lf : LockFile) : bool {
-    let path = lock_file_path(project_root)
+def read_lock_file_at(path : string; var lf : LockFile) : bool {
     var ok = false
     fopen(path, "rb") <| $(f) {
         if (f == null) {
@@ -93,8 +98,7 @@ def read_lock_file(project_root : string; var lf : LockFile) : bool {
     return ok
 }
 
-def write_lock_file(project_root : string; lf : LockFile) : bool {
-    let path = lock_file_path(project_root)
+def write_lock_file_at(path : string; lf : LockFile) : bool {
     let text = sprint_json(lf, true)
     var ok = false
     fopen(path, "wb") <| $(f) {
@@ -107,4 +111,20 @@ def write_lock_file(project_root : string; lf : LockFile) : bool {
         ok = true
     }
     return ok
+}
+
+def read_lock_file(project_root : string; var lf : LockFile) : bool {
+    return read_lock_file_at(lock_file_path(project_root), lf)
+}
+
+def write_lock_file(project_root : string; lf : LockFile) : bool {
+    return write_lock_file_at(lock_file_path(project_root), lf)
+}
+
+def read_global_lock_file(var lf : LockFile) : bool {
+    return read_lock_file_at(global_lock_file_path(), lf)
+}
+
+def write_global_lock_file(lf : LockFile) : bool {
+    return write_lock_file_at(global_lock_file_path(), lf)
 }

@@ -78,6 +78,21 @@ def run_cmd(cmd : string; var output : string&) : int {
     return exit_code
 }
 
+// force-remove a directory tree, handling read-only files (e.g. git objects on Windows)
+def force_rmdir(path : string) {
+    if (!fexist(path)) {
+        return
+    }
+    // rmdir_rec can't remove read-only files (git objects on Windows)
+    // use shell rm -rf which handles this correctly
+    var output : string
+    let exit_code = run_cmd("rm -rf \"{path}\"", output)
+    if (exit_code != 0) {
+        // fallback: try builtin rmdir_rec
+        rmdir_rec(path)
+    }
+}
+
 def package_name_from_source(source : string) : string {
     // "github.com/user/dasImgui" -> "dasImgui"
     // "/path/to/mymod" -> "mymod"

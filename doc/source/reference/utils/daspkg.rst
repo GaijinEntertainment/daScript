@@ -59,9 +59,10 @@ Design principles:
 - **Executable manifests** -- ``.das_package`` is a daslang script, not
   a static JSON file.  Version resolution, dependency declarations, and
   build steps can contain arbitrary logic.
-- **Per-project** -- packages install into the project's ``modules/``
-  directory (like ``node_modules``), not globally.  Reproducible builds
-  by default.
+- **Per-project by default** -- packages install into the project's
+  ``modules/`` directory (like ``node_modules``).  Reproducible builds
+  by default.  Large modules can be installed **globally** with
+  ``--global`` to avoid redundant clones and builds across projects.
 - **Two package types** -- pure-daslang (just ``.das`` files, no build)
   and C++ (cmake auto-build from source).
 
@@ -84,6 +85,8 @@ Commands
    * - ``update [name]``
      - Re-install one or all packages at their pinned version
        (re-clone, rebuild).
+   * - ``upgrade [name]``
+     - Upgrade one or all packages to the latest version.
    * - ``list``
      - List installed packages.
    * - ``search <query>``
@@ -99,12 +102,21 @@ Commands
    * - ``withdraw <name>``
      - Remove a package from the index via PR (requires ``gh`` CLI).
 
+All commands that operate on packages (``install``, ``remove``,
+``update``, ``upgrade``, ``list``, ``check``, ``build``) accept the
+``--global`` flag.
+
 Options:
 
 - ``--root <path>`` -- project root (default: current directory).
 - ``--force`` -- force reinstall even if already installed.
+- ``--global``, ``-g`` -- operate on global modules in
+  ``{das_root}/modules/`` (see :ref:`daspkg_global_modules`).
+- ``--color`` / ``--no-color`` -- enable/disable ANSI colored output.
 - ``--verbose``, ``-v`` -- print debug details (git commands, resolve
   steps, file operations).
+- ``--json`` -- machine-readable JSON output (``search``, ``list``,
+  ``check``).
 
 
 Package sources
@@ -251,6 +263,78 @@ When you run ``daspkg install github.com/user/repo@v1.0``:
 7. Auto-build if ``.das_package`` has ``build()``.
 
 
+.. _daspkg_global_modules:
+
+Global modules
+==============
+
+By default, packages install per-project into ``{root}/modules/``.
+Large packages with native builds (e.g. dasImgui) can be installed
+**globally** -- once under ``{das_root}/modules/`` -- and shared across
+all projects using that daScript SDK.
+
+.. code-block:: bash
+
+   # install globally
+   daspkg install --global dasImgui
+
+   # list / update / upgrade / remove / build / check globally
+   daspkg list --global
+   daspkg update --global dasImgui
+   daspkg upgrade --global dasImgui
+   daspkg remove --global dasImgui
+   daspkg build --global
+   daspkg check --global
+
+Install behavior
+----------------
+
+- **Global install** (``--global``): clones and builds in
+  ``{das_root}/modules/``, records in
+  ``{das_root}/modules/.daspkg_global.lock``.
+- **Local install auto-uses global**: ``daspkg install foo`` checks the
+  global lock file first.  If a compatible global version exists, it
+  records a reference (``"global": true`` in the project lock file)
+  instead of cloning -- zero network, zero build time.
+- **Version mismatch**: if the global version doesn't satisfy the
+  requested version, daspkg errors with a suggestion.  Use ``--force``
+  to install locally, or ``--global`` to update the global copy.
+- **Dependencies**: global packages' dependencies also install globally.
+  Built-in SDK modules already in ``{das_root}/modules/`` are skipped
+  automatically.
+
+Coexistence (local + global)
+----------------------------
+
+A package can exist both locally and globally.  The C++ runtime
+(``require_dynamic_modules``) handles this via **shadow detection**:
+
+- If the same module directory exists in both ``{das_root}/modules/``
+  and ``{project_root}/modules/``, the **local version wins**.
+- A warning is printed:
+  ``Warning: local 'dasImgui' shadows global -- using local``
+- This is safe -- removing the local copy seamlessly falls back to the
+  global one.
+
+Remove behavior
+---------------
+
+- ``daspkg remove --global foo`` -- deletes ``{das_root}/modules/foo/``
+  and removes from global lock file.
+- ``daspkg remove foo`` (where project entry has ``"global": true``) --
+  only removes the project lock file reference; the global directory is
+  **not** deleted.
+
+CMake integration
+-----------------
+
+Global packages that use ``cmake_build()`` or ``custom_build()`` get a
+``.daspkg_standalone`` marker file.  The main daScript ``CMakeLists.txt``
+skips directories with this marker during auto-discovery, preventing
+build errors from standalone CMakeLists.txt files that expect
+``DASLANG_DIR`` to be set explicitly.
+
+
 Project layout
 ==============
 
@@ -270,6 +354,13 @@ Project layout
        .daspkg_cache/               # index cache (gitignored)
        .daspkg_tmp/                 # temp dir during install (gitignored)
 
+   {das_root}/                       # daScript SDK root
+     modules/
+       .daspkg_global.lock           # global lock file (gitignored)
+       <global_package>/
+         .daspkg_standalone          # marker: built by daspkg, skip in CMake
+         ...                         # same structure as local packages
+
 
 Lock file
 =========
@@ -280,16 +371,18 @@ Lock file
 
    {
        "sdk_version": "",
-       "packages": {
-           "mymodule": {
+       "packages": [
+           {
+               "name": "mymodule",
                "source": "github.com/user/mymodule",
-               "version": "v1.0",
+               "version": "1.0",
                "tag": "v1.0",
                "branch": "",
                "root": true,
-               "local": false
+               "local": false,
+               "global": false
            }
-       }
+       ]
    }
 
 - **root** -- ``true`` if the user explicitly installed this package;
@@ -297,6 +390,11 @@ Lock file
 - **version** -- what the user requested.
 - **tag/branch** -- what ``.das_package`` resolved to (the actual git ref).
 - **local** -- ``true`` for packages installed from a local path.
+- **global** -- ``true`` if the package is resolved from a global
+  install in ``{das_root}/modules/`` (no local copy).
+
+The global lock file (``{das_root}/modules/.daspkg_global.lock``) uses
+the same format to track globally installed packages.
 
 
 Package index
