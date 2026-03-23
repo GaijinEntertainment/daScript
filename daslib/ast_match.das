@@ -98,7 +98,7 @@ def qm_scan(var blk_expr : ExpressionPtr&; var pos : int&; len : int; matcher : 
     var inscope blk_copy <- clone_expression(blk_expr)
     var blk = blk_copy as ExprBlock
     for (scan_pos in range(pos, len)) {
-        if (true) {
+        {
             var inscope elem <- clone_expression(blk.list[scan_pos])
             let r = invoke(matcher, elem)
             if (r.matched) {
@@ -505,7 +505,7 @@ def private generate_type_match(pat_type : TypeDecl?; td_var : string; expr_var 
         var inscope dc <- qmacro(length($i(td_var).dim) != $v(dlen))
         body |> emplace_new <| qm_type_guard(at, expr_var, dc)
         for (d, i in pat_type.dim, range(n_dim)) {
-            if (true) {
+            {
                 var dval = d
                 var didx = i
                 var inscope c <- qmacro($i(td_var).dim[$v(didx)] != $v(dval))
@@ -547,7 +547,7 @@ def private generate_pattern_args_match(pat_block : ExprBlock?; target_var : str
         // Detect $a(var) tag on the last argument — captures remaining args
         var has_a_tag = false
         var a_tag_vname = ""
-        if (true) {
+        {
             let last_arg = get_ptr(pat_block.arguments[n_args - 1])
             if (get_ptr(last_arg._type) != null && get_ptr(last_arg._type).flags.isTag && get_ptr(last_arg._type).baseType == Type.none) {
                 has_a_tag = true
@@ -574,7 +574,7 @@ def private generate_pattern_args_match(pat_block : ExprBlock?; target_var : str
 
         // Match each fixed argument's name and type (using real arg index mapping)
         for (arg, i in pat_block.arguments, range(n_fixed)) {
-            if (true) {
+            {
                 var pat_arg = get_ptr(arg)
                 var fidx = i
                 let arg_name = string(pat_arg.name)
@@ -856,7 +856,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                         var inscope fail_s <- qmacro(qm_fail_list($i(actual_var)))
                         body |> emplace_new <| qm_guard(at, cond_s, fail_s)
                         for (selem, si in *pv, range(pat_len)) {
-                            if (true) {
+                            {
                                 // Skip tagged iterators ($i capture) — they'll be handled later
                                 let is_tagged = has_tags && si < length(pat_for.iteratorsTags) && pat_for.iteratorsTags[si] != null
                                 if (!is_tagged) {
@@ -1082,7 +1082,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                 var inscope fail <- qmacro(qm_fail_list($i(actual_var)))
                 body |> emplace_new <| qm_guard(at, cond, fail)
                 for (velem, vi in *pv, range(pat_len)) {
-                    if (true) {
+                    {
                         var pat_v = get_ptr(velem)
                         var vidx = vi
                         var fname2 = string(name)
@@ -1135,7 +1135,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                 var inscope fail <- qmacro(qm_fail_list($i(actual_var)))
                 body |> emplace_new <| qm_guard(at, cond, fail)
                 for (selem, si in *pv, range(pat_len)) {
-                    if (true) {
+                    {
                         let sval = string(selem)
                         if (!empty(sval)) {
                             var sv = sval
