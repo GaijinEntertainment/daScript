@@ -596,8 +596,7 @@ def private is_wildcard_call(pattern : Expression?) : bool {
         return false
     }
     let call = pattern as ExprCall
-    let cname = string(call.name)
-    return cname == "_wildcard" || cname == "_wildcard1" || cname == "_optional" || cname == "_any"
+    return call.name == "_wildcard" || call.name == "_wildcard1" || call.name == "_optional" || call.name == "_any"
 }
 
 [macro_function]
@@ -613,7 +612,7 @@ def private get_wildcard_b_tag(pattern : Expression?) : string {
     let arg = get_ptr(call.arguments[0])
     if (arg is ExprTag) {
         let tag = arg as ExprTag
-        if (string(tag.name) == "b") {
+        if (tag.name == "b") {
             let var_expr = tag.subexpr as ExprVar
             if (var_expr != null) {
                 return string(var_expr.name)
@@ -638,15 +637,14 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
     // ── ExprTag — captures ($e, $v, $i, $t, $c, $f) ────────
     if (pattern is ExprTag) {
         let tag = pattern as ExprTag
-        let tag_name = string(tag.name)
-        if (tag_name == "e" || tag_name == "") {
+        if (tag.name == "e" || tag.name == "") {
             let var_expr = tag.subexpr as ExprVar
             if (var_expr != null) {
                 let vname = string(var_expr.name)
                 body |> emplace_new <| qmacro_expr(${ $i(vname) |> move_new <| clone_expression($i(actual_var)); })
             }
             return
-        } elif (tag_name == "v") {
+        } elif (tag.name == "v") {
             // $v(var) — extract constant value. Overload resolved by variable type.
             // Generates: var _qm_r = qm_extract(actual, vname); if (!_qm_r.matched) return _qm_r
             let var_expr = tag.subexpr as ExprVar
@@ -659,7 +657,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                 body |> emplace_new <| qm_guard(at, cond, fail)
             }
             return
-        } elif (tag_name == "i") {
+        } elif (tag.name == "i") {
             let var_expr = tag.subexpr as ExprVar
             if (var_expr != null) {
                 let vname = string(var_expr.name)
@@ -693,7 +691,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                 }
             }
             return
-        } elif (tag_name == "t") {
+        } elif (tag.name == "t") {
             // $t(var) — extract TypeDeclPtr from ExprTypeDecl
             let var_expr = tag.subexpr as ExprVar
             if (var_expr != null) {
@@ -705,7 +703,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                 body |> emplace_new <| qm_guard(at, cond, fail)
             }
             return
-        } elif (tag_name == "c") {
+        } elif (tag.name == "c") {
             // $c(var)(args) — match call arguments, capture call name
             let var_expr = tag.subexpr as ExprVar
             if (var_expr != null) {
@@ -721,7 +719,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                 body |> emplace_new <| qmacro_expr(${ $i(vname) = qm_extract_call_name($i(actual_var)); })
             }
             return
-        } elif (tag_name == "f") {
+        } elif (tag.name == "f") {
             // a.$f(var) — match field value, capture field name
             let var_expr = tag.subexpr as ExprVar
             if (var_expr != null) {
@@ -1139,9 +1137,8 @@ def private get_wildcard_name(pattern : Expression?) : string {
         return ""
     }
     let call = pattern as ExprCall
-    let cname = string(call.name)
-    if (cname == "_wildcard" || cname == "_wildcard1" || cname == "_optional" || cname == "_any") {
-        return cname
+    if (call.name == "_wildcard" || call.name == "_wildcard1" || call.name == "_optional" || call.name == "_any") {
+        return string(call.name)
     }
     return ""
 }
