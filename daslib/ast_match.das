@@ -507,7 +507,7 @@ def private generate_type_match(pat_type : TypeDecl?; td_var : string; expr_var 
 // ── Argument and return type matching ────────────────────────────────────
 
 [macro_function]
-def private generate_pattern_args_match(pat_block : ExprBlock?; target_var : string; ret_field : string; expr_var : string; var body : array<ExpressionPtr>&; var index : int&; at : LineInfo) {
+def private generate_pattern_args_match(var pat_block : ExprBlock?; target_var : string; ret_field : string; expr_var : string; var body : array<ExpressionPtr>&; var index : int&; at : LineInfo) {
     //! Generate code to match argument names, types, and return type.
     //! target_var — runtime variable with .arguments and return type field
     //! ret_field — "returnType" for ExprBlock, "result" for Function
@@ -561,7 +561,7 @@ def private generate_pattern_args_match(pat_block : ExprBlock?; target_var : str
 
                 // Type matching — if argument has a type, match it
                 if (pat_arg._type != null) {
-                    var pat_td = unsafe(reinterpret<TypeDecl?> pat_arg._type)
+                    var pat_td = get_ptr(pat_arg._type)
                     // Skip if type is autoinfer (unspecified)
                     if (pat_td.baseType != Type.autoinfer) {
                         let td_var = next_var(index)
@@ -580,7 +580,7 @@ def private generate_pattern_args_match(pat_block : ExprBlock?; target_var : str
 
     // Return type matching
     if (pat_block.returnType != null) {
-        var pat_ret = unsafe(reinterpret<TypeDecl?> pat_block.returnType)
+        var pat_ret = get_ptr(pat_block.returnType)
         // Skip if return type is autoinfer or void (unspecified)
         if (pat_ret.baseType != Type.autoinfer && pat_ret.baseType != Type.tVoid) {
             let ret_var = next_var(index)
