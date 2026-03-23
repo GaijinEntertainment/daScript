@@ -6,12 +6,11 @@ require common public
 require daslib/ast_boost
 
 def do_ast_dump_expression(expression : string) : string {
-    let args <- get_command_line_arguments()
-    if (empty(args)) {
+    let exe = get_daslang_exe()
+    if (empty(exe)) {
         return make_tool_result("Cannot determine daslang executable path", true)
     }
-    let exe = args[0]
-    let script_path = "{get_das_root()}/_mcp_stub.das"
+    let script_path = make_temp_das_file()
     let code = "options gen2\noptions rtti\nrequire ast\nrequire daslib/ast_boost\n\n[export]\ndef main() \{\n    var inscope ed <- quote({expression})\n    print(\"\{debug_expression(ed)\}\n\")\n\}\n"
     var write_ok = false
     fopen(script_path, "wb") <| $(fw) {
@@ -24,22 +23,9 @@ def do_ast_dump_expression(expression : string) : string {
     if (!write_ok) {
         return make_tool_result("Cannot write temp file", true)
     }
-    let cmd = "{exe} {script_path}"
     var output : string
-    var exit_code = 0
-    unsafe {
-        exit_code = popen(cmd) <| $(f) {
-            if (f == null) {
-                output = "Failed to execute: {cmd}"
-                return
-            }
-            output = build_string() <| $(var w) {
-                while (!feof(f)) {
-                    write(w, fgets(f))
-                }
-            }
-        }
-    }
+    let exit_code = run_and_capture("{exe} {script_path}", output)
+    remove(script_path)
     if (exit_code != 0) {
         return make_tool_result("AST dump failed (exit code {exit_code}):\n{output}", true)
     }

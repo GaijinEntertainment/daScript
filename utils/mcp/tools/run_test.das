@@ -5,7 +5,7 @@ options no_unused_block_arguments = false
 require common public
 require fio
 
-def do_run_test(file : string; project : string = ""; timeout_str : string = ""; json : bool = false) : string {
+def do_run_test(file : string; project : string = ""; timeout_str : string = ""; json : bool = false; failures_only : bool = false) : string {
     let exe = get_daslang_exe()
     if (empty(exe)) {
         return make_tool_result("Cannot determine daslang executable path", true)
@@ -14,6 +14,9 @@ def do_run_test(file : string; project : string = ""; timeout_str : string = "";
     var cmd = "{exe} {get_das_root()}/dastest/dastest.das -- --test {test_file}"
     if (!empty(project)) {
         cmd = "{cmd} --project {project}"
+    }
+    if (failures_only) {
+        cmd = "{cmd} --failures-only"
     }
     let timeout_sec = empty(timeout_str) ? 120.0 : float(to_int(timeout_str))
     if (json) {
