@@ -823,9 +823,9 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                                 // Skip tagged iterators ($i capture) — they'll be handled later
                                 let is_tagged = has_tags && si < length(pat_for.iteratorsTags) && pat_for.iteratorsTags[si] != null
                                 if (!is_tagged) {
-                                    let sval = string(selem)
-                                    if (!empty(sval)) {
-                                                    let fname2 = string(name)
+                                    if (!empty(selem)) {
+                                        let sval = string(selem)
+                                        let fname2 = string(name)
                                         var inscope sc <- qmacro($i(cast_var).$f(fname2)[$v(si)] != $v(sval))
                                         var inscope sf <- qmacro(qm_fail_field($i(actual_var)))
                                         body |> emplace_new <| qm_guard(at, sc, sf)
@@ -1000,8 +1000,8 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
         } elif (bt == Type.tHandle && string(xtype.annotation.name) == "das_string") {
             // das_string field
             let pv = unsafe(reinterpret<das_string?> p8)
-            let sval = string(*pv)
-            if (!empty(sval)) {
+            if (!empty(*pv)) {
+                let sval = string(*pv)
                 let fname = string(name)
                 var inscope cond <- qmacro($i(cast_var).$f(fname) != $v(sval))
                 var inscope fail <- qmacro(qm_fail_field($i(actual_var)))
@@ -1089,9 +1089,8 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                 body |> emplace_new <| qm_guard(at, cond, fail)
                 for (selem, si in *pv, range(pat_len)) {
                     {
-                        let sval = string(selem)
-                        if (!empty(sval)) {
-                            var sidx = si
+                        if (!empty(selem)) {
+                            let sval = string(selem)
                             let fname2 = string(name)
                             var inscope sc <- qmacro($i(cast_var).$f(fname2)[$v(si)] != $v(sval))
                             var inscope sf <- qmacro(qm_fail_field($i(actual_var)))
