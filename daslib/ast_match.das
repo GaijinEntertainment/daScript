@@ -867,8 +867,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                     let tag_expr = get_ptr(tag)
                     if (tag_expr is ExprVar) {
                         let cap_name = string((tag_expr as ExprVar).name)
-                        var tidx = ti
-                        body |> emplace_new <| qmacro_expr(${ $i(cap_name) = string($i(cast_var).iterators[$v(tidx)]); })
+                        body |> emplace_new <| qmacro_expr(${ $i(cap_name) = string($i(cast_var).iterators[$v(ti)]); })
                     }
                 }
             }
@@ -999,7 +998,6 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                     let child_pattern = get_ptr(elem)
                     if (child_pattern != null) {
                         let child_var = next_var(index)
-                        var fidx = i
                         body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_expression($i(cast_var).$f(name)[$v(i)]); })
                         generate_match(child_pattern, child_var, body, index, at)
                     }
