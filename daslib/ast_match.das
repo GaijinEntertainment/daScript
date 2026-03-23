@@ -41,11 +41,6 @@ struct QMatchResult {
 
 // ── Runtime helpers ─────────────────────────────────────────────────────
 
-def qm_func_body(var func : FunctionPtr) : ExpressionPtr {
-    //! Extract a function's body as ExpressionPtr (clone).
-    return <- clone_expression(func.body)
-}
-
 def qm_run(expr : ExpressionPtr; blk : block<(var arg : ExpressionPtr) : QMatchResult>) : QMatchResult {
     var inscope copy <- clone_expression(expr)
     return invoke(blk, copy)
