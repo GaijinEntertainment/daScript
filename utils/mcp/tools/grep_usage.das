@@ -6,20 +6,43 @@ require common public
 require daslib/json
 require daslib/json_boost
 
-def detect_ast_grep() : string {
-    var found = ""
+def private try_ast_grep(cmd : string) : bool {
+    var found = false
     unsafe {
-        popen("sg --version") <| $(f) {
+        popen("{cmd} --version") <| $(f) {
             if (f == null) {
                 return
             }
             let line = fgets(f)
             if (find(line, "ast-grep") >= 0) {
-                found = "sg"
+                found = true
             }
         }
     }
     return found
+}
+
+def detect_ast_grep() : string {
+    // try bare "sg" first (works when .venv is activated or sg is on PATH)
+    if (try_ast_grep("sg")) {
+        return "sg"
+    }
+    // try .venv paths (not activated): Scripts/ on Windows, bin/ on Linux/macOS
+    let das_root = get_das_root()
+    for (subdir in ["Scripts", "bin"]) {
+        let venv_sg = "{das_root}/.venv/{subdir}/sg"
+        if (try_ast_grep(venv_sg)) {
+            return venv_sg
+        }
+    }
+    return ""
+}
+
+def get_ast_grep_cmd() : string {
+    if (empty(ast_grep_cmd)) {
+        ast_grep_cmd = detect_ast_grep()
+    }
+    return ast_grep_cmd
 }
 
 def json_to_int(v : JsonValue?) : int {
@@ -60,9 +83,11 @@ def do_grep_usage(symbol, directory, context_lines_str, glob_filter : string) : 
     let das_root = get_das_root()
     let search_dir = resolve_path(!empty(directory) ? directory : ".")
     // build ast-grep command
-    var cmd = "sg run -p \"{symbol}\" -l daslang --json \"{search_dir}\""
+    let sg = get_ast_grep_cmd()
+    let cd_root = "cd \"{das_root}\" && "
+    var cmd = "{cd_root}{sg} run -p \"{symbol}\" -l daslang --json \"{search_dir}\""
     if (!empty(glob_filter)) {
-        cmd = "sg run -p \"{symbol}\" -l daslang --globs \"{glob_filter}\" --json \"{search_dir}\""
+        cmd = "{cd_root}{sg} run -p \"{symbol}\" -l daslang --globs \"{glob_filter}\" --json \"{search_dir}\""
     }
     var raw_json : string
     unsafe {
