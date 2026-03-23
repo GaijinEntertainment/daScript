@@ -293,9 +293,7 @@ def private qm_guard(at : LineInfo; var cond : ExpressionPtr&; var fail_call : E
     //! Build: if (cond) { return fail_call }
     var inscope fail_ret <- new ExprReturn(at = at, subexpr <- fail_call)
     var inscope fail_blk <- new ExprBlock(at = at)
-    unsafe {
-        (reinterpret<ExprBlock?> fail_blk).list |> emplace(fail_ret)
-    }
+    fail_blk.list |> emplace(fail_ret)
     return <- new ExprIfThenElse(at = at, cond <- cond, if_true <- fail_blk)
 }
 
@@ -1208,11 +1206,8 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
             direct_body |> emplace_new <| qmacro_expr(${return qm_ok(); })
             // Build: if (direct_var) { direct match + return }
             var inscope direct_blk <- new ExprBlock(at = at)
-            unsafe {
-                var dp = reinterpret<ExprBlock?> direct_blk
-                for (stmt in direct_body) {
-                    dp.list |> emplace(stmt)
-                }
+            for (stmt in direct_body) {
+                direct_blk.list |> emplace(stmt)
             }
             var inscope direct_cond <- make_var_ref(at, direct_var)
             var inscope direct_if <- new ExprIfThenElse(at = at, cond <- direct_cond, if_true <- direct_blk)
@@ -1229,9 +1224,7 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
     var inscope is_mkblk <- make_is_check(at, vref_blk, "ExprMakeBlock")
     var inscope unwrap <- qmacro_expr(${ $i(blk_var) |> move_new <| clone_expression(($i(blk_var) as ExprMakeBlock)._block); })
     var inscope unwrap_blk <- new ExprBlock(at = at)
-    unsafe {
-        (reinterpret<ExprBlock?> unwrap_blk).list |> emplace(unwrap)
-    }
+    unwrap_blk.list |> emplace(unwrap)
     var inscope unwrap_if <- new ExprIfThenElse(at = at, cond <- is_mkblk, if_true <- unwrap_blk)
     body |> emplace(unwrap_if)
     // Now verify it's ExprBlock
@@ -1343,17 +1336,14 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
 
                 // Build inner block: $(var elem : ExpressionPtr) : QMatchResult { match_code }
                 var inscope inner_blk <- new ExprBlock(at = at)
-                unsafe {
-                    var ip = reinterpret<ExprBlock?> inner_blk
-                    ip.blockFlags |= ExprBlockFlags.isClosure
-                    ip.returnType |> move_new <| typeinfo ast_typedecl(type<QMatchResult>)
-                    var inscope inner_arg <- new Variable(at = at, name := elem_var)
-                    inner_arg._type |> move_new <| typeinfo ast_typedecl(type<ExpressionPtr>)
-                    inner_arg.access_flags |= VariableAccessFlags.access_ref
-                    ip.arguments |> emplace(inner_arg)
-                    for (stmt in match_body) {
-                        ip.list |> emplace(stmt)
-                    }
+                inner_blk.blockFlags |= ExprBlockFlags.isClosure
+                inner_blk.returnType |> move_new <| typeinfo ast_typedecl(type<QMatchResult>)
+                var inscope inner_arg <- new Variable(at = at, name := elem_var)
+                inner_arg._type |> move_new <| typeinfo ast_typedecl(type<ExpressionPtr>)
+                inner_arg.access_flags |= VariableAccessFlags.access_ref
+                inner_blk.arguments |> emplace(inner_arg)
+                for (stmt in match_body) {
+                    inner_blk.list |> emplace(stmt)
                 }
                 var inscope inner_mkblk <- new ExprMakeBlock(at = at, _block <- inner_blk)
 
@@ -1441,26 +1431,23 @@ class private QMatch : AstCallMacro {
 
         // Build block: $(var _qm_arg : ExpressionPtr) : QMatchResult { ... }
         var inscope blk <- new ExprBlock(at = at)
-        unsafe {
-            var blk_ptr = reinterpret<ExprBlock?> blk
-            blk_ptr.blockFlags |= ExprBlockFlags.isClosure
-            blk_ptr.returnType |> move_new <| typeinfo ast_typedecl(type<QMatchResult>)
-            var inscope arg_var <- new Variable(at = at, name := "_qm_arg")
-            arg_var._type |> move_new <| typeinfo ast_typedecl(type<ExpressionPtr>)
-            arg_var.access_flags |= VariableAccessFlags.access_ref
-            blk_ptr.arguments |> emplace(arg_var)
+        blk.blockFlags |= ExprBlockFlags.isClosure
+        blk.returnType |> move_new <| typeinfo ast_typedecl(type<QMatchResult>)
+        var inscope arg_var <- new Variable(at = at, name := "_qm_arg")
+        arg_var._type |> move_new <| typeinfo ast_typedecl(type<ExpressionPtr>)
+        arg_var.access_flags |= VariableAccessFlags.access_ref
+        blk.arguments |> emplace(arg_var)
 
-            // Null check
-            blk_ptr.list |> emplace_new <| qm_null_guard(at, "_qm_arg")
-            // Pattern matching
-            var index = 0
-            var inscope body : array<ExpressionPtr>
-            generate_match(pattern, "_qm_arg", body, index, at)
-            for (stmt in body) {
-                blk_ptr.list |> emplace(stmt)
-            }
-            blk_ptr.list |> emplace_new <| qmacro_expr(${return qm_ok(); })
+        // Null check
+        blk.list |> emplace_new <| qm_null_guard(at, "_qm_arg")
+        // Pattern matching
+        var index = 0
+        var inscope body : array<ExpressionPtr>
+        generate_match(pattern, "_qm_arg", body, index, at)
+        for (stmt in body) {
+            blk.list |> emplace(stmt)
         }
+        blk.list |> emplace_new <| qmacro_expr(${return qm_ok(); })
 
         var inscope expr_arg : ExpressionPtr
         if (!qm_validate_expr_arg(prog, call.arguments[0], at, expr_arg)) {
@@ -1502,26 +1489,23 @@ class private QMatchBlock : AstCallMacro {
 
         // Build block: $(var _qm_arg : ExpressionPtr) : QMatchResult { ... }
         var inscope blk <- new ExprBlock(at = at)
-        unsafe {
-            var blk_ptr = reinterpret<ExprBlock?> blk
-            blk_ptr.blockFlags |= ExprBlockFlags.isClosure
-            blk_ptr.returnType |> move_new <| typeinfo ast_typedecl(type<QMatchResult>)
-            var inscope arg_var <- new Variable(at = at, name := "_qm_arg")
-            arg_var._type |> move_new <| typeinfo ast_typedecl(type<ExpressionPtr>)
-            arg_var.access_flags |= VariableAccessFlags.access_ref
-            blk_ptr.arguments |> emplace(arg_var)
+        blk.blockFlags |= ExprBlockFlags.isClosure
+        blk.returnType |> move_new <| typeinfo ast_typedecl(type<QMatchResult>)
+        var inscope arg_var <- new Variable(at = at, name := "_qm_arg")
+        arg_var._type |> move_new <| typeinfo ast_typedecl(type<ExpressionPtr>)
+        arg_var.access_flags |= VariableAccessFlags.access_ref
+        blk.arguments |> emplace(arg_var)
 
-            // Null check
-            blk_ptr.list |> emplace_new <| qm_null_guard(at, "_qm_arg")
-            // Block matching
-            var index = 0
-            var inscope body : array<ExpressionPtr>
-            generate_block_match(pat_block, "_qm_arg", body, index, at)
-            for (stmt in body) {
-                blk_ptr.list |> emplace(stmt)
-            }
-            blk_ptr.list |> emplace_new <| qmacro_expr(${return qm_ok(); })
+        // Null check
+        blk.list |> emplace_new <| qm_null_guard(at, "_qm_arg")
+        // Block matching
+        var index = 0
+        var inscope body : array<ExpressionPtr>
+        generate_block_match(pat_block, "_qm_arg", body, index, at)
+        for (stmt in body) {
+            blk.list |> emplace(stmt)
         }
+        blk.list |> emplace_new <| qmacro_expr(${return qm_ok(); })
 
         var inscope expr_arg : ExpressionPtr
         if (!qm_validate_expr_arg(prog, call.arguments[0], at, expr_arg)) {
@@ -1563,35 +1547,32 @@ class private QMatchFunction : AstCallMacro {
 
         // Build block: $(var _qm_arg : ExpressionPtr; _qm_func : Function?) : QMatchResult { ... }
         var inscope blk <- new ExprBlock(at = at)
-        unsafe {
-            var blk_ptr = reinterpret<ExprBlock?> blk
-            blk_ptr.blockFlags |= ExprBlockFlags.isClosure
-            blk_ptr.returnType |> move_new <| typeinfo ast_typedecl(type<QMatchResult>)
-            // First param: body (ExpressionPtr)
-            var inscope arg_body <- new Variable(at = at, name := "_qm_arg")
-            arg_body._type |> move_new <| typeinfo ast_typedecl(type<ExpressionPtr>)
-            arg_body.access_flags |= VariableAccessFlags.access_ref
-            blk_ptr.arguments |> emplace(arg_body)
-            // Second param: function pointer (Function?)
-            var inscope arg_func <- new Variable(at = at, name := "_qm_func")
-            arg_func._type |> move_new <| typeinfo ast_typedecl(type<Function?>)
-            blk_ptr.arguments |> emplace(arg_func)
+        blk.blockFlags |= ExprBlockFlags.isClosure
+        blk.returnType |> move_new <| typeinfo ast_typedecl(type<QMatchResult>)
+        // First param: body (ExpressionPtr)
+        var inscope arg_body <- new Variable(at = at, name := "_qm_arg")
+        arg_body._type |> move_new <| typeinfo ast_typedecl(type<ExpressionPtr>)
+        arg_body.access_flags |= VariableAccessFlags.access_ref
+        blk.arguments |> emplace(arg_body)
+        // Second param: function pointer (Function?)
+        var inscope arg_func <- new Variable(at = at, name := "_qm_func")
+        arg_func._type |> move_new <| typeinfo ast_typedecl(type<Function?>)
+        blk.arguments |> emplace(arg_func)
 
-            blk_ptr.list |> emplace_new <| qm_null_guard(at, "_qm_arg")
+        blk.list |> emplace_new <| qm_null_guard(at, "_qm_arg")
 
-            var index = 0
-            var inscope body : array<ExpressionPtr>
+        var index = 0
+        var inscope body : array<ExpressionPtr>
 
-            // Match function arguments and return type against _qm_func
-            generate_pattern_args_match(pat_block, "_qm_func", "result", "_qm_arg", body, index, at)
+        // Match function arguments and return type against _qm_func
+        generate_pattern_args_match(pat_block, "_qm_func", "result", "_qm_arg", body, index, at)
 
-            // Match function body (skip arg check — already done against _qm_func)
-            generate_block_match(pat_block, "_qm_arg", body, index, at, false)
-            for (stmt in body) {
-                blk_ptr.list |> emplace(stmt)
-            }
-            blk_ptr.list |> emplace_new <| qmacro_expr(${return qm_ok(); })
+        // Match function body (skip arg check — already done against _qm_func)
+        generate_block_match(pat_block, "_qm_arg", body, index, at, false)
+        for (stmt in body) {
+            blk.list |> emplace(stmt)
         }
+        blk.list |> emplace_new <| qmacro_expr(${return qm_ok(); })
 
         var inscope func_arg <- clone_expression(call.arguments[0])
         var inscope mkblk_f <- new ExprMakeBlock(at = at, _block <- blk)
