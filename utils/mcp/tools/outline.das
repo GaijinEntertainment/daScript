@@ -3,6 +3,7 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
 require common public
+require grep_usage public
 require daslib/json
 require daslib/json_boost
 require daslib/strings_boost
@@ -230,12 +231,14 @@ def do_outline(file, glob_filter : string) : string {
         // glob mode: scan directory
         target = das_root
     }
-    var cmd = "sg scan -r \"{rules_path}\" --json \"{target}\""
+    let sg = get_ast_grep_cmd()
+    let cd_root = "cd \"{das_root}\" && "
+    var cmd = "{cd_root}{sg} scan -r \"{rules_path}\" --json \"{target}\""
     if (!empty(glob_filter) && !empty(file)) {
         // both file and glob — use glob as filter
-        cmd = "sg scan -r \"{rules_path}\" --globs \"{glob_filter}\" --json \"{resolve_path(file)}\""
+        cmd = "{cd_root}{sg} scan -r \"{rules_path}\" --globs \"{glob_filter}\" --json \"{resolve_path(file)}\""
     } elif (!empty(glob_filter)) {
-        cmd = "sg scan -r \"{rules_path}\" --globs \"{glob_filter}\" --json \"{das_root}\""
+        cmd = "{cd_root}{sg} scan -r \"{rules_path}\" --globs \"{glob_filter}\" --json \"{das_root}\""
     }
     var raw_json : string
     unsafe {

@@ -11,6 +11,8 @@ require math public
 require strings public
 require fio public
 
+var ast_grep_cmd : string
+
 struct ContentItem {
     @rename = "type" _type : string
     text : string

@@ -27,7 +27,7 @@ def main() {
     let sg_check = detect_ast_grep()
     if (!empty(sg_check)) {
         ast_grep_available = true
-        log_write("ast-grep detected — grep_usage tool enabled")
+        log_write("ast-grep detected ({sg_check}) — grep_usage tool enabled")
     } else {
         log_write("WARNING: ast-grep not found — grep_usage tool disabled")
     }
