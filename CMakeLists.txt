@@ -1358,7 +1358,6 @@ file(GLOB DAS_DASPKG_FILES ${PROJECT_SOURCE_DIR}/utils/daspkg/*.das)
 install(FILES ${DAS_DASPKG_FILES} DESTINATION utils/daspkg)
 install(FILES
     ${PROJECT_SOURCE_DIR}/utils/daspkg/README.md
-    ${PROJECT_SOURCE_DIR}/utils/daspkg/DESIGN.md
     DESTINATION utils/daspkg
 )
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/daspkg/fixtures/
