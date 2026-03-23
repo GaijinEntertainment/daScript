@@ -664,7 +664,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                         // var $i(name) = expr — match ExprLet, capture variable name
                         // Clone the wrapped expression so we don't modify the pattern AST
                         var inscope wrapped_clone <- clone_expression(tag.value)
-                        var wrapped_clone_let = unsafe(reinterpret<ExprLet?> get_ptr(wrapped_clone))
+                        var wrapped_clone_let = wrapped_clone as ExprLet
                         if (length(wrapped_clone_let.variables) > 0) {
                             get_ptr(wrapped_clone_let.variables[0]).name := ""
                         }
@@ -705,7 +705,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                 if (tag.value != null) {
                     // Clone wrapped ExprCall, clear placeholder name so field match skips it
                     var inscope wrapped_clone <- clone_expression(tag.value)
-                    var wrapped_call = unsafe(reinterpret<ExprCall?> get_ptr(wrapped_clone))
+                    var wrapped_call = wrapped_clone as ExprCall
                     wrapped_call.name := ""
                     generate_match(get_ptr(wrapped_clone), actual_var, body, index, at)
                 }
@@ -721,10 +721,10 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                     // Clone wrapped ExprField, clear placeholder name so field match skips it
                     var inscope wrapped_clone <- clone_expression(tag.value)
                     if (wrapped_clone is ExprField) {
-                        var wf = unsafe(reinterpret<ExprField?> get_ptr(wrapped_clone))
+                        var wf = wrapped_clone as ExprField
                         wf.name := ""
                     } elif (wrapped_clone is ExprSafeField) {
-                        var wf = unsafe(reinterpret<ExprSafeField?> get_ptr(wrapped_clone))
+                        var wf = wrapped_clone as ExprSafeField
                         wf.name := ""
                     }
                     generate_match(get_ptr(wrapped_clone), actual_var, body, index, at)
@@ -752,13 +752,13 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
         // Clone the typeexpr for matching
         let td_var = next_var(index)
         body |> emplace_new <| qmacro_expr(${ var inscope $i(td_var) <- clone_type($i(cast_var).typeexpr); })
-        generate_type_match(get_ptr(unsafe(reinterpret<ExprTypeDecl?> pattern).typeexpr), td_var, actual_var, body, index, at)
+        generate_type_match(get_ptr((pattern as ExprTypeDecl).typeexpr), td_var, actual_var, body, index, at)
         return
     }
 
     // ── ExprFor — handle iteratorsTags for $i capture ─────────
     if (pattern is ExprFor) {
-        var pat_for = unsafe(reinterpret<ExprFor?> pattern)
+        var pat_for = pattern as ExprFor
         // Process iteratorsTags: clear tagged iterator names (so generic matching skips them)
         // and record which indices need $i capture
         var has_tags = false
@@ -884,25 +884,25 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
         var inscope as_cast <- new ExprAsVariant(at = at, value <- as_val, name := rtti)
         body |> emplace_new <| qmacro_expr(${ var $i(cast_var) = $e(as_cast); })
         if (rtti == "ExprConstInt") {
-            let cv = unsafe(reinterpret<ExprConstInt?> pattern)
+            let cv = pattern as ExprConstInt
             var val = cv.value
             var inscope cond <- qmacro($i(cast_var).value != $v(val))
             var inscope fail <- qmacro(qm_fail_field($i(actual_var)))
             body |> emplace_new <| qm_guard(at, cond, fail)
         } elif (rtti == "ExprConstFloat") {
-            let cv = unsafe(reinterpret<ExprConstFloat?> pattern)
+            let cv = pattern as ExprConstFloat
             var val = cv.value
             var inscope cond <- qmacro($i(cast_var).value != $v(val))
             var inscope fail <- qmacro(qm_fail_field($i(actual_var)))
             body |> emplace_new <| qm_guard(at, cond, fail)
         } elif (rtti == "ExprConstBool") {
-            let cv = unsafe(reinterpret<ExprConstBool?> pattern)
+            let cv = pattern as ExprConstBool
             var val = cv.value
             var inscope cond <- qmacro($i(cast_var).value != $v(val))
             var inscope fail <- qmacro(qm_fail_field($i(actual_var)))
             body |> emplace_new <| qm_guard(at, cond, fail)
         } elif (rtti == "ExprConstString") {
-            let cv = unsafe(reinterpret<ExprConstString?> pattern)
+            let cv = pattern as ExprConstString
             var inscope cond <- qmacro($i(cast_var).value != $v(string(cv.value)))
             var inscope fail <- qmacro(qm_fail_field($i(actual_var)))
             body |> emplace_new <| qm_guard(at, cond, fail)
