@@ -525,11 +525,13 @@ static int run_lifecycle(const string & fn) {
 
 static void print_help() {
     tout << "daslang-live — live-reloading application host for daScript\n";
-    tout << "Usage: daslang-live [options] <script.das>\n";
+    tout << "Usage: daslang-live [options] <script.das> [-- script arguments]\n";
     tout << "  -project <file>   — project file (.das_project)\n";
     tout << "  -dasroot <path>   — override DAS_ROOT\n";
     tout << "  -cwd              — change working directory to script's folder\n";
     tout << "  -v1syntax         — use v1 syntax (default: v2)\n";
+    tout << "  --no-dyn-modules  — skip loading dynamic modules\n";
+    tout << "  --                — separator for script arguments\n";
     tout << "  -h, --help        — this help\n";
 }
 
