@@ -61,35 +61,35 @@ def qm_run_function(var func : FunctionPtr&; blk : block<(var body : ExpressionP
 }
 
 def qm_ok() : QMatchResult {
-    return QMatchResult(matched=true)
+    return QMatchResult(matched = true)
 }
 
 def qm_fail_rtti(var expr : ExpressionPtr) : QMatchResult {
-    return QMatchResult(error=QMatchError.rtti_mismatch, expr=get_ptr(expr))
+    return QMatchResult(error = QMatchError.rtti_mismatch, expr = get_ptr(expr))
 }
 
 def qm_fail_field(var expr : ExpressionPtr) : QMatchResult {
-    return QMatchResult(error=QMatchError.field_mismatch, expr=get_ptr(expr))
+    return QMatchResult(error = QMatchError.field_mismatch, expr = get_ptr(expr))
 }
 
 def qm_fail_null() : QMatchResult {
-    return QMatchResult(error=QMatchError.null_expression)
+    return QMatchResult(error = QMatchError.null_expression)
 }
 
 def qm_fail_list(var expr : ExpressionPtr) : QMatchResult {
-    return QMatchResult(error=QMatchError.list_length, expr=get_ptr(expr))
+    return QMatchResult(error = QMatchError.list_length, expr = get_ptr(expr))
 }
 
 def qm_fail_const(var expr : ExpressionPtr) : QMatchResult {
-    return QMatchResult(error=QMatchError.const_type_mismatch, expr=get_ptr(expr))
+    return QMatchResult(error = QMatchError.const_type_mismatch, expr = get_ptr(expr))
 }
 
 def qm_fail_type(var expr : ExpressionPtr) : QMatchResult {
-    return QMatchResult(error=QMatchError.type_mismatch, expr=get_ptr(expr))
+    return QMatchResult(error = QMatchError.type_mismatch, expr = get_ptr(expr))
 }
 
 def qm_fail_wildcard(var expr : ExpressionPtr) : QMatchResult {
-    return QMatchResult(error=QMatchError.wildcard_not_found, expr=get_ptr(expr))
+    return QMatchResult(error = QMatchError.wildcard_not_found, expr = get_ptr(expr))
 }
 
 def qm_scan(var blk_expr : ExpressionPtr&; var pos : int&; len : int; matcher : block<(var elem : ExpressionPtr) : QMatchResult>) : QMatchResult {
@@ -236,6 +236,34 @@ def qm_extract_remaining_args(args : dasvector`smart_ptr`Variable; from_logical 
         }
         logical ++
     }
+}
+
+def qm_extract_stmts(var blk_expr : ExpressionPtr; from_pos : int; to_pos : int; var result : array<ExpressionPtr>&) : void {
+    //! Extract statements [from_pos, to_pos) from a block into an array (cloned).
+    var blk = blk_expr as ExprBlock
+    for (i in range(from_pos, to_pos)) {
+        result |> emplace_new <| clone_expression(blk.list[i])
+    }
+}
+
+def qm_extract_call_name(var expr : ExpressionPtr) : string {
+    //! Extract call name from ExprCall or similar.
+    let rtti = string(get_ptr(expr).__rtti)
+    if (rtti == "ExprCall") {
+        return string((expr as ExprCall).name)
+    }
+    return ""
+}
+
+def qm_extract_field_name(var expr : ExpressionPtr) : string {
+    //! Extract field name from ExprField, ExprSafeField, or variant expressions.
+    let rtti = string(get_ptr(expr).__rtti)
+    if (rtti == "ExprField" || rtti == "ExprSafeField") {
+        return string((expr as ExprField).name)
+    } elif (rtti == "ExprIsVariant" || rtti == "ExprAsVariant" || rtti == "ExprSafeAsVariant") {
+        return string((expr as ExprIsVariant).name)
+    }
+    return ""
 }
 
 def qm_extract_type(var expr : ExpressionPtr; var out_type : TypeDeclPtr&) : QMatchResult {
@@ -609,6 +637,29 @@ def private is_wildcard_call(pattern : Expression?) : bool {
     return cname == "_wildcard" || cname == "_wildcard1" || cname == "_optional" || cname == "_any"
 }
 
+[macro_function]
+def private get_wildcard_b_tag(pattern : Expression?) : string {
+    //! If wildcard has a $b(var) argument, return the variable name. Otherwise "".
+    if (string(pattern.__rtti) != "ExprCall") {
+        return ""
+    }
+    let call = pattern as ExprCall
+    if (length(call.arguments) == 0) {
+        return ""
+    }
+    let arg = get_ptr(call.arguments[0])
+    if (string(arg.__rtti) == "ExprTag") {
+        let tag = arg as ExprTag
+        if (string(tag.name) == "b") {
+            let var_expr = tag.subexpr as ExprVar
+            if (var_expr != null) {
+                return string(var_expr.name)
+            }
+        }
+    }
+    return ""
+}
+
 // ── Core code generator ─────────────────────────────────────────────────
 // Generated code uses var (not let) for all variables so as-cast returns
 // non-const and field access gives non-const smart_ptr<Expression>.
@@ -690,6 +741,44 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                 var inscope cond <- qmacro($i(r_var).matched == false)
                 var inscope fail <- make_var_ref(at, r_var)
                 body |> emplace_new <| qm_guard(at, cond, fail)
+            }
+            return
+        } elif (tag_name == "c") {
+            // $c(var)(args) — match call arguments, capture call name
+            let var_expr = tag.subexpr as ExprVar
+            if (var_expr != null) {
+                let vname = string(var_expr.name)
+                if (tag.value != null) {
+                    // Clone wrapped ExprCall, clear placeholder name so field match skips it
+                    var inscope wrapped_clone <- clone_expression(tag.value)
+                    var wrapped_call = unsafe(reinterpret<ExprCall?> get_ptr(wrapped_clone))
+                    wrapped_call.name := ""
+                    generate_match(get_ptr(wrapped_clone), actual_var, body, index, at)
+                }
+                // Extract call name
+                body |> emplace_new <| qmacro_expr(${ $i(vname) = qm_extract_call_name($i(actual_var)); })
+            }
+            return
+        } elif (tag_name == "f") {
+            // a.$f(var) — match field value, capture field name
+            let var_expr = tag.subexpr as ExprVar
+            if (var_expr != null) {
+                let vname = string(var_expr.name)
+                if (tag.value != null) {
+                    // Clone wrapped ExprField, clear placeholder name so field match skips it
+                    var inscope wrapped_clone <- clone_expression(tag.value)
+                    let wrapped_rtti = string(get_ptr(wrapped_clone).__rtti)
+                    if (wrapped_rtti == "ExprField") {
+                        var wf = unsafe(reinterpret<ExprField?> get_ptr(wrapped_clone))
+                        wf.name := ""
+                    } elif (wrapped_rtti == "ExprSafeField") {
+                        var wf = unsafe(reinterpret<ExprSafeField?> get_ptr(wrapped_clone))
+                        wf.name := ""
+                    }
+                    generate_match(get_ptr(wrapped_clone), actual_var, body, index, at)
+                }
+                // Extract field name
+                body |> emplace_new <| qmacro_expr(${ $i(vname) = qm_extract_field_name($i(actual_var)); })
             }
             return
         }
@@ -1212,6 +1301,10 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
     body |> emplace_new <| qmacro_expr(${ var $i(len_var) = length($i(cast_var).list); })
 
     // Walk through pattern statements
+    // Track pending $b capture: save_var holds start position, b_vname holds user variable name
+    var pending_b_save = ""   // name of the var holding wildcard start position
+    var pending_b_vname = ""  // name of the user's $b capture variable
+
     let pat_len = length(pat_block.list)
     for (pat_stmt, pat_idx in pat_block.list, range(pat_len)) {
         let pat = get_ptr(pat_stmt)
@@ -1219,29 +1312,65 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
 
         if (wc_name == "_wildcard") {
             // Zero or more — just skip. The next fixed pattern will scan forward.
-            // If this is the last statement, consume everything remaining.
+            // Save start position for $b capture
+            let b_vname = get_wildcard_b_tag(pat)
+            if (!empty(b_vname)) {
+                let save_var = next_var(index)
+                body |> emplace_new <| qmacro_expr(${ var $i(save_var) = $i(pos_var); })
+                pending_b_save = save_var
+                pending_b_vname = b_vname
+            }
             if (pat_idx == pat_len - 1) {
                 // Trailing wildcard — matches rest, done
-                pass
+                // Emit $b capture: [save_pos, len)
+                if (!empty(pending_b_vname)) {
+                    body |> emplace_new <| qmacro_expr(${ qm_extract_stmts($i(blk_var), $i(pending_b_save), $i(len_var), $i(pending_b_vname)); })
+                    pending_b_save = ""
+                    pending_b_vname = ""
+                }
             }
             // Otherwise, the next fixed statement will handle scanning
         } elif (wc_name == "_wildcard1") {
             // One or more — advance pos by at least 1
+            let b_vname = get_wildcard_b_tag(pat)
+            if (!empty(b_vname)) {
+                let save_var = next_var(index)
+                body |> emplace_new <| qmacro_expr(${ var $i(save_var) = $i(pos_var); })
+                pending_b_save = save_var
+                pending_b_vname = b_vname
+            }
             var inscope cond <- qmacro($i(pos_var) >= $i(len_var))
             var inscope fail <- qmacro(qm_fail_wildcard($i(actual_var)))
             body |> emplace_new <| qm_guard(at, cond, fail)
             body |> emplace_new <| qmacro_expr(${ $i(pos_var) ++; })
+            if (pat_idx == pat_len - 1) {
+                // Trailing _wildcard1 — capture [save_pos, len)
+                if (!empty(pending_b_vname)) {
+                    body |> emplace_new <| qmacro_expr(${ qm_extract_stmts($i(blk_var), $i(pending_b_save), $i(len_var), $i(pending_b_vname)); })
+                    pending_b_save = ""
+                    pending_b_vname = ""
+                }
+            }
         } elif (wc_name == "_optional") {
-            // Zero or one — optionally advance by 1
-            // If the next fixed pattern matches at current pos, don't advance
-            // If not, try advancing by 1
-            // For now, simple: just mark that next scan can skip 0 or 1
+            // Zero or one — similar to _wildcard for $b
+            let b_vname = get_wildcard_b_tag(pat)
+            if (!empty(b_vname)) {
+                let save_var = next_var(index)
+                body |> emplace_new <| qmacro_expr(${ var $i(save_var) = $i(pos_var); })
+                pending_b_save = save_var
+                pending_b_vname = b_vname
+            }
             pass
         } elif (wc_name == "_any") {
             // Exactly one — advance pos by exactly 1
+            let b_vname = get_wildcard_b_tag(pat)
             var inscope cond <- qmacro($i(pos_var) >= $i(len_var))
             var inscope fail <- qmacro(qm_fail_wildcard($i(actual_var)))
             body |> emplace_new <| qm_guard(at, cond, fail)
+            if (!empty(b_vname)) {
+                // _any captures exactly one statement
+                body |> emplace_new <| qmacro_expr(${ qm_extract_stmts($i(blk_var), $i(pos_var), $i(pos_var) + 1, $i(b_vname)); })
+            }
             body |> emplace_new <| qmacro_expr(${ $i(pos_var) ++; })
         } else {
             // Fixed statement — must match at current position
@@ -1281,8 +1410,21 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
                 var inscope scan_cond <- qmacro($i(scan_r_var).matched == false)
                 var inscope scan_fail <- qmacro($i(scan_r_var))
                 body |> emplace_new <| qm_guard(at, scan_cond, scan_fail)
+
+                // Emit pending $b capture: [save_pos, pos - 1) — pos was updated by qm_scan to after the match
+                if (!empty(pending_b_vname)) {
+                    body |> emplace_new <| qmacro_expr(${ qm_extract_stmts($i(blk_var), $i(pending_b_save), $i(pos_var) - 1, $i(pending_b_vname)); })
+                    pending_b_save = ""
+                    pending_b_vname = ""
+                }
             } else {
                 // No preceding wildcard — must match at exact position
+                // Emit pending $b capture before this fixed match (for _wildcard1 followed by fixed)
+                if (!empty(pending_b_vname)) {
+                    body |> emplace_new <| qmacro_expr(${ qm_extract_stmts($i(blk_var), $i(pending_b_save), $i(pos_var), $i(pending_b_vname)); })
+                    pending_b_save = ""
+                    pending_b_vname = ""
+                }
                 // Bounds check
                 var inscope cond <- qmacro($i(pos_var) >= $i(len_var))
                 var inscope fail <- qmacro(qm_fail_wildcard($i(actual_var)))
