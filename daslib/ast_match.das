@@ -420,29 +420,25 @@ def private generate_type_match(pat_type : TypeDecl?; td_var : string; expr_var 
 
     // ── structType — compare by name ────────────────────────
     if (pat_type.structType != null) {
-        let sname = string(pat_type.structType.name)
-        var inscope c <- qmacro($i(td_var).structType == null || string($i(td_var).structType.name) != $v(sname))
+        var inscope c <- qmacro($i(td_var).structType == null || $i(td_var).structType.name != $v(string(pat_type.structType.name)))
         body |> emplace_new <| qm_type_guard(at, expr_var, c)
     }
 
     // ── enumType — compare by name ──────────────────────────
     if (pat_type.enumType != null) {
-        let ename = string(pat_type.enumType.name)
-        var inscope c <- qmacro($i(td_var).enumType == null || string($i(td_var).enumType.name) != $v(ename))
+        var inscope c <- qmacro($i(td_var).enumType == null || $i(td_var).enumType.name != $v(string(pat_type.enumType.name)))
         body |> emplace_new <| qm_type_guard(at, expr_var, c)
     }
 
     // ── annotation — compare by name (handled types) ────────
     if (pat_type.annotation != null) {
-        let aname = string(pat_type.annotation.name)
-        var inscope c <- qmacro($i(td_var).annotation == null || string($i(td_var).annotation.name) != $v(aname))
+        var inscope c <- qmacro($i(td_var).annotation == null || $i(td_var).annotation.name != $v(string(pat_type.annotation.name)))
         body |> emplace_new <| qm_type_guard(at, expr_var, c)
     }
 
     // ── alias — compare string ──────────────────────────────
     if (!empty(pat_type.alias)) {
-        let aval = string(pat_type.alias)
-        var inscope c <- qmacro(string($i(td_var).alias) != $v(aval))
+        var inscope c <- qmacro($i(td_var).alias != $v(string(pat_type.alias)))
         body |> emplace_new <| qm_type_guard(at, expr_var, c)
     }
 
@@ -558,7 +554,7 @@ def private generate_pattern_args_match(pat_block : ExprBlock?; target_var : str
 
                 // Name matching
                 if (!empty(arg_name)) {
-                    var inscope nc <- qmacro(string($i(target_var).arguments[$i(phys_var)].name) != $v(arg_name))
+                    var inscope nc <- qmacro($i(target_var).arguments[$i(phys_var)].name != $v(arg_name))
                     var inscope nf <- qmacro(qm_fail_field($i(expr_var)))
                     body |> emplace_new <| qm_guard(at, nc, nf)
                 }
@@ -830,7 +826,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                                     let sval = string(selem)
                                     if (!empty(sval)) {
                                                     let fname2 = string(name)
-                                        var inscope sc <- qmacro(string($i(cast_var).$f(fname2)[$v(si)]) != $v(sval))
+                                        var inscope sc <- qmacro($i(cast_var).$f(fname2)[$v(si)] != $v(sval))
                                         var inscope sf <- qmacro(qm_fail_field($i(actual_var)))
                                         body |> emplace_new <| qm_guard(at, sc, sf)
                                     }
@@ -923,8 +919,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
             body |> emplace_new <| qm_guard(at, cond, fail)
         } elif (rtti == "ExprConstString") {
             let cv = unsafe(reinterpret<ExprConstString?> pattern)
-            var val = string(cv.value)
-            var inscope cond <- qmacro(string($i(cast_var).value) != $v(val))
+            var inscope cond <- qmacro($i(cast_var).value != $v(string(cv.value)))
             var inscope fail <- qmacro(qm_fail_field($i(actual_var)))
             body |> emplace_new <| qm_guard(at, cond, fail)
         }
@@ -1008,7 +1003,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
             let sval = string(*pv)
             if (!empty(sval)) {
                 let fname = string(name)
-                var inscope cond <- qmacro(string($i(cast_var).$f(fname)) != $v(sval))
+                var inscope cond <- qmacro($i(cast_var).$f(fname) != $v(sval))
                 var inscope fail <- qmacro(qm_fail_field($i(actual_var)))
                 body |> emplace_new <| qm_guard(at, cond, fail)
             }
@@ -1057,7 +1052,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                             let vn = string(pat_v.name)
                             if (!empty(vn)) {
                                 var vname = vn
-                                var inscope nc <- qmacro(string($i(cast_var).$f(fname2)[$v(vi)].name) != $v(vname))
+                                var inscope nc <- qmacro($i(cast_var).$f(fname2)[$v(vi)].name != $v(vname))
                                 var inscope nf <- qmacro(qm_fail_field($i(actual_var)))
                                 body |> emplace_new <| qm_guard(at, nc, nf)
                             }
@@ -1098,7 +1093,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                         if (!empty(sval)) {
                             var sidx = si
                             let fname2 = string(name)
-                            var inscope sc <- qmacro(string($i(cast_var).$f(fname2)[$v(si)]) != $v(sval))
+                            var inscope sc <- qmacro($i(cast_var).$f(fname2)[$v(si)] != $v(sval))
                             var inscope sf <- qmacro(qm_fail_field($i(actual_var)))
                             body |> emplace_new <| qm_guard(at, sc, sf)
                         }
