@@ -113,7 +113,7 @@ def qm_scan(var blk_expr : ExpressionPtr&; var pos : int&; len : int; matcher : 
 
 def qm_extract(var expr : ExpressionPtr; var val : int&) : QMatchResult {
     //! Extract int from ExprConstInt. Fails if wrong type.
-    if (string(get_ptr(expr).__rtti) == "ExprConstInt") {
+    if (expr is ExprConstInt) {
         val = (expr as ExprConstInt).value
         return qm_ok()
     }
@@ -121,7 +121,7 @@ def qm_extract(var expr : ExpressionPtr; var val : int&) : QMatchResult {
 }
 
 def qm_extract(var expr : ExpressionPtr; var val : float&) : QMatchResult {
-    if (string(get_ptr(expr).__rtti) == "ExprConstFloat") {
+    if (expr is ExprConstFloat) {
         val = (expr as ExprConstFloat).value
         return qm_ok()
     }
@@ -129,7 +129,7 @@ def qm_extract(var expr : ExpressionPtr; var val : float&) : QMatchResult {
 }
 
 def qm_extract(var expr : ExpressionPtr; var val : bool&) : QMatchResult {
-    if (string(get_ptr(expr).__rtti) == "ExprConstBool") {
+    if (expr is ExprConstBool) {
         val = (expr as ExprConstBool).value
         return qm_ok()
     }
@@ -137,7 +137,7 @@ def qm_extract(var expr : ExpressionPtr; var val : bool&) : QMatchResult {
 }
 
 def qm_extract(var expr : ExpressionPtr; var val : string&) : QMatchResult {
-    if (string(get_ptr(expr).__rtti) == "ExprConstString") {
+    if (expr is ExprConstString) {
         val = string((expr as ExprConstString).value)
         return qm_ok()
     }
@@ -145,7 +145,7 @@ def qm_extract(var expr : ExpressionPtr; var val : string&) : QMatchResult {
 }
 
 def qm_extract(var expr : ExpressionPtr; var val : int64&) : QMatchResult {
-    if (string(get_ptr(expr).__rtti) == "ExprConstInt64") {
+    if (expr is ExprConstInt64) {
         val = (expr as ExprConstInt64).value
         return qm_ok()
     }
@@ -153,7 +153,7 @@ def qm_extract(var expr : ExpressionPtr; var val : int64&) : QMatchResult {
 }
 
 def qm_extract(var expr : ExpressionPtr; var val : uint&) : QMatchResult {
-    if (string(get_ptr(expr).__rtti) == "ExprConstUInt") {
+    if (expr is ExprConstUInt) {
         val = (expr as ExprConstUInt).value
         return qm_ok()
     }
@@ -161,7 +161,7 @@ def qm_extract(var expr : ExpressionPtr; var val : uint&) : QMatchResult {
 }
 
 def qm_extract(var expr : ExpressionPtr; var val : double&) : QMatchResult {
-    if (string(get_ptr(expr).__rtti) == "ExprConstDouble") {
+    if (expr is ExprConstDouble) {
         val = (expr as ExprConstDouble).value
         return qm_ok()
     }
@@ -171,14 +171,13 @@ def qm_extract(var expr : ExpressionPtr; var val : double&) : QMatchResult {
 def qm_extract_name(var expr : ExpressionPtr) : string {
     //! Extract the "name" field from common expression types.
     //! Works for ExprVar, ExprCall, ExprField, ExprSafeField, ExprLet variables, etc.
-    let rtti = string(get_ptr(expr).__rtti)
-    if (rtti == "ExprVar") {
+    if (expr is ExprVar) {
         return string((expr as ExprVar).name)
-    } elif (rtti == "ExprField" || rtti == "ExprSafeField") {
+    } elif (expr is ExprField || expr is ExprSafeField) {
         return string((expr as ExprField).name)
-    } elif (rtti == "ExprCall") {
+    } elif (expr is ExprCall) {
         return string((expr as ExprCall).name)
-    } elif (rtti == "ExprIsVariant" || rtti == "ExprAsVariant" || rtti == "ExprSafeAsVariant") {
+    } elif (expr is ExprIsVariant || expr is ExprAsVariant || expr is ExprSafeAsVariant) {
         return string((expr as ExprIsVariant).name)
     }
     return ""
@@ -248,8 +247,7 @@ def qm_extract_stmts(var blk_expr : ExpressionPtr; from_pos : int; to_pos : int;
 
 def qm_extract_call_name(var expr : ExpressionPtr) : string {
     //! Extract call name from ExprCall or similar.
-    let rtti = string(get_ptr(expr).__rtti)
-    if (rtti == "ExprCall") {
+    if (expr is ExprCall) {
         return string((expr as ExprCall).name)
     }
     return ""
@@ -257,10 +255,9 @@ def qm_extract_call_name(var expr : ExpressionPtr) : string {
 
 def qm_extract_field_name(var expr : ExpressionPtr) : string {
     //! Extract field name from ExprField, ExprSafeField, or variant expressions.
-    let rtti = string(get_ptr(expr).__rtti)
-    if (rtti == "ExprField" || rtti == "ExprSafeField") {
+    if (expr is ExprField || expr is ExprSafeField) {
         return string((expr as ExprField).name)
-    } elif (rtti == "ExprIsVariant" || rtti == "ExprAsVariant" || rtti == "ExprSafeAsVariant") {
+    } elif (expr is ExprIsVariant || expr is ExprAsVariant || expr is ExprSafeAsVariant) {
         return string((expr as ExprIsVariant).name)
     }
     return ""
@@ -268,7 +265,7 @@ def qm_extract_field_name(var expr : ExpressionPtr) : string {
 
 def qm_extract_type(var expr : ExpressionPtr; var out_type : TypeDeclPtr&) : QMatchResult {
     //! Extract TypeDeclPtr from ExprTypeDecl.
-    if (string(get_ptr(expr).__rtti) != "ExprTypeDecl") {
+    if (!(expr is ExprTypeDecl)) {
         return qm_fail_type(expr)
     }
     var td = (expr as ExprTypeDecl)
@@ -402,7 +399,7 @@ def private generate_type_match(pat_type : TypeDecl?; td_var : string; expr_var 
     if (pat_type.baseType == Type.alias && pat_type.flags.isTag) {
         if (pat_type.firstType != null && length(pat_type.firstType.dimExpr) == 1) {
             let tag_expr = get_ptr(pat_type.firstType.dimExpr[0])
-            if (tag_expr != null && string(tag_expr.__rtti) == "ExprVar") {
+            if (tag_expr != null && tag_expr is ExprVar) {
                 let vname = string((tag_expr as ExprVar).name)
                 body |> emplace_new <| qmacro_expr(${ $i(vname) |> move_new <| clone_type($i(td_var)); })
             }
@@ -554,7 +551,7 @@ def private generate_pattern_args_match(pat_block : ExprBlock?; target_var : str
             let last_arg = get_ptr(pat_block.arguments[n_args - 1])
             if (get_ptr(last_arg._type) != null && get_ptr(last_arg._type).flags.isTag && get_ptr(last_arg._type).baseType == Type.none) {
                 has_a_tag = true
-                if (get_ptr(last_arg.init) != null && string(get_ptr(last_arg.init).__rtti) == "ExprVar") {
+                if (get_ptr(last_arg.init) != null && last_arg.init is ExprVar) {
                     a_tag_vname = string((last_arg.init as ExprVar).name)
                 }
             }
@@ -629,7 +626,7 @@ def private generate_pattern_args_match(pat_block : ExprBlock?; target_var : str
 
 [macro_function]
 def private is_wildcard_call(pattern : Expression?) : bool {
-    if (string(pattern.__rtti) != "ExprCall") {
+    if (!(pattern is ExprCall)) {
         return false
     }
     let call = pattern as ExprCall
@@ -640,7 +637,7 @@ def private is_wildcard_call(pattern : Expression?) : bool {
 [macro_function]
 def private get_wildcard_b_tag(pattern : Expression?) : string {
     //! If wildcard has a $b(var) argument, return the variable name. Otherwise "".
-    if (string(pattern.__rtti) != "ExprCall") {
+    if (!(pattern is ExprCall)) {
         return ""
     }
     let call = pattern as ExprCall
@@ -648,7 +645,7 @@ def private get_wildcard_b_tag(pattern : Expression?) : string {
         return ""
     }
     let arg = get_ptr(call.arguments[0])
-    if (string(arg.__rtti) == "ExprTag") {
+    if (arg is ExprTag) {
         let tag = arg as ExprTag
         if (string(tag.name) == "b") {
             let var_expr = tag.subexpr as ExprVar
@@ -672,8 +669,8 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
 
     let rtti = string(pattern.__rtti)
 
-    // ── ExprTag — captures ($e, $v, $i) ─────────────────────
-    if (rtti == "ExprTag") {
+    // ── ExprTag — captures ($e, $v, $i, $t, $c, $f) ────────
+    if (pattern is ExprTag) {
         let tag = pattern as ExprTag
         let tag_name = string(tag.name)
         if (tag_name == "e" || tag_name == "") {
@@ -703,8 +700,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                 // Check if $i wraps a declaration (ExprLet, ExprFor, ExprAddr)
                 if (tag.value != null) {
                     let wrapped = get_ptr(tag.value)
-                    let wrapped_rtti = string(wrapped.__rtti)
-                    if (wrapped_rtti == "ExprLet") {
+                    if (wrapped is ExprLet) {
                         // var $i(name) = expr — match ExprLet, capture variable name
                         // Clone the wrapped expression so we don't modify the pattern AST
                         var inscope wrapped_clone <- clone_expression(tag.value)
@@ -767,11 +763,10 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                 if (tag.value != null) {
                     // Clone wrapped ExprField, clear placeholder name so field match skips it
                     var inscope wrapped_clone <- clone_expression(tag.value)
-                    let wrapped_rtti = string(get_ptr(wrapped_clone).__rtti)
-                    if (wrapped_rtti == "ExprField") {
+                    if (wrapped_clone is ExprField) {
                         var wf = unsafe(reinterpret<ExprField?> get_ptr(wrapped_clone))
                         wf.name := ""
-                    } elif (wrapped_rtti == "ExprSafeField") {
+                    } elif (wrapped_clone is ExprSafeField) {
                         var wf = unsafe(reinterpret<ExprSafeField?> get_ptr(wrapped_clone))
                         wf.name := ""
                     }
@@ -791,7 +786,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
     }
 
     // ── ExprTypeDecl — type matching with generate_type_match ──
-    if (rtti == "ExprTypeDecl") {
+    if (pattern is ExprTypeDecl) {
         body |> emplace_new <| qm_rtti_guard(at, actual_var, "ExprTypeDecl")
         let cast_var = next_var(index)
         var inscope as_val <- make_var_ref(at, actual_var)
@@ -807,7 +802,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
     }
 
     // ── ExprFor — handle iteratorsTags for $i capture ─────────
-    if (rtti == "ExprFor") {
+    if (pattern is ExprFor) {
         var pat_for = unsafe(reinterpret<ExprFor?> pattern)
         // Process iteratorsTags: clear tagged iterator names (so generic matching skips them)
         // and record which indices need $i capture
@@ -890,7 +885,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                             let child_var = next_var(index)
                             var fname = string(name)
                             body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_expression($i(cast_var).$f(fname)); })
-                            if (!is_wildcard_call(child_pattern) && string(child_pattern.__rtti) != "ExprTag") {
+                            if (!is_wildcard_call(child_pattern) && !(child_pattern is ExprTag)) {
                                 var inscope ncond <- qmacro(get_ptr($i(child_var)) == null)
                                 var inscope nfail <- qmacro(qm_fail_null())
                                 body |> emplace_new <| qm_guard(at, ncond, nfail)
@@ -926,7 +921,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
             for (tag, ti in pat_for.iteratorsTags, range(length(pat_for.iteratorsTags))) {
                 if (tag != null) {
                     let tag_expr = get_ptr(tag)
-                    if (string(tag_expr.__rtti) == "ExprVar") {
+                    if (tag_expr is ExprVar) {
                         let cap_name = string((tag_expr as ExprVar).name)
                         var tidx = ti
                         body |> emplace_new <| qmacro_expr(${ $i(cap_name) = string($i(cast_var).iterators[$v(tidx)]); })
@@ -1030,7 +1025,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                     let child_var = next_var(index)
                     var fname = string(name)
                     body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_expression($i(cast_var).$f(fname)); })
-                    if (!is_wildcard_call(child_pattern) && string(child_pattern.__rtti) != "ExprTag") {
+                    if (!is_wildcard_call(child_pattern) && !(child_pattern is ExprTag)) {
                         var inscope ncond <- qmacro(get_ptr($i(child_var)) == null)
                         var inscope nfail <- qmacro(qm_fail_null())
                         body |> emplace_new <| qm_guard(at, ncond, nfail)
@@ -1095,7 +1090,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                         if (pat_v.flags.tag && pat_v.source != null) {
                             // $i capture — extract variable name
                             let src = get_ptr(pat_v.source)
-                            if (string(src.__rtti) == "ExprVar") {
+                            if (src is ExprVar) {
                                 let vname = string((src as ExprVar).name)
                                 body |> emplace_new <| qmacro_expr(${ $i(vname) = string($i(cast_var).$f(fname2)[$v(vidx)].name); })
                             }
@@ -1189,7 +1184,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
 [macro_function]
 def private get_wildcard_name(pattern : Expression?) : string {
     //! Get the wildcard type name, or "" if not a wildcard.
-    if (string(pattern.__rtti) != "ExprCall") {
+    if (!(pattern is ExprCall)) {
         return ""
     }
     let call = pattern as ExprCall
@@ -1536,7 +1531,7 @@ class private QMatchBlock : AstCallMacro {
 
         // arg[1] is ExprMakeBlock containing ExprBlock
         let pat_arg = get_ptr(call.arguments[1])
-        if (string(pat_arg.__rtti) != "ExprMakeBlock") {
+        if (!(pat_arg is ExprMakeBlock)) {
             macro_error(prog, at, "qmatch_block: second argument must be a block")
             return <- default<ExpressionPtr>
         }
@@ -1598,7 +1593,7 @@ class private QMatchFunction : AstCallMacro {
         let at = call.at
 
         let pat_arg = get_ptr(call.arguments[1])
-        if (string(pat_arg.__rtti) != "ExprMakeBlock") {
+        if (!(pat_arg is ExprMakeBlock)) {
             macro_error(prog, at, "qmatch_function: second argument must be a block")
             return <- default<ExpressionPtr>
         }
