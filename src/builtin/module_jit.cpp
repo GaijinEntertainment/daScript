@@ -640,25 +640,22 @@ extern "C" {
     }
 
     extern "C" {
-        void * get_jit_table_find ( int32_t baseType, Context * context, LineInfoArg * at ) {
+        DAS_API void * get_jit_table_find ( int32_t baseType, Context * context, LineInfoArg * at ) {
             return das_get_jit_table_find(baseType, context, at);
         }
-        void * get_jit_table_at ( int32_t baseType, Context * context, LineInfoArg * at ) {
+        DAS_API void * get_jit_table_at ( int32_t baseType, Context * context, LineInfoArg * at ) {
             return das_get_jit_table_at(baseType, context, at);
         }
-        void * get_jit_table_erase ( int32_t baseType, Context * context, LineInfoArg * at ) {
+        DAS_API void * get_jit_table_erase ( int32_t baseType, Context * context, LineInfoArg * at ) {
             return das_get_jit_table_erase(baseType, context, at);
         }
-
-        void * das_get_jit_new ( TypeAnnotation *annotation ) {
+        DAS_API void * das_get_jit_new ( TypeAnnotation *annotation ) {
             return annotation->jitGetNew();
         }
-
-        void * das_get_jit_delete ( TypeAnnotation *annotation ) {
+        DAS_API void * das_get_jit_delete ( TypeAnnotation *annotation ) {
             return annotation->jitGetDelete();
         }
-
-        void * das_get_jit_clone ( TypeAnnotation *annotation ) {
+        DAS_API void * das_get_jit_clone ( TypeAnnotation *annotation ) {
             return annotation->jitGetClone();
         }
     }
