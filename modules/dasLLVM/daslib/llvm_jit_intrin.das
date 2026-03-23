@@ -121,7 +121,19 @@ def public has_intrinsic(expr : smart_ptr<ExprCallFunc>) {
     var result = false
     assume argType = expr.arguments[0]._type
     let call_name = "{expr.func._module.name}::{expr.func.name}"
+
+    // We skip some intrinsics below, because g_intrin_lookup
+    // is not enough and `pfun` can return null sometimes.
+    // But we don't have full picture without arguments.
+    // Anyway, assertion in lookup_intrinsic guarantees consistency.
     if (call_name == "$::length" && !argType.isGoodArrayType) {
+        // table<string; json::JsonValue>
+        // $::dasvector`smart_ptr`Variable&
+        return false
+    }
+    if (!expr.arguments |> empty() && argType.isHandle) {
+        // intrinsics can't have handle types:
+        // int64(clock)
         return false
     }
     g_intrin_lookup |> get(call_name) <| $(pfun) {
@@ -136,6 +148,8 @@ def public lookup_intinsic(g_ctx : LLVMContextRef; g_builder : LLVMOpaqueBuilder
     g_intrin_lookup |> get(call_name) <| $(pfun) {
         result = pfun |> invoke(JitCtx(ctx = g_ctx, builder = g_builder, types = types), expr, arguments)
     }
+    // Check initrinsic consistency
+    verify(result != null == has_intrinsic(expr))
     return result
 }
 

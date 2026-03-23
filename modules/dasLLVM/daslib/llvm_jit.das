@@ -6334,8 +6334,9 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
     }
     visitor.ffunc = globals_fn
     let entry = LLVMAppendBasicBlockInContext(g_ctx, globals_fn, "entry")
+    let body = LLVMAppendBasicBlockInContext(g_ctx, globals_fn, "body")
     visitor.function_entry = entry
-    LLVMPositionBuilderAtEnd(visitor.g_builder, entry)
+    LLVMPositionBuilderAtEnd(visitor.g_builder, body)
     let ctx_param = LLVMGetParam(globals_fn, 0u)
     prog |> for_each_module <| $(mod) {
         mod |> for_each_global() <| $(glob) {
@@ -6369,6 +6370,9 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
         }
     }
     LLVMBuildRetVoid(visitor.g_builder)
+    // terminate entry block with branch to body (entry only has allocas from at_function_entry)
+    LLVMPositionBuilderAtEnd(visitor.g_builder, entry)
+    LLVMBuildBr(visitor.g_builder, body)
     visitor.adapter := null
     unsafe {
         delete visitor

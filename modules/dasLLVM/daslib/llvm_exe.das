@@ -454,9 +454,38 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
 
 // Creates main function that initializes a standalone JIT context, registers
 // all compiled functions, runs init scripts, then calls the program entry point.
-def public inject_main(program_context : Context?; ctx : LLVMContextRef; funcs : array<FunctionPtr>;
+def public inject_main(program_context : Context?; ctx : LLVMContextRef;
                        prog : Program?; entry_point : string; mod : LLVMOpaqueModule?;
                        var types : PrimitiveTypes?, var uids : UidNodes?; strict : bool) : LLVMOpaqueValue? {
+
+    let builder = LLVMCreateBuilder()
+    defer <| ${
+        LLVMDisposeBuilder(builder)
+    }
+    // Collect ALL used functions from the program (not just JIT-compiled ones from `funcs`).
+    // There shouldn't be any `das` functions in standalone_exe, otherwise it
+    // will crash.
+    var funcs : array<FunctionPtr>
+    var has_no_jit = false
+    prog |> for_each_module <| $(m) {
+        if (m.name == "llvm_func" || m.name == "llvm_macro") {
+            return
+        }
+        m |> for_each_function("") <| $(fun) {
+            if (fun.flags.used) {
+                if (!fun.flags.builtIn && fun.moreFlags.requestNoJit) {
+                    has_no_jit = true
+                    to_log(LOG_ERROR, "LLVM EXE: function '{fun.name}' is marked no_jit but standalone exe requires all functions to be JIT-compiled\n")
+                }
+                funcs |> emplace(fun)
+            }
+        }
+    }
+    if (strict && has_no_jit) {
+        to_log(LOG_ERROR, "Cannot build standalone exe: some functions are no_jit in strict mode\n")
+        return null
+    }
+
     var start_fn_name = ""
     var no_return = true
     for (fn in funcs) {
@@ -483,10 +512,6 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; funcs :
         )
     )
     let main_fn = LLVMAddFunctionWithType(mod, "main", main_fn_type)
-    let builder = LLVMCreateBuilder()
-    defer <| ${
-        LLVMDisposeBuilder(builder)
-    }
     let entry = LLVMAppendBasicBlockInContext(ctx, main_fn, "entry")
     LLVMPositionBuilderAtEnd(builder, entry)
 

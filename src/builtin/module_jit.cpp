@@ -4,6 +4,11 @@
 #include "daScript/misc/performance_time.h"
 #include "daScript/misc/sysos.h"
 
+#ifdef DAS_ENABLE_DYN_INCLUDES
+#include "daScript/ast/dyn_modules.h"
+#include "daScript/simulate/fs_file_info.h"
+#endif
+
 #include "daScript/ast/ast.h"                     // astTypeInfo
 #include "daScript/ast/ast_handle.h"              // addConstant
 #include "daScript/ast/ast_interop.h"             // addExtern
@@ -210,11 +215,13 @@ extern "C" {
             policies.debugger = false;
             context.setup(totalVariables, globalStringHeapSize, policies, {});
             context.globalsSize = 32000;
+            context.sharedOwner = true;
             for (int i = 0; i < totalVariables; i++) {
                 globalVariables[i] = GlobalVariable{};
             }
             context.allocateGlobalsAndShared();
             memset(context.globals, 0, context.globalsSize);
+            memset(context.shared, 0, context.sharedSize);
 
             // Instead of copying everything like in standalone contexts
             // Let's add only things we really need.
@@ -958,5 +965,12 @@ static void init() {
 extern "C" {
 DAS_API void jit_initialize_modules () {
     init();
+#ifdef DAS_ENABLE_DYN_INCLUDES
+    das::daScriptEnvironment::ensure();
+    auto access = das::make_smart<das::FsFileAccess>();
+    das::TextPrinter tout;
+    das::require_dynamic_modules(access, das::getDasRoot(), "", tout);
+#endif
+    das::Module::Initialize();
 }
 }
